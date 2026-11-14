@@ -587,7 +587,7 @@ class PramanyxClient:
     async def search_the_web(self, query: str, n: int = 5) -> dict:
         return await self._get("/web/search", params={"q": query, "n": n})
 
-    # ── A question on a rhythm, run by the platform (the Genie One study, 2026-11-15) ────────────────
+    # ── A question on a rhythm, run by the platform (the coworker plan, 2026-11-15) ────────────────
     async def schedule_question(self, question: str, connection: str, cron: str, name: str = "") -> dict:
         """An automation: a schedule trigger and one `investigate` step. It runs on the platform's own scheduler —
         traced, listed with the other automations, under the organisation's setting for scheduled model work — never on the coworker's."""

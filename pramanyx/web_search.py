@@ -1,4 +1,4 @@
-"""The web, for outside context only (the Genie One study; the user's call of 2026-11-15).
+"""The web, for outside context only (the coworker plan; the user's call of 2026-11-15).
 
 The coworker's shell ships a web search of its own; it was switched off on 2026-11-13 because the agent's reach must
 not go around the platform. This is the platform's own: a person can ask what else was going on — a public holiday,

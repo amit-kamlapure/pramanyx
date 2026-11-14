@@ -1,6 +1,6 @@
 """Slack, as knowledge: what was said in the channels a bot is in, readable by that channel's members only.
 
-The Genie One study's sources step, Slack first (the user, 2026-11-15). Genie One reads a company's Slack; here it is
+The outside-sources step, Slack first (the user, 2026-11-15). An analytics coworker reads a company's Slack; here it is
 read through the Slack bot an organisation already connected (`pramanyx/slackbots`), and only where that bot was
 invited — a channel nobody added it to is never read.
 

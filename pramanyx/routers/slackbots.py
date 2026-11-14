@@ -396,7 +396,7 @@ def slack_bots_heartbeat(body: HeartbeatBody, request: Request):
             "running": len(row["running"]), "failed": len(row["failed"])}
 
 
-# ── What was said in the bot's channels, as knowledge (the Genie One study, 2026-11-15) ───────────────────────
+# ── What was said in the bot's channels, as knowledge (the coworker plan, 2026-11-15) ───────────────────────
 
 @router.post("/slack-bots/{bot_id}/knowledge-sync", status_code=202)
 async def sync_slack_knowledge(bot_id: str, request: Request):

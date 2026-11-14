@@ -210,7 +210,7 @@ def test_a_chat_answers_chart_is_captioned_by_its_grid_and_its_title_reads_clean
     assert _unmarked(doc.title) == "Jeans led with $54,496.64 in August"
 
 
-# ── Excel and Word (the Genie One study, 2026-11-15) ────────────────────────────────────────────────────────
+# ── Excel and Word (the coworker plan, 2026-11-15) ────────────────────────────────────────────────────────
 
 def test_the_workbook_carries_every_stored_row_as_values_and_the_query():
     import io

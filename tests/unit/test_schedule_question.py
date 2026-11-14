@@ -1,4 +1,4 @@
-"""A question asked again on a rhythm runs on the platform, not in the coworker's shell (the Genie One study,
+"""A question asked again on a rhythm runs on the platform, not in the coworker's shell (the coworker plan,
 2026-11-15). The shell's own scheduler held a schedule that stopped when the shell did and that no one else saw; the
 coworker now makes Pramanyx's own automation — a schedule trigger and one governed `investigate` step."""
 from __future__ import annotations

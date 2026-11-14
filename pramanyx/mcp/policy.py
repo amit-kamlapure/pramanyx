@@ -41,7 +41,7 @@ TOOL_LEVELS: dict[str, Level] = {
     "list_jobs": "read",
     "get_job": "read",
     "cancel_job": "act",
-    # The Genie One study, 2026-11-15 — a question asked again on a rhythm makes an automation: it changes what the
+    # The coworker plan, 2026-11-15 — a question asked again on a rhythm makes an automation: it changes what the
     # platform does unattended, so it is an act, hidden until an organisation lets its agents act.
     "schedule_question": "act",
     # A web search changes nothing and starts no model work: a read, behind the organisation's own `web_search` setting.

@@ -41,7 +41,7 @@ BOT_SCOPES = [
     "files:write",
     "reactions:read",
     "users:read",
-    # The Genie One study, Slack first (2026-11-15) — reading the channels the bot is in as knowledge, readable by
+    # The coworker plan, Slack first (2026-11-15) — reading the channels the bot is in as knowledge, readable by
     # their members only (`connectors/knowledge/slack.py`): which channels and who is in them, and members' emails.
     "channels:read",
     "groups:read",

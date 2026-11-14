@@ -1,4 +1,4 @@
-"""An answer as an Excel workbook or a Word document (the Genie One study, 2026-11-15).
+"""An answer as an Excel workbook or a Word document (the coworker plan, 2026-11-15).
 
 The shell the coworker runs on can write Office files, by running code the model writes. That was switched off on
 purpose: a figure must never pass through code a model wrote. These two renderers are the platform's own way to the

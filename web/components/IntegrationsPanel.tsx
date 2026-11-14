@@ -772,7 +772,7 @@ export function IntegrationsPanel() {
             </Button>
           </div>
         </div>
-        {/* The Genie One study, Slack first (2026-11-15) — the bot's channels as knowledge, members only. */}
+        {/* The coworker plan, Slack first (2026-11-15) — the bot's channels as knowledge, members only. */}
         <SlackKnowledgeRow botId={b.id} />
         {/* The records themselves — every field a person can change, changed here. Before this the page could only
             ADD a bot, and a bot bound to the wrong connection sat answering "did not answer (HTTP 409)" in Slack. */}

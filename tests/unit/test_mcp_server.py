@@ -62,7 +62,7 @@ def test_server_registers_the_governed_tools():
         # Arc OC-8 — a page of a business entity's objects through the doors for builders; the propose tools are
         # registered per declared action (`register_ontology_tools`), never here.
         "list_objects",
-        # The Genie One study, 2026-11-15 — a question asked again on a rhythm, as Pramanyx's own automation (an act).
+        # The coworker plan, 2026-11-15 — a question asked again on a rhythm, as Pramanyx's own automation (an act).
         "schedule_question",
         # 2026-11-15 — the web for outside context, behind the organisation's `web_search` setting (a read).
         "search_the_web",
