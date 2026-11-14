@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from pramanyx.connectors.knowledge.readers import CHOSEN, ORG, chosen, org_wide, source_audience  # noqa: F401 — re-exported
+from pramanyx.connectors.knowledge import CHOSEN, ORG, chosen, org_wide, source_audience  # noqa: F401 — re-exported
 
 #: Document ids a knowledge connector writes (`connectors/knowledge/*`): `<kind>_<connection>_<page>`.
 _CONNECTOR_PREFIXES = ("confluence_", "notion_")

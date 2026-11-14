@@ -189,7 +189,7 @@ class NotionSync:
     def _access(self) -> dict:
         """Who may read a page. Notion's API tells an integration what was shared WITH IT, never who else may read a
         page, so every page is read by whom the person who connected the source chose (`access.source_audience`)."""
-        from pramanyx.connectors.knowledge.readers import source_audience
+        from pramanyx.connectors.knowledge import source_audience
         return source_audience(self._meta, what="Notion does not say who may read a page")
 
     def sync(self) -> dict:
