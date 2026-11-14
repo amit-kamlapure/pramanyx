@@ -116,7 +116,9 @@ export default function DefinitionRoute({ params, searchParams }: {
           <>
             <Button size="sm" variant="outline" onClick={() => setWriting(true)}>{found ? "Change the wording" : "Write what it means"}</Button>
             {found && !approved && (
-              <Button size="sm" variant="outline" disabled={busy} onClick={() => void send("/record/definitions/approve", {}, "Approved")}>
+              // Only its owner approves it; anyone else is told whose it is, by the server.
+              <Button size="sm" variant="outline" disabled={busy} onClick={() => void send("/record/definitions/approve", {}, "Approved")}
+                title={`Only its owner, ${who(found.owner) || "no one named"}, can approve it`}>
                 Approve as written
               </Button>
             )}

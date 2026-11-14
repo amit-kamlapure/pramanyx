@@ -1,10 +1,14 @@
-"""Per-connection knowledge store.
+"""Per-connection knowledge — the Semantic Layer's business definitions, read per question.
 
-Lets users author business definitions, metric explanations, synonym maps,
-and join notes that are specific to their database — and retrieves only the
-relevant ones per question (unlike static prompt rules that dump everything).
+ONE STORE WITH DEFINITIONS (the user, 2026-11-14: "Semantic Layer and Definition can be made one"). An entry is a
+Definition (a Record claim of kind ``definition``, `record/writers.py`): its title is the definition's word, its body
+what the word means, its tags the word's other names, and its kind (metric, synonym, rule, join, note) and id ride on
+the claim. Writing one is a person's (tier declared); removing one withdraws it, its wording kept — the JSON file this
+module wrote until then deleted it. Every reader below — the SQL writer's prompt, the definitional answer, the schema
+linker's hints — reads Definitions through the same functions, so nothing that read the knowledge base moved. A
+connection's old file is folded in once, on first read, and kept beside as ``*.json.folded``.
 
-Storage:  data/knowledge_{conn_id}.json
+Storage:  the Record (claims of kind ``definition``), formerly data/knowledge_{conn_id}.json
 Vectors:  Qdrant collection  pramanyx_connection_kb  (filtered by connection_id)
 
 Entry shape:
@@ -47,7 +51,9 @@ class KnowledgeEntry:
         kind: KnowledgeKind = "note",
         tags: list[str] | None = None,
         connection_id: str = "",
+        standing: dict | None = None,
     ) -> None:
+        self.standing      = standing or {}     # the Definition's: tier, owner, approved_by
         self.id            = id
         self.title         = title
         self.body          = body
@@ -63,6 +69,7 @@ class KnowledgeEntry:
             "kind":          self.kind,
             "tags":          self.tags,
             "connection_id": self.connection_id,
+            **({"standing": self.standing} if self.standing else {}),
         }
 
     @classmethod
@@ -112,51 +119,98 @@ def purge_connection(connection_id: str) -> int:
         # Vector index is best-effort; the JSON file is the source of truth.
         from pramanyx.kernel.errors import tolerate
         tolerate(e, "connection_kb purge: vector delete", counter="connection_kb.purge.vector")
+    from pramanyx.record.writers import definitions, withdraw_definition
+    gone = 0
+    for c in definitions(connection_id):
+        if withdraw_definition(connection_id=connection_id, term=str(c.extra.get("term") or ""), by="connection removed",
+                               reason="the connection was removed"):
+            gone += 1
     p = _path(connection_id)
     if p.exists():
         p.unlink()
-        return 1
-    return 0
+        gone = gone or 1
+    return gone
+
+
+def _fold_legacy_file(connection_id: str) -> None:
+    """A connection's knowledge file from before Definitions, folded into them once: each entry becomes a Definition
+    at tier said — no person is known to have declared it here — and the file is kept as ``*.json.folded``."""
+    p = _path(connection_id)
+    if not p.exists():
+        return
+    try:
+        raw = json.loads(p.read_text())
+    except Exception as exc:  # noqa: BLE001 — an unreadable file is left where it is, said
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "a connection's knowledge file could not be read to fold into Definitions; it is left in place",
+                 counter="connection_kb.fold")
+        return
+    from pramanyx.record.writers import write_definition
+    for d in raw if isinstance(raw, list) else []:
+        e = KnowledgeEntry.from_dict(d)
+        if (e.title or "").strip() and (e.body or "").strip():
+            write_definition(connection_id=connection_id, term=e.title, text=e.body, by="knowledge-base file",
+                             aliases=e.tags, kind=e.kind, entry_id=e.id, by_person=False)
+    p.rename(p.with_suffix(".json.folded"))
+
+
+def _entry_of(claim) -> KnowledgeEntry:
+    from pramanyx.record.writers import definition_term
+    term = str(claim.extra.get("term") or "")
+    return KnowledgeEntry(id=str(claim.extra.get("entry_id") or definition_term(term)), title=term,
+                          body=claim.statement.text, kind=claim.extra.get("kb_kind") or "note",
+                          tags=list(claim.extra.get("aliases") or []), connection_id=claim.about.key,
+                          standing={"tier": claim.tier, "owner": claim.owner, "approved_by": claim.extra.get("approved_by", "")})
 
 
 def load_entries(connection_id: str) -> list[KnowledgeEntry]:
-    p = _path(connection_id)
-    if not p.exists():
-        return []
-    try:
-        raw = json.loads(p.read_text())
-        return [KnowledgeEntry.from_dict(d) for d in raw]
-    except Exception:
-        return []
+    """The connection's current Definitions, as entries."""
+    from pramanyx.record.writers import definitions
+    _fold_legacy_file(connection_id)
+    return [_entry_of(c) for c in definitions(connection_id) if (c.extra.get("term") or "").strip()]
 
 
 def save_entries(connection_id: str, entries: list[KnowledgeEntry]) -> None:
-    _DATA_DIR.mkdir(exist_ok=True)
-    _path(connection_id).write_text(
-        json.dumps([e.to_dict() for e in entries], indent=2)
-    )
+    """Write each entry as a Definition (what a whole-list save meant: these are the entries)."""
+    for e in entries:
+        upsert_entry(connection_id, e)
+
+
+def _who() -> tuple[str, bool]:
+    """Who writes: the person the request acts for, else no person."""
+    try:
+        from pramanyx.security.authz import acting_person
+        who = acting_person(None) or ""
+    except Exception:  # noqa: BLE001 — outside a request there is no person
+        who = ""
+    return (who, True) if who else ("knowledge base", False)
 
 
 def upsert_entry(connection_id: str, entry: KnowledgeEntry) -> KnowledgeEntry:
+    """Write an entry as the Definition of its title. An entry whose title changed withdraws the Definition of the old
+    one: the id stays the entry's, the word is the Definition's."""
+    from pramanyx.record.writers import definition_term, withdraw_definition, write_definition
     entry.connection_id = connection_id
     if not entry.id:
-        entry.id = str(uuid.uuid4())[:8]
-    entries = load_entries(connection_id)
-    entries = [e for e in entries if e.id != entry.id]
-    entries.append(entry)
-    save_entries(connection_id, entries)
+        entry.id = definition_term(entry.title) or str(uuid.uuid4())[:8]
+    who, person = _who()
+    previous = next((e for e in load_entries(connection_id) if e.id == entry.id), None)
+    if previous is not None and definition_term(previous.title) != definition_term(entry.title):
+        withdraw_definition(connection_id=connection_id, term=previous.title, by=who, reason=f"renamed to {entry.title}")
+    write_definition(connection_id=connection_id, term=entry.title, text=entry.body, by=who, aliases=entry.tags,
+                     kind=entry.kind, entry_id=entry.id, by_person=person)
     _index_entry(entry)
     _invalidate_linker_hints(connection_id)
     return entry
 
 
 def delete_entry(connection_id: str, entry_id: str) -> bool:
-    entries = load_entries(connection_id)
-    before = len(entries)
-    entries = [e for e in entries if e.id != entry_id]
-    if len(entries) == before:
+    """Withdraw the entry's Definition — its wording kept, never deleted."""
+    from pramanyx.record.writers import withdraw_definition
+    entry = next((e for e in load_entries(connection_id) if e.id == entry_id), None)
+    if entry is None:
         return False
-    save_entries(connection_id, entries)
+    withdraw_definition(connection_id=connection_id, term=entry.title, by=_who()[0], reason="removed")
     _delete_from_index(connection_id, entry_id)
     _invalidate_linker_hints(connection_id)
     return True

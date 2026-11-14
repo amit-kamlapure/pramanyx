@@ -210,7 +210,7 @@ def load_record_definitions(connection_id: str) -> list[dict]:
     return [{"term": c.extra.get("term", ""), "slug": definition_term(c.extra.get("term", "")), "text": c.statement.text,
              "aliases": c.extra.get("aliases") or [], "tier": c.tier, "claim_id": c.id, "claim_key": c.key,
              "owner": c.owner, "approved_by": c.extra.get("approved_by", "")}
-            for c in definitions(connection_id)]
+            for c in definitions(connection_id) if c.tier in ("declared", "approved")]   # a person's word, nothing less
 
 
 def withdrawn_investigations(connection_id: str, *, limit: int = MAX_RECORD_FINDINGS) -> set[str]:

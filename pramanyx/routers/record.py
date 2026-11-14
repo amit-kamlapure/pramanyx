@@ -218,7 +218,7 @@ def write_record_definition(req: DefinitionRequest, principal=Depends(get_princi
 
 @router.post("/record/definitions/approve", dependencies=[gate(Capability.SEMANTIC_EDIT)])
 def approve_record_definition(req: DefinitionApproval, principal=Depends(get_principal)) -> dict:
-    """A person approves a definition as written. Gated as approving a metric is; the approval names who and when."""
+    """Its owner approves a definition as written; anyone else is refused, and told whose it is."""
     from pramanyx.record.writers import approve_definition, definition_key
     if not _visible(req.connection_id):
         raise HTTPException(status_code=404, detail="No such connection")
@@ -228,7 +228,11 @@ def approve_record_definition(req: DefinitionApproval, principal=Depends(get_pri
     current = C.latest(definition_key(req.connection_id, req.term))
     if current is None:
         raise HTTPException(status_code=404, detail="No such definition")
-    cid = approve_definition(connection_id=req.connection_id, term=req.term, by=who)
+    from pramanyx.record.writers import NotTheOwner
+    try:
+        cid = approve_definition(connection_id=req.connection_id, term=req.term, by=who)
+    except NotTheOwner as exc:
+        raise HTTPException(status_code=403, detail=f"This definition is not yours to approve: {exc}.")
     if cid:
         _refresh_definitions(req.connection_id)
     return _definition_view(C.get(cid) if cid else current)

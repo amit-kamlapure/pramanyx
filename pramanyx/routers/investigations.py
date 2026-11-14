@@ -2996,6 +2996,27 @@ def _answer_core(
                 "Query returned 0 rows — the SQL logic is likely wrong."
             )
             _combined_hint = " | ".join(filter(None, [_chat_zero_diag or "", _scope_fix_hint, _filter_fix_hint, _grain_fix_hint, _shape_fix_hint, _idmath_fix_hint, _ratio_fix_hint, _semantic_fix_hint, _fanout_fix_hint, _chasm_fix_hint]))
+            # THE ONE PLACE USAGE IS REFERRED TO. The first attempt was inconclusive — it failed, returned nothing, or
+            # was not what was asked — so the repair is told how people query this data themselves, mined from the
+            # warehouse's own history: a pointer, said as unconfirmed, never ground. An answer that came out
+            # conclusive never reads it.
+            if result.error or _chat_zero_diag or _shape_fix_hint:
+                try:
+                    from pramanyx.record.writers import usage_for
+                    _usage = usage_for(connection_id, question=question, sql=final_sql)
+                    if _usage:
+                        _combined_hint += (" | FROM THIS WAREHOUSE'S OWN QUERY HISTORY (what people ran; mined, "
+                                           "confirmed by no one — use only if it fits): "
+                                           + "; ".join(c.statement.text for c in _usage))
+                        _receipt({"guard": "usage_history", "action": "referred",
+                                  "detail": (f"the first attempt was inconclusive, so {len(_usage)} thing"
+                                             f"{'s' if len(_usage) != 1 else ''} people do in this warehouse's own "
+                                             "query history were given to the repair: "
+                                             + "; ".join(c.statement.text for c in _usage))[:1500]})
+                except Exception as exc:
+                    from pramanyx.kernel.errors import tolerate
+                    tolerate(exc, "usage claims for an inconclusive answer are best-effort; the repair runs without them",
+                             counter="chat.usage_history")
             try:
                 fix = _writer2.fix(final_sql, _fix_error, hint=_combined_hint, max_retries=2)
                 if fix.ok:

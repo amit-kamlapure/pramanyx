@@ -30,16 +30,18 @@ def test_a_definition_is_a_persons_and_an_approval_keeps_its_words():
                                by="user:ana", aliases=["active buyer"])
     c = C.get(first)
     assert (c.kind, c.tier, c.author_kind, c.owner) == ("definition", "declared", "person", "user:ana")
-    approved = C.get(W.approve_definition(connection_id=conn, term="active customer", by="user:ben"))
+    with pytest.raises(W.NotTheOwner):
+        W.approve_definition(connection_id=conn, term="active customer", by="user:ben")     # not ben's
+    approved = C.get(W.approve_definition(connection_id=conn, term="active customer", by="user:ana"))
     assert approved.tier == "approved" and approved.statement.text == "Bought in the last 90 days."
-    assert approved.extra["approved_by"] == "user:ben" and approved.warrants[-1].kind == "attestation"
-    assert W.approve_definition(connection_id=conn, term="Active  Customer!", by="user:ben") is None   # already
+    assert approved.extra["approved_by"] == "user:ana" and approved.warrants[-1].kind == "attestation"
+    assert W.approve_definition(connection_id=conn, term="Active  Customer!", by="user:ana") is None   # already
 
 
 def test_a_new_wording_waits_for_approval_again_and_the_earlier_is_kept():
     conn = _conn()
     W.write_definition(connection_id=conn, term="GMV", text="Gross merchandise value, before returns.", by="user:ana")
-    W.approve_definition(connection_id=conn, term="GMV", by="user:ben")
+    W.approve_definition(connection_id=conn, term="GMV", by="user:ana")
     W.write_definition(connection_id=conn, term="gmv", text="Gross merchandise value, net of cancellations.", by="user:cai")
     now = C.latest(W.definition_key(conn, "GMV"))
     assert now.tier == "declared" and now.owner == "user:ana"                      # the owner stays the owner
@@ -71,6 +73,10 @@ def test_the_doors_write_read_and_approve(monkeypatch):
     assert wrote.status_code == 201 and wrote.json()["tier"] == "declared"
     assert client.get("/record/definitions", params={"connection_id": conn, "term": "churned"}).json()[0]["term"] == "Churned"
     assert client.get("/record/definitions", params={"connection_id": conn, "term": "nothing"}).json() == []
+    monkeypatch.setattr(R, "_who", lambda principal: "user:ben")
+    refused = client.post("/record/definitions/approve", json={"connection_id": conn, "term": "Churned"})
+    assert refused.status_code == 403 and "user:ana" in refused.json()["detail"]
+    monkeypatch.setattr(R, "_who", lambda principal: "user:ana")
     ok = client.post("/record/definitions/approve", json={"connection_id": conn, "term": "Churned"})
     assert ok.status_code == 200 and ok.json()["approved_by"] == "user:ana"
     assert client.post("/record/definitions/approve", json={"connection_id": conn, "term": "Unknown"}).status_code == 404
@@ -81,3 +87,51 @@ def test_a_definition_names_its_word_says_what_it_means_and_is_a_persons(missing
     args = {"connection_id": _conn(), "term": "x", "text": "y", "by": "user:ana", missing: ""}
     with pytest.raises(ValueError):
         W.write_definition(**args)
+
+
+# ── the Semantic Layer's knowledge and Definitions are one ───────────────────────────────────────────────────
+
+def test_a_semantic_layer_entry_is_a_definition_and_a_definition_is_an_entry():
+    from pramanyx.semantic import connection_kb as KB
+    conn = _conn()
+    KB.upsert_entry(conn, KB.KnowledgeEntry(id="", title="MRR", body="Sum of active monthly subscriptions.",
+                                            kind="metric", tags=["monthly recurring revenue"]))
+    c = C.latest(W.definition_key(conn, "MRR"))
+    assert c.kind == "definition" and c.tier == "declared" and c.extra["kb_kind"] == "metric"
+    assert c.extra["aliases"] == ["monthly recurring revenue"]
+    W.write_definition(connection_id=conn, term="Churned", text="No order in 180 days.", by="user:ana")
+    assert sorted(e.title for e in KB.load_entries(conn)) == ["Churned", "MRR"]
+
+
+def test_removing_an_entry_withdraws_its_definition_and_keeps_the_wording():
+    from pramanyx.semantic import connection_kb as KB
+    conn = _conn()
+    entry = KB.upsert_entry(conn, KB.KnowledgeEntry(id="", title="GMV", body="Gross merchandise value."))
+    assert KB.delete_entry(conn, entry.id) is True
+    assert KB.load_entries(conn) == []
+    now = C.latest(W.definition_key(conn, "GMV"))
+    assert now.state == "withdrawn" and [v.statement.text for v in C.versions(now.key)][-1] == "Gross merchandise value."
+
+
+def test_a_renamed_entry_withdraws_the_old_word():
+    from pramanyx.semantic import connection_kb as KB
+    conn = _conn()
+    e = KB.upsert_entry(conn, KB.KnowledgeEntry(id="e1", title="Revenue", body="Net of returns."))
+    KB.upsert_entry(conn, KB.KnowledgeEntry(id=e.id, title="Net revenue", body="Net of returns."))
+    assert [x.title for x in KB.load_entries(conn)] == ["Net revenue"]
+    assert C.latest(W.definition_key(conn, "Revenue")).state == "withdrawn"
+
+
+def test_an_old_knowledge_file_is_folded_in_once_and_kept_beside(tmp_path, monkeypatch):
+    import json as _json
+
+    from pramanyx.semantic import connection_kb as KB
+    conn = _conn()
+    monkeypatch.setattr(KB, "_DATA_DIR", tmp_path)
+    (tmp_path / f"knowledge_{conn}.json").write_text(_json.dumps(
+        [{"id": "aov", "title": "AOV", "body": "GMV over orders.", "kind": "metric", "tags": ["basket"]}]))
+    assert [(e.id, e.title, e.kind) for e in KB.load_entries(conn)] == [("aov", "AOV", "metric")]
+    assert (tmp_path / f"knowledge_{conn}.json.folded").exists() and not (tmp_path / f"knowledge_{conn}.json").exists()
+    c = C.latest(W.definition_key(conn, "AOV"))
+    assert c.tier == "said" and c.author_kind == "system"                          # no person declared it here
+    assert B.load_record_definitions(conn) == []                                    # so the planner is not shown it

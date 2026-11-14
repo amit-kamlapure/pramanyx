@@ -36,8 +36,11 @@ from pramanyx.hub.provenance import AUTHORITY_LADDER
 #: The artifact kind in the kernel ledger.
 KIND = "claim"
 
+#: ``usage`` — what a warehouse's own query history shows people do with it (a join they write, a filter they repeat,
+#: a formula they name): mined, checked to bind, confirmed by no one. Referred to only when an answer came out
+#: inconclusive (`record/writers.usage_for`), never shown as ground.
 ClaimKind = Literal["observation", "finding", "reading", "definition", "hypothesis",
-                    "prediction", "said", "cause"]
+                    "prediction", "said", "cause", "usage"]
 #: A tier is a word of the hub's authority ladder, minus the one that is not a claim.
 TIERS: tuple[str, ...] = tuple(t for t in AUTHORITY_LADDER if t != "inferred")
 Status = Literal["Final", "Provisional", "To date"]
@@ -46,7 +49,9 @@ AuthorKind = Literal["person", "agent", "system"]
 #: ``conversation`` and ``meeting`` are the evidence envelope's two kinds (the decision-framework study §3.2): where a
 #: person said it — a Slack thread, a meeting's notes — kept as a reference, a hash of what was read, and the quoted
 #: words only when their author shared them. The platform keeps meaning and pointers, never copies of conversations.
-WarrantKind = Literal["run", "document", "attestation", "claim", "conversation", "meeting"]
+#: ``query_history`` is a warehouse's own record of the statements people ran: its ref names the connection, the
+#: history's source and a hash of the statement text the claim was mined from.
+WarrantKind = Literal["run", "document", "attestation", "claim", "conversation", "meeting", "query_history"]
 #: The warrant kinds that point at what people said, which carry a hash of what was read.
 SAID_WARRANTS: tuple[str, ...] = ("conversation", "meeting")
 

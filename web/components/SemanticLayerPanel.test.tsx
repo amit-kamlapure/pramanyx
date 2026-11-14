@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // The stub prints the connection it was handed, so a test can see which one the panel reads for.
 vi.mock("@/components/MetricsPanel", () => ({ MetricsPanel: ({ connId }: { connId: string }) => <div data-testid="metrics-stub">{connId}</div> }));
 vi.mock("@/components/intake/IntakePanel", () => ({ IntakePanel: () => <div data-testid="intake-stub" /> }));
-// The Knowledge tab's second card reads its own doors; its test is `semantic/MissedQuestions.test.tsx`.
+// The Definitions tab's second card reads its own doors; its test is `semantic/MissedQuestions.test.tsx`.
 vi.mock("@/components/semantic/MissedQuestions", () => ({ MissedQuestions: () => <div data-testid="missed-stub" /> }));
 // One object, as the shared cache hands out: a new one per render would loop the panel's mirroring effect.
 const SCHEMA = { schema: { tables: [{ name: "orders" }, { name: "customers" }] }, loading: false };
@@ -65,7 +65,8 @@ describe("the connection in scope", () => {
 describe("a read that failed says so", () => {
   it.each([
     ["annotations", "Could not read the annotations", "No annotations yet."],
-    ["knowledge", "Could not read the knowledge entries", "No knowledge entries yet."],
+    ["definitions", "Could not read the definitions", "No definitions yet."],
+    ["knowledge", "Could not read the definitions", "No definitions yet."],        // the tab's earlier name, still a link
     ["benchmarks", "Could not read the benchmark questions", "No questions yet."],
   ])("%s: the failure with Retry, never the empty line", async (tab, said, never) => {
     serve(() => new Response("down", { status: 503 }));

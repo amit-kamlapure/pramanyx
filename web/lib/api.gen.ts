@@ -16136,7 +16136,7 @@ export interface paths {
         put?: never;
         /**
          * Approve Record Definition
-         * @description A person approves a definition as written. Gated as approving a metric is; the approval names who and when.
+         * @description Its owner approves a definition as written; anyone else is refused, and told whose it is.
          */
         post: operations["approve_record_definition_record_definitions_approve_post"];
         delete?: never;
@@ -25748,8 +25748,8 @@ export interface components {
         /**
          * _MineCandidatesRequest
          * @description Arc NV-3 — what the candidate door reads. Only the warehouse's own history for now; trusted queries and
-         *     verdicts keep their own miners and arrive here when their doors are wired. Arc NV-4 — `stage` puts every bound
-         *     candidate into the resolve-once inbox, where a person accepts (it is declared) or rejects (kept).
+         *     verdicts keep their own miners and arrive here when their doors are wired. `stage` books every bound candidate in
+         *     the Record as a usage claim (2026-11-14; until then it staged them in the actions inbox).
          */
         _MineCandidatesRequest: {
             /**

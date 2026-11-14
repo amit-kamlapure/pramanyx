@@ -245,3 +245,14 @@ def test_nothing_stays_bound_after_the_call(door, monkeypatch):
     from pramanyx.org.context import current_session_id
     _filed(door, monkeypatch, {model_door.TRACE_HEADER: "cw-88f4fdd19a454d47-1", model_door.SESSION_HEADER: "session-88f4"})
     assert telemetry.current_trace_id() == "" and current_session_id() == ""
+
+
+def test_what_only_openais_platform_reads_is_sent_to_no_one_else(door, monkeypatch):
+    """Receipt 2026-11-14: the shell sets `store`, the organisation's model became Gemini, and every coworker turn
+    failed with `Unknown name "store"`. The field goes to OpenAI and to no other provider."""
+    _ask(door, store=False, metadata={"a": "b"}, temperature=0.2)
+    sent = json.loads(door["requests"][-1].content)
+    assert "store" not in sent and "metadata" not in sent and sent["temperature"] == 0.2
+    monkeypatch.setattr(provider, "door_binding", lambda role: ("openai", "gpt-x", URL, KEY))
+    _ask(door, store=False)
+    assert json.loads(door["requests"][-1].content)["store"] is False

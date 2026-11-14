@@ -40,6 +40,10 @@ CALLER_HEADER = "x-pramanyx-door-caller"
 TRACE_HEADER = "x-pramanyx-trace"
 SESSION_HEADER = "x-pramanyx-session"
 
+#: Request fields that belong to OpenAI's platform, not to the chat-completions wire other providers serve.
+_OPENAI_PLATFORM_ONLY = frozenset({"store", "metadata", "service_tier", "prompt_cache_key", "safety_identifier",
+                                   "prediction"})
+
 #: A provider that has not answered in this long is not going to: the caller is a person waiting on a reply.
 _TIMEOUT = httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=10.0)
 
@@ -166,7 +170,11 @@ async def door_chat(request: Request):
     turn = turn if TRACE_NAME.match(turn) else ""
     turn_session = (request.headers.get(SESSION_HEADER) or "").strip()[:80] if turn else ""
     streamed = bool(body.get("stream"))
-    upstream = {**body, "model": model}
+    # What only OpenAI's own platform reads is not sent to anyone else: the shell asks in OpenAI's dialect and sets
+    # `store`, and Gemini refuses a request that carries a field it does not know (2026-11-14: every coworker turn
+    # failed with "Unknown name \"store\"" once the organisation's model became Gemini).
+    upstream = {k: v for k, v in body.items() if backend == "openai" or k not in _OPENAI_PLATFORM_ONLY}
+    upstream["model"] = model
     if streamed:
         # Asked for, so the call can be counted: without it a streamed reply says nothing of what it cost.
         upstream["stream_options"] = {**(body.get("stream_options") or {}), "include_usage": True}

@@ -4602,8 +4602,8 @@ def rebuild_ontology(
 
 class _MineCandidatesRequest(BaseModel):
     """Arc NV-3 — what the candidate door reads. Only the warehouse's own history for now; trusted queries and
-    verdicts keep their own miners and arrive here when their doors are wired. Arc NV-4 — `stage` puts every bound
-    candidate into the resolve-once inbox, where a person accepts (it is declared) or rejects (kept)."""
+    verdicts keep their own miners and arrive here when their doors are wired. `stage` books every bound candidate in
+    the Record as a usage claim (2026-11-14; until then it staged them in the actions inbox)."""
     hours: int = Field(default=24 * 14, ge=1, le=24 * 180)
     limit: int = Field(default=2000, ge=1, le=10000)
     stage: bool = False
@@ -4734,7 +4734,12 @@ def mine_ontology_candidates(
                       known_joins=known, binder=_binder, query_log_weights=statement_weights)
         out.update(report.to_dict())
         if body.stage:
-            out["staged"] = stage_candidates(report.offered, graph, connection_id, graph.schema_name or effective)
+            # The user, 2026-11-14: "query history findings to become record claims only". What binds is booked in
+            # the Record as a usage claim, warranted by the history it came from — no longer a card in the actions
+            # inbox — and is referred to only when an answer comes out inconclusive (`record/writers.usage_for`).
+            from pramanyx.record.writers import book_usage_claims
+            out["booked"] = book_usage_claims(connection_id=connection_id, candidates=report.offered,
+                                              source=history.source or "", schema_name=graph.schema_name or effective)
         out["mined"] = len(report.candidates)
         out["statements"] = len(statements)
         out["calls"] = sum(statement_weights)
