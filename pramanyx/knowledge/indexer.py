@@ -93,8 +93,10 @@ def _ownership(doc_id: str, previous: Optional[dict] = None) -> dict:
     if source:
         try:
             return {"org_id": _connection_org(source) or (previous or {}).get("org_id", "")}
-        except Exception:  # noqa: BLE001 — an unreadable registry keeps the owner it had, or the request's
-            pass
+        except Exception as exc:  # noqa: BLE001 — an unreadable registry keeps the owner it had, or the request's
+            from pramanyx.kernel.errors import tolerate
+            tolerate(exc, "a connector page's owner could not be read from its source connection; it keeps the "
+                     "owner it had, or the request's", counter="documents.connector_owner")
     if previous and "org_id" in previous:
         return {"org_id": previous["org_id"]}
     from pramanyx.org.context import current_org_id

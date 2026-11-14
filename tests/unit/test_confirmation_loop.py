@@ -32,7 +32,7 @@ def _answer(conn: str, inv: str, headline: str = "Shipped orders lead GMV") -> s
 def store(tmp_path, monkeypatch):
     monkeypatch.setattr(V, "_DB_PATH", tmp_path / "verdicts.db", raising=False)
     refreshed: list = []
-    monkeypatch.setattr(V, "_refresh_graphs_behind", lambda conn, org: refreshed.append(conn))
+    monkeypatch.setattr(V, "refresh_graphs_behind", lambda conn, org: refreshed.append(conn))
     monkeypatch.setattr(V, "_turn_record", lambda inv: {})
     return refreshed
 

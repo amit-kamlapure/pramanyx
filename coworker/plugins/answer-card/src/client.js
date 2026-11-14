@@ -707,6 +707,10 @@ function Exhibit({ answer, whole, asked }) {
       title: m.departed ? "The answer did not use this metric as approved. Opens its definition." : "The approved metric this answer was held to. Opens its definition.",
       onClick: () => openBeside("page", pageFor.metric(m.name, connection)),
     }, m.departed ? `${m.name} · not used as approved` : m.name)),
+    ...(ground ? ground.definitions : []).map((term) => h("button", {
+      key: `d-${term}`, type: "button", className: "pramanyx-mark", title: "A definition a person wrote, which this answer was given. Opens it.",
+      onClick: () => openBeside("page", pageFor.definition(term, connection)),
+    }, term)),
     ...sheetsRead.map((sheet) => h("button", { key: `s-${sheet.id}`, type: "button", className: "pramanyx-mark", title: "A spreadsheet this answer read. Opens it.",
       onClick: () => openBeside("page", pageFor.sheet(sheet.id, sheet.name)) }, sheet.name)),
     // The first few objects, and the rest behind one mark: an answer grounded in eight would otherwise trail a

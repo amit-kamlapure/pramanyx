@@ -16077,6 +16077,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/record/definitions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Definitions
+         * @description A connection's Definitions, or the one for ``term``. Read by the app's Definition page and by an answer that
+         *     leaned on one.
+         */
+        get: operations["list_definitions_record_definitions_get"];
+        put?: never;
+        /**
+         * Write Record Definition
+         * @description A person writes what a business word means on a connection. Theirs, at tier ``declared``; writing it again
+         *     keeps the earlier wording beneath it, and a new wording waits for approval again.
+         */
+        post: operations["write_record_definition_record_definitions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/record/definitions/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve Record Definition
+         * @description A person approves a definition as written. Gated as approving a metric is; the approval names who and when.
+         */
+        post: operations["approve_record_definition_record_definitions_approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/record/duties": {
         parameters: {
             query?: never;
@@ -20683,6 +20729,24 @@ export interface components {
              * @default
              */
             schema_name: string;
+        };
+        /** DefinitionApproval */
+        DefinitionApproval: {
+            /** Connection Id */
+            connection_id: string;
+            /** Term */
+            term: string;
+        };
+        /** DefinitionRequest */
+        DefinitionRequest: {
+            /** Aliases */
+            aliases?: string[];
+            /** Connection Id */
+            connection_id: string;
+            /** Term */
+            term: string;
+            /** Text */
+            text: string;
         };
         /** DeltaStatusIn */
         DeltaStatusIn: {
@@ -53698,6 +53762,114 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_definitions_record_definitions_get: {
+        parameters: {
+            query: {
+                connection_id: string;
+                term?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    write_record_definition_record_definitions_post: {
+        parameters: {
+            query?: {
+                connection_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DefinitionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_record_definition_record_definitions_approve_post: {
+        parameters: {
+            query?: {
+                connection_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DefinitionApproval"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

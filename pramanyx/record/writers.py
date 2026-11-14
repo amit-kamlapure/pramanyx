@@ -494,6 +494,62 @@ def withdraw_answer_claims(*, connection_id: str, inv_id: str, reason: str, verd
     return done
 
 
+# ── a Definition: what a business word means, written by a person and approved ────────────
+
+def definition_term(term: str) -> str:
+    """The word as a key: case, spacing and punctuation are not a different word."""
+    import re
+    return re.sub(r"[^a-z0-9]+", "-", (term or "").strip().lower()).strip("-")[:80]
+
+
+def definition_key(connection_id: str, term: str) -> str:
+    return _claims.claim_key("definition", connection_id or "-", definition_term(term))
+
+
+def write_definition(*, connection_id: str, term: str, text: str, by: str,
+                     aliases: Optional[list[str]] = None) -> str:
+    """A person writes what a business word means on a connection: a Record claim of kind ``definition`` at tier
+    ``declared``, authored and owned by them. Writing it again restates it — the earlier wording kept — and a
+    changed wording is no longer approved: an approval is of the words the approver read."""
+    term, text = (term or "").strip(), (text or "").strip()
+    if not (term and text and by):
+        raise ValueError("a definition names its word, says what it means, and is a person's")
+    key = definition_key(connection_id, term)
+    prior = _claims.latest(key)
+    claim = _claims.Claim(
+        kind="definition", tier="declared", status="Final", as_of=_today(),
+        about=_claims.About(kind="connection", key=connection_id),
+        statement=_claims.Statement(text=text[:4000]),
+        owner=(prior.owner if prior and prior.owner else by), author=by, author_kind="person",
+        extra={"term": term[:120], "aliases": [a.strip()[:120] for a in (aliases or []) if a and a.strip()][:20]},
+    )
+    return _claims.restate(key, claim, conn_id=connection_id) if prior else \
+        _claims.book(claim, key=key, conn_id=connection_id)
+
+
+def approve_definition(*, connection_id: str, term: str, by: str) -> Optional[str]:
+    """A person approves a definition as written: restated at tier ``approved``, its words unchanged, with an
+    attestation naming who approved it and when. None when there is no such definition, or it already stands
+    approved."""
+    key = definition_key(connection_id, term)
+    prior = _claims.latest(key)
+    if prior is None or prior.tier == "approved" or not by:
+        return None
+    new = prior.model_copy(deep=True)
+    new.confidence = None
+    new.tier = "approved"
+    new.warrants = [*prior.warrants, _claims.Warrant(kind="attestation", ref=f"approval:{by}",
+                                                     detail=f"approved as written by {by} on {_today()}")]
+    new.extra = {**prior.extra, "approved_by": by, "approved_on": _today()}
+    return _claims.restate(key, new, conn_id=connection_id)
+
+
+def definitions(connection_id: str, *, limit: int = 500) -> list[_claims.Claim]:
+    """The current definitions on a connection (and every connection's, for ``"-"``)."""
+    return [c for c in _claims.list_claims(kind="definition", conn_id=connection_id or None, limit=limit)
+            if c.state != "withdrawn"]
+
+
 # ── the hub's ClaimCheck (the fifth shape's second half) ────────────────────────────────────
 
 def said_claim_key(connection_id: str, object_ref: str, reply_id: str) -> str:

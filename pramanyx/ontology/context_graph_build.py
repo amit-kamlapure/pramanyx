@@ -204,6 +204,15 @@ def load_record_findings(connection_id: str, org_id: Optional[str] = None, *,
     return out
 
 
+def load_record_definitions(connection_id: str) -> list[dict]:
+    """The Record's current Definitions on a connection, in the shape `context_graph._project_definitions` reads."""
+    from pramanyx.record.writers import definition_term, definitions
+    return [{"term": c.extra.get("term", ""), "slug": definition_term(c.extra.get("term", "")), "text": c.statement.text,
+             "aliases": c.extra.get("aliases") or [], "tier": c.tier, "claim_id": c.id, "claim_key": c.key,
+             "owner": c.owner, "approved_by": c.extra.get("approved_by", "")}
+            for c in definitions(connection_id)]
+
+
 def withdrawn_investigations(connection_id: str, *, limit: int = MAX_RECORD_FINDINGS) -> set[str]:
     """The investigations whose claims a person withdrew. Their answers' receipts are still in the ledger, and
     without this the receipt would bring back, as a legacy finding, the very thing a person said was wrong."""
@@ -541,6 +550,9 @@ def build_context_graph(
     # Arc FA, FA-1 — the published declarations.
     declarations = _safe(lambda: load_declarations(connection_id, ontology), "declarations", [])
 
+    # The Record's Definitions — what a business word means, as a person wrote it.
+    definitions = _safe(lambda: load_record_definitions(connection_id), "definitions", [])
+
     cg = project_graph(
         ontology,
         org_id=resolved_org,
@@ -551,6 +563,7 @@ def build_context_graph(
         findings=findings,
         briefs=briefs,
         declarations=declarations,
+        definitions=definitions,
     )
 
     if persist:

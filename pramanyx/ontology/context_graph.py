@@ -369,6 +369,7 @@ def project_graph(
     findings: Optional[list] = None,
     briefs: Optional[list] = None,
     declarations: Optional[list] = None,
+    definitions: Optional[list] = None,
 ) -> ContextGraph:
     """Project an :class:`OntologyGraph` (+ narrative sources) into a typed
     :class:`ContextGraph`. Pure and deterministic; never raises on a missing/partial
@@ -395,6 +396,7 @@ def project_graph(
     _project_metrics(cg, ontology)
     _project_joins(cg, ontology)
     _project_glossary_terms(cg, ontology, merged_glossary)
+    _project_definitions(cg, definitions or [])
     _project_resolutions(cg, resolutions or [])
     _project_findings(cg, findings or [])
     # Briefs last: their `derived_from` edges point at finding nodes, which must
@@ -595,6 +597,42 @@ def _project_glossary_terms(cg: ContextGraph, ontology, merged_glossary: Optiona
             except Exception as exc:
                 tolerate(exc, "context-graph glossary-term projection is best-effort",
                          counter="context_graph.term_projection")
+
+
+#: A Definition's node id: `glossary_term:definition:<word>` — a term, so the read-back shows it among the meanings,
+#: and named so a reader (the coworker) can tell a person's written definition from a column's description.
+DEFINITION_NODE_PREFIX = "glossary_term:definition:"
+
+
+def _project_definitions(cg: ContextGraph, definitions: list) -> None:
+    """`glossary_term` nodes from the Record's Definitions (`record/writers.write_definition`): what a business word
+    means, as a person wrote it. Provenance ``record`` with the claim's tier, so the warrant is a person's — declared
+    when written, approved once approved — and a `defines` edge to a metric of the same name."""
+    metric_by_name = {m.label.strip().lower(): m.id for m in cg.nodes_of("metric")}
+    metric_by_name.update({mid.split(":", 1)[-1].strip().lower(): mid for mid in (n.id for n in cg.nodes_of("metric"))})
+    for d in definitions:
+        try:
+            term = str(d.get("term") or "").strip()
+            if not term or not str(d.get("text") or "").strip():
+                continue
+            node = GraphNode(
+                id=f"{DEFINITION_NODE_PREFIX}{d.get('slug') or term.lower()}",
+                kind="glossary_term", label=term, summary=str(d["text"]),
+                provenance=Provenance(source="record", note=f"tier={d.get('tier', '')} claim={d.get('claim_key', '')}"),
+                data={"definition": True, "term": term, "aliases": list(d.get("aliases") or []),
+                      "claim_id": d.get("claim_id", ""), "claim_key": d.get("claim_key", ""),
+                      "tier": d.get("tier", ""), "owner": d.get("owner", ""), "approved_by": d.get("approved_by", "")},
+            )
+            cg.add_node(node)
+            for word in [term, *(d.get("aliases") or [])]:
+                mid = metric_by_name.get(str(word).strip().lower())
+                if mid:
+                    cg.add_edge(GraphEdge(id=_edge_id(node.id, "defines", mid), kind="defines", from_id=node.id,
+                                          to_id=mid, provenance=Provenance(source="record", note="a definition of the metric's name"),
+                                          label="defines"))
+                    break
+        except Exception as exc:
+            tolerate(exc, "context-graph definition projection is best-effort", counter="context_graph.definitions")
 
 
 def _table_node_id_for_table(cg: ContextGraph, bare_table: str) -> Optional[str]:

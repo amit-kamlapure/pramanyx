@@ -296,7 +296,7 @@ export function groundingOf(answer) {
   const lines = answer?.receipt?.lineage;
   if (!Array.isArray(lines)) return null;
   const after = (ref) => String(ref || "").split(":").slice(1).join(":");
-  const out = { tables: [], columns: [], objects: [], findings: [], metrics: [] };
+  const out = { tables: [], columns: [], objects: [], findings: [], metrics: [], definitions: [] };
   for (const item of lines) {
     const name = after(item?.ref);
     if (!name) continue;
@@ -310,13 +310,20 @@ export function groundingOf(answer) {
       // …and the links between objects, which name two things and open as neither.
       const ref = String(item.ref);
       if (ref.includes("-->")) continue;
+      // A Definition a person wrote — what a business word means — that the answer was given as ground.
+      if (ref.startsWith("glossary_term:definition:")) {
+        const term = String(item.detail || "").trim() || ref.slice("glossary_term:definition:".length).replace(/-/g, " ");
+        if (!out.definitions.includes(term)) out.definitions.push(term);
+        continue;
+      }
       const into = ref.startsWith("finding:") ? out.findings : ref.startsWith("table:") ? out.objects : null;
       if (into && !into.includes(name)) into.push(name);
     }
     else if (item.relation === "metric_drift") out.metrics.push({ name, departed: true, note: String(item.detail || "") });
     else if (item.relation === "metric_used" || item.relation === "trusted_metric") out.metrics.push({ name, departed: false, note: "" });
   }
-  out.count = out.tables.length + out.columns.length + out.objects.length + out.findings.length + out.metrics.length;
+  out.count = out.tables.length + out.columns.length + out.objects.length + out.findings.length + out.metrics.length
+    + out.definitions.length;
   return out;
 }
 
@@ -338,11 +345,12 @@ export const pageFor = {
   metric: (name, connection) => `/metrics/${encodeURIComponent(name)}?conn=${encodeURIComponent(connection)}`,
   type: (name, connection) => `/ontology/${encodeURIComponent(name)}?conn=${encodeURIComponent(connection)}`,
   receipt: (id) => `/receipt/${encodeURIComponent(id)}`,
+  definition: (term, connection) => `/definitions/${encodeURIComponent(term)}?conn=${encodeURIComponent(connection)}`,
   // The sheet's own name rides the address, so its tab can carry it: the app's page reads only the id.
   sheet: (id, name = "") => `/sheets/${encodeURIComponent(id)}${name ? `?name=${encodeURIComponent(name)}` : ""}`,
 };
 const NAMED = [[/^\/metrics\/([^/?]+)/, "Metric"], [/^\/ontology\/([^/?]+)/, "Ontology"], [/^\/receipt\//, "Why this number"],
-               [/^\/sheets\/[^/?]+/, "Sheet"]];
+               [/^\/sheets\/[^/?]+/, "Sheet"], [/^\/definitions\/([^/?]+)/, "Definition"]];
 
 /** A referenced spreadsheet's tab is called by its own name and nothing else — "Olist orders", not "Sheet". */
 function sheetName(path) {

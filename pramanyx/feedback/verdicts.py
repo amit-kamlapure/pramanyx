@@ -174,7 +174,7 @@ def record_verdict(
                                                          reason=note or "", verdict_id=new_id, by=who))
             result["claims"] = moved
             if moved:
-                _refresh_graphs_behind(connection_id, org)
+                refresh_graphs_behind(connection_id, org)
         except Exception as exc:
             from pramanyx.kernel.errors import tolerate
             tolerate(exc, "a verdict's reach to the Record is best-effort; the verdict stands",
@@ -194,7 +194,7 @@ def record_verdict(
     return result
 
 
-def _refresh_graphs_behind(connection_id: str, org: str) -> None:
+def refresh_graphs_behind(connection_id: str, org: str) -> None:
     """The connection's graphs are rebuilt from the Record, off the request: a claim's tier changed, and the graph
     is a projection of it. A node is named by its claim's VERSION, so an approval is a new node and only a rebuild
     replaces the old one. One thread, every schema the connection has a graph for; a failure is counted, not raised."""
