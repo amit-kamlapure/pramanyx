@@ -57,7 +57,7 @@ turned back on from the interface.
   named anything. A single row of numbers is shown as figures, with no chart and no table. The table has
   headings named as the app names them, numbers aligned and grouped, a click on a heading sorts, Totals sums
   each column of numbers, Copy and CSV carry the rows as they were answered. The agent is told the answer is
-  shown whole and not to write it again: its own reply is a sentence on what was not checked.
+  shown whole and not to write it again, and its own closing remark is not shown when an answer is.
 - **What a sentence stood on is a mark at its end.** Each metric the answer was held to, each spreadsheet and
   each object of the ontology it read is a small chip after the words; it opens the app's own page for it
   beside the conversation. A metric not used as approved says so on its mark.
@@ -135,8 +135,10 @@ turned back on from the interface.
   (`POST /coworker/trace`, from this machine only), under a trace named `cw-<session>-<turn>` that shows as
   "via Coworker". The model calls are not sent: each one tells the platform's model door which turn it was made
   for (two request headers), and the door files its own record of the call — tokens, model, cost — under that
-  turn, so spend is counted once. A call to the governed answer path carries the platform's own trace for that
-  answer on its result (`platform_trace`), which joins the two. The words stay here: the system prompt, what the
+  turn, so spend is counted once. **One question is one trace:** before a call to the governed answer path the
+  coworker tells the platform which step of which turn is asking (`PUT /coworker/claim`), and the platform
+  records what it does to answer — its model calls, its query, its checks — under the turn's trace and inside
+  that step, where it would otherwise open a run of its own. The words stay here: the system prompt, what the
   agent was given and what it said are in the shell's own log, and each event says where (`shell_session`, `seq`).
   `node --test plugins/home/test/trace.test.mjs` covers what is sent and what is not.
 - **A read-only relay**, `/pramanyx/…` on the shell's own server, so the page can read Pramanyx without the API's
@@ -155,14 +157,15 @@ admin allows "Let the coworker ask its models through Pramanyx" in Settings ▸ 
 
 ## What is not done
 
-- The agent's own sentence stands above the answer, not under it: the shell puts an answer at the end of the
-  turn's flow and the reply before it. The platform's follow-up questions are carried over MCP and not yet shown.
+- When an answer is shown, the agent's closing remark is not: the answer is the output. The remark is still
+  written and kept in the conversation's record. The platform's follow-up questions are carried over MCP and not
+  yet shown.
 - Figures in the words and the chart are as the platform formats them (€17,857,124.67; 17.9M on a bar). The
   shortened form of the mockup (€17.86m) needs a column's unit, which is not carried over MCP.
-- In Agent Ops a coworker turn and the platform's work for it are two rows; the turn's tool result names the
-  platform's trace but the page does not yet link one to the other. A subagent's turns are recorded as traces
-  of their own, not nested under the turn that started them. The Trajectory tab in the coworker still shows a
-  call to the platform as one row; opening the platform's steps there is not built.
+- The claim that puts the platform's work inside a turn's trace is matched on the question and the connection,
+  because a tool call carries nothing else. It covers `ask`; a custom agent's answer and a deep analysis are
+  still recorded as runs of their own. A subagent's turns are traces of their own, not nested under the turn
+  that started them. The Trajectory tab in the coworker still shows a call to the platform as one row.
 - A deep analysis is one named row that opens to what came back. Its own steps — baseline, decomposition, what
   each concluded — are not drawn, and it has no card.
 - A Pramanyx tool added since this was written, and each custom agent's, is named from the end of the first turn

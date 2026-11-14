@@ -156,8 +156,8 @@ function holdToConnection(ctx) {
  *
  * The platform's own work for a question is in the same trace. Before a call to the governed answer path, the
  * platform is told which step of which turn is asking; it records what it does to answer under this turn's trace
- * and inside that step. One question, one trace. Were the claim not taken, the answer names the trace it was
- * recorded under instead, and the call's result carries that.
+ * and inside that step. One question, one trace. Were the claim not taken, the answer's work is a run of its own
+ * in the same store, as it was before, and the call's result still names its receipt.
  */
 const ASKS = /^mcp__pramanyx__ask(_[a-z0-9_]+)?$/;
 const clip = (text, most) => (typeof text === "string" && text.length > most ? text.slice(0, most) : text);
@@ -167,18 +167,18 @@ const textOf = (content) => (Array.isArray(content) ? content.map((p) => (p && t
 export const traceOf = (sessionId, turn) =>
   `cw-${String(sessionId).replace(/^session-/, "").replace(/[^A-Za-z0-9]/g, "").slice(0, 16)}-${Number(turn) || 0}`;
 
-/** What an answer's result says of itself, for the record: which platform trace, which receipt, how many rows. */
+/** What an answer's result says of itself, for the record: which receipt, which headline, how many rows. */
 function ofAnAnswer(text) {
   try {
     const got = JSON.parse(text);
     return {
-      platform_trace: got.trace_id || undefined, investigation_id: got.investigation_id || undefined,
+      investigation_id: got.investigation_id || undefined,
       receipt_id: got.receipt?.artifact?.id || got.receipt_id || undefined,
       headline: clip(got.answer || got.headline || undefined, 300),
       rows: typeof got.row_count === "number" ? got.row_count : undefined,
     };
   } catch {
-    return { platform_trace: /"trace_id":\s*"([A-Za-z0-9-]{4,60})"/.exec(text)?.[1] };
+    return {};
   }
 }
 
@@ -214,9 +214,6 @@ export function turnEvents(turns, sessionId, held, event) {
     now.calls.delete(message.toolCallId);
     const said = ASKS.test(call.name) ? ofAnAnswer(textOf(message.content)) : {};
     if (said.headline) now.headline = said.headline;
-    // The platform recorded its work inside this turn's trace when the claim made before the call was taken; then
-    // there is no other trace to name. It is named only when the answer was recorded apart.
-    if (said.platform_trace === now.trace) delete said.platform_trace;
     const { rows, ...rest } = said;
     return [{ kind: "tool_call_result", name: String(call.name || "tool"), span_id: message.toolCallId, ok: !message.isError,
               duration_ms: Math.max(0, at - call.at), conn_id, ...(typeof rows === "number" ? { row_count: rows } : {}),

@@ -108,7 +108,7 @@ TRACE_NAME = re.compile(r"^cw-[A-Za-z0-9]{6,40}-[0-9]{1,6}$")
 _SESSION_NAME = re.compile(r"^[A-Za-z0-9-]{6,80}$")
 #: What a payload may carry. Named, so a field the shell adds later is not stored because it arrived.
 _PAYLOAD_KEYS = frozenset({
-    "question", "mode", "turn", "step", "tool", "arguments", "platform_trace", "investigation_id", "receipt_id",
+    "question", "mode", "turn", "step", "tool", "arguments", "investigation_id", "receipt_id",
     "headline", "rows", "reason", "error", "message", "shell_session", "seq", "calls",
 })
 

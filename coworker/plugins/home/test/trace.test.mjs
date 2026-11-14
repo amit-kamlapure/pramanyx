@@ -5,7 +5,7 @@ import { traceOf, turnEvents } from "../lib/index.js";
 
 const S = "session-88f4fdd1-9a45-4d47-a907-c446dd4d3d83";
 const ev = (type, seq, time, data) => ({ type, seq, time, data });
-const answer = JSON.stringify({ answer: "NET-A-PORTER leads", row_count: 5, investigation_id: "b97328dd", trace_id: "1d5a621b", receipt: { artifact: { id: "54a8bed26939" } } });
+const answer = JSON.stringify({ answer: "NET-A-PORTER leads", row_count: 5, investigation_id: "b97328dd", receipt: { artifact: { id: "54a8bed26939" } } });
 
 function aTurn() {
   const turns = new Map();
@@ -44,13 +44,12 @@ test("what the agent was given and what it said are not sent — only where they
   assert.equal(aTurn().out[1].payload.seq, 19);
 });
 
-test("an answer's result carries the platform's own trace for it, its receipt and its rows", () => {
+test("an answer's result carries its receipt and its rows", () => {
   const result = aTurn().out[2];
   assert.equal(result.span_id, "call_1");
   assert.equal(result.ok, true);
   assert.equal(result.duration_ms, 7000);
   assert.equal(result.row_count, 5);
-  assert.equal(result.payload.platform_trace, "1d5a621b");
   assert.equal(result.payload.receipt_id, "54a8bed26939");
   assert.ok(!("rows" in result.payload));
 });
@@ -73,12 +72,4 @@ test("a turn that was stopped is not recorded as one that worked", () => {
 
 test("an event outside any turn is not recorded", () => {
   assert.deepEqual(turnEvents(new Map(), S, "", ev("tool/call", 3, 0, { callId: "x", name: "y" })), []);
-});
-
-test("an answer recorded inside this turn's own trace names no other trace", () => {
-  const turns = new Map();
-  turnEvents(turns, S, "", ev("turn/start", 1, 0, { turn: 1 }));
-  turnEvents(turns, S, "", ev("tool/call", 2, 1, { callId: "c", name: "mcp__pramanyx__ask", arguments: "{}" }));
-  const [result] = turnEvents(turns, S, "", ev("tool/result", 3, 2, { message: { toolCallId: "c", content: [{ type: "text", text: JSON.stringify({ answer: "x", trace_id: traceOf(S, 1) }) }] } }));
-  assert.ok(!("platform_trace" in result.payload));
 });
