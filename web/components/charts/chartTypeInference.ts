@@ -200,6 +200,21 @@ export function chooseMultiMeasure(
  * Infer the best chart type for the given columns + rows.
  * Returns null when the data is not chartable (< 2 rows, no numeric cols, etc.)
  */
+/** Most values a breakdown by a number holds and still reads as one bar per value. */
+const NUMBER_BAND_MAX = 24;
+
+/** A number column that is a breakdown's band: whole numbers, each value once, few of them. */
+export function isNumberBand(rows: unknown[][], idx: number): boolean {
+  if (rows.length < 2 || rows.length > NUMBER_BAND_MAX) return false;
+  const seen = new Set<number>();
+  for (const r of rows) {
+    const v = Number((r as unknown[])[idx]);
+    if (!Number.isInteger(v) || seen.has(v)) return false;
+    seen.add(v);
+  }
+  return true;
+}
+
 export function inferChartType(
   columns: string[],
   rows: unknown[][],
@@ -286,6 +301,13 @@ export function inferChartType(
   }
 
   // ── NO TIME AXIS ─────────────────────────────────────────────────────────
+
+  // A breakdown BY a number — review score 1 to 5, hour of day, a rating — with no label beside it: the first column
+  // holds a few whole numbers, each once, and the other is what was counted or summed for each. That is a bar per
+  // value, not a relation between two measures. Before 2026-11-14 it drew nothing under ten rows and a scatter above.
+  if (catIdx === undefined && allNumeric.length === 2 && isNumberBand(rows, allNumeric[0])) {
+    return { type: "bar", xCol: allNumeric[0], yCols: [allNumeric[1]] };
+  }
 
   // Two pure numerics, no category → scatter (correlation / outlier detection). A relation
   // puts both columns on axes, so it reads every numeric column, support included.
@@ -386,6 +408,7 @@ export function availableChartTypes(columns: string[], rows: unknown[][]): Chart
     add("treemap");
   }
 
+  if (!hasDate && !hasCat && nNum === 2 && isNumberBand(rows, numericIdxs[0])) add("bar");
   if (!hasDate && !hasCat && nNum >= 2) add("scatter");
 
   // ── native-fit specialized types — offered only where the shape renders something honest ──

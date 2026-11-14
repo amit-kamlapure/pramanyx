@@ -632,9 +632,11 @@ function titleOf(answer) {
   const columns = answer.columns ?? [];
   if (columns.length !== 2) return "";
   const numeric = numericColumns(columns, answer.rows ?? []);
-  if (numeric[0] === numeric[1]) return "";
-  const measure = labelOf(columns[numeric[0] ? 0 : 1]), by = labelOf(columns[numeric[0] ? 1 : 0]);
-  return `${measure} by ${by.toLowerCase()}`;
+  if (!numeric[0] && !numeric[1]) return "";
+  // Two numbers: the first is what the rows are broken down by (review score), the second what was counted for each.
+  // The chart draws them that way round (`resolveSpec`: the measure is never the band).
+  const [measureAt, byAt] = numeric[0] && numeric[1] ? [1, 0] : numeric[0] ? [0, 1] : [1, 0];
+  return `${labelOf(columns[measureAt])} by ${labelOf(columns[byAt]).toLowerCase()}`;
 }
 
 /**
