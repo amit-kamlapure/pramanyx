@@ -6748,8 +6748,18 @@ def export_investigation(inv_id: str, format: str = "pdf", narrate: bool = False
     from fastapi.responses import Response
     from pramanyx.security.authz import check_owner
 
-    check_owner("investigation", inv_id, principal)  # SEC-05: no cross-org export
     inv = get_investigation(inv_id)
+    if inv:
+        check_owner("investigation", inv_id, principal)  # SEC-05: no cross-org export
+    else:
+        # A quick answer — the chat's, and the coworker's — is kept as a chat answer, which `get_investigation` does
+        # not read: its files answered 404 (found live, 2026-11-15). Read from its own store, held to the caller's
+        # organisation as the chat's 👍 is.
+        from pramanyx.db.history import get_chat_answer
+        chat = get_chat_answer(inv_id)
+        if chat and principal is not None and (chat.get("org_id") or "default") != (principal.org_id or "default"):
+            chat = None
+        inv = {**chat, "kind": "chat"} if chat else None
     if not inv:
         raise HTTPException(status_code=404, detail="Investigation not found")
     fmt = (format or "pdf").lower()
