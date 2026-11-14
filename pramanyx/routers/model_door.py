@@ -36,6 +36,9 @@ router = APIRouter(tags=["llm"])
 SETTING = "coworker_models"
 ROLES = ("coder", "narrator", "fast")
 CALLER_HEADER = "x-pramanyx-door-caller"
+#: The run a call was made for, and the caller's own id for the conversation — see `routers/coworker.py`.
+TRACE_HEADER = "x-pramanyx-trace"
+SESSION_HEADER = "x-pramanyx-session"
 
 #: A provider that has not answered in this long is not going to: the caller is a person waiting on a reply.
 _TIMEOUT = httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=10.0)
@@ -156,6 +159,12 @@ async def door_chat(request: Request):
     backend, model, url, key = bound
 
     caller = (request.headers.get(CALLER_HEADER) or "").strip()[:60]
+    # The run this call belongs to, when the caller names one: a coworker turn (`cw-…`, and nothing else — a caller
+    # cannot file its calls under a run of the platform's own). Unnamed, the call is recorded under no run, as before.
+    from pramanyx.routers.coworker import TRACE_NAME
+    turn = (request.headers.get(TRACE_HEADER) or "").strip()
+    turn = turn if TRACE_NAME.match(turn) else ""
+    turn_session = (request.headers.get(SESSION_HEADER) or "").strip()[:80] if turn else ""
     streamed = bool(body.get("stream"))
     upstream = {**body, "model": model}
     if streamed:
@@ -177,19 +186,30 @@ async def door_chat(request: Request):
 
     def settle(*, ok: bool, usage: Optional[dict], error: Optional[BaseException] = None) -> None:
         """Record the call and close the outbound door — once, on every path."""
+        from pramanyx import telemetry
+        from pramanyx.org.context import reset_session_id, set_session_id
+
         prompt_tokens, completion_tokens = _usage(usage)
         note.update({"role": role, "streamed": streamed, "prompt_tokens": prompt_tokens,
                      "completion_tokens": completion_tokens})
+        # Bound here and not around the request: a streamed reply is settled from the response's own iterator, which
+        # does not run in the context the request was read in.
+        token = set_session_id(f"coworker:{turn_session}") if turn and turn_session else None
         try:
-            record_door_call(backend=backend, model=model, role=role, prompt_tokens=prompt_tokens,
-                             completion_tokens=completion_tokens, ms=(time.monotonic() - started) * 1000.0,
-                             ok=ok, error_class=(type(error).__name__ if error else (None if ok else "upstream")),
-                             streamed=streamed, caller=caller)
+            with telemetry.bind_trace(turn):
+                try:
+                    record_door_call(backend=backend, model=model, role=role, prompt_tokens=prompt_tokens,
+                                     completion_tokens=completion_tokens, ms=(time.monotonic() - started) * 1000.0,
+                                     ok=ok, error_class=(type(error).__name__ if error else (None if ok else "upstream")),
+                                     streamed=streamed, caller=caller)
+                finally:
+                    if error is not None:
+                        gate.__exit__(type(error), error, error.__traceback__)
+                    else:
+                        gate.__exit__(None, None, None)
         finally:
-            if error is not None:
-                gate.__exit__(type(error), error, error.__traceback__)
-            else:
-                gate.__exit__(None, None, None)
+            if token is not None:
+                reset_session_id(token)
 
     client = _client()
     try:

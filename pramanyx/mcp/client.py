@@ -318,7 +318,8 @@ class PramanyxClient:
             # What the platform itself wrote about the rows, and how it would draw them. A caller that shows the
             # answer shows these, so it does not have a second model retell the first.
             "narrative": None, "chart_config": None, "followups": None,
-            "investigation_id": None, "has_receipt": False, "error": None,
+            # The trace this answer's work was recorded under, for a caller that keeps its own record of the turn.
+            "investigation_id": None, "has_receipt": False, "trace_id": None, "error": None,
         }
         async for ev in self._stream_sse("POST", "/chat", body, timeout=self.deep_timeout):
             t = ev.get("type")
@@ -351,6 +352,7 @@ class PramanyxClient:
             elif t == "done":
                 acc["investigation_id"] = ev.get("inv_id")
                 acc["has_receipt"] = bool(ev.get("has_receipt"))
+                acc["trace_id"] = ev.get("trace_id")
         if acc["error"] and acc["answer"] is None:
             raise PramanyxError(f"ask failed: {acc['error']}")
         if with_receipt and acc["investigation_id"] and acc["has_receipt"]:

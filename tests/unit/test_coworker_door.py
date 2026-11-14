@@ -76,3 +76,69 @@ def test_the_route_is_served_by_the_api():
     import inspect
     from pramanyx import api
     assert "coworker_router.router" in inspect.getsource(api)
+
+
+# ── a coworker turn, recorded where runs are ─────────────────────────────────────────────────────────────────────
+
+@pytest.fixture()
+def taken(door, monkeypatch):
+    """What the session log was told, and under which session id."""
+    from pramanyx.obs import session_log
+    from pramanyx.org.context import current_session_id
+    seen = []
+    monkeypatch.setattr(session_log, "emit", lambda kind, **kw: seen.append({"kind": kind, "session": current_session_id(), **kw}))
+    return door[0], seen
+
+
+TURN = {"trace_id": "cw-88f4fdd19a454d47-1", "session": "session-88f4fdd1-9a45-4d47-a907-c446dd4d3d83"}
+
+
+def test_a_turns_events_are_written_under_its_trace_and_named_as_the_coworkers(taken):
+    client, seen = taken
+    r = client.post("/coworker/trace", json={**TURN, "events": [
+        {"kind": "user_request", "name": "coworker", "conn_id": "c1", "payload": {"question": "How many orders?", "turn": 1}},
+        {"kind": "tool_call_result", "name": "mcp__pramanyx__ask", "span_id": "call_1", "ok": True, "duration_ms": 7000,
+         "row_count": 5, "payload": {"platform_trace": "1d5a621b", "receipt_id": "r1"}},
+    ]})
+    assert r.status_code == 200 and r.json() == {"written": 2}
+    assert [e["kind"] for e in seen] == ["user_request", "tool_call_result"]
+    assert {e["trace_id"] for e in seen} == {TURN["trace_id"]}
+    # The door a run came in by is read off the session id's prefix.
+    assert {e["session"] for e in seen} == {"coworker:" + TURN["session"]}
+    assert seen[1]["payload"]["platform_trace"] == "1d5a621b" and seen[1]["row_count"] == 5
+
+
+def test_the_session_id_is_not_left_bound_after_the_call(taken):
+    from pramanyx.org.context import current_session_id
+    client, _ = taken
+    client.post("/coworker/trace", json={**TURN, "events": [{"kind": "final_response", "ok": True}]})
+    assert current_session_id() == ""
+
+
+@pytest.mark.parametrize("trace", ["1d5a621b", "untraced:request:2026-11-14", "cw-", "cw-abc-1", "cw-88f4fdd19a454d47-x"])
+def test_only_a_coworker_turns_own_trace_can_be_written_to(taken, trace):
+    """A run of the platform's own is named otherwise; this route cannot add to one."""
+    client, seen = taken
+    r = client.post("/coworker/trace", json={**TURN, "trace_id": trace, "events": [{"kind": "final_response"}]})
+    assert r.status_code == 422 and seen == []
+
+
+def test_a_model_call_is_not_taken_here_the_door_records_those(taken):
+    client, seen = taken
+    r = client.post("/coworker/trace", json={**TURN, "events": [{"kind": "llm_call", "payload": {}}]})
+    assert r.status_code == 422 and seen == []
+
+
+def test_a_payload_carries_only_what_is_named(taken):
+    client, seen = taken
+    client.post("/coworker/trace", json={**TURN, "events": [
+        {"kind": "tool_call", "name": "t", "payload": {"tool": "t", "system_prompt": "the shell's own words", "seq": 19}}]})
+    assert seen[0]["payload"] == {"tool": "t", "seq": 19}
+
+
+def test_another_machine_cannot_record_a_turn(taken, monkeypatch):
+    _, seen = taken
+    app = FastAPI()
+    app.include_router(C.router)
+    r = TestClient(app, client=("203.0.113.9", 50000)).post("/coworker/trace", json={**TURN, "events": [{"kind": "final_response"}]})
+    assert r.status_code == 403 and seen == []

@@ -143,6 +143,124 @@ function holdToConnection(ctx) {
   });
 }
 
+/**
+ * A TURN IS A RUN, AND IS RECORDED WHERE RUNS ARE. The shell keeps its own trajectory of a turn; the platform's
+ * operators read one store (Agent Ops, over the session log), and a coworker turn was not in it. Each event of a
+ * turn that matters to an operator is sent to the platform as it happens — the question, each tool call and its
+ * result, the end — under one trace named for the conversation and the turn.
+ *
+ * Two things are deliberately not sent. The model calls: the platform's model door already records every one, so
+ * each call is only told which turn it belongs to (two request headers) and the door files it there; sending them
+ * too would count the spend twice. And the words: the system prompt, what the agent was given and what it said
+ * stay in the shell's own log, and each event says where there (`shell_session`, `seq`).
+ *
+ * A call to the governed answer path comes back with the platform's own trace for that answer, which is carried
+ * on the call's result: the coworker's turn and the platform's work for it are two traces, joined there.
+ */
+const ASKS = /^mcp__pramanyx__ask(_[a-z0-9_]+)?$/;
+const clip = (text, most) => (typeof text === "string" && text.length > most ? text.slice(0, most) : text);
+const textOf = (content) => (Array.isArray(content) ? content.map((p) => (p && typeof p.text === "string" ? p.text : "")).join("") : "");
+
+/** The trace of one turn of one conversation: `cw-<the shell's session id, shortened>-<turn>`. */
+export const traceOf = (sessionId, turn) =>
+  `cw-${String(sessionId).replace(/^session-/, "").replace(/[^A-Za-z0-9]/g, "").slice(0, 16)}-${Number(turn) || 0}`;
+
+/** What an answer's result says of itself, for the record: which platform trace, which receipt, how many rows. */
+function ofAnAnswer(text) {
+  try {
+    const got = JSON.parse(text);
+    return {
+      platform_trace: got.trace_id || undefined, investigation_id: got.investigation_id || undefined,
+      receipt_id: got.receipt?.artifact?.id || got.receipt_id || undefined,
+      headline: clip(got.answer || got.headline || undefined, 300),
+      rows: typeof got.row_count === "number" ? got.row_count : undefined,
+    };
+  } catch {
+    return { platform_trace: /"trace_id":\s*"([A-Za-z0-9-]{4,60})"/.exec(text)?.[1] };
+  }
+}
+
+/**
+ * The events one of the shell's own session events comes to, for the platform's record — none for most. `turns`
+ * holds what is known of each conversation's running turn and is changed here. Pure but for that.
+ */
+export function turnEvents(turns, sessionId, held, event) {
+  const data = event?.data ?? {};
+  const at = Number(event?.time) || Date.now();
+  const where = { shell_session: sessionId, seq: event?.seq };
+  const now = turns.get(sessionId);
+  if (event?.type === "turn/start") {
+    turns.set(sessionId, { turn: data.turn, trace: traceOf(sessionId, data.turn), started: at, asked: false, calls: new Map(), headline: "", tools: 0 });
+    return [];
+  }
+  if (!now) return [];
+  const conn_id = held || null;
+  if (event.type === "user/message" && !now.asked && data.source?.kind === "user") {
+    now.asked = true;
+    return [{ kind: "user_request", name: "coworker", conn_id, payload: { question: clip(textOf(data.content), 2000), turn: now.turn, ...where } }];
+  }
+  if (event.type === "tool/call" && data.callId) {
+    now.calls.set(data.callId, { name: data.name, at });
+    now.tools += 1;
+    return [{ kind: "tool_call", name: String(data.name || "tool"), span_id: data.callId, conn_id,
+              payload: { tool: data.name, arguments: clip(typeof data.arguments === "string" ? data.arguments : JSON.stringify(data.arguments ?? {}), 1500), step: data.step, ...where } }];
+  }
+  if (event.type === "tool/result") {
+    const message = data.message ?? {};
+    const call = now.calls.get(message.toolCallId);
+    if (!call) return [];
+    now.calls.delete(message.toolCallId);
+    const said = ASKS.test(call.name) ? ofAnAnswer(textOf(message.content)) : {};
+    if (said.headline) now.headline = said.headline;
+    const { rows, ...rest } = said;
+    return [{ kind: "tool_call_result", name: String(call.name || "tool"), span_id: message.toolCallId, ok: !message.isError,
+              duration_ms: Math.max(0, at - call.at), conn_id, ...(typeof rows === "number" ? { row_count: rows } : {}),
+              payload: { tool: call.name, ...rest, ...where } }];
+  }
+  if (event.type === "turn/end") {
+    turns.delete(sessionId);
+    const reason = String(data.reason?.kind || "");
+    return [{ kind: "final_response", name: "coworker", ok: reason === "completed", duration_ms: Math.max(0, at - now.started), conn_id,
+              payload: { ...(now.headline ? { headline: now.headline } : {}), reason, calls: now.tools, turn: now.turn, ...where } }];
+  }
+  return [];
+}
+
+function recordTurns(ctx, api) {
+  const turns = new Map();
+  const traces = new Map();          // session → the running turn's trace, read when a model call's headers are made
+  let sending = Promise.resolve();
+  let warned = false;
+  const send = (trace, session, events) => {
+    // One after another, so the record reads in the order things happened.
+    sending = sending.then(() => fetch(`${api}/coworker/trace`, {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ trace_id: trace, session, events }),
+    })).then((answer) => { if (!answer.ok) throw new Error(String(answer.status)); }).catch((error) => {
+      if (!warned) console.warn(`pramanyx-home: a turn was not recorded in the platform's trace store (${error?.message ?? error})`);
+      warned = true;
+    });
+  };
+  ctx.on("session/event", (session, event) => {
+    try {
+      const id = String(session?.id ?? "");
+      if (!id) return;
+      const before = turns.get(id);
+      const held = HELD_FOLDER.exec(String(session?.header?.cwd ?? ""))?.[1] ?? "";
+      const events = turnEvents(turns, id, held, event);
+      const after = turns.get(id);
+      if (after) traces.set(id, after.trace); else traces.delete(id);
+      const trace = (after ?? before)?.trace;
+      if (events.length && trace) send(trace, id, events);
+    } catch { /* the record is best-effort; the turn it observes goes on */ }
+  });
+  // Each model call says which turn it was made for, and the platform's model door files it under that turn.
+  ctx.on("llm-pi-ai/request-headers", (request, headers, next) => {
+    const trace = request?.sessionId ? traces.get(String(request.sessionId)) : undefined;
+    if (trace) { headers.set("x-pramanyx-trace", trace); headers.set("x-pramanyx-session", String(request.sessionId)); }
+    return next();
+  });
+}
+
 export const inject = ["webServer", "workspaceRegistry"];
 
 export function apply(ctx) {
@@ -153,6 +271,7 @@ export function apply(ctx) {
   });
   sayWhereThisIs(ctx, api);
   holdToConnection(ctx);
+  recordTurns(ctx, api);
   ctx.effect(() => ctx.webServer.register({
     kind: "exact",
     path: "/pramanyx-enter",

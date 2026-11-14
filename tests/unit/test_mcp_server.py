@@ -90,7 +90,7 @@ def test_ask_folds_stream_and_fetches_receipt():
             {"type": "narrative", "narrative": "There are **42** orders.", "anomalies": ["None stand out."],
              "trend": "stable", "confidence": "high"},
             {"type": "followups", "questions": ["How many last month?"]},
-            {"type": "done", "inv_id": "t1", "has_receipt": True},
+            {"type": "done", "inv_id": "t1", "has_receipt": True, "trace_id": "1d5a621b"},
         ])),
         "/chat/conn1/t1/receipt": httpx.Response(200, json={
             "natural_key": "chat:conn1:t1", "cost": {"total_tokens": 120},
@@ -98,6 +98,7 @@ def test_ask_folds_stream_and_fetches_receipt():
     }
     res = _run(_client(routes).ask("how many orders", "conn1"))
     assert res["answer"] == "There are 42 orders"
+    assert res["trace_id"] == "1d5a621b"      # the trace the answer's work was recorded under
     # What the platform wrote about the rows, and how it would draw them, reach the caller as they were sent.
     assert res["narrative"] == {"narrative": "There are **42** orders.", "anomalies": ["None stand out."],
                                 "trend": "stable", "confidence": "high"}

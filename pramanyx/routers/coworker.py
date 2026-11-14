@@ -13,12 +13,31 @@ neither is configuration and neither is stored.
 Only this machine may say where the coworker is, and only an address on this machine is accepted. The address is
 opened by a person's browser from the app's top bar; a route that let any caller set it would let any caller choose
 where the app sends people.
+
+**A coworker turn is a run, and is recorded where runs are.** The coworker's shell keeps its own trajectory of a
+turn — what it was given, each model call, each tool call. Agent Ops reads one store, the session log, and until
+this a coworker turn was not in it: the platform's own work for each question was (one trace per `ask`), and the
+coworker's model calls were, filed under no run at all. `POST /coworker/trace` takes the turn's events as they
+happen and writes them to that same store, so the turn is one trace an operator opens like any other:
+
+* the request, each tool call and its result, and the end of the turn come from the coworker;
+* its **model calls are not taken here**. The model door (`routers/model_door.py`) already records every one, with
+  its tokens and its cost; the coworker names the turn on each call and the door files the call under it. Taking
+  them here too would count the spend twice;
+* a call to the platform's own answer path carries **the platform's trace for that answer**, so the two halves of
+  one question are joined: the coworker's turn, and what the platform did to answer;
+* the conversation's words are the coworker's and stay with it. What is kept is the question, each tool's name and
+  what it was asked, and where in the coworker's own log the rest is (`shell_session`, `seq`).
+
+A trace written here is named `cw-…` and no other name is accepted, so this route cannot write into a run of the
+platform's own.
 """
 from __future__ import annotations
 
 import ipaddress
+import re
 import time
-from typing import Optional
+from typing import Any, Literal, Optional
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, HTTPException, Request
@@ -75,3 +94,62 @@ def where_the_coworker_is() -> CoworkerDoor:
     if _last["url"] and _now() - _last["at"] <= FRESH_FOR:
         return CoworkerDoor(available=True, url=_last["url"])
     return CoworkerDoor(available=False)
+
+
+# ── a coworker turn, as a trace ──────────────────────────────────────────────────────────────────────────────────
+
+#: A coworker turn's trace: `cw-<shell session, shortened>-<turn>`. The prefix is the boundary — see the module's note.
+TRACE_NAME = re.compile(r"^cw-[A-Za-z0-9]{6,40}-[0-9]{1,6}$")
+_SESSION_NAME = re.compile(r"^[A-Za-z0-9-]{6,80}$")
+#: What a payload may carry. Named, so a field the shell adds later is not stored because it arrived.
+_PAYLOAD_KEYS = frozenset({
+    "question", "mode", "turn", "step", "tool", "arguments", "platform_trace", "investigation_id", "receipt_id",
+    "headline", "rows", "reason", "error", "message", "shell_session", "seq", "calls",
+})
+
+
+class CoworkerTraceEvent(BaseModel):
+    kind: Literal["user_request", "tool_call", "tool_call_result", "final_response", "execution_error"] = Field(
+        description="What happened. A model call is not taken: the model door records those.")
+    name: str = Field(default="", max_length=120, description="The tool's name, or `coworker` for the turn itself.")
+    span_id: Optional[str] = Field(default=None, max_length=80, description="A tool call's id; its result carries the same.")
+    ok: Optional[bool] = None
+    duration_ms: Optional[float] = Field(default=None, ge=0)
+    conn_id: Optional[str] = Field(default=None, max_length=80, description="The connection the conversation is held to.")
+    row_count: Optional[int] = Field(default=None, ge=0)
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class CoworkerTraceBatch(BaseModel):
+    trace_id: str = Field(max_length=60, description="The turn's trace, `cw-<session>-<turn>`.")
+    session: str = Field(max_length=80, description="The shell's own id for the conversation.")
+    events: list[CoworkerTraceEvent] = Field(max_length=50)
+
+
+class CoworkerTraceTaken(BaseModel):
+    written: int = Field(description="How many events were written to the session log.")
+
+
+@router.post("/coworker/trace", response_model=CoworkerTraceTaken)
+def take_a_coworker_turn(body: CoworkerTraceBatch, request: Request) -> CoworkerTraceTaken:
+    """Events of one coworker turn, written to the session log Agent Ops reads. From this machine only."""
+    if not _on_this_machine(request.client.host if request.client else None):
+        raise HTTPException(status_code=403, detail="Only a coworker on this machine may record its turns.")
+    if not TRACE_NAME.match(body.trace_id) or not _SESSION_NAME.match(body.session):
+        raise HTTPException(status_code=422, detail="A coworker turn's trace is named cw-<session>-<turn>.")
+    from pramanyx.obs import session_log
+    from pramanyx.org.context import reset_session_id, set_session_id
+
+    # The door a run came in by is read off its session id's prefix (`slack:…`, `mcp:…`); this is `coworker:…`.
+    token = set_session_id(f"coworker:{body.session}")
+    try:
+        for event in body.events:
+            session_log.emit(
+                event.kind, name=event.name or "coworker", trace_id=body.trace_id, span_id=event.span_id,
+                ok=event.ok, duration_ms=event.duration_ms, conn_id=event.conn_id, row_count=event.row_count,
+                error_class=("coworker" if event.ok is False and event.kind != "tool_call" else None),
+                payload={k: v for k, v in event.payload.items() if k in _PAYLOAD_KEYS},
+            )
+    finally:
+        reset_session_id(token)
+    return CoworkerTraceTaken(written=len(body.events))

@@ -6219,7 +6219,7 @@ async def _stream_as_agent(agent, stream: AsyncGenerator[str, None]) -> AsyncGen
 #: SSE types the session log needs to notice. Checked as cheap substrings before
 #: paying for a JSON parse — the stream is mostly high-frequency delta frames and
 #: an observability sink must not tax every one of them.
-_SESSION_LOG_SNIFF = ('"start"', '"error"', '"headline"', '"receipt_id"')
+_SESSION_LOG_SNIFF = ('"start"', '"error"', '"headline"', '"receipt_id"', '"type": "done"')
 
 
 async def stream_with_session_log(
@@ -6293,6 +6293,11 @@ async def stream_with_session_log(
                         headline = str(frame.get("headline") or "")[:2000]
                     elif kind == "receipt_id":
                         receipt_id = frame.get("receipt_id")
+                    elif kind == "done" and "trace_id" not in frame:
+                        # The frame that ends the stream says which trace the run was recorded under, so a caller
+                        # that keeps its own record of the turn (the coworker) can point at this one. A field on
+                        # a frame every client already reads, not a new frame a client would have to learn.
+                        event = f"data: {_json.dumps({**frame, 'trace_id': run_id})}\n\n"
                     elif kind == "error":
                         failed = str(frame.get("message") or "")[:2000]
                         session_log.emit(

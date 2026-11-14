@@ -97,6 +97,29 @@ def test_the_ask_door_records_the_focus_on_its_request_event():
     assert mine and mine[0]["payload"]["focus"] == {"kind": "departure", "id": "held-q"}
 
 
+def test_the_frame_that_ends_a_run_says_which_trace_it_was_recorded_under():
+    """A caller that keeps its own record of the turn (the coworker) points at the platform's by this id: it is the
+    trace the run's request event was written under, on the closing frame every client already reads."""
+    import asyncio
+
+    from pramanyx.routers.investigations import stream_with_session_log
+
+    async def _body():
+        yield "data: " + json.dumps({"type": "rows", "rows": [["done"]]}) + "\n\n"
+        yield "data: " + json.dumps({"type": "done", "inv_id": "t1", "has_receipt": True}) + "\n\n"
+
+    async def _drain():
+        return [c async for c in stream_with_session_log(_body(), question="which trace is mine?", conn_id="c1", door="chat")]
+
+    rows, done = [json.loads(c[6:]) for c in asyncio.run(_drain())]
+    assert rows == {"type": "rows", "rows": [["done"]]}                      # a row that says "done" is not the end
+    assert done["inv_id"] == "t1" and done["has_receipt"] is True            # the frame keeps what it carried
+    from pramanyx.kernel.ledger import Ledger
+    mine = [r for r in Ledger.default().session_events(kind=session_log.USER_REQUEST, limit=50)
+            if (r.get("payload") or {}).get("question") == "which trace is mine?"]
+    assert mine and done["trace_id"] == mine[0]["trace_id"]
+
+
 def test_both_meters_are_served_on_one_spotlight_route():
     """SP-M's vocabulary meter had no route at all; it and the Ask door's share one door now."""
     body = client.get("/spotlight/uptake").json()
