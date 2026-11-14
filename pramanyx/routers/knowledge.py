@@ -22,6 +22,12 @@ def _document_owner_guard(request: Request) -> None:
     from pramanyx.security.authz import check_owner, get_principal
     if (doc_id := request.path_params.get("doc_id")):
         check_owner("document", doc_id, get_principal(request))
+        # And the person: a page its source restricts opens only for whom the source lets read it.
+        from pramanyx.knowledge.access import may_read, refusal
+        from pramanyx.knowledge.indexer import get_document
+        entry = get_document(doc_id)
+        if entry is not None and not may_read(entry):
+            raise HTTPException(status_code=403, detail=refusal(entry))
 
 
 #: DATA-06 — every connection a door of this router names belongs to the caller's org (identity on),
@@ -767,6 +773,15 @@ def _knowledge_syncer(conn_type: str, conn_id: str, meta: dict):
     return NotionSync(conn_id, meta)
 
 
+def _sees_source_titles(meta: dict) -> bool:
+    from pramanyx.org.context import current_user_id
+    from pramanyx.security.authz import require_identity_enabled
+    if not require_identity_enabled() or str(meta.get("audience") or "").strip().lower() == "org":
+        return True
+    owner = str(meta.get("connected_by") or "").strip().lower()
+    return bool(owner) and owner == (current_user_id() or "").strip().lower()
+
+
 class KnowledgeSourceIn(BaseModel):
     conn_type: str
     name: str
@@ -794,8 +809,14 @@ def list_knowledge_sources():
         entry = {"id": conn.get("id"), "name": conn.get("name"),
                  "conn_type": conn.get("conn_type"), "status": None}
         try:
-            syncer = _knowledge_syncer(conn["conn_type"], conn["id"], get_meta(conn["id"]))
+            meta = get_meta(conn["id"])
+            syncer = _knowledge_syncer(conn["conn_type"], conn["id"], meta)
             entry["status"] = syncer.status()
+            # A page that did not land is listed by its title, and a title can say what a restricted page is about:
+            # its titles are shown to the person who connected the source, or to everyone when they opened it.
+            if isinstance(entry["status"], dict) and not _sees_source_titles(meta):
+                entry["status"] = {**entry["status"], "pages_skipped": [],
+                                   "pages_skipped_withheld": "titles are shown to the person who connected the source"}
         except Exception as exc:
             entry["error"] = str(exc)
         sources.append(entry)
@@ -832,6 +853,10 @@ async def create_knowledge_source(body: KnowledgeSourceIn):
     if not ok:
         raise HTTPException(status_code=400, detail=f"Source test failed: {msg}")
 
+    # Who connected it: the person a page no one else may be matched to is left to (`knowledge/access.py`).
+    from pramanyx.org.context import current_user_id
+    if current_user_id():
+        config["connected_by"] = current_user_id()
     dsn = config.get("base_url", "") if body.conn_type == "confluence" else "notion://"
     conn_id = add_connection(name=body.name.strip(), conn_type=body.conn_type,
                              dsn=dsn, meta=config)

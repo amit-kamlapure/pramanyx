@@ -50,7 +50,7 @@ def get_document(doc_id: str) -> Optional[dict]:
 
 
 def _register(doc_id: str, filename: str, title: str, chunk_count: int, uploaded_at: str,
-              settings: Optional[dict] = None) -> None:
+              settings: Optional[dict] = None, access: Optional[dict] = None) -> None:
     docs = _load_registry()
     previous = next((d for d in docs if d["doc_id"] == doc_id), None)
     # Remove any existing entry for this doc_id
@@ -69,6 +69,9 @@ def _register(doc_id: str, filename: str, title: str, chunk_count: int, uploaded
         # Whose it is. A re-index (a connector re-sync, a restore) never changes the owner a
         # document was first stamped with — only the connection's own org decides a doc tree.
         **_ownership(doc_id, previous),
+        # Who may read it, as its SOURCE said when it was synced (`knowledge/access.py`). Re-stated on every sync —
+        # a page restricted since is restricted now — and kept as it was by a re-index that was not told it.
+        **({"access": access} if access else ({"access": previous["access"]} if previous and previous.get("access") else {})),
     })
     _save_registry(docs)
 
@@ -84,10 +87,26 @@ def _ownership(doc_id: str, previous: Optional[dict] = None) -> dict:
     conn = doctree_connection(doc_id)
     if conn is not None:
         return {"connection_id": conn, "org_id": _connection_org(conn)}
+    # A knowledge connector's page belongs to its source connection's organisation, not to whichever request
+    # happened to run the sync.
+    source = connector_connection(doc_id)
+    if source:
+        try:
+            return {"org_id": _connection_org(source) or (previous or {}).get("org_id", "")}
+        except Exception:  # noqa: BLE001 — an unreadable registry keeps the owner it had, or the request's
+            pass
     if previous and "org_id" in previous:
         return {"org_id": previous["org_id"]}
     from pramanyx.org.context import current_org_id
     return {"org_id": current_org_id()}
+
+
+def connector_connection(doc_id: str) -> str:
+    """The knowledge source a connector page came from (`confluence_<conn>_<page>`), or ""."""
+    for prefix in ("confluence_", "notion_"):
+        if doc_id.startswith(prefix):
+            return doc_id[len(prefix):].split("_", 1)[0]
+    return ""
 
 
 def _connection_org(connection_id: str) -> str:
@@ -130,13 +149,15 @@ def in_scope(entry: dict, *, connection_id: Optional[str] = None,
     Another connection's schema docs describe tables this connection does not have, so they
     are never in scope for it. ``org_id`` is ``None`` with sign-in off (one tenant owns every
     row); otherwise a document is readable by its own organisation, or by everyone when it
-    belongs to none."""
+    belongs to none — and, within it, by the people its source lets read it."""
     doc_id = entry.get("doc_id", "")
     if connection_id and doctree_connection(doc_id) not in (None, connection_id):
         return False
     if org_id is not None and entry_org(entry) not in (None, org_id):
         return False
-    return True
+    # And the person: a page its source restricts is read only by whom the source lets read it (`access.may_read`).
+    from pramanyx.knowledge.access import may_read
+    return may_read(entry)
 
 
 def correct_chunk_count(doc_id: str, chunk_count: int) -> bool:
@@ -230,9 +251,11 @@ def index_text(
     doc_id: Optional[str] = None,
     source_url: str = "",
     settings=None,
+    access: Optional[dict] = None,
 ) -> dict:
     """
-    Chunk plain text, embed, and upsert into Qdrant — no file I/O required.
+    Chunk plain text, embed, and upsert into Qdrant — no file I/O required. ``access`` is who may read it, as its
+    source says (`knowledge/access.py`).
     Returns the registry entry dict.
 
     Used by Confluence/Notion/API knowledge connectors.
@@ -262,7 +285,7 @@ def index_text(
     _ensure_collection()
     _upsert_chunks(chunks)
     _register(doc_id, filename, title, len(chunks), uploaded_at,
-              settings=settings.as_dict() if settings else None)
+              settings=settings.as_dict() if settings else None, access=access)
     return {
         "doc_id": doc_id,
         "title": title,

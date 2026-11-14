@@ -16,14 +16,15 @@ MAX_SKIPPED_LISTED = 100
 
 
 def index_page(*, text: str, title: str, source: str, doc_id: str,
-               source_url: str = "") -> Optional[str]:
-    """Index one page. Returns None when it landed, else the reason it did not."""
+               source_url: str = "", access: Optional[dict] = None) -> Optional[str]:
+    """Index one page, with who may read it as its source says (`knowledge/access.py`). Returns None when it landed,
+    else the reason it did not."""
     from pramanyx.kernel.registries.ingestion import ingest
 
     if not text.strip():
         return "the page has no text"
     entry = ingest("knowledge", text=text, title=title, source=source,
-                   doc_id=doc_id, source_url=source_url)
+                   doc_id=doc_id, source_url=source_url, access=access)
     if not entry:
         return "the document index did not accept it (the API log has the cause)"
     if not entry.get("chunk_count"):

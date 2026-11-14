@@ -23,7 +23,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Iterator
+from typing import Optional, Iterator
 
 import requests
 
@@ -52,6 +52,7 @@ class ConfluenceSync:
 
     def __init__(self, connection_id: str, meta: dict) -> None:
         self._conn_id   = connection_id
+        self._meta      = dict(meta or {})
         self._base_url  = meta.get("base_url", "").rstrip("/")
         self._username  = meta.get("username", "")
         self._api_token = meta.get("api_token", "")
@@ -107,7 +108,10 @@ class ConfluenceSync:
                 params={
                     "type":   "page",
                     "spaceKey": space_key,
-                    "expand": "body.storage",
+                    # Who may read the page, and the pages above it: a read restriction on an ancestor holds for
+                    # every page under it (`_access_of`).
+                    "expand": "body.storage,ancestors,restrictions.read.restrictions.user,"
+                              "restrictions.read.restrictions.group",
                     "limit":  _PAGE_SIZE,
                     "start":  start,
                 },
@@ -126,6 +130,72 @@ class ConfluenceSync:
             if not data.get("_links", {}).get("next"):
                 break
             start += _PAGE_SIZE
+
+    # ── Who may read a page ────────────────────────────────────────────────────
+
+    def _read_restriction(self, content: dict) -> Optional[tuple[set[str], set[str], int]]:
+        """A page's own READ restriction as (people by email, groups by name, readers with no email), or None when
+        it has none. A reader Confluence names without an email cannot be matched to a person here: counted, and
+        not a reader."""
+        read = ((content.get("restrictions") or {}).get("read") or {}).get("restrictions") or {}
+        users = (read.get("user") or {}).get("results") or []
+        groups = (read.get("group") or {}).get("results") or []
+        if not users and not groups:
+            return None
+        emails = {str(u.get("email") or "").strip().lower() for u in users if str(u.get("email") or "").strip()}
+        names = {str(g.get("name") or "").strip() for g in groups if str(g.get("name") or "").strip()}
+        return emails, names, sum(1 for u in users if not str(u.get("email") or "").strip())
+
+    def _ancestor_restriction(self, ancestor_id: str):
+        """An ancestor's read restriction, read once per sync."""
+        cache = self.__dict__.setdefault("_ancestors_read", {})
+        if ancestor_id not in cache:
+            try:
+                resp = self._session.get(
+                    f"{self._base_url}/wiki/rest/api/content/{ancestor_id}",
+                    params={"expand": "restrictions.read.restrictions.user,restrictions.read.restrictions.group"},
+                    timeout=15)
+                resp.raise_for_status()
+                cache[ancestor_id] = ("ok", self._read_restriction(resp.json()))
+            except Exception as exc:  # noqa: BLE001 — an ancestor that cannot be read restricts to no one
+                cache[ancestor_id] = ("unread", str(exc)[:120])
+        return cache[ancestor_id]
+
+    def _access_of(self, page: dict) -> dict:
+        """Who may read this page, as Confluence says (`knowledge/access.py`).
+
+        A read restriction holds for the page and every page under it, so each restricted level — the page and
+        each ancestor — must admit a reader. Group membership is not expanded here, so where several levels are
+        restricted the readers are the people and the groups named at EVERY level: narrower than Confluence may be,
+        never wider. A page no level restricts is read by whom the source's audience names (the space's own
+        permissions are not read: the person who connected the source says who reads its unrestricted pages). An
+        ancestor that cannot be read, or a restriction none of whose readers can be matched, leaves the page to the
+        person who connected the source alone."""
+        from pramanyx.knowledge.access import chosen, source_audience
+        owner = str(self._meta.get("connected_by") or "").strip()
+        levels = []
+        own = self._read_restriction(page)
+        if own is not None:
+            levels.append(own)
+        for anc in page.get("ancestors") or []:
+            state, got = self._ancestor_restriction(str(anc.get("id") or ""))
+            if state != "ok":
+                return chosen([owner] if owner else [], [], f"a page above it could not be read ({got}), so only the "
+                              "person who connected the source reads it", "confluence-restrictions")
+            if got is not None:
+                levels.append(got)
+        if not levels:
+            return source_audience(self._meta, what="Confluence places no read restriction on the page")
+        people = set.intersection(*(lv[0] for lv in levels))
+        groups = set.intersection(*(lv[1] for lv in levels))
+        unmatched = sum(lv[2] for lv in levels)
+        if not people and not groups:
+            return chosen([owner] if owner else [], [], "Confluence restricts the page and none of its readers could "
+                          "be matched here, so only the person who connected the source reads it",
+                          "confluence-restrictions")
+        note = f"; {unmatched} of its readers have no email Confluence shares and are not matched" if unmatched else ""
+        return chosen(sorted(people), sorted(groups), f"Confluence restricts who may read the page{note}",
+                      "confluence-restrictions")
 
     # ── Main sync ──────────────────────────────────────────────────────────────
 
@@ -155,6 +225,7 @@ class ConfluenceSync:
                     source=f"confluence:{space_key}",
                     doc_id=f"confluence_{self._conn_id}_{page_id}",
                     source_url=source_url,
+                    access=self._access_of(page),
                 )
                 if why is None:
                     count += 1

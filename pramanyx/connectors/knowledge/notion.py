@@ -64,6 +64,7 @@ class NotionSync:
 
     def __init__(self, connection_id: str, meta: dict) -> None:
         self._conn_id   = connection_id
+        self._meta      = dict(meta or {})
         self._token     = meta.get("integration_token", "")
         self._db_ids    = [d.strip() for d in meta.get("database_ids", "").split(",") if d.strip()]
         self._page_limit = int(meta.get("page_limit", 200))
@@ -184,6 +185,13 @@ class NotionSync:
 
     # ── Main sync ──────────────────────────────────────────────────────────────
 
+    @property
+    def _access(self) -> dict:
+        """Who may read a page. Notion's API tells an integration what was shared WITH IT, never who else may read a
+        page, so every page is read by whom the person who connected the source chose (`access.source_audience`)."""
+        from pramanyx.knowledge.access import source_audience
+        return source_audience(self._meta, what="Notion does not say who may read a page")
+
     def sync(self) -> dict:
         """Sync all accessible pages. Returns sync stats; the pages that did not land are
         kept on the state with their reason (``pages_skipped``)."""
@@ -203,7 +211,7 @@ class NotionSync:
                 text = _blocks_to_text(self._get_page_blocks(page_id))
                 why = index_page(text=text, title=title, source=f"notion:{source_label}",
                                  doc_id=f"notion_{self._conn_id}_{page_id}",
-                                 source_url=source_url)
+                                 source_url=source_url, access=self._access)
             except Exception as exc:
                 why = f"its blocks could not be read ({exc})"
             if why is None:
