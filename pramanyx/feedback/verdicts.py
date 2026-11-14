@@ -158,6 +158,27 @@ def record_verdict(
             from pramanyx.kernel.errors import tolerate
             tolerate(exc, "the agent's learning loop is best-effort; the verdict stands",
                      counter="verdicts.agent_loop")
+    # THE CONFIRMATION LOOP — a person's word reaches the claim the answer booked. A Right raises it to the tier a
+    # person's word carries, which is what the graph shows the planner as ground for the next answer; a Wrong
+    # withdraws it. Until 2026-11-14 a verdict reached the statistics, the exports and the corrections prompt, and
+    # never the Record: on that day 1,036 findings stood in the graph and not one was a person's. Best-effort and
+    # after the commit, like everything above: the verdict is the durable thing.
+    if connection_id and investigation_id:
+        try:
+            from pramanyx.org.context import current_user_id
+            from pramanyx.record import writers as _record
+            who = current_user_id() or ""
+            moved = (_record.approve_answer_claims(connection_id=connection_id, inv_id=investigation_id,
+                                                   verdict_id=new_id, by=who) if v == "accept"
+                     else _record.withdraw_answer_claims(connection_id=connection_id, inv_id=investigation_id,
+                                                         reason=note or "", verdict_id=new_id, by=who))
+            result["claims"] = moved
+            if moved:
+                _refresh_graphs_behind(connection_id, org)
+        except Exception as exc:
+            from pramanyx.kernel.errors import tolerate
+            tolerate(exc, "a verdict's reach to the Record is best-effort; the verdict stands",
+                     counter="verdicts.record_loop")
     # Verdict → Ambiguity Ledger bridge: a reviewer's reject/correct on a headlined finding
     # crystallizes as the HIGHEST-authority resolution (overrides any probe/user reading on that
     # question). Best-effort; never fails the verdict write.
@@ -171,6 +192,27 @@ def record_verdict(
             tolerate(exc, "verdict→ledger crystallization is best-effort",
                      counter="verdicts.ledger_bridge")
     return result
+
+
+def _refresh_graphs_behind(connection_id: str, org: str) -> None:
+    """The connection's graphs are rebuilt from the Record, off the request: a claim's tier changed, and the graph
+    is a projection of it. A node is named by its claim's VERSION, so an approval is a new node and only a rebuild
+    replaces the old one. One thread, every schema the connection has a graph for; a failure is counted, not raised."""
+    import threading
+
+    def _go() -> None:
+        from pramanyx.kernel.errors import tolerate
+        try:
+            from pramanyx.ontology.context_graph_store import load_graphs_for_connection
+            from pramanyx.ontology.graph_freshness import refresh_context_graph
+            schemas = {g.schema_name or None for g in load_graphs_for_connection(org, connection_id)} or {None}
+            for schema in schemas:
+                refresh_context_graph(connection_id, schema, org_id=org, force=True)
+        except Exception as exc:  # noqa: BLE001
+            tolerate(exc, "the graph rebuild after a verdict is best-effort; the next rebuild picks the claim up",
+                     counter="verdicts.graph_refresh")
+
+    threading.Thread(target=_go, name="verdict-graph-refresh", daemon=True).start()
 
 
 def sql_key(sql: str) -> str:

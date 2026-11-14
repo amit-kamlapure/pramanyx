@@ -245,8 +245,14 @@ def restate_answer_observation(answer: dict, entry: dict, *, text: str = "") -> 
         value=float(changes[0]["new"]) if len(changes) == 1 and changes[0].get("new") is not None else None,
         unit=prior.statement.unit)
     new.warrants = [_claims.Warrant(kind="run", ref=receipt, detail=sql[:400])]
+    if prior.tier == "approved":
+        # A person approved the number they were shown. This is another number: it is measured, and theirs to
+        # approve again — an approval is never carried onto a figure its author did not see.
+        new.tier = "measured"
     new.as_of = str(entry.get("checked_at") or "")[:10] or _today()
-    new.extra = {**prior.extra, "restated_by": "answers.recheck", "cause": entry.get("cause", "unknown"),
+    new.extra = {**{k: v for k, v in prior.extra.items() if k not in ("approved_by", "verdict_id", "approved_on")},
+                 **({"approval_lapsed": "the number moved after a person said it was right"} if prior.tier == "approved" else {}),
+                 "restated_by": "answers.recheck", "cause": entry.get("cause", "unknown"),
                  "changes": changes[:10], "missing_rows": entry.get("missing_rows", 0),
                  "lag_days": entry.get("lag_days"), "first_receipt": first_receipt}
     if entry.get("status") == "changed" and entry.get("cause") == "late_rows":
@@ -421,6 +427,71 @@ def withdraw_explorer_finding(*, connection_id: str, finding_id: str, reason: st
                                       value=prior.statement.value, unit=prior.statement.unit)
     new.extra = {**prior.extra, "withdrawn_reason": (reason or "")[:400], "withdrawn_by": by or "system"}
     return _claims.restate(key, new, conn_id=connection_id)
+
+
+# ── a person's word on an answer (the confirmation loop) ───────────────────────────────────
+
+def answer_claims(connection_id: str, inv_id: str) -> list[_claims.Claim]:
+    """Every current claim one answer booked: a quick answer's observation, and a deep analysis's findings and
+    hypotheses. Found by the keys the writers above give them — the investigation id is in each."""
+    if not (connection_id and inv_id):
+        return []
+    out: list[_claims.Claim] = []
+    one = _claims.latest(observation_key(connection_id, inv_id))
+    if one is not None:
+        out.append(one)
+    deep = _claims.claim_key("finding", "deep", connection_id, inv_id, "")
+    for kind in ("finding", "hypothesis"):
+        for c in _claims.list_claims(kind=kind, conn_id=connection_id, limit=2000):
+            if c.key.startswith(deep) and str(c.extra.get("investigation_id") or "") == inv_id:
+                out.append(c)
+    return out
+
+
+def approve_answer_claims(*, connection_id: str, inv_id: str, verdict_id: Any, by: str = "") -> list[str]:
+    """A person said an answer was right: each MEASURED claim it booked is restated at tier ``approved``, its run
+    warrant kept and an attestation added that names the verdict — the tier a person's word carries, and the one
+    the graph shows the planner as ground (`ontology/context_graph_readback.py` shows only what a person stands
+    behind). Until this existed nothing a person did raised a claim, so nothing learned was ever shown.
+
+    The statement is unchanged, so it is no Correction. A hypothesis is not raised (nothing was measured), nor a
+    claim already a person's or withdrawn. Returns the new versions' ids."""
+    done: list[str] = []
+    for prior in answer_claims(connection_id, inv_id):
+        if prior.tier != "measured" or prior.state == "withdrawn":
+            continue
+        new = prior.model_copy(deep=True)
+        new.confidence = None
+        new.tier = "approved"
+        new.warrants = [*prior.warrants, _claims.Warrant(
+            kind="attestation", ref=f"verdict:{verdict_id}",
+            detail=f"said to be right by {by}" if by else "said to be right by a person")]
+        new.extra = {**prior.extra, "approved_by": by or "a person", "verdict_id": verdict_id,
+                     "approved_on": _today()}
+        done.append(_claims.restate(prior.key, new, conn_id=connection_id))
+    return done
+
+
+def withdraw_answer_claims(*, connection_id: str, inv_id: str, reason: str, verdict_id: Any,
+                           by: str = "") -> list[str]:
+    """A person said an answer was wrong: each claim it booked is WITHDRAWN — restated ``state="withdrawn"`` with the
+    reason, the earlier version kept beneath it, as `withdraw_explorer_finding` withdraws a finding. Never deleted:
+    "what did we believe" still answers, and the Corrections view lists it. Returns the new versions' ids."""
+    done: list[str] = []
+    for prior in answer_claims(connection_id, inv_id):
+        if prior.state == "withdrawn":
+            continue
+        new = prior.model_copy(deep=True)
+        new.confidence = None
+        new.state = "withdrawn"
+        new.valid_until = _today()
+        new.status = "Final"
+        new.statement = _claims.Statement(text=f"Withdrawn: {prior.statement.text}"[:1000], metric=prior.statement.metric,
+                                          value=prior.statement.value, unit=prior.statement.unit)
+        new.extra = {**prior.extra, "withdrawn_reason": (reason or "a person said the answer was wrong")[:400],
+                     "withdrawn_by": by or "a person", "verdict_id": verdict_id}
+        done.append(_claims.restate(prior.key, new, conn_id=connection_id))
+    return done
 
 
 # ── the hub's ClaimCheck (the fifth shape's second half) ────────────────────────────────────

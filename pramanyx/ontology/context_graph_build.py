@@ -184,7 +184,9 @@ def load_record_findings(connection_id: str, org_id: Optional[str] = None, *,
     out: list[dict] = []
     for kind in RECORD_FINDING_KINDS:
         for c in record_claims.list_claims(kind=kind, conn_id=connection_id, limit=limit):
-            if c.state == "withdrawn" or c.tier not in ("measured", "mined"):
+            # `approved` and `declared` are a person's (a Right on the answer, a correction): until 2026-11-14 they
+            # were dropped here, so a claim a person stood behind left the graph the moment they did.
+            if c.state == "withdrawn" or c.tier not in ("measured", "mined", "approved", "declared"):
                 continue
             text = (c.statement.text or "").strip()
             if not text:
@@ -202,11 +204,25 @@ def load_record_findings(connection_id: str, org_id: Optional[str] = None, *,
     return out
 
 
-def merge_finding_sources(record: list[dict], legacy: list[dict]) -> list[dict]:
+def withdrawn_investigations(connection_id: str, *, limit: int = MAX_RECORD_FINDINGS) -> set[str]:
+    """The investigations whose claims a person withdrew. Their answers' receipts are still in the ledger, and
+    without this the receipt would bring back, as a legacy finding, the very thing a person said was wrong."""
+    from pramanyx.record import claims as record_claims
+    out: set[str] = set()
+    for kind in RECORD_FINDING_KINDS:
+        for c in record_claims.list_claims(kind=kind, conn_id=connection_id, limit=limit):
+            if c.state == "withdrawn" and c.extra.get("investigation_id"):
+                out.add(str(c.extra["investigation_id"]))
+    return out
+
+
+def merge_finding_sources(record: list[dict], legacy: list[dict], *,
+                          withdrawn: Optional[set[str]] = None) -> list[dict]:
     """The Record first: a legacy finding (the explorer store, an answer receipt) that a claim
     already covers — the same investigation, or the same explorer finding id — is dropped, so the
-    graph never holds a fact twice; one that predates the Record is kept, said as its source."""
-    covered_inv = {str(f.get("investigation_id")) for f in record if f.get("investigation_id")}
+    graph never holds a fact twice; one that predates the Record is kept, said as its source. An
+    investigation whose claim was WITHDRAWN is covered too: its receipt does not speak for it."""
+    covered_inv = {str(f.get("investigation_id")) for f in record if f.get("investigation_id")} | (withdrawn or set())
     covered_fid = {str(f.get("finding_id")) for f in record if f.get("finding_id")}
     kept = list(record)
     for f in legacy:
@@ -518,7 +534,8 @@ def build_context_graph(
     legacy = _safe(lambda: load_findings(connection_id), "findings", [])
     legacy += _consolidated_investigation_findings(
         connection_id, resolved_org, schema_name)
-    findings = merge_finding_sources(record, legacy)
+    findings = merge_finding_sources(
+        record, legacy, withdrawn=_safe(lambda: withdrawn_investigations(connection_id), "record", set()))
 
     briefs = _safe(lambda: load_briefs(connection_id), "briefs", [])
     # Arc FA, FA-1 — the published declarations.
