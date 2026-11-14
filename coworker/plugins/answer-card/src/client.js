@@ -14,10 +14,10 @@
  */
 import { createElement as h, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { drawChart } from "./chart";
+import { drawChart, labelOf, numericColumns } from "./chart";
 import {
-  PANE, PANE_PATTERN, PaneBody, groundingOf, pageFor, PaneTitle, ResultGrid, button, faint, hasPane, idOf, line, openBeside, quiet, remember,
-  rememberThing, setOpener, sheetsByTable, thingId, useChosen,
+  PANE, PANE_PATTERN, PaneBody, downloadCsv, groundingOf, pageFor, PaneTitle, ResultGrid, button, faint, hasPane, idOf, line,
+  openBeside, quiet, remember, rememberThing, setOpener, shown, sheetsByTable, thingId, useChosen,
 } from "./exhibit";
 
 const TOOL = "mcp__pramanyx__ask";
@@ -412,13 +412,29 @@ const STEPS_LOOK = `
   cursor: pointer; color: inherit; background: transparent;
   border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
 }
-/* The pencil on a chart: there when the chart is pointed at or the pencil is reached by keyboard, as in the app. */
-.pramanyx-exhibit-edit {
-  position: absolute; top: 2px; right: 2px; width: 28px; height: 28px; border-radius: 4px; cursor: pointer; padding: 0;
-  display: inline-flex; align-items: center; justify-content: center; color: inherit; opacity: 0;
-  background: var(--dsw-alias-bg-base, #111113); border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+/*
+ * An answer's own controls. An icon is plain until pointed at; a mark after a sentence is a small edged chip that
+ * opens what the sentence stood on; a quiet link opens something behind the answer.
+ */
+.pramanyx-icon {
+  width: 30px; height: 30px; border-radius: 4px; cursor: pointer; padding: 0; border: 0; background: transparent;
+  display: inline-flex; align-items: center; justify-content: center; color: inherit; opacity: 0.62;
 }
-.pramanyx-exhibit-chart:hover .pramanyx-exhibit-edit, .pramanyx-exhibit-edit:focus-visible { opacity: 1; }
+.pramanyx-icon:hover, .pramanyx-icon:focus-visible, .pramanyx-icon[aria-pressed="true"], .pramanyx-icon[aria-expanded="true"] {
+  opacity: 1; background: color-mix(in srgb, currentColor 8%, transparent);
+}
+.pramanyx-icon:disabled { cursor: default; opacity: 0.3; }
+.pramanyx-mark {
+  font: inherit; font-size: 12px; line-height: 18px; height: 20px; padding: 0 6px; margin: 0 0 0 4px; border-radius: 4px;
+  cursor: pointer; color: inherit; vertical-align: 1px; white-space: nowrap;
+  background: color-mix(in srgb, currentColor 6%, transparent); border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+}
+.pramanyx-mark:hover, .pramanyx-mark:focus-visible { border-color: color-mix(in srgb, currentColor 55%, transparent); }
+.pramanyx-link {
+  font: inherit; font-size: 12.5px; color: inherit; opacity: 0.68; background: transparent; border: 0; padding: 4px 0; cursor: pointer;
+  text-decoration: underline dotted color-mix(in srgb, currentColor 45%, transparent); text-underline-offset: 3px;
+}
+.pramanyx-link:hover, .pramanyx-link:focus-visible, .pramanyx-link[aria-expanded="true"] { opacity: 1; }
 .pramanyx-step-busy {
   flex: none; width: 12px; height: 12px; border-radius: 50%; box-sizing: border-box;
   border: 1.5px solid currentColor; border-right-color: transparent; opacity: 0.7;
@@ -497,9 +513,10 @@ async function say(path, body) {
  * Was this right? The one thing a card writes. It goes to Pramanyx as the app's own control sends it: the
  * judgement to the answer's record, and — when a person says what was wrong, or gives the SQL that would have
  * been right — a verdict that later answers on the connection are given. What was said is remembered in this
- * browser by the answer's id, so a card reopened later says what was said and does not ask again.
+ * browser by the answer's id, so a card reopened later says what was said and does not ask again. It is drawn as
+ * two icons at the foot of the answer; `extras` are the answer's other controls, which share that one row.
  */
-function Feedback({ answer }) {
+function Feedback({ answer, extras = null }) {
   const id = String(answer.investigation_id || "");
   const connection = String(answer.connection || "");
   const kept = () => { try { return localStorage.getItem(SAID + id) || ""; } catch { return ""; } };
@@ -509,7 +526,6 @@ function Feedback({ answer }) {
   const [fix, setFix] = useState("");
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
-  if (!id || !connection) return null;
 
   const settle = (what) => { try { localStorage.setItem(SAID + id, what); } catch { /* said for this visit */ } setSaid(what); };
   const judge = async (verdict) => {
@@ -540,13 +556,13 @@ function Feedback({ answer }) {
   };
   const field = { font: "inherit", fontSize: 12.5, color: "inherit", background: "transparent", border: `1px solid ${line}`,
                   borderRadius: 4, padding: "6px 8px", width: "100%", boxSizing: "border-box", resize: "vertical" };
-  return h("div", { style: { borderTop: `1px solid ${line}`, marginTop: 12, paddingTop: 10, fontSize: 12.5, display: "flex", flexDirection: "column", gap: 8 } },
-    said && !asking ? h("div", { style: quiet }, SAYS[said] ?? SAYS.right)
-      : !asking ? h("div", { style: { display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" } },
-          h("span", { style: quiet }, "Was this right?"),
-          h("button", { type: "button", disabled: busy, style: button(false), onClick: () => judge("helpful") }, "Right"),
-          h("button", { type: "button", disabled: busy, style: button(false), onClick: () => judge("unhelpful") }, "Wrong"))
-        : null,
+  const canJudge = Boolean(id && connection);
+  return h("div", { style: { fontSize: 12.5, display: "flex", flexDirection: "column", gap: 8 } },
+    h("div", { style: { display: "flex", flexWrap: "wrap", gap: 2, alignItems: "center" } },
+      canJudge && !said ? h("button", { type: "button", className: "pramanyx-icon", disabled: busy, "aria-label": "This was right", title: "This was right", onClick: () => judge("helpful") }, h(Glyph, { d: GLYPH.right })) : null,
+      canJudge && !said ? h("button", { type: "button", className: "pramanyx-icon", disabled: busy, "aria-label": "This was wrong", title: "This was wrong", onClick: () => judge("unhelpful") }, h(Glyph, { d: GLYPH.wrong })) : null,
+      extras),
+    canJudge && said && !asking ? h("div", { style: quiet }, SAYS[said] ?? SAYS.right) : null,
     asking ? h("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
       h("div", { style: quiet }, SAYS.wrong),
       h("label", { htmlFor: `why-${id}` }, "What was wrong?"),
@@ -561,15 +577,54 @@ function Feedback({ answer }) {
 
 const OBJECTS_SHOWN = 3;
 
-/** A pencil, for "Edit visualization". */
-const Pencil = () => h("svg", { width: 14, height: 14, viewBox: "0 0 16 16", fill: "none", stroke: "currentColor", strokeWidth: 1.4, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" },
-  h("path", { d: "M11.2 2.6l2.2 2.2-7.6 7.6-3 .8.8-3z" }), h("path", { d: "M9.8 4l2.2 2.2" }));
+const GLYPH = {
+  edit: ["M11.2 2.6l2.2 2.2-7.6 7.6-3 .8.8-3z", "M9.8 4l2.2 2.2"],
+  table: ["M2.5 3.5h11v9h-11z", "M2.5 6.5h11M2.5 9.5h11M6.5 3.5v9"],
+  download: ["M8 2.5v7.5M5 7.5l3 3 3-3", "M3 13.5h10"],
+  copy: ["M5.5 5.5h8v8h-8z", "M10.5 5.5V3a.5.5 0 00-.5-.5H3a.5.5 0 00-.5.5v7a.5.5 0 00.5.5h2.5"],
+  right: ["M5 7.2v6.3H2.8V7.2z", "M5 7.2l2.6-4.7c1 0 1.7.7 1.7 1.7v2.2h3a1 1 0 011 1.2l-.9 4.4a1.3 1.3 0 01-1.3 1.1H5"],
+  wrong: ["M11 8.8V2.5h2.2v6.3z", "M11 8.8l-2.6 4.7c-1 0-1.7-.7-1.7-1.7V9.6h-3a1 1 0 01-1-1.2l.9-4.4A1.3 1.3 0 014.9 2.9H11"],
+};
+const Glyph = ({ d }) => h("svg", { width: 15, height: 15, viewBox: "0 0 16 16", fill: "none", stroke: "currentColor", strokeWidth: 1.3, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" },
+  d.map((path, i) => h("path", { key: i, d: path })));
+
+/** Words the platform wrote, with what it marked `**decisive**` set bold. Nothing else in them is read as markup. */
+function rich(text) {
+  return String(text || "").split(/(\*\*[^*]+\*\*)/g).filter(Boolean).map((piece, i) =>
+    (piece.startsWith("**") && piece.endsWith("**") && piece.length > 4
+      ? h("strong", { key: i, style: { fontWeight: 600 } }, piece.slice(2, -2)) : piece));
+}
+
+/** "Total gmv eur by platform": what an exhibit of one measure over one dimension is of, from its own columns. */
+function titleOf(answer) {
+  const columns = answer.columns ?? [];
+  if (columns.length !== 2) return "";
+  const numeric = numericColumns(columns, answer.rows ?? []);
+  if (numeric[0] === numeric[1]) return "";
+  const measure = labelOf(columns[numeric[0] ? 0 : 1]), by = labelOf(columns[numeric[0] ? 1 : 0]);
+  return `${measure} by ${by.toLowerCase()}`;
+}
 
 /**
- * An answer, as a Data Canvas shows one. The chart; under it the tables it read and how many rows, and on the
- * right Table and SQL. Table opens the rows in place. SQL opens the query and the rows beside the conversation,
- * in the shell's right-hand pane, and the pencil on the chart opens its editor there — where the shell has no
- * such pane, the SQL opens in place and there is no pencil.
+ * One row of numbers is a figure, not a chart and not a one-line table: each number set large under its name, and
+ * what is not a number said beside it. The Data Canvas shows a single-row answer this way.
+ */
+function Figures({ answer }) {
+  const columns = answer.columns ?? [], row = (answer.rows ?? [])[0] ?? [];
+  const numeric = numericColumns(columns, answer.rows ?? []);
+  return h("div", { style: { display: "flex", flexWrap: "wrap", gap: "14px 36px", padding: "6px 0 10px" } },
+    columns.map((c, i) => h("div", { key: c, style: { minWidth: 0 } },
+      h("div", { style: { ...quiet, fontSize: 12.5 } }, labelOf(c)),
+      h("div", { style: { fontSize: numeric[i] ? 26 : 15, fontWeight: 600, lineHeight: 1.3, fontVariantNumeric: "tabular-nums", overflowWrap: "anywhere" } },
+        shown(row[i], numeric[i])))));
+}
+
+/**
+ * An answer, laid out to be read: what was found, said in a headline and a few sentences the platform wrote from
+ * the rows; then the exhibit — a title, the chart, and three icons in its corner (take the rows away, see them as
+ * a table, change how they are drawn); then what stands out. What a sentence stood on is a small mark at its end,
+ * and opens the app's own page for it beside the conversation. Everything else an answer can show is one quiet
+ * row at its foot. Nothing here is a second telling: every word is the platform's, and every number is from the rows.
  */
 function Exhibit({ answer, whole, asked }) {
   const id = idOf(answer, asked);
@@ -577,13 +632,13 @@ function Exhibit({ answer, whole, asked }) {
   const [open, setOpen] = useState("");
   const [allObjects, setAllObjects] = useState(false);
   const [sheets, setSheets] = useState(null);
+  const [copied, setCopied] = useState(false);
   // An answer over the Sheets connection read spreadsheets: each opens as itself, beside the conversation.
   const overSheets = String(answer.connection || answer.receipt?.artifact?.conn_id || "") === "sheets";
   useEffect(() => { if (overSheets) sheetsByTable().then(setSheets); }, [overSheets]);
   useEffect(() => { remember(id, answer, asked); }, [id, answer, asked]);
-  const frame = { border: `1px solid ${line}`, borderRadius: 6, padding: 12, margin: "6px 0", fontSize: 13 };
-  const count = typeof answer.row_count === "number" ? answer.row_count : (answer.rows ?? []).length;
-  const read = (answer.tables_used ?? []).join(", ");
+  const rows = answer.rows ?? [];
+  const count = typeof answer.row_count === "number" ? answer.row_count : rows.length;
   const toggle = (what) => setOpen((was) => (was === what ? "" : what));
   const ground = groundingOf(answer);
   const metrics = ground ? ground.metrics : [];
@@ -594,45 +649,63 @@ function Exhibit({ answer, whole, asked }) {
   const tables = [...objects, ...(answer.tables_used ?? []).filter((t) => !objects.some((o) => same(o, t)))];
   const receipt = answer.receipt?.artifact?.id || "";
   const connection = String(answer.connection || answer.receipt?.artifact?.conn_id || "");
-  return h("div", { style: frame },
-    h("div", { style: { fontSize: 15, fontWeight: 600, padding: "0 0 10px" } }, answer.answer || answer.question || "Answer"),
-    h("div", { className: "pramanyx-exhibit-chart", style: { position: "relative" } },
-      h(Chart, { answer, viz }),
-      hasPane() ? h("button", {
-        type: "button", className: "pramanyx-exhibit-edit", "aria-label": "Edit visualization", title: "Edit visualization",
-        onClick: () => openBeside("viz", id),
-      }, h(Pencil)) : null),
-    h("div", { style: { display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", paddingTop: 8 } },
-      read ? h("span", { style: { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 12.5 } }, read) : null,
-      h("span", { style: { ...quiet, fontSize: 12.5 } }, `${count} ${count === 1 ? "row" : "rows"}`),
-      h("span", { style: { flex: "1 1 auto" } }),
-      h("button", { type: "button", "aria-expanded": open === "table", style: button(open === "table"), onClick: () => toggle("table") },
-        `${open === "table" ? "⌄" : "›"} Table`),
-      h("button", { type: "button", style: button(open === "sql"), onClick: () => { if (!openBeside("sql", id)) toggle("sql"); } }, "SQL"),
-      h("button", { type: "button", "aria-expanded": open === "how", style: button(open === "how"), onClick: () => toggle("how") }, "How it was answered"),
-      receipt && hasPane() ? h("button", { type: "button", style: button(false), title: "The app's own page for how this number was produced",
-        onClick: () => openBeside("page", pageFor.receipt(receipt)) }, "Why this number") : null),
-    // What the answer was held to and what it read, each opening the app's own page for it beside the conversation.
-    hasPane() && connection && (metrics.length || tables.length) ? h("div", { style: { display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", paddingTop: 8, fontSize: 12.5 } },
-      metrics.map((m) => h("button", {
-        key: `m-${m.name}`, type: "button", style: button(false), title: m.departed ? "The answer did not use this metric as approved. Opens its definition." : "Opens this metric's definition",
-        onClick: () => openBeside("page", pageFor.metric(m.name, connection)),
-      }, m.departed ? `Metric · ${m.name} · not used as approved` : `Metric · ${m.name}`)),
-      (overSheets && sheets ? (answer.tables_used ?? []) : []).map((t) => sheets.get(String(t).split(".").pop().toLowerCase())).filter(Boolean).map((sheet) =>
-        h("button", { key: `s-${sheet.id}`, type: "button", style: button(false), title: "Opens this spreadsheet",
-                      onClick: () => openBeside("page", pageFor.sheet(sheet.id)) }, `Sheet · ${sheet.name}`)),
-      // The first few objects, and the rest behind one button: an answer grounded in eight would otherwise put
-      // a wall of buttons under its chart.
-      (allObjects ? tables : tables.slice(0, OBJECTS_SHOWN)).map((t) => h("button", {
-        key: `t-${t}`, type: "button", style: button(false), title: "Opens this object in the ontology",
-        onClick: () => openBeside("page", pageFor.type(t, connection)),
-      }, `Ontology · ${t}`)),
-      tables.length > OBJECTS_SHOWN ? h("button", { type: "button", "aria-expanded": allObjects, style: button(false), onClick: () => setAllObjects((was) => !was) },
-        allObjects ? "Fewer" : `and ${tables.length - OBJECTS_SHOWN} more`) : null) : null,
-    open === "table" ? h("div", { style: { paddingTop: 10 } }, h(ResultGrid, { answer })) : null,
-    open === "sql" ? h("div", { style: { paddingTop: 10 } }, h(Sql, { answer })) : null,
-    open === "how" ? h("div", { style: { paddingTop: 10 } }, h(How, { answer, whole })) : null,
-    h(Feedback, { answer }));
+  const told = answer.narrative && typeof answer.narrative === "object" ? answer.narrative : null;
+  const words = told && typeof told.narrative === "string" ? told.narrative.trim() : "";
+  const standsOut = told && Array.isArray(told.anomalies) ? told.anomalies.filter((x) => typeof x === "string" && x.trim()) : [];
+  const figure = rows.length === 1;
+  const title = titleOf(answer);
+  const marks = hasPane() && connection;
+  const sheetsRead = (overSheets && sheets ? (answer.tables_used ?? []) : []).map((t) => sheets.get(String(t).split(".").pop().toLowerCase())).filter(Boolean);
+  const copy = () => {
+    const text = [answer.answer, words.replace(/\*\*/g, ""), "", [answer.columns ?? [], ...rows].map((r) => r.join("\t")).join("\n")].filter((x) => x !== null && x !== undefined).join("\n");
+    navigator.clipboard?.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); });
+  };
+  // What the answer was held to and what it read: a mark each, at the end of what was said.
+  const stoodOn = marks ? [
+    ...metrics.map((m) => h("button", {
+      key: `m-${m.name}`, type: "button", className: "pramanyx-mark",
+      title: m.departed ? "The answer did not use this metric as approved. Opens its definition." : "The approved metric this answer was held to. Opens its definition.",
+      onClick: () => openBeside("page", pageFor.metric(m.name, connection)),
+    }, m.departed ? `${m.name} · not used as approved` : m.name)),
+    ...sheetsRead.map((sheet) => h("button", { key: `s-${sheet.id}`, type: "button", className: "pramanyx-mark", title: "A spreadsheet this answer read. Opens it.",
+      onClick: () => openBeside("page", pageFor.sheet(sheet.id)) }, sheet.name)),
+    // The first few objects, and the rest behind one mark: an answer grounded in eight would otherwise trail a
+    // line of them.
+    ...(allObjects ? tables : tables.slice(0, OBJECTS_SHOWN)).map((t) => h("button", {
+      key: `t-${t}`, type: "button", className: "pramanyx-mark", title: "An object of the ontology this answer read. Opens it.",
+      onClick: () => openBeside("page", pageFor.type(t, connection)),
+    }, t)),
+    tables.length > OBJECTS_SHOWN ? h("button", { key: "more", type: "button", className: "pramanyx-mark", "aria-expanded": allObjects, onClick: () => setAllObjects((was) => !was) },
+      allObjects ? "fewer" : `+${tables.length - OBJECTS_SHOWN}`) : null,
+  ] : [];
+  return h("div", { style: { display: "flex", flexDirection: "column", gap: 14, margin: "10px 0 6px", fontSize: 14.5, lineHeight: 1.6 } },
+    h("div", { role: "heading", "aria-level": 3, style: { fontSize: 20, fontWeight: 600, lineHeight: 1.3 } }, answer.answer || answer.question || "Answer"),
+    words || stoodOn.length ? h("div", null, rich(words), stoodOn) : null,
+    h("div", { style: { border: `1px solid ${line}`, borderRadius: 6, padding: "8px 8px 4px 14px" } },
+      h("div", { style: { display: "flex", alignItems: "center", gap: 2, minHeight: 30 } },
+        h("div", { style: { flex: "1 1 auto", minWidth: 0, fontSize: 14, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, title),
+        h("button", { type: "button", className: "pramanyx-icon", "aria-label": "Download the rows as CSV", title: "Download the rows as CSV", onClick: () => downloadCsv(answer) }, h(Glyph, { d: GLYPH.download })),
+        figure ? null : h("button", { type: "button", className: "pramanyx-icon", "aria-label": "Show as a table", title: "Show as a table", "aria-expanded": open === "table", onClick: () => toggle("table") }, h(Glyph, { d: GLYPH.table })),
+        !figure && hasPane() ? h("button", { type: "button", className: "pramanyx-icon", "aria-label": "Edit visualization", title: "Edit visualization", onClick: () => openBeside("viz", id) }, h(Glyph, { d: GLYPH.edit })) : null),
+      h("div", { style: { paddingRight: 6 } },
+        figure ? h(Figures, { answer }) : open === "table" ? h("div", { style: { padding: "6px 0 8px" } }, h(ResultGrid, { answer })) : h(Chart, { answer, viz })),
+      h("div", { style: { display: "flex", alignItems: "center", gap: 12, borderTop: `1px solid ${line}`, marginTop: 6, paddingRight: 6 } },
+        h("button", { type: "button", className: "pramanyx-link", "aria-expanded": open === "sql", onClick: () => { if (!openBeside("sql", id)) toggle("sql"); } }, "Show the SQL"),
+        h("span", { style: { flex: "1 1 auto" } }),
+        h("span", { style: { ...quiet, fontSize: 12.5 } }, `${count} ${count === 1 ? "row" : "rows"}`)),
+      open === "sql" ? h("div", { style: { padding: "4px 6px 8px 0" } }, h(Sql, { answer })) : null),
+    standsOut.length ? h("div", { style: { display: "flex", flexDirection: "column", gap: 6 } },
+      h("div", { role: "heading", "aria-level": 4, style: { fontSize: 16, fontWeight: 600 } }, "What stands out"),
+      standsOut.map((point, i) => h("div", { key: i }, rich(point)))) : null,
+    h(Feedback, { answer, extras: [
+      h("button", { key: "copy", type: "button", className: "pramanyx-icon", "aria-label": copied ? "Copied" : "Copy the answer", title: copied ? "Copied" : "Copy the answer", onClick: copy }, h(Glyph, { d: GLYPH.copy })),
+      h("span", { key: "gap", style: { width: 8 } }),
+      receipt && hasPane() ? h("button", { key: "why", type: "button", className: "pramanyx-link", title: "The app's own page for how this number was produced",
+        onClick: () => openBeside("page", pageFor.receipt(receipt)) }, "Why this number") : null,
+      h("span", { key: "gap2", style: { width: 12 } }),
+      h("button", { key: "how", type: "button", className: "pramanyx-link", "aria-expanded": open === "how", onClick: () => toggle("how") }, "How it was answered"),
+    ] }),
+    open === "how" ? h("div", { style: { border: `1px solid ${line}`, borderRadius: 6, padding: 12 } }, h(How, { answer, whole })) : null);
 }
 
 function Card(props) {

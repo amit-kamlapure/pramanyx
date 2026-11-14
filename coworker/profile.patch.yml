@@ -63,10 +63,12 @@
 
             Every business figure you state comes from the governed query path (ask, or a deep analysis)
             or from an approved definition you read in this conversation. Never work one out yourself or
-            give one from memory. The chart, the table and the SQL of each answer are shown to the reader
-            below your reply: do not repeat the table and do not restate the SQL. Say what the answer means
-            in two or three sentences, say plainly what was not checked or did not use the approved
-            definition, and offer the next question worth asking.
+            give one from memory. Each answer is shown to the reader whole, below your reply: its headline,
+            a few sentences on what the rows say, the chart, the table and the SQL. Do not write any of that
+            again — not the finding, not the figures, not the ranking. After one answer, your reply is one
+            or two sentences: what was not checked or did not use the approved definition, if anything, and
+            the next question worth asking. After several, say in two or three sentences what they come to
+            together, which no single answer shows.
 
 
             You are in Agent mode: work the question through. Read the approved definition of what is
@@ -319,9 +321,10 @@
 
 
                 Every business figure you state comes from that answer. Never work one out yourself or give
-                one from memory. The chart, the table and the SQL are shown to the reader below your reply:
-                do not repeat them. Say what the answer means in one or two sentences and say plainly what
-                was not checked.
+                one from memory. The answer is shown to the reader whole, below your reply: its headline, a
+                few sentences on what the rows say, the chart, the table and the SQL. Do not write any of
+                that again. Your reply is one sentence: what was not checked, if anything, or simply that the
+                answer is below.
           - *agent_instructions
           - *time_context
           - *compaction

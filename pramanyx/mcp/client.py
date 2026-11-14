@@ -315,6 +315,9 @@ class PramanyxClient:
             "question": question, "connection": connection, "answer": None, "sql": None,
             "columns": None, "rows": None, "row_count": None, "chart_type": None,
             "analysis": None, "trusted_metrics": None, "tables_used": None,
+            # What the platform itself wrote about the rows, and how it would draw them. A caller that shows the
+            # answer shows these, so it does not have a second model retell the first.
+            "narrative": None, "chart_config": None, "followups": None,
             "investigation_id": None, "has_receipt": False, "error": None,
         }
         async for ev in self._stream_sse("POST", "/chat", body, timeout=self.deep_timeout):
@@ -337,6 +340,12 @@ class PramanyxClient:
                 acc["trusted_metrics"] = ev.get("items")
             elif t == "tables_used":
                 acc["tables_used"] = ev.get("tables")
+            elif t == "chart_config":
+                acc["chart_config"] = ev.get("chart_config")
+            elif t == "narrative":
+                acc["narrative"] = {k: ev.get(k) for k in ("narrative", "anomalies", "trend", "confidence")}
+            elif t == "followups":
+                acc["followups"] = ev.get("questions")
             elif t == "error":
                 acc["error"] = ev.get("message")
             elif t == "done":

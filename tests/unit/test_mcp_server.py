@@ -86,6 +86,10 @@ def test_ask_folds_stream_and_fetches_receipt():
             {"type": "headline", "headline": "There are 42 orders"},
             {"type": "trusted", "items": [{"metric": "orders"}]},
             {"type": "tables_used", "tables": ["orders"]},
+            {"type": "chart_config", "chart_config": {"exhibit": {"kind": "figure"}}},
+            {"type": "narrative", "narrative": "There are **42** orders.", "anomalies": ["None stand out."],
+             "trend": "stable", "confidence": "high"},
+            {"type": "followups", "questions": ["How many last month?"]},
             {"type": "done", "inv_id": "t1", "has_receipt": True},
         ])),
         "/chat/conn1/t1/receipt": httpx.Response(200, json={
@@ -94,6 +98,11 @@ def test_ask_folds_stream_and_fetches_receipt():
     }
     res = _run(_client(routes).ask("how many orders", "conn1"))
     assert res["answer"] == "There are 42 orders"
+    # What the platform wrote about the rows, and how it would draw them, reach the caller as they were sent.
+    assert res["narrative"] == {"narrative": "There are **42** orders.", "anomalies": ["None stand out."],
+                                "trend": "stable", "confidence": "high"}
+    assert res["chart_config"] == {"exhibit": {"kind": "figure"}}
+    assert res["followups"] == ["How many last month?"]
     assert res["sql"].startswith("SELECT COUNT")
     assert res["row_count"] == 1
     assert res["rows"] == [[42]]

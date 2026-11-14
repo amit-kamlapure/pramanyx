@@ -48,12 +48,19 @@ turned back on from the interface.
   mounts none of Agent's planning, delegation, schedule or to-do tools.
 - **Pramanyx's MCP server** (`python -m pramanyx.mcp`), a thin client of the running API. The agent reaches
   Pramanyx through it and through nothing else.
-- **An answer is an exhibit, as a Data Canvas shows one.** It takes over the display of the `ask` tool, and of each
-  custom agent's `ask_<agent>` tool the first time one is seen. The chart is drawn by the same resolver the app,
-  the PDF export and `POST /charts/svg` use. Under it: the tables read and the row count, and on the right
-  **Table** and **SQL**. Table opens the rows in place — headings named as the app names them, numbers aligned
-  and grouped, a click on a heading sorts, Totals sums each column of numbers, Copy and CSV carry the rows as
-  they were answered.
+- **An answer is laid out to be read.** It takes over the display of the `ask` tool, and of each custom agent's
+  `ask_<agent>` tool the first time one is seen. First the headline, then the few sentences the platform itself
+  wrote from the rows (its own narrative, carried over MCP with what it marked decisive set bold), then the
+  exhibit: a title from its columns, the chart — drawn by the same resolver the app, the PDF export and
+  `POST /charts/svg` use — and three icons in its corner: download the rows as CSV, show them as a table, edit
+  the visualization. Under the chart, "Show the SQL" and the row count. Then "What stands out", when the platform
+  named anything. A single row of numbers is shown as figures, with no chart and no table. The table has
+  headings named as the app names them, numbers aligned and grouped, a click on a heading sorts, Totals sums
+  each column of numbers, Copy and CSV carry the rows as they were answered. The agent is told the answer is
+  shown whole and not to write it again: its own reply is a sentence on what was not checked.
+- **What a sentence stood on is a mark at its end.** Each metric the answer was held to, each spreadsheet and
+  each object of the ontology it read is a small chip after the words; it opens the app's own page for it
+  beside the conversation. A metric not used as approved says so on its mark.
 - **Things open beside the conversation.** The shell has a right-hand pane with tabs, and the coworker adds a kind
   of tab to it. **SQL** opens an answer's query and rows there. The pencil on a chart opens **Edit
   visualization**: what it is drawn as, its X and Y axis, a colour, labels, tooltip and orientation. What is
@@ -74,7 +81,8 @@ turned back on from the interface.
 - **One voice.** The coworker is part of the platform and speaks as it: "I checked the approved definition", never
   "I asked Pramanyx" or "Pramanyx flagged". The agent's instructions say so, and say the tools are its own ways
   of working; the cards, the steps and the first screen do not name Pramanyx as another party.
-- **Was this right?** Under an answer, Right and Wrong. Both go to Pramanyx as the app's own control sends them:
+- **Was this right?** Two icons at the foot of an answer, beside Copy, "Why this number" and "How it was
+  answered". Both go to Pramanyx as the app's own control sends them:
   the judgement to `/chat/feedback`, and — when a person says what was wrong, or gives the SQL that would have
   been right — a verdict to `/verify/verdict`, which later answers on the connection are given. The page asks its
   own server (`/pramanyx-feedback`, `/pramanyx-verdict`) and the server asks Pramanyx. These are the only writes
@@ -108,8 +116,8 @@ turned back on from the interface.
 - **What a step read opens beside the conversation.** A metric's definition, an object of the ontology, the
   Briefing, earlier findings: each step's result can be opened as a tab and is laid out to be read — facts as
   name and value, SQL as SQL, a list of like things as a grid that sorts.
-- **The app's own pages open beside the conversation.** Under an answer: "Why this number" opens the app's
-  receipt page for it; each metric the answer was held to opens that metric's page (`/metrics/<name>`, the
+- **The app's own pages open beside the conversation.** "Why this number" opens the app's receipt page for an
+  answer; the mark of each metric the answer was held to opens that metric's page (`/metrics/<name>`, the
   Semantic Layer's provenance panel: where the definition came from, whose it is, what disagrees with it); each
   table it read opens that entity's page (`/ontology/<type>`, the Ontology's own panel). These are the app's
   pages in a frame, not summaries drawn here, so everything on them works. A metric the answer did not use as
@@ -138,6 +146,10 @@ admin allows "Let the coworker ask its models through Pramanyx" in Settings ▸ 
 
 ## What is not done
 
+- The agent's own sentence stands above the answer, not under it: the shell puts an answer at the end of the
+  turn's flow and the reply before it. The platform's follow-up questions are carried over MCP and not yet shown.
+- Figures in the words and the chart are as the platform formats them (€17,857,124.67; 17.9M on a bar). The
+  shortened form of the mockup (€17.86m) needs a column's unit, which is not carried over MCP.
 - A deep analysis is one named row that opens to what came back. Its own steps — baseline, decomposition, what
   each concluded — are not drawn, and it has no card.
 - A Pramanyx tool added since this was written, and each custom agent's, is named from the end of the first turn

@@ -114,7 +114,7 @@ const numberOf = (v) => {
   if (typeof v === "string" && /^-?\d+(\.\d+)?$/.test(v.trim())) return Number(v);
   return null;
 };
-const show = (v, asNumber) => {
+export const shown = (v, asNumber) => {
   if (v === null || v === undefined) return "";
   const n = asNumber ? numberOf(v) : null;
   return n === null ? String(v) : said.format(n);
@@ -126,6 +126,14 @@ function toCsv(columns, rows) {
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   return [columns, ...rows].map((r) => r.map(cell).join(",")).join("\n");
+}
+
+/** The rows as they were answered, as a CSV file the browser saves. */
+export function downloadCsv(answer) {
+  const url = URL.createObjectURL(new Blob([toCsv(answer.columns ?? [], answer.rows ?? [])], { type: "text/csv" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = "pramanyx-answer.csv"; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 /**
@@ -152,12 +160,7 @@ export function ResultGrid({ answer, compact = false }) {
     const text = [columns, ...rows].map((r) => r.join("\t")).join("\n");
     navigator.clipboard?.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); });
   };
-  const csv = () => {
-    const url = URL.createObjectURL(new Blob([toCsv(columns, rows)], { type: "text/csv" }));
-    const a = document.createElement("a");
-    a.href = url; a.download = "pramanyx-answer.csv"; a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  };
+  const csv = () => downloadCsv(answer);
   const cell = { padding: compact ? "6px 10px" : "8px 12px", whiteSpace: "nowrap", borderTop: `1px solid ${line}` };
   const mono = { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 12.5, fontVariantNumeric: "tabular-nums" };
   const mark = (at) => (by?.at === at ? (by.down ? "↓" : "↑") : "↕");
@@ -180,7 +183,7 @@ export function ResultGrid({ answer, compact = false }) {
                      padding: compact ? "6px 10px" : "8px 12px", textAlign: "inherit", whiteSpace: "nowrap" },
           }, labelOf(c), h("span", { "aria-hidden": "true", style: { ...quiet, paddingLeft: 6 } }, mark(i))))))),
         h("tbody", null, ordered.slice(0, ROWS_SHOWN).map((r, n) => h("tr", { key: n },
-          r.map((v, i) => h("td", { key: i, style: { ...cell, ...mono, textAlign: numeric[i] ? "right" : "left" } }, show(v, numeric[i])))))),
+          r.map((v, i) => h("td", { key: i, style: { ...cell, ...mono, textAlign: numeric[i] ? "right" : "left" } }, shown(v, numeric[i])))))),
         totals ? h("tfoot", null, h("tr", { style: { background: faint } },
           columns.map((c, i) => h("td", { key: c, style: { ...cell, ...mono, fontWeight: 600, textAlign: numeric[i] ? "right" : "left" } },
             numeric[i] ? said.format(rows.reduce((sum, r) => sum + (numberOf(r[i]) ?? 0), 0)) : i === 0 ? "Total" : "")))) : null)),
