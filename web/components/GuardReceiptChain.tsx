@@ -46,6 +46,7 @@ const GUARD_LABEL: Record<string, string> = {
   ambiguity_probe: "The question's readings were probed",
   count_star_entity_grain: "Row count checked against the entity asked for",
   repair_recheck: "A repair was re-checked before adoption",
+  result_shape: "The rows were checked against what the question asked",
   time_order: "Timestamps that run backwards flagged",
   day_window: "A period's last day read whole",
   declared_filter: "The metric's declared filter applied",
@@ -70,6 +71,7 @@ const GUARD_SHORT: Record<string, string> = {
   ambiguity_probe: "ambiguity",
   count_star_entity_grain: "grain",
   repair_recheck: "recheck",
+  result_shape: "result",
   time_order: "time order",
   day_window: "day window",
   declared_filter: "declared filter",
@@ -96,6 +98,7 @@ const ACTION_VERB: Record<string, string> = {
   caveated: "carried a caveat instead of asserting",
   flagged: "flagged it — no provable rewrite exists",
   kept_original: "kept the original query",
+  said_not_as_asked: "said the result does not answer the question as asked",
   narrowed: "narrowed it to the rows you may see",
   refused: "refused it — it reads what you may not see",
 };
