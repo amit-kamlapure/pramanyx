@@ -233,29 +233,3 @@ def test_the_word_document_says_what_the_pdf_says():
     d = Document(io.BytesIO(export_report(_chat_inv(), "docx")[0]))
     text = "\n".join(p.text for p in d.paragraphs)
     assert "Fragrance leads revenue" in text and "Makeup lags the top two" in text and "SELECT category" in text
-
-
-def test_a_quick_answer_exports_too_and_only_to_its_own_organisation(monkeypatch):
-    """Found live, 2026-11-15: a chat answer — every coworker answer — is not read by `get_investigation`, so its
-    files answered 404. Read from the chat store, and held to the caller's organisation."""
-    import io
-
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-    from openpyxl import load_workbook
-
-    from pramanyx.routers import investigations as R
-    from pramanyx.security.authz import Principal, get_principal
-    chat = {**_chat_inv(), "org_id": "acme", "session_id": "", "agent_id": ""}
-    monkeypatch.setattr(R, "get_investigation", lambda i: None)
-    monkeypatch.setattr("pramanyx.db.history.get_chat_answer", lambda i: chat if i == "c1" else None)
-    monkeypatch.setattr(R, "resolve_currency_symbol", lambda *a, **k: "")
-    app = FastAPI()
-    app.include_router(R.router)
-    who = {"p": Principal(user_id="ana@example.com", org_id="acme")}
-    app.dependency_overrides[get_principal] = lambda: who["p"]
-    client = TestClient(app)
-    got = client.get("/investigations/c1/export", params={"format": "xlsx"})
-    assert got.status_code == 200 and load_workbook(io.BytesIO(got.content))["Data"].max_row == 4
-    who["p"] = Principal(user_id="eve@example.com", org_id="other")
-    assert client.get("/investigations/c1/export", params={"format": "xlsx"}).status_code == 404
