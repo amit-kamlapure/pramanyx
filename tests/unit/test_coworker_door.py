@@ -142,3 +142,47 @@ def test_another_machine_cannot_record_a_turn(taken, monkeypatch):
     app.include_router(C.router)
     r = TestClient(app, client=("203.0.113.9", 50000)).post("/coworker/trace", json={**TURN, "events": [{"kind": "final_response"}]})
     assert r.status_code == 403 and seen == []
+
+
+# ── the platform's work for a turn is inside the turn's trace ────────────────────────────────────────────────────
+
+CLAIM = {**TURN, "span_id": "call_1", "question": "How many orders?", "connection": "c1"}
+
+
+@pytest.fixture()
+def claims(door, monkeypatch):
+    monkeypatch.setattr(C, "_claims", [])
+    return door
+
+
+def test_a_claim_is_taken_once_by_the_question_it_was_made_for(claims):
+    client, _ = claims
+    assert client.put("/coworker/claim", json=CLAIM).status_code == 204
+    assert C.claimed_for("Another question", "c1") is None
+    assert C.claimed_for("How many orders?", "another") is None
+    taken = C.claimed_for("How many orders?", "c1")
+    assert taken["trace_id"] == TURN["trace_id"] and taken["span_id"] == "call_1" and taken["session"] == TURN["session"]
+    assert C.claimed_for("How many orders?", "c1") is None            # used once
+
+
+def test_two_calls_asking_the_same_thing_are_answered_in_the_order_they_were_made(claims):
+    client, _ = claims
+    client.put("/coworker/claim", json=CLAIM)
+    client.put("/coworker/claim", json={**CLAIM, "span_id": "call_2"})
+    assert [C.claimed_for("How many orders?", "c1")["span_id"] for _ in range(2)] == ["call_1", "call_2"]
+
+
+def test_a_claim_nobody_took_does_not_wait_forever(claims):
+    client, clock = claims
+    client.put("/coworker/claim", json=CLAIM)
+    clock["t"] += C.CLAIM_FOR + 1
+    assert C.claimed_for("How many orders?", "c1") is None
+
+
+def test_a_claim_names_a_coworker_turn_and_comes_from_this_machine(claims):
+    client, _ = claims
+    assert client.put("/coworker/claim", json={**CLAIM, "trace_id": "1d5a621b"}).status_code == 422
+    app = FastAPI()
+    app.include_router(C.router)
+    assert TestClient(app, client=("203.0.113.9", 50000)).put("/coworker/claim", json=CLAIM).status_code == 403
+    assert C._claims == []

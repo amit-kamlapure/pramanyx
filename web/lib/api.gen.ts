@@ -4430,6 +4430,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/coworker/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Claim The Next Answer
+         * @description Said by the coworker just before it asks: the answer to this question belongs inside this step of this turn.
+         */
+        put: operations["claim_the_next_answer_coworker_claim_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/coworker/trace": {
         parameters: {
             query?: never;
@@ -20149,6 +20169,31 @@ export interface components {
              */
             url: string;
         };
+        /** CoworkerClaim */
+        CoworkerClaim: {
+            /**
+             * Connection
+             * @default
+             */
+            connection: string;
+            /** Question */
+            question: string;
+            /**
+             * Session
+             * @description The shell's own id for the conversation.
+             */
+            session: string;
+            /**
+             * Span Id
+             * @description The tool call the question is asked by.
+             */
+            span_id: string;
+            /**
+             * Trace Id
+             * @description The turn's trace, `cw-<session>-<turn>`.
+             */
+            trace_id: string;
+        };
         /** CoworkerDoor */
         CoworkerDoor: {
             /**
@@ -34173,6 +34218,37 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["CoworkerDoor"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    claim_the_next_answer_coworker_claim_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CoworkerClaim"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

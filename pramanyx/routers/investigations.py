@@ -6260,22 +6260,35 @@ async def stream_with_session_log(
     import uuid as _uuid
     from pramanyx import telemetry as _tel
 
-    run_id = _uuid.uuid4().hex[:8]
+    # A question the coworker asked is a step of the coworker's turn, and its work is recorded INSIDE that turn's
+    # trace and that step — not as a second run beside it (`routers/coworker.py`). The turn's own request and end are
+    # the coworker's to record, so neither is written again here; a failure still is.
+    from contextlib import ExitStack
+    from pramanyx.org.context import reset_session_id, set_session_id
+    from pramanyx.routers.coworker import claimed_for
+    claim = claimed_for(question, conn_id)
+    run_id = claim["trace_id"] if claim else _uuid.uuid4().hex[:8]
     inv_id: str | None = None
     failed: str | None = None
     headline: str = ""
     receipt_id: str | None = None
     t0 = _t.monotonic()
     # Arc TC, TC-2 — the turn is a run too, named by the same id as its trace: an edit or an action it makes says so
-    with _tel.bind_trace(run_id), _tel.bind_run(run_id, "chat"):
-        session_log.emit(
-            session_log.USER_REQUEST, name=door, trace_id=run_id, conn_id=conn_id,
-            payload={"question": question, "depth": depth, "canvas_id": canvas_id,
-                     "schema": schema, "purpose": purpose, "agent_id": agent_id,
-                     # SP-15 — the object the palette was summoned from ({kind, id}), so
-                     # the Ask door's uptake is a reading of the log, not a guess.
-                     **({"focus": focus} if focus else {})},
-        )
+    with ExitStack() as _bound:
+        _bound.enter_context(_tel.bind_trace(run_id))
+        _bound.enter_context(_tel.bind_run(run_id, "chat"))
+        if claim:
+            _bound.enter_context(_tel.bind_parent_span(claim["span_id"]))
+            _bound.callback(reset_session_id, set_session_id(f"coworker:{claim['session']}"))
+        if not claim:
+            session_log.emit(
+                session_log.USER_REQUEST, name=door, trace_id=run_id, conn_id=conn_id,
+                payload={"question": question, "depth": depth, "canvas_id": canvas_id,
+                         "schema": schema, "purpose": purpose, "agent_id": agent_id,
+                         # SP-15 — the object the palette was summoned from ({kind, id}), so
+                         # the Ask door's uptake is a reading of the log, not a guess.
+                         **({"focus": focus} if focus else {})},
+            )
         try:
             async for event in stream:
                 if any(h in event for h in _SESSION_LOG_SNIFF):
@@ -6321,14 +6334,15 @@ async def stream_with_session_log(
             )
             raise
         finally:
-            session_log.emit(
-                session_log.FINAL_RESPONSE, name=door, trace_id=run_id,
-                investigation_id=inv_id, conn_id=conn_id, ok=failed is None,
-                duration_ms=round((_t.monotonic() - t0) * 1000, 1),
-                payload={**({"headline": headline} if headline else {}),
-                         **({"receipt_id": receipt_id} if receipt_id else {}),
-                         **({"error": failed} if failed else {})},
-            )
+            if not claim:
+                session_log.emit(
+                    session_log.FINAL_RESPONSE, name=door, trace_id=run_id,
+                    investigation_id=inv_id, conn_id=conn_id, ok=failed is None,
+                    duration_ms=round((_t.monotonic() - t0) * 1000, 1),
+                    payload={**({"headline": headline} if headline else {}),
+                             **({"receipt_id": receipt_id} if receipt_id else {}),
+                             **({"error": failed} if failed else {})},
+                )
 
 
 async def _stream_with_session(session_id: str, stream: AsyncGenerator[str, None],

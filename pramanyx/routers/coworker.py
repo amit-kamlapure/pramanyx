@@ -24,8 +24,13 @@ happen and writes them to that same store, so the turn is one trace an operator 
 * its **model calls are not taken here**. The model door (`routers/model_door.py`) already records every one, with
   its tokens and its cost; the coworker names the turn on each call and the door files the call under it. Taking
   them here too would count the spend twice;
-* a call to the platform's own answer path carries **the platform's trace for that answer**, so the two halves of
-  one question are joined: the coworker's turn, and what the platform did to answer;
+* **the platform's own work for the turn is in the same trace, not a second one.** Before the coworker asks the
+  governed answer path a question, it says so (`PUT /coworker/claim`: this question, on this connection, is step
+  such-and-such of turn so-and-so). The answer path then records its work — its model calls, its query, its
+  checks — under the turn's trace and inside that step, where it would otherwise have opened a trace of its own.
+  One question is one trace: what the coworker did, and inside its call, what the platform did to answer. The
+  claim is matched on the question and the connection because a tool call carries nothing else: the coworker's
+  shell cannot add a field to it. A claim is used once and lasts two minutes;
 * the conversation's words are the coworker's and stay with it. What is kept is the question, each tool's name and
   what it was asked, and where in the coworker's own log the rest is (`shell_session`, `seq`).
 
@@ -153,3 +158,44 @@ def take_a_coworker_turn(body: CoworkerTraceBatch, request: Request) -> Coworker
     finally:
         reset_session_id(token)
     return CoworkerTraceTaken(written=len(body.events))
+
+
+# ── the platform's work for a turn, inside the turn's trace ──────────────────────────────────────────────────────
+
+#: How long a claim waits for its question to arrive. The coworker claims and then asks at once.
+CLAIM_FOR = 120.0
+_claims: list[dict] = []
+
+
+class CoworkerClaim(BaseModel):
+    trace_id: str = Field(max_length=60, description="The turn's trace, `cw-<session>-<turn>`.")
+    session: str = Field(max_length=80, description="The shell's own id for the conversation.")
+    span_id: str = Field(min_length=1, max_length=80, description="The tool call the question is asked by.")
+    question: str = Field(min_length=1, max_length=20000)
+    connection: str = Field(default="", max_length=80)
+
+
+@router.put("/coworker/claim", status_code=204)
+def claim_the_next_answer(body: CoworkerClaim, request: Request) -> None:
+    """Said by the coworker just before it asks: the answer to this question belongs inside this step of this turn."""
+    if not _on_this_machine(request.client.host if request.client else None):
+        raise HTTPException(status_code=403, detail="Only a coworker on this machine may claim an answer.")
+    if not TRACE_NAME.match(body.trace_id) or not _SESSION_NAME.match(body.session):
+        raise HTTPException(status_code=422, detail="A coworker turn's trace is named cw-<session>-<turn>.")
+    now = _now()
+    _claims[:] = [c for c in _claims if now - c["at"] <= CLAIM_FOR][-200:]
+    _claims.append({"trace_id": body.trace_id, "session": body.session, "span_id": body.span_id,
+                    "question": body.question, "connection": body.connection, "at": now})
+
+
+def claimed_for(question: str, conn_id: str) -> Optional[dict]:
+    """The coworker's claim on this question on this connection, taken — or None, and the run opens its own trace.
+
+    The oldest fresh claim that matches: two calls asking the same thing are answered in the order they were made.
+    """
+    now = _now()
+    for at, claim in enumerate(_claims):
+        if (now - claim["at"] <= CLAIM_FOR and claim["question"] == question
+                and (not claim["connection"] or claim["connection"] == (conn_id or ""))):
+            return _claims.pop(at)
+    return None

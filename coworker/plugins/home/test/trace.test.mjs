@@ -74,3 +74,11 @@ test("a turn that was stopped is not recorded as one that worked", () => {
 test("an event outside any turn is not recorded", () => {
   assert.deepEqual(turnEvents(new Map(), S, "", ev("tool/call", 3, 0, { callId: "x", name: "y" })), []);
 });
+
+test("an answer recorded inside this turn's own trace names no other trace", () => {
+  const turns = new Map();
+  turnEvents(turns, S, "", ev("turn/start", 1, 0, { turn: 1 }));
+  turnEvents(turns, S, "", ev("tool/call", 2, 1, { callId: "c", name: "mcp__pramanyx__ask", arguments: "{}" }));
+  const [result] = turnEvents(turns, S, "", ev("tool/result", 3, 2, { message: { toolCallId: "c", content: [{ type: "text", text: JSON.stringify({ answer: "x", trace_id: traceOf(S, 1) }) }] } }));
+  assert.ok(!("platform_trace" in result.payload));
+});

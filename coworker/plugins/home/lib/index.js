@@ -154,8 +154,10 @@ function holdToConnection(ctx) {
  * too would count the spend twice. And the words: the system prompt, what the agent was given and what it said
  * stay in the shell's own log, and each event says where there (`shell_session`, `seq`).
  *
- * A call to the governed answer path comes back with the platform's own trace for that answer, which is carried
- * on the call's result: the coworker's turn and the platform's work for it are two traces, joined there.
+ * The platform's own work for a question is in the same trace. Before a call to the governed answer path, the
+ * platform is told which step of which turn is asking; it records what it does to answer under this turn's trace
+ * and inside that step. One question, one trace. Were the claim not taken, the answer names the trace it was
+ * recorded under instead, and the call's result carries that.
  */
 const ASKS = /^mcp__pramanyx__ask(_[a-z0-9_]+)?$/;
 const clip = (text, most) => (typeof text === "string" && text.length > most ? text.slice(0, most) : text);
@@ -212,6 +214,9 @@ export function turnEvents(turns, sessionId, held, event) {
     now.calls.delete(message.toolCallId);
     const said = ASKS.test(call.name) ? ofAnAnswer(textOf(message.content)) : {};
     if (said.headline) now.headline = said.headline;
+    // The platform recorded its work inside this turn's trace when the claim made before the call was taken; then
+    // there is no other trace to name. It is named only when the answer was recorded apart.
+    if (said.platform_trace === now.trace) delete said.platform_trace;
     const { rows, ...rest } = said;
     return [{ kind: "tool_call_result", name: String(call.name || "tool"), span_id: message.toolCallId, ok: !message.isError,
               duration_ms: Math.max(0, at - call.at), conn_id, ...(typeof rows === "number" ? { row_count: rows } : {}),
@@ -252,6 +257,25 @@ function recordTurns(ctx, api) {
       const trace = (after ?? before)?.trace;
       if (events.length && trace) send(trace, id, events);
     } catch { /* the record is best-effort; the turn it observes goes on */ }
+  });
+  // Before a question goes to the governed answer path, the platform is told which step of which turn asks it, so
+  // the work of answering is recorded inside this turn's trace and not as a second run beside it. Waited for, but
+  // not for long: an unanswered claim costs the join, never the answer.
+  ctx.on("tools/pre-execute", async (call, next) => {
+    try {
+      const session = call?.agent?.session;
+      const id = String((session && typeof session === "object" ? session.id : session) ?? "");
+      const trace = traces.get(id);
+      const args = call?.arguments && typeof call.arguments === "object" ? call.arguments : {};
+      if (trace && call?.callId && ASKS.test(String(call.name)) && typeof args.question === "string" && args.question) {
+        await fetch(`${api}/coworker/claim`, {
+          method: "PUT", headers: { "content-type": "application/json" }, signal: AbortSignal.timeout(1500),
+          body: JSON.stringify({ trace_id: trace, session: id, span_id: call.callId, question: args.question,
+                                 connection: String(args.connection ?? args.connection_id ?? "") }),
+        });
+      }
+    } catch { /* the answer is asked for all the same */ }
+    return next();
   });
   // Each model call says which turn it was made for, and the platform's model door files it under that turn.
   ctx.on("llm-pi-ai/request-headers", (request, headers, next) => {

@@ -622,6 +622,21 @@ def bind_trace(trace_id: str) -> Generator[str, None, None]:
         _active_trace_id.reset(token)
 
 
+@contextmanager
+def bind_parent_span(span_id: str) -> Generator[str, None, None]:
+    """Make ``span_id`` the parent of every span opened in the enclosed block — for work done here on behalf of a
+    step that began elsewhere (a coworker's tool call, which the platform's answer is the inside of). The span itself
+    is not opened or closed here: whoever began it records both ends. A falsy id is a no-op."""
+    if not span_id:
+        yield ""
+        return
+    token = _span_stack.set(_span_stack.get() + (span_id,))
+    try:
+        yield span_id
+    finally:
+        _span_stack.reset(token)
+
+
 #: Arc TC, TC-2 — the RUN the code executes under, beside the trace it writes to: ``(run_id, kind)``, kind one of
 #: ``chat`` (a question asked at the ask door), ``automation``, ``monitor`` or ``agent`` (a kernel job a built-in agent
 #: runs). The trace alone cannot say it: a deep analysis keeps the asking turn's trace, and a nested chain its parent's.

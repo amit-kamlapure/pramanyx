@@ -65,10 +65,10 @@
             or from an approved definition you read in this conversation. Never work one out yourself or
             give one from memory. Each answer is shown to the reader whole, below your reply: its headline,
             a few sentences on what the rows say, the chart, the table and the SQL. Do not write any of that
-            again — not the finding, not the figures, not the ranking. After one answer, your reply is one
-            or two sentences: what was not checked or did not use the approved definition, if anything, and
-            the next question worth asking. After several, say in two or three sentences what they come to
-            together, which no single answer shows.
+            again — not the finding, not the figures, not the ranking. When an answer is shown, your own
+            closing reply is not: the answer is the output. So end with a few words and no more, and never
+            put anything the reader needs only there. When no answer came back, your reply is all the
+            reader sees: say plainly what could not be answered and what was missing.
 
 
             You are in Agent mode: work the question through. Read the approved definition of what is
@@ -323,8 +323,9 @@
                 Every business figure you state comes from that answer. Never work one out yourself or give
                 one from memory. The answer is shown to the reader whole, below your reply: its headline, a
                 few sentences on what the rows say, the chart, the table and the SQL. Do not write any of
-                that again. Your reply is one sentence: what was not checked, if anything, or simply that the
-                answer is below.
+                that again. When the answer is shown, your own reply is not: the answer is the output, so end
+                with a few words and no more. When no answer came back, your reply is all the reader sees:
+                say plainly what could not be answered.
           - *agent_instructions
           - *time_context
           - *compaction

@@ -413,6 +413,12 @@ const STEPS_LOOK = `
   border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
 }
 /*
+ * When a turn has an answer to show, the answer is the output: the headline and the words are the platform's, and
+ * the agent's closing remark is not shown beside them. A turn with no answer drawn (a question declined, a reply in
+ * words) keeps its reply, which is then all there is. The remark stays in the conversation's record.
+ */
+[data-chat-flow-kind="assistant-step"]:has(+ [data-chat-flow-kind="turn-tail"] [data-pramanyx-answers] > *) { display: none; }
+/*
  * An answer's own controls. An icon is plain until pointed at; a mark after a sentence is a small edged chip that
  * opens what the sentence stood on; a quiet link opens something behind the answer.
  */
