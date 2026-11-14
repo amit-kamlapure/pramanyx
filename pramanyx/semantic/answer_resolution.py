@@ -628,13 +628,19 @@ def _relation_names(tables: dict) -> set:
 
 
 def _name_parts(tables: dict) -> set:
-    """Every word a column's name is made of — ``gmv_eur`` gives ``gmv`` and ``eur`` — normalised.
+    """Every word a column's or a TABLE's name is made of — ``gmv_eur`` gives ``gmv`` and ``eur`` — normalised.
 
     A word in a question that is PART of a column's name describes the measure, it does not
-    filter it: "total GMV (EUR) by platform" names the unit the column itself carries. Used
-    only to stop an abstention, never to bind anything."""
+    filter it: "total GMV (EUR) by platform" names the unit the column itself carries. A word that is
+    part of a table's name names WHERE to look: "how many Olist orders by status" on a connection whose
+    tables are ``olist_orders``, ``olist_reviews``… was declined on 2026-11-14 as "“Olist” is not present
+    in this data", because no column held the value "Olist". Used only to stop an abstention, never to
+    bind anything."""
     parts = set()
-    for cols in (tables or {}).values():
+    for name, cols in (tables or {}).items():
+        for word in re.split(r"[^A-Za-z0-9]+", str(name).split(".")[-1]):
+            if len(word) >= 2:
+                parts.add(_norm_name(word))
         for c in cols or []:
             for word in re.split(r"[^A-Za-z0-9]+", str(c)):
                 if len(word) >= 2:

@@ -609,7 +609,26 @@ def test_a_word_in_no_column_name_and_no_row_still_abstains():
     assert [t.lower() for t in r.not_found] == ["zalando"]
 
 
-def test_name_parts_are_the_words_of_column_names_only():
-    parts = R._name_parts({"lux.orders": ["gmv_eur", "order_id", "x"]})
-    assert {"gmv", "eur", "order", "id"} <= parts
-    assert "orders" not in parts and "lux" not in parts and "x" not in parts
+def test_name_parts_are_the_words_of_column_and_table_names():
+    parts = R._name_parts({"lux.orders": ["gmv_eur", "order_id", "x"], "olist_reviews": ["score"]})
+    assert {"gmv", "eur", "order", "id", "score"} <= parts
+    assert {R._norm_name(w) for w in ("orders", "olist", "reviews")} <= parts   # a table's own name, without its schema
+    assert "lux" not in parts and "x" not in parts
+
+
+_SHEETS = """\
+TABLE: netflix_titles  (8807 rows)
+  show_id  VARCHAR
+  type  VARCHAR
+TABLE: olist_orders  (99441 rows)
+  order_id  VARCHAR
+  order_status  VARCHAR
+"""
+
+
+def test_a_word_that_names_a_table_is_where_to_look_not_a_value_to_find():
+    """Receipt 2026-11-14 (Sheets): "How many Olist orders are there by order status?" was declined with
+    `“Olist” is not present in this data. present values include: Movie, TV Show` on a connection whose tables are
+    olist_orders, olist_reviews… — no column held the value "Olist", and the word names the tables."""
+    r = R.resolve("How many Olist orders are there by order status?", schema=_SHEETS, db=_FakeDB(hits={}))
+    assert r.not_found == [] and r.feasibility != "not_answerable"
