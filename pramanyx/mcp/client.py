@@ -583,6 +583,23 @@ class PramanyxClient:
     async def post_claim(self, body: dict) -> Any:
         return await self._post("/ledger/v1/claims", json_body=body)
 
+    # ── A question on a rhythm, run by the platform (the Genie One study, 2026-11-15) ────────────────
+    async def schedule_question(self, question: str, connection: str, cron: str, name: str = "") -> dict:
+        """An automation: a schedule trigger and one `investigate` step. It runs on the platform's own scheduler —
+        traced, listed with the other automations, under the organisation's setting for scheduled model work — never on the coworker's."""
+        body = {"conn_id": connection, "name": (name or question)[:120],
+                "description": "Asked from the coworker, to be asked again on a rhythm.",
+                "conditions": [{"kind": "schedule", "config": {"cron": cron}}],
+                "effects": [{"kind": "investigate", "config": {"question": question}}]}
+        made = await self._post("/automations", json_body=body)
+        settings = await self._get("/org-settings")
+        off = isinstance(settings, dict) and settings.get("scheduled_model_work") is not True
+        return {"id": made.get("id"), "name": made.get("name"), "cron": cron, "enabled": made.get("enabled"),
+                "on_probation": made.get("probation"),
+                "note": ("It will not run until an admin turns on scheduled model work in Settings ▸ Organisation."
+                         if off else "It runs on the platform's schedule; each run is its own trace in Agent Ops."),
+                "open": f"/automations/{made.get('id')}"}
+
     # ── DE-2c: the knowledge tools, through the API like everything else ───────────
     async def search_graph(self, connection: str, query: str, *, limit: int = 10) -> dict:
         return await self._get(f"/knowledge/{connection}/graph/search", params={"q": query, "limit": limit})

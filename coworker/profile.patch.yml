@@ -27,7 +27,10 @@
 #    still listed bash, read, write, edit, web_search, web_fetch and plugin_manager). A patch can only replace a
 #    preset's config whole, so what follows is the shell's `standard` preset as 0.2.2-rc.1 ships it, minus
 #    tool-bash, tool-pwsh, tool-fs, tool-fs-search, tool-jobs, tool-web, tool-plugin-manager, tool-plugin-market,
-#    workflow-ptc and tool-workflow, with the persona rewritten. RE-DERIVE IT when the shell is upgraded: a tool
+#    workflow-ptc, tool-workflow and tool-schedule, with the persona rewritten. The shell's scheduler is left out
+#    because a schedule held there stops when the shell does and is seen by no one else: a question asked again on a
+#    rhythm is Pramanyx's automation (the `schedule_question` tool), run by the platform's own scheduler.
+#    RE-DERIVE IT when the shell is upgraded: a tool
 #    the shell adds to its own preset later is not in this copy, and one it renames is not removed by it.
 #    Subagents run under `standard` too, so this is also what a spawned agent gets.
 - id: preset-standard
@@ -76,6 +79,11 @@
             file yourself.
 
 
+            Asked to ask something again on a rhythm ("every Monday"), set it up with schedule_question and say
+            back when it will run and anything its note says. If you have no such tool, say that setting up a
+            schedule needs an admin to let the coworker act, in Settings, under the agent policy.
+
+
             You are in Agent mode: work the question through. Read the approved definition of what is
             asked about before you ask for its figures, check an answer that looks off before you report
             it, and for a question about why something happened or what is driving it, run a deep analysis
@@ -88,8 +96,6 @@
       - &time_context
         id: time-context
         name: '@deepseek-ai/dsh-time-context'
-      - id: tool-schedule
-        name: '@deepseek-ai/dsh-tool-schedule'
       - id: skill-filesystem
         name: '@deepseek-ai/dsh-skill-filesystem'
       - id: tool-skill

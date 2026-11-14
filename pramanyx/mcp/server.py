@@ -289,6 +289,19 @@ async def ask(
 
 
 @mcp.tool()
+async def schedule_question(
+    question: Annotated[str, Field(description="The question to ask again, as the person would ask it.")],
+    connection: Annotated[str, Field(description="The connection id the question is about.")],
+    cron: Annotated[str, Field(description="When, as a five-field cron in the organisation's time zone, e.g. '0 9 * * 1' for Mondays at 09:00.")],
+    name: Annotated[str, Field(description="A short name the person will recognise; the question when empty.")] = "",
+) -> dict:
+    """Ask a question again on a rhythm — "every Monday, revenue by category". Pramanyx's own scheduler runs it as
+    an automation, so each run is governed like any answer and traced; it does not depend on this conversation
+    staying open, and it is listed with the organisation's other automations. Say back when it will run and the note this returns."""
+    return await _client.schedule_question(question, connection, cron, name)
+
+
+@mcp.tool()
 async def deep_analysis(
     question: Annotated[str, Field(description="An open-ended analytical question, e.g. 'Why did margin fall in Q3?' or 'What's driving low review scores?'")],
     connection: Annotated[str, Field(description="A connection id from list_connections.")],
