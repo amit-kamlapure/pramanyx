@@ -133,9 +133,13 @@ function useNarrow(): [boolean, (el: HTMLDivElement | null) => void] {
   return [narrow, setEl];
 }
 
-export function SheetView({ sheetId, onBack, onOpen, onAsk }: {
+export function SheetView({ sheetId, onBack, onOpen, onAsk, asReference = false }: {
   sheetId: string; onBack: () => void; onOpen: (id: string) => void;
   onAsk?: (question: string) => void;
+  /** The sheet as an asset an answer read, opened beside it (`/sheets/<id>`): the grid and everything that works ON
+   *  it — search, filter, sort, copy, download, views — without the row that takes the sheet somewhere else (a
+   *  dashboard, sharing, the ontology, combining, a chat) and without the way back to a list there is none of. */
+  asReference?: boolean;
 }) {
   const [sheet, setSheet] = useState<Sheet | null>(null);
   // a sheet shared with the reader to read (SH-8) is open with nothing on it offering a change: no edit, no combining
@@ -601,12 +605,14 @@ export function SheetView({ sheetId, onBack, onOpen, onAsk }: {
             the count shorten — never drawn past the sheet, under what opens beside it */}
         <div style={{ ...BAR, flexWrap: "wrap", rowGap: 6 }}>
           <span style={{ display: "flex", alignItems: "center", gap: 10, flex: "1 1 auto", minWidth: 0, overflow: "hidden" }}>
-            <Button variant="plain" size="sm" onClick={onBack} aria-label="Back to Spreadsheets" title="Back to Spreadsheets"
-              style={{ ...MUTED, padding: "0 4px", flex: "0 0 auto" }}><Icon name="chevl" size={12} /> Spreadsheets</Button>
+            {!asReference && (
+              <Button variant="plain" size="sm" onClick={onBack} aria-label="Back to Spreadsheets" title="Back to Spreadsheets"
+                style={{ ...MUTED, padding: "0 4px", flex: "0 0 auto" }}><Icon name="chevl" size={12} /> Spreadsheets</Button>
+            )}
             {sheetName}
             {sheetFacts}
           </span>
-          {sheetActions}
+          {!asReference && sheetActions}
         </div>
 
         {/* the toolbar: the search gives way first, then undo, history and copy take a line of their own */}

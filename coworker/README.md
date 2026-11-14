@@ -127,8 +127,9 @@ turned back on from the interface.
   table it read opens that entity's page (`/ontology/<type>`, the Ontology's own panel). These are the app's
   pages in a frame, not summaries drawn here, so everything on them works. A metric the answer did not use as
   approved says so on its button. An answer over the Sheets connection offers each spreadsheet it read, which
-  opens as `/sheets/<id>`: the spreadsheet as a referenced asset — its name, where it came from, its size and its
-  rows — with none of the Spreadsheets page's tools, and its tab named by the sheet's own name. Past three ontology objects the rest fold behind one
+  opens as `/sheets/<id>`: the spreadsheet as a referenced asset — the sheet itself, with what works on it
+  (search, filter, sort, copy, download, views), without the row that takes it elsewhere (dashboard, sharing,
+  ontology, combine, chat) — and its tab named by the sheet's own name. Past three ontology objects the rest fold behind one
   button. The tab shows only those four kinds of page.
 - **A conversation is held to its connection.** The agent is told which connection a conversation is about, and
   that is an instruction, not a boundary. The boundary is the shell's tool guard: a call to one of Pramanyx's
