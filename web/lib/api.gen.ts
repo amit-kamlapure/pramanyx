@@ -1531,6 +1531,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/delegation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Whose Delegation
+         * @description Who the delegation this request presents names — how the coworker's host checks a token before keeping it.
+         *     401 when none is presented or it does not resolve.
+         */
+        get: operations["whose_delegation_auth_delegation_get"];
+        put?: never;
+        /**
+         * Delegate To The Coworker
+         * @description A short-lived token naming the person this request is, for the coworker to present on their behalf
+         *     (`security/delegation.py`). Minted only for a person: not for a service principal, not for the agent, and not
+         *     from a delegation — a delegated request cannot pass itself on. With sign-in off, the person is the install's
+         *     operator, who every write here is recorded under anyway.
+         */
+        post: operations["delegate_to_the_coworker_auth_delegation_post"];
+        /**
+         * End The Delegation
+         * @description End the delegation this request presents. Idempotent.
+         */
+        delete: operations["end_the_delegation_auth_delegation_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/session": {
         parameters: {
             query?: never;
@@ -4400,6 +4432,10 @@ export interface paths {
         /**
          * Where The Coworker Is
          * @description Whether a coworker is running, and the address to open. Reads what was last said; asks nothing.
+         *
+         *     The address carries the coworker shell's access token, so it is given only to a caller on this machine — the
+         *     only place a coworker on this machine's loopback can be opened from anyway (People, 2026-11-15: until then any
+         *     caller that could reach the API read the token). Anyone else is told one is running, and not where.
          */
         get: operations["where_the_coworker_is_coworker_get"];
         put?: never;
@@ -8521,7 +8557,8 @@ export interface paths {
         };
         /**
          * Export Investigation
-         * @description Download a stored analysis as a polished PDF or PowerPoint (`format=pdf|pptx`).
+         * @description Download a stored analysis as PDF, PowerPoint, Excel or Word (`format=pdf|pptx|xlsx|docx`). Built from the
+         *     answer's stored report, never from code a model wrote; Excel carries every stored row.
          *
          *     `narrate=true` prepends an LLM-authored executive summary (best-effort; the
          *     export still succeeds if the model is slow or unavailable).
@@ -15638,6 +15675,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/rbac/directory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Directory
+         * @description The organisation's people: email, name, title, team (a group id) and manager.
+         */
+        get: operations["get_directory_rbac_directory_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/rbac/directory/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Directory
+         * @description Import people from a CSV (email, name, title, team, manager). A dry run says what would change; the real run
+         *     applies it, puts each person in their team's group, and journals it under the person who ran it.
+         */
+        post: operations["import_directory_rbac_directory_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/rbac/me": {
         parameters: {
             query?: never;
@@ -18364,6 +18442,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/slack-bots/{bot_id}/knowledge-sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sync Slack Knowledge
+         * @description Read the channels this bot is in into the document index, each day readable by the channel's members only
+         *     (`connectors/knowledge/slack.py`). Runs in the background; its status says what was read and what Slack refused.
+         */
+        post: operations["sync_slack_knowledge_slack_bots__bot_id__knowledge_sync_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/slack-bots/{bot_id}/knowledge-sync/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Slack Knowledge Status */
+        get: operations["slack_knowledge_status_slack_bots__bot_id__knowledge_sync_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/spotlight/tools": {
         parameters: {
             query?: never;
@@ -18811,7 +18927,8 @@ export interface paths {
         put?: never;
         /**
          * Post Verdict
-         * @description Record a human verdict on an investigation finding.
+         * @description Record a human verdict on an investigation finding, under the person this request acts for — never a name
+         *     from the body.
          */
         post: operations["post_verdict_verify_verdict_post"];
         delete?: never;
@@ -18912,6 +19029,26 @@ export interface paths {
          * @description Persist one chart's display config. An empty `config` resets it (deletes the row).
          */
         put: operations["put_viz_config_route_viz_configs_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/web/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search The Web
+         * @description Search the web: titles, addresses and the pages' own snippets — sources to cite, never figures.
+         */
+        get: operations["search_the_web_web_search_get"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -20853,6 +20990,21 @@ export interface components {
             /** To Version */
             to_version: number;
         };
+        /** DirectoryImport */
+        DirectoryImport: {
+            /** Csv */
+            csv: string;
+            /**
+             * Dry Run
+             * @default true
+             */
+            dry_run: boolean;
+            /**
+             * Full
+             * @default true
+             */
+            full: boolean;
+        };
         /** DismissRequest */
         DismissRequest: {
             /**
@@ -22589,6 +22741,11 @@ export interface components {
              * @default
              */
             timezone: string;
+            /**
+             * Web Search
+             * @description Let the coworker search the web for outside context (holidays, news, an announcement), cited and never used as a figure about the business. The words searched go to the search provider. Off by default.
+             */
+            web_search?: boolean | null;
             /**
              * Website
              * @description Primary website URL, e.g. 'https://acme.com'
@@ -29232,6 +29389,66 @@ export interface operations {
         };
     };
     auth_config_auth_config_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    whose_delegation_auth_delegation_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    delegate_to_the_coworker_auth_delegation_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    end_the_delegation_auth_delegation_delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -53069,6 +53286,70 @@ export interface operations {
             };
         };
     };
+    get_directory_rbac_directory_get: {
+        parameters: {
+            query?: {
+                include_inactive?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_directory_rbac_directory_import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DirectoryImport"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     my_access_rbac_me_get: {
         parameters: {
             query?: never;
@@ -58469,6 +58750,68 @@ export interface operations {
             };
         };
     };
+    sync_slack_knowledge_slack_bots__bot_id__knowledge_sync_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    slack_knowledge_status_slack_bots__bot_id__knowledge_sync_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_spotlight_tools_spotlight_tools_get: {
         parameters: {
             query?: {
@@ -59306,6 +59649,38 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_the_web_web_search_get: {
+        parameters: {
+            query: {
+                q: string;
+                n?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
