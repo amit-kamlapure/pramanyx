@@ -90,6 +90,8 @@ def test_ask_folds_stream_and_fetches_receipt():
             {"type": "narrative", "narrative": "There are **42** orders.", "anomalies": ["None stand out."],
              "trend": "stable", "confidence": "high"},
             {"type": "followups", "questions": ["How many last month?"]},
+            {"type": "inspect_warning", "issues": ["The question asks for a total by status."], "suggested_fix": "",
+             "kind": "not_what_was_asked"},
             {"type": "done", "inv_id": "t1", "has_receipt": True},
         ])),
         "/chat/conn1/t1/receipt": httpx.Response(200, json={
@@ -103,6 +105,9 @@ def test_ask_folds_stream_and_fetches_receipt():
                                 "trend": "stable", "confidence": "high"}
     assert res["chart_config"] == {"exhibit": {"kind": "figure"}}
     assert res["followups"] == ["How many last month?"]
+    # What the platform says is wrong with its own answer reaches the caller, with whether it was checked.
+    assert res["warning"] == {"issues": ["The question asks for a total by status."], "suggested_fix": "",
+                              "kind": "not_what_was_asked"}
     assert res["sql"].startswith("SELECT COUNT")
     assert res["row_count"] == 1
     assert res["rows"] == [[42]]

@@ -658,6 +658,8 @@ function Exhibit({ answer, whole, asked }) {
   const told = answer.narrative && typeof answer.narrative === "object" ? answer.narrative : null;
   const words = told && typeof told.narrative === "string" ? told.narrative.trim() : "";
   const standsOut = told && Array.isArray(told.anomalies) ? told.anomalies.filter((x) => typeof x === "string" && x.trim()) : [];
+  const wrong = Array.isArray(answer.warning?.issues) ? answer.warning.issues.filter((x) => typeof x === "string" && x.trim()) : [];
+  const checked = answer.warning?.kind === "not_what_was_asked";
   const figure = rows.length === 1;
   const title = titleOf(answer);
   const marks = hasPane() && connection;
@@ -686,6 +688,11 @@ function Exhibit({ answer, whole, asked }) {
   ] : [];
   return h("div", { style: { display: "flex", flexDirection: "column", gap: 14, margin: "10px 0 6px", fontSize: 14.5, lineHeight: 1.6 } },
     h("div", { role: "heading", "aria-level": 3, style: { fontSize: 20, fontWeight: 600, lineHeight: 1.3 } }, answer.answer || answer.question || "Answer"),
+    // What the platform itself says is wrong with this answer, said under the headline where a finding would be.
+    wrong.length ? h("div", { role: "alert", style: { display: "flex", gap: 8, alignItems: "baseline", padding: "8px 10px", borderRadius: 6,
+                                                      border: "1px solid color-mix(in srgb, #e5a50a 55%, transparent)", background: "color-mix(in srgb, #e5a50a 9%, transparent)" } },
+      h("span", { "aria-hidden": "true", style: { fontWeight: 600 } }, "!"),
+      h("span", null, checked ? wrong.join(" ") : `This may not be right: ${wrong.join("; ")}`)) : null,
     words || stoodOn.length ? h("div", null, rich(words), stoodOn) : null,
     h("div", { style: { border: `1px solid ${line}`, borderRadius: 6, padding: "8px 8px 4px 14px" } },
       h("div", { style: { display: "flex", alignItems: "center", gap: 2, minHeight: 30 } },

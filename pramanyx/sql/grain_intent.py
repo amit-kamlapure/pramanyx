@@ -240,3 +240,103 @@ def check_result_grain(
                     f"data), but the result has {row_count} rows. GROUP BY the {exp.entity} "
                     f"grain exactly — one output row per {exp.entity}.")
     return None
+
+
+# ── the result, against what was asked ───────────────────────────────────────────────────────────────────────────
+
+_TIME_ASK = re.compile(r"\b(daily|weekly|monthly|quarterly|yearly|annual(?:ly)?|over time|trend(?:s|ed|ing)?|time series|"
+                       r"by (?:day|date|week|month|quarter|year)|year over year|month over month|yoy|mom)\b", re.I)
+_TIME_COL = re.compile(r"(date|day|week|month|quarter|year|time|period)", re.I)
+
+
+def _tokens(name: str) -> set[str]:
+    return {t.rstrip("s") for t in re.split(r"[^a-z0-9]+", (name or "").lower()) if len(t) >= 3}
+
+
+def _is_number(value) -> bool:
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, (int, float)):
+        return True
+    return isinstance(value, str) and bool(re.fullmatch(r"-?\d+(\.\d+)?", value.strip()))
+
+
+@dataclass
+class FinerThanAsked:
+    """A result broken down further than its question asked."""
+    by: str                    # the question's own words: "order status"
+    rows: int
+    distinct: int              # how many values of what was asked for
+    asked: list[str]           # the result's columns for what was asked
+    also: list[str]            # the columns it is broken down by besides
+
+    @property
+    def diagnosis(self) -> str:
+        """For the model that repairs the query."""
+        one = ", ".join(self.asked)
+        return (f"GRAIN MISMATCH: the question asks for a total by {self.by}, but the result has {self.rows} rows "
+                f"for {self.distinct} distinct {one}"
+                + (f" — it is also broken down by {', '.join(self.also)}" if self.also else "")
+                + f". Return one row per {one}: group by {one} only.")
+
+    @property
+    def said(self) -> str:
+        """For the person reading the answer."""
+        return (f"The question asks for a total by {self.by}. This result has {self.rows:,} rows for "
+                f"{self.distinct:,} distinct {', '.join(self.asked)}"
+                + (f", because it is also broken down by {', '.join(self.also)}" if self.also else "") + ".")
+
+
+def result_finer_than_asked(question: str, columns: Sequence[str], rows: Sequence[Sequence]) -> Optional[FinerThanAsked]:
+    """A total asked "by <dimension>" whose RESULT has several rows for one value of that dimension.
+
+    The check on the rows themselves, whatever SQL made them. Receipt 2026-11-14 (LuxExperience): "What is total
+    GMV by order status?" was first written right (3 rows); a repair regrouped it by order and status, 146,621 rows,
+    and the answer shown was one row per order under a headline about statuses. `grouped_by_a_row_key` reads the
+    SQL and catches the shapes it knows; this reads what came back, so a shape nobody anticipated is caught too.
+
+    Precision-first. Fires only when the question asks for an aggregate, names what to break it down by, and asks
+    for nothing per row; every named dimension is found among the result's columns; and the rows, projected on
+    those columns, repeat. A column the question itself mentions (by name, or a time column when the question asks
+    over time) is taken as asked for. Measured before it was wired (2026-11-14, 79 live answers, 26 of them
+    breakdowns): it fired on 3, all the receipt above, and on no other.
+    """
+    q = (question or "").strip()
+    if not q or not columns or len(rows) < 2 or not _AGG_ASK.search(q) or _PER_ROW_ASK.search(q):
+        return None
+    by = _BY_PHRASE.search(q)
+    if not by:
+        return None
+    parts = [p.strip() for p in re.split(r"\s*(?:,|\band\b)\s*", by.group(1).lower()) if p.strip()]
+    heads = [p.split()[-1].rstrip("s") for p in parts]
+    if not heads:
+        return None
+    names = [str(c) for c in columns]
+    numeric = [all(_is_number(r[i]) or r[i] is None for r in rows) and any(r[i] is not None for r in rows)
+               for i in range(len(names))]
+    asked: list[int] = []
+    for head in heads:
+        at = next((i for i, c in enumerate(names) if head in _tokens(c) and i not in asked), None)
+        if at is None:
+            return None                  # a dimension the result does not carry by that name: not this check's call
+        asked.append(at)
+    seen = {tuple(r[i] for i in asked) for r in rows}
+    if len(seen) == len(rows):
+        return None
+    # What the question says OUTSIDE its "by …" phrase: "by order status" names status, and its "order" does not ask
+    # for a column of orders.
+    q_tokens = _tokens(q[:by.start()] + " " + q[by.end():])
+    extra = [i for i in range(len(names)) if i not in asked and not (numeric[i] and not _KEY_COL.match(names[i]))]
+    ql = q.lower()
+    for i in extra:
+        if _KEY_COL.match(names[i]):
+            # A row's own key is asked for only by name ("by order id"). Naming its entity is not asking for it:
+            # "how many orders by status" counts orders, it does not want a row for each.
+            key = names[i].split(".")[-1].lower()
+            if key in ql or key.replace("_", " ") in ql:
+                return None
+            continue
+        if _tokens(names[i]) & q_tokens or (_TIME_ASK.search(q) and _TIME_COL.search(names[i])):
+            return None                  # the question asked for this column too
+    return FinerThanAsked(by=by.group(1).strip(), rows=len(rows), distinct=len(seen),
+                          asked=[names[i] for i in asked], also=[names[i] for i in extra])

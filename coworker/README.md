@@ -58,6 +58,11 @@ turned back on from the interface.
   headings named as the app names them, numbers aligned and grouped, a click on a heading sorts, Totals sums
   each column of numbers, Copy and CSV carry the rows as they were answered. The agent is told the answer is
   shown whole and not to write it again, and its own closing remark is not shown when an answer is.
+- **What the platform says is wrong with an answer is said under its headline.** The platform checks the rows
+  against the question before it writes a headline (the result gate, `pramanyx/sql/grain_intent.py`): a total
+  asked "by status" that came back one row per order is repaired once, and if no query answers as asked the
+  headline reads "This does not answer the question as asked" with the reason beside it. That is the
+  platform's verdict, carried over MCP (`warning`); the coworker draws it and decides nothing.
 - **What a sentence stood on is a mark at its end.** Each metric the answer was held to, each spreadsheet and
   each object of the ontology it read is a small chip after the words; it opens the app's own page for it
   beside the conversation. A metric not used as approved says so on its mark.

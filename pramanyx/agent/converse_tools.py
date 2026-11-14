@@ -133,6 +133,14 @@ def run_sql(connection_id: str, args: dict, *, emit: Optional[Emit] = None,
         fanout = None if result.error else flag_fanout(conn, sql)
 
     rows = list(result.rows or [])
+    # The result gate, at this door too (`sql/grain_intent.result_finer_than_asked`; the quick body asks it in
+    # `routers/investigations._answer_core`): rows broken down further than the turn's question asked. Here the
+    # statement is the model's own step and may be one of several, so it is not rewritten and nothing is replaced:
+    # the model is told in `caveats`, where a query that ran and still misleads is said, and the receipt says it.
+    finer = None
+    if user_question and not result.error:
+        from pramanyx.sql.grain_intent import result_finer_than_asked
+        finer = result_finer_than_asked(user_question, list(result.columns or []), rows)
     out = {
         "columns": list(result.columns or []),
         # Truncated on purpose: the model reasons about a shape, and a 10k-row answer
@@ -142,8 +150,9 @@ def run_sql(connection_id: str, args: dict, *, emit: Optional[Emit] = None,
         "row_count": result.row_count,
         "truncated": len(rows) > max_rows,
         "error": result.error,
-        "caveats": list(result.caveats or []) + ([fanout] if fanout else []),
-        "guard_receipts": [_receipt_dict(r) for r in receipts],
+        "caveats": list(result.caveats or []) + ([fanout] if fanout else []) + ([finer.said] if finer else []),
+        "guard_receipts": [_receipt_dict(r) for r in receipts] + (
+            [{"guard": "result_shape", "action": "flagged", "detail": finer.said}] if finer else []),
         "doors": list(getattr(result, "doors", None) or []),
     }
     # The rows are the EXECUTED statement's. When a guard rewrote or repaired what the

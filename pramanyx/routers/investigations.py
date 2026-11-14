@@ -469,6 +469,11 @@ _DIM_NOUN_RE = re.compile(
 _GROUP_ID_COL_RE = re.compile(r"(^|_)(id|key|code|sk|pk)$|_id$|_key$|_code$", re.I)
 
 
+#: The result gate's verdict (`sql/grain_intent.result_finer_than_asked`), as the `inspect_warning` frame names it
+#: and as the answer's headline says it.
+NOT_AS_ASKED = "not_what_was_asked"
+NOT_AS_ASKED_HEADLINE = "This does not answer the question as asked"
+
 #: The checks that are pure functions of the SQL, asked of every repair — see `_checks_still_firing`.
 _REPAIR_CHECKS = frozenset({"fanout", "idmath", "ratio", "grain", "chasm"})
 
@@ -2929,23 +2934,34 @@ def _answer_core(
         if not result.error and result.row_count == 0:
             _chat_zero_diag = _zero_row_suspicious(final_sql)
             _checked.append("zero-row")
+        # THE RESULT, AGAINST WHAT WAS ASKED — the gate between the rows and the headline. Every check above reads
+        # the SQL; this one reads what came back. A total asked "by status" that returns many rows per status is
+        # not that total, whatever query made it. It asks for a repair like any other check, is asked again of the
+        # repair's result, and when no query answers as asked the answer SAYS SO at its head (`_not_as_asked`,
+        # below) — it is not left to the reader to notice 500 rows under a headline about three statuses.
+        from pramanyx.sql.grain_intent import result_finer_than_asked as _finer_than_asked
+        _shape = None if result.error else _finer_than_asked(question, result.columns or [], result.rows or [])
+        _shape_fix_hint = _shape.diagnosis if _shape else ""
+        if not result.error:
+            _checked.append("result-shape")
 
         # Also trigger a rewrite when semantic column warnings exist, even if
         # the SQL executed successfully (wrong columns produce wrong results silently).
-        if result.error or _chat_zero_diag or _semantic_fix_hint or _fanout_fix_hint or _scope_fix_hint or _filter_fix_hint or _grain_fix_hint or _idmath_fix_hint or _ratio_fix_hint or _chasm_fix_hint:
+        if result.error or _chat_zero_diag or _shape_fix_hint or _semantic_fix_hint or _fanout_fix_hint or _scope_fix_hint or _filter_fix_hint or _grain_fix_hint or _idmath_fix_hint or _ratio_fix_hint or _chasm_fix_hint:
             _writer2 = SqlWriter(db, schema_str=schema)
             _fix_error = (
                 result.error or
                 (_scope_fix_hint if _scope_fix_hint else None) or
                 (_filter_fix_hint if _filter_fix_hint else None) or
                 (_grain_fix_hint if _grain_fix_hint else None) or
+                (_shape_fix_hint if _shape_fix_hint else None) or
                 (_idmath_fix_hint if _idmath_fix_hint else None) or
                 (_ratio_fix_hint if _ratio_fix_hint else None) or
                 (_semantic_fix_hint if _semantic_fix_hint else None) or
                 (_fanout_fix_hint if _fanout_fix_hint else None) or
                 "Query returned 0 rows — the SQL logic is likely wrong."
             )
-            _combined_hint = " | ".join(filter(None, [_chat_zero_diag or "", _scope_fix_hint, _filter_fix_hint, _grain_fix_hint, _idmath_fix_hint, _ratio_fix_hint, _semantic_fix_hint, _fanout_fix_hint, _chasm_fix_hint]))
+            _combined_hint = " | ".join(filter(None, [_chat_zero_diag or "", _scope_fix_hint, _filter_fix_hint, _grain_fix_hint, _shape_fix_hint, _idmath_fix_hint, _ratio_fix_hint, _semantic_fix_hint, _fanout_fix_hint, _chasm_fix_hint]))
             try:
                 fix = _writer2.fix(final_sql, _fix_error, hint=_combined_hint, max_retries=2)
                 if fix.ok:
@@ -2970,6 +2986,10 @@ def _answer_core(
                         schema_cols=_pst_recheck(schema))
                     _still = [_n for _n in _firing if _n in _triggered]
                     _broke = [_n for _n in _firing if _n not in _triggered]
+                    # The repair's RESULT is asked what the original's was: broken down further than the question
+                    # asked, it is not adopted — whether the original was too (still) or was not (the repair's doing).
+                    if not retry.error and _finer_than_asked(question, retry.columns or [], retry.rows or []):
+                        (_still if _shape else _broke).append("result shape")
                     # The filter guard is asked again of EVERY model repair, although it probes the warehouse
                     # (one DISTINCT per filtered column, on this path only): the model writes a new statement,
                     # and the one it wrote on theLook put back the literal the pre-flight had fixed.
@@ -2987,12 +3007,13 @@ def _answer_core(
                                 f"the repair trips {', '.join(_broke)}, which the original did not" if _broke else "",
                             ])) + ", so it was not adopted and the original query stands"),
                             "before": final_sql[:2000], "after": fix.sql[:2000]})
-                    elif not retry.error and (retry.row_count > 0 or not _chat_zero_diag or _semantic_fix_hint or _fanout_fix_hint or _scope_fix_hint or _filter_fix_hint or _grain_fix_hint or _idmath_fix_hint or _ratio_fix_hint):
+                    elif not retry.error and (retry.row_count > 0 or not _chat_zero_diag or _shape_fix_hint or _semantic_fix_hint or _fanout_fix_hint or _scope_fix_hint or _filter_fix_hint or _grain_fix_hint or _idmath_fix_hint or _ratio_fix_hint):
                         # The adopted repair is said too (PENDING item 23): the query shown changed with no
                         # word of why, and the pair — a query that failed or tripped a check, and the one that
                         # ran clean — was kept nowhere.
                         _fired = [_n for _n, _h in (("scope", _scope_fix_hint), ("filter", _filter_fix_hint),
-                                                    ("grain", _grain_fix_hint), ("id arithmetic", _idmath_fix_hint),
+                                                    ("grain", _grain_fix_hint), ("result shape", _shape_fix_hint),
+                                                    ("id arithmetic", _idmath_fix_hint),
                                                     ("ratio", _ratio_fix_hint), ("columns", _semantic_fix_hint),
                                                     ("fan-out", _fanout_fix_hint), ("chasm", _chasm_fix_hint)) if _h]
                         _receipt({
@@ -3047,9 +3068,22 @@ def _answer_core(
                 approach=list(answer.approach or []),
                 trusted=list(_trusted_used or []))
 
+        # The verdict on the result that answers, after any repair: asked once more, of the rows about to be shown.
+        _not_as_asked = _finer_than_asked(question, result.columns or [], result.rows or [])
+        if _not_as_asked is not None:
+            _receipt({
+                "guard": "result_shape", "action": "said_not_as_asked",
+                "detail": (_not_as_asked.said + (" A repair was tried and did not answer as asked either."
+                                                 if _shape else "")),
+                "before": final_sql[:2000]})
+
         # Ground the headline in the ACTUAL rows — the coder's headline is a pre-execution
         # prediction and can contradict the data it ran on.
         _grounded_headline = _ground_headline(answer.headline, result.columns, result.rows)
+        if _not_as_asked is not None:
+            # A headline is a finding, and there is none: the rows are not what was asked for. The answer says that
+            # where the finding would be, and why beside it (the `inspect_warning` below).
+            _grounded_headline = NOT_AS_ASKED_HEADLINE
         _rcpt["grounded"] = (_grounded_headline or "") != (answer.headline or "")
         if _rcpt["grounded"]:
             _receipt({
@@ -3161,6 +3195,10 @@ def _answer_core(
         emit("rows", {"rows": result.rows[:10000]})
         _grounded_headline = _apply_currency(_grounded_headline, _cur_sym)
         emit("headline", {"headline": _grounded_headline})
+        if _not_as_asked is not None:
+            # The frame an answer already carries its doubts on, shown under the headline; `kind` says this one is
+            # a verdict the platform checked, not a model's suspicion.
+            emit("inspect_warning", {"issues": [_not_as_asked.said], "suggested_fix": "", "kind": NOT_AS_ASKED})
         emit("chart_type", {"chart_type": answer.chart_type})
         if answer.chart_config:
             emit("chart_config", {"chart_config": answer.chart_config})
@@ -3473,7 +3511,7 @@ def _answer_core(
         # guard+backstop, ratio-of-sums, measure-grain caveat, scope guard — are
         # staged follow-ons, not removed here.) When it runs (resolution off), it
         # is grounded on the schema slice so it cannot invent columns.
-        if _resolution is None:
+        if _resolution is None and _not_as_asked is None:      # a verdict already said is not overwritten by a suspicion
             try:
                 from pramanyx.sql.inspect import inspect as _inspect_sql
                 _ir = _inspect_sql(question, final_sql, result.columns, result.rows,

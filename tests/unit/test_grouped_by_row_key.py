@@ -86,3 +86,63 @@ def test_a_repair_is_asked_every_check_not_only_the_ones_that_asked_for_it():
     import inspect
     src = inspect.getsource(inv)
     assert "set(_REPAIR_CHECKS)" in src and "which the original did not" in src
+
+
+# ── the result, against what was asked (the gate between the rows and the headline) ──────────────────────────────
+
+from pramanyx.sql.grain_intent import result_finer_than_asked as shape  # noqa: E402
+
+_Q = "What is total GMV by order status?"
+_PER_ORDER = [[i, s, 10.0] for i, s in enumerate(["shipped", "returned", "cancelled"] * 4)]
+
+
+def test_the_receipts_result_is_caught_and_said_two_ways():
+    got = shape(_Q, ["order_id", "status", "total_gmv_eur"], _PER_ORDER)
+    assert got and (got.rows, got.distinct, got.asked, got.also) == (12, 3, ["status"], ["order_id"])
+    assert "group by status only" in got.diagnosis                                  # for the model that repairs
+    assert got.said == ("The question asks for a total by order status. This result has 12 rows for 3 distinct "
+                        "status, because it is also broken down by order_id.")     # for the person reading
+
+
+@pytest.mark.parametrize("question, columns, rows", [
+    # one row per value of what was asked: right
+    (_Q, ["status", "sum_gmv_eur"], [["shipped", 1.0], ["returned", 2.0], ["cancelled", 3.0]]),
+    # extra MEASURES beside the dimension are not a finer breakdown
+    ("What is the return rate by platform?", ["platform", "items", "returned_items", "rate"], [["a", 5, 1, 0.2], ["b", 9, 3, 0.33]]),
+    # two dimensions asked, both present, each combination once
+    ("Total revenue by store and month", ["store", "month", "revenue"], [["s1", "jan", 1], ["s1", "feb", 2], ["s2", "jan", 3]]),
+    # the question asks per row
+    ("What is the total for each order by status?", ["order_id", "status", "total"], _PER_ORDER),
+    # the extra column is asked for elsewhere in the question
+    ("Monthly revenue by channel", ["month", "channel", "revenue"], [["jan", "web", 1], ["feb", "web", 2], ["jan", "store", 3]]),
+    ("Total sales by region for each segment", ["region", "segment", "sales"], [["n", "a", 1], ["n", "b", 2]]),
+    ("Total sales by region, split by segment too", ["region", "segment", "sales"], [["n", "a", 1], ["n", "b", 2]]),
+    # the key is asked for by name
+    ("Total GMV of orders by order id and status", ["order_id", "status", "total"], _PER_ORDER),
+    # the dimension is not among the columns by that name: not this check's call
+    ("Total GMV by shop", ["platform", "gmv"], [["a", 1], ["a", 2]]),
+    # no aggregate asked, no breakdown named, or a single row
+    ("List orders by status", ["order_id", "status"], [[1, "x"], [2, "x"]]),
+    ("What is total GMV?", ["status", "gmv"], [["x", 1], ["x", 2]]),
+    (_Q, ["status", "gmv"], [["shipped", 1.0]]),
+])
+def test_what_is_right_or_not_this_checks_call_passes(question, columns, rows):
+    assert shape(question, columns, rows) is None
+
+
+def test_the_answer_path_asks_it_of_the_first_result_of_a_repair_and_of_what_is_shown():
+    """Wiring guard: a check nothing calls is the gap this closes. Asked three times — of the first result (to ask
+    for a repair), of the repair's result (to adopt it or not), and of the rows about to be shown (to say so)."""
+    import inspect
+
+    from pramanyx.routers import investigations as inv
+    src = inspect.getsource(inv._answer_core)
+    assert src.count("_finer_than_asked(question,") == 3
+    assert '"said_not_as_asked"' in src and "NOT_AS_ASKED_HEADLINE" in src
+    assert 'emit("inspect_warning", {"issues": [_not_as_asked.said]' in src
+
+
+def test_naming_the_entity_that_is_counted_is_not_asking_for_a_row_each():
+    """Found by running the answer path for real: "how many orders are there by status" names orders, and the first
+    version took that as asking for the order_id column."""
+    assert shape("how many orders are there by status", ["order_id", "status", "orders"], _PER_ORDER) is not None
