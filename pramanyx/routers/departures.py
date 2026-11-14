@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from pramanyx.govern.departure import (
@@ -96,7 +96,7 @@ class VerdictBody(BaseModel):
 
 
 @router.post("/departures/{departure_id}/verdict")
-def mark(departure_id: str, body: VerdictBody):
+def mark(departure_id: str, body: VerdictBody, request: Request):
     """The declarer's mark on one departure — accept / correct / reject.
 
     Forwards into the feedback plane when the departure carries an investigation id
@@ -114,10 +114,12 @@ def mark(departure_id: str, body: VerdictBody):
     if row.get("investigation_id"):
         try:
             from pramanyx.feedback.verdicts import record_verdict
+            from pramanyx.security.authz import acting_person, get_principal
             record_verdict(connection_id=row.get("conn_id", ""),
                            investigation_id=row["investigation_id"],
                            verdict=verdict, note=body.note.strip(),
-                           headline=(row.get("text_preview") or "")[:200])
+                           headline=(row.get("text_preview") or "")[:200],
+                           by=acting_person(get_principal(request)))
         except Exception:
             # The departure mark stands on its own; the feedback forward is a bonus,
             # not a dependency — a broken second ledger must not lose the first mark.

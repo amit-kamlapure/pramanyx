@@ -33,9 +33,28 @@ def _add_agent_col(c: "sqlite3.Connection") -> None:
     add_column_if_missing(c, "finding_verdicts", "agent_id", "TEXT NOT NULL DEFAULT ''")
 
 
+def _add_by_col(c: "sqlite3.Connection") -> None:
+    # People (2026-11-15) — WHO judged it. Eleven verdicts stood on the live install and not one named a person, so
+    # the Record's approvals read "a person" and no one's word could ever be weighed. Rows before this stay unnamed:
+    # they are history, and guessing a name for them would be inventing one.
+    add_column_if_missing(c, "finding_verdicts", "judged_by", "TEXT NOT NULL DEFAULT ''")
+
+
 # Schema evolution (DATA-05). The `finding_verdicts` base table is v1; changes are Migration(v>=2).
 _MIGRATIONS = [Migration(2, "close-the-loop columns (sql_source, corrected_sql)", _add_closeloop_cols),
-               Migration(3, "agent_id (the custom agent whose answer was judged)", _add_agent_col)]
+               Migration(3, "agent_id (the custom agent whose answer was judged)", _add_agent_col),
+               Migration(4, "judged_by (the person whose verdict it is)", _add_by_col)]
+
+
+def _person(by: str) -> str:
+    """The one spelling a verdict's person is stored under: ``user:<id>``. Unsaid is the person this request acts
+    for (`authz.acting_person`) — a door never takes a name from its body. An agent or the system is not a person,
+    and a verdict is a person's word: refused, not recorded under a name that would read as someone's."""
+    from pramanyx.security.authz import acting_person
+    who = (by or "").strip() or acting_person(None)
+    if who.startswith(("agent:", "service:", "system")):
+        raise ValueError(f"a verdict is a person's word; {who!r} is not a person")
+    return who if who.startswith("user:") else f"user:{who}"
 
 # accept = the finding is correct/useful · correct = right direction but a detail is wrong
 # · reject = wrong or misleading. These are the labels the trust economy calibrates against.
@@ -79,6 +98,7 @@ def record_verdict(
     sql_source: str = "",
     corrected_sql: str = "",
     agent_id: str = "",
+    by: str = "",
 ) -> dict:
     """Persist a human verdict on a finding. Raises ValueError on an invalid verdict label
     (the only failure the caller must handle); everything else is a normal insert.
@@ -90,10 +110,13 @@ def record_verdict(
     AO-7a/7b: what the caller did not say is read from the turn's own record — the agent
     that answered, the connection, the headline and the SQL. A Slack ✅ arrives with an
     investigation id and little else; before this it was stored as a verdict on nothing in
-    particular, and no agent could learn from it."""
+    particular, and no agent could learn from it.
+
+    ``by`` is the person whose verdict it is (`_person`): a door passes the person its request acts for."""
     v = (verdict or "").strip().lower()
     if v not in VERDICTS:
         raise ValueError(f"verdict must be one of {VERDICTS}, got {verdict!r}")
+    by = _person(by)
     _OVERRULED.clear()          # the few-shot memory's tombstone reads the verdict store fresh from here on
     turn = _turn_record(investigation_id) if investigation_id else {}
     if turn:
@@ -110,10 +133,10 @@ def record_verdict(
             c,
             "INSERT INTO finding_verdicts "
             "(org_id, connection_id, investigation_id, verdict, note, headline, "
-            "sql_source, corrected_sql, created_at, agent_id) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?)",
+            "sql_source, corrected_sql, created_at, agent_id, judged_by) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (org, connection_id or "", investigation_id or "", v, note or "", headline or "",
-             sql_source or "", corrected_sql or "", now, agent_id or ""),
+             sql_source or "", corrected_sql or "", now, agent_id or "", by),
         )
         c.commit()
         # MI-2 — the verdict just made this run's evidence permanent. Best-effort and
@@ -141,7 +164,7 @@ def record_verdict(
             "investigation_id": investigation_id or "", "verdict": v,
             "note": note or "", "headline": headline or "",
             "sql_source": sql_source or "", "corrected_sql": corrected_sql or "",
-            "created_at": now, "agent_id": agent_id or "",
+            "created_at": now, "agent_id": agent_id or "", "judged_by": by,
         }
     finally:
         c.close()
@@ -165,9 +188,8 @@ def record_verdict(
     # after the commit, like everything above: the verdict is the durable thing.
     if connection_id and investigation_id:
         try:
-            from pramanyx.org.context import current_user_id
             from pramanyx.record import writers as _record
-            who = current_user_id() or ""
+            who = by                    # the verdict's person, not the sign-in contextvar (empty with sign-in off)
             moved = (_record.approve_answer_claims(connection_id=connection_id, inv_id=investigation_id,
                                                    verdict_id=new_id, by=who) if v == "accept"
                      else _record.withdraw_answer_claims(connection_id=connection_id, inv_id=investigation_id,

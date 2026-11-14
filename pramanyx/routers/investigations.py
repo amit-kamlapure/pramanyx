@@ -6474,8 +6474,7 @@ async def _stream_with_session(session_id: str, stream: AsyncGenerator[str, None
     token = set_session_id(session_id or "")
     user_token = None
     if principal_ref and not current_user_id():
-        from pramanyx.identity.resolver import attribution_key
-        user_token = set_user_id(attribution_key(principal_ref))
+        user_token = set_user_id(said_asker(principal_ref))
     try:
         async for event in stream:
             yield event
@@ -6483,6 +6482,22 @@ async def _stream_with_session(session_id: str, stream: AsyncGenerator[str, None
         if user_token is not None:
             reset_user_id(user_token)
         reset_session_id(token)
+
+
+#: The doors that name an outside asker by a prefix of their own (`routers/doors.py`, the MCP client).
+_DOOR_PREFIXES = ("api:", "teams:", "slack:", "webhook:", "a2a:", "automation:", "agent-ops")
+
+
+def said_asker(principal_ref: str) -> str:
+    """Who a body says is asking, kept as what it is: a label a caller chose (People, 2026-11-15). Until then it went
+    through the identity links and became the request's person, which document access and every write read — so a
+    body saying ``slack:U…`` was that linked person, and one saying ``ana@example.com`` was Ana. Now it is never a
+    person: a door's own prefix stays as the door wrote it, and anything else is marked ``said:``. A person comes
+    from sign-in or a delegation, never from a body."""
+    raw = str(principal_ref or "").strip()[:128]
+    if not raw:
+        return ""
+    return raw if raw.startswith(_DOOR_PREFIXES) else f"said:{raw}"
 
 
 def _job_id_for_investigation(inv_id: str) -> Optional[str]:
