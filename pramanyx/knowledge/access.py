@@ -27,7 +27,7 @@ from typing import Optional
 from pramanyx.connectors.knowledge import CHOSEN, ORG, chosen, org_wide, source_audience  # noqa: F401 — re-exported
 
 #: Document ids a knowledge connector writes (`connectors/knowledge/*`): `<kind>_<connection>_<page>`.
-_CONNECTOR_PREFIXES = ("confluence_", "notion_")
+_CONNECTOR_PREFIXES = ("confluence_", "notion_", "slack_")
 
 
 def is_connector_document(doc_id: str) -> bool:

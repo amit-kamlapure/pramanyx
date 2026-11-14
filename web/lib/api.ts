@@ -12664,3 +12664,22 @@ export async function importDirectory(csv: string, opts: { dryRun: boolean; full
   if (!res.ok) throw await refused(res, "Importing the people directory");
   return res.json();
 }
+
+// ── What was said in a Slack bot's channels, as knowledge (2026-11-15) ──────────────────────────────────────────
+
+export interface SlackKnowledgeStatus {
+  bot_id: string; last_sync: string | null; pages_indexed: number;
+  channels: { name: string; readers: number; unmatched: number }[];
+  pages_skipped: { title: string; url: string; reason: string }[]; skipped_count: number; refused: string;
+}
+
+export async function getSlackKnowledgeStatus(botId: string): Promise<SlackKnowledgeStatus> {
+  const res = await fetch(`${getApiBase()}/slack-bots/${encodeURIComponent(botId)}/knowledge-sync/status`);
+  if (!res.ok) throw await refused(res, "Reading what was read from Slack");
+  return res.json();
+}
+
+export async function syncSlackKnowledge(botId: string): Promise<void> {
+  const res = await fetch(`${getApiBase()}/slack-bots/${encodeURIComponent(botId)}/knowledge-sync`, { method: "POST" });
+  if (!res.ok) throw await refused(res, "Reading the bot's channels");
+}

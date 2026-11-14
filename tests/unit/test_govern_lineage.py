@@ -155,14 +155,18 @@ class TestKnowledgeConnectorCredentials:
     rather than inheriting this one by default.
     """
 
-    def test_the_known_knowledge_connectors_are_exactly_these_two(self):
+    def test_the_known_knowledge_connectors_are_exactly_these_three(self):
+        """2026-11-15 — Slack added, its credential model decided explicitly: the organisation's own Slack bot token
+        (a declared shared-token exception), which reads only the channels a person invited the bot to, and every day
+        it indexes is readable by that channel's members only (`connectors/knowledge/slack.py`, `knowledge/access.py`).
+        The shared token decides what is READ; who may read it here is the source's own membership."""
         import pathlib
 
         import pramanyx.connectors.knowledge as pkg
 
         mods = sorted(p.stem for p in pathlib.Path(pkg.__file__).parent.glob("*.py")
                       if p.stem != "__init__")
-        assert mods == ["confluence", "notion"], (
+        assert mods == ["confluence", "notion", "slack"], (
             "a knowledge connector was added or removed — decide its credential model "
             "explicitly (per-user OAuth, or a declared shared-token exception) rather "
             "than inheriting the shared-token default these two use")
