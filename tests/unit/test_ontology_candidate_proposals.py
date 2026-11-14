@@ -176,7 +176,8 @@ def test_the_public_door_names_are_bound():
     assert RO.declare_link_core is RO._declare_link_core
 
 
-def test_the_mining_door_stages_when_asked(monkeypatch):
+def test_the_mining_door_books_usage_claims_when_asked_and_stages_no_card(monkeypatch):
+    """2026-11-14 (the user): query-history findings are Record claims only — booked, never an inbox card."""
     from pramanyx.db.query_history import HistoryRow, QueryHistory
     from pramanyx.orgsettings import allows as A
     from pramanyx.routers import ontology as R
@@ -195,10 +196,13 @@ def test_the_mining_door_stages_when_asked(monkeypatch):
     import pramanyx.db.connection as C
     monkeypatch.setattr(C, "open_connection_for_with_schema", lambda cid, s=None: Conn())
     out = R.mine_ontology_candidates(R._MineCandidatesRequest(stage=True), connection_id="c-door", schema_name="main")
-    assert len(out["offered"]) == 1 and out["staged"]["proposals"] == []       # Arc NV-7: a formula is not a card here
-    assert out["staged"]["unstageable"][0]["why"].startswith("a formula is proposed and adopted in the Semantic Layer")
+    assert len(out["offered"]) == 1 and "staged" not in out
+    assert len(out["booked"]["booked"]) == 1                                    # the formula, as a usage claim
+    from pramanyx.record import claims as RC
+    (c,) = [x for x in RC.list_claims(kind="usage", conn_id="c-door")]
+    assert c.tier == "mined" and c.extra["candidate_kind"] == "measure"
     plain = R.mine_ontology_candidates(None, connection_id="c-door", schema_name="main")
-    assert "staged" not in plain
+    assert "booked" not in plain
 
 
 @pytest.fixture(autouse=True)

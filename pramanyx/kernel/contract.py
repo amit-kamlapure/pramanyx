@@ -23,7 +23,7 @@ VERSION = "2027.1"
 
 #: The seven duties (the study §H): what each books, and which built-in agent carries it today.
 DUTIES: tuple[dict[str, Any], ...] = (
-    {"duty": "Observe", "books": ["observation", "reading"], "proposes": ["monitor"],
+    {"duty": "Observe", "books": ["observation", "reading", "usage"], "proposes": ["monitor"],
      "today": "Explorer, Watcher", "why": "somebody has to look where nobody asked"},
     {"duty": "Inquire", "books": ["hypothesis", "finding"], "proposes": [],
      "today": "Analyst (SQL Engineer, Narrator, Orchestrator inside it)", "why": "explanation is a search over causes"},
