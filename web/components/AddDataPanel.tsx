@@ -19,6 +19,12 @@ import { CONNECTORS } from "@/lib/connectors.gen";
 import {
   addConnection,
   getConnectorTypes,
+  getMyAccess,
+  getOrgAllows,
+  getQueryHistoryReadiness,
+  mineQueryHistory,
+  setOrgAllow,
+  type QueryHistoryReadiness,
   uploadFileToConnection,
   bulkUploadFilesToConnection,
   analyzeConnectionFile,
@@ -636,6 +642,72 @@ function WorkspaceUploader({ onAdded, workspaceId }: {
 
 // ── Main page ────────────────────────────────────────────────────────────────
 
+/** The readiness to offer, or null when the offer is not to be made: the choice already made, the reader not an admin,
+ *  or the engine keeping no history. Never throws: a question that cannot be asked is not asked. */
+export async function queryHistoryOffer(connId: string): Promise<QueryHistoryReadiness | null> {
+  try {
+    const allows = await getOrgAllows();
+    if (allows.read_query_history?.set) return null;
+    const me = await getMyAccess().catch(() => null);
+    if (me && !me.permissions.includes("admin.manage_org")) return null;
+    const ready = await getQueryHistoryReadiness(connId);
+    return ready && ready.applies ? ready : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Read this warehouse's own query history? Asked once, of an admin, right after a connection that keeps one is added.
+ * What it reads is said plainly; a yes is the organisation's setting (Settings ▸ Organization ▸ What Pramanyx may
+ * do) and reads this connection's history once into the actions inbox, where nothing is used until a person accepts
+ * it; a no is kept, so the question is not asked again.
+ */
+function QueryHistoryOffer({ engine, connId, ready, onDone }: {
+  engine: string; connId: string; ready: QueryHistoryReadiness; onDone: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [said, setSaid] = useState("");
+  const answer = async (yes: boolean) => {
+    setBusy(true); setSaid("");
+    try {
+      await setOrgAllow("read_query_history", yes);
+      if (yes && ready.ok) {
+        setSaid("Reading the query history…");
+        await mineQueryHistory(connId);
+      }
+      onDone();
+    } catch (e) {
+      setSaid(e instanceof Error ? e.message : "That was not saved.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div style={{ height: "100%", overflowY: "auto", background: "var(--bg-0)", padding: "28px", display: "flex",
+                  flexDirection: "column", gap: 14 }}>
+      <h2 className="aug-fs-h1" style={{ margin: 0, color: "var(--t1)" }}>Read {engine}&apos;s own query history?</h2>
+      <p className="aug-fs-ui" style={{ margin: 0, color: "var(--t1)", lineHeight: 1.6 }}>
+        Pramanyx would read the SQL text of the statements people ran on this warehouse in the last 14 days — up to
+        2,000 of them, never their rows — and propose joins, filters and formulas from what they show. Nothing is used
+        until a person accepts it in the actions inbox.
+      </p>
+      <p className="aug-fs-sm" style={{ margin: 0, color: "var(--t2)" }}>
+        This is your organisation&apos;s setting, off until you choose, and it covers every warehouse you connect. You can
+        change it in Settings ▸ Organization ▸ What Pramanyx may do.
+      </p>
+      <p className="aug-fs-sm" style={{ margin: 0, color: ready.ok ? "var(--t2)" : "var(--t1)" }}>
+        {ready.sentence}{!ready.ok && ready.fix ? ` It needs ${ready.fix}.` : ""}
+      </p>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <Button disabled={busy} onClick={() => void answer(true)}>Yes, read it</Button>
+        <Button variant="outline" disabled={busy} onClick={() => void answer(false)}>No</Button>
+      </div>
+      {said && <p className="aug-fs-sm" style={{ margin: 0, color: "var(--t2)" }}>{said}</p>}
+    </div>
+  );
+}
+
 export function AddDataPanel({ onClose, onAdded, workspaceId }: {
   onClose: () => void;
   /** Refresh the catalogue. Returns whether `connId` is now VISIBLE in it, so the
@@ -655,6 +727,8 @@ export function AddDataPanel({ onClose, onAdded, workspaceId }: {
   //: and could not tell a slow refresh from a failed ingest.
   const [phase, setPhase]     = useState("");
   const [error, setError]     = useState("");
+  // The study's step 2: once, when an admin adds a warehouse that keeps a query history, the question of reading it.
+  const [offer, setOffer]     = useState<{ connId: string; engine: string; ready: QueryHistoryReadiness } | null>(null);
 
   useEffect(() => { getConnectorTypes().then(setTypes).catch(() => setTypes([])); }, []);
 
@@ -723,6 +797,10 @@ export function AddDataPanel({ onClose, onAdded, workspaceId }: {
                  + "the connection's workspace.");
         return;
       }
+      // Asked here, where the choice arises, and only when it is still open: an admin who answered it once is not
+      // asked again, a person who cannot answer it is not asked, and an engine with no history has nothing to read.
+      const asked = await queryHistoryOffer(created.id);
+      if (asked) { setOffer({ connId: created.id, engine: meta(picked.type).label, ready: asked }); return; }
       onClose();
     } catch (ex: unknown) {
       setError((ex as Error).message);
@@ -731,6 +809,10 @@ export function AddDataPanel({ onClose, onAdded, workspaceId }: {
       setPhase("");
     }
   };
+
+  if (offer) {
+    return <QueryHistoryOffer engine={offer.engine} connId={offer.connId} ready={offer.ready} onDone={onClose} />;
+  }
 
   return (
     <div style={{ height: "100%", overflowY: "auto", background: "var(--bg-0)" }}>

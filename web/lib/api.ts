@@ -233,6 +233,35 @@ export type OrgAllowSetting = "share_aggregates" | "outside_row_model" | "reason
 /** Each choice's answer, and whether an admin set it — one never set answers from the server's environment. */
 export type OrgAllows = Record<OrgAllowSetting, { allowed: boolean; set: boolean }>;
 
+/** An admin answers one of the choices, on its own (`PUT /org-settings/allows/{key}`). */
+export async function setOrgAllow(key: OrgAllowSetting, allowed: boolean): Promise<{ key: string; allowed: boolean; set: boolean }> {
+  const res = await fetch(`${getApiBase()}/org-settings/allows/${encodeURIComponent(key)}`, {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ allowed }),
+  });
+  if (!res.ok) throw await refused(res, "Saving the choice");
+  return res.json();
+}
+
+/** Whether a warehouse keeps a query history the platform can read, and what it needs (`GET .../prerequisites`). */
+export interface QueryHistoryReadiness {
+  engine: string; ok: boolean; applies: boolean; source: string; note: string; fix: string; can_enable: boolean; sentence: string;
+}
+
+export async function getQueryHistoryReadiness(connId: string): Promise<QueryHistoryReadiness | null> {
+  const res = await fetch(`${getApiBase()}/connections/${encodeURIComponent(connId)}/prerequisites`);
+  if (!res.ok) return null;
+  return ((await res.json()) as { query_history?: QueryHistoryReadiness }).query_history ?? null;
+}
+
+/** Read a connection's warehouse history once, into the actions inbox as proposals (`POST /ontology/candidates/mine`). */
+export async function mineQueryHistory(connId: string): Promise<void> {
+  const q = new URLSearchParams({ connection_id: connId });
+  const res = await fetch(`${getApiBase()}/ontology/candidates/mine?${q}`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ stage: true }),
+  });
+  if (!res.ok) throw await refused(res, "Reading the query history");
+}
+
 export async function getOrgAllows(): Promise<OrgAllows> {
   const res = await fetch(`${getApiBase()}/org-settings/allows`);
   if (!res.ok) throw new Error("Failed to read what the organisation allows");

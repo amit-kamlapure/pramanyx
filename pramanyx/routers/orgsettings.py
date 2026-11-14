@@ -14,6 +14,8 @@ from pydantic import BaseModel
 from pramanyx.licensing import Capability, gate
 from pramanyx.orgsettings import effective_settings, load_org_settings, save_org_settings
 from pramanyx.orgsettings.models import OrgSettings
+from pramanyx.rbac.deps import require_permission
+from pramanyx.rbac.permissions import Permission
 from pramanyx.security.authz import connection_owner_guard
 
 #: DATA-06 — every connection a door of this router names belongs to the caller's org (identity on).
@@ -33,6 +35,23 @@ def get_org_allows():
     from pramanyx.orgsettings.allows import FORMER_ENV, allows
     stored = load_org_settings()
     return {k: {"allowed": allows(k), "set": getattr(stored, k) is not None} for k in FORMER_ENV}
+
+
+class AllowChoice(BaseModel):
+    allowed: bool
+
+
+@router.put("/org-settings/allows/{key}",
+            dependencies=[Depends(require_permission(Permission.ADMIN_MANAGE_ORG))])
+def put_org_allow(key: str, body: AllowChoice):
+    """One of what the organisation allows Pramanyx to do, answered by an admin — on its own, so a question asked where
+    the choice arises (the offer to read a warehouse's query history when a connection is added) does not rewrite
+    every other setting. Journaled where every organisation setting is. A key that is not one of the choices is 404."""
+    from pramanyx.orgsettings.allows import FORMER_ENV, allows
+    if key not in FORMER_ENV:
+        raise HTTPException(status_code=404, detail=f"{key!r} is not one of what the organisation allows")
+    save_org_settings(load_org_settings().model_copy(update={key: bool(body.allowed)}))
+    return {"key": key, "allowed": allows(key), "set": True}
 
 
 @router.put("/org-settings")

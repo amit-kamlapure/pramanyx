@@ -59,3 +59,35 @@ class TestWorkspaceOverrideRoute:
             ws["id"], WR.UpdateWorkspaceRequest(settings_override={"industry": "Freight"})
         )
         assert updated["settings_override"] == {"industry": "Freight"}
+
+
+class TestOneAllowAtATime:
+    """The offer to read a warehouse's query history, made where a connection is added, answers that one choice and
+    leaves every other setting as it was. An admin's to answer."""
+
+    def _client(self):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        app = FastAPI()
+        app.include_router(R.router)
+        return TestClient(app)
+
+    def test_an_admin_answers_one_choice_and_the_rest_stand(self):
+        S.save_org_settings(OrgSettings(currency_code="EUR", share_aggregates=True))
+        r = self._client().put("/org-settings/allows/read_query_history", json={"allowed": True})
+        assert r.status_code == 200 and r.json() == {"key": "read_query_history", "allowed": True, "set": True}
+        saved = S.load_org_settings()
+        assert saved.read_query_history is True and saved.currency_code == "EUR" and saved.share_aggregates is True
+        assert self._client().put("/org-settings/allows/read_query_history", json={"allowed": False}).json()["allowed"] is False
+        assert S.load_org_settings().read_query_history is False                      # a no is kept: not asked again
+
+    def test_a_key_that_is_not_a_choice_is_not_found(self):
+        assert self._client().put("/org-settings/allows/currency_code", json={"allowed": True}).status_code == 404
+
+    def test_a_person_without_the_admin_permission_is_refused(self, monkeypatch):
+        from pramanyx.security.authz import Principal
+        monkeypatch.setattr("pramanyx.security.authz.get_principal", lambda request: Principal(user_id="ben", org_id="default"))
+        monkeypatch.setattr("pramanyx.rbac.resolver.maybe_bootstrap_owner", lambda p: None)
+        monkeypatch.setattr("pramanyx.rbac.resolver.has_permission", lambda p, perm: perm.value != "admin.manage_org")
+        assert self._client().put("/org-settings/allows/read_query_history", json={"allowed": True}).status_code == 403
+        assert S.load_org_settings().read_query_history is None

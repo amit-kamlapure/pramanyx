@@ -14383,6 +14383,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/org-settings/allows/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Org Allow
+         * @description One of what the organisation allows Pramanyx to do, answered by an admin — on its own, so a question asked where
+         *     the choice arises (the offer to read a warehouse's query history when a connection is added) does not rewrite
+         *     every other setting. Journaled where every organisation setting is. A key that is not one of the choices is 404.
+         */
+        put: operations["put_org_allow_org_settings_allows__key__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/org-settings/effective": {
         parameters: {
             query?: never;
@@ -19153,6 +19175,11 @@ export interface components {
              * @default
              */
             description: string;
+        };
+        /** AllowChoice */
+        AllowChoice: {
+            /** Allowed */
+            allowed: boolean;
         };
         /** AllowRequest */
         AllowRequest: {
@@ -50996,6 +51023,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    put_org_allow_org_settings_allows__key__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AllowChoice"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
