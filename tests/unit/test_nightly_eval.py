@@ -312,8 +312,9 @@ def test_every_dataset_names_its_golden_sql_or_says_it_has_none():
         for fname in spec["golden"]:
             assert (N.EVALS_DIR / fname).is_file(), fname
             assert all(r.get("reference_sql") for r in N.read_jsonl(N.EVALS_DIR / fname))
-    assert N.DATASETS["thelook"]["golden"] == ()
+    assert N.DATASETS["thelook"]["golden"] == ("golden_thelook.jsonl",)          # 2026-11-14: Olist's file is gone
     assert len(N.load_cases("golden", ["luxexperience"])) == 30
+    assert len(N.load_cases("golden", ["thelook"])) == 15
 
 
 def test_a_case_whose_canary_is_in_its_own_payload_is_refused():
