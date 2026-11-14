@@ -114,10 +114,29 @@ const numberOf = (v) => {
   if (typeof v === "string" && /^-?\d+(\.\d+)?$/.test(v.trim())) return Number(v);
   return null;
 };
-export const shown = (v, asNumber) => {
+/** The symbol a currency code prints as ("EUR" → "€"), or the code itself where the browser knows none. */
+const symbolOf = (code) => {
+  try {
+    return new Intl.NumberFormat(undefined, { style: "currency", currency: code, currencyDisplay: "narrowSymbol" })
+      .formatToParts(0).find((part) => part.type === "currency")?.value || code;
+  } catch { return code; }
+};
+/** What the platform said each column is a figure of: `{column: "currency:EUR"}`. None said is none. */
+export const unitsOf = (answer) => answer?.column_units ?? answer?.chart_config?.column_units ?? {};
+/**
+ * A cell as a person reads it. A number is grouped; a money column carries its currency's symbol, by the unit the
+ * platform said (never guessed here from the column's name). `short` is for a figure standing alone: €17.86m.
+ */
+export const shown = (v, asNumber, unit = "", short = false) => {
   if (v === null || v === undefined) return "";
   const n = asNumber ? numberOf(v) : null;
-  return n === null ? String(v) : said.format(n);
+  if (n === null) return String(v);
+  const money = String(unit).toLowerCase().startsWith("currency:") ? symbolOf(String(unit).slice(9).trim().toUpperCase()) : "";
+  if (short && Math.abs(n) >= 1e4) {
+    const [scale, mark] = Math.abs(n) >= 1e9 ? [1e9, "bn"] : Math.abs(n) >= 1e6 ? [1e6, "m"] : [1e3, "k"];
+    return `${money}${new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(n / scale)}${mark}`;
+  }
+  return money ? `${money}${new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)}` : said.format(n);
 };
 
 function toCsv(columns, rows) {
@@ -148,6 +167,7 @@ export function ResultGrid({ answer, compact = false }) {
   const [totals, setTotals] = useState(false);
   const [copied, setCopied] = useState(false);
   const numeric = numericColumns(columns, rows);
+  const units = unitsOf(answer);
   const ordered = by === null ? rows : [...rows].sort((a, b) => {
     const x = a[by.at], y = b[by.at];
     const p = numeric[by.at] ? numberOf(x) : null, q = numeric[by.at] ? numberOf(y) : null;
@@ -183,10 +203,10 @@ export function ResultGrid({ answer, compact = false }) {
                      padding: compact ? "6px 10px" : "8px 12px", textAlign: "inherit", whiteSpace: "nowrap" },
           }, labelOf(c), h("span", { "aria-hidden": "true", style: { ...quiet, paddingLeft: 6 } }, mark(i))))))),
         h("tbody", null, ordered.slice(0, ROWS_SHOWN).map((r, n) => h("tr", { key: n },
-          r.map((v, i) => h("td", { key: i, style: { ...cell, ...mono, textAlign: numeric[i] ? "right" : "left" } }, shown(v, numeric[i])))))),
+          r.map((v, i) => h("td", { key: i, style: { ...cell, ...mono, textAlign: numeric[i] ? "right" : "left" } }, shown(v, numeric[i], units[columns[i]])))))),
         totals ? h("tfoot", null, h("tr", { style: { background: faint } },
           columns.map((c, i) => h("td", { key: c, style: { ...cell, ...mono, fontWeight: 600, textAlign: numeric[i] ? "right" : "left" } },
-            numeric[i] ? said.format(rows.reduce((sum, r) => sum + (numberOf(r[i]) ?? 0), 0)) : i === 0 ? "Total" : "")))) : null)),
+            numeric[i] ? shown(rows.reduce((sum, r) => sum + (numberOf(r[i]) ?? 0), 0), true, units[c]) : i === 0 ? "Total" : "")))) : null)),
     total > rows.length || rows.length > ROWS_SHOWN ? h("div", { style: { ...quiet, fontSize: 12 } },
       `${Math.min(rows.length, ROWS_SHOWN)} of ${total} rows shown. Totals, Copy and CSV are over the ${rows.length} that came back.`) : null);
 }

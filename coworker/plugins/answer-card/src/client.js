@@ -17,7 +17,7 @@ import { createPortal } from "react-dom";
 import { drawChart, labelOf, numericColumns } from "./chart";
 import {
   PANE, PANE_PATTERN, PaneBody, downloadCsv, groundingOf, pageFor, PaneTitle, ResultGrid, button, faint, hasPane, idOf, line,
-  openBeside, quiet, remember, rememberThing, setOpener, shown, sheetsByTable, thingId, useChosen,
+  openBeside, quiet, remember, rememberThing, setOpener, shown, unitsOf, sheetsByTable, thingId, useChosen,
 } from "./exhibit";
 
 const TOOL = "mcp__pramanyx__ask";
@@ -94,7 +94,7 @@ function Chart({ answer, viz }) {
     try {
       remove = drawChart(box.current, {
         columns: answer.columns ?? [], rows: answer.rows ?? [], chart_type: answer.chart_type,
-        chart_config: answer.chart_config, column_units: answer.column_units, title: null, viz,
+        chart_config: answer.chart_config, column_units: unitsOf(answer), title: null, viz,
       });
     } catch {
       remove = null;
@@ -436,6 +436,11 @@ const STEPS_LOOK = `
   background: color-mix(in srgb, currentColor 6%, transparent); border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
 }
 .pramanyx-mark:hover, .pramanyx-mark:focus-visible { border-color: color-mix(in srgb, currentColor 55%, transparent); }
+.pramanyx-ask {
+  font: inherit; font-size: 14px; color: inherit; text-align: left; background: transparent; border: 0; cursor: pointer;
+  border-top: 1px solid color-mix(in srgb, currentColor 14%, transparent); padding: 8px 0; opacity: 0.86;
+}
+.pramanyx-ask:hover, .pramanyx-ask:focus-visible { opacity: 1; background: color-mix(in srgb, currentColor 5%, transparent); }
 .pramanyx-link {
   font: inherit; font-size: 12.5px; color: inherit; opacity: 0.68; background: transparent; border: 0; padding: 4px 0; cursor: pointer;
   text-decoration: underline dotted color-mix(in srgb, currentColor 45%, transparent); text-underline-offset: 3px;
@@ -594,6 +599,27 @@ const GLYPH = {
 const Glyph = ({ d }) => h("svg", { width: 15, height: 15, viewBox: "0 0 16 16", fill: "none", stroke: "currentColor", strokeWidth: 1.3, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" },
   d.map((path, i) => h("path", { key: i, d: path })));
 
+/**
+ * Write a question into the question box, for the person to send or change. The shell hands the box's own setter
+ * only to what it mounts above the box on the first screen, so here the box is found in the page and typed into as
+ * a person would. False when there is no box to find; the caller then leaves the question on the clipboard.
+ */
+function draft(question) {
+  const seat = document.querySelector("[data-composer-seat]") ?? document;
+  const box = seat.querySelector("textarea");
+  if (box) {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set.call(box, question);
+    box.dispatchEvent(new Event("input", { bubbles: true }));
+    box.focus();
+    return true;
+  }
+  const field = seat.querySelector('[contenteditable="true"], [contenteditable=""], [role="textbox"]');
+  if (!field) return false;
+  field.focus();
+  document.execCommand("selectAll");
+  return document.execCommand("insertText", false, question);
+}
+
 /** Words the platform wrote, with what it marked `**decisive**` set bold. Nothing else in them is read as markup. */
 function rich(text) {
   return String(text || "").split(/(\*\*[^*]+\*\*)/g).filter(Boolean).map((piece, i) =>
@@ -618,11 +644,14 @@ function titleOf(answer) {
 function Figures({ answer }) {
   const columns = answer.columns ?? [], row = (answer.rows ?? [])[0] ?? [];
   const numeric = numericColumns(columns, answer.rows ?? []);
+  const units = unitsOf(answer);
   return h("div", { style: { display: "flex", flexWrap: "wrap", gap: "14px 36px", padding: "6px 0 10px" } },
     columns.map((c, i) => h("div", { key: c, style: { minWidth: 0 } },
       h("div", { style: { ...quiet, fontSize: 12.5 } }, labelOf(c)),
-      h("div", { style: { fontSize: numeric[i] ? 26 : 15, fontWeight: 600, lineHeight: 1.3, fontVariantNumeric: "tabular-nums", overflowWrap: "anywhere" } },
-        shown(row[i], numeric[i])))));
+      // The short form to read, the whole figure on hover: €56.93m, and 56,931,850.61 behind it.
+      h("div", { title: numeric[i] ? shown(row[i], true, units[c]) : undefined,
+                 style: { fontSize: numeric[i] ? 26 : 15, fontWeight: 600, lineHeight: 1.3, fontVariantNumeric: "tabular-nums", overflowWrap: "anywhere" } },
+        shown(row[i], numeric[i], units[c], true)))));
 }
 
 /**
@@ -660,6 +689,7 @@ function Exhibit({ answer, whole, asked }) {
   const standsOut = told && Array.isArray(told.anomalies) ? told.anomalies.filter((x) => typeof x === "string" && x.trim()) : [];
   const wrong = Array.isArray(answer.warning?.issues) ? answer.warning.issues.filter((x) => typeof x === "string" && x.trim()) : [];
   const checked = answer.warning?.kind === "not_what_was_asked";
+  const asks = Array.isArray(answer.followups) ? answer.followups.filter((x) => typeof x === "string" && x.trim()).slice(0, 3) : [];
   const figure = rows.length === 1;
   const title = titleOf(answer);
   const marks = hasPane() && connection;
@@ -710,6 +740,12 @@ function Exhibit({ answer, whole, asked }) {
     standsOut.length ? h("div", { style: { display: "flex", flexDirection: "column", gap: 6 } },
       h("div", { role: "heading", "aria-level": 4, style: { fontSize: 16, fontWeight: 600 } }, "What stands out"),
       standsOut.map((point, i) => h("div", { key: i }, rich(point)))) : null,
+    asks.length ? h("div", { style: { display: "flex", flexDirection: "column" } },
+      h("div", { style: { ...quiet, fontSize: 12.5, paddingBottom: 2 } }, "Follow-ups"),
+      asks.map((question, i) => h("button", {
+        key: i, type: "button", className: "pramanyx-ask", title: "Writes this question into the box. Nothing is asked until you send it.",
+        onClick: () => { if (!draft(question)) navigator.clipboard?.writeText(question); },
+      }, question))) : null,
     h(Feedback, { answer, extras: [
       h("button", { key: "copy", type: "button", className: "pramanyx-icon", "aria-label": copied ? "Copied" : "Copy the answer", title: copied ? "Copied" : "Copy the answer", onClick: copy }, h(Glyph, { d: GLYPH.copy })),
       h("span", { key: "gap", style: { width: 8 } }),

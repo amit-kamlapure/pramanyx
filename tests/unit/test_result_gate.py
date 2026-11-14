@@ -39,3 +39,25 @@ def test_rows_that_are_what_was_asked_pass_without_a_word(borrowed, db, monkeypa
     assert _frames(frames, "inspect_warning") == []
     assert _frames(frames, "headline") and _frames(frames, "headline")[0]["headline"] != inv.NOT_AS_ASKED_HEADLINE
     assert not any(r.get("guard") == "result_shape" for r in result.guard_receipts)
+
+
+# ── what a quick answer's columns are figures of ─────────────────────────────────────────────────────────────────
+
+def test_a_money_column_carries_the_currency_the_statement_names(monkeypatch):
+    monkeypatch.setattr("pramanyx.orgsettings.figure_currency", lambda conn, schema=None: "")
+    units = inv._quick_column_units("c1", None, "SELECT platform, SUM(gmv_eur) AS total_gmv_eur FROM orders GROUP BY 1",
+                                    ["platform", "total_gmv_eur"])
+    assert units == {"total_gmv_eur": "currency:EUR"}
+
+
+def test_else_the_currency_a_person_confirmed_and_never_a_default(monkeypatch):
+    sql, cols = "SELECT region, SUM(sales) AS total_sales, COUNT(*) AS orders FROM t GROUP BY 1", ["region", "total_sales", "orders"]
+    monkeypatch.setattr("pramanyx.orgsettings.figure_currency", lambda conn, schema=None: "USD")
+    assert inv._quick_column_units("c1", None, sql, cols) == {"total_sales": "currency:USD"}
+    monkeypatch.setattr("pramanyx.orgsettings.figure_currency", lambda conn, schema=None: "")
+    assert inv._quick_column_units("c1", None, sql, cols) == {}          # unconfirmed: a plain amount
+
+
+def test_a_share_is_not_money_whatever_it_is_a_share_of(monkeypatch):
+    monkeypatch.setattr("pramanyx.orgsettings.figure_currency", lambda conn, schema=None: "EUR")
+    assert inv._quick_column_units("c1", None, "SELECT 1", ["platform", "revenue_share_pct"]) == {}

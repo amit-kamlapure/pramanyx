@@ -1350,6 +1350,30 @@ def _ground_headline(headline, columns, rows):
     return f"{metric}: {fval}"
 
 
+def _quick_column_units(connection_id: str, schema_name: Optional[str], sql: str, columns) -> dict[str, str]:
+    """`{column: "currency:EUR"}` for a quick answer's money columns, by the rules a deep finding's are tagged by:
+    the SOURCE currency the statement itself names (`gmv_eur` → EUR, `agent/investigate._tag_currency_columns`),
+    else the currency a PERSON confirmed for the dataset — never a default and never a model's guess. A column that
+    is not money, and a dataset with neither, are left unlabelled."""
+    try:
+        from pramanyx.agent.investigate import _MONEYISH_COL_RE, _SHARE_COL_RE, _tag_currency_columns
+        from pramanyx.orgsettings import figure_currency
+        tagged: dict = {"columns": [str(c) for c in (columns or [])]}
+        _tag_currency_columns(tagged, sql or "")
+        units = dict(tagged.get("column_units") or {})
+        code = figure_currency(connection_id, schema_name)
+        if code:
+            for name in tagged["columns"]:
+                if name not in units and _MONEYISH_COL_RE.search(name) and not _SHARE_COL_RE.search(name):
+                    units[name] = f"currency:{code}"
+        return units
+    except Exception as exc:  # noqa: BLE001 — unlabelled is the honest fallback
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "a quick answer's column units could not be read; its figures print unlabelled",
+                 counter="chat.column_units")
+        return {}
+
+
 def resolve_currency_symbol(connection_id: str, schema_name: Optional[str]) -> str:
     """The symbol a figure from this dataset carries: the currency a PERSON confirmed for it, else
     "" — a plain amount, never a default "$" and never the model's inferred code (2026-10-23)."""
@@ -3190,6 +3214,11 @@ def _answer_core(
         _exh = quick_exhibit(result.columns, result.rows, answer.chart_type)
         if _exh:
             answer.chart_config = {**(answer.chart_config or {}), "exhibit": _exh}
+        # What each column is a figure OF — its currency — rides the same way, so a caller that draws the answer
+        # (the coworker) prints €17.9m where it printed 17857124.67, by the same rule the headline is labelled by.
+        _units = _quick_column_units(connection_id, canvas_scope_eff_schema, final_sql, result.columns)
+        if _units:
+            answer.chart_config = {**(answer.chart_config or {}), "column_units": _units}
         # `doors` rides the frame that says the statement ran (GM-3); the web reads `columns` alone from it.
         emit("columns", {"columns": result.columns, "doors": list(result.doors or [])})
         emit("rows", {"rows": result.rows[:10000]})
@@ -3502,16 +3531,15 @@ def _answer_core(
             tolerate(exc, "post-answer narrative/follow-up enrichment is best-effort; the answer is already done",
                      counter="chat.post_answer")
 
-        # Semantic inspect — logical validation. Phase 3 of the ground-first
-        # redesign: when the resolution ran, its verdict already settled entity /
-        # grain / measure / scope (the exact five things this LLM re-checks), so we
-        # SKIP the redundant round-trip — the first guard the resolution replaces
-        # rather than adds to. (Deletion roadmap — the other post-hoc guards it
-        # subsumes: entity-column alignment, breakdown-grain, id-arithmetic
-        # guard+backstop, ratio-of-sums, measure-grain caveat, scope guard — are
-        # staged follow-ons, not removed here.) When it runs (resolution off), it
-        # is grounded on the schema slice so it cannot invent columns.
-        if _resolution is None and _not_as_asked is None:      # a verdict already said is not overwritten by a suspicion
+        # Semantic inspect — the model-based judge: does this statement, with these rows, answer the question?
+        # From Phase 3 of the ground-first redesign until 2026-11-14 it was SKIPPED whenever the resolution ran, on
+        # the premise that the resolution's verdict had already settled entity, grain, measure and scope. The receipt
+        # of 2026-11-14 falsified that for grain (a per-order result under a headline about statuses, resolution
+        # run, nothing said), and the resolution judges the question BEFORE the SQL is written or repaired, so it
+        # cannot see what a repair did. The judge reads the statement that answers, so it runs on every answer the
+        # result gate did not already rule on: one narrator call. It is grounded on the schema slice so it cannot
+        # invent columns, and its word is a suspicion ("may"), where the gate's is a verdict.
+        if _not_as_asked is None:
             try:
                 from pramanyx.sql.inspect import inspect as _inspect_sql
                 _ir = _inspect_sql(question, final_sql, result.columns, result.rows,
