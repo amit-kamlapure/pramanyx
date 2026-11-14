@@ -4430,6 +4430,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/coworker/trace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Take A Coworker Turn
+         * @description Events of one coworker turn, written to the session log Agent Ops reads. From this machine only.
+         */
+        post: operations["take_a_coworker_turn_coworker_trace_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/cron/tick": {
         parameters: {
             query?: never;
@@ -20142,6 +20162,64 @@ export interface components {
              */
             url?: string | null;
         };
+        /** CoworkerTraceBatch */
+        CoworkerTraceBatch: {
+            /** Events */
+            events: components["schemas"]["CoworkerTraceEvent"][];
+            /**
+             * Session
+             * @description The shell's own id for the conversation.
+             */
+            session: string;
+            /**
+             * Trace Id
+             * @description The turn's trace, `cw-<session>-<turn>`.
+             */
+            trace_id: string;
+        };
+        /** CoworkerTraceEvent */
+        CoworkerTraceEvent: {
+            /**
+             * Conn Id
+             * @description The connection the conversation is held to.
+             */
+            conn_id?: string | null;
+            /** Duration Ms */
+            duration_ms?: number | null;
+            /**
+             * Kind
+             * @description What happened. A model call is not taken: the model door records those.
+             * @enum {string}
+             */
+            kind: "user_request" | "tool_call" | "tool_call_result" | "final_response" | "execution_error";
+            /**
+             * Name
+             * @description The tool's name, or `coworker` for the turn itself.
+             * @default
+             */
+            name: string;
+            /** Ok */
+            ok?: boolean | null;
+            /** Payload */
+            payload?: {
+                [key: string]: unknown;
+            };
+            /** Row Count */
+            row_count?: number | null;
+            /**
+             * Span Id
+             * @description A tool call's id; its result carries the same.
+             */
+            span_id?: string | null;
+        };
+        /** CoworkerTraceTaken */
+        CoworkerTraceTaken: {
+            /**
+             * Written
+             * @description How many events were written to the session log.
+             */
+            written: number;
+        };
         /** CreateArtifactRequest */
         CreateArtifactRequest: {
             /**
@@ -34094,6 +34172,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CoworkerDoor"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    take_a_coworker_turn_coworker_trace_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CoworkerTraceBatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoworkerTraceTaken"];
                 };
             };
             /** @description Validation Error */

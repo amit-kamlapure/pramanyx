@@ -130,6 +130,15 @@ turned back on from the interface.
   the agent repeats to the person. A custom agent asked without a connection is refused too, since it would
   answer on its own. A guard can only refuse; nothing later in the shell turns that back into permission.
   `node --test plugins/home/test/held.test.mjs` covers the rule.
+- **A turn is recorded where the platform's runs are.** Agent Ops reads one store, and a coworker turn is in it:
+  the question, each tool call and its result, and the end of the turn are sent to the platform as they happen
+  (`POST /coworker/trace`, from this machine only), under a trace named `cw-<session>-<turn>` that shows as
+  "via Coworker". The model calls are not sent: each one tells the platform's model door which turn it was made
+  for (two request headers), and the door files its own record of the call — tokens, model, cost — under that
+  turn, so spend is counted once. A call to the governed answer path carries the platform's own trace for that
+  answer on its result (`platform_trace`), which joins the two. The words stay here: the system prompt, what the
+  agent was given and what it said are in the shell's own log, and each event says where (`shell_session`, `seq`).
+  `node --test plugins/home/test/trace.test.mjs` covers what is sent and what is not.
 - **A read-only relay**, `/pramanyx/…` on the shell's own server, so the page can read Pramanyx without the API's
   allowed origins being changed. It relays five paths (`/connections`, `/suggestions`, `/agents/custom`,
   `/investigations`, `/sheets`), GET and HEAD only, and answers 404 for anything else.
@@ -150,6 +159,10 @@ admin allows "Let the coworker ask its models through Pramanyx" in Settings ▸ 
   turn's flow and the reply before it. The platform's follow-up questions are carried over MCP and not yet shown.
 - Figures in the words and the chart are as the platform formats them (€17,857,124.67; 17.9M on a bar). The
   shortened form of the mockup (€17.86m) needs a column's unit, which is not carried over MCP.
+- In Agent Ops a coworker turn and the platform's work for it are two rows; the turn's tool result names the
+  platform's trace but the page does not yet link one to the other. A subagent's turns are recorded as traces
+  of their own, not nested under the turn that started them. The Trajectory tab in the coworker still shows a
+  call to the platform as one row; opening the platform's steps there is not built.
 - A deep analysis is one named row that opens to what came back. Its own steps — baseline, decomposition, what
   each concluded — are not drawn, and it has no card.
 - A Pramanyx tool added since this was written, and each custom agent's, is named from the end of the first turn
