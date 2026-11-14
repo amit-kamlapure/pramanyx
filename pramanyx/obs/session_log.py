@@ -70,6 +70,9 @@ EVENT_KINDS = (
     FINAL_RESPONSE, EXECUTION_ERROR, GUARDRAIL, STEP,
 )
 
+#: The kinds that record no span of their own and belong inside the step they happen in (`emit`).
+_NESTED_IN_THEIR_STEP = frozenset({LLM_CALL, GUARDRAIL, EXTERNAL_CALL})
+
 # Cap free-text payload values (a question, a SQL string, an error). Matches the
 # span sink's cap so the two tables truncate identically.
 _MAX_TEXT = 2000
@@ -346,6 +349,10 @@ def emit(
                 bump(f"obs.session_log.untraced_not_written.{kind}")
                 return
             tid = untraced_trace_id()
+        if parent_span_id is None and kind in _NESTED_IN_THEIR_STEP:
+            # A model call, a guard and an outbound call happen INSIDE a step, and say which: without it a trace's
+            # waterfall drew the SQL writer's 12K-token call beside the tool call it ran for, not inside it.
+            parent_span_id = _tel.current_span_id() or None
         session_id, user_id, agent_id = _tel.trace_identity()
         # Which RUN and which CHARTER — the join Migration 10 exists for. Outside a job
         # (an /ask turn answered inline) both are empty, which is the honest answer:

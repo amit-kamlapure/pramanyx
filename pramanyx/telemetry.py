@@ -598,6 +598,12 @@ def current_trace_id() -> str:
     return _active_trace_id.get()
 
 
+def current_span_id() -> str:
+    """The innermost open span — the step the code is running inside — or '' outside every span."""
+    stack = _span_stack.get()
+    return stack[-1] if stack else ""
+
+
 @contextmanager
 def bind_trace(trace_id: str) -> Generator[str, None, None]:
     """Pin ``trace_id`` as the ambient trace for the enclosed block.

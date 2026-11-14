@@ -186,3 +186,20 @@ def test_a_claim_names_a_coworker_turn_and_comes_from_this_machine(claims):
     app.include_router(C.router)
     assert TestClient(app, client=("203.0.113.9", 50000)).put("/coworker/claim", json=CLAIM).status_code == 403
     assert C._claims == []
+
+
+def test_a_model_call_is_recorded_inside_the_step_it_ran_in(monkeypatch):
+    """The waterfall of a coworker turn drew the platform's SQL-writing call beside the `ask` it ran for. A model
+    call, a guard and an outbound call now name the innermost open span as their parent; outside every span, none."""
+    from pramanyx import telemetry
+    from pramanyx.obs import session_log
+    written = []
+    monkeypatch.setattr(session_log, "enabled", lambda: True)
+    monkeypatch.setattr("pramanyx.kernel.ledger.Ledger.session_event_insert", lambda self, row: written.append(row))
+    with telemetry.bind_trace("cw-88f4fdd19a454d47-3"), telemetry.bind_parent_span("call_9"):
+        session_log.emit(session_log.LLM_CALL, name="coder", model="m")
+        session_log.emit(session_log.GUARDRAIL, name="pii")
+        session_log.emit(session_log.TOOL_CALL, name="sql.execute", span_id="s1")      # a span names its own parent
+    with telemetry.bind_trace("cw-88f4fdd19a454d47-3"):
+        session_log.emit(session_log.LLM_CALL, name="coder", model="m")
+    assert [r["parent_span_id"] for r in written] == ["call_9", "call_9", None, None]
