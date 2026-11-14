@@ -2,15 +2,16 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const door = vi.hoisted(() => ({ answer: { available: false } as { available: boolean; url?: string | null }, asked: 0 }));
+const door = vi.hoisted(() => ({ answer: { available: false } as { available: boolean; url?: string | null }, asked: 0, minted: 0 }));
 vi.mock("@/lib/api", () => ({
   fetchCoworkerDoor: () => { door.asked += 1; return Promise.resolve(door.answer); },
+  mintCoworkerDelegation: () => { door.minted += 1; return Promise.resolve("person-token"); },
 }));
 
 import { AppSwitcher, coworkerHref } from "@/components/shell/AppSwitcher";
 
 describe("the way to the coworker", () => {
-  beforeEach(() => { door.asked = 0; });
+  beforeEach(() => { door.asked = 0; door.minted = 0; });
   afterEach(cleanup);
 
   it("draws nothing when no coworker is running", async () => {
@@ -49,6 +50,10 @@ describe("the way to the coworker", () => {
     expect(carried.get("conn")).toBe("c1");
     expect(carried.get("theme")).toBe("light");
     expect(carried.get("back")).toBe(window.location.href);
+    // The person rides along once the API has minted their delegation — asked for once, on the first open.
+    await waitFor(() => expect(new URLSearchParams(new URL((screen.getByText("Coworker").closest("a") as HTMLAnchorElement).href).hash.slice(1)).get("d")).toBe("person-token"));
+    fireEvent.click(dots); fireEvent.click(dots);
+    expect(door.minted).toBe(1);
   });
 
   it("looks again as it opens, so a coworker that stopped is not offered", async () => {
