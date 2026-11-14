@@ -156,6 +156,15 @@ class OrgSettings(BaseModel):
                     "and counts against the usage caps. Off by default.",
     )
 
+    # 2026-11-15 (the Genie One study) — `pramanyx/web_search.py`. Outside context only: never a figure about the
+    # business, always cited. What is searched goes to the search provider the operator configured.
+    web_search: Optional[bool] = Field(
+        default=None,
+        description="Let the coworker search the web for outside context (holidays, news, an announcement), cited "
+                    "and never used as a figure about the business. The words searched go to the search provider. "
+                    "Off by default.",
+    )
+
     # ── Working memory (CB-6) ──
     priorities: list[Priority] = Field(
         default_factory=list,

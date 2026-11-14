@@ -219,6 +219,8 @@ export function OrgSettingsPanel({ workspaceId, workspaceName }: { workspaceId?:
       hint: "Only where a source cannot be read in place (an upload, an API mirror, a bucket). Rows leave their source for the session; the answer's door trail says so." },
     { k: "coworker_models", label: "Let the coworker ask its models through Pramanyx",
       hint: "The coworker's model calls are made with your organisation's models and keys. A conversation there, and the answers in it, go to that provider. Each call is recorded and counts against the usage caps." },
+    { k: "web_search", label: "Let the coworker search the web for outside context",
+      hint: "Holidays, news, an announcement: cited, and never used as a figure about your business. The words searched go to the search provider." },
   ];
   const allowField = ({ k, label, hint }: { k: OrgAllowSetting; label: string; hint: string }) => {
     const chosen = s[k];

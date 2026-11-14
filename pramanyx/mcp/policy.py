@@ -44,6 +44,8 @@ TOOL_LEVELS: dict[str, Level] = {
     # The Genie One study, 2026-11-15 — a question asked again on a rhythm makes an automation: it changes what the
     # platform does unattended, so it is an act, hidden until an organisation lets its agents act.
     "schedule_question": "act",
+    # A web search changes nothing and starts no model work: a read, behind the organisation's own `web_search` setting.
+    "search_the_web": "read",
     "search_graph": "read",
     "describe_entity": "read",
     "list_objects": "read",          # Arc OC-8 — a page of objects through /objects/v1/list

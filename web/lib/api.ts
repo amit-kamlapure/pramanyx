@@ -214,6 +214,8 @@ export interface OrgSettings {
   copy_rows_across_sources?: boolean | null;
   /** 2026-11-13 — the model door: the coworker's model calls, made by Pramanyx with the organisation's models. */
   coworker_models?: boolean | null;
+  /** 2026-11-15 — the coworker may search the web for outside context, cited and never a figure. */
+  web_search?: boolean | null;
 }
 
 /** Whether a coworker is running beside the app, and the address to open (`routers/coworker.py`). */
@@ -236,7 +238,7 @@ export async function mintCoworkerDelegation(): Promise<string | null> {
 
 /** The choices an organisation makes about what Pramanyx may do (ROADMAP §3.65; §3.68 added `read_query_history`). */
 export type OrgAllowSetting = "share_aggregates" | "outside_row_model" | "reason_to_read_runs" | "scheduled_model_work"
-  | "read_query_history" | "copy_rows_across_sources" | "coworker_models";
+  | "read_query_history" | "copy_rows_across_sources" | "coworker_models" | "web_search";
 
 /** Each choice's answer, and whether an admin set it — one never set answers from the server's environment. */
 export type OrgAllows = Record<OrgAllowSetting, { allowed: boolean; set: boolean }>;

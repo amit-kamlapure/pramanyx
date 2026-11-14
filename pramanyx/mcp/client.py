@@ -583,6 +583,10 @@ class PramanyxClient:
     async def post_claim(self, body: dict) -> Any:
         return await self._post("/ledger/v1/claims", json_body=body)
 
+    # ── The web, for outside context only (2026-11-15) ──────────────────────────────────────────────
+    async def search_the_web(self, query: str, n: int = 5) -> dict:
+        return await self._get("/web/search", params={"q": query, "n": n})
+
     # ── A question on a rhythm, run by the platform (the Genie One study, 2026-11-15) ────────────────
     async def schedule_question(self, question: str, connection: str, cron: str, name: str = "") -> dict:
         """An automation: a schedule trigger and one `investigate` step. It runs on the platform's own scheduler —

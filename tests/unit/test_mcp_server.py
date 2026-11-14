@@ -64,6 +64,8 @@ def test_server_registers_the_governed_tools():
         "list_objects",
         # The Genie One study, 2026-11-15 — a question asked again on a rhythm, as Pramanyx's own automation (an act).
         "schedule_question",
+        # 2026-11-15 — the web for outside context, behind the organisation's `web_search` setting (a read).
+        "search_the_web",
     }
     # No whole-trace tool either, for the same reason as `query`: `GET /traces/{id}` is
     # 1.2 MB for a 1,140-event run, so a tool wrapping it would exhaust the context that

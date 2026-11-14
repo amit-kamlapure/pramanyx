@@ -23,6 +23,9 @@ FORMER_ENV: dict[str, tuple[str, ...]] = {
     # 2026-11-13 — the coworker (coworker/) asks its model through Pramanyx, with the organisation's models and
     # keys. What it sends is a conversation, and it leaves for that provider; lending the keys is an admin's choice.
     "coworker_models": (),
+    # 2026-11-15 (the Genie One study) — the coworker may search the open web for outside context: a holiday, the
+    # news, a competitor's announcement. The words searched leave the install for the search provider.
+    "web_search": (),
 }
 
 #: Where a person changes them, for the sentences that say a thing is off.

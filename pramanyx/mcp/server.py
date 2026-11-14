@@ -289,6 +289,18 @@ async def ask(
 
 
 @mcp.tool()
+async def search_the_web(
+    query: Annotated[str, Field(description="What to look up outside the business: a holiday, a news event, an announcement.")],
+    n: Annotated[int, Field(description="How many results, 1 to 8.")] = 5,
+) -> dict:
+    """Search the web for OUTSIDE CONTEXT only — what else was going on (a public holiday, the news, a competitor's
+    announcement). Each result is a source: cite it by its address. Never state a figure about the business from it;
+    the business's figures come only from ask or deep_analysis. Off unless the organisation turned it on; a refusal
+    comes back as a sentence to pass on."""
+    return await _client.search_the_web(query, n)
+
+
+@mcp.tool()
 async def schedule_question(
     question: Annotated[str, Field(description="The question to ask again, as the person would ask it.")],
     connection: Annotated[str, Field(description="The connection id the question is about.")],
