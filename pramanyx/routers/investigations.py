@@ -1356,17 +1356,9 @@ def _quick_column_units(connection_id: str, schema_name: Optional[str], sql: str
     else the currency a PERSON confirmed for the dataset — never a default and never a model's guess. A column that
     is not money, and a dataset with neither, are left unlabelled."""
     try:
-        from pramanyx.agent.investigate import _MONEYISH_COL_RE, _SHARE_COL_RE, _tag_currency_columns
+        from pramanyx.agent.investigate import money_column_units
         from pramanyx.orgsettings import figure_currency
-        tagged: dict = {"columns": [str(c) for c in (columns or [])]}
-        _tag_currency_columns(tagged, sql or "")
-        units = dict(tagged.get("column_units") or {})
-        code = figure_currency(connection_id, schema_name)
-        if code:
-            for name in tagged["columns"]:
-                if name not in units and _MONEYISH_COL_RE.search(name) and not _SHARE_COL_RE.search(name):
-                    units[name] = f"currency:{code}"
-        return units
+        return money_column_units(columns, sql, figure_currency(connection_id, schema_name))
     except Exception as exc:  # noqa: BLE001 — unlabelled is the honest fallback
         from pramanyx.kernel.errors import tolerate
         tolerate(exc, "a quick answer's column units could not be read; its figures print unlabelled",
