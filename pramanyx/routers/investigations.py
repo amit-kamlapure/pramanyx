@@ -469,6 +469,10 @@ _DIM_NOUN_RE = re.compile(
 _GROUP_ID_COL_RE = re.compile(r"(^|_)(id|key|code|sk|pk)$|_id$|_key$|_code$", re.I)
 
 
+#: The checks that are pure functions of the SQL, asked of every repair — see `_checks_still_firing`.
+_REPAIR_CHECKS = frozenset({"fanout", "idmath", "ratio", "grain", "chasm"})
+
+
 def _checks_still_firing(sql: str, triggered: set[str], *, question: str, dialect: str,
                          full_cols: dict, schema_cols: dict) -> list[str]:
     """Which of the SQL-only checks in ``triggered`` still fire on ``sql`` — the repaired query.
@@ -2954,10 +2958,18 @@ def _answer_core(
                                                     ("grain", _grain_fix_hint),
                                                     ("chasm", _chasm_fix_hint)) if _h}
                     from pramanyx.db.schema_render import parse_schema_tables as _pst_recheck
-                    _still = _checks_still_firing(
-                        fix.sql, _triggered, question=question, dialect=db.dialect,
+                    # And every SQL-only check is asked of the repair, not only the ones that asked for it: a
+                    # repair made for one reason can break something else. On Lux (2026-11-14) "total GMV by order
+                    # status" was first written right (3 rows); a repair asked for by another check regrouped it
+                    # by order_id and status (146,621 rows) and was adopted, because grain had not fired on the
+                    # original and so was not asked of the repair. A check the original passed and the repair
+                    # trips is the repair's doing; the original stands.
+                    _firing = _checks_still_firing(
+                        fix.sql, set(_REPAIR_CHECKS), question=question, dialect=db.dialect,
                         full_cols=_pst_recheck(_full_schema),
-                        schema_cols=_pst_recheck(schema)) if _triggered else []
+                        schema_cols=_pst_recheck(schema))
+                    _still = [_n for _n in _firing if _n in _triggered]
+                    _broke = [_n for _n in _firing if _n not in _triggered]
                     # The filter guard is asked again of EVERY model repair, although it probes the warehouse
                     # (one DISTINCT per filtered column, on this path only): the model writes a new statement,
                     # and the one it wrote on theLook put back the literal the pre-flight had fixed.
@@ -2967,11 +2979,13 @@ def _answer_core(
                         _frun_fix = _fdc_re(db, fix.sql)
                         if not filter_repair_holds(_frun, _frun_fix):
                             _still = [*_still, "filter"]
-                    if _still:
+                    if _still or _broke:
                         _receipt({
                             "guard": "repair_recheck", "action": "kept_original",
-                            "detail": (f"the repair still trips {', '.join(_still)}, so it was "
-                                       "not adopted and the original query stands"),
+                            "detail": ("; ".join(filter(None, [
+                                f"the repair still trips {', '.join(_still)}" if _still else "",
+                                f"the repair trips {', '.join(_broke)}, which the original did not" if _broke else "",
+                            ])) + ", so it was not adopted and the original query stands"),
                             "before": final_sql[:2000], "after": fix.sql[:2000]})
                     elif not retry.error and (retry.row_count > 0 or not _chat_zero_diag or _semantic_fix_hint or _fanout_fix_hint or _scope_fix_hint or _filter_fix_hint or _grain_fix_hint or _idmath_fix_hint or _ratio_fix_hint):
                         # The adopted repair is said too (PENDING item 23): the query shown changed with no

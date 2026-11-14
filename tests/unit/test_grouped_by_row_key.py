@@ -66,3 +66,23 @@ def test_the_chat_path_asks_it_where_a_repair_is_re_checked():
     # the first shape still fires as it did
     assert "BREAKDOWN GRAIN MISMATCH" in I._breakdown_grain_hint(
         "top product categories by revenue", "SELECT product_id, SUM(x) FROM t GROUP BY product_id")
+
+
+def test_a_repair_is_asked_every_check_not_only_the_ones_that_asked_for_it():
+    """Receipt 2026-11-14 (LuxExperience): the first query was right — `GROUP BY status`, 3 rows. A repair asked for
+    by another check regrouped it by order_id and status (146,621 rows) and was adopted: grain had not fired on the
+    original, so it was not asked of the repair. Asked of every repair, it is caught."""
+    from pramanyx.routers import investigations as inv
+
+    question = "What is total GMV by order status?"
+    original = "SELECT status, ROUND(SUM(gmv_eur), 2) AS total_gmv_eur FROM orders GROUP BY status"
+    ask = dict(question=question, dialect="postgres", full_cols={}, schema_cols={})
+    assert "grain" in inv._REPAIR_CHECKS
+    assert inv._checks_still_firing(original, set(inv._REPAIR_CHECKS), **ask) == []      # the original passes
+    assert inv._checks_still_firing(_RECEIPT, set(inv._REPAIR_CHECKS), **ask) == ["grain"]
+    # What the old re-check asked: only what had fired on the original — nothing, here.
+    assert inv._checks_still_firing(_RECEIPT, set(), **ask) == []
+    # The path asks all of them, and a check the original passed stops the repair being adopted.
+    import inspect
+    src = inspect.getsource(inv)
+    assert "set(_REPAIR_CHECKS)" in src and "which the original did not" in src
