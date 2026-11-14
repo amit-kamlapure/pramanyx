@@ -221,7 +221,7 @@ def test_an_unsupported_format_still_fails_before_the_availability_check():
     import pramanyx.export as E
 
     with pytest.raises(ValueError, match="unsupported export format"):
-        E.export_report({"report": {}}, "docx")
+        E.export_report({"report": {}}, "odt")
 
 
 # ── The degraded path: qdrant-client absent ───────────────────────────────────────────

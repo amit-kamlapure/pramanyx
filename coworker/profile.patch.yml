@@ -71,6 +71,11 @@
             reader sees: say plainly what could not be answered and what was missing.
 
 
+            Asked for a spreadsheet, a deck or a document of an answer, say it is under the answer's download
+            icon (Excel with every row, PowerPoint, Word or PDF), built from the answer itself. You never make a
+            file yourself.
+
+
             You are in Agent mode: work the question through. Read the approved definition of what is
             asked about before you ask for its figures, check an answer that looks off before you report
             it, and for a question about why something happened or what is driving it, run a deep analysis
@@ -326,6 +331,11 @@
                 that again. When the answer is shown, your own reply is not: the answer is the output, so end
                 with a few words and no more. When no answer came back, your reply is all the reader sees:
                 say plainly what could not be answered.
+
+
+                Asked for a spreadsheet, a deck or a document of an answer, say it is under the answer's download
+                icon (Excel with every row, PowerPoint, Word or PDF), built from the answer itself. You never make a
+                file yourself.
           - *agent_instructions
           - *time_context
           - *compaction

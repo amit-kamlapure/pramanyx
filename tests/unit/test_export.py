@@ -156,7 +156,7 @@ def test_chat_and_analysis_dispatch():
 # ── full export ─────────────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("inv_fn", [_ada_inv, _chat_inv, _analysis_inv])
-@pytest.mark.parametrize("fmt,magic", [("pdf", _PDF), ("pptx", _ZIP)])
+@pytest.mark.parametrize("fmt,magic", [("pdf", _PDF), ("pptx", _ZIP), ("xlsx", _ZIP), ("docx", _ZIP)])
 def test_export_produces_valid_file(inv_fn, fmt, magic):
     data, filename, media = export_report(inv_fn(), fmt)
     assert data[: len(magic)] == magic
@@ -167,7 +167,7 @@ def test_export_produces_valid_file(inv_fn, fmt, magic):
 
 def test_bad_format_raises():
     with pytest.raises(ValueError):
-        export_report(_chat_inv(), "docx")
+        export_report(_chat_inv(), "odt")
 
 
 def test_every_figure_links_back_to_its_receipt(monkeypatch):
@@ -208,3 +208,28 @@ def test_a_chat_answers_chart_is_captioned_by_its_grid_and_its_title_reads_clean
     captions = [b.caption for b in doc.blocks if b.kind in ("chart", "table") and b.caption]
     assert captions == ["Revenue and Items by Product Category"]
     assert _unmarked(doc.title) == "Jeans led with $54,496.64 in August"
+
+
+# ── Excel and Word (the Genie One study, 2026-11-15) ────────────────────────────────────────────────────────
+
+def test_the_workbook_carries_every_stored_row_as_values_and_the_query():
+    import io
+
+    from openpyxl import load_workbook
+    inv = _chat_inv()
+    inv["report"]["rows"] = [[f"c{i}", i * 1000] for i in range(60)]          # more than any preview shows
+    wb = load_workbook(io.BytesIO(export_report(inv, "xlsx")[0]))
+    assert wb.sheetnames == ["Answer", "Data", "Query"]
+    data = list(wb["Data"].iter_rows(values_only=True))
+    assert data[0] == ("category", "revenue") and len(data) == 61 and data[60] == ("c59", 59000)
+    assert wb["Answer"]["A1"].value == "Fragrance leads revenue"
+    assert wb["Query"]["A1"].value.startswith("SELECT category")
+
+
+def test_the_word_document_says_what_the_pdf_says():
+    import io
+
+    from docx import Document
+    d = Document(io.BytesIO(export_report(_chat_inv(), "docx")[0]))
+    text = "\n".join(p.text for p in d.paragraphs)
+    assert "Fragrance leads revenue" in text and "Makeup lags the top two" in text and "SELECT category" in text

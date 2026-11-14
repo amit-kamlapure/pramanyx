@@ -733,9 +733,10 @@ function Exhibit({ answer, whole, asked }) {
     h("div", { style: { border: `1px solid ${line}`, borderRadius: 6, padding: "8px 8px 4px 14px" } },
       h("div", { style: { display: "flex", alignItems: "center", gap: 2, minHeight: 30 } },
         h("div", { style: { flex: "1 1 auto", minWidth: 0, fontSize: 14, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, title),
-        h("button", { type: "button", className: "pramanyx-icon", "aria-label": "Download the rows as CSV", title: "Download the rows as CSV", onClick: () => downloadCsv(answer) }, h(Glyph, { d: GLYPH.download })),
+        h("button", { type: "button", className: "pramanyx-icon", "aria-label": "Download", title: "Download: the rows, or the answer as a file", "aria-expanded": open === "files", onClick: () => toggle("files") }, h(Glyph, { d: GLYPH.download })),
         figure ? null : h("button", { type: "button", className: "pramanyx-icon", "aria-label": "Show as a table", title: "Show as a table", "aria-expanded": open === "table", onClick: () => toggle("table") }, h(Glyph, { d: GLYPH.table })),
         !figure && hasPane() ? h("button", { type: "button", className: "pramanyx-icon", "aria-label": "Edit visualization", title: "Edit visualization", onClick: () => openBeside("viz", id) }, h(Glyph, { d: GLYPH.edit })) : null),
+      open === "files" ? h(Files, { answer, id: answer.investigation_id ? String(answer.investigation_id) : "" }) : null,
       h("div", { style: { paddingRight: 6 } },
         figure ? h(Figures, { answer }) : open === "table" ? h("div", { style: { padding: "6px 0 8px" } }, h(ResultGrid, { answer })) : h(Chart, { answer, viz })),
       h("div", { style: { display: "flex", alignItems: "center", gap: 12, borderTop: `1px solid ${line}`, marginTop: 6, paddingRight: 6 } },
@@ -761,6 +762,23 @@ function Exhibit({ answer, whole, asked }) {
       h("button", { key: "how", type: "button", className: "pramanyx-link", "aria-expanded": open === "how", onClick: () => toggle("how") }, "How it was answered"),
     ] }),
     open === "how" ? h("div", { style: { border: `1px solid ${line}`, borderRadius: 6, padding: 12 } }, h(How, { answer, whole })) : null);
+}
+
+/**
+ * Download: the rows as CSV, kept on this page; and the answer as a file Pramanyx builds from its stored report —
+ * Excel with every stored row, PowerPoint, Word, PDF (`pramanyx/export`). Never a file the model's own code made: a
+ * figure does not pass through code a model wrote. An answer with no record of its own (nothing was stored) offers
+ * the rows only, and says so.
+ */
+const FILES = [["xlsx", "Excel, every row"], ["pptx", "PowerPoint"], ["docx", "Word"], ["pdf", "PDF"]];
+
+function Files({ answer, id }) {
+  const link = { fontSize: 13, color: "inherit", textDecoration: "underline", textUnderlineOffset: 2 };
+  return h("div", { role: "group", "aria-label": "Download", style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 14, padding: "2px 6px 8px 0", fontSize: 13 } },
+    h("button", { type: "button", className: "pramanyx-link", onClick: () => downloadCsv(answer) }, "Rows as CSV"),
+    id ? FILES.map(([fmt, label]) => h("a", { key: fmt, style: link, download: "",
+      href: `/pramanyx/investigations/${encodeURIComponent(id)}/export?format=${fmt}` }, label))
+      : h("span", { style: quiet }, "This answer was not stored, so only its rows can be taken."));
 }
 
 function Card(props) {

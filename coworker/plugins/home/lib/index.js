@@ -16,6 +16,9 @@ const READS = [
   /^\/agents\/custom$/,       // a person's own agents
   /^\/investigations$/,       // recent questions
   /^\/sheets$/,               // the sheets by name, so an answer that read one can open it
+  // An answer as a file — Excel, PowerPoint, Word or PDF — built by Pramanyx from the answer's stored rows, never by
+  // code the model wrote (`pramanyx/export`). A GET like the rest; the bytes are passed through as they come.
+  /^\/investigations\/[A-Za-z0-9_-]{1,64}\/export$/,
 ];
 
 import { mkdir, writeFile } from "node:fs/promises";
@@ -118,6 +121,19 @@ const ENTER = `<!doctype html><meta charset="utf-8"><title>Pramanyx</title><scri
  * answer card's relays and the MCP server read it on every call. One shell is one person's: a newer arrival replaces
  * the older. Never kept in a conversation or shown to the model, so the agent cannot choose who it acts for.
  */
+/** The person kept above, presented with what this coworker reads for them — so a read is theirs, never wider. */
+async function personHeader() {
+  const file = process.env.PRAMANYX_DELEGATION_FILE || "";
+  if (!file) return {};
+  try {
+    const { readFile } = await import("node:fs/promises");
+    const token = (await readFile(file, "utf8")).trim();
+    return /^[A-Za-z0-9_-]{20,128}$/.test(token) ? { "x-pramanyx-delegation": token } : {};
+  } catch {
+    return {};
+  }
+}
+
 export async function keepThePerson(req, res, api) {
   const reply = (status, body) => { res.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" }); res.end(JSON.stringify(body)); };
   if (req.method !== "POST") return reply(405, { detail: "POST only" });
@@ -357,11 +373,12 @@ export function apply(ctx) {
       const path = url.pathname.slice("/pramanyx".length);
       if (!READS.some((allowed) => allowed.test(path))) return new Response("Not relayed", { status: 404 });
       try {
-        const answer = await fetch(api + path + url.search, { headers: { accept: "application/json" } });
-        return new Response(await answer.text(), {
-          status: answer.status,
-          headers: { "content-type": answer.headers.get("content-type") || "application/json", "cache-control": "no-store" },
-        });
+        const answer = await fetch(api + path + url.search, { headers: { accept: "*/*", ...(await personHeader()) } });
+        const headers = { "content-type": answer.headers.get("content-type") || "application/json", "cache-control": "no-store" };
+        const named = answer.headers.get("content-disposition");
+        if (named) headers["content-disposition"] = named;
+        // Bytes, not text: a file must arrive as it left (a workbook read as text is a broken workbook).
+        return new Response(await answer.arrayBuffer(), { status: answer.status, headers });
       } catch {
         return new Response(JSON.stringify({ detail: "The platform is not answering" }), {
           status: 502, headers: { "content-type": "application/json" },

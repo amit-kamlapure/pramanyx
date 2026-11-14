@@ -1,22 +1,29 @@
 "use client";
 
 /**
- * ExportButton — download a stored analysis as a polished PDF or PowerPoint.
+ * ExportButton — download a stored analysis as PDF, PowerPoint, Excel or Word. Excel carries every stored row.
  *
  * Hits GET /investigations/{id}/export?format=… (server-side serializer that
  * renders the report's prose, KPIs, charts and tables). The optional "AI
  * executive summary" toggle sets ?narrate=true (best-effort LLM detailing).
  */
 import { useEffect, useRef, useState } from "react";
-import { downloadInvestigationExport } from "@/lib/api";
-import { Icon } from "@/components/ui/icon";
+import { downloadInvestigationExport, type ExportFormat } from "@/lib/api";
+import { Icon, type IconName } from "@/components/ui/icon";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
+
+const FORMATS: { fmt: ExportFormat; label: string; icon: IconName }[] = [
+  { fmt: "pdf", label: "PDF document", icon: "brief" },
+  { fmt: "pptx", label: "PowerPoint (.pptx)", icon: "chart" },
+  { fmt: "xlsx", label: "Excel (.xlsx), every row", icon: "table" },
+  { fmt: "docx", label: "Word (.docx)", icon: "brief" },
+];
 
 export function ExportButton({ invId }: { invId: string }) {
   const [open, setOpen] = useState(false);
   const [narrate, setNarrate] = useState(false);
-  const [busy, setBusy] = useState<null | "pdf" | "pptx">(null);
+  const [busy, setBusy] = useState<null | ExportFormat>(null);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -28,7 +35,7 @@ export function ExportButton({ invId }: { invId: string }) {
     return () => document.removeEventListener("mousedown", onDoc);
   }, [open]);
 
-  const go = (fmt: "pdf" | "pptx") => {
+  const go = (fmt: ExportFormat) => {
     setBusy(fmt);
     downloadInvestigationExport(invId, fmt, narrate);
     // The browser handles the actual file transfer; clear the spinner shortly after.
@@ -46,7 +53,7 @@ export function ExportButton({ invId }: { invId: string }) {
     <div ref={ref} style={{ position: "relative" }}>
       <Button variant="plain" size="xs"
         onClick={() => setOpen(v => !v)}
-        title="Download this analysis as PDF or PowerPoint"
+        title="Download this analysis as PDF, PowerPoint, Excel or Word"
         style={{
           display: "inline-flex", alignItems: "center", gap: 6,
           padding: "4px 10px", borderRadius: "var(--r2)", fontSize: 12,
@@ -64,24 +71,19 @@ export function ExportButton({ invId }: { invId: string }) {
       {open && (
         <div style={{
           position: "absolute", right: 0, top: "calc(100% + 6px)", zIndex: 50,
-          width: 210, padding: 6, borderRadius: "var(--r2)",
+          width: 230, padding: 6, borderRadius: "var(--r2)",
           background: "var(--bg-1)", border: "1px solid var(--b2)",
           boxShadow: "var(--shadow-lg)",
         }}>
-          <button style={item} disabled={!!busy} onClick={() => go("pdf")}
-            onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-3)")}
-            onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
-            <span style={{ color: "var(--t3)", display: "inline-flex" }}><Icon name="brief" size={14} /></span>
-            <span style={{ flex: 1 }}>PDF document</span>
-            {busy === "pdf" && <Spin />}
-          </button>
-          <button style={item} disabled={!!busy} onClick={() => go("pptx")}
-            onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-3)")}
-            onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
-            <span style={{ color: "var(--t3)", display: "inline-flex" }}><Icon name="chart" size={14} /></span>
-            <span style={{ flex: 1 }}>PowerPoint (.pptx)</span>
-            {busy === "pptx" && <Spin />}
-          </button>
+          {FORMATS.map(f => (
+            <button key={f.fmt} style={item} disabled={!!busy} onClick={() => go(f.fmt)}
+              onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-3)")}
+              onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
+              <span style={{ color: "var(--t3)", display: "inline-flex" }}><Icon name={f.icon} size={14} /></span>
+              <span style={{ flex: 1 }}>{f.label}</span>
+              {busy === f.fmt && <Spin />}
+            </button>
+          ))}
           <label style={{
             display: "flex", alignItems: "center", gap: 8, padding: "8px 10px 4px",
             marginTop: 4, borderTop: "1px solid var(--b1)", fontSize: 11,

@@ -8908,7 +8908,7 @@ export async function generateCanvasBriefingNarrative(
 
 /** Download URL for a stored investigation's export. `narrate` prepends an
  *  LLM-authored executive summary (best-effort). */
-export function investigationExportUrl(invId: string, fmt: "pdf" | "pptx", narrate = false): string {
+export function investigationExportUrl(invId: string, fmt: ExportFormat, narrate = false): string {
   const q = new URLSearchParams({ format: fmt });
   if (narrate) q.set("narrate", "true");
   return `${getApiBase()}/investigations/${encodeURIComponent(invId)}/export?${q.toString()}`;
@@ -8916,7 +8916,9 @@ export function investigationExportUrl(invId: string, fmt: "pdf" | "pptx", narra
 
 /** Trigger a browser download of an investigation export. The endpoint replies
  *  with Content-Disposition: attachment, so the file saves without navigating. */
-export function downloadInvestigationExport(invId: string, fmt: "pdf" | "pptx", narrate = false): void {
+export type ExportFormat = "pdf" | "pptx" | "xlsx" | "docx";
+
+export function downloadInvestigationExport(invId: string, fmt: ExportFormat, narrate = false): void {
   const a = document.createElement("a");
   a.href = investigationExportUrl(invId, fmt, narrate);
   a.rel = "noopener";

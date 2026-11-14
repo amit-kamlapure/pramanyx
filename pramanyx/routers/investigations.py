@@ -6740,7 +6740,8 @@ def investigation_envelope(inv_id: str, principal=Depends(get_principal)) -> dic
 @router.get("/investigations/{inv_id}/export")
 def export_investigation(inv_id: str, format: str = "pdf", narrate: bool = False,
                          principal=Depends(get_principal)):
-    """Download a stored analysis as a polished PDF or PowerPoint (`format=pdf|pptx`).
+    """Download a stored analysis as PDF, PowerPoint, Excel or Word (`format=pdf|pptx|xlsx|docx`). Built from the
+    answer's stored report, never from code a model wrote; Excel carries every stored row.
 
     `narrate=true` prepends an LLM-authored executive summary (best-effort; the
     export still succeeds if the model is slow or unavailable)."""
@@ -6752,8 +6753,8 @@ def export_investigation(inv_id: str, format: str = "pdf", narrate: bool = False
     if not inv:
         raise HTTPException(status_code=404, detail="Investigation not found")
     fmt = (format or "pdf").lower()
-    if fmt not in ("pdf", "pptx"):
-        raise HTTPException(status_code=400, detail="format must be 'pdf' or 'pptx'")
+    if fmt not in ("pdf", "pptx", "xlsx", "docx"):
+        raise HTTPException(status_code=400, detail="format must be one of pdf, pptx, xlsx, docx")
 
     # Imported after the authz/existence checks so a caller who may not read this
     # investigation learns nothing about the deployment's configuration, and guarded
