@@ -229,10 +229,11 @@ export async function fetchCoworkerDoor(): Promise<CoworkerDoor> {
 }
 
 /** A short-lived token naming the person signed in here, for the coworker to act for them (`security/delegation.py`).
- *  Null when the API refuses one (not signed in) — the coworker still opens, as nobody in particular. */
+ *  A refusal (not signed in) is thrown with its reason; the switcher still opens the coworker, as nobody in
+ *  particular. */
 export async function mintCoworkerDelegation(): Promise<string | null> {
   const res = await fetch(`${getApiBase()}/auth/delegation`, { method: "POST" });
-  if (!res.ok) return null;
+  if (!res.ok) throw await refused(res, "Handing the coworker who you are");
   return ((await res.json()) as { token?: string }).token ?? null;
 }
 
@@ -259,7 +260,7 @@ export interface QueryHistoryReadiness {
 
 export async function getQueryHistoryReadiness(connId: string): Promise<QueryHistoryReadiness | null> {
   const res = await fetch(`${getApiBase()}/connections/${encodeURIComponent(connId)}/prerequisites`);
-  if (!res.ok) return null;
+  if (!res.ok) throw await refused(res, "Reading whether the warehouse keeps a query history");
   return ((await res.json()) as { query_history?: QueryHistoryReadiness }).query_history ?? null;
 }
 
@@ -12646,10 +12647,9 @@ export interface DirectoryImportPlan {
   refused: { line: number; reason: string }[];
 }
 
-/** The organisation's people; null when the caller may not manage roles. */
-export async function getDirectory(): Promise<DirectoryPerson[] | null> {
+/** The organisation's people (role administrators only; asked only by one). */
+export async function getDirectory(): Promise<DirectoryPerson[]> {
   const res = await fetch(`${getApiBase()}/rbac/directory`);
-  if (res.status === 403) return null;
   if (!res.ok) throw await refused(res, "Reading the people directory");
   return res.json();
 }
