@@ -171,7 +171,7 @@ class ConfluenceSync:
         permissions are not read: the person who connected the source says who reads its unrestricted pages). An
         ancestor that cannot be read, or a restriction none of whose readers can be matched, leaves the page to the
         person who connected the source alone."""
-        from pramanyx.knowledge.access import chosen, source_audience
+        from pramanyx.connectors.knowledge.readers import chosen, source_audience
         owner = str(self._meta.get("connected_by") or "").strip()
         levels = []
         own = self._read_restriction(page)
