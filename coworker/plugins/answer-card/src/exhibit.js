@@ -338,10 +338,18 @@ export const pageFor = {
   metric: (name, connection) => `/metrics/${encodeURIComponent(name)}?conn=${encodeURIComponent(connection)}`,
   type: (name, connection) => `/ontology/${encodeURIComponent(name)}?conn=${encodeURIComponent(connection)}`,
   receipt: (id) => `/receipt/${encodeURIComponent(id)}`,
-  sheet: (id) => `/sheets/${encodeURIComponent(id)}`,
+  // The sheet's own name rides the address, so its tab can carry it: the app's page reads only the id.
+  sheet: (id, name = "") => `/sheets/${encodeURIComponent(id)}${name ? `?name=${encodeURIComponent(name)}` : ""}`,
 };
 const NAMED = [[/^\/metrics\/([^/?]+)/, "Metric"], [/^\/ontology\/([^/?]+)/, "Ontology"], [/^\/receipt\//, "Why this number"],
                [/^\/sheets\/[^/?]+/, "Sheet"]];
+
+/** A referenced spreadsheet's tab is called by its own name and nothing else — "Olist orders", not "Sheet". */
+function sheetName(path) {
+  const m = /^\/sheets\/[^/?]+\?(?:.*&)?name=([^&#]+)/.exec(path);
+  if (!m) return "";
+  try { return decodeURIComponent(m[1].replace(/\+/g, " ")); } catch { return m[1]; }
+}
 
 /** The sheets by the table each is read as, read once: an answer names a sheet's table, and its page wants its id. */
 let sheetsRead = null;
@@ -355,6 +363,8 @@ export function sheetsByTable() {
 
 /** What a page tab is called: the kind of page, and the thing it is about. */
 function pageName(path) {
+  const named = sheetName(path);
+  if (named) return named;
   for (const [shape, kind] of NAMED) {
     const m = shape.exec(path);
     if (!m) continue;
@@ -368,8 +378,8 @@ function pageName(path) {
 /**
  * One of the app's own pages, shown beside the conversation. Not a summary of it drawn here: the page itself —
  * a metric's definition as the Semantic Layer shows it, an entity as the Ontology shows it, an answer's
- * receipt as "Why this number" shows it, a spreadsheet as Spreadsheets shows it — with everything on it working,
- * because it is the app. Only the app's own paths for those four are shown; anything else is refused, since the address arrives in a tab's name.
+ * receipt as "Why this number" shows it, a spreadsheet as the asset it is (its name, origin and rows; none of the
+ * Spreadsheets page's tools) — because it is the app. Only the app's own paths for those four are shown; anything else is refused, since the address arrives in a tab's name.
  */
 function AppPage({ path }) {
   if (!NAMED.some(([shape]) => shape.test(path))) return h("div", { style: { ...page, ...quiet } }, "This tab names a page this pane does not show.");

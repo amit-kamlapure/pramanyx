@@ -127,7 +127,8 @@ turned back on from the interface.
   table it read opens that entity's page (`/ontology/<type>`, the Ontology's own panel). These are the app's
   pages in a frame, not summaries drawn here, so everything on them works. A metric the answer did not use as
   approved says so on its button. An answer over the Sheets connection offers each spreadsheet it read, which
-  opens as `/sheets/<id>`, the app's own sheet view. Past three ontology objects the rest fold behind one
+  opens as `/sheets/<id>`: the spreadsheet as a referenced asset — its name, where it came from, its size and its
+  rows — with none of the Spreadsheets page's tools, and its tab named by the sheet's own name. Past three ontology objects the rest fold behind one
   button. The tab shows only those four kinds of page.
 - **A conversation is held to its connection.** The agent is told which connection a conversation is about, and
   that is an instruction, not a boundary. The boundary is the shell's tool guard: a call to one of Pramanyx's
@@ -182,8 +183,7 @@ admin allows "Let the coworker ask its models through Pramanyx" in Settings ▸ 
   and a pivot; those are not here. Nothing but an answer opens in the right-hand pane yet: not an object of the
   ontology, a metric's definition, a document or a sheet.
 - The app's pages are found at the address the coworker was reached from, else `http://localhost:3000`. An install
-  that serves the app elsewhere and is opened directly shows an empty frame. The sheet page was type-checked
-  and served; it has not been opened from a live answer over a sheet.
+  that serves the app elsewhere and is opened directly shows an empty frame.
 - The exhibit, the table and the editor were checked by hand on a live answer (sort, totals against the approved
   figure, pie, labels off, vertical, back to as answered). No test draws them.
 - A result longer than the shell's cap reaches the page cut short. The card reads it without its receipt; a

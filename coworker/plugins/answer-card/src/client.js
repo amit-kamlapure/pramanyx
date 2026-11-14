@@ -706,7 +706,7 @@ function Exhibit({ answer, whole, asked }) {
       onClick: () => openBeside("page", pageFor.metric(m.name, connection)),
     }, m.departed ? `${m.name} · not used as approved` : m.name)),
     ...sheetsRead.map((sheet) => h("button", { key: `s-${sheet.id}`, type: "button", className: "pramanyx-mark", title: "A spreadsheet this answer read. Opens it.",
-      onClick: () => openBeside("page", pageFor.sheet(sheet.id)) }, sheet.name)),
+      onClick: () => openBeside("page", pageFor.sheet(sheet.id, sheet.name)) }, sheet.name)),
     // The first few objects, and the rest behind one mark: an answer grounded in eight would otherwise trail a
     // line of them.
     ...(allObjects ? tables : tables.slice(0, OBJECTS_SHOWN)).map((t) => h("button", {
