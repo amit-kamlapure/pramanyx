@@ -30,6 +30,8 @@ class _Activation:
 
     agent_token: contextvars.Token
     budget_token: Any = None
+    #: The run this activation opened, when it opened one (`obs/own_run.py`): closed when the agent is released.
+    run: Any = None
 
 
 def activate_agent(agent: UserAgent) -> "_Activation":
@@ -43,7 +45,19 @@ def activate_agent(agent: UserAgent) -> "_Activation":
         import logging
         logging.getLogger(__name__).warning(
             "guardrail run cap not armed for agent %s: %s", agent.id, exc)
-    return _Activation(agent_token=token, budget_token=budget_token)
+    # An agent's model calls are never filed under no run. Inside a request or a job the run is already open and
+    # this opens nothing; anywhere else (a quality check, a scheduled re-evaluation) the agent's work is its own run.
+    run = None
+    try:
+        from pramanyx.obs.own_run import own_run
+        run = own_run("agent", f"{agent.name or agent.id}", conn_id=agent.connection_id or "")
+        run.__enter__()
+    except Exception as exc:                # noqa: BLE001 — a run that cannot be opened must not stop the agent
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "an agent's run could not be opened; its calls are recorded as they come",
+                 counter="agents.own_run")
+        run = None
+    return _Activation(agent_token=token, budget_token=budget_token, run=run)
 
 
 def release_agent(token: "_Activation") -> None:
@@ -59,6 +73,12 @@ def release_agent(token: "_Activation") -> None:
             tolerate(exc, "releasing an agent's guardrail cap; the agent is still released",
                      counter="guardrails.disarm")
         _active.reset(token.agent_token)
+        if token.run is not None:
+            try:
+                token.run.__exit__(None, None, None)
+            except Exception as exc:        # noqa: BLE001
+                from pramanyx.kernel.errors import tolerate
+                tolerate(exc, "closing an agent's run; the agent is still released", counter="agents.own_run_close")
         return
     _active.reset(token)
 
