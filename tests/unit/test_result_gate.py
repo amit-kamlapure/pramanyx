@@ -61,3 +61,22 @@ def test_else_the_currency_a_person_confirmed_and_never_a_default(monkeypatch):
 def test_a_share_is_not_money_whatever_it_is_a_share_of(monkeypatch):
     monkeypatch.setattr("pramanyx.orgsettings.figure_currency", lambda conn, schema=None: "EUR")
     assert inv._quick_column_units("c1", None, "SELECT 1", ["platform", "revenue_share_pct"]) == {}
+
+
+# ── what stands out is only what does ────────────────────────────────────────────────────────────────────────────
+
+def test_what_stands_out_drops_sentences_that_say_nothing_does_and_doubts_about_the_query():
+    """Every item below was shown under "What stands out" on a live answer before 2026-11-14."""
+    said = [
+        "No unexpected spikes or outliers in the top five platforms.",
+        "No anomalies detected in the five platform totals.",
+        "None detected.",
+        "No outlier: the top five are tightly clustered within **€7,575.12**.",
+        "Query groups by order_id and status, so results are individual orders, not total GMV by status",
+        "SQL groups by order_id and status, so it cannot produce total GMV by status",
+        "Hortolândia's 15.49% late rate is a sharp outlier, 5.3 points above São Vicente's 10.19%.",
+        "November 2026 shows 511 orders, less than half of October's 1,143 — consistent with an incomplete month",
+        "Returned orders have the highest GMV, which is counterintuitive for a reversal status.",
+    ]
+    assert inv.stands_out(said) == said[-3:]
+    assert inv.stands_out([]) == [] and inv.stands_out(None) == [] and inv.stands_out(["", 3]) == []

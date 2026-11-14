@@ -1166,7 +1166,10 @@ class _FollowUpBase(BaseModel):
 class _NarrativeResult(BaseModel):
     """The prose enrichment attached to a quick answer — anomaly detection, trend, comparison."""
     narrative: str = Field(default="", description="2-3 tight sentences that lead with the answer and wrap decisive numbers in **bold**.")
-    anomalies: list[str] = Field(default_factory=list, description="List of detected anomalies or unexpected patterns.")
+    anomalies: list[str] = Field(default_factory=list, description=(
+        "Only what genuinely stands out in these rows: an outlier, a break in the pattern, one value far from the "
+        "rest. An EMPTY list when nothing does — never a sentence saying nothing stands out. Not the ranking or the "
+        "answer restated, and not a doubt about the query."))
     trend: str = Field(default="stable", description="One of: up, down, stable, mixed.")
     confidence: str = Field(default="medium", description="One of: high, medium, low.")
 
@@ -1364,6 +1367,21 @@ def _quick_column_units(connection_id: str, schema_name: Optional[str], sql: str
         tolerate(exc, "a quick answer's column units could not be read; its figures print unlabelled",
                  counter="chat.column_units")
         return {}
+
+
+_NOTHING_STANDS_OUT = re.compile(
+    r"^\s*(?:there\s+(?:are|is|were|was)\s+)?(?:no|none|nothing|not\s+any)\b"
+    r"|\bno\s+(?:\w+\s+){0,2}(?:anomal\w*|outliers?|spikes?|surprises?|irregularit\w*|unusual\w*|unexpected\w*)\b"
+    r"|\bnothing\s+(?:\w+\s+){0,2}stands?\s+out\b"
+    r"|\b(?:the\s+)?(?:query|sql|result)\s+(?:groups|returns|uses|filters|does|is)\b", re.I)
+
+
+def stands_out(items) -> list[str]:
+    """What the narrator named as standing out, less what is not a finding: a sentence saying nothing stands out
+    ("No unexpected spikes or outliers…"), and a doubt about the query, which is the result gate's and the inspect's
+    to say, where a reader sees it as one. Measured 2026-11-14: of the live answers whose narrative named anything,
+    the commonest item said there was nothing to name, and it was shown under "What stands out"."""
+    return [str(x).strip() for x in (items or []) if isinstance(x, str) and x.strip() and not _NOTHING_STANDS_OUT.search(x)]
 
 
 def resolve_currency_symbol(connection_id: str, schema_name: Optional[str]) -> str:
@@ -3494,7 +3512,7 @@ def _answer_core(
             if _narrative_worth_it and _pa.narrative:
                 _narrative_dict = {
                     "narrative": _apply_currency(_pa.narrative, _cur_sym),
-                    "anomalies": _pa.anomalies[:3],
+                    "anomalies": stands_out(_pa.anomalies)[:3],
                     "trend": _pa.trend,
                     "confidence": _pa.confidence,
                 }
