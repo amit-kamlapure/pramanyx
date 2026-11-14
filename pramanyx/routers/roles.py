@@ -93,3 +93,38 @@ def delete_assignment(user_id: str = Query(...), role: str = Query(...)):
     """Revoke a role grant from a user in the caller's org."""
     removed = revoke_role(current_org_id(), user_id.strip(), (role or "").strip().lower())
     return {"removed": removed}
+
+
+# ── The people directory (People, 2026-11-15) ────────────────────────────────────────────────────────────
+
+class DirectoryImport(BaseModel):
+    csv: str
+    #: True — the file is the whole directory, so a person it does not name is deactivated.
+    full: bool = True
+    #: True — say what would happen and change nothing (the form's first step).
+    dry_run: bool = True
+
+
+@router.get("/rbac/directory")
+def get_directory(include_inactive: bool = False):
+    """The organisation's people: email, name, title, team (a group id) and manager."""
+    from dataclasses import asdict
+
+    from pramanyx.rbac.directory import people
+    return [asdict(p) for p in people(current_org_id(), include_inactive=include_inactive)]
+
+
+@router.post("/rbac/directory/import")
+def import_directory(body: DirectoryImport, request: Request):
+    """Import people from a CSV (email, name, title, team, manager). A dry run says what would change; the real run
+    applies it, puts each person in their team's group, and journals it under the person who ran it."""
+    from pramanyx.rbac.directory import apply_import, plan_import
+    from pramanyx.security.authz import acting_person
+    if not (body.csv or "").strip():
+        raise HTTPException(status_code=400, detail="The CSV is empty.")
+    org = current_org_id()
+    plan = (plan_import(org, body.csv, full=body.full) if body.dry_run
+            else apply_import(org, body.csv, full=body.full, by=acting_person(get_principal(request))))
+    if not plan.add and not plan.change and not plan.unchanged and plan.refused:
+        raise HTTPException(status_code=422, detail=f"No one could be read from the CSV: {plan.refused[0]['reason']}")
+    return {"applied": not body.dry_run, **plan.as_dict()}

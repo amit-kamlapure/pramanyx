@@ -12616,3 +12616,39 @@ export async function importOntologyTree(
   if (!res.ok) throw new Error(await res.text().catch(() => `HTTP ${res.status}`));
   return res.json();
 }
+
+// ── The people directory (People, 2026-11-15) ────────────────────────────────────────────────────────────────
+
+export interface DirectoryPerson {
+  email: string; name: string; title: string; team: string; manager: string;
+  source: string; active: boolean; imported_at: string;
+}
+
+export interface DirectoryImportPlan {
+  applied: boolean;
+  add: { email: string; name: string; title: string; team: string; manager: string }[];
+  change: { email: string; fields: Record<string, [unknown, unknown]> }[];
+  deactivate: string[];
+  unchanged: number;
+  teams_new: string[];
+  refused: { line: number; reason: string }[];
+}
+
+/** The organisation's people; null when the caller may not manage roles. */
+export async function getDirectory(): Promise<DirectoryPerson[] | null> {
+  const res = await fetch(`${getApiBase()}/rbac/directory`);
+  if (res.status === 403) return null;
+  if (!res.ok) throw await refused(res, "Reading the people directory");
+  return res.json();
+}
+
+/** Import people from a CSV; a dry run says what would change and changes nothing. */
+export async function importDirectory(csv: string, opts: { dryRun: boolean; full: boolean }): Promise<DirectoryImportPlan> {
+  const res = await fetch(`${getApiBase()}/rbac/directory/import`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ csv, dry_run: opts.dryRun, full: opts.full }),
+  });
+  if (!res.ok) throw await refused(res, "Importing the people directory");
+  return res.json();
+}
