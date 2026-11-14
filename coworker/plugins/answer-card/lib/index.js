@@ -49,6 +49,20 @@ async function read(req) {
   return Buffer.concat(parts).toString("utf8");
 }
 
+/** The person the app handed this coworker (`home`'s keepThePerson), presented with what they said, so Pramanyx
+ *  records it under them. "" when none was handed over: then it is recorded as the install's operator, as before. */
+async function personHeader() {
+  const file = process.env.PRAMANYX_DELEGATION_FILE || "";
+  if (!file) return {};
+  try {
+    const { readFile } = await import("node:fs/promises");
+    const token = (await readFile(file, "utf8")).trim();
+    return /^[A-Za-z0-9_-]{20,128}$/.test(token) ? { "x-pramanyx-delegation": token } : {};
+  } catch {
+    return {};
+  }
+}
+
 export const inject = ["webServer"];
 
 export function apply(ctx) {
@@ -70,7 +84,8 @@ export function apply(ctx) {
         if (!body) return reply(res, 422, { detail: "Not something this route records" });
         try {
           const answer = await fetch(api + saying.to, {
-            method: "POST", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify(body),
+            method: "POST", headers: { "content-type": "application/json", accept: "application/json", ...(await personHeader()) },
+            body: JSON.stringify(body),
           });
           const kept = await answer.text();
           res.writeHead(answer.status, { "content-type": answer.headers.get("content-type") || "application/json", "cache-control": "no-store" });

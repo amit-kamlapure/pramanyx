@@ -1527,6 +1527,8 @@ def chat_feedback(body: _ChatFeedbackRequest, request: Request):
     popularity feed, so thumbs teach ranking through the one existing signal path.
     Monotone by design: counters only grow — an unhelpful verdict journals the
     event (audit + future consumers) but never decrements a prior."""
+    from pramanyx.rbac.agent_gate import refuse_an_agents_verdict
+    refuse_an_agents_verdict(request)
     _check_conn_org(request, body.conn_id)
     from pramanyx.kernel.errors import tolerate
     from pramanyx.security.authz import acting_person, get_principal

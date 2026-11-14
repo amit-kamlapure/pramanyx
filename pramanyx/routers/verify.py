@@ -38,6 +38,8 @@ class VerdictIn(BaseModel):
 def post_verdict(v: VerdictIn, request: Request):
     """Record a human verdict on an investigation finding, under the person this request acts for — never a name
     from the body."""
+    from pramanyx.rbac.agent_gate import refuse_an_agents_verdict
+    refuse_an_agents_verdict(request)
     from pramanyx.security.authz import acting_person, get_principal
     try:
         return record_verdict(

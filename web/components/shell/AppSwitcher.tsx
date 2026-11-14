@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
-import { fetchCoworkerDoor, type CoworkerDoor } from "@/lib/api";
+import { fetchCoworkerDoor, mintCoworkerDelegation, type CoworkerDoor } from "@/lib/api";
 
 /**
  * The nine dots: the way from the app to the coworker, and the place a person learns there is one.
@@ -16,9 +16,11 @@ import { fetchCoworkerDoor, type CoworkerDoor } from "@/lib/api";
  *
  * What is carried across, so the person arrives where they were: the connection in the top bar, light or dark,
  * and this page's own address as the way back. They ride in the address's fragment — the coworker drops a query
- * string on arrival, and a fragment is never sent to a server. The coworker's access rides there too.
+ * string on arrival, and a fragment is never sent to a server. The coworker's access rides there too, and so does
+ * the person: a short-lived delegation the API mints for whoever is signed in here (`security/delegation.py`), so
+ * what the coworker does for them is recorded under them, and reads only what they may read.
  */
-export type Carried = { connectionId?: string; theme?: string; back?: string };
+export type Carried = { connectionId?: string; theme?: string; back?: string; delegation?: string };
 
 /**
  * The address the dots open: the coworker's own entry page, with the coworker's access and what is carried in the
@@ -34,6 +36,7 @@ export function coworkerHref(url: string, carried: Carried): string {
     const said = new URLSearchParams();
     const access = at.searchParams.get("token");
     if (access) said.set("t", access);
+    if (carried.delegation) said.set("d", carried.delegation);
     if (carried.connectionId) said.set("conn", carried.connectionId);
     if (carried.theme) said.set("theme", carried.theme);
     if (carried.back) said.set("back", carried.back);
@@ -56,6 +59,10 @@ const tile: React.CSSProperties = {
 export function AppSwitcher({ connectionId, theme }: { connectionId?: string; theme?: string }) {
   const [door, setDoor] = useState<CoworkerDoor | null>(null);
   const [open, setOpen] = useState(false);
+  // The person, handed to the coworker. Asked for once, when the menu first opens: a page that never opens it mints
+  // nothing. No delegation (refused, or the API is older) still opens the coworker — as nobody in particular.
+  const [delegation, setDelegation] = useState<string | undefined>(undefined);
+  const asked = useRef(false);
   const host = useRef<HTMLDivElement | null>(null);
 
   const look = useCallback(() => {
@@ -84,7 +91,7 @@ export function AppSwitcher({ connectionId, theme }: { connectionId?: string; th
 
   if (!door?.available || !door.url) return null;
   const href = coworkerHref(door.url, {
-    connectionId, theme, back: typeof window === "undefined" ? undefined : window.location.href,
+    connectionId, theme, delegation, back: typeof window === "undefined" ? undefined : window.location.href,
   });
   return (
     <div ref={host} style={{ position: "relative" }}>
@@ -93,7 +100,14 @@ export function AppSwitcher({ connectionId, theme }: { connectionId?: string; th
         // beside the avatar went unseen.
         style={{ width: 26, height: 26, border: "1px solid var(--b2)", borderRadius: "var(--r2)", background: "var(--bg-3)", color: "var(--t1)" }}
         // Looked at again as it opens: a coworker that stopped since the page loaded is not offered.
-        onClick={() => { if (!open) look(); setOpen((was) => !was); }}>
+        onClick={() => {
+          if (!open) look();
+          if (!open && !asked.current) {
+            asked.current = true;
+            mintCoworkerDelegation().then((d) => setDelegation(d ?? undefined)).catch(() => { asked.current = false; });
+          }
+          setOpen((was) => !was);
+        }}>
         <Icon name="apps" size={16} />
       </Button>
       {open && (

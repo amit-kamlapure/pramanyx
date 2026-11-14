@@ -103,6 +103,8 @@ def mark(departure_id: str, body: VerdictBody, request: Request):
     (one mark, both ledgers), then re-measures the automation's precision and
     graduates it the moment the threshold holds — "graduates at a measured
     precision", literally at the moment of the measurement that satisfies it."""
+    from pramanyx.rbac.agent_gate import refuse_an_agents_verdict
+    refuse_an_agents_verdict(request)
     verdict = body.verdict.strip().lower()
     if verdict not in ("accept", "correct", "reject"):
         raise HTTPException(status_code=422,

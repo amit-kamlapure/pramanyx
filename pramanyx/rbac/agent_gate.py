@@ -192,3 +192,13 @@ async def enforce_agent_policy(request: Request) -> AsyncIterator[None]:
     finally:
         principal_grant.release(token)
         audit(refused_code is None, refused_code)
+
+
+def refuse_an_agents_verdict(request: Request) -> None:
+    """A verdict is a person's word, given by them (the user, 2026-11-15): Right / Wrong, a 👍, a departure's mark.
+    An agent — the coworker's through its tools, an outside one through a service principal — may read what its
+    person may read, and never speak for them. Refused with the reason, delegated or not."""
+    if is_agent_request(request):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403,
+                            detail="A verdict is a person's word: an agent cannot give one. Ask the person to press Right or Wrong.")

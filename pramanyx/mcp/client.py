@@ -43,6 +43,20 @@ IDENTITY_USER_HEADER = "X-Pramanyx-User"
 #: DE-2b — the mark that makes a request an agent's own, and the tool it serves. Spelled here
 #: so this module stays httpx-only; `pramanyx.mcp.policy` imports them from here.
 AGENT_HEADER = "X-Pramanyx-Agent"
+#: `security.delegation.HEADER`, spelled here so the client imports nothing of the API's.
+DELEGATION_HEADER = "X-Pramanyx-Delegation"
+
+
+def _delegation() -> str:
+    """The delegation the coworker's host keeps (``PRAMANYX_DELEGATION_FILE``), or ""."""
+    path = os.environ.get("PRAMANYX_DELEGATION_FILE", "").strip()
+    if not path:
+        return ""
+    try:
+        with open(path, encoding="utf-8") as f:
+            return f.read(256).strip()
+    except OSError:
+        return ""
 TOOL_HEADER = "X-Pramanyx-Tool"
 AGENT_MARK = "mcp"
 #: The MCP tool a request serves, set by the server around each call (`PolicedFastMCP`).
@@ -121,6 +135,14 @@ class PramanyxClient:
         # DE-2b — every call this client makes is an agent's own, and says which tool it serves,
         # so the API applies the organisation's agent policy to it and audits it with its principal.
         h[AGENT_HEADER] = AGENT_MARK
+        # People (2026-11-15) — the person the app handed the coworker, kept by the coworker's host in a file only
+        # this account reads (`security/delegation.py`). Read on every call, so a new one applies without a restart;
+        # never from a tool argument, so the model cannot choose who it acts for. Not for an HTTP caller let in as
+        # itself: that one is its own principal.
+        if caller is None:
+            person = _delegation()
+            if person:
+                h[DELEGATION_HEADER] = person
         tool = CURRENT_TOOL.get()
         if tool:
             h[TOOL_HEADER] = tool

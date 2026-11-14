@@ -96,11 +96,53 @@ const ENTER = `<!doctype html><meta charset="utf-8"><title>Pramanyx</title><scri
 (function () {
   var said = new URLSearchParams(location.hash.slice(1));
   var access = said.get("t") || "";
+  var person = said.get("d") || "";
   said.delete("t");
+  said.delete("d");
   var carried = said.toString();
-  location.replace("./" + (access ? "?token=" + encodeURIComponent(access) : "") + (carried ? "#pramanyx:" + carried : ""));
+  var go = function () {
+    location.replace("./" + (access ? "?token=" + encodeURIComponent(access) : "") + (carried ? "#pramanyx:" + carried : ""));
+  };
+  if (!person) return go();
+  // The person the app handed over goes to this page's own server, which checks it with Pramanyx and keeps it;
+  // it never reaches the conversation or the model. A failure still opens the coworker, as nobody in particular.
+  fetch("pramanyx-person", { method: "POST", headers: { "content-type": "application/json" },
+                             body: JSON.stringify({ d: person }) }).then(go, go);
 })();
 </script>`;
+
+/**
+ * THE PERSON THE COWORKER ACTS FOR (People, 2026-11-15). The app mints a short-lived delegation for whoever is
+ * signed in there (`pramanyx/security/delegation.py`) and the entry page above posts it here. It is checked with
+ * Pramanyx, then kept in one file only this account can read (PRAMANYX_DELEGATION_FILE, set by start.sh) — where the
+ * answer card's relays and the MCP server read it on every call. One shell is one person's: a newer arrival replaces
+ * the older. Never kept in a conversation or shown to the model, so the agent cannot choose who it acts for.
+ */
+export async function keepThePerson(req, res, api) {
+  const reply = (status, body) => { res.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" }); res.end(JSON.stringify(body)); };
+  if (req.method !== "POST") return reply(405, { detail: "POST only" });
+  const from = req.headers["sec-fetch-site"];
+  if (from && from !== "same-origin") return reply(403, { detail: "Only this page may say this" });
+  const file = process.env.PRAMANYX_DELEGATION_FILE || "";
+  if (!file) return reply(501, { detail: "No place to keep the person (PRAMANYX_DELEGATION_FILE is unset)" });
+  let raw = "";
+  for await (const part of req) { raw += part; if (raw.length > 1024) return reply(413, { detail: "Too long" }); }
+  let token = "";
+  try { token = String(JSON.parse(raw).d || ""); } catch { token = ""; }
+  if (!/^[A-Za-z0-9_-]{20,128}$/.test(token)) return reply(422, { detail: "Not a delegation" });
+  try {
+    const answer = await fetch(api + "/auth/delegation", { headers: { accept: "application/json", "x-pramanyx-delegation": token } });
+    if (!answer.ok) return reply(401, { detail: "Pramanyx did not recognise the person" });
+    const who = await answer.json();
+    const { writeFile, mkdir } = await import("node:fs/promises");
+    const { dirname } = await import("node:path");
+    await mkdir(dirname(file), { recursive: true });
+    await writeFile(file, token, { mode: 0o600 });
+    return reply(200, { user_id: who.user_id });
+  } catch {
+    return reply(502, { detail: "The platform is not answering" });
+  }
+}
 
 /**
  * A CONVERSATION IS HELD TO ITS CONNECTION. Telling the agent which connection a conversation is about is an
@@ -302,6 +344,11 @@ export function apply(ctx) {
       return res.end(req.method === "HEAD" ? undefined : ENTER);
     },
   }), "pramanyx-home: the way in from the app");
+  ctx.effect(() => ctx.webServer.register({
+    kind: "exact",
+    path: "/pramanyx-person",
+    handler: (req, res) => keepThePerson(req, res, api),
+  }), "pramanyx-home: the person the coworker acts for");
   ctx.effect(() => ctx.webServer.register({
     kind: "prefix",
     path: "/pramanyx",          // no trailing slash: the server matches the prefix itself, or the prefix and a "/"

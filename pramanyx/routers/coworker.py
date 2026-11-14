@@ -94,10 +94,15 @@ def say_where_the_coworker_is(body: CoworkerAddress, request: Request) -> Cowork
 
 
 @router.get("/coworker", response_model=CoworkerDoor)
-def where_the_coworker_is() -> CoworkerDoor:
-    """Whether a coworker is running, and the address to open. Reads what was last said; asks nothing."""
+def where_the_coworker_is(request: Request) -> CoworkerDoor:
+    """Whether a coworker is running, and the address to open. Reads what was last said; asks nothing.
+
+    The address carries the coworker shell's access token, so it is given only to a caller on this machine — the
+    only place a coworker on this machine's loopback can be opened from anyway (People, 2026-11-15: until then any
+    caller that could reach the API read the token). Anyone else is told one is running, and not where."""
     if _last["url"] and _now() - _last["at"] <= FRESH_FOR:
-        return CoworkerDoor(available=True, url=_last["url"])
+        here = _on_this_machine(request.client.host if request.client else None)
+        return CoworkerDoor(available=True, url=_last["url"] if here else None)
     return CoworkerDoor(available=False)
 
 

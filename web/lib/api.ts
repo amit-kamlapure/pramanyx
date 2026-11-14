@@ -226,6 +226,14 @@ export async function fetchCoworkerDoor(): Promise<CoworkerDoor> {
   return res.json();
 }
 
+/** A short-lived token naming the person signed in here, for the coworker to act for them (`security/delegation.py`).
+ *  Null when the API refuses one (not signed in) — the coworker still opens, as nobody in particular. */
+export async function mintCoworkerDelegation(): Promise<string | null> {
+  const res = await fetch(`${getApiBase()}/auth/delegation`, { method: "POST" });
+  if (!res.ok) return null;
+  return ((await res.json()) as { token?: string }).token ?? null;
+}
+
 /** The choices an organisation makes about what Pramanyx may do (ROADMAP §3.65; §3.68 added `read_query_history`). */
 export type OrgAllowSetting = "share_aggregates" | "outside_row_model" | "reason_to_read_runs" | "scheduled_model_work"
   | "read_query_history" | "copy_rows_across_sources" | "coworker_models";

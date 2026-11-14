@@ -17,6 +17,8 @@ export DSH_HOME="${DSH_HOME:-$HOME/.pramanyx/coworker}"
 # Nothing is reported to the shell's maker (profile.patch.yml turns the reporters off; this is the second lock).
 export DSH_TELEMETRY_MODE=DISABLED
 export PRAMANYX_API_URL="${PRAMANYX_API_URL:-http://127.0.0.1:8000}"
+# The person the app hands this coworker (a short-lived delegation), kept where the host and the MCP server read it.
+export PRAMANYX_DELEGATION_FILE="${PRAMANYX_DELEGATION_FILE:-$DSH_HOME/delegation}"
 # The shell's provider plugin will not send a request without a key. The model door takes none, so this is a
 # placeholder and not a secret.
 export PRAMANYX_DOOR_KEY="${PRAMANYX_DOOR_KEY:-no-key-the-door-takes-none}"
