@@ -588,17 +588,23 @@ class PramanyxClient:
         return await self._get("/web/search", params={"q": query, "n": n})
 
     # ── A question on a rhythm, run by the platform (the coworker plan, 2026-11-15) ────────────────
-    async def schedule_question(self, question: str, connection: str, cron: str, name: str = "") -> dict:
+    async def schedule_question(self, question: str, connection: str, cron: str, name: str = "",
+                                stop_after_minutes: int = 0) -> dict:
         """An automation: a schedule trigger and one `investigate` step. It runs on the platform's own scheduler —
         traced, listed with the other automations, under the organisation's setting for scheduled model work — never on the coworker's."""
         body = {"conn_id": connection, "name": (name or question)[:120],
                 "description": "Asked from the coworker, to be asked again on a rhythm.",
                 "conditions": [{"kind": "schedule", "config": {"cron": cron}}],
                 "effects": [{"kind": "investigate", "config": {"question": question}}]}
+        if stop_after_minutes and stop_after_minutes > 0:
+            from datetime import datetime, timedelta, timezone
+            body["expires_at"] = (datetime.now(timezone.utc) + timedelta(minutes=int(stop_after_minutes))
+                                  ).strftime("%Y-%m-%dT%H:%M:%SZ")
         made = await self._post("/automations", json_body=body)
         settings = await self._get("/org-settings")
         off = isinstance(settings, dict) and settings.get("scheduled_model_work") is not True
         return {"id": made.get("id"), "name": made.get("name"), "cron": cron, "enabled": made.get("enabled"),
+                "stops_at": made.get("expires_at") or "never",
                 "on_probation": made.get("probation"),
                 "note": ("It will not run until an admin turns on scheduled model work in Settings ▸ Organisation."
                          if off else "It runs on the platform's schedule; each run is its own trace in Agent Ops."),

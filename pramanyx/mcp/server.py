@@ -306,11 +306,12 @@ async def schedule_question(
     connection: Annotated[str, Field(description="The connection id the question is about.")],
     cron: Annotated[str, Field(description="When, as a five-field cron in the organisation's time zone, e.g. '0 9 * * 1' for Mondays at 09:00.")],
     name: Annotated[str, Field(description="A short name the person will recognise; the question when empty.")] = "",
+    stop_after_minutes: Annotated[int, Field(description="Stop asking after this many minutes (\"for the next half hour\" is 30); 0 keeps it until someone stops it.")] = 0,
 ) -> dict:
     """Ask a question again on a rhythm — "every Monday, revenue by category". Pramanyx's own scheduler runs it as
     an automation, so each run is governed like any answer and traced; it does not depend on this conversation
     staying open, and it is listed with the organisation's other automations. Say back when it will run and the note this returns."""
-    return await _client.schedule_question(question, connection, cron, name)
+    return await _client.schedule_question(question, connection, cron, name, stop_after_minutes)
 
 
 @mcp.tool()
