@@ -328,14 +328,23 @@ async def search_the_web(
 async def schedule_question(
     question: Annotated[str, Field(description="The question to ask again, as the person would ask it.")],
     connection: Annotated[str, Field(description="The connection id the question is about.")],
-    cron: Annotated[str, Field(description="When, as a five-field cron in the organisation's time zone, e.g. '0 9 * * 1' for Mondays at 09:00.")],
+    cron: Annotated[str, Field(description=(
+        "When. For a rhythm, a five-field cron: '0 9 * * 1' is Mondays at 09:00, '0 8 * * 1-5' weekdays at 08:00, "
+        "'*/15 * * * *' every 15 minutes. For what a cron cannot say, a recurrence of two lines, a start then the recurrence. "
+        "Once: 'DTSTART:20261116T150000\nRRULE:FREQ=DAILY;COUNT=1'. Every 90 minutes from a start: "
+        "'DTSTART:20261116T090000\nRRULE:FREQ=MINUTELY;INTERVAL=90'. Every second Monday: "
+        "'DTSTART:20261116T090000\nRRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO'. The first Monday of each month, six "
+        "times: 'DTSTART:20261207T090000\nRRULE:FREQ=MONTHLY;BYDAY=1MO;COUNT=6'. Until a date: add ';UNTIL=20261231'. "
+        "Times are read in `timezone`."))],
     name: Annotated[str, Field(description="A short name the person will recognise; the question when empty.")] = "",
     stop_after_minutes: Annotated[int, Field(description="Stop asking after this many minutes (\"for the next half hour\" is 30); 0 keeps it until someone stops it.")] = 0,
+    timezone: Annotated[str, Field(description="The clock the times are read in, as an IANA name such as Europe/Berlin or Asia/Kolkata. Empty is UTC: say so, or ask, when the person named a time of day.")] = "",
 ) -> dict:
-    """Ask a question again on a rhythm — "every Monday, revenue by category". Pramanyx's own scheduler runs it as
-    an automation, so each run is governed like any answer and traced; it does not depend on this conversation
-    staying open, and it is listed with the organisation's other automations. Say back when it will run and the note this returns."""
-    return await _client.schedule_question(question, connection, cron, name, stop_after_minutes)
+    """Ask a question on a schedule — "every Monday, revenue by category", "tomorrow at three, once", "every second
+    Friday". Pramanyx's own scheduler runs it as an automation, so each run is governed like any answer and traced;
+    it does not depend on this conversation staying open, and it is listed with the organisation's other schedules.
+    It starts at its first scheduled time, not now. Say back `when` and `next_run` as returned, and the note."""
+    return await _client.schedule_question(question, connection, cron, name, stop_after_minutes, timezone)
 
 
 @mcp.tool()

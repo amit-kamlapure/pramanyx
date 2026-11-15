@@ -22,14 +22,28 @@
 - id: tool-plugin-manager
   disabled: true
 
+# ── off: the shell's own scheduler — its store of timed reminders, its page, its clock marks on a conversation.
+#    There is one scheduler and it is Pramanyx's (the user, 2026-11-15: "the scheduler needs to be one across the
+#    platform"). Measured side by side that day: the shell's delivers an instruction into a conversation at a time
+#    and nothing more — no trigger but the clock, no step but "say this to the agent", no record of what the run
+#    produced, no owner, and it stops when this process does. Pramanyx's fires on a clock or on the data, runs
+#    governed steps, keeps every run, and is the one every other surface already lists. What the shell's said that
+#    Pramanyx's could not — once, every N from a start, the first Monday, five times — Pramanyx's now says
+#    (`pramanyx/automations/recurrence.py`). The sidebar's Schedules entry is ours (`plugins/home`) and opens the app's
+#    own page. `tool-schedule` is out of the agent preset below for the same reason.
+- id: schedule
+  disabled: true
+- id: ui-schedule
+  disabled: true
+
 # ── the agent preset. THIS is where an agent's tools are mounted; the rows above are the tools' own services, and
 #    turning those off alone left every tool in the agent's hands (checked from inside a session, 2026-11-13: it
 #    still listed bash, read, write, edit, web_search, web_fetch and plugin_manager). A patch can only replace a
 #    preset's config whole, so what follows is the shell's `standard` preset as 0.2.2-rc.1 ships it, minus
 #    tool-bash, tool-pwsh, tool-fs, tool-fs-search, tool-jobs, tool-web, tool-plugin-manager, tool-plugin-market,
-#    workflow-ptc, tool-workflow and tool-schedule, with the persona rewritten. The shell's scheduler is left out
-#    because a schedule held there stops when the shell does and is seen by no one else: a question asked again on a
-#    rhythm is Pramanyx's automation (the `schedule_question` tool), run by the platform's own scheduler.
+#    workflow-ptc, tool-workflow and tool-schedule, with the persona rewritten. The shell's scheduler is off whole
+#    (above): a question asked again on a rhythm, or once at a time, is Pramanyx's automation (the
+#    `schedule_question` tool), run by the platform's own scheduler.
 #    RE-DERIVE IT when the shell is upgraded: a tool
 #    the shell adds to its own preset later is not in this copy, and one it renames is not removed by it.
 #    Subagents run under `standard` too, so this is also what a spawned agent gets.

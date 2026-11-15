@@ -1155,7 +1155,7 @@ def add_admitted(automation_id: str, target: str, keys: Sequence[str]) -> None:
 # the registry is the peer-maker. The callable builds the model (its validation
 # refusing malformed drafts) and saves through the ONE write door above.
 
-def _first_scheduled_time(automation: Automation) -> str:
+def first_scheduled_time(automation: Automation) -> str:
     """The next time this chain's schedule fires (ISO UTC) — only when EVERY trigger is a
     schedule, because the mute below would also silence a webhook or a metric trigger."""
     if not automation.conditions or any(c.kind != "schedule" for c in automation.conditions):
@@ -1181,7 +1181,7 @@ def _save_payload_for_inbox(params: dict):
     # on its next tick (`engine._schedule_fired`): the user's 9am chain, accepted late in the
     # evening, would have posted within a minute. The wait is the mute that already exists —
     # it has its end, the run history reads "muted until …", and a resume lifts it.
-    first_run = _first_scheduled_time(automation)
+    first_run = first_scheduled_time(automation)
     if first_run and not automation.paused_until:
         automation = automation.model_copy(update={"paused_until": first_run})
     # HB-2 — an accepted draft is a DECLARED automation: born on probation, addressed to

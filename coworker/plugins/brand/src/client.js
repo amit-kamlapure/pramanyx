@@ -177,23 +177,6 @@ const WORDS = {
 };
 
 /**
- * Dictionaries reworded by rule rather than key by key: the shell calls a scheduled run an "automation task" in
- * some forty phrases, and here it is a schedule. The article goes first, so "an automation task" does not become
- * "an schedule".
- */
-const REWORDED = {
-  "schedule.catalog": automationToSchedule,
-  "schedule.manager": automationToSchedule,
-};
-
-function automationToSchedule(phrase) {
-  return phrase
-    .replace(/\ban automation task\b/g, "a schedule").replace(/\bAn automation task\b/g, "A schedule")
-    .replace(/automation tasks/g, "schedules").replace(/Automation tasks/g, "Schedules")
-    .replace(/automation task/g, "schedule").replace(/Automation task/g, "Schedule");
-}
-
-/**
  * Put our phrases in the shell's English dictionaries. It reaches into the locale service's own table, which is
  * not a promise the shell makes — so every step is allowed to find nothing, and then nothing changes. A phrase is
  * only ever written to what it should say, so running this again changes nothing more.
@@ -207,15 +190,6 @@ function sayOurWords(locale) {
       if (!entries) continue;
       for (const [key, phrase] of Object.entries(words)) {
         if (entries[key] !== phrase) { entries[key] = phrase; changed = true; }
-      }
-    }
-    for (const [namespace, reword] of Object.entries(REWORDED)) {
-      const entries = english(namespace);
-      if (!entries) continue;
-      for (const [key, phrase] of Object.entries(entries)) {
-        if (typeof phrase !== "string") continue;
-        const ours = reword(phrase);
-        if (ours !== phrase) { entries[key] = ours; changed = true; }
       }
     }
     if (changed) locale.publish?.(locale.snapshot?.active, false);

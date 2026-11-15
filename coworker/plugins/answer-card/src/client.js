@@ -337,6 +337,77 @@ function draftOf(block) {
 const DraftCard = inTail((props) => h(ToolStep, props),
   (props) => (props.phase === "result" && draftOf(props.block) ? h(Draft, { draft: draftOf(props.block) }) : null));
 
+/**
+ * A SCHEDULE, SET HERE AND KEPT BY THE PLATFORM (2026-11-15). There is one scheduler, the platform's, and a schedule
+ * made in a conversation is one of its automations — so this card draws no copy of it. It names what was set and
+ * asks the platform where it stands every time it is drawn (`GET /automations/<id>/schedule`, through the relay):
+ * when it runs, in the platform's own words; when next; and whether it is on, waiting for its first run, switched
+ * off, ended or gone. Its button opens the app's own page of schedules beside the conversation, on this one, where a
+ * person changes it, mutes it, runs it now and reads what each run did.
+ */
+const whenNext = (at) => {
+  const d = new Date(at);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+};
+
+/** Where a schedule stands, as one sentence. `now` is the platform's read: null when the schedule is gone. */
+export function standing(now) {
+  if (now === null) return "This schedule was removed.";
+  const next = whenNext(now.next_run);
+  if (now.state === "ended") return `Ended: ${now.ended || "it has no run left"}.`;
+  if (now.state === "off") return "Switched off. It runs again when it is switched on, on the schedule's page.";
+  if (now.state === "muted") return next ? `First run ${next}, your time.` : "Waiting for its first run.";
+  return next ? `Next run ${next}, your time.` : "On.";
+}
+
+export function Scheduled({ made }) {
+  const [now, setNow] = useState(undefined);        // undefined while it is read; null when the schedule is gone
+  const [unread, setUnread] = useState(false);
+  useEffect(() => {
+    let live = true;
+    fetch(`/pramanyx/automations/${encodeURIComponent(made.id)}/schedule`, { headers: { accept: "application/json" } })
+      .then((answer) => {
+        if (answer.status === 404) return null;
+        if (!answer.ok) throw new Error(String(answer.status));
+        return answer.json();
+      })
+      .then((got) => { if (live) setNow(got); })
+      .catch(() => { if (live) setUnread(true); });
+    return () => { live = false; };
+  }, [made.id]);
+  const frame = { border: `1px solid ${line}`, borderRadius: 6, padding: 12, margin: "10px 0",
+                  display: "flex", flexDirection: "column", gap: 6, fontSize: 13.5 };
+  const said = now && Array.isArray(now.said) && now.said.length ? now.said.join("; ") : String(made.when || "");
+  const steps = now && Array.isArray(now.steps) ? now.steps : [];
+  const sends = steps.filter((kind) => kind === "email" || kind === "slack_post" || kind === "notify");
+  return h("div", { "data-pramanyx-schedule": now === null ? "gone" : now?.state || "reading", style: frame },
+    h("div", { role: "heading", "aria-level": 4, style: { fontWeight: 600 } }, "Schedule"),
+    h("div", null, String(now?.name || made.name || "")),
+    said ? h("div", { style: quiet }, said) : null,
+    unread ? h("div", { style: quiet }, "Where this schedule stands could not be read just now.")
+      : now === undefined ? h("div", { style: quiet }, "Reading where this schedule stands…")
+        : h("div", { role: "status" }, standing(now)),
+    now && now.expires_at && now.state !== "ended" ? h("div", { style: quiet }, `It stops on ${whenNext(now.expires_at)}.`) : null,
+    now ? h("div", { style: quiet }, sends.length
+      ? `Each run is also sent on: ${sends.map((kind) => ({ email: "email", slack_post: "Slack", notify: "a notification" })[kind]).join(", ")}.`
+      : "Each run's answer is kept with the schedule. To have it sent somewhere, add a step on its page.") : null,
+    now !== null && hasPane() ? h("div", null, h("button", { type: "button", style: button(false),
+      onClick: () => openBeside("page", pageFor.schedule(made.id, String(now?.conn_id || made.connection || ""))) }, "Open the schedule")) : null);
+}
+
+/** The schedule a `schedule_question` call made, or null. */
+function scheduleOf(block) {
+  try {
+    const got = JSON.parse(resultText(block) || "{}");
+    return got && typeof got.id === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(got.id) ? got : null;
+  } catch {
+    return null;
+  }
+}
+
+const ScheduleCard = inTail((props) => h(ToolStep, props),
+  (props) => (props.phase === "result" && !props.block?.isError && scheduleOf(props.block) ? h(Scheduled, { made: scheduleOf(props.block) }) : null));
+
 /** What a call was given, whichever of the shell's shapes carries it. Nothing readable is an empty object. */
 function argsOf(block) {
   const parsed = (raw) => {
@@ -980,7 +1051,8 @@ export function apply(ctx) {
     named.add(name);
     ctx.slots.inject("tool.call.toolview", () =>
       ctx.slots.register({ name: "tool.call.toolview", key: name },
-        ANSWERS.test(name) ? AnswerCard : name === PREFIX + "draft_email" ? DraftCard : ToolStep));
+        ANSWERS.test(name) ? AnswerCard : name === PREFIX + "draft_email" ? DraftCard
+          : name === PREFIX + "schedule_question" ? ScheduleCard : ToolStep));
   };
   // The tools known when this was written are named from the first call. A view is keyed by exact tool name, so
   // one added to Pramanyx since — and each custom agent's — gets its view at the end of the first turn that calls it.

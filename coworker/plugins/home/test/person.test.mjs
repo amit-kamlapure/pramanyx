@@ -85,3 +85,15 @@ test("the page may read what was sent from a draft, and nothing else of email", 
   assert.ok(relayed("/email/sent"));
   assert.ok(!relayed("/email/send") && !relayed("/email/sent/other") && !relayed("/email"));
 });
+
+test("the relay reads where one schedule stands, and nothing else of the scheduler", async () => {
+  // The card under the turn that made a schedule asks the platform where it stands. That is a read. Making,
+  // changing, running and removing a schedule are a person's acts on the app's own page, never this relay's.
+  const { READS } = await import("../lib/index.js");
+  const relayed = (path) => READS.some((allowed) => allowed.test(path));
+  assert.ok(relayed("/automations/3f2a9c1e-77aa-4b0e-9d1e-0c5a2f6b8e11/schedule"));
+  for (const path of ["/automations", "/automations/a1", "/automations/a1/run", "/automations/a1/enabled",
+                      "/automations/a1/schedule/x", "/automations/../org-settings/schedule", "/automations/a b/schedule"]) {
+    assert.ok(!relayed(path), path);
+  }
+});

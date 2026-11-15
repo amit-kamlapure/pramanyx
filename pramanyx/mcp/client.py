@@ -589,26 +589,46 @@ class PramanyxClient:
 
     # ── A question on a rhythm, run by the platform (the coworker plan, 2026-11-15) ────────────────
     async def schedule_question(self, question: str, connection: str, cron: str, name: str = "",
-                                stop_after_minutes: int = 0) -> dict:
+                                stop_after_minutes: int = 0, timezone: str = "") -> dict:
         """An automation: a schedule trigger and one `investigate` step. It runs on the platform's own scheduler —
-        traced, listed with the other automations, under the organisation's setting for scheduled model work — never on the coworker's."""
+        traced, and listed with the other automations — never on the coworker's.
+
+        ``cron`` is the schedule's expression: a five-field cron, or a recurrence for what a cron cannot say (once, every
+        N from a start, the first Monday, five times — `automations.recurrence`). It starts at its first scheduled time,
+        never at the moment it is made (`start_at_first_run`): "every Monday at nine", asked on a Wednesday, must
+        not run that Wednesday. What comes back says when in words and when next, as the platform reads it."""
         body = {"conn_id": connection, "name": (name or question)[:120],
-                "description": "Asked from the coworker, to be asked again on a rhythm.",
-                "conditions": [{"kind": "schedule", "config": {"cron": cron}}],
-                "effects": [{"kind": "investigate", "config": {"question": question}}]}
+                "description": "Asked from the coworker, to be asked again on a schedule.",
+                "conditions": [{"kind": "schedule", "config": {"cron": str(cron).replace("\\n", "\n").strip()}}],
+                "effects": [{"kind": "investigate", "config": {"question": question}}],
+                "start_at_first_run": True}
+        # The clock its times are read in: the one the person named, else the organisation's own (Settings ▸
+        # Organisation), else UTC. The tool's words had promised "the organisation's time zone" while sending none,
+        # so "Mondays at nine" was nine in UTC whatever the organisation's clock said.
+        clock = timezone.strip()
+        if not clock:
+            settings = await self._get("/org-settings")
+            clock = str(settings.get("timezone") or "").strip() if isinstance(settings, dict) else ""
+        if clock:
+            body["timezone"] = clock
         if stop_after_minutes and stop_after_minutes > 0:
-            from datetime import datetime, timedelta, timezone
-            body["expires_at"] = (datetime.now(timezone.utc) + timedelta(minutes=int(stop_after_minutes))
+            from datetime import datetime, timedelta, timezone as _tz
+            body["expires_at"] = (datetime.now(_tz.utc) + timedelta(minutes=int(stop_after_minutes))
                                   ).strftime("%Y-%m-%dT%H:%M:%SZ")
         made = await self._post("/automations", json_body=body)
-        settings = await self._get("/org-settings")
-        off = isinstance(settings, dict) and settings.get("scheduled_model_work") is not True
-        return {"id": made.get("id"), "name": made.get("name"), "cron": cron, "enabled": made.get("enabled"),
+        when = await self._get(f"/automations/{made.get('id')}/schedule")
+        when = when if isinstance(when, dict) else {}
+        return {"id": made.get("id"), "name": made.get("name"), "connection": connection,
+                "cron": body["conditions"][0]["config"]["cron"],
+                "when": "; ".join(when.get("said") or []), "next_run": when.get("next_run") or "",
+                "timezone": when.get("timezone") or clock or "UTC",
+                "enabled": made.get("enabled"),
                 "stops_at": made.get("expires_at") or "never",
                 "on_probation": made.get("probation"),
-                "note": ("It will not run until an admin turns on scheduled model work in Settings ▸ Organisation."
-                         if off else "It runs on the platform's schedule; each run is its own trace in Agent Ops."),
-                "open": f"/automations/{made.get('id')}"}
+                "note": ("It runs on the platform's own scheduler, starting at its first scheduled time; each run is "
+                         "its own trace in Agent Ops, and it is listed under Schedules. To have a run sent somewhere "
+                         "(email, Slack), a person adds that step on the schedule's page."),
+                "open": f"/automations?conn={connection}&focus={made.get('id')}"}
 
     # ── DE-2c: the knowledge tools, through the API like everything else ───────────
     async def search_graph(self, connection: str, query: str, *, limit: int = 10) -> dict:

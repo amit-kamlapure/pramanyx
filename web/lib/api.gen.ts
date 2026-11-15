@@ -2331,6 +2331,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/automations/{automation_id}/schedule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Schedule Of
+         * @description When this automation runs, in words, and where it stands — one read for a surface that shows a schedule as a
+         *     card (the coworker's, under the turn that made it). Read every time the card is drawn: whether a schedule is on,
+         *     muted, ended or gone is a fact about the schedule, not about the page that made it.
+         */
+        get: operations["schedule_of_automations__automation_id__schedule_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/automations/{automation_id}/versions": {
         parameters: {
             query?: never;
@@ -20354,7 +20376,8 @@ export interface components {
          * Condition
          * @description One precondition on an automation firing. Combinable via ``Automation.condition_logic``.
          *
-         *     ``schedule`` is a cron expression — the *only* condition monitors and briefs have today.
+         *     ``schedule`` is a cron expression — the *only* condition monitors and briefs have today — or, in the same
+         *     ``cron`` field, a RECURRENCE for what a cron cannot say (`automations.recurrence`, 2026-11-15).
          *     ``metric`` delegates to an existing :class:`~pramanyx.monitors.models.Monitor` (by id) so the six
          *     already-tested alert conditions become available to any effect, not just to an alert.
          *     ``source_change`` fires when a table's cheap source version advanced (A3). ``entity_appears``
@@ -20623,6 +20646,11 @@ export interface components {
              * @default ordered
              */
             scheduling: string;
+            /**
+             * Start At First Run
+             * @default false
+             */
+            start_at_first_run: boolean;
             /**
              * Timezone
              * @default
@@ -30782,6 +30810,37 @@ export interface operations {
             query?: {
                 limit?: number;
             };
+            header?: never;
+            path: {
+                automation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    schedule_of_automations__automation_id__schedule_get: {
+        parameters: {
+            query?: never;
             header?: never;
             path: {
                 automation_id: string;

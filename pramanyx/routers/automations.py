@@ -72,6 +72,12 @@ class CreateAutomationRequest(BaseModel):
     #: Honoured on CREATE, for a drafted chain finished in the editor; an update keeps the
     #: stored one, as it always has. An id that names no agent is refused.
     agent_id: str = ""
+    #: 2026-11-15 — a schedule made by SENTENCE starts at its first scheduled time, not at the moment it is made
+    #: (SP-7's rule, which the inbox's accepted draft already follows). A new cron has no previous run to be due
+    #: since, so the heartbeat fires it on its next tick: "every Monday at nine", asked for on a Wednesday, ran that
+    #: Wednesday. The door that makes a schedule from a person's words (`schedule_question`) sends this; the canvas,
+    #: where a person presses Create and may want the run that proves it, does not. Read on create only.
+    start_at_first_run: bool = False
 
 
 class ProposeRequest(BaseModel):
@@ -495,6 +501,31 @@ def _admitted_triggers(payload: dict) -> dict:
     return payload
 
 
+def _a_schedule_that_can_run(automation: Automation, wait_for_first: bool) -> Automation:
+    """Two things a NEW schedule is held to. A recurrence with no run left is refused: "once, yesterday at three" would be
+    saved, look armed, and never run. And when the caller asked for it (`start_at_first_run`), a chain whose every
+    trigger is a cron is muted until its first scheduled time — the mute that already exists, with its end, so the
+    run history reads "muted until …" and a person can lift it. A recurrence needs no mute: it is never due merely for
+    being new (`engine._schedule_fired`)."""
+    from datetime import datetime, timezone
+
+    from pramanyx.automations.engine import next_fire_utc
+    from pramanyx.automations.recurrence import is_recurrence, said
+    now = datetime.now(timezone.utc)
+    for c in automation.conditions:
+        if c.kind == "schedule" and is_recurrence(c.cron) and next_fire_utc(c.cron, now, automation.timezone) is None:
+            raise HTTPException(status_code=422, detail=(
+                f"this schedule has no run left — {said(c.cron, automation.timezone) or 'its recurrence'} is already "
+                "past. Give it a later start."))
+    if wait_for_first and not automation.paused_until \
+            and all(c.kind == "schedule" and not is_recurrence(c.cron) for c in automation.conditions):
+        from pramanyx.automations.store import first_scheduled_time
+        first = first_scheduled_time(automation)
+        if first:
+            automation = automation.model_copy(update={"paused_until": first})
+    return automation
+
+
 @router.post("/automations")
 def create(body: CreateAutomationRequest):
     """Create an automation. A malformed condition or effect is rejected HERE, at construction —
@@ -507,6 +538,7 @@ def create(body: CreateAutomationRequest):
             # workspace (a pack install) stays honestly unowned.
             from pramanyx.workspace.context import current_workspace_id
             payload["workspace_id"] = current_workspace_id() or ""
+        wait_for_first = bool(payload.pop("start_at_first_run", False))
         automation = Automation(**_admitted_triggers(_keyed_triggers(payload)))
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=_validation_detail(exc)) from exc
@@ -515,6 +547,7 @@ def create(body: CreateAutomationRequest):
         if get_agent(automation.agent_id) is None:
             raise HTTPException(status_code=422,
                                 detail=f"no agent with id {automation.agent_id!r} to run this chain as")
+    automation = _a_schedule_that_can_run(automation, wait_for_first)
     # HB-2 — a DECLARED automation is born on probation, addressed to its declarer.
     # With identity off `current_user_id()` is "" and the gate's probation check is
     # inert (nobody to address the review to) — built and waiting on OIDC, exactly as
@@ -541,7 +574,7 @@ def update(automation_id: str, body: CreateAutomationRequest):
         # And the fields set by OTHER doors — the MCP flag, the schedule's clock — are kept
         # unless this request actually sends them: the canvas saves the whole record it
         # draws, which never included either, and was resetting both on every save.
-        authored = body.model_dump(exclude={"agent_id"})
+        authored = body.model_dump(exclude={"agent_id", "start_at_first_run"})
         for kept in ("exposed_as_tool", "timezone"):
             if kept not in body.model_fields_set:
                 authored[kept] = getattr(existing, kept)
@@ -599,6 +632,43 @@ def set_exposed(automation_id: str, exposed: bool = True):
     if a is None:
         raise HTTPException(status_code=404, detail="Automation not found")
     return a.model_dump()
+
+
+@router.get("/automations/{automation_id}/schedule")
+def schedule_of(automation_id: str):
+    """When this automation runs, in words, and where it stands — one read for a surface that shows a schedule as a
+    card (the coworker's, under the turn that made it). Read every time the card is drawn: whether a schedule is on,
+    muted, ended or gone is a fact about the schedule, not about the page that made it."""
+    from datetime import datetime, timezone
+
+    from pramanyx.automations.engine import ended_reason, next_fire_utc
+    from pramanyx.automations.recurrence import said_when
+    a = get_automation(automation_id)
+    if a is None:
+        raise HTTPException(status_code=404, detail="Automation not found")
+    now = datetime.now(timezone.utc)
+    ended = ended_reason(a, now)
+    muted_until = ""
+    if a.paused_until:
+        try:
+            until = datetime.fromisoformat(str(a.paused_until).replace("Z", "+00:00"))
+            if (until if until.tzinfo else until.replace(tzinfo=timezone.utc)) > now:
+                muted_until, now = str(a.paused_until), until if until.tzinfo else until.replace(tzinfo=timezone.utc)
+        except ValueError:
+            muted_until = ""
+    whens = [c for c in a.conditions if c.kind == "schedule"]
+    times = [t for c in whens if (t := next_fire_utc(c.cron, now, a.timezone)) is not None]
+    state = "ended" if ended else "off" if not a.enabled else "muted" if muted_until else "on"
+    return {
+        "id": a.id, "name": a.name, "conn_id": a.conn_id, "state": state, "ended": ended,
+        "said": [said_when(c.cron, a.timezone) for c in whens],
+        "timezone": a.timezone or "UTC",
+        # The next run only while there will be one: an ended or switched-off schedule has none to promise.
+        "next_run": min(times).strftime("%Y-%m-%dT%H:%M:%SZ") if times and state in ("on", "muted") else "",
+        "muted_until": muted_until, "expires_at": a.expires_at or "",
+        "last_run_at": a.last_run_at or "", "last_status": a.last_status or "",
+        "steps": [e.kind for e in a.effects],
+    }
 
 
 @router.get("/automations/{automation_id}/doors")

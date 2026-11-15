@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { cronWords, nextFireUtc, parseCron, toCron } from "@/components/automations/ScheduleEditor";
+import { cronWords, isRecurrence, nextFireUtc, parseCron, toCron } from "@/components/automations/ScheduleEditor";
 
 describe("parseCron / toCron", () => {
   it("round-trips the platform's own shapes", () => {
@@ -57,5 +57,46 @@ describe("nextFireUtc", () => {
   });
   it("guesses nothing for a custom expression", () => {
     expect(nextFireUtc("*/5 * * * *", now)).toBeNull();
+  });
+});
+
+/**
+ * 2026-11-15 — one scheduler. What only the dropped one could say about time (once; every N from a start) is
+ * stated here as a person states it, and written as the recurrence the server reads (`automations/recurrence.py`).
+ */
+describe("once, and every N from a start", () => {
+  const ONCE = "DTSTART:20261116T150000\nRRULE:FREQ=DAILY;COUNT=1";
+  const NINETY = "DTSTART:20261116T090000\nRRULE:FREQ=MINUTELY;INTERVAL=90";
+  const FORTNIGHT = "DTSTART:20261116T090000\nRRULE:FREQ=WEEKLY;INTERVAL=2";
+
+  it("reads them into their parts and writes them back unchanged", () => {
+    expect(parseCron(ONCE)).toMatchObject({ occurrence: "once", date: "2026-11-16", time: "15:00" });
+    expect(parseCron(NINETY)).toMatchObject({ occurrence: "every", every: 90, unit: "minutes", date: "2026-11-16", time: "09:00" });
+    expect(parseCron(FORTNIGHT)).toMatchObject({ occurrence: "every", every: 2, unit: "weeks" });
+    for (const written of [ONCE, NINETY, FORTNIGHT]) expect(toCron(parseCron(written))).toBe(written);
+  });
+  it("says them in the server's own words, the clock named", () => {
+    expect(cronWords(ONCE)).toBe("Once, on Mon 16 Nov 2026 at 15:00 UTC");
+    expect(cronWords(ONCE, "Europe/Berlin")).toBe("Once, on Mon 16 Nov 2026 at 15:00 Europe/Berlin");
+    expect(cronWords(NINETY)).toBe("Every 90 minutes, from Mon 16 Nov 2026 at 09:00 UTC");
+    expect(cronWords(FORTNIGHT)).toBe("Every 2 weeks on Mon at 09:00 UTC, from Mon 16 Nov 2026");
+    expect(cronWords("DTSTART:20261116T090000\nRRULE:FREQ=DAILY;INTERVAL=1")).toBe("Every day at 09:00 UTC");
+  });
+  it("keeps a recurrence it does not state as custom, untouched, and quotes it", () => {
+    for (const written of ["DTSTART:20261207T090000\nRRULE:FREQ=MONTHLY;BYDAY=1MO;COUNT=6",
+                        "DTSTART;TZID=Asia/Kolkata:20261116T090000\nRRULE:FREQ=DAILY;COUNT=1",
+                        "DTSTART:20261116T090000Z\nRRULE:FREQ=DAILY;COUNT=1"]) {
+      expect(isRecurrence(written)).toBe(true);
+      const s = parseCron(written);
+      expect(s.occurrence).toBe("custom");
+      expect(toCron(s)).toBe(written);
+    }
+    expect(cronWords("DTSTART:20261207T090000\nRRULE:FREQ=MONTHLY;BYDAY=1MO;COUNT=6"))
+      .toBe("On the recurrence RRULE:FREQ=MONTHLY;BYDAY=1MO;COUNT=6 (UTC)");
+    expect(isRecurrence("0 9 * * 1")).toBe(false);
+  });
+  it("guesses no next run for a recurrence: its words already say when", () => {
+    expect(nextFireUtc(ONCE, new Date(Date.UTC(2026, 10, 15)))).toBeNull();
+    expect(nextFireUtc(NINETY, new Date(Date.UTC(2026, 10, 15)))).toBeNull();
   });
 });

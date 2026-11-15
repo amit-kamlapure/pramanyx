@@ -29,6 +29,7 @@ import {
   revokeGrant,
 } from "@/lib/api";
 import { type DraftKeeps } from "@/components/automations/AutomationAuthor";
+import { cronWords, isRecurrence } from "@/components/automations/ScheduleEditor";
 import { ghostBtn, useIntegrationGrants } from "@/components/automations/AutomationRows";
 import { ProposalCard } from "@/components/ProposalCard";
 import { bindingRefs } from "@/lib/automationFlow";
@@ -595,7 +596,7 @@ function AutomationCard({ a, onToggle, onPause, onRun, onEdit, onDelete, onRuns,
             {a.last_status && <span style={{ color: OUTCOME_COLOR[a.last_status] || "var(--t3)", fontSize: 11 }}>● {a.last_status}</span>}
           </div>
           <div style={{ fontSize: 11, color: "var(--t3)", marginTop: 2 }}>
-            {a.conditions.map(describeCondition).join(a.condition_logic === "all" ? " AND " : " OR ")}
+            {a.conditions.map(c => describeCondition(c, a.timezone)).join(a.condition_logic === "all" ? " AND " : " OR ")}
             {" → "}
             {a.effects.map(describeEffect).join(", ")}
           </div>
@@ -854,8 +855,12 @@ function InboxView({ conn, proposals, grants, onReload, flash, onOpenInEditor }:
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-function describeCondition(c: AutoCondition): string {
-  if (c.kind === "schedule") return `schedule(${c.config.cron ?? ""})`;
+function describeCondition(c: AutoCondition, timezone = ""): string {
+  if (c.kind === "schedule") {
+    // A cron as written; a recurrence (once, every N from a start) in words — its two lines are not a summary.
+    const cron = String(c.config.cron ?? "");
+    return `schedule(${isRecurrence(cron) ? cronWords(cron, timezone) : cron})`;
+  }
   if (c.kind === "metric") return `metric(${c.config.monitor_id ?? ""})`;
   return `${c.kind}(${c.config.table ?? ""})`;
 }

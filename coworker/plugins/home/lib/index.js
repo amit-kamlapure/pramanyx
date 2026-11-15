@@ -22,6 +22,10 @@ export const READS = [
   // What went out from one email draft (`pramanyx/routers/email.py`): a draft that was sent says so whenever the
   // conversation is opened, because "sent" is read from Pramanyx's journal and not remembered by the page.
   /^\/email\/sent$/,
+  // One schedule, as the platform has it now (`GET /automations/<id>/schedule`): when it runs in words, when next,
+  // and whether it is on, muted, ended or gone. The card under the turn that made a schedule reads this every time
+  // it is drawn, because where a schedule stands is a fact about the schedule and not about the page that made it.
+  /^\/automations\/[A-Za-z0-9_-]{1,64}\/schedule$/,
 ];
 
 import { mkdir, writeFile } from "node:fs/promises";

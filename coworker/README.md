@@ -29,6 +29,13 @@ tools taken out, under the shell's MIT licence.
 - **Everything that reports to the shell's maker**, and the feedback buttons that would feed it.
 - **The shell's own account**: its sign-in, its account settings, its session-log export and "Feedback" entry.
   A person here is who Pramanyx says they are.
+- **The shell's own scheduler**: its store of timed reminders, its page, its clock marks on a conversation, and the
+  four tools that let an agent make one. There is one scheduler and it is Pramanyx's. Measured side by side
+  (2026-11-15): the shell's delivers a sentence into a conversation at a time, with no trigger but the clock, no
+  record of what the run produced, no owner, and it stops when this process does; Pramanyx's fires on a clock or on
+  the data, runs governed steps, keeps every run, retries, and is the list every other surface shows. It held no
+  schedules when it was turned off. What it could say about time that Pramanyx's could not — once, every N from a
+  start, the first Monday, five times — Pramanyx's now says (`pramanyx/automations/recurrence.py`).
 
 The overlay is passed on the command line, so it outranks the Settings page: a row turned off here cannot be
 turned back on from the interface.
@@ -98,8 +105,17 @@ turned back on from the interface.
   the first screen's wording, the app's dark palette, small corners, and a plain ring where the shell draws its
   animal while an answer is worked on.
 - **The sidebar.** New conversation, Agents, Schedules, and conversations in one newest-first list. Agents opens a
-  page of a person's own agents; asking one begins a new conversation. Schedules is the shell's own scheduled
-  runs, reworded. The one-list view is the shell's own option, chosen once on a first visit.
+  page of a person's own agents; asking one begins a new conversation. Schedules opens the app's own page of
+  schedules and automations (`/automations`), in a frame: the one list, where a person makes a schedule, changes
+  when it runs, mutes it, runs it now and reads what each run did. The one-list view is the shell's own option,
+  chosen once on a first visit.
+- **A schedule set in a conversation is the platform's.** Asked to ask something again — every Monday, once
+  tomorrow at three, every second Friday — the agent sets it up with `schedule_question`, and it is one of
+  Pramanyx's automations: it starts at its first scheduled time, runs whether or not the coworker is open, and is
+  listed under Schedules. Under the turn that made it is a card that draws no copy: it asks the platform where the
+  schedule stands each time it is drawn (on, waiting for its first run, switched off, ended, removed) and its
+  button opens the schedule on the app's page beside the conversation. The agent cannot make a schedule send
+  anything: a person adds an email or Slack step on that page.
 - **The first screen.** The mark on a tile over a large headline, then the question box. Under it: questions worth
   asking of a chosen connection as plain lines, and two cards — the questions asked lately (each with its
   connection and how long ago) and a person's own agents. Each row writes a question into the box; nothing is
@@ -149,8 +165,9 @@ turned back on from the interface.
   agent was given and what it said are in the shell's own log, and each event says where (`shell_session`, `seq`).
   `node --test plugins/home/test/trace.test.mjs` covers what is sent and what is not.
 - **A read-only relay**, `/pramanyx/…` on the shell's own server, so the page can read Pramanyx without the API's
-  allowed origins being changed. It relays five paths (`/connections`, `/suggestions`, `/agents/custom`,
-  `/investigations`, `/sheets`), GET and HEAD only, and answers 404 for anything else.
+  allowed origins being changed. It relays the paths the page reads (`/connections`, `/suggestions`,
+  `/agents/custom`, `/investigations`, `/sheets`, an answer's export, what was sent from an email draft, and where
+  one schedule stands), GET and HEAD only, and answers 404 for anything else.
 
 ## Run it
 
@@ -221,8 +238,13 @@ admin allows "Let the coworker ask its models through Pramanyx" in Settings ▸ 
   rename, archive and delete); pinned items.
 - Both modes ask as the narrator role. Quick does not use the fast one: a mode has no model of its own here yet.
   Quick's voice paragraphs are a copy of Agent's in `profile.patch.yml`; a change to one is made in both.
-- **A schedule made here spends Pramanyx model calls unattended**, and Pramanyx's own setting for scheduled model
-  work does not see it: the run arrives as an ordinary question over MCP.
+- **A schedule's answer does not arrive in a conversation.** The shell's scheduler put each run into a chat as a
+  new turn; Pramanyx's keeps each run with the schedule (its History, on the Schedules page) and sends it on only
+  through a step a person added. Nothing brings a run's answer back into the conversation that set it up.
+- **A schedule made here spends model calls unattended.** It is a person's own request, so the organisation's
+  setting for model work nobody asked for does not apply to it; nothing else caps it but the usage limits.
+- The Schedules page opens on the connection last chosen on the first screen, and the frame takes the app's own
+  light or dark, not the coworker's.
 - The door relays to a provider on the chat-completions wire. An organisation whose roles are bound to one that
   is not (Anthropic's own API today) is told so by name, and the coworker cannot answer until a role is bound to
   one that is.
