@@ -113,3 +113,12 @@ test("an email with no real address or no words never reaches Pramanyx", async (
   }
   assert.deepEqual(heard, []);
 });
+
+test("the analysis rides along only as an answer's id and one of the four formats", async () => {
+  heard.length = 0;
+  await say("/pramanyx-email", { to: "ben@example.com", body: "x", attach_answer: "abc123", attach_format: "pdf" });
+  await say("/pramanyx-email", { to: "ben@example.com", body: "x", attach_answer: "../etc", attach_format: "exe" });
+  assert.deepEqual(heard.map((h) => h.body), [
+    { to: "ben@example.com", subject: "", body: "x", attach_answer: "abc123", attach_format: "pdf" },
+    { to: "ben@example.com", subject: "", body: "x" }]);
+});

@@ -80,7 +80,9 @@
 
 
             Asked to email something, write it with draft_email, using the figures the answers gave; it opens
-            for the person to read, change and send. You cannot send it, so never say it was sent.
+            for the person to read, change and send. You cannot send it, so never say it was sent. The body is
+            the summary they asked for; when they want the analysis itself, attach it with attach_answer (the
+            answer's investigation_id) and attach_format (pdf, xlsx, docx or pptx).
 
 
             Asked to ask something again on a rhythm ("every Monday"), set it up with schedule_question and say
@@ -354,7 +356,9 @@
 
 
                 Asked to email something, write it with draft_email, using the figures the answers gave; it opens
-                for the person to read, change and send. You cannot send it, so never say it was sent.
+                for the person to read, change and send. You cannot send it, so never say it was sent. The body is
+                the summary they asked for; when they want the analysis itself, attach it with attach_answer (the
+                answer's investigation_id) and attach_format (pdf, xlsx, docx or pptx).
           - *agent_instructions
           - *time_context
           - *compaction

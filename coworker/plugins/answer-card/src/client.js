@@ -213,10 +213,18 @@ const AnswerCard = inTail((props) => h(AnswerStep, props), (props) => h(Card, pr
  * (`/pramanyx-email`, which presents the person the app handed over) to Pramanyx's `/email/send`, which refuses an
  * agent. What happened is said where it happened: sent to whom, or why not.
  */
+/** What an analysis can be attached as: the platform's own exports, never a file the model wrote. */
+const ATTACH = [["", "No attachment"], ["pdf", "The analysis as PDF"], ["xlsx", "The analysis as Excel, every row"],
+  ["docx", "The analysis as Word"], ["pptx", "The analysis as PowerPoint"]];
+
 export function Draft({ draft }) {
   const [to, setTo] = useState(String(draft?.to || ""));
   const [subject, setSubject] = useState(String(draft?.subject || ""));
   const [body, setBody] = useState(String(draft?.body || ""));
+  // The answer whose analysis may ride along — named by the agent when the person asked for it, or the answer an
+  // "Email this" was opened from. None known, no attachment is offered.
+  const answerId = String(draft?.attach_answer || "");
+  const [attach, setAttach] = useState(answerId ? String(draft?.attach_format || "") : "");
   const [state, setState] = useState({ busy: false, sent: false, said: "" });
   const field = { width: "100%", boxSizing: "border-box", font: "inherit", fontSize: 13.5, padding: "6px 8px",
                   border: `1px solid ${line}`, borderRadius: 6, background: "transparent", color: "inherit" };
@@ -224,7 +232,8 @@ export function Draft({ draft }) {
     setState({ busy: true, sent: false, said: "" });
     try {
       const answer = await fetch("/pramanyx-email", { method: "POST", headers: { "content-type": "application/json" },
-                                                      body: JSON.stringify({ to, subject, body }) });
+                                                      body: JSON.stringify({ to, subject, body,
+                                                        ...(attach && answerId ? { attach_answer: answerId, attach_format: attach } : {}) }) });
       const said = await answer.json().catch(() => ({}));
       if (!answer.ok) return setState({ busy: false, sent: false, said: String(said.detail || `The email was refused (${answer.status}).`) });
       setState({ busy: false, sent: !!said.sent, said: String(said.said || (said.sent ? "Sent." : "Not sent.")) });
@@ -247,6 +256,10 @@ export function Draft({ draft }) {
       h("span", { style: quiet }, "Message"),
       h("textarea", { rows: 8, value: body, disabled: state.sent, style: { ...field, resize: "vertical", lineHeight: 1.5 },
                       onChange: (e) => setBody(e.target.value) })),
+    answerId ? h("label", { style: { display: "flex", flexDirection: "column", gap: 3 } },
+      h("span", { style: quiet }, "Attach"),
+      h("select", { value: attach, disabled: state.sent, style: field, onChange: (e) => setAttach(e.target.value) },
+        ATTACH.map(([value, label]) => h("option", { key: value || "none", value }, label)))) : null,
     h("div", { style: { display: "flex", alignItems: "center", gap: 10 } },
       h("button", { type: "button", style: button(true), disabled: !ready, onClick: send },
         state.busy ? "Sending…" : state.sent ? "Sent" : "Send"),
@@ -855,7 +868,9 @@ function emailOf(answer) {
   const told = answer.narrative && typeof answer.narrative === "object" ? String(answer.narrative.narrative || "").replace(/\*\*/g, "") : "";
   const rows = (answer.rows ?? []).slice(0, 20).map((r) => r.join(" · "));
   return { to: "", subject: String(answer.answer || answer.question || "From Pramanyx").slice(0, 150),
-           body: [answer.answer, told, rows.length ? [(answer.columns ?? []).join(" · "), ...rows].join("\n") : ""].filter(Boolean).join("\n\n") };
+           body: [answer.answer, told, rows.length ? [(answer.columns ?? []).join(" · "), ...rows].join("\n") : ""].filter(Boolean).join("\n\n"),
+           // "Email this" knows its answer, so the analysis can be attached.
+           attach_answer: answer.investigation_id ? String(answer.investigation_id) : "", attach_format: "" };
 }
 
 function Files({ answer, id }) {

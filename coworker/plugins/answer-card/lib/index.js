@@ -31,7 +31,10 @@ const SAYINGS = {
     most: 256 * 1024,                  // an email carries a table's worth of text; a verdict never needs this much
     body: (said) => (typeof said.to === "string" && /^[^@\s,;<>]+@[^@\s,;<>]+\.[^@\s,;<>]+$/.test(said.to.trim())
                      && typeof said.body === "string" && said.body.trim()
-      ? { to: said.to.trim().slice(0, 320), subject: text(said.subject, 300), body: text(said.body, 100000) } : null),
+      ? { to: said.to.trim().slice(0, 320), subject: text(said.subject, 300), body: text(said.body, 100000),
+          // The analysis to attach, when the person chose one: an answer's id and one of the four export formats.
+          ...(ID.test(said.attach_answer || "") && ["pdf", "xlsx", "docx", "pptx"].includes(said.attach_format)
+            ? { attach_answer: said.attach_answer, attach_format: said.attach_format } : {}) } : null),
   },
   "/pramanyx-verdict": {
     to: "/verify/verdict",

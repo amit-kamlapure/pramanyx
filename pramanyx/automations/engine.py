@@ -1119,7 +1119,18 @@ def _dispatch_email(effect: Effect, automation: Automation) -> EffectOutcome:
     if verdict is not None and verdict.held:
         return EffectOutcome(kind=effect.kind, target=f"email:{to}", status="held",
                              message=f"held at departure — {verdict.reason_sentence()}")
-    ok, said = send_email(to, subject, body, connection_id=str(effect.config.get("connection_id") or ""))
+    attachment = None
+    fmt = str(effect.config.get("attach_format") or "").strip()
+    if fmt:
+        # The analysis this chain ran, as a file (`attach_investigation`, bound from the investigate step); a step
+        # that asks for one never sends without it.
+        from pramanyx.automations.email import answer_attachment
+        attachment, why = answer_attachment(str(effect.config.get("attach_investigation") or ""), fmt)
+        if attachment is None:
+            return EffectOutcome(kind=effect.kind, target=f"email:{to}", status="dispatch_error",
+                                 message=f"not sent: {why}")
+    ok, said = send_email(to, subject, body, connection_id=str(effect.config.get("connection_id") or ""),
+                          attachment=attachment)
     return EffectOutcome(kind=effect.kind, target=f"email:{to}", status="executed" if ok else "dispatch_error",
                          message=said)
 

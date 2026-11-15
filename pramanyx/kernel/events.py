@@ -57,7 +57,7 @@ CATALOGUE: dict[str, dict[str, Any]] = {
     "mcp.oauth": {"what": "a person signed in to an OAuth-authenticated MCP server, failed to, or signed out", "payload": ["server_id", "action", "by", "detail"], "emitted_by": "mcpservers/oauth"},
     "chat.feedback": {"what": "a person's verdict on a chat turn", "payload": ["turn_id", "verdict", "note", "by"], "emitted_by": "routers/query"},
     "directory.imported": {"what": "people were imported into the directory: added, changed, deactivated, and their teams' groups", "payload": ["by", "added", "changed", "deactivated", "unchanged", "teams_new", "refused", "full"], "emitted_by": "rbac/directory"},
-    "email.sent": {"what": "a person sent an email from the coworker, or tried to; who, to whom, the subject and the outcome", "payload": ["by", "to", "subject", "sent", "said"], "emitted_by": "routers/email"},
+    "email.sent": {"what": "a person sent an email from the coworker, or tried to; who, to whom, the subject and the outcome", "payload": ["by", "to", "subject", "sent", "said", "attached"], "emitted_by": "routers/email"},
     "web.searched": {"what": "the coworker searched the web for outside context; the words searched left the install", "payload": ["query", "provider", "results", "by"], "emitted_by": "web_search"},
     "trace.feedback": {"what": "a person's verdict on a run", "payload": ["trace_id", "verdict", "note", "by"], "emitted_by": "routers/obs"},
     "trace.payload_access": {"what": "a run's captured payload was read", "payload": ["trace_id"], "emitted_by": "routers/obs"},
