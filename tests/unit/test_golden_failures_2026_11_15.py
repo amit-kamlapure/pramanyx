@@ -187,3 +187,18 @@ def test_a_number_in_no_cell_is_still_rewritten():
     said, receipt = ground_answer_numbers("6,400 orders were cancelled.", [["cancelled", 5872]],
                                           question="How many cancelled?", provider=_Rewriter())
     assert said == "5,872 orders were cancelled." and receipt["action"] == "rewrote the answer"
+
+
+def test_the_gap_between_two_measured_figures_is_measured(monkeypatch):
+    from datetime import datetime, timezone
+
+    from pramanyx.govern import departure as D
+    from pramanyx.govern import departure_basis as B
+    record = {"connection_id": "", "completed_at": datetime.now(timezone.utc).isoformat(),
+              "report": {"phases": [{"findings": [{
+                  "sql": "SELECT platform, SUM(gmv_eur) AS gmv FROM orders GROUP BY 1", "columns": ["platform", "gmv"],
+                  "row_count": 2, "rows": [["Mytheresa", 1194379.82], ["NET-A-PORTER", 970096.14]]}]}]}}
+    monkeypatch.setattr(B, "_analysis_record", lambda inv_id: record)
+    measured = B.measurement_for_analysis("abcdef12")
+    assert D._remeasure("Mytheresa leads NET-A-PORTER by €224k.", measured, False).outcome != D.HOLDS
+    assert D._remeasure("Mytheresa leads NET-A-PORTER by €310k.", measured, False).outcome == D.HOLDS

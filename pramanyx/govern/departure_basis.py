@@ -132,7 +132,8 @@ def _collect_results(obj, out: list, depth: int = 0) -> None:
             count = obj.get("row_count")
             out.append({"sql": sql,
                         "cells": cell_values(rows[:MAX_ROWS_PER_RESULT])
-                        + _totals_of(sql, obj.get("columns"), rows, count if isinstance(count, int) else len(rows))})
+                        + _totals_of(sql, obj.get("columns"), rows, count if isinstance(count, int) else len(rows))
+                        + _gaps_of(rows)})
         for value in obj.values():
             _collect_results(value, out, depth + 1)
     elif isinstance(obj, list):
@@ -158,6 +159,30 @@ def _totals_of(sql: str, columns, rows: list, row_count: int) -> list:
         tolerate(exc, "departure basis: a result's totals could not be computed; its cells still ground",
                  counter="departures.basis_totals")
         return []
+
+
+#: The most rows a result may have for its within-column gaps to count as measured — few enough that a made-up figure
+#: has little room to match one by chance.
+MAX_GAP_ROWS = 12
+
+
+def _gaps_of(rows: list) -> list:
+    """The gaps between two figures of the same column of a small result — "Mytheresa leads NET-A-PORTER by €224k" —
+    as measured values. A difference of two measured values is measured too, as the Briefing's gate already counts it
+    (`briefing.ranges.fresh_measurement`); a scheduled summary to Slack was held on exactly that gap (2026-11-15)."""
+    if not rows or len(rows) > MAX_GAP_ROWS:
+        return []
+    from pramanyx.explorer.grounding import cell_values
+    table = [list(r.values()) if isinstance(r, dict) else list(r or []) for r in rows]
+    width = min(len(r) for r in table)
+    gaps: list = []
+    for col in range(width):
+        column = [cell_values([[r[col]]]) for r in table]
+        if not all(len(c) == 1 for c in column):
+            continue                                            # a label column, or one with gaps in it
+        values = [c[0] for c in column]
+        gaps += [abs(a - b) for i, a in enumerate(values) for b in values[i + 1:] if a != b]
+    return gaps
 
 
 def _as_of_in(period: str) -> str:
