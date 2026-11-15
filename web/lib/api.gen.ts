@@ -8249,6 +8249,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/integrations/connections/{conn_id}/account": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Read The Account
+         * @description The connected account's address — recorded at connect, else read from the provider once and recorded
+         *     (`broker.account_of`). What a card says it is connected as, and the "send to me" an email step can name.
+         */
+        post: operations["read_the_account_integrations_connections__conn_id__account_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/integrations/connections/{conn_id}/revoke": {
         parameters: {
             query?: never;
@@ -40669,6 +40690,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    read_the_account_integrations_connections__conn_id__account_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
