@@ -824,6 +824,20 @@ def ground_answer_numbers(answer: str, rows: list, *, question: str = "",
         return answer, None
 
     bad = ", ".join(offending[:5])
+    # A number the label check doubts but the turn MEASURED is kept (2026-11-15). "801 orders were cancelled in fiscal
+    # 2025" sat beside an all-years "cancelled | 5,872" row and read as a contradiction; 801 was a cell of the turn's
+    # own filtered query. The rewrite that followed turned a right answer into "I can't give a count". So: when the
+    # magnitudes all ground and every doubted pair's number is a cell somewhere in the turn, the answer stands, and the
+    # doubt is on its receipt. A number that is in no cell at all is still rewritten or withheld below.
+    from pramanyx.explorer.grounding import figures_found
+    if not list(verify_finding(text, cells).ungrounded) and all(
+            figures_found(pair.split("=", 1)[-1], cells) for pair in offending):
+        return answer, {
+            "guard": "numeric grounding",
+            "action": "kept the answer",
+            "detail": f"{bad}: each number is a measured cell of this turn, beside a different row's label — kept, "
+                      "not rewritten",
+        }
     logger.info("converse: answer carried ungrounded number(s) %s; re-grounding", bad)
 
     try:

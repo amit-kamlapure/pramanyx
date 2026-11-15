@@ -163,3 +163,27 @@ def test_the_gate_counts_an_analysis_total_as_measured_and_still_holds_a_wrong_o
     assert ok.outcome != D.HOLDS, ok
     wrong = D._remeasure("FY2027 GMV to 14 November: €3,500,000.00 across the four platforms.", measured, False)
     assert wrong.outcome == D.HOLDS
+
+
+# ── the rewrite never worsens a right answer (lc01, 2026-11-15) ───────────────────────────────────────────────
+
+def test_a_doubted_number_the_turn_measured_is_kept_not_rewritten():
+    from pramanyx.agent.converse_tools import ground_answer_numbers
+    rows = [["cancelled", 5872], ["shipped", 72618], ["returned", 68212],      # all years, by status
+            [801]]                                                             # the turn's filtered count
+    answer = "801 orders were cancelled in fiscal year 2025."
+    said, receipt = ground_answer_numbers(answer, rows, question="How many orders were cancelled in FY2025?",
+                                          provider=_Never())
+    assert said == answer and receipt["action"] == "kept the answer"
+
+
+def test_a_number_in_no_cell_is_still_rewritten():
+    from pramanyx.agent.converse_tools import ground_answer_numbers
+
+    class _Rewriter:
+        def complete(self, **kw):
+            from types import SimpleNamespace
+            return SimpleNamespace(answer="5,872 orders were cancelled.")
+    said, receipt = ground_answer_numbers("6,400 orders were cancelled.", [["cancelled", 5872]],
+                                          question="How many cancelled?", provider=_Rewriter())
+    assert said == "5,872 orders were cancelled." and receipt["action"] == "rewrote the answer"
