@@ -112,6 +112,13 @@ const FACTS: React.CSSProperties = {
   display: "grid", gridTemplateColumns: "minmax(110px, 150px) minmax(0, 1fr)", gap: "4px 12px", padding: "8px 0 4px 22px",
 };
 
+/** The choices still worth offering on a card: not granted yet, and not "both" once either half is — adding the
+ *  missing half is the one choice left (2026-11-15). */
+function offered(options: NonNullable<IntegrationProvider["products"]>[number]["options"] = []) {
+  const anyOn = options.some(o => o.connected);
+  return options.filter(o => !o.connected && !(anyOn && o.id === "both"));
+}
+
 /** Connect one of a provider's products, chosen from a menu — the button a "Needs you" row carries. */
 function ConnectMenu({ p, label, busy, onConnect }: {
   p: IntegrationProvider; label: string; busy: boolean; onConnect: (provider: string, product: string) => void;
@@ -284,7 +291,7 @@ export function IntegrationsPanel() {
     }
   };
 
-  const connect = async (provider: string, product?: string) => {
+  const connect = async (provider: string, product?: string, option?: string) => {
     // A NEW tab, so this one survives to refetch on refocus. It opens inside the click,
     // before anything is awaited — a tab opened after an await is a pop-up the browser may
     // block — and is pointed at the consent screen once the API has the URL. It used to be
@@ -295,7 +302,7 @@ export function IntegrationsPanel() {
     setBusy(product ? `${provider}:${product}` : provider);
     setError("");
     try {
-      const url = await beginIntegrationConnect(provider, product);
+      const url = option ? await beginIntegrationConnect(provider, product, option) : await beginIntegrationConnect(provider, product);
       if (tab && !tab.closed) {
         tab.opener = null;
         tab.location.href = url;
@@ -562,7 +569,27 @@ export function IntegrationsPanel() {
                     minHeight: 28 }}>
                   <BrandTile type={pr.name} size={20} />
                   <span className="aug-fs-sm" title={about} style={{ ...ONE_LINE, color: "var(--t1)" }}>{pr.name}</span>
-                  {pr.connected ? <Chip tone="up">connected</Chip> : (
+                  {pr.options?.length ? (
+                    // A card with a choice (Gmail, 2026-11-15): what is granted, and the rest to choose from.
+                    <span style={{ ...ROW, gap: 6, flexWrap: "nowrap" }}>
+                      {pr.options.filter(o => o.connected && o.id !== "both").map(o => <Chip key={o.id} tone="up">{o.label.toLowerCase()}</Chip>)}
+                      {offered(pr.options).length > 0 && (
+                        <DropdownMenu.Root>
+                          <DropdownMenu.Trigger>
+                            <Button variant="outline" size="xs" disabled={!p.configured || !!p.client_id_problem || busy === key}
+                              data-testid={`integration-product-${pr.id}-connect`}>
+                              {busy === key ? "…" : pr.options.some(o => o.connected) ? "Add" : "Connect"} <Icon name="chevd" size={12} />
+                            </Button>
+                          </DropdownMenu.Trigger>
+                          <DropdownMenu.Content size="1" align="end">
+                            {offered(pr.options).map(o => (
+                              <DropdownMenu.Item key={o.id} onSelect={() => void connect(p.id, pr.id, o.id)}>{o.label}</DropdownMenu.Item>
+                            ))}
+                          </DropdownMenu.Content>
+                        </DropdownMenu.Root>
+                      )}
+                    </span>
+                  ) : pr.connected ? <Chip tone="up">connected</Chip> : (
                     <Button variant="outline" size="xs" disabled={!p.configured || !!p.client_id_problem || busy === key}
                       title={p.client_id_problem ? p.client_id_problem
                         : p.configured ? undefined : `Set up the ${p.name} app first — one app serves every ${p.name} product`}

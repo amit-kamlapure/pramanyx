@@ -37,6 +37,26 @@ class Product(BaseModel):
     blurb: str
     #: Space-separated scopes this product's card requests, beside the provider's own.
     scopes: str
+    #: What a person may choose to grant on this one card (the user, 2026-11-15: Gmail is one card, with a choice of
+    #: reading, sending or both). Empty for a card with one thing to grant. Each option's scopes are its own.
+    options: list["ProductOption"] = []
+
+    def option(self, option_id: str) -> "ProductOption | None":
+        return next((o for o in self.options if o.id == option_id), None)
+
+    @property
+    def all_scopes(self) -> set[str]:
+        return set(self.scopes.split()) | {s for o in self.options for s in o.scopes.split()}
+
+
+class ProductOption(BaseModel):
+    """One choice on a product's card — "Read", "Send", "Read and send"."""
+    id: str
+    label: str
+    scopes: str
+
+
+Product.model_rebuild()
 
 
 class Provider(BaseModel):
@@ -91,7 +111,8 @@ class Provider(BaseModel):
     def products_needing(self, scopes: str) -> list["Product"]:
         """The products of this provider whose scopes are among ``scopes`` — what a withheld grant leaves unconnected."""
         missing = set((scopes or "").split())
-        return [p for p in self.products if set(p.scopes.split()) & missing]
+        # A card with a choice counts its choices' scopes too: a withheld "send" names Gmail (2026-11-15).
+        return [p for p in self.products if p.all_scopes & missing]
 
     def client_id_problem(self, client_id: str) -> str:
         """Why ``client_id`` cannot be this provider's client id, in words; "" when it can (or no shape is known)."""
@@ -108,7 +129,7 @@ class Provider(BaseModel):
     @property
     def requestable_scopes(self) -> set[str]:
         """Every scope this provider's cards may ask for — its own, and each product's."""
-        return set(self.default_scopes.split()) | {s for p in self.products for s in p.scopes.split()}
+        return set(self.default_scopes.split()) | {s for p in self.products for s in p.all_scopes}
 
 
 _GOOGLE_AUTH = "https://www.googleapis.com/auth/"
@@ -136,8 +157,15 @@ PROVIDERS: dict[str, Provider] = {p.id: p for p in [
         # Read-only, each the narrowest scope its tools need — Drive lists files by their
         # metadata and never reads their contents.
         products=[
-            Product(id="gmail", name="Gmail", blurb="Search and read your email.",
-                    scopes=_GOOGLE_AUTH + "gmail.readonly"),
+            # One Gmail card with a choice (the user, 2026-11-15): reading and sending stay two Google permissions —
+            # sending never rides in on a read — and a person picks either or both. `scopes` is the read, which is
+            # what the card meant before it had a choice.
+            Product(id="gmail", name="Gmail", blurb="Search and read your email, send email, or both.",
+                    scopes=_GOOGLE_AUTH + "gmail.readonly",
+                    options=[ProductOption(id="read", label="Read and search", scopes=_GOOGLE_AUTH + "gmail.readonly"),
+                             ProductOption(id="send", label="Send", scopes=_GOOGLE_AUTH + "gmail.send"),
+                             ProductOption(id="both", label="Read and send",
+                                           scopes=_GOOGLE_AUTH + "gmail.readonly " + _GOOGLE_AUTH + "gmail.send")]),
             Product(id="sheets", name="Google Sheets", blurb="Read the cells of a spreadsheet.",
                     scopes=_GOOGLE_AUTH + "spreadsheets.readonly"),
             Product(id="slides", name="Google Slides", blurb="Read the text of a presentation, slide by slide.",

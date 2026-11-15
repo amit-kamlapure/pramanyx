@@ -128,13 +128,61 @@ def _collect_results(obj, out: list, depth: int = 0) -> None:
         rows = obj.get("rows")
         if isinstance(rows, list) and rows:
             from pramanyx.explorer.grounding import cell_values
-            out.append({"sql": str(obj.get("sql") or ""),
-                        "cells": cell_values(rows[:MAX_ROWS_PER_RESULT])})
+            sql = str(obj.get("sql") or "")
+            count = obj.get("row_count")
+            out.append({"sql": sql,
+                        "cells": cell_values(rows[:MAX_ROWS_PER_RESULT])
+                        + _totals_of(sql, obj.get("columns"), rows, count if isinstance(count, int) else len(rows))
+                        + _gaps_of(rows)})
         for value in obj.values():
             _collect_results(value, out, depth + 1)
     elif isinstance(obj, list):
         for value in obj:
             _collect_results(value, out, depth + 1)
+
+
+def _totals_of(sql: str, columns, rows: list, row_count: int) -> list:
+    """Each additive column's total over every row of a result, as measured values — computed by code exactly as the
+    conversation is given them to quote (`tools.postproc.column_totals`), and only when every row is present.
+
+    Found by scheduling a summary to Slack (2026-11-15): "FY2027 GMV to 14 November: €3,071,674.70 across the
+    platforms" was held at every run, because a total is no cell of the rows it adds up — though the sum of those
+    rows is as measured as the rows are. A total that does not add up (a distinct count, an average) is never one."""
+    if not (sql and isinstance(columns, list) and columns and rows):
+        return []
+    try:
+        from pramanyx.explorer.grounding import cell_values
+        from pramanyx.tools.postproc import column_totals
+        totals = column_totals(sql, [str(c) for c in columns], list(rows), int(row_count)) or []
+        return cell_values([[total for _column, total in totals]]) if totals else []
+    except Exception as exc:
+        tolerate(exc, "departure basis: a result's totals could not be computed; its cells still ground",
+                 counter="departures.basis_totals")
+        return []
+
+
+#: The most rows a result may have for its within-column gaps to count as measured — few enough that a made-up figure
+#: has little room to match one by chance.
+MAX_GAP_ROWS = 12
+
+
+def _gaps_of(rows: list) -> list:
+    """The gaps between two figures of the same column of a small result — "Mytheresa leads NET-A-PORTER by €224k" —
+    as measured values. A difference of two measured values is measured too, as the Briefing's gate already counts it
+    (`briefing.ranges.fresh_measurement`); a scheduled summary to Slack was held on exactly that gap (2026-11-15)."""
+    if not rows or len(rows) > MAX_GAP_ROWS:
+        return []
+    from pramanyx.explorer.grounding import cell_values
+    table = [list(r.values()) if isinstance(r, dict) else list(r or []) for r in rows]
+    width = min(len(r) for r in table)
+    gaps: list = []
+    for col in range(width):
+        column = [cell_values([[r[col]]]) for r in table]
+        if not all(len(c) == 1 for c in column):
+            continue                                            # a label column, or one with gaps in it
+        values = [c[0] for c in column]
+        gaps += [abs(a - b) for i, a in enumerate(values) for b in values[i + 1:] if a != b]
+    return gaps
 
 
 def _as_of_in(period: str) -> str:
@@ -442,7 +490,10 @@ def rerun_queries(conn_id: str, queries: list[str]) -> Optional[list]:
             result = db.execute(RERUN_LABEL, sql)
             if getattr(result, "error", None):
                 return None
-            cells.extend(cell_values((getattr(result, "rows", None) or [])[:MAX_ROWS_PER_RESULT]))
+            rows = getattr(result, "rows", None) or []
+            cells.extend(cell_values(rows[:MAX_ROWS_PER_RESULT]))
+            cells.extend(_totals_of(sql, getattr(result, "columns", None), rows,
+                                    getattr(result, "row_count", None) or len(rows)))
         return cells
     finally:
         try:

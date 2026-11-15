@@ -1251,6 +1251,8 @@ from pramanyx.routers import coworker as coworker_router  # noqa: E402 — where
 app.include_router(coworker_router.router)
 from pramanyx.routers import web_search as web_search_router  # noqa: E402 — the web, for outside context only
 app.include_router(web_search_router.router)
+from pramanyx.routers import email as email_router  # noqa: E402 — an email a person wrote, sent on their click
+app.include_router(email_router.router)
 app.include_router(metastore.router)
 app.include_router(approvals.router)
 app.include_router(metastore.grants_router)

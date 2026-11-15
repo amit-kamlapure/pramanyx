@@ -237,7 +237,8 @@ def _bot_outcome(ok: bool, info: dict) -> tuple:
         from pramanyx.notifications.sent_once import stopped
         return "uncertain", None, (info["error"] if stopped(info.get("error"))
                                    else "post timed out — it may have arrived, so it is not retried")
-    return "failed", None, f"Slack refused the post: {info.get('error', 'unknown')}"
+    from pramanyx.slackbots.post import refusal_said
+    return "failed", None, f"Slack refused the post: {refusal_said(info.get('error', 'unknown'))}"
 
 
 def _supersede(sub: BriefSubscription) -> str:

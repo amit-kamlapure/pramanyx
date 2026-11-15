@@ -100,6 +100,8 @@ KIND_CATEGORY: dict[str, str] = {
     # 2026-11-15 — a web search sends the words searched to a provider outside the install (`web_search.py`): what
     # left, and who sent it.
     "web.searched": "data_access",
+    # 2026-11-15 — an email a person sent: words and figures that left the install, and to whom (`routers/email.py`).
+    "email.sent": "data_access",
     # MI-1 — the two feedback doors. Both have been writing to the ledger since they
     # shipped, neither was categorized, so the governance feed could not show that a
     # person had ever graded anything. They are split by design (`chat.feedback` keys on
@@ -593,6 +595,7 @@ _SINKS: list[tuple[str, Callable[..., list[AuditEvent]]]] = [
     ("data_access", lambda n, **w: _from_ledger("mcp.tool_call", n, **w)),
     ("data_access", lambda n, **w: _from_ledger("agent.grounding_read", n, **w)),
     ("data_access", lambda n, **w: _from_ledger("web.searched", n, **w)),
+    ("data_access", lambda n, **w: _from_ledger("email.sent", n, **w)),
     ("governance_change", lambda n, **w: _from_ledger("directory.imported", n, **w)),
     ("action_decision", lambda n, **w: _from_ledger("action.approval", n, **w)),
     ("governance_change", lambda n, **w: _from_ledger("connection.prerequisite_enabled", n, **w)),

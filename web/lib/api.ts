@@ -6064,6 +6064,8 @@ export interface IntegrationProduct {
   connected: boolean;
   /** The tools connecting it lets an automation run. */
   tools: string[];
+  /** The choices this one card offers (Gmail: read, send, or both), each granted on its own. Empty when none. */
+  options?: { id: string; label: string; scopes: string; connected: boolean }[];
 }
 
 /* ── VA-9d · MCP servers this deployment may CALL ──────────────────────────────
@@ -6302,8 +6304,11 @@ export async function setupIntegrationApp(provider: string, body: {
 
 /** Begin the dance. The caller sends the BROWSER to `authorize_url` — a fetch cannot
  *  follow a consent screen. */
-export async function beginIntegrationConnect(provider: string, product?: string): Promise<string> {
-  const q = product ? `?product=${encodeURIComponent(product)}` : "";
+export async function beginIntegrationConnect(provider: string, product?: string, option?: string): Promise<string> {
+  const params = new URLSearchParams();
+  if (product) params.set("product", product);
+  if (option) params.set("option", option);
+  const q = params.toString() ? `?${params}` : "";
   const res = await fetch(`${getApiBase()}/integrations/${provider}/connect${q}`, { method: "POST" });
   if (!res.ok) {
     let detail = ""; try { detail = fastApiError(await res.json(), ""); } catch { /* non-JSON */ }

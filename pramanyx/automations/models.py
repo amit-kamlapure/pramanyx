@@ -163,6 +163,9 @@ _EFFECT_REQUIRED: dict[str, tuple[str, ...]] = {
     # sibling: an automation missing its channel would otherwise sit in the DB looking
     # schedulable and fail at 03:00, which is K1's lesson (reject at parse, never surface).
     "slack_post":     ("bot_id", "channel"),
+    # 2026-11-15 — send as email, through the organisation's Google connection (`automations.email`). The recipient is
+    # required at construction: an email step that names nobody would be filled in by whatever ran upstream.
+    "email":          ("to",),
     # DS-9 — the chain this step runs. Required at construction like every sibling: a
     # subchain step with no child names nothing, and "looking schedulable" is the
     # expensive kind of broken (K1: reject at parse, never surface).
@@ -338,7 +341,7 @@ class Effect(BaseModel):
     """
     kind: Literal["investigate", "brief", "notify", "kinetic_action", "monitor", "agent_alert",
                   "slack_post", "subchain", "integration_call",
-                  "metric_value", "trusted_query", "mcp_call", "synthesize", "expectations"]
+                  "metric_value", "trusted_query", "mcp_call", "synthesize", "expectations", "email"]
     #: VA-4a — this step's name, for `{"$from": "<alias>.<key>"}` references. Defaults to
     #: its 1-based position (`step1`, `step2`, …) so an existing automation gains
     #: referable steps without being rewritten.

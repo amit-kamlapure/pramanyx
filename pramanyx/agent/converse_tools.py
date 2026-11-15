@@ -211,6 +211,95 @@ def run_sql(connection_id: str, args: dict, *, emit: Optional[Emit] = None,
     return out
 
 
+#: What a model's WORKING sounds like, as opposed to an answer: it speaks of the person in the third person, of its own
+#: tool calls and instructions, and of what it is about to do. One alone can occur in an answer; two do not.
+_WORKING_NOTES = tuple(re.compile(p, re.I) for p in (
+    r"\bthe user (?:is asking|asks|asked|wants|wanted|is looking|needs)\b",
+    r"\b(?:previous|next|another|one more|remaining|last) tool calls?\b",
+    r"\btool calls? (?:left|remaining)\b",
+    r"\bmy (?:standing )?instructions\b",
+    r"\blet me (?:try|check|search|look|query|run|call|review|verify|re-?check|state what)\b",
+    r"\bbefore answering\b",
+    r"\bi (?:need|have|will need) to (?:check|search|call|query|look up|use|run)\b",
+    r"\bi (?:will|'ll) (?:now )?(?:call|query|search|run)\b",
+))
+
+
+def working_notes(text: str) -> Optional[str]:
+    """Why ``text`` is the model's working rather than an answer for a person, or None.
+
+    Found live, 2026-11-15: an agent out of tool calls stopped mid-thought — "The user is asking for two things … I
+    have one tool call left … Let me try a targeted search." — and that paragraph was saved as its answer and shown as
+    one, in the coworker at headline size. The user's rule is that an agent's remarks are never the output."""
+    said = (text or "").strip()
+    if not said:
+        return None
+    hits = [p.pattern for p in _WORKING_NOTES if p.search(said)]
+    if len(hits) >= 2 or re.match(r"\s*the user (?:is asking|asks|asked|wants)\b", said, re.I):
+        return ("That is your working, not an answer: it talks about the person and your own steps. Either make the "
+                "tool call you meant to make, or write the answer itself, to the person, from what the results gave.")
+    return None
+
+
+def breakdown_where_one_figure_was_asked(question: str, results: list[dict], answer: str) -> Optional[str]:
+    """Why an answer is not finished, when the question asked for ONE figure and the result it stands on is a
+    breakdown — or None. Measured on both golden sets (2026-11-15): "How many returns were rejected?", "What share of
+    orders were cancelled?" and five more were answered right in words over a table of every status, so what the
+    person was shown was not the answer. Handed back once (`run_tool_loop`'s ``stop_check``): run the query that
+    returns the figure itself."""
+    from pramanyx.sql.grain_intent import asks_one_figure
+    if not asks_one_figure(question) or not results:
+        return None
+    shown = answering_result(answer, [{"rows": (r.get("rows") or {}).get("rows") or []} for r in results])
+    rows = (results[shown].get("rows") or {}).get("rows") or [] if shown >= 0 else []
+    if len(rows) < 2:
+        return None
+    return (f"The question asks for one figure, and the result your answer stands on is a breakdown of {len(rows)} "
+            "rows. Run the query that returns that figure itself — a filter to the rows asked about, or the share or "
+            "rate computed in SQL — so the result shown is the answer. Then answer.")
+
+
+def citable_totals(results: list[dict]) -> list[list]:
+    """Each result's column totals, as rows the grounding check may cite. The model is GIVEN these (`run_sql`'s
+    ``totals``, computed by code and to be quoted, never added up by hand) — and the check then held every quoted total
+    to the cells, where no total is, so a correct "€56.98M in all" was rewritten away (golden set, 2026-11-15)."""
+    from pramanyx.tools.postproc import column_totals
+    out: list[list] = []
+    for res in results or []:
+        sql = str((res.get("sql") or {}).get("sql") or "")
+        columns = list((res.get("columns") or {}).get("columns") or [])
+        rows = list((res.get("rows") or {}).get("rows") or [])
+        if not (sql and columns and rows):
+            continue
+        try:
+            totals = column_totals(sql, columns, rows, len(rows)) or []
+        except Exception:  # noqa: BLE001 — a total that cannot be computed is simply not citable
+            totals = []
+        if totals:
+            out.append([total for _column, total in totals])
+    return out
+
+
+def answering_result(answer: str, results: list[dict]) -> int:
+    """Which of a turn's query results the answer stands on: the one whose rows hold the most of the figures the
+    answer states (within a writer's rounding), the latest on a tie. -1 when there is nothing to choose.
+
+    A turn may run several queries — a check of the data, then the one that answers, or the answer first and a check
+    after. Until 2026-11-15 the result shown with the answer was simply the last one run, so a sanity query run after
+    the real one became "the answer": a one-row count where ten centres were asked for, a status cross-tab under a
+    question about brands (golden set, 2026-11-14). Chosen by what the answer says, never by the model's word: the
+    figures are checked against each result's own rows."""
+    if len(results) < 2:
+        return len(results) - 1
+    from pramanyx.explorer.grounding import figures_found
+    best, best_hits = len(results) - 1, -1
+    for i, res in enumerate(results):
+        hits = figures_found(answer, res.get("rows") or [])
+        if hits >= best_hits:                         # ">=": the latest wins a tie, as before
+            best, best_hits = i, hits
+    return best
+
+
 def policy_receipt(result: Any) -> Optional[dict]:
     """What the reader's access policy did to this read — narrowed it to their rows, or refused it — as the guard
     receipt that says it on the reader's answer, not only to the model in ``caveats``: its caveats are folded into the
@@ -714,7 +803,7 @@ def ground_answer_numbers(answer: str, rows: list, *, question: str = "",
     guard may only ever remove a false claim, never invent a failure.
     """
     from pramanyx.explorer.grounding import (
-        numeric_cells_block, ungrounded_label_values, verify_finding,
+        numeric_cells_block, rows_block, ungrounded_label_values, verify_finding,
     )
 
     text = (answer or "").strip()
@@ -735,6 +824,20 @@ def ground_answer_numbers(answer: str, rows: list, *, question: str = "",
         return answer, None
 
     bad = ", ".join(offending[:5])
+    # A number the label check doubts but the turn MEASURED is kept (2026-11-15). "801 orders were cancelled in fiscal
+    # 2025" sat beside an all-years "cancelled | 5,872" row and read as a contradiction; 801 was a cell of the turn's
+    # own filtered query. The rewrite that followed turned a right answer into "I can't give a count". So: when the
+    # magnitudes all ground and every doubted pair's number is a cell somewhere in the turn, the answer stands, and the
+    # doubt is on its receipt. A number that is in no cell at all is still rewritten or withheld below.
+    from pramanyx.explorer.grounding import figures_found
+    if not list(verify_finding(text, cells).ungrounded) and all(
+            figures_found(pair.split("=", 1)[-1], cells) for pair in offending):
+        return answer, {
+            "guard": "numeric grounding",
+            "action": "kept the answer",
+            "detail": f"{bad}: each number is a measured cell of this turn, beside a different row's label — kept, "
+                      "not rewritten",
+        }
     logger.info("converse: answer carried ungrounded number(s) %s; re-grounding", bad)
 
     try:
@@ -745,13 +848,15 @@ def ground_answer_numbers(answer: str, rows: list, *, question: str = "",
             system=(
                 "Your previous answer contained a number that does NOT appear in the "
                 "data — a fabricated magnitude. Rewrite the answer using ONLY values "
-                "from the list you are given. Copy each value exactly; never scale it "
+                "from the rows you are given, each with the label its row carries. Write to the "
+                "person; never mention the list or the values you were given. Copy each value exactly; never scale it "
                 "or add a magnitude suffix (K/M/B) it does not already have. If a "
                 "number cannot be supported by the list, drop it and describe the "
                 "pattern qualitatively. Keep the answer's format and length."
             ),
             user=(
                 f"QUESTION: {question}\n\n"
+                f"THE RESULT ROWS (each row's label beside its values):\n{rows_block(cells)}\n\n"
                 f"EXACT RESULT VALUES YOU MAY CITE:\n{numeric_cells_block(cells)}\n\n"
                 f"YOUR PREVIOUS (UNGROUNDED) ANSWER:\n{text}\n\n"
                 f"Ungrounded number(s) to remove or fix: {bad}\n"
@@ -862,6 +967,22 @@ def converse(connection_id: str, question: str, *, extra_context: Optional[str] 
     from pramanyx.agent.tool_loop import run_tool_loop
     from pramanyx.llm.provider import get_provider
 
+    # The results this turn's queries returned, in order — what the stop check reads to see which one an answer
+    # stands on. Only a streaming caller has frames to read; a sync caller's turn is checked for working notes alone.
+    results: list[dict] = []
+    if tool_emit is not None:
+        _outer = tool_emit
+
+        def tool_emit(kind: str, payload: dict) -> None:   # noqa: F811 — the caller's emit, with the results kept
+            if kind == "sql":
+                results.append({"sql": payload})
+            elif kind in ("columns", "rows") and results:
+                results[-1][kind] = payload
+            _outer(kind, payload)
+
+    def _not_yet(answer: str) -> Optional[str]:
+        return working_notes(answer) or breakdown_where_one_figure_was_asked(question, results, answer)
+
     return run_tool_loop(
         provider or get_provider("coder"),
         converse_system_prompt(connection_id, extra_context, question=question, agent=agent, shape=shape),
@@ -879,6 +1000,9 @@ def converse(connection_id: str, question: str, *, extra_context: Optional[str] 
         # Explicit rather than defaulted, so the two callers of this loop read as a pair
         # and a reader can see there are two sites without going to find the other one.
         site="converse.tool",
+        # A model that stops with its working notes, or with a breakdown where one figure was asked, is handed the
+        # draft back once (2026-11-15).
+        stop_check=_not_yet,
         # JD-4: the BUILDER'S arguments, not its output, so a shuffled-context control can
         # swap ONE of them and rebuild. Written only while an operator's capture window is
         # open (`session_log.capture_replay`); by default this records nothing.
@@ -980,7 +1104,9 @@ def converse_system_prompt(connection_id: str, extra: Optional[str] = None,
         "approaches, discuss business context, connect what the user asks to what the "
         "platform knows. Claims about THIS organization's data are different — they "
         "come from tool results, never from memory or plausibility. A number you did "
-        "not just read from a tool result is a number you do not state.",
+        "not just read from a tool result is a number you do not state. So when the "
+        "question asks for a share, a percentage, a rate or a ratio, compute it in the "
+        "query, so its result carries the figure you will state.",
         "",
         "Every query you run goes through a guard battery before it executes, and the "
         "platform records every guard receipt in the answer's provenance. Never narrate "
@@ -1033,6 +1159,28 @@ def converse_system_prompt(connection_id: str, extra: Optional[str] = None,
             from pramanyx.kernel.errors import tolerate
             tolerate(exc, "pack disclosure is additive; the conversation stands without it",
                      counter="converse.pack_disclosure")
+        # The question's business terms, resolved against what the business DECLARED — "EU markets", "YNAP", "the
+        # accessories division" — with the SQL each compiles to. The quick answer was given this block and the
+        # conversation was not, so a conversation found a declared rule only if it searched for one, and on the golden
+        # set it did not: `ship_region = 'Europe'` for EU markets, `category = 'accessories'` for the division
+        # (2026-11-15). Deterministic, no model; empty when the question reaches nothing declared.
+        dialect = "duckdb"                  # an unknown connection compiles as the platform's own engine does
+        try:
+            from pramanyx.db.connection import connection_traits
+            from pramanyx.db.registry import get_conn_type
+            traits = connection_traits(get_conn_type(connection_id))
+            dialect = (traits.get("dialect") or "duckdb") if traits.get("writes_native_sql") else "duckdb"
+        except Exception as exc:  # noqa: BLE001 — the frame still compiles, in DuckDB's dialect
+            logger.debug("question frame: dialect of %s unread (%s)", connection_id, exc)
+        try:
+            from pramanyx.agent.grounding import question_frame
+            block = question_frame(question, connection_id, dialect=dialect).strip()
+            if block:
+                lines += ["", block]
+        except Exception as exc:
+            from pramanyx.kernel.errors import tolerate
+            tolerate(exc, "the question frame is additive; the conversation stands without it",
+                     counter="converse.question_frame")
     if extra:
         lines += ["", extra]
     # AO-1a — the agent's brief LEADS the prompt, as it leads the quick body's SQL prompt

@@ -165,7 +165,7 @@ UNCERTAIN_DELIVERY = "it may already have been delivered, so it was not retried"
 #: ``slack_post`` since Track C3 (2026-11-06): it reaches a channel of people, and it was missing only
 #: because the set predates it (#278 was written before RC-5 made a Slack bot a record) — a tick
 #: killed after an unattended post re-posted the same period on the next one.
-OUTWARD_EFFECT_KINDS = frozenset({"notify", "brief", "agent_alert", "slack_post"})
+OUTWARD_EFFECT_KINDS = frozenset({"notify", "brief", "agent_alert", "slack_post", "email"})
 
 
 def has_outward_effect(automation: Automation) -> bool:
@@ -691,7 +691,7 @@ ROUTED_ABOUT_KEY = "_departure_about"
 #: of starving into a skip nobody is asked about.
 DISAGREEMENT_KEY = "_readings_disagree"
 #: The step kinds that leave the platform through the engine's departure gate.
-DEPARTURE_SENDS = frozenset({"slack_post", "notify"})
+DEPARTURE_SENDS = frozenset({"slack_post", "notify", "email"})
 
 #: Track C3 — engine→dispatcher plumbing on the `DEPARTURE_BASIS_KEY` precedent: the delivery key of
 #: THIS send — the automation, the run, the step (with its iteration when fanned out). Stable across
@@ -699,7 +699,7 @@ DEPARTURE_SENDS = frozenset({"slack_post", "notify"})
 #: (`notifications/sent_once.py`) can send it once. Never authored, never stored.
 DELIVERY_KEY_KEY = "_delivery_key"
 #: The step kinds that send through a transport keyed by it.
-KEYED_SENDS = frozenset({"slack_post", "notify", "brief"})
+KEYED_SENDS = frozenset({"slack_post", "notify", "brief", "email"})
 
 #: RC-2 on the unattended path — the grid an outward Slack post should draw a picture of.
 #: Engine→dispatcher plumbing on the `DEPARTURE_BASIS_KEY` precedent: by dispatch time the
@@ -1109,6 +1109,32 @@ def slack_message_text(effect: Effect, automation: Automation) -> str:
     return _slack_message_text(effect, automation)
 
 
+def _dispatch_email(effect: Effect, automation: Automation) -> EffectOutcome:
+    """Send the step's answer as email (`automations/email.py`), judged at departure on the exact text it sends —
+    the same customs a Slack post passes."""
+    from pramanyx.automations.email import email_text, send_email
+    to = str(effect.config.get("to", "")).strip()
+    subject, body = email_text(effect, automation, _slack_message_text(effect, automation))
+    verdict = _gate_departure(effect, automation, kind="email", text=body, target=f"email:{to}")
+    if verdict is not None and verdict.held:
+        return EffectOutcome(kind=effect.kind, target=f"email:{to}", status="held",
+                             message=f"held at departure — {verdict.reason_sentence()}")
+    attachment = None
+    fmt = str(effect.config.get("attach_format") or "").strip()
+    if fmt:
+        # The analysis this chain ran, as a file (`attach_investigation`, bound from the investigate step); a step
+        # that asks for one never sends without it.
+        from pramanyx.automations.email import answer_attachment
+        attachment, why = answer_attachment(str(effect.config.get("attach_investigation") or ""), fmt)
+        if attachment is None:
+            return EffectOutcome(kind=effect.kind, target=f"email:{to}", status="dispatch_error",
+                                 message=f"not sent: {why}")
+    ok, said = send_email(to, subject, body, connection_id=str(effect.config.get("connection_id") or ""),
+                          attachment=attachment)
+    return EffectOutcome(kind=effect.kind, target=f"email:{to}", status="executed" if ok else "dispatch_error",
+                         message=said)
+
+
 def _dispatch_slack_post(effect: Effect, automation: Automation) -> EffectOutcome:
     """RC-5.4 — post into a channel AS the bot, so the message can be replied to.
 
@@ -1119,7 +1145,7 @@ def _dispatch_slack_post(effect: Effect, automation: Automation) -> EffectOutcom
     the Pramanyx `session_id` — a reply composes on the same conversation, with the same
     agent, over the same connection.
     """
-    from pramanyx.slackbots.post import post_as_bot
+    from pramanyx.slackbots.post import post_as_bot, refusal_said
     from pramanyx.slackbots.store import get_bot_decrypted
 
     bot_id = str(effect.config.get("bot_id", ""))
@@ -1219,7 +1245,7 @@ def _dispatch_slack_post(effect: Effect, automation: Automation) -> EffectOutcom
                              message=info["error"] if stopped(info.get("error"))
                              else f"post timed out — {UNCERTAIN_DELIVERY}")
     return EffectOutcome(kind=effect.kind, target=f"{bot_id}:{channel}", status="failed",
-                         message=f"Slack refused the post: {info.get('error', 'unknown')}")
+                         message=f"Slack refused the post: {refusal_said(info.get('error', 'unknown'), channel)}")
 
 
 def _file_departure_link(effect: Effect, automation: Automation, *, kind: str,
@@ -2013,6 +2039,7 @@ _DISPATCHERS: dict[str, Callable[[Effect, Automation], EffectOutcome]] = {
     "monitor": _dispatch_monitor,
     "agent_alert": _dispatch_agent_alert,
     "slack_post": _dispatch_slack_post,
+    "email": lambda effect, automation: _dispatch_email(effect, automation),
     "subchain": _dispatch_subchain,
     "integration_call": _dispatch_integration,
     "metric_value": _dispatch_metric_value,

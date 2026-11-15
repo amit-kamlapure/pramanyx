@@ -112,6 +112,9 @@ def catalog(request: Request):
             "products": [{
                 "id": pr.id, "name": pr.name, "blurb": pr.blurb, "scopes": pr.scopes,
                 "connected": bool(granted) and set(pr.scopes.split()) <= granted,
+                # A card with a choice says which of its choices the grant covers, each on its own.
+                "options": [{"id": o.id, "label": o.label, "scopes": o.scopes,
+                             "connected": bool(granted) and set(o.scopes.split()) <= granted} for o in pr.options],
                 "tools": [op.label for op in operations_for(p.id)
                           if set(op.scopes) <= set(pr.scopes.split())],
             } for pr in p.products],
@@ -212,18 +215,25 @@ def put_app(provider_id: str, body: AppBody, request: Request):
 # ── connect / callback ───────────────────────────────────────────────────────────
 
 @router.post("/integrations/{provider_id}/connect")
-def connect(provider_id: str, request: Request, product: Optional[str] = None):
+def connect(provider_id: str, request: Request, product: Optional[str] = None, option: Optional[str] = None):
     """Begin the dance; the client sends the browser to `authorize_url`.
 
     ``product`` connects one product of the provider's app from its own card: the provider's
-    own scopes and that product's, and nothing another card would ask for."""
+    own scopes and that product's, and nothing another card would ask for. ``option`` is the choice made on a card
+    that offers one (Gmail: read, send, or both) — only that choice's scopes are asked for."""
     scopes = ""
     if product:
         provider = get_provider(provider_id)
         item = provider.product(product) if provider else None
         if item is None:
             raise HTTPException(404, f"{provider_id} has no product named {product!r}")
-        scopes = f"{provider.default_scopes} {item.scopes}".strip()
+        wanted = item.scopes
+        if option:
+            chosen = item.option(option)
+            if chosen is None:
+                raise HTTPException(404, f"{item.name} has no choice named {option!r}")
+            wanted = chosen.scopes
+        scopes = f"{provider.default_scopes} {wanted}".strip()
     # The AUTHORED callback wins over the derived one: a deployment registered under an
     # address it is not currently being reached at (every local Slack setup, since Slack
     # refuses http://) would otherwise send the provider a URI nobody registered.
@@ -286,6 +296,17 @@ def oauth_callback(state: str = "", code: str = "", error: str = ""):
 @router.get("/integrations/connections")
 def my_connections():
     return {"connections": [c.to_safe_dict() for c in store.list_connections(_user())]}
+
+
+@router.post("/integrations/connections/{conn_id}/account")
+def read_the_account(conn_id: str):
+    """The connected account's address — recorded at connect, else read from the provider once and recorded
+    (`broker.account_of`). What a card says it is connected as, and the "send to me" an email step can name. Only the
+    grant's own person may read it: someone else's is a 404, as revoking one is."""
+    conn = store.get_connection(conn_id)
+    if conn is None or conn.user_id != _user():
+        raise HTTPException(404, "unknown connection")
+    return {"account": broker.account_of(conn_id)}
 
 
 @router.post("/integrations/connections/{conn_id}/revoke")

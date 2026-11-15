@@ -98,3 +98,27 @@ test("a request this page made is let through", async () => {
   assert.equal(answer.status, 200);
   assert.equal(heard.length, 1);
 });
+
+test("an email a person wrote goes on to Pramanyx's send door, the words as they left the page", async () => {
+  heard.length = 0;
+  const answer = await say("/pramanyx-email", { to: " ben@example.com ", subject: "GMV", body: "Mytheresa leads.", from: "ignored" });
+  assert.equal(answer.status, 200);
+  assert.deepEqual(heard, [{ path: "/email/send", method: "POST", body: { to: "ben@example.com", subject: "GMV", body: "Mytheresa leads." } }]);
+});
+
+test("an email with no real address or no words never reaches Pramanyx", async () => {
+  heard.length = 0;
+  for (const body of [{ to: "not-an-address", body: "x" }, { to: "a@b.com, c@d.com", body: "x" }, { to: "ben@example.com", body: " " }]) {
+    assert.equal((await say("/pramanyx-email", body)).status, 422);
+  }
+  assert.deepEqual(heard, []);
+});
+
+test("the analysis rides along only as an answer's id and one of the four formats", async () => {
+  heard.length = 0;
+  await say("/pramanyx-email", { to: "ben@example.com", body: "x", attach_answer: "abc123", attach_format: "pdf" });
+  await say("/pramanyx-email", { to: "ben@example.com", body: "x", attach_answer: "../etc", attach_format: "exe" });
+  assert.deepEqual(heard.map((h) => h.body), [
+    { to: "ben@example.com", subject: "", body: "x", attach_answer: "abc123", attach_format: "pdf" },
+    { to: "ben@example.com", subject: "", body: "x" }]);
+});

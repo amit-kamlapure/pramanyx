@@ -221,7 +221,46 @@ def _account_label(provider: Provider, body: dict) -> str:
     for key in ("email", "user_id", "bot_user_id"):
         if body.get(key):
             return str(body[key])
+    # Google (and any OpenID provider) names the account inside the `id_token` its token endpoint returns. Read as a
+    # LABEL, never as a credential: it arrived over TLS straight from the token endpoint in the code exchange, which is
+    # the case OpenID Connect allows to skip the signature (2026-11-15: every Google connection recorded no account).
+    token = str(body.get("id_token") or "")
+    if token.count(".") == 2:
+        import base64
+        import json as _json
+        part = token.split(".")[1]
+        try:
+            claims = _json.loads(base64.urlsafe_b64decode(part + "=" * (-len(part) % 4)))
+        except ValueError:
+            claims = {}
+        if isinstance(claims, dict) and claims.get("email"):
+            return str(claims["email"])
     return ""
+
+
+def account_of(conn_id: str) -> str:
+    """The connected account's address, read from the provider when the connect did not record it — Google's
+    userinfo, under the `userinfo.email` permission every Google card asks for — and recorded on the connection. ""
+    when the provider will not say."""
+    conn = get_connection_decrypted(conn_id)
+    if conn is None:
+        return ""
+    if conn.account:
+        return conn.account
+    if conn.provider != "google":
+        return ""
+    import httpx
+    try:
+        r = httpx.get("https://openidconnect.googleapis.com/v1/userinfo",
+                      headers={"Authorization": f"Bearer {fresh_access_token(conn_id)}"}, timeout=10)
+        email = str((r.json() or {}).get("email") or "") if r.status_code == 200 else ""
+    except (httpx.HTTPError, ValueError, BrokerError) as exc:
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "the connected account's address could not be read from Google", counter="integrations.account")
+        return ""
+    if email:
+        save_connection(conn.model_copy(update={"account": email}))
+    return email
 
 
 # ── use ──────────────────────────────────────────────────────────────────────────

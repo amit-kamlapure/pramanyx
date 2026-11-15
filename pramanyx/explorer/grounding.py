@@ -279,6 +279,67 @@ _PAIR_LOOKAHEAD = 3
 _PAIR_NUM_RE = re.compile(r"\d[\d,]*(?:\.\d+)?")
 
 
+_SCALE = {"k": 1e3, "thousand": 1e3, "m": 1e6, "mn": 1e6, "million": 1e6, "b": 1e9, "bn": 1e9, "billion": 1e9}
+_SCALE_RE = re.compile(r"\s?(k|m|mn|b|bn|thousand|million|billion)(?![a-z])")
+
+
+def _counts_at(window: str) -> list[tuple[str, int, int]]:
+    """`_counts_in` with each number's position and its written length — never a year or a piece of a date ("fiscal
+    year 2025" beside a region's name is not that region's count), and read with its scale ("€23.51M" is 23,510,000,
+    not 23.51). Both found in the golden set's receipts, 2026-11-15. Returns (value, start, length)."""
+    out = []
+    for m in _PAIR_NUM_RE.finditer(window):
+        tok, end = m.group(0), m.end()
+        if re.match(r"\s*%", window[end:]):
+            continue
+        if re.fullmatch(r"(19|20)\d\d", tok) or window[end:end + 1] in ("-", "/") or window[max(0, m.start() - 1):m.start()] in ("-", "/"):
+            continue
+        scale = _SCALE_RE.match(window[end:])
+        if scale:
+            value = float(tok.replace(",", "")) * _SCALE[scale.group(1)]      # the pattern admits digits only
+            out.append((f"{value:.6g}" if value < 1e15 else tok, m.start(), len(tok) + len(scale.group(0))))
+            continue
+        out.append((tok, m.start(), len(tok)))
+    return out
+
+
+def _another_label_between(span: str, label: str, facts: dict) -> bool:
+    """Whether another row's label sits in ``span`` — the text between a label and a number."""
+    return any(other != label and re.search(r"(?<!\w)" + re.escape(other) + r"(?!\w)", span) for other in facts)
+
+
+def _closer_label_after(window: str, at: int, size: int, label: str, facts: dict) -> bool:
+    """Whether another label follows the number closer than this label precedes it — "the 12,145 shipped"."""
+    tail = window[at + size:at + size + 16]
+    return any(other != label and re.match(r"\W{0,3}" + re.escape(other) + r"(?!\w)", tail.lstrip("`* ")) for other in facts)
+
+
+def figures_found(text: str, rows, limit: int = 2000) -> int:
+    """How many of the figures ``text`` states are cells of ``rows``, within a writer's rounding — how strongly a
+    result carries an answer's numbers (`converse_tools.answering_result` chooses the result an answer stands on by
+    it)."""
+    stated = [float(tok.replace(",", "")) for tok in _PAIR_NUM_RE.findall(text or "")]   # digits only, always parses
+    cells = [f for row in list(rows or [])[:limit]
+             for c in (row.values() if isinstance(row, dict) else (row or []))
+             if (f := _to_float(c)) is not None]
+    return sum(1 for n in stated if any(_pair_matches(n, v) for v in cells))
+
+
+def rows_block(rows, limit: int = 40) -> str:
+    """The result's rows as a reader sees them — each row's label beside its values — for a re-grounding prompt. A
+    list of bare numbers told the rewriter nothing of which country or platform each belonged to (golden set,
+    2026-11-15: "the provided list contains only numeric values and no country labels")."""
+    lines: list[str] = []
+    for row in rows or []:
+        cells = list(row.values()) if isinstance(row, dict) else list(row or [])
+        line = " | ".join("" if c is None else str(c) for c in cells)
+        if line and line not in lines:
+            lines.append(line)
+        if len(lines) >= limit:
+            break
+    return "\n".join(lines) if lines else "(no rows)"
+
+
 def _row_label_values(rows) -> dict:
     """``{label: {numbers on that label's row}}`` — the pairs a result asserts."""
     facts: dict = {}
@@ -321,8 +382,15 @@ def ungrounded_label_values(text: str, rows) -> list[str]:
             # BOTH directions. A table writes "ZRH-LHR | 28" and prose writes "28
             # flights on ZRH-LHR"; a forward-only window reads the second as a label
             # with no claim attached and waves the fabrication through.
-            after = _PAIR_NUM_RE.findall(low[m.end():m.end() + _PAIR_WINDOW])[:_PAIR_LOOKAHEAD]
-            before = _PAIR_NUM_RE.findall(low[max(0, m.start() - _PAIR_WINDOW):m.start()])[-_PAIR_LOOKAHEAD:]
+            # A number belongs to the NEAREST label (2026-11-15): "only a cancelled order is not completed. So it
+            # counts the 12,145 shipped" was read as cancelled = 12,145 — the number is shipped's, the label after it.
+            after_w = low[m.end():m.end() + _PAIR_WINDOW]
+            before_w = low[max(0, m.start() - _PAIR_WINDOW):m.start()]
+            after = [t for t, at, size in _counts_at(after_w)
+                     if not _another_label_between(after_w[:at], label, facts)
+                     and not _closer_label_after(low, m.end() + at, size, label, facts)][:_PAIR_LOOKAHEAD]
+            before = [t for t, at, size in _counts_at(before_w)
+                      if not _another_label_between(before_w[at + size:], label, facts)][-_PAIR_LOOKAHEAD:]
             nums: list[float] = []
             for tok in list(after) + list(before):
                 try:

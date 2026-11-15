@@ -116,7 +116,7 @@ def ask_target(connection_id: str, *, depth: str = "quick",
             _executor = ContextThreadPoolExecutor(thread_name_prefix="pramanyx-eval")
             asyncio.get_running_loop().set_default_executor(_executor)
             seen: dict = {"sql": "", "columns": [], "rows": [], "headline": "", "error": "",
-                          "trace_id": "", "all_sql": [], "envelope": {}, "frames": {}}
+                          "trace_id": "", "all_sql": [], "envelope": {}, "frames": {}, "grounding": {}}
             async for frame in build_ask_stream(req, None):
                 if not frame.startswith("data: "):
                     continue
@@ -150,6 +150,10 @@ def ask_target(connection_id: str, *, depth: str = "quick",
                     seen["headline"] = payload.get("headline", "")
                 elif kind == "error":
                     seen["error"] = payload.get("message", "")
+                elif kind == "guard_receipt" and payload.get("guard") == "numeric grounding":
+                    # What the grounding check flagged and the words it replaced — so a withheld or rewritten
+                    # answer can be read afterwards, not only counted (2026-11-15).
+                    seen["grounding"] = {k: payload.get(k) for k in ("action", "detail", "before")}
             _executor.shutdown(wait=False)
             return seen
 
@@ -174,7 +178,7 @@ def ask_target(connection_id: str, *, depth: str = "quick",
             narrative=seen["headline"],
             meta={"door": "ask", "depth": depth, "trace_id": seen["trace_id"],
                   "all_sql": seen["all_sql"], "envelope": seen["envelope"],
-                  "frames": seen["frames"]})
+                  "frames": seen["frames"], "grounding": seen["grounding"]})
     return target
 
 

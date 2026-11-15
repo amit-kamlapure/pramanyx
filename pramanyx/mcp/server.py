@@ -289,6 +289,26 @@ async def ask(
 
 
 @mcp.tool()
+async def draft_email(
+    to: Annotated[str, Field(description="The address it is for, when the person named one; empty for them to fill in.")] = "",
+    subject: Annotated[str, Field(description="A short subject line.")] = "",
+    body: Annotated[str, Field(description="The email's text — a summary of what the person asked to share, in their terms. Its figures are the ones the answers in this conversation gave, as given.")] = "",
+    attach_answer: Annotated[str, Field(description="When the person wants the analysis itself attached: that answer's investigation_id, as the answer returned it. Empty for no attachment.")] = "",
+    attach_format: Annotated[str, Field(description="What to attach it as: pdf, xlsx (every row), docx or pptx. Empty for no attachment.")] = "",
+) -> dict:
+    """Draft an email for the person to read, change and send themselves. You cannot send it: the draft opens beside
+    your reply with a Send button, and only the person's click sends it. Use the figures the answers here gave, never
+    new ones. Write the body as the summary they asked for — the whole answer, or only the part they named — and when
+    they want the analysis itself, name it to attach (Pramanyx builds the file from the answer; you never make one).
+    After drafting, say in a few words that the draft is ready to review."""
+    fmt = attach_format.strip().lower()
+    attach = {"attach_answer": attach_answer.strip(), "attach_format": fmt} \
+        if attach_answer.strip() and fmt in ("pdf", "xlsx", "docx", "pptx") else {}
+    return {"draft": {"to": to.strip(), "subject": subject.strip(), "body": body.strip(), **attach},
+            "note": "Shown to the person as a draft with a Send button. Nothing has been sent."}
+
+
+@mcp.tool()
 async def search_the_web(
     query: Annotated[str, Field(description="What to look up outside the business: a holiday, a news event, an announcement.")],
     n: Annotated[int, Field(description="How many results, 1 to 8.")] = 5,
@@ -306,11 +326,12 @@ async def schedule_question(
     connection: Annotated[str, Field(description="The connection id the question is about.")],
     cron: Annotated[str, Field(description="When, as a five-field cron in the organisation's time zone, e.g. '0 9 * * 1' for Mondays at 09:00.")],
     name: Annotated[str, Field(description="A short name the person will recognise; the question when empty.")] = "",
+    stop_after_minutes: Annotated[int, Field(description="Stop asking after this many minutes (\"for the next half hour\" is 30); 0 keeps it until someone stops it.")] = 0,
 ) -> dict:
     """Ask a question again on a rhythm — "every Monday, revenue by category". Pramanyx's own scheduler runs it as
     an automation, so each run is governed like any answer and traced; it does not depend on this conversation
     staying open, and it is listed with the organisation's other automations. Say back when it will run and the note this returns."""
-    return await _client.schedule_question(question, connection, cron, name)
+    return await _client.schedule_question(question, connection, cron, name, stop_after_minutes)
 
 
 @mcp.tool()

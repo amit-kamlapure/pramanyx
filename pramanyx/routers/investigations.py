@@ -3843,8 +3843,10 @@ async def _stream_converse(
         # `rows` accumulates what the turn's queries actually returned — the evidence
         # the closing prose is held to. A turn may run several queries; all of their
         # cells are citable, so they pool.
+        # `results` keeps each query's own result, in order, so the one the answer stands on can be the one shown
+        # (`converse_tools.answering_result`) — not merely the last one run.
         turn: dict = {"steps": 0, "sql": False, "inv_id": "", "has_receipt": False,
-                      "rows": []}
+                      "rows": [], "results": []}
         if sheet:
             # Arc SH — the sheet's own counts, which the conversation is handed in its grounding (the rows the sheet
             # holds, the rows the view on screen shows), are citable like any result: without them the check rewrote
@@ -3868,6 +3870,9 @@ async def _stream_converse(
                 return
             if _frame_type == "sql":
                 turn["sql"] = True
+                turn["results"].append({"sql": _frame_payload})
+            if _frame_type in ("columns", "rows", "chart_type") and turn["results"]:
+                turn["results"][-1][_frame_type] = _frame_payload
             if _frame_type == "rows":
                 turn["rows"].extend(_frame_payload.get("rows") or [])
             if _frame_type == "sheet_rows":
@@ -4036,14 +4041,40 @@ async def _stream_converse(
                     f"{'call' if steps_n == 1 else 'calls'}). What each step found is "
                     "above — asking again, or more specifically, usually gets there."
                 )
+        # An agent's working notes are never its answer (the user's rule; found live 2026-11-15, when one out of tool
+        # calls stopped mid-thought and the paragraph was shown at headline size). The loop hands a draft like that
+        # back once (`converse_tools.working_notes`); one that is still working at the end is not shown. What it
+        # wrote is kept on the receipt, where a reader can open it as what it is.
+        from pramanyx.agent.converse_tools import working_notes
+        if working_notes(answer):
+            emit("guard_receipt", {"guard": "working_notes", "action": "withheld the answer",
+                                   "detail": "the model stopped with its own working, not an answer",
+                                   "before": answer[:500]})
+            answer = ("I didn't reach an answer — I stopped while still working it out. What each step found is "
+                      "above; asking again, or more narrowly, usually gets there.")
         # Every other number this turn shows the user came from a result set; until
         # now the sentence above them did not, and nothing compared the two. A model
         # that writes a plausible table the rows do not contain is the one failure the
         # user cannot catch — the chart beside it looks authoritative either way.
+        from pramanyx.agent.converse_tools import citable_totals
         answer, _ground_receipt = ground_answer_numbers(
-            answer, turn["rows"], question=question)
+            answer, turn["rows"] + citable_totals(turn["results"]), question=question)
         if _ground_receipt is not None:
             emit("guard_receipt", _ground_receipt)
+
+        # The result shown is the one the answer stands on. Every reader keeps the last `sql`/`columns`/`rows` it was
+        # sent, so when that is not the last one run, it is sent again, whole, before the headline.
+        from pramanyx.agent.converse_tools import answering_result
+        _shown = answering_result(answer, [{"rows": (r.get("rows") or {}).get("rows") or []} for r in turn["results"]])
+        if 0 <= _shown < len(turn["results"]) - 1:
+            _was = turn["results"][_shown]
+            emit("sql", _was["sql"])
+            if "columns" in _was:
+                emit("columns", _was["columns"])
+            if "rows" in _was:
+                emit("rows", _was["rows"])
+            if "chart_type" in _was:
+                emit("chart_type", _was["chart_type"])
 
         if not turn["sql"]:
             # No SQL this turn ⇒ the same shape the core's own no-SQL paths use, so a
@@ -6561,12 +6592,21 @@ def get_investigations(limit: int = 50, workspace_id: str | None = None):
     from pramanyx.metastore import accessible_catalog_ids
     allowed = accessible_catalog_ids(workspace_id)
     if allowed is None:
-        return list_investigations(limit=limit)
+        return _as_asked(list_investigations(limit=limit))
     # Fetch wider when scoping so a workspace's items aren't truncated by the global
     # newest-first limit before filtering, then trim back to `limit`.
     rows = list_investigations(limit=max(limit, 200))
     scoped = [r for r in rows if r.get("connection_id") in allowed]
-    return scoped[:limit]
+    return _as_asked(scoped[:limit])
+
+
+def _as_asked(rows: list[dict]) -> list[dict]:
+    """Each row's question as it was ASKED (`automations.temporal.ask_of`): a scheduled run's question carries the
+    code-written context it was answered under, and a list of recent questions read "[Scheduled-run context — written
+    by code, not inferred] …" for every one of them (the coworker's "Asked lately", 2026-11-15). The stored question
+    is untouched; only the list shows the ask."""
+    from pramanyx.automations.temporal import ask_of
+    return [{**r, "question": ask_of(str(r.get("question") or ""))} if r.get("question") else r for r in rows]
 
 
 @router.get("/investigations/indexed-ids")

@@ -178,7 +178,8 @@ function tailAfter(node) {
   return null;
 }
 
-function AnswerCard(props) {
+/** A tool's row in the steps, and its card at the end of the turn: the place every answer and every draft is read. */
+const inTail = (Step, Whole) => function TailCard(props) {
   const here = useRef(null);
   const [tail, setTail] = useState(null);
   useEffect(() => {
@@ -200,9 +201,85 @@ function AnswerCard(props) {
   // In the list of steps: the answer as a named row that opens to its SQL and rows. At the end of the turn, once
   // that place exists: the whole card.
   return h("div", { ref: here },
-    h(AnswerStep, props),
-    tail ? createPortal(h(Card, props), tail) : null);
+    h(Step, props),
+    tail ? createPortal(h(Whole, props), tail) : null);
+};
+
+const AnswerCard = inTail((props) => h(AnswerStep, props), (props) => h(Card, props));
+
+/**
+ * AN EMAIL, DRAFTED HERE AND SENT BY THE PERSON (2026-11-15). The agent's `draft_email` hands back words; this is
+ * where a person reads them, changes them and presses Send. Only that click sends — through this page's own server
+ * (`/pramanyx-email`, which presents the person the app handed over) to Pramanyx's `/email/send`, which refuses an
+ * agent. What happened is said where it happened: sent to whom, or why not.
+ */
+/** What an analysis can be attached as: the platform's own exports, never a file the model wrote. */
+const ATTACH = [["", "No attachment"], ["pdf", "The analysis as PDF"], ["xlsx", "The analysis as Excel, every row"],
+  ["docx", "The analysis as Word"], ["pptx", "The analysis as PowerPoint"]];
+
+export function Draft({ draft }) {
+  const [to, setTo] = useState(String(draft?.to || ""));
+  const [subject, setSubject] = useState(String(draft?.subject || ""));
+  const [body, setBody] = useState(String(draft?.body || ""));
+  // The answer whose analysis may ride along — named by the agent when the person asked for it, or the answer an
+  // "Email this" was opened from. None known, no attachment is offered.
+  const answerId = String(draft?.attach_answer || "");
+  const [attach, setAttach] = useState(answerId ? String(draft?.attach_format || "") : "");
+  const [state, setState] = useState({ busy: false, sent: false, said: "" });
+  const field = { width: "100%", boxSizing: "border-box", font: "inherit", fontSize: 13.5, padding: "6px 8px",
+                  border: `1px solid ${line}`, borderRadius: 6, background: "transparent", color: "inherit" };
+  const send = async () => {
+    setState({ busy: true, sent: false, said: "" });
+    try {
+      const answer = await fetch("/pramanyx-email", { method: "POST", headers: { "content-type": "application/json" },
+                                                      body: JSON.stringify({ to, subject, body,
+                                                        ...(attach && answerId ? { attach_answer: answerId, attach_format: attach } : {}) }) });
+      const said = await answer.json().catch(() => ({}));
+      if (!answer.ok) return setState({ busy: false, sent: false, said: String(said.detail || `The email was refused (${answer.status}).`) });
+      setState({ busy: false, sent: !!said.sent, said: String(said.said || (said.sent ? "Sent." : "Not sent.")) });
+    } catch {
+      setState({ busy: false, sent: false, said: "The platform is not answering; nothing was sent." });
+    }
+  };
+  const ready = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to.trim()) && body.trim() && !state.busy && !state.sent;
+  return h("div", { "data-pramanyx-draft": "", style: { border: `1px solid ${line}`, borderRadius: 6, padding: 12, margin: "10px 0",
+                                                        display: "flex", flexDirection: "column", gap: 8, fontSize: 13.5 } },
+    h("div", { role: "heading", "aria-level": 4, style: { fontWeight: 600 } }, "Email draft"),
+    h("label", { style: { display: "flex", flexDirection: "column", gap: 3 } },
+      h("span", { style: quiet }, "To"),
+      h("input", { type: "email", value: to, disabled: state.sent, placeholder: "name@example.com", style: field,
+                   onChange: (e) => setTo(e.target.value) })),
+    h("label", { style: { display: "flex", flexDirection: "column", gap: 3 } },
+      h("span", { style: quiet }, "Subject"),
+      h("input", { type: "text", value: subject, disabled: state.sent, style: field, onChange: (e) => setSubject(e.target.value) })),
+    h("label", { style: { display: "flex", flexDirection: "column", gap: 3 } },
+      h("span", { style: quiet }, "Message"),
+      h("textarea", { rows: 8, value: body, disabled: state.sent, style: { ...field, resize: "vertical", lineHeight: 1.5 },
+                      onChange: (e) => setBody(e.target.value) })),
+    answerId ? h("label", { style: { display: "flex", flexDirection: "column", gap: 3 } },
+      h("span", { style: quiet }, "Attach"),
+      h("select", { value: attach, disabled: state.sent, style: field, onChange: (e) => setAttach(e.target.value) },
+        ATTACH.map(([value, label]) => h("option", { key: value || "none", value }, label)))) : null,
+    h("div", { style: { display: "flex", alignItems: "center", gap: 10 } },
+      h("button", { type: "button", style: button(true), disabled: !ready, onClick: send },
+        state.busy ? "Sending…" : state.sent ? "Sent" : "Send"),
+      state.said ? h("span", { role: "status", style: { color: state.sent ? "inherit" : "#c2410c" } },
+        state.sent ? `✓ ${state.said}` : `Not sent: ${state.said}`) : null,
+      !state.said && !state.sent ? h("span", { style: quiet }, "Nothing is sent until you press Send.") : null));
 }
+
+/** The draft a `draft_email` call returned, or null. */
+function draftOf(block) {
+  try {
+    const got = JSON.parse(resultText(block) || "{}");
+    return got && typeof got.draft === "object" ? got.draft : null;
+  } catch {
+    return null;
+  }
+}
+
+const DraftCard = inTail((props) => h(ToolStep, props),
+  (props) => (props.phase === "result" && draftOf(props.block) ? h(Draft, { draft: draftOf(props.block) }) : null));
 
 /** What a call was given, whichever of the shell's shapes carries it. Nothing readable is an empty object. */
 function argsOf(block) {
@@ -287,6 +364,9 @@ function AnswerStep(props) {
  */
 const DOES = {
   deep_analysis: ["Ran a deep analysis", ["question"]],
+  draft_email: ["Drafted an email", ["subject", "to"]],
+  schedule_question: ["Set a question on a schedule", ["question", "cron"]],
+  search_the_web: ["Searched the web", ["query"]],
   explore: ["Explored", ["question", "topic", "focus"]],
   explain: ["Asked how an answer was reached", ["investigation_id"]],
   get_metric: ["Read the definition of the metric", ["name", "metric", "metric_name"]],
@@ -663,6 +743,14 @@ function Figures({ answer }) {
  * and opens the app's own page for it beside the conversation. Everything else an answer can show is one quiet
  * row at its foot. Nothing here is a second telling: every word is the platform's, and every number is from the rows.
  */
+export function headlineOf(text) {
+  const said = String(text || "").trim();
+  if (said.length <= 220) return { head: said, rest: "" };
+  const cut = said.slice(0, 220).search(/[.!?](\s|$)(?![\s\S]*[.!?](\s|$))/);
+  const at = cut > 40 ? cut + 1 : said.slice(0, 220).lastIndexOf(" ");
+  return { head: said.slice(0, at > 0 ? at : 220).trim(), rest: said.slice(at > 0 ? at : 220).trim() };
+}
+
 function Exhibit({ answer, whole, asked }) {
   const id = idOf(answer, asked);
   const viz = useChosen(id);
@@ -688,6 +776,9 @@ function Exhibit({ answer, whole, asked }) {
   const connection = String(answer.connection || answer.receipt?.artifact?.conn_id || "");
   const told = answer.narrative && typeof answer.narrative === "object" ? answer.narrative : null;
   const words = told && typeof told.narrative === "string" ? told.narrative.trim() : "";
+  // A headline is a line. An answer written as a paragraph (an agent's prose) keeps its first sentence as the
+  // headline and the rest as text: drawn whole at headline size, a long answer filled the screen in bold.
+  const lead = headlineOf(answer.answer || answer.question || "Answer");
   const standsOut = told && Array.isArray(told.anomalies) ? told.anomalies.filter((x) => typeof x === "string" && x.trim()) : [];
   const wrong = Array.isArray(answer.warning?.issues) ? answer.warning.issues.filter((x) => typeof x === "string" && x.trim()) : [];
   const checked = answer.warning?.kind === "not_what_was_asked";
@@ -723,7 +814,8 @@ function Exhibit({ answer, whole, asked }) {
       allObjects ? "fewer" : `+${tables.length - OBJECTS_SHOWN}`) : null,
   ] : [];
   return h("div", { style: { display: "flex", flexDirection: "column", gap: 14, margin: "10px 0 6px", fontSize: 14.5, lineHeight: 1.6 } },
-    h("div", { role: "heading", "aria-level": 3, style: { fontSize: 20, fontWeight: 600, lineHeight: 1.3 } }, answer.answer || answer.question || "Answer"),
+    h("div", { role: "heading", "aria-level": 3, style: { fontSize: 20, fontWeight: 600, lineHeight: 1.3 } }, lead.head),
+    lead.rest ? h("div", null, rich(lead.rest)) : null,
     // What the platform itself says is wrong with this answer, said under the headline where a finding would be.
     wrong.length ? h("div", { role: "alert", style: { display: "flex", gap: 8, alignItems: "baseline", padding: "8px 10px", borderRadius: 6,
                                                       border: "1px solid color-mix(in srgb, #e5a50a 55%, transparent)", background: "color-mix(in srgb, #e5a50a 9%, transparent)" } },
@@ -772,13 +864,25 @@ function Exhibit({ answer, whole, asked }) {
  */
 const FILES = [["xlsx", "Excel, every row"], ["pptx", "PowerPoint"], ["docx", "Word"], ["pdf", "PDF"]];
 
+function emailOf(answer) {
+  const told = answer.narrative && typeof answer.narrative === "object" ? String(answer.narrative.narrative || "").replace(/\*\*/g, "") : "";
+  const rows = (answer.rows ?? []).slice(0, 20).map((r) => r.join(" · "));
+  return { to: "", subject: String(answer.answer || answer.question || "From Pramanyx").slice(0, 150),
+           body: [answer.answer, told, rows.length ? [(answer.columns ?? []).join(" · "), ...rows].join("\n") : ""].filter(Boolean).join("\n\n"),
+           // "Email this" knows its answer, so the analysis can be attached.
+           attach_answer: answer.investigation_id ? String(answer.investigation_id) : "", attach_format: "" };
+}
+
 function Files({ answer, id }) {
   const link = { fontSize: 13, color: "inherit", textDecoration: "underline", textUnderlineOffset: 2 };
-  return h("div", { role: "group", "aria-label": "Download", style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 14, padding: "2px 6px 8px 0", fontSize: 13 } },
+  const [emailing, setEmailing] = useState(false);
+  return h("div", null, h("div", { role: "group", "aria-label": "Download", style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 14, padding: "2px 6px 8px 0", fontSize: 13 } },
+    h("button", { type: "button", className: "pramanyx-link", "aria-expanded": emailing, onClick: () => setEmailing((was) => !was) }, "Email this"),
     h("button", { type: "button", className: "pramanyx-link", onClick: () => downloadCsv(answer) }, "Rows as CSV"),
     id ? FILES.map(([fmt, label]) => h("a", { key: fmt, style: link, download: "",
       href: `/pramanyx/investigations/${encodeURIComponent(id)}/export?format=${fmt}` }, label))
-      : h("span", { style: quiet }, "This answer was not stored, so only its rows can be taken."));
+      : h("span", { style: quiet }, "This answer was not stored, so only its rows can be taken.")),
+    emailing ? h(Draft, { draft: emailOf(answer) }) : null);
 }
 
 function Card(props) {
@@ -817,7 +921,8 @@ export function apply(ctx) {
     if (typeof name !== "string" || named.has(name) || !name.startsWith(PREFIX)) return;
     named.add(name);
     ctx.slots.inject("tool.call.toolview", () =>
-      ctx.slots.register({ name: "tool.call.toolview", key: name }, ANSWERS.test(name) ? AnswerCard : ToolStep));
+      ctx.slots.register({ name: "tool.call.toolview", key: name },
+        ANSWERS.test(name) ? AnswerCard : name === PREFIX + "draft_email" ? DraftCard : ToolStep));
   };
   // The tools known when this was written are named from the first call. A view is keyed by exact tool name, so
   // one added to Pramanyx since — and each custom agent's — gets its view at the end of the first turn that calls it.

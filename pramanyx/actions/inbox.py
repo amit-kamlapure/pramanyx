@@ -910,7 +910,8 @@ def _accept_outbound_send(p: StagedProposal, *, actor: str, mint_grant: bool = F
         _record_outcome(p.id, "uncertain", "post timed out", {})
         return _Result("uncertain", False, p.action_id,
                              message="post timed out — it may have arrived"), ""
-    why = f"Slack refused the post: {info.get('error', 'unknown')}"
+    from pramanyx.slackbots.post import refusal_said
+    why = f"Slack refused the post: {refusal_said(info.get('error', 'unknown'))}"
     _record_outcome(p.id, "failed", why, {})
     return _Result("failed", False, p.action_id, message=why), ""
 

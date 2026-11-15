@@ -40,6 +40,25 @@ _MAX_FILE_BYTES = 8 * 1024 * 1024
 _MAX_TEXT = 30_000
 
 
+#: Slack's errors for a post, said the way a person can act on them. Found scheduling a summary (2026-11-15): the
+#: post passed every check and came back "channel_not_found", which says nothing about the fix.
+_REFUSAL_SAID = {
+    "channel_not_found": "the bot cannot see {channel}: invite it there (type /invite @<the bot's name> in the channel), "
+                         "or name a channel it is already in",
+    "not_in_channel": "the bot is not a member of {channel}: invite it there (type /invite @<the bot's name> in the channel)",
+    "is_archived": "{channel} is archived",
+    "invalid_auth": "Slack no longer accepts the bot's token: reconnect the bot",
+    "account_inactive": "the bot's Slack app was removed or deactivated: reinstall it",
+    "missing_scope": "the bot lacks the permission to post: reinstall it with chat:write",
+}
+
+
+def refusal_said(error: str, channel: str = "") -> str:
+    """A refused post's reason in a person's words, with Slack's own code kept beside it."""
+    said = _REFUSAL_SAID.get(str(error or ""), "")
+    return (said.format(channel=channel or "that channel") + f" (Slack: {error})") if said else str(error or "unknown")
+
+
 def post_as_bot(bot_token: str, channel: str, text: str,
                 thread_ts: Optional[str] = None, *, delivery_key: str = "",
                 departure_id: str = "") -> tuple[bool, dict]:

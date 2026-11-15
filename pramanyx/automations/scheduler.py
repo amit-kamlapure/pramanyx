@@ -34,6 +34,14 @@ TICK_SECONDS = 60
 
 
 def tick_once() -> dict[str, int]:
+    """One whole tick: the schedules, then the housekeeping — what an outside clock (``/cron/tick``) calls. In this
+    process the two run as two jobs (`start`), so a slow reading never holds a schedule back."""
+    counts = tick_schedules_once()
+    counts.update(housekeeping_once())
+    return counts
+
+
+def tick_schedules_once() -> dict[str, int]:
     """Evaluate every enabled automation once. One automation's failure never stops the rest.
 
     The same tick ALSO runs every enabled monitor and brief subscription as a virtual
@@ -92,6 +100,15 @@ def tick_once() -> dict[str, int]:
     except Exception as exc:
         logger.warning("automation heartbeat could not resume parked runs: %s", exc)
         counts["resumed"] = 0
+    return counts
+
+
+def housekeeping_once() -> dict[str, int]:
+    """The platform's hourly and daily work — reviews, predictions, inquiries, mission reports, the settling reading,
+    re-checks, the agents' nightly evaluations, Briefing recall. Its own job since 2026-11-15: run inside the schedules'
+    tick, the daily settling reading after a restart held that tick for over five minutes, and every schedule due in
+    that time — a person's "every five minutes" among them — was skipped."""
+    counts: dict[str, int] = {}
     # CB-2 — the reviews that came due: measure again with the answer's own definition and ask.
     # Once an hour is the right grain for a question dated in days; the tick is a minute.
     try:
@@ -337,10 +354,18 @@ def start() -> None:
         return
     try:
         _scheduler.add_job(
-            tick_once,
+            tick_schedules_once,
             trigger=IntervalTrigger(seconds=TICK_SECONDS),
             id="automation_heartbeat",
             name="automation heartbeat",
+            replace_existing=True,
+        )
+        # The housekeeping on a clock of its own: a slow reading waits for itself, never for a schedule.
+        _scheduler.add_job(
+            housekeeping_once,
+            trigger=IntervalTrigger(seconds=TICK_SECONDS),
+            id="automation_housekeeping",
+            name="automation housekeeping",
             replace_existing=True,
         )
         _scheduler.start()

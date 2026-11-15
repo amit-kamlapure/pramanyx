@@ -49,3 +49,12 @@ def test_the_coworker_no_longer_mounts_the_shells_scheduler():
     profile = (Path(__file__).resolve().parents[2] / "coworker" / "profile.patch.yml").read_text()
     assert "name: '@deepseek-ai/dsh-tool-schedule'" not in profile
     assert "schedule_question" in profile
+
+
+def test_a_schedule_for_a_while_stops_on_its_own():
+    c, sent = _client({"scheduled_model_work": True})
+    asyncio.run(c.schedule_question("gmv by platform", "conn-1", "*/5 * * * *", stop_after_minutes=30))
+    assert sent["body"]["expires_at"].endswith("Z")
+    c, sent = _client({"scheduled_model_work": True})
+    asyncio.run(c.schedule_question("gmv by platform", "conn-1", "*/5 * * * *"))
+    assert "expires_at" not in sent["body"]

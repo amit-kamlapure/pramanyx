@@ -714,7 +714,8 @@ def _answer_of(obs: Any) -> dict:
     return {"headline": obs.narrative or "", "envelope": meta.get("envelope") or {},
             "rows": obs.rows or [], "columns": obs.columns or [], "error": obs.error or "",
             "sql": obs.sql or "", "all_sql": meta.get("all_sql") or ([obs.sql] if obs.sql else []),
-            "frames": meta.get("frames") or {}, "trace_id": meta.get("trace_id") or ""}
+            "frames": meta.get("frames") or {}, "trace_id": meta.get("trace_id") or "",
+            "grounding": meta.get("grounding") or {}}
 
 
 class Night:
@@ -1063,7 +1064,9 @@ def _run_case(night: Night, set_name: str, case: dict, conn_id: str, schema: str
     from pramanyx.custom_agents.quality import results_match
     v = score_golden(answer, references.get(case["id"], []), results_match)
     return v, {"headline": (answer["headline"] or "")[:200], "sql": answer["all_sql"][-1:],
-               "rows_shown": len(answer["rows"])}
+               "rows_shown": len(answer["rows"]),
+               # What the grounding check did to the answer's words, when it did anything: read with the verdict.
+               **({"grounding": answer["grounding"]} if answer.get("grounding") else {})}
 
 
 def _git_sha() -> str:

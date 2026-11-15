@@ -26,6 +26,7 @@ from starlette.requests import Request
 #: Doors whose connection id is not a registry connection, each with why — argued here, never grown silently.
 NOT_A_REGISTRY_CONNECTION = {
     "/integrations/connections/{conn_id}/revoke": "an integration grant, owned by its user (someone else's is a 404)",
+    "/integrations/connections/{conn_id}/account": "an integration grant, owned by its user (someone else's is a 404)",
     "/integrations/operations": "an integration grant's id scopes the operation roster to its provider",
 }
 
