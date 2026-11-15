@@ -151,6 +151,19 @@ def test_a_rule_is_said_in_words():
         "schedule(Once, on Mon 5 Jan 2026 at 15:00 UTC)"
 
 
+def test_a_floating_start_is_never_given_a_clock_the_reader_does_not_know():
+    """Found live, 2026-11-15: a schedule read in Asia/Kolkata gave its run the reason "…at 23:18 UTC" — the trigger
+    alone was asked, and it guessed. A reader holding the automation names ITS clock; one holding only the trigger
+    says whose clock it is."""
+    floating = "DTSTART:20260105T231800\nRRULE:FREQ=DAILY;COUNT=1"
+    a = _scheduled(floating, created=_at(2026, 1, 5, 17, 0), timezone="Asia/Kolkata")
+    run = run_automation(a, now=_at(2026, 1, 5, 17, 1), dispatch=_ran([]))
+    assert run.reason.startswith("schedule(Once, on Mon 5 Jan 2026 at 23:18 Asia/Kolkata): next due 2026-01-05T17:48")
+    assert Condition(kind="schedule", config={"cron": floating}).describe() == \
+        "schedule(Once, on Mon 5 Jan 2026 at 23:18 in the automation's clock)"
+    assert recurrence.said(floating, "") == "Once, on Mon 5 Jan 2026 at 23:18 UTC"           # "" is UTC, and known
+
+
 # ── a cron's weekday numbers mean what a cron means ──────────────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("field, named", [
@@ -192,6 +205,19 @@ def test_a_tick_a_breath_before_its_time_does_not_end_it():
     run = run_automation(a, now=_at(2026, 1, 5, 14, 59, 59), dispatch=_ran([]))
     assert run.outcome == "not_fired" and retire_if_ended(a, run) is False
     assert get_automation(a.id).enabled is True
+
+
+def test_between_its_time_and_the_tick_that_runs_it_a_schedule_is_due_not_ended():
+    """Found live, 2026-11-15: a one-off due at :48:00, read at :48:15 with the tick coming at :48:23, said "ended"
+    — its one run still to come. A reader counts runs from the engine's last tick, as the engine does."""
+    a = _scheduled(ONCE_AT_THREE, created=_at(2026, 1, 5, 14, 0))
+    last_tick, asked = _at(2026, 1, 5, 14, 59, 23), _at(2026, 1, 5, 15, 0, 15)
+    assert ended_reason(a, asked) == "its schedule has no run left"          # what the read once concluded
+    assert ended_reason(a, asked, since=last_tick) == ""                      # the run is still to come
+    assert ended_reason(a, _at(2026, 1, 5, 15, 1), since=_at(2026, 1, 5, 15, 0, 23)) == "its schedule has no run left"
+    # A stale "since" never revives an end date: expiry is a fact about now.
+    over = _scheduled("*/5 * * * *", created=_at(2026, 1, 5), expires_at="2026-01-05T08:30:00Z")
+    assert ended_reason(over, _at(2026, 1, 5, 9, 0), since=_at(2026, 1, 5, 8, 0)).startswith("expired at")
 
 
 def test_an_expired_schedule_stops_being_asked_every_minute():

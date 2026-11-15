@@ -99,7 +99,8 @@ def doors(automation: Automation) -> list[dict]:
 
 def _schedule_door(a: Automation) -> Door:
     # `when`: a cron as written, a recurrence (`automations.recurrence`) in words — the door's detail is read by a person.
-    crons = [c.when for c in (a.conditions or []) if c.kind == "schedule" and c.cron]
+    from pramanyx.automations.recurrence import said
+    crons = [said(c.cron, a.timezone or "") or c.cron for c in (a.conditions or []) if c.kind == "schedule" and c.cron]
     base = dict(kind="schedule", label="Schedule", icon="clock", priority=10,
                 description="Runs itself on a clock: a cron cadence, or a recurrence (once, every N, the first Monday).")
     if not crons:

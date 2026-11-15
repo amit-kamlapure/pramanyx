@@ -88,6 +88,8 @@ class Recurrence:
     until: Optional[datetime]
     parts: dict = field(compare=False, hash=False, repr=False, default_factory=dict)
     _steps: Any = field(compare=False, hash=False, repr=False, default=None)
+    #: The start named no clock of its own (no ``Z``, no ``TZID``): it is read in the automation's.
+    floating: bool = False
 
     @property
     def once(self) -> bool:
@@ -109,9 +111,6 @@ class Recurrence:
         return found.astimezone(UTC) if found is not None else None
 
     # ── in words ─────────────────────────────────────────────────────────────────
-    def _clock(self) -> str:
-        return f"{self.start.hour:02d}:{self.start.minute:02d} {self.zone}"
-
     def _day(self, at: Optional[datetime] = None) -> str:
         at = at or self.start
         return f"{_DAYS[('MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU')[at.weekday()]]} {at.day} {_MONTHS[at.month - 1]} {at.year}"
@@ -120,10 +119,16 @@ class Recurrence:
         unit = _UNIT[self.freq]
         return f"Every {unit}" if self.interval == 1 else f"Every {self.interval} {unit}s"
 
-    def said(self) -> str:
-        """The recurrence as a person would say it, its clock named. A shape this cannot say is quoted, never guessed."""
+    def said(self, clock_known: bool = True) -> str:
+        """The recurrence as a person would say it, its clock named. A shape this cannot say is quoted, never guessed.
+
+        ``clock_known`` False is a reader that holds the trigger but not its automation: a floating start is read in
+        the automation's clock, which that reader does not know, so it says so rather than name one (a run's reason
+        once read "at 23:18 UTC" for a schedule read in Asia/Kolkata)."""
+        clock = self.zone if (clock_known or not self.floating) else "in the automation's clock"
+        at = f"{self.start.hour:02d}:{self.start.minute:02d} {clock}"
         if self.once:
-            return f"Once, on {self._day()} at {self._clock()}"
+            return f"Once, on {self._day()} at {at}"
         named = {k for k in self.parts if k.startswith("BY")}
         tail = ""
         if self.count:
@@ -132,30 +137,30 @@ class Recurrence:
             tail = f", until {self._day(self.until.astimezone(self.start.tzinfo))}"
         since = f", from {self._day()}"
         if self.freq in _STEPPED:
-            return f"{self._every()}{since} at {self._clock()}{tail}"
+            return f"{self._every()}{since} at {at}{tail}"
         if self.freq == "DAILY" and not named:
-            return f"{self._every()} at {self._clock()}{since if self.interval > 1 else ''}{tail}"
+            return f"{self._every()} at {at}{since if self.interval > 1 else ''}{tail}"
         if self.freq == "WEEKLY" and named <= {"BYDAY"}:
             days = [d.strip().upper() for d in self.parts.get("BYDAY", "").split(",") if d.strip()]
             if all(d in _DAYS for d in days):
                 on = ", ".join(_DAYS[d] for d in days) or self._day().split(" ")[0]
-                return f"{self._every()} on {on} at {self._clock()}{since if self.interval > 1 else ''}{tail}"
+                return f"{self._every()} on {on} at {at}{since if self.interval > 1 else ''}{tail}"
         if self.freq == "MONTHLY" and len(named) == 1:
             which = "every month" if self.interval == 1 else f"every {self.interval} months"
             if "BYDAY" in named:
                 m = _BYDAY.match(self.parts["BYDAY"].strip().upper())
                 if m and m.group("nth") and int(m.group("nth")) in _NTH:
-                    return f"On the {_NTH[int(m.group('nth'))]} {_DAYS[m.group('day')]} of {which} at {self._clock()}{tail}"
+                    return f"On the {_NTH[int(m.group('nth'))]} {_DAYS[m.group('day')]} of {which} at {at}{tail}"
             if "BYMONTHDAY" in named and re.fullmatch(r"-?\d{1,2}", self.parts["BYMONTHDAY"].strip()):
                 day = int(self.parts["BYMONTHDAY"])
                 on = "the last day" if day == -1 else f"day {day}"
-                return f"On {on} of {which} at {self._clock()}{tail}"
+                return f"On {on} of {which} at {at}{tail}"
         if self.freq == "MONTHLY" and not named:
             which = "every month" if self.interval == 1 else f"every {self.interval} months"
-            return f"On day {self.start.day} of {which} at {self._clock()}{tail}"
+            return f"On day {self.start.day} of {which} at {at}{tail}"
         if self.freq == "YEARLY" and not named:
-            return f"{self._every()} on {self.start.day} {_MONTHS[self.start.month - 1]} at {self._clock()}{tail}"
-        return f"On the recurrence {self.text.splitlines()[1]}, from {self._day()} at {self._clock()}"
+            return f"{self._every()} on {self.start.day} {_MONTHS[self.start.month - 1]} at {at}{tail}"
+        return f"On the recurrence {self.text.splitlines()[1]}, from {self._day()} at {at}"
 
 
 def _until(raw: str, tz) -> datetime:
@@ -237,7 +242,7 @@ def parse(expression: str, timezone: str = "") -> Recurrence:
              else f"DTSTART;TZID={head.group('zone')}:{moment}" if head.group("zone") else f"DTSTART:{moment}")
     text = f"{first}\nRRULE:" + ";".join(f"{k}={v}" for k, v in parts.items())
     return Recurrence(text=text, start=start, zone=zone, freq=freq, interval=interval, count=count, until=until,
-                parts=parts, _steps=steps)
+                      parts=parts, _steps=steps, floating=not (head.group("z") or head.group("zone")))
 
 
 class RecurrenceTrigger:
@@ -251,12 +256,12 @@ class RecurrenceTrigger:
         return self.recurrence.at_or_after(now)
 
 
-def said(expression: str, timezone: str = "") -> str:
+def said(expression: str, timezone: Optional[str] = None) -> str:
     """A recurrence in words, or "" for text that is not one (a cron is worded by its own readers)."""
     if not is_recurrence(expression):
         return ""
     try:
-        return parse(str(expression).strip(), timezone or "").said()
+        return parse(str(expression).strip(), timezone or "").said(clock_known=timezone is not None)
     except RecurrenceError:
         return ""
 

@@ -15,6 +15,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
+import { cronWords, isRecurrence } from "@/components/automations/ScheduleEditor";
 
 import { Button } from "@/components/ui/button";
 import { StatusChip, type ChipHue } from "@/components/brief/StatusChip";
@@ -122,7 +123,10 @@ function stepWords(e: Record<string, unknown>): string {
 
 function triggerWords(c: Record<string, unknown>): string {
   const cfg = (c.config ?? {}) as Record<string, unknown>;
-  if (c.kind === "schedule" && cfg.cron) return `schedule · ${String(cfg.cron)} (UTC)`;
+  if (c.kind === "schedule" && cfg.cron) {
+    const cron = String(cfg.cron);
+    return isRecurrence(cron) ? `schedule · ${cronWords(cron)}` : `schedule · ${cron} (UTC)`;
+  }
   return String(c.kind ?? "trigger");
 }
 

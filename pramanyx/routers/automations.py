@@ -647,15 +647,24 @@ def schedule_of(automation_id: str):
     if a is None:
         raise HTTPException(status_code=404, detail="Automation not found")
     now = datetime.now(timezone.utc)
-    ended = ended_reason(a, now)
-    muted_until = ""
-    if a.paused_until:
+
+    def moment(stamp) -> Optional[datetime]:
         try:
-            until = datetime.fromisoformat(str(a.paused_until).replace("Z", "+00:00"))
-            if (until if until.tzinfo else until.replace(tzinfo=timezone.utc)) > now:
-                muted_until, now = str(a.paused_until), until if until.tzinfo else until.replace(tzinfo=timezone.utc)
+            read = datetime.fromisoformat(str(stamp or "").replace("Z", "+00:00"))
         except ValueError:
-            muted_until = ""
+            return None
+        return read if read.tzinfo else read.replace(tzinfo=timezone.utc)
+
+    # Runs are counted from the engine's own "since last time": its last tick, else when the automation was made. A
+    # schedule whose time has come but whose tick has not is DUE, with a run still to come — not ended, and not
+    # without a next run.
+    ticked = moment(a.last_run_at) or moment(a.created_at) or now
+    ended = ended_reason(a, now, since=ticked)
+    now = min(ticked, now)
+    muted_until = ""
+    until = moment(a.paused_until)
+    if until is not None and until > datetime.now(timezone.utc):
+        muted_until, now = str(a.paused_until), until
     whens = [c for c in a.conditions if c.kind == "schedule"]
     times = [t for c in whens if (t := next_fire_utc(c.cron, now, a.timezone)) is not None]
     state = "ended" if ended else "off" if not a.enabled else "muted" if muted_until else "on"

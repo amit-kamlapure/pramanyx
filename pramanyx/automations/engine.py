@@ -281,6 +281,14 @@ def next_fire_utc(cron: str, after: datetime, timezone: str = "") -> Optional[da
     return t.astimezone(_tz.utc) if t is not None else None
 
 
+def _when(cond: Condition, automation: Automation) -> str:
+    """A schedule's expression for a run's reason: a cron as written; a recurrence in words, in THIS automation's
+    clock — the trigger alone does not know which clock a floating start is read in, and a reason that named the
+    wrong one would be worse than none."""
+    from pramanyx.automations.recurrence import said
+    return said(cond.cron, getattr(automation, "timezone", "") or "") or cond.when
+
+
 def _schedule_fired(cond: Condition, automation: Automation, now: datetime) -> tuple[bool, str]:
     """True when the cron matched at some point between the last run and ``now``.
 
@@ -292,6 +300,7 @@ def _schedule_fired(cond: Condition, automation: Automation, now: datetime) -> t
         trigger = cron_trigger(cond.cron, getattr(automation, "timezone", ""))
     except (ValueError, KeyError) as exc:
         raise ProbeUnavailable(f"invalid cron '{cond.cron}': {exc}") from exc
+    when = _when(cond, automation)
 
     prev_run = last_run(automation.id)
     prev = _parse(prev_run.started_at) if prev_run else None
@@ -306,7 +315,7 @@ def _schedule_fired(cond: Condition, automation: Automation, now: datetime) -> t
     if prev is None:
         from pramanyx.automations.recurrence import is_recurrence
         if not is_recurrence(cond.cron):
-            return True, f"schedule({cond.when}): first run"
+            return True, f"schedule({when}): first run"
         # A RECURRENCE says exactly when, so it is never due merely for being new: "once at three" made at two must wait
         # for three. Its runs are counted from the moment the automation was made.
         prev = _parse(automation.created_at) or now
@@ -314,18 +323,23 @@ def _schedule_fired(cond: Condition, automation: Automation, now: datetime) -> t
     # +1s so a tick that lands on the same instant as the previous run cannot re-fire it.
     nxt = trigger.get_next_fire_time(None, prev + timedelta(seconds=1))
     if nxt is not None and nxt <= now:
-        return True, f"schedule({cond.when}): due since {nxt.isoformat()}"
-    return False, f"schedule({cond.when}): next due {nxt.isoformat() if nxt else 'never'}"
+        return True, f"schedule({when}): due since {nxt.isoformat()}"
+    return False, f"schedule({when}): next due {nxt.isoformat() if nxt else 'never'}"
 
 
-def ended_reason(automation: Automation, at: object) -> str:
+def ended_reason(automation: Automation, at: object, *, since: object = None) -> str:
     """Why this automation will never fire again by itself, as of ``at`` (a moment, or its ISO stamp) — "" while it
     still can.
 
-    Two ends, both final: its ``expires_at`` has passed, or every trigger is a schedule RECURRENCE with no run left (a
-    one-off that has run, "five times" after the fifth). A cron never ends, and a trigger that reads the world — a
-    metric, a table, a webhook — can always fire again, so a chain holding either is never ended by this. A recurrence
-    that cannot be read is the tick's error to report, not an end."""
+    Two ends, both final: its ``expires_at`` has passed, or every trigger is a schedule RECURRENCE with no run left
+    (a one-off that has run, "five times" after the fifth). A cron never ends, and a trigger that reads the world — a
+    metric, a table, a webhook — can always fire again, so a chain holding either is never ended by this. A
+    recurrence that cannot be read is the tick's error to report, not an end.
+
+    ``since`` is the moment runs are counted from when that is not ``at``: a reader asking between a one-off's time
+    and the tick that will run it (found live, 2026-11-15: for most of a minute the schedule read "ended" while its
+    one run was still to come) passes the last tick, because a run is left for as long as the engine has not got to
+    it. The tick itself passes nothing: the moment its run read the clock is both."""
     now = at if isinstance(at, datetime) else (_parse(str(at or "")) or datetime.now(timezone.utc))
     expires = _parse(automation.expires_at)
     if expires is not None and expires <= now:
@@ -334,9 +348,11 @@ def ended_reason(automation: Automation, at: object) -> str:
     conditions = list(automation.conditions or [])
     if not conditions or not all(c.kind == "schedule" and is_recurrence(c.cron) for c in conditions):
         return ""
+    counted = since if isinstance(since, datetime) else (_parse(str(since or "")) if since else None)
+    counted = min(counted, now) if counted is not None else now
     clock = getattr(automation, "timezone", "") or ""
     try:
-        left = any(parse(c.cron.strip(), clock).at_or_after(now) is not None for c in conditions)
+        left = any(parse(c.cron.strip(), clock).at_or_after(counted) is not None for c in conditions)
     except RecurrenceError:
         return ""
     return "" if left else "its schedule has no run left"
@@ -481,7 +497,7 @@ def evaluate_conditions(automation: Automation, *, now: datetime,
     results: list[tuple[bool, str]] = []
     for cond in automation.conditions:
         if cond.kind == "schedule":
-            results.append((True, f"schedule({cond.when}): {skipped}")
+            results.append((True, f"schedule({_when(cond, automation)}): {skipped}")
                            if manual else _schedule_fired(cond, automation, now))
         elif cond.kind == "webhook":
             results.append((True, f"webhook: {asked}") if manual
