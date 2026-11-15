@@ -220,14 +220,33 @@ const VIEW_SET = "pramanyx.coworker.view-set";
  * The shell reads its view before any plugin starts and keeps it in memory, so writing the stored copy changes
  * nothing on the page that is open (a first version did only that, and the first visit still showed folders).
  * The stored copy is written and the page is loaded once more, which a first visit shows as a brief flicker.
+ *
+ * THE STORED VIEW IS WHOLE (found 2026-11-15). The shell loads a stored view as it finds it, without its own
+ * defaults under it, and two of its fields are read as objects. A first visit has no stored view, and this once
+ * wrote only the two fields it changes: the shell's conversation list then failed to start and the sidebar showed
+ * no conversations at all. The shell's own fields go under ours, and a view stored that way is mended once.
  */
+const SHELL_VIEW = { groupBy: "workspace", orderBy: "updated", groupExpansion: {}, sessionOrderByAccount: {}, archivedFilter: "default" };
+
+function isWhole(view) {
+  return ["groupExpansion", "sessionOrderByAccount"].every((key) => view[key] && typeof view[key] === "object" && !Array.isArray(view[key]));
+}
+
 function listConversationsNewestFirst() {
   try {
-    if (localStorage.getItem(VIEW_SET)) return;
+    const stored = localStorage.getItem(VIEW);
+    const view = JSON.parse(stored || "{}");
+    if (localStorage.getItem(VIEW_SET)) {
+      // Set before: mend a view this plugin once stored without the shell's own fields, and leave any other alone.
+      if (!stored || isWhole(view)) return;
+      localStorage.setItem(VIEW, JSON.stringify({ ...SHELL_VIEW, ...view, groupExpansion: {}, sessionOrderByAccount: {} }));
+      window.location.reload();
+      return;
+    }
     localStorage.setItem(VIEW_SET, "1");
-    const view = JSON.parse(localStorage.getItem(VIEW) || "{}");
-    if (view.groupBy === "flat") return;
-    localStorage.setItem(VIEW, JSON.stringify({ ...view, groupBy: "flat", orderBy: "updated" }));
+    if (view.groupBy === "flat" && (!stored || isWhole(view))) return;
+    localStorage.setItem(VIEW, JSON.stringify({ ...SHELL_VIEW, ...view,
+      ...(isWhole(view) ? {} : { groupExpansion: {}, sessionOrderByAccount: {} }), groupBy: "flat", orderBy: "updated" }));
     window.location.reload();
   } catch {
     // A browser that keeps nothing: the shell's default view stands.
