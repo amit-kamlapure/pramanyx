@@ -25,6 +25,9 @@ export interface FormCtx {
   plotted?: string[];
   catCols: string[];
   dateCol?: string;
+  /** The date column drawn on a time scale: `dateCol`, unless its periods are plain numbers (`isNumberPeriod`) —
+   *  those are an ordinal band, one per period, already in period order. */
+  timeCol?: string;
   measure: string;
   band: string;
   format?: string | null;
@@ -74,6 +77,8 @@ const LON = /(^|_)(lon|lng|long|longitude)$/i;
 export function resolveExtendedForm(type: string, c: FormCtx): FormResult | null {
   const { columns, rows, data, numCols, catCols, dateCol, measure, base, exhibit: ex } = c;
   const yT = title(c.yTitle, measure);
+  /** A bar's band: a real date on time, a number period (`timeCol` unset) one ordinal band each, a label nominal. */
+  const bandType = (field: string) => field === c.timeCol ? "temporal" : field === dateCol ? "ordinal" : "nominal";
 
   switch (type) {
     // ── relation ───────────────────────────────────────────────────────────
@@ -202,7 +207,7 @@ export function resolveExtendedForm(type: string, c: FormCtx): FormResult | null
             transform: [{ fold: folded, as: ["__measure", "__value"] }],
             mark: { type: "bar", tooltip: true },
             encoding: {
-              x: { field: bandField, type: dateCol === bandField ? "temporal" : "nominal",
+              x: { field: bandField, type: bandType(bandField),
                    axis: bandAxis(title(c.xTitle, bandField)) },
               y: { field: "__value", type: "quantitative", stack: grouped ? null : "zero",
                    axis: valueAxis(title(c.yTitle, "value"), c.format) },
@@ -213,7 +218,7 @@ export function resolveExtendedForm(type: string, c: FormCtx): FormResult | null
         };
       }
       const enc: Record<string, unknown> = {
-        x: { field: bandField, type: dateCol === bandField ? "temporal" : "nominal",
+        x: { field: bandField, type: bandType(bandField),
              axis: bandAxis(title(c.xTitle, bandField)) },
         y: { field: measure, type: "quantitative", stack: grouped ? null : "zero",
              axis: valueAxis(yT, c.format) },
@@ -240,7 +245,7 @@ export function resolveExtendedForm(type: string, c: FormCtx): FormResult | null
             width: 180, height: 110,
             mark: { type: "line" },
             encoding: {
-              x: { field: x, type: x === dateCol ? "temporal" : "ordinal", axis: bandAxis("") },
+              x: { field: x, type: x === c.timeCol ? "temporal" : "ordinal", axis: bandAxis("") },
               y: { field: measure, type: "quantitative", axis: valueAxis("", c.format) },
             },
           },
@@ -348,8 +353,8 @@ export function resolveExtendedForm(type: string, c: FormCtx): FormResult | null
         resolved: "line-forecast", defaultH: 300, xCategories: 0,
         spec: {
           ...base, layer: layers,
-          encoding: { x: { field: x, type: x === dateCol ? "temporal" : "ordinal",
-                           axis: { ...bandAxis(title(c.xTitle, x)), ...(x === dateCol ? { format: "%b %Y" } : {}) } } },
+          encoding: { x: { field: x, type: x === c.timeCol ? "temporal" : "ordinal",
+                           axis: { ...bandAxis(title(c.xTitle, x)), ...(x === c.timeCol ? { format: "%b %Y" } : {}) } } },
         },
       };
     }

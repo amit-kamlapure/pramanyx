@@ -16,7 +16,7 @@
 
 import { chartDateFormat, cleanLabel, detectGranularity, fmtDate, type Gran } from "@/lib/format";
 import { currencySymbol, effectiveCurrencySymbol, isMoneyColumn } from "@/lib/orgSettings";
-import { classifyColumns, isIdLike, isPriorPeriodCol, isUngraphableGrid, percentRates, plottedMeasures,
+import { classifyColumns, isIdLike, isNumberPeriod, isNumeric, isPriorPeriodCol, isUngraphableGrid, percentRates, plottedMeasures,
          tooFewToCompare, uniqueLabelBand, CHANGE_METRIC_COL, HORIZONTAL_MAX_CATS, PERCENT_CHANGE_COL,
          TOO_FEW_TO_COMPARE } from "@/components/charts/columnRoles";
 import { EXTENDED_TYPES, resolveExtendedForm } from "@/components/charts/vega/forms";
@@ -323,6 +323,13 @@ function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
   const { dateIdxs, numericIdxs, catIdxs } = classifyColumns(columns, rows);
   const dateCol = dateIdxs.length ? columns[dateIdxs[0]] : undefined;
   /**
+   * The date column drawn on a TIME scale — none when its periods are plain numbers (`isNumberPeriod`): FY2026 on
+   * a time scale is 2.026 seconds past 1970. A number period is still the time dimension (the x, the band, upright),
+   * drawn as an ordinal band: one even band per period, read below as numbers and in period order.
+   */
+  const numberPeriod = dateIdxs.length > 0 && isNumberPeriod(rows, dateIdxs[0]);
+  const timeCol = numberPeriod ? undefined : dateCol;
+  /**
    * An ID is numeric and is never the answer. `franchiseID` sorts ahead of `revenue` in
    * column order, so taking the first numeric column plotted the identifier and labelled the
    * axis "franchiseID" — a chart of row numbers. Identifier-shaped names are dropped from
@@ -454,6 +461,16 @@ function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
   };
 
   const data = { values: toRecords(columns, rows) };
+  /**
+   * A number period is read as a number — "2026" and 2026 are one year, and month 2 sorts before month 10 — and
+   * its rows in period order, so a band that keeps data order and one that sorts its own domain agree, and a line
+   * runs left to right. A row with no period goes last.
+   */
+  if (numberPeriod && dateCol) {
+    for (const d of data.values) if (isNumeric(d[dateCol])) d[dateCol] = Number(d[dateCol]);
+    const at = (d: Record<string, unknown>) => (typeof d[dateCol] === "number" ? d[dateCol] as number : Infinity);
+    data.values.sort((a, b) => at(a) - at(b));
+  }
 
   /**
    * Ranking order is applied to the DATA, not to the encoding.
@@ -501,7 +518,7 @@ function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
   // ---- the forms beyond the everyday six ------------------------------------------------
   if (EXTENDED_TYPES.has(type)) {
     const ext = resolveExtendedForm(type, {
-      columns, rows, data, numCols, catCols, dateCol, measure, band,
+      columns, rows, data, numCols, catCols, dateCol, timeCol, measure, band,
       format, xTitle, yTitle, showLabels, base, exhibit,
       plotted: (inferred?.yCols?.length ? inferred.yCols : plottedMeasures(columns, rows, numericIdxs))
         .map((i) => columns[i]).filter((c) => numCols.includes(c)),
@@ -568,7 +585,7 @@ function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
     // zig-zagging through all 32 points with no legend. When inference ran it already chose
     // the column, so only the explicit-hint path needs the date preference.
     const x = inferred ? band : (dateCol ?? band);
-    const xIsDate = x === dateCol;
+    const xIsDate = x === timeCol;
     // A series column (multi-line) or a single measure (line).
     const seriesCol = inferredSeries ?? (type.startsWith("multi") ? catCols.find((c) => c !== x) : undefined);
     const xValues = rows.map((r) => r[columns.indexOf(x)]);
@@ -645,12 +662,16 @@ function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
   const bandValues = rows.map((r) => r[columns.indexOf(band)]);
   const bandGran = dateCol && band === dateCol ? detectGranularity(band, bandValues) : null;
   const changeByPeriod = isChange && bandGran !== null;
+  // A band of number periods: ordinal, in the period order the rows were put in above.
+  const numberBand = numberPeriod && band === dateCol;
+  // A band on a time scale, with a date axis: a real date, unless it is a change's labelled periods.
+  const bandOnTime = band === timeCol && !changeByPeriod;
   // A change over time is one bar per period with a change, in time order, labelled as the table
   // labels its period.
   const periodRows = changeByPeriod
     ? [...data.values]
         .filter((d) => d[measure] !== null && d[measure] !== "" && Number.isFinite(Number(d[measure])))
-        .sort((a, b) => String(a[band]).localeCompare(String(b[band])))
+        .sort((a, b) => numberBand ? Number(a[band]) - Number(b[band]) : String(a[band]).localeCompare(String(b[band])))
         .map((d) => ({ ...d, __period: fmtDate(String(d[band] ?? ""), bandGran ?? "month") }))
     : null;
   // Titles bind to the CHANNEL, not the screen axis: the editor's "X axis" section IS
@@ -687,15 +708,15 @@ function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
                                      pct ? ".1%" : format, pct ? "" : moneyPrefix(measure)) };
   const bandEnc = {
     field: changeByPeriod ? "__period" : band,
-    type: (changeByPeriod ? "ordinal" : dateCol === band ? "temporal" : "nominal") as string,
-    ...(bandGran && !changeByPeriod ? utcScale(bandGran) : {}),
+    type: (changeByPeriod || numberBand ? "ordinal" : bandOnTime ? "temporal" : "nominal") as string,
+    ...(bandOnTime ? utcScale(bandGran) : {}),
     axis: {
       ...bandAxis(axisTitle(xTitle, band)),
-      ...(bandGran && !changeByPeriod
+      ...(bandOnTime && bandGran
         ? { format: chartDateFormat(bandGran, new Set(bandValues.map((v) => String(v ?? "").slice(0, 4))).size > 1),
             ...periodTicks(bandGran, new Set(bandValues.map(String)).size),
             ...compactMonths(bandGran, bandValues) } : {}),
-      ...(periodRows && bandGran === "month" ? compactPeriodLabels(periodRows.map((d) => String(d.__period))) : {}),
+      ...(periodRows && bandGran === "month" && !numberBand ? compactPeriodLabels(periodRows.map((d) => String(d.__period))) : {}),
     },
     // Lead with the largest — the ranking the question implies. Ties break stably.
     // Data order, always: see orderedValues above for why an encoding sort cannot be trusted.
@@ -824,7 +845,9 @@ function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
         ? [...ordered.filter((d) => !(Number(d[few.den]) < TOO_FEW_TO_COMPARE)),
            ...ordered.filter((d) => Number(d[few.den]) < TOO_FEW_TO_COMPARE)]
         : ordered;
+      // A band of number periods keeps period order, whichever way it lies and wherever a too-few row is.
       const sorted = periodRows ? { data: { values: periodRows } }
+        : numberBand ? {}
         : horizontal || fewTest ? { data: { values: fewLast } } : {};
       return all.length > 1
         ? { ...base, ...sorted, ...withTf, layer: all, encoding }

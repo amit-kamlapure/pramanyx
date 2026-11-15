@@ -116,6 +116,24 @@ export function firstNonNull(rows: unknown[][], colIdx: number): unknown {
   return rows[0]?.[colIdx as number];
 }
 
+/**
+ * A date column whose every value is a plain NUMBER — `fiscal_year` 2026, `month` 7, `yyyymm` 202501. It is a
+ * period counted in whole steps, never a moment on a clock, so a chart draws it as an ordinal band: one even
+ * band per period, in number order. On a time scale the number 2026 is 2.026 seconds past 1970: a bar of
+ * FY2026 against FY2027 drew two hairlines at the two ends of a one-millisecond scale, with no year under
+ * either (2026-11-15). A date written as a date — "2025-08-01", a `Date` — stays a time.
+ */
+export function isNumberPeriod(rows: unknown[][], colIdx: number): boolean {
+  let seen = false;
+  for (const r of rows) {
+    const v = (r as unknown[])[colIdx];
+    if (v === null || v === undefined || v === "" || v === "NULL") continue;
+    if (v instanceof Date || typeof v === "boolean" || !isNumeric(v)) return false;
+    seen = true;
+  }
+  return seen;
+}
+
 /** Count the distinct values a column takes across all rows. */
 export function countUnique(rows: unknown[][], colIdx: number): number {
   return new Set(rows.map((r) => String((r as unknown[])[colIdx]))).size;
