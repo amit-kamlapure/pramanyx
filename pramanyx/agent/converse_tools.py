@@ -1159,12 +1159,16 @@ def converse_system_prompt(connection_id: str, extra: Optional[str] = None,
         # conversation was not, so a conversation found a declared rule only if it searched for one, and on the golden
         # set it did not: `ship_region = 'Europe'` for EU markets, `category = 'accessories'` for the division
         # (2026-11-15). Deterministic, no model; empty when the question reaches nothing declared.
+        dialect = "duckdb"                  # an unknown connection compiles as the platform's own engine does
         try:
-            from pramanyx.agent.grounding import question_frame
             from pramanyx.db.connection import connection_traits
             from pramanyx.db.registry import get_conn_type
             traits = connection_traits(get_conn_type(connection_id))
             dialect = (traits.get("dialect") or "duckdb") if traits.get("writes_native_sql") else "duckdb"
+        except Exception as exc:  # noqa: BLE001 — the frame still compiles, in DuckDB's dialect
+            logger.debug("question frame: dialect of %s unread (%s)", connection_id, exc)
+        try:
+            from pramanyx.agent.grounding import question_frame
             block = question_frame(question, connection_id, dialect=dialect).strip()
             if block:
                 lines += ["", block]
