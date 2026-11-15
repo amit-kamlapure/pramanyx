@@ -142,3 +142,24 @@ def test_the_conversation_is_given_the_questions_declared_definitions(monkeypatc
     assert '"EU markets" → Order.ship_country is one of' in prompt and seen["question"].endswith("EU markets?")
     monkeypatch.setattr("pramanyx.agent.grounding.question_frame", lambda *a, **k: "")
     assert "QUESTION FRAME" not in C.converse_system_prompt("conn-1", question="How many orders?")
+
+
+# ── a scheduled summary's total leaves the install (the departure gate, 2026-11-15) ───────────────────────────
+
+def test_the_gate_counts_an_analysis_total_as_measured_and_still_holds_a_wrong_one(monkeypatch):
+    from datetime import datetime, timezone
+
+    from pramanyx.govern import departure as D
+    from pramanyx.govern import departure_basis as B
+    record = {"connection_id": "", "completed_at": datetime.now(timezone.utc).isoformat(),
+              "report": {"phases": [{"findings": [{
+                  "sql": "SELECT platform, SUM(gmv_eur) AS gmv FROM orders WHERE fiscal_year = 2027 GROUP BY 1",
+                  "columns": ["platform", "gmv"], "row_count": 4,
+                  "rows": [["Mytheresa", 1190000.12], ["NET-A-PORTER", 970000.30], ["YOOX", 480000.10],
+                           ["MR PORTER", 431674.18]]}]}]}}
+    monkeypatch.setattr(B, "_analysis_record", lambda inv_id: record)
+    measured = B.measurement_for_analysis("abcdef12")
+    ok = D._remeasure("FY2027 GMV to 14 November: €3,071,674.70 across the four platforms.", measured, False)
+    assert ok.outcome != D.HOLDS, ok
+    wrong = D._remeasure("FY2027 GMV to 14 November: €3,500,000.00 across the four platforms.", measured, False)
+    assert wrong.outcome == D.HOLDS

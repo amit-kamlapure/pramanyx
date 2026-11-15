@@ -128,13 +128,36 @@ def _collect_results(obj, out: list, depth: int = 0) -> None:
         rows = obj.get("rows")
         if isinstance(rows, list) and rows:
             from pramanyx.explorer.grounding import cell_values
-            out.append({"sql": str(obj.get("sql") or ""),
-                        "cells": cell_values(rows[:MAX_ROWS_PER_RESULT])})
+            sql = str(obj.get("sql") or "")
+            count = obj.get("row_count")
+            out.append({"sql": sql,
+                        "cells": cell_values(rows[:MAX_ROWS_PER_RESULT])
+                        + _totals_of(sql, obj.get("columns"), rows, count if isinstance(count, int) else len(rows))})
         for value in obj.values():
             _collect_results(value, out, depth + 1)
     elif isinstance(obj, list):
         for value in obj:
             _collect_results(value, out, depth + 1)
+
+
+def _totals_of(sql: str, columns, rows: list, row_count: int) -> list:
+    """Each additive column's total over every row of a result, as measured values — computed by code exactly as the
+    conversation is given them to quote (`tools.postproc.column_totals`), and only when every row is present.
+
+    Found by scheduling a summary to Slack (2026-11-15): "FY2027 GMV to 14 November: €3,071,674.70 across the
+    platforms" was held at every run, because a total is no cell of the rows it adds up — though the sum of those
+    rows is as measured as the rows are. A total that does not add up (a distinct count, an average) is never one."""
+    if not (sql and isinstance(columns, list) and columns and rows):
+        return []
+    try:
+        from pramanyx.explorer.grounding import cell_values
+        from pramanyx.tools.postproc import column_totals
+        totals = column_totals(sql, [str(c) for c in columns], list(rows), int(row_count)) or []
+        return cell_values([[total for _column, total in totals]]) if totals else []
+    except Exception as exc:
+        tolerate(exc, "departure basis: a result's totals could not be computed; its cells still ground",
+                 counter="departures.basis_totals")
+        return []
 
 
 def _as_of_in(period: str) -> str:
@@ -442,7 +465,10 @@ def rerun_queries(conn_id: str, queries: list[str]) -> Optional[list]:
             result = db.execute(RERUN_LABEL, sql)
             if getattr(result, "error", None):
                 return None
-            cells.extend(cell_values((getattr(result, "rows", None) or [])[:MAX_ROWS_PER_RESULT]))
+            rows = getattr(result, "rows", None) or []
+            cells.extend(cell_values(rows[:MAX_ROWS_PER_RESULT]))
+            cells.extend(_totals_of(sql, getattr(result, "columns", None), rows,
+                                    getattr(result, "row_count", None) or len(rows)))
         return cells
     finally:
         try:

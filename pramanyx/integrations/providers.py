@@ -111,7 +111,8 @@ class Provider(BaseModel):
     def products_needing(self, scopes: str) -> list["Product"]:
         """The products of this provider whose scopes are among ``scopes`` — what a withheld grant leaves unconnected."""
         missing = set((scopes or "").split())
-        return [p for p in self.products if set(p.scopes.split()) & missing]
+        # A card with a choice counts its choices' scopes too: a withheld "send" names Gmail (2026-11-15).
+        return [p for p in self.products if p.all_scopes & missing]
 
     def client_id_problem(self, client_id: str) -> str:
         """Why ``client_id`` cannot be this provider's client id, in words; "" when it can (or no shape is known)."""

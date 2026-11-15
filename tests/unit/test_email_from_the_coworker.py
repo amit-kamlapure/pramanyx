@@ -67,3 +67,20 @@ def test_gmail_is_one_card_whose_choices_ask_only_for_their_own_permission(monke
     assert client.post("/integrations/google/connect", params={"product": "gmail", "option": "send"}).status_code == 200
     assert asked["scopes"].split()[-1].endswith("gmail.send") and "gmail.readonly" not in asked["scopes"]
     assert client.post("/integrations/google/connect", params={"product": "gmail", "option": "nope"}).status_code == 404
+
+
+def test_a_withheld_choice_names_its_card():
+    from pramanyx.integrations.providers import get_provider
+    google = get_provider("google")
+    assert [p.id for p in google.products_needing("https://www.googleapis.com/auth/gmail.send")] == ["gmail"]
+
+
+def test_googles_account_is_read_from_the_id_token_it_returns():
+    import base64
+    import json as _json
+
+    from pramanyx.integrations.broker import _account_label
+    from pramanyx.integrations.providers import get_provider
+    claims = base64.urlsafe_b64encode(_json.dumps({"email": "ana@example.com"}).encode()).decode().rstrip("=")
+    assert _account_label(get_provider("google"), {"id_token": f"h.{claims}.s"}) == "ana@example.com"
+    assert _account_label(get_provider("google"), {"id_token": "not-a-jwt"}) == ""

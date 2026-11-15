@@ -298,6 +298,13 @@ def my_connections():
     return {"connections": [c.to_safe_dict() for c in store.list_connections(_user())]}
 
 
+@router.post("/integrations/connections/{conn_id}/account")
+def read_the_account(conn_id: str):
+    """The connected account's address — recorded at connect, else read from the provider once and recorded
+    (`broker.account_of`). What a card says it is connected as, and the "send to me" an email step can name."""
+    return {"account": broker.account_of(conn_id)}
+
+
 @router.post("/integrations/connections/{conn_id}/revoke")
 def revoke(conn_id: str):
     conn = store.get_connection(conn_id)
