@@ -4477,6 +4477,7 @@ export interface paths {
         /**
          * Claim The Next Answer
          * @description Said by the coworker just before it asks: the answer to this question belongs inside this step of this turn.
+         *     The connection it names is asked whose it is (DATA-06), like every door that takes one in its body.
          */
         put: operations["claim_the_next_answer_coworker_claim_put"];
         post?: never;
