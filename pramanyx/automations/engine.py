@@ -1145,7 +1145,7 @@ def _dispatch_slack_post(effect: Effect, automation: Automation) -> EffectOutcom
     the Pramanyx `session_id` — a reply composes on the same conversation, with the same
     agent, over the same connection.
     """
-    from pramanyx.slackbots.post import post_as_bot
+    from pramanyx.slackbots.post import post_as_bot, refusal_said
     from pramanyx.slackbots.store import get_bot_decrypted
 
     bot_id = str(effect.config.get("bot_id", ""))
@@ -1245,7 +1245,7 @@ def _dispatch_slack_post(effect: Effect, automation: Automation) -> EffectOutcom
                              message=info["error"] if stopped(info.get("error"))
                              else f"post timed out — {UNCERTAIN_DELIVERY}")
     return EffectOutcome(kind=effect.kind, target=f"{bot_id}:{channel}", status="failed",
-                         message=f"Slack refused the post: {info.get('error', 'unknown')}")
+                         message=f"Slack refused the post: {refusal_said(info.get('error', 'unknown'), channel)}")
 
 
 def _file_departure_link(effect: Effect, automation: Automation, *, kind: str,

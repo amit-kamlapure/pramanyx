@@ -75,3 +75,10 @@ def test_the_engine_gates_the_email_like_a_slack_post(monkeypatch, google):
     out = engine._dispatch_email(auto.effects[0], auto)
     assert out.status == "held" and google["sent"] == []
     assert "email" in engine.DEPARTURE_SENDS and "email" in engine.OUTWARD_EFFECT_KINDS
+
+
+def test_a_refused_slack_post_says_what_to_do():
+    from pramanyx.slackbots.post import refusal_said
+    said = refusal_said("channel_not_found", "#general")
+    assert "cannot see #general" in said and "/invite" in said and said.endswith("(Slack: channel_not_found)")
+    assert refusal_said("some_new_error") == "some_new_error"
