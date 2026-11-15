@@ -1,7 +1,7 @@
 // A coworker turn, as the platform's trace store is told it. `node --test plugins/home/test/trace.test.mjs`
 import test from "node:test";
 import assert from "node:assert/strict";
-import { helperLines, newRecord, readHelper, traceOf, turnEvents } from "../lib/index.js";
+import { helperLines, newRecord, readHelper, readHelperOfCall, traceOf, turnEvents } from "../lib/index.js";
 
 const S = "session-88f4fdd1-9a45-4d47-a907-c446dd4d3d83";
 const ev = (type, seq, time, data) => ({ type, seq, time, data });
@@ -172,12 +172,13 @@ test("what a helper found is kept for the page: its description, its answers, th
   on(H, asHelper, ev("tool/call", 4, 7, { callId: "md", name: "mcp__pramanyx__get_metric", arguments: "{}" }));
   on(H, asHelper, ev("tool/result", 5, 8, { message: { toolCallId: "md", content: text("{}") } }));
   on(H, asHelper, ev("turn/end", 6, 9, { turn: 1, reason: { kind: "completed" } }));
-  assert.deepEqual(lines.map(([id]) => id), [H, H, H]);
-  assert.deepEqual(lines[0][1], { started: { description: "GMV by platform FY2027", parent: S } });
-  assert.equal(lines[1][1].answer.tool, "mcp__pramanyx__ask");
-  assert.deepEqual(lines[1][1].answer.args, { question: "GMV by platform", connection: "dcc63d83" });
-  assert.equal(lines[1][1].answer.text, answer, "an answer is kept as it came back; a definition read is not an answer");
-  assert.deepEqual(lines[2][1], { ended: "completed" });
+  assert.deepEqual(lines.map(([id]) => id), [H, "call:spawn_1", H, H]);
+  assert.deepEqual(lines[0][1], { started: { description: "GMV by platform FY2027", parent: S, call: "spawn_1" } });
+  assert.deepEqual(lines[1][1], { child: H }, "the page finds a helper by the call that started it");
+  assert.equal(lines[2][1].answer.tool, "mcp__pramanyx__ask");
+  assert.deepEqual(lines[2][1].answer.args, { question: "GMV by platform", connection: "dcc63d83" });
+  assert.equal(lines[2][1].answer.text, answer, "an answer is kept as it came back; a definition read is not an answer");
+  assert.deepEqual(lines[3][1], { ended: "completed" });
 });
 
 test("the page reads what was kept of a helper, and nothing for an id that is not one", async () => {
@@ -200,6 +201,11 @@ test("the page reads what was kept of a helper, and nothing for an id that is no
     assert.equal((await readHelper(H)).done, true);
     assert.equal((await readHelper(H2)).known, false, "a helper from before answers were kept");
     assert.equal(await readHelper("../../etc/passwd"), null, "an id is an id, never a path");
+    assert.deepEqual(await readHelperOfCall("spawn_9"), { known: false, pending: true }, "a start not known yet");
+    await mkdir(join(home, "helpers", "calls"), { recursive: true });
+    await writeFile(join(home, "helpers", "calls", "spawn_1.json"), JSON.stringify({ child: H }));
+    assert.equal((await readHelperOfCall("spawn_1")).description, "GMV by platform FY2027");
+    assert.equal(await readHelperOfCall("../x"), null);
   } finally {
     if (was === undefined) delete process.env.DSH_HOME; else process.env.DSH_HOME = was;
   }

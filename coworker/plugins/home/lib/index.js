@@ -222,21 +222,34 @@ const SPAWNS = /^subagent(_fork)?$/;
  * header names the conversation that started it) is held to its parent's connection, whatever folder it was started
  * in. Otherwise the folder it started in decides. Cached, so moving a conversation's folder later is no way round.
  */
-export function holdOf(holds, id, header) {
-  if (holds.has(id)) return holds.get(id);
-  const parent = typeof header?.parentSession === "string" ? header.parentSession : "";
-  const held = parent && holds.get(parent) ? holds.get(parent) : (HELD_FOLDER.exec(String(header?.cwd ?? ""))?.[1] ?? "");
-  holds.set(id, held);
-  return held;
+export function holdOf(holds, id, header, now = "") {
+  if (!holds.has(id)) {
+    const parent = typeof header?.parentSession === "string" ? header.parentSession : "";
+    holds.set(id, parent && holds.get(parent) ? holds.get(parent) : (HELD_FOLDER.exec(String(header?.cwd ?? ""))?.[1] ?? ""));
+  }
+  // ONE WAY ONLY: a conversation held to nothing becomes held when it moves into a connection's folder, and a held
+  // one never changes. Found live, 2026-11-15: the shell makes a helper in its parent's folder and moves it to the
+  // folder it was started in a moment later, so a helper of All sources, started in its source's folder, was first
+  // seen in All sources and was held to nothing. Moving can only tighten a hold, never loosen or swap it.
+  const moved = HELD_FOLDER.exec(String(now ?? ""))?.[1] ?? "";
+  if (!holds.get(id) && moved) holds.set(id, moved);
+  return holds.get(id);
 }
 
 /** The refusal for one call from a conversation held to `held`, or undefined when the call may run. Pure. */
 export function refusalFor(name, args, held) {
-  if (held && typeof name === "string" && SPAWNS.test(name)) {
-    // A helper of a held conversation is held too. Started in another connection's folder it would read that one.
+  if (typeof name === "string" && SPAWNS.test(name)) {
+    // EVERY HELPER IS HELD TO ONE SOURCE. A helper of a held conversation is held to its connection; started in
+    // another connection's folder it would read that one. A helper of a conversation held to none (All sources) is
+    // held to the source whose folder it starts in — and one started in no source's folder would be held to
+    // nothing: found live, 2026-11-15, the agent was told to give each source's helper its folder and did not.
     const folder = args && typeof args === "object" && typeof args.cwd === "string" ? args.cwd.trim() : "";
-    if (folder && (HELD_FOLDER.exec(folder)?.[1] ?? "") !== held) {
+    const source = HELD_FOLDER.exec(folder)?.[1] ?? "";
+    if (held && folder && source !== held) {
       return `This conversation is held to the connection \`${held}\`, and so is every helper it starts. Start the helper without a folder. To work across sources, the person starts the conversation in ${ALL_SOURCES}.`;
+    }
+    if (!held && !source) {
+      return `A helper works on one source. Start it with cwd set to that source's folder — the folders are listed in your instructions — so it is held to that source.`;
     }
     return undefined;
   }
@@ -258,9 +271,9 @@ function holdToConnection(ctx, holds) {
     at.effect(() => at.tools.guard((call) => {
       const session = call.agent?.session;
       const id = String((session && typeof session === "object" ? session.id : session) ?? "");
-      if (id && holds.has(id)) return refusalFor(call.name, call.arguments, holds.get(id));
       let folder = "";
       try { folder = call.agent ? String(at.workingDirectory.get(call.agent.session) || "") : ""; } catch { folder = ""; }
+      if (id && holds.has(id)) return refusalFor(call.name, call.arguments, holdOf(holds, id, {}, folder));
       return refusalFor(call.name, call.arguments, HELD_FOLDER.exec(folder)?.[1] ?? "");
     }), "pramanyx-home: a conversation is held to its connection");
   });
@@ -443,7 +456,10 @@ export function helperLines(record, sessionId, header, event) {
     const message = data.message ?? {};
     const child = STARTED.exec(textOf(message.content))?.[1];
     const helper = child ? record.helpers.get(child) : undefined;
-    return helper && helper.parent === sessionId ? [[child, { started: { description: helper.description || "", parent: sessionId } }]] : [];
+    if (!helper || helper.parent !== sessionId) return [];
+    // And which call started it: the page finds a helper by its spawn call, the one thing the end of a turn is told.
+    return [[child, { started: { description: helper.description || "", parent: sessionId, call: helper.span } }],
+            [`call:${helper.span}`, { child }]];
   }
   if (event?.type === "tool/call" && data.callId && HELPER_ANSWERS.test(String(data.name))) {
     const asked = record.turns.get(sessionId);
@@ -468,10 +484,29 @@ async function keepHelperLines(lines) {
   const { appendFile } = await import("node:fs/promises");
   const { dirname } = await import("node:path");
   for (const [id, line] of lines) {
+    if (id.startsWith("call:")) {
+      const call = id.slice(5);
+      if (!CALL_ID.test(call) || !HELPER_ID.test(String(line.child))) continue;
+      await mkdir(dirname(callFile(call)), { recursive: true });
+      await writeFile(callFile(call), JSON.stringify(line), { mode: 0o600 });
+      continue;
+    }
     if (!HELPER_ID.test(id)) continue;
     await mkdir(dirname(helperFile(id)), { recursive: true });
     await appendFile(helperFile(id), `${JSON.stringify(line)}\n`, { mode: 0o600 });
   }
+}
+
+const CALL_ID = /^[A-Za-z0-9_-]{1,80}$/;
+const callFile = (call) => join(process.env.DSH_HOME || join(homedir(), ".dsh"), "helpers", "calls", `${call}.json`);
+
+/** The helper a spawn call started, as `readHelper` says it — or, while that call's start is not yet known, `pending`. */
+export async function readHelperOfCall(call) {
+  if (!CALL_ID.test(String(call))) return null;
+  const { readFile } = await import("node:fs/promises");
+  let child = "";
+  try { child = String(JSON.parse(await readFile(callFile(call), "utf8")).child || ""); } catch { return { known: false, pending: true }; }
+  return readHelper(child);
 }
 
 /** What one helper found so far: its description, its answers in order, and whether it has finished. */
@@ -515,7 +550,7 @@ function recordTurns(ctx, api, holds) {
       if (!id) return;
       const header = session?.header ?? {};
       const before = record.turns.get(id);
-      const held = holdOf(holds, id, header);
+      const held = holdOf(holds, id, header, event?.type === "working-directory/change" ? event?.data?.cwd : "");
       const events = turnEvents(record, id, held, event, header);
       const lines = helperLines(record, id, header, event);          // after: a spawn's description is kept there
       const after = record.turns.get(id);
@@ -576,8 +611,8 @@ export function apply(ctx) {
     handler: async (req, res) => {
       const reply = (status, body) => { res.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" }); res.end(JSON.stringify(body)); };
       if (req.method !== "GET") return reply(405, { detail: "GET only" });
-      const id = new URL(req.url, "http://here").searchParams.get("session") || "";
-      const found = await readHelper(id);
+      const asked = new URL(req.url, "http://here").searchParams;
+      const found = asked.has("call") ? await readHelperOfCall(asked.get("call") || "") : await readHelper(asked.get("session") || "");
       return found ? reply(200, found) : reply(422, { detail: "Not a helper's id" });
     },
   }), "pramanyx-home: what a helper found");

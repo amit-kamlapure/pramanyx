@@ -165,14 +165,23 @@ function AnswerTail(props) {
     }
   });
   const helpers = helpersOf(props.turn);
-  return h("div", null,
+  // A question worked by helpers has ONE output: the close the main agent writes once every helper has reported
+  // (the user, 2026-11-16: "one main agent that orchestrates sub-agents … synthesises … and then gives one final
+  // output"). Its turns' answers — the helpers' and the main agent's own checks — are the work behind that output:
+  // not cards with their own follow-ups, what stands out and Right/Wrong (`data-pramanyx-gathered`, below).
+  return h("div", helpers.length ? { "data-pramanyx-gathered": "" } : null,
     h("div", { [TAIL]: "" }),
-    helpers.length ? h("div", { "data-pramanyx-helpers": "" }, helpers.map((helper) => h(Helper, { key: helper.id, ...helper }))) : null);
+    helpers.length ? h("div", { "data-pramanyx-helpers": "" },
+      h("div", { style: { ...quiet, fontSize: 12.5, padding: "6px 0 2px" } }, `Worked by ${helpers.length} helper${helpers.length === 1 ? "" : "s"}`),
+      helpers.map((helper) => h(Helper, { key: helper.call, ...helper }))) : null);
 }
 
-/** The helpers a turn started: each spawn whose result named the helper it started, in the order they were started. */
+/**
+ * The helpers a turn started, in the order they were started: each call to the shell's spawn tool. The end of a turn
+ * is told its calls but not their results, so a helper is found by the call that started it; the host half knows
+ * which helper each call started (`/pramanyx-helper?call=`).
+ */
 const SPAWNED = /^subagent(_fork)?$/;
-const STARTED = /started subagent ([A-Za-z0-9-]{8,64})/;
 
 function helpersOf(turn) {
   const out = [];
@@ -180,48 +189,52 @@ function helpersOf(turn) {
     const blocks = step?.data?.entries?.get?.("assistant-step")?.value?.blocks ?? [];
     for (const block of blocks) {
       if (block?.kind !== "tool-call" || !SPAWNED.test(String(block.name))) continue;
-      const id = STARTED.exec(resultText(block))?.[1];
-      if (id && !out.some((known) => known.id === id)) out.push({ id, asked: String(argsOf(block).description || "") });
+      const call = String(block.callId || "");
+      if (/^[A-Za-z0-9_-]{1,80}$/.test(call) && !out.some((known) => known.call === call)) {
+        out.push({ call, asked: String(argsOf(block).description || "") });
+      }
     }
   }
   return out;
 }
 
 /**
- * ONE HELPER'S ANSWERS, UNDER THE QUESTION THAT STARTED IT (2026-11-15). A helper works in a conversation of its
- * own, which the person does not read; what it was answered is drawn here, as the platform's own cards — each
- * answer as the governed path gave it, a deep analysis by its report — read from what the host half kept
- * (`/pramanyx-helper`), and read again while the helper works. A helper from before answers were kept shows nothing.
+ * ONE HELPER, AS A ROW OF THE WORK (2026-11-15, reshaped 2026-11-16). A helper works in a conversation of its own;
+ * here it is one row — what it was asked, and whether it is still working — that opens to what it was answered:
+ * each answer as the work list shows one (its headline, opening to the SQL and the rows), a deep analysis by its
+ * report. Not as cards: a helper's answer is a part of the question, not an outcome of its own. Read from what the
+ * host half kept (`/pramanyx-helper`), again while the helper works. A helper from before answers were kept shows
+ * nothing.
  */
-function Helper({ id, asked }) {
+function Helper({ call, asked }) {
   const [found, setFound] = useState(null);
   useEffect(() => {
     let live = true;
     let timer = null;
+    let unknown = 0;                 // a start not known after a minute is a helper from before answers were kept
     const look = () => {
-      fetch(`/pramanyx-helper?session=${encodeURIComponent(id)}`, { headers: { accept: "application/json" } })
+      fetch(`/pramanyx-helper?call=${encodeURIComponent(call)}`, { headers: { accept: "application/json" } })
         .then((answer) => (answer.ok ? answer.json() : null))
         .then((got) => {
           if (!live) return;
           setFound(got);
-          if (got && got.known && !got.done) timer = setTimeout(look, 4000);
+          // Read again while the helper works — and while its start is not yet known here, for a turn still running.
+          if (got && (got.known ? !got.done : got.pending && (unknown += 1) < 15)) timer = setTimeout(look, 4000);
         })
         .catch(() => { if (live) timer = setTimeout(look, 8000); });
     };
     look();
     return () => { live = false; if (timer !== null) clearTimeout(timer); };
-  }, [id]);
+  }, [call]);
   if (!found || !found.known) return null;
-  const title = found.description || asked || "A helper";
-  return h("section", { style: { margin: "10px 0 4px" } },
-    h("div", { style: { ...quiet, fontSize: 12.5, display: "flex", gap: 8, alignItems: "baseline" } },
-      h("span", { style: { fontWeight: 600 } }, title),
-      found.done ? null : h("span", null, "· working")),
-    (found.answers ?? []).map((answer, i) => (/deep_analysis$/.test(String(answer.tool))
+  const answers = found.answers ?? [];
+  const note = !found.done ? "working" : answers.length ? `${answers.length} answer${answers.length === 1 ? "" : "s"}` : "no answer";
+  return h(Step, { kind: "rows", busy: !found.done, title: found.description || asked || "A helper", note },
+    answers.length ? answers.map((answer, i) => (/deep_analysis$/.test(String(answer.tool))
       ? h(Analysis, { key: i, text: answer.text })
-      : h(Card, { key: i, phase: "result", toolName: answer.tool,
-                  block: { kind: "tool-call", name: answer.tool, args: answer.args ?? {}, text: answer.text } }))),
-    found.done && !(found.answers ?? []).length ? h("div", { style: { ...quiet, fontSize: 12.5 } }, "This helper came back with no answer.") : null);
+      : h(AnswerStep, { key: i, phase: "result", toolName: answer.tool,
+                        block: { kind: "tool-call", name: answer.tool, args: answer.args ?? {}, text: answer.text } })))
+      : null);
 }
 
 /** A deep analysis a helper ran, by the platform's own report. */
@@ -236,25 +249,57 @@ function Analysis({ text }) {
       report || (got?.status === "running" ? "Still running when the helper last looked." : "The report could not be read here.")));
 }
 
-/** Mark helpers' report notices, and the replies of every report turn but the last of a run (see the look above). */
+/**
+ * The turns a helpers question takes after its first: each starts with a helper's report (a helper under Agent mode
+ * reports twice — a message, then that it finished). Of a run of them, the turn holding the close keeps its work
+ * (folded, as any turn's) and its answers are work (`data-pramanyx-gathered`); every other report turn is
+ * bookkeeping and is not shown. The close (`data-pramanyx-close`) is the run's fullest reply that says more than
+ * "Waiting" or "Done": found live, 2026-11-16, the synthesis came one turn before the last, which said only that the
+ * helpers were done and their figures were "in the reply above".
+ */
 function foldHelperReports() {
-  const REPORT = /(Agent [A-Za-z0-9-]{8,64} sent a message|Background subagent [A-Za-z0-9-]{8,64} finished)/;
+  // The shell draws a report's turn under its own label ("Subtask status updated", "Task message received"), not the
+  // notice's words; both are matched, so a later shell that shows the words is still read.
+  const REPORT = /(Subtask status updated|Task message received|Agent [A-Za-z0-9-]{8,64} sent a message|Background subagent [A-Za-z0-9-]{8,64} finished)/;
+  const BOOKKEEPING = /^\s*(waiting|done)\W*$/i;
   let timer = null;
+  const mark = (node, name, on) => { if (on !== node.hasAttribute(name)) { if (on) node.setAttribute(name, ""); else node.removeAttribute(name); } };
   const pass = () => {
     timer = null;
     const reports = new Set();
     for (const row of document.querySelectorAll('[data-chat-flow-kind="turn-trigger"][data-chat-turn]')) {
       if (REPORT.test(row.textContent || "")) {
-        row.setAttribute("data-pramanyx-report", "");
+        mark(row, "data-pramanyx-report", true);
         reports.add(Number(row.getAttribute("data-chat-turn")));
       }
     }
-    for (const reply of document.querySelectorAll('[data-chat-flow-kind="assistant-step"][data-chat-turn]')) {
-      const turn = Number(reply.getAttribute("data-chat-turn"));
-      const waiting = reports.has(turn) && reports.has(turn + 1);
-      if (waiting !== reply.hasAttribute("data-pramanyx-waiting")) {
-        if (waiting) reply.setAttribute("data-pramanyx-waiting", ""); else reply.removeAttribute("data-pramanyx-waiting");
-      }
+    // Runs of consecutive report turns, and in each the reply that closes it.
+    const closeTurn = new Map();      // report turn → the turn holding its run's close (or none yet)
+    const closes = new Set();
+    for (const first of [...reports].sort((a, b) => a - b)) {
+      if (reports.has(first - 1)) continue;
+      const run = [];
+      for (let t = first; reports.has(t); t += 1) run.push(t);
+      const replies = run.flatMap((t) => [...document.querySelectorAll(
+        `[data-chat-flow-kind="assistant-step"][data-chat-group-part="response"][data-chat-turn="${t}"]`)]);
+      // The fullest reply that is not bookkeeping: the synthesis says more than any remark made after it, and the
+      // agent is told to answer an interim report with "Waiting" and a late one with "Done". A later reply wins a tie.
+      const said = (reply) => (reply.textContent || "").trim();
+      const close = replies.filter((reply) => said(reply) && !BOOKKEEPING.test(said(reply)))
+        .reduce((best, reply) => (!best || said(reply).length >= said(best).length ? reply : best), null);
+      if (close) closes.add(close);
+      const holder = close ? Number(close.getAttribute("data-chat-turn")) : run[run.length - 1];
+      for (const t of run) closeTurn.set(t, holder);
+      for (const reply of replies) mark(reply, "data-pramanyx-close", reply === close);
+    }
+    for (const item of document.querySelectorAll("[data-chat-flow-kind][data-chat-turn]")) {
+      const turn = Number(item.getAttribute("data-chat-turn"));
+      const kind = item.getAttribute("data-chat-flow-kind");
+      if (!reports.has(turn)) continue;
+      const holds = closeTurn.get(turn) === turn;
+      const reply = kind === "assistant-step" && item.getAttribute("data-chat-group-part") === "response";
+      mark(item, "data-pramanyx-waiting", kind !== "turn-trigger" && (!holds || (reply && !closes.has(item))));
+      mark(item, "data-pramanyx-gathered", kind === "turn-tail");
     }
   };
   new MutationObserver(() => { if (timer === null) timer = setTimeout(pass, 250); })
@@ -719,14 +764,23 @@ const STEPS_LOOK = `
  * the agent's closing remark is not shown beside them. A turn with no answer drawn (a question declined, a reply in
  * words) keeps its reply, which is then all there is. The remark stays in the conversation's record.
  */
-[data-chat-flow-kind="assistant-step"]:has(+ [data-chat-flow-kind="turn-tail"] [data-pramanyx-answers] > *),
-[data-chat-flow-kind="assistant-step"]:has(+ [data-chat-flow-kind="turn-tail"] [data-pramanyx-helpers] > *) { display: none; }
+[data-chat-flow-kind="assistant-step"]:not([data-pramanyx-close]):has(+ [data-chat-flow-kind="turn-tail"] [data-pramanyx-answers] > *),
+[data-chat-flow-kind="assistant-step"]:not([data-pramanyx-close]):has(+ [data-chat-flow-kind="turn-tail"] [data-pramanyx-helpers] > *) { display: none; }
 /*
- * HELPERS (2026-11-15). A helper's report arrives as a notice that starts a turn of its own, and the agent answers
- * it ("Waiting", until the last). Those are the work's bookkeeping, not the output: the notices are not shown, and
- * of a run of report turns only the last one's reply is — the close, over what the helpers' answers support.
+ * A QUESTION WORKED BY HELPERS HAS ONE OUTPUT (2026-11-16). Its helpers are rows of the work under the question; the
+ * answers drawn in its turns — the main agent's own checks among them — are not shown as cards, since each card is an
+ * outcome of its own (its follow-ups, what stands out, Right and Wrong); the reports' turns are bookkeeping and are
+ * not shown; and the main agent's close, once every helper has reported, is the output.
  */
+[data-pramanyx-gathered] [data-pramanyx-answers] { display: none; }
 [data-pramanyx-report], [data-pramanyx-waiting] { display: none; }
+/* The close is the output wherever in its turn it was said — before more steps, too — so the work's fold and its
+ * column line do not take it in. */
+[data-chat-flow-kind="assistant-step"][data-pramanyx-close] {
+  display: block !important; margin-left: 0 !important; padding-left: 0 !important; border-left: 0 !important;
+}
+[data-chat-flow-kind="assistant-step"][data-pramanyx-close]::before,
+[data-chat-flow-kind="assistant-step"][data-pramanyx-close]::after { content: none !important; }
 /*
  * An answer's own controls. An icon is plain until pointed at; a mark after a sentence is a small edged chip that
  * opens what the sentence stood on; a quiet link opens something behind the answer.

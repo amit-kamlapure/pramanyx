@@ -171,13 +171,19 @@ turned back on from the interface.
   brief on one connection and starts none of its own. **Held:** a helper of a held conversation is held to the same
   connection, whatever folder it is started in, and a held conversation cannot start one in another connection's
   folder. **All sources**, a workspace beside the connections, is held to none: its instructions list each source and
-  its folder, and a helper started in a source's folder is held to that source. **One question, one trace:** a
+  its folder, a helper must be started in a source's folder, and is then held to that source. The shell makes a
+  helper in its parent's folder and moves it a moment later, so a hold may tighten when a conversation moves into a
+  connection's folder, and never loosens or changes. **One question, one trace:** a
   helper's tool calls and model calls are written into the question's trace, inside the call that started it, which
   lasts until the helper finishes; the turns its reports start join the same trace, and the question ends when the
-  last helper has reported. **What the reader sees:** each helper's answers, as the platform's own cards, under the
-  question that started them (the host half keeps them as they came back, `/pramanyx-helper`); the report notices
-  and the agent's "Waiting" replies are not shown, and the close is the last reply. `node --test
-  plugins/home/test/*.test.mjs` covers the record and the hold.
+  last helper has reported. **One question, one output** (the user, 2026-11-16): the main agent orchestrates its
+  helpers, gathers their reports and writes the one answer. The reader sees the question, then "Worked by N helpers"
+  — one folded row per helper, opening to what it was answered (each answer's headline, SQL and rows; the host
+  half keeps them as they came back, `/pramanyx-helper`) — and then the main agent's close. No helper's answer is a
+  card of its own (no follow-ups, what stands out or Right/Wrong per part), nor is any check the main agent ran
+  inside the question; the report notices, the "Waiting" and "Done" replies and the turns that held them are not
+  shown. The close is the run's fullest reply that is not bookkeeping, shown wherever in its turn it was said.
+  `node --test plugins/home/test/*.test.mjs` covers the record and the hold.
 - **A read-only relay**, `/pramanyx/…` on the shell's own server, so the page can read Pramanyx without the API's
   allowed origins being changed. It relays the paths the page reads (`/connections`, `/suggestions`,
   `/agents/custom`, `/investigations`, `/sheets`, an answer's export, what was sent from an email draft, and where
@@ -251,9 +257,9 @@ admin allows "Let the coworker ask its models through Pramanyx" in Settings ▸ 
   rename, archive and delete); pinned items.
 - Both modes ask as the narrator role. Quick does not use the fast one: a mode has no model of its own here yet.
   Quick's voice paragraphs are a copy of Agent's in `profile.patch.yml`; a change to one is made in both.
-- **A helper's close is the agent's words.** Each helper's answers are the platform's and are shown as its cards; the
-  closing reply that puts them together is written by the agent and is not checked by the platform the way an
-  answer is. A helper's answers are kept on this machine (`$DSH_HOME/helpers`) and are not in Pramanyx's store.
+- **A helpers question's one output is the agent's words.** Each helper's answers are the platform's; the close that
+  puts them together is written by the main agent and is not checked by the platform the way an answer is — its
+  figures are not yet held against the helpers' answers. It has no Right/Wrong of its own. A helper's answers are kept on this machine (`$DSH_HOME/helpers`) and are not in Pramanyx's store.
 - **A schedule's answer does not arrive in a conversation.** The shell's scheduler put each run into a chat as a
   new turn; Pramanyx's keeps each run with the schedule (its History, on the Schedules page) and sends it on only
   through a step a person added. Nothing brings a run's answer back into the conversation that set it up.

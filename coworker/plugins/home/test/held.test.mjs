@@ -62,6 +62,13 @@ test("a held conversation cannot start a helper in another connection's folder",
   assert.equal(refusalFor("subagent", { cwd: FOLDER("other") }, ""), undefined, "All sources may give each source its helper");
 });
 
+test("a conversation held to no connection starts a helper only in a source's folder, so every helper is held", () => {
+  // Found live, 2026-11-15: told to start each source's helper in its folder, the agent started both in All sources.
+  assert.match(refusalFor("subagent", { description: "d", prompt: "p" }, ""), /cwd set to that source's folder/);
+  assert.match(refusalFor("subagent", { cwd: "/Users/x/.pramanyx/coworker/all-sources" }, ""), /held to that source/);
+  assert.equal(refusalFor("subagent", { cwd: FOLDER("sheets") }, ""), undefined);
+});
+
 test("a helper is held to the connection of the conversation that started it, whatever its folder", () => {
   const holds = new Map();
   assert.equal(holdOf(holds, "parent", { cwd: FOLDER("c1") }), "c1");
@@ -70,9 +77,19 @@ test("a helper is held to the connection of the conversation that started it, wh
 
 test("under All sources, a helper started in a source's folder is held to that source", () => {
   const holds = new Map();
-  assert.equal(holdOf(holds, "parent", { cwd: "/Users/x/.pramanyx/coworker/all-sources" }), "");
+  const ALL = "/Users/x/.pramanyx/coworker/all-sources";
+  assert.equal(holdOf(holds, "parent", { cwd: ALL }), "");
   assert.equal(holdOf(holds, "db", { cwd: FOLDER("dcc63d83"), parentSession: "parent" }), "dcc63d83");
-  assert.equal(holdOf(holds, "sheet", { cwd: FOLDER("sheets"), parentSession: "parent" }), "sheets");
+  // As the shell does it (live, 2026-11-15): made in the parent's folder, then moved to the one it was started in.
+  assert.equal(holdOf(holds, "sheet", { cwd: ALL, parentSession: "parent" }), "");
+  assert.equal(holdOf(holds, "sheet", { cwd: ALL, parentSession: "parent" }, FOLDER("sheets")), "sheets");
+  assert.equal(holdOf(holds, "sheet", {}, ""), "sheets", "and stays held");
+});
+
+test("moving can tighten a hold, never loosen or swap it", () => {
+  const holds = new Map();
+  assert.equal(holdOf(holds, "s", { cwd: FOLDER("c1") }, FOLDER("other")), "c1");
+  assert.equal(holdOf(holds, "s", {}, "/Users/x/.pramanyx/coworker/all-sources"), "c1");
 });
 
 test("where a conversation is held is decided once: a later folder is no way round", () => {
@@ -80,5 +97,5 @@ test("where a conversation is held is decided once: a later folder is no way rou
   assert.equal(holdOf(holds, "s", { cwd: FOLDER("c1") }), "c1");
   assert.equal(holdOf(holds, "s", { cwd: FOLDER("other") }), "c1");
   assert.equal(holdOf(holds, "t", { cwd: "/Users/x/.pramanyx/coworker/all-sources" }), "");
-  assert.equal(holdOf(holds, "t", { cwd: FOLDER("c1") }), "", "an unheld conversation stays as it began");
+  assert.equal(holdOf(holds, "t", { cwd: FOLDER("c1") }), "", "a header read again is not a move");
 });
