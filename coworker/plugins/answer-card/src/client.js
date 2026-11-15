@@ -164,7 +164,102 @@ function AnswerTail(props) {
       for (const block of blocks) if (block?.kind === "tool-call") nameStepsOf(block.name);
     }
   });
-  return h("div", { [TAIL]: "" });
+  const helpers = helpersOf(props.turn);
+  return h("div", null,
+    h("div", { [TAIL]: "" }),
+    helpers.length ? h("div", { "data-pramanyx-helpers": "" }, helpers.map((helper) => h(Helper, { key: helper.id, ...helper }))) : null);
+}
+
+/** The helpers a turn started: each spawn whose result named the helper it started, in the order they were started. */
+const SPAWNED = /^subagent(_fork)?$/;
+const STARTED = /started subagent ([A-Za-z0-9-]{8,64})/;
+
+function helpersOf(turn) {
+  const out = [];
+  for (const step of turn?.steps ?? []) {
+    const blocks = step?.data?.entries?.get?.("assistant-step")?.value?.blocks ?? [];
+    for (const block of blocks) {
+      if (block?.kind !== "tool-call" || !SPAWNED.test(String(block.name))) continue;
+      const id = STARTED.exec(resultText(block))?.[1];
+      if (id && !out.some((known) => known.id === id)) out.push({ id, asked: String(argsOf(block).description || "") });
+    }
+  }
+  return out;
+}
+
+/**
+ * ONE HELPER'S ANSWERS, UNDER THE QUESTION THAT STARTED IT (2026-11-15). A helper works in a conversation of its
+ * own, which the person does not read; what it was answered is drawn here, as the platform's own cards — each
+ * answer as the governed path gave it, a deep analysis by its report — read from what the host half kept
+ * (`/pramanyx-helper`), and read again while the helper works. A helper from before answers were kept shows nothing.
+ */
+function Helper({ id, asked }) {
+  const [found, setFound] = useState(null);
+  useEffect(() => {
+    let live = true;
+    let timer = null;
+    const look = () => {
+      fetch(`/pramanyx-helper?session=${encodeURIComponent(id)}`, { headers: { accept: "application/json" } })
+        .then((answer) => (answer.ok ? answer.json() : null))
+        .then((got) => {
+          if (!live) return;
+          setFound(got);
+          if (got && got.known && !got.done) timer = setTimeout(look, 4000);
+        })
+        .catch(() => { if (live) timer = setTimeout(look, 8000); });
+    };
+    look();
+    return () => { live = false; if (timer !== null) clearTimeout(timer); };
+  }, [id]);
+  if (!found || !found.known) return null;
+  const title = found.description || asked || "A helper";
+  return h("section", { style: { margin: "10px 0 4px" } },
+    h("div", { style: { ...quiet, fontSize: 12.5, display: "flex", gap: 8, alignItems: "baseline" } },
+      h("span", { style: { fontWeight: 600 } }, title),
+      found.done ? null : h("span", null, "· working")),
+    (found.answers ?? []).map((answer, i) => (/deep_analysis$/.test(String(answer.tool))
+      ? h(Analysis, { key: i, text: answer.text })
+      : h(Card, { key: i, phase: "result", toolName: answer.tool,
+                  block: { kind: "tool-call", name: answer.tool, args: answer.args ?? {}, text: answer.text } }))),
+    found.done && !(found.answers ?? []).length ? h("div", { style: { ...quiet, fontSize: 12.5 } }, "This helper came back with no answer.") : null);
+}
+
+/** A deep analysis a helper ran, by the platform's own report. */
+function Analysis({ text }) {
+  let got = null;
+  try { got = JSON.parse(text); } catch { got = null; }
+  const report = typeof got?.report === "string" ? got.report : (typeof got?.report?.summary === "string" ? got.report.summary : "");
+  const frame = { border: `1px solid ${line}`, borderRadius: 6, padding: 12, margin: "6px 0", fontSize: 13 };
+  return h("div", { style: frame },
+    h("div", { style: { ...quiet, fontSize: 12.5, paddingBottom: 6 } }, "Deep analysis"),
+    h("div", { style: { whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight: 1.5, maxHeight: 420, overflow: "auto" } },
+      report || (got?.status === "running" ? "Still running when the helper last looked." : "The report could not be read here.")));
+}
+
+/** Mark helpers' report notices, and the replies of every report turn but the last of a run (see the look above). */
+function foldHelperReports() {
+  const REPORT = /(Agent [A-Za-z0-9-]{8,64} sent a message|Background subagent [A-Za-z0-9-]{8,64} finished)/;
+  let timer = null;
+  const pass = () => {
+    timer = null;
+    const reports = new Set();
+    for (const row of document.querySelectorAll('[data-chat-flow-kind="turn-trigger"][data-chat-turn]')) {
+      if (REPORT.test(row.textContent || "")) {
+        row.setAttribute("data-pramanyx-report", "");
+        reports.add(Number(row.getAttribute("data-chat-turn")));
+      }
+    }
+    for (const reply of document.querySelectorAll('[data-chat-flow-kind="assistant-step"][data-chat-turn]')) {
+      const turn = Number(reply.getAttribute("data-chat-turn"));
+      const waiting = reports.has(turn) && reports.has(turn + 1);
+      if (waiting !== reply.hasAttribute("data-pramanyx-waiting")) {
+        if (waiting) reply.setAttribute("data-pramanyx-waiting", ""); else reply.removeAttribute("data-pramanyx-waiting");
+      }
+    }
+  };
+  new MutationObserver(() => { if (timer === null) timer = setTimeout(pass, 250); })
+    .observe(document.body, { childList: true, subtree: true });
+  pass();
 }
 
 /**
@@ -624,7 +719,14 @@ const STEPS_LOOK = `
  * the agent's closing remark is not shown beside them. A turn with no answer drawn (a question declined, a reply in
  * words) keeps its reply, which is then all there is. The remark stays in the conversation's record.
  */
-[data-chat-flow-kind="assistant-step"]:has(+ [data-chat-flow-kind="turn-tail"] [data-pramanyx-answers] > *) { display: none; }
+[data-chat-flow-kind="assistant-step"]:has(+ [data-chat-flow-kind="turn-tail"] [data-pramanyx-answers] > *),
+[data-chat-flow-kind="assistant-step"]:has(+ [data-chat-flow-kind="turn-tail"] [data-pramanyx-helpers] > *) { display: none; }
+/*
+ * HELPERS (2026-11-15). A helper's report arrives as a notice that starts a turn of its own, and the agent answers
+ * it ("Waiting", until the last). Those are the work's bookkeeping, not the output: the notices are not shown, and
+ * of a run of report turns only the last one's reply is — the close, over what the helpers' answers support.
+ */
+[data-pramanyx-report], [data-pramanyx-waiting] { display: none; }
 /*
  * An answer's own controls. An icon is plain until pointed at; a mark after a sentence is a small edged chip that
  * opens what the sentence stood on; a quiet link opens something behind the answer.
@@ -1060,6 +1162,7 @@ export function apply(ctx) {
   for (const short of Object.keys(DOES)) nameStepsOf(PREFIX + short);
   wearStepsLook();
   foldRunningWork();
+  foldHelperReports();
   // The shell's right-hand pane, when it has one: one kind of tab, for an answer's SQL and rows and for its chart's
   // editor. Without it the SQL opens in the card and there is no editor.
   ctx.inject(["sidebarRightTabs", "sidebarRight"], (at) => {

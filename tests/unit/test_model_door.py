@@ -240,6 +240,26 @@ def test_a_caller_cannot_file_its_calls_under_a_run_of_the_platforms_own(door, m
     assert _filed(door, monkeypatch, {model_door.TRACE_HEADER: named, model_door.SESSION_HEADER: "s"}) == [("", "")]
 
 
+def test_a_helpers_call_is_filed_inside_the_call_that_started_the_helper(door, monkeypatch):
+    """2026-11-15 — a coworker helper (a sub-agent) works for the question that started it: its model calls are filed
+    in that question's trace, inside the tool call that started it, where its waterfall draws them."""
+    from pramanyx import telemetry
+    inside = []
+    monkeypatch.setattr(provider, "record_door_call", lambda **kw: inside.append(telemetry.current_span_id()))
+    turn = {model_door.TRACE_HEADER: "cw-88f4fdd19a454d47-1", model_door.SESSION_HEADER: "f6602a4c"}
+    for headers in ({**turn, model_door.SPAN_HEADER: "call_8775487398bf4d1b"}, turn,
+                    {**turn, model_door.SPAN_HEADER: "no spaces or slashes/"},
+                    {model_door.SPAN_HEADER: "call_without_a_turn"}):
+        door["client"].post("/llm/door/v1/chat/completions", json={"model": "narrator", "messages": [{"role": "user", "content": "hi"}]},
+                            headers={model_door.CALLER_HEADER: "coworker", **headers})
+    # A span is honoured only inside a coworker turn, and only in a span's own form; otherwise the call is filed
+    # wherever it would have been before.
+    assert inside[0] == "call_8775487398bf4d1b"
+    assert "call_8775487398bf4d1b" not in inside[1:] and "no spaces or slashes/" not in inside
+    assert "call_without_a_turn" not in inside
+    assert telemetry.current_span_id() == ""
+
+
 def test_nothing_stays_bound_after_the_call(door, monkeypatch):
     from pramanyx import telemetry
     from pramanyx.org.context import current_session_id

@@ -108,6 +108,21 @@ def test_a_turns_events_are_written_under_its_trace_and_named_as_the_coworkers(t
     assert seen[1]["payload"]["receipt_id"] == "r1" and seen[1]["row_count"] == 5
 
 
+def test_a_helpers_work_is_written_inside_the_call_that_started_it(taken):
+    """2026-11-15 — one question, one trace, however many agents work on it: a helper's events carry the call that
+    started the helper as their parent, and what the helper was is kept in the payload."""
+    client, seen = taken
+    r = client.post("/coworker/trace", json={**TURN, "events": [
+        {"kind": "tool_call", "name": "mcp__pramanyx__ask", "span_id": "ask_h1", "parent_span_id": "spawn_1",
+         "payload": {"tool": "mcp__pramanyx__ask"}},
+        {"kind": "tool_call_result", "name": "subagent", "span_id": "spawn_1", "ok": True, "duration_ms": 4400,
+         "payload": {"helper": "f6602a4c-e2ec-4ff3-98fb-dfe4d7516b02", "description": "GMV by platform FY2027", "secret": "x"}},
+    ]})
+    assert r.status_code == 200
+    assert seen[0]["parent_span_id"] == "spawn_1" and seen[1]["parent_span_id"] is None
+    assert seen[1]["payload"] == {"helper": "f6602a4c-e2ec-4ff3-98fb-dfe4d7516b02", "description": "GMV by platform FY2027"}
+
+
 def test_the_session_id_is_not_left_bound_after_the_call(taken):
     from pramanyx.org.context import current_session_id
     client, _ = taken

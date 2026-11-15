@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from typing import Any, AsyncIterator, Optional
 
@@ -39,6 +40,10 @@ CALLER_HEADER = "x-pramanyx-door-caller"
 #: The run a call was made for, and the caller's own id for the conversation — see `routers/coworker.py`.
 TRACE_HEADER = "x-pramanyx-trace"
 SESSION_HEADER = "x-pramanyx-session"
+#: The step a call was made inside, when that step began in the caller: a coworker helper's model calls are filed
+#: inside the tool call that started the helper (2026-11-15), so a question's trace draws them where they happened.
+SPAN_HEADER = "x-pramanyx-span"
+_SPAN_NAME = re.compile(r"^[A-Za-z0-9:_.-]{1,80}$")
 
 #: Request fields that belong to OpenAI's platform, not to the chat-completions wire other providers serve.
 _OPENAI_PLATFORM_ONLY = frozenset({"store", "metadata", "service_tier", "prompt_cache_key", "safety_identifier",
@@ -169,6 +174,8 @@ async def door_chat(request: Request):
     turn = (request.headers.get(TRACE_HEADER) or "").strip()
     turn = turn if TRACE_NAME.match(turn) else ""
     turn_session = (request.headers.get(SESSION_HEADER) or "").strip()[:80] if turn else ""
+    inside = (request.headers.get(SPAN_HEADER) or "").strip() if turn else ""
+    inside = inside if _SPAN_NAME.match(inside) else ""
     streamed = bool(body.get("stream"))
     # What only OpenAI's own platform reads is not sent to anyone else: the shell asks in OpenAI's dialect and sets
     # `store`, and Gemini refuses a request that carries a field it does not know (2026-11-14: every coworker turn
@@ -204,7 +211,7 @@ async def door_chat(request: Request):
         # does not run in the context the request was read in.
         token = set_session_id(f"coworker:{turn_session}") if turn and turn_session else None
         try:
-            with telemetry.bind_trace(turn):
+            with telemetry.bind_trace(turn), telemetry.bind_parent_span(inside):
                 try:
                     record_door_call(backend=backend, model=model, role=role, prompt_tokens=prompt_tokens,
                                      completion_tokens=completion_tokens, ms=(time.monotonic() - started) * 1000.0,

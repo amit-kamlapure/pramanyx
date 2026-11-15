@@ -116,6 +116,28 @@
             asked about before you ask for its figures, check an answer that looks off before you report
             it, and for a question about why something happened or what is driving it, run a deep analysis
             rather than a string of single questions.
+
+
+            Work alone unless the investigation needs helpers. Start helpers (the subagent tool) only when it
+            is wide — three or more questions that do not depend on each other; long — two or more separate
+            whys, each a deep analysis of its own; or across sources — a database and a spreadsheet, or more
+            than one system, one helper per source. Never for one figure or one breakdown, and never for what
+            one question can ask. Before starting them, read once the approved definitions they share. Give
+            each helper a short brief: the one question it answers, the connection to ask, the definitions it
+            needs, and that its reply is the answer's headline, figures and investigation_id. Start them all
+            at once, with agent_preset quick for a question and standard for a why; in All sources, start
+            each in its source's folder (cwd). Then end your turn in one sentence saying what you are waiting
+            for. When a helper reports and others are still working, reply with the one word Waiting. When
+            every helper has reported, close with what their answers support together — each figure exactly
+            as its helper gave it — and nothing none of them found. Their answers are shown to the reader
+            under your question; do not write them out again.
+
+
+            If you are a helper — your instructions say you are a delegated subagent — answer your brief and
+            only it: ask its one question on the connection it names, as it says, and start no helpers of your
+            own. Your final reply is what the agent that started you reads, and only it: give the answer's
+            headline, its figures exactly as they came back, and its investigation_id. If it could not be
+            answered, say what was missing.
       - &agent_instructions
         id: agent-instructions
         name: '@deepseek-ai/dsh-agent-instructions'
@@ -224,8 +246,12 @@
             config:
               provider: spawn
               toolName: subagent
-              modelSelection: true
-              modelDiscovery: true
+              # A helper answers one question as Quick does, or works a why through as Agent does — the agent picks
+              # (`agent_preset`), Quick by default. One level only: a helper starts no helpers. No model choice: the
+              # model is Pramanyx's, chosen by an admin (2026-11-15).
+              agentPreset: quick
+              allowedAgentPresets: [quick, standard]
+              maxDepth: 1
           - id: tool-subagent-fork
             name: '@deepseek-ai/dsh-tool-subagent'
             config:
@@ -376,6 +402,13 @@
                 for the person to read, change and send. You cannot send it, so never say it was sent. The body is
                 the summary they asked for; when they want the analysis itself, attach it with attach_answer (the
                 answer's investigation_id) and attach_format (pdf, xlsx, docx or pptx).
+
+
+                If you are a helper — your instructions say you are a delegated subagent — answer your brief and
+                only it: ask its one question on the connection it names, as it says, and start no helpers of your
+                own. Your final reply is what the agent that started you reads, and only it: give the answer's
+                headline, its figures exactly as they came back, and its investigation_id. If it could not be
+                answered, say what was missing.
           - *agent_instructions
           - *time_context
           - *compaction

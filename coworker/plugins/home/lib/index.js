@@ -46,6 +46,7 @@ async function workspacePerConnection(ctx, api) {
   const home = process.env.DSH_HOME || join(homedir(), ".dsh");
   const answer = await fetch(`${api}/connections`, { headers: { accept: "application/json" } });
   if (!answer.ok) throw new Error(`connections: ${answer.status}`);
+  const sources = [];
   for (const connection of await answer.json()) {
     const id = String(connection.id || "");
     if (!/^[A-Za-z0-9_-]+$/.test(id)) continue;          // an id becomes a folder name: nothing else is let through
@@ -63,7 +64,38 @@ async function workspacePerConnection(ctx, api) {
     const known = await ctx.workspaceRegistry.resolveByPath(folder);
     if (!known) await ctx.workspaceRegistry.create(folder, name);
     else if (known.title !== name) await known.setTitle(name);
+    sources.push({ id, name, folder });
   }
+  await allSources(ctx, home, sources);
+}
+
+/**
+ * ALL SOURCES (2026-11-15). An investigation that needs a database and a spreadsheet, or several systems, cannot be
+ * worked in a conversation held to one connection. This workspace is held to none: its `AGENTS.md` lists every
+ * connection and its folder, and says to give each source its own helper, started in that source's folder — where
+ * the helper is held to that source alone (`holdOf`). The person chooses it in the shell's picker, as they choose a
+ * connection.
+ */
+const ALL_SOURCES = "All sources";
+
+async function allSources(ctx, home, sources) {
+  const folder = join(home, "all-sources");
+  await mkdir(folder, { recursive: true });
+  await writeFile(join(folder, "AGENTS.md"), [
+    `# ${ALL_SOURCES}`,
+    "",
+    "This conversation is held to no one connection: it is for an investigation that needs more than one source.",
+    "The sources, each with its connection id and its folder:",
+    "",
+    ...sources.map((source) => `- ${source.name}: connection \`${source.id}\`, folder \`${source.folder}\``),
+    "",
+    "When the investigation needs more than one of them, start one helper per source with `cwd` set to that",
+    "source's folder: the helper is then held to that source and asks it alone. Name the connection in each brief.",
+    "",
+  ].join("\n"));
+  const known = await ctx.workspaceRegistry.resolveByPath(folder);
+  if (!known) await ctx.workspaceRegistry.create(folder, ALL_SOURCES);
+  else if (known.title !== ALL_SOURCES) await known.setTitle(ALL_SOURCES);
 }
 
 /**
@@ -182,9 +214,32 @@ export async function keepThePerson(req, res, api) {
 const OURS = "mcp__pramanyx__";
 const LISTS = /^mcp__pramanyx__list_(platform_)?connections$/;
 const HELD_FOLDER = /[\\/]connections[\\/]([A-Za-z0-9_-]+)[\\/]?$/;
+/** The shell's tools that start a helper: a sub-agent, as a fresh session or as a fork of this one. */
+const SPAWNS = /^subagent(_fork)?$/;
+
+/**
+ * Which connection a conversation is held to, decided once: the first time it is seen. A HELPER (a sub-agent, whose
+ * header names the conversation that started it) is held to its parent's connection, whatever folder it was started
+ * in. Otherwise the folder it started in decides. Cached, so moving a conversation's folder later is no way round.
+ */
+export function holdOf(holds, id, header) {
+  if (holds.has(id)) return holds.get(id);
+  const parent = typeof header?.parentSession === "string" ? header.parentSession : "";
+  const held = parent && holds.get(parent) ? holds.get(parent) : (HELD_FOLDER.exec(String(header?.cwd ?? ""))?.[1] ?? "");
+  holds.set(id, held);
+  return held;
+}
 
 /** The refusal for one call from a conversation held to `held`, or undefined when the call may run. Pure. */
 export function refusalFor(name, args, held) {
+  if (held && typeof name === "string" && SPAWNS.test(name)) {
+    // A helper of a held conversation is held too. Started in another connection's folder it would read that one.
+    const folder = args && typeof args === "object" && typeof args.cwd === "string" ? args.cwd.trim() : "";
+    if (folder && (HELD_FOLDER.exec(folder)?.[1] ?? "") !== held) {
+      return `This conversation is held to the connection \`${held}\`, and so is every helper it starts. Start the helper without a folder. To work across sources, the person starts the conversation in ${ALL_SOURCES}.`;
+    }
+    return undefined;
+  }
   if (!held || typeof name !== "string" || !name.startsWith(OURS) || LISTS.test(name)) return undefined;
   const given = args && typeof args === "object" ? (args.connection ?? args.connection_id) : undefined;
   const named = typeof given === "string" ? given.trim() : "";
@@ -198,9 +253,12 @@ export function refusalFor(name, args, held) {
   return undefined;
 }
 
-function holdToConnection(ctx) {
+function holdToConnection(ctx, holds) {
   ctx.inject(["tools", "workingDirectory"], (at) => {
     at.effect(() => at.tools.guard((call) => {
+      const session = call.agent?.session;
+      const id = String((session && typeof session === "object" ? session.id : session) ?? "");
+      if (id && holds.has(id)) return refusalFor(call.name, call.arguments, holds.get(id));
       let folder = "";
       try { folder = call.agent ? String(at.workingDirectory.get(call.agent.session) || "") : ""; } catch { folder = ""; }
       return refusalFor(call.name, call.arguments, HELD_FOLDER.exec(folder)?.[1] ?? "");
@@ -247,29 +305,68 @@ function ofAnAnswer(text) {
   }
 }
 
+/** The record's memory: each conversation's running turn, each helper's place, each conversation's open question. */
+export function newRecord() {
+  return { turns: new Map(), helpers: new Map(), questions: new Map() };
+}
+
+/** The helper a spawn's result says it started. */
+const STARTED = /started subagent ([A-Za-z0-9-]{8,64})/;
+/** A turn the shell starts because a helper reported: its first message is the report, not a person's question. */
+const REPORTS = new Set(["agent-message", "subagent-settled"]);
+
 /**
- * The events one of the shell's own session events comes to, for the platform's record — none for most. `turns`
- * holds what is known of each conversation's running turn and is changed here. Pure but for that.
+ * The events one of the shell's own session events comes to, for the platform's record — none for most. `record`
+ * (`newRecord`) holds what is known and is changed here. Pure but for that.
+ *
+ * ONE QUESTION IS ONE TRACE, HOWEVER MANY AGENTS WORK ON IT (2026-11-15). A turn may start helpers (sub-agents);
+ * each is a conversation of its own to the shell, and was recorded as a trace of its own, its brief filed as if a
+ * person had asked it. Now a helper's work is written into the question's trace, inside the call that started it,
+ * and that call's span lasts until the helper has finished. A helper reporting back starts a new turn of the
+ * conversation that started it: that turn is the same question, so it joins the same trace. The question ends — its
+ * `final_response` — at the end of the first turn after which no helper is still working.
  */
-export function turnEvents(turns, sessionId, held, event) {
+export function turnEvents(record, sessionId, held, event, header = {}) {
+  const { turns, helpers, questions } = record;
   const data = event?.data ?? {};
   const at = Number(event?.time) || Date.now();
   const where = { shell_session: sessionId, seq: event?.seq };
+  const parent = typeof header?.parentSession === "string" ? header.parentSession : "";
   const now = turns.get(sessionId);
   if (event?.type === "turn/start") {
+    if (parent) {
+      const helper = helpers.get(sessionId) ?? { parent, span: null, at };
+      helpers.set(sessionId, helper);
+      const question = questions.get(helper.parent);
+      question?.running.add(sessionId);
+      turns.set(sessionId, { turn: data.turn, trace: question?.trace ?? traceOf(sessionId, data.turn), started: at, asked: true,
+                             helper: true, inside: helper.span, calls: new Map(), headline: "", tools: 0 });
+      return [];
+    }
     turns.set(sessionId, { turn: data.turn, trace: traceOf(sessionId, data.turn), started: at, asked: false, calls: new Map(), headline: "", tools: 0 });
     return [];
   }
   if (!now) return [];
   const conn_id = held || null;
-  if (event.type === "user/message" && !now.asked && data.source?.kind === "user") {
-    now.asked = true;
-    return [{ kind: "user_request", name: "coworker", conn_id, payload: { question: clip(textOf(data.content), 2000), turn: now.turn, ...where } }];
+  const inside = now.inside ? { parent_span_id: now.inside } : {};
+  if (event.type === "user/message" && !now.asked) {
+    const kind = data.source?.kind;
+    if (kind === "user") {
+      now.asked = true;
+      questions.set(sessionId, { trace: now.trace, started: now.started, running: questions.get(sessionId)?.running ?? new Set() });
+      return [{ kind: "user_request", name: "coworker", conn_id, payload: { question: clip(textOf(data.content), 2000), turn: now.turn, ...where } }];
+    }
+    if (REPORTS.has(kind)) {
+      now.asked = true;
+      const question = questions.get(sessionId);
+      if (question) now.trace = question.trace;
+      return [];
+    }
   }
   if (event.type === "tool/call" && data.callId) {
-    now.calls.set(data.callId, { name: data.name, at });
+    now.calls.set(data.callId, { name: data.name, at, args: data.arguments });
     now.tools += 1;
-    return [{ kind: "tool_call", name: String(data.name || "tool"), span_id: data.callId, conn_id,
+    return [{ kind: "tool_call", name: String(data.name || "tool"), span_id: data.callId, conn_id, ...inside,
               payload: { tool: data.name, arguments: clip(typeof data.arguments === "string" ? data.arguments : JSON.stringify(data.arguments ?? {}), 1500), step: data.step, ...where } }];
   }
   if (event.type === "tool/result") {
@@ -277,26 +374,131 @@ export function turnEvents(turns, sessionId, held, event) {
     const call = now.calls.get(message.toolCallId);
     if (!call) return [];
     now.calls.delete(message.toolCallId);
+    const child = SPAWNS.test(String(call.name)) && !message.isError ? STARTED.exec(textOf(message.content))?.[1] : undefined;
+    if (child) {
+      // The helper's span stays open while it works; it is closed when the helper finishes, below.
+      const was = helpers.get(child);
+      helpers.set(child, { ...was, parent: sessionId, span: message.toolCallId, at: call.at, name: call.name, description: descriptionOf(call.args) });
+      const running = turns.get(child);
+      if (running) running.inside = message.toolCallId;          // a helper that began before its start was reported
+      questions.get(sessionId)?.running.add(child);
+      return [];
+    }
     const said = ASKS.test(call.name) ? ofAnAnswer(textOf(message.content)) : {};
     if (said.headline) now.headline = said.headline;
     const { rows, ...rest } = said;
     return [{ kind: "tool_call_result", name: String(call.name || "tool"), span_id: message.toolCallId, ok: !message.isError,
-              duration_ms: Math.max(0, at - call.at), conn_id, ...(typeof rows === "number" ? { row_count: rows } : {}),
+              duration_ms: Math.max(0, at - call.at), conn_id, ...inside, ...(typeof rows === "number" ? { row_count: rows } : {}),
               payload: { tool: call.name, ...rest, ...where } }];
   }
   if (event.type === "turn/end") {
     turns.delete(sessionId);
     const reason = String(data.reason?.kind || "");
-    return [{ kind: "final_response", name: "coworker", ok: reason === "completed", duration_ms: Math.max(0, at - now.started), conn_id,
+    if (now.helper) {
+      const helper = helpers.get(sessionId);
+      if (helper) questions.get(helper.parent)?.running.delete(sessionId);
+      if (!helper?.span || helper.closed) return [];
+      helper.closed = true;
+      return [{ kind: "tool_call_result", name: String(helper.name || "subagent"), span_id: helper.span, ok: reason === "completed",
+                duration_ms: Math.max(0, at - helper.at), conn_id,
+                payload: { tool: helper.name || "subagent", helper: sessionId, ...(helper.description ? { description: helper.description } : {}),
+                           ...(now.headline ? { headline: now.headline } : {}), reason, calls: now.tools, ...where } }];
+    }
+    const question = questions.get(sessionId);
+    // Helpers still at work on this question: it has not ended, whatever this turn did.
+    if (question?.running.size) return [];
+    const started = question && question.trace === now.trace ? question.started : now.started;
+    return [{ kind: "final_response", name: "coworker", ok: reason === "completed", duration_ms: Math.max(0, at - started), conn_id,
               payload: { ...(now.headline ? { headline: now.headline } : {}), reason, calls: now.tools, turn: now.turn, ...where } }];
   }
   return [];
 }
 
-function recordTurns(ctx, api) {
-  const turns = new Map();
+/** A spawn's one-line description, as the agent wrote it. */
+function descriptionOf(args) {
+  try {
+    const given = typeof args === "string" ? JSON.parse(args) : args;
+    return clip(String(given?.description ?? ""), 160);
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * WHAT A HELPER FOUND, KEPT FOR THE PAGE. A helper's answers are in its own conversation, which the person does not
+ * read; the conversation that started it shows them, as the platform's own cards, under the turn that started it.
+ * So each answer a helper is given — the governed path's (`ask`, an agent's `ask_…`) and a deep analysis's — is kept
+ * here as it came back, one file per helper, with when it finished. The page reads it (`/pramanyx-helper`).
+ */
+const HELPER_ANSWERS = /^mcp__pramanyx__(ask(_[a-z0-9_]+)?|deep_analysis)$/;
+const HELPER_ID = /^[A-Za-z0-9-]{8,64}$/;
+const helperFile = (id) => join(process.env.DSH_HOME || join(homedir(), ".dsh"), "helpers", `${id}.jsonl`);
+
+export function helperLines(record, sessionId, header, event) {
+  const parent = typeof header?.parentSession === "string" ? header.parentSession : "";
+  const data = event?.data ?? {};
+  if (!parent) {
+    // The start of a helper, seen from the conversation that started it: its description.
+    if (event?.type !== "tool/result") return [];
+    const message = data.message ?? {};
+    const child = STARTED.exec(textOf(message.content))?.[1];
+    const helper = child ? record.helpers.get(child) : undefined;
+    return helper && helper.parent === sessionId ? [[child, { started: { description: helper.description || "", parent: sessionId } }]] : [];
+  }
+  if (event?.type === "tool/call" && data.callId && HELPER_ANSWERS.test(String(data.name))) {
+    const asked = record.turns.get(sessionId);
+    if (asked) (asked.answerCalls ??= new Map()).set(data.callId, { name: data.name, args: data.arguments });
+    return [];
+  }
+  if (event?.type === "tool/result") {
+    const message = data.message ?? {};
+    const call = record.turns.get(sessionId)?.answerCalls?.get(message.toolCallId);
+    if (!call || message.isError) return [];
+    let args = {};
+    try { args = typeof call.args === "string" ? JSON.parse(call.args) : (call.args ?? {}); } catch { args = {}; }
+    return [[sessionId, { answer: { tool: call.name, args: { question: args.question, connection: args.connection ?? args.connection_id },
+                                    text: clip(textOf(message.content), 400_000) } }]];
+  }
+  if (event?.type === "turn/end") return [[sessionId, { ended: String(data.reason?.kind || "") }]];
+  return [];
+}
+
+async function keepHelperLines(lines) {
+  if (!lines.length) return;
+  const { appendFile } = await import("node:fs/promises");
+  const { dirname } = await import("node:path");
+  for (const [id, line] of lines) {
+    if (!HELPER_ID.test(id)) continue;
+    await mkdir(dirname(helperFile(id)), { recursive: true });
+    await appendFile(helperFile(id), `${JSON.stringify(line)}\n`, { mode: 0o600 });
+  }
+}
+
+/** What one helper found so far: its description, its answers in order, and whether it has finished. */
+export async function readHelper(id) {
+  if (!HELPER_ID.test(id)) return null;
+  const { readFile } = await import("node:fs/promises");
+  let text = "";
+  // No record: a helper from before answers were kept, or not a helper at all. The page draws nothing for it.
+  try { text = await readFile(helperFile(id), "utf8"); } catch { return { known: false, description: "", answers: [], done: false }; }
+  const out = { known: true, description: "", answers: [], done: false };
+  for (const raw of text.split("\n")) {
+    if (!raw.trim()) continue;
+    let line;
+    try { line = JSON.parse(raw); } catch { continue; }
+    if (line.started) out.description = String(line.started.description || "");
+    if (line.answer) { out.answers.push(line.answer); out.done = false; }
+    if (line.ended) out.done = true;
+  }
+  return out;
+}
+
+function recordTurns(ctx, api, holds) {
+  const record = newRecord();
   const traces = new Map();          // session → the running turn's trace, read when a model call's headers are made
+  const insides = new Map();         // a helper's session → the call that started it, for its model calls' headers
   let sending = Promise.resolve();
+  let keeping = Promise.resolve();
   let warned = false;
   const send = (trace, session, events) => {
     // One after another, so the record reads in the order things happened.
@@ -311,13 +513,17 @@ function recordTurns(ctx, api) {
     try {
       const id = String(session?.id ?? "");
       if (!id) return;
-      const before = turns.get(id);
-      const held = HELD_FOLDER.exec(String(session?.header?.cwd ?? ""))?.[1] ?? "";
-      const events = turnEvents(turns, id, held, event);
-      const after = turns.get(id);
+      const header = session?.header ?? {};
+      const before = record.turns.get(id);
+      const held = holdOf(holds, id, header);
+      const events = turnEvents(record, id, held, event, header);
+      const lines = helperLines(record, id, header, event);          // after: a spawn's description is kept there
+      const after = record.turns.get(id);
       if (after) traces.set(id, after.trace); else traces.delete(id);
+      if (after?.inside) insides.set(id, after.inside); else if (!after) insides.delete(id);
       const trace = (after ?? before)?.trace;
       if (events.length && trace) send(trace, id, events);
+      if (lines.length) keeping = keeping.then(() => keepHelperLines(lines)).catch(() => { /* the page says it could not read it */ });
     } catch { /* the record is best-effort; the turn it observes goes on */ }
   });
   // Before a question goes to the governed answer path, the platform is told which step of which turn asks it, so
@@ -343,6 +549,9 @@ function recordTurns(ctx, api) {
   ctx.on("llm-pi-ai/request-headers", (request, headers, next) => {
     const trace = request?.sessionId ? traces.get(String(request.sessionId)) : undefined;
     if (trace) { headers.set("x-pramanyx-trace", trace); headers.set("x-pramanyx-session", String(request.sessionId)); }
+    // A helper's model calls are filed inside the call that started it.
+    const inside = request?.sessionId ? insides.get(String(request.sessionId)) : undefined;
+    if (trace && inside) headers.set("x-pramanyx-span", inside);
     return next();
   });
 }
@@ -356,8 +565,22 @@ export function apply(ctx) {
     console.warn(`pramanyx-home: no workspace per connection this start (${error?.message ?? error})`);
   });
   sayWhereThisIs(ctx, api);
-  holdToConnection(ctx);
-  recordTurns(ctx, api);
+  // Which connection each conversation is held to, decided the first time it is seen (`holdOf`): the guard and the
+  // record read the same answer.
+  const holds = new Map();
+  holdToConnection(ctx, holds);
+  recordTurns(ctx, api, holds);
+  ctx.effect(() => ctx.webServer.register({
+    kind: "exact",
+    path: "/pramanyx-helper",
+    handler: async (req, res) => {
+      const reply = (status, body) => { res.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" }); res.end(JSON.stringify(body)); };
+      if (req.method !== "GET") return reply(405, { detail: "GET only" });
+      const id = new URL(req.url, "http://here").searchParams.get("session") || "";
+      const found = await readHelper(id);
+      return found ? reply(200, found) : reply(422, { detail: "Not a helper's id" });
+    },
+  }), "pramanyx-home: what a helper found");
   ctx.effect(() => ctx.webServer.register({
     kind: "exact",
     path: "/pramanyx-enter",

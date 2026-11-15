@@ -117,6 +117,8 @@ _SESSION_NAME = re.compile(r"^[A-Za-z0-9-]{6,80}$")
 _PAYLOAD_KEYS = frozenset({
     "question", "mode", "turn", "step", "tool", "arguments", "investigation_id", "receipt_id",
     "headline", "rows", "reason", "error", "message", "shell_session", "seq", "calls",
+    # A helper the turn started: which session it is, and its brief's one-line description.
+    "helper", "description",
 })
 
 
@@ -125,6 +127,10 @@ class CoworkerTraceEvent(BaseModel):
         description="What happened. A model call is not taken: the model door records those.")
     name: str = Field(default="", max_length=120, description="The tool's name, or `coworker` for the turn itself.")
     span_id: Optional[str] = Field(default=None, max_length=80, description="A tool call's id; its result carries the same.")
+    #: 2026-11-15 — the step this event happened INSIDE: a helper's work (a sub-agent the turn started) is recorded
+    #: under the call that started it, so one question is one trace however many agents worked on it.
+    parent_span_id: Optional[str] = Field(default=None, max_length=80,
+                                          description="The tool call this happened inside — for a helper's work, the call that started the helper.")
     ok: Optional[bool] = None
     duration_ms: Optional[float] = Field(default=None, ge=0)
     conn_id: Optional[str] = Field(default=None, max_length=80, description="The connection the conversation is held to.")
@@ -158,7 +164,7 @@ def take_a_coworker_turn(body: CoworkerTraceBatch, request: Request) -> Coworker
         for event in body.events:
             session_log.emit(
                 event.kind, name=event.name or "coworker", trace_id=body.trace_id, span_id=event.span_id,
-                ok=event.ok, duration_ms=event.duration_ms, conn_id=event.conn_id, row_count=event.row_count,
+                parent_span_id=event.parent_span_id, ok=event.ok, duration_ms=event.duration_ms, conn_id=event.conn_id, row_count=event.row_count,
                 error_class=("coworker" if event.ok is False and event.kind != "tool_call" else None),
                 payload={k: v for k, v in event.payload.items() if k in _PAYLOAD_KEYS},
             )

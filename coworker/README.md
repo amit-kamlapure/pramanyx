@@ -164,6 +164,20 @@ turned back on from the interface.
   that step, where it would otherwise open a run of its own. The words stay here: the system prompt, what the
   agent was given and what it said are in the shell's own log, and each event says where (`shell_session`, `seq`).
   `node --test plugins/home/test/trace.test.mjs` covers what is sent and what is not.
+- **Helpers, started by need.** In Agent mode the agent works alone unless the investigation needs more: when it
+  is wide (three or more questions that do not depend on each other), long (two or more whys, each a deep
+  analysis) or across sources (a database and a spreadsheet, or several systems), it starts helpers — the shell's
+  sub-agents — all at once, one question each, under Quick for a question and Agent for a why. A helper answers its
+  brief on one connection and starts none of its own. **Held:** a helper of a held conversation is held to the same
+  connection, whatever folder it is started in, and a held conversation cannot start one in another connection's
+  folder. **All sources**, a workspace beside the connections, is held to none: its instructions list each source and
+  its folder, and a helper started in a source's folder is held to that source. **One question, one trace:** a
+  helper's tool calls and model calls are written into the question's trace, inside the call that started it, which
+  lasts until the helper finishes; the turns its reports start join the same trace, and the question ends when the
+  last helper has reported. **What the reader sees:** each helper's answers, as the platform's own cards, under the
+  question that started them (the host half keeps them as they came back, `/pramanyx-helper`); the report notices
+  and the agent's "Waiting" replies are not shown, and the close is the last reply. `node --test
+  plugins/home/test/*.test.mjs` covers the record and the hold.
 - **A read-only relay**, `/pramanyx/…` on the shell's own server, so the page can read Pramanyx without the API's
   allowed origins being changed. It relays the paths the page reads (`/connections`, `/suggestions`,
   `/agents/custom`, `/investigations`, `/sheets`, an answer's export, what was sent from an email draft, and where
@@ -188,8 +202,7 @@ admin allows "Let the coworker ask its models through Pramanyx" in Settings ▸ 
   shortened form of the mockup (€17.86m) needs a column's unit, which is not carried over MCP.
 - The claim that puts the platform's work inside a turn's trace is matched on the question and the connection,
   because a tool call carries nothing else. It covers `ask`; a custom agent's answer and a deep analysis are
-  still recorded as runs of their own. A subagent's turns are traces of their own, not nested under the turn
-  that started them. The Trajectory tab in the coworker still shows a call to the platform as one row.
+  still recorded as runs of their own. The Trajectory tab in the coworker still shows a call to the platform as one row.
 - A deep analysis is one named row that opens to what came back. Its own steps — baseline, decomposition, what
   each concluded — are not drawn, and it has no card.
 - A Pramanyx tool added since this was written, and each custom agent's, is named from the end of the first turn
@@ -238,6 +251,9 @@ admin allows "Let the coworker ask its models through Pramanyx" in Settings ▸ 
   rename, archive and delete); pinned items.
 - Both modes ask as the narrator role. Quick does not use the fast one: a mode has no model of its own here yet.
   Quick's voice paragraphs are a copy of Agent's in `profile.patch.yml`; a change to one is made in both.
+- **A helper's close is the agent's words.** Each helper's answers are the platform's and are shown as its cards; the
+  closing reply that puts them together is written by the agent and is not checked by the platform the way an
+  answer is. A helper's answers are kept on this machine (`$DSH_HOME/helpers`) and are not in Pramanyx's store.
 - **A schedule's answer does not arrive in a conversation.** The shell's scheduler put each run into a chat as a
   new turn; Pramanyx's keeps each run with the schedule (its History, on the Schedules page) and sends it on only
   through a step a person added. Nothing brings a run's answer back into the conversation that set it up.
