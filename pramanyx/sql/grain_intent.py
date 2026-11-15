@@ -108,6 +108,23 @@ _AGG_FN = re.compile(r"\b(sum|avg|count|min|max)\s*\(", re.I)
 _KEY_COL = re.compile(r"^(?:[a-z_][a-z0-9_]*\.)?([a-z][a-z0-9_]*)_id$|^(?:[a-z_][a-z0-9_]*\.)?id$", re.I)
 
 
+_ONE_FIGURE_ASK = re.compile(
+    r"^\s*(?:how many|how much|what (?:share|percentage|proportion|fraction) of|"
+    r"what(?:'s| is| was| were| are)\b[^?]{0,40}?\b(?:total|number|count|share|percentage|proportion|rate|ratio|"
+    r"average|mean|sum)\b)", re.I)
+#: "every" is not here: "count every order, cancelled ones included" asks for one count.
+_MANY_ROWS_ASK = re.compile(
+    r"\b(which|top|bottom|list|rank|ranked|breakdown|break down|split|compare|comparison|distribution|trend|over time|"
+    r"monthly|weekly|daily|yearly|across|each|per|by)\b", re.I)
+
+
+def asks_one_figure(question: str) -> bool:
+    """Whether a question asks for ONE figure — "How many returns were rejected?", "What share of orders were
+    cancelled?" — and not a breakdown, a ranking or a comparison."""
+    q = str(question or "")
+    return bool(_ONE_FIGURE_ASK.search(q)) and not _MANY_ROWS_ASK.search(q)
+
+
 def grouped_by_a_row_key(question: str, sql: str) -> Optional[str]:
     """A total asked "by <dimension>" whose SQL ALSO groups by a row's own key.
 

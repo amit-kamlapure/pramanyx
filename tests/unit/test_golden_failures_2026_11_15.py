@@ -102,3 +102,27 @@ def test_the_rewrite_is_shown_each_rows_label():
 class _Never:
     def complete(self, **kw):
         raise AssertionError("no rewrite should be asked for a grounded answer")
+
+
+# ── one figure asked, a breakdown shown (l03, l07, l09, lb08, lc01; t03, t13) ─────────────────────────────────
+
+def _res(rows):
+    return {"sql": {"sql": "SELECT 1"}, "columns": {"columns": ["k", "n"]}, "rows": {"rows": rows}}
+
+
+def test_a_breakdown_under_a_one_figure_question_is_handed_back():
+    from pramanyx.agent.converse_tools import breakdown_where_one_figure_was_asked as check
+    by_condition = _res([["resellable", 69049], ["minor_refurbish", 12007], ["reject", 5351]])
+    why = check("How many returns were rejected at inspection?", [by_condition], "5,351 returns were rejected.")
+    assert why and "breakdown of 3 rows" in why
+    assert check("How many returns were rejected at inspection?", [by_condition, _res([[5351]])],
+                 "5,351 returns were rejected.") is None                      # the filtered count, run after
+    assert check("How many returns by condition?", [by_condition], "Resellable leads with 69,049.") is None
+
+
+def test_the_one_figure_reading():
+    from pramanyx.sql.grain_intent import asks_one_figure
+    assert asks_one_figure("What was YNAP's total GMV in fiscal year 2025?")
+    assert asks_one_figure("How many orders were destined for EU markets? Count every order, cancelled ones included.")
+    assert not asks_one_figure("Which three EU markets had the highest GMV?")
+    assert not asks_one_figure("For each platform, what is the average order value?")

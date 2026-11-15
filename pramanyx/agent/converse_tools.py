@@ -241,6 +241,24 @@ def working_notes(text: str) -> Optional[str]:
     return None
 
 
+def breakdown_where_one_figure_was_asked(question: str, results: list[dict], answer: str) -> Optional[str]:
+    """Why an answer is not finished, when the question asked for ONE figure and the result it stands on is a
+    breakdown — or None. Measured on both golden sets (2026-11-15): "How many returns were rejected?", "What share of
+    orders were cancelled?" and five more were answered right in words over a table of every status, so what the
+    person was shown was not the answer. Handed back once (`run_tool_loop`'s ``stop_check``): run the query that
+    returns the figure itself."""
+    from pramanyx.sql.grain_intent import asks_one_figure
+    if not asks_one_figure(question) or not results:
+        return None
+    shown = answering_result(answer, [{"rows": (r.get("rows") or {}).get("rows") or []} for r in results])
+    rows = (results[shown].get("rows") or {}).get("rows") or [] if shown >= 0 else []
+    if len(rows) < 2:
+        return None
+    return (f"The question asks for one figure, and the result your answer stands on is a breakdown of {len(rows)} "
+            "rows. Run the query that returns that figure itself — a filter to the rows asked about, or the share or "
+            "rate computed in SQL — so the result shown is the answer. Then answer.")
+
+
 def citable_totals(results: list[dict]) -> list[list]:
     """Each result's column totals, as rows the grounding check may cite. The model is GIVEN these (`run_sql`'s
     ``totals``, computed by code and to be quoted, never added up by hand) — and the check then held every quoted total
@@ -944,6 +962,22 @@ def converse(connection_id: str, question: str, *, extra_context: Optional[str] 
     from pramanyx.agent.tool_loop import run_tool_loop
     from pramanyx.llm.provider import get_provider
 
+    # The results this turn's queries returned, in order — what the stop check reads to see which one an answer
+    # stands on. Only a streaming caller has frames to read; a sync caller's turn is checked for working notes alone.
+    results: list[dict] = []
+    if tool_emit is not None:
+        _outer = tool_emit
+
+        def tool_emit(kind: str, payload: dict) -> None:   # noqa: F811 — the caller's emit, with the results kept
+            if kind == "sql":
+                results.append({"sql": payload})
+            elif kind in ("columns", "rows") and results:
+                results[-1][kind] = payload
+            _outer(kind, payload)
+
+    def _not_yet(answer: str) -> Optional[str]:
+        return working_notes(answer) or breakdown_where_one_figure_was_asked(question, results, answer)
+
     return run_tool_loop(
         provider or get_provider("coder"),
         converse_system_prompt(connection_id, extra_context, question=question, agent=agent, shape=shape),
@@ -961,8 +995,9 @@ def converse(connection_id: str, question: str, *, extra_context: Optional[str] 
         # Explicit rather than defaulted, so the two callers of this loop read as a pair
         # and a reader can see there are two sites without going to find the other one.
         site="converse.tool",
-        # A model that stops with its working notes is handed them back once (2026-11-15).
-        stop_check=working_notes,
+        # A model that stops with its working notes, or with a breakdown where one figure was asked, is handed the
+        # draft back once (2026-11-15).
+        stop_check=_not_yet,
         # JD-4: the BUILDER'S arguments, not its output, so a shuffled-context control can
         # swap ONE of them and rebuild. Written only while an operator's capture window is
         # open (`session_log.capture_replay`); by default this records nothing.
