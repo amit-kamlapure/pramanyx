@@ -24,6 +24,15 @@ const SAYINGS = {
     body: (said) => (ID.test(said.connection) && ID.test(said.answer) && ["helpful", "unhelpful"].includes(said.verdict)
       ? { conn_id: said.connection, turn_id: said.answer, verdict: said.verdict, note: text(said.note, 2000) } : null),
   },
+  // 2026-11-15 — an email a person wrote here, sent on their click (`pramanyx/routers/email.py`). One address; the
+  // words as they left the page. Pramanyx refuses an agent at that door; this route is reached only from this page.
+  "/pramanyx-email": {
+    to: "/email/send",
+    most: 256 * 1024,                  // an email carries a table's worth of text; a verdict never needs this much
+    body: (said) => (typeof said.to === "string" && /^[^@\s,;<>]+@[^@\s,;<>]+\.[^@\s,;<>]+$/.test(said.to.trim())
+                     && typeof said.body === "string" && said.body.trim()
+      ? { to: said.to.trim().slice(0, 320), subject: text(said.subject, 300), body: text(said.body, 100000) } : null),
+  },
   "/pramanyx-verdict": {
     to: "/verify/verdict",
     body: (said) => (ID.test(said.connection) && ID.test(said.answer) && ["correct", "reject"].includes(said.verdict)
@@ -38,12 +47,12 @@ function reply(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
-async function read(req) {
+async function read(req, most = MOST) {
   const parts = [];
   let size = 0;
   for await (const part of req) {
     size += part.length;
-    if (size > MOST) return null;
+    if (size > most) return null;
     parts.push(part);
   }
   return Buffer.concat(parts).toString("utf8");
@@ -76,7 +85,7 @@ export function apply(ctx) {
         const from = req.headers["sec-fetch-site"];
         if (from && from !== "same-origin") return reply(res, 403, { detail: "Only this page may say this" });
         if (!String(req.headers["content-type"] || "").startsWith("application/json")) return reply(res, 415, { detail: "JSON only" });
-        const raw = await read(req);
+        const raw = await read(req, saying.most || MOST);
         if (raw === null) return reply(res, 413, { detail: "Too long" });
         let said;
         try { said = JSON.parse(raw); } catch { said = null; }

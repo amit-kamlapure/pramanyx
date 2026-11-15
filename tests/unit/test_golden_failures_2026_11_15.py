@@ -39,3 +39,34 @@ def test_the_conversation_is_told_to_compute_a_share_in_the_query():
     import inspect
     source = " ".join(inspect.getsource(converse_system_prompt).replace('"', " ").split())
     assert "asks for a share, a percentage, a rate or a ratio, compute it in the query" in source
+
+
+# ── an agent's working notes are never its answer (found live, 2026-11-15) ────────────────────────────────────
+
+LIVE = ("The user is asking for two things: 1. The approved definition of GMV. 2. The fiscal year definition. From the "
+        "previous tool calls: the fiscal year starts on 2026-07-01. Wait, my standing instructions say: use the approved "
+        "metric definitions. I have one tool call left. Let me try a targeted search.")
+
+
+def test_working_notes_are_recognised_and_answers_are_not():
+    from pramanyx.agent.converse_tools import working_notes
+    assert working_notes(LIVE)
+    assert working_notes("The user wants GMV by platform.")
+    for answer in ("Mytheresa leads fiscal 2027 GMV at €1,205,163.43, ahead of NET-A-PORTER at €980,229.52.",
+                   "Let me know if you want it by month. GMV is SUM(orders.gmv_eur) for non-cancelled orders.",
+                   "I couldn't find a GMV definition in the handbook; the fiscal year runs 1 July to 30 June."):
+        assert working_notes(answer) is None, answer
+
+
+def test_the_loop_hands_working_notes_back_once():
+    from pramanyx.agent.tool_loop import run_tool_loop
+    from pramanyx.llm.provider import ToolTurn
+    replies = iter([ToolTurn(text=LIVE), ToolTurn(text="The fiscal year runs 1 July to 30 June.")])
+
+    class _P:
+        def complete_with_tools(self, system, user, tools, history=None, **kw):
+            return next(replies)
+    from pramanyx.agent.converse_tools import working_notes
+    got = run_tool_loop(_P(), "sys", "q", [], max_steps=6, stop_check=working_notes)
+    assert got.answer == "The fiscal year runs 1 July to 30 June."
+    assert any(s.tool == "(answer held)" for s in got.steps)

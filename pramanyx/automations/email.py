@@ -3,7 +3,7 @@
 Until this the platform could not send email at all: the Google connection read Gmail, and no SMTP was configured.
 This is the smallest correct sender — through the organisation's own Google connection, as the account that
 connected it, with Gmail's narrowest sending scope (``gmail.send``, its own product on the Google card, so reading
-mail and sending it are two consents, never one).
+mail and sending it are two Google permissions, chosen on the one Gmail card, never one riding in on the other).
 
 * **The recipient is the step's, set by a person** (`models._EFFECT_REQUIRED["email"]`), never bound from an upstream
   step: what an answer says must not choose who receives it.
@@ -41,8 +41,8 @@ def sending_connection(connection_id: str = "") -> tuple[Optional[str], str]:
     for c in candidates:
         if c is not None and c.provider == "google" and SEND_SCOPE in (c.scopes or "").split():
             return c.id, ""
-    return None, ("no Google connection may send email: connect 'Gmail · send' on the Google card in Settings ▸ "
-                  "Integrations, which asks Google for permission to send as that account")
+    return None, ("no Google connection may send email: on the Google card in Settings ▸ Integrations, connect Gmail "
+                  "and choose Send, which asks Google for permission to send as that account")
 
 
 def send_email(to: str, subject: str, body: str, *, connection_id: str = "") -> tuple[bool, str]:

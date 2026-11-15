@@ -5783,6 +5783,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/email/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send An Email
+         * @description Send one email as the organisation's connected Google account. Answers ``{sent, said}`` — the sentence the
+         *     person is shown, success or why not.
+         */
+        post: operations["send_an_email_email_send_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/evals/cases/{case_id}": {
         parameters: {
             query?: never;
@@ -8306,7 +8327,8 @@ export interface paths {
          * @description Begin the dance; the client sends the browser to `authorize_url`.
          *
          *     ``product`` connects one product of the provider's app from its own card: the provider's
-         *     own scopes and that product's, and nothing another card would ask for.
+         *     own scopes and that product's, and nothing another card would ask for. ``option`` is the choice made on a card
+         *     that offers one (Gmail: read, send, or both) — only that choice's scopes are asked for.
          */
         post: operations["connect_integrations__provider_id__connect_post"];
         delete?: never;
@@ -21159,7 +21181,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "investigate" | "brief" | "notify" | "kinetic_action" | "monitor" | "agent_alert" | "slack_post" | "subchain" | "integration_call" | "metric_value" | "trusted_query" | "mcp_call" | "synthesize" | "expectations";
+            kind: "investigate" | "brief" | "notify" | "kinetic_action" | "monitor" | "agent_alert" | "slack_post" | "subchain" | "integration_call" | "metric_value" | "trusted_query" | "mcp_call" | "synthesize" | "expectations" | "email";
             /** When */
             when?: components["schemas"]["GuardClause"][];
             /**
@@ -21168,6 +21190,21 @@ export interface components {
              * @enum {string}
              */
             when_logic: "all" | "any";
+        };
+        /** EmailBody */
+        EmailBody: {
+            /** Body */
+            body: string;
+            /**
+             * Subject
+             * @default
+             */
+            subject: string;
+            /**
+             * To
+             * @description One address.
+             */
+            to: string;
         };
         /** EvalIn */
         EvalIn: {
@@ -36454,6 +36491,39 @@ export interface operations {
             };
         };
     };
+    send_an_email_email_send_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     delete_case_evals_cases__case_id__delete: {
         parameters: {
             query?: {
@@ -40704,6 +40774,7 @@ export interface operations {
         parameters: {
             query?: {
                 product?: string | null;
+                option?: string | null;
             };
             header?: never;
             path: {

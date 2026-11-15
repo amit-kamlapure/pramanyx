@@ -33,6 +33,7 @@ GUARD_LABEL: dict[str, str] = {
     "repair_recheck": "A repair was re-checked before adoption",
     "result_shape": "The rows were checked against what the question asked",
     "usage_history": "What people run in this warehouse was read for an inconclusive answer",
+    "working_notes": "The model's working notes were held back: they are not an answer",
     "time_order": "Timestamps that run backwards flagged",
     "day_window": "A period's last day read whole",
     "declared_filter": "The metric's declared filter applied",

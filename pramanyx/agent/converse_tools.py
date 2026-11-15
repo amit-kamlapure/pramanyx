@@ -211,6 +211,36 @@ def run_sql(connection_id: str, args: dict, *, emit: Optional[Emit] = None,
     return out
 
 
+#: What a model's WORKING sounds like, as opposed to an answer: it speaks of the person in the third person, of its own
+#: tool calls and instructions, and of what it is about to do. One alone can occur in an answer; two do not.
+_WORKING_NOTES = tuple(re.compile(p, re.I) for p in (
+    r"\bthe user (?:is asking|asks|asked|wants|wanted|is looking|needs)\b",
+    r"\b(?:previous|next|another|one more|remaining|last) tool calls?\b",
+    r"\btool calls? (?:left|remaining)\b",
+    r"\bmy (?:standing )?instructions\b",
+    r"\blet me (?:try|check|search|look|query|run|call|review|verify|re-?check|state what)\b",
+    r"\bbefore answering\b",
+    r"\bi (?:need|have|will need) to (?:check|search|call|query|look up|use|run)\b",
+    r"\bi (?:will|'ll) (?:now )?(?:call|query|search|run)\b",
+))
+
+
+def working_notes(text: str) -> Optional[str]:
+    """Why ``text`` is the model's working rather than an answer for a person, or None.
+
+    Found live, 2026-11-15: an agent out of tool calls stopped mid-thought — "The user is asking for two things … I
+    have one tool call left … Let me try a targeted search." — and that paragraph was saved as its answer and shown as
+    one, in the coworker at headline size. The user's rule is that an agent's remarks are never the output."""
+    said = (text or "").strip()
+    if not said:
+        return None
+    hits = [p.pattern for p in _WORKING_NOTES if p.search(said)]
+    if len(hits) >= 2 or re.match(r"\s*the user (?:is asking|asks|asked|wants)\b", said, re.I):
+        return ("That is your working, not an answer: it talks about the person and your own steps. Either make the "
+                "tool call you meant to make, or write the answer itself, to the person, from what the results gave.")
+    return None
+
+
 def answering_result(answer: str, results: list[dict]) -> int:
     """Which of a turn's query results the answer stands on: the one whose rows hold the most of the figures the
     answer states (within a writer's rounding), the latest on a tie. -1 when there is nothing to choose.
@@ -908,6 +938,8 @@ def converse(connection_id: str, question: str, *, extra_context: Optional[str] 
         # Explicit rather than defaulted, so the two callers of this loop read as a pair
         # and a reader can see there are two sites without going to find the other one.
         site="converse.tool",
+        # A model that stops with its working notes is handed them back once (2026-11-15).
+        stop_check=working_notes,
         # JD-4: the BUILDER'S arguments, not its output, so a shuffled-context control can
         # swap ONE of them and rebuild. Written only while an operator's capture window is
         # open (`session_log.capture_replay`); by default this records nothing.

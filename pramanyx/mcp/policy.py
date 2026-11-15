@@ -46,6 +46,8 @@ TOOL_LEVELS: dict[str, Level] = {
     "schedule_question": "act",
     # A web search changes nothing and starts no model work: a read, behind the organisation's own `web_search` setting.
     "search_the_web": "read",
+    # 2026-11-15 — a draft changes nothing and sends nothing: the person sends it (`routers/email.py`).
+    "draft_email": "read",
     "search_graph": "read",
     "describe_entity": "read",
     "list_objects": "read",          # Arc OC-8 — a page of objects through /objects/v1/list

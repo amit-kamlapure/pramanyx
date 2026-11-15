@@ -53,7 +53,7 @@ def test_the_answer_is_sent_to_the_named_address_as_the_connected_account(google
 def test_without_the_sending_permission_it_says_what_to_connect_and_sends_nothing(google):
     google["scopes"] = "https://www.googleapis.com/auth/gmail.readonly"
     ok, said = E.send_email("ana@example.com", "s", "b")
-    assert not ok and "Gmail · send" in said and google["sent"] == []
+    assert not ok and "choose Send" in said and google["sent"] == []
 
 
 @pytest.mark.parametrize("to", ["", "not-an-address", "a@b.com, c@d.com"])

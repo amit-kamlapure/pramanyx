@@ -289,6 +289,19 @@ async def ask(
 
 
 @mcp.tool()
+async def draft_email(
+    to: Annotated[str, Field(description="The address it is for, when the person named one; empty for them to fill in.")] = "",
+    subject: Annotated[str, Field(description="A short subject line.")] = "",
+    body: Annotated[str, Field(description="The email's text. Its figures are the ones the answers in this conversation gave, as given.")] = "",
+) -> dict:
+    """Draft an email for the person to read, change and send themselves. You cannot send it: the draft opens beside
+    your reply with a Send button, and only the person's click sends it. Use the figures the answers here gave, never
+    new ones. After drafting, say in a few words that the draft is ready to review."""
+    return {"draft": {"to": to.strip(), "subject": subject.strip(), "body": body.strip()},
+            "note": "Shown to the person as a draft with a Send button. Nothing has been sent."}
+
+
+@mcp.tool()
 async def search_the_web(
     query: Annotated[str, Field(description="What to look up outside the business: a holiday, a news event, an announcement.")],
     n: Annotated[int, Field(description="How many results, 1 to 8.")] = 5,

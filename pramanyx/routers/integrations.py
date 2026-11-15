@@ -112,6 +112,9 @@ def catalog(request: Request):
             "products": [{
                 "id": pr.id, "name": pr.name, "blurb": pr.blurb, "scopes": pr.scopes,
                 "connected": bool(granted) and set(pr.scopes.split()) <= granted,
+                # A card with a choice says which of its choices the grant covers, each on its own.
+                "options": [{"id": o.id, "label": o.label, "scopes": o.scopes,
+                             "connected": bool(granted) and set(o.scopes.split()) <= granted} for o in pr.options],
                 "tools": [op.label for op in operations_for(p.id)
                           if set(op.scopes) <= set(pr.scopes.split())],
             } for pr in p.products],
@@ -212,18 +215,25 @@ def put_app(provider_id: str, body: AppBody, request: Request):
 # ── connect / callback ───────────────────────────────────────────────────────────
 
 @router.post("/integrations/{provider_id}/connect")
-def connect(provider_id: str, request: Request, product: Optional[str] = None):
+def connect(provider_id: str, request: Request, product: Optional[str] = None, option: Optional[str] = None):
     """Begin the dance; the client sends the browser to `authorize_url`.
 
     ``product`` connects one product of the provider's app from its own card: the provider's
-    own scopes and that product's, and nothing another card would ask for."""
+    own scopes and that product's, and nothing another card would ask for. ``option`` is the choice made on a card
+    that offers one (Gmail: read, send, or both) — only that choice's scopes are asked for."""
     scopes = ""
     if product:
         provider = get_provider(provider_id)
         item = provider.product(product) if provider else None
         if item is None:
             raise HTTPException(404, f"{provider_id} has no product named {product!r}")
-        scopes = f"{provider.default_scopes} {item.scopes}".strip()
+        wanted = item.scopes
+        if option:
+            chosen = item.option(option)
+            if chosen is None:
+                raise HTTPException(404, f"{item.name} has no choice named {option!r}")
+            wanted = chosen.scopes
+        scopes = f"{provider.default_scopes} {wanted}".strip()
     # The AUTHORED callback wins over the derived one: a deployment registered under an
     # address it is not currently being reached at (every local Slack setup, since Slack
     # refuses http://) would otherwise send the provider a URI nobody registered.

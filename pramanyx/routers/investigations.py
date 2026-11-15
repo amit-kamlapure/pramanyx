@@ -4041,6 +4041,17 @@ async def _stream_converse(
                     f"{'call' if steps_n == 1 else 'calls'}). What each step found is "
                     "above — asking again, or more specifically, usually gets there."
                 )
+        # An agent's working notes are never its answer (the user's rule; found live 2026-11-15, when one out of tool
+        # calls stopped mid-thought and the paragraph was shown at headline size). The loop hands a draft like that
+        # back once (`converse_tools.working_notes`); one that is still working at the end is not shown. What it
+        # wrote is kept on the receipt, where a reader can open it as what it is.
+        from pramanyx.agent.converse_tools import working_notes
+        if working_notes(answer):
+            emit("guard_receipt", {"guard": "working_notes", "action": "withheld the answer",
+                                   "detail": "the model stopped with its own working, not an answer",
+                                   "before": answer[:500]})
+            answer = ("I didn't reach an answer — I stopped while still working it out. What each step found is "
+                      "above; asking again, or more narrowly, usually gets there.")
         # Every other number this turn shows the user came from a result set; until
         # now the sentence above them did not, and nothing compared the two. A model
         # that writes a plausible table the rows do not contain is the one failure the
