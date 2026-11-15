@@ -443,6 +443,18 @@ def execute_guarded(
         # Two kinds of caveat ride every result: a declared filter this statement does not
         # apply, and a guard that could not run (GM-4).
         extra = [*extra, *_declared_caveats, *_unchecked_caveats]
+        # 2026-11-15 — a last period that has not ended (`sql/periods.py`): a half month is said as so far, never
+        # read as a fall. Read from the result itself, so every path that writes about the rows is told.
+        try:
+            from pramanyx.sql.periods import last_period_in_progress
+            _partial = last_period_in_progress(list(getattr(res, "columns", None) or []),
+                                               list(getattr(res, "rows", None) or []))
+        except Exception as _exc:  # noqa: BLE001 — a result that cannot be read for its periods carries no caveat
+            from pramanyx.kernel.errors import tolerate
+            tolerate(_exc, "the in-progress period check could not read this result", counter="sql.periods")
+            _partial = None
+        if _partial:
+            extra = [*extra, _partial]
         if extra:
             res.caveats = list(dict.fromkeys([*res.caveats, *extra]))
         _add_doors(res, _before, first=True)
