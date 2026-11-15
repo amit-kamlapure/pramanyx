@@ -304,7 +304,11 @@ async def draft_email(
     fmt = attach_format.strip().lower()
     attach = {"attach_answer": attach_answer.strip(), "attach_format": fmt} \
         if attach_answer.strip() and fmt in ("pdf", "xlsx", "docx", "pptx") else {}
-    return {"draft": {"to": to.strip(), "subject": subject.strip(), "body": body.strip(), **attach},
+    import uuid
+    # The draft's own name, kept with it in the conversation: what its send is journaled under, so the draft shows as
+    # sent whenever the conversation is opened again (`GET /email/sent`).
+    return {"draft": {"id": uuid.uuid4().hex[:16], "to": to.strip(), "subject": subject.strip(), "body": body.strip(),
+                      **attach},
             "note": "Shown to the person as a draft with a Send button. Nothing has been sent."}
 
 

@@ -217,6 +217,22 @@ const AnswerCard = inTail((props) => h(AnswerStep, props), (props) => h(Card, pr
 const ATTACH = [["", "No attachment"], ["pdf", "The analysis as PDF"], ["xlsx", "The analysis as Excel, every row"],
   ["docx", "The analysis as Word"], ["pptx", "The analysis as PowerPoint"]];
 
+/** A draft's own name, for the journal: the one Pramanyx minted when the agent drafted it, the answer's for an
+ *  "Email this", and for a draft from before drafts were named, one made from its words — the same after a reload. */
+export function draftName(draft) {
+  if (draft?.name) return String(draft.name);
+  if (draft?.id && /^[A-Za-z0-9_-]{6,40}$/.test(String(draft.id))) return `d-${draft.id}`;
+  const text = `${draft?.subject || ""}\n${draft?.body || ""}`;
+  let hash = 2166136261;
+  for (let i = 0; i < text.length; i += 1) hash = Math.imul(hash ^ text.charCodeAt(i), 16777619);
+  return `h-${(hash >>> 0).toString(36)}`;
+}
+
+const whenSent = (at) => {
+  const d = new Date(at);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+};
+
 export function Draft({ draft }) {
   const [to, setTo] = useState(String(draft?.to || ""));
   const [subject, setSubject] = useState(String(draft?.subject || ""));
@@ -225,47 +241,87 @@ export function Draft({ draft }) {
   // "Email this" was opened from. None known, no attachment is offered.
   const answerId = String(draft?.attach_answer || "");
   const [attach, setAttach] = useState(answerId ? String(draft?.attach_format || "") : "");
-  const [state, setState] = useState({ busy: false, sent: false, said: "" });
+  const [state, setState] = useState({ busy: false, said: "" });
+  // WHETHER IT WENT is a fact about the email, not about this page: it is read from Pramanyx's journal, under the
+  // draft's own name, every time the draft is drawn. Kept in the page alone, a sent email showed as an open draft
+  // again after a reload (2026-11-15). `null` until the journal has answered; a draft from before drafts were named
+  // is found by its subject.
+  const name = draftName(draft);
+  const unnamed = !draft?.id && !draft?.name;
+  const [sends, setSends] = useState(null);
+  const [unread, setUnread] = useState(false);
+  const [again, setAgain] = useState(false);
+  useEffect(() => {
+    let live = true;
+    const asked = new URLSearchParams({ draft: name, ...(unnamed && draft?.subject ? { subject: String(draft.subject) } : {}) });
+    fetch(`/pramanyx/email/sent?${asked}`, { headers: { accept: "application/json" } })
+      .then((answer) => (answer.ok ? answer.json() : Promise.reject(new Error(String(answer.status)))))
+      .then((got) => { if (live) setSends(Array.isArray(got?.sends) ? got.sends : []); })
+      .catch(() => { if (live) { setSends([]); setUnread(true); } });
+    return () => { live = false; };
+  }, [name]);
   const field = { width: "100%", boxSizing: "border-box", font: "inherit", fontSize: 13.5, padding: "6px 8px",
                   border: `1px solid ${line}`, borderRadius: 6, background: "transparent", color: "inherit" };
+  const frame = { border: `1px solid ${line}`, borderRadius: 6, padding: 12, margin: "10px 0",
+                  display: "flex", flexDirection: "column", gap: 8, fontSize: 13.5 };
   const send = async () => {
-    setState({ busy: true, sent: false, said: "" });
+    setState({ busy: true, said: "" });
     try {
       const answer = await fetch("/pramanyx-email", { method: "POST", headers: { "content-type": "application/json" },
-                                                      body: JSON.stringify({ to, subject, body,
+                                                      body: JSON.stringify({ to, subject, body, draft: name,
                                                         ...(attach && answerId ? { attach_answer: answerId, attach_format: attach } : {}) }) });
       const said = await answer.json().catch(() => ({}));
-      if (!answer.ok) return setState({ busy: false, sent: false, said: String(said.detail || `The email was refused (${answer.status}).`) });
-      setState({ busy: false, sent: !!said.sent, said: String(said.said || (said.sent ? "Sent." : "Not sent.")) });
+      if (!answer.ok) return setState({ busy: false, said: String(said.detail || `The email was refused (${answer.status}).`) });
+      if (!said.sent) return setState({ busy: false, said: String(said.said || "Not sent.") });
+      const attached = /, with (.+) attached$/.exec(String(said.said || ""));
+      setSends((was) => [{ to: to.trim(), subject, at: new Date().toISOString(), attached: attached ? attached[1] : "" }, ...(was || [])]);
+      setAgain(false);
+      setState({ busy: false, said: "" });
     } catch {
-      setState({ busy: false, sent: false, said: "The platform is not answering; nothing was sent." });
+      setState({ busy: false, said: "The platform is not answering; nothing was sent." });
     }
   };
-  const ready = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to.trim()) && body.trim() && !state.busy && !state.sent;
-  return h("div", { "data-pramanyx-draft": "", style: { border: `1px solid ${line}`, borderRadius: 6, padding: 12, margin: "10px 0",
-                                                        display: "flex", flexDirection: "column", gap: 8, fontSize: 13.5 } },
+  if (sends === null) {
+    return h("div", { "data-pramanyx-draft": "checking", style: frame },
+      h("div", { role: "heading", "aria-level": 4, style: { fontWeight: 600 } }, "Email draft"),
+      h("div", { style: quiet }, "Checking whether this was sent…"));
+  }
+  if (sends.length && !again) {
+    // Sent: said as that, with to whom and when — and not as a form that reads as still waiting to be sent.
+    return h("div", { "data-pramanyx-draft": "sent", style: frame },
+      h("div", { role: "heading", "aria-level": 4, style: { fontWeight: 600 } }, "Email sent"),
+      sends.slice(0, 5).map((sent, i) => h("div", { key: `${sent.at}-${i}`, role: i ? undefined : "status" },
+        `✓ To ${sent.to}`, whenSent(sent.at) ? ` · ${whenSent(sent.at)}` : "", sent.attached ? ` · with ${sent.attached} attached` : "")),
+      sends.length > 5 ? h("div", { style: quiet }, `and ${sends.length - 5} more`) : null,
+      h("div", { style: quiet }, `Subject: ${sends[0].subject || subject}`),
+      h("div", { style: quiet }, "The email as it went is in the sending account's Sent mail."),
+      h("div", null, h("button", { type: "button", className: "pramanyx-link",
+        onClick: () => { setTo(""); setState({ busy: false, said: "" }); setAgain(true); } }, "Send to someone else")));
+  }
+  const ready = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to.trim()) && body.trim() && !state.busy;
+  return h("div", { "data-pramanyx-draft": "", style: frame },
     h("div", { role: "heading", "aria-level": 4, style: { fontWeight: 600 } }, "Email draft"),
+    sends.length ? h("div", { style: quiet }, `Already sent to ${sends.map((sent) => sent.to).slice(0, 3).join(", ")}${sends.length > 3 ? " and others" : ""}.`) : null,
+    unread ? h("div", { style: quiet }, "Whether this draft was already sent could not be checked.") : null,
     h("label", { style: { display: "flex", flexDirection: "column", gap: 3 } },
       h("span", { style: quiet }, "To"),
-      h("input", { type: "email", value: to, disabled: state.sent, placeholder: "name@example.com", style: field,
+      h("input", { type: "email", value: to, placeholder: "name@example.com", style: field,
                    onChange: (e) => setTo(e.target.value) })),
     h("label", { style: { display: "flex", flexDirection: "column", gap: 3 } },
       h("span", { style: quiet }, "Subject"),
-      h("input", { type: "text", value: subject, disabled: state.sent, style: field, onChange: (e) => setSubject(e.target.value) })),
+      h("input", { type: "text", value: subject, style: field, onChange: (e) => setSubject(e.target.value) })),
     h("label", { style: { display: "flex", flexDirection: "column", gap: 3 } },
       h("span", { style: quiet }, "Message"),
-      h("textarea", { rows: 8, value: body, disabled: state.sent, style: { ...field, resize: "vertical", lineHeight: 1.5 },
+      h("textarea", { rows: 8, value: body, style: { ...field, resize: "vertical", lineHeight: 1.5 },
                       onChange: (e) => setBody(e.target.value) })),
     answerId ? h("label", { style: { display: "flex", flexDirection: "column", gap: 3 } },
       h("span", { style: quiet }, "Attach"),
-      h("select", { value: attach, disabled: state.sent, style: field, onChange: (e) => setAttach(e.target.value) },
+      h("select", { value: attach, style: field, onChange: (e) => setAttach(e.target.value) },
         ATTACH.map(([value, label]) => h("option", { key: value || "none", value }, label)))) : null,
     h("div", { style: { display: "flex", alignItems: "center", gap: 10 } },
-      h("button", { type: "button", style: button(true), disabled: !ready, onClick: send },
-        state.busy ? "Sending…" : state.sent ? "Sent" : "Send"),
-      state.said ? h("span", { role: "status", style: { color: state.sent ? "inherit" : "#c2410c" } },
-        state.sent ? `✓ ${state.said}` : `Not sent: ${state.said}`) : null,
-      !state.said && !state.sent ? h("span", { style: quiet }, "Nothing is sent until you press Send.") : null));
+      h("button", { type: "button", style: button(true), disabled: !ready, onClick: send }, state.busy ? "Sending…" : "Send"),
+      state.said ? h("span", { role: "status", style: { color: "#c2410c" } }, `Not sent: ${state.said}`)
+        : h("span", { style: quiet }, "Nothing is sent until you press Send.")));
 }
 
 /** The draft a `draft_email` call returned, or null. */
@@ -869,8 +925,10 @@ function emailOf(answer) {
   const rows = (answer.rows ?? []).slice(0, 20).map((r) => r.join(" · "));
   return { to: "", subject: String(answer.answer || answer.question || "From Pramanyx").slice(0, 150),
            body: [answer.answer, told, rows.length ? [(answer.columns ?? []).join(" · "), ...rows].join("\n") : ""].filter(Boolean).join("\n\n"),
-           // "Email this" knows its answer, so the analysis can be attached.
-           attach_answer: answer.investigation_id ? String(answer.investigation_id) : "", attach_format: "" };
+           // "Email this" knows its answer, so the analysis can be attached — and the draft is named for the answer,
+           // so an answer that was emailed says so whenever it is opened.
+           attach_answer: answer.investigation_id ? String(answer.investigation_id) : "", attach_format: "",
+           ...(answer.investigation_id ? { name: `a-${answer.investigation_id}` } : {}) };
 }
 
 function Files({ answer, id }) {

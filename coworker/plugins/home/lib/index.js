@@ -10,7 +10,7 @@
  * answered 404 here and never reaches the API. The shell hands a `resource` route GET and HEAD only, so nothing
  * relayed can write.
  */
-const READS = [
+export const READS = [
   /^\/connections$/,          // which databases there are, to say whose questions these are
   /^\/suggestions$/,          // starter questions for one connection (cached; a first read may cost a model call)
   /^\/agents\/custom$/,       // a person's own agents
@@ -19,6 +19,9 @@ const READS = [
   // An answer as a file — Excel, PowerPoint, Word or PDF — built by Pramanyx from the answer's stored rows, never by
   // code the model wrote (`pramanyx/export`). A GET like the rest; the bytes are passed through as they come.
   /^\/investigations\/[A-Za-z0-9_-]{1,64}\/export$/,
+  // What went out from one email draft (`pramanyx/routers/email.py`): a draft that was sent says so whenever the
+  // conversation is opened, because "sent" is read from Pramanyx's journal and not remembered by the page.
+  /^\/email\/sent$/,
 ];
 
 import { mkdir, writeFile } from "node:fs/promises";

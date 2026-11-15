@@ -5804,6 +5804,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/email/sent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Emails Sent
+         * @description What went out from one draft: the caller's own successful sends from it, newest first.
+         *
+         *     Found live, 2026-11-15: an email sent minutes earlier showed as an open draft again, because "sent" lived only in
+         *     the page that sent it and a reload forgot it. Whether an email went is a fact about the email, and the journal
+         *     already records it (``email.sent``) — so the place a draft is shown asks here, and says the same thing every time
+         *     it is opened. ``subject`` finds a send journaled before drafts were named, and only among the entries that name
+         *     no draft: a later draft that happens to carry the same subject is never read as sent.
+         */
+        get: operations["emails_sent_email_sent_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/evals/cases/{case_id}": {
         parameters: {
             query?: never;
@@ -21228,6 +21254,11 @@ export interface components {
             /** Body */
             body: string;
             /**
+             * Draft
+             * @default
+             */
+            draft: string;
+            /**
              * Subject
              * @default
              */
@@ -36535,6 +36566,38 @@ export interface operations {
                 "application/json": components["schemas"]["EmailBody"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    emails_sent_email_sent_get: {
+        parameters: {
+            query?: {
+                draft?: string;
+                subject?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

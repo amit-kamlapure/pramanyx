@@ -78,3 +78,10 @@ test("a recognised delegation is kept where only this account reads it, and ride
   await post("/pramanyx-feedback", { connection: "conn-1", answer: "answer-1", verdict: "helpful" });
   assert.deepEqual(heard, [{ path: "/chat/feedback", person: GOOD }]);
 });
+
+test("the page may read what was sent from a draft, and nothing else of email", async () => {
+  const { READS } = await import("../lib/index.js");
+  const relayed = (path) => READS.some((allowed) => allowed.test(path));
+  assert.ok(relayed("/email/sent"));
+  assert.ok(!relayed("/email/send") && !relayed("/email/sent/other") && !relayed("/email"));
+});
