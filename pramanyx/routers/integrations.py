@@ -301,7 +301,11 @@ def my_connections():
 @router.post("/integrations/connections/{conn_id}/account")
 def read_the_account(conn_id: str):
     """The connected account's address — recorded at connect, else read from the provider once and recorded
-    (`broker.account_of`). What a card says it is connected as, and the "send to me" an email step can name."""
+    (`broker.account_of`). What a card says it is connected as, and the "send to me" an email step can name. Only the
+    grant's own person may read it: someone else's is a 404, as revoking one is."""
+    conn = store.get_connection(conn_id)
+    if conn is None or conn.user_id != _user():
+        raise HTTPException(404, "unknown connection")
     return {"account": broker.account_of(conn_id)}
 
 

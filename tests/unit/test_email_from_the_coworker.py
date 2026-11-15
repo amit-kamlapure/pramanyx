@@ -84,3 +84,22 @@ def test_googles_account_is_read_from_the_id_token_it_returns():
     claims = base64.urlsafe_b64encode(_json.dumps({"email": "ana@example.com"}).encode()).decode().rstrip("=")
     assert _account_label(get_provider("google"), {"id_token": f"h.{claims}.s"}) == "ana@example.com"
     assert _account_label(get_provider("google"), {"id_token": "not-a-jwt"}) == ""
+
+
+def test_only_the_grants_own_person_reads_its_account(monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from pramanyx.routers import integrations as R
+
+    class _Conn:
+        user_id = "ana@example.com"
+    monkeypatch.setattr(R.store, "get_connection", lambda cid: _Conn() if cid == "ic1" else None)
+    monkeypatch.setattr(R.broker, "account_of", lambda cid: "ana@example.com")
+    app = FastAPI()
+    app.include_router(R.router)
+    client = TestClient(app)
+    monkeypatch.setattr(R, "_user", lambda: "ana@example.com")
+    assert client.post("/integrations/connections/ic1/account").json() == {"account": "ana@example.com"}
+    monkeypatch.setattr(R, "_user", lambda: "eve@example.com")
+    assert client.post("/integrations/connections/ic1/account").status_code == 404
