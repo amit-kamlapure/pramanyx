@@ -31,6 +31,8 @@ GUARD_LABEL: dict[str, str] = {
     "ambiguity_probe": "The question's readings were probed",
     "count_star_entity_grain": "Row count checked against the entity asked for",
     "repair_recheck": "A repair was re-checked before adoption",
+    "result_shape": "The rows were checked against what the question asked",
+    "usage_history": "What people run in this warehouse was read for an inconclusive answer",
     "time_order": "Timestamps that run backwards flagged",
     "day_window": "A period's last day read whole",
     "declared_filter": "The metric's declared filter applied",
@@ -49,6 +51,8 @@ ACTION_VERB: dict[str, str] = {
     "caveated": "carried a caveat instead of asserting",
     "flagged": "flagged it — no provable rewrite exists",
     "kept_original": "kept the original query",
+    "said_not_as_asked": "said the result does not answer the question as asked",
+    "referred": "gave it to the repair as a pointer, not as ground",
     "narrowed": "narrowed it to the rows you may see",
     "refused": "refused it — it reads what you may not see",
 }

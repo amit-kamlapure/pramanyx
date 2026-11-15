@@ -67,7 +67,7 @@ export function faceOf(node: TimelineNode): RunFace {
 
 /** Doors we can name from a session id's provider prefix. Anything else stays "Web". */
 const DOOR_LABEL: Record<string, string> = {
-  slack: "Slack", teams: "Teams", mcp: "MCP", api: "API", cli: "CLI",
+  slack: "Slack", teams: "Teams", mcp: "MCP", api: "API", cli: "CLI", coworker: "Coworker",
 };
 
 /**

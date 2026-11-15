@@ -598,6 +598,12 @@ def current_trace_id() -> str:
     return _active_trace_id.get()
 
 
+def current_span_id() -> str:
+    """The innermost open span — the step the code is running inside — or '' outside every span."""
+    stack = _span_stack.get()
+    return stack[-1] if stack else ""
+
+
 @contextmanager
 def bind_trace(trace_id: str) -> Generator[str, None, None]:
     """Pin ``trace_id`` as the ambient trace for the enclosed block.
@@ -620,6 +626,21 @@ def bind_trace(trace_id: str) -> Generator[str, None, None]:
         yield trace_id
     finally:
         _active_trace_id.reset(token)
+
+
+@contextmanager
+def bind_parent_span(span_id: str) -> Generator[str, None, None]:
+    """Make ``span_id`` the parent of every span opened in the enclosed block — for work done here on behalf of a
+    step that began elsewhere (a coworker's tool call, which the platform's answer is the inside of). The span itself
+    is not opened or closed here: whoever began it records both ends. A falsy id is a no-op."""
+    if not span_id:
+        yield ""
+        return
+    token = _span_stack.set(_span_stack.get() + (span_id,))
+    try:
+        yield span_id
+    finally:
+        _span_stack.reset(token)
 
 
 #: Arc TC, TC-2 — the RUN the code executes under, beside the trace it writes to: ``(run_id, kind)``, kind one of

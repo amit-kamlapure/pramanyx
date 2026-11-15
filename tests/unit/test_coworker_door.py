@@ -76,3 +76,130 @@ def test_the_route_is_served_by_the_api():
     import inspect
     from pramanyx import api
     assert "coworker_router.router" in inspect.getsource(api)
+
+
+# ── a coworker turn, recorded where runs are ─────────────────────────────────────────────────────────────────────
+
+@pytest.fixture()
+def taken(door, monkeypatch):
+    """What the session log was told, and under which session id."""
+    from pramanyx.obs import session_log
+    from pramanyx.org.context import current_session_id
+    seen = []
+    monkeypatch.setattr(session_log, "emit", lambda kind, **kw: seen.append({"kind": kind, "session": current_session_id(), **kw}))
+    return door[0], seen
+
+
+TURN = {"trace_id": "cw-88f4fdd19a454d47-1", "session": "session-88f4fdd1-9a45-4d47-a907-c446dd4d3d83"}
+
+
+def test_a_turns_events_are_written_under_its_trace_and_named_as_the_coworkers(taken):
+    client, seen = taken
+    r = client.post("/coworker/trace", json={**TURN, "events": [
+        {"kind": "user_request", "name": "coworker", "conn_id": "c1", "payload": {"question": "How many orders?", "turn": 1}},
+        {"kind": "tool_call_result", "name": "mcp__pramanyx__ask", "span_id": "call_1", "ok": True, "duration_ms": 7000,
+         "row_count": 5, "payload": {"receipt_id": "r1"}},
+    ]})
+    assert r.status_code == 200 and r.json() == {"written": 2}
+    assert [e["kind"] for e in seen] == ["user_request", "tool_call_result"]
+    assert {e["trace_id"] for e in seen} == {TURN["trace_id"]}
+    # The door a run came in by is read off the session id's prefix.
+    assert {e["session"] for e in seen} == {"coworker:" + TURN["session"]}
+    assert seen[1]["payload"]["receipt_id"] == "r1" and seen[1]["row_count"] == 5
+
+
+def test_the_session_id_is_not_left_bound_after_the_call(taken):
+    from pramanyx.org.context import current_session_id
+    client, _ = taken
+    client.post("/coworker/trace", json={**TURN, "events": [{"kind": "final_response", "ok": True}]})
+    assert current_session_id() == ""
+
+
+@pytest.mark.parametrize("trace", ["1d5a621b", "untraced:request:2026-11-14", "cw-", "cw-abc-1", "cw-88f4fdd19a454d47-x"])
+def test_only_a_coworker_turns_own_trace_can_be_written_to(taken, trace):
+    """A run of the platform's own is named otherwise; this route cannot add to one."""
+    client, seen = taken
+    r = client.post("/coworker/trace", json={**TURN, "trace_id": trace, "events": [{"kind": "final_response"}]})
+    assert r.status_code == 422 and seen == []
+
+
+def test_a_model_call_is_not_taken_here_the_door_records_those(taken):
+    client, seen = taken
+    r = client.post("/coworker/trace", json={**TURN, "events": [{"kind": "llm_call", "payload": {}}]})
+    assert r.status_code == 422 and seen == []
+
+
+def test_a_payload_carries_only_what_is_named(taken):
+    client, seen = taken
+    client.post("/coworker/trace", json={**TURN, "events": [
+        {"kind": "tool_call", "name": "t", "payload": {"tool": "t", "system_prompt": "the shell's own words", "seq": 19}}]})
+    assert seen[0]["payload"] == {"tool": "t", "seq": 19}
+
+
+def test_another_machine_cannot_record_a_turn(taken, monkeypatch):
+    _, seen = taken
+    app = FastAPI()
+    app.include_router(C.router)
+    r = TestClient(app, client=("203.0.113.9", 50000)).post("/coworker/trace", json={**TURN, "events": [{"kind": "final_response"}]})
+    assert r.status_code == 403 and seen == []
+
+
+# ── the platform's work for a turn is inside the turn's trace ────────────────────────────────────────────────────
+
+CLAIM = {**TURN, "span_id": "call_1", "question": "How many orders?", "connection": "c1"}
+
+
+@pytest.fixture()
+def claims(door, monkeypatch):
+    monkeypatch.setattr(C, "_claims", [])
+    return door
+
+
+def test_a_claim_is_taken_once_by_the_question_it_was_made_for(claims):
+    client, _ = claims
+    assert client.put("/coworker/claim", json=CLAIM).status_code == 204
+    assert C.claimed_for("Another question", "c1") is None
+    assert C.claimed_for("How many orders?", "another") is None
+    taken = C.claimed_for("How many orders?", "c1")
+    assert taken["trace_id"] == TURN["trace_id"] and taken["span_id"] == "call_1" and taken["session"] == TURN["session"]
+    assert C.claimed_for("How many orders?", "c1") is None            # used once
+
+
+def test_two_calls_asking_the_same_thing_are_answered_in_the_order_they_were_made(claims):
+    client, _ = claims
+    client.put("/coworker/claim", json=CLAIM)
+    client.put("/coworker/claim", json={**CLAIM, "span_id": "call_2"})
+    assert [C.claimed_for("How many orders?", "c1")["span_id"] for _ in range(2)] == ["call_1", "call_2"]
+
+
+def test_a_claim_nobody_took_does_not_wait_forever(claims):
+    client, clock = claims
+    client.put("/coworker/claim", json=CLAIM)
+    clock["t"] += C.CLAIM_FOR + 1
+    assert C.claimed_for("How many orders?", "c1") is None
+
+
+def test_a_claim_names_a_coworker_turn_and_comes_from_this_machine(claims):
+    client, _ = claims
+    assert client.put("/coworker/claim", json={**CLAIM, "trace_id": "1d5a621b"}).status_code == 422
+    app = FastAPI()
+    app.include_router(C.router)
+    assert TestClient(app, client=("203.0.113.9", 50000)).put("/coworker/claim", json=CLAIM).status_code == 403
+    assert C._claims == []
+
+
+def test_a_model_call_is_recorded_inside_the_step_it_ran_in(monkeypatch):
+    """The waterfall of a coworker turn drew the platform's SQL-writing call beside the `ask` it ran for. A model
+    call, a guard and an outbound call now name the innermost open span as their parent; outside every span, none."""
+    from pramanyx import telemetry
+    from pramanyx.obs import session_log
+    written = []
+    monkeypatch.setattr(session_log, "enabled", lambda: True)
+    monkeypatch.setattr("pramanyx.kernel.ledger.Ledger.session_event_insert", lambda self, row: written.append(row))
+    with telemetry.bind_trace("cw-88f4fdd19a454d47-3"), telemetry.bind_parent_span("call_9"):
+        session_log.emit(session_log.LLM_CALL, name="coder", model="m")
+        session_log.emit(session_log.GUARDRAIL, name="pii")
+        session_log.emit(session_log.TOOL_CALL, name="sql.execute", span_id="s1")      # a span names its own parent
+    with telemetry.bind_trace("cw-88f4fdd19a454d47-3"):
+        session_log.emit(session_log.LLM_CALL, name="coder", model="m")
+    assert [r["parent_span_id"] for r in written] == ["call_9", "call_9", None, None]

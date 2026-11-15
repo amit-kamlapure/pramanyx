@@ -16,8 +16,8 @@ door, in-process). Spend is `session_events` read through `Ledger.session_events
 **The sets.**
 
 * ``golden`` — the existing golden SQL per dataset (`ablation_luxexperience_hard.jsonl`,
-  `ablation_luxexperience_business.jsonl`, `ablation_olist_business.jsonl`; theLook has none
-  committed, and the report says so). Every reference is executed before any model is asked;
+  `ablation_luxexperience_business.jsonl`, `ablation_olist_business.jsonl`, `golden_thelook.jsonl` (2026-11-14,
+  in Olist's place: its DuckDB file is gone). Every reference is executed before any model is asked;
   one that fails tonight is withheld and named. Scored by `results_match`, the comparator the
   product's own goldens use, against the result the answer showed.
 * ``abstention`` (`nightly_abstention.jsonl`) — questions the data cannot answer. Passes when
@@ -111,7 +111,8 @@ DATASETS: dict[str, dict] = {
     "olist": {"connection_id": "baef6c3e", "schema": "ecommerce",
               "golden": ("ablation_olist_business.jsonl",)},
     # No golden SQL is committed for theLook: the report says so rather than scoring nothing as zero.
-    "thelook": {"connection_id": "8233e4fd", "schema": "thelook", "golden": ()},
+    # 15 cases written 2026-11-14 to take Olist's place (its DuckDB file is gone); each reference ran on theLook first.
+    "thelook": {"connection_id": "8233e4fd", "schema": "thelook", "golden": ("golden_thelook.jsonl",)},
 }
 
 

@@ -43,6 +43,20 @@ IDENTITY_USER_HEADER = "X-Pramanyx-User"
 #: DE-2b — the mark that makes a request an agent's own, and the tool it serves. Spelled here
 #: so this module stays httpx-only; `pramanyx.mcp.policy` imports them from here.
 AGENT_HEADER = "X-Pramanyx-Agent"
+#: `security.delegation.HEADER`, spelled here so the client imports nothing of the API's.
+DELEGATION_HEADER = "X-Pramanyx-Delegation"
+
+
+def _delegation() -> str:
+    """The delegation the coworker's host keeps (``PRAMANYX_DELEGATION_FILE``), or ""."""
+    path = os.environ.get("PRAMANYX_DELEGATION_FILE", "").strip()
+    if not path:
+        return ""
+    try:
+        with open(path, encoding="utf-8") as f:
+            return f.read(256).strip()
+    except OSError:
+        return ""
 TOOL_HEADER = "X-Pramanyx-Tool"
 AGENT_MARK = "mcp"
 #: The MCP tool a request serves, set by the server around each call (`PolicedFastMCP`).
@@ -121,6 +135,14 @@ class PramanyxClient:
         # DE-2b — every call this client makes is an agent's own, and says which tool it serves,
         # so the API applies the organisation's agent policy to it and audits it with its principal.
         h[AGENT_HEADER] = AGENT_MARK
+        # People (2026-11-15) — the person the app handed the coworker, kept by the coworker's host in a file only
+        # this account reads (`security/delegation.py`). Read on every call, so a new one applies without a restart;
+        # never from a tool argument, so the model cannot choose who it acts for. Not for an HTTP caller let in as
+        # itself: that one is its own principal.
+        if caller is None:
+            person = _delegation()
+            if person:
+                h[DELEGATION_HEADER] = person
         tool = CURRENT_TOOL.get()
         if tool:
             h[TOOL_HEADER] = tool
@@ -315,6 +337,12 @@ class PramanyxClient:
             "question": question, "connection": connection, "answer": None, "sql": None,
             "columns": None, "rows": None, "row_count": None, "chart_type": None,
             "analysis": None, "trusted_metrics": None, "tables_used": None,
+            # What the platform itself wrote about the rows, and how it would draw them. A caller that shows the
+            # answer shows these, so it does not have a second model retell the first.
+            "narrative": None, "chart_config": None, "followups": None,
+            # What the platform itself says is wrong with the answer, when it says anything: `kind`
+            # "not_what_was_asked" is a verdict it checked on the rows, anything else a model's suspicion.
+            "warning": None,
             "investigation_id": None, "has_receipt": False, "error": None,
         }
         async for ev in self._stream_sse("POST", "/chat", body, timeout=self.deep_timeout):
@@ -337,6 +365,15 @@ class PramanyxClient:
                 acc["trusted_metrics"] = ev.get("items")
             elif t == "tables_used":
                 acc["tables_used"] = ev.get("tables")
+            elif t == "chart_config":
+                acc["chart_config"] = ev.get("chart_config")
+            elif t == "narrative":
+                acc["narrative"] = {k: ev.get(k) for k in ("narrative", "anomalies", "trend", "confidence")}
+            elif t == "followups":
+                acc["followups"] = ev.get("questions")
+            elif t == "inspect_warning":
+                acc["warning"] = {"issues": ev.get("issues") or [], "suggested_fix": ev.get("suggested_fix") or "",
+                                  "kind": ev.get("kind") or ""}
             elif t == "error":
                 acc["error"] = ev.get("message")
             elif t == "done":
@@ -545,6 +582,27 @@ class PramanyxClient:
 
     async def post_claim(self, body: dict) -> Any:
         return await self._post("/ledger/v1/claims", json_body=body)
+
+    # ── The web, for outside context only (2026-11-15) ──────────────────────────────────────────────
+    async def search_the_web(self, query: str, n: int = 5) -> dict:
+        return await self._get("/web/search", params={"q": query, "n": n})
+
+    # ── A question on a rhythm, run by the platform (the coworker plan, 2026-11-15) ────────────────
+    async def schedule_question(self, question: str, connection: str, cron: str, name: str = "") -> dict:
+        """An automation: a schedule trigger and one `investigate` step. It runs on the platform's own scheduler —
+        traced, listed with the other automations, under the organisation's setting for scheduled model work — never on the coworker's."""
+        body = {"conn_id": connection, "name": (name or question)[:120],
+                "description": "Asked from the coworker, to be asked again on a rhythm.",
+                "conditions": [{"kind": "schedule", "config": {"cron": cron}}],
+                "effects": [{"kind": "investigate", "config": {"question": question}}]}
+        made = await self._post("/automations", json_body=body)
+        settings = await self._get("/org-settings")
+        off = isinstance(settings, dict) and settings.get("scheduled_model_work") is not True
+        return {"id": made.get("id"), "name": made.get("name"), "cron": cron, "enabled": made.get("enabled"),
+                "on_probation": made.get("probation"),
+                "note": ("It will not run until an admin turns on scheduled model work in Settings ▸ Organisation."
+                         if off else "It runs on the platform's schedule; each run is its own trace in Agent Ops."),
+                "open": f"/automations/{made.get('id')}"}
 
     # ── DE-2c: the knowledge tools, through the API like everything else ───────────
     async def search_graph(self, connection: str, query: str, *, limit: int = 10) -> dict:

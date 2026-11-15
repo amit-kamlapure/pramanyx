@@ -81,3 +81,47 @@ def close_session(request: Request, response: Response):
     ended = sessions.revoke(request.cookies.get(sessions.COOKIE))
     response.delete_cookie(sessions.COOKIE, path="/")
     return {"signed_out": True, "ended": ended}
+
+
+# ── The coworker's person (People, 2026-11-15) ─────────────────────────────────────────────────────────────────────
+
+@router.post("/auth/delegation")
+def delegate_to_the_coworker(request: Request):
+    """A short-lived token naming the person this request is, for the coworker to present on their behalf
+    (`security/delegation.py`). Minted only for a person: not for a service principal, not for the agent, and not
+    from a delegation — a delegated request cannot pass itself on. With sign-in off, the person is the install's
+    operator, who every write here is recorded under anyway."""
+    from pramanyx.org.context import current_org_id
+    from pramanyx.rbac.agent_gate import is_agent_request
+    from pramanyx.security import delegation
+    from pramanyx.security.authz import caller, get_principal, require_identity_enabled
+    if delegation.presented(request) or is_agent_request(request):
+        raise HTTPException(status_code=403, detail="Only a person can hand the coworker their identity.")
+    principal = get_principal(request)
+    if principal is None and require_identity_enabled():
+        raise HTTPException(status_code=401, detail="Sign in first; the coworker acts for the person signed in.")
+    user = principal.user_id if principal else caller()
+    org = principal.org_id if principal else (current_org_id() or "default")
+    try:
+        token, exp = delegation.mint(user, org)
+    except ValueError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    return {"token": token, "expires_at": exp, "user_id": user}
+
+
+@router.delete("/auth/delegation")
+def end_the_delegation(request: Request):
+    """End the delegation this request presents. Idempotent."""
+    from pramanyx.security import delegation
+    return {"ended": delegation.revoke(request.headers.get(delegation.HEADER))}
+
+
+@router.get("/auth/delegation")
+def whose_delegation(request: Request):
+    """Who the delegation this request presents names — how the coworker's host checks a token before keeping it.
+    401 when none is presented or it does not resolve."""
+    from pramanyx.security import delegation
+    who = delegation.resolve(request.headers.get(delegation.HEADER))
+    if who is None:
+        raise HTTPException(status_code=401, detail="No delegation, or one that has ended.")
+    return {"user_id": who.user_id, "org_id": who.org_id}

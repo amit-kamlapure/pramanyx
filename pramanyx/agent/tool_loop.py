@@ -114,7 +114,17 @@ def _budget(provider: LLMProvider) -> int:
     return profile_for(provider.role).tool_loop_steps
 
 
-def run_tool_loop(
+def run_tool_loop(provider: "LLMProvider", system: str, question: str, tools: "list[ToolSpec]", **kw) -> "LoopResult":
+    """One agent turn — the loop below — always under a run: the caller's, or one of its own when it opened none (a
+    sheet's chat, a dashboard draft). An agent's model calls are never filed under no run (`obs/own_run.py`)."""
+    from pramanyx.obs.own_run import own_run
+    with own_run("agent_loop", f"{kw.get('site') or 'converse.tool'}: {question}", conn_id=kw.get("conn_id") or "") as trace:
+        if not kw.get("trace_id"):
+            kw["trace_id"] = trace
+        return _run_tool_loop(provider, system, question, tools, **kw)
+
+
+def _run_tool_loop(
     provider: LLMProvider,
     system: str,
     question: str,

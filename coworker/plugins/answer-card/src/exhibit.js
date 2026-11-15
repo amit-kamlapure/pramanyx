@@ -114,10 +114,29 @@ const numberOf = (v) => {
   if (typeof v === "string" && /^-?\d+(\.\d+)?$/.test(v.trim())) return Number(v);
   return null;
 };
-const show = (v, asNumber) => {
+/** The symbol a currency code prints as ("EUR" → "€"), or the code itself where the browser knows none. */
+const symbolOf = (code) => {
+  try {
+    return new Intl.NumberFormat(undefined, { style: "currency", currency: code, currencyDisplay: "narrowSymbol" })
+      .formatToParts(0).find((part) => part.type === "currency")?.value || code;
+  } catch { return code; }
+};
+/** What the platform said each column is a figure of: `{column: "currency:EUR"}`. None said is none. */
+export const unitsOf = (answer) => answer?.column_units ?? answer?.chart_config?.column_units ?? {};
+/**
+ * A cell as a person reads it. A number is grouped; a money column carries its currency's symbol, by the unit the
+ * platform said (never guessed here from the column's name). `short` is for a figure standing alone: €17.86m.
+ */
+export const shown = (v, asNumber, unit = "", short = false) => {
   if (v === null || v === undefined) return "";
   const n = asNumber ? numberOf(v) : null;
-  return n === null ? String(v) : said.format(n);
+  if (n === null) return String(v);
+  const money = String(unit).toLowerCase().startsWith("currency:") ? symbolOf(String(unit).slice(9).trim().toUpperCase()) : "";
+  if (short && Math.abs(n) >= 1e4) {
+    const [scale, mark] = Math.abs(n) >= 1e9 ? [1e9, "bn"] : Math.abs(n) >= 1e6 ? [1e6, "m"] : [1e3, "k"];
+    return `${money}${new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(n / scale)}${mark}`;
+  }
+  return money ? `${money}${new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)}` : said.format(n);
 };
 
 function toCsv(columns, rows) {
@@ -126,6 +145,14 @@ function toCsv(columns, rows) {
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   return [columns, ...rows].map((r) => r.map(cell).join(",")).join("\n");
+}
+
+/** The rows as they were answered, as a CSV file the browser saves. */
+export function downloadCsv(answer) {
+  const url = URL.createObjectURL(new Blob([toCsv(answer.columns ?? [], answer.rows ?? [])], { type: "text/csv" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = "pramanyx-answer.csv"; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 /**
@@ -140,6 +167,7 @@ export function ResultGrid({ answer, compact = false }) {
   const [totals, setTotals] = useState(false);
   const [copied, setCopied] = useState(false);
   const numeric = numericColumns(columns, rows);
+  const units = unitsOf(answer);
   const ordered = by === null ? rows : [...rows].sort((a, b) => {
     const x = a[by.at], y = b[by.at];
     const p = numeric[by.at] ? numberOf(x) : null, q = numeric[by.at] ? numberOf(y) : null;
@@ -152,12 +180,7 @@ export function ResultGrid({ answer, compact = false }) {
     const text = [columns, ...rows].map((r) => r.join("\t")).join("\n");
     navigator.clipboard?.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); });
   };
-  const csv = () => {
-    const url = URL.createObjectURL(new Blob([toCsv(columns, rows)], { type: "text/csv" }));
-    const a = document.createElement("a");
-    a.href = url; a.download = "pramanyx-answer.csv"; a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  };
+  const csv = () => downloadCsv(answer);
   const cell = { padding: compact ? "6px 10px" : "8px 12px", whiteSpace: "nowrap", borderTop: `1px solid ${line}` };
   const mono = { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 12.5, fontVariantNumeric: "tabular-nums" };
   const mark = (at) => (by?.at === at ? (by.down ? "↓" : "↑") : "↕");
@@ -180,10 +203,10 @@ export function ResultGrid({ answer, compact = false }) {
                      padding: compact ? "6px 10px" : "8px 12px", textAlign: "inherit", whiteSpace: "nowrap" },
           }, labelOf(c), h("span", { "aria-hidden": "true", style: { ...quiet, paddingLeft: 6 } }, mark(i))))))),
         h("tbody", null, ordered.slice(0, ROWS_SHOWN).map((r, n) => h("tr", { key: n },
-          r.map((v, i) => h("td", { key: i, style: { ...cell, ...mono, textAlign: numeric[i] ? "right" : "left" } }, show(v, numeric[i])))))),
+          r.map((v, i) => h("td", { key: i, style: { ...cell, ...mono, textAlign: numeric[i] ? "right" : "left" } }, shown(v, numeric[i], units[columns[i]])))))),
         totals ? h("tfoot", null, h("tr", { style: { background: faint } },
           columns.map((c, i) => h("td", { key: c, style: { ...cell, ...mono, fontWeight: 600, textAlign: numeric[i] ? "right" : "left" } },
-            numeric[i] ? said.format(rows.reduce((sum, r) => sum + (numberOf(r[i]) ?? 0), 0)) : i === 0 ? "Total" : "")))) : null)),
+            numeric[i] ? shown(rows.reduce((sum, r) => sum + (numberOf(r[i]) ?? 0), 0), true, units[c]) : i === 0 ? "Total" : "")))) : null)),
     total > rows.length || rows.length > ROWS_SHOWN ? h("div", { style: { ...quiet, fontSize: 12 } },
       `${Math.min(rows.length, ROWS_SHOWN)} of ${total} rows shown. Totals, Copy and CSV are over the ${rows.length} that came back.`) : null);
 }
@@ -273,7 +296,7 @@ export function groundingOf(answer) {
   const lines = answer?.receipt?.lineage;
   if (!Array.isArray(lines)) return null;
   const after = (ref) => String(ref || "").split(":").slice(1).join(":");
-  const out = { tables: [], columns: [], objects: [], findings: [], metrics: [] };
+  const out = { tables: [], columns: [], objects: [], findings: [], metrics: [], definitions: [] };
   for (const item of lines) {
     const name = after(item?.ref);
     if (!name) continue;
@@ -287,13 +310,20 @@ export function groundingOf(answer) {
       // …and the links between objects, which name two things and open as neither.
       const ref = String(item.ref);
       if (ref.includes("-->")) continue;
+      // A Definition a person wrote — what a business word means — that the answer was given as ground.
+      if (ref.startsWith("glossary_term:definition:")) {
+        const term = String(item.detail || "").trim() || ref.slice("glossary_term:definition:".length).replace(/-/g, " ");
+        if (!out.definitions.includes(term)) out.definitions.push(term);
+        continue;
+      }
       const into = ref.startsWith("finding:") ? out.findings : ref.startsWith("table:") ? out.objects : null;
       if (into && !into.includes(name)) into.push(name);
     }
     else if (item.relation === "metric_drift") out.metrics.push({ name, departed: true, note: String(item.detail || "") });
     else if (item.relation === "metric_used" || item.relation === "trusted_metric") out.metrics.push({ name, departed: false, note: "" });
   }
-  out.count = out.tables.length + out.columns.length + out.objects.length + out.findings.length + out.metrics.length;
+  out.count = out.tables.length + out.columns.length + out.objects.length + out.findings.length + out.metrics.length
+    + out.definitions.length;
   return out;
 }
 
@@ -315,10 +345,19 @@ export const pageFor = {
   metric: (name, connection) => `/metrics/${encodeURIComponent(name)}?conn=${encodeURIComponent(connection)}`,
   type: (name, connection) => `/ontology/${encodeURIComponent(name)}?conn=${encodeURIComponent(connection)}`,
   receipt: (id) => `/receipt/${encodeURIComponent(id)}`,
-  sheet: (id) => `/sheets/${encodeURIComponent(id)}`,
+  definition: (term, connection) => `/definitions/${encodeURIComponent(term)}?conn=${encodeURIComponent(connection)}`,
+  // The sheet's own name rides the address, so its tab can carry it: the app's page reads only the id.
+  sheet: (id, name = "") => `/sheets/${encodeURIComponent(id)}${name ? `?name=${encodeURIComponent(name)}` : ""}`,
 };
 const NAMED = [[/^\/metrics\/([^/?]+)/, "Metric"], [/^\/ontology\/([^/?]+)/, "Ontology"], [/^\/receipt\//, "Why this number"],
-               [/^\/sheets\/[^/?]+/, "Sheet"]];
+               [/^\/sheets\/[^/?]+/, "Sheet"], [/^\/definitions\/([^/?]+)/, "Definition"]];
+
+/** A referenced spreadsheet's tab is called by its own name and nothing else — "Olist orders", not "Sheet". */
+function sheetName(path) {
+  const m = /^\/sheets\/[^/?]+\?(?:.*&)?name=([^&#]+)/.exec(path);
+  if (!m) return "";
+  try { return decodeURIComponent(m[1].replace(/\+/g, " ")); } catch { return m[1]; }
+}
 
 /** The sheets by the table each is read as, read once: an answer names a sheet's table, and its page wants its id. */
 let sheetsRead = null;
@@ -332,6 +371,8 @@ export function sheetsByTable() {
 
 /** What a page tab is called: the kind of page, and the thing it is about. */
 function pageName(path) {
+  const named = sheetName(path);
+  if (named) return named;
   for (const [shape, kind] of NAMED) {
     const m = shape.exec(path);
     if (!m) continue;
@@ -345,8 +386,8 @@ function pageName(path) {
 /**
  * One of the app's own pages, shown beside the conversation. Not a summary of it drawn here: the page itself —
  * a metric's definition as the Semantic Layer shows it, an entity as the Ontology shows it, an answer's
- * receipt as "Why this number" shows it, a spreadsheet as Spreadsheets shows it — with everything on it working,
- * because it is the app. Only the app's own paths for those four are shown; anything else is refused, since the address arrives in a tab's name.
+ * receipt as "Why this number" shows it, a spreadsheet as the asset it is (its name, origin and rows; none of the
+ * Spreadsheets page's tools) — because it is the app. Only the app's own paths for those four are shown; anything else is refused, since the address arrives in a tab's name.
  */
 function AppPage({ path }) {
   if (!NAMED.some(([shape]) => shape.test(path))) return h("div", { style: { ...page, ...quiet } }, "This tab names a page this pane does not show.");

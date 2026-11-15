@@ -4037,6 +4037,21 @@ def _tag_currency_columns(finding: dict, metric_sql: str) -> None:
         finding["column_units"] = units
 
 
+def money_column_units(columns, sql: str, confirmed_code: str = "") -> dict[str, str]:
+    """`{column: "currency:EUR"}` for a result's money columns — the public door on the rule above, for a caller
+    that holds columns and a statement and no finding (a quick answer). The SOURCE currency the statement names
+    wins (`gmv_eur` → EUR); else ``confirmed_code``, the one a person confirmed for the dataset; else nothing.
+    A share is never money."""
+    tagged: dict = {"columns": [str(c) for c in (columns or [])]}
+    _tag_currency_columns(tagged, sql or "")
+    units = dict(tagged.get("column_units") or {})
+    if confirmed_code:
+        for name in tagged["columns"]:
+            if name not in units and _MONEYISH_COL_RE.search(name) and not _SHARE_COL_RE.search(name):
+                units[name] = f"currency:{confirmed_code}"
+    return units
+
+
 def _tag_percent_columns(findings: list, match) -> None:
     """Mark every finding column whose name matches `match` (a compiled regex) as a percent on the
     finding's `column_units`, so the UI formats it the one consistent way. Additive; idempotent."""

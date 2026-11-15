@@ -214,6 +214,8 @@ export interface OrgSettings {
   copy_rows_across_sources?: boolean | null;
   /** 2026-11-13 — the model door: the coworker's model calls, made by Pramanyx with the organisation's models. */
   coworker_models?: boolean | null;
+  /** 2026-11-15 — the coworker may search the web for outside context, cited and never a figure. */
+  web_search?: boolean | null;
 }
 
 /** Whether a coworker is running beside the app, and the address to open (`routers/coworker.py`). */
@@ -226,12 +228,50 @@ export async function fetchCoworkerDoor(): Promise<CoworkerDoor> {
   return res.json();
 }
 
+/** A short-lived token naming the person signed in here, for the coworker to act for them (`security/delegation.py`).
+ *  A refusal (not signed in) is thrown with its reason; the switcher still opens the coworker, as nobody in
+ *  particular. */
+export async function mintCoworkerDelegation(): Promise<string | null> {
+  const res = await fetch(`${getApiBase()}/auth/delegation`, { method: "POST" });
+  if (!res.ok) throw await refused(res, "Handing the coworker who you are");
+  return ((await res.json()) as { token?: string }).token ?? null;
+}
+
 /** The choices an organisation makes about what Pramanyx may do (ROADMAP §3.65; §3.68 added `read_query_history`). */
 export type OrgAllowSetting = "share_aggregates" | "outside_row_model" | "reason_to_read_runs" | "scheduled_model_work"
-  | "read_query_history" | "copy_rows_across_sources" | "coworker_models";
+  | "read_query_history" | "copy_rows_across_sources" | "coworker_models" | "web_search";
 
 /** Each choice's answer, and whether an admin set it — one never set answers from the server's environment. */
 export type OrgAllows = Record<OrgAllowSetting, { allowed: boolean; set: boolean }>;
+
+/** An admin answers one of the choices, on its own (`PUT /org-settings/allows/{key}`). */
+export async function setOrgAllow(key: OrgAllowSetting, allowed: boolean): Promise<{ key: string; allowed: boolean; set: boolean }> {
+  const res = await fetch(`${getApiBase()}/org-settings/allows/${encodeURIComponent(key)}`, {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ allowed }),
+  });
+  if (!res.ok) throw await refused(res, "Saving the choice");
+  return res.json();
+}
+
+/** Whether a warehouse keeps a query history the platform can read, and what it needs (`GET .../prerequisites`). */
+export interface QueryHistoryReadiness {
+  engine: string; ok: boolean; applies: boolean; source: string; note: string; fix: string; can_enable: boolean; sentence: string;
+}
+
+export async function getQueryHistoryReadiness(connId: string): Promise<QueryHistoryReadiness | null> {
+  const res = await fetch(`${getApiBase()}/connections/${encodeURIComponent(connId)}/prerequisites`);
+  if (!res.ok) throw await refused(res, "Reading whether the warehouse keeps a query history");
+  return ((await res.json()) as { query_history?: QueryHistoryReadiness }).query_history ?? null;
+}
+
+/** Read a connection's warehouse history once, into the actions inbox as proposals (`POST /ontology/candidates/mine`). */
+export async function mineQueryHistory(connId: string): Promise<void> {
+  const q = new URLSearchParams({ connection_id: connId });
+  const res = await fetch(`${getApiBase()}/ontology/candidates/mine?${q}`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ stage: true }),
+  });
+  if (!res.ok) throw await refused(res, "Reading the query history");
+}
 
 export async function getOrgAllows(): Promise<OrgAllows> {
   const res = await fetch(`${getApiBase()}/org-settings/allows`);
@@ -8871,7 +8911,7 @@ export async function generateCanvasBriefingNarrative(
 
 /** Download URL for a stored investigation's export. `narrate` prepends an
  *  LLM-authored executive summary (best-effort). */
-export function investigationExportUrl(invId: string, fmt: "pdf" | "pptx", narrate = false): string {
+export function investigationExportUrl(invId: string, fmt: ExportFormat, narrate = false): string {
   const q = new URLSearchParams({ format: fmt });
   if (narrate) q.set("narrate", "true");
   return `${getApiBase()}/investigations/${encodeURIComponent(invId)}/export?${q.toString()}`;
@@ -8879,7 +8919,9 @@ export function investigationExportUrl(invId: string, fmt: "pdf" | "pptx", narra
 
 /** Trigger a browser download of an investigation export. The endpoint replies
  *  with Content-Disposition: attachment, so the file saves without navigating. */
-export function downloadInvestigationExport(invId: string, fmt: "pdf" | "pptx", narrate = false): void {
+export type ExportFormat = "pdf" | "pptx" | "xlsx" | "docx";
+
+export function downloadInvestigationExport(invId: string, fmt: ExportFormat, narrate = false): void {
   const a = document.createElement("a");
   a.href = investigationExportUrl(invId, fmt, narrate);
   a.rel = "noopener";
@@ -12586,4 +12628,58 @@ export async function importOntologyTree(
     `${getApiBase()}/ontology/import?${ontoScope(connectionId, schemaName)}`, { method: "POST" });
   if (!res.ok) throw new Error(await res.text().catch(() => `HTTP ${res.status}`));
   return res.json();
+}
+
+// ── The people directory (People, 2026-11-15) ────────────────────────────────────────────────────────────────
+
+export interface DirectoryPerson {
+  email: string; name: string; title: string; team: string; manager: string;
+  source: string; active: boolean; imported_at: string;
+}
+
+export interface DirectoryImportPlan {
+  applied: boolean;
+  add: { email: string; name: string; title: string; team: string; manager: string }[];
+  change: { email: string; fields: Record<string, [unknown, unknown]> }[];
+  deactivate: string[];
+  unchanged: number;
+  teams_new: string[];
+  refused: { line: number; reason: string }[];
+}
+
+/** The organisation's people (role administrators only; asked only by one). */
+export async function getDirectory(): Promise<DirectoryPerson[]> {
+  const res = await fetch(`${getApiBase()}/rbac/directory`);
+  if (!res.ok) throw await refused(res, "Reading the people directory");
+  return res.json();
+}
+
+/** Import people from a CSV; a dry run says what would change and changes nothing. */
+export async function importDirectory(csv: string, opts: { dryRun: boolean; full: boolean }): Promise<DirectoryImportPlan> {
+  const res = await fetch(`${getApiBase()}/rbac/directory/import`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ csv, dry_run: opts.dryRun, full: opts.full }),
+  });
+  if (!res.ok) throw await refused(res, "Importing the people directory");
+  return res.json();
+}
+
+// ── What was said in a Slack bot's channels, as knowledge (2026-11-15) ──────────────────────────────────────────
+
+export interface SlackKnowledgeStatus {
+  bot_id: string; last_sync: string | null; pages_indexed: number;
+  channels: { name: string; readers: number; unmatched: number }[];
+  pages_skipped: { title: string; url: string; reason: string }[]; skipped_count: number; refused: string;
+}
+
+export async function getSlackKnowledgeStatus(botId: string): Promise<SlackKnowledgeStatus> {
+  const res = await fetch(`${getApiBase()}/slack-bots/${encodeURIComponent(botId)}/knowledge-sync/status`);
+  if (!res.ok) throw await refused(res, "Reading what was read from Slack");
+  return res.json();
+}
+
+export async function syncSlackKnowledge(botId: string): Promise<void> {
+  const res = await fetch(`${getApiBase()}/slack-bots/${encodeURIComponent(botId)}/knowledge-sync`, { method: "POST" });
+  if (!res.ok) throw await refused(res, "Reading the bot's channels");
 }

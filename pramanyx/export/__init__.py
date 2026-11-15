@@ -28,11 +28,12 @@ try:
     from .document import ExportDoc, build_export_doc
     from .pdf import render_pdf
     from .slides import render_pptx
+    from .office import render_docx, render_xlsx
     EXPORT_AVAILABLE = True
     _EXPORT_IMPORT_ERROR = ""
 except ImportError as _exc:                       # pragma: no cover — depends on install
     ExportDoc = build_export_doc = None           # type: ignore[assignment,misc]
-    render_pdf = render_pptx = None               # type: ignore[assignment]
+    render_pdf = render_pptx = render_docx = render_xlsx = None   # type: ignore[assignment]
     EXPORT_AVAILABLE = False
     _EXPORT_IMPORT_ERROR = str(_exc)
 
@@ -41,13 +42,17 @@ class ExportUnavailable(RuntimeError):
     """Raised when a report export is requested without the `export` extra installed."""
 
 
-__all__ = ["export_report", "build_export_doc", "ExportDoc",
+__all__ = ["export_report", "build_export_doc", "ExportDoc", "FORMATS",
            "EXPORT_AVAILABLE", "ExportUnavailable"]
 
 _MEDIA = {
     "pdf": "application/pdf",
     "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 }
+#: The formats an answer exports to, in the order a menu offers them.
+FORMATS = tuple(_MEDIA)
 
 
 def _slug(s: str) -> str:
@@ -56,7 +61,7 @@ def _slug(s: str) -> str:
 
 def export_report(inv: dict, fmt: str = "pdf", *, narrate: bool = False,
                   money_symbol: str = "") -> tuple[bytes, str, str]:
-    """Render `inv` to `fmt` ∈ {pdf, pptx}. Returns (bytes, filename, media_type).
+    """Render `inv` to `fmt` ∈ {pdf, pptx, xlsx, docx}. Returns (bytes, filename, media_type).
 
     `money_symbol` is the connection's effective currency symbol, resolved by the
     CALLER (the router owns that lookup — the platform-side export must not import
@@ -64,12 +69,13 @@ def export_report(inv: dict, fmt: str = "pdf", *, narrate: bool = False,
     explicit currency unit carry it, matching the web's fallback."""
     fmt = (fmt or "pdf").lower()
     if fmt not in _MEDIA:
-        raise ValueError(f"unsupported export format: {fmt!r} (use pdf or pptx)")
+        raise ValueError(f"unsupported export format: {fmt!r} (use one of {', '.join(_MEDIA)})")
     if not EXPORT_AVAILABLE:
         raise ExportUnavailable(
             "Report export needs the 'export' extra (reportlab, python-pptx, "
             "matplotlib). Install it with:  uv sync --extra export   —  "
             f"underlying import error: {_EXPORT_IMPORT_ERROR}")
     doc = build_export_doc(inv, narrate=narrate, money_symbol=money_symbol)
-    data = render_pdf(doc) if fmt == "pdf" else render_pptx(doc)
+    data = (render_pdf(doc) if fmt == "pdf" else render_pptx(doc) if fmt == "pptx"
+            else render_xlsx(doc, inv.get("report") or {}) if fmt == "xlsx" else render_docx(doc))
     return data, f"{_slug(doc.title)}.{fmt}", _MEDIA[fmt]

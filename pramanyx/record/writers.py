@@ -245,8 +245,14 @@ def restate_answer_observation(answer: dict, entry: dict, *, text: str = "") -> 
         value=float(changes[0]["new"]) if len(changes) == 1 and changes[0].get("new") is not None else None,
         unit=prior.statement.unit)
     new.warrants = [_claims.Warrant(kind="run", ref=receipt, detail=sql[:400])]
+    if prior.tier == "approved":
+        # A person approved the number they were shown. This is another number: it is measured, and theirs to
+        # approve again — an approval is never carried onto a figure its author did not see.
+        new.tier = "measured"
     new.as_of = str(entry.get("checked_at") or "")[:10] or _today()
-    new.extra = {**prior.extra, "restated_by": "answers.recheck", "cause": entry.get("cause", "unknown"),
+    new.extra = {**{k: v for k, v in prior.extra.items() if k not in ("approved_by", "verdict_id", "approved_on")},
+                 **({"approval_lapsed": "the number moved after a person said it was right"} if prior.tier == "approved" else {}),
+                 "restated_by": "answers.recheck", "cause": entry.get("cause", "unknown"),
                  "changes": changes[:10], "missing_rows": entry.get("missing_rows", 0),
                  "lag_days": entry.get("lag_days"), "first_receipt": first_receipt}
     if entry.get("status") == "changed" and entry.get("cause") == "late_rows":
@@ -421,6 +427,217 @@ def withdraw_explorer_finding(*, connection_id: str, finding_id: str, reason: st
                                       value=prior.statement.value, unit=prior.statement.unit)
     new.extra = {**prior.extra, "withdrawn_reason": (reason or "")[:400], "withdrawn_by": by or "system"}
     return _claims.restate(key, new, conn_id=connection_id)
+
+
+# ── a person's word on an answer (the confirmation loop) ───────────────────────────────────
+
+def answer_claims(connection_id: str, inv_id: str) -> list[_claims.Claim]:
+    """Every current claim one answer booked: a quick answer's observation, and a deep analysis's findings and
+    hypotheses. Found by the keys the writers above give them — the investigation id is in each."""
+    if not (connection_id and inv_id):
+        return []
+    out: list[_claims.Claim] = []
+    one = _claims.latest(observation_key(connection_id, inv_id))
+    if one is not None:
+        out.append(one)
+    deep = _claims.claim_key("finding", "deep", connection_id, inv_id, "")
+    for kind in ("finding", "hypothesis"):
+        for c in _claims.list_claims(kind=kind, conn_id=connection_id, limit=2000):
+            if c.key.startswith(deep) and str(c.extra.get("investigation_id") or "") == inv_id:
+                out.append(c)
+    return out
+
+
+def approve_answer_claims(*, connection_id: str, inv_id: str, verdict_id: Any, by: str = "") -> list[str]:
+    """A person said an answer was right: each MEASURED claim it booked is restated at tier ``approved``, its run
+    warrant kept and an attestation added that names the verdict — the tier a person's word carries, and the one
+    the graph shows the planner as ground (`ontology/context_graph_readback.py` shows only what a person stands
+    behind). Until this existed nothing a person did raised a claim, so nothing learned was ever shown.
+
+    The statement is unchanged, so it is no Correction. A hypothesis is not raised (nothing was measured), nor a
+    claim already a person's or withdrawn. Returns the new versions' ids."""
+    done: list[str] = []
+    for prior in answer_claims(connection_id, inv_id):
+        if prior.tier != "measured" or prior.state == "withdrawn":
+            continue
+        new = prior.model_copy(deep=True)
+        new.confidence = None
+        new.tier = "approved"
+        new.warrants = [*prior.warrants, _claims.Warrant(
+            kind="attestation", ref=f"verdict:{verdict_id}",
+            detail=f"said to be right by {by}" if by else "said to be right by a person")]
+        new.extra = {**prior.extra, "approved_by": by or "a person", "verdict_id": verdict_id,
+                     "approved_on": _today()}
+        done.append(_claims.restate(prior.key, new, conn_id=connection_id))
+    return done
+
+
+def withdraw_answer_claims(*, connection_id: str, inv_id: str, reason: str, verdict_id: Any,
+                           by: str = "") -> list[str]:
+    """A person said an answer was wrong: each claim it booked is WITHDRAWN — restated ``state="withdrawn"`` with the
+    reason, the earlier version kept beneath it, as `withdraw_explorer_finding` withdraws a finding. Never deleted:
+    "what did we believe" still answers, and the Corrections view lists it. Returns the new versions' ids."""
+    done: list[str] = []
+    for prior in answer_claims(connection_id, inv_id):
+        if prior.state == "withdrawn":
+            continue
+        new = prior.model_copy(deep=True)
+        new.confidence = None
+        new.state = "withdrawn"
+        new.valid_until = _today()
+        new.status = "Final"
+        new.statement = _claims.Statement(text=f"Withdrawn: {prior.statement.text}"[:1000], metric=prior.statement.metric,
+                                          value=prior.statement.value, unit=prior.statement.unit)
+        new.extra = {**prior.extra, "withdrawn_reason": (reason or "a person said the answer was wrong")[:400],
+                     "withdrawn_by": by or "a person", "verdict_id": verdict_id}
+        done.append(_claims.restate(prior.key, new, conn_id=connection_id))
+    return done
+
+
+# ── usage: what a warehouse's own query history shows (the user, 2026-11-14) ──────────────────────────────────
+
+_USAGE_SAYS = {
+    "join": "People join {subject} this way in their own queries: {proposal}",
+    "filter": "People repeatedly filter {subject} by: {proposal}",
+    "measure": "People compute this over {subject} in their own queries: {proposal}",
+    "synonym": "People's queries use this name for {subject}: {proposal}",
+    "object_set": "People's queries single out this set of {subject}: {proposal}",
+}
+
+
+def book_usage_claims(*, connection_id: str, candidates, source: str = "", schema_name: str = "") -> dict:
+    """The candidates mined from a warehouse's query history and checked to bind, booked as Record claims of kind
+    ``usage`` at tier ``mined``, each warranted by the history it came from ("query history findings to become record
+    claims only"). Booked once: a candidate already on record with the same words is left as it is, so a second mining
+    restates nothing. Returns ``{"booked": [...ids], "already": n}``."""
+    import hashlib
+    booked: list[str] = []
+    already = 0
+    for c in candidates:
+        proposal, subject = str(c.proposal).strip(), str(c.subject).strip()
+        digest = hashlib.sha256(f"{c.kind}|{subject}|{proposal}".encode()).hexdigest()
+        key = _claims.claim_key("usage", connection_id, c.kind, digest[:16])
+        text = _USAGE_SAYS.get(c.kind, "People's queries show: {proposal}").format(subject=subject, proposal=proposal)[:1000]
+        prior = _claims.latest(key)
+        if prior is not None and prior.state != "withdrawn" and prior.statement.text == text:
+            already += 1
+            continue
+        claim = _claims.Claim(
+            kind="usage", tier="mined", status="Provisional", as_of=_today(),
+            about=_claims.About(kind="connection", key=connection_id),
+            statement=_claims.Statement(text=text),
+            warrants=[_claims.Warrant(kind="query_history", ref=f"history:{connection_id}:{source or 'warehouse'}:{digest[:16]}",
+                                      detail=str(c.evidence or "")[:400], content_hash=digest)],
+            author="query history", author_kind="system",
+            extra={"candidate_kind": c.kind, "subject": subject, "proposal": proposal,
+                   **({"schema": schema_name} if schema_name else {})},
+        )
+        booked.append(_claims.restate(key, claim, conn_id=connection_id) if prior else
+                      _claims.book(claim, key=key, conn_id=connection_id))
+    return {"booked": booked, "already": already}
+
+
+def usage_for(connection_id: str, *, question: str = "", sql: str = "", limit: int = 4) -> list[_claims.Claim]:
+    """The usage claims that bear on a question or the statement written for it — those about a table the statement
+    reads, or naming a word of the question. For the ONE place they are referred to: an answer that came out
+    inconclusive, as a pointer to how people query this data, never as ground ("only to be referred when
+    investigation is non-conclusive")."""
+    import re
+    words = {w for w in re.findall(r"[a-z0-9_]{3,}", f"{question} {sql}".lower())}
+    if not words:
+        return []
+    scored = []
+    for c in _claims.list_claims(kind="usage", conn_id=connection_id, limit=500):
+        if c.state == "withdrawn":
+            continue
+        about = {w for w in re.findall(r"[a-z0-9_]{3,}", f"{c.extra.get('subject', '')} {c.extra.get('proposal', '')}".lower())}
+        hit = len(words & about)
+        if hit:
+            scored.append((hit, c))
+    scored.sort(key=lambda x: -x[0])
+    return [c for _, c in scored[:limit]]
+
+
+# ── a Definition: what a business word means, written by a person and approved ────────────
+
+def definition_term(term: str) -> str:
+    """The word as a key: case, spacing and punctuation are not a different word."""
+    import re
+    return re.sub(r"[^a-z0-9]+", "-", (term or "").strip().lower()).strip("-")[:80]
+
+
+def definition_key(connection_id: str, term: str) -> str:
+    return _claims.claim_key("definition", connection_id or "-", definition_term(term))
+
+
+def write_definition(*, connection_id: str, term: str, text: str, by: str,
+                     aliases: Optional[list[str]] = None, kind: str = "", entry_id: str = "",
+                     by_person: bool = True) -> str:
+    """A person writes what a business word means on a connection: a Record claim of kind ``definition`` at tier
+    ``declared``, authored and owned by them. Writing it again restates it — the earlier wording kept — and a
+    changed wording is no longer approved: an approval is of the words the approver read."""
+    term, text = (term or "").strip(), (text or "").strip()
+    if not (term and text and by):
+        raise ValueError("a definition names its word, says what it means, and is a person's")
+    key = definition_key(connection_id, term)
+    prior = _claims.latest(key)
+    # What the Semantic Layer called each entry (`semantic/connection_kb.py`: metric, synonym, rule, join, note) and the
+    # id it gave it ride along, so its readers keep reading what they read. Written by no person (a migration), it is
+    # what was said, not what anyone declared.
+    claim = _claims.Claim(
+        kind="definition", tier="declared" if by_person else "said", status="Final", as_of=_today(),
+        about=_claims.About(kind="connection", key=connection_id),
+        statement=_claims.Statement(text=text[:4000]),
+        owner=(prior.owner if prior and prior.owner else (by if by_person else "")), author=by,
+        author_kind="person" if by_person else "system",
+        extra={"term": term[:120], "aliases": [a.strip()[:120] for a in (aliases or []) if a and a.strip()][:20],
+               **({"kb_kind": kind} if kind else {}), **({"entry_id": entry_id} if entry_id else {})},
+    )
+    return _claims.restate(key, claim, conn_id=connection_id) if prior else \
+        _claims.book(claim, key=key, conn_id=connection_id)
+
+
+class NotTheOwner(PermissionError):
+    """Only a definition's owner approves it."""
+
+
+def approve_definition(*, connection_id: str, term: str, by: str) -> Optional[str]:
+    """Its OWNER approves a definition as written (the user, 2026-11-14: "Definition can be approved by the owner
+    only"): restated at tier ``approved``, its words unchanged, with an attestation naming who approved it and when.
+    Raises `NotTheOwner` for anyone else. None when there is no such definition, or it already stands approved."""
+    key = definition_key(connection_id, term)
+    prior = _claims.latest(key)
+    if prior is None or prior.tier == "approved" or not by:
+        return None
+    if (prior.owner or "").strip().lower() != by.strip().lower():
+        raise NotTheOwner(f"only its owner, {prior.owner or 'no one named'}, approves this definition")
+    new = prior.model_copy(deep=True)
+    new.confidence = None
+    new.tier = "approved"
+    new.warrants = [*prior.warrants, _claims.Warrant(kind="attestation", ref=f"approval:{by}",
+                                                     detail=f"approved as written by {by} on {_today()}")]
+    new.extra = {**prior.extra, "approved_by": by, "approved_on": _today()}
+    return _claims.restate(key, new, conn_id=connection_id)
+
+
+def withdraw_definition(*, connection_id: str, term: str, by: str, reason: str = "") -> Optional[str]:
+    """A definition taken away is WITHDRAWN, its wording kept beneath it — never deleted."""
+    key = definition_key(connection_id, term)
+    prior = _claims.latest(key)
+    if prior is None or prior.state == "withdrawn":
+        return None
+    new = prior.model_copy(deep=True)
+    new.confidence = None
+    new.state = "withdrawn"
+    new.valid_until = _today()
+    new.extra = {**prior.extra, "withdrawn_by": by or "a person", "withdrawn_reason": (reason or "")[:400]}
+    return _claims.restate(key, new, conn_id=connection_id)
+
+
+def definitions(connection_id: str, *, limit: int = 500) -> list[_claims.Claim]:
+    """The current definitions on a connection (and every connection's, for ``"-"``)."""
+    return [c for c in _claims.list_claims(kind="definition", conn_id=connection_id or None, limit=limit)
+            if c.state != "withdrawn"]
 
 
 # ── the hub's ClaimCheck (the fifth shape's second half) ────────────────────────────────────

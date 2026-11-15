@@ -14,6 +14,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from pramanyx.licensing import Capability, gate
 from pramanyx.record import claims as C
 from pramanyx.record import decisions as D
 from pramanyx.security.authz import connection_owner_guard, get_principal
@@ -160,6 +161,88 @@ def book_record_said(req: SaidRequest, principal=Depends(get_principal)) -> dict
         raise HTTPException(status_code=422, detail=str(exc))
     booked = C.get(cid)
     return _claim_view(booked) if booked else {"id": cid}
+
+
+# ── Definitions: what a business word means, written by a person, approved by one ─────────────────────────────
+
+class DefinitionRequest(BaseModel):
+    connection_id: str = Field(min_length=1, max_length=80)
+    term: str = Field(min_length=1, max_length=120)
+    text: str = Field(min_length=1, max_length=4000)
+    aliases: list[str] = Field(default_factory=list, max_length=20)
+
+
+class DefinitionApproval(BaseModel):
+    connection_id: str = Field(min_length=1, max_length=80)
+    term: str = Field(min_length=1, max_length=120)
+
+
+def _definition_view(c: C.Claim) -> dict:
+    return {**_claim_view(c), "term": c.extra.get("term", ""), "aliases": c.extra.get("aliases") or [],
+            "approved_by": c.extra.get("approved_by", ""), "approved_on": c.extra.get("approved_on", ""),
+            "versions": [{"id": v.id, "text": v.statement.text, "tier": v.tier, "author": v.author,
+                          "recorded_at": v.recorded_at} for v in C.versions(c.key, limit=20)]}
+
+
+@router.get("/record/definitions")
+def list_definitions(connection_id: str, term: Optional[str] = None) -> list[dict]:
+    """A connection's Definitions, or the one for ``term``. Read by the app's Definition page and by an answer that
+    leaned on one."""
+    from pramanyx.record.writers import definition_key, definitions
+    if not _visible(connection_id):
+        raise HTTPException(status_code=404, detail="No such connection")
+    if term:
+        one = C.latest(definition_key(connection_id, term))
+        return [_definition_view(one)] if one is not None and one.state != "withdrawn" else []
+    return [_definition_view(c) for c in definitions(connection_id)]
+
+
+@router.post("/record/definitions", status_code=201, dependencies=[gate(Capability.SEMANTIC_EDIT)])
+def write_record_definition(req: DefinitionRequest, principal=Depends(get_principal)) -> dict:
+    """A person writes what a business word means on a connection. Theirs, at tier ``declared``; writing it again
+    keeps the earlier wording beneath it, and a new wording waits for approval again."""
+    from pramanyx.record.writers import write_definition
+    if not _visible(req.connection_id):
+        raise HTTPException(status_code=404, detail="No such connection")
+    who = _who(principal)
+    if not who:
+        raise HTTPException(status_code=422, detail="nobody is signed in to this request — a definition is a person's")
+    try:
+        cid = write_definition(connection_id=req.connection_id, term=req.term, text=req.text, by=who,
+                               aliases=req.aliases)
+    except (ValueError, C.ClaimRefused) as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    _refresh_definitions(req.connection_id)
+    return _definition_view(C.get(cid))
+
+
+@router.post("/record/definitions/approve", dependencies=[gate(Capability.SEMANTIC_EDIT)])
+def approve_record_definition(req: DefinitionApproval, principal=Depends(get_principal)) -> dict:
+    """Its owner approves a definition as written; anyone else is refused, and told whose it is."""
+    from pramanyx.record.writers import approve_definition, definition_key
+    if not _visible(req.connection_id):
+        raise HTTPException(status_code=404, detail="No such connection")
+    who = _who(principal)
+    if not who:
+        raise HTTPException(status_code=422, detail="nobody is signed in to this request — an approval is a person's")
+    current = C.latest(definition_key(req.connection_id, req.term))
+    if current is None:
+        raise HTTPException(status_code=404, detail="No such definition")
+    from pramanyx.record.writers import NotTheOwner
+    try:
+        cid = approve_definition(connection_id=req.connection_id, term=req.term, by=who)
+    except NotTheOwner as exc:
+        raise HTTPException(status_code=403, detail=f"This definition is not yours to approve: {exc}.")
+    if cid:
+        _refresh_definitions(req.connection_id)
+    return _definition_view(C.get(cid) if cid else current)
+
+
+def _refresh_definitions(connection_id: str) -> None:
+    """The connection's graphs are rebuilt from the Record, off the request, so the planner reads the definition."""
+    from pramanyx.org.context import current_org_id
+    from pramanyx.feedback.verdicts import refresh_graphs_behind
+    refresh_graphs_behind(connection_id, current_org_id())
 
 
 @router.get("/record/you")

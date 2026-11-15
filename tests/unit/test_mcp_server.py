@@ -62,6 +62,10 @@ def test_server_registers_the_governed_tools():
         # Arc OC-8 — a page of a business entity's objects through the doors for builders; the propose tools are
         # registered per declared action (`register_ontology_tools`), never here.
         "list_objects",
+        # The coworker plan, 2026-11-15 — a question asked again on a rhythm, as Pramanyx's own automation (an act).
+        "schedule_question",
+        # 2026-11-15 — the web for outside context, behind the organisation's `web_search` setting (a read).
+        "search_the_web",
     }
     # No whole-trace tool either, for the same reason as `query`: `GET /traces/{id}` is
     # 1.2 MB for a 1,140-event run, so a tool wrapping it would exhaust the context that
@@ -86,6 +90,12 @@ def test_ask_folds_stream_and_fetches_receipt():
             {"type": "headline", "headline": "There are 42 orders"},
             {"type": "trusted", "items": [{"metric": "orders"}]},
             {"type": "tables_used", "tables": ["orders"]},
+            {"type": "chart_config", "chart_config": {"exhibit": {"kind": "figure"}}},
+            {"type": "narrative", "narrative": "There are **42** orders.", "anomalies": ["None stand out."],
+             "trend": "stable", "confidence": "high"},
+            {"type": "followups", "questions": ["How many last month?"]},
+            {"type": "inspect_warning", "issues": ["The question asks for a total by status."], "suggested_fix": "",
+             "kind": "not_what_was_asked"},
             {"type": "done", "inv_id": "t1", "has_receipt": True},
         ])),
         "/chat/conn1/t1/receipt": httpx.Response(200, json={
@@ -94,6 +104,14 @@ def test_ask_folds_stream_and_fetches_receipt():
     }
     res = _run(_client(routes).ask("how many orders", "conn1"))
     assert res["answer"] == "There are 42 orders"
+    # What the platform wrote about the rows, and how it would draw them, reach the caller as they were sent.
+    assert res["narrative"] == {"narrative": "There are **42** orders.", "anomalies": ["None stand out."],
+                                "trend": "stable", "confidence": "high"}
+    assert res["chart_config"] == {"exhibit": {"kind": "figure"}}
+    assert res["followups"] == ["How many last month?"]
+    # What the platform says is wrong with its own answer reaches the caller, with whether it was checked.
+    assert res["warning"] == {"issues": ["The question asks for a total by status."], "suggested_fix": "",
+                              "kind": "not_what_was_asked"}
     assert res["sql"].startswith("SELECT COUNT")
     assert res["row_count"] == 1
     assert res["rows"] == [[42]]

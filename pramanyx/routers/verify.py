@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from pramanyx.feedback import record_verdict, verdict_stats, list_verdicts
@@ -35,13 +35,18 @@ class VerdictIn(BaseModel):
 
 
 @router.post("/verify/verdict")
-def post_verdict(v: VerdictIn):
-    """Record a human verdict on an investigation finding."""
+def post_verdict(v: VerdictIn, request: Request):
+    """Record a human verdict on an investigation finding, under the person this request acts for — never a name
+    from the body."""
+    from pramanyx.rbac.agent_gate import refuse_an_agents_verdict
+    refuse_an_agents_verdict(request)
+    from pramanyx.security.authz import acting_person, get_principal
     try:
         return record_verdict(
             connection_id=v.connection_id, investigation_id=v.investigation_id,
             verdict=v.verdict, note=v.note, headline=v.headline,
             sql_source=v.sql_source, corrected_sql=v.corrected_sql, agent_id=v.agent_id,
+            by=acting_person(get_principal(request)),
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))

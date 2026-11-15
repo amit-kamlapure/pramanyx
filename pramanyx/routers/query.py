@@ -1527,13 +1527,17 @@ def chat_feedback(body: _ChatFeedbackRequest, request: Request):
     popularity feed, so thumbs teach ranking through the one existing signal path.
     Monotone by design: counters only grow — an unhelpful verdict journals the
     event (audit + future consumers) but never decrements a prior."""
+    from pramanyx.rbac.agent_gate import refuse_an_agents_verdict
+    refuse_an_agents_verdict(request)
     _check_conn_org(request, body.conn_id)
     from pramanyx.kernel.errors import tolerate
+    from pramanyx.security.authz import acting_person, get_principal
+    who = acting_person(get_principal(request))
     try:
         from pramanyx.kernel.ledger import Ledger
         Ledger.default().emit(
             "chat.feedback",
-            {"turn_id": body.turn_id, "verdict": body.verdict, "note": body.note[:2000]},
+            {"turn_id": body.turn_id, "verdict": body.verdict, "note": body.note[:2000], "by": who},
             conn_id=body.conn_id,
         )
     except Exception as exc:
@@ -1542,7 +1546,7 @@ def chat_feedback(body: _ChatFeedbackRequest, request: Request):
     # drill-recording below reads it with `get_investigation`), so it pins directly.
     from pramanyx.obs.session_log import pin_run
     pin_run(investigation_id=body.turn_id or "")
-    accepted = body.verdict == "helpful" and bool(body.turn_id) and _accept_chat_answer(body.conn_id, body.turn_id)
+    accepted = body.verdict == "helpful" and bool(body.turn_id) and _accept_chat_answer(body.conn_id, body.turn_id, who)
     if body.verdict == "helpful" and body.turn_id:
         try:
             from pramanyx.db.history import get_investigation
@@ -1557,7 +1561,7 @@ def chat_feedback(body: _ChatFeedbackRequest, request: Request):
     return {"ok": True, "accepted": accepted}
 
 
-def _accept_chat_answer(conn_id: str, turn_id: str) -> bool:
+def _accept_chat_answer(conn_id: str, turn_id: str, by: str = "") -> bool:
     """PENDING item 23 — the chat's "yes". The chat, where most answers are given, could record only `correct` or
     `reject`, so nobody could accept an answer there and the human-graded corpus could only learn what was wrong.
     A 👍 now records an `accept` verdict on the turn, carrying the SQL the turn RAN — read from its own record, never
@@ -1580,7 +1584,7 @@ def _accept_chat_answer(conn_id: str, turn_id: str) -> bool:
         if prior and prior.get("verdict") == "accept":
             return True
         record_verdict(connection_id=conn_id, investigation_id=turn_id, verdict="accept", note="helpful (chat)",
-                       headline=str(report.get("headline") or "")[:200], sql_source=sql)
+                       headline=str(report.get("headline") or "")[:200], sql_source=sql, by=by)
         return True
     except Exception as exc:  # noqa: BLE001 — the thumbs signal is journaled either way
         tolerate(exc, "the chat's accept could not be recorded; the feedback event stands",

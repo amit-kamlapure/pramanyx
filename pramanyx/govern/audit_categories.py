@@ -97,6 +97,9 @@ KIND_CATEGORY: dict[str, str] = {
     # key door or through the MCP tool): who, which agent at which revision, the connection, the blocks present. Data
     # access because the blocks carry the connection's schema, definitions and documents; the content is never kept.
     "agent.grounding_read": "data_access",
+    # 2026-11-15 — a web search sends the words searched to a provider outside the install (`web_search.py`): what
+    # left, and who sent it.
+    "web.searched": "data_access",
     # MI-1 — the two feedback doors. Both have been writing to the ledger since they
     # shipped, neither was categorized, so the governance feed could not show that a
     # person had ever graded anything. They are split by design (`chat.feedback` keys on
@@ -130,6 +133,8 @@ KIND_CATEGORY: dict[str, str] = {
     "service_principal.minted": "governance_change",
     "mcp.oauth": "governance_change",
     "method.registered": "governance_change",
+    # 2026-11-15 — a people-directory import moves group memberships, and so who may read what (`rbac/directory.py`).
+    "directory.imported": "governance_change",
 }
 
 #: The non-Ledger sink: the append-only `audit_log` table is entirely data access.
@@ -587,6 +592,8 @@ _SINKS: list[tuple[str, Callable[..., list[AuditEvent]]]] = [
     ("data_access", lambda n, **w: _from_ledger("access.justified", n, **w)),
     ("data_access", lambda n, **w: _from_ledger("mcp.tool_call", n, **w)),
     ("data_access", lambda n, **w: _from_ledger("agent.grounding_read", n, **w)),
+    ("data_access", lambda n, **w: _from_ledger("web.searched", n, **w)),
+    ("governance_change", lambda n, **w: _from_ledger("directory.imported", n, **w)),
     ("action_decision", lambda n, **w: _from_ledger("action.approval", n, **w)),
     ("governance_change", lambda n, **w: _from_ledger("connection.prerequisite_enabled", n, **w)),
     ("action_decision", lambda n, **w: _from_ledger("action.autonomous", n, **w)),

@@ -1,10 +1,11 @@
 "use client";
 
 /**
- * `/sheets/<id>`: one spreadsheet as a page of its own — its grid, views, history and everything else the
- * Spreadsheets page shows for it. Opened beside an answer that read the sheet (the coworker's right-hand pane),
- * the way `/receipt/<id>` is opened from a document. A LAYOUT over `SheetView`: same app, same tokens, same auth,
- * and the same sharing — a sheet not shared with the reader says so here as it does there.
+ * `/sheets/<id>`: a spreadsheet as a REFERENCED ASSET — what an answer read, opened beside it in the coworker's
+ * right-hand pane. The sheet itself, with everything that works on it (search, filter, sort, copy, download, views)
+ * and without the row that takes it somewhere else: no dashboard, sharing, ontology, combining or chat (the user,
+ * 2026-11-14: "we are not showcasing a limited view of the UI, we are showing referenced assets"). A LAYOUT over
+ * `SheetView`: same app, same tokens, same auth and the same sharing — a sheet not shared with the reader says so.
  */
 import { use } from "react";
 import { useRouter } from "next/navigation";
@@ -28,9 +29,9 @@ export default function SheetRoute({ params }: { params: Promise<{ id: string }>
   const { id } = use(params);
   const router = useRouter();
   return (
-    <main style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
-      <SheetView key={id} sheetId={segment(id)}
-        // Another sheet opened from this one opens here; "back" has no list to go back to on a page of one sheet.
+    <main style={{ display: "flex", flexDirection: "column", height: "100vh", minHeight: 0 }}>
+      <SheetView key={id} sheetId={segment(id)} asReference
+        // A sheet a link column points at opens here, as an asset too; there is no list to go back to.
         onOpen={(next) => { if (next) router.push(`/sheets/${encodeURIComponent(next)}`); }}
         onBack={() => undefined} />
     </main>

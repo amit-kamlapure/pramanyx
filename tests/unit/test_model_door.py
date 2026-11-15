@@ -209,3 +209,50 @@ def test_a_door_call_lands_in_the_model_call_record_marked_as_the_doors(monkeypa
     assert row["extra"] == {"door": "coworker"} and row["streamed"] is True
     assert (row["prompt_tokens"], row["completion_tokens"]) == (1, 2)
     assert "system" not in row and "user" not in row and "output" not in row      # the words are not kept
+
+
+# ── a call says which coworker turn it was made for, and is filed under it ───────────────────────────────────────
+
+def _filed(door, monkeypatch, headers):
+    """Ask through the door with `headers`, and return the trace and session each recorded call was written under."""
+    from pramanyx import telemetry
+    from pramanyx.org.context import current_session_id
+    under = []
+    monkeypatch.setattr(provider, "record_door_call", lambda **kw: under.append((telemetry.current_trace_id(), current_session_id())))
+    r = door["client"].post("/llm/door/v1/chat/completions",
+                            json={"model": "narrator", "messages": [{"role": "user", "content": "hi"}]},
+                            headers={model_door.CALLER_HEADER: "coworker", **headers})
+    assert r.status_code == 200
+    return under
+
+
+def test_a_call_made_for_a_coworker_turn_is_filed_under_that_turn(door, monkeypatch):
+    under = _filed(door, monkeypatch, {model_door.TRACE_HEADER: "cw-88f4fdd19a454d47-1", model_door.SESSION_HEADER: "session-88f4"})
+    assert under == [("cw-88f4fdd19a454d47-1", "coworker:session-88f4")]
+
+
+def test_a_call_that_names_no_turn_is_recorded_under_none_as_before(door, monkeypatch):
+    assert _filed(door, monkeypatch, {}) == [("", "")]
+
+
+@pytest.mark.parametrize("named", ["1d5a621b", "untraced:request:2026-11-14", "cw-short-1"])
+def test_a_caller_cannot_file_its_calls_under_a_run_of_the_platforms_own(door, monkeypatch, named):
+    assert _filed(door, monkeypatch, {model_door.TRACE_HEADER: named, model_door.SESSION_HEADER: "s"}) == [("", "")]
+
+
+def test_nothing_stays_bound_after_the_call(door, monkeypatch):
+    from pramanyx import telemetry
+    from pramanyx.org.context import current_session_id
+    _filed(door, monkeypatch, {model_door.TRACE_HEADER: "cw-88f4fdd19a454d47-1", model_door.SESSION_HEADER: "session-88f4"})
+    assert telemetry.current_trace_id() == "" and current_session_id() == ""
+
+
+def test_what_only_openais_platform_reads_is_sent_to_no_one_else(door, monkeypatch):
+    """Receipt 2026-11-14: the shell sets `store`, the organisation's model became Gemini, and every coworker turn
+    failed with `Unknown name "store"`. The field goes to OpenAI and to no other provider."""
+    _ask(door, store=False, metadata={"a": "b"}, temperature=0.2)
+    sent = json.loads(door["requests"][-1].content)
+    assert "store" not in sent and "metadata" not in sent and sent["temperature"] == 0.2
+    monkeypatch.setattr(provider, "door_binding", lambda role: ("openai", "gpt-x", URL, KEY))
+    _ask(door, store=False)
+    assert json.loads(door["requests"][-1].content)["store"] is False

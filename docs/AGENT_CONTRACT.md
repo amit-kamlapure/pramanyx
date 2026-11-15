@@ -8,7 +8,7 @@ An agent is defined by the kind of entry it is licensed to book in the ledger, n
 
 | Duty | Books | Proposes | Today | Why it exists |
 |---|---|---|---|---|
-| **Observe** | observation, reading | monitor | Explorer, Watcher | somebody has to look where nobody asked |
+| **Observe** | observation, reading, usage | monitor | Explorer, Watcher | somebody has to look where nobody asked |
 | **Inquire** | hypothesis, finding | — | Analyst (SQL Engineer, Narrator, Orchestrator inside it) | explanation is a search over causes |
 | **Challenge** | cause | refutation of a hypothesis | Verifier; the skeptic step and its causal_checks record | a claim rises a tier only after an attempt to break it — by a different binding where the install has two |
 | **Forecast** | prediction | scenario | the scenario ladder's methods (code); no model forecasts | a system that never commits to an expectation can never be scored |
@@ -22,12 +22,12 @@ Every run books one, never an empty result: `answered` · `contradicted` · `no_
 
 ## What an entry must carry
 
-- **kinds**: `observation`, `finding`, `reading`, `definition`, `hypothesis`, `prediction`, `said`, `cause`
+- **kinds**: `observation`, `finding`, `reading`, `definition`, `hypothesis`, `prediction`, `said`, `cause`, `usage`
 - **tiers** (the authority ladder, minus the one that is not a claim): `measured`, `approved`, `declared`, `mined`, `said`
 - **statuses**: `Final`, `Provisional`, `To date`
 - **about**: `object`, `segment`, `type`, `connection`, `domain`, `organisation`
 - **author kinds**: `person`, `agent`, `system`
-- **warrants**: `run`, `document`, `attestation`, `claim`, `conversation`, `meeting`
+- **warrants**: `run`, `document`, `attestation`, `claim`, `conversation`, `meeting`, `query_history`
 - **fields an author writes**: `kind`, `about`, `statement`, `tier`, `status`, `as_of`, `valid_from`, `valid_until`, `warrants`, `falsifier`, `next_check`, `owner`, `author`, `author_kind`, `definition_version`, `state`, `extra`
 - **filled by the ledger, never by an author**: `id`, `key`, `version`, `recorded_at`, `supersedes`, `superseded_by`, `confidence`
 - **states**: hypothesis open · supported · refuted · abandoned; prediction open · scored

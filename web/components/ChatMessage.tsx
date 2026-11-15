@@ -1184,8 +1184,11 @@ function NarrativeBrief({
         <p className="aug-text-sm text-amber-400/90 leading-relaxed flex items-start gap-1.5">
           <span className="shrink-0 mt-0.5"><Icon name="warning" size={16} label="Warning" /></span>
           <span>
-            Result may be incomplete — {inspect.issues.join("; ")}
-            {inspect.suggestedFix ? `. ${inspect.suggestedFix}` : ""}
+            {/* a verdict the platform checked on the rows is said as one; a model's suspicion stays a "may" */}
+            {inspect.kind === "not_what_was_asked"
+              ? inspect.issues.join(" ")
+              : <>Result may be incomplete — {inspect.issues.join("; ")}
+                  {inspect.suggestedFix ? `. ${inspect.suggestedFix}` : ""}</>}
           </span>
         </p>
       )}

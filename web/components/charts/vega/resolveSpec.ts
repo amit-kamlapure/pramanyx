@@ -481,10 +481,17 @@ function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
   // An explicit user choice outranks inference; a transform outranks both (it derives
   // the column it plots). Only with neither does inference pick the y.
   const userMeasure = chosenMeasure && columns.includes(chosenMeasure) ? chosenMeasure : null;
-  const measure = tf ? tf.derived
-    : (userMeasure ?? (inferred?.yCols?.length ? columns[inferred.yCols[0]] : firstMeasure));
   const band = inferred ? columns[inferred.xCol]
     : ownBand ? columns[ownBand.band] : (catCols[0] ?? dateCol ?? columns[0]);
+  /**
+   * The measure is never the column the bars are broken down by. A breakdown by a NUMBER — review score 1 to 5,
+   * with no text or date column beside it — falls back to the first column as its band, and the first measure is
+   * that same column: "review count by review score" drew review_score against itself and the count was never
+   * plotted (the coworker, 2026-11-14). The measure is then the next number that is not the band.
+   */
+  const measureNotBand = firstMeasure === band ? (numCols.find((c) => c !== band) ?? firstMeasure) : firstMeasure;
+  const measure = tf ? tf.derived
+    : (userMeasure ?? (inferred?.yCols?.length ? columns[inferred.yCols[0]] : measureNotBand));
   const inferredSeries = inferred?.colorCol != null ? columns[inferred.colorCol]
     : ownBand?.group !== undefined ? columns[ownBand.group] : undefined;
   const base: Record<string, unknown> = { $schema: "https://vega.github.io/schema/vega-lite/v6.json", data };

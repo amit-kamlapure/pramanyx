@@ -473,3 +473,26 @@ def test_a_join_that_over_counts_is_flagged_and_the_compiled_query_is_not(monkey
     assert not quiet["error"]
     assert not any(r["guard"] == "fanout_detected" for r in quiet["guard_receipts"]), quiet["guard_receipts"]
     assert not any("over-count" in c for c in quiet["caveats"])
+
+
+def test_run_sql_tells_the_model_when_its_rows_are_finer_than_the_turn_asked(monkeypatch, fake_conn):
+    """The result gate at this door: the model's own step is not rewritten, but rows broken down further than the
+    turn's question asked are said in `caveats` — where a query that ran and still misleads is said — and on the
+    receipt. A step that answers as asked, or a call that names no question, carries neither."""
+    per_order = _Result(columns=["order_id", "status", "total"], row_count=4,
+                        rows=[[1, "shipped", 5.0], [2, "shipped", 7.0], [3, "returned", 2.0], [4, "returned", 9.0]])
+    monkeypatch.setattr("pramanyx.sql.executor.execute_guarded", lambda conn, sql, **kw: per_order)
+    sql = "SELECT order_id, status, SUM(total) FROM orders GROUP BY 1, 2"
+
+    out = ct.run_sql("c1", {"sql": sql}, user_question="What is total GMV by order status?")
+    said = [c for c in out["caveats"] if "asks for a total by order status" in c]
+    assert len(said) == 1 and "also broken down by order_id" in said[0]
+    assert any(r["guard"] == "result_shape" and r["action"] == "flagged" for r in out["guard_receipts"])
+    assert out["rows"] == per_order.rows                       # the rows are the model's to read, unchanged
+
+    assert not any(r.get("guard") == "result_shape" for r in ct.run_sql("c1", {"sql": sql})["guard_receipts"])
+    by_status = _Result(columns=["status", "total"], row_count=2, rows=[["shipped", 12.0], ["returned", 11.0]])
+    monkeypatch.setattr("pramanyx.sql.executor.execute_guarded", lambda conn, sql, **kw: by_status)
+    right = ct.run_sql("c1", {"sql": "SELECT status, SUM(total) FROM orders GROUP BY 1"},
+                       user_question="What is total GMV by order status?")
+    assert not any(r.get("guard") == "result_shape" for r in right["guard_receipts"])

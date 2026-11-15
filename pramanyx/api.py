@@ -1249,6 +1249,8 @@ from pramanyx.routers import model_door as model_door_router  # noqa: E402 — t
 app.include_router(model_door_router.router)
 from pramanyx.routers import coworker as coworker_router  # noqa: E402 — where the coworker is, for the app's way in
 app.include_router(coworker_router.router)
+from pramanyx.routers import web_search as web_search_router  # noqa: E402 — the web, for outside context only
+app.include_router(web_search_router.router)
 app.include_router(metastore.router)
 app.include_router(approvals.router)
 app.include_router(metastore.grants_router)

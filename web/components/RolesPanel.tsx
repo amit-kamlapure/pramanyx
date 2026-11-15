@@ -23,6 +23,7 @@ import { SelectField } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { formatCount, pct } from "@/lib/format";
 
+import { PeopleDirectoryCard } from "./PeopleDirectoryCard";
 import { Details, Pair, Stack, goTo, plural } from "./settings/parts";
 
 /** The catalogue carries each role's display name (`label`) beside its id; the client type predates it. */
@@ -550,6 +551,9 @@ export function RolesPanel() {
           </Card>
         )}
       </Pair>
+
+      {/* People (2026-11-15) — the directory; an import fills the function groups above. */}
+      <PeopleDirectoryCard canManage={canManage} onImported={() => void refreshGroups()} />
     </Stack>
   );
 }

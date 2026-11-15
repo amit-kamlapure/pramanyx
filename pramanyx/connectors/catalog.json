@@ -521,6 +521,13 @@
           "placeholder": "ENG,PROD (empty = all)",
           "secret": false,
           "optional": true
+        },
+        {
+          "key": "audience",
+          "label": "Who reads pages Confluence does not restrict",
+          "placeholder": "empty = only you · org = everyone · or group ids",
+          "secret": false,
+          "optional": true
         }
       ],
       "secret_fields": [
@@ -1402,6 +1409,13 @@
           "key": "database_ids",
           "label": "Database IDs",
           "placeholder": "id1,id2 (optional)",
+          "secret": false,
+          "optional": true
+        },
+        {
+          "key": "audience",
+          "label": "Who reads the pages (Notion does not say)",
+          "placeholder": "empty = only you · org = everyone · or group ids",
           "secret": false,
           "optional": true
         }

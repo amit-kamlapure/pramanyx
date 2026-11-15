@@ -116,6 +116,12 @@ def resolve_principal(request: Request) -> Optional[Principal]:
     if service_principals.headers_present(request):
         return service_principals.resolve(request)
 
+    # 0b. People (2026-11-15) — the person the app delegated to the coworker (`security/delegation.py`). Presented,
+    #     it is the answer: an unknown, expired or revoked one resolves NOTHING and never falls through to the headers.
+    from pramanyx.security import delegation
+    if delegation.presented(request):
+        return delegation.resolve(request.headers.get(delegation.HEADER))
+
     if oidc.configured():
         try:
             verified = oidc.resolve_verified(request.headers.get("Authorization"))

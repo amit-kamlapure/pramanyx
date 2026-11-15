@@ -9,21 +9,22 @@ page is listed with its reason on the source's status.
 """
 from __future__ import annotations
 
-from typing import Optional
+from typing import Iterable, Optional
 
 #: How many skipped pages a source's status keeps by name — the count is always whole.
 MAX_SKIPPED_LISTED = 100
 
 
 def index_page(*, text: str, title: str, source: str, doc_id: str,
-               source_url: str = "") -> Optional[str]:
-    """Index one page. Returns None when it landed, else the reason it did not."""
+               source_url: str = "", access: Optional[dict] = None) -> Optional[str]:
+    """Index one page, with who may read it as its source says (`knowledge/access.py`). Returns None when it landed,
+    else the reason it did not."""
     from pramanyx.kernel.registries.ingestion import ingest
 
     if not text.strip():
         return "the page has no text"
     entry = ingest("knowledge", text=text, title=title, source=source,
-                   doc_id=doc_id, source_url=source_url)
+                   doc_id=doc_id, source_url=source_url, access=access)
     if not entry:
         return "the document index did not accept it (the API log has the cause)"
     if not entry.get("chunk_count"):
@@ -35,3 +36,40 @@ def index_page(*, text: str, title: str, source: str, doc_id: str,
 
 def skipped_entry(title: str, url: str, reason: str) -> dict:
     return {"title": title, "url": url, "reason": reason}
+
+
+# ── who may read a page, in the words its source gives (read by `pramanyx.knowledge.access`) ───────────────
+
+ORG = "org"
+CHOSEN = "chosen"
+
+def org_wide(why: str, source: str) -> dict:
+    return {"sharing": ORG, "shared_with": [], "why": why, "source": source}
+
+
+def chosen(people: Iterable[str], groups: Iterable[str], why: str, source: str) -> dict:
+    seen: set[tuple[str, str]] = set()
+    out: list[dict] = []
+    for kind, ids in (("person", people), ("group", groups)):
+        for raw in ids:
+            ident = str(raw or "").strip()
+            key = (kind, ident.lower())
+            if ident and key not in seen:
+                seen.add(key)
+                out.append({"kind": kind, "id": ident})
+    return {"sharing": CHOSEN, "shared_with": out, "why": why, "source": source}
+
+
+def source_audience(meta: dict, *, what: str) -> dict:
+    """Who may read a page its source places no restriction on, as the person who connected the source set it.
+
+    ``audience`` on the source: empty — only the person who connected it; ``org`` — everyone in the organisation;
+    otherwise group ids, comma-separated, plus that person. Never wider than they said."""
+    owner = str(meta.get("connected_by") or "").strip()
+    said = str(meta.get("audience") or "").strip()
+    if said.lower() == ORG:
+        return org_wide(f"{what}; the person who connected the source opened it to the organisation",
+                        "source-audience")
+    groups = [g.strip() for g in said.split(",") if g.strip()]
+    whom = "the person who connected the source" + (" and the groups they named" if groups else "")
+    return chosen([owner] if owner else [], groups, f"{what}; readable by {whom}", "source-audience")

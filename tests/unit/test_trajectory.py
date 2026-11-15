@@ -96,11 +96,15 @@ def test_payload_fields_ride_only_under_an_open_capture_window(provider):
         or prompt_window.active()
 
 
-def test_a_loop_outside_any_trace_writes_nothing(provider):
-    before = len(Ledger.default().session_events(kind=session_log.STEP, limit=5000))
+def test_a_loop_outside_any_trace_runs_under_a_run_of_its_own(provider):
+    """It used to write nothing, its steps and its model calls belonging to no run (2026-11-14: 373 calls in two days,
+    in Agent Ops nowhere). A loop no one opened a run for opens its own (`obs/own_run.py`): every step is under it."""
+    before = {e["seq"] for e in Ledger.default().session_events(kind=session_log.STEP, limit=5000)}
     set_responses([FauxToolCall(payload={"sql": "SELECT 1"}, name="run_sql"), "ok"])
     run_tool_loop(provider, "sys", "q?", _tools(run_sql=_run_sql))
-    assert len(Ledger.default().session_events(kind=session_log.STEP, limit=5000)) == before
+    new = [e for e in Ledger.default().session_events(kind=session_log.STEP, limit=5000) if e["seq"] not in before]
+    assert new and all(str(e["trace_id"]).startswith("agent_loop-") for e in new)
+    assert telemetry.current_trace_id() == ""
 
 
 # ── the trajectory read ───────────────────────────────────────────────────────────────

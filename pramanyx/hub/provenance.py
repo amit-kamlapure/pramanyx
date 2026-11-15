@@ -35,7 +35,8 @@ AUTHORITY_LADDER: tuple[str, ...] = (
     "measured",     # executed against the data; the number is the data's own
     "approved",     # a definition its owner approved (Finance's revenue)
     "declared",     # a person declared it (a process, a promise, a rule, a note they wrote)
-    "mined",        # extracted from a document and human-reviewed (KI's lane)
+    "mined",        # extracted from a document and human-reviewed (KI's lane), or from a warehouse's own query
+                    # history — what people ran there, checked to bind, confirmed by no one (kind `usage`)
     "said",         # said in a conversation; nobody has verified it
     "inferred",     # a model's inference, unconfirmed
 )

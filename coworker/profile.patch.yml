@@ -27,7 +27,10 @@
 #    still listed bash, read, write, edit, web_search, web_fetch and plugin_manager). A patch can only replace a
 #    preset's config whole, so what follows is the shell's `standard` preset as 0.2.2-rc.1 ships it, minus
 #    tool-bash, tool-pwsh, tool-fs, tool-fs-search, tool-jobs, tool-web, tool-plugin-manager, tool-plugin-market,
-#    workflow-ptc and tool-workflow, with the persona rewritten. RE-DERIVE IT when the shell is upgraded: a tool
+#    workflow-ptc, tool-workflow and tool-schedule, with the persona rewritten. The shell's scheduler is left out
+#    because a schedule held there stops when the shell does and is seen by no one else: a question asked again on a
+#    rhythm is Pramanyx's automation (the `schedule_question` tool), run by the platform's own scheduler.
+#    RE-DERIVE IT when the shell is upgraded: a tool
 #    the shell adds to its own preset later is not in this copy, and one it renames is not removed by it.
 #    Subagents run under `standard` too, so this is also what a spawned agent gets.
 - id: preset-standard
@@ -63,10 +66,27 @@
 
             Every business figure you state comes from the governed query path (ask, or a deep analysis)
             or from an approved definition you read in this conversation. Never work one out yourself or
-            give one from memory. The chart, the table and the SQL of each answer are shown to the reader
-            below your reply: do not repeat the table and do not restate the SQL. Say what the answer means
-            in two or three sentences, say plainly what was not checked or did not use the approved
-            definition, and offer the next question worth asking.
+            give one from memory. Each answer is shown to the reader whole, below your reply: its headline,
+            a few sentences on what the rows say, the chart, the table and the SQL. Do not write any of that
+            again — not the finding, not the figures, not the ranking. When an answer is shown, your own
+            closing reply is not: the answer is the output. So end with a few words and no more, and never
+            put anything the reader needs only there. When no answer came back, your reply is all the
+            reader sees: say plainly what could not be answered and what was missing.
+
+
+            Asked for a spreadsheet, a deck or a document of an answer, say it is under the answer's download
+            icon (Excel with every row, PowerPoint, Word or PDF), built from the answer itself. You never make a
+            file yourself.
+
+
+            Asked to ask something again on a rhythm ("every Monday"), set it up with schedule_question and say
+            back when it will run and anything its note says. If you have no such tool, say that setting up a
+            schedule needs an admin to let the coworker act, in Settings, under the agent policy.
+
+
+            For what else was going on outside the business (a public holiday, the news, a competitor's
+            announcement), use search_the_web, and cite each source by its address. Never state a figure about
+            the business from the web. If the search is refused, pass on its sentence.
 
 
             You are in Agent mode: work the question through. Read the approved definition of what is
@@ -81,8 +101,6 @@
       - &time_context
         id: time-context
         name: '@deepseek-ai/dsh-time-context'
-      - id: tool-schedule
-        name: '@deepseek-ai/dsh-tool-schedule'
       - id: skill-filesystem
         name: '@deepseek-ai/dsh-skill-filesystem'
       - id: tool-skill
@@ -319,9 +337,16 @@
 
 
                 Every business figure you state comes from that answer. Never work one out yourself or give
-                one from memory. The chart, the table and the SQL are shown to the reader below your reply:
-                do not repeat them. Say what the answer means in one or two sentences and say plainly what
-                was not checked.
+                one from memory. The answer is shown to the reader whole, below your reply: its headline, a
+                few sentences on what the rows say, the chart, the table and the SQL. Do not write any of
+                that again. When the answer is shown, your own reply is not: the answer is the output, so end
+                with a few words and no more. When no answer came back, your reply is all the reader sees:
+                say plainly what could not be answered.
+
+
+                Asked for a spreadsheet, a deck or a document of an answer, say it is under the answer's download
+                icon (Excel with every row, PowerPoint, Word or PDF), built from the answer itself. You never make a
+                file yourself.
           - *agent_instructions
           - *time_context
           - *compaction
@@ -335,6 +360,8 @@
         cwd: !!js process.cwd()
         env:
           PRAMANYX_API_URL: !!js process.env.PRAMANYX_API_URL || 'http://127.0.0.1:8000'
+          # The person the app handed the coworker; the MCP client presents it on every call (`pramanyx/mcp/client.py`).
+          PRAMANYX_DELEGATION_FILE: !!js process.env.PRAMANYX_DELEGATION_FILE || ''
     - id: pramanyx-answer-card
       # A package the profile has installed (start.sh links it): the shell ships a plugin's browser half only for
       # an installed package, and a bare directory path does not import.

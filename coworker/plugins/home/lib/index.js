@@ -16,6 +16,9 @@ const READS = [
   /^\/agents\/custom$/,       // a person's own agents
   /^\/investigations$/,       // recent questions
   /^\/sheets$/,               // the sheets by name, so an answer that read one can open it
+  // An answer as a file — Excel, PowerPoint, Word or PDF — built by Pramanyx from the answer's stored rows, never by
+  // code the model wrote (`pramanyx/export`). A GET like the rest; the bytes are passed through as they come.
+  /^\/investigations\/[A-Za-z0-9_-]{1,64}\/export$/,
 ];
 
 import { mkdir, writeFile } from "node:fs/promises";
@@ -96,11 +99,66 @@ const ENTER = `<!doctype html><meta charset="utf-8"><title>Pramanyx</title><scri
 (function () {
   var said = new URLSearchParams(location.hash.slice(1));
   var access = said.get("t") || "";
+  var person = said.get("d") || "";
   said.delete("t");
+  said.delete("d");
   var carried = said.toString();
-  location.replace("./" + (access ? "?token=" + encodeURIComponent(access) : "") + (carried ? "#pramanyx:" + carried : ""));
+  var go = function () {
+    location.replace("./" + (access ? "?token=" + encodeURIComponent(access) : "") + (carried ? "#pramanyx:" + carried : ""));
+  };
+  if (!person) return go();
+  // The person the app handed over goes to this page's own server, which checks it with Pramanyx and keeps it;
+  // it never reaches the conversation or the model. A failure still opens the coworker, as nobody in particular.
+  fetch("pramanyx-person", { method: "POST", headers: { "content-type": "application/json" },
+                             body: JSON.stringify({ d: person }) }).then(go, go);
 })();
 </script>`;
+
+/**
+ * THE PERSON THE COWORKER ACTS FOR (People, 2026-11-15). The app mints a short-lived delegation for whoever is
+ * signed in there (`pramanyx/security/delegation.py`) and the entry page above posts it here. It is checked with
+ * Pramanyx, then kept in one file only this account can read (PRAMANYX_DELEGATION_FILE, set by start.sh) — where the
+ * answer card's relays and the MCP server read it on every call. One shell is one person's: a newer arrival replaces
+ * the older. Never kept in a conversation or shown to the model, so the agent cannot choose who it acts for.
+ */
+/** The person kept above, presented with what this coworker reads for them — so a read is theirs, never wider. */
+async function personHeader() {
+  const file = process.env.PRAMANYX_DELEGATION_FILE || "";
+  if (!file) return {};
+  try {
+    const { readFile } = await import("node:fs/promises");
+    const token = (await readFile(file, "utf8")).trim();
+    return /^[A-Za-z0-9_-]{20,128}$/.test(token) ? { "x-pramanyx-delegation": token } : {};
+  } catch {
+    return {};
+  }
+}
+
+export async function keepThePerson(req, res, api) {
+  const reply = (status, body) => { res.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" }); res.end(JSON.stringify(body)); };
+  if (req.method !== "POST") return reply(405, { detail: "POST only" });
+  const from = req.headers["sec-fetch-site"];
+  if (from && from !== "same-origin") return reply(403, { detail: "Only this page may say this" });
+  const file = process.env.PRAMANYX_DELEGATION_FILE || "";
+  if (!file) return reply(501, { detail: "No place to keep the person (PRAMANYX_DELEGATION_FILE is unset)" });
+  let raw = "";
+  for await (const part of req) { raw += part; if (raw.length > 1024) return reply(413, { detail: "Too long" }); }
+  let token = "";
+  try { token = String(JSON.parse(raw).d || ""); } catch { token = ""; }
+  if (!/^[A-Za-z0-9_-]{20,128}$/.test(token)) return reply(422, { detail: "Not a delegation" });
+  try {
+    const answer = await fetch(api + "/auth/delegation", { headers: { accept: "application/json", "x-pramanyx-delegation": token } });
+    if (!answer.ok) return reply(401, { detail: "Pramanyx did not recognise the person" });
+    const who = await answer.json();
+    const { writeFile, mkdir } = await import("node:fs/promises");
+    const { dirname } = await import("node:path");
+    await mkdir(dirname(file), { recursive: true });
+    await writeFile(file, token, { mode: 0o600 });
+    return reply(200, { user_id: who.user_id });
+  } catch {
+    return reply(502, { detail: "The platform is not answering" });
+  }
+}
 
 /**
  * A CONVERSATION IS HELD TO ITS CONNECTION. Telling the agent which connection a conversation is about is an
@@ -143,6 +201,145 @@ function holdToConnection(ctx) {
   });
 }
 
+/**
+ * A TURN IS A RUN, AND IS RECORDED WHERE RUNS ARE. The shell keeps its own trajectory of a turn; the platform's
+ * operators read one store (Agent Ops, over the session log), and a coworker turn was not in it. Each event of a
+ * turn that matters to an operator is sent to the platform as it happens — the question, each tool call and its
+ * result, the end — under one trace named for the conversation and the turn.
+ *
+ * Two things are deliberately not sent. The model calls: the platform's model door already records every one, so
+ * each call is only told which turn it belongs to (two request headers) and the door files it there; sending them
+ * too would count the spend twice. And the words: the system prompt, what the agent was given and what it said
+ * stay in the shell's own log, and each event says where there (`shell_session`, `seq`).
+ *
+ * The platform's own work for a question is in the same trace. Before a call to the governed answer path, the
+ * platform is told which step of which turn is asking; it records what it does to answer under this turn's trace
+ * and inside that step. One question, one trace. Were the claim not taken, the answer's work is a run of its own
+ * in the same store, as it was before, and the call's result still names its receipt.
+ */
+const ASKS = /^mcp__pramanyx__ask(_[a-z0-9_]+)?$/;
+const clip = (text, most) => (typeof text === "string" && text.length > most ? text.slice(0, most) : text);
+const textOf = (content) => (Array.isArray(content) ? content.map((p) => (p && typeof p.text === "string" ? p.text : "")).join("") : "");
+
+/** The trace of one turn of one conversation: `cw-<the shell's session id, shortened>-<turn>`. */
+export const traceOf = (sessionId, turn) =>
+  `cw-${String(sessionId).replace(/^session-/, "").replace(/[^A-Za-z0-9]/g, "").slice(0, 16)}-${Number(turn) || 0}`;
+
+/** What an answer's result says of itself, for the record: which receipt, which headline, how many rows. */
+function ofAnAnswer(text) {
+  try {
+    const got = JSON.parse(text);
+    return {
+      investigation_id: got.investigation_id || undefined,
+      receipt_id: got.receipt?.artifact?.id || got.receipt_id || undefined,
+      headline: clip(got.answer || got.headline || undefined, 300),
+      rows: typeof got.row_count === "number" ? got.row_count : undefined,
+    };
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * The events one of the shell's own session events comes to, for the platform's record — none for most. `turns`
+ * holds what is known of each conversation's running turn and is changed here. Pure but for that.
+ */
+export function turnEvents(turns, sessionId, held, event) {
+  const data = event?.data ?? {};
+  const at = Number(event?.time) || Date.now();
+  const where = { shell_session: sessionId, seq: event?.seq };
+  const now = turns.get(sessionId);
+  if (event?.type === "turn/start") {
+    turns.set(sessionId, { turn: data.turn, trace: traceOf(sessionId, data.turn), started: at, asked: false, calls: new Map(), headline: "", tools: 0 });
+    return [];
+  }
+  if (!now) return [];
+  const conn_id = held || null;
+  if (event.type === "user/message" && !now.asked && data.source?.kind === "user") {
+    now.asked = true;
+    return [{ kind: "user_request", name: "coworker", conn_id, payload: { question: clip(textOf(data.content), 2000), turn: now.turn, ...where } }];
+  }
+  if (event.type === "tool/call" && data.callId) {
+    now.calls.set(data.callId, { name: data.name, at });
+    now.tools += 1;
+    return [{ kind: "tool_call", name: String(data.name || "tool"), span_id: data.callId, conn_id,
+              payload: { tool: data.name, arguments: clip(typeof data.arguments === "string" ? data.arguments : JSON.stringify(data.arguments ?? {}), 1500), step: data.step, ...where } }];
+  }
+  if (event.type === "tool/result") {
+    const message = data.message ?? {};
+    const call = now.calls.get(message.toolCallId);
+    if (!call) return [];
+    now.calls.delete(message.toolCallId);
+    const said = ASKS.test(call.name) ? ofAnAnswer(textOf(message.content)) : {};
+    if (said.headline) now.headline = said.headline;
+    const { rows, ...rest } = said;
+    return [{ kind: "tool_call_result", name: String(call.name || "tool"), span_id: message.toolCallId, ok: !message.isError,
+              duration_ms: Math.max(0, at - call.at), conn_id, ...(typeof rows === "number" ? { row_count: rows } : {}),
+              payload: { tool: call.name, ...rest, ...where } }];
+  }
+  if (event.type === "turn/end") {
+    turns.delete(sessionId);
+    const reason = String(data.reason?.kind || "");
+    return [{ kind: "final_response", name: "coworker", ok: reason === "completed", duration_ms: Math.max(0, at - now.started), conn_id,
+              payload: { ...(now.headline ? { headline: now.headline } : {}), reason, calls: now.tools, turn: now.turn, ...where } }];
+  }
+  return [];
+}
+
+function recordTurns(ctx, api) {
+  const turns = new Map();
+  const traces = new Map();          // session → the running turn's trace, read when a model call's headers are made
+  let sending = Promise.resolve();
+  let warned = false;
+  const send = (trace, session, events) => {
+    // One after another, so the record reads in the order things happened.
+    sending = sending.then(() => fetch(`${api}/coworker/trace`, {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ trace_id: trace, session, events }),
+    })).then((answer) => { if (!answer.ok) throw new Error(String(answer.status)); }).catch((error) => {
+      if (!warned) console.warn(`pramanyx-home: a turn was not recorded in the platform's trace store (${error?.message ?? error})`);
+      warned = true;
+    });
+  };
+  ctx.on("session/event", (session, event) => {
+    try {
+      const id = String(session?.id ?? "");
+      if (!id) return;
+      const before = turns.get(id);
+      const held = HELD_FOLDER.exec(String(session?.header?.cwd ?? ""))?.[1] ?? "";
+      const events = turnEvents(turns, id, held, event);
+      const after = turns.get(id);
+      if (after) traces.set(id, after.trace); else traces.delete(id);
+      const trace = (after ?? before)?.trace;
+      if (events.length && trace) send(trace, id, events);
+    } catch { /* the record is best-effort; the turn it observes goes on */ }
+  });
+  // Before a question goes to the governed answer path, the platform is told which step of which turn asks it, so
+  // the work of answering is recorded inside this turn's trace and not as a second run beside it. Waited for, but
+  // not for long: an unanswered claim costs the join, never the answer.
+  ctx.on("tools/pre-execute", async (call, next) => {
+    try {
+      const session = call?.agent?.session;
+      const id = String((session && typeof session === "object" ? session.id : session) ?? "");
+      const trace = traces.get(id);
+      const args = call?.arguments && typeof call.arguments === "object" ? call.arguments : {};
+      if (trace && call?.callId && ASKS.test(String(call.name)) && typeof args.question === "string" && args.question) {
+        await fetch(`${api}/coworker/claim`, {
+          method: "PUT", headers: { "content-type": "application/json" }, signal: AbortSignal.timeout(1500),
+          body: JSON.stringify({ trace_id: trace, session: id, span_id: call.callId, question: args.question,
+                                 connection: String(args.connection ?? args.connection_id ?? "") }),
+        });
+      }
+    } catch { /* the answer is asked for all the same */ }
+    return next();
+  });
+  // Each model call says which turn it was made for, and the platform's model door files it under that turn.
+  ctx.on("llm-pi-ai/request-headers", (request, headers, next) => {
+    const trace = request?.sessionId ? traces.get(String(request.sessionId)) : undefined;
+    if (trace) { headers.set("x-pramanyx-trace", trace); headers.set("x-pramanyx-session", String(request.sessionId)); }
+    return next();
+  });
+}
+
 export const inject = ["webServer", "workspaceRegistry"];
 
 export function apply(ctx) {
@@ -153,6 +350,7 @@ export function apply(ctx) {
   });
   sayWhereThisIs(ctx, api);
   holdToConnection(ctx);
+  recordTurns(ctx, api);
   ctx.effect(() => ctx.webServer.register({
     kind: "exact",
     path: "/pramanyx-enter",
@@ -163,6 +361,11 @@ export function apply(ctx) {
     },
   }), "pramanyx-home: the way in from the app");
   ctx.effect(() => ctx.webServer.register({
+    kind: "exact",
+    path: "/pramanyx-person",
+    handler: (req, res) => keepThePerson(req, res, api),
+  }), "pramanyx-home: the person the coworker acts for");
+  ctx.effect(() => ctx.webServer.register({
     kind: "prefix",
     path: "/pramanyx",          // no trailing slash: the server matches the prefix itself, or the prefix and a "/"
     resource: async (request) => {
@@ -170,11 +373,12 @@ export function apply(ctx) {
       const path = url.pathname.slice("/pramanyx".length);
       if (!READS.some((allowed) => allowed.test(path))) return new Response("Not relayed", { status: 404 });
       try {
-        const answer = await fetch(api + path + url.search, { headers: { accept: "application/json" } });
-        return new Response(await answer.text(), {
-          status: answer.status,
-          headers: { "content-type": answer.headers.get("content-type") || "application/json", "cache-control": "no-store" },
-        });
+        const answer = await fetch(api + path + url.search, { headers: { accept: "*/*", ...(await personHeader()) } });
+        const headers = { "content-type": answer.headers.get("content-type") || "application/json", "cache-control": "no-store" };
+        const named = answer.headers.get("content-disposition");
+        if (named) headers["content-disposition"] = named;
+        // Bytes, not text: a file must arrive as it left (a workbook read as text is a broken workbook).
+        return new Response(await answer.arrayBuffer(), { status: answer.status, headers });
       } catch {
         return new Response(JSON.stringify({ detail: "The platform is not answering" }), {
           status: 502, headers: { "content-type": "application/json" },

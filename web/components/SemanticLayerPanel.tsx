@@ -5,7 +5,8 @@
  *  1. Metrics     — governed definitions: what is approved and measured, what waits for review (the landing tab;
  *                   `MetricsPanel`)
  *  2. Annotations — what a table or column means, read into every prompt
- *  3. Knowledge   — business facts: metric definitions, synonyms, join rules, notes; and the questions that reached
+ *  3. Definitions — what the business's words mean (metric definitions, synonyms, join rules, notes), each a Definition
+ *                   a person wrote and its owner approves — one store with the Definition page; and the questions that reached
  *                   none of the declared terms, where a person adds the words they used (`semantic/MissedQuestions`)
  *  4. Benchmarks  — questions with rules for the SQL they should get, run to catch a regression
  *  5. Import      — the intake lane (PX-3): bring knowledge in from files, sheets, wikis or usage, review the plan,
@@ -298,6 +299,17 @@ interface KnowledgeEntry {
   kind: string;
   tags: string[];
   connection_id: string;
+  /** The Definition's standing (`record/writers.py`): declared when written, approved once its owner approves it. */
+  standing?: { tier: string; owner: string; approved_by: string };
+}
+
+/** Whose a definition is, and whether its owner approved it, in a few words. */
+function standingWords(s: KnowledgeEntry["standing"]): string {
+  if (!s) return "";
+  const who = (ref: string) => String(ref || "").replace(/^(user|person):/, "");
+  if (s.tier === "approved") return `approved by ${who(s.approved_by)}`;
+  if (s.tier === "declared") return `written by ${who(s.owner)}, not yet approved`;
+  return "brought in from a file, no one has declared it";
 }
 
 const KNOWLEDGE_KINDS = [
@@ -389,20 +401,20 @@ function KnowledgeTab({ connId }: { connId: string }) {
 
   return (
     <Page testId="semantic-knowledge">
-      <Card label="Knowledge" testId="knowledge" right={<>
-        {entries.length > 0 && <span style={NUM}>{countNoun(entries.length, "entry", "entries")}</span>}
-        <Button size="xs" variant="ghost" onClick={startAdd}><Icon name="plus" size={12} />Add entry</Button>
+      <Card label="Definitions" testId="knowledge" right={<>
+        {entries.length > 0 && <span style={NUM}>{countNoun(entries.length, "definition", "definitions")}</span>}
+        <Button size="xs" variant="ghost" onClick={startAdd}><Icon name="plus" size={12} />Add a definition</Button>
         <ToolsMenu testId="knowledge-tools" items={[
           { label: rebuilding ? "Rebuilding…" : "Rebuild the search index", onSelect: rebuildIndex, disabled: rebuilding,
             title: "Re-reads every entry into the index answers retrieve them from" },
         ]} />
       </>}>
-        <Subtitle>Business facts — metric definitions, synonyms, join rules — the most relevant read into each answer.</Subtitle>
+        <Subtitle>What your business's words mean — metrics, synonyms, rules, joins — each written by a person and approved by its owner, the most relevant read into each answer.</Subtitle>
         {note && <p className="aug-fs-sm" style={{ color: "var(--grn4)", margin: "0 0 8px" }}>{note}</p>}
         {loading && <Loading what="glossary entries" />}
         {editId === null && <ErrorMsg msg={err} />}
-        {readErr && <ReadFailed what="the knowledge entries" error={readErr} onRetry={load} />}
-        {!loading && !readErr && entries.length === 0 && <Empty>No knowledge entries yet.</Empty>}
+        {readErr && <ReadFailed what="the definitions" error={readErr} onRetry={load} />}
+        {!loading && !readErr && entries.length === 0 && <Empty>No definitions yet.</Empty>}
 
         {entries.map((e, i) => (
           <div key={e.id} data-testid="knowledge-entry" style={{ ...ROW, flexWrap: "nowrap", alignItems: "flex-start", gap: 12,
@@ -413,6 +425,14 @@ function KnowledgeTab({ connId }: { connId: string }) {
                 <Chip>{KIND_WORD[e.kind] ?? e.kind}</Chip>
                 {e.tags.map(t => <span key={t} className="aug-fs-xs" style={MUTED}>#{t}</span>)}
               </div>
+              {e.standing && (
+                <div className="aug-fs-xs" style={{ ...MUTED, marginTop: 2 }}>
+                  {standingWords(e.standing)} ·{" "}
+                  <a href={`/definitions/${encodeURIComponent(e.title)}?conn=${encodeURIComponent(connId)}`}>
+                    {e.standing.tier === "approved" ? "Open" : "Open to approve"}
+                  </a>
+                </div>
+              )}
               <p className="aug-fs-sm" style={{ color: "var(--t2)", margin: "2px 0 0", lineHeight: 1.5 }}>{e.body}</p>
             </div>
             <RowTools what={e.title} onEdit={() => startEdit(e)} onDelete={() => deleteEntry(e.id)} />
@@ -424,9 +444,9 @@ function KnowledgeTab({ connId }: { connId: string }) {
           (PENDING item 28; near-matches stay unwired, ROADMAP §6 item 62). */}
       <MissedQuestions connId={connId} />
 
-      <FormDialog open={editId !== null} title={editId === "__new__" ? "New knowledge entry" : "Edit entry"}
+      <FormDialog open={editId !== null} title={editId === "__new__" ? "New definition" : "Change the definition"}
         onClose={() => { setEditId(null); setErr(""); }} onSave={saveEntry} saving={saving} error={err}>
-        <Input value={form.title} onChange={v => setForm(f => ({ ...f, title: v }))} label="Title / name *"
+        <Input value={form.title} onChange={v => setForm(f => ({ ...f, title: v }))} label="The word *"
           placeholder={KIND_HINTS[form.kind].title} hint="A short name the AI can match the user's question against" />
         <Input value={form.body} onChange={v => setForm(f => ({ ...f, body: v }))} label="Definition or rule *" multiline
           mono={form.kind === "metric" || form.kind === "join"}
@@ -436,8 +456,8 @@ function KnowledgeTab({ connId }: { connId: string }) {
             <label className="aug-fs-xs" style={{ color: "var(--t2)" }}>Kind</label>
             <Select value={form.kind} onChange={v => setForm(f => ({ ...f, kind: v }))} options={KNOWLEDGE_KINDS} label="Kind" />
           </div>
-          <Input value={form.tags} onChange={v => setForm(f => ({ ...f, tags: v }))} label="Tags"
-            placeholder="e.g. revenue, finance, north-star" hint="Comma-separated — helps grouping & retrieval" />
+          <Input value={form.tags} onChange={v => setForm(f => ({ ...f, tags: v }))} label="Other names for it"
+            placeholder="e.g. revenue, net bookings" hint="Comma-separated — the other words people use for it" />
         </div>
       </FormDialog>
     </Page>
@@ -646,7 +666,7 @@ function BenchmarksTab({ connId }: { connId: string }) {
 // Metrics leads: it is the governed answer to "what does this number mean", and the one tab whose contents the AI
 // reuses in every chart and answer. It was third, behind two tabs of annotation, so the definitions a connection already
 // carried were the last thing anyone saw.
-const TABS = ["Metrics", "Annotations", "Knowledge", "Benchmarks", "Import"];
+const TABS = ["Metrics", "Annotations", "Definitions", "Benchmarks", "Import"];
 //: The landing tab, and the one that carries no `?semtab=`. Derived from TABS so reordering the array cannot leave the
 //: default pointing at a tab that moved.
 const DEFAULT_TAB = TABS[0];
@@ -702,8 +722,10 @@ export function SemanticLayerPanel({ connectionId, connName, connections = [] }:
   // URL sync starts from location.search and only touches its own params, so semtab survives its rewrites.
   const [activeTab, setActiveTab] = useState<string>(() => {
     if (typeof window === "undefined") return DEFAULT_TAB;
-    const want = new URLSearchParams(window.location.search).get("semtab") ?? "";
-    return TABS.find(t => t.toLowerCase() === want.toLowerCase()) ?? DEFAULT_TAB;
+    // "knowledge" is the tab's name from before it was Definitions: a link kept from then still opens it.
+    const asked = (new URLSearchParams(window.location.search).get("semtab") ?? "").toLowerCase();
+    const want = asked === "knowledge" ? "definitions" : asked;
+    return TABS.find(t => t.toLowerCase() === want) ?? DEFAULT_TAB;
   });
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -807,7 +829,7 @@ export function SemanticLayerPanel({ connectionId, connName, connections = [] }:
       <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }} key={activeConn}>
         {activeTab === "Metrics"     && <MetricsPanel connId={activeConn} schema={metricsSchema || undefined} datasets={schemas} />}
         {activeTab === "Annotations" && <AnnotationsTab connId={activeConn} scopeTable={scopeTable} />}
-        {activeTab === "Knowledge"   && <KnowledgeTab   connId={activeConn} />}
+        {activeTab === "Definitions" && <KnowledgeTab   connId={activeConn} />}
         {activeTab === "Benchmarks"  && <BenchmarksTab  connId={activeConn} />}
         {activeTab === "Import"      && (
           <Page testId="semantic-import"><IntakePanel connId={activeConn} schema={scopeSchema} /></Page>

@@ -35,6 +35,10 @@ POLICY: dict[tuple[str, str], Optional[P]] = {
     ("GET", "/rbac/assignments"): P.ADMIN_MANAGE_ROLES,
     ("POST", "/rbac/assignments"): P.ADMIN_MANAGE_ROLES,
     ("DELETE", "/rbac/assignments"): P.ADMIN_MANAGE_ROLES,
+    # People (2026-11-15) — the directory names people, their managers and teams, and an import moves group
+    # memberships: role administration.
+    ("GET", "/rbac/directory"): P.ADMIN_MANAGE_ROLES,
+    ("POST", "/rbac/directory/import"): P.ADMIN_MANAGE_ROLES,
     # HB-1 — groups and level grants sit with role administration (they decide who
     # receives what and who may touch what). The member and grant LISTS are gated
     # too, like /rbac/assignments: they name people. /groups (names + channels) and

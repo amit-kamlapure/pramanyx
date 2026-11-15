@@ -345,7 +345,9 @@ export interface ChatTurn {
   fromCache: boolean;
   cachedQuestion: string | null;
 
-  inspectWarning: { issues: string[]; suggestedFix: string } | null;
+  /** What the platform says is wrong with the answer. `kind` "not_what_was_asked" is a verdict it checked on the
+   *  rows (the result gate); with no kind it is a model's suspicion. */
+  inspectWarning: { issues: string[]; suggestedFix: string; kind?: string } | null;
   playbookRefs: PlaybookRef[];
 
   narrative: {
@@ -620,6 +622,7 @@ const PART_PROJECTORS: Record<string, (t: ChatTurn, d: Payload) => void> = {
     t.inspectWarning = {
       issues: (d.issues as string[]) ?? [],
       suggestedFix: (d.suggested_fix as string) ?? "",
+      ...(typeof d.kind === "string" && d.kind ? { kind: d.kind } : {}),
     };
   },
   playbook_refs: (t, d) => { t.playbookRefs = (d.items as PlaybookRef[]) ?? []; },

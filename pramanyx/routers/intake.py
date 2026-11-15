@@ -282,6 +282,14 @@ def mine_knowledge(body: MineIn, request: Request):
     except KeyError:
         raise HTTPException(status_code=404, detail="Knowledge connection not found")
     meta = get_meta(body.knowledge_connection_id)
+    # Mining stages definitions the whole organisation reads. A source whose pages are not the organisation's to
+    # read is not mined into it: the definition would carry a restricted page's words past its restriction.
+    if str(meta.get("audience") or "").strip().lower() != "org":
+        from pramanyx.security.authz import require_identity_enabled
+        if require_identity_enabled():
+            raise HTTPException(status_code=409, detail=(
+                "This source's pages are not open to the whole organisation, and mined definitions are: its pages "
+                "are not mined. The person who connected it can open it to the organisation (audience: org)."))
     try:
         if conn_type == "confluence":
             from pramanyx.connectors.knowledge.confluence import ConfluenceSync

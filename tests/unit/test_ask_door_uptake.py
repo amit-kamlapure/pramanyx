@@ -97,6 +97,44 @@ def test_the_ask_door_records_the_focus_on_its_request_event():
     assert mine and mine[0]["payload"]["focus"] == {"kind": "departure", "id": "held-q"}
 
 
+def test_a_question_the_coworker_claimed_is_recorded_inside_the_coworkers_turn(monkeypatch):
+    """One question, one trace. The coworker says which step of which turn is asking; the run then writes under that
+    trace and inside that step, and does not open and close a run of its own — the turn's request and end are the
+    coworker's to record, and written twice they would read as two runs."""
+    import asyncio
+
+    from pramanyx import telemetry
+    from pramanyx.org.context import current_session_id
+    from pramanyx.routers import coworker
+    from pramanyx.routers.investigations import stream_with_session_log
+
+    monkeypatch.setattr(coworker, "_claims", [{
+        "trace_id": "cw-88f4fdd19a454d47-7", "session": "session-88f4", "span_id": "call_9",
+        "question": "claimed by the coworker?", "connection": "c1", "at": coworker._now()}])
+    during = {}
+
+    async def _body():
+        during["trace"], during["session"] = telemetry.current_trace_id(), current_session_id()
+        with telemetry.mlflow_tool_span("inside the answer"):
+            pass
+        yield "data: " + json.dumps({"type": "done", "inv_id": "t1"}) + "\n\n"
+
+    async def _drain():
+        return [c async for c in stream_with_session_log(_body(), question="claimed by the coworker?", conn_id="c1", door="chat")]
+
+    (done,) = [json.loads(c[6:]) for c in asyncio.run(_drain())]
+    assert during == {"trace": "cw-88f4fdd19a454d47-7", "session": "coworker:session-88f4"}
+    assert done == {"type": "done", "inv_id": "t1"}                 # the frame is delivered as it was sent
+    from pramanyx.kernel.ledger import Ledger
+    mine = Ledger.default().session_events(trace_id="cw-88f4fdd19a454d47-7", limit=50)
+    kinds = {e["kind"] for e in mine}
+    assert session_log.USER_REQUEST not in kinds and session_log.FINAL_RESPONSE not in kinds
+    # What the platform did to answer hangs from the coworker's tool call.
+    spans = [e for e in mine if e["kind"] == session_log.TOOL_CALL]
+    assert spans and {e["parent_span_id"] for e in spans} == {"call_9"}
+    assert coworker._claims == [] and telemetry.current_trace_id() == "" and current_session_id() == ""
+
+
 def test_both_meters_are_served_on_one_spotlight_route():
     """SP-M's vocabulary meter had no route at all; it and the Ask door's share one door now."""
     body = client.get("/spotlight/uptake").json()

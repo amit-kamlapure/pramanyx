@@ -364,8 +364,10 @@ async def propose_user_agent(body: AgentProposeRequest):
 
     documents: list[dict] = []
     try:
-        from pramanyx.knowledge.indexer import list_documents
-        documents = list_documents() or []
+        from pramanyx.knowledge.indexer import in_scope, list_documents
+        from pramanyx.security.authz import tenant_scope
+        # Only what the person proposing the agent may read: an agent bound to a page they cannot see would hand it on.
+        documents = [d for d in (list_documents() or []) if in_scope(d, org_id=tenant_scope())]
     except Exception as exc:
         from pramanyx.kernel.errors import tolerate
         tolerate(exc, "agent proposal document read", counter="agents.propose_documents")

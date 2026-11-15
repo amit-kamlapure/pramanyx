@@ -396,6 +396,42 @@ def slack_bots_heartbeat(body: HeartbeatBody, request: Request):
             "running": len(row["running"]), "failed": len(row["failed"])}
 
 
+# ── What was said in the bot's channels, as knowledge (the coworker plan, 2026-11-15) ───────────────────────
+
+@router.post("/slack-bots/{bot_id}/knowledge-sync", status_code=202)
+async def sync_slack_knowledge(bot_id: str, request: Request):
+    """Read the channels this bot is in into the document index, each day readable by the channel's members only
+    (`connectors/knowledge/slack.py`). Runs in the background; its status says what was read and what Slack refused."""
+    from pramanyx.security.authz import acting_person, get_principal
+    bot = store.get_bot_decrypted(bot_id)
+    if bot is None:
+        raise HTTPException(status_code=404, detail="no such slack bot")
+    who = acting_person(get_principal(request))
+
+    async def _run():
+        import asyncio
+
+        from pramanyx.connectors.knowledge.slack import SlackSync
+        try:
+            result = await asyncio.to_thread(SlackSync(bot_id, bot.bot_token, {"connected_by": who}).sync)
+            logger.info("Slack knowledge sync for %s: %s", bot_id, result)
+        except Exception as exc:  # noqa: BLE001 — a background sync's failure is logged and on its status
+            logger.warning("Slack knowledge sync failed for %s: %s", bot_id, exc)
+
+    from pramanyx.kernel.concurrency import spawn
+    spawn(_run(), name=f"slack-knowledge-{bot_id}")
+    return {"message": f"Reading the channels {bot.name or bot_id} is in", "async": True}
+
+
+@router.get("/slack-bots/{bot_id}/knowledge-sync/status")
+def slack_knowledge_status(bot_id: str):
+    from pramanyx.connectors.knowledge.slack import SlackSync
+    bot = store.get_bot_decrypted(bot_id)
+    if bot is None:
+        raise HTTPException(status_code=404, detail="no such slack bot")
+    return SlackSync(bot_id, bot.bot_token or "unused").status()
+
+
 @router.get("/slack-bots/{bot_id}")
 def get_slack_bot(bot_id: str):
     bot = store.get_bot(bot_id)

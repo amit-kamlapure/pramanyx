@@ -469,6 +469,15 @@ _DIM_NOUN_RE = re.compile(
 _GROUP_ID_COL_RE = re.compile(r"(^|_)(id|key|code|sk|pk)$|_id$|_key$|_code$", re.I)
 
 
+#: The result gate's verdict (`sql/grain_intent.result_finer_than_asked`), as the `inspect_warning` frame names it
+#: and as the answer's headline says it.
+NOT_AS_ASKED = "not_what_was_asked"
+NOT_AS_ASKED_HEADLINE = "This does not answer the question as asked"
+
+#: The checks that are pure functions of the SQL, asked of every repair — see `_checks_still_firing`.
+_REPAIR_CHECKS = frozenset({"fanout", "idmath", "ratio", "grain", "chasm"})
+
+
 def _checks_still_firing(sql: str, triggered: set[str], *, question: str, dialect: str,
                          full_cols: dict, schema_cols: dict) -> list[str]:
     """Which of the SQL-only checks in ``triggered`` still fire on ``sql`` — the repaired query.
@@ -1157,7 +1166,10 @@ class _FollowUpBase(BaseModel):
 class _NarrativeResult(BaseModel):
     """The prose enrichment attached to a quick answer — anomaly detection, trend, comparison."""
     narrative: str = Field(default="", description="2-3 tight sentences that lead with the answer and wrap decisive numbers in **bold**.")
-    anomalies: list[str] = Field(default_factory=list, description="List of detected anomalies or unexpected patterns.")
+    anomalies: list[str] = Field(default_factory=list, description=(
+        "Only what genuinely stands out in these rows: an outlier, a break in the pattern, one value far from the "
+        "rest. An EMPTY list when nothing does — never a sentence saying nothing stands out. Not the ranking or the "
+        "answer restated, and not a doubt about the query."))
     trend: str = Field(default="stable", description="One of: up, down, stable, mixed.")
     confidence: str = Field(default="medium", description="One of: high, medium, low.")
 
@@ -1339,6 +1351,37 @@ def _ground_headline(headline, columns, rows):
     if cat_idx is not None and len(rows) > 1 and cat_idx < len(rows[0]):
         return f"{rows[0][cat_idx]} leads {metric.lower()} at {fval}"
     return f"{metric}: {fval}"
+
+
+def _quick_column_units(connection_id: str, schema_name: Optional[str], sql: str, columns) -> dict[str, str]:
+    """`{column: "currency:EUR"}` for a quick answer's money columns, by the rules a deep finding's are tagged by:
+    the SOURCE currency the statement itself names (`gmv_eur` → EUR, `agent/investigate._tag_currency_columns`),
+    else the currency a PERSON confirmed for the dataset — never a default and never a model's guess. A column that
+    is not money, and a dataset with neither, are left unlabelled."""
+    try:
+        from pramanyx.agent.investigate import money_column_units
+        from pramanyx.orgsettings import figure_currency
+        return money_column_units(columns, sql, figure_currency(connection_id, schema_name))
+    except Exception as exc:  # noqa: BLE001 — unlabelled is the honest fallback
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "a quick answer's column units could not be read; its figures print unlabelled",
+                 counter="chat.column_units")
+        return {}
+
+
+_NOTHING_STANDS_OUT = re.compile(
+    r"^\s*(?:there\s+(?:are|is|were|was)\s+)?(?:no|none|nothing|not\s+any)\b"
+    r"|\bno\s+(?:\w+\s+){0,2}(?:anomal\w*|outliers?|spikes?|surprises?|irregularit\w*|unusual\w*|unexpected\w*)\b"
+    r"|\bnothing\s+(?:\w+\s+){0,2}stands?\s+out\b"
+    r"|\b(?:the\s+)?(?:query|sql|result)\s+(?:groups|returns|uses|filters|does|is)\b", re.I)
+
+
+def stands_out(items) -> list[str]:
+    """What the narrator named as standing out, less what is not a finding: a sentence saying nothing stands out
+    ("No unexpected spikes or outliers…"), and a doubt about the query, which is the result gate's and the inspect's
+    to say, where a reader sees it as one. Measured 2026-11-14: of the live answers whose narrative named anything,
+    the commonest item said there was nothing to name, and it was shown under "What stands out"."""
+    return [str(x).strip() for x in (items or []) if isinstance(x, str) and x.strip() and not _NOTHING_STANDS_OUT.search(x)]
 
 
 def resolve_currency_symbol(connection_id: str, schema_name: Optional[str]) -> str:
@@ -2925,23 +2968,55 @@ def _answer_core(
         if not result.error and result.row_count == 0:
             _chat_zero_diag = _zero_row_suspicious(final_sql)
             _checked.append("zero-row")
+        # THE RESULT, AGAINST WHAT WAS ASKED — the gate between the rows and the headline. Every check above reads
+        # the SQL; this one reads what came back. A total asked "by status" that returns many rows per status is
+        # not that total, whatever query made it. It asks for a repair like any other check, is asked again of the
+        # repair's result, and when no query answers as asked the answer SAYS SO at its head (`_not_as_asked`,
+        # below) — it is not left to the reader to notice 500 rows under a headline about three statuses.
+        from pramanyx.sql.grain_intent import result_finer_than_asked as _finer_than_asked
+        _shape = None if result.error else _finer_than_asked(question, result.columns or [], result.rows or [])
+        _shape_fix_hint = _shape.diagnosis if _shape else ""
+        if not result.error:
+            _checked.append("result-shape")
 
         # Also trigger a rewrite when semantic column warnings exist, even if
         # the SQL executed successfully (wrong columns produce wrong results silently).
-        if result.error or _chat_zero_diag or _semantic_fix_hint or _fanout_fix_hint or _scope_fix_hint or _filter_fix_hint or _grain_fix_hint or _idmath_fix_hint or _ratio_fix_hint or _chasm_fix_hint:
+        if result.error or _chat_zero_diag or _shape_fix_hint or _semantic_fix_hint or _fanout_fix_hint or _scope_fix_hint or _filter_fix_hint or _grain_fix_hint or _idmath_fix_hint or _ratio_fix_hint or _chasm_fix_hint:
             _writer2 = SqlWriter(db, schema_str=schema)
             _fix_error = (
                 result.error or
                 (_scope_fix_hint if _scope_fix_hint else None) or
                 (_filter_fix_hint if _filter_fix_hint else None) or
                 (_grain_fix_hint if _grain_fix_hint else None) or
+                (_shape_fix_hint if _shape_fix_hint else None) or
                 (_idmath_fix_hint if _idmath_fix_hint else None) or
                 (_ratio_fix_hint if _ratio_fix_hint else None) or
                 (_semantic_fix_hint if _semantic_fix_hint else None) or
                 (_fanout_fix_hint if _fanout_fix_hint else None) or
                 "Query returned 0 rows — the SQL logic is likely wrong."
             )
-            _combined_hint = " | ".join(filter(None, [_chat_zero_diag or "", _scope_fix_hint, _filter_fix_hint, _grain_fix_hint, _idmath_fix_hint, _ratio_fix_hint, _semantic_fix_hint, _fanout_fix_hint, _chasm_fix_hint]))
+            _combined_hint = " | ".join(filter(None, [_chat_zero_diag or "", _scope_fix_hint, _filter_fix_hint, _grain_fix_hint, _shape_fix_hint, _idmath_fix_hint, _ratio_fix_hint, _semantic_fix_hint, _fanout_fix_hint, _chasm_fix_hint]))
+            # THE ONE PLACE USAGE IS REFERRED TO. The first attempt was inconclusive — it failed, returned nothing, or
+            # was not what was asked — so the repair is told how people query this data themselves, mined from the
+            # warehouse's own history: a pointer, said as unconfirmed, never ground. An answer that came out
+            # conclusive never reads it.
+            if result.error or _chat_zero_diag or _shape_fix_hint:
+                try:
+                    from pramanyx.record.writers import usage_for
+                    _usage = usage_for(connection_id, question=question, sql=final_sql)
+                    if _usage:
+                        _combined_hint += (" | FROM THIS WAREHOUSE'S OWN QUERY HISTORY (what people ran; mined, "
+                                           "confirmed by no one — use only if it fits): "
+                                           + "; ".join(c.statement.text for c in _usage))
+                        _receipt({"guard": "usage_history", "action": "referred",
+                                  "detail": (f"the first attempt was inconclusive, so {len(_usage)} thing"
+                                             f"{'s' if len(_usage) != 1 else ''} people do in this warehouse's own "
+                                             "query history were given to the repair: "
+                                             + "; ".join(c.statement.text for c in _usage))[:1500]})
+                except Exception as exc:
+                    from pramanyx.kernel.errors import tolerate
+                    tolerate(exc, "usage claims for an inconclusive answer are best-effort; the repair runs without them",
+                             counter="chat.usage_history")
             try:
                 fix = _writer2.fix(final_sql, _fix_error, hint=_combined_hint, max_retries=2)
                 if fix.ok:
@@ -2954,10 +3029,22 @@ def _answer_core(
                                                     ("grain", _grain_fix_hint),
                                                     ("chasm", _chasm_fix_hint)) if _h}
                     from pramanyx.db.schema_render import parse_schema_tables as _pst_recheck
-                    _still = _checks_still_firing(
-                        fix.sql, _triggered, question=question, dialect=db.dialect,
+                    # And every SQL-only check is asked of the repair, not only the ones that asked for it: a
+                    # repair made for one reason can break something else. On Lux (2026-11-14) "total GMV by order
+                    # status" was first written right (3 rows); a repair asked for by another check regrouped it
+                    # by order_id and status (146,621 rows) and was adopted, because grain had not fired on the
+                    # original and so was not asked of the repair. A check the original passed and the repair
+                    # trips is the repair's doing; the original stands.
+                    _firing = _checks_still_firing(
+                        fix.sql, set(_REPAIR_CHECKS), question=question, dialect=db.dialect,
                         full_cols=_pst_recheck(_full_schema),
-                        schema_cols=_pst_recheck(schema)) if _triggered else []
+                        schema_cols=_pst_recheck(schema))
+                    _still = [_n for _n in _firing if _n in _triggered]
+                    _broke = [_n for _n in _firing if _n not in _triggered]
+                    # The repair's RESULT is asked what the original's was: broken down further than the question
+                    # asked, it is not adopted — whether the original was too (still) or was not (the repair's doing).
+                    if not retry.error and _finer_than_asked(question, retry.columns or [], retry.rows or []):
+                        (_still if _shape else _broke).append("result shape")
                     # The filter guard is asked again of EVERY model repair, although it probes the warehouse
                     # (one DISTINCT per filtered column, on this path only): the model writes a new statement,
                     # and the one it wrote on theLook put back the literal the pre-flight had fixed.
@@ -2967,18 +3054,21 @@ def _answer_core(
                         _frun_fix = _fdc_re(db, fix.sql)
                         if not filter_repair_holds(_frun, _frun_fix):
                             _still = [*_still, "filter"]
-                    if _still:
+                    if _still or _broke:
                         _receipt({
                             "guard": "repair_recheck", "action": "kept_original",
-                            "detail": (f"the repair still trips {', '.join(_still)}, so it was "
-                                       "not adopted and the original query stands"),
+                            "detail": ("; ".join(filter(None, [
+                                f"the repair still trips {', '.join(_still)}" if _still else "",
+                                f"the repair trips {', '.join(_broke)}, which the original did not" if _broke else "",
+                            ])) + ", so it was not adopted and the original query stands"),
                             "before": final_sql[:2000], "after": fix.sql[:2000]})
-                    elif not retry.error and (retry.row_count > 0 or not _chat_zero_diag or _semantic_fix_hint or _fanout_fix_hint or _scope_fix_hint or _filter_fix_hint or _grain_fix_hint or _idmath_fix_hint or _ratio_fix_hint):
+                    elif not retry.error and (retry.row_count > 0 or not _chat_zero_diag or _shape_fix_hint or _semantic_fix_hint or _fanout_fix_hint or _scope_fix_hint or _filter_fix_hint or _grain_fix_hint or _idmath_fix_hint or _ratio_fix_hint):
                         # The adopted repair is said too (PENDING item 23): the query shown changed with no
                         # word of why, and the pair — a query that failed or tripped a check, and the one that
                         # ran clean — was kept nowhere.
                         _fired = [_n for _n, _h in (("scope", _scope_fix_hint), ("filter", _filter_fix_hint),
-                                                    ("grain", _grain_fix_hint), ("id arithmetic", _idmath_fix_hint),
+                                                    ("grain", _grain_fix_hint), ("result shape", _shape_fix_hint),
+                                                    ("id arithmetic", _idmath_fix_hint),
                                                     ("ratio", _ratio_fix_hint), ("columns", _semantic_fix_hint),
                                                     ("fan-out", _fanout_fix_hint), ("chasm", _chasm_fix_hint)) if _h]
                         _receipt({
@@ -3033,9 +3123,22 @@ def _answer_core(
                 approach=list(answer.approach or []),
                 trusted=list(_trusted_used or []))
 
+        # The verdict on the result that answers, after any repair: asked once more, of the rows about to be shown.
+        _not_as_asked = _finer_than_asked(question, result.columns or [], result.rows or [])
+        if _not_as_asked is not None:
+            _receipt({
+                "guard": "result_shape", "action": "said_not_as_asked",
+                "detail": (_not_as_asked.said + (" A repair was tried and did not answer as asked either."
+                                                 if _shape else "")),
+                "before": final_sql[:2000]})
+
         # Ground the headline in the ACTUAL rows — the coder's headline is a pre-execution
         # prediction and can contradict the data it ran on.
         _grounded_headline = _ground_headline(answer.headline, result.columns, result.rows)
+        if _not_as_asked is not None:
+            # A headline is a finding, and there is none: the rows are not what was asked for. The answer says that
+            # where the finding would be, and why beside it (the `inspect_warning` below).
+            _grounded_headline = NOT_AS_ASKED_HEADLINE
         _rcpt["grounded"] = (_grounded_headline or "") != (answer.headline or "")
         if _rcpt["grounded"]:
             _receipt({
@@ -3142,11 +3245,20 @@ def _answer_core(
         _exh = quick_exhibit(result.columns, result.rows, answer.chart_type)
         if _exh:
             answer.chart_config = {**(answer.chart_config or {}), "exhibit": _exh}
+        # What each column is a figure OF — its currency — rides the same way, so a caller that draws the answer
+        # (the coworker) prints €17.9m where it printed 17857124.67, by the same rule the headline is labelled by.
+        _units = _quick_column_units(connection_id, canvas_scope_eff_schema, final_sql, result.columns)
+        if _units:
+            answer.chart_config = {**(answer.chart_config or {}), "column_units": _units}
         # `doors` rides the frame that says the statement ran (GM-3); the web reads `columns` alone from it.
         emit("columns", {"columns": result.columns, "doors": list(result.doors or [])})
         emit("rows", {"rows": result.rows[:10000]})
         _grounded_headline = _apply_currency(_grounded_headline, _cur_sym)
         emit("headline", {"headline": _grounded_headline})
+        if _not_as_asked is not None:
+            # The frame an answer already carries its doubts on, shown under the headline; `kind` says this one is
+            # a verdict the platform checked, not a model's suspicion.
+            emit("inspect_warning", {"issues": [_not_as_asked.said], "suggested_fix": "", "kind": NOT_AS_ASKED})
         emit("chart_type", {"chart_type": answer.chart_type})
         if answer.chart_config:
             emit("chart_config", {"chart_config": answer.chart_config})
@@ -3421,7 +3533,7 @@ def _answer_core(
             if _narrative_worth_it and _pa.narrative:
                 _narrative_dict = {
                     "narrative": _apply_currency(_pa.narrative, _cur_sym),
-                    "anomalies": _pa.anomalies[:3],
+                    "anomalies": stands_out(_pa.anomalies)[:3],
                     "trend": _pa.trend,
                     "confidence": _pa.confidence,
                 }
@@ -3450,16 +3562,15 @@ def _answer_core(
             tolerate(exc, "post-answer narrative/follow-up enrichment is best-effort; the answer is already done",
                      counter="chat.post_answer")
 
-        # Semantic inspect — logical validation. Phase 3 of the ground-first
-        # redesign: when the resolution ran, its verdict already settled entity /
-        # grain / measure / scope (the exact five things this LLM re-checks), so we
-        # SKIP the redundant round-trip — the first guard the resolution replaces
-        # rather than adds to. (Deletion roadmap — the other post-hoc guards it
-        # subsumes: entity-column alignment, breakdown-grain, id-arithmetic
-        # guard+backstop, ratio-of-sums, measure-grain caveat, scope guard — are
-        # staged follow-ons, not removed here.) When it runs (resolution off), it
-        # is grounded on the schema slice so it cannot invent columns.
-        if _resolution is None:
+        # Semantic inspect — the model-based judge: does this statement, with these rows, answer the question?
+        # From Phase 3 of the ground-first redesign until 2026-11-14 it was SKIPPED whenever the resolution ran, on
+        # the premise that the resolution's verdict had already settled entity, grain, measure and scope. The receipt
+        # of 2026-11-14 falsified that for grain (a per-order result under a headline about statuses, resolution
+        # run, nothing said), and the resolution judges the question BEFORE the SQL is written or repaired, so it
+        # cannot see what a repair did. The judge reads the statement that answers, so it runs on every answer the
+        # result gate did not already rule on: one narrator call. It is grounded on the schema slice so it cannot
+        # invent columns, and its word is a suspicion ("may"), where the gate's is a verdict.
+        if _not_as_asked is None:
             try:
                 from pramanyx.sql.inspect import inspect as _inspect_sql
                 _ir = _inspect_sql(question, final_sql, result.columns, result.rows,
@@ -6260,22 +6371,35 @@ async def stream_with_session_log(
     import uuid as _uuid
     from pramanyx import telemetry as _tel
 
-    run_id = _uuid.uuid4().hex[:8]
+    # A question the coworker asked is a step of the coworker's turn, and its work is recorded INSIDE that turn's
+    # trace and that step — not as a second run beside it (`routers/coworker.py`). The turn's own request and end are
+    # the coworker's to record, so neither is written again here; a failure still is.
+    from contextlib import ExitStack
+    from pramanyx.org.context import reset_session_id, set_session_id
+    from pramanyx.routers.coworker import claimed_for
+    claim = claimed_for(question, conn_id)
+    run_id = claim["trace_id"] if claim else _uuid.uuid4().hex[:8]
     inv_id: str | None = None
     failed: str | None = None
     headline: str = ""
     receipt_id: str | None = None
     t0 = _t.monotonic()
     # Arc TC, TC-2 — the turn is a run too, named by the same id as its trace: an edit or an action it makes says so
-    with _tel.bind_trace(run_id), _tel.bind_run(run_id, "chat"):
-        session_log.emit(
-            session_log.USER_REQUEST, name=door, trace_id=run_id, conn_id=conn_id,
-            payload={"question": question, "depth": depth, "canvas_id": canvas_id,
-                     "schema": schema, "purpose": purpose, "agent_id": agent_id,
-                     # SP-15 — the object the palette was summoned from ({kind, id}), so
-                     # the Ask door's uptake is a reading of the log, not a guess.
-                     **({"focus": focus} if focus else {})},
-        )
+    with ExitStack() as _bound:
+        _bound.enter_context(_tel.bind_trace(run_id))
+        _bound.enter_context(_tel.bind_run(run_id, "chat"))
+        if claim:
+            _bound.enter_context(_tel.bind_parent_span(claim["span_id"]))
+            _bound.callback(reset_session_id, set_session_id(f"coworker:{claim['session']}"))
+        if not claim:
+            session_log.emit(
+                session_log.USER_REQUEST, name=door, trace_id=run_id, conn_id=conn_id,
+                payload={"question": question, "depth": depth, "canvas_id": canvas_id,
+                         "schema": schema, "purpose": purpose, "agent_id": agent_id,
+                         # SP-15 — the object the palette was summoned from ({kind, id}), so
+                         # the Ask door's uptake is a reading of the log, not a guess.
+                         **({"focus": focus} if focus else {})},
+            )
         try:
             async for event in stream:
                 if any(h in event for h in _SESSION_LOG_SNIFF):
@@ -6316,14 +6440,15 @@ async def stream_with_session_log(
             )
             raise
         finally:
-            session_log.emit(
-                session_log.FINAL_RESPONSE, name=door, trace_id=run_id,
-                investigation_id=inv_id, conn_id=conn_id, ok=failed is None,
-                duration_ms=round((_t.monotonic() - t0) * 1000, 1),
-                payload={**({"headline": headline} if headline else {}),
-                         **({"receipt_id": receipt_id} if receipt_id else {}),
-                         **({"error": failed} if failed else {})},
-            )
+            if not claim:
+                session_log.emit(
+                    session_log.FINAL_RESPONSE, name=door, trace_id=run_id,
+                    investigation_id=inv_id, conn_id=conn_id, ok=failed is None,
+                    duration_ms=round((_t.monotonic() - t0) * 1000, 1),
+                    payload={**({"headline": headline} if headline else {}),
+                             **({"receipt_id": receipt_id} if receipt_id else {}),
+                             **({"error": failed} if failed else {})},
+                )
 
 
 async def _stream_with_session(session_id: str, stream: AsyncGenerator[str, None],
@@ -6349,8 +6474,7 @@ async def _stream_with_session(session_id: str, stream: AsyncGenerator[str, None
     token = set_session_id(session_id or "")
     user_token = None
     if principal_ref and not current_user_id():
-        from pramanyx.identity.resolver import attribution_key
-        user_token = set_user_id(attribution_key(principal_ref))
+        user_token = set_user_id(said_asker(principal_ref))
     try:
         async for event in stream:
             yield event
@@ -6358,6 +6482,22 @@ async def _stream_with_session(session_id: str, stream: AsyncGenerator[str, None
         if user_token is not None:
             reset_user_id(user_token)
         reset_session_id(token)
+
+
+#: The doors that name an outside asker by a prefix of their own (`routers/doors.py`, the MCP client).
+_DOOR_PREFIXES = ("api:", "teams:", "slack:", "webhook:", "a2a:", "automation:", "agent-ops")
+
+
+def said_asker(principal_ref: str) -> str:
+    """Who a body says is asking, kept as what it is: a label a caller chose (People, 2026-11-15). Until then it went
+    through the identity links and became the request's person, which document access and every write read — so a
+    body saying ``slack:U…`` was that linked person, and one saying ``ana@example.com`` was Ana. Now it is never a
+    person: a door's own prefix stays as the door wrote it, and anything else is marked ``said:``. A person comes
+    from sign-in or a delegation, never from a body."""
+    raw = str(principal_ref or "").strip()[:128]
+    if not raw:
+        return ""
+    return raw if raw.startswith(_DOOR_PREFIXES) else f"said:{raw}"
 
 
 def _job_id_for_investigation(inv_id: str) -> Optional[str]:
@@ -6600,7 +6740,8 @@ def investigation_envelope(inv_id: str, principal=Depends(get_principal)) -> dic
 @router.get("/investigations/{inv_id}/export")
 def export_investigation(inv_id: str, format: str = "pdf", narrate: bool = False,
                          principal=Depends(get_principal)):
-    """Download a stored analysis as a polished PDF or PowerPoint (`format=pdf|pptx`).
+    """Download a stored analysis as PDF, PowerPoint, Excel or Word (`format=pdf|pptx|xlsx|docx`). Built from the
+    answer's stored report, never from code a model wrote; Excel carries every stored row.
 
     `narrate=true` prepends an LLM-authored executive summary (best-effort; the
     export still succeeds if the model is slow or unavailable)."""
@@ -6612,8 +6753,8 @@ def export_investigation(inv_id: str, format: str = "pdf", narrate: bool = False
     if not inv:
         raise HTTPException(status_code=404, detail="Investigation not found")
     fmt = (format or "pdf").lower()
-    if fmt not in ("pdf", "pptx"):
-        raise HTTPException(status_code=400, detail="format must be 'pdf' or 'pptx'")
+    if fmt not in ("pdf", "pptx", "xlsx", "docx"):
+        raise HTTPException(status_code=400, detail="format must be one of pdf, pptx, xlsx, docx")
 
     # Imported after the authz/existence checks so a caller who may not read this
     # investigation learns nothing about the deployment's configuration, and guarded

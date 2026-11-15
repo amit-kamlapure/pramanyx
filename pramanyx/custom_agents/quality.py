@@ -270,6 +270,11 @@ def evaluate_agent(agent: UserAgent, db=None,
         tolerate(exc, "dialect rules for agent eval are best-effort",
                  counter="agents.eval_dialect_rules")
 
+    # The check is a run of its own, named for what it is, so Agent Ops lists it and its spend is the agent's.
+    from pramanyx.obs.own_run import own_run
+    _run = own_run("agent_eval", f"Checking the agent {agent.name or agent.id} against {len(goldens)} certified "
+                   f"question{'s' if len(goldens) != 1 else ''}", conn_id=agent.connection_id or "")
+    _run.__enter__()
     token = activate_agent(agent)
     try:
         for g in goldens:
@@ -306,6 +311,7 @@ def evaluate_agent(agent: UserAgent, db=None,
                 result["passed"] += 1
     finally:
         release_agent(token)
+        _run.__exit__(None, None, None)
 
     result["duration_ms"] = round((time.monotonic() - started) * 1000, 1)
     # AO-6/AO-7d — what changed since the last stamp rides on the result: the goldens that
