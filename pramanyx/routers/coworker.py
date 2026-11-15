@@ -45,8 +45,10 @@ import time
 from typing import Any, Literal, Optional
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
+
+from pramanyx.security.authz import connection_owner_guard
 
 router = APIRouter(tags=["coworker"])
 
@@ -180,9 +182,10 @@ class CoworkerClaim(BaseModel):
     connection: str = Field(default="", max_length=80)
 
 
-@router.put("/coworker/claim", status_code=204)
+@router.put("/coworker/claim", status_code=204, dependencies=[Depends(connection_owner_guard)])
 def claim_the_next_answer(body: CoworkerClaim, request: Request) -> None:
-    """Said by the coworker just before it asks: the answer to this question belongs inside this step of this turn."""
+    """Said by the coworker just before it asks: the answer to this question belongs inside this step of this turn.
+    The connection it names is asked whose it is (DATA-06), like every door that takes one in its body."""
     if not _on_this_machine(request.client.host if request.client else None):
         raise HTTPException(status_code=403, detail="Only a coworker on this machine may claim an answer.")
     if not TRACE_NAME.match(body.trace_id) or not _SESSION_NAME.match(body.session):
