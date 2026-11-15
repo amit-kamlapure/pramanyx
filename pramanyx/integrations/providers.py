@@ -138,6 +138,11 @@ PROVIDERS: dict[str, Provider] = {p.id: p for p in [
         products=[
             Product(id="gmail", name="Gmail", blurb="Search and read your email.",
                     scopes=_GOOGLE_AUTH + "gmail.readonly"),
+            # 2026-11-15 — an automation's answer sent as email (`automations/email.py`). Its own card, so reading mail
+            # and sending it are two consents: the narrowest scope that sends, and it cannot read.
+            Product(id="gmail_send", name="Gmail · send",
+                    blurb="Send an automation's answer as email, from this account, to the address its step names.",
+                    scopes=_GOOGLE_AUTH + "gmail.send"),
             Product(id="sheets", name="Google Sheets", blurb="Read the cells of a spreadsheet.",
                     scopes=_GOOGLE_AUTH + "spreadsheets.readonly"),
             Product(id="slides", name="Google Slides", blurb="Read the text of a presentation, slide by slide.",
