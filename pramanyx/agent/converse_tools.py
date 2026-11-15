@@ -211,6 +211,35 @@ def run_sql(connection_id: str, args: dict, *, emit: Optional[Emit] = None,
     return out
 
 
+def answering_result(answer: str, results: list[dict]) -> int:
+    """Which of a turn's query results the answer stands on: the one whose rows hold the most of the figures the
+    answer states (within a writer's rounding), the latest on a tie. -1 when there is nothing to choose.
+
+    A turn may run several queries — a check of the data, then the one that answers, or the answer first and a check
+    after. Until 2026-11-15 the result shown with the answer was simply the last one run, so a sanity query run after
+    the real one became "the answer": a one-row count where ten centres were asked for, a status cross-tab under a
+    question about brands (golden set, 2026-11-14). Chosen by what the answer says, never by the model's word: the
+    figures are checked against each result's own rows."""
+    if len(results) < 2:
+        return len(results) - 1
+    from pramanyx.explorer.grounding import _PAIR_NUM_RE, _pair_matches, _to_float
+    stated = []
+    for tok in _PAIR_NUM_RE.findall(answer or ""):
+        try:
+            stated.append(float(tok.replace(",", "")))
+        except ValueError:
+            continue
+    best, best_hits = len(results) - 1, -1
+    for i, res in enumerate(results):
+        cells = [f for row in (res.get("rows") or [])[:2000]
+                 for c in (row.values() if isinstance(row, dict) else (row or []))
+                 if (f := _to_float(c)) is not None]
+        hits = sum(1 for n in stated if any(_pair_matches(n, v) for v in cells))
+        if hits >= best_hits:                         # ">=": the latest wins a tie, as before
+            best, best_hits = i, hits
+    return best
+
+
 def policy_receipt(result: Any) -> Optional[dict]:
     """What the reader's access policy did to this read — narrowed it to their rows, or refused it — as the guard
     receipt that says it on the reader's answer, not only to the model in ``caveats``: its caveats are folded into the
@@ -980,7 +1009,9 @@ def converse_system_prompt(connection_id: str, extra: Optional[str] = None,
         "approaches, discuss business context, connect what the user asks to what the "
         "platform knows. Claims about THIS organization's data are different — they "
         "come from tool results, never from memory or plausibility. A number you did "
-        "not just read from a tool result is a number you do not state.",
+        "not just read from a tool result is a number you do not state. So when the "
+        "question asks for a share, a percentage, a rate or a ratio, compute it in the "
+        "query, so its result carries the figure you will state.",
         "",
         "Every query you run goes through a guard battery before it executes, and the "
         "platform records every guard receipt in the answer's provenance. Never narrate "

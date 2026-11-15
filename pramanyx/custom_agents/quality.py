@@ -17,6 +17,8 @@ Failure posture: a generation/execution error fails THAT golden, never the run.
 """
 from __future__ import annotations
 
+import re
+
 import logging
 import time
 from datetime import date, datetime, timezone
@@ -135,6 +137,21 @@ def _variants(cell: str) -> set[str]:
     return out
 
 
+def _coarser(cell: str, generated: set[str]) -> bool:
+    """A reference figure written to ONE decimal place (ROUND(AVG(age), 1) = 40.9) is that precision's figure: a
+    generated 40.94 is the same value to it (golden set, 2026-11-15 — a correct average by gender scored wrong).
+    Only one place: an integer reference may be a count, where 40.4 is not 40, and two places is the comparator's
+    own precision already."""
+    if not re.fullmatch(r"-?\d+\.\d", cell or ""):
+        return False
+    want = float(cell)
+    for g in generated:
+        f = _as_float(g)
+        if f is not None and abs(round(f, 1) - want) < 1e-9:
+            return True
+    return False
+
+
 def results_match(ref_rows: list, gen_rows: list) -> bool:
     """The golden passes when the generated result carries the reference result:
     identical normalized sets, or the reference's values all present per-row in
@@ -159,7 +176,7 @@ def results_match(ref_rows: list, gen_rows: list) -> bool:
     for ref_row in ref_n:
         need = set(ref_row)
         hit = next((i for i, g in enumerate(gen_sets)
-                    if i not in used and all(_variants(c) & g for c in need)), None)
+                    if i not in used and all(_variants(c) & g or _coarser(c, g) for c in need)), None)
         if hit is None:
             break
         used.add(hit)

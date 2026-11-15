@@ -3843,8 +3843,10 @@ async def _stream_converse(
         # `rows` accumulates what the turn's queries actually returned — the evidence
         # the closing prose is held to. A turn may run several queries; all of their
         # cells are citable, so they pool.
+        # `results` keeps each query's own result, in order, so the one the answer stands on can be the one shown
+        # (`converse_tools.answering_result`) — not merely the last one run.
         turn: dict = {"steps": 0, "sql": False, "inv_id": "", "has_receipt": False,
-                      "rows": []}
+                      "rows": [], "results": []}
         if sheet:
             # Arc SH — the sheet's own counts, which the conversation is handed in its grounding (the rows the sheet
             # holds, the rows the view on screen shows), are citable like any result: without them the check rewrote
@@ -3868,6 +3870,9 @@ async def _stream_converse(
                 return
             if _frame_type == "sql":
                 turn["sql"] = True
+                turn["results"].append({"sql": _frame_payload})
+            if _frame_type in ("columns", "rows", "chart_type") and turn["results"]:
+                turn["results"][-1][_frame_type] = _frame_payload
             if _frame_type == "rows":
                 turn["rows"].extend(_frame_payload.get("rows") or [])
             if _frame_type == "sheet_rows":
@@ -4044,6 +4049,20 @@ async def _stream_converse(
             answer, turn["rows"], question=question)
         if _ground_receipt is not None:
             emit("guard_receipt", _ground_receipt)
+
+        # The result shown is the one the answer stands on. Every reader keeps the last `sql`/`columns`/`rows` it was
+        # sent, so when that is not the last one run, it is sent again, whole, before the headline.
+        from pramanyx.agent.converse_tools import answering_result
+        _shown = answering_result(answer, [{"rows": (r.get("rows") or {}).get("rows") or []} for r in turn["results"]])
+        if 0 <= _shown < len(turn["results"]) - 1:
+            _was = turn["results"][_shown]
+            emit("sql", _was["sql"])
+            if "columns" in _was:
+                emit("columns", _was["columns"])
+            if "rows" in _was:
+                emit("rows", _was["rows"])
+            if "chart_type" in _was:
+                emit("chart_type", _was["chart_type"])
 
         if not turn["sql"]:
             # No SQL this turn ⇒ the same shape the core's own no-SQL paths use, so a

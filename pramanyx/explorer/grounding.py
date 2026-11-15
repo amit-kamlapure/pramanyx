@@ -279,6 +279,15 @@ _PAIR_LOOKAHEAD = 3
 _PAIR_NUM_RE = re.compile(r"\d[\d,]*(?:\.\d+)?")
 
 
+def _counts_in(window: str) -> list[str]:
+    """The numbers in a window that could be a row's cell — never a percentage. "Cancelled orders were 14.72% of all
+    orders" says a share of the whole, not that the Cancelled row holds 14.72; read as a cell it contradicted the row's
+    count, and every share an answer worked out from a breakdown was rewritten away or withheld (golden set,
+    2026-11-15: "I can't state a percentage"). `verify_finding` exempts percentages for the same reason."""
+    return [m.group(0) for m in _PAIR_NUM_RE.finditer(window)
+            if not re.match(r"\s*%", window[m.end():])]
+
+
 def _row_label_values(rows) -> dict:
     """``{label: {numbers on that label's row}}`` — the pairs a result asserts."""
     facts: dict = {}
@@ -321,8 +330,8 @@ def ungrounded_label_values(text: str, rows) -> list[str]:
             # BOTH directions. A table writes "ZRH-LHR | 28" and prose writes "28
             # flights on ZRH-LHR"; a forward-only window reads the second as a label
             # with no claim attached and waves the fabrication through.
-            after = _PAIR_NUM_RE.findall(low[m.end():m.end() + _PAIR_WINDOW])[:_PAIR_LOOKAHEAD]
-            before = _PAIR_NUM_RE.findall(low[max(0, m.start() - _PAIR_WINDOW):m.start()])[-_PAIR_LOOKAHEAD:]
+            after = _counts_in(low[m.end():m.end() + _PAIR_WINDOW])[:_PAIR_LOOKAHEAD]
+            before = _counts_in(low[max(0, m.start() - _PAIR_WINDOW):m.start()])[-_PAIR_LOOKAHEAD:]
             nums: list[float] = []
             for tok in list(after) + list(before):
                 try:
