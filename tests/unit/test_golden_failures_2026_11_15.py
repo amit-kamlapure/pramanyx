@@ -126,3 +126,19 @@ def test_the_one_figure_reading():
     assert asks_one_figure("How many orders were destined for EU markets? Count every order, cancelled ones included.")
     assert not asks_one_figure("Which three EU markets had the highest GMV?")
     assert not asks_one_figure("For each platform, what is the average order value?")
+
+
+# ── a declared rule reaches the conversation (lb05, lb06, lb07, lb10) ─────────────────────────────────────────
+
+def test_the_conversation_is_given_the_questions_declared_definitions(monkeypatch):
+    from pramanyx.agent import converse_tools as C
+    seen = {}
+
+    def frame(question, connection_id, *, schema_name="", dialect="duckdb"):
+        seen.update(question=question, dialect=dialect)
+        return 'QUESTION FRAME\n- "EU markets" → Order.ship_country is one of Austria, Belgium, …\n\n'
+    monkeypatch.setattr("pramanyx.agent.grounding.question_frame", frame)
+    prompt = C.converse_system_prompt("conn-1", question="How many orders went to EU markets?")
+    assert '"EU markets" → Order.ship_country is one of' in prompt and seen["question"].endswith("EU markets?")
+    monkeypatch.setattr("pramanyx.agent.grounding.question_frame", lambda *a, **k: "")
+    assert "QUESTION FRAME" not in C.converse_system_prompt("conn-1", question="How many orders?")

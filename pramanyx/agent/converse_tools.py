@@ -1154,6 +1154,24 @@ def converse_system_prompt(connection_id: str, extra: Optional[str] = None,
             from pramanyx.kernel.errors import tolerate
             tolerate(exc, "pack disclosure is additive; the conversation stands without it",
                      counter="converse.pack_disclosure")
+        # The question's business terms, resolved against what the business DECLARED — "EU markets", "YNAP", "the
+        # accessories division" — with the SQL each compiles to. The quick answer was given this block and the
+        # conversation was not, so a conversation found a declared rule only if it searched for one, and on the golden
+        # set it did not: `ship_region = 'Europe'` for EU markets, `category = 'accessories'` for the division
+        # (2026-11-15). Deterministic, no model; empty when the question reaches nothing declared.
+        try:
+            from pramanyx.agent.grounding import question_frame
+            from pramanyx.db.connection import connection_traits
+            from pramanyx.db.registry import get_conn_type
+            traits = connection_traits(get_conn_type(connection_id))
+            dialect = (traits.get("dialect") or "duckdb") if traits.get("writes_native_sql") else "duckdb"
+            block = question_frame(question, connection_id, dialect=dialect).strip()
+            if block:
+                lines += ["", block]
+        except Exception as exc:
+            from pramanyx.kernel.errors import tolerate
+            tolerate(exc, "the question frame is additive; the conversation stands without it",
+                     counter="converse.question_frame")
     if extra:
         lines += ["", extra]
     # AO-1a — the agent's brief LEADS the prompt, as it leads the quick body's SQL prompt
