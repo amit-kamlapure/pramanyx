@@ -13,7 +13,9 @@
  *     transforms and computed by the chart, which is the whole argument for the grammar.
  */
 
-import { cleanLabel } from "@/lib/format";
+import { cleanLabel, detectGranularity, fmtDate } from "@/lib/format";
+import { periodsSpanned, timeBarFit } from "@/components/charts/vega/bandFit";
+import { dateAxis, utcScale } from "@/components/charts/vega/timeAxis";
 
 export interface FormCtx {
   columns: string[];
@@ -188,6 +190,34 @@ export function resolveExtendedForm(type: string, c: FormCtx): FormResult | null
       if (!bandField) return null;
 
       /**
+       * Over a real date (`timeCol`) a bar takes its period. Stacked, it stays on the time scale, fitted to its period
+       * (`timeBarFit`). Grouped, each period is one labelled band, as the table labels it: Vega-Lite sets bars side by
+       * side only within a band, and on a time scale it dropped the grouping and stacked 5px hairlines ("xOffset
+       * dropped because x is continuous", 2026-11-16).
+       */
+      const bandValues = rows.map((r) => r[columns.indexOf(bandField)]);
+      const onTime = bandField === c.timeCol;
+      const gran = onTime ? detectGranularity(bandField, bandValues) : null;
+      const spanned = onTime && !grouped ? periodsSpanned(gran, bandValues) : null;
+      const fit = spanned ? timeBarFit(spanned) : null;
+      const at = (d: Record<string, unknown>) => Date.parse(String(d[bandField] ?? ""));
+      const periods = onTime && grouped && gran
+        ? [...data.values].sort((a, b) => at(a) - at(b))
+            .map((d) => ({ ...d, __period: fmtDate(String(d[bandField] ?? ""), gran) }))
+        : null;
+      const xEnc = periods
+        ? { field: "__period", type: "ordinal", sort: null, title: title(c.xTitle, bandField),
+            axis: bandAxis(title(c.xTitle, bandField)) }
+        : onTime && gran
+          // The plain bar's date axis: a tick and a label per period, under the middle of each bar.
+          ? { field: bandField, type: "temporal",
+              scale: { ...(utcScale(gran).scale as Record<string, unknown> | undefined), ...(fit ? { padding: fit.padding } : {}) },
+              axis: { ...bandAxis(title(c.xTitle, bandField)), ...dateAxis(gran, bandValues) } }
+          : { field: bandField, type: bandType(bandField), axis: bandAxis(title(c.xTitle, bandField)) };
+      const barMark = { type: "bar", tooltip: true, ...(fit ? { width: fit.size } : {}) };
+      const ownData = periods ? { data: { values: periods } } : {};
+
+      /**
        * No second dimension, but two or more measures: the MEASURES are the series.
        * `region × revenue × profit` has one category and nothing to group by, so a fold
        * turns the measure names into a series column — which is what a reader means by
@@ -203,12 +233,11 @@ export function resolveExtendedForm(type: string, c: FormCtx): FormResult | null
           resolved: grouped ? "grouped-bar" : "stacked-bar", defaultH: 320,
           xCategories: new Set(rows.map((r) => r[columns.indexOf(bandField)])).size,
           spec: {
-            ...base,
+            ...base, ...ownData,
             transform: [{ fold: folded, as: ["__measure", "__value"] }],
-            mark: { type: "bar", tooltip: true },
+            mark: barMark,
             encoding: {
-              x: { field: bandField, type: bandType(bandField),
-                   axis: bandAxis(title(c.xTitle, bandField)) },
+              x: xEnc,
               y: { field: "__value", type: "quantitative", stack: grouped ? null : "zero",
                    axis: valueAxis(title(c.yTitle, "value"), c.format) },
               color: { field: "__measure", type: "nominal", sort: null },
@@ -218,8 +247,7 @@ export function resolveExtendedForm(type: string, c: FormCtx): FormResult | null
         };
       }
       const enc: Record<string, unknown> = {
-        x: { field: bandField, type: bandType(bandField),
-             axis: bandAxis(title(c.xTitle, bandField)) },
+        x: xEnc,
         y: { field: measure, type: "quantitative", stack: grouped ? null : "zero",
              axis: valueAxis(yT, c.format) },
         color: { field: series, type: "nominal", sort: null },
@@ -227,7 +255,7 @@ export function resolveExtendedForm(type: string, c: FormCtx): FormResult | null
       if (grouped) enc.xOffset = { field: series, sort: null };
       return { resolved: grouped ? "grouped-bar" : "stacked-bar", defaultH: 320,
                xCategories: new Set(rows.map((r) => r[columns.indexOf(bandField)])).size,
-               spec: { ...base, mark: { type: "bar", tooltip: true }, encoding: enc } };
+               spec: { ...base, ...ownData, mark: barMark, encoding: enc } };
     }
 
     case "small-multiples":

@@ -14,7 +14,7 @@
  * which is precisely why a resolved chart cannot be persisted.
  */
 
-import { chartDateFormat, cleanLabel, detectGranularity, fmtDate, type Gran } from "@/lib/format";
+import { cleanLabel, detectGranularity, fmtDate } from "@/lib/format";
 import { currencySymbol, effectiveCurrencySymbol, isMoneyColumn } from "@/lib/orgSettings";
 import { classifyColumns, isIdLike, isNumberPeriod, isNumeric, isPriorPeriodCol, isUngraphableGrid, percentRates, plottedMeasures,
          tooFewToCompare, uniqueLabelBand, CHANGE_METRIC_COL, HORIZONTAL_MAX_CATS, PERCENT_CHANGE_COL,
@@ -23,6 +23,8 @@ import { EXTENDED_TYPES, resolveExtendedForm } from "@/components/charts/vega/fo
 import { sanitizeExhibit, type ExhibitSpec } from "@/components/charts/exhibit";
 import { inferChartType, HINT_TO_TYPE, type ChartType } from "@/components/charts/chartTypeInference";
 import { applyNames, type SeriesNames } from "@/components/charts/vega/names";
+import { periodsSpanned, timeBarFit } from "@/components/charts/vega/bandFit";
+import { dateAxis, utcScale } from "@/components/charts/vega/timeAxis";
 
 /** The four post-processing ops the edit panel offers, mirroring pramanyx/tools/postproc.py. */
 export type TransformOp = "pop" | "contribution" | "rolling" | "cumulative";
@@ -185,41 +187,6 @@ const SELECT_OPACITY = { condition: { param: "picked", value: 1 }, value: 0.28 }
 /** Rows-as-arrays → rows-as-objects, the shape Vega-Lite consumes directly. */
 function toRecords(columns: string[], rows: unknown[][]): Record<string, unknown>[] {
   return rows.map((r) => Object.fromEntries(columns.map((c, i) => [c, r[i]])));
-}
-
-/** One tick per period of the series' grain — a stride of periods past eighteen. `%b %Y` labels on
- *  the default ticks repeated a month ("Aug 2025 Aug 2025 Sep 2025 …") once a chart was wide enough
- *  for two ticks a month (theLook Q3, 2026-10-02). A sub-day grain keeps the default ticks. */
-function periodTicks(gran: Gran, periods: number): Record<string, unknown> {
-  const unit = gran === "quarter" ? "month" : gran;
-  if (!["day", "week", "month", "year"].includes(unit)) return {};
-  return { tickCount: { interval: unit, step: (gran === "quarter" ? 3 : 1) * Math.max(1, Math.ceil(periods / 18)) } };
-}
-
-/** A date-grain axis keeps time in UTC. A day read from the warehouse ("2025-08-01") is UTC
- *  midnight, which is 02:00 in Zurich: a local scale put its month tick at local midnight, before
- *  the first point, and the series' first month went unlabelled (theLook Q3, 2026-10-03). A grain
- *  with a time of day keeps the viewer's clock. */
-function utcScale(gran: Gran | null): Record<string, unknown> {
-  return gran && ["day", "week", "month", "quarter", "year"].includes(gran) ? { scale: { type: "utc" } } : {};
-}
-
-/** Month labels short enough that every one fits: the month alone, with its year beneath it on the
- *  first month and on January ("Aug / 2025, Sep, …, Jan / 2026, …"). `%b %Y` on thirteen months ran
- *  labels together and dropped three (theLook Q3, 2026-10-03); a year beside its month was still wide
- *  enough for Vega to hide its neighbours. Six months or fewer keep `%b %Y`, and so does a series
- *  ticked past one month a tick, where January may not be a tick at all. Read in UTC, as `utcScale`
- *  keeps the axis. */
-function compactMonths(gran: Gran | null, values: unknown[]): Record<string, unknown> {
-  const months = [...new Set(values.map((v) => String(v ?? "").slice(0, 7)))]
-    .filter((m) => /^\d{4}-\d{2}$/.test(m)).sort();
-  if (gran !== "month" || months.length <= 6 || months.length > 18) return {};
-  const [y, m] = months[0].split("-").map(Number);
-  // Each label centred on its own month: flush at the ends, the first was pushed into the second and
-  // the last into the one before, and Vega hid both.
-  return { labelFlush: false,
-           labelExpr: `(utcmonth(datum.value) == 0 || (utcyear(datum.value) == ${y} && utcmonth(datum.value) == ${m - 1}))`
-                      + " ? [utcFormat(datum.value, '%b'), utcFormat(datum.value, '%Y')] : utcFormat(datum.value, '%b')" };
 }
 
 /** The same for a change chart's period bars, whose labels are already "Sep 2025" — each kept whole as
@@ -589,8 +556,6 @@ function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
     // A series column (multi-line) or a single measure (line).
     const seriesCol = inferredSeries ?? (type.startsWith("multi") ? catCols.find((c) => c !== x) : undefined);
     const xValues = rows.map((r) => r[columns.indexOf(x)]);
-    // A series that crosses a year boundary keeps its year, whatever the grain.
-    const xMultiYear = new Set(xValues.map((v) => String(v ?? "").slice(0, 4))).size > 1;
     const linePct = measureIsPercent(measure);
     const lineScaled = linePct && percentAlreadyScaled(measure);
     const lineField = lineScaled ? `${measure}__frac` : measure;
@@ -616,9 +581,7 @@ function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
          */
         axis: {
           ...bandAxis(axisTitle(xTitle, x)),
-          ...(xIsDate ? { format: chartDateFormat(detectGranularity(x, xValues), xMultiYear),
-                          ...periodTicks(detectGranularity(x, xValues), new Set(xValues.map(String)).size),
-                          ...compactMonths(detectGranularity(x, xValues), xValues) } : {}),
+          ...(xIsDate ? dateAxis(detectGranularity(x, xValues), xValues) : {}),
         },
       },
       // A percentage reads as one on a trend too: this axis ignored the unit the bar path
@@ -666,6 +629,14 @@ function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
   const numberBand = numberPeriod && band === dateCol;
   // A band on a time scale, with a date axis: a real date, unless it is a change's labelled periods.
   const bandOnTime = band === timeCol && !changeByPeriod;
+  // A bar on a time scale takes its period (`timeBarFit`) — upright across the width, lying down along the height —
+  // where Vega-Lite would draw it 5px wide.
+  const spanned = bandOnTime ? periodsSpanned(bandGran, bandValues) : null;
+  const timeFit = spanned ? timeBarFit(spanned, horizontal ? "height" : "width") : null;
+  const bandScale: Record<string, unknown> = {
+    ...((bandOnTime ? utcScale(bandGran).scale : undefined) as Record<string, unknown> | undefined),
+    ...(timeFit ? { padding: timeFit.padding } : {}),
+  };
   // A change over time is one bar per period with a change, in time order, labelled as the table
   // labels its period.
   const periodRows = changeByPeriod
@@ -709,13 +680,10 @@ function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
   const bandEnc = {
     field: changeByPeriod ? "__period" : band,
     type: (changeByPeriod || numberBand ? "ordinal" : bandOnTime ? "temporal" : "nominal") as string,
-    ...(bandOnTime ? utcScale(bandGran) : {}),
+    ...(Object.keys(bandScale).length ? { scale: bandScale } : {}),
     axis: {
       ...bandAxis(axisTitle(xTitle, band)),
-      ...(bandOnTime && bandGran
-        ? { format: chartDateFormat(bandGran, new Set(bandValues.map((v) => String(v ?? "").slice(0, 4))).size > 1),
-            ...periodTicks(bandGran, new Set(bandValues.map(String)).size),
-            ...compactMonths(bandGran, bandValues) } : {}),
+      ...(bandOnTime && bandGran ? dateAxis(bandGran, bandValues) : {}),
       ...(periodRows && bandGran === "month" && !numberBand ? compactPeriodLabels(periodRows.map((d) => String(d.__period))) : {}),
     },
     // Lead with the largest — the ranking the question implies. Ties break stably.
@@ -802,7 +770,8 @@ function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
   }
 
   const layers: Record<string, unknown>[] = [
-    { mark: { type: "bar", tooltip: true }, params: [SELECT_PARAM(band)] },
+    { mark: { type: "bar", tooltip: true, ...(timeFit ? { [horizontal ? "height" : "width"]: timeFit.size } : {}) },
+      params: [SELECT_PARAM(band)] },
   ];
   const pctTransform = [
     ...(pctScaled ? [{ calculate: `datum['${measure}'] / 100`, as: valueField }] : []),

@@ -146,7 +146,7 @@ describe("a real date stays on a time scale", () => {
                                   chartType: "bar", showLabels: true })!;
     const x = (out.spec.encoding as Record<string, Record<string, unknown>>).x;
     expect(x.type).toBe("temporal");
-    expect(x.scale).toEqual({ type: "utc" });
+    expect(x.scale).toMatchObject({ type: "utc" });
     expect((x.axis as Record<string, unknown>).format).toBe("%b %Y");
   });
 
@@ -156,9 +156,9 @@ describe("a real date stays on a time scale", () => {
     expect((out.spec.encoding as Record<string, Record<string, unknown>>).x.type).toBe("temporal");
   });
 
-  it("a grouped bar by month too", () => {
+  it("a stacked bar by month too (a grouped one is a band per month, labelled as a month: timeBars.test.ts)", () => {
     const rows = months.flatMap((m) => ["North", "South"].map((r, j) => [m, r, 100 + j]));
-    const out = resolveVegaSpec({ columns: ["order_month", "region", "revenue"], rows, chartType: "grouped-bar" })!;
+    const out = resolveVegaSpec({ columns: ["order_month", "region", "revenue"], rows, chartType: "stacked-bar" })!;
     expect((out.spec.encoding as Record<string, Record<string, unknown>>).x.type).toBe("temporal");
   });
 });
