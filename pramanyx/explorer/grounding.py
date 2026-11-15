@@ -296,10 +296,7 @@ def _counts_at(window: str) -> list[tuple[str, int, int]]:
             continue
         scale = _SCALE_RE.match(window[end:])
         if scale:
-            try:
-                value = float(tok.replace(",", "")) * _SCALE[scale.group(1)]
-            except ValueError:
-                continue
+            value = float(tok.replace(",", "")) * _SCALE[scale.group(1)]      # the pattern admits digits only
             out.append((f"{value:.6g}" if value < 1e15 else tok, m.start(), len(tok) + len(scale.group(0))))
             continue
         out.append((tok, m.start(), len(tok)))
@@ -315,6 +312,17 @@ def _closer_label_after(window: str, at: int, size: int, label: str, facts: dict
     """Whether another label follows the number closer than this label precedes it — "the 12,145 shipped"."""
     tail = window[at + size:at + size + 16]
     return any(other != label and re.match(r"\W{0,3}" + re.escape(other) + r"(?!\w)", tail.lstrip("`* ")) for other in facts)
+
+
+def figures_found(text: str, rows, limit: int = 2000) -> int:
+    """How many of the figures ``text`` states are cells of ``rows``, within a writer's rounding — how strongly a
+    result carries an answer's numbers (`converse_tools.answering_result` chooses the result an answer stands on by
+    it)."""
+    stated = [float(tok.replace(",", "")) for tok in _PAIR_NUM_RE.findall(text or "")]   # digits only, always parses
+    cells = [f for row in list(rows or [])[:limit]
+             for c in (row.values() if isinstance(row, dict) else (row or []))
+             if (f := _to_float(c)) is not None]
+    return sum(1 for n in stated if any(_pair_matches(n, v) for v in cells))
 
 
 def rows_block(rows, limit: int = 40) -> str:

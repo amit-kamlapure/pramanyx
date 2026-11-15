@@ -89,7 +89,16 @@ def test_readback_end_to_end_through_real_substrate(infra_or_skip, monkeypatch, 
         from pramanyx.ontology.context_graph_readback import build_graph_prior
         p = build_graph_prior("why did sales drop last quarter", CONN, org_id=ORG)
         assert p.fired
-        assert "third quarter" in p.section  # the finding text reached the plan
+        # Since 2026-11-13 only a finding a person CONFIRMED is put before the planner (the user: "it's not the old
+        # findings that are very critical unless user has given an upvote"). This one is the platform's own, so it is
+        # counted and withheld, never shown as ground.
+        assert "third quarter" not in p.section and "not been confirmed by a person" in p.section
+        # Confirmed — a Right restates its claim at tier approved — it reaches the plan, cited.
+        cg.nodes["finding:rev"].provenance = Provenance(source="record", note="tier=approved")
+        store.save_graph(cg)
+        index_graph(cg)
+        p = build_graph_prior("why did sales drop last quarter", CONN, org_id=ORG)
+        assert "third quarter" in p.section  # the confirmed finding's text reached the plan
         assert "[finding:rev]" in p.section  # cited
     finally:
         _cleanup()

@@ -291,19 +291,10 @@ def answering_result(answer: str, results: list[dict]) -> int:
     figures are checked against each result's own rows."""
     if len(results) < 2:
         return len(results) - 1
-    from pramanyx.explorer.grounding import _PAIR_NUM_RE, _pair_matches, _to_float
-    stated = []
-    for tok in _PAIR_NUM_RE.findall(answer or ""):
-        try:
-            stated.append(float(tok.replace(",", "")))
-        except ValueError:
-            continue
+    from pramanyx.explorer.grounding import figures_found
     best, best_hits = len(results) - 1, -1
     for i, res in enumerate(results):
-        cells = [f for row in (res.get("rows") or [])[:2000]
-                 for c in (row.values() if isinstance(row, dict) else (row or []))
-                 if (f := _to_float(c)) is not None]
-        hits = sum(1 for n in stated if any(_pair_matches(n, v) for v in cells))
+        hits = figures_found(answer, res.get("rows") or [])
         if hits >= best_hits:                         # ">=": the latest wins a tie, as before
             best, best_hits = i, hits
     return best
