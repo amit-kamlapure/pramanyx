@@ -6592,12 +6592,21 @@ def get_investigations(limit: int = 50, workspace_id: str | None = None):
     from pramanyx.metastore import accessible_catalog_ids
     allowed = accessible_catalog_ids(workspace_id)
     if allowed is None:
-        return list_investigations(limit=limit)
+        return _as_asked(list_investigations(limit=limit))
     # Fetch wider when scoping so a workspace's items aren't truncated by the global
     # newest-first limit before filtering, then trim back to `limit`.
     rows = list_investigations(limit=max(limit, 200))
     scoped = [r for r in rows if r.get("connection_id") in allowed]
-    return scoped[:limit]
+    return _as_asked(scoped[:limit])
+
+
+def _as_asked(rows: list[dict]) -> list[dict]:
+    """Each row's question as it was ASKED (`automations.temporal.ask_of`): a scheduled run's question carries the
+    code-written context it was answered under, and a list of recent questions read "[Scheduled-run context — written
+    by code, not inferred] …" for every one of them (the coworker's "Asked lately", 2026-11-15). The stored question
+    is untouched; only the list shows the ask."""
+    from pramanyx.automations.temporal import ask_of
+    return [{**r, "question": ask_of(str(r.get("question") or ""))} if r.get("question") else r for r in rows]
 
 
 @router.get("/investigations/indexed-ids")

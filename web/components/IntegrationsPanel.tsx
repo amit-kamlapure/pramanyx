@@ -112,6 +112,13 @@ const FACTS: React.CSSProperties = {
   display: "grid", gridTemplateColumns: "minmax(110px, 150px) minmax(0, 1fr)", gap: "4px 12px", padding: "8px 0 4px 22px",
 };
 
+/** The choices still worth offering on a card: not granted yet, and not "both" once either half is — adding the
+ *  missing half is the one choice left (2026-11-15). */
+function offered(options: NonNullable<IntegrationProvider["products"]>[number]["options"] = []) {
+  const anyOn = options.some(o => o.connected);
+  return options.filter(o => !o.connected && !(anyOn && o.id === "both"));
+}
+
 /** Connect one of a provider's products, chosen from a menu — the button a "Needs you" row carries. */
 function ConnectMenu({ p, label, busy, onConnect }: {
   p: IntegrationProvider; label: string; busy: boolean; onConnect: (provider: string, product: string) => void;
@@ -566,7 +573,7 @@ export function IntegrationsPanel() {
                     // A card with a choice (Gmail, 2026-11-15): what is granted, and the rest to choose from.
                     <span style={{ ...ROW, gap: 6, flexWrap: "nowrap" }}>
                       {pr.options.filter(o => o.connected && o.id !== "both").map(o => <Chip key={o.id} tone="up">{o.label.toLowerCase()}</Chip>)}
-                      {pr.options.some(o => !o.connected) && (
+                      {offered(pr.options).length > 0 && (
                         <DropdownMenu.Root>
                           <DropdownMenu.Trigger>
                             <Button variant="outline" size="xs" disabled={!p.configured || !!p.client_id_problem || busy === key}
@@ -575,7 +582,7 @@ export function IntegrationsPanel() {
                             </Button>
                           </DropdownMenu.Trigger>
                           <DropdownMenu.Content size="1" align="end">
-                            {pr.options.filter(o => !o.connected).map(o => (
+                            {offered(pr.options).map(o => (
                               <DropdownMenu.Item key={o.id} onSelect={() => void connect(p.id, pr.id, o.id)}>{o.label}</DropdownMenu.Item>
                             ))}
                           </DropdownMenu.Content>

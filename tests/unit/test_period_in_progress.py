@@ -32,3 +32,11 @@ def test_no_time_column_a_fiscal_year_or_one_row_carries_nothing():
 def test_the_executor_attaches_it_to_every_result():
     from pramanyx.sql import executor
     assert "last_period_in_progress" in inspect.getsource(executor)
+
+
+def test_a_scheduled_runs_title_is_what_was_asked():
+    from pramanyx.automations.temporal import OBSERVATION_HEADER
+    from pramanyx.routers.investigations import _as_asked
+    asked = f"{OBSERVATION_HEADER}\nThis is a scheduled daily run.\nObserve 2026-11-14 (UTC).\n\nSummarise GMV by platform."
+    assert _as_asked([{"id": "a", "question": asked}, {"id": "b", "question": "Why did returns rise?"}]) == [
+        {"id": "a", "question": "Summarise GMV by platform."}, {"id": "b", "question": "Why did returns rise?"}]
