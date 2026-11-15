@@ -8261,7 +8261,8 @@ export interface paths {
         /**
          * Read The Account
          * @description The connected account's address — recorded at connect, else read from the provider once and recorded
-         *     (`broker.account_of`). What a card says it is connected as, and the "send to me" an email step can name.
+         *     (`broker.account_of`). What a card says it is connected as, and the "send to me" an email step can name. Only the
+         *     grant's own person may read it: someone else's is a 404, as revoking one is.
          */
         post: operations["read_the_account_integrations_connections__conn_id__account_post"];
         delete?: never;
@@ -21214,6 +21215,16 @@ export interface components {
         };
         /** EmailBody */
         EmailBody: {
+            /**
+             * Attach Answer
+             * @default
+             */
+            attach_answer: string;
+            /**
+             * Attach Format
+             * @default
+             */
+            attach_format: string;
             /** Body */
             body: string;
             /**
