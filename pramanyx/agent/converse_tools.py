@@ -241,6 +241,27 @@ def working_notes(text: str) -> Optional[str]:
     return None
 
 
+def citable_totals(results: list[dict]) -> list[list]:
+    """Each result's column totals, as rows the grounding check may cite. The model is GIVEN these (`run_sql`'s
+    ``totals``, computed by code and to be quoted, never added up by hand) — and the check then held every quoted total
+    to the cells, where no total is, so a correct "€56.98M in all" was rewritten away (golden set, 2026-11-15)."""
+    from pramanyx.tools.postproc import column_totals
+    out: list[list] = []
+    for res in results or []:
+        sql = str((res.get("sql") or {}).get("sql") or "")
+        columns = list((res.get("columns") or {}).get("columns") or [])
+        rows = list((res.get("rows") or {}).get("rows") or [])
+        if not (sql and columns and rows):
+            continue
+        try:
+            totals = column_totals(sql, columns, rows, len(rows)) or []
+        except Exception:  # noqa: BLE001 — a total that cannot be computed is simply not citable
+            totals = []
+        if totals:
+            out.append([total for _column, total in totals])
+    return out
+
+
 def answering_result(answer: str, results: list[dict]) -> int:
     """Which of a turn's query results the answer stands on: the one whose rows hold the most of the figures the
     answer states (within a writer's rounding), the latest on a tie. -1 when there is nothing to choose.
@@ -773,7 +794,7 @@ def ground_answer_numbers(answer: str, rows: list, *, question: str = "",
     guard may only ever remove a false claim, never invent a failure.
     """
     from pramanyx.explorer.grounding import (
-        numeric_cells_block, ungrounded_label_values, verify_finding,
+        numeric_cells_block, rows_block, ungrounded_label_values, verify_finding,
     )
 
     text = (answer or "").strip()
@@ -804,13 +825,15 @@ def ground_answer_numbers(answer: str, rows: list, *, question: str = "",
             system=(
                 "Your previous answer contained a number that does NOT appear in the "
                 "data — a fabricated magnitude. Rewrite the answer using ONLY values "
-                "from the list you are given. Copy each value exactly; never scale it "
+                "from the rows you are given, each with the label its row carries. Write to the "
+                "person; never mention the list or the values you were given. Copy each value exactly; never scale it "
                 "or add a magnitude suffix (K/M/B) it does not already have. If a "
                 "number cannot be supported by the list, drop it and describe the "
                 "pattern qualitatively. Keep the answer's format and length."
             ),
             user=(
                 f"QUESTION: {question}\n\n"
+                f"THE RESULT ROWS (each row's label beside its values):\n{rows_block(cells)}\n\n"
                 f"EXACT RESULT VALUES YOU MAY CITE:\n{numeric_cells_block(cells)}\n\n"
                 f"YOUR PREVIOUS (UNGROUNDED) ANSWER:\n{text}\n\n"
                 f"Ungrounded number(s) to remove or fix: {bad}\n"

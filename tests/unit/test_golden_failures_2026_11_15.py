@@ -2,7 +2,7 @@
 
 * The result shown was the last query run, not the one the answer stood on (t09, t11): `answering_result`.
 * A share stated next to a row's label read as that row's count, so every share worked out from a breakdown was
-  rewritten away or withheld (t03, t13, and LuxExperience l05): `grounding._counts_in`.
+  rewritten away or withheld (t03, t13, and LuxExperience l05): `grounding._counts_at`.
 * A reference rounded to one place failed a correct two-place answer (t15): `quality._coarser`.
 """
 from __future__ import annotations
@@ -70,3 +70,35 @@ def test_the_loop_hands_working_notes_back_once():
     got = run_tool_loop(_P(), "sys", "q", [], max_steps=6, stop_check=working_notes)
     assert got.answer == "The fiscal year runs 1 July to 30 June."
     assert any(s.tool == "(answer held)" for s in got.steps)
+
+
+# ── the grounding check's false alarms, read from the receipts of 2026-11-15 ──────────────────────────────────
+
+def test_a_total_the_platform_computed_is_citable():
+    from pramanyx.agent.converse_tools import citable_totals, ground_answer_numbers
+    res = [{"sql": {"sql": "SELECT category, SUM(q * p) AS revenue FROM order_items GROUP BY 1"},
+            "columns": {"columns": ["category", "revenue"]},
+            "rows": {"rows": [["womenswear", 23511200.0], ["menswear", 7200100.0], ["shoes", 26270600.0]]}}]
+    rows = res[0]["rows"]["rows"]
+    answer = "Womenswear leads with €23.51M of the €56.98M total."
+    said, receipt = ground_answer_numbers(answer, rows + citable_totals(res), question="revenue by category",
+                                          provider=_Never())
+    assert said == answer and receipt is None
+
+
+def test_a_number_belongs_to_the_label_nearest_it_and_a_year_is_not_a_count():
+    from pramanyx.explorer.grounding import ungrounded_label_values
+    status = [["shipped", 12145], ["returned", 11861], ["cancelled", 989]]
+    assert ungrounded_label_values("only a cancelled order is not completed. So it counts the 12,145 shipped", status) == []
+    assert ungrounded_label_values("7,528 orders placed in fiscal year 2025 went to Europe", [["Europe", 7528]]) == []
+    assert ungrounded_label_values("Cancelled: 19,000 orders.", status) == ["cancelled=19000"]
+
+
+def test_the_rewrite_is_shown_each_rows_label():
+    from pramanyx.explorer.grounding import rows_block
+    assert rows_block([["Greece", 261694.35], ["Denmark", 255336.0]]) == "Greece | 261694.35\nDenmark | 255336.0"
+
+
+class _Never:
+    def complete(self, **kw):
+        raise AssertionError("no rewrite should be asked for a grounded answer")

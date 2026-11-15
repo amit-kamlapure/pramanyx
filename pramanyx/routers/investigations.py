@@ -4056,8 +4056,9 @@ async def _stream_converse(
         # now the sentence above them did not, and nothing compared the two. A model
         # that writes a plausible table the rows do not contain is the one failure the
         # user cannot catch — the chart beside it looks authoritative either way.
+        from pramanyx.agent.converse_tools import citable_totals
         answer, _ground_receipt = ground_answer_numbers(
-            answer, turn["rows"], question=question)
+            answer, turn["rows"] + citable_totals(turn["results"]), question=question)
         if _ground_receipt is not None:
             emit("guard_receipt", _ground_receipt)
 
