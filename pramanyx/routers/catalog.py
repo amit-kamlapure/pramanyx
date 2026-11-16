@@ -242,8 +242,16 @@ TREE_WAIT_SECONDS = 8.0
 #: One read per catalog at a time, outliving the request that started it: a catalog still reading when the tree
 #: answers goes on reading, and the next tree is answered from it. Long-lived on purpose — a `with` pool waits for
 #: every read on the way out, which is the wait this exists to bound.
-_reads = ThreadPoolExecutor(max_workers=_TREE_READERS * 2, thread_name_prefix="catalog-tree")
-_reading: dict[str, Future] = {}
+_reads = ThreadPoolExecutor(max_workers=_TREE_READERS * 4, thread_name_prefix="catalog-tree")
+#: The reads of each catalog not yet finished, newest last: ``conn_id → [(future, started, monotonic)]``.
+_reading: dict[str, list[tuple[Future, float]]] = {}
+#: A read running longer than this is set aside and a fresh one started (found live, 2026-11-16: a BigQuery read stuck
+#: for fourteen minutes while the same project answered a test in three seconds — a call with no timeout of its own,
+#: waiting on a reply that would not come — and the one-read rule kept every later tree on it). A thread cannot be
+#: stopped from outside; the stuck one is left to end, and at most `MAX_READS_PER_CATALOG` of a catalog's reads are
+#: ever outstanding, so stuck ones cannot fill the pool.
+READ_SET_ASIDE_SECONDS = 60.0
+MAX_READS_PER_CATALOG = 3
 #: What each catalog held the last time it was read: ``conn_id → (epoch seconds, schemas)``. Shown, and said to be
 #: from then, for a catalog still reading — an empty catalog would teach the reader it holds nothing.
 _last_read: dict[str, tuple[float, list]] = {}
@@ -263,13 +271,16 @@ def _read_and_keep(conn_id: str, conn_type: str) -> list[dict] | None:
 
 
 def read_catalog(conn_id: str, conn_type: str, context: contextvars.Context) -> Future:
-    """This catalog's read: the one already under way, or a new one."""
+    """This catalog's read: the one already under way, or a new one — and a new one beside a read under way too long."""
+    now = time.monotonic()
     with _reads_lock:
-        running = _reading.get(conn_id)
-        if running is not None and not running.done():
-            return running
+        running = [(f, t) for f, t in _reading.get(conn_id, []) if not f.done()]
+        newest = running[-1] if running else None
+        if newest is not None and (now - newest[1] < READ_SET_ASIDE_SECONDS or len(running) >= MAX_READS_PER_CATALOG):
+            _reading[conn_id] = running
+            return newest[0]
         started = _reads.submit(context.run, _read_and_keep, conn_id, conn_type)
-        _reading[conn_id] = started
+        _reading[conn_id] = [*running, (started, now)]
         return started
 
 

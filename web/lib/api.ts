@@ -999,14 +999,26 @@ export interface CatalogTree {
   sections: CatalogSection[];
 }
 
+/** Tree requests under way, by address: an identical one joins it (2026-11-16). The Catalog asks twice as it opens
+ *  (before and after it knows the workspace, often the same address), and a browser holds a second request for an
+ *  address until the first has answered — so a tree that takes its full wait took twice that to show. */
+const treesUnderWay = new Map<string, Promise<CatalogTree>>();
+
 export async function getCatalogTree(workspaceId?: string): Promise<CatalogTree> {
   // The workspace the reader stands in, unless the caller names one. The header does the same
   // for the server, but the parameter is what the request log and a test can see.
   const ws = workspaceId || getActiveWorkspace();
   const qs = ws ? `?workspace_id=${encodeURIComponent(ws)}` : "";
-  const res = await fetch(`${getApiBase()}/catalog/tree${qs}`);
-  if (!res.ok) throw new Error("Failed to fetch catalog tree");
-  return res.json();
+  const url = `${getApiBase()}/catalog/tree${qs}`;
+  const underWay = treesUnderWay.get(url);
+  if (underWay) return underWay;
+  const asked = (async () => {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("Failed to fetch catalog tree");
+    return res.json() as Promise<CatalogTree>;
+  })().finally(() => treesUnderWay.delete(url));
+  treesUnderWay.set(url, asked);
+  return asked;
 }
 
 export async function refreshSchemaCache(id: string): Promise<void> {

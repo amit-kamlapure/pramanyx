@@ -89,3 +89,12 @@ def test_a_catalog_whose_read_breaks_is_could_not_look_and_never_the_trees_end(t
     tree = _tree()
     assert tree["slow"]["read"] == "failed" and tree["slow"]["schemas"] == []
     assert tree["fast"]["read"] == "now"
+
+
+def test_a_read_stuck_past_its_time_is_set_aside_for_a_fresh_one_but_never_without_bound(two_catalogs, monkeypatch):
+    """Found live: a BigQuery read stuck for fourteen minutes while the project answered a test in three seconds; the
+    one-read rule kept every later tree on it."""
+    monkeypatch.setattr(catalog_router, "READ_SET_ASIDE_SECONDS", 0.0)     # every read under way is "too long"
+    for _ in range(5):
+        _tree()
+    assert two_catalogs["slow"] == catalog_router.MAX_READS_PER_CATALOG    # set aside, re-read — and capped
