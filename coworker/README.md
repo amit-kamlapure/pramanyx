@@ -109,13 +109,17 @@ turned back on from the interface.
   schedules and automations (`/automations`), in a frame: the one list, where a person makes a schedule, changes
   when it runs, mutes it, runs it now and reads what each run did. The one-list view is the shell's own option,
   chosen once on a first visit.
-- **A schedule set in a conversation is the platform's.** Asked to ask something again — every Monday, once
-  tomorrow at three, every second Friday — the agent sets it up with `schedule_question`, and it is one of
-  Pramanyx's automations: it starts at its first scheduled time, runs whether or not the coworker is open, and is
-  listed under Schedules. Under the turn that made it is a card that draws no copy: it asks the platform where the
-  schedule stands each time it is drawn (on, waiting for its first run, switched off, ended, removed) and its
-  button opens the schedule on the app's page beside the conversation. The agent cannot make a schedule send
-  anything: a person adds an email or Slack step on that page.
+- **Anything on a schedule, from a sentence** (2026-11-16). Asked to have something happen on a schedule — a
+  question asked again, a summary, a Slack post, an email; every Monday, or once in five minutes — the agent passes
+  the person's own words to `schedule`, and the platform's own designer (the one behind the Automations page's
+  sentence box, `automations/propose.py`) drafts the whole chain from what the install has: when it runs, what it
+  does, where it goes. The same checks a save runs refuse a draft that could not be saved; a draft that left a
+  choice open (a Slack channel the person did not name) is not made, and the agent asks. What is made is one of
+  Pramanyx's automations: it starts at its first scheduled time, runs whether or not the coworker is open, is
+  listed under Schedules, and opens on the canvas, where a person can change it by hand. Under the turn that made
+  it is a card that draws no copy: it reads where the schedule stands each time it is drawn, and **shows each run's
+  result here** — "deliver it here" needs no sending step. A Slack post a model drafted waits for a person on each
+  run until one says "always allow"; an email from a new schedule is held at departure while it is on probation.
 - **The first screen.** The mark on a tile over a large headline, then the question box. Under it: questions worth
   asking of a chosen connection as plain lines, and two cards — the questions asked lately (each with its
   connection and how long ago) and a person's own agents. Each row writes a question into the box; nothing is
@@ -264,9 +268,10 @@ admin allows "Let the coworker ask its models through Pramanyx" in Settings ▸ 
   question's trace, and said in one line under it: every figure found, or each one not found with the clause it is
   in. A bare whole number under 1,000 is not checked, as the gate does not check one. Nothing is held: the answer is
   already shown. It has no Right/Wrong of its own. A helper's answers are kept on this machine (`$DSH_HOME/helpers`) and are not in Pramanyx's store.
-- **A schedule's answer does not arrive in a conversation.** The shell's scheduler put each run into a chat as a
-  new turn; Pramanyx's keeps each run with the schedule (its History, on the Schedules page) and sends it on only
-  through a step a person added. Nothing brings a run's answer back into the conversation that set it up.
+- **A schedule's result is shown, not sent, here.** The shell's scheduler put each run into a chat as a new turn,
+  which the agent then answered. Here a run's result appears in the card under the request the next time the
+  conversation is drawn: nothing starts a turn or notifies the person when it lands. Only the last three runs are
+  shown. A request needing a step the platform has none of — the news from the web — is refused with the reason.
 - **A schedule made here spends model calls unattended.** It is a person's own request, so the organisation's
   setting for model work nobody asked for does not apply to it; nothing else caps it but the usage limits.
 - The Schedules page opens on the connection last chosen on the first screen, and the frame takes the app's own

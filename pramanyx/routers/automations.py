@@ -75,7 +75,7 @@ class CreateAutomationRequest(BaseModel):
     #: 2026-11-15 — a schedule made by SENTENCE starts at its first scheduled time, not at the moment it is made
     #: (SP-7's rule, which the inbox's accepted draft already follows). A new cron has no previous run to be due
     #: since, so the heartbeat fires it on its next tick: "every Monday at nine", asked for on a Wednesday, ran that
-    #: Wednesday. The door that makes a schedule from a person's words (`schedule_question`) sends this; the canvas,
+    #: Wednesday. The door that makes a schedule from a person's words (the coworker's `schedule`) sends this; the canvas,
     #: where a person presses Create and may want the run that proves it, does not. Read on create only.
     start_at_first_run: bool = False
 
@@ -85,6 +85,11 @@ class ProposeRequest(BaseModel):
 
     outcome: str = Field(description="What the chain should achieve, in the user's words.")
     conn_id: str = Field(description="The connection the chain runs against.")
+    #: 2026-11-16 — the clock the person speaks in ("in five minutes", "at nine"), when the caller knows it; else the
+    #: reader's own setting.
+    timezone: str = Field(default="", max_length=64, description="An IANA clock, e.g. Asia/Kolkata; empty for the reader's own.")
+    #: The request came from a conversation (the coworker), which shows each run itself: "here" needs no sending step.
+    from_conversation: bool = False
 
 
 class PauseRequest(BaseModel):
@@ -296,7 +301,8 @@ def propose(body: ProposeRequest):
     """
     from pramanyx.automations.propose import propose_chain
 
-    proposal = propose_chain(body.outcome, conn_id=body.conn_id)
+    proposal = propose_chain(body.outcome, conn_id=body.conn_id, timezone_name=body.timezone,
+                             from_conversation=body.from_conversation)
     if proposal.verdict != "proposed":
         # 200, not 4xx: "nothing here can do that" is an ANSWER to the question that was
         # asked, and the reason is the useful half of it. A 422 would make the client
@@ -677,7 +683,29 @@ def schedule_of(automation_id: str):
         "muted_until": muted_until, "expires_at": a.expires_at or "",
         "last_run_at": a.last_run_at or "", "last_status": a.last_status or "",
         "steps": [e.kind for e in a.effects],
+        "runs": _what_runs_found(a.id),
     }
+
+
+#: How many of a schedule's runs the conversation that set it up shows.
+RUNS_SHOWN = 3
+
+
+def _what_runs_found(automation_id: str) -> list[dict]:
+    """The latest runs that did something, newest first, each with what its steps found — the answer an investigate
+    step gave, a write-up's text — and the investigation behind it. The conversation that set the schedule up shows
+    these under its card (2026-11-16: "deliver it here"); a run that did nothing is not one to show."""
+    out: list[dict] = []
+    for run in get_runs(automation_id=automation_id, limit=RUNS_SHOWN, outcomes=("fired", "paused", "error")):
+        found = []
+        for e in run.effects:
+            data = e.data or {}
+            said = str(data.get("summary") or data.get("answer") or data.get("text") or "").strip()
+            found.append({"kind": e.kind, "status": e.status, "said": said[:1500],
+                          "investigation_id": e.investigation_id or str(data.get("investigation_id") or ""),
+                          "message": (e.message or "")[:300]})
+        out.append({"at": run.started_at, "outcome": run.outcome, "reason": (run.reason or "")[:300], "steps": found})
+    return out
 
 
 @router.get("/automations/{automation_id}/doors")

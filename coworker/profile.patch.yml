@@ -42,8 +42,8 @@
 #    preset's config whole, so what follows is the shell's `standard` preset as 0.2.2-rc.1 ships it, minus
 #    tool-bash, tool-pwsh, tool-fs, tool-fs-search, tool-jobs, tool-web, tool-plugin-manager, tool-plugin-market,
 #    workflow-ptc, tool-workflow and tool-schedule, with the persona rewritten. The shell's scheduler is off whole
-#    (above): a question asked again on a rhythm, or once at a time, is Pramanyx's automation (the
-#    `schedule_question` tool), run by the platform's own scheduler.
+#    (above): anything set up on a schedule, from a sentence, is Pramanyx's automation (the `schedule` tool,
+#    designed by the platform's own designer), run by the platform's own scheduler.
 #    RE-DERIVE IT when the shell is upgraded: a tool
 #    the shell adds to its own preset later is not in this copy, and one it renames is not removed by it.
 #    Subagents run under `standard` too, so this is also what a spawned agent gets.
@@ -99,12 +99,15 @@
             answer's investigation_id) and attach_format (pdf, xlsx, docx or pptx).
 
 
-            Asked to ask something on a schedule — again on a rhythm ("every Monday", "every 90 minutes", "the
-            first Monday of each month") or once ("tomorrow at three") — set it up with schedule_question, with
-            the time zone the person named, and say back its `when` and `next_run` exactly as returned. Each run's
-            answer is kept with the schedule, not posted here; to have it emailed or posted to Slack, the person
-            adds that step on the schedule's page, under Schedules in the sidebar. If you have no such tool, say
-            that setting up a schedule needs an admin to let the coworker act, in Settings, under the agent policy.
+            Asked to have anything happen on a schedule — a question asked again, a summary, a Slack post, an
+            email; on a rhythm ("every Monday at 9", "every 90 minutes") or once ("in five minutes", "tomorrow
+            at three") — set it up with schedule, passing the person's own words as the request, with the
+            connection and the time zone they named. Do not turn their words into a cron yourself. Say back its
+            `when` and `next_run` exactly as returned. If it returns `needs`, ask the person that one thing and
+            set it up again with their answer; if it returns a `reason`, say it. Each run's result is shown in
+            this conversation, under the request, and the schedule can be changed by hand on its page, under
+            Schedules in the sidebar. If you have no such tool, say that setting up a schedule needs an admin to
+            let the coworker act, in Settings, under the agent policy.
 
 
             For what else was going on outside the business (a public holiday, the news, a competitor's

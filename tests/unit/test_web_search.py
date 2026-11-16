@@ -78,4 +78,4 @@ def test_it_is_an_organisation_setting_and_the_coworker_tool_is_a_read():
     from pramanyx.orgsettings.allows import FORMER_ENV
     from pramanyx.orgsettings.models import OrgSettings
     assert FORMER_ENV["web_search"] == () and OrgSettings().web_search is None
-    assert TOOL_LEVELS["search_the_web"] == "read" and TOOL_LEVELS["schedule_question"] == "act"
+    assert TOOL_LEVELS["search_the_web"] == "read" and TOOL_LEVELS["schedule"] == "act"

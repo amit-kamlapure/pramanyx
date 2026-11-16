@@ -588,46 +588,40 @@ class PramanyxClient:
         return await self._get("/web/search", params={"q": query, "n": n})
 
     # ── A question on a rhythm, run by the platform (the coworker plan, 2026-11-15) ────────────────
-    async def schedule_question(self, question: str, connection: str, cron: str, name: str = "",
-                                stop_after_minutes: int = 0, timezone: str = "") -> dict:
-        """An automation: a schedule trigger and one `investigate` step. It runs on the platform's own scheduler —
-        traced, and listed with the other automations — never on the coworker's.
-
-        ``cron`` is the schedule's expression: a five-field cron, or a recurrence for what a cron cannot say (once, every
-        N from a start, the first Monday, five times — `automations.recurrence`). It starts at its first scheduled time,
-        never at the moment it is made (`start_at_first_run`): "every Monday at nine", asked on a Wednesday, must
-        not run that Wednesday. What comes back says when in words and when next, as the platform reads it."""
-        body = {"conn_id": connection, "name": (name or question)[:120],
-                "description": "Asked from the coworker, to be asked again on a schedule.",
-                "conditions": [{"kind": "schedule", "config": {"cron": str(cron).replace("\\n", "\n").strip()}}],
-                "effects": [{"kind": "investigate", "config": {"question": question}}],
-                "start_at_first_run": True}
-        # The clock its times are read in: the one the person named, else the organisation's own (Settings ▸
-        # Organisation), else UTC. The tool's words had promised "the organisation's time zone" while sending none,
-        # so "Mondays at nine" was nine in UTC whatever the organisation's clock said.
+    async def schedule(self, request: str, connection: str, timezone: str = "") -> dict:
+        """ANYTHING ON A SCHEDULE, FROM A SENTENCE (2026-11-16). The person's words go to the platform's own designer
+        (`POST /automations/propose`, `automations/propose.py`): a model drafts the whole chain — when it runs, what
+        it does, where it goes — from what this install has, and the same checks a save runs refuse a draft that
+        could not be saved. A draft with nothing left open is then made, as the person asked; its runs are shown in
+        the conversation, and its design opens on the platform's canvas, where a person can change it by hand. A
+        draft that left a choice open (a Slack channel the person did not name) is NOT made: what is open comes back,
+        for the agent to ask. One scheduler — the platform's; one designer — the one the Automations page uses."""
         clock = timezone.strip()
         if not clock:
             settings = await self._get("/org-settings")
             clock = str(settings.get("timezone") or "").strip() if isinstance(settings, dict) else ""
-        if clock:
-            body["timezone"] = clock
-        if stop_after_minutes and stop_after_minutes > 0:
-            from datetime import datetime, timedelta, timezone as _tz
-            body["expires_at"] = (datetime.now(_tz.utc) + timedelta(minutes=int(stop_after_minutes))
-                                  ).strftime("%Y-%m-%dT%H:%M:%SZ")
-        made = await self._post("/automations", json_body=body)
+        drafted = await self._post("/automations/propose", json_body={
+            "outcome": request, "conn_id": connection, "timezone": clock, "from_conversation": True})
+        drafted = drafted if isinstance(drafted, dict) else {}
+        if drafted.get("verdict") != "proposed" or not drafted.get("draft"):
+            return {"scheduled": False, "reason": drafted.get("reason") or "the request could not be made into a schedule",
+                    "notes": drafted.get("notes") or ""}
+        if drafted.get("to_fill"):
+            return {"scheduled": False, "needs": drafted["to_fill"], "notes": drafted.get("notes") or "",
+                    "reason": "the request leaves a choice open; ask the person and set it up again with their answer"}
+        draft = dict(drafted["draft"])
+        draft["description"] = (draft.get("description") or "") + " Set up from a conversation, in the person's words."
+        made = await self._post("/automations", json_body={**draft, "start_at_first_run": True})
         when = await self._get(f"/automations/{made.get('id')}/schedule")
         when = when if isinstance(when, dict) else {}
-        return {"id": made.get("id"), "name": made.get("name"), "connection": connection,
-                "cron": body["conditions"][0]["config"]["cron"],
+        return {"scheduled": True, "id": made.get("id"), "name": made.get("name"), "connection": connection,
                 "when": "; ".join(when.get("said") or []), "next_run": when.get("next_run") or "",
                 "timezone": when.get("timezone") or clock or "UTC",
-                "enabled": made.get("enabled"),
+                "steps": [str(e.get("kind")) for e in draft.get("effects") or []],
                 "stops_at": made.get("expires_at") or "never",
-                "on_probation": made.get("probation"),
-                "note": ("It runs on the platform's own scheduler, starting at its first scheduled time; each run is "
-                         "its own trace in Agent Ops, and it is listed under Schedules. To have a run sent somewhere "
-                         "(email, Slack), a person adds that step on the schedule's page."),
+                "notes": " ".join(x for x in [str(drafted.get("notes") or "").strip(),
+                                              "Each run is shown in this conversation, kept with the schedule, and "
+                                              "traced in Agent Ops; its design can be changed on the schedule's page."] if x),
                 "open": f"/automations?conn={connection}&focus={made.get('id')}"}
 
     # ── DE-2c: the knowledge tools, through the API like everything else ───────────

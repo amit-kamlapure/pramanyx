@@ -283,3 +283,33 @@ def test_an_authorable_kind_is_offered_even_with_an_empty_catalogue():
     line = next(ln for ln in p.system.splitlines() if ln.startswith("- trusted_query"))
     assert "UNAVAILABLE" not in line
     assert "(a list: rows)" in line
+
+
+# ── 2026-11-16: a sentence is the way to schedule anything ───────────────────────────────────────────────────────────
+
+def test_the_designer_is_told_the_time_in_the_persons_clock_so_in_five_minutes_can_be_drawn():
+    """The user, after the agent shell's scheduler took "deliver me AI news in the next 5 minutes here": the
+    designer was never told the time, so it could draft only a rhythm."""
+    once = "DTSTART:20991116T115800\nRRULE:FREQ=DAILY;COUNT=1"
+    p = _Provider(_chain(conditions=[{"kind": "schedule", "config": {"cron": once}}]))
+    out = propose_chain("in five minutes, how is the pipeline?", conn_id=CONN, provider=p, timezone_name="Asia/Kolkata")
+    assert "NOW: " in p.system and "in Asia/Kolkata" in p.system and "Write every time in Asia/Kolkata" in p.system
+    assert "COUNT=1" in p.system                                  # it is taught how to say once
+    assert out.verdict == "proposed" and out.draft["timezone"] == "Asia/Kolkata"
+    assert out.draft["conditions"][0]["config"]["cron"] == once
+    assert out.first_run.startswith("2099-11-16T06:28")           # 11:58 in Kolkata, as the scheduler reads it
+
+
+def test_a_request_from_a_conversation_needs_no_sending_step_for_here():
+    p = _Provider(_chain())
+    propose_chain("every Monday, how is the pipeline — here", conn_id=CONN, provider=p, from_conversation=True)
+    assert "THE PERSON ASKED IN A CONVERSATION" in p.system and "need no sending step" in p.system
+    p = _Provider(_chain())
+    propose_chain("every Monday, how is the pipeline", conn_id=CONN, provider=p)
+    assert "THE PERSON ASKED IN A CONVERSATION" not in p.system   # the Automations page's box is not a conversation
+
+
+def test_a_recurrence_the_designer_writes_wrongly_is_refused_like_any_unsaveable_draft():
+    p = _Provider(_chain(conditions=[{"kind": "schedule", "config": {"cron": "DTSTART:20991116T090000\nRRULE:FREQ=SECONDLY"}}]))
+    out = propose_chain("every second", conn_id=CONN, provider=p)
+    assert out.verdict == "refused" and "FREQ must be one of" in out.reason

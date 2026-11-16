@@ -26842,10 +26842,21 @@ export interface components {
              */
             conn_id: string;
             /**
+             * From Conversation
+             * @default false
+             */
+            from_conversation: boolean;
+            /**
              * Outcome
              * @description What the chain should achieve, in the user's words.
              */
             outcome: string;
+            /**
+             * Timezone
+             * @description An IANA clock, e.g. Asia/Kolkata; empty for the reader's own.
+             * @default
+             */
+            timezone: string;
         };
         /** LayoutRequest */
         pramanyx__routers__cards__LayoutRequest: {

@@ -40,7 +40,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { TabStrip } from "@/components/ui/tab-strip";
 import { EmptyState as SharedEmptyState } from "@/components/ui/empty-state";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 
 // ── Vocabulary (mirrors the backend Literals) ────────────────────────────────────
 
@@ -337,21 +337,6 @@ export function AutomationsPanel({ connId, focusId }: Props) {
         trailing={<>
         {view === "list" && (
           <>
-            {/* DS-15 — the other way in. Creation by PROPOSAL: describe the outcome, the
-                agent drafts a chain grounded in what this deployment actually has, and it
-                arrives as a seeded form with a dry-run receipt. Nothing is saved until the
-                person presses the same Create button they always would. */}
-            <Input
-              placeholder="or describe it — e.g. post a Monday pipeline summary to #revenue"
-              value={outcome}
-              onChange={e => setOutcome(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") void onPropose(); }}
-              style={{ width: 340,
-                marginRight: 8 }} />
-            <Button variant="ghost" className="h-auto aug-fs-sm" disabled={!outcome.trim() || proposing}
-              onClick={() => void onPropose()} style={{ padding: "5px 12px" }}>
-              {proposing ? "Drafting…" : "Propose"}
-            </Button>
             <input ref={importFileRef} type="file" accept=".json,application/json"
               style={{ display: "none" }}
               onChange={e => {
@@ -369,7 +354,7 @@ export function AutomationsPanel({ connId, focusId }: Props) {
               onClick={() => { setCanvasFor(null); setCreateName("Untitled automation");
                                setCreating({}); setView("canvas"); }}
               style={{ fontSize: 12, padding: "5px 12px" }}>
-              + New automation
+              + Design it yourself
             </Button>
           </>
         )}
@@ -453,6 +438,29 @@ export function AutomationsPanel({ connId, focusId }: Props) {
         )}
         {showSpinner && <Loading what="automations" />}
 
+        {/* A SENTENCE IS THE WAY IN (the user, 2026-11-16: "this should be the de-facto way of scheduling literally
+            anything"). Say what should happen and when; the designer drafts the whole chain from what this
+            deployment has (DS-15, `automations/propose.py`) and it opens on the canvas with a dry-run receipt —
+            nothing is saved until the person presses Create there. Designing by hand stays: "+ Design it yourself". */}
+        {view === "list" && !showSpinner && (
+          <div data-testid="say-it" style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16,
+            padding: 14, border: "1px solid var(--b1)", borderRadius: "var(--r3)", background: "var(--bg-1, var(--bg-2))" }}>
+            <label htmlFor="say-it" className="aug-fs-sm" style={{ fontWeight: 600 }}>What should happen, and when?</label>
+            <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+              <Textarea id="say-it" rows={2} value={outcome} style={{ flex: "1 1 auto", resize: "vertical" }}
+                placeholder="e.g. every Monday at 9, GMV by platform posted to #revenue — or: in ten minutes, email me yesterday's orders"
+                onChange={e => setOutcome(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void onPropose(); } }} />
+              <Button variant="default" className="h-auto aug-fs-sm" disabled={!outcome.trim() || proposing || !conn}
+                onClick={() => void onPropose()} style={{ padding: "7px 14px", flexShrink: 0 }}>
+                {proposing ? "Drafting…" : "Draft it"}
+              </Button>
+            </div>
+            <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>
+              Drawn on the canvas for you to check and change before anything is saved. Once, on a rhythm, or when the data changes.
+            </span>
+          </div>
+        )}
         {view === "list" && !showSpinner && loadError && (
           <ReadFailed what="the automations" error={loadError} onRetry={() => { void load(); }} />
         )}

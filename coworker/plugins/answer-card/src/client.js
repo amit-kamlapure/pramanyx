@@ -594,6 +594,7 @@ export function Scheduled({ made }) {
   const said = now && Array.isArray(now.said) && now.said.length ? now.said.join("; ") : String(made.when || "");
   const steps = now && Array.isArray(now.steps) ? now.steps : [];
   const sends = steps.filter((kind) => kind === "email" || kind === "slack_post" || kind === "notify");
+  const runs = now && Array.isArray(now.runs) ? now.runs : [];
   return h("div", { "data-pramanyx-schedule": now === null ? "gone" : now?.state || "reading", style: frame },
     h("div", { role: "heading", "aria-level": 4, style: { fontWeight: 600 } }, "Schedule"),
     h("div", null, String(now?.name || made.name || "")),
@@ -602,18 +603,47 @@ export function Scheduled({ made }) {
       : now === undefined ? h("div", { style: quiet }, "Reading where this schedule stands…")
         : h("div", { role: "status" }, standing(now)),
     now && now.expires_at && now.state !== "ended" ? h("div", { style: quiet }, `It stops on ${whenNext(now.expires_at)}.`) : null,
-    now ? h("div", { style: quiet }, sends.length
-      ? `Each run is also sent on: ${sends.map((kind) => ({ email: "email", slack_post: "Slack", notify: "a notification" })[kind]).join(", ")}.`
-      : "Each run's answer is kept with the schedule. To have it sent somewhere, add a step on its page.") : null,
+    steps.length ? h("div", { style: quiet }, `It ${steps.map((kind) => STEP_WORDS[kind] || kind.replace(/_/g, " ")).join(", then ")}.`) : null,
+    now && sends.length ? h("div", { style: quiet },
+      `Each run is also sent on: ${sends.map((kind) => ({ email: "email", slack_post: "Slack", notify: "a notification" })[kind]).join(", ")}.`) : null,
+    // WHAT EACH RUN FOUND, HERE (2026-11-16: "deliver it here"). Read with the schedule each time the card is drawn.
+    runs.length ? h("div", { "data-pramanyx-runs": "", style: { display: "flex", flexDirection: "column", gap: 6, paddingTop: 4 } },
+      runs.map((run, i) => h(RunFound, { key: `${run.at}-${i}`, run }))) : null,
     now !== null && hasPane() ? h("div", null, h("button", { type: "button", style: button(false),
       onClick: () => openBeside("page", pageFor.schedule(made.id, String(now?.conn_id || made.connection || ""))) }, "Open the schedule")) : null);
 }
 
-/** The schedule a `schedule_question` call made, or null. */
+/** The tools that set up a schedule: `schedule` (a sentence, 2026-11-16) and the question-only one it replaced, whose
+ *  cards in earlier conversations still draw. */
+const SCHEDULES = /^mcp__pramanyx__schedule(_question)?$/;
+
+/** What a schedule's steps do, in words. */
+const STEP_WORDS = {
+  investigate: "asks the question", synthesize: "writes it up", slack_post: "posts it to Slack", email: "emails it",
+  notify: "sends a notification", metric_value: "reads the metric", trusted_query: "runs the trusted query",
+  subchain: "runs another automation", kinetic_action: "takes the declared action", expectations: "checks the table's expectations",
+};
+
+/** One run of a schedule: when, and what its steps found — the platform's words, with the analysis a click away. */
+function RunFound({ run }) {
+  const found = (run.steps ?? []).filter((step) => step.said);
+  const failed = (run.steps ?? []).filter((step) => !["executed", "skipped"].includes(String(step.status)));
+  const analysis = (run.steps ?? []).map((step) => step.investigation_id).find(Boolean);
+  return h("div", { style: { borderTop: `1px solid ${line}`, paddingTop: 6 } },
+    h("div", { style: { ...quiet, fontSize: 12.5 } },
+      `Ran ${whenNext(run.at)}`, run.outcome === "paused" ? " · waiting for a person" : run.outcome === "error" ? " · did not run" : ""),
+    found.length ? found.map((step, i) => h("div", { key: i, style: { whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight: 1.5 } }, step.said))
+      : h("div", { style: quiet }, run.outcome === "error" ? (run.reason || "It broke before it found anything.")
+        : failed.length ? (failed[0].message || "A step did not finish.") : "It found nothing to say."),
+    analysis && hasPane() ? h("div", null, h("button", { type: "button", className: "pramanyx-link",
+      onClick: () => openBeside("page", pageFor.receipt(analysis)) }, "How it was answered")) : null);
+}
+
+/** The schedule a call made, or null — a call that asked instead (`needs`) or could not (`reason`) made none. */
 function scheduleOf(block) {
   try {
     const got = JSON.parse(resultText(block) || "{}");
-    return got && typeof got.id === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(got.id) ? got : null;
+    return got && got.scheduled !== false && typeof got.id === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(got.id) ? got : null;
   } catch {
     return null;
   }
@@ -706,6 +736,7 @@ function AnswerStep(props) {
 const DOES = {
   deep_analysis: ["Ran a deep analysis", ["question"]],
   draft_email: ["Drafted an email", ["subject", "to"]],
+  schedule: ["Set up a schedule", ["request"]],
   schedule_question: ["Set a question on a schedule", ["question", "cron"]],
   search_the_web: ["Searched the web", ["query"]],
   explore: ["Explored", ["question", "topic", "focus"]],
@@ -1282,7 +1313,7 @@ export function apply(ctx) {
     ctx.slots.inject("tool.call.toolview", () =>
       ctx.slots.register({ name: "tool.call.toolview", key: name },
         ANSWERS.test(name) ? AnswerCard : name === PREFIX + "draft_email" ? DraftCard
-          : name === PREFIX + "schedule_question" ? ScheduleCard : ToolStep));
+          : SCHEDULES.test(name) ? ScheduleCard : ToolStep));
   };
   // The tools known when this was written are named from the first call. A view is keyed by exact tool name, so
   // one added to Pramanyx since — and each custom agent's — gets its view at the end of the first turn that calls it.

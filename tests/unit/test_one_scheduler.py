@@ -313,3 +313,18 @@ def test_the_shells_scheduler_is_off_in_the_coworker():
     home = (root / "plugins" / "home" / "src" / "client.js").read_text()
     assert "/automations" in home and "pramanyx-schedules" in home
     assert "schedule.catalog" not in (root / "plugins" / "brand" / "src" / "client.js").read_text()
+
+
+def test_the_schedule_read_carries_what_each_run_found_for_the_conversation_that_set_it_up(flag_on):
+    """2026-11-16: "deliver it here" — the coworker's card shows each run's result, read with the schedule."""
+    from pramanyx.automations.models import AutomationRun, EffectOutcome
+    from pramanyx.automations.store import append_run
+    made = client.post("/automations", json=_body("0 9 * * 1")).json()
+    for i, (outcome, said) in enumerate([("not_fired", ""), ("fired", "GMV led by Mytheresa at €1.2M"),
+                                         ("fired", "GMV led by NET-A-PORTER")]):
+        append_run(AutomationRun(automation_id=made["id"], outcome=outcome, started_at=f"2026-11-1{i}T09:00:00Z",
+                                 effects=[EffectOutcome(kind="investigate", status="executed", investigation_id=f"inv{i}",
+                                                        data={"summary": said})] if said else []))
+    runs = client.get(f"/automations/{made['id']}/schedule").json()["runs"]
+    assert [r["steps"][0]["said"] for r in runs] == ["GMV led by NET-A-PORTER", "GMV led by Mytheresa at €1.2M"]
+    assert runs[0]["steps"][0]["investigation_id"] == "inv2"         # a run that did nothing is not shown
