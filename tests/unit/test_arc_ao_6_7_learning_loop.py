@@ -260,6 +260,7 @@ def test_the_nightly_run_is_once_a_day_and_behind_its_flag(monkeypatch):
     runs: list = []
     monkeypatch.setattr(quality, "evaluate_agent", lambda ag: runs.append(ag.id) or {"passed": 1, "total": 1})
     learning._last_nightly_day = None
+    monkeypatch.setattr("pramanyx.kernel.once_a_day.first_today", lambda job, day: True)   # a day no one has claimed
     day = datetime(2026, 10, 3, tzinfo=timezone.utc)
     out = learning.nightly(now=day)
     assert runs == [a.id] and out["ran"][0]["agent_id"] == a.id

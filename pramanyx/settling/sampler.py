@@ -233,6 +233,10 @@ def run_settling_samples_daily(*, now: Optional[datetime] = None, force: bool = 
     if not force and _last_sample_day == today.isoformat():
         return 0
     _last_sample_day = today.isoformat()
+    # Once a UTC day across restarts too (`kernel.once_a_day`): a restart re-ran every warehouse's reading.
+    from pramanyx.kernel.once_a_day import first_today
+    if not force and not first_today("settling_reading", today.isoformat()):
+        return 0
     try:
         from pramanyx.db.registry import list_connections
         connections = list_connections()

@@ -219,6 +219,11 @@ def nightly(*, now: Optional[datetime] = None, force: bool = False) -> dict[str,
     if _last_nightly_day == day and not force:
         return {"skipped": "already ran today"}
     _last_nightly_day = day
+    # Once a UTC day across restarts too (`kernel.once_a_day`): a restart re-ran every agent's evaluation, model calls
+    # and all.
+    from pramanyx.kernel.once_a_day import first_today
+    if not force and not first_today("agents_nightly", day):
+        return {"skipped": "already ran today"}
     from pramanyx.custom_agents.store import list_agents, list_goldens
     from pramanyx.custom_agents.quality import evaluate_agent
     ran, skipped = [], []
