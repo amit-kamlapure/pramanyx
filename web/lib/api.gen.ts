@@ -14518,6 +14518,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/org-settings/agent-policy/version": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Agent Policy Version
+         * @description Whether the agent policy changed, as a fingerprint (2026-11-16). The MCP server asks every few seconds and, when
+         *     it moves, tells its clients their tool list changed — so a running coworker picks up a policy a person just set,
+         *     without a restart. Not a data access, and not recorded as an agent's call: the read of the policy that follows a
+         *     change is.
+         */
+        get: operations["get_agent_policy_version_org_settings_agent_policy_version_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/org-settings/allows": {
         parameters: {
             query?: never;
@@ -51596,6 +51619,26 @@ export interface operations {
         };
     };
     delete_agent_policy_org_settings_agent_policy_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    get_agent_policy_version_org_settings_agent_policy_version_get: {
         parameters: {
             query?: never;
             header?: never;

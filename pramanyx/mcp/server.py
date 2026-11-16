@@ -16,7 +16,9 @@ the API process exactly as they do for the web app.
 """
 from __future__ import annotations
 
+import asyncio
 import hmac
+import weakref
 from typing import Annotated, Any, Optional
 
 from mcp.server.fastmcp import FastMCP
@@ -63,8 +65,9 @@ class PolicedFastMCP(FastMCP):
     offered and failed, and one called by name anyway is refused with the same stable code
     the API would give. Every tool carries the protocol's hints — `readOnlyHint` for a read,
     `destructiveHint` for an act — from the one level map (`mcp/policy.py`). When the API
-    cannot be asked, the install's default (`run`) is applied, which is what the API will
-    enforce anyway.
+    cannot be asked, `run`'s tools are listed: a policy that could not be read is no grant.
+    A change is picked up without a restart: the server watches the policy's version while a
+    client holds a list and tells it the list changed (`watch_the_policy`).
     """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -113,7 +116,24 @@ class PolicedFastMCP(FastMCP):
             if not callers.admits(grant, t.name):          # ED-2 — the caller's own grant narrows the list
                 continue
             out.append(t.model_copy(update={"annotations": tool_annotations(level)}))
+        self._watch_the_policy_for(self._session())
         return out
+
+    def _session(self):
+        try:
+            return self.get_context().session
+        except Exception:                          # noqa: BLE001 — listed outside a request (a test, a direct call)
+            return None
+
+    def _watch_the_policy_for(self, session) -> None:
+        """Remember a session that was handed a list, and keep one watch on the policy for all of them (2026-11-16: a
+        coworker started under `run` kept that list after a person allowed `act`, until it was restarted)."""
+        if session is None:
+            return
+        _listed_to.add(session)
+        global _watching
+        if _watching is None or _watching.done():
+            _watching = asyncio.get_running_loop().create_task(watch_the_policy())
 
     async def call_tool(self, name: str, arguments: dict):
         import json as _json
@@ -158,6 +178,43 @@ class PolicedFastMCP(FastMCP):
 
 _POLICY_TTL = 30.0
 _policy_cache: dict = {}   # {caller name, "" for this process: (fetched_at, AgentPolicy)}
+
+#: How often the server asks whether the policy changed. The question reads no data and is recorded nowhere
+#: (`GET /org-settings/agent-policy/version`), so it can be asked often: a person who allows `act` in Settings and
+#: turns to the coworker finds the new tools there within this.
+_WATCH_EVERY = 10.0
+#: After the API could not be asked, wait this long before asking again.
+_WATCH_BACKOFF = 30.0
+_listed_to: "weakref.WeakSet" = weakref.WeakSet()   # the sessions a list was handed to
+_watching: "Optional[asyncio.Task]" = None
+
+
+async def watch_the_policy(*, every: float = _WATCH_EVERY, rounds: Optional[int] = None) -> None:
+    """While any session that was handed a list is open, ask whether the policy changed; when it has, drop the cached
+    policy and tell each session its tool list changed — the client re-lists and is handed what the policy now allows.
+    The first answer is the baseline. ``rounds`` bounds the watch for a test."""
+    import time as _time
+    seen = ""
+    done = 0
+    while _listed_to and (rounds is None or done < rounds):
+        done += 1
+        try:
+            version = await _client.agent_policy_version()
+        except Exception as exc:                    # noqa: BLE001 — the API restarting: ask again later, said once
+            _log.info("could not ask whether the agent policy changed (%s); asking again in %ss", exc, _WATCH_BACKOFF)
+            await asyncio.sleep(_WATCH_BACKOFF)
+            continue
+        if seen and version and version != seen:
+            forget_policy()
+            _live_checked[:] = [_time.monotonic() - _LIVE_TTL]   # the re-list reads the live rosters too
+            for session in list(_listed_to):
+                try:
+                    await session.send_tool_list_changed()
+                except Exception as exc:            # noqa: BLE001 — that session closed; the others still hear
+                    _log.debug("could not send tools/list_changed: %s", exc)
+                    _listed_to.discard(session)
+        seen = version or seen
+        await asyncio.sleep(every)
 
 
 async def current_policy():
@@ -626,6 +683,17 @@ import logging as _logging
 import re as _re
 
 _log = _logging.getLogger("pramanyx.mcp")
+
+
+class _NotTheVersionCheck(_logging.Filter):
+    """The policy watch asks every few seconds (`watch_the_policy`); its request line would bury the others."""
+
+    def filter(self, record: _logging.LogRecord) -> bool:
+        from pramanyx.orgsettings.agent_policy import POLICY_VERSION_ROUTE
+        return POLICY_VERSION_ROUTE not in record.getMessage()
+
+
+_logging.getLogger("httpx").addFilter(_NotTheVersionCheck())
 
 #: A tool name an MCP client will accept, derived from the automation's own name.
 _SLUG_OK = _re.compile(r"[^a-z0-9_]+")

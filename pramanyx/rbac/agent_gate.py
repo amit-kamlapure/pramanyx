@@ -172,6 +172,14 @@ async def enforce_agent_policy(request: Request) -> AsyncIterator[None]:
         _audit(request, tool=tool, allowed=allowed, code=refused_code, required=required, policy=policy,
                connection=connection, body=body, org_id=org_id, principal=principal)
 
+    # 2026-11-16 — the MCP server asks every few seconds whether the policy changed, so a running coworker picks up a
+    # change without a restart. That question reads no data: it is let through unrecorded, where a row every few
+    # seconds would bury the calls an agent made. The read of the policy that follows a change is recorded.
+    from pramanyx.orgsettings.agent_policy import POLICY_VERSION_ROUTE
+    if code is None and template == POLICY_VERSION_ROUTE and request.method in ("GET", "HEAD"):
+        yield
+        return
+
     if code is not None:
         audit(False, code)
         raise HTTPException(status_code=403, detail=refusal(

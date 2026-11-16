@@ -57,7 +57,8 @@ Spotlight's staged acts. Which of the three an outside agent may do is the organ
 | Allowlists | `connections` (connection ids) and `tools` (tool names); `null` means all. |
 | Environment | `PRAMANYX_AGENT_POLICY_LEVEL`, `PRAMANYX_AGENT_POLICY_CONNECTIONS`, `PRAMANYX_AGENT_POLICY_TOOLS` (server side) can only **narrow** what is saved, never widen it. |
 | Enforcement | Every call this client makes carries `X-Pramanyx-Agent: mcp` and `X-Pramanyx-Tool: <tool>`; the API checks the policy on those calls and refuses with a 403 whose `detail.code` is one of `AGENT_LEVEL_DENIED`, `AGENT_TOOL_DENIED`, `AGENT_CONNECTION_DENIED`, `AGENT_POLICY_NOT_SELF_SET`. The server also hides a disallowed tool from `tools/list` and refuses one called by name with the same code. |
-| Audit | Every agent call, allowed or refused, is a `mcp.tool_call` event in the Ledger with its principal, tool, route, verdict and bounded arguments — listed on the governance feed under *data access*. |
+| Changes | Picked up without a restart (since 2026-11-16). The server asks `GET /org-settings/agent-policy/version` every ten seconds while a client holds a list; when the fingerprint moves it sends `notifications/tools/list_changed`, and the client re-lists under the new policy. |
+| Audit | Every agent call, allowed or refused, is a `mcp.tool_call` event in the Ledger with its principal, tool, route, verdict and bounded arguments — listed on the governance feed under *data access*. The one exception is the version question above: it reads no data, and a row every ten seconds would bury the calls an agent made; the read of the policy that follows a change is recorded. |
 
 ## Architecture
 

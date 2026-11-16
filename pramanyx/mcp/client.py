@@ -551,6 +551,11 @@ class PramanyxClient:
     async def agent_policy(self) -> dict:
         return await self._get("/org-settings/agent-policy")
 
+    async def agent_policy_version(self) -> str:
+        """Whether the policy changed, as a fingerprint — read every few seconds, recorded nowhere (2026-11-16)."""
+        from pramanyx.orgsettings.agent_policy import POLICY_VERSION_ROUTE
+        return str((await self._get(POLICY_VERSION_ROUTE) or {}).get("version") or "")
+
     async def service_principal_me(self, name: str, key: str) -> tuple[int, Optional[dict]]:
         """Arc ED, ED-2 — ``(status, body)`` the API gives a presented service principal: 200 with its grant, 401 when the
         name and key do not match. 0 when the API could not be asked."""

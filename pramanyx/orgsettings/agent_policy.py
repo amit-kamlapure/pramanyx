@@ -201,6 +201,20 @@ def narrow(policy: AgentPolicy, env: Optional[dict] = None) -> AgentPolicy:
     return out
 
 
+#: Where an agent asks whether the policy changed — the one route an agent reaches that is not recorded as its call: it
+#: reads no data (`rbac/agent_gate.py`).
+POLICY_VERSION_ROUTE = "/org-settings/agent-policy/version"
+
+
+def policy_version(org_id: str) -> str:
+    """A short fingerprint of what applies to the organisation's agents right now — it changes when the saved policy,
+    the default or the environment's narrowing does, and says nothing else. The MCP server watches it so a running
+    coworker sees a change without a restart (2026-11-16)."""
+    import hashlib
+    eff = effective_agent_policy(org_id).as_dict()
+    return hashlib.sha256(json.dumps(eff, sort_keys=True).encode()).hexdigest()[:16]
+
+
 def effective_agent_policy(org_id: str) -> AgentPolicy:
     """What applies to an agent's call for this organisation right now: the saved policy (or
     the default), narrowed by the environment. Read every time — nothing is cached, so a

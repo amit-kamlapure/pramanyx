@@ -246,6 +246,17 @@ def get_agent_policy():
     return _agent_policy_view()
 
 
+@router.get("/org-settings/agent-policy/version")
+def get_agent_policy_version():
+    """Whether the agent policy changed, as a fingerprint (2026-11-16). The MCP server asks every few seconds and, when
+    it moves, tells its clients their tool list changed — so a running coworker picks up a policy a person just set,
+    without a restart. Not a data access, and not recorded as an agent's call: the read of the policy that follows a
+    change is."""
+    from pramanyx.org.context import current_org_id
+    from pramanyx.orgsettings.agent_policy import policy_version
+    return {"version": policy_version(current_org_id())}
+
+
 @router.put("/org-settings/agent-policy")
 def put_agent_policy(body: _AgentPolicyBody, request: Request):
     """Set the organisation's agent policy. A person with ADMIN_MANAGE_ORG; never the agent."""
