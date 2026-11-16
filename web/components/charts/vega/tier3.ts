@@ -17,12 +17,22 @@
  */
 
 import { cleanLabel } from "@/lib/format";
+import { RECEDE, subjectsOf } from "@/components/charts/vega/emphasis";
 
 export interface Tier3Args {
   columns: string[];
   rows: unknown[][];
   chartType: string;
   title?: string | null;
+  /** The chosen values (exhibit `emphasis`, a dashboard's focus): they stay lit, the rest recede. */
+  emphasis?: readonly unknown[] | null;
+}
+
+/** A Vega opacity reading `field` off a datum: the chosen stay at `on`, the rest recede. No choice, no encoding. */
+function litBy(emphasis: readonly unknown[] | null | undefined, field: string, on = 1): Record<string, unknown> {
+  const s = subjectsOf(emphasis);
+  if (!s.length) return {};
+  return { opacity: { signal: `indexof(${JSON.stringify(s)}, '' + datum.${field}) >= 0 ? ${on} : ${RECEDE}` } };
 }
 
 export interface Tier3Spec {
@@ -42,8 +52,9 @@ const num = (v: unknown): number => {
   return Number.isFinite(n) ? n : 0;
 };
 
-/** Column pick: first non-numeric as the label, first numeric as the measure. */
-function pickCols(columns: string[], rows: unknown[][]): { label: string; value: string } | null {
+/** Column pick: first non-numeric as the label, first numeric as the measure. Exported so a click on a tile or a stage
+ *  can say which column it stands for (`charts/selection.ts`). */
+export function pickCols(columns: string[], rows: unknown[][]): { label: string; value: string } | null {
   if (!columns.length || !rows.length) return null;
   const numericIdx = columns.findIndex((_, i) => rows.some((r) => typeof r[i] === "number" || (r[i] !== null && r[i] !== "" && Number.isFinite(Number(r[i])))));
   const labelIdx = columns.findIndex((_, i) => i !== numericIdx);
@@ -64,7 +75,7 @@ const base = (title?: string | null) => ({
 //: shifted up for a value that is not drawn reads as a label nudged off-centre for no reason.
 const SHOW_VALUE = "(datum.y1 - datum.y0) > 38 && (datum.x1 - datum.x0) > 46";
 
-function treemap(columns: string[], rows: unknown[][], title?: string | null): Tier3Spec | null {
+function treemap(columns: string[], rows: unknown[][], title?: string | null, emphasis?: readonly unknown[] | null): Tier3Spec | null {
   const cols = pickCols(columns, rows);
   if (!cols) return null;
   const li = columns.indexOf(cols.label);
@@ -121,7 +132,7 @@ function treemap(columns: string[], rows: unknown[][], title?: string | null): T
                */
               fillOpacity: { value: 0.55 },
             },
-            update: { x: { field: "x0" }, y: { field: "y0" }, x2: { field: "x1" }, y2: { field: "y1" } },
+            update: { x: { field: "x0" }, y: { field: "y0" }, x2: { field: "x1" }, y2: { field: "y1" }, ...litBy(emphasis, "name") },
           },
         },
         {
@@ -174,7 +185,7 @@ function treemap(columns: string[], rows: unknown[][], title?: string | null): T
 }
 
 // ── funnel ───────────────────────────────────────────────────────────────────
-function funnel(columns: string[], rows: unknown[][], title?: string | null): Tier3Spec | null {
+function funnel(columns: string[], rows: unknown[][], title?: string | null, emphasis?: readonly unknown[] | null): Tier3Spec | null {
   const cols = pickCols(columns, rows);
   if (!cols) return null;
   const li = columns.indexOf(cols.label);
@@ -201,6 +212,7 @@ function funnel(columns: string[], rows: unknown[][], title?: string | null): Ti
               width: { scale: "w", field: "value" },
               y: { scale: "y", field: "stage" },
               height: { scale: "y", band: 1 },
+              ...litBy(emphasis, "stage"),
             },
           },
         },
@@ -221,7 +233,7 @@ function funnel(columns: string[], rows: unknown[][], title?: string | null): Ti
 }
 
 // ── gantt ────────────────────────────────────────────────────────────────────
-function gantt(columns: string[], rows: unknown[][], title?: string | null): Tier3Spec | null {
+function gantt(columns: string[], rows: unknown[][], title?: string | null, emphasis?: readonly unknown[] | null): Tier3Spec | null {
   if (columns.length < 3 || !rows.length) return null;
   const [taskC, startC, endC] = [columns[0], columns[1], columns[2]];
   const values = rows.map((r) => ({
@@ -255,6 +267,7 @@ function gantt(columns: string[], rows: unknown[][], title?: string | null): Tie
           update: {
             x: { scale: "x", field: "s" }, x2: { scale: "x", field: "e" },
             y: { scale: "y", field: "task" }, height: { scale: "y", band: 1 },
+            ...litBy(emphasis, "task"),
           },
         },
       }],
@@ -273,7 +286,7 @@ function gantt(columns: string[], rows: unknown[][], title?: string | null): Tie
  * A two-column layout: sources on the left, targets on the right, node heights proportional
  * to the flow through them, links drawn as cubic beziers between the two.
  */
-function sankey(columns: string[], rows: unknown[][], title?: string | null): Tier3Spec | null {
+function sankey(columns: string[], rows: unknown[][], title?: string | null, emphasis?: readonly unknown[] | null): Tier3Spec | null {
   if (columns.length < 3 || !rows.length) return null;
   const links = rows.map((r) => ({ source: String(r[0] ?? ""), target: String(r[1] ?? ""), value: num(r[2]) }))
     .filter((l) => l.source && l.target && l.value > 0);
@@ -354,6 +367,7 @@ function sankey(columns: string[], rows: unknown[][], title?: string | null): Ti
               width: { signal: "nodeW" },
               y: { field: "y0" }, y2: { field: "y1" },
               fill: { scale: "color", field: "name" },
+              ...litBy(emphasis, "name"),
             },
           },
         },
@@ -375,14 +389,14 @@ function sankey(columns: string[], rows: unknown[][], title?: string | null): Ti
 }
 
 /** Resolve one tier-3 chart, or null when this is not a tier-3 type / the data cannot carry it. */
-export function resolveTier3Spec({ columns, rows, chartType, title }: Tier3Args): Tier3Spec | null {
+export function resolveTier3Spec({ columns, rows, chartType, title, emphasis }: Tier3Args): Tier3Spec | null {
   const t = String(chartType ?? "").toLowerCase();
   if (!TIER3_TYPES.has(t) || !rows?.length || !columns?.length) return null;
   const named = title ?? (columns.length ? cleanLabel(columns[0]) : null);
   switch (t) {
-    case "treemap": return treemap(columns, rows, named);
-    case "funnel": return funnel(columns, rows, named);
-    case "gantt": return gantt(columns, rows, named);
-    default: return sankey(columns, rows, named);
+    case "treemap": return treemap(columns, rows, named, emphasis);
+    case "funnel": return funnel(columns, rows, named, emphasis);
+    case "gantt": return gantt(columns, rows, named, emphasis);
+    default: return sankey(columns, rows, named, emphasis);
   }
 }

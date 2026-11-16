@@ -35,8 +35,9 @@ import { cleanLabel } from "@/lib/format";
 import { downloadChartPng, type ChartInstance } from "@/lib/chartExport";
 import { applyPostproc, type PostprocOp } from "@/lib/api";
 import { VizEditorPanel, type VizEditorModel } from "@/components/charts/VizEditorPanel";
+import { pickOf, type Pick } from "@/components/charts/selection";
 import { sameVizConfig, type VizConfig } from "@/components/charts/vizConfig";
-import { useVizEditorOpen, openVizEditor, closeVizEditor } from "@/components/charts/vizEditorStore";
+import { useVizEditorOpen, openVizEditor, closeVizEditor, useVizDock } from "@/components/charts/vizEditorStore";
 
 const TRANSFORM_OPTS: { v: PostprocOp | "none"; t: string }[] = [
   { v: "none", t: "None" },
@@ -147,6 +148,12 @@ interface Props {
   /** Fill an exact pixel height — for a resizeable card/canvas node (chart + table grow to fill). */
   fillHeight?: number | null;
   onSelect?: (datum: Record<string, unknown>) => void;
+  /** A click on a mark, as the column and value it stands for (`charts/selection.ts`) — what a dashboard filters by.
+   *  An axis, a legend or a mark standing for no single value is not reported. */
+  onPick?: (pick: Pick, datum: Record<string, unknown>) => void;
+  /** A stable name for this chart's editor — a dashboard card's id — so a panel elsewhere (the builder's Chart tab) can
+   *  hold it. Left out, the chart names its own. */
+  editorKey?: string;
   /** The user's saved display choices, applied as the INITIAL state of every control. Read once
    *  per mount (the component owns the controls after that), so restoring a card and editing it
    *  can't fight each other. */
@@ -162,7 +169,7 @@ interface Props {
 
 export function ResultChartCard({
   columns, rows, title, chartType, chartConfig, custom, exhibit: exhibitProp,
-  columnUnits, defaultShowLabels, heightScale, fillHeight, onSelect,
+  columnUnits, defaultShowLabels, heightScale, fillHeight, onSelect, onPick, editorKey,
   config, onConfigChange, onViewChange,
 }: Props) {
   // Saved display choices seed the controls ONCE. A lazy useState (not a ref) because this is
@@ -397,7 +404,9 @@ export function ResultChartCard({
   }, [liveConfig, onConfigChange]);
 
   // Single-instance viz editor (one drawer open app-wide).
-  const cardId = useId();
+  const ownId = useId();
+  const cardId = editorKey ?? ownId;
+  const dock = useVizDock(cardId);
   const editorOpen = useVizEditorOpen(cardId);
 
   // The type the chart ACTUALLY renders, so the Visualization dropdown shows "Bar"/"Scatter"
@@ -501,13 +510,18 @@ export function ResultChartCard({
           showLabels={showLabels}
           heightScale={heightScale}
           fitHeight={fillHeight}
-          onSelect={onSelect}
+          onSelect={onSelect || onPick ? (datum) => {
+            onSelect?.(datum);
+            // read against the data drawn (the card's own aggregation applied) and the chart in force
+            const pick = onPick ? pickOf(datum, effData.columns, effData.rows, hint, dim || null) : null;
+            if (pick) onPick?.(pick, datum);
+          } : undefined}
           onInstanceReady={(inst) => { instRef.current = inst; }}
         />
       )}
 
       {editorOpen && typeof document !== "undefined" &&
-        createPortal(<VizEditorPanel model={model} onClose={() => closeVizEditor(cardId)} />, document.body)}
+        createPortal(<VizEditorPanel model={model} docked={!!dock} onClose={() => closeVizEditor(cardId)} />, dock ?? document.body)}
     </div>
   );
 }

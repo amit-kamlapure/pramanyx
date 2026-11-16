@@ -17,6 +17,7 @@
 import { useEffect, useRef, useState } from "react";
 import { bandPaddingFor, withBandPadding } from "@/components/charts/vega/bandFit";
 import { buildVegaConfig, buildVegaRuntimeConfig, readVegaTokens } from "@/components/charts/vega/config";
+import { clickedDatum } from "@/components/charts/selection";
 import type { ChartInstance, PngOptions } from "@/lib/chartExport";
 
 type VegaModules = {
@@ -122,8 +123,9 @@ export function VegaChart({ spec, tier = 1, height = 300, className, onCompiled,
             viewRef.current = view;
 
             view.addEventListener("click", (_e: unknown, item: unknown) => {
-              const datum = (item as { datum?: unknown })?.datum;
-              if (datum && typeof datum === "object") onSelectRef.current?.(datum as Record<string, unknown>);
+              // only a mark answers a click (the board study §6.2: a click filters a dashboard)
+              const datum = clickedDatum(item);
+              if (datum) onSelectRef.current?.(datum);
             });
 
             /**

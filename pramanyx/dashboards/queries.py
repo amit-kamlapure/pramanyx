@@ -751,6 +751,7 @@ def run(db: Any, sql: str, shown: Shown, columns: list[dict], *, seconds: float,
     """A card shown as asked: the statement around the person's own, run and shaped."""
     stmt, max_rows = statement(sql, shown, columns, dialect_of(db))
     out = execute(db, stmt, max_rows=max_rows, seconds=seconds, params=params)
+    # the statement as it ran — the person's own inside the one that shapes it — for a card that shows its SQL
     if out["error"]:
-        return {**out, "shown": None}
-    return {**out, "shown": shape(out["columns"], out["rows"], shown)}
+        return {**out, "shown": None, "statement": stmt}
+    return {**out, "shown": shape(out["columns"], out["rows"], shown), "statement": stmt}

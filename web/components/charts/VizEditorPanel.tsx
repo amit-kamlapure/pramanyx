@@ -263,13 +263,14 @@ function AnnotationSection({ model }: { model: VizEditorModel }) {
 
 // ── Panel ─────────────────────────────────────────────────────────────────────
 
-export function VizEditorPanel({ model, onClose }: { model: VizEditorModel; onClose: () => void }) {
+export function VizEditorPanel({ model, onClose, docked = false }: { model: VizEditorModel; onClose: () => void; docked?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
 
   // Escape closes; a click outside the drawer closes — EXCEPT clicks in a design-system Select
   // menu, which portals to <body> (a click there, or a dismiss while one is open, is the select's
   // to handle, not the drawer's). The listener is attached on mount, AFTER the opening pencil click.
   useEffect(() => {
+    if (docked) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     const onDown = (e: MouseEvent) => {
       const t = e.target as Element | null;
@@ -280,7 +281,7 @@ export function VizEditorPanel({ model, onClose }: { model: VizEditorModel; onCl
     window.addEventListener("keydown", onKey);
     document.addEventListener("mousedown", onDown);
     return () => { window.removeEventListener("keydown", onKey); document.removeEventListener("mousedown", onDown); };
-  }, [onClose]);
+  }, [onClose, docked]);
 
   const chartMode = model.view === "chart" && model.chartAvailable;
 
@@ -308,7 +309,8 @@ export function VizEditorPanel({ model, onClose }: { model: VizEditorModel; onCl
       // No z-index: it is portalled into <body> after the page, which is one layer (.aug-root),
       // so it is above the page already — and a select opened inside it, portalled after IT,
       // is above this. A z-index here would put that menu underneath.
-      style={{
+      // docked (the board study): drawn in the place that holds it — the builder's Chart tab — as part of that panel
+      style={docked ? { display: "flex", flexDirection: "column" } : {
         position: "fixed", top: 0, right: 0, bottom: 0, width: "min(340px, 92vw)",
         background: "var(--bg-2)", borderLeft: "1px solid var(--b2)",
         boxShadow: "-8px 0 28px -12px rgba(0,0,0,.55)",

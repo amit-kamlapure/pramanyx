@@ -10,6 +10,7 @@
 import type { QueryShaped, QueryShown } from "@/lib/api";
 import { dayLabel } from "@/lib/dashboards/objectView";
 import { fmtDate, type Gran } from "@/lib/format";
+import { emphasisOpacity } from "@/components/charts/vega/emphasis";
 
 type QueryChart = Extract<QueryShaped, { as: "bar" | "line" | "area" | "scatter" }>;
 
@@ -46,12 +47,15 @@ export function seriesColours(series: string[], colours: ChartColours, tones: Re
 const DATE_AS_TEXT = /^\d{4}(-(\d{2}|Q[1-4]))?(-\d{2})?$/;
 
 export function queryChartSpec(c: QueryChart, setup: Pick<QueryShown, "segments" | "labels" | "running"> & Partial<Pick<QueryShown, "across">>,
-  colours: ChartColours): Record<string, unknown> {
+  colours: ChartColours, emphasis?: readonly unknown[] | null): Record<string, unknown> {
   const temporal = c.x.kind === "date" || c.x.kind === "time";
   const manyYears = temporal && new Set(c.points.map(p => String(p.x ?? "").slice(0, 4))).size > 1;
   // a statement's own `date_trunc('month', …)` names no bucket: months read as months, not as "1 Sept 2016"
   const wholeMonths = temporal && !c.x.bucket && c.points.length > 1 && c.points.every(p => String(p.x ?? "").slice(8, 10) === "01");
-  const values = c.points.map(p => ({ x: xText(p.x, c.x.kind, wholeMonths ? "month" : c.x.bucket, manyYears), s: p.s || "", v: p.v }));
+  // `xr` is the place as the query returned it, beside the words it is drawn with: what a click reports, and what a
+  // dashboard's focus lights (the board study, 2026-11-16)
+  const values = c.points.map(p => ({ x: xText(p.x, c.x.kind, wholeMonths ? "month" : c.x.bucket, manyYears), xr: p.x, s: p.s || "", v: p.v }));
+  const lit = emphasisOpacity(emphasis, "xr", temporal);
   const split = c.series.length > 1 || (c.series.length === 1 && c.series[0] !== "");
   const named = c.series.filter(s => s !== "");
   const color = split
@@ -100,6 +104,8 @@ export function queryChartSpec(c: QueryChart, setup: Pick<QueryShown, "segments"
   const encoding: Record<string, unknown> = across
     ? { y: { ...x, axis: { ...x.axis, labelLimit: 180 } }, x: y, ...color, tooltip, ...(offset ? { yOffset: offset } : {}) }
     : { x, y, ...color, tooltip, ...(offset ? { xOffset: offset } : {}) };
+  // a line stays whole: its chosen place is said by the label layer's point, not by fading the path
+  if (lit && c.as !== "line") encoding.opacity = lit;
   const layer: Record<string, unknown>[] = [{ mark, encoding }];
   if (setup.labels && !shares && c.as !== "scatter" && !across) {
     // labels are selective: along dates or numbers only the last place is labelled — a stack by its total, a line or a

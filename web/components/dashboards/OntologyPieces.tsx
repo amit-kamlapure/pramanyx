@@ -481,9 +481,9 @@ export function usePieceFiltering(props: Record<string, unknown>): { on: boolean
 }
 
 /** The chip a piece the filters cannot narrow wears while one is on. */
-export function NotFiltered() {
+export function NotFiltered({ why }: { why?: string } = {}) {
   return (
-    <span className="aug-fs-xs" data-testid="not-filtered" title="The filters narrow the objects' own pieces; this one reads everything"
+    <span className="aug-fs-xs" data-testid="not-filtered" title={why ?? "The filters narrow the objects' own pieces; this one reads everything"}
       style={{ position: "absolute", top: 10, right: 12, zIndex: 1, color: "var(--t3)", background: "var(--bg-3)",
         border: "1px solid var(--b1)", borderRadius: "var(--r-chip)", padding: "1px 7px", pointerEvents: "auto" }}>
       Not filtered

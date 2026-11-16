@@ -139,7 +139,7 @@ describe("a person's dashboards", () => {
       range: { ...READ.range, status: "final", preset: "last_month", covers: "July 2026" } });
     show();
     await waitFor(() => expect(api.getDashboard).toHaveBeenCalledWith("thelook", "returns-1", { preset: "previous_month" }));
-    await waitFor(() => expect(api.runCard).toHaveBeenCalledWith("c7f3a001", { preset: "previous_month" }, { compare: true }));
+    await waitFor(() => expect(api.runCard).toHaveBeenCalledWith("c7f3a001", { preset: "previous_month" }, { compare: true, focus: [] }));
     // Never first read as written: that run would roll every card's standing value.
     expect(api.getDashboard).not.toHaveBeenCalledWith("thelook", "returns-1", null);
     expect(await screen.findByTestId("dashboard-range")).toHaveTextContent("July 2026 · final");

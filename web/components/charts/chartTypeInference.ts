@@ -60,6 +60,14 @@ export type ChartType =
   | "gantt"      // task spans on a time axis (label + start + end)
   | "choropleth" // region → measure shaded on a map (needs geojson)
   | "point-map"  // lat/lon points on a base map
+  // ── storytelling kinds (the board study, 2026-11-16) ──
+  | "lollipop"    // a ranking with less ink: a stem and a dot
+  | "leaderboard" // a ranking to read: rank · name · value (· change)
+  | "dumbbell"    // before → after per item, both ends drawn
+  | "slope"       // two points in time per item, joined
+  | "bullet"      // a figure against its target, per item
+  | "cohort"      // retention by cohort and age
+  | "interval"    // an estimate with its uncertainty
   | "table";
 
 // ── Central type vocab (single source of truth) ─────────────────────────────
@@ -76,6 +84,8 @@ export const TYPE_TO_HINT: Record<ChartType, string> = {
   "counter": "counter", "funnel": "funnel", "histogram": "histogram", "boxplot": "boxplot",
   "sankey": "sankey", "waterfall": "waterfall",
   "line-forecast": "line_forecast", "gantt": "gantt", "choropleth": "choropleth", "point-map": "point_map",
+  "lollipop": "lollipop", "leaderboard": "leaderboard", "dumbbell": "dumbbell", "slope": "slope",
+  "bullet": "bullet", "cohort": "cohort", "interval": "interval",
   "table": "auto",
 };
 
@@ -87,6 +97,7 @@ export const ALL_CHART_TYPES: ChartType[] = [
   "bar", "line", "area", "delta-bar", "grouped-bar", "stacked-bar", "multi-line", "small-multiples",
   "scatter", "pie", "treemap", "heatmap", "histogram", "boxplot", "funnel", "waterfall",
   "sankey", "counter", "line-forecast", "gantt", "choropleth", "point-map",
+  "lollipop", "leaderboard", "dumbbell", "slope", "bullet", "cohort", "interval",
 ];
 
 /** The underscore engine hint → the ChartType it renders as. Reverse of TYPE_TO_HINT plus
@@ -102,6 +113,8 @@ export const HINT_TO_TYPE: Record<string, ChartType> = {
   scatter: "scatter", heatmap: "heatmap", matrix: "heatmap", pie: "pie", treemap: "treemap", pareto: "bar",
   counter: "counter", funnel: "funnel", histogram: "histogram", boxplot: "boxplot", sankey: "sankey",
   waterfall: "waterfall", line_forecast: "line-forecast", gantt: "gantt", choropleth: "choropleth", point_map: "point-map",
+  lollipop: "lollipop", leaderboard: "leaderboard", dumbbell: "dumbbell", slope: "slope",
+  bullet: "bullet", cohort: "cohort", interval: "interval",
 };
 
 /** Human label for each type — the dropdown/gallery text. */
@@ -112,6 +125,8 @@ export const CHART_TYPE_LABEL: Record<ChartType | "auto", string> = {
   "pie": "Pie", "treemap": "Treemap", "counter": "Counter", "funnel": "Funnel",
   "histogram": "Histogram", "boxplot": "Box plot", "sankey": "Sankey", "waterfall": "Waterfall",
   "line-forecast": "Line (forecast)", "gantt": "Gantt", "choropleth": "Choropleth map", "point-map": "Point map",
+  "lollipop": "Lollipop", "leaderboard": "Leaderboard", "dumbbell": "Dumbbell", "slope": "Slope",
+  "bullet": "Bullet", "cohort": "Cohorts", "interval": "Intervals",
   "table": "Table",
 };
 
@@ -373,6 +388,12 @@ export function inferChartType(
  *  the column classification so it can offer the full set the data supports (combo, pie,
  *  heatmap, treemap, scatter, stacked, area …) without ever offering a type that would
  *  render blank for the shape. Returns [] when the data isn't chartable. */
+/** Columns the storytelling kinds read by name (mirrors `vega/forms.ts`). */
+const TARGET_COL = /(^|_)(target|goal|plan|budget|quota)(_|$)/i;
+const PERIOD_COL = /(^|_)(period|age|month_number|week_number|months_since|weeks_since|days_since|index|tenure)(_|$)/i;
+const LOWER_COL = /lower|lo_|_low|p10/i;
+const UPPER_COL = /upper|hi_|_high|p90/i;
+
 export function availableChartTypes(columns: string[], rows: unknown[][]): ChartType[] {
   if (!columns.length || rows.length < 2) return [];
   const { dateIdxs, numericIdxs, catIdxs } = classifyColumns(columns, rows);
@@ -423,6 +444,15 @@ export function availableChartTypes(columns: string[], rows: unknown[][]): Chart
   if (nNum >= 1 && nRows >= 8) { add("histogram"); add("boxplot"); }
   // Counter — a single big-number KPI of the primary measure (a valid view of any measured result).
   if (nNum >= 1) add("counter");
+
+  // ── storytelling kinds — each offered only where its shape is in the result (the board study, 2026-11-16) ──
+  const named = (re: RegExp) => numericIdxs.some((i) => re.test(columns[i]));
+  if (hasCat && !hasDate && nNum >= 1) { add("leaderboard"); add("lollipop"); }
+  if (hasCat && nNum >= 2) { add("dumbbell"); add("slope"); }
+  if (hasCat && (hasDate ? countUnique(rows, dateIdxs[0]) === 2 : catIdxs.length >= 2 && countUnique(rows, catIdxs[1]) === 2)) add("slope");
+  if (hasCat && named(TARGET_COL)) add("bullet");
+  if ((hasDate || hasCat) && nNum >= 2 && named(PERIOD_COL)) add("cohort");
+  if ((hasDate || hasCat) && columns.some((c) => LOWER_COL.test(c)) && columns.some((c) => UPPER_COL.test(c))) add("interval");
 
   return out;
 }

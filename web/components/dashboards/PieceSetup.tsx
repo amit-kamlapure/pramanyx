@@ -714,7 +714,7 @@ function FigureWiring({ spec, p, set }: { spec: DashboardSpec; p: Props; set: (p
 
 // ── the panel ────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-export function PieceSetup({ spec, selected, onChange, connectionId, schema, cardTitle, entityTitle, cardSetup }: {
+export function PieceSetup({ spec, selected, onChange, connectionId, schema, cardTitle, entityTitle, cardSetup, cardChart, cardSql }: {
   spec: DashboardSpec;
   selected: string | null;
   onChange: Change;
@@ -725,7 +725,12 @@ export function PieceSetup({ spec, selected, onChange, connectionId, schema, car
   entityTitle?: (id: string) => string | undefined;
   /** Arc AP-7 — the setup of a card the page knows more of (a card of a person's own query), by its id. */
   cardSetup?: (cardId: string) => ReactNode | null;
+  /** The board study — the card's own chart editor, held in the panel. */
+  cardChart?: (cardId: string) => ReactNode | null;
+  /** The board study — the statement the card ran. */
+  cardSql?: (cardId: string) => ReactNode | null;
 }) {
+  const [cardTab, setCardTab] = useState<"shows" | "chart" | "sql">("shows");
   const el = selected ? spec.elements[selected] : undefined;
   // the entity a piece reads: its set's (Arc AP-2), or the one it names
   const read = el ? pieceSet(spec, el.props) : null;
@@ -784,11 +789,25 @@ export function PieceSetup({ spec, selected, onChange, connectionId, schema, car
       )}
       {el.type === "Card" && (
         <>
-          <Row label="Edge" hint="A coloured edge is emphasis. What the card measures is the card's own.">
-            <Pick label="Edge" value={String(p.tone ?? "")} none="None" options={TONES.map(t => ({ value: t, label: TONE_WORDS[t] }))}
-              onPick={v => set({ tone: v || null }, "a card's edge chosen by hand")} />
-          </Row>
-          {cardSetup?.(String(p.card ?? ""))}
+          {/* the board study: one panel for a card — what it shows, how it is drawn, and the statement it ran */}
+          {(cardChart || cardSql) && (
+            <div data-testid="card-tabs" style={{ padding: "10px 14px 2px" }}>
+              <Segmented label="Card" value={cardTab} size="1"
+                options={[{ value: "shows", label: "What it shows" }, ...(cardChart ? [{ value: "chart" as const, label: "Chart" }] : []),
+                  ...(cardSql ? [{ value: "sql" as const, label: "SQL" }] : [])]}
+                onChange={v => setCardTab(v as "shows" | "chart" | "sql")} />
+            </div>
+          )}
+          {cardTab === "chart" && cardChart ? cardChart(String(p.card ?? ""))
+            : cardTab === "sql" && cardSql ? cardSql(String(p.card ?? "")) : (
+            <>
+              <Row label="Edge" hint="A coloured edge is emphasis. What the card measures is the card's own.">
+                <Pick label="Edge" value={String(p.tone ?? "")} none="None" options={TONES.map(t => ({ value: t, label: TONE_WORDS[t] }))}
+                  onPick={v => set({ tone: v || null }, "a card's edge chosen by hand")} />
+              </Row>
+              {cardSetup?.(String(p.card ?? ""))}
+            </>
+          )}
         </>
       )}
       {el.type === "Note" && (
@@ -835,7 +854,7 @@ export function PieceSetup({ spec, selected, onChange, connectionId, schema, car
       {needsFields && el.type === "ObjectTimeline" && fieldsBody(f => <TimelineSetup p={p} ef={f} set={set} />)}
       {needsFields && el.type === "ChooseOne" && fieldsBody(f => <ChooseOneSetup p={p} ef={f} set={set} />)}
       {needsFields && el.type === "ObjectSearch" && fieldsBody(f => <SearchSetup p={p} ef={f} set={set} />)}
-      {placed && <SectionPick spec={spec} k={k} onChange={onChange} />}
+      {placed && (el.type !== "Card" || cardTab === "shows") && <SectionPick spec={spec} k={k} onChange={onChange} />}
     </div>
   );
 }

@@ -125,7 +125,7 @@ function Steps({ label, value, least, most, onStep }: { label: string; value: nu
 const Rule = () => <span aria-hidden="true" style={{ width: 1, height: 16, background: "var(--b2)", margin: "0 6px" }} />;
 
 export function DashboardBuilder({ spec, onChange, cardTitle, bar, add, words, aside, above, connectionId, schema,
-  onAddPiece, checks, cardSetup, cardReads, queryCards, children }: {
+  onAddPiece, checks, cardSetup, cardChart, cardSql, cardReads, queryCards, children }: {
   spec: DashboardSpec;
   /** Every change, as the next spec and the version's note. */
   onChange: (next: DashboardSpec, note: string) => void;
@@ -148,6 +148,9 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, add, words, a
   checks?: Record<string, ReadState>;
   /** Arc AP-7 — the setup of a card the page knows more of (a card of a person's own query), by its id; null for none. */
   cardSetup?: (cardId: string) => ReactNode | null;
+  /** The board study — a card's own chart editor and the statement it ran, the inspector's Chart and SQL tabs. */
+  cardChart?: (cardId: string) => ReactNode | null;
+  cardSql?: (cardId: string) => ReactNode | null;
   /** Arc AP-8 — the dashboard's values a card of the person's own query reads, by the card's id. */
   cardReads?: (cardId: string) => string[];
   /** Arc AP-8c — the cards of the person's own query the dashboard places: a value may read one's first value. */
@@ -378,7 +381,7 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, add, words, a
               onRenamed={n => setWire(`value:${n}`)} queryCards={queryCards} />
               : wireKind === "choice" ? <ChoiceSetup spec={spec} name={wireName} />
                 : <PieceSetup spec={spec} selected={selected} onChange={apply} connectionId={connectionId} schema={schema} cardTitle={cardTitle}
-                  entityTitle={entityTitle} cardSetup={cardSetup} />)}
+                  entityTitle={entityTitle} cardSetup={cardSetup} cardChart={cardChart} cardSql={cardSql} />)}
         </aside>
       </div>
     </div>

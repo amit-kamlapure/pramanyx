@@ -35,6 +35,13 @@ const ICONS: Record<ChartType | "auto", string> = {
   gantt:          "▤",
   choropleth:     "◍",
   "point-map":    "◉",
+  lollipop:       "⊸",
+  leaderboard:    "№",
+  dumbbell:       "⚬",
+  slope:          "⟋",
+  bullet:         "⊢",
+  cohort:         "◩",
+  interval:       "⟊",
   table:          "≡",
 };
 

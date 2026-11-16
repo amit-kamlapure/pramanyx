@@ -2910,6 +2910,13 @@ export interface CardRunResult {
    *  phrase. `equal_age` is false until the range is final — part of any difference is then
    *  age, not a move. `value` null says why; it is never read as zero. */
   previous?: CardRunPrevious | null;
+  /** The board study — the statement as it ran: after the guards translated and hardened it, cut to the range, the
+   *  shaping around a person's own query; its values bound beside it in `params`, never pasted in. Null when it did
+   *  not get as far as running. */
+  ran?: { sql: string; params: Record<string, unknown> | null } | null;
+  /** The board study — present when the run was asked with the dashboard's focus: whether it was cut by every chosen
+   *  value (`by` what), and why not by the rest — a card that cannot be cut says so in its own place. */
+  cut?: { applied: boolean; by: string[]; why: string } | null;
   /** Arc AP-7 — a card of a person's own query, as it is shown: its figure, its table or its chart's points. */
   shown?: QueryShaped | null;
   duration_ms?: number;
@@ -3223,7 +3230,9 @@ export async function saveVizConfig(
 /** Recompute a card's value now (guard-on-read). Returns the current result + the rolling
  *  last/prev value for a delta. */
 export async function runCard(cardId: string, range?: BriefingRange | null,
-  opts: { compare?: boolean; values?: Record<string, { kind: string; value: unknown }>; filters?: QueryNarrowing[] } = {}): Promise<CardRunResult> {
+  opts: { compare?: boolean; values?: Record<string, { kind: string; value: unknown }>; filters?: QueryNarrowing[];
+    /** The board study — the dashboard's focus this card is asked with: each cuts it, or `cut` says why not. */
+    focus?: { table: string; column: string; value: string | number | boolean }[] } = {}): Promise<CardRunResult> {
   const q = new URLSearchParams();
   if (range) {
     if (range.preset === "custom") { if (range.start) q.set("start", range.start); if (range.end) q.set("end", range.end); }
@@ -3236,10 +3245,22 @@ export async function runCard(cardId: string, range?: BriefingRange | null,
   const url = `${getApiBase()}/cards/${encodeURIComponent(cardId)}/run`;
   const qs = q.toString();
   // Arc AP-8 — a query that reads the dashboard's values is sent them; every other card is run as it always was
-  const res = await fetch(qs ? `${url}?${qs}` : url, opts.values || opts.filters
-    ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ values: opts.values ?? {}, filters: opts.filters ?? [] }) }
+  const res = await fetch(qs ? `${url}?${qs}` : url, opts.values || opts.filters || opts.focus?.length
+    ? { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ values: opts.values ?? {}, filters: opts.filters ?? [], focus: opts.focus ?? [] }) }
     : { method: "POST" });
   if (!res.ok) throw new Error("Failed to refresh dashboard card");
+  return res.json();
+}
+
+/** The board study — what a click on a card's chart stands for: the table and column its `column` is read from, traced
+ *  off the card's own statement — or why a click on it filters nothing. */
+export async function traceField(cardId: string, column: string):
+  Promise<{ table: string; column: string; confidence: string } | { refused: string }> {
+  const res = await fetch(`${getApiBase()}/cards/${encodeURIComponent(cardId)}/field`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ column }),
+  });
+  if (!res.ok) throw new Error("What the click stands for could not be read");
   return res.json();
 }
 

@@ -32,6 +32,7 @@ import {
   Children, Component, createContext, useCallback, useContext, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState,
   type PointerEvent as ReactPointerEvent, type ReactNode, type Ref, type RefObject,
 } from "react";
+import { createPortal } from "react-dom";
 import { evaluateVisibility, type Spec, type VisibilityCondition } from "@json-render/core";
 import {
   JSONUIProvider, Renderer, createStateStore, useBoundProp, useStateStore,
@@ -41,7 +42,7 @@ import {
 import type { CardState } from "@/components/brief/PinnedCardBody";
 import { CanvasScale, CellBoxContext, OFF_GRID, useMeasured, type CellBox } from "@/components/dashboards/cellBox";
 import { QuestionPiece } from "@/components/dashboards/QuestionPiece";
-import { DashboardTile, SaidTile, WIDE, WithheldTile, tileShape, type QueryWaiting, type TileDoors } from "@/components/dashboards/DashboardTile";
+import { DashboardTile, SaidTile, WIDE, WithheldTile, tileShape, type QueryWaiting, type TileDoors, type TileFocus } from "@/components/dashboards/DashboardTile";
 import { ActionButtonsPiece } from "@/components/dashboards/ActionButtonsPiece";
 import { ReadSlotContext, type ReadSlot, type ReadStatus } from "@/components/dashboards/readSlot";
 import { ChooseOnePiece, ObjectListPiece, ObjectMapPiece, ObjectSearchPiece, ObjectTimelinePiece } from "@/components/dashboards/AppPieces";
@@ -55,7 +56,7 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Refusal } from "@/components/ui/states";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { runCard, type BriefingRange, type CardRunResult, type DashboardCard, type QueryNarrowing } from "@/lib/api";
+import { runCard, traceField, type BriefingRange, type CardRunResult, type DashboardCard, type QueryNarrowing } from "@/lib/api";
 import {
   FILTER_DEFAULT_PX, FILTER_WIDTH, GRADE, GRID, LIMITS, SPAN, rowsTall, sizeOf, type ActionButtonDef, type ComponentName,
   type GridKind, type Layout, type Size, type Tone,
@@ -65,6 +66,9 @@ import { stateModel, type DashboardHostState } from "@/lib/dashboards/hostState"
 import { checkDashboardSpec, openingTab } from "@/lib/dashboards/rules";
 import type { WireSpec } from "@/lib/dashboards/sets";
 import { valuesFor, valuesRead, type ValuesSent } from "@/lib/dashboards/values";
+import { chosenOn, focusFor, focusWords, traceAndChoose, type DashboardFocus } from "@/lib/dashboards/focus";
+import { toast } from "@/components/ui/toast";
+import type { Pick as ChartPick } from "@/components/charts/selection";
 import { AddRowPiece } from "@/components/dashboards/AddRowPiece";
 import { QueryFiltersPiece, QueryNarrowingProvider, readsTable, useQueryNarrowing, type FilterColumn } from "@/components/dashboards/QueryFilters";
 import { ScenarioInputsPiece, type ScenarioPreset } from "@/components/dashboards/ScenarioInputs";
@@ -77,6 +81,8 @@ export interface DashboardDoors extends TileDoors, StaticDoors {
   /** Arc AP-1 — give an element its room on its section's grid, one grade at a time. `measured` is the room every element
    *  of a section not yet on the grid has on screen, so moving it onto the grid keeps what the reader saw. */
   onRegrid?: (key: string, box: Box, measured: Record<string, Box>) => void;
+  /** The board study — move an element beside another, before or after it: a drag by its header, or Alt+Shift+arrows. */
+  onMove?: (key: string, target: string, place: "before" | "after") => void;
   /** Arc AP-1 — the filter column's width, in grades of 40 px. */
   onFilterWidth?: (grades: number) => void;
   /** Arc AP-1 — the builder: a piece, the filter column or a section pointed at is the one chosen to set up. */
@@ -116,6 +122,9 @@ interface DashboardContextValue {
   reads: Set<string>;
   /** Each drawn element's room and steps, by key, for the builder's − and + (`DashboardHandle`). */
   steppers: Map<string, Stepper>;
+  /** The board study — the reader's focus, and where a click on a card's mark goes. */
+  focus: DashboardFocus[];
+  pick: ((cardId: string, p: ChartPick) => void) | null;
 }
 
 const DashboardContext = createContext<DashboardContextValue | null>(null);
@@ -417,8 +426,11 @@ function PiecesSection({ element, children }: ComponentRenderProps<SectionProps>
         style={gridded ? {
           display: "grid", gap: GRID.gap, alignItems: "stretch", gridAutoRows: `${GRID.row}px`,
           gridTemplateColumns: `repeat(${stacked ? 1 : GRID.columns}, minmax(0, 1fr))`,
+          // the board study: a piece moved or resized leaves no hole — a later one that fits fills it
+          gridAutoFlow: "row dense",
         } : {
           display: "grid", gap: GAP, alignItems: "stretch", gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+          gridAutoFlow: "row dense",
         }}>
         <SectionKeys.Provider value={keys}>{children}</SectionKeys.Provider>
       </div>
@@ -631,6 +643,63 @@ export function readStateOf(held: { status: ReadStatus; reason: string }[]): Rea
   return held.some(m => m.status === "reading") ? { status: "reading", reason: "" } : { status: "ok", reason: "" };
 }
 
+/** The board study (2026-11-16) — a piece moves by its header: drag it, and a marker shows the side of the piece it would
+ *  land beside; let go to move it there, Escape to leave it. The grip draws at rest in the builder (an action looks like
+ *  one before the pointer reaches it, CLARITY.md) and leaves the header's right end to the piece's own doors. */
+function MoveGrip({ cell, elementKey, onMove }: {
+  cell: RefObject<HTMLDivElement | null>; elementKey: string; onMove: (key: string, target: string, place: "before" | "after") => void;
+}) {
+  const [landing, setLanding] = useState<{ target: string; place: "before" | "after"; rect: DOMRect } | null>(null);
+  const down = (e: ReactPointerEvent<HTMLSpanElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const grip = e.currentTarget;
+    grip.setPointerCapture(e.pointerId);
+    const own = cell.current;
+    if (own) own.style.opacity = "0.5";
+    let at: { target: string; place: "before" | "after"; rect: DOMRect } | null = null;
+    const move = (ev: PointerEvent) => {
+      const over = (document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null)?.closest<HTMLElement>("[data-element]");
+      const target = over?.dataset.element;
+      if (!over || !target || target === elementKey) { at = null; setLanding(null); return; }
+      const rect = over.getBoundingClientRect();
+      at = { target, place: ev.clientX < rect.left + rect.width / 2 ? "before" : "after", rect };
+      setLanding(at);
+    };
+    const end = (keep: boolean) => {
+      grip.removeEventListener("pointermove", move);
+      grip.removeEventListener("pointerup", up);
+      grip.removeEventListener("pointercancel", cancel);
+      window.removeEventListener("keydown", esc);
+      if (own) own.style.opacity = "";
+      setLanding(null);
+      if (keep && at) onMove(elementKey, at.target, at.place);
+    };
+    const up = () => end(true);
+    const cancel = () => end(false);
+    const esc = (ev: KeyboardEvent) => { if (ev.key === "Escape") end(false); };
+    grip.addEventListener("pointermove", move);
+    grip.addEventListener("pointerup", up);
+    grip.addEventListener("pointercancel", cancel);
+    window.addEventListener("keydown", esc);
+  };
+  return (
+    <>
+      <span data-testid="move-grip" title="Drag to move it beside another piece" onPointerDown={down}
+        style={{ position: "absolute", left: 0, top: 0, right: 112, height: 34, zIndex: 2, cursor: "grab", touchAction: "none" }}>
+        <span aria-hidden="true" style={{ position: "absolute", left: 4, top: 4, fontSize: 11, lineHeight: 1, letterSpacing: -1,
+          color: "var(--t3)", border: "1px solid var(--b1)", borderRadius: "var(--r2)", padding: "1px 2px", background: "var(--bg-2)" }}>⋮⋮</span>
+      </span>
+      {landing && typeof document !== "undefined" && createPortal(
+        <span data-testid="move-marker" aria-hidden="true" style={{ position: "fixed", zIndex: 50, pointerEvents: "none", width: 3, borderRadius: 2,
+          background: "var(--accent)", top: landing.rect.top, height: landing.rect.height,
+          left: landing.place === "before" ? landing.rect.left - GRID.gap / 2 - 1 : landing.rect.right + GRID.gap / 2 - 2 }} />,
+        document.body)}
+    </>
+  );
+}
+
 /** Alt+arrows: one grade wider, narrower, taller or shorter. */
 const STEP: Record<string, [number, number]> = { ArrowRight: [1, 0], ArrowLeft: [-1, 0], ArrowDown: [0, 1], ArrowUp: [0, -1] };
 
@@ -673,6 +742,8 @@ function Cell({ type, props, size, testid, extra, children }: {
   const kind = type in LIMITS ? (type as GridKind) : null;
   const own: Box | null = gridded ? { w: Number(props.w) || 1, h: Number(props.h) || 1 } : null;
   const regrid = !!doors.onRegrid && key !== null && kind !== null;
+  const movable = !!doors.onMove && key !== null;
+  const { children: siblings } = useContext(SectionKeys);
   // the size picked by name stays only where the grid is not offered, and never on a section already on the grid
   const resizable = !regrid && !gridded && !!doors.onResize && key !== null;
   const chosen = key !== null && selected === key;
@@ -714,11 +785,23 @@ function Cell({ type, props, size, testid, extra, children }: {
     <div ref={ref} className="group" data-testid={testid} data-element={key ?? undefined} data-size={gridded ? undefined : size}
       data-w={gridded ? box.w : undefined} data-h={gridded ? box.h : undefined} data-selected={chosen || undefined} {...extra?.attrs}
       onPointerDownCapture={doors.onSelect && key ? () => doors.onSelect?.(key) : undefined}
-      tabIndex={regrid ? 0 : undefined}
-      aria-label={regrid ? "Alt and the arrow keys resize this one grade at a time" : undefined}
-      onKeyDown={regrid ? e => {
-        const d = e.altKey ? STEP[e.key] : undefined;
-        if (!d || e.target !== e.currentTarget) return;
+      tabIndex={regrid || movable ? 0 : undefined}
+      aria-label={regrid ? `Alt and the arrow keys resize this one grade at a time${movable ? "; Alt, Shift and the arrows move it" : ""}`
+        : movable ? "Alt, Shift and the arrow keys move this one place" : undefined}
+      onKeyDown={regrid || movable ? e => {
+        if (e.target !== e.currentTarget || !e.altKey || !(e.key in STEP)) return;
+        if (e.shiftKey) {
+          // one place earlier or later among its siblings, as a drag would land it
+          if (!movable || !key) return;
+          const at = siblings.indexOf(key);
+          const back = e.key === "ArrowLeft" || e.key === "ArrowUp";
+          const other = siblings[back ? at - 1 : at + 1];
+          e.preventDefault();
+          if (at >= 0 && other) doors.onMove?.(key, other, back ? "before" : "after");
+          return;
+        }
+        const d = regrid ? STEP[e.key] : undefined;
+        if (!d) return;
         e.preventDefault();
         step(d[0], d[1]);
       } : undefined}
@@ -730,6 +813,7 @@ function Cell({ type, props, size, testid, extra, children }: {
           width: preview.w * ghostColumn + (preview.w - 1) * GRID.gap, height: rowsTall(preview.h),
           border: "2px dashed var(--blue3)", borderRadius: "var(--r3)" }} />
       )}
+      {movable && key && <MoveGrip cell={ref} elementKey={key} onMove={doors.onMove!} />}
       {regrid && kind && (
         <GridHandles cell={ref} kind={kind} from={own} gridded={gridded}
           onPreview={(b, col) => { setPreview(b); setGhostColumn(col); }} onDone={done} />
@@ -749,6 +833,8 @@ function useValuedRun(cs: CardState | undefined, range: BriefingRange | null | u
   cs: CardState | undefined; waits: QueryWaiting | null; onRefresh: (() => void) | null;
 } {
   const { valueOf, wire } = usePieces();
+  const { focus } = useDashboard();
+  const focusSent = cs ? JSON.stringify(focusFor(focus, cs.card.id)) : "[]";
   // a dashboard made from a file: a reader's filters narrow a query that reads its table, and a row added here is read again
   const { narrowing, table, changes } = useQueryNarrowing();
   const isQuery = !!(cs?.card.render as { shown?: unknown } | undefined)?.shown;
@@ -759,12 +845,13 @@ function useValuedRun(cs: CardState | undefined, range: BriefingRange | null | u
   const filtersSent = JSON.stringify(filters);
   const [tick, setTick] = useState(0);
   const refresh = useCallback(() => setTick(t => t + 1), []);
-  const key = cs && sent ? `${cs.card.id}|${sent}|${filtersSent}|${changes}|${JSON.stringify(range ?? null)}|${tick}` : "";
+  const key = cs && sent ? `${cs.card.id}|${sent}|${filtersSent}|${focusSent}|${changes}|${JSON.stringify(range ?? null)}|${tick}` : "";
   const [got, setGot] = useState<{ key: string; run?: CardRunResult; failed?: boolean } | null>(null);
   useEffect(() => {
     if (!key || !cs) return;
     let alive = true;
-    runCard(cs.card.id, range, { values: JSON.parse(sent) as ValuesSent, filters: JSON.parse(filtersSent) as QueryNarrowing[] })
+    runCard(cs.card.id, range, { values: JSON.parse(sent) as ValuesSent, filters: JSON.parse(filtersSent) as QueryNarrowing[],
+      focus: JSON.parse(focusSent) })
       .then(run => { if (alive) setGot({ key, run }); })
       .catch(() => { if (alive) setGot({ key, failed: true }); });
     return () => { alive = false; };
@@ -797,18 +884,24 @@ function DashboardCard({ element }: ComponentRenderProps<{ card: string; tone?: 
   const size: Size = element.props.size ?? (!!cs && WIDE[tileShape(cs)] ? "wide" : "small");
   // a saved card is a fixed query: the reader's filters cannot narrow it, and it says so while one is on
   const filtering = useFiltering();
+  // the board study — a click on its chart chooses a value for the whole dashboard; what it chose stays lit on it
+  const { focus, pick } = useDashboard();
+  const tileFocus = useMemo<TileFocus | undefined>(() => (pick
+    ? { chosen: (field: string) => chosenOn(focus, id, field), onPick: (p: ChartPick) => pick(id, p) } : undefined), [focus, pick, id]);
+  const cut = cs?.run?.cut ?? null;
+  const notCut = !!cut && !cut.applied && focusFor(focus, id).length > 0;
   return (
     <Cell type="Card" props={element.props as Record<string, unknown>} size={size} testid="dashboard-card"
       extra={{ attrs: { "data-card": id, "data-tone": tone ?? undefined },
         style: { boxShadow: tone ? `inset 3px 0 0 ${TONE_RULE[tone]}` : undefined, paddingLeft: tone ? 3 : 0 } }}>
-      {key => <>{filtering.on && <NotFiltered />}{status === "withheld"
+      {key => <>{notCut ? <NotFiltered why={cut?.why || undefined} /> : filtering.on && <NotFiltered />}{status === "withheld"
         ? <WithheldTile />
         : !cs
           ? <SaidTile what="Not one of your cards">The dashboard places a card you do not have.</SaidTile>
           : (
             <CardBoundary key={`${id}:${cs.run ? JSON.stringify(cs.run.rows).length : 0}:${cs.failed ? 1 : 0}`}>
               <DashboardTile cs={cs as CardState & { card: DashboardCard }} status={status} sym={sym} doors={doors}
-                place={{ elementKey: key, size, range, schema }} waits={valued.waits} />
+                place={{ elementKey: key, size, range, schema }} waits={valued.waits} focus={tileFocus} />
             </CardBoundary>
           )}</>}
     </Cell>
@@ -1142,10 +1235,28 @@ const REGISTRY = {
 } satisfies Record<ComponentName, unknown>;
 
 const NO_IMAGES: Record<string, ImageStamp> = {};
+const NO_FOCUS: DashboardFocus[] = [];
+
+/** The board study — what the dashboard is filtered by, each value a chip that takes it off; Clear takes them all. */
+function FocusBar({ focus, onFocus }: { focus: DashboardFocus[]; onFocus: (next: DashboardFocus[]) => void }) {
+  return (
+    <div data-testid="dashboard-focus" className="aug-fs-sm"
+      style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, margin: "0 0 14px", color: "var(--t3)" }}>
+      <span>Filtered by</span>
+      {focus.map(f => (
+        <Button key={`${f.table}.${f.column}`} size="xs" variant="ghost" data-testid="focus-chip"
+          title="Take this off" onClick={() => onFocus(focus.filter(x => x !== f))}>
+          {focusWords(f)} <Icon name="close" size={12} />
+        </Button>
+      ))}
+      <Button size="xs" variant="ghost" data-testid="focus-clear" onClick={() => onFocus([])}>Clear</Button>
+    </div>
+  );
+}
 const NO_READS: readonly string[] = [];
 
 export function ComposedDashboard({ spec, cards, host, doors, sym = "$", images = NO_IMAGES, range = null, schema, connectionId, dashboardId,
-  selected = null, handle, reads = NO_READS, asGroup, onSaid }: {
+  selected = null, handle, reads = NO_READS, asGroup, onSaid, focus = NO_FOCUS, onFocus }: {
   spec: unknown;
   cards: CardState[];
   host: DashboardHostState;
@@ -1171,6 +1282,9 @@ export function ComposedDashboard({ spec, cards, host, doors, sym = "$", images 
   asGroup?: string;
   /** Arc AP-6 — each line the object door said beside a read (what a row policy withholds), once. */
   onSaid?: (line: string) => void;
+  /** The board study — the reader's focus: values chosen by a click on a mark. Given `onFocus`, a click chooses one. */
+  focus?: DashboardFocus[];
+  onFocus?: (next: DashboardFocus[]) => void;
 }) {
   // A spec is known by what it says, not by which object says it: a caller that parses the
   // same JSON again on every render hands over a new object each time, and that must not
@@ -1217,8 +1331,14 @@ export function ComposedDashboard({ spec, cards, host, doors, sym = "$", images 
     selected,
     steppers,
     reads: new Set(readsKey ? readsKey.split("\n") : []),
+    focus,
+    pick: onFocus ? (cardId: string, p: ChartPick) => {
+      // what the click stands for, traced off the card's own statement — or said, when a click on it filters nothing
+      traceAndChoose(traceField, cardId, p, focus, onFocus, why => toast.info("This click filters nothing", { description: why }))
+        .catch(e => toast.error("The click could not be read", { description: (e as Error).message }));
+    } : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on what the spec and the range say
-  }), [check.valid, written, cards, host, doors, sym, images, rangeKey, schema, connectionId, selected, steppers, readsKey]);
+  }), [check.valid, written, cards, host, doors, sym, images, rangeKey, schema, connectionId, selected, steppers, readsKey, focus, onFocus]);
 
   if (!check.valid) {
     return (
@@ -1240,6 +1360,7 @@ export function ComposedDashboard({ spec, cards, host, doors, sym = "$", images 
         asGroup={asGroup} onSaid={onSaid}
         sets={check.valid ? (spec as WireSpec).sets : undefined} values={check.valid ? (spec as WireSpec).values : undefined}
         dashboardId={dashboardId} cardSql={cardSql}>
+        {focus.length > 0 && onFocus && <FocusBar focus={focus} onFocus={onFocus} />}
         <JSONUIProvider registry={REGISTRY as ComponentRegistry} store={store}>
           <Renderer spec={spec as Spec} registry={REGISTRY as ComponentRegistry} />
         </JSONUIProvider>

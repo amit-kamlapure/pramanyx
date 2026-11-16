@@ -180,6 +180,25 @@ def test_a_kept_query_keeps_its_values_by_name_and_each_run_binds_the_page_s_own
                                                        "holds no value of those names.")
 
 
+def test_a_card_says_the_statement_it_ran_with_its_values_bound_beside_it(client, rows):
+    """The board study — a card shows the SQL behind it as it RAN: the person's own inside the statement that shapes it,
+    its values bound beside it, never pasted in; a plain card's statement as the guards ran it."""
+    import json as _json
+    conn = f"v{uuid.uuid4().hex[:6]}"
+    fig = {"as": "figure", "series": [{"column": "total_amount", "agg": "sum"}]}
+    card = client.post("/dashboards/queries", params={"connection_id": conn},
+                       json={"sql": ASKED, "shown": fig, "values": VALUES}).json()["card"]
+    ran = client.post(f"/cards/{card['id']}/run", json={"values": {**VALUES, "country": {"kind": "text", "value": "BR"}}}).json()["ran"]
+    assert ran is not None
+    assert "ecommerce.orders" in ran["sql"] and "total_amount" in ran["sql"]       # the person's own, inside
+    assert ran["sql"] != card["sql"]                                                 # the shaping statement around it
+    assert "'BR'" not in ran["sql"] and "{{country}}" not in ran["sql"]               # bound, never pasted
+    assert "BR" in _json.dumps(ran["params"])
+    # a run that is refused still says what it would have run, when it got that far — and nothing when it did not
+    bare = client.post(f"/cards/{card['id']}/run").json()
+    assert bare["error"] and bare["ran"] is None
+
+
 def test_a_query_reading_values_is_read_as_it_says_for_a_range_and_says_why(client, monkeypatch):
     from pramanyx.briefing.ranges import RangeSpec
     conn = f"v{uuid.uuid4().hex[:6]}"
@@ -291,3 +310,58 @@ def test_a_set_s_linked_objects_and_a_combined_set_are_read_as_the_web_reads_the
         return versions.keep(home, s, approved_by="user:amit", source="a person's own hand", written_by_model=False)
     _flags(monkeypatch)
     assert keep(spec).kept
+
+
+# ── a control nothing reads (the opendashboards study, 2026-11-15) ──────────────────────────────────────────────────
+
+def test_a_value_the_reader_sets_that_no_query_and_no_set_reads_is_said_and_no_other_value_is(monkeypatch):
+    from types import SimpleNamespace
+    sql = {"q1": "SELECT 1 WHERE 'a' = {{country}}"}
+    monkeypatch.setattr("pramanyx.cards.store.get_card",
+                        lambda cid: SimpleNamespace(sql=sql[cid], title=cid) if cid in sql else None)
+    spec = _desk(**{"values.least": {"label": "Least", "kind": "number", "value": 100, "from": {"by": "reader"}},
+                    "values.country": {"label": "Country", "kind": "text", "value": "DE", "from": {"by": "reader"}},
+                    "values.lonely": {"label": "Region", "kind": "text", "value": "EU", "from": {"by": "reader"}},
+                    "values.note": {"label": "Note", "kind": "text", "value": "x"},
+                    "values.many": {"label": "How many", "kind": "number", "from": {"by": "count", "set": "placed"}}})
+    spec["sets"]["placed"]["where"].append({"path": "total_amount", "op": ">=", "value_from": "least"})
+    said = variables.unread(spec, ["q1"])
+    # read by a set (least), by a placed query (country); the author's own and a count are figures, not controls
+    assert said == ['The reader sets "Region" on the page, and nothing on this dashboard reads it: no query names '
+                    "{{lonely}} and no set compares with it. Moving it would change nothing. Read it in a query or a set, "
+                    "or take it away."], said
+    # a query the dashboard does not place reads nothing on it
+    assert len(variables.unread(spec, [])) == 2
+    assert variables.unread({}, []) == [] and variables.unread(None, None) == []
+
+
+@needs_rules
+def test_a_model_s_dashboard_with_a_control_nothing_reads_is_refused_a_person_s_is_kept_and_none_is_published(
+        volumes, monkeypatch):  # noqa: F811
+    monkeypatch.setattr(pieces, "accepted_edits", lambda conn: [])
+    tag = uuid.uuid4().hex[:6]
+    home = Home(f"vars{tag}", ME, f"desk-{tag}")
+    graph = _graph()
+    monkeypatch.setattr(pieces, "served_graph", lambda conn: graph)
+    _flags(monkeypatch)
+    spec = _desk(**{"values.region": {"label": "Region", "kind": "text", "value": "EU", "from": {"by": "reader"}}})
+    said = 'The reader sets "Region" on the page, and nothing on this dashboard reads it'
+
+    by_model = versions.keep(home, spec, approved_by="user:amit", source="a proposal", written_by_model=True)
+    assert not by_model.kept and any(s.startswith(said) for s in by_model.sentences), by_model.sentences
+    # a person mid-build keeps it: a value is unread from when it is added until it is wired
+    by_hand = versions.keep(home, spec, approved_by="user:amit", source="a person's own hand", written_by_model=False)
+    assert by_hand.kept, by_hand.sentences
+    sales = {"kind": "group", "id": "sales", "name": "Sales"}
+    refused = versions.publish(home, [sales], approved_by="user:amit")
+    assert refused.status == versions.REFUSED and any(s.startswith(said) for s in refused.sentences), refused.sentences
+
+    # wired into a set, it publishes
+    spec["sets"]["placed"]["where"].append({"path": "status", "op": "=", "value_from": "region"})
+    assert versions.keep(home, spec, approved_by="user:amit", source="a person's own hand", written_by_model=False).kept
+    published = versions.publish(home, [sales], approved_by="user:amit")
+    assert published.kept, published.sentences
+    # taken out of the set again by hand: kept, and unpublishing is never refused
+    spec["sets"]["placed"]["where"].pop()
+    assert versions.keep(home, spec, approved_by="user:amit", source="a person's own hand", written_by_model=False).kept
+    assert versions.publish(home, [], approved_by="user:amit").kept
