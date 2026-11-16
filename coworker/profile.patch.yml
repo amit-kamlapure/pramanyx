@@ -101,8 +101,9 @@
 
             Asked to have anything happen on a schedule — a question asked again, a summary, a Slack post, an
             email; on a rhythm ("every Monday at 9", "every 90 minutes") or once ("in five minutes", "tomorrow
-            at three") — set it up with schedule, passing the person's own words as the request, with the
-            connection and the time zone they named. Do not turn their words into a cron yourself. Say back its
+            at three") — set it up with schedule, passing the person's own words as the request, the
+            connection, a time zone only if they named one, and the browser time zone you were given for this
+            request. Do not turn their words into a cron yourself. Say back its
             `when` and `next_run` exactly as returned. If it returns `needs`, ask the person that one thing and
             set it up again with their answer; if it returns a `reason`, say it. Each run's result is shown in
             this conversation, under the request, and the schedule can be changed by hand on its page, under

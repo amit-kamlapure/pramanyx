@@ -85,9 +85,12 @@ class ProposeRequest(BaseModel):
 
     outcome: str = Field(description="What the chain should achieve, in the user's words.")
     conn_id: str = Field(description="The connection the chain runs against.")
-    #: 2026-11-16 — the clock the person speaks in ("in five minutes", "at nine"), when the caller knows it; else the
-    #: reader's own setting.
-    timezone: str = Field(default="", max_length=64, description="An IANA clock, e.g. Asia/Kolkata; empty for the reader's own.")
+    #: 2026-11-16 — the clock the person speaks in ("in five minutes", "at nine"): one they named, else their own
+    #: setting, else where they are, else the organisation's (`propose.the_clock`).
+    timezone: str = Field(default="", max_length=64, description="An IANA clock the person named, e.g. Asia/Kolkata.")
+    clock_here: str = Field(default="", max_length=64,
+                            description="The IANA clock where the person is (the browser's): read when they named none "
+                                        "and set none of their own.")
     #: The request came from a conversation (the coworker), which shows each run itself: "here" needs no sending step.
     from_conversation: bool = False
 
@@ -302,7 +305,7 @@ def propose(body: ProposeRequest):
     from pramanyx.automations.propose import propose_chain
 
     proposal = propose_chain(body.outcome, conn_id=body.conn_id, timezone_name=body.timezone,
-                             from_conversation=body.from_conversation)
+                             clock_here=body.clock_here, from_conversation=body.from_conversation)
     if proposal.verdict != "proposed":
         # 200, not 4xx: "nothing here can do that" is an ANSWER to the question that was
         # asked, and the reason is the useful half of it. A 422 would make the client

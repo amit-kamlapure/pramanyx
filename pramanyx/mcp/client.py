@@ -588,20 +588,20 @@ class PramanyxClient:
         return await self._get("/web/search", params={"q": query, "n": n})
 
     # ── A question on a rhythm, run by the platform (the coworker plan, 2026-11-15) ────────────────
-    async def schedule(self, request: str, connection: str, timezone: str = "") -> dict:
+    async def schedule(self, request: str, connection: str, timezone: str = "", browser_time_zone: str = "") -> dict:
         """ANYTHING ON A SCHEDULE, FROM A SENTENCE (2026-11-16). The person's words go to the platform's own designer
         (`POST /automations/propose`, `automations/propose.py`): a model drafts the whole chain — when it runs, what
         it does, where it goes — from what this install has, and the same checks a save runs refuse a draft that
         could not be saved. A draft with nothing left open is then made, as the person asked; its runs are shown in
         the conversation, and its design opens on the platform's canvas, where a person can change it by hand. A
         draft that left a choice open (a Slack channel the person did not name) is NOT made: what is open comes back,
-        for the agent to ask. One scheduler — the platform's; one designer — the one the Automations page uses."""
-        clock = timezone.strip()
-        if not clock:
-            settings = await self._get("/org-settings")
-            clock = str(settings.get("timezone") or "").strip() if isinstance(settings, dict) else ""
+        for the agent to ask. One scheduler — the platform's; one designer — the one the Automations page uses.
+
+        ``timezone`` is a zone the person named; ``browser_time_zone`` the one the shell tells the agent the person's
+        browser is in. Which the times are read in is the platform's order (`automations.propose.the_clock`)."""
         drafted = await self._post("/automations/propose", json_body={
-            "outcome": request, "conn_id": connection, "timezone": clock, "from_conversation": True})
+            "outcome": request, "conn_id": connection, "timezone": timezone.strip(),
+            "clock_here": browser_time_zone.strip(), "from_conversation": True})
         drafted = drafted if isinstance(drafted, dict) else {}
         if drafted.get("verdict") != "proposed" or not drafted.get("draft"):
             return {"scheduled": False, "reason": drafted.get("reason") or "the request could not be made into a schedule",
@@ -616,7 +616,7 @@ class PramanyxClient:
         when = when if isinstance(when, dict) else {}
         return {"scheduled": True, "id": made.get("id"), "name": made.get("name"), "connection": connection,
                 "when": "; ".join(when.get("said") or []), "next_run": when.get("next_run") or "",
-                "timezone": when.get("timezone") or clock or "UTC",
+                "timezone": when.get("timezone") or draft.get("timezone") or "UTC",
                 "steps": [str(e.get("kind")) for e in draft.get("effects") or []],
                 "stops_at": made.get("expires_at") or "never",
                 "notes": " ".join(x for x in [str(drafted.get("notes") or "").strip(),

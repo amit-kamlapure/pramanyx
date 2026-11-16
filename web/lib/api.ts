@@ -5075,6 +5075,8 @@ export interface AgentPolicyView {
   saved: AgentPolicy | null;
   environment: { level: string | null; connections: string[] | null; tools: string[] | null };
   levels: string[];
+  /** The level an organisation that saved nothing gets — `act` since 2026-11-16. Absent from an older server. */
+  default?: string;
 }
 
 export async function getAgentPolicy(): Promise<AgentPolicyView> {
@@ -7146,10 +7148,21 @@ export type ChainProposal = {
   dry_run?: Record<string, unknown>;
 };
 
+/** The IANA clock this browser is in, or "" when it cannot say. */
+export function clockHere(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+  } catch {
+    return "";
+  }
+}
+
+/** 2026-11-16 — the browser's clock goes with the sentence: "at nine" is read in it when the person named no zone
+ *  and set none of their own (`automations/propose.py`, `the_clock`). */
 export async function proposeAutomation(outcome: string, conn_id: string): Promise<ChainProposal> {
   const res = await fetch(`${getApiBase()}/automations/propose`, {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ outcome, conn_id }),
+    body: JSON.stringify({ outcome, conn_id, clock_here: clockHere() }),
   });
   if (!res.ok) throw new Error("Could not reach the chain proposer");
   return res.json();

@@ -125,6 +125,37 @@ already passed.
 """
 
 
+def _readable_zone(name: str) -> str:
+    from zoneinfo import ZoneInfo
+    name = (name or "").strip()
+    if not name:
+        return ""
+    try:
+        ZoneInfo(name)
+        return name
+    except Exception:  # noqa: BLE001 — a zone this install cannot read is passed over for the next clock, never guessed
+        return ""
+
+
+def the_clock(named: str = "", here: str = "") -> str:
+    """The clock a sentence's times are read in (2026-11-16; the user: "Yes, my clock"): the zone the person named;
+    else the clock they chose for themselves; else the clock where they are (their browser's, which the app sends and
+    the coworker is told); else the organisation's; else "" — UTC, the platform's default. A zone this install cannot
+    read is passed over."""
+    from pramanyx.db.user_prefs import preferred_timezone
+    for zone in (named, preferred_timezone(), here):
+        if (readable := _readable_zone(zone)):
+            return readable
+    try:
+        from pramanyx.orgsettings.store import load_org_settings
+        return _readable_zone(str(load_org_settings().timezone or ""))
+    except Exception as exc:  # noqa: BLE001 — the organisation's settings unreadable: UTC, as before any were kept
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "the organisation's clock could not be read; a sentence's times are read in UTC",
+                 counter="automations.propose.clock")
+        return ""
+
+
 def _time_section(clock: str) -> str:
     """What time it is, in the clock the draft's times are read in: a request said as "in five minutes" or "tomorrow
     at three" is worked out from it (2026-11-16 — the proposer was never told the time, so it could draft only a
@@ -379,14 +410,14 @@ def _first_run(conditions: list, now: datetime, timezone: str = "") -> str:
 
 
 def propose_chain(outcome: str, *, conn_id: str, provider: Any = None, timezone_name: str = "",
-                  from_conversation: bool = False) -> ChainProposal:
+                  clock_here: str = "", from_conversation: bool = False) -> ChainProposal:
     """Draft a chain for ``outcome``, validate it, dry-run it. Never saves.
 
     ``provider`` is injectable so the suite can exercise every path here without spending a
     token — this repo has already paid once for tests that reached a live model.
 
-    ``timezone_name`` is the clock the person speaks in, when the caller knows it (the coworker passes the one the
-    person named); otherwise the reader's own preference. ``from_conversation`` says the request came from a
+    ``timezone_name`` is a clock the person named; ``clock_here`` the clock where they are (the browser's). Which one
+    the times are read in is `the_clock`'s order. ``from_conversation`` says the request came from a
     conversation, which shows each run itself (2026-11-16: a sentence is THE way to schedule anything — the user,
     after seeing the agent shell's scheduler take "deliver me AI news in the next 5 minutes here")."""
     from pramanyx.automations.models import Automation
@@ -394,10 +425,9 @@ def propose_chain(outcome: str, *, conn_id: str, provider: Any = None, timezone_
     if not (outcome or "").strip():
         return ChainProposal(verdict="refused", reason="describe what the chain should do")
 
-    # SP-13 — the clock the draft's times are read in: the one the caller names, else the reader's own setting; ""
-    # keeps UTC, the platform's default and every pre-SP-13 chain's clock.
-    from pramanyx.db.user_prefs import preferred_timezone
-    draft_tz = (timezone_name or "").strip() or preferred_timezone()
+    # SP-13 — the clock the draft's times are read in (`the_clock`); "" keeps UTC, the platform's default and every
+    # pre-SP-13 chain's clock.
+    draft_tz = the_clock(timezone_name, clock_here)
     try:
         prov = provider
         if prov is None:

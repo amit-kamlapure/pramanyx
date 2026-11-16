@@ -1,8 +1,8 @@
 """DE-2b and DE-2c (ROADMAP §3.51; §6 item 37(c)) — an outside agent is a principal with a policy.
 
 DE-2b: one policy per organisation — `read`, `run`, `act` — with connection and tool
-allowlists, kept with the organisation's per-org settings, `run` by default and `act` only by a
-person, narrowed (never widened) by the environment, enforced in the API on every request the
+allowlists, kept with the organisation's per-org settings, `act` by default (since 2026-11-16; `run`
+before) and set only by a person, narrowed (never widened) by the environment, enforced in the API on every request the
 MCP client marks as its own, refused with stable codes, audited with its principal; the MCP
 server hides a disallowed tool from `tools/list` and refuses it by name; every tool carries
 `readOnlyHint` / `destructiveHint`. DE-2c: the four knowledge tools reach their bodies through
@@ -42,10 +42,12 @@ def _clean_policy(monkeypatch):
 
 # ── the store ────────────────────────────────────────────────────────────────────────
 
-def test_an_install_with_no_saved_policy_runs_at_run_and_says_it_is_the_default():
+def test_an_install_with_no_saved_policy_lets_its_agents_act_and_says_it_is_the_default():
+    """The user, 2026-11-16: the harness knows when to read, run or act. The level is a ceiling the agent works under,
+    so the default allows all three; a person lowers it."""
     p = AP.effective_agent_policy(ORG)
-    assert p.level == "run" and p.source == "default" and p.set_by == ""
-    assert p.allows_level("read") and p.allows_level("run") and not p.allows_level("act")
+    assert p.level == "act" and p.source == "default" and p.set_by == ""
+    assert p.allows_level("read") and p.allows_level("run") and p.allows_level("act")
     assert p.allows_tool("anything") and p.allows_connection("c1")
 
 
@@ -123,7 +125,9 @@ def test_an_unmarked_request_is_untouched_even_under_a_read_policy():
     assert _run(go()) != 403, "the web app and every other caller are not agents"
 
 
-def test_the_default_policy_refuses_an_act_by_name_and_serves_a_read():
+def test_a_run_policy_refuses_an_act_by_name_and_serves_a_read():
+    AP.save_agent_policy(ORG, level="run", set_by="ana")
+
     async def go():
         async with _api() as c:
             refused = await c.post("/jobs/not-a-job/cancel", headers={**AGENT, TOOL_HEADER: "cancel_job"})
@@ -135,6 +139,13 @@ def test_the_default_policy_refuses_an_act_by_name_and_serves_a_read():
     assert body["error"] == "agent_policy_denied" and body["code"] == P.CODE_LEVEL
     assert body["tool"] == "cancel_job" and body["policy_level"] == "run" and body["required_level"] == "act"
     assert served.status_code == 200
+
+
+def test_the_default_policy_lets_an_act_through_to_its_route():
+    async def go():
+        async with _api() as c:
+            return await c.post("/jobs/not-a-job/cancel", headers={**AGENT, TOOL_HEADER: "cancel_job"})
+    assert _run(go()).status_code != 403, "nobody saved a policy: the default lets the agent act"
 
 
 def test_a_read_policy_hides_run_and_a_grant_of_act_opens_the_cancel():
@@ -178,6 +189,7 @@ def test_every_agent_call_is_audited_with_its_principal_and_shows_on_the_governa
 
     import uuid
     robot = f"robot-{uuid.uuid4().hex[:8]}"
+    AP.save_agent_policy(ORG, level="run", set_by="ana")
 
     async def go():
         async with _api() as c:
@@ -205,7 +217,8 @@ def test_the_policy_route_is_set_by_a_person_and_refuses_the_agent():
             cleared = await c.delete("/org-settings/agent-policy")
             return before, by_agent, by_person, after, cleared
     before, by_agent, by_person, after, cleared = _run(go())
-    assert before.status_code == 200 and before.json()["effective"]["level"] == "run" and before.json()["saved"] is None
+    assert before.status_code == 200 and before.json()["effective"]["level"] == "act" and before.json()["saved"] is None
+    assert before.json()["default"] == "act"                       # the screen names it, never its own copy
     assert by_agent.status_code == 403 and by_agent.json()["detail"]["code"] == P.CODE_SELF_SET
     assert by_person.status_code == 200
     eff = after.json()["effective"]
@@ -279,7 +292,8 @@ def test_a_tool_allowlist_hides_the_rest_and_refuses_them_by_name(monkeypatch):
     assert json.loads(str(e.value))["code"] == P.CODE_TOOL
 
 
-def test_when_the_api_cannot_be_asked_the_default_run_applies(monkeypatch):
+def test_when_the_api_cannot_be_asked_runs_tools_are_listed_and_never_an_act(monkeypatch):
+    """A policy the server could not read is no grant: the default is `act`, but an unread one lists `run`'s tools."""
     async def down():
         raise RuntimeError("connection refused")
     monkeypatch.setattr(S._client, "agent_policy", down)

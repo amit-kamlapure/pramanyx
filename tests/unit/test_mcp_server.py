@@ -43,8 +43,8 @@ def _run(coro):
 # ── the server surface ───────────────────────────────────────────────────────────
 def test_server_registers_the_governed_tools():
     # DE-2b: what is REGISTERED is the eighteen below; what is LISTED is what the organisation's
-    # agent policy allows — under the default (`run`, nobody granted `act`) the one act tool,
-    # `cancel_job`, is hidden. `test_de2b_agent_policy.py` holds the listing.
+    # agent policy allows — under a policy of `run` the act tools (`cancel_job`, `schedule`) are
+    # hidden; the default, since 2026-11-16, is `act`. `test_de2b_agent_policy.py` holds the listing.
     tools = set(mcp._tool_manager._tools)
     assert tools == {
         "list_connections", "ask", "deep_analysis", "get_investigation", "get_metric",

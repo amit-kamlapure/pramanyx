@@ -310,7 +310,7 @@ def test_an_unreachable_api_registers_nothing_and_raises_nothing():
 
 def test_an_agents_tool_is_a_run_under_the_organisations_agent_policy(client, monkeypatch):
     """AO-5a held to DE-2b. An agent's tool is an ask AS that agent, so it needs what `ask`
-    needs: the install's default policy (`run`) lists it with a run's hints, a `read` policy
+    needs: a policy of `run` lists it with a run's hints, a `read` policy
     hides it, and the door it calls is a run at the API too. Measured 2026-10-03 with the
     two arcs combined: the tool was registered, then hidden and refused as an unmapped act."""
     from pramanyx.mcp import policy as P

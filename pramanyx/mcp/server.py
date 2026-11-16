@@ -162,16 +162,18 @@ _policy_cache: dict = {}   # {caller name, "" for this process: (fetched_at, Age
 
 async def current_policy():
     """The effective agent policy for this server's principal — or, for an HTTP caller let in as itself (ED-2), for
-    that caller — from the API; the default when the API cannot say (and that is logged once per fetch, not hidden)."""
+    that caller — from the API; `run` when the API cannot say (and that is logged once per fetch, not hidden)."""
     import time as _time
 
     from pramanyx.mcp.client import CURRENT_CALLER
-    from pramanyx.orgsettings.agent_policy import DEFAULT_POLICY, AgentPolicy
+    from pramanyx.orgsettings.agent_policy import AgentPolicy
     who = (CURRENT_CALLER.get() or ("",))[0]
     kept = _policy_cache.get(who)
     if kept and (_time.monotonic() - kept[0]) < _POLICY_TTL:
         return kept[1]
-    policy = DEFAULT_POLICY
+    # A policy the API could not be asked for is no grant: the tools that change something stay hidden until it answers
+    # (the API checks every call against the policy it holds, whatever this list shows).
+    policy = AgentPolicy(level="run", source="unread")
     try:
         answer = await _client.agent_policy()
         eff = (answer or {}).get("effective") or {}
@@ -182,7 +184,7 @@ async def current_policy():
             set_by=str(eff.get("set_by") or ""), source=str(eff.get("source") or "saved"),
         )
     except Exception as exc:
-        _log.warning("could not read the agent policy from the API (%s); applying the default, `run`", exc)
+        _log.warning("could not read the agent policy from the API (%s); listing what `run` allows until it answers", exc)
     _policy_cache[who] = (_time.monotonic(), policy)
     return policy
 
@@ -332,7 +334,8 @@ async def schedule(
         "'every weekday at 8, post revenue to #general', 'on the first of each month, email the margin report to "
         "x@y.com'. Pass their words; do not translate them into a cron."))],
     connection: Annotated[str, Field(description="The connection the schedule runs against.")],
-    timezone: Annotated[str, Field(description="The clock the person speaks in, as an IANA name such as Asia/Kolkata or Europe/Berlin; empty for the organisation's own.")] = "",
+    timezone: Annotated[str, Field(description="Only a clock the person NAMED ('at 9 London time' → Europe/London), as an IANA name; empty when they named none.")] = "",
+    browser_time_zone: Annotated[str, Field(description="The browser time zone you were given for this request, e.g. Asia/Kolkata; empty if you were given none.")] = "",
 ) -> dict:
     """Set up anything on a schedule from a sentence — a question asked again, a write-up, a Slack post, an email, once
     or on a rhythm. The platform's own designer drafts the whole chain from what this install has, checks it as a
@@ -340,7 +343,7 @@ async def schedule(
     conversation is open. Returns `scheduled` with `when` and `next_run` (say them back as returned), or `needs`: a
     choice the request left open (a channel, a sender) — ask the person and call again with their answer — or a
     `reason` it could not be made."""
-    return await _client.schedule(request, connection, timezone)
+    return await _client.schedule(request, connection, timezone, browser_time_zone)
 
 
 @mcp.tool()

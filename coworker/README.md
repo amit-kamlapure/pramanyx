@@ -120,6 +120,9 @@ turned back on from the interface.
   it is a card that draws no copy: it reads where the schedule stands each time it is drawn, and **shows each run's
   result here** — "deliver it here" needs no sending step. A Slack post a model drafted waits for a person on each
   run until one says "always allow"; an email from a new schedule is held at departure while it is on probation.
+  Its times are read in a zone the person named, else their own saved clock, else their browser's (the shell tells
+  the agent which, on every message), else the organisation's, else UTC. Setting one up is an act: the organisation's
+  agent policy allows it by default (since 2026-11-16; `run` before), and an admin can lower it.
 - **The first screen.** The mark on a tile over a large headline, then the question box. Under it: questions worth
   asking of a chosen connection as plain lines, and two cards — the questions asked lately (each with its
   connection and how long ago) and a person's own agents. Each row writes a question into the box; nothing is

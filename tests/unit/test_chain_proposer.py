@@ -300,6 +300,29 @@ def test_the_designer_is_told_the_time_in_the_persons_clock_so_in_five_minutes_c
     assert out.first_run.startswith("2099-11-16T06:28")           # 11:58 in Kolkata, as the scheduler reads it
 
 
+def test_a_sentences_times_are_read_in_the_zone_named_then_the_persons_then_where_they_are_then_the_orgs(monkeypatch):
+    """The user, 2026-11-16 ("Yes, my clock"): a draft on the Automations page read "9 in the morning" as 09:00 UTC,
+    because neither the person nor the organisation had set a clock — though the browser knew it."""
+    import pramanyx.db.user_prefs as prefs
+    import pramanyx.orgsettings.store as org
+    from pramanyx.automations.propose import the_clock
+    mine, ours = {"tz": ""}, {"tz": ""}
+    monkeypatch.setattr(prefs, "preferred_timezone", lambda: mine["tz"])
+    monkeypatch.setattr(org, "load_org_settings", lambda: type("S", (), {"timezone": ours["tz"]})())
+    assert the_clock() == ""                                                   # nothing known: UTC
+    ours["tz"] = "Europe/Berlin"
+    assert the_clock() == "Europe/Berlin"
+    assert the_clock(here="Asia/Kolkata") == "Asia/Kolkata"                    # where they are, before the org's
+    mine["tz"] = "America/New_York"
+    assert the_clock(here="Asia/Kolkata") == "America/New_York"                # their own choice, before the browser
+    assert the_clock("Europe/London", "Asia/Kolkata") == "Europe/London"       # a zone they named, before all
+    assert the_clock("Mars/Olympus", "Asia/Kolkata") == "America/New_York"     # one nobody can read is passed over
+    p = _Provider(_chain())
+    mine["tz"] = ""
+    out = propose_chain("every day at nine, how is the pipeline", conn_id=CONN, provider=p, clock_here="Asia/Kolkata")
+    assert "Write every time in Asia/Kolkata" in p.system and out.draft["timezone"] == "Asia/Kolkata"
+
+
 def test_a_request_from_a_conversation_needs_no_sending_step_for_here():
     p = _Provider(_chain())
     propose_chain("every Monday, how is the pipeline — here", conn_id=CONN, provider=p, from_conversation=True)

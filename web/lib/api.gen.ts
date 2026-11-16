@@ -14499,7 +14499,7 @@ export interface paths {
         /**
          * Get Agent Policy
          * @description What an outside agent may do for this organisation: the saved policy (or the default,
-         *     `run`), the environment's narrowing, and the EFFECTIVE result of the two.
+         *     `act`), the environment's narrowing, and the EFFECTIVE result of the two.
          */
         get: operations["get_agent_policy_org_settings_agent_policy_get"];
         /**
@@ -14510,7 +14510,7 @@ export interface paths {
         post?: never;
         /**
          * Delete Agent Policy
-         * @description Drop the saved policy — the organisation falls back to the default, `run`.
+         * @description Drop the saved policy — the organisation falls back to the default, `act`.
          */
         delete: operations["delete_agent_policy_org_settings_agent_policy_delete"];
         options?: never;
@@ -26837,6 +26837,12 @@ export interface components {
          */
         pramanyx__routers__automations__ProposeRequest: {
             /**
+             * Clock Here
+             * @description The IANA clock where the person is (the browser's): read when they named none and set none of their own.
+             * @default
+             */
+            clock_here: string;
+            /**
              * Conn Id
              * @description The connection the chain runs against.
              */
@@ -26853,7 +26859,7 @@ export interface components {
             outcome: string;
             /**
              * Timezone
-             * @description An IANA clock, e.g. Asia/Kolkata; empty for the reader's own.
+             * @description An IANA clock the person named, e.g. Asia/Kolkata.
              * @default
              */
             timezone: string;

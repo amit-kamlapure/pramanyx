@@ -39,7 +39,7 @@ def test_the_persons_words_go_to_the_platforms_designer_and_what_it_draws_is_mad
     (path, asked), (made_at, made) = sent["posts"]
     assert path == "/automations/propose" and asked == {"outcome": "in five minutes, GMV by platform, here",
                                                        "conn_id": "conn-1", "timezone": "Asia/Kolkata",
-                                                       "from_conversation": True}
+                                                       "clock_here": "", "from_conversation": True}
     assert made_at == "/automations" and made["conditions"] == DRAFT["conditions"] and made["start_at_first_run"] is True
     assert got["scheduled"] is True and got["when"].startswith("Once, on Mon 16 Nov 2026")
     assert got["steps"] == ["investigate"] and got["open"] == "/automations?conn=conn-1&focus=a1"
@@ -60,13 +60,16 @@ def test_a_request_nothing_here_can_do_says_why_and_nothing_is_made():
     assert [p for p, _ in sent["posts"]] == ["/automations/propose"]
 
 
-def test_its_times_are_read_in_the_clock_named_else_the_organisations():
-    c, sent = _client({"verdict": "refused", "reason": "x"}, settings={"timezone": "Europe/Berlin"})
-    asyncio.run(c.schedule("at nine", "conn-1"))
-    assert sent["posts"][0][1]["timezone"] == "Europe/Berlin"
-    c, sent = _client({"verdict": "refused", "reason": "x"}, settings={"timezone": "Europe/Berlin"})
-    asyncio.run(c.schedule("at nine", "conn-1", "Asia/Kolkata"))
-    assert sent["posts"][0][1]["timezone"] == "Asia/Kolkata" and "/org-settings" not in sent["gets"]
+def test_the_zone_named_and_the_browsers_go_to_the_designer_which_decides_between_them():
+    """The user, 2026-11-16: "Yes, my clock". The shell tells the agent the browser's zone on every message; the
+    agent passes it apart from a zone the person named, and the platform's order decides (`the_clock`)."""
+    c, sent = _client({"verdict": "refused", "reason": "x"})
+    asyncio.run(c.schedule("at nine", "conn-1", browser_time_zone="Asia/Kolkata"))
+    assert sent["posts"][0][1]["timezone"] == "" and sent["posts"][0][1]["clock_here"] == "Asia/Kolkata"
+    c, sent = _client({"verdict": "refused", "reason": "x"})
+    asyncio.run(c.schedule("at nine London time", "conn-1", "Europe/London", "Asia/Kolkata"))
+    assert sent["posts"][0][1]["timezone"] == "Europe/London" and sent["posts"][0][1]["clock_here"] == "Asia/Kolkata"
+    assert sent["gets"] == []                                    # the client no longer reads the org's clock itself
 
 
 def test_what_it_makes_is_one_the_automation_door_accepts():

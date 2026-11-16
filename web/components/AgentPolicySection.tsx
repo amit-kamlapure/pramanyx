@@ -3,12 +3,12 @@
 /**
  * AgentPolicySection — Settings ▸ Organization: what an outside agent (an MCP client) may do here (DE-2b,
  * ROADMAP §3.51). Three levels — read looks things up, run starts analyses that spend model calls, act
- * changes things (cancel a job, run an automation, Spotlight's acts) — and two allowlists.
+ * changes things (cancel a job, set up a schedule, run an automation, Spotlight's acts) — and two allowlists.
  *
  * The section shows three things apart and says which is which: the policy a person SAVED (or that nobody
- * did, so the default `run` stands), what the ENVIRONMENT pins on the server (it can only narrow), and the
- * EFFECTIVE result the API enforces. `act` is given only by a named person: the server refuses an agent that
- * tries, and this form is disabled without `admin.manage_org`, saying so.
+ * did, so the default — `act` since 2026-11-16 — stands), what the ENVIRONMENT pins on the server (it can only
+ * narrow), and the EFFECTIVE result the API enforces. A policy is set by a named person: the server refuses an
+ * agent that tries, and this form is disabled without `admin.manage_org`, saying so.
  *
  * A card (CLARITY, 2026-10-12): the policy in force at the label's right end, one line on what it governs, the three
  * levels side by side, the two allowlists, one Save.
@@ -28,7 +28,7 @@ type Level = "read" | "run" | "act";
 const LEVELS: Array<{ key: Level; label: string; hint: string }> = [
   { key: "read", label: "Read", hint: "look things up — connections, findings, metrics, the knowledge graph" },
   { key: "run", label: "Run", hint: "also ask questions and start explorations, which spend model calls" },
-  { key: "act", label: "Act", hint: "also cancel jobs, run automations and Spotlight's staged acts" },
+  { key: "act", label: "Act", hint: "also set up schedules, cancel jobs, run automations and Spotlight's staged acts" },
 ];
 
 /** A comma list as typed → the list the API takes; blank means "all". */
@@ -51,7 +51,7 @@ export function describeEffective(view: AgentPolicyView): string {
 
 export function AgentPolicySection() {
   const [view, setView] = useState<AgentPolicyView | null>(null);
-  const [level, setLevel] = useState<Level>("run");
+  const [level, setLevel] = useState<Level>("act");
   const [connections, setConnections] = useState("");
   const [tools, setTools] = useState("");
   const [canManage, setCanManage] = useState(true);
@@ -168,7 +168,7 @@ export function AgentPolicySection() {
         </Button>
         {view?.saved && (
           <Button variant="ghost" size="sm" onClick={clear} disabled={!canManage || saving} data-testid="agent-policy-clear">
-            Return to the default (run)
+            {view.default ? `Return to the default (${view.default})` : "Return to the default"}
           </Button>
         )}
       </SaveLine>
