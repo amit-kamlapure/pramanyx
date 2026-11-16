@@ -114,6 +114,9 @@ Prefer the smallest chain that does what was asked. Name it in the user's words.
 A QUESTION a step asks (an `investigate` step's `question`) is what the person wants found, for which
 period — as they would ask it: "Top 5 product categories by revenue yesterday". Never tell the analysis
 how to report: no "state the date range or source you used", no "explain", no caveats to add, no format.
+Keep a period as the person said it — "yesterday", "last week", "this month": each run reads it afresh
+from its own day. Never turn it into a calendar date the person did not say; a daily schedule asking
+about one fixed date would answer the same day forever.
 Each answer keeps its own record of how it was answered, shown beside it, and the platform says itself
 whether a figure may still change.
 

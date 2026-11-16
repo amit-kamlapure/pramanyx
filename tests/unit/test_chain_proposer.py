@@ -344,3 +344,6 @@ def test_the_designer_writes_a_question_as_asked_never_how_to_report_it():
     p = _Provider(_chain())
     propose_chain("every Monday, top 5 categories by revenue", conn_id=CONN, provider=p)
     assert "Never tell the analysis\nhow to report" in p.system and "state the date range or source you used" in p.system
+    # Found beside the agent shell's own scheduler, which kept "yesterday" relative to each run: the designer had
+    # written "For yesterday (2026-11-15, …)" — right once, wrong every morning after for a daily schedule.
+    assert "Keep a period as the person said it" in p.system and "Never turn it into a calendar date" in p.system
