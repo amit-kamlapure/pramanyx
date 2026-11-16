@@ -608,7 +608,7 @@ export function Scheduled({ made }) {
       `Each run is also sent on: ${sends.map((kind) => ({ email: "email", slack_post: "Slack", notify: "a notification" })[kind]).join(", ")}.`) : null,
     // WHAT EACH RUN FOUND, HERE (2026-11-16: "deliver it here"). Read with the schedule each time the card is drawn.
     runs.length ? h("div", { "data-pramanyx-runs": "", style: { display: "flex", flexDirection: "column", gap: 6, paddingTop: 4 } },
-      runs.map((run, i) => h(RunFound, { key: `${run.at}-${i}`, run }))) : null,
+      runs.map((run, i) => h(RunFound, { key: `${run.at}-${i}`, run, provisional: String(now?.provisional || "") }))) : null,
     now !== null && hasPane() ? h("div", null, h("button", { type: "button", style: button(false),
       onClick: () => openBeside("page", pageFor.schedule(made.id, String(now?.conn_id || made.connection || ""))) }, "Open the schedule")) : null);
 }
@@ -624,17 +624,41 @@ const STEP_WORDS = {
   subchain: "runs another automation", kinetic_action: "takes the declared action", expectations: "checks the table's expectations",
 };
 
-/** One run of a schedule: when, and what its steps found — the platform's words, with the analysis a click away. */
-function RunFound({ run }) {
-  const found = (run.steps ?? []).filter((step) => step.said);
+/**
+ * A run's answer, shown as an answer is (2026-11-16, the user: "why is the result not chart or table?"): the headline,
+ * then its rows as the chart they chose — one row as figures — with the table a click away, and under it the
+ * platform's one line on whether the figures may still change. How it was answered is the analysis's own page.
+ */
+function RunAnswer({ answer, provisional }) {
+  const [table, setTable] = useState(false);
+  const one = (answer.rows ?? []).length === 1;
+  const count = typeof answer.row_count === "number" ? answer.row_count : (answer.rows ?? []).length;
+  return h("div", { "data-pramanyx-run-answer": "", style: { display: "flex", flexDirection: "column", gap: 6 } },
+    answer.headline ? h("div", { style: { fontSize: 15, fontWeight: 600, lineHeight: 1.4 } }, answer.headline) : null,
+    h("div", { style: { border: `1px solid ${line}`, borderRadius: 6, padding: "6px 8px 4px 12px" } },
+      one ? h(Figures, { answer }) : table ? h("div", { style: { padding: "4px 0 6px" } }, h(ResultGrid, { answer, compact: true }))
+        : h(Chart, { answer }),
+      one ? null : h("div", { style: { display: "flex", alignItems: "center", gap: 12, borderTop: `1px solid ${line}`, marginTop: 4 } },
+        h("button", { type: "button", className: "pramanyx-link", "aria-expanded": table, onClick: () => setTable((was) => !was) },
+          table ? "Show the chart" : "Show as a table"),
+        h("span", { style: { flex: "1 1 auto" } }),
+        h("span", { style: { ...quiet, fontSize: 12.5 } }, `${count} ${count === 1 ? "row" : "rows"}`))),
+    provisional ? h("div", { style: { ...quiet, fontSize: 12.5 } }, provisional) : null);
+}
+
+/** One run of a schedule: when, and what its steps found — an answer as an answer, a write-up as its text, with the
+ *  analysis a click away. */
+function RunFound({ run, provisional = "" }) {
+  const found = (run.steps ?? []).filter((step) => step.answer || step.said);
   const failed = (run.steps ?? []).filter((step) => !["executed", "skipped"].includes(String(step.status)));
   const analysis = (run.steps ?? []).map((step) => step.investigation_id).find(Boolean);
   // A step that handed its analysis to the platform's queue: the run is recorded before the answer exists.
   const answering = (run.steps ?? []).some((step) => step.answering);
-  return h("div", { style: { borderTop: `1px solid ${line}`, paddingTop: 6 } },
+  return h("div", { style: { borderTop: `1px solid ${line}`, paddingTop: 6, display: "flex", flexDirection: "column", gap: 6 } },
     h("div", { style: { ...quiet, fontSize: 12.5 } },
       `Ran ${whenNext(run.at)}`, run.outcome === "paused" ? " · waiting for a person" : run.outcome === "error" ? " · did not run" : ""),
-    found.length ? found.map((step, i) => h("div", { key: i, style: { whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight: 1.5 } }, step.said))
+    found.length ? found.map((step, i) => (step.answer ? h(RunAnswer, { key: i, answer: step.answer, provisional })
+      : h("div", { key: i, style: { whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight: 1.5 } }, step.said)))
       : h("div", { style: quiet }, run.outcome === "error" ? (run.reason || "It broke before it found anything.")
         : failed.length ? (failed[0].message || "A step did not finish.")
           : answering ? "Still being answered. The answer shows here when it is done." : "It found nothing to say."),

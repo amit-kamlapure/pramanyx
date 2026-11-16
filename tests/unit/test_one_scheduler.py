@@ -364,3 +364,41 @@ def test_a_run_whose_analysis_is_still_running_says_so_and_shows_its_answer_once
     assert done["said"] == "Outerwear & Coats led with 4,686.58" and done["investigation_id"] == "inv-done"
     assert done["answering"] is False
     assert broke["status"] == "failed" and broke["message"] == "BigQuery timed out" and broke["said"] == ""
+
+
+def test_a_runs_answer_is_shown_as_an_answer_with_the_platforms_one_line_on_whether_it_may_change(flag_on, monkeypatch):
+    """The user, 2026-11-16: "why is the result not chart or table or more visual?" — the run kept a headline, five rows
+    and a chart, and the card showed only the report's paragraph, whose method and caveat sentences the user asked
+    about. The read hands the answer as an answer, and the platform's own line on whether its figures may change."""
+    from pramanyx.automations.models import AutomationRun, EffectOutcome
+    from pramanyx.automations.store import append_run
+    import pramanyx.settling.answer as settling
+    envelope = {"headline": "Outerwear & Coats tops 15 Nov category revenue at 13.34%",
+                "body": "Revenue by product category is available — order_items.sale_price joined to …",
+                "grid": {"columns": ["category", "revenue"], "rows": [["Outerwear & Coats", "6108.12"], ["Jeans", "5821.06"]]},
+                "chart": {"chart_type": "auto", "chart_config": {}}}
+    made = client.post("/automations", json=_body("0 9 * * 1")).json()
+    append_run(AutomationRun(automation_id=made["id"], outcome="fired", started_at="2026-11-16T16:05:37Z",
+                             effects=[EffectOutcome(kind="investigate", status="executed", investigation_id="inv1",
+                                                    data={"summary": "Revenue by product category is available — …",
+                                                          "envelope": envelope})]))
+    monkeypatch.setattr(settling, "settling_answer", lambda conn_id: settling.SettlingAnswer(kind=settling.REWRITES,
+                                                                                             rewrites=("order_items",)))
+    read = client.get(f"/automations/{made['id']}/schedule").json()
+    step = read["runs"][0]["steps"][0]
+    assert step["answer"]["headline"] == envelope["headline"] and step["answer"]["rows"][0] == ["Outerwear & Coats", "6108.12"]
+    assert step["answer"]["chart_type"] == "auto" and step["answer"]["row_count"] == 2
+    assert step["said"] == envelope["headline"]                    # the report's paragraph is not repeated
+    assert read["provisional"] == "Provisional: this source still revises its days, so these figures may change."
+    monkeypatch.setattr(settling, "settling_answer", lambda conn_id: settling.SettlingAnswer(kind=settling.UNKNOWN))
+    assert client.get(f"/automations/{made['id']}/schedule").json()["provisional"] == ""
+
+
+def test_the_one_line_on_settling_is_short_and_says_nothing_of_a_source_known_to_settle_or_not_known():
+    from pramanyx.settling.answer import LIVE, MOVING, REWRITES, SETTLES, UNKNOWN, SettlingAnswer
+    assert SettlingAnswer(kind=SETTLES, days=3).in_brief() == ("Figures for the last 3 days are provisional: this source "
+                                                               "settles 3 days after a day ends.")
+    assert SettlingAnswer(kind=UNKNOWN).in_brief() == ""
+    for kind in (LIVE, MOVING, REWRITES):
+        line = SettlingAnswer(kind=kind, moving=("orders",), rewrites=("orders",)).in_brief()
+        assert line and len(line) < 90 and "orders" not in line                 # one line, naming no tables

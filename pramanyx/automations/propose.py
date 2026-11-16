@@ -111,6 +111,12 @@ Rules that decide whether your proposal is accepted at all:
 
 Prefer the smallest chain that does what was asked. Name it in the user's words.
 
+A QUESTION a step asks (an `investigate` step's `question`) is what the person wants found, for which
+period — as they would ask it: "Top 5 product categories by revenue yesterday". Never tell the analysis
+how to report: no "state the date range or source you used", no "explain", no caveats to add, no format.
+Each answer keeps its own record of how it was answered, shown beside it, and the platform says itself
+whether a figure may still change.
+
 WHEN IT RUNS — a `schedule` trigger's `cron` holds one of two things:
 - a five-field cron for a rhythm: "0 9 * * 1" is Mondays at 09:00, "0 8 * * 1-5" weekdays at 08:00,
   "*/15 * * * *" every 15 minutes;

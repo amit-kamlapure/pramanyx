@@ -687,17 +687,49 @@ def schedule_of(automation_id: str):
         "last_run_at": a.last_run_at or "", "last_status": a.last_status or "",
         "steps": [e.kind for e in a.effects],
         "runs": _what_runs_found(a.id),
+        # 2026-11-16 — whether a run's figures may still change, said once by the platform from what it learned of the
+        # source; the model is not asked to say it at length in every answer.
+        "provisional": _provisional(a.conn_id),
     }
 
 
 #: How many of a schedule's runs the conversation that set it up shows.
 RUNS_SHOWN = 3
+#: How many of an answer's rows a run's card is handed; it says how many there were.
+ROWS_SHOWN = 200
+
+
+def _provisional(conn_id: str) -> str:
+    try:
+        from pramanyx.settling.answer import settling_answer
+        return settling_answer(conn_id).in_brief()
+    except Exception as exc:  # noqa: BLE001 — not knowing how the source settles is no reason to withhold its runs
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "how the source settles could not be read for a schedule's card", counter="automations.provisional",
+                 conn_id=conn_id)
+        return ""
+
+
+def _shown_answer(envelope: dict) -> Optional[dict]:
+    """A run's answer as an answer is shown (2026-11-16, the user: "why is the result not chart or table?"): its
+    headline, its rows, and the chart it chose — from the envelope its report keeps. None when it kept no rows."""
+    if not isinstance(envelope, dict) or not envelope:
+        return None
+    grid = envelope.get("grid") if isinstance(envelope.get("grid"), dict) else {}
+    columns, rows = list(grid.get("columns") or []), list(grid.get("rows") or [])
+    if not columns or not rows:
+        return None
+    chart = envelope.get("chart") if isinstance(envelope.get("chart"), dict) else {}
+    return {"headline": str(envelope.get("headline") or "").strip(), "columns": columns, "rows": rows[:ROWS_SHOWN],
+            "row_count": len(rows), "chart_type": chart.get("chart_type") or "auto",
+            "chart_config": chart.get("chart_config") or {}}
 
 
 def _what_runs_found(automation_id: str) -> list[dict]:
-    """The latest runs that did something, newest first, each with what its steps found — the answer an investigate
-    step gave, a write-up's text — and the investigation behind it. The conversation that set the schedule up shows
-    these under its card (2026-11-16: "deliver it here"); a run that did nothing is not one to show."""
+    """The latest runs that did something, newest first, each with what its steps found — an analysis's answer as an
+    answer is shown (headline, rows, chart), a write-up's text — and the investigation behind it. The conversation that
+    set the schedule up shows these under its card (2026-11-16: "deliver it here"); a run that did nothing is not one
+    to show. How it was answered — the tables, the window, the SQL — is the investigation's page, not the card's."""
     from pramanyx.runners.investigation import submitted_job, what_the_job_became
     out: list[dict] = []
     for run in get_runs(automation_id=automation_id, limit=RUNS_SHOWN, outcomes=("fired", "paused", "error")):
@@ -705,7 +737,8 @@ def _what_runs_found(automation_id: str) -> list[dict]:
         for e in run.effects:
             data = e.data or {}
             said = str(data.get("summary") or data.get("answer") or data.get("text") or "").strip()
-            step = {"kind": e.kind, "status": e.status, "said": said[:1500],
+            answer = _shown_answer(data.get("envelope") or {})
+            step = {"kind": e.kind, "status": e.status, "said": said[:1500], "answer": answer,
                     "investigation_id": e.investigation_id or str(data.get("investigation_id") or ""),
                     "message": (e.message or "")[:300], "answering": False}
             # A step that submitted its analysis and returned holds only the job's id (2026-11-16: the card said "it
@@ -716,10 +749,14 @@ def _what_runs_found(automation_id: str) -> list[dict]:
             if became.get("state") == "answering":
                 step["answering"] = True
             elif became.get("state") == "answered":
-                step.update(said=became["said"][:1500], investigation_id=became["investigation_id"])
+                step.update(said=became["said"][:1500], investigation_id=became["investigation_id"],
+                            answer=_shown_answer(became.get("envelope") or {}))
             elif became.get("state") == "stopped":
                 step.update(status="failed", message=became["reason"][:300],
                             investigation_id=became.get("investigation_id") or "")
+            # An answer with rows is shown by its headline and exhibit; the report's paragraph is not repeated.
+            if step["answer"] and step["answer"]["headline"]:
+                step["said"] = step["answer"]["headline"]
             found.append(step)
         out.append({"at": run.started_at, "outcome": run.outcome, "reason": (run.reason or "")[:300], "steps": found})
     return out

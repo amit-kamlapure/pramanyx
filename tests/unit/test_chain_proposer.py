@@ -336,3 +336,11 @@ def test_a_recurrence_the_designer_writes_wrongly_is_refused_like_any_unsaveable
     p = _Provider(_chain(conditions=[{"kind": "schedule", "config": {"cron": "DTSTART:20991116T090000\nRRULE:FREQ=SECONDLY"}}]))
     out = propose_chain("every second", conn_id=CONN, provider=p)
     assert out.verdict == "refused" and "FREQ must be one of" in out.reason
+
+
+def test_the_designer_writes_a_question_as_asked_never_how_to_report_it():
+    """The user, 2026-11-16, of a scheduled answer that opened on "order_items.sale_price joined to products.category…":
+    the designer had written into the question "State the date range and source you used", and the answer obeyed."""
+    p = _Provider(_chain())
+    propose_chain("every Monday, top 5 categories by revenue", conn_id=CONN, provider=p)
+    assert "Never tell the analysis\nhow to report" in p.system and "state the date range or source you used" in p.system

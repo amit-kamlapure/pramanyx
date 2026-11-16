@@ -416,9 +416,10 @@ def submitted_job(message: str) -> str:
 def what_the_job_became(job_id: str) -> dict:
     """Where a submitted run stands, read after the step that started it (2026-11-16: a schedule's card said "it
     found nothing to say" while its investigation was still running). ``{"state": "answering"}`` while the job runs;
-    ``{"state": "answered", "investigation_id", "said"}`` once the join `_note_dispatch` records names its
-    investigation; ``{"state": "stopped", "reason"}`` for a job that ended without one; ``{}`` when the job cannot be
-    read at all."""
+    ``{"state": "answered", "investigation_id", "said", "envelope"}`` once the join `_note_dispatch` records names its
+    investigation — the envelope is the answer as the stored report supports it (headline, rows, chart), for a reader
+    that shows it as an answer; ``{"state": "stopped", "reason"}`` for a job that ended without one; ``{}`` when the
+    job cannot be read at all."""
     from pramanyx.kernel.jobs import JobState
     from pramanyx.kernel.ledger import Ledger
     ledger = Ledger.default()
@@ -430,7 +431,9 @@ def what_the_job_became(job_id: str) -> dict:
         report = inv.get("report") if isinstance(inv.get("report"), dict) else {}
         said = str(report.get("executive_summary") or inv.get("headline") or report.get("headline") or "").strip()
         if said:
-            return {"state": "answered", "investigation_id": inv_id, "said": said}
+            from pramanyx.answer.envelope import envelope_of_report
+            envelope = envelope_of_report(report, question=str(inv.get("question") or "")) or {}
+            return {"state": "answered", "investigation_id": inv_id, "said": said, "envelope": envelope}
         return {"state": "stopped", "investigation_id": inv_id,
                 "reason": str(inv.get("error") or "the analysis ended without an answer")}
     job = ledger.job_get(job_id)

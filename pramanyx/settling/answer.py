@@ -82,6 +82,17 @@ class SettlingAnswer:
             return f"A day's numbers stop changing {_days(self.days or 0)} after it ends, which the platform measured."
         return "The platform has not read this source for long enough to know when its numbers settle."
 
+    def in_brief(self) -> str:
+        """One line for under a figure, or "" when it will not change (2026-11-16, the user, of a scheduled answer that
+        spent a paragraph naming five tables to say this): whether the figures may still move."""
+        if self.kind == LIVE:
+            return "Read as it stands: people edit this source at any age."
+        if self.never_settled:
+            return "Provisional: this source still revises its days, so these figures may change."
+        if self.kind == SETTLES and self.days:
+            return f"Figures for the last {_days(self.days)} are provisional: this source settles {_days(self.days)} after a day ends."
+        return ""
+
     def clause(self) -> str:
         """The same, as a clause of a longer sentence; "" when nothing is known to say. It names its tables: "it", in
         someone else's sentence, reads as whatever that sentence was about."""
