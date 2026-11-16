@@ -40,6 +40,7 @@ import { CatalogScope } from "@/components/catalog/CatalogScope";
 import { CatalogTable } from "@/components/catalog/CatalogTable";
 import { recents } from "@/components/catalog/CatalogTools";
 import { explored, findDuplicates, itemKey, type CatalogItem } from "@/lib/catalogSummary";
+import { relTime } from "@/lib/format";
 
 /** <Button> forces child SVGs to size-4/size-3; this restores each icon's own
  *  width/height attributes (size-auto → the SVG's intrinsic attribute size). */
@@ -190,6 +191,7 @@ export function CatalogScreen({ connections, selectedConn, onSelect, onDeleteCon
   // until the workspace list arrives) and one after; the first is org-wide and the heavier, and it used to answer
   // last and overwrite the scoped tree — six catalogs on an Olist screen (2026-10-22).
   const treeReq = useRef(0);
+  const retries = useRef(0);
   const loadTree = () => {
     setTreeL(true);
     const seq = ++treeReq.current;
@@ -208,6 +210,13 @@ export function CatalogScreen({ connections, selectedConn, onSelect, onDeleteCon
             return n;
           });
         }
+        // A catalog still reading when the tree answered (the server waits for no one longer than a few seconds) is
+        // asked again shortly, once its read can have landed — a few times, not forever.
+        const unsettled = t.sections.some(s => s.entries.some(e => e.read === "reading" || e.read === "earlier"));
+        if (unsettled && retries.current < 4) {
+          retries.current += 1;
+          setTimeout(() => { if (seq === treeReq.current) void loadTree(); }, 10_000);
+        } else if (!unsettled) retries.current = 0;
         return t;   // callers await this to confirm a new connection is really listed
       })
       .catch(err => { if (seq !== treeReq.current) return null; console.error("[CatalogScreen] tree load failed:", err); setTreeError(String(err?.message ?? err)); return null; })
@@ -308,6 +317,7 @@ export function CatalogScreen({ connections, selectedConn, onSelect, onDeleteCon
               depth={0}
               icon={<IcoCatalog color="var(--t2)" />}
               label={entry.name}
+              badge={<CatalogRead entry={entry} />}
               count={entry.schemas.reduce((s, sc) => s + sc.tables.length, 0) || undefined}
               isOpen={catOpen}
               isSelected={sel?.level === "catalog" && sel.connId === entry.conn_id}
@@ -516,4 +526,22 @@ export function CatalogScreen({ connections, selectedConn, onSelect, onDeleteCon
       />
     </div>
   );
+}
+
+/** How a catalog was read, beside its name, when it was not read just now: a catalog that is slow to answer is never
+ *  shown as one with nothing in it (2026-11-16). Nothing is drawn for a catalog read now. */
+function CatalogRead({ entry }: { entry: CatalogEntry }) {
+  if (entry.read === "reading") {
+    return <span className="aug-fs-xs" title="This catalog has not answered yet; it is asked again in a few seconds."
+      style={{ color: "var(--t3)" }}>reading…</span>;
+  }
+  if (entry.read === "earlier") {
+    return <span className="aug-fs-xs" title={`Still reading. Shown as it was read ${relTime(entry.read_at)}.`}
+      style={{ color: "var(--t3)" }}>as read {relTime(entry.read_at)}</span>;
+  }
+  if (entry.read === "failed") {
+    return <span className="aug-fs-xs" title="This catalog could not be read; its schemas are not shown."
+      style={{ color: "var(--amb4)" }}>could not be read</span>;
+  }
+  return null;
 }

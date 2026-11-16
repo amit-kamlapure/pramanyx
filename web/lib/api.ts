@@ -982,6 +982,11 @@ export interface CatalogEntry {
   conn_type: string;
   builtin: boolean;
   schemas: CatalogSchemaInfo[];
+  /** How this catalog was read for this tree (2026-11-16): `now`; `failed` (it could not be looked at); `earlier`
+   *  (still reading when the tree answered, so what it held at `read_at`); `reading` (still reading, never read
+   *  before — no schemas, and not because it has none). Absent from a server older than the field. */
+  read?: "now" | "failed" | "earlier" | "reading";
+  read_at?: string;
 }
 
 export interface CatalogSection {

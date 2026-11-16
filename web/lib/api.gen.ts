@@ -3130,6 +3130,10 @@ export interface paths {
          * Get Catalog Tree
          * @description Return the full 4-level catalog hierarchy: Section → Catalog → Schema → Table.
          *     Scoped to `workspace_id`'s connections when given (data-path tenancy).
+         *
+         *     Each catalog says how it was read (``read``): ``now``; ``failed`` (it could not be looked at); ``earlier`` (still
+         *     reading after `TREE_WAIT_SECONDS`, so what it held when last read, at ``read_at``); or ``reading`` (still reading,
+         *     and never read before — no schemas, and not because it has none).
          */
         get: operations["get_catalog_tree_catalog_tree_get"];
         put?: never;

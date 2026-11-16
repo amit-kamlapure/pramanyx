@@ -4,7 +4,9 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import logging
-from concurrent.futures import ThreadPoolExecutor
+import threading
+import time
+from concurrent.futures import Future, ThreadPoolExecutor, wait
 
 from fastapi import APIRouter
 
@@ -230,11 +232,59 @@ def quick_schemas(conn_id: str, conn_type: str) -> list[dict] | None:
 #: How many catalogs the tree reads side by side.
 _TREE_READERS = 8
 
+#: How long the tree waits for the catalogs it reads before it answers without the slow ones (2026-11-16). Found live:
+#: after the machine slept, one catalog's read hung on a connection that had died with the sleep — none of the
+#: connectors' metadata calls carries a timeout of its own — and because the tree waits for its slowest catalog,
+#: "Loading the catalog…" stood for 153 seconds while every catalog but one had answered in under three. Each reload
+#: started another read of the same catalog behind it. Healthy, the whole tree answers in two to four seconds.
+TREE_WAIT_SECONDS = 8.0
+
+#: One read per catalog at a time, outliving the request that started it: a catalog still reading when the tree
+#: answers goes on reading, and the next tree is answered from it. Long-lived on purpose — a `with` pool waits for
+#: every read on the way out, which is the wait this exists to bound.
+_reads = ThreadPoolExecutor(max_workers=_TREE_READERS * 2, thread_name_prefix="catalog-tree")
+_reading: dict[str, Future] = {}
+#: What each catalog held the last time it was read: ``conn_id → (epoch seconds, schemas)``. Shown, and said to be
+#: from then, for a catalog still reading — an empty catalog would teach the reader it holds nothing.
+_last_read: dict[str, tuple[float, list]] = {}
+_reads_lock = threading.Lock()
+
+
+def _read_and_keep(conn_id: str, conn_type: str) -> list[dict] | None:
+    try:
+        got = quick_schemas(conn_id, conn_type)
+    except Exception as exc:  # noqa: BLE001 — one catalog that cannot be read is "could not look", never the tree's end
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "catalog tree: a catalog's schemas could not be read", counter="catalog.tree_read")
+        return None
+    if got is not None:
+        _last_read[conn_id] = (time.time(), got)
+    return got
+
+
+def read_catalog(conn_id: str, conn_type: str, context: contextvars.Context) -> Future:
+    """This catalog's read: the one already under way, or a new one."""
+    with _reads_lock:
+        running = _reading.get(conn_id)
+        if running is not None and not running.done():
+            return running
+        started = _reads.submit(context.run, _read_and_keep, conn_id, conn_type)
+        _reading[conn_id] = started
+        return started
+
+
+def _stamp(at: float) -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(at))
+
 
 @router.get("/catalog/tree")
 async def get_catalog_tree(workspace_id: str | None = None):
     """Return the full 4-level catalog hierarchy: Section → Catalog → Schema → Table.
-    Scoped to `workspace_id`'s connections when given (data-path tenancy)."""
+    Scoped to `workspace_id`'s connections when given (data-path tenancy).
+
+    Each catalog says how it was read (``read``): ``now``; ``failed`` (it could not be looked at); ``earlier`` (still
+    reading after `TREE_WAIT_SECONDS`, so what it held when last read, at ``read_at``); or ``reading`` (still reading,
+    and never read before — no schemas, and not because it has none)."""
     loop = asyncio.get_running_loop()
 
     def _build_tree() -> dict:
@@ -249,17 +299,23 @@ async def get_catalog_tree(workspace_id: str | None = None):
         # Each catalog's schemas are a round trip to its own warehouse. Read one after another, the first tree of a
         # session waited for the SUM of them: 17.1 s measured live on 2026-10-09 (two BigQuery projects, a Sheets
         # connection and five more), behind "Loading the catalog…" — the usability walk-through's finding. Read side by
-        # side it waits for the slowest. Each thread reads a different connection, so no connector is shared; each runs
-        # in a copy of this request's context; and the metastore reconcile below stays one at a time.
+        # side it waits for the slowest — and, since 2026-11-16, for no longer than `TREE_WAIT_SECONDS`. Each read runs
+        # in a copy of this request's context; the metastore reconcile below stays one at a time.
         parent = contextvars.copy_context()
-        with ThreadPoolExecutor(max_workers=max(1, min(_TREE_READERS, len(listed))),
-                                thread_name_prefix="catalog-tree") as pool:
-            read = list(pool.map(lambda c: parent.copy().run(quick_schemas, c["id"], c.get("conn_type", "duckdb")),
-                                 listed))
+        reads = [read_catalog(c["id"], c.get("conn_type", "duckdb"), parent.copy()) for c in listed]
+        wait(reads, timeout=TREE_WAIT_SECONDS)
         entries = []
-        for conn_info, introspected in zip(listed, read):
+        for conn_info, read in zip(listed, reads):
             cid = conn_info["id"]
-            schemas = introspected or []
+            introspected = read.result() if read.done() else None
+            if read.done():
+                state, read_at = ("now" if introspected is not None else "failed"), time.time()
+                schemas = introspected or []
+            else:
+                earlier = _last_read.get(cid)
+                state = "earlier" if earlier else "reading"
+                read_at = earlier[0] if earlier else 0.0
+                schemas = list(earlier[1]) if earlier else []
             # Keep the metastore's first-class Schema rows tracking live introspection
             # (catalog.schema namespace). Best-effort — never break the tree build.
             #
@@ -269,7 +325,8 @@ async def get_catalog_tree(workspace_id: str | None = None):
             # destroys metadata whenever a database blinks is not a read. The next
             # successful request re-inserted them, so the damage showed up as write
             # churn rather than as an error — store_metastore had 1701 writes in
-            # production against single digits for every other store.
+            # production against single digits for every other store. Skipped too for
+            # a catalog still reading: what it holds now is not known yet.
             if introspected is not None:
                 try:
                     from pramanyx.metastore import set_catalog_schemas
@@ -283,6 +340,8 @@ async def get_catalog_tree(workspace_id: str | None = None):
                 "conn_type": conn_info.get("conn_type", ""),
                 "builtin": conn_info.get("builtin", False),
                 "schemas": schemas,
+                "read": state,
+                "read_at": _stamp(read_at) if read_at else "",
             })
 
         return {"sections": [{"id": "connections", "label": "Catalogs", "entries": entries}]}
