@@ -536,8 +536,8 @@ function CatalogRead({ entry }: { entry: CatalogEntry }) {
       style={{ color: "var(--t3)" }}>reading…</span>;
   }
   if (entry.read === "earlier") {
-    return <span className="aug-fs-xs" title={`Still reading. Shown as it was read ${relTime(entry.read_at)}.`}
-      style={{ color: "var(--t3)" }}>as read {relTime(entry.read_at)}</span>;
+    return <span className="aug-fs-xs" title={`Still reading. Shown as it was read ${relTime(entry.read_at)} ago.`}
+      style={{ color: "var(--t3)" }}>as read {relTime(entry.read_at)} ago</span>;
   }
   if (entry.read === "failed") {
     return <span className="aug-fs-xs" title="This catalog could not be read; its schemas are not shown."
