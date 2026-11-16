@@ -172,9 +172,9 @@ export function Frame({ testid, shape, over, dashed, children, doors }: {
 export function Title({ title, right, muted = false }: { title: string; right?: ReactNode; muted?: boolean }) {
   return (
     <div style={{ display: "flex", alignItems: "baseline", gap: 10, minWidth: 0, paddingRight: 64 }}>
-      <div className={muted ? undefined : "aug-fs-ui"} title={title} style={{
+      <div className={muted ? "aug-fs-chrome" : "aug-fs-ui"} title={title} style={{
         flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-        ...(muted ? { fontSize: 13, fontWeight: 500, color: "var(--t2)" } : { fontWeight: 600, color: "var(--t1)" }),
+        ...(muted ? { fontWeight: 500, color: "var(--t2)" } : { fontWeight: 600, color: "var(--t1)" }),
       }}>{title}</div>
       {right}
     </div>
@@ -323,7 +323,7 @@ function FigureTile({ cs, status, sym, doors, place }: { cs: CardState & { card:
       ) : shown ? (
         <div className="aug-fs-display" data-testid="tile-figure" data-size={place.size} title={shown.outside ? `Outside what its unit states (${card.unit})` : undefined}
           style={{ fontWeight: 600, lineHeight: 1.1, letterSpacing: "-0.02em", color: over ? "var(--red4)" : "var(--t1)", fontVariantNumeric: "tabular-nums",
-            fontSize: widest ? "2.6em" : big ? "2.1em" : 26 }}>
+            fontSize: widest ? "2.6em" : big ? "2.1em" : undefined }}>
           {shown.text}
         </div>
       ) : (
@@ -533,7 +533,7 @@ function QueryTile({ cs, doors, place, focus }: { cs: CardState & { card: Dashbo
       {shaped.as === "figure" ? (
         <div data-testid="query-tile-figure" style={{ display: "flex", flexDirection: "column", gap: 2 }}>
           <span style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
-            <span data-testid="query-tile-value" style={{ fontSize: 26, lineHeight: 1.1, letterSpacing: "-0.02em", fontWeight: 600, color: "var(--t1)", fontVariantNumeric: "tabular-nums" }}>{shaped.format ? draftedFigure(shaped.value, shaped.format) : formatMetricValue(shaped.value)}</span>
+            <span data-testid="query-tile-value" className="aug-fs-display" style={{ lineHeight: 1.1, letterSpacing: "-0.02em", fontWeight: 600, color: "var(--t1)", fontVariantNumeric: "tabular-nums" }}>{shaped.format ? draftedFigure(shaped.value, shaped.format) : formatMetricValue(shaped.value)}</span>
             {beside && (
               <span data-testid="query-tile-beside" className="aug-fs-sm" style={{ padding: "0 6px", borderRadius: "var(--r2)", background: "var(--bg-3)", color: "var(--t2)", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
                 {besideText(beside)}

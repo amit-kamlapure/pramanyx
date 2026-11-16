@@ -688,7 +688,7 @@ function MoveGrip({ cell, elementKey, onMove }: {
     <>
       <span data-testid="move-grip" title="Drag to move it beside another piece" onPointerDown={down}
         style={{ position: "absolute", left: 0, top: 0, right: 112, height: 34, zIndex: 2, cursor: "grab", touchAction: "none" }}>
-        <span aria-hidden="true" style={{ position: "absolute", left: 4, top: 4, fontSize: 11, lineHeight: 1, letterSpacing: -1,
+        <span aria-hidden="true" className="aug-fs-xs" style={{ position: "absolute", left: 4, top: 4, lineHeight: 1, letterSpacing: -1,
           color: "var(--t3)", border: "1px solid var(--b1)", borderRadius: "var(--r2)", padding: "1px 2px", background: "var(--bg-2)" }}>⋮⋮</span>
       </span>
       {landing && typeof document !== "undefined" && createPortal(

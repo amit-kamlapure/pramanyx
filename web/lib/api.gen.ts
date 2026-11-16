@@ -3060,6 +3060,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/cards/{card_id}/field": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Card Field Route
+         * @description What a click on a card's chart stands for: the table and column its ``column`` is read from, traced off the
+         *     card's own statement — or why a click on it filters nothing (`dashboards.focus.field_of`).
+         */
+        post: operations["card_field_route_cards__card_id__field_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/cards/{card_id}/graduate": {
         parameters: {
             query?: never;
@@ -19972,6 +19993,14 @@ export interface components {
             window_hours: number;
         };
         /**
+         * CardField
+         * @description The board study — a column a card's chart shows, as a click on it reports it.
+         */
+        CardField: {
+            /** Column */
+            column: string;
+        };
+        /**
          * CardProvenance
          * @description Where the card came from — so every measured card links back to its evidence.
          */
@@ -20042,6 +20071,13 @@ export interface components {
              * @default []
              */
             filters: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Focus
+             * @default []
+             */
+            focus: {
                 [key: string]: unknown;
             }[];
             /**
@@ -32510,6 +32546,43 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    card_field_route_cards__card_id__field_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                card_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CardField"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
             };
             /** @description Validation Error */
             422: {
