@@ -202,6 +202,56 @@ def claim_the_next_answer(body: CoworkerClaim, request: Request) -> None:
                     "question": body.question, "connection": body.connection, "at": now})
 
 
+# ── the one answer of a question worked by helpers, checked against the answers it gathered ──────────────────────
+
+_ANSWER_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+class GatheredAnswer(BaseModel):
+    trace_id: str = Field(max_length=60, description="The question's trace, `cw-<session>-<turn>`.")
+    session: str = Field(max_length=80, description="The shell's own id for the conversation.")
+    text: str = Field(min_length=1, max_length=40000, description="The answer the main agent wrote, as it wrote it.")
+    investigation_ids: list[str] = Field(max_length=60, description="Every answer the question gathered: the helpers' "
+                                                                     "and the main agent's own.")
+
+
+class GatheredAnswerChecked(BaseModel):
+    checked: int = Field(description="How many figures the answer states.")
+    found: int = Field(description="How many of them are in the rows of the answers it gathered.")
+    not_found: list[dict] = Field(default_factory=list, description="Each figure not found, with the clause it is in.")
+    answers: int = Field(description="How many of the answers had rows to check against.")
+    unread: int = Field(description="How many could not be read: gone, kept no rows, or not the asker's to read.")
+
+
+@router.post("/coworker/answer-check", response_model=GatheredAnswerChecked)
+def check_a_gathered_answer(body: GatheredAnswer, request: Request) -> GatheredAnswerChecked:
+    """The figures of a question's one answer against the answers its helpers and its main agent were given
+    (`govern/gathered.py`), recorded in the question's trace as a step of it. From this machine only, like the turn's
+    other events; an answer the person may not read is left out of the basis and counted as unread, never read."""
+    if not _on_this_machine(request.client.host if request.client else None):
+        raise HTTPException(status_code=403, detail="Only a coworker on this machine may check its answers.")
+    if not TRACE_NAME.match(body.trace_id) or not _SESSION_NAME.match(body.session):
+        raise HTTPException(status_code=422, detail="A coworker question's trace is named cw-<session>-<turn>.")
+    from pramanyx.govern.gathered import check_gathered_answer
+    from pramanyx.security.authz import Ownership, get_principal, resolve_ownership
+    principal = get_principal(request)
+    asked = [i for i in dict.fromkeys(body.investigation_ids) if _ANSWER_ID.match(i)]
+    readable = [i for i in asked if resolve_ownership("investigation", i, principal) in (Ownership.OWNED, Ownership.SHARED)]
+    said = check_gathered_answer(body.text, readable)
+    said["unread"] += len(asked) - len(readable)
+    from pramanyx.obs import session_log
+    from pramanyx.org.context import reset_session_id, set_session_id
+    token = set_session_id(f"coworker:{body.session}")
+    try:
+        session_log.emit(
+            session_log.STEP, name="answer_check", trace_id=body.trace_id, ok=not said["not_found"],
+            payload={"checked": said["checked"], "found": said["found"], "answers": said["answers"],
+                     "unread": said["unread"], "not_found": [f["text"] for f in said["not_found"]][:20]})
+    finally:
+        reset_session_id(token)
+    return GatheredAnswerChecked(**said)
+
+
 def claimed_for(question: str, conn_id: str) -> Optional[dict]:
     """The coworker's claim on this question on this connection, taken — or None, and the run opens its own trace.
 

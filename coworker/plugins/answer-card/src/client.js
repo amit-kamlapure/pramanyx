@@ -165,11 +165,25 @@ function AnswerTail(props) {
     }
   });
   const helpers = helpersOf(props.turn);
+  // The turn holding a question's one answer is told which question it is (`foldHelperReports` marks its tail), and
+  // shows under the answer what the check of its figures found.
+  const here = useRef(null);
+  const [checkCall, setCheckCall] = useState("");
+  useEffect(() => {
+    const tail = here.current?.closest?.('[data-chat-flow-kind="turn-tail"]');
+    if (!tail) return undefined;
+    const read = () => setCheckCall(tail.getAttribute("data-pramanyx-check-call") || "");
+    read();
+    const watch = new MutationObserver(read);
+    watch.observe(tail, { attributes: true, attributeFilter: ["data-pramanyx-check-call"] });
+    return () => watch.disconnect();
+  }, []);
   // A question worked by helpers has ONE output: the close the main agent writes once every helper has reported
   // (the user, 2026-11-16: "one main agent that orchestrates sub-agents … synthesises … and then gives one final
   // output"). Its turns' answers — the helpers' and the main agent's own checks — are the work behind that output:
   // not cards with their own follow-ups, what stands out and Right/Wrong (`data-pramanyx-gathered`, below).
-  return h("div", helpers.length ? { "data-pramanyx-gathered": "" } : null,
+  return h("div", { ref: here, ...(helpers.length ? { "data-pramanyx-gathered": "", "data-pramanyx-first-call": helpers[0].call } : {}) },
+    checkCall ? h(AnswerCheck, { call: checkCall }) : null,
     h("div", { [TAIL]: "" }),
     helpers.length ? h("div", { "data-pramanyx-helpers": "" },
       h("div", { style: { ...quiet, fontSize: 12.5, padding: "6px 0 2px" } }, `Worked by ${helpers.length} helper${helpers.length === 1 ? "" : "s"}`),
@@ -237,6 +251,55 @@ function Helper({ call, asked }) {
       : null);
 }
 
+/**
+ * WHAT THE CHECK OF THE ONE ANSWER FOUND (2026-11-16). The platform held each figure the answer states against the
+ * rows of the answers the question gathered — the helpers' and the main agent's own (`pramanyx/govern/gathered.py`).
+ * Said in one line under the answer: every figure found, or which were not, each with the clause it is in. A figure
+ * worked out from others is not in any answer, and is listed: the reader is told, not left to assume.
+ */
+function AnswerCheck({ call }) {
+  const [said, setSaid] = useState(null);
+  useEffect(() => {
+    let live = true;
+    let timer = null;
+    let tries = 0;
+    const look = () => {
+      fetch(`/pramanyx-answer-check?call=${encodeURIComponent(call)}`, { headers: { accept: "application/json" } })
+        .then((answer) => (answer.ok ? answer.json() : null))
+        .then((got) => {
+          if (!live) return;
+          setSaid(got);
+          if (got?.state === "pending" && (tries += 1) < 45) timer = setTimeout(look, 4000);
+        })
+        .catch(() => { if (live) setSaid({ state: "unchecked", detail: "Its check could not be read." }); });
+    };
+    look();
+    return () => { live = false; if (timer !== null) clearTimeout(timer); };
+  }, [call]);
+  const box = { fontSize: 12.5, padding: "8px 0 2px", display: "flex", flexDirection: "column", gap: 4 };
+  if (!said) return null;
+  if (said.state === "pending") return h("div", { "data-pramanyx-check": "pending", style: { ...box, ...quiet } }, "Checking its figures against the answers it was gathered from…");
+  if (said.state !== "checked") return h("div", { "data-pramanyx-check": "unchecked", style: { ...box, ...quiet } }, `Its figures were not checked. ${said.detail || ""}`.trim());
+  const missing = Array.isArray(said.not_found) ? said.not_found : [];
+  const checked = Number(said.checked) || 0;
+  if (!checked) return h("div", { "data-pramanyx-check": "none", style: { ...box, ...quiet } }, "It states no figures to check.");
+  if (!Number(said.answers)) {
+    return h("div", { "data-pramanyx-check": "unread", style: { ...box, ...quiet } },
+      "Its figures could not be checked: none of the answers it was gathered from could be read.");
+  }
+  if (!missing.length) {
+    return h("div", { "data-pramanyx-check": "found", style: { ...box, ...quiet } },
+      `✓ Every figure in this answer (${checked}) is in the answers it was gathered from.`);
+  }
+  return h("div", { "data-pramanyx-check": "missing", role: "note", style: box },
+    h("div", { style: { color: "#c2410c" } },
+      `${missing.length === 1 ? "1 figure" : `${missing.length} figures`} in this answer ${missing.length === 1 ? "is" : "are"} not in the answers it was gathered from — worked out, or not measured:`),
+    missing.slice(0, 8).map((figure, i) => h("div", { key: i, style: { display: "flex", gap: 8 } },
+      h("span", { style: { fontWeight: 600, whiteSpace: "nowrap" } }, figure.text),
+      figure.clause ? h("span", { style: quiet }, `“${figure.clause}”`) : null)),
+    missing.length > 8 ? h("div", { style: quiet }, `and ${missing.length - 8} more`) : null);
+}
+
 /** A deep analysis a helper ran, by the platform's own report. */
 function Analysis({ text }) {
   let got = null;
@@ -291,6 +354,17 @@ function foldHelperReports() {
       const holder = close ? Number(close.getAttribute("data-chat-turn")) : run[run.length - 1];
       for (const t of run) closeTurn.set(t, holder);
       for (const reply of replies) mark(reply, "data-pramanyx-close", reply === close);
+      // The question this run answers is the turn before it; its first helper's call is how its check is found.
+      const call = document.querySelector(`[data-chat-flow-kind="turn-tail"][data-chat-turn="${first - 1}"] [data-pramanyx-first-call]`)
+        ?.getAttribute("data-pramanyx-first-call") || "";
+      for (const t of run) {
+        const tail = document.querySelector(`[data-chat-flow-kind="turn-tail"][data-chat-turn="${t}"]`);
+        if (!tail) continue;
+        const wanted = close && t === holder ? call : "";
+        if ((tail.getAttribute("data-pramanyx-check-call") || "") !== wanted) {
+          if (wanted) tail.setAttribute("data-pramanyx-check-call", wanted); else tail.removeAttribute("data-pramanyx-check-call");
+        }
+      }
     }
     for (const item of document.querySelectorAll("[data-chat-flow-kind][data-chat-turn]")) {
       const turn = Number(item.getAttribute("data-chat-turn"));

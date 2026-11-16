@@ -4488,6 +4488,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/coworker/answer-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check A Gathered Answer
+         * @description The figures of a question's one answer against the answers its helpers and its main agent were given
+         *     (`govern/gathered.py`), recorded in the question's trace as a step of it. From this machine only, like the turn's
+         *     other events; an answer the person may not read is left out of the basis and counted as unread, never read.
+         */
+        post: operations["check_a_gathered_answer_coworker_answer_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/coworker/claim": {
         parameters: {
             query?: never;
@@ -20549,6 +20571,11 @@ export interface components {
             name: string;
             /** Ok */
             ok?: boolean | null;
+            /**
+             * Parent Span Id
+             * @description The tool call this happened inside — for a helper's work, the call that started the helper.
+             */
+            parent_span_id?: string | null;
             /** Payload */
             payload?: {
                 [key: string]: unknown;
@@ -21684,6 +21711,59 @@ export interface components {
             name: string;
         } & {
             [key: string]: unknown;
+        };
+        /** GatheredAnswer */
+        GatheredAnswer: {
+            /**
+             * Investigation Ids
+             * @description Every answer the question gathered: the helpers' and the main agent's own.
+             */
+            investigation_ids: string[];
+            /**
+             * Session
+             * @description The shell's own id for the conversation.
+             */
+            session: string;
+            /**
+             * Text
+             * @description The answer the main agent wrote, as it wrote it.
+             */
+            text: string;
+            /**
+             * Trace Id
+             * @description The question's trace, `cw-<session>-<turn>`.
+             */
+            trace_id: string;
+        };
+        /** GatheredAnswerChecked */
+        GatheredAnswerChecked: {
+            /**
+             * Answers
+             * @description How many of the answers had rows to check against.
+             */
+            answers: number;
+            /**
+             * Checked
+             * @description How many figures the answer states.
+             */
+            checked: number;
+            /**
+             * Found
+             * @description How many of them are in the rows of the answers it gathered.
+             */
+            found: number;
+            /**
+             * Not Found
+             * @description Each figure not found, with the clause it is in.
+             */
+            not_found?: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Unread
+             * @description How many could not be read: gone, kept no rows, or not the asker's to read.
+             */
+            unread: number;
         };
         /**
          * GenerateSqlRequest
@@ -34685,6 +34765,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CoworkerDoor"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_a_gathered_answer_coworker_answer_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GatheredAnswer"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GatheredAnswerChecked"];
                 };
             };
             /** @description Validation Error */

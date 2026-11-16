@@ -320,7 +320,33 @@ function ofAnAnswer(text) {
 
 /** The record's memory: each conversation's running turn, each helper's place, each conversation's open question. */
 export function newRecord() {
-  return { turns: new Map(), helpers: new Map(), questions: new Map() };
+  return { turns: new Map(), helpers: new Map(), questions: new Map(), checks: [] };
+}
+
+/** The answers a question gathers, by the tool that gave them: the governed path's, an agent's, a deep analysis's. */
+const ANSWERED = /^mcp__pramanyx__(ask(_[a-z0-9_]+)?|deep_analysis)$/;
+const BOOKKEEPING = /^\s*(waiting|done)\W*$/i;
+
+/**
+ * A question's one answer, from what its main agent said after its helpers reported: the fullest reply that is not
+ * bookkeeping ("Waiting", "Done") — the page's own rule for which reply it shows (`answer-card`), so the answer
+ * checked is the answer shown. "" when there is none yet.
+ */
+export function closeOf(replies) {
+  return (replies ?? []).map((reply) => String(reply ?? "").trim())
+    .filter((reply) => reply && !BOOKKEEPING.test(reply))
+    .reduce((best, reply) => (reply.length >= best.length ? reply : best), "");
+}
+
+/** The investigation an answer's result names, or "". */
+function investigationOf(text) {
+  try {
+    const got = JSON.parse(text);
+    const id = String(got?.investigation_id ?? "");
+    return /^[A-Za-z0-9_-]{1,64}$/.test(id) ? id : "";
+  } catch {
+    return "";
+  }
 }
 
 /** The helper a spawn's result says it started. */
@@ -366,15 +392,23 @@ export function turnEvents(record, sessionId, held, event, header = {}) {
     const kind = data.source?.kind;
     if (kind === "user") {
       now.asked = true;
-      questions.set(sessionId, { trace: now.trace, started: now.started, running: questions.get(sessionId)?.running ?? new Set() });
+      questions.set(sessionId, { trace: now.trace, started: now.started, running: questions.get(sessionId)?.running ?? new Set(),
+                                 answers: new Set(), spawns: [], replies: [], ended: false, checked: "" });
       return [{ kind: "user_request", name: "coworker", conn_id, payload: { question: clip(textOf(data.content), 2000), turn: now.turn, ...where } }];
     }
     if (REPORTS.has(kind)) {
       now.asked = true;
+      now.report = true;
       const question = questions.get(sessionId);
       if (question) now.trace = question.trace;
       return [];
     }
+  }
+  if (event.type === "assistant/message" && now.report && !now.helper) {
+    // What the main agent says after its helpers report: where the question's one answer is.
+    const said = (data.message?.content ?? []).filter((part) => part?.type === "text").map((part) => String(part.text ?? "")).join("");
+    if (said.trim()) questions.get(sessionId)?.replies.push(said);
+    return [];
   }
   if (event.type === "tool/call" && data.callId) {
     now.calls.set(data.callId, { name: data.name, at, args: data.arguments });
@@ -395,7 +429,15 @@ export function turnEvents(record, sessionId, held, event, header = {}) {
       const running = turns.get(child);
       if (running) running.inside = message.toolCallId;          // a helper that began before its start was reported
       questions.get(sessionId)?.running.add(child);
+      questions.get(sessionId)?.spawns.push(message.toolCallId);
       return [];
+    }
+    if (ANSWERED.test(String(call.name)) && !message.isError) {
+      // Every answer the question gathers — a helper's, and the main agent's own — is what its one answer rests on.
+      const id = investigationOf(textOf(message.content));
+      const owner = now.helper ? helpers.get(sessionId)?.parent : sessionId;
+      const question = owner ? questions.get(owner) : undefined;
+      if (id && question && question.trace === now.trace) question.answers.add(id);
     }
     const said = ASKS.test(call.name) ? ofAnAnswer(textOf(message.content)) : {};
     if (said.headline) now.headline = said.headline;
@@ -420,7 +462,20 @@ export function turnEvents(record, sessionId, held, event, header = {}) {
     const question = questions.get(sessionId);
     // Helpers still at work on this question: it has not ended, whatever this turn did.
     if (question?.running.size) return [];
-    const started = question && question.trace === now.trace ? question.started : now.started;
+    const ours = question && question.trace === now.trace;
+    if (ours && question.spawns.length) {
+      // A question worked by helpers: its one answer is checked against the answers it gathered — once it has ended,
+      // and again if a later report's turn changed which reply that answer is.
+      const text = closeOf(question.replies);
+      if (text && text !== question.checked) {
+        question.checked = text;
+        record.checks.push({ session: sessionId, trace: question.trace, call: question.spawns[0], text, ids: [...question.answers] });
+      }
+    }
+    // A question ends once: a helper's late report starts a turn of the same question, not a second end.
+    if (ours && question.ended) return [];
+    if (ours) question.ended = true;
+    const started = ours ? question.started : now.started;
     return [{ kind: "final_response", name: "coworker", ok: reason === "completed", duration_ms: Math.max(0, at - started), conn_id,
               payload: { ...(now.headline ? { headline: now.headline } : {}), reason, calls: now.tools, turn: now.turn, ...where } }];
   }
@@ -528,6 +583,41 @@ export async function readHelper(id) {
   return out;
 }
 
+const checkFile = (call) => join(process.env.DSH_HOME || join(homedir(), ".dsh"), "helpers", "checks", `${call}.json`);
+
+/**
+ * THE ONE ANSWER, CHECKED (2026-11-16). The platform holds each figure of a question's one answer against the rows
+ * of the answers the question gathered (`POST /coworker/answer-check`, `pramanyx/govern/gathered.py`) and records
+ * the check in the question's trace; what it said is kept here, under the call that started the question's first
+ * helper — the key the page finds the question by — for the page to show under the answer.
+ */
+async function checkTheAnswer(api, check) {
+  if (!CALL_ID.test(String(check.call))) return;
+  const { writeFile } = await import("node:fs/promises");
+  const { dirname } = await import("node:path");
+  let kept;
+  try {
+    const answer = await fetch(`${api}/coworker/answer-check`, {
+      method: "POST", headers: { "content-type": "application/json", ...(await personHeader()) },
+      body: JSON.stringify({ trace_id: check.trace, session: check.session, text: check.text.slice(0, 40000),
+                             investigation_ids: check.ids.slice(0, 60) }),
+    });
+    kept = answer.ok ? { state: "checked", ...(await answer.json()) }
+      : { state: "unchecked", detail: `The platform did not check it (${answer.status}).` };
+  } catch {
+    kept = { state: "unchecked", detail: "The platform was not answering when it ended." };
+  }
+  await mkdir(dirname(checkFile(check.call)), { recursive: true });
+  await writeFile(checkFile(check.call), JSON.stringify({ ...kept, opening: check.text.slice(0, 120) }), { mode: 0o600 });
+}
+
+/** What was said of a question's one answer, by the call that started its first helper; `pending` until then. */
+export async function readAnswerCheck(call) {
+  if (!CALL_ID.test(String(call))) return null;
+  const { readFile } = await import("node:fs/promises");
+  try { return JSON.parse(await readFile(checkFile(call), "utf8")); } catch { return { state: "pending" }; }
+}
+
 function recordTurns(ctx, api, holds) {
   const record = newRecord();
   const traces = new Map();          // session → the running turn's trace, read when a model call's headers are made
@@ -559,6 +649,9 @@ function recordTurns(ctx, api, holds) {
       const trace = (after ?? before)?.trace;
       if (events.length && trace) send(trace, id, events);
       if (lines.length) keeping = keeping.then(() => keepHelperLines(lines)).catch(() => { /* the page says it could not read it */ });
+      for (const check of record.checks.splice(0)) {
+        keeping = keeping.then(() => checkTheAnswer(api, check)).catch(() => { /* the page says it was not checked */ });
+      }
     } catch { /* the record is best-effort; the turn it observes goes on */ }
   });
   // Before a question goes to the governed answer path, the platform is told which step of which turn asks it, so
@@ -616,6 +709,16 @@ export function apply(ctx) {
       return found ? reply(200, found) : reply(422, { detail: "Not a helper's id" });
     },
   }), "pramanyx-home: what a helper found");
+  ctx.effect(() => ctx.webServer.register({
+    kind: "exact",
+    path: "/pramanyx-answer-check",
+    handler: async (req, res) => {
+      const reply = (status, body) => { res.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" }); res.end(JSON.stringify(body)); };
+      if (req.method !== "GET") return reply(405, { detail: "GET only" });
+      const found = await readAnswerCheck(new URL(req.url, "http://here").searchParams.get("call") || "");
+      return found ? reply(200, found) : reply(422, { detail: "Not a call's id" });
+    },
+  }), "pramanyx-home: what was said of a question's one answer");
   ctx.effect(() => ctx.webServer.register({
     kind: "exact",
     path: "/pramanyx-enter",

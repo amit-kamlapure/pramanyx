@@ -257,9 +257,13 @@ admin allows "Let the coworker ask its models through Pramanyx" in Settings ▸ 
   rename, archive and delete); pinned items.
 - Both modes ask as the narrator role. Quick does not use the fast one: a mode has no model of its own here yet.
   Quick's voice paragraphs are a copy of Agent's in `profile.patch.yml`; a change to one is made in both.
-- **A helpers question's one output is the agent's words.** Each helper's answers are the platform's; the close that
-  puts them together is written by the main agent and is not checked by the platform the way an answer is — its
-  figures are not yet held against the helpers' answers. It has no Right/Wrong of its own. A helper's answers are kept on this machine (`$DSH_HOME/helpers`) and are not in Pramanyx's store.
+- **A helpers question's one output is the agent's words, checked.** Each helper's answers are the platform's; the
+  close that puts them together is written by the main agent. When the question ends, its figures are held against
+  the rows of every answer the question gathered — the helpers' and the main agent's own checks — by the departure
+  gate's own reading (`POST /coworker/answer-check`, `pramanyx/govern/gathered.py`), recorded as a step of the
+  question's trace, and said in one line under it: every figure found, or each one not found with the clause it is
+  in. A bare whole number under 1,000 is not checked, as the gate does not check one. Nothing is held: the answer is
+  already shown. It has no Right/Wrong of its own. A helper's answers are kept on this machine (`$DSH_HOME/helpers`) and are not in Pramanyx's store.
 - **A schedule's answer does not arrive in a conversation.** The shell's scheduler put each run into a chat as a
   new turn; Pramanyx's keeps each run with the schedule (its History, on the Schedules page) and sends it on only
   through a step a person added. Nothing brings a run's answer back into the conversation that set it up.

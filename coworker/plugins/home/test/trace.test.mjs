@@ -1,7 +1,7 @@
 // A coworker turn, as the platform's trace store is told it. `node --test plugins/home/test/trace.test.mjs`
 import test from "node:test";
 import assert from "node:assert/strict";
-import { helperLines, newRecord, readHelper, readHelperOfCall, traceOf, turnEvents } from "../lib/index.js";
+import { closeOf, helperLines, newRecord, readAnswerCheck, readHelper, readHelperOfCall, traceOf, turnEvents } from "../lib/index.js";
 
 const S = "session-88f4fdd1-9a45-4d47-a907-c446dd4d3d83";
 const ev = (type, seq, time, data) => ({ type, seq, time, data });
@@ -206,6 +206,89 @@ test("the page reads what was kept of a helper, and nothing for an id that is no
     await writeFile(join(home, "helpers", "calls", "spawn_1.json"), JSON.stringify({ child: H }));
     assert.equal((await readHelperOfCall("spawn_1")).description, "GMV by platform FY2027");
     assert.equal(await readHelperOfCall("../x"), null);
+  } finally {
+    if (was === undefined) delete process.env.DSH_HOME; else process.env.DSH_HOME = was;
+  }
+});
+
+// ── the one answer, checked ───────────────────────────────────────────────────────────────────────────────────────
+
+const said = (t) => ({ content: [{ type: "reasoning", text: "thinking about it" }, { type: "text", text: t }] });
+const answerOf = (id) => JSON.stringify({ answer: "a headline", investigation_id: id, row_count: 3 });
+
+test("a question's one answer is its fullest reply that is not bookkeeping", () => {
+  assert.equal(closeOf(["Waiting", "Lux 3.98%, Olist 0.63% — not like for like.", "Done."]), "Lux 3.98%, Olist 0.63% — not like for like.");
+  assert.equal(closeOf(["Waiting.", " done "]), "");
+  assert.equal(closeOf([]), "");
+});
+
+/** Two helpers, a check of the main agent's own, a late report after the answer: as the live run of 2026-11-16 went. */
+function aGatheredQuestion() {
+  const record = newRecord();
+  const out = [];
+  const on = (session, header, e) => out.push(...turnEvents(record, session, "", e, header));
+  on(S, {}, ev("turn/start", 1, 0, { turn: 1 }));
+  on(S, {}, ev("user/message", 2, 1, { content: text("Lux vs Olist cancellation"), source: { kind: "user" } }));
+  on(S, {}, ev("tool/call", 3, 2, { callId: "spawn_1", name: "subagent", arguments: "{}" }));
+  on(S, {}, ev("tool/call", 4, 3, { callId: "spawn_2", name: "subagent", arguments: "{}" }));
+  on(S, {}, ev("tool/result", 5, 4, { message: { toolCallId: "spawn_1", content: text(`started subagent ${H}`) } }));
+  on(S, {}, ev("tool/result", 6, 5, { message: { toolCallId: "spawn_2", content: text(`started subagent ${H2}`) } }));
+  on(S, {}, ev("turn/end", 7, 6, { turn: 1, reason: { kind: "completed" } }));
+  for (const [helper, id] of [[H, "inv-lux"], [H2, "inv-olist"]]) {
+    on(helper, asHelper, ev("turn/start", 1, 10, { turn: 1 }));
+    on(helper, asHelper, ev("tool/call", 2, 11, { callId: `ask_${id}`, name: "mcp__pramanyx__ask", arguments: "{}" }));
+    on(helper, asHelper, ev("tool/result", 3, 12, { message: { toolCallId: `ask_${id}`, content: text(answerOf(id)) } }));
+    on(helper, asHelper, ev("turn/end", 4, 13, { turn: 1, reason: { kind: "completed" } }));
+  }
+  on(S, {}, ev("turn/start", 8, 20, { turn: 2 }));
+  on(S, {}, ev("user/message", 9, 21, { content: text("finished"), source: { kind: "subagent-settled" } }));
+  on(S, {}, ev("tool/call", 10, 22, { callId: "own_check", name: "mcp__pramanyx__ask", arguments: "{}" }));
+  on(S, {}, ev("tool/result", 11, 23, { message: { toolCallId: "own_check", content: text(answerOf("inv-check")) } }));
+  on(S, {}, ev("assistant/message", 12, 24, { message: said("Lux is 3.98%; Olist is 0.63%, all-time, so not like for like.") }));
+  on(S, {}, ev("turn/end", 13, 25, { turn: 2, reason: { kind: "completed" } }));
+  const first = record.checks.splice(0);
+  on(S, {}, ev("turn/start", 14, 30, { turn: 3 }));
+  on(S, {}, ev("user/message", 15, 31, { content: text("finished"), source: { kind: "subagent-settled" } }));
+  on(S, {}, ev("assistant/message", 16, 32, { message: said("Done.") }));
+  on(S, {}, ev("turn/end", 17, 33, { turn: 3, reason: { kind: "completed" } }));
+  return { out, record, first, later: record.checks.splice(0) };
+}
+
+test("the one answer is checked against every answer the question gathered: the helpers' and its own", () => {
+  const { first } = aGatheredQuestion();
+  assert.equal(first.length, 1);
+  assert.deepEqual(first[0].ids.sort(), ["inv-check", "inv-lux", "inv-olist"]);
+  assert.equal(first[0].text, "Lux is 3.98%; Olist is 0.63%, all-time, so not like for like.", "the words said, not the thinking");
+  assert.equal(first[0].call, "spawn_1", "found by the call that started the question's first helper");
+  assert.equal(first[0].trace, traceOf(S, 1));
+});
+
+test("a late report neither ends the question again nor checks an answer that did not change", () => {
+  const { out, later } = aGatheredQuestion();
+  assert.equal(out.filter((e) => e.kind === "final_response").length, 1);
+  assert.equal(later.length, 0, "\"Done\" is not an answer");
+});
+
+test("a question with no helpers is not checked: its answer is the platform's own", () => {
+  const record = newRecord();
+  for (const e of [ev("turn/start", 1, 0, { turn: 1 }), ev("user/message", 2, 1, { content: text("q"), source: { kind: "user" } }),
+                   ev("turn/end", 3, 2, { turn: 1, reason: { kind: "completed" } })]) turnEvents(record, S, "", e);
+  assert.deepEqual(record.checks, []);
+});
+
+test("the page reads what was said of an answer, pending until it was said", async () => {
+  const { mkdtemp, mkdir, writeFile } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const home = await mkdtemp(join(tmpdir(), "checks-"));
+  const was = process.env.DSH_HOME;
+  process.env.DSH_HOME = home;
+  try {
+    assert.deepEqual(await readAnswerCheck("spawn_1"), { state: "pending" });
+    await mkdir(join(home, "helpers", "checks"), { recursive: true });
+    await writeFile(join(home, "helpers", "checks", "spawn_1.json"), JSON.stringify({ state: "checked", checked: 5, found: 4 }));
+    assert.equal((await readAnswerCheck("spawn_1")).found, 4);
+    assert.equal(await readAnswerCheck("../etc"), null);
   } finally {
     if (was === undefined) delete process.env.DSH_HOME; else process.env.DSH_HOME = was;
   }
