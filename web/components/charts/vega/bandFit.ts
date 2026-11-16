@@ -15,6 +15,8 @@
  * setting and is untouched.
  */
 
+import type { Gran } from "@/lib/format";
+
 /** The thickest a single bar is drawn, in px. */
 export const MAX_BAR_PX = 96;
 /** Vega-Lite's own default inner padding for a bar's band scale; below it nothing changes. */
@@ -51,6 +53,45 @@ export function barsPerBand(spec: Record<string, unknown>, columns: string[], ro
   }
   const i = columns.indexOf(field);
   return i < 0 ? 1 : Math.max(1, new Set(rows.map((r) => r[i])).size);
+}
+
+/** The days in one period of each grain a bar is fitted to, on average. A sub-day grain keeps Vega-Lite's own bar. */
+const PERIOD_DAYS: Partial<Record<Gran, number>> = { day: 1, week: 7, month: 30.436875, quarter: 91.310625, year: 365.2425 };
+const DAY_MS = 86_400_000;
+
+/**
+ * How many periods of `gran` a series spans, first to last — a period with no row still counts, so a missing month
+ * keeps its place. Null for a sub-day grain, or values that are not dates.
+ */
+export function periodsSpanned(gran: Gran | null, values: unknown[]): number | null {
+  const days = gran ? PERIOD_DAYS[gran] : undefined;
+  if (!days) return null;
+  const ts = values.map((v) => (v instanceof Date ? v.getTime() : Date.parse(String(v ?? "")))).filter(Number.isFinite);
+  if (!ts.length) return null;
+  return Math.round((Math.max(...ts) - Math.min(...ts)) / (days * DAY_MS)) + 1;
+}
+
+/**
+ * A bar on a TIME scale, fitted to its period.
+ *
+ * A time scale has no band, so Vega-Lite draws a bar on one 5px wide whatever its period: eight months of revenue read
+ * as eight hairlines a hundred pixels apart (2026-11-16). Each bar takes its period instead, by the rule a category's
+ * band keeps above: the step is the plot over the periods the series spans, and a bar is at most {@link MAX_BAR_PX},
+ * never under `1 − MAX_BAND_PADDING` of its step and never over `1 − BASE_BAND_PADDING` of it. Half a step of padding at
+ * each end of the scale keeps the first and last bars inside the plot, each centred on its period's tick.
+ *
+ * Both are expressions over the plot's own `width` (`height` for a bar lying down), so the spec stays plain JSON and
+ * fits whatever size it is drawn at.
+ */
+export function timeBarFit(periods: number, along: "width" | "height" = "width"):
+    { size: { expr: string }; padding: { expr: string } } {
+  const step = `(${along} / ${Math.max(1, periods)})`;
+  const least = Math.round((1 - MAX_BAND_PADDING) * 100) / 100;
+  const most = Math.round((1 - BASE_BAND_PADDING) * 100) / 100;
+  return {
+    size: { expr: `max(${least} * ${step}, min(${most} * ${step}, ${MAX_BAR_PX}))` },
+    padding: { expr: `${step} / 2` },
+  };
 }
 
 /** `spec` with the padding written into its own config (a spec's config wins over the theme's). */
