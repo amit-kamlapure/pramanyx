@@ -396,7 +396,8 @@ def keep(home: Home, spec: Any, *, approved_by: str, source: str, note: str = ""
     unresolved = pieces.not_resolved(home.connection_id, spec, wiring=wired) \
         + wiring.not_resolved(home.connection_id, spec, wiring=wired) \
         + variables.not_resolved(home.connection_id, spec, wiring=wired) + variables.unheld(spec, verdict.cards) \
-        + questions.not_resolved(home.connection_id, spec)
+        + questions.not_resolved(home.connection_id, spec) \
+        + (variables.unread(spec, verdict.cards) if written_by_model else [])
     if unresolved:
         return Kept(REFUSED, sentences=tuple(unresolved))
     copies = twin_cards(verdict.cards, before.get("cards") or [])
@@ -446,6 +447,12 @@ def publish(home: Home, to: list[dict], *, approved_by: str) -> Kept:
     targets = [{"kind": str(t["kind"]), "id": str(t["id"]), "name": str(t.get("name") or t["id"])} for t in to]
     if nothing_to_publish(before.get("published_to"), publication_of(before), targets):
         return Kept(UNCHANGED, version=prior.get("version"), artifact_id=prior.get("id") or "")
+    if targets:
+        # a control its readers would move to no effect does not reach them; unpublishing is never refused
+        from pramanyx.dashboards import variables
+        unread = variables.unread(before["spec"], before.get("cards") or ())
+        if unread:
+            return Kept(REFUSED, sentences=tuple(unread))
     names = ", ".join(t["name"] for t in targets)
     payload = {
         **before,

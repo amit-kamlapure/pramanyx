@@ -76,11 +76,13 @@ def _verdicts() -> list[str]:
 
 def _levels() -> dict[str, Any]:
     from pramanyx.actions.authority import GRADUATION_N, LEVELS
+    from pramanyx.orgsettings.agent_policy import DEFAULT_LEVEL
     from pramanyx.orgsettings.agent_policy import LEVELS as POLICY_LEVELS
     return {
-        "agent_policy": {"levels": list(POLICY_LEVELS), "default": "run",
+        "agent_policy": {"levels": list(POLICY_LEVELS), "default": DEFAULT_LEVEL,
                          "read": "look things up", "run": "start work or book an entry with its warrant",
-                         "act": "change something outside the conversation — given only by a person"},
+                         "act": "change something outside the conversation; what it sends waits for a person, and a "
+                                "person can lower the level, never the agent"},
         "authority": {"ladder": {f"L{k}": v for k, v in LEVELS.items()}, "graduation_n": GRADUATION_N,
                       "rule": "the lower of the ceiling a person set and what the record earned; L4 only on a graduation receipt; "
                               "an irreversible action never passes L3; L5 only on an L5 receipt a person books on a long L4 record "

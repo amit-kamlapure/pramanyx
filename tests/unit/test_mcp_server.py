@@ -43,8 +43,8 @@ def _run(coro):
 # ── the server surface ───────────────────────────────────────────────────────────
 def test_server_registers_the_governed_tools():
     # DE-2b: what is REGISTERED is the eighteen below; what is LISTED is what the organisation's
-    # agent policy allows — under the default (`run`, nobody granted `act`) the one act tool,
-    # `cancel_job`, is hidden. `test_de2b_agent_policy.py` holds the listing.
+    # agent policy allows — under a policy of `run` the act tools (`cancel_job`, `schedule`) are
+    # hidden; the default, since 2026-11-16, is `act`. `test_de2b_agent_policy.py` holds the listing.
     tools = set(mcp._tool_manager._tools)
     assert tools == {
         "list_connections", "ask", "deep_analysis", "get_investigation", "get_metric",
@@ -62,8 +62,8 @@ def test_server_registers_the_governed_tools():
         # Arc OC-8 — a page of a business entity's objects through the doors for builders; the propose tools are
         # registered per declared action (`register_ontology_tools`), never here.
         "list_objects",
-        # The coworker plan, 2026-11-15 — a question asked again on a rhythm, as Pramanyx's own automation (an act).
-        "schedule_question",
+        # 2026-11-16 — anything on a schedule from a sentence, as Pramanyx's own automation (an act).
+        "schedule",
         # 2026-11-15 — the web for outside context, behind the organisation's `web_search` setting (a read).
         "search_the_web",
         # 2026-11-15 — a draft for the person to send themselves (a read; sending is the person's click).

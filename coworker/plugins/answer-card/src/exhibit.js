@@ -348,9 +348,11 @@ export const pageFor = {
   definition: (term, connection) => `/definitions/${encodeURIComponent(term)}?conn=${encodeURIComponent(connection)}`,
   // The sheet's own name rides the address, so its tab can carry it: the app's page reads only the id.
   sheet: (id, name = "") => `/sheets/${encodeURIComponent(id)}${name ? `?name=${encodeURIComponent(name)}` : ""}`,
+  // A schedule, on the app's own page of schedules and automations, opened on that one.
+  schedule: (id, connection) => `/automations?conn=${encodeURIComponent(connection)}&focus=${encodeURIComponent(id)}`,
 };
 const NAMED = [[/^\/metrics\/([^/?]+)/, "Metric"], [/^\/ontology\/([^/?]+)/, "Ontology"], [/^\/receipt\//, "Why this number"],
-               [/^\/sheets\/[^/?]+/, "Sheet"], [/^\/definitions\/([^/?]+)/, "Definition"]];
+               [/^\/sheets\/[^/?]+/, "Sheet"], [/^\/definitions\/([^/?]+)/, "Definition"], [/^\/automations\?/, "Schedule"]];
 
 /** A referenced spreadsheet's tab is called by its own name and nothing else — "Olist orders", not "Sheet". */
 function sheetName(path) {
@@ -387,7 +389,7 @@ function pageName(path) {
  * One of the app's own pages, shown beside the conversation. Not a summary of it drawn here: the page itself —
  * a metric's definition as the Semantic Layer shows it, an entity as the Ontology shows it, an answer's
  * receipt as "Why this number" shows it, a spreadsheet as the asset it is (its name, origin and rows; none of the
- * Spreadsheets page's tools) — because it is the app. Only the app's own paths for those four are shown; anything else is refused, since the address arrives in a tab's name.
+ * Spreadsheets page's tools), a schedule on the page every schedule is kept on — because it is the app. Only the app's own paths for those are shown; anything else is refused, since the address arrives in a tab's name.
  */
 function AppPage({ path }) {
   if (!NAMED.some(([shape]) => shape.test(path))) return h("div", { style: { ...page, ...quiet } }, "This tab names a page this pane does not show.");

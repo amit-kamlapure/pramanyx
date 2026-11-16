@@ -1,5 +1,5 @@
 /**
- * The coworker's first screen and its Agents page. Under the question box: questions worth asking of one connection, the questions
+ * The coworker's first screen, its Agents page and its Schedules page. Under the question box: questions worth asking of one connection, the questions
  * asked lately, and a person's own agents. Everything on it is read from Pramanyx through this plugin's relay
  * (`lib/index.js`), and every item does one thing: it writes a question into the box. The connection is the one
  * the conversation is filed under — the shell's own picker above the box — and the agent already knows it. Nothing here asks anything
@@ -271,6 +271,32 @@ function AgentsPage({ ask }) {
                 }, "Ask this agent"))))));
 }
 
+const SCHEDULES = "pramanyx-schedules";
+
+/** The sidebar's drawing for Schedules: a clock face, in the colour of the text beside it. */
+function SchedulesIcon({ size = 16 }) {
+  return h("svg", { width: size, height: size, viewBox: "0 0 16 16", fill: "none", stroke: "currentColor", strokeWidth: 1.3, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" },
+    h("circle", { cx: 8, cy: 8, r: 5.5 }),
+    h("path", { d: "M8 5v3.2l2 1.3" }));
+}
+
+/**
+ * The Schedules page. THERE IS ONE SCHEDULER, and it is the platform's (the user, 2026-11-15: "the scheduler needs
+ * to be one across the platform"). The shell's own — a timed reminder into a conversation, kept in the shell and seen
+ * by nobody else — is off (`profile.patch.yml`), and this page keeps no list of its own: it is the app's own page of
+ * schedules and automations, in a frame, so everything on it works (make one, change when it runs, mute it, run it
+ * now, read what each run did) and it is the same list every other surface shows. It opens on the connection last
+ * chosen on the first screen; the page itself changes connection.
+ */
+function SchedulesPage() {
+  const connection = remembered();
+  const asked = /^[A-Za-z0-9_-]{1,64}$/.test(connection) ? `?conn=${encodeURIComponent(connection)}` : "";
+  return h("iframe", {
+    src: `${appOrigin()}/automations${asked}`, title: "Schedules", referrerPolicy: "no-referrer",
+    style: { width: "100%", height: "100%", border: 0, display: "block", background: "var(--dsw-alias-bg-base)" },
+  });
+}
+
 const BACK = "pramanyx.coworker.back";
 const CARRIED = "#pramanyx:";
 
@@ -284,6 +310,12 @@ function onThisMachine(address) {
 
 function wayBack() {
   try { const kept = localStorage.getItem(BACK) || ""; return onThisMachine(kept) ? kept : ""; } catch { return ""; }
+}
+
+/** Where the app is: the address this page was reached from, else where the app is served on a machine of its own. */
+function appOrigin() {
+  try { const back = wayBack(); if (back) return new URL(back).origin; } catch { /* the default */ }
+  return "http://localhost:3000";
 }
 
 /**
@@ -414,4 +446,9 @@ export function apply(ctx) {
         ask: (agent) => ctx.uiWorkspace.startSession(void 0, { prompt: `Ask the ${agent.name} agent: `, whenDraftExists: "append" }),
       }),
     }, AgentsPage));
+
+  // Schedules: the same pairing. The shell's own entry of that name is off with its scheduler.
+  ctx.slots.inject("sidebar.panellist", () =>
+    ctx.slots.register({ name: "sidebar.panellist", id: SCHEDULES, order: 6, label: () => "Schedules" }, SchedulesIcon));
+  ctx.slots.inject("main", () => ctx.slots.register({ name: "main", key: SCHEDULES }, SchedulesPage));
 }

@@ -49,6 +49,19 @@ const CASES: Record<string, { columns: string[]; rows: unknown[][] }> = {
                  rows: [["Zurich", 47.37, 8.54, 120], ["Berlin", 52.52, 13.40, 300],
                         ["Madrid", 40.42, -3.70, 210], ["Oslo", 59.91, 10.75, 90],
                         ["Dublin", 53.35, -6.26, 140], ["Athens", 37.98, 23.73, 60]] },
+  // ── the storytelling kinds (the board study, 2026-11-16) ──
+  lollipop: { columns: ["channel", "revenue"], rows: [["Search", 1.4e6], ["Organic", 3e5], ["Email", 1.1e5], ["Display", 7e4]] },
+  leaderboard: { columns: ["channel", "revenue", "previous_revenue"],
+                 rows: [["Search", 1.4e6, 1.2e6], ["Organic", 3e5, 3.3e5], ["Email", 1.1e5, 9e4], ["Display", 7e4, 7e4]] },
+  dumbbell: { columns: ["category", "revenue_2024", "revenue_2025"],
+              rows: [["Jeans", 110, 154], ["Outerwear", 120, 162], ["Sweaters", 95, 111], ["Socks", 40, 35]] },
+  slope: { columns: ["category", "year", "revenue"],
+           rows: ["Jeans", "Outerwear", "Socks"].flatMap((c, i) => [[c, "2024", 100 + i * 10], [c, "2025", 140 - i * 20]]) },
+  bullet: { columns: ["team", "bookings", "target"], rows: [["North", 82, 100], ["South", 104, 95], ["East", 61, 80]] },
+  cohort: { columns: ["cohort_month", "month_number", "retention"],
+            rows: months(4).flatMap((m, ci) => [0, 1, 2, 3].filter((k) => k < 4 - ci).map((k) => [m, k, 1 - k * 0.22])) },
+  interval: { columns: ["region", "estimate", "lower", "upper"],
+              rows: [["North", 120, 100, 140], ["South", 90, 70, 115], ["East", 60, 52, 66], ["West", 75, 60, 92]] },
 };
 
 async function render(type: string) {
@@ -106,7 +119,8 @@ describe("forms beyond the everyday six", () => {
    * and the categorical ones to palette membership, which is the stricter claim and the one
    * that catches a library default.
    */
-  const RAMPED = new Set(["heatmap", "choropleth"]);
+  // a cohort grid is the heatmap's own ramp, read along an order (the board study, 2026-11-16)
+  const RAMPED = new Set(["heatmap", "choropleth", "cohort"]);
 
   it.each(TYPES)("%s paints only from the token set", async (type) => {
     const { view } = await render(type);

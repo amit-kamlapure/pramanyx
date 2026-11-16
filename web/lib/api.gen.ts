@@ -2331,6 +2331,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/automations/{automation_id}/schedule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Schedule Of
+         * @description When this automation runs, in words, and where it stands — one read for a surface that shows a schedule as a
+         *     card (the coworker's, under the turn that made it). Read every time the card is drawn: whether a schedule is on,
+         *     muted, ended or gone is a fact about the schedule, not about the page that made it.
+         */
+        get: operations["schedule_of_automations__automation_id__schedule_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/automations/{automation_id}/versions": {
         parameters: {
             query?: never;
@@ -3038,6 +3060,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/cards/{card_id}/field": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Card Field Route
+         * @description What a click on a card's chart stands for: the table and column its ``column`` is read from, traced off the
+         *     card's own statement — or why a click on it filters nothing (`dashboards.focus.field_of`).
+         */
+        post: operations["card_field_route_cards__card_id__field_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/cards/{card_id}/graduate": {
         parameters: {
             query?: never;
@@ -3108,6 +3151,10 @@ export interface paths {
          * Get Catalog Tree
          * @description Return the full 4-level catalog hierarchy: Section → Catalog → Schema → Table.
          *     Scoped to `workspace_id`'s connections when given (data-path tenancy).
+         *
+         *     Each catalog says how it was read (``read``): ``now``; ``failed`` (it could not be looked at); ``earlier`` (still
+         *     reading after `TREE_WAIT_SECONDS`, so what it held when last read, at ``read_at``); or ``reading`` (still reading,
+         *     and never read before — no schemas, and not because it has none).
          */
         get: operations["get_catalog_tree_catalog_tree_get"];
         put?: never;
@@ -4466,6 +4513,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/coworker/answer-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check A Gathered Answer
+         * @description The figures of a question's one answer against the answers its helpers and its main agent were given
+         *     (`govern/gathered.py`), recorded in the question's trace as a step of it. From this machine only, like the turn's
+         *     other events; an answer the person may not read is left out of the basis and counted as unread, never read.
+         */
+        post: operations["check_a_gathered_answer_coworker_answer_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/coworker/claim": {
         parameters: {
             query?: never;
@@ -5798,6 +5867,32 @@ export interface paths {
          *     person is shown, success or why not.
          */
         post: operations["send_an_email_email_send_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/email/sent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Emails Sent
+         * @description What went out from one draft: the caller's own successful sends from it, newest first.
+         *
+         *     Found live, 2026-11-15: an email sent minutes earlier showed as an open draft again, because "sent" lived only in
+         *     the page that sent it and a reload forgot it. Whether an email went is a fact about the email, and the journal
+         *     already records it (``email.sent``) — so the place a draft is shown asks here, and says the same thing every time
+         *     it is opened. ``subject`` finds a send journaled before drafts were named, and only among the entries that name
+         *     no draft: a later draft that happens to carry the same subject is never read as sent.
+         */
+        get: operations["emails_sent_email_sent_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -14425,7 +14520,7 @@ export interface paths {
         /**
          * Get Agent Policy
          * @description What an outside agent may do for this organisation: the saved policy (or the default,
-         *     `run`), the environment's narrowing, and the EFFECTIVE result of the two.
+         *     `act`), the environment's narrowing, and the EFFECTIVE result of the two.
          */
         get: operations["get_agent_policy_org_settings_agent_policy_get"];
         /**
@@ -14436,9 +14531,32 @@ export interface paths {
         post?: never;
         /**
          * Delete Agent Policy
-         * @description Drop the saved policy — the organisation falls back to the default, `run`.
+         * @description Drop the saved policy — the organisation falls back to the default, `act`.
          */
         delete: operations["delete_agent_policy_org_settings_agent_policy_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/org-settings/agent-policy/version": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Agent Policy Version
+         * @description Whether the agent policy changed, as a fingerprint (2026-11-16). The MCP server asks every few seconds and, when
+         *     it moves, tells its clients their tool list changed — so a running coworker picks up a policy a person just set,
+         *     without a restart. Not a data access, and not recorded as an agent's call: the read of the policy that follows a
+         *     change is.
+         */
+        get: operations["get_agent_policy_version_org_settings_agent_policy_version_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -19875,6 +19993,14 @@ export interface components {
             window_hours: number;
         };
         /**
+         * CardField
+         * @description The board study — a column a card's chart shows, as a click on it reports it.
+         */
+        CardField: {
+            /** Column */
+            column: string;
+        };
+        /**
          * CardProvenance
          * @description Where the card came from — so every measured card links back to its evidence.
          */
@@ -19945,6 +20071,13 @@ export interface components {
              * @default []
              */
             filters: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Focus
+             * @default []
+             */
+            focus: {
                 [key: string]: unknown;
             }[];
             /**
@@ -20328,7 +20461,8 @@ export interface components {
          * Condition
          * @description One precondition on an automation firing. Combinable via ``Automation.condition_logic``.
          *
-         *     ``schedule`` is a cron expression — the *only* condition monitors and briefs have today.
+         *     ``schedule`` is a cron expression — the *only* condition monitors and briefs have today — or, in the same
+         *     ``cron`` field, a RECURRENCE for what a cron cannot say (`automations.recurrence`, 2026-11-15).
          *     ``metric`` delegates to an existing :class:`~pramanyx.monitors.models.Monitor` (by id) so the six
          *     already-tested alert conditions become available to any effect, not just to an alert.
          *     ``source_change`` fires when a table's cheap source version advanced (A3). ``entity_appears``
@@ -20500,6 +20634,11 @@ export interface components {
             name: string;
             /** Ok */
             ok?: boolean | null;
+            /**
+             * Parent Span Id
+             * @description The tool call this happened inside — for a helper's work, the call that started the helper.
+             */
+            parent_span_id?: string | null;
             /** Payload */
             payload?: {
                 [key: string]: unknown;
@@ -20597,6 +20736,11 @@ export interface components {
              * @default ordered
              */
             scheduling: string;
+            /**
+             * Start At First Run
+             * @default false
+             */
+            start_at_first_run: boolean;
             /**
              * Timezone
              * @default
@@ -21228,6 +21372,11 @@ export interface components {
             /** Body */
             body: string;
             /**
+             * Draft
+             * @default
+             */
+            draft: string;
+            /**
              * Subject
              * @default
              */
@@ -21625,6 +21774,59 @@ export interface components {
             name: string;
         } & {
             [key: string]: unknown;
+        };
+        /** GatheredAnswer */
+        GatheredAnswer: {
+            /**
+             * Investigation Ids
+             * @description Every answer the question gathered: the helpers' and the main agent's own.
+             */
+            investigation_ids: string[];
+            /**
+             * Session
+             * @description The shell's own id for the conversation.
+             */
+            session: string;
+            /**
+             * Text
+             * @description The answer the main agent wrote, as it wrote it.
+             */
+            text: string;
+            /**
+             * Trace Id
+             * @description The question's trace, `cw-<session>-<turn>`.
+             */
+            trace_id: string;
+        };
+        /** GatheredAnswerChecked */
+        GatheredAnswerChecked: {
+            /**
+             * Answers
+             * @description How many of the answers had rows to check against.
+             */
+            answers: number;
+            /**
+             * Checked
+             * @description How many figures the answer states.
+             */
+            checked: number;
+            /**
+             * Found
+             * @description How many of them are in the rows of the answers it gathered.
+             */
+            found: number;
+            /**
+             * Not Found
+             * @description Each figure not found, with the clause it is in.
+             */
+            not_found?: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Unread
+             * @description How many could not be read: gone, kept no rows, or not the asker's to read.
+             */
+            unread: number;
         };
         /**
          * GenerateSqlRequest
@@ -26694,15 +26896,32 @@ export interface components {
          */
         pramanyx__routers__automations__ProposeRequest: {
             /**
+             * Clock Here
+             * @description The IANA clock where the person is (the browser's): read when they named none and set none of their own.
+             * @default
+             */
+            clock_here: string;
+            /**
              * Conn Id
              * @description The connection the chain runs against.
              */
             conn_id: string;
             /**
+             * From Conversation
+             * @default false
+             */
+            from_conversation: boolean;
+            /**
              * Outcome
              * @description What the chain should achieve, in the user's words.
              */
             outcome: string;
+            /**
+             * Timezone
+             * @description An IANA clock the person named, e.g. Asia/Kolkata.
+             * @default
+             */
+            timezone: string;
         };
         /** LayoutRequest */
         pramanyx__routers__cards__LayoutRequest: {
@@ -30779,6 +30998,37 @@ export interface operations {
             };
         };
     };
+    schedule_of_automations__automation_id__schedule_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                automation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     automation_versions_automations__automation_id__versions_get: {
         parameters: {
             query?: {
@@ -32296,6 +32546,43 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    card_field_route_cards__card_id__field_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                card_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CardField"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
             };
             /** @description Validation Error */
             422: {
@@ -34608,6 +34895,39 @@ export interface operations {
             };
         };
     };
+    check_a_gathered_answer_coworker_answer_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GatheredAnswer"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GatheredAnswerChecked"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     claim_the_next_answer_coworker_claim_put: {
         parameters: {
             query?: never;
@@ -36535,6 +36855,38 @@ export interface operations {
                 "application/json": components["schemas"]["EmailBody"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    emails_sent_email_sent_get: {
+        parameters: {
+            query?: {
+                draft?: string;
+                subject?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -51340,6 +51692,26 @@ export interface operations {
         };
     };
     delete_agent_policy_org_settings_agent_policy_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    get_agent_policy_version_org_settings_agent_policy_version_get: {
         parameters: {
             query?: never;
             header?: never;

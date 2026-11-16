@@ -105,15 +105,16 @@ def test_a_program_lists_objects_and_proposes_an_action_a_person_then_decides(do
     from pramanyx.org.context import DEFAULT_ORG_ID
     from pramanyx.orgsettings.agent_policy import clear_agent_policy, save_agent_policy
     program = {"X-Pramanyx-Agent": "mcp", "X-Pramanyx-Tool": "propose_flag_order_for_review"}
-    held = client.post("/objects/v1/actions/flag_order_for_review/propose", params=PARAMS, headers=program,
-                       json={"params": {"order": f"order:{ORDER}", "reason": "late"}})
-    assert held.status_code == 403                                          # the default policy, `run`, holds it
-    save_agent_policy(DEFAULT_ORG_ID, level="act", set_by="test")
+    save_agent_policy(DEFAULT_ORG_ID, level="run", set_by="test")
     try:
-        by_program = client.post("/objects/v1/actions/flag_order_for_review/propose", params=PARAMS, headers=program,
-                                 json={"params": {"order": f"order:{ORDER}", "reason": "late"}})
+        held = client.post("/objects/v1/actions/flag_order_for_review/propose", params=PARAMS, headers=program,
+                           json={"params": {"order": f"order:{ORDER}", "reason": "late"}})
     finally:
         clear_agent_policy(DEFAULT_ORG_ID)
+    assert held.status_code == 403                                          # a policy of `run` holds it
+    # Nobody saved a policy: the default (`act`, since 2026-11-16) lets the program stage it — for a person to decide.
+    by_program = client.post("/objects/v1/actions/flag_order_for_review/propose", params=PARAMS, headers=program,
+                             json={"params": {"order": f"order:{ORDER}", "reason": "late"}})
     [theirs] = [p for p in list_proposals(connection_id=CONN, status="pending") if p.id == by_program.json()["proposal_id"]]
     assert theirs.proposer.startswith("agent:propose_flag_order_for_review for ")   # a program, said as one
     wrong = client.post("/objects/v1/actions/flag_order_for_review/propose", params=PARAMS,

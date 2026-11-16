@@ -117,6 +117,8 @@ _SESSION_NAME = re.compile(r"^[A-Za-z0-9-]{6,80}$")
 _PAYLOAD_KEYS = frozenset({
     "question", "mode", "turn", "step", "tool", "arguments", "investigation_id", "receipt_id",
     "headline", "rows", "reason", "error", "message", "shell_session", "seq", "calls",
+    # A helper the turn started: which session it is, and its brief's one-line description.
+    "helper", "description",
 })
 
 
@@ -125,6 +127,10 @@ class CoworkerTraceEvent(BaseModel):
         description="What happened. A model call is not taken: the model door records those.")
     name: str = Field(default="", max_length=120, description="The tool's name, or `coworker` for the turn itself.")
     span_id: Optional[str] = Field(default=None, max_length=80, description="A tool call's id; its result carries the same.")
+    #: 2026-11-15 — the step this event happened INSIDE: a helper's work (a sub-agent the turn started) is recorded
+    #: under the call that started it, so one question is one trace however many agents worked on it.
+    parent_span_id: Optional[str] = Field(default=None, max_length=80,
+                                          description="The tool call this happened inside — for a helper's work, the call that started the helper.")
     ok: Optional[bool] = None
     duration_ms: Optional[float] = Field(default=None, ge=0)
     conn_id: Optional[str] = Field(default=None, max_length=80, description="The connection the conversation is held to.")
@@ -158,7 +164,7 @@ def take_a_coworker_turn(body: CoworkerTraceBatch, request: Request) -> Coworker
         for event in body.events:
             session_log.emit(
                 event.kind, name=event.name or "coworker", trace_id=body.trace_id, span_id=event.span_id,
-                ok=event.ok, duration_ms=event.duration_ms, conn_id=event.conn_id, row_count=event.row_count,
+                parent_span_id=event.parent_span_id, ok=event.ok, duration_ms=event.duration_ms, conn_id=event.conn_id, row_count=event.row_count,
                 error_class=("coworker" if event.ok is False and event.kind != "tool_call" else None),
                 payload={k: v for k, v in event.payload.items() if k in _PAYLOAD_KEYS},
             )
@@ -194,6 +200,56 @@ def claim_the_next_answer(body: CoworkerClaim, request: Request) -> None:
     _claims[:] = [c for c in _claims if now - c["at"] <= CLAIM_FOR][-200:]
     _claims.append({"trace_id": body.trace_id, "session": body.session, "span_id": body.span_id,
                     "question": body.question, "connection": body.connection, "at": now})
+
+
+# ── the one answer of a question worked by helpers, checked against the answers it gathered ──────────────────────
+
+_ANSWER_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+class GatheredAnswer(BaseModel):
+    trace_id: str = Field(max_length=60, description="The question's trace, `cw-<session>-<turn>`.")
+    session: str = Field(max_length=80, description="The shell's own id for the conversation.")
+    text: str = Field(min_length=1, max_length=40000, description="The answer the main agent wrote, as it wrote it.")
+    investigation_ids: list[str] = Field(max_length=60, description="Every answer the question gathered: the helpers' "
+                                                                     "and the main agent's own.")
+
+
+class GatheredAnswerChecked(BaseModel):
+    checked: int = Field(description="How many figures the answer states.")
+    found: int = Field(description="How many of them are in the rows of the answers it gathered.")
+    not_found: list[dict] = Field(default_factory=list, description="Each figure not found, with the clause it is in.")
+    answers: int = Field(description="How many of the answers had rows to check against.")
+    unread: int = Field(description="How many could not be read: gone, kept no rows, or not the asker's to read.")
+
+
+@router.post("/coworker/answer-check", response_model=GatheredAnswerChecked)
+def check_a_gathered_answer(body: GatheredAnswer, request: Request) -> GatheredAnswerChecked:
+    """The figures of a question's one answer against the answers its helpers and its main agent were given
+    (`govern/gathered.py`), recorded in the question's trace as a step of it. From this machine only, like the turn's
+    other events; an answer the person may not read is left out of the basis and counted as unread, never read."""
+    if not _on_this_machine(request.client.host if request.client else None):
+        raise HTTPException(status_code=403, detail="Only a coworker on this machine may check its answers.")
+    if not TRACE_NAME.match(body.trace_id) or not _SESSION_NAME.match(body.session):
+        raise HTTPException(status_code=422, detail="A coworker question's trace is named cw-<session>-<turn>.")
+    from pramanyx.govern.gathered import check_gathered_answer
+    from pramanyx.security.authz import Ownership, get_principal, resolve_ownership
+    principal = get_principal(request)
+    asked = [i for i in dict.fromkeys(body.investigation_ids) if _ANSWER_ID.match(i)]
+    readable = [i for i in asked if resolve_ownership("investigation", i, principal) in (Ownership.OWNED, Ownership.SHARED)]
+    said = check_gathered_answer(body.text, readable)
+    said["unread"] += len(asked) - len(readable)
+    from pramanyx.obs import session_log
+    from pramanyx.org.context import reset_session_id, set_session_id
+    token = set_session_id(f"coworker:{body.session}")
+    try:
+        session_log.emit(
+            session_log.STEP, name="answer_check", trace_id=body.trace_id, ok=not said["not_found"],
+            payload={"checked": said["checked"], "found": said["found"], "answers": said["answers"],
+                     "unread": said["unread"], "not_found": [f["text"] for f in said["not_found"]][:20]})
+    finally:
+        reset_session_id(token)
+    return GatheredAnswerChecked(**said)
 
 
 def claimed_for(question: str, conn_id: str) -> Optional[dict]:

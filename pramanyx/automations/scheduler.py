@@ -286,7 +286,7 @@ def _run_one(automation) -> None:
 
     def _work():
         with using_org(org):
-            run_automation(automation)
+            retire_if_ended(automation, run_automation(automation))
 
     # Serverless: run the work INLINE, before the tick responds. The kernel path
     # only awaits the SUBMIT — the work itself becomes an asyncio task, and Vercel
@@ -310,6 +310,33 @@ def _run_one(automation) -> None:
     if job_id is not None:
         return       # routed through the kernel
     _work()              # no-loop fallback
+
+
+def retire_if_ended(automation, run) -> bool:
+    """Switch off a schedule that has ended: it ran its last occurrence, or its end date passed. True when it did.
+
+    Found 2026-11-15: an automation past its ``expires_at`` stayed enabled, so the heartbeat asked it every minute
+    and wrote a ``gated`` run each time — five test schedules, five rows a minute, for good. And a schedule that
+    runs ONCE (`automations.recurrence`) would have joined them the minute after it ran. An ended schedule is said once,
+    on its last run, and then it is off: the list shows it off, and switching it back on — with a later end, or a
+    new recurrence — is a person's act.
+
+    Judged as of the moment the run itself read the clock, never a later one: a tick that came a breath before
+    three o'clock must not end a schedule whose one run is at three. A run parked mid-chain, or one that broke, ends
+    nothing. An adopted object (a monitor, a brief) rides the tick as an automation and is not one in the store."""
+    if run is None or run.outcome in ("paused", "error"):
+        return False
+    from pramanyx.automations.engine import ended_reason
+    why = ended_reason(automation, run.started_at)
+    if not why:
+        return False
+    from pramanyx.automations.store import get_automation, set_automation_enabled
+    stored = get_automation(str(automation.id))
+    if stored is None or not stored.enabled:
+        return False
+    set_automation_enabled(str(automation.id), False)
+    logger.info("automation %s (%s) ended and was switched off: %s", automation.id, automation.name, why)
+    return True
 
 
 def trigger_now(automation_id: str, run_id: Optional[str] = None,

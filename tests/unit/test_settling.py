@@ -395,6 +395,7 @@ def test_the_horizon_said_is_the_moving_tables_own_not_a_longer_ones(home):
 def test_the_daily_reading_runs_once_per_utc_day(monkeypatch):
     calls: list[str] = []
     monkeypatch.setattr(sampler, "_last_sample_day", "")
+    monkeypatch.setattr("pramanyx.kernel.once_a_day.first_today", lambda job, day: True)   # a day no one has claimed
     monkeypatch.setattr("pramanyx.db.registry.list_connections",
                         lambda: [{"id": "c1"}, {"id": "c-quiet"}])
     monkeypatch.setattr(sampler, "time_tables",

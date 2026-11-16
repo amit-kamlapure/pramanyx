@@ -164,7 +164,221 @@ function AnswerTail(props) {
       for (const block of blocks) if (block?.kind === "tool-call") nameStepsOf(block.name);
     }
   });
-  return h("div", { [TAIL]: "" });
+  const helpers = helpersOf(props.turn);
+  // The turn holding a question's one answer is told which question it is (`foldHelperReports` marks its tail), and
+  // shows under the answer what the check of its figures found.
+  const here = useRef(null);
+  const [checkCall, setCheckCall] = useState("");
+  useEffect(() => {
+    const tail = here.current?.closest?.('[data-chat-flow-kind="turn-tail"]');
+    if (!tail) return undefined;
+    const read = () => setCheckCall(tail.getAttribute("data-pramanyx-check-call") || "");
+    read();
+    const watch = new MutationObserver(read);
+    watch.observe(tail, { attributes: true, attributeFilter: ["data-pramanyx-check-call"] });
+    return () => watch.disconnect();
+  }, []);
+  // A question worked by helpers has ONE output: the close the main agent writes once every helper has reported
+  // (the user, 2026-11-16: "one main agent that orchestrates sub-agents … synthesises … and then gives one final
+  // output"). Its turns' answers — the helpers' and the main agent's own checks — are the work behind that output:
+  // not cards with their own follow-ups, what stands out and Right/Wrong (`data-pramanyx-gathered`, below).
+  return h("div", { ref: here, ...(helpers.length ? { "data-pramanyx-gathered": "", "data-pramanyx-first-call": helpers[0].call } : {}) },
+    checkCall ? h(AnswerCheck, { call: checkCall }) : null,
+    h("div", { [TAIL]: "" }),
+    helpers.length ? h("div", { "data-pramanyx-helpers": "" },
+      h("div", { style: { ...quiet, fontSize: 12.5, padding: "6px 0 2px" } }, `Worked by ${helpers.length} helper${helpers.length === 1 ? "" : "s"}`),
+      helpers.map((helper) => h(Helper, { key: helper.call, ...helper }))) : null);
+}
+
+/**
+ * The helpers a turn started, in the order they were started: each call to the shell's spawn tool. The end of a turn
+ * is told its calls but not their results, so a helper is found by the call that started it; the host half knows
+ * which helper each call started (`/pramanyx-helper?call=`).
+ */
+const SPAWNED = /^subagent(_fork)?$/;
+
+function helpersOf(turn) {
+  const out = [];
+  for (const step of turn?.steps ?? []) {
+    const blocks = step?.data?.entries?.get?.("assistant-step")?.value?.blocks ?? [];
+    for (const block of blocks) {
+      if (block?.kind !== "tool-call" || !SPAWNED.test(String(block.name))) continue;
+      const call = String(block.callId || "");
+      if (/^[A-Za-z0-9_-]{1,80}$/.test(call) && !out.some((known) => known.call === call)) {
+        out.push({ call, asked: String(argsOf(block).description || "") });
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * ONE HELPER, AS A ROW OF THE WORK (2026-11-15, reshaped 2026-11-16). A helper works in a conversation of its own;
+ * here it is one row — what it was asked, and whether it is still working — that opens to what it was answered:
+ * each answer as the work list shows one (its headline, opening to the SQL and the rows), a deep analysis by its
+ * report. Not as cards: a helper's answer is a part of the question, not an outcome of its own. Read from what the
+ * host half kept (`/pramanyx-helper`), again while the helper works. A helper from before answers were kept shows
+ * nothing.
+ */
+function Helper({ call, asked }) {
+  const [found, setFound] = useState(null);
+  useEffect(() => {
+    let live = true;
+    let timer = null;
+    let unknown = 0;                 // a start not known after a minute is a helper from before answers were kept
+    const look = () => {
+      fetch(`/pramanyx-helper?call=${encodeURIComponent(call)}`, { headers: { accept: "application/json" } })
+        .then((answer) => (answer.ok ? answer.json() : null))
+        .then((got) => {
+          if (!live) return;
+          setFound(got);
+          // Read again while the helper works — and while its start is not yet known here, for a turn still running.
+          if (got && (got.known ? !got.done : got.pending && (unknown += 1) < 15)) timer = setTimeout(look, 4000);
+        })
+        .catch(() => { if (live) timer = setTimeout(look, 8000); });
+    };
+    look();
+    return () => { live = false; if (timer !== null) clearTimeout(timer); };
+  }, [call]);
+  if (!found || !found.known) return null;
+  const answers = found.answers ?? [];
+  const note = !found.done ? "working" : answers.length ? `${answers.length} answer${answers.length === 1 ? "" : "s"}` : "no answer";
+  return h(Step, { kind: "rows", busy: !found.done, title: found.description || asked || "A helper", note },
+    answers.length ? answers.map((answer, i) => (/deep_analysis$/.test(String(answer.tool))
+      ? h(Analysis, { key: i, text: answer.text })
+      : h(AnswerStep, { key: i, phase: "result", toolName: answer.tool,
+                        block: { kind: "tool-call", name: answer.tool, args: answer.args ?? {}, text: answer.text } })))
+      : null);
+}
+
+/**
+ * WHAT THE CHECK OF THE ONE ANSWER FOUND (2026-11-16). The platform held each figure the answer states against the
+ * rows of the answers the question gathered — the helpers' and the main agent's own (`pramanyx/govern/gathered.py`).
+ * Said in one line under the answer: every figure found, or which were not, each with the clause it is in. A figure
+ * worked out from others is not in any answer, and is listed: the reader is told, not left to assume.
+ */
+function AnswerCheck({ call }) {
+  const [said, setSaid] = useState(null);
+  useEffect(() => {
+    let live = true;
+    let timer = null;
+    let tries = 0;
+    const look = () => {
+      fetch(`/pramanyx-answer-check?call=${encodeURIComponent(call)}`, { headers: { accept: "application/json" } })
+        .then((answer) => (answer.ok ? answer.json() : null))
+        .then((got) => {
+          if (!live) return;
+          setSaid(got);
+          if (got?.state === "pending" && (tries += 1) < 45) timer = setTimeout(look, 4000);
+        })
+        .catch(() => { if (live) setSaid({ state: "unchecked", detail: "Its check could not be read." }); });
+    };
+    look();
+    return () => { live = false; if (timer !== null) clearTimeout(timer); };
+  }, [call]);
+  const box = { fontSize: 12.5, padding: "8px 0 2px", display: "flex", flexDirection: "column", gap: 4 };
+  if (!said) return null;
+  if (said.state === "pending") return h("div", { "data-pramanyx-check": "pending", style: { ...box, ...quiet } }, "Checking its figures against the answers it was gathered from…");
+  if (said.state !== "checked") return h("div", { "data-pramanyx-check": "unchecked", style: { ...box, ...quiet } }, `Its figures were not checked. ${said.detail || ""}`.trim());
+  const missing = Array.isArray(said.not_found) ? said.not_found : [];
+  const checked = Number(said.checked) || 0;
+  if (!checked) return h("div", { "data-pramanyx-check": "none", style: { ...box, ...quiet } }, "It states no figures to check.");
+  if (!Number(said.answers)) {
+    return h("div", { "data-pramanyx-check": "unread", style: { ...box, ...quiet } },
+      "Its figures could not be checked: none of the answers it was gathered from could be read.");
+  }
+  if (!missing.length) {
+    return h("div", { "data-pramanyx-check": "found", style: { ...box, ...quiet } },
+      `✓ Every figure in this answer (${checked}) is in the answers it was gathered from.`);
+  }
+  return h("div", { "data-pramanyx-check": "missing", role: "note", style: box },
+    h("div", { style: { color: "#c2410c" } },
+      `${missing.length === 1 ? "1 figure" : `${missing.length} figures`} in this answer ${missing.length === 1 ? "is" : "are"} not in the answers it was gathered from — worked out, or not measured:`),
+    missing.slice(0, 8).map((figure, i) => h("div", { key: i, style: { display: "flex", gap: 8 } },
+      h("span", { style: { fontWeight: 600, whiteSpace: "nowrap" } }, figure.text),
+      figure.clause ? h("span", { style: quiet }, `“${figure.clause}”`) : null)),
+    missing.length > 8 ? h("div", { style: quiet }, `and ${missing.length - 8} more`) : null);
+}
+
+/** A deep analysis a helper ran, by the platform's own report. */
+function Analysis({ text }) {
+  let got = null;
+  try { got = JSON.parse(text); } catch { got = null; }
+  const report = typeof got?.report === "string" ? got.report : (typeof got?.report?.summary === "string" ? got.report.summary : "");
+  const frame = { border: `1px solid ${line}`, borderRadius: 6, padding: 12, margin: "6px 0", fontSize: 13 };
+  return h("div", { style: frame },
+    h("div", { style: { ...quiet, fontSize: 12.5, paddingBottom: 6 } }, "Deep analysis"),
+    h("div", { style: { whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight: 1.5, maxHeight: 420, overflow: "auto" } },
+      report || (got?.status === "running" ? "Still running when the helper last looked." : "The report could not be read here.")));
+}
+
+/**
+ * The turns a helpers question takes after its first: each starts with a helper's report (a helper under Agent mode
+ * reports twice — a message, then that it finished). Of a run of them, the turn holding the close keeps its work
+ * (folded, as any turn's) and its answers are work (`data-pramanyx-gathered`); every other report turn is
+ * bookkeeping and is not shown. The close (`data-pramanyx-close`) is the run's fullest reply that says more than
+ * "Waiting" or "Done": found live, 2026-11-16, the synthesis came one turn before the last, which said only that the
+ * helpers were done and their figures were "in the reply above".
+ */
+function foldHelperReports() {
+  // The shell draws a report's turn under its own label ("Subtask status updated", "Task message received"), not the
+  // notice's words; both are matched, so a later shell that shows the words is still read.
+  const REPORT = /(Subtask status updated|Task message received|Agent [A-Za-z0-9-]{8,64} sent a message|Background subagent [A-Za-z0-9-]{8,64} finished)/;
+  const BOOKKEEPING = /^\s*(waiting|done)\W*$/i;
+  let timer = null;
+  const mark = (node, name, on) => { if (on !== node.hasAttribute(name)) { if (on) node.setAttribute(name, ""); else node.removeAttribute(name); } };
+  const pass = () => {
+    timer = null;
+    const reports = new Set();
+    for (const row of document.querySelectorAll('[data-chat-flow-kind="turn-trigger"][data-chat-turn]')) {
+      if (REPORT.test(row.textContent || "")) {
+        mark(row, "data-pramanyx-report", true);
+        reports.add(Number(row.getAttribute("data-chat-turn")));
+      }
+    }
+    // Runs of consecutive report turns, and in each the reply that closes it.
+    const closeTurn = new Map();      // report turn → the turn holding its run's close (or none yet)
+    const closes = new Set();
+    for (const first of [...reports].sort((a, b) => a - b)) {
+      if (reports.has(first - 1)) continue;
+      const run = [];
+      for (let t = first; reports.has(t); t += 1) run.push(t);
+      const replies = run.flatMap((t) => [...document.querySelectorAll(
+        `[data-chat-flow-kind="assistant-step"][data-chat-group-part="response"][data-chat-turn="${t}"]`)]);
+      // The fullest reply that is not bookkeeping: the synthesis says more than any remark made after it, and the
+      // agent is told to answer an interim report with "Waiting" and a late one with "Done". A later reply wins a tie.
+      const said = (reply) => (reply.textContent || "").trim();
+      const close = replies.filter((reply) => said(reply) && !BOOKKEEPING.test(said(reply)))
+        .reduce((best, reply) => (!best || said(reply).length >= said(best).length ? reply : best), null);
+      if (close) closes.add(close);
+      const holder = close ? Number(close.getAttribute("data-chat-turn")) : run[run.length - 1];
+      for (const t of run) closeTurn.set(t, holder);
+      for (const reply of replies) mark(reply, "data-pramanyx-close", reply === close);
+      // The question this run answers is the turn before it; its first helper's call is how its check is found.
+      const call = document.querySelector(`[data-chat-flow-kind="turn-tail"][data-chat-turn="${first - 1}"] [data-pramanyx-first-call]`)
+        ?.getAttribute("data-pramanyx-first-call") || "";
+      for (const t of run) {
+        const tail = document.querySelector(`[data-chat-flow-kind="turn-tail"][data-chat-turn="${t}"]`);
+        if (!tail) continue;
+        const wanted = close && t === holder ? call : "";
+        if ((tail.getAttribute("data-pramanyx-check-call") || "") !== wanted) {
+          if (wanted) tail.setAttribute("data-pramanyx-check-call", wanted); else tail.removeAttribute("data-pramanyx-check-call");
+        }
+      }
+    }
+    for (const item of document.querySelectorAll("[data-chat-flow-kind][data-chat-turn]")) {
+      const turn = Number(item.getAttribute("data-chat-turn"));
+      const kind = item.getAttribute("data-chat-flow-kind");
+      if (!reports.has(turn)) continue;
+      const holds = closeTurn.get(turn) === turn;
+      const reply = kind === "assistant-step" && item.getAttribute("data-chat-group-part") === "response";
+      mark(item, "data-pramanyx-waiting", kind !== "turn-trigger" && (!holds || (reply && !closes.has(item))));
+      mark(item, "data-pramanyx-gathered", kind === "turn-tail");
+    }
+  };
+  new MutationObserver(() => { if (timer === null) timer = setTimeout(pass, 250); })
+    .observe(document.body, { childList: true, subtree: true });
+  pass();
 }
 
 /**
@@ -217,6 +431,22 @@ const AnswerCard = inTail((props) => h(AnswerStep, props), (props) => h(Card, pr
 const ATTACH = [["", "No attachment"], ["pdf", "The analysis as PDF"], ["xlsx", "The analysis as Excel, every row"],
   ["docx", "The analysis as Word"], ["pptx", "The analysis as PowerPoint"]];
 
+/** A draft's own name, for the journal: the one Pramanyx minted when the agent drafted it, the answer's for an
+ *  "Email this", and for a draft from before drafts were named, one made from its words — the same after a reload. */
+export function draftName(draft) {
+  if (draft?.name) return String(draft.name);
+  if (draft?.id && /^[A-Za-z0-9_-]{6,40}$/.test(String(draft.id))) return `d-${draft.id}`;
+  const text = `${draft?.subject || ""}\n${draft?.body || ""}`;
+  let hash = 2166136261;
+  for (let i = 0; i < text.length; i += 1) hash = Math.imul(hash ^ text.charCodeAt(i), 16777619);
+  return `h-${(hash >>> 0).toString(36)}`;
+}
+
+const whenSent = (at) => {
+  const d = new Date(at);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+};
+
 export function Draft({ draft }) {
   const [to, setTo] = useState(String(draft?.to || ""));
   const [subject, setSubject] = useState(String(draft?.subject || ""));
@@ -225,47 +455,87 @@ export function Draft({ draft }) {
   // "Email this" was opened from. None known, no attachment is offered.
   const answerId = String(draft?.attach_answer || "");
   const [attach, setAttach] = useState(answerId ? String(draft?.attach_format || "") : "");
-  const [state, setState] = useState({ busy: false, sent: false, said: "" });
+  const [state, setState] = useState({ busy: false, said: "" });
+  // WHETHER IT WENT is a fact about the email, not about this page: it is read from Pramanyx's journal, under the
+  // draft's own name, every time the draft is drawn. Kept in the page alone, a sent email showed as an open draft
+  // again after a reload (2026-11-15). `null` until the journal has answered; a draft from before drafts were named
+  // is found by its subject.
+  const name = draftName(draft);
+  const unnamed = !draft?.id && !draft?.name;
+  const [sends, setSends] = useState(null);
+  const [unread, setUnread] = useState(false);
+  const [again, setAgain] = useState(false);
+  useEffect(() => {
+    let live = true;
+    const asked = new URLSearchParams({ draft: name, ...(unnamed && draft?.subject ? { subject: String(draft.subject) } : {}) });
+    fetch(`/pramanyx/email/sent?${asked}`, { headers: { accept: "application/json" } })
+      .then((answer) => (answer.ok ? answer.json() : Promise.reject(new Error(String(answer.status)))))
+      .then((got) => { if (live) setSends(Array.isArray(got?.sends) ? got.sends : []); })
+      .catch(() => { if (live) { setSends([]); setUnread(true); } });
+    return () => { live = false; };
+  }, [name]);
   const field = { width: "100%", boxSizing: "border-box", font: "inherit", fontSize: 13.5, padding: "6px 8px",
                   border: `1px solid ${line}`, borderRadius: 6, background: "transparent", color: "inherit" };
+  const frame = { border: `1px solid ${line}`, borderRadius: 6, padding: 12, margin: "10px 0",
+                  display: "flex", flexDirection: "column", gap: 8, fontSize: 13.5 };
   const send = async () => {
-    setState({ busy: true, sent: false, said: "" });
+    setState({ busy: true, said: "" });
     try {
       const answer = await fetch("/pramanyx-email", { method: "POST", headers: { "content-type": "application/json" },
-                                                      body: JSON.stringify({ to, subject, body,
+                                                      body: JSON.stringify({ to, subject, body, draft: name,
                                                         ...(attach && answerId ? { attach_answer: answerId, attach_format: attach } : {}) }) });
       const said = await answer.json().catch(() => ({}));
-      if (!answer.ok) return setState({ busy: false, sent: false, said: String(said.detail || `The email was refused (${answer.status}).`) });
-      setState({ busy: false, sent: !!said.sent, said: String(said.said || (said.sent ? "Sent." : "Not sent.")) });
+      if (!answer.ok) return setState({ busy: false, said: String(said.detail || `The email was refused (${answer.status}).`) });
+      if (!said.sent) return setState({ busy: false, said: String(said.said || "Not sent.") });
+      const attached = /, with (.+) attached$/.exec(String(said.said || ""));
+      setSends((was) => [{ to: to.trim(), subject, at: new Date().toISOString(), attached: attached ? attached[1] : "" }, ...(was || [])]);
+      setAgain(false);
+      setState({ busy: false, said: "" });
     } catch {
-      setState({ busy: false, sent: false, said: "The platform is not answering; nothing was sent." });
+      setState({ busy: false, said: "The platform is not answering; nothing was sent." });
     }
   };
-  const ready = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to.trim()) && body.trim() && !state.busy && !state.sent;
-  return h("div", { "data-pramanyx-draft": "", style: { border: `1px solid ${line}`, borderRadius: 6, padding: 12, margin: "10px 0",
-                                                        display: "flex", flexDirection: "column", gap: 8, fontSize: 13.5 } },
+  if (sends === null) {
+    return h("div", { "data-pramanyx-draft": "checking", style: frame },
+      h("div", { role: "heading", "aria-level": 4, style: { fontWeight: 600 } }, "Email draft"),
+      h("div", { style: quiet }, "Checking whether this was sent…"));
+  }
+  if (sends.length && !again) {
+    // Sent: said as that, with to whom and when — and not as a form that reads as still waiting to be sent.
+    return h("div", { "data-pramanyx-draft": "sent", style: frame },
+      h("div", { role: "heading", "aria-level": 4, style: { fontWeight: 600 } }, "Email sent"),
+      sends.slice(0, 5).map((sent, i) => h("div", { key: `${sent.at}-${i}`, role: i ? undefined : "status" },
+        `✓ To ${sent.to}`, whenSent(sent.at) ? ` · ${whenSent(sent.at)}` : "", sent.attached ? ` · with ${sent.attached} attached` : "")),
+      sends.length > 5 ? h("div", { style: quiet }, `and ${sends.length - 5} more`) : null,
+      h("div", { style: quiet }, `Subject: ${sends[0].subject || subject}`),
+      h("div", { style: quiet }, "The email as it went is in the sending account's Sent mail."),
+      h("div", null, h("button", { type: "button", className: "pramanyx-link",
+        onClick: () => { setTo(""); setState({ busy: false, said: "" }); setAgain(true); } }, "Send to someone else")));
+  }
+  const ready = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to.trim()) && body.trim() && !state.busy;
+  return h("div", { "data-pramanyx-draft": "", style: frame },
     h("div", { role: "heading", "aria-level": 4, style: { fontWeight: 600 } }, "Email draft"),
+    sends.length ? h("div", { style: quiet }, `Already sent to ${sends.map((sent) => sent.to).slice(0, 3).join(", ")}${sends.length > 3 ? " and others" : ""}.`) : null,
+    unread ? h("div", { style: quiet }, "Whether this draft was already sent could not be checked.") : null,
     h("label", { style: { display: "flex", flexDirection: "column", gap: 3 } },
       h("span", { style: quiet }, "To"),
-      h("input", { type: "email", value: to, disabled: state.sent, placeholder: "name@example.com", style: field,
+      h("input", { type: "email", value: to, placeholder: "name@example.com", style: field,
                    onChange: (e) => setTo(e.target.value) })),
     h("label", { style: { display: "flex", flexDirection: "column", gap: 3 } },
       h("span", { style: quiet }, "Subject"),
-      h("input", { type: "text", value: subject, disabled: state.sent, style: field, onChange: (e) => setSubject(e.target.value) })),
+      h("input", { type: "text", value: subject, style: field, onChange: (e) => setSubject(e.target.value) })),
     h("label", { style: { display: "flex", flexDirection: "column", gap: 3 } },
       h("span", { style: quiet }, "Message"),
-      h("textarea", { rows: 8, value: body, disabled: state.sent, style: { ...field, resize: "vertical", lineHeight: 1.5 },
+      h("textarea", { rows: 8, value: body, style: { ...field, resize: "vertical", lineHeight: 1.5 },
                       onChange: (e) => setBody(e.target.value) })),
     answerId ? h("label", { style: { display: "flex", flexDirection: "column", gap: 3 } },
       h("span", { style: quiet }, "Attach"),
-      h("select", { value: attach, disabled: state.sent, style: field, onChange: (e) => setAttach(e.target.value) },
+      h("select", { value: attach, style: field, onChange: (e) => setAttach(e.target.value) },
         ATTACH.map(([value, label]) => h("option", { key: value || "none", value }, label)))) : null,
     h("div", { style: { display: "flex", alignItems: "center", gap: 10 } },
-      h("button", { type: "button", style: button(true), disabled: !ready, onClick: send },
-        state.busy ? "Sending…" : state.sent ? "Sent" : "Send"),
-      state.said ? h("span", { role: "status", style: { color: state.sent ? "inherit" : "#c2410c" } },
-        state.sent ? `✓ ${state.said}` : `Not sent: ${state.said}`) : null,
-      !state.said && !state.sent ? h("span", { style: quiet }, "Nothing is sent until you press Send.") : null));
+      h("button", { type: "button", style: button(true), disabled: !ready, onClick: send }, state.busy ? "Sending…" : "Send"),
+      state.said ? h("span", { role: "status", style: { color: "#c2410c" } }, `Not sent: ${state.said}`)
+        : h("span", { style: quiet }, "Nothing is sent until you press Send.")));
 }
 
 /** The draft a `draft_email` call returned, or null. */
@@ -280,6 +550,134 @@ function draftOf(block) {
 
 const DraftCard = inTail((props) => h(ToolStep, props),
   (props) => (props.phase === "result" && draftOf(props.block) ? h(Draft, { draft: draftOf(props.block) }) : null));
+
+/**
+ * A SCHEDULE, SET HERE AND KEPT BY THE PLATFORM (2026-11-15). There is one scheduler, the platform's, and a schedule
+ * made in a conversation is one of its automations — so this card draws no copy of it. It names what was set and
+ * asks the platform where it stands every time it is drawn (`GET /automations/<id>/schedule`, through the relay):
+ * when it runs, in the platform's own words; when next; and whether it is on, waiting for its first run, switched
+ * off, ended or gone. Its button opens the app's own page of schedules beside the conversation, on this one, where a
+ * person changes it, mutes it, runs it now and reads what each run did.
+ */
+const whenNext = (at) => {
+  const d = new Date(at);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+};
+
+/** Where a schedule stands, as one sentence. `now` is the platform's read: null when the schedule is gone. */
+export function standing(now) {
+  if (now === null) return "This schedule was removed.";
+  const next = whenNext(now.next_run);
+  if (now.state === "ended") return `Ended: ${now.ended || "it has no run left"}.`;
+  if (now.state === "off") return "Switched off. It runs again when it is switched on, on the schedule's page.";
+  if (now.state === "muted") return next ? `First run ${next}, your time.` : "Waiting for its first run.";
+  return next ? `Next run ${next}, your time.` : "On.";
+}
+
+export function Scheduled({ made }) {
+  const [now, setNow] = useState(undefined);        // undefined while it is read; null when the schedule is gone
+  const [unread, setUnread] = useState(false);
+  useEffect(() => {
+    let live = true;
+    fetch(`/pramanyx/automations/${encodeURIComponent(made.id)}/schedule`, { headers: { accept: "application/json" } })
+      .then((answer) => {
+        if (answer.status === 404) return null;
+        if (!answer.ok) throw new Error(String(answer.status));
+        return answer.json();
+      })
+      .then((got) => { if (live) setNow(got); })
+      .catch(() => { if (live) setUnread(true); });
+    return () => { live = false; };
+  }, [made.id]);
+  const frame = { border: `1px solid ${line}`, borderRadius: 6, padding: 12, margin: "10px 0",
+                  display: "flex", flexDirection: "column", gap: 6, fontSize: 13.5 };
+  const said = now && Array.isArray(now.said) && now.said.length ? now.said.join("; ") : String(made.when || "");
+  const steps = now && Array.isArray(now.steps) ? now.steps : [];
+  const sends = steps.filter((kind) => kind === "email" || kind === "slack_post" || kind === "notify");
+  const runs = now && Array.isArray(now.runs) ? now.runs : [];
+  return h("div", { "data-pramanyx-schedule": now === null ? "gone" : now?.state || "reading", style: frame },
+    h("div", { role: "heading", "aria-level": 4, style: { fontWeight: 600 } }, "Schedule"),
+    h("div", null, String(now?.name || made.name || "")),
+    said ? h("div", { style: quiet }, said) : null,
+    unread ? h("div", { style: quiet }, "Where this schedule stands could not be read just now.")
+      : now === undefined ? h("div", { style: quiet }, "Reading where this schedule stands…")
+        : h("div", { role: "status" }, standing(now)),
+    now && now.expires_at && now.state !== "ended" ? h("div", { style: quiet }, `It stops on ${whenNext(now.expires_at)}.`) : null,
+    steps.length ? h("div", { style: quiet }, `It ${steps.map((kind) => STEP_WORDS[kind] || kind.replace(/_/g, " ")).join(", then ")}.`) : null,
+    now && sends.length ? h("div", { style: quiet },
+      `Each run is also sent on: ${sends.map((kind) => ({ email: "email", slack_post: "Slack", notify: "a notification" })[kind]).join(", ")}.`) : null,
+    // WHAT EACH RUN FOUND, HERE (2026-11-16: "deliver it here"). Read with the schedule each time the card is drawn.
+    runs.length ? h("div", { "data-pramanyx-runs": "", style: { display: "flex", flexDirection: "column", gap: 6, paddingTop: 4 } },
+      runs.map((run, i) => h(RunFound, { key: `${run.at}-${i}`, run, provisional: String(now?.provisional || "") }))) : null,
+    now !== null && hasPane() ? h("div", null, h("button", { type: "button", style: button(false),
+      onClick: () => openBeside("page", pageFor.schedule(made.id, String(now?.conn_id || made.connection || ""))) }, "Open the schedule")) : null);
+}
+
+/** The tools that set up a schedule: `schedule` (a sentence, 2026-11-16) and the question-only one it replaced, whose
+ *  cards in earlier conversations still draw. */
+const SCHEDULES = /^mcp__pramanyx__schedule(_question)?$/;
+
+/** What a schedule's steps do, in words. */
+const STEP_WORDS = {
+  investigate: "asks the question", synthesize: "writes it up", slack_post: "posts it to Slack", email: "emails it",
+  notify: "sends a notification", metric_value: "reads the metric", trusted_query: "runs the trusted query",
+  subchain: "runs another automation", kinetic_action: "takes the declared action", expectations: "checks the table's expectations",
+};
+
+/**
+ * A run's answer, shown as an answer is (2026-11-16, the user: "why is the result not chart or table?"): the headline,
+ * then its rows as the chart they chose — one row as figures — with the table a click away, and under it the
+ * platform's one line on whether the figures may still change. How it was answered is the analysis's own page.
+ */
+function RunAnswer({ answer, provisional }) {
+  const [table, setTable] = useState(false);
+  const one = (answer.rows ?? []).length === 1;
+  const count = typeof answer.row_count === "number" ? answer.row_count : (answer.rows ?? []).length;
+  return h("div", { "data-pramanyx-run-answer": "", style: { display: "flex", flexDirection: "column", gap: 6 } },
+    answer.headline ? h("div", { style: { fontSize: 15, fontWeight: 600, lineHeight: 1.4 } }, answer.headline) : null,
+    h("div", { style: { border: `1px solid ${line}`, borderRadius: 6, padding: "6px 8px 4px 12px" } },
+      one ? h(Figures, { answer }) : table ? h("div", { style: { padding: "4px 0 6px" } }, h(ResultGrid, { answer, compact: true }))
+        : h(Chart, { answer }),
+      one ? null : h("div", { style: { display: "flex", alignItems: "center", gap: 12, borderTop: `1px solid ${line}`, marginTop: 4 } },
+        h("button", { type: "button", className: "pramanyx-link", "aria-expanded": table, onClick: () => setTable((was) => !was) },
+          table ? "Show the chart" : "Show as a table"),
+        h("span", { style: { flex: "1 1 auto" } }),
+        h("span", { style: { ...quiet, fontSize: 12.5 } }, `${count} ${count === 1 ? "row" : "rows"}`))),
+    provisional ? h("div", { style: { ...quiet, fontSize: 12.5 } }, provisional) : null);
+}
+
+/** One run of a schedule: when, and what its steps found — an answer as an answer, a write-up as its text, with the
+ *  analysis a click away. */
+function RunFound({ run, provisional = "" }) {
+  const found = (run.steps ?? []).filter((step) => step.answer || step.said);
+  const failed = (run.steps ?? []).filter((step) => !["executed", "skipped"].includes(String(step.status)));
+  const analysis = (run.steps ?? []).map((step) => step.investigation_id).find(Boolean);
+  // A step that handed its analysis to the platform's queue: the run is recorded before the answer exists.
+  const answering = (run.steps ?? []).some((step) => step.answering);
+  return h("div", { style: { borderTop: `1px solid ${line}`, paddingTop: 6, display: "flex", flexDirection: "column", gap: 6 } },
+    h("div", { style: { ...quiet, fontSize: 12.5 } },
+      `Ran ${whenNext(run.at)}`, run.outcome === "paused" ? " · waiting for a person" : run.outcome === "error" ? " · did not run" : ""),
+    found.length ? found.map((step, i) => (step.answer ? h(RunAnswer, { key: i, answer: step.answer, provisional })
+      : h("div", { key: i, style: { whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight: 1.5 } }, step.said)))
+      : h("div", { style: quiet }, run.outcome === "error" ? (run.reason || "It broke before it found anything.")
+        : failed.length ? (failed[0].message || "A step did not finish.")
+          : answering ? "Still being answered. The answer shows here when it is done." : "It found nothing to say."),
+    analysis && hasPane() ? h("div", null, h("button", { type: "button", className: "pramanyx-link",
+      onClick: () => openBeside("page", pageFor.receipt(analysis)) }, "How it was answered")) : null);
+}
+
+/** The schedule a call made, or null — a call that asked instead (`needs`) or could not (`reason`) made none. */
+function scheduleOf(block) {
+  try {
+    const got = JSON.parse(resultText(block) || "{}");
+    return got && got.scheduled !== false && typeof got.id === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(got.id) ? got : null;
+  } catch {
+    return null;
+  }
+}
+
+const ScheduleCard = inTail((props) => h(ToolStep, props),
+  (props) => (props.phase === "result" && !props.block?.isError && scheduleOf(props.block) ? h(Scheduled, { made: scheduleOf(props.block) }) : null));
 
 /** What a call was given, whichever of the shell's shapes carries it. Nothing readable is an empty object. */
 function argsOf(block) {
@@ -365,6 +763,7 @@ function AnswerStep(props) {
 const DOES = {
   deep_analysis: ["Ran a deep analysis", ["question"]],
   draft_email: ["Drafted an email", ["subject", "to"]],
+  schedule: ["Set up a schedule", ["request"]],
   schedule_question: ["Set a question on a schedule", ["question", "cron"]],
   search_the_web: ["Searched the web", ["query"]],
   explore: ["Explored", ["question", "topic", "focus"]],
@@ -497,7 +896,23 @@ const STEPS_LOOK = `
  * the agent's closing remark is not shown beside them. A turn with no answer drawn (a question declined, a reply in
  * words) keeps its reply, which is then all there is. The remark stays in the conversation's record.
  */
-[data-chat-flow-kind="assistant-step"]:has(+ [data-chat-flow-kind="turn-tail"] [data-pramanyx-answers] > *) { display: none; }
+[data-chat-flow-kind="assistant-step"]:not([data-pramanyx-close]):has(+ [data-chat-flow-kind="turn-tail"] [data-pramanyx-answers] > *),
+[data-chat-flow-kind="assistant-step"]:not([data-pramanyx-close]):has(+ [data-chat-flow-kind="turn-tail"] [data-pramanyx-helpers] > *) { display: none; }
+/*
+ * A QUESTION WORKED BY HELPERS HAS ONE OUTPUT (2026-11-16). Its helpers are rows of the work under the question; the
+ * answers drawn in its turns — the main agent's own checks among them — are not shown as cards, since each card is an
+ * outcome of its own (its follow-ups, what stands out, Right and Wrong); the reports' turns are bookkeeping and are
+ * not shown; and the main agent's close, once every helper has reported, is the output.
+ */
+[data-pramanyx-gathered] [data-pramanyx-answers] { display: none; }
+[data-pramanyx-report], [data-pramanyx-waiting] { display: none; }
+/* The close is the output wherever in its turn it was said — before more steps, too — so the work's fold and its
+ * column line do not take it in. */
+[data-chat-flow-kind="assistant-step"][data-pramanyx-close] {
+  display: block !important; margin-left: 0 !important; padding-left: 0 !important; border-left: 0 !important;
+}
+[data-chat-flow-kind="assistant-step"][data-pramanyx-close]::before,
+[data-chat-flow-kind="assistant-step"][data-pramanyx-close]::after { content: none !important; }
 /*
  * An answer's own controls. An icon is plain until pointed at; a mark after a sentence is a small edged chip that
  * opens what the sentence stood on; a quiet link opens something behind the answer.
@@ -869,8 +1284,10 @@ function emailOf(answer) {
   const rows = (answer.rows ?? []).slice(0, 20).map((r) => r.join(" · "));
   return { to: "", subject: String(answer.answer || answer.question || "From Pramanyx").slice(0, 150),
            body: [answer.answer, told, rows.length ? [(answer.columns ?? []).join(" · "), ...rows].join("\n") : ""].filter(Boolean).join("\n\n"),
-           // "Email this" knows its answer, so the analysis can be attached.
-           attach_answer: answer.investigation_id ? String(answer.investigation_id) : "", attach_format: "" };
+           // "Email this" knows its answer, so the analysis can be attached — and the draft is named for the answer,
+           // so an answer that was emailed says so whenever it is opened.
+           attach_answer: answer.investigation_id ? String(answer.investigation_id) : "", attach_format: "",
+           ...(answer.investigation_id ? { name: `a-${answer.investigation_id}` } : {}) };
 }
 
 function Files({ answer, id }) {
@@ -922,7 +1339,8 @@ export function apply(ctx) {
     named.add(name);
     ctx.slots.inject("tool.call.toolview", () =>
       ctx.slots.register({ name: "tool.call.toolview", key: name },
-        ANSWERS.test(name) ? AnswerCard : name === PREFIX + "draft_email" ? DraftCard : ToolStep));
+        ANSWERS.test(name) ? AnswerCard : name === PREFIX + "draft_email" ? DraftCard
+          : SCHEDULES.test(name) ? ScheduleCard : ToolStep));
   };
   // The tools known when this was written are named from the first call. A view is keyed by exact tool name, so
   // one added to Pramanyx since — and each custom agent's — gets its view at the end of the first turn that calls it.
@@ -930,6 +1348,7 @@ export function apply(ctx) {
   for (const short of Object.keys(DOES)) nameStepsOf(PREFIX + short);
   wearStepsLook();
   foldRunningWork();
+  foldHelperReports();
   // The shell's right-hand pane, when it has one: one kind of tab, for an answer's SQL and rows and for its chart's
   // editor. Without it the SQL opens in the card and there is no editor.
   ctx.inject(["sidebarRightTabs", "sidebarRight"], (at) => {

@@ -208,14 +208,63 @@ def claim_delivery(automation_id: str, started_at: str) -> bool:
 
 
 def cron_trigger(cron: str, timezone: str = ""):
-    """The ONE reading of a cron string — in the automation's own clock (SP-13).
+    """The ONE reading of a schedule's expression — in the automation's own clock (SP-13).
 
     "" = UTC, which is every chain written before the field existed. An IANA name
     hands DST to the trigger itself: a 09:00 Europe/Berlin chain fires at 07:00Z in
-    summer and 08:00Z in winter, with no arithmetic of ours in between."""
+    summer and 08:00Z in winter, with no arithmetic of ours in between.
+
+    The expression is a five-field cron or a RECURRENCE (2026-11-15, `automations.recurrence`): once at an
+    instant, every N from a start, the first Monday, five times — what a cron cannot say. Both
+    answer the one question every reader asks, "when next, after this moment", so both are read
+    here and no reader of a schedule has to know which it holds."""
+    from pramanyx.automations.recurrence import RecurrenceTrigger, is_recurrence
+    if is_recurrence(cron):
+        return RecurrenceTrigger(cron, timezone)
     from apscheduler.triggers.cron import CronTrigger
 
-    return CronTrigger.from_crontab(cron, timezone=timezone or "UTC")
+    fields = str(cron or "").split()
+    if len(fields) == 5:
+        fields[4] = weekdays_by_name(fields[4])
+    return CronTrigger.from_crontab(" ".join(fields) if len(fields) == 5 else cron, timezone=timezone or "UTC")
+
+
+_CRON_WEEKDAYS = ("sun", "mon", "tue", "wed", "thu", "fri", "sat")
+
+
+def weekdays_by_name(field: str) -> str:
+    """A cron's day-of-week field with its NUMBERS said as names, so they mean what a cron means by them.
+
+    Measured 2026-11-15, choosing which scheduler to keep: the trigger library numbers the week from Monday (0 =
+    Monday), a cron from Sunday (0 or 7 = Sunday, 1 = Monday). So ``0 9 * * 1`` — which the app's editor writes for
+    "Weekly on Mon", the coworker's tool describes as "Mondays at 09:00", and every reader takes for Monday — fired
+    on TUESDAY; ``1-5`` ran Tuesday to Saturday; ``7`` was refused. Names were always read right, so the numbers
+    are turned into names here, at the one reading, and nothing downstream has to know. A field with a name in it,
+    or ``*``, passes as written; one this cannot read passes as written too, for the library to refuse in its own
+    words."""
+    text = str(field or "").strip()
+    if not text or text in ("*", "?") or any(ch.isalpha() for ch in text):
+        return text
+    days: set[int] = set()
+    try:
+        for item in text.split(","):
+            body, _, step = item.partition("/")
+            stride = int(step) if step else 1
+            if body == "*":
+                low, high = 0, 6
+            elif "-" in body:
+                low, high = (int(part) for part in body.split("-", 1))
+            else:
+                low = int(body)
+                high = 6 if step else low          # a cron's "2/2" is "from 2 to the end, by 2"
+            if not (0 <= low <= high <= 7) or stride < 1:
+                return text
+            days.update(day % 7 for day in range(low, high + 1, stride))
+    except ValueError:
+        return text
+    if len(days) == 7:
+        return "*"
+    return ",".join(_CRON_WEEKDAYS[day] for day in sorted(days))
 
 
 def next_fire_utc(cron: str, after: datetime, timezone: str = "") -> Optional[datetime]:
@@ -232,6 +281,14 @@ def next_fire_utc(cron: str, after: datetime, timezone: str = "") -> Optional[da
     return t.astimezone(_tz.utc) if t is not None else None
 
 
+def _when(cond: Condition, automation: Automation) -> str:
+    """A schedule's expression for a run's reason: a cron as written; a recurrence in words, in THIS automation's
+    clock — the trigger alone does not know which clock a floating start is read in, and a reason that named the
+    wrong one would be worse than none."""
+    from pramanyx.automations.recurrence import said
+    return said(cond.cron, getattr(automation, "timezone", "") or "") or cond.when
+
+
 def _schedule_fired(cond: Condition, automation: Automation, now: datetime) -> tuple[bool, str]:
     """True when the cron matched at some point between the last run and ``now``.
 
@@ -243,6 +300,7 @@ def _schedule_fired(cond: Condition, automation: Automation, now: datetime) -> t
         trigger = cron_trigger(cond.cron, getattr(automation, "timezone", ""))
     except (ValueError, KeyError) as exc:
         raise ProbeUnavailable(f"invalid cron '{cond.cron}': {exc}") from exc
+    when = _when(cond, automation)
 
     prev_run = last_run(automation.id)
     prev = _parse(prev_run.started_at) if prev_run else None
@@ -255,13 +313,49 @@ def _schedule_fired(cond: Condition, automation: Automation, now: datetime) -> t
     if claimed is not None and (prev is None or claimed > prev):
         prev = claimed
     if prev is None:
-        return True, f"schedule({cond.cron}): first run"
+        from pramanyx.automations.recurrence import is_recurrence
+        if not is_recurrence(cond.cron):
+            return True, f"schedule({when}): first run"
+        # A RECURRENCE says exactly when, so it is never due merely for being new: "once at three" made at two must wait
+        # for three. Its runs are counted from the moment the automation was made.
+        prev = _parse(automation.created_at) or now
 
     # +1s so a tick that lands on the same instant as the previous run cannot re-fire it.
     nxt = trigger.get_next_fire_time(None, prev + timedelta(seconds=1))
     if nxt is not None and nxt <= now:
-        return True, f"schedule({cond.cron}): due since {nxt.isoformat()}"
-    return False, f"schedule({cond.cron}): next due {nxt.isoformat() if nxt else 'never'}"
+        return True, f"schedule({when}): due since {nxt.isoformat()}"
+    return False, f"schedule({when}): next due {nxt.isoformat() if nxt else 'never'}"
+
+
+def ended_reason(automation: Automation, at: object, *, since: object = None) -> str:
+    """Why this automation will never fire again by itself, as of ``at`` (a moment, or its ISO stamp) — "" while it
+    still can.
+
+    Two ends, both final: its ``expires_at`` has passed, or every trigger is a schedule RECURRENCE with no run left
+    (a one-off that has run, "five times" after the fifth). A cron never ends, and a trigger that reads the world — a
+    metric, a table, a webhook — can always fire again, so a chain holding either is never ended by this. A
+    recurrence that cannot be read is the tick's error to report, not an end.
+
+    ``since`` is the moment runs are counted from when that is not ``at``: a reader asking between a one-off's time
+    and the tick that will run it (found live, 2026-11-15: for most of a minute the schedule read "ended" while its
+    one run was still to come) passes the last tick, because a run is left for as long as the engine has not got to
+    it. The tick itself passes nothing: the moment its run read the clock is both."""
+    now = at if isinstance(at, datetime) else (_parse(str(at or "")) or datetime.now(timezone.utc))
+    expires = _parse(automation.expires_at)
+    if expires is not None and expires <= now:
+        return f"expired at {automation.expires_at}"
+    from pramanyx.automations.recurrence import RecurrenceError, is_recurrence, parse
+    conditions = list(automation.conditions or [])
+    if not conditions or not all(c.kind == "schedule" and is_recurrence(c.cron) for c in conditions):
+        return ""
+    counted = since if isinstance(since, datetime) else (_parse(str(since or "")) if since else None)
+    counted = min(counted, now) if counted is not None else now
+    clock = getattr(automation, "timezone", "") or ""
+    try:
+        left = any(parse(c.cron.strip(), clock).at_or_after(counted) is not None for c in conditions)
+    except RecurrenceError:
+        return ""
+    return "" if left else "its schedule has no run left"
 
 
 def _metric_not_due(cond: Condition, automation: Automation, now: datetime) -> Optional[tuple[bool, str]]:
@@ -403,7 +497,7 @@ def evaluate_conditions(automation: Automation, *, now: datetime,
     results: list[tuple[bool, str]] = []
     for cond in automation.conditions:
         if cond.kind == "schedule":
-            results.append((True, f"schedule({cond.cron}): {skipped}")
+            results.append((True, f"schedule({_when(cond, automation)}): {skipped}")
                            if manual else _schedule_fired(cond, automation, now))
         elif cond.kind == "webhook":
             results.append((True, f"webhook: {asked}") if manual

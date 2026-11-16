@@ -399,4 +399,46 @@ def run_investigation(
     if job_id is None:
         # No live loop — run inline, as the monitor/brief schedulers do.
         return _inline("ran inline (no kernel loop)")
-    return InvestigationRun("executed", f"job {job_id}", job_id=job_id, basis="submitted")
+    return InvestigationRun("executed", f"{_SUBMITTED} {job_id}", job_id=job_id, basis="submitted")
+
+
+#: How a submitted run names its job in the step it filled — the one place it is written and read.
+_SUBMITTED = "job"
+
+
+def submitted_job(message: str) -> str:
+    """The job a submitted run's step names (``"job <id>"``, written above), or "" for any other message."""
+    head, _, rest = (message or "").partition(" ")
+    job = rest.split(" ", 1)[0] if head == _SUBMITTED else ""
+    return job if job.replace("-", "").replace("_", "").isalnum() else ""
+
+
+def what_the_job_became(job_id: str) -> dict:
+    """Where a submitted run stands, read after the step that started it (2026-11-16: a schedule's card said "it
+    found nothing to say" while its investigation was still running). ``{"state": "answering"}`` while the job runs;
+    ``{"state": "answered", "investigation_id", "said", "envelope"}`` once the join `_note_dispatch` records names its
+    investigation — the envelope is the answer as the stored report supports it (headline, rows, chart), for a reader
+    that shows it as an answer; ``{"state": "stopped", "reason"}`` for a job that ended without one; ``{}`` when the
+    job cannot be read at all."""
+    from pramanyx.kernel.jobs import JobState
+    from pramanyx.kernel.ledger import Ledger
+    ledger = Ledger.default()
+    joined = ledger.events(kind=DISPATCH_EVENT, job_id=job_id, limit=1)
+    inv_id = str(((joined[0].get("payload") or {}) if joined else {}).get("investigation_id") or "")
+    if inv_id:
+        from pramanyx.db.history import get_investigation
+        inv = get_investigation(inv_id) or {}
+        report = inv.get("report") if isinstance(inv.get("report"), dict) else {}
+        said = str(report.get("executive_summary") or inv.get("headline") or report.get("headline") or "").strip()
+        if said:
+            from pramanyx.answer.envelope import envelope_of_report
+            envelope = envelope_of_report(report, question=str(inv.get("question") or "")) or {}
+            return {"state": "answered", "investigation_id": inv_id, "said": said, "envelope": envelope}
+        return {"state": "stopped", "investigation_id": inv_id,
+                "reason": str(inv.get("error") or "the analysis ended without an answer")}
+    job = ledger.job_get(job_id)
+    if not job:
+        return {}
+    if job.get("state") in JobState.ACTIVE:
+        return {"state": "answering"}
+    return {"state": "stopped", "reason": str(job.get("error") or f"the analysis {str(job.get('state')).lower()}")}

@@ -1,8 +1,8 @@
 """DE-2b and DE-2c (ROADMAP §3.51; §6 item 37(c)) — an outside agent is a principal with a policy.
 
 DE-2b: one policy per organisation — `read`, `run`, `act` — with connection and tool
-allowlists, kept with the organisation's per-org settings, `run` by default and `act` only by a
-person, narrowed (never widened) by the environment, enforced in the API on every request the
+allowlists, kept with the organisation's per-org settings, `act` by default (since 2026-11-16; `run`
+before) and set only by a person, narrowed (never widened) by the environment, enforced in the API on every request the
 MCP client marks as its own, refused with stable codes, audited with its principal; the MCP
 server hides a disallowed tool from `tools/list` and refuses it by name; every tool carries
 `readOnlyHint` / `destructiveHint`. DE-2c: the four knowledge tools reach their bodies through
@@ -42,10 +42,12 @@ def _clean_policy(monkeypatch):
 
 # ── the store ────────────────────────────────────────────────────────────────────────
 
-def test_an_install_with_no_saved_policy_runs_at_run_and_says_it_is_the_default():
+def test_an_install_with_no_saved_policy_lets_its_agents_act_and_says_it_is_the_default():
+    """The user, 2026-11-16: the harness knows when to read, run or act. The level is a ceiling the agent works under,
+    so the default allows all three; a person lowers it."""
     p = AP.effective_agent_policy(ORG)
-    assert p.level == "run" and p.source == "default" and p.set_by == ""
-    assert p.allows_level("read") and p.allows_level("run") and not p.allows_level("act")
+    assert p.level == "act" and p.source == "default" and p.set_by == ""
+    assert p.allows_level("read") and p.allows_level("run") and p.allows_level("act")
     assert p.allows_tool("anything") and p.allows_connection("c1")
 
 
@@ -123,7 +125,9 @@ def test_an_unmarked_request_is_untouched_even_under_a_read_policy():
     assert _run(go()) != 403, "the web app and every other caller are not agents"
 
 
-def test_the_default_policy_refuses_an_act_by_name_and_serves_a_read():
+def test_a_run_policy_refuses_an_act_by_name_and_serves_a_read():
+    AP.save_agent_policy(ORG, level="run", set_by="ana")
+
     async def go():
         async with _api() as c:
             refused = await c.post("/jobs/not-a-job/cancel", headers={**AGENT, TOOL_HEADER: "cancel_job"})
@@ -135,6 +139,13 @@ def test_the_default_policy_refuses_an_act_by_name_and_serves_a_read():
     assert body["error"] == "agent_policy_denied" and body["code"] == P.CODE_LEVEL
     assert body["tool"] == "cancel_job" and body["policy_level"] == "run" and body["required_level"] == "act"
     assert served.status_code == 200
+
+
+def test_the_default_policy_lets_an_act_through_to_its_route():
+    async def go():
+        async with _api() as c:
+            return await c.post("/jobs/not-a-job/cancel", headers={**AGENT, TOOL_HEADER: "cancel_job"})
+    assert _run(go()).status_code != 403, "nobody saved a policy: the default lets the agent act"
 
 
 def test_a_read_policy_hides_run_and_a_grant_of_act_opens_the_cancel():
@@ -178,6 +189,7 @@ def test_every_agent_call_is_audited_with_its_principal_and_shows_on_the_governa
 
     import uuid
     robot = f"robot-{uuid.uuid4().hex[:8]}"
+    AP.save_agent_policy(ORG, level="run", set_by="ana")
 
     async def go():
         async with _api() as c:
@@ -205,7 +217,8 @@ def test_the_policy_route_is_set_by_a_person_and_refuses_the_agent():
             cleared = await c.delete("/org-settings/agent-policy")
             return before, by_agent, by_person, after, cleared
     before, by_agent, by_person, after, cleared = _run(go())
-    assert before.status_code == 200 and before.json()["effective"]["level"] == "run" and before.json()["saved"] is None
+    assert before.status_code == 200 and before.json()["effective"]["level"] == "act" and before.json()["saved"] is None
+    assert before.json()["default"] == "act"                       # the screen names it, never its own copy
     assert by_agent.status_code == 403 and by_agent.json()["detail"]["code"] == P.CODE_SELF_SET
     assert by_person.status_code == 200
     eff = after.json()["effective"]
@@ -279,7 +292,8 @@ def test_a_tool_allowlist_hides_the_rest_and_refuses_them_by_name(monkeypatch):
     assert json.loads(str(e.value))["code"] == P.CODE_TOOL
 
 
-def test_when_the_api_cannot_be_asked_the_default_run_applies(monkeypatch):
+def test_when_the_api_cannot_be_asked_runs_tools_are_listed_and_never_an_act(monkeypatch):
+    """A policy the server could not read is no grant: the default is `act`, but an unread one lists `run`'s tools."""
     async def down():
         raise RuntimeError("connection refused")
     monkeypatch.setattr(S._client, "agent_policy", down)
@@ -336,3 +350,80 @@ def test_the_knowledge_tools_are_still_readable_under_a_read_policy_through_the_
             return await c.get("/knowledge/c-none/table-health", params={"table": "orders"},
                                headers={**AGENT, TOOL_HEADER: "get_table_health"})
     assert _run(go()).status_code == 200
+
+
+# ── 2026-11-16: a running coworker picks up a policy change without a restart ───────────
+
+def test_the_policy_version_moves_with_the_policy_and_asking_it_is_not_recorded_as_an_agents_call():
+    """Found trying it live: a coworker started under `run` kept that tool list after a person cleared the policy to
+    the default `act`, until it was restarted. The MCP server now asks whether the policy changed — a question that
+    reads no data, so it is not recorded; the read of the policy that follows a change is."""
+    from pramanyx.govern.audit_categories import feed
+    import uuid
+    robot = f"watch-{uuid.uuid4().hex[:8]}"
+    me = {**AGENT, "X-Pramanyx-User": robot}
+
+    async def go():
+        async with _api() as c:
+            first = (await c.get("/org-settings/agent-policy/version", headers=me)).json()["version"]
+            again = (await c.get("/org-settings/agent-policy/version", headers=me)).json()["version"]
+            AP.save_agent_policy(ORG, level="run", set_by="ana")
+            lowered = (await c.get("/org-settings/agent-policy/version", headers=me)).json()["version"]
+            await c.get("/org-settings/agent-policy", headers=me)            # the read a change is followed by
+            AP.clear_agent_policy(ORG)
+            cleared = (await c.get("/org-settings/agent-policy/version", headers=me)).json()["version"]
+            return first, again, lowered, cleared
+    first, again, lowered, cleared = _run(go())
+    assert first == again and lowered != first and cleared == first and len(first) == 16
+    rows = [e for e in feed(category="data_access", limit=500) if e.kind == "mcp.tool_call" and e.detail.get("actor") == robot]
+    assert [e.detail.get("route") for e in rows] == ["/org-settings/agent-policy"]
+
+
+def test_when_the_policy_changes_every_session_handed_a_list_is_told_once(monkeypatch):
+    class _Session:
+        def __init__(self, gone=False):
+            self.told, self.gone = 0, gone
+
+        async def send_tool_list_changed(self):
+            if self.gone:
+                raise RuntimeError("closed")
+            self.told += 1
+
+    versions = iter(["v1", "v1", "v2", "v2"])
+
+    async def version():
+        return next(versions)
+    monkeypatch.setattr(S._client, "agent_policy_version", version)
+    open_one, closed_one = _Session(), _Session(gone=True)
+    S._listed_to.add(open_one)
+    S._listed_to.add(closed_one)
+    S._policy_cache[""] = (0.0, AP.AgentPolicy(level="run"))
+    try:
+        _run(S.watch_the_policy(every=0, rounds=4))
+        assert open_one.told == 1                                    # the first answer is the baseline; one change, once
+        assert "" not in S._policy_cache                             # the re-list reads the policy afresh
+        assert closed_one not in S._listed_to                        # a session that closed is let go
+    finally:
+        S._listed_to.discard(open_one)
+        S._listed_to.discard(closed_one)
+
+
+def test_a_session_handed_a_list_is_watched_and_one_watch_serves_them_all(monkeypatch):
+    async def version():
+        return "v1"
+    monkeypatch.setattr(S._client, "agent_policy_version", version)
+
+    class _Session:
+        async def send_tool_list_changed(self):
+            pass
+
+    async def go():
+        one, two = _Session(), _Session()
+        S.mcp._watch_the_policy_for(one)
+        first = S._watching
+        S.mcp._watch_the_policy_for(two)
+        assert S._watching is first and {one, two} <= set(S._listed_to)
+        first.cancel()
+        S._listed_to.discard(one)
+        S._listed_to.discard(two)
+    _run(go())

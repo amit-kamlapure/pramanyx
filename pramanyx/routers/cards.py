@@ -354,6 +354,48 @@ class CardRunValues(BaseModel):
     reader's own filters on the table it reads (`queries.narrowed`)."""
     values: Dict[str, Dict[str, Any]] = {}
     filters: List[Dict[str, Any]] = []
+    #: The board study — the dashboard's focus: values a reader chose by clicking a mark, each ``{"table", "column",
+    #: "value"}`` as `/cards/{id}/field` traced it. A card is cut by each it can be, and says which it could not.
+    focus: List[Dict[str, Any]] = []
+
+
+class CardField(BaseModel):
+    """The board study — a column a card's chart shows, as a click on it reports it."""
+    column: str
+
+
+@router.post("/cards/{card_id}/field")
+def card_field_route(card_id: str, body: CardField) -> dict:
+    """What a click on a card's chart stands for: the table and column its ``column`` is read from, traced off the
+    card's own statement — or why a click on it filters nothing (`dashboards.focus.field_of`)."""
+    from pramanyx.dashboards import focus as F
+    from pramanyx.db.connection import open_connection_for
+
+    card = get_card(card_id)
+    if not card:
+        raise HTTPException(status_code=404, detail="Card not found")
+    sql = _metric_statement(_governed_metric_of(card)) or card.sql or ""
+    try:
+        db = open_connection_for(card.connection_id)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Connection not found: {e}")
+    try:
+        dialect = str(getattr(db, "dialect", "") or "duckdb")
+        # the connection's columns, as the query page reads them (kept five minutes), so a column the statement does not
+        # name the table of — ``SELECT country … JOIN customers``, ``SELECT *`` — is still traced to the one it is
+        schema = None
+        try:
+            from pramanyx.db.schema_render import sqlglot_schema
+            from pramanyx.routers._shared import get_schema_cached
+            schema = sqlglot_schema(get_schema_cached(card.connection_id, db)) or None
+        except Exception as exc:  # noqa: BLE001 — traced on the statement alone, which says what it could not tell
+            tolerate(exc, "dashboard: a field was traced without the connection's columns", counter="dashboard.field_schema")
+    finally:
+        try:
+            db.close()
+        except Exception as exc:
+            tolerate(exc, "dashboard: connection close failed after a field trace", counter="dashboard.db_close")
+    return F.field_of(sql, body.column, dialect, schema)
 
 
 @router.post("/cards/{card_id}/run")
@@ -376,19 +418,24 @@ def run_card_route(card_id: str, preset: Optional[str] = None, start: Optional[s
     It is at equal age only when the range is final: a cut does not bound a cohort's outcomes to
     an as-of the way a metric's own measurement does, so before then part of any difference is
     age, and `previous` says so."""
+    from pramanyx.dashboards import focus as F
     from pramanyx.db.connection import open_connection_for
     from pramanyx.sql.executor import execute_guarded
 
     card = get_card(card_id)
     if not card:
         raise HTTPException(status_code=404, detail="Card not found")
+    try:
+        focus = F.parsed(body.focus) if body and body.focus else []
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     if not (card.sql or "").strip():
         return {"columns": [], "rows": [], "row_count": 0, "caveats": [], "error": None,
-                "value": None, "refresh": card.refresh.model_dump(), "scoped": None}
+                "value": None, "refresh": card.refresh.model_dump(), "scoped": None, "ran": None}
     spec = _card_range(card.connection_id, preset, start, end, workspace_id)
     metric = _governed_metric_of(card)
     if metric is not None and spec is not None:
-        measured = _metric_card_for_range(card, metric, spec, compare)
+        measured = _metric_card_for_range(card, metric, spec, compare, focus)
         if measured is not None:
             return measured
     try:
@@ -399,8 +446,13 @@ def run_card_route(card_id: str, preset: Optional[str] = None, start: Optional[s
     # was made went stale the moment the definition was corrected (the user, 2026-10-07: "no static
     # or stale metrics").
     base = _metric_statement(metric) or card.sql
-    sql, scoped, cut_on = base, None, None
     shown, unread = _shown_of(card)
+    focus_cut: Optional[dict] = None
+    if focus and not unread:
+        # the board study — every card, a person's own query too, cut the same way: each table it reads replaced by itself
+        # filtered to the value, schema-qualified or not; before the range is cut, so its comparison is cut alike
+        base, focus_cut = F.cut_statement(base, focus, str(getattr(db, "dialect", "") or "duckdb"))
+    sql, scoped, cut_on = base, None, None
     reads = (_reads_values(card) or bool(body and body.filters)) if shown is not None else False
     # A dashboard made from a file reads the whole file: a Briefing's "last month" is no question of it
     whole_file = shown is not None and isinstance(card.render, dict) and card.render.get("standing") is True
@@ -433,8 +485,9 @@ def run_card_route(card_id: str, preset: Optional[str] = None, start: Optional[s
     if shown is not None or unread:
         # Arc AP-7 — a card of a person's own query, shown as they asked
         try:
-            return _run_shown(db, card, shown, unread, sql, scoped, values=body.values if body else {},
-                              filters=body.filters if body else [])
+            out = _run_shown(db, card, shown, unread, sql, scoped, values=body.values if body else {},
+                             filters=body.filters if body else [], focused=bool(focus_cut and focus_cut.get("by")))
+            return {**out, **({"cut": focus_cut} if focus else {})}
         finally:
             try:
                 db.close()
@@ -457,7 +510,9 @@ def run_card_route(card_id: str, preset: Optional[str] = None, start: Optional[s
     # demo warehouse, 8.42M where the range held 2.78M. `value` is what a reader is shown.
     value = _scalar(result)
     # A range's figure is the range's; the tracked value and its history stay the standing card's.
-    card = _recorded(card, None if (scoped is not None and not scoped["standing"]) else value)
+    # a figure cut by a reader's focus is theirs, never the card's standing value
+    focused = bool(focus_cut and focus_cut.get("by"))
+    card = _recorded(card, None if (scoped is not None and not scoped["standing"]) or focused else value)
     return {
         "columns": result.columns or [],
         "rows": (result.rows or [])[:200],       # raw values so the client can detect a time series
@@ -469,7 +524,10 @@ def run_card_route(card_id: str, preset: Optional[str] = None, start: Optional[s
         "value": value,
         "refresh": card.refresh.model_dump(),
         "scoped": scoped,
+        # the board study — the statement as it ran: after the guards translated and hardened it, cut to the range
+        "ran": {"sql": getattr(result, "sql", None) or sql, "params": None},
         **({"previous": previous} if compare else {}),
+        **({"cut": focus_cut} if focus else {}),
     }
 
 
@@ -507,15 +565,15 @@ def _reads_values(card) -> bool:
 
 
 def _run_shown(db, card, shown, unread: str, sql: str, scoped, *, values: Optional[dict] = None,
-               filters: Optional[list] = None) -> dict:
+               filters: Optional[list] = None, focused: bool = False) -> dict:
     """Arc AP-7 — run a query card as it is shown: refused while a row policy narrows a table it reads (it reads the
     table straight), summed around the person's statement, stopped after the connection's time limit. Arc AP-8 — the
     dashboard's values it reads are bound by the engine, as the page holds them now; one it holds nothing for is said."""
     from pramanyx.dashboards import pieces, queries
 
-    def said(why: str) -> dict:
+    def said(why: str, ran: Optional[dict] = None) -> dict:
         return {"columns": [], "rows": [], "row_count": 0, "caveats": [], "error": why, "value": None,
-                "refresh": card.refresh.model_dump(), "scoped": scoped, "shown": None}
+                "refresh": card.refresh.model_dump(), "scoped": scoped, "shown": None, "ran": ran}
     if unread:
         return said(unread)
     params = None
@@ -549,14 +607,16 @@ def _run_shown(db, card, shown, unread: str, sql: str, scoped, *, values: Option
     if problems:
         return said(" ".join(problems))
     ran = queries.run(db, sql, shown, columns, seconds=seconds, params=params)
+    # the statement as it ran, its values bound beside it — never pasted in
+    as_ran = {"sql": ran.get("statement") or sql, "params": params}
     if ran["error"]:
-        return said(ran["error"])
+        return said(ran["error"], as_ran)
     value = ran["shown"].get("value") if ran["shown"]["as"] == "figure" else None
     # a figure read for one reader's values is theirs, never the card's standing value
-    card = _recorded(card, value if (scoped is None or scoped["standing"]) and params is None else None)
+    card = _recorded(card, value if (scoped is None or scoped["standing"]) and params is None and not focused else None)
     return {"columns": [c.get("name") for c in ran["columns"]], "rows": ran["rows"][:200], "row_count": len(ran["rows"]),
             "caveats": ran["caveats"], "error": None, "value": value, "refresh": card.refresh.model_dump(),
-            "scoped": scoped, "shown": ran["shown"], "duration_ms": ran["duration_ms"]}
+            "scoped": scoped, "shown": ran["shown"], "duration_ms": ran["duration_ms"], "ran": as_ran}
 
 
 def _governed_metric_of(card):
@@ -580,7 +640,7 @@ def _metric_statement(metric) -> str:
     return value_query(metric) or ""
 
 
-def _metric_card_for_range(card, metric, spec, compare: bool) -> Optional[dict]:
+def _metric_card_for_range(card, metric, spec, compare: bool, focus: Optional[list] = None) -> Optional[dict]:
     """A metric card read for a range the way the Briefing reads the metric — on its own dates, with
     its comparison at equal age — never cut on whatever date the profiler calls its table's main
     one. None when the metric's dates are not set, so the card falls back to the cut."""
@@ -591,14 +651,32 @@ def _metric_card_for_range(card, metric, spec, compare: bool) -> Optional[dict]:
 
     if not mt.declared(metric):
         return None
+    from pramanyx.dashboards import focus as F
+    from pramanyx.semantic.metric_statement import split_grain
+    # the board study — a metric is cut by one value of a column on the table its dates are on, measured as itself
+    by = part = None
+    cut = None
+    if focus:
+        grain = F.bare(split_grain(getattr(metric, "time_column", "") or "")[0] or ((getattr(metric, "tables", None) or [""])[0]))
+        usable = [f for f in focus if F.bare(f.table) == grain]
+        first = usable[0] if usable else None
+        if first is not None:
+            by, part = first.column, str(first.value)
+        cut = F.verdict([F.words(first)] if first else [],
+                        [f"Not cut by {F.words(f)}: the metric is measured on {grain}, not {F.bare(f.table)}."
+                         for f in focus if F.bare(f.table) != grain]
+                        + [f"Not cut by {F.words(f)}: a metric is cut by one value at a time." for f in usable[1:]])
+    statement = None
     try:
         with period_brief.connection_runner(card.connection_id) as (run_sql, dialect):
-            rows, why = mt.run_measure(metric, spec.windows(), run_sql, dialect=dialect)
+            rows, why = mt.run_measure(metric, spec.windows(), run_sql, dialect=dialect, by=by, part=part)
+            # the metric's own measurement, as it ran — built again, never run again
+            statement, _ = mt.measure_sql(metric, spec.windows(), dialect=dialect, by=by, part=part)
     except Exception as exc:  # noqa: BLE001 — the cut below still answers
         tolerate(exc, "a metric card could not be measured for its range; it is cut instead",
                  counter="dashboard.card_measure")
         return None
-    got = {r["window"]: r for r in rows}
+    got = {r["window"]: r for r in rows if by is None or str(r.get("group")) == str(part)}
     value = None if why else read_value(got.get("current"))
     words = phrases(spec)
     out = {"columns": [metric.name], "rows": [[value]] if value is not None else [],
@@ -606,7 +684,9 @@ def _metric_card_for_range(card, metric, spec, compare: bool) -> Optional[dict]:
            "value": value, "refresh": card.refresh.model_dump(),
            "scoped": {"covers": words["covers"], "standing": False, "why": "" if value is not None else
                       (why or "its data has no rows in this range"), "grain": metric.time_column},
-           "metric": {"name": metric.name, "version": metric.version, "status": metric.status}}
+           "metric": {"name": metric.name, "version": metric.version, "status": metric.status},
+           "ran": {"sql": statement, "params": None} if statement else None,
+           **({"cut": cut} if focus else {})}
     if compare:
         pv = None if why else read_value(got.get("previous"))
         out["previous"] = {"covers": words["compared_with"], "word": compared_word(spec),

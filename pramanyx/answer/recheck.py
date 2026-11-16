@@ -520,6 +520,10 @@ def run_rechecks_daily(*, force: bool = False, now: Optional[datetime] = None,
     if _last_run_day == today and not force:
         return {"skipped": "already ran today"}
     _last_run_day = today
+    # Once a UTC day across restarts too (`kernel.once_a_day`): a restart re-ran every answer's query.
+    from pramanyx.kernel.once_a_day import first_today
+    if not force and not first_today("answer_rechecks", today):
+        return {"skipped": "already ran today"}
     from pramanyx.db.history import recent_chat_answers
     since = (now - timedelta(days=WINDOW_DAYS)).isoformat()
     due = []

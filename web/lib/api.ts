@@ -982,6 +982,11 @@ export interface CatalogEntry {
   conn_type: string;
   builtin: boolean;
   schemas: CatalogSchemaInfo[];
+  /** How this catalog was read for this tree (2026-11-16): `now`; `failed` (it could not be looked at); `earlier`
+   *  (still reading when the tree answered, so what it held at `read_at`); `reading` (still reading, never read
+   *  before — no schemas, and not because it has none). Absent from a server older than the field. */
+  read?: "now" | "failed" | "earlier" | "reading";
+  read_at?: string;
 }
 
 export interface CatalogSection {
@@ -994,14 +999,26 @@ export interface CatalogTree {
   sections: CatalogSection[];
 }
 
+/** Tree requests under way, by address: an identical one joins it (2026-11-16). The Catalog asks twice as it opens
+ *  (before and after it knows the workspace, often the same address), and a browser holds a second request for an
+ *  address until the first has answered — so a tree that takes its full wait took twice that to show. */
+const treesUnderWay = new Map<string, Promise<CatalogTree>>();
+
 export async function getCatalogTree(workspaceId?: string): Promise<CatalogTree> {
   // The workspace the reader stands in, unless the caller names one. The header does the same
   // for the server, but the parameter is what the request log and a test can see.
   const ws = workspaceId || getActiveWorkspace();
   const qs = ws ? `?workspace_id=${encodeURIComponent(ws)}` : "";
-  const res = await fetch(`${getApiBase()}/catalog/tree${qs}`);
-  if (!res.ok) throw new Error("Failed to fetch catalog tree");
-  return res.json();
+  const url = `${getApiBase()}/catalog/tree${qs}`;
+  const underWay = treesUnderWay.get(url);
+  if (underWay) return underWay;
+  const asked = (async () => {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("Failed to fetch catalog tree");
+    return res.json() as Promise<CatalogTree>;
+  })().finally(() => treesUnderWay.delete(url));
+  treesUnderWay.set(url, asked);
+  return asked;
 }
 
 export async function refreshSchemaCache(id: string): Promise<void> {
@@ -2893,6 +2910,13 @@ export interface CardRunResult {
    *  phrase. `equal_age` is false until the range is final — part of any difference is then
    *  age, not a move. `value` null says why; it is never read as zero. */
   previous?: CardRunPrevious | null;
+  /** The board study — the statement as it ran: after the guards translated and hardened it, cut to the range, the
+   *  shaping around a person's own query; its values bound beside it in `params`, never pasted in. Null when it did
+   *  not get as far as running. */
+  ran?: { sql: string; params: Record<string, unknown> | null } | null;
+  /** The board study — present when the run was asked with the dashboard's focus: whether it was cut by every chosen
+   *  value (`by` what), and why not by the rest — a card that cannot be cut says so in its own place. */
+  cut?: { applied: boolean; by: string[]; why: string } | null;
   /** Arc AP-7 — a card of a person's own query, as it is shown: its figure, its table or its chart's points. */
   shown?: QueryShaped | null;
   duration_ms?: number;
@@ -3206,7 +3230,9 @@ export async function saveVizConfig(
 /** Recompute a card's value now (guard-on-read). Returns the current result + the rolling
  *  last/prev value for a delta. */
 export async function runCard(cardId: string, range?: BriefingRange | null,
-  opts: { compare?: boolean; values?: Record<string, { kind: string; value: unknown }>; filters?: QueryNarrowing[] } = {}): Promise<CardRunResult> {
+  opts: { compare?: boolean; values?: Record<string, { kind: string; value: unknown }>; filters?: QueryNarrowing[];
+    /** The board study — the dashboard's focus this card is asked with: each cuts it, or `cut` says why not. */
+    focus?: { table: string; column: string; value: string | number | boolean }[] } = {}): Promise<CardRunResult> {
   const q = new URLSearchParams();
   if (range) {
     if (range.preset === "custom") { if (range.start) q.set("start", range.start); if (range.end) q.set("end", range.end); }
@@ -3219,10 +3245,22 @@ export async function runCard(cardId: string, range?: BriefingRange | null,
   const url = `${getApiBase()}/cards/${encodeURIComponent(cardId)}/run`;
   const qs = q.toString();
   // Arc AP-8 — a query that reads the dashboard's values is sent them; every other card is run as it always was
-  const res = await fetch(qs ? `${url}?${qs}` : url, opts.values || opts.filters
-    ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ values: opts.values ?? {}, filters: opts.filters ?? [] }) }
+  const res = await fetch(qs ? `${url}?${qs}` : url, opts.values || opts.filters || opts.focus?.length
+    ? { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ values: opts.values ?? {}, filters: opts.filters ?? [], focus: opts.focus ?? [] }) }
     : { method: "POST" });
   if (!res.ok) throw new Error("Failed to refresh dashboard card");
+  return res.json();
+}
+
+/** The board study — what a click on a card's chart stands for: the table and column its `column` is read from, traced
+ *  off the card's own statement — or why a click on it filters nothing. */
+export async function traceField(cardId: string, column: string):
+  Promise<{ table: string; column: string; confidence: string } | { refused: string }> {
+  const res = await fetch(`${getApiBase()}/cards/${encodeURIComponent(cardId)}/field`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ column }),
+  });
+  if (!res.ok) throw new Error("What the click stands for could not be read");
   return res.json();
 }
 
@@ -5058,6 +5096,8 @@ export interface AgentPolicyView {
   saved: AgentPolicy | null;
   environment: { level: string | null; connections: string[] | null; tools: string[] | null };
   levels: string[];
+  /** The level an organisation that saved nothing gets — `act` since 2026-11-16. Absent from an older server. */
+  default?: string;
 }
 
 export async function getAgentPolicy(): Promise<AgentPolicyView> {
@@ -7129,10 +7169,21 @@ export type ChainProposal = {
   dry_run?: Record<string, unknown>;
 };
 
+/** The IANA clock this browser is in, or "" when it cannot say. */
+export function clockHere(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+  } catch {
+    return "";
+  }
+}
+
+/** 2026-11-16 — the browser's clock goes with the sentence: "at nine" is read in it when the person named no zone
+ *  and set none of their own (`automations/propose.py`, `the_clock`). */
 export async function proposeAutomation(outcome: string, conn_id: string): Promise<ChainProposal> {
   const res = await fetch(`${getApiBase()}/automations/propose`, {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ outcome, conn_id }),
+    body: JSON.stringify({ outcome, conn_id, clock_here: clockHere() }),
   });
   if (!res.ok) throw new Error("Could not reach the chain proposer");
   return res.json();

@@ -25,6 +25,7 @@ import { inferChartType, HINT_TO_TYPE, type ChartType } from "@/components/chart
 import { applyNames, type SeriesNames } from "@/components/charts/vega/names";
 import { periodsSpanned, timeBarFit } from "@/components/charts/vega/bandFit";
 import { dateAxis, utcScale } from "@/components/charts/vega/timeAxis";
+import { emphasisOpacity as emphasisOn } from "@/components/charts/vega/emphasis";
 
 /** The four post-processing ops the edit panel offers, mirroring pramanyx/tools/postproc.py. */
 export type TransformOp = "pop" | "contribution" | "rolling" | "cumulative";
@@ -535,10 +536,13 @@ function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
       spec: {
         ...base,
         mark: { type: "arc", innerRadius: Math.round(pieH * 0.28), tooltip: true },
+        // a slice answers a click as a bar does, and a chosen slice stays lit while the rest recede
+        params: [SELECT_PARAM(band)],
         encoding: {
           theta: { field: measure, type: "quantitative", stack: true },
           color: { field: band, type: "nominal", sort: null, legend: { orient: "right", direction: "vertical" } },
           order: { field: measure, type: "quantitative", sort: "descending" },
+          opacity: emphasisOn(exhibit?.emphasis, band) ?? SELECT_OPACITY,
         },
       },
     };
@@ -607,7 +611,7 @@ function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
         layer: [
           { mark: { type: "line" } },
           { mark: { type: "point", tooltip: true }, params: [SELECT_PARAM(x)],
-            encoding: { opacity: SELECT_OPACITY } },
+            encoding: { opacity: emphasisOn(exhibit?.emphasis, x, xIsDate) ?? SELECT_OPACITY } },
         ],
         encoding: enc,
       },
@@ -763,10 +767,8 @@ function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
 
   /** Emphasis — the question's subjects stay, everything else recedes. */
   function emphasisOpacity(): Record<string, unknown> | null {
-    const subjects = (exhibit?.emphasis ?? []).filter(Boolean);
-    if (!subjects.length || !band) return null;
-    return { condition: { test: `indexof(${JSON.stringify(subjects)}, datum['${band}']) >= 0`, value: 1 },
-             value: 0.32 };
+    // one test for every kind (`vega/emphasis.ts`): a date band compares as its day, any other value as text
+    return emphasisOn(exhibit?.emphasis, band, !!dateCol && band === dateCol);
   }
 
   const layers: Record<string, unknown>[] = [

@@ -67,7 +67,8 @@ _CONDITION_REQUIRED: dict[str, tuple[str, ...]] = {
 class Condition(BaseModel):
     """One precondition on an automation firing. Combinable via ``Automation.condition_logic``.
 
-    ``schedule`` is a cron expression — the *only* condition monitors and briefs have today.
+    ``schedule`` is a cron expression — the *only* condition monitors and briefs have today — or, in the same
+    ``cron`` field, a RECURRENCE for what a cron cannot say (`automations.recurrence`, 2026-11-15).
     ``metric`` delegates to an existing :class:`~pramanyx.monitors.models.Monitor` (by id) so the six
     already-tested alert conditions become available to any effect, not just to an alert.
     ``source_change`` fires when a table's cheap source version advanced (A3). ``entity_appears``
@@ -102,12 +103,26 @@ class Condition(BaseModel):
             raise ValueError(
                 f"condition kind '{self.kind}' requires config key(s): {', '.join(missing)}"
             )
+        if self.kind == "schedule":
+            # 2026-11-15 — the expression may be a RECURRENCE (`automations.recurrence`: once, every N from a start, the first
+            # Monday, five times). One that cannot be read is refused here, with its sentence, like every other
+            # malformed trigger: it would otherwise sit looking schedulable and never run.
+            from pramanyx.automations.recurrence import is_recurrence, parse
+            if is_recurrence(self.cron):
+                parse(self.cron.strip())          # RecurrenceError is a ValueError: the refusal is its own words
         return self
 
     # Typed accessors — call sites never reach into `config` by hand.
     @property
     def cron(self) -> str:
         return str(self.config.get("cron", ""))
+
+    @property
+    def when(self) -> str:
+        """A schedule's expression as one line a reader can take in: a cron as written, a recurrence in words — its two
+        lines put into a run's reason would read as noise, and break the line."""
+        from pramanyx.automations.recurrence import is_recurrence, said
+        return (said(self.cron) or self.cron.replace("\n", " ")) if is_recurrence(self.cron) else self.cron
 
     @property
     def monitor_id(self) -> str:
@@ -120,7 +135,7 @@ class Condition(BaseModel):
     def describe(self) -> str:
         """A short human string for run history — why this condition did or didn't fire."""
         if self.kind == "schedule":
-            return f"schedule({self.cron})"
+            return f"schedule({self.when})"
         if self.kind == "metric":
             return f"metric({self.monitor_id})"
         if self.kind == "webhook":

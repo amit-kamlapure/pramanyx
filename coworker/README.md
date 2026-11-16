@@ -29,6 +29,13 @@ tools taken out, under the shell's MIT licence.
 - **Everything that reports to the shell's maker**, and the feedback buttons that would feed it.
 - **The shell's own account**: its sign-in, its account settings, its session-log export and "Feedback" entry.
   A person here is who Pramanyx says they are.
+- **The shell's own scheduler**: its store of timed reminders, its page, its clock marks on a conversation, and the
+  four tools that let an agent make one. There is one scheduler and it is Pramanyx's. Measured side by side
+  (2026-11-15): the shell's delivers a sentence into a conversation at a time, with no trigger but the clock, no
+  record of what the run produced, no owner, and it stops when this process does; Pramanyx's fires on a clock or on
+  the data, runs governed steps, keeps every run, retries, and is the list every other surface shows. It held no
+  schedules when it was turned off. What it could say about time that Pramanyx's could not — once, every N from a
+  start, the first Monday, five times — Pramanyx's now says (`pramanyx/automations/recurrence.py`).
 
 The overlay is passed on the command line, so it outranks the Settings page: a row turned off here cannot be
 turned back on from the interface.
@@ -98,8 +105,24 @@ turned back on from the interface.
   the first screen's wording, the app's dark palette, small corners, and a plain ring where the shell draws its
   animal while an answer is worked on.
 - **The sidebar.** New conversation, Agents, Schedules, and conversations in one newest-first list. Agents opens a
-  page of a person's own agents; asking one begins a new conversation. Schedules is the shell's own scheduled
-  runs, reworded. The one-list view is the shell's own option, chosen once on a first visit.
+  page of a person's own agents; asking one begins a new conversation. Schedules opens the app's own page of
+  schedules and automations (`/automations`), in a frame: the one list, where a person makes a schedule, changes
+  when it runs, mutes it, runs it now and reads what each run did. The one-list view is the shell's own option,
+  chosen once on a first visit.
+- **Anything on a schedule, from a sentence** (2026-11-16). Asked to have something happen on a schedule — a
+  question asked again, a summary, a Slack post, an email; every Monday, or once in five minutes — the agent passes
+  the person's own words to `schedule`, and the platform's own designer (the one behind the Automations page's
+  sentence box, `automations/propose.py`) drafts the whole chain from what the install has: when it runs, what it
+  does, where it goes. The same checks a save runs refuse a draft that could not be saved; a draft that left a
+  choice open (a Slack channel the person did not name) is not made, and the agent asks. What is made is one of
+  Pramanyx's automations: it starts at its first scheduled time, runs whether or not the coworker is open, is
+  listed under Schedules, and opens on the canvas, where a person can change it by hand. Under the turn that made
+  it is a card that draws no copy: it reads where the schedule stands each time it is drawn, and **shows each run's
+  result here** — "deliver it here" needs no sending step. A Slack post a model drafted waits for a person on each
+  run until one says "always allow"; an email from a new schedule is held at departure while it is on probation.
+  Its times are read in a zone the person named, else their own saved clock, else their browser's (the shell tells
+  the agent which, on every message), else the organisation's, else UTC. Setting one up is an act: the organisation's
+  agent policy allows it by default (since 2026-11-16; `run` before), and an admin can lower it.
 - **The first screen.** The mark on a tile over a large headline, then the question box. Under it: questions worth
   asking of a chosen connection as plain lines, and two cards — the questions asked lately (each with its
   connection and how long ago) and a person's own agents. Each row writes a question into the box; nothing is
@@ -148,9 +171,30 @@ turned back on from the interface.
   that step, where it would otherwise open a run of its own. The words stay here: the system prompt, what the
   agent was given and what it said are in the shell's own log, and each event says where (`shell_session`, `seq`).
   `node --test plugins/home/test/trace.test.mjs` covers what is sent and what is not.
+- **Helpers, started by need.** In Agent mode the agent works alone unless the investigation needs more: when it
+  is wide (three or more questions that do not depend on each other), long (two or more whys, each a deep
+  analysis) or across sources (a database and a spreadsheet, or several systems), it starts helpers — the shell's
+  sub-agents — all at once, one question each, under Quick for a question and Agent for a why. A helper answers its
+  brief on one connection and starts none of its own. **Held:** a helper of a held conversation is held to the same
+  connection, whatever folder it is started in, and a held conversation cannot start one in another connection's
+  folder. **All sources**, a workspace beside the connections, is held to none: its instructions list each source and
+  its folder, a helper must be started in a source's folder, and is then held to that source. The shell makes a
+  helper in its parent's folder and moves it a moment later, so a hold may tighten when a conversation moves into a
+  connection's folder, and never loosens or changes. **One question, one trace:** a
+  helper's tool calls and model calls are written into the question's trace, inside the call that started it, which
+  lasts until the helper finishes; the turns its reports start join the same trace, and the question ends when the
+  last helper has reported. **One question, one output** (the user, 2026-11-16): the main agent orchestrates its
+  helpers, gathers their reports and writes the one answer. The reader sees the question, then "Worked by N helpers"
+  — one folded row per helper, opening to what it was answered (each answer's headline, SQL and rows; the host
+  half keeps them as they came back, `/pramanyx-helper`) — and then the main agent's close. No helper's answer is a
+  card of its own (no follow-ups, what stands out or Right/Wrong per part), nor is any check the main agent ran
+  inside the question; the report notices, the "Waiting" and "Done" replies and the turns that held them are not
+  shown. The close is the run's fullest reply that is not bookkeeping, shown wherever in its turn it was said.
+  `node --test plugins/home/test/*.test.mjs` covers the record and the hold.
 - **A read-only relay**, `/pramanyx/…` on the shell's own server, so the page can read Pramanyx without the API's
-  allowed origins being changed. It relays five paths (`/connections`, `/suggestions`, `/agents/custom`,
-  `/investigations`, `/sheets`), GET and HEAD only, and answers 404 for anything else.
+  allowed origins being changed. It relays the paths the page reads (`/connections`, `/suggestions`,
+  `/agents/custom`, `/investigations`, `/sheets`, an answer's export, what was sent from an email draft, and where
+  one schedule stands), GET and HEAD only, and answers 404 for anything else.
 
 ## Run it
 
@@ -171,8 +215,7 @@ admin allows "Let the coworker ask its models through Pramanyx" in Settings ▸ 
   shortened form of the mockup (€17.86m) needs a column's unit, which is not carried over MCP.
 - The claim that puts the platform's work inside a turn's trace is matched on the question and the connection,
   because a tool call carries nothing else. It covers `ask`; a custom agent's answer and a deep analysis are
-  still recorded as runs of their own. A subagent's turns are traces of their own, not nested under the turn
-  that started them. The Trajectory tab in the coworker still shows a call to the platform as one row.
+  still recorded as runs of their own. The Trajectory tab in the coworker still shows a call to the platform as one row.
 - A deep analysis is one named row that opens to what came back. Its own steps — baseline, decomposition, what
   each concluded — are not drawn, and it has no card.
 - A Pramanyx tool added since this was written, and each custom agent's, is named from the end of the first turn
@@ -221,8 +264,21 @@ admin allows "Let the coworker ask its models through Pramanyx" in Settings ▸ 
   rename, archive and delete); pinned items.
 - Both modes ask as the narrator role. Quick does not use the fast one: a mode has no model of its own here yet.
   Quick's voice paragraphs are a copy of Agent's in `profile.patch.yml`; a change to one is made in both.
-- **A schedule made here spends Pramanyx model calls unattended**, and Pramanyx's own setting for scheduled model
-  work does not see it: the run arrives as an ordinary question over MCP.
+- **A helpers question's one output is the agent's words, checked.** Each helper's answers are the platform's; the
+  close that puts them together is written by the main agent. When the question ends, its figures are held against
+  the rows of every answer the question gathered — the helpers' and the main agent's own checks — by the departure
+  gate's own reading (`POST /coworker/answer-check`, `pramanyx/govern/gathered.py`), recorded as a step of the
+  question's trace, and said in one line under it: every figure found, or each one not found with the clause it is
+  in. A bare whole number under 1,000 is not checked, as the gate does not check one. Nothing is held: the answer is
+  already shown. It has no Right/Wrong of its own. A helper's answers are kept on this machine (`$DSH_HOME/helpers`) and are not in Pramanyx's store.
+- **A schedule's result is shown, not sent, here.** The shell's scheduler put each run into a chat as a new turn,
+  which the agent then answered. Here a run's result appears in the card under the request the next time the
+  conversation is drawn: nothing starts a turn or notifies the person when it lands. Only the last three runs are
+  shown. A request needing a step the platform has none of — the news from the web — is refused with the reason.
+- **A schedule made here spends model calls unattended.** It is a person's own request, so the organisation's
+  setting for model work nobody asked for does not apply to it; nothing else caps it but the usage limits.
+- The Schedules page opens on the connection last chosen on the first screen, and the frame takes the app's own
+  light or dark, not the coworker's.
 - The door relays to a provider on the chat-completions wire. An organisation whose roles are bound to one that
   is not (Anthropic's own API today) is told so by name, and the coworker cannot answer until a role is bound to
   one that is.

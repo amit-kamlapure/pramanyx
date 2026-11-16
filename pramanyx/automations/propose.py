@@ -110,7 +110,80 @@ Rules that decide whether your proposal is accepted at all:
   `notes`. A partial chain that silently drops half the request is worse than a refusal.
 
 Prefer the smallest chain that does what was asked. Name it in the user's words.
+
+A QUESTION a step asks (an `investigate` step's `question`) is what the person wants found, for which
+period — as they would ask it: "Top 5 product categories by revenue yesterday". Never tell the analysis
+how to report: no "state the date range or source you used", no "explain", no caveats to add, no format.
+Keep a period as the person said it — "yesterday", "last week", "this month": each run reads it afresh
+from its own day. Never turn it into a calendar date the person did not say; a daily schedule asking
+about one fixed date would answer the same day forever.
+Each answer keeps its own record of how it was answered, shown beside it, and the platform says itself
+whether a figure may still change.
+
+WHEN IT RUNS — a `schedule` trigger's `cron` holds one of two things:
+- a five-field cron for a rhythm: "0 9 * * 1" is Mondays at 09:00, "0 8 * * 1-5" weekdays at 08:00,
+  "*/15 * * * *" every 15 minutes;
+- for what a cron cannot say, a recurrence of two lines — a start, then the rule — written with a real
+  newline between them. Once: "DTSTART:20261116T150000\nRRULE:FREQ=DAILY;COUNT=1". Every 90 minutes
+  from a start: "DTSTART:20261116T090000\nRRULE:FREQ=MINUTELY;INTERVAL=90". Every second Monday:
+  "DTSTART:20261116T090000\nRRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO". The first Monday of each month,
+  six times: "DTSTART:20261207T090000\nRRULE:FREQ=MONTHLY;BYDAY=1MO;COUNT=6".
+Times are the person's own clock, given below with the time NOW: "in 5 minutes", "tomorrow at three" and
+"tonight" are worked out from it, and a one-off is a recurrence with COUNT=1. Never write a start that has
+already passed.
 """
+
+
+def _readable_zone(name: str) -> str:
+    from zoneinfo import ZoneInfo
+    name = (name or "").strip()
+    if not name:
+        return ""
+    try:
+        ZoneInfo(name)
+        return name
+    except Exception:  # noqa: BLE001 — a zone this install cannot read is passed over for the next clock, never guessed
+        return ""
+
+
+def the_clock(named: str = "", here: str = "") -> str:
+    """The clock a sentence's times are read in (2026-11-16; the user: "Yes, my clock"): the zone the person named;
+    else the clock they chose for themselves; else the clock where they are (their browser's, which the app sends and
+    the coworker is told); else the organisation's; else "" — UTC, the platform's default. A zone this install cannot
+    read is passed over."""
+    from pramanyx.db.user_prefs import preferred_timezone
+    for zone in (named, preferred_timezone(), here):
+        if (readable := _readable_zone(zone)):
+            return readable
+    try:
+        from pramanyx.orgsettings.store import load_org_settings
+        return _readable_zone(str(load_org_settings().timezone or ""))
+    except Exception as exc:  # noqa: BLE001 — the organisation's settings unreadable: UTC, as before any were kept
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "the organisation's clock could not be read; a sentence's times are read in UTC",
+                 counter="automations.propose.clock")
+        return ""
+
+
+def _time_section(clock: str) -> str:
+    """What time it is, in the clock the draft's times are read in: a request said as "in five minutes" or "tomorrow
+    at three" is worked out from it (2026-11-16 — the proposer was never told the time, so it could draft only a
+    rhythm)."""
+    from zoneinfo import ZoneInfo
+    now_utc = datetime.now(timezone.utc)
+    try:
+        here = now_utc.astimezone(ZoneInfo(clock)) if clock else now_utc
+    except Exception:  # noqa: BLE001 — an unknown clock is read as UTC, and said so below
+        here, clock = now_utc, ""
+    return (f"NOW: {here:%A %Y-%m-%d %H:%M} in {clock or 'UTC'} (that is {now_utc:%Y-%m-%d %H:%M} UTC). "
+            f"Write every time in {clock or 'UTC'}.")
+
+
+#: Said to the proposer when the request comes from a conversation (the coworker), whose card shows each run.
+_FROM_A_CONVERSATION = (
+    "THE PERSON ASKED IN A CONVERSATION. What each run finds is shown in that conversation, under the request: "
+    "\"here\", \"to me\", \"show me\" and \"let me know\" need no sending step — do not add one. Add a Slack "
+    "post or an email only when the request names one.")
 
 
 def _deployment_section(conn_id: str) -> str:
@@ -345,17 +418,25 @@ def _first_run(conditions: list, now: datetime, timezone: str = "") -> str:
     return min(times).strftime("%Y-%m-%dT%H:%M:%SZ") if times else ""
 
 
-def propose_chain(outcome: str, *, conn_id: str, provider: Any = None) -> ChainProposal:
+def propose_chain(outcome: str, *, conn_id: str, provider: Any = None, timezone_name: str = "",
+                  clock_here: str = "", from_conversation: bool = False) -> ChainProposal:
     """Draft a chain for ``outcome``, validate it, dry-run it. Never saves.
 
     ``provider`` is injectable so the suite can exercise every path here without spending a
     token — this repo has already paid once for tests that reached a live model.
-    """
+
+    ``timezone_name`` is a clock the person named; ``clock_here`` the clock where they are (the browser's). Which one
+    the times are read in is `the_clock`'s order. ``from_conversation`` says the request came from a
+    conversation, which shows each run itself (2026-11-16: a sentence is THE way to schedule anything — the user,
+    after seeing the agent shell's scheduler take "deliver me AI news in the next 5 minutes here")."""
     from pramanyx.automations.models import Automation
 
     if not (outcome or "").strip():
         return ChainProposal(verdict="refused", reason="describe what the chain should do")
 
+    # SP-13 — the clock the draft's times are read in (`the_clock`); "" keeps UTC, the platform's default and every
+    # pre-SP-13 chain's clock.
+    draft_tz = the_clock(timezone_name, clock_here)
     try:
         prov = provider
         if prov is None:
@@ -364,9 +445,9 @@ def propose_chain(outcome: str, *, conn_id: str, provider: Any = None) -> ChainP
             # keys — and the fast tier proposes chains that do not validate.
             from pramanyx.llm.provider import get_provider
             prov = get_provider("coder")
-        drafted = prov.complete(system=_SYS + "\n\n" + _deployment_section(conn_id),
-                                user=outcome, response_model=ProposedChain,
-                                temperature=0.1)
+        system = "\n\n".join([_SYS, _time_section(draft_tz), *([_FROM_A_CONVERSATION] if from_conversation else []),
+                               _deployment_section(conn_id)])
+        drafted = prov.complete(system=system, user=outcome, response_model=ProposedChain, temperature=0.1)
     except Exception as exc:
         logger.warning("chain proposer failed: %s", exc)
         return ChainProposal(
@@ -403,11 +484,6 @@ def propose_chain(outcome: str, *, conn_id: str, provider: Any = None) -> ChainP
     opened = _open_unnamed_choices(drafted, outcome)
     held = _hold_drafted_writes(drafted)
 
-    # SP-13 — the caller's chosen clock, read from the settings registry. A draft
-    # spoken as "9am" lands in the reader's own time; "" keeps UTC, the platform's
-    # default and every pre-SP-13 chain's clock.
-    from pramanyx.db.user_prefs import preferred_timezone
-    draft_tz = preferred_timezone()
     payload = {
         "conn_id": conn_id,
         "name": drafted.name or "Proposed chain",

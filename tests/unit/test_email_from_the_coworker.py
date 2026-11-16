@@ -21,6 +21,11 @@ def door(monkeypatch):
     class _L:
         def emit(self, kind, payload, **kw):
             journal.append((kind, payload))
+
+        def events(self, *, kind=None, limit=200, org_id=None, **kw):       # newest first, as the journal reads
+            rows = [{"seq": i, "at": f"2026-11-15T15:{40 + i}:00+00:00", "kind": k, "payload": p}
+                    for i, (k, p) in enumerate(journal) if kind in (None, k)]
+            return rows[::-1][:limit]
     monkeypatch.setattr("pramanyx.kernel.ledger.Ledger.default", staticmethod(lambda: _L()))
     monkeypatch.setenv("PRAMANYX_LOCAL_USER", "ana@example.com")
     from pramanyx.routers import email
@@ -36,7 +41,7 @@ def test_a_person_sends_and_is_told_and_it_is_journaled(door):
     assert sent == [("ben@example.com", "GMV", "Mytheresa leads.")]
     assert [p for k, p in journal if k == "email.sent"] == [{"by": "user:ana@example.com", "to": "ben@example.com",
                                                              "subject": "GMV", "sent": True, "said": "sent to ben@example.com",
-                                                             "attached": ""}]
+                                                             "attached": "", "draft": ""}]
 
 
 def test_an_agent_cannot_send(door):
@@ -49,7 +54,11 @@ def test_the_coworker_only_drafts():
     from pramanyx.mcp.policy import TOOL_LEVELS
     from pramanyx.mcp.server import draft_email
     got = asyncio.run(draft_email(to=" ben@example.com ", subject="GMV", body="Mytheresa leads."))
-    assert got["draft"] == {"to": "ben@example.com", "subject": "GMV", "body": "Mytheresa leads."}
+    draft = dict(got["draft"])
+    name = draft.pop("id")                      # the draft's own name: what its send is journaled under
+    assert len(name) == 16 and int(name, 16) >= 0
+    assert draft == {"to": "ben@example.com", "subject": "GMV", "body": "Mytheresa leads."}
+    assert asyncio.run(draft_email(body="Another."))["draft"]["id"] != name
     assert "Nothing has been sent" in got["note"] and TOOL_LEVELS["draft_email"] == "read"
 
 
@@ -179,3 +188,43 @@ def test_a_scheduled_email_step_attaches_its_chains_analysis(monkeypatch):
     auto.effects[0].config["attach_investigation"] = "gone"
     out = engine._dispatch_email(auto.effects[0], auto)
     assert out.status == "dispatch_error" and out.message == "not sent: missing"
+
+
+
+# ── a sent draft says so whenever it is opened (found live, 2026-11-15: sent minutes ago, shown as open) ─────────
+
+def test_a_send_is_journaled_under_its_drafts_name_and_read_back(door):
+    client, sent, journal = door
+    client.post("/email/send", json={"to": "ben@example.com", "subject": "GMV", "body": "x", "draft": "d-abc123"})
+    assert [p["draft"] for k, p in journal if k == "email.sent"] == ["d-abc123"]
+    got = client.get("/email/sent", params={"draft": "d-abc123"}).json()["sends"]
+    assert [(s["to"], s["subject"], s["attached"]) for s in got] == [("ben@example.com", "GMV", "")] and got[0]["at"]
+    assert client.get("/email/sent", params={"draft": "d-other"}).json() == {"sends": []}
+    assert client.get("/email/sent").json() == {"sends": []}
+
+
+def test_a_refused_send_is_not_a_send_and_another_persons_is_theirs(door, monkeypatch):
+    client, sent, journal = door
+    client.post("/email/send", json={"to": "ben@example.com", "body": "x", "draft": "d-1"})
+    monkeypatch.setattr("pramanyx.automations.email.send_email", lambda *a, **k: (False, "Gmail refused the email (403)"))
+    client.post("/email/send", json={"to": "cy@example.com", "body": "x", "draft": "d-2"})
+    assert client.get("/email/sent", params={"draft": "d-2"}).json() == {"sends": []}
+    assert len(client.get("/email/sent", params={"draft": "d-1"}).json()["sends"]) == 1
+    monkeypatch.setenv("PRAMANYX_LOCAL_USER", "eve@example.com")
+    assert client.get("/email/sent", params={"draft": "d-1"}).json() == {"sends": []}
+
+
+def test_a_send_from_before_drafts_were_named_is_found_by_its_subject_and_only_then(door):
+    client, sent, journal = door
+    journal.append(("email.sent", {"by": "user:ana@example.com", "to": "ben@example.com", "subject": "GMV",
+                                   "sent": True, "said": "sent", "attached": ""}))     # as journaled before the name
+    client.post("/email/send", json={"to": "cy@example.com", "subject": "GMV", "body": "x", "draft": "d-new"})
+    unnamed = client.get("/email/sent", params={"draft": "h-zzz", "subject": "GMV"}).json()["sends"]
+    assert [s["to"] for s in unnamed] == ["ben@example.com"]              # never the named draft's send
+    assert [s["to"] for s in client.get("/email/sent", params={"draft": "d-new"}).json()["sends"]] == ["cy@example.com"]
+
+
+def test_a_drafts_name_is_a_name_and_nothing_else(door):
+    client, sent, _ = door
+    refused = client.post("/email/send", json={"to": "ben@example.com", "body": "x", "draft": "../../etc passwd"})
+    assert refused.status_code == 422 and sent == []

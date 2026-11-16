@@ -202,6 +202,7 @@ def test_the_daily_reading_reads_the_parts_of_a_connection_with_no_time_table(mo
     from pramanyx.settling import sampler
     seen: list[str] = []
     monkeypatch.setattr(sampler, "_last_sample_day", "")
+    monkeypatch.setattr("pramanyx.kernel.once_a_day.first_today", lambda job, day: True)   # a day no one has claimed
     monkeypatch.setattr("pramanyx.db.registry.list_connections", lambda: [{"id": "c1"}])
     monkeypatch.setattr(sampler, "time_tables", lambda cid: [])
     monkeypatch.setattr(P, "read_connection", lambda cid, today=None: seen.append(cid) or {"metrics": [], "statements": 0})

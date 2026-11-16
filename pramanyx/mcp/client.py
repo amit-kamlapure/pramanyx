@@ -551,6 +551,11 @@ class PramanyxClient:
     async def agent_policy(self) -> dict:
         return await self._get("/org-settings/agent-policy")
 
+    async def agent_policy_version(self) -> str:
+        """Whether the policy changed, as a fingerprint — read every few seconds, recorded nowhere (2026-11-16)."""
+        from pramanyx.orgsettings.agent_policy import POLICY_VERSION_ROUTE
+        return str((await self._get(POLICY_VERSION_ROUTE) or {}).get("version") or "")
+
     async def service_principal_me(self, name: str, key: str) -> tuple[int, Optional[dict]]:
         """Arc ED, ED-2 — ``(status, body)`` the API gives a presented service principal: 200 with its grant, 401 when the
         name and key do not match. 0 when the API could not be asked."""
@@ -588,27 +593,41 @@ class PramanyxClient:
         return await self._get("/web/search", params={"q": query, "n": n})
 
     # ── A question on a rhythm, run by the platform (the coworker plan, 2026-11-15) ────────────────
-    async def schedule_question(self, question: str, connection: str, cron: str, name: str = "",
-                                stop_after_minutes: int = 0) -> dict:
-        """An automation: a schedule trigger and one `investigate` step. It runs on the platform's own scheduler —
-        traced, listed with the other automations, under the organisation's setting for scheduled model work — never on the coworker's."""
-        body = {"conn_id": connection, "name": (name or question)[:120],
-                "description": "Asked from the coworker, to be asked again on a rhythm.",
-                "conditions": [{"kind": "schedule", "config": {"cron": cron}}],
-                "effects": [{"kind": "investigate", "config": {"question": question}}]}
-        if stop_after_minutes and stop_after_minutes > 0:
-            from datetime import datetime, timedelta, timezone
-            body["expires_at"] = (datetime.now(timezone.utc) + timedelta(minutes=int(stop_after_minutes))
-                                  ).strftime("%Y-%m-%dT%H:%M:%SZ")
-        made = await self._post("/automations", json_body=body)
-        settings = await self._get("/org-settings")
-        off = isinstance(settings, dict) and settings.get("scheduled_model_work") is not True
-        return {"id": made.get("id"), "name": made.get("name"), "cron": cron, "enabled": made.get("enabled"),
+    async def schedule(self, request: str, connection: str, timezone: str = "", browser_time_zone: str = "") -> dict:
+        """ANYTHING ON A SCHEDULE, FROM A SENTENCE (2026-11-16). The person's words go to the platform's own designer
+        (`POST /automations/propose`, `automations/propose.py`): a model drafts the whole chain — when it runs, what
+        it does, where it goes — from what this install has, and the same checks a save runs refuse a draft that
+        could not be saved. A draft with nothing left open is then made, as the person asked; its runs are shown in
+        the conversation, and its design opens on the platform's canvas, where a person can change it by hand. A
+        draft that left a choice open (a Slack channel the person did not name) is NOT made: what is open comes back,
+        for the agent to ask. One scheduler — the platform's; one designer — the one the Automations page uses.
+
+        ``timezone`` is a zone the person named; ``browser_time_zone`` the one the shell tells the agent the person's
+        browser is in. Which the times are read in is the platform's order (`automations.propose.the_clock`)."""
+        drafted = await self._post("/automations/propose", json_body={
+            "outcome": request, "conn_id": connection, "timezone": timezone.strip(),
+            "clock_here": browser_time_zone.strip(), "from_conversation": True})
+        drafted = drafted if isinstance(drafted, dict) else {}
+        if drafted.get("verdict") != "proposed" or not drafted.get("draft"):
+            return {"scheduled": False, "reason": drafted.get("reason") or "the request could not be made into a schedule",
+                    "notes": drafted.get("notes") or ""}
+        if drafted.get("to_fill"):
+            return {"scheduled": False, "needs": drafted["to_fill"], "notes": drafted.get("notes") or "",
+                    "reason": "the request leaves a choice open; ask the person and set it up again with their answer"}
+        draft = dict(drafted["draft"])
+        draft["description"] = (draft.get("description") or "") + " Set up from a conversation, in the person's words."
+        made = await self._post("/automations", json_body={**draft, "start_at_first_run": True})
+        when = await self._get(f"/automations/{made.get('id')}/schedule")
+        when = when if isinstance(when, dict) else {}
+        return {"scheduled": True, "id": made.get("id"), "name": made.get("name"), "connection": connection,
+                "when": "; ".join(when.get("said") or []), "next_run": when.get("next_run") or "",
+                "timezone": when.get("timezone") or draft.get("timezone") or "UTC",
+                "steps": [str(e.get("kind")) for e in draft.get("effects") or []],
                 "stops_at": made.get("expires_at") or "never",
-                "on_probation": made.get("probation"),
-                "note": ("It will not run until an admin turns on scheduled model work in Settings ▸ Organisation."
-                         if off else "It runs on the platform's schedule; each run is its own trace in Agent Ops."),
-                "open": f"/automations/{made.get('id')}"}
+                "notes": " ".join(x for x in [str(drafted.get("notes") or "").strip(),
+                                              "Each run is shown in this conversation, kept with the schedule, and "
+                                              "traced in Agent Ops; its design can be changed on the schedule's page."] if x),
+                "open": f"/automations?conn={connection}&focus={made.get('id')}"}
 
     # ── DE-2c: the knowledge tools, through the API like everything else ───────────
     async def search_graph(self, connection: str, query: str, *, limit: int = 10) -> dict:

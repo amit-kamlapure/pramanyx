@@ -216,7 +216,7 @@ class _AgentPolicyBody(BaseModel):
 def _agent_policy_view() -> dict:
     from pramanyx.org.context import current_org_id
     from pramanyx.orgsettings.agent_policy import (
-        LEVELS, effective_agent_policy, environment_narrowing, load_agent_policy,
+        DEFAULT_LEVEL, LEVELS, effective_agent_policy, environment_narrowing, load_agent_policy,
     )
     org = current_org_id()
     saved = load_agent_policy(org)
@@ -226,11 +226,12 @@ def _agent_policy_view() -> dict:
         "saved": saved.as_dict() if saved.source == "saved" else None,
         "environment": {k: (list(v) if isinstance(v, tuple) else v) for k, v in env.items()},
         "levels": list(LEVELS),
+        "default": DEFAULT_LEVEL,
     }
 
 
 def _refuse_an_agent(request: Request) -> None:
-    """`act` is given only by a person: an agent that reaches this route is refused by name."""
+    """An agent never sets its own policy: an agent that reaches this route is refused by name."""
     from pramanyx.mcp.policy import CODE_SELF_SET, TOOL_HEADER, refusal
     from pramanyx.rbac.agent_gate import is_agent_request
     if is_agent_request(request):
@@ -241,8 +242,19 @@ def _refuse_an_agent(request: Request) -> None:
 @router.get("/org-settings/agent-policy")
 def get_agent_policy():
     """What an outside agent may do for this organisation: the saved policy (or the default,
-    `run`), the environment's narrowing, and the EFFECTIVE result of the two."""
+    `act`), the environment's narrowing, and the EFFECTIVE result of the two."""
     return _agent_policy_view()
+
+
+@router.get("/org-settings/agent-policy/version")
+def get_agent_policy_version():
+    """Whether the agent policy changed, as a fingerprint (2026-11-16). The MCP server asks every few seconds and, when
+    it moves, tells its clients their tool list changed — so a running coworker picks up a policy a person just set,
+    without a restart. Not a data access, and not recorded as an agent's call: the read of the policy that follows a
+    change is."""
+    from pramanyx.org.context import current_org_id
+    from pramanyx.orgsettings.agent_policy import policy_version
+    return {"version": policy_version(current_org_id())}
 
 
 @router.put("/org-settings/agent-policy")
@@ -262,7 +274,7 @@ def put_agent_policy(body: _AgentPolicyBody, request: Request):
 
 @router.delete("/org-settings/agent-policy")
 def delete_agent_policy(request: Request):
-    """Drop the saved policy — the organisation falls back to the default, `run`."""
+    """Drop the saved policy — the organisation falls back to the default, `act`."""
     _refuse_an_agent(request)
     from pramanyx.org.context import current_org_id
     from pramanyx.orgsettings.agent_policy import clear_agent_policy

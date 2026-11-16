@@ -40,6 +40,22 @@ function subscribe(cb: () => void) {
   return () => { listeners.delete(cb); };
 }
 
+/** The board study — a place in the page that holds one card's editor in itself (the dashboard builder's Chart tab),
+ *  instead of the drawer: the card it serves, and the element it draws into. One at a time, like the drawer. */
+let dock: { key: string; el: HTMLElement } | null = null;
+
+export function setVizDock(next: { key: string; el: HTMLElement } | null) {
+  if (dock?.key === next?.key && dock?.el === next?.el) return;
+  dock = next;
+  emit();
+}
+
+/** The element this card's editor draws into, when a dock serves it; null draws the drawer. */
+export function useVizDock(id: string): HTMLElement | null {
+  const get = () => (dock && dock.key === id ? dock.el : null);
+  return useSyncExternalStore(subscribe, get, () => null);
+}
+
 /** True when THIS card's viz editor is the one currently open. */
 export function useVizEditorOpen(id: string): boolean {
   const get = () => openId === id;

@@ -188,10 +188,10 @@ def _guide_create_agent() -> dict:
 
 def _guide_create_automation() -> dict:
     steps = [
-        "Describe the outcome in one sentence — here, or in “Agent Ops” → “Automations” "
-        "with “Propose”. The platform drafts the chain, validates it against what this "
-        "deployment can actually do, and attaches a dry run. (“+ New automation” builds "
-        "one by hand.)",
+        "Say what should happen, and when, in one sentence — here, or in “Agent Ops” → "
+        "“Automations”, in “What should happen, and when?” with “Draft it”. The platform "
+        "drafts the chain, validates it against what this deployment can actually do, and "
+        "attaches a dry run. (“+ Design it yourself” builds one by hand.)",
         "Name the Slack channel, and the bot when there is more than one: a choice the "
         "request did not make stays open, and the draft cannot be accepted until it is "
         "made.",
@@ -199,7 +199,8 @@ def _guide_create_automation() -> dict:
         "person accepts or rejects it there, and acceptance re-validates before anything "
         "is saved. Nothing schedules itself.",
         "An accepted draft is armed at once, and a scheduled one waits for its first "
-        "scheduled time (cron is read in UTC). Its other doors — webhook, Slack, MCP "
+        "scheduled time, in the clock the draft names (one the request named, else the "
+        "person's own, else their browser's, else the organisation's, else UTC). Its other doors — webhook, Slack, MCP "
         "tool — open from its “Deploy” menu, each saying whether THIS deployment can "
         "open it.",
     ]

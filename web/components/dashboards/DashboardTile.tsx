@@ -32,6 +32,8 @@ import { deltaInfo, formatMetric } from "@/components/brief/metricFormat";
 import { ResultChartCard } from "@/components/charts/ResultChartCard";
 import { type ChartCustom } from "@/components/Chart";
 import { type VizConfig } from "@/components/charts/vizConfig";
+import { ALL_CHART_TYPES } from "@/components/charts/chartTypeInference";
+import type { Pick as ChartPick } from "@/components/charts/selection";
 import { VegaChart } from "@/components/charts/vega/VegaChart";
 import { useCellBox, useMeasured } from "@/components/dashboards/cellBox";
 import { SizePick } from "@/components/dashboards/SizePick";
@@ -153,7 +155,8 @@ export function Frame({ testid, shape, over, dashed, children, doors }: {
       position: "relative", height: "100%", boxSizing: "border-box", display: "flex", flexDirection: "column",
       // on a section's grid the box is fixed: what it holds stays inside it, and a piece's own body scrolls (Arc AP-1)
       minHeight: 0, overflow: "hidden",
-      gap: 6, padding: "14px 16px 12px", background: "var(--bg-2)", borderRadius: "var(--r3)",
+      // the quieter card of the board study (docs/OPENDASHBOARDS_STUDY.md §6.2): more air, no shadow (CLARITY.md)
+      gap: 8, padding: "16px 18px 14px", background: "var(--bg-2)", borderRadius: "var(--r3)",
       // a card stands on the page by its fill; an edge is drawn only where it says something — dashed for a piece
       // that cannot be read, red for a figure over its limit (CLARITY.md, "cards on the ground")
       border: `1px ${dashed ? "dashed" : "solid"} ${over ? "color-mix(in srgb, var(--red4) 55%, var(--b1))" : dashed ? "var(--b1)" : "var(--card-edge)"}`,
@@ -164,11 +167,14 @@ export function Frame({ testid, shape, over, dashed, children, doors }: {
   );
 }
 
-export function Title({ title, right }: { title: string; right?: ReactNode }) {
+/** A piece's name: the card says what it shows at full strength (14/600); a figure's name is its muted label, the
+ *  figure being the point (CLARITY.md, "a row of figures": label muted · value 22–30px). */
+export function Title({ title, right, muted = false }: { title: string; right?: ReactNode; muted?: boolean }) {
   return (
     <div style={{ display: "flex", alignItems: "baseline", gap: 10, minWidth: 0, paddingRight: 64 }}>
-      <div className="aug-fs-ui" title={title} style={{
-        flex: 1, minWidth: 0, color: "var(--t2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+      <div className={muted ? "aug-fs-chrome" : "aug-fs-ui"} title={title} style={{
+        flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+        ...(muted ? { fontWeight: 500, color: "var(--t2)" } : { fontWeight: 600, color: "var(--t1)" }),
       }}>{title}</div>
       {right}
     </div>
@@ -308,7 +314,7 @@ function FigureTile({ cs, status, sym, doors, place }: { cs: CardState & { card:
   return (
     <Frame testid="dashboard-tile" shape="figure" over={over}
       doors={<Doors card={card} doors={doors} place={place} onAlert={value !== null && !alerting ? () => setAlertOpen(o => !o) : undefined} />}>
-      <Title title={card.title} />
+      <Title title={card.title} muted />
       {errored ? (
         <>
           <div className="aug-fs-ui" style={{ color: "var(--amb4)" }}>Could not be read</div>
@@ -316,7 +322,7 @@ function FigureTile({ cs, status, sym, doors, place }: { cs: CardState & { card:
         </>
       ) : shown ? (
         <div className="aug-fs-display" data-testid="tile-figure" data-size={place.size} title={shown.outside ? `Outside what its unit states (${card.unit})` : undefined}
-          style={{ fontWeight: 600, lineHeight: 1.15, color: over ? "var(--red4)" : "var(--t1)", fontVariantNumeric: "tabular-nums",
+          style={{ fontWeight: 600, lineHeight: 1.1, letterSpacing: "-0.02em", color: over ? "var(--red4)" : "var(--t1)", fontVariantNumeric: "tabular-nums",
             fontSize: widest ? "2.6em" : big ? "2.1em" : undefined }}>
           {shown.text}
         </div>
@@ -422,7 +428,7 @@ function TrendTile({ cs, trend, status, sym, doors, place }: { cs: CardState & {
   );
 }
 
-function RowsTile({ cs, doors, place }: { cs: CardState & { card: DashboardCard }; doors: TileDoors; place: TilePlace }) {
+function RowsTile({ cs, doors, place, focus }: { cs: CardState & { card: DashboardCard }; doors: TileDoors; place: TilePlace; focus?: TileFocus }) {
   const { card, run } = cs;
   const persistViz = usePersistViz(card);
   const source = sourceOf(card);
@@ -435,7 +441,10 @@ function RowsTile({ cs, doors, place }: { cs: CardState & { card: DashboardCard 
       <Title title={card.title} />
       <div ref={room} style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
         {run && (
-          <ResultChartCard columns={run.columns} rows={run.rows as unknown[][]}
+          <ResultChartCard editorKey={card.id} columns={run.columns} rows={run.rows as unknown[][]}
+            // the board study — a click filters the dashboard; what is chosen stays lit, beside the card's own exhibit
+            onPick={focus?.onPick ? (p) => focus.onPick?.(p) : undefined}
+            exhibit={focusExhibit(render.chartConfig, run.columns, focus)}
             chartType={render.chartType ?? null} chartConfig={render.chartConfig ?? null} custom={render.custom ?? null}
             defaultShowLabels={render.showDataLabels} fillHeight={height} config={render.viz ?? null} onConfigChange={persistViz} />
         )}
@@ -449,8 +458,10 @@ function RowsTile({ cs, doors, place }: { cs: CardState & { card: DashboardCard 
  *  off a chosen object waits on, in words. */
 export type QueryWaiting = { reading: true } | { waiting: ReactNode };
 
-export function DashboardTile({ cs, status, sym, doors, place = STANDING, waits = null }: {
+export function DashboardTile({ cs, status, sym, doors, place = STANDING, waits = null, focus }: {
   cs: CardState & { card: DashboardCard }; status: CardStatus; sym: string; doors: TileDoors;
+  /** The board study — the dashboard's focus: what is chosen (lit), and where a click on a mark goes. */
+  focus?: TileFocus;
   /** The element this tile draws and its size; left out, the tile stands alone at the small size. */
   place?: TilePlace;
   waits?: QueryWaiting | null;
@@ -463,27 +474,34 @@ export function DashboardTile({ cs, status, sym, doors, place = STANDING, waits 
   }
   // Arc AP-7 — a card of a person's own query (the run says how it is shown)
   if (cs.run && "shown" in cs.run && (cs.card.render as { shown?: unknown })?.shown) {
-    return <QueryTile cs={cs} doors={doors} place={place} />;
+    return <QueryTile cs={cs} doors={doors} place={place} focus={focus} />;
   }
   const shape = tileShape(cs);
   const trend = shape === "trend" && cs.run ? seriesTrend(cs.run.columns, cs.run.rows) : null;
   if (trend) return <TrendTile cs={cs} trend={trend} status={status} sym={sym} doors={doors} place={place} />;
-  if (shape === "rows") return <RowsTile cs={cs} doors={doors} place={place} />;
+  if (shape === "rows") return <RowsTile cs={cs} doors={doors} place={place} focus={focus} />;
   return <FigureTile cs={cs} status={status} sym={sym} doors={doors} place={place} />;
 }
 
 /** Arc AP-7 — a card of a person's own query, as they set it up: its figure, its table or its chart, and what the run
  *  left out said beneath it. A query that cannot be read says why, in its place. */
-function QueryTile({ cs, doors, place }: { cs: CardState & { card: DashboardCard }; doors: TileDoors; place: TilePlace }) {
+function QueryTile({ cs, doors, place, focus }: { cs: CardState & { card: DashboardCard }; doors: TileDoors; place: TilePlace; focus?: TileFocus }) {
   const { card, run } = cs;
   const shaped = run?.shown ?? null;
   const setup = (card.render as { shown?: QueryShown }).shown;
+  const viz = (card.render as { viz?: VizConfig }).viz;
+  const persistViz = usePersistViz(card);
   const [room, height] = useChartHeight(SPAN[place.size].h === 2 ? 400 : 200);
+  // the board study — any kind an answer's chart draws, when one beyond the query's own six is asked for
+  const anyKind = !!shaped && shaped.as !== "figure" && shaped.as !== "table" && isOtherKind(viz?.type);
+  const chosen = shaped && shaped.as !== "figure" && shaped.as !== "table" ? focus?.chosen?.(shaped.x.name) ?? null : null;
   const spec = useMemo(() => {
-    if (!shaped || !setup || shaped.as === "figure" || shaped.as === "table") return null;
+    if (!shaped || !setup || shaped.as === "figure" || shaped.as === "table" || anyKind) return null;
     const t = readVegaTokens();
-    return queryChartSpec(shaped, setup, { palette: t.palette, other: t.deemph });
-  }, [shaped, setup]);
+    return queryChartSpec(shaped, setup, { palette: t.palette, other: t.deemph }, chosen);
+  }, [shaped, setup, anyKind, chosen]);
+  const grid = useMemo(() => (anyKind && shaped && setup ? queryGrid(shaped as Parameters<typeof queryGrid>[0], setup) : null),
+    [anyKind, shaped, setup]);
   // A card drafted from a file says what it means, read off its statement: under a figure always, under a chart behind Details.
   const drafted = (card.render as { drafted_by_model?: boolean }).drafted_by_model === true;
   const definition = (card.render as { definition?: string }).definition ?? "";
@@ -511,11 +529,11 @@ function QueryTile({ cs, doors, place }: { cs: CardState & { card: DashboardCard
   );
   return (
     <Frame testid="dashboard-tile" shape={shaped.as === "figure" ? "figure" : "rows"} doors={<Doors card={card} doors={doors} place={place} />}>
-      <Title title={card.title} />
+      <Title title={card.title} muted={shaped.as === "figure"} />
       {shaped.as === "figure" ? (
         <div data-testid="query-tile-figure" style={{ display: "flex", flexDirection: "column", gap: 2 }}>
           <span style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
-            <span className="aug-fs-h1" data-testid="query-tile-value" style={{ fontWeight: 600, color: "var(--t1)", fontVariantNumeric: "tabular-nums" }}>{shaped.format ? draftedFigure(shaped.value, shaped.format) : formatMetricValue(shaped.value)}</span>
+            <span data-testid="query-tile-value" className="aug-fs-display" style={{ lineHeight: 1.1, letterSpacing: "-0.02em", fontWeight: 600, color: "var(--t1)", fontVariantNumeric: "tabular-nums" }}>{shaped.format ? draftedFigure(shaped.value, shaped.format) : formatMetricValue(shaped.value)}</span>
             {beside && (
               <span data-testid="query-tile-beside" className="aug-fs-sm" style={{ padding: "0 6px", borderRadius: "var(--r2)", background: "var(--bg-3)", color: "var(--t2)", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
                 {besideText(beside)}
@@ -541,7 +559,18 @@ function QueryTile({ cs, doors, place }: { cs: CardState & { card: DashboardCard
         </div>
       ) : (
         <div ref={room} data-testid="query-tile-chart" style={{ flex: 1, minHeight: 0 }}>
-          {spec && <VegaChart spec={spec} tier={2} height={height} />}
+          {spec && <VegaChart spec={spec} tier={2} height={height}
+            onSelect={focus?.onPick ? (d) => {
+              // the place a click stands for, as the query returned it — never the words it was drawn with
+              if (d && "xr" in d && d.xr !== null && d.xr !== undefined) {
+                focus.onPick?.({ field: shaped.x.name, value: d.xr as string | number });
+              }
+            } : undefined} />}
+          {grid && (
+            <ResultChartCard editorKey={card.id} columns={grid.columns} rows={grid.rows} chartType={viz?.type ?? null} config={viz ?? null}
+              onConfigChange={persistViz} fillHeight={height} exhibit={chosen ? { emphasis: chosen } : undefined}
+              onPick={focus?.onPick ? (p) => focus.onPick?.(p) : undefined} />
+          )}
         </div>
       )}
       {said}
@@ -549,6 +578,39 @@ function QueryTile({ cs, doors, place }: { cs: CardState & { card: DashboardCard
       {foot}
     </Frame>
   );
+}
+
+/** The board study — what a dashboard's focus asks of a tile: the values chosen for a field (lit on its chart), and where
+ *  a click on a mark goes. */
+export interface TileFocus {
+  chosen?: (field: string) => string[] | null;
+  onPick?: (pick: ChartPick) => void;
+}
+
+/** A card's own exhibit with the dashboard's chosen values laid over it — undefined when nothing is chosen, so the card's
+ *  stored exhibit is read as it always was. */
+function focusExhibit(chartConfig: Record<string, unknown> | undefined, columns: string[], focus?: TileFocus) {
+  const chosen = columns.map(c => focus?.chosen?.(c) ?? null).find(v => v && v.length);
+  if (!chosen) return undefined;
+  const own = (chartConfig?.exhibit ?? {}) as Record<string, unknown>;
+  return { ...own, emphasis: chosen } as never;
+}
+
+/** A kind an answer's chart draws that a query card's own six do not (bar, line, area, scatter, a figure, a table). */
+const OWN_SIX = new Set(["auto", "bar", "line", "area", "scatter", "table", "figure"]);
+export function isOtherKind(type: string | null | undefined): boolean {
+  return !!type && !OWN_SIX.has(type) && (ALL_CHART_TYPES as readonly string[]).includes(type);
+}
+
+/** A query card's chart points as a result grid — the place, its series when split, its measure by its own column name
+ *  (so a money column still reads as money) — for an answer's chart to draw. */
+export function queryGrid(c: Extract<QueryShaped, { as: "bar" | "line" | "area" | "scatter" }>,
+  setup: Pick<QueryShown, "series" | "split">): { columns: string[]; rows: unknown[][] } {
+  const measure = setup.series?.[0]?.column || "value";
+  const split = c.series.length > 1 || (c.series.length === 1 && c.series[0] !== "");
+  return split
+    ? { columns: [c.x.name, setup.split || "series", measure], rows: c.points.map(p => [p.x, p.s || "", p.v]) }
+    : { columns: [c.x.name, measure], rows: c.points.map(p => [p.x, p.v]) };
 }
 
 /** A value said beside a figure, in the form its statement asked for. */

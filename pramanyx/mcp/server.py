@@ -16,7 +16,9 @@ the API process exactly as they do for the web app.
 """
 from __future__ import annotations
 
+import asyncio
 import hmac
+import weakref
 from typing import Annotated, Any, Optional
 
 from mcp.server.fastmcp import FastMCP
@@ -63,8 +65,9 @@ class PolicedFastMCP(FastMCP):
     offered and failed, and one called by name anyway is refused with the same stable code
     the API would give. Every tool carries the protocol's hints — `readOnlyHint` for a read,
     `destructiveHint` for an act — from the one level map (`mcp/policy.py`). When the API
-    cannot be asked, the install's default (`run`) is applied, which is what the API will
-    enforce anyway.
+    cannot be asked, `run`'s tools are listed: a policy that could not be read is no grant.
+    A change is picked up without a restart: the server watches the policy's version while a
+    client holds a list and tells it the list changed (`watch_the_policy`).
     """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -113,7 +116,24 @@ class PolicedFastMCP(FastMCP):
             if not callers.admits(grant, t.name):          # ED-2 — the caller's own grant narrows the list
                 continue
             out.append(t.model_copy(update={"annotations": tool_annotations(level)}))
+        self._watch_the_policy_for(self._session())
         return out
+
+    def _session(self):
+        try:
+            return self.get_context().session
+        except Exception:                          # noqa: BLE001 — listed outside a request (a test, a direct call)
+            return None
+
+    def _watch_the_policy_for(self, session) -> None:
+        """Remember a session that was handed a list, and keep one watch on the policy for all of them (2026-11-16: a
+        coworker started under `run` kept that list after a person allowed `act`, until it was restarted)."""
+        if session is None:
+            return
+        _listed_to.add(session)
+        global _watching
+        if _watching is None or _watching.done():
+            _watching = asyncio.get_running_loop().create_task(watch_the_policy())
 
     async def call_tool(self, name: str, arguments: dict):
         import json as _json
@@ -159,19 +179,58 @@ class PolicedFastMCP(FastMCP):
 _POLICY_TTL = 30.0
 _policy_cache: dict = {}   # {caller name, "" for this process: (fetched_at, AgentPolicy)}
 
+#: How often the server asks whether the policy changed. The question reads no data and is recorded nowhere
+#: (`GET /org-settings/agent-policy/version`), so it can be asked often: a person who allows `act` in Settings and
+#: turns to the coworker finds the new tools there within this.
+_WATCH_EVERY = 10.0
+#: After the API could not be asked, wait this long before asking again.
+_WATCH_BACKOFF = 30.0
+_listed_to: "weakref.WeakSet" = weakref.WeakSet()   # the sessions a list was handed to
+_watching: "Optional[asyncio.Task]" = None
+
+
+async def watch_the_policy(*, every: float = _WATCH_EVERY, rounds: Optional[int] = None) -> None:
+    """While any session that was handed a list is open, ask whether the policy changed; when it has, drop the cached
+    policy and tell each session its tool list changed — the client re-lists and is handed what the policy now allows.
+    The first answer is the baseline. ``rounds`` bounds the watch for a test."""
+    import time as _time
+    seen = ""
+    done = 0
+    while _listed_to and (rounds is None or done < rounds):
+        done += 1
+        try:
+            version = await _client.agent_policy_version()
+        except Exception as exc:                    # noqa: BLE001 — the API restarting: ask again later, said once
+            _log.info("could not ask whether the agent policy changed (%s); asking again in %ss", exc, _WATCH_BACKOFF)
+            await asyncio.sleep(_WATCH_BACKOFF)
+            continue
+        if seen and version and version != seen:
+            forget_policy()
+            _live_checked[:] = [_time.monotonic() - _LIVE_TTL]   # the re-list reads the live rosters too
+            for session in list(_listed_to):
+                try:
+                    await session.send_tool_list_changed()
+                except Exception as exc:            # noqa: BLE001 — that session closed; the others still hear
+                    _log.debug("could not send tools/list_changed: %s", exc)
+                    _listed_to.discard(session)
+        seen = version or seen
+        await asyncio.sleep(every)
+
 
 async def current_policy():
     """The effective agent policy for this server's principal — or, for an HTTP caller let in as itself (ED-2), for
-    that caller — from the API; the default when the API cannot say (and that is logged once per fetch, not hidden)."""
+    that caller — from the API; `run` when the API cannot say (and that is logged once per fetch, not hidden)."""
     import time as _time
 
     from pramanyx.mcp.client import CURRENT_CALLER
-    from pramanyx.orgsettings.agent_policy import DEFAULT_POLICY, AgentPolicy
+    from pramanyx.orgsettings.agent_policy import AgentPolicy
     who = (CURRENT_CALLER.get() or ("",))[0]
     kept = _policy_cache.get(who)
     if kept and (_time.monotonic() - kept[0]) < _POLICY_TTL:
         return kept[1]
-    policy = DEFAULT_POLICY
+    # A policy the API could not be asked for is no grant: the tools that change something stay hidden until it answers
+    # (the API checks every call against the policy it holds, whatever this list shows).
+    policy = AgentPolicy(level="run", source="unread")
     try:
         answer = await _client.agent_policy()
         eff = (answer or {}).get("effective") or {}
@@ -182,7 +241,7 @@ async def current_policy():
             set_by=str(eff.get("set_by") or ""), source=str(eff.get("source") or "saved"),
         )
     except Exception as exc:
-        _log.warning("could not read the agent policy from the API (%s); applying the default, `run`", exc)
+        _log.warning("could not read the agent policy from the API (%s); listing what `run` allows until it answers", exc)
     _policy_cache[who] = (_time.monotonic(), policy)
     return policy
 
@@ -304,7 +363,11 @@ async def draft_email(
     fmt = attach_format.strip().lower()
     attach = {"attach_answer": attach_answer.strip(), "attach_format": fmt} \
         if attach_answer.strip() and fmt in ("pdf", "xlsx", "docx", "pptx") else {}
-    return {"draft": {"to": to.strip(), "subject": subject.strip(), "body": body.strip(), **attach},
+    import uuid
+    # The draft's own name, kept with it in the conversation: what its send is journaled under, so the draft shows as
+    # sent whenever the conversation is opened again (`GET /email/sent`).
+    return {"draft": {"id": uuid.uuid4().hex[:16], "to": to.strip(), "subject": subject.strip(), "body": body.strip(),
+                      **attach},
             "note": "Shown to the person as a draft with a Send button. Nothing has been sent."}
 
 
@@ -321,17 +384,23 @@ async def search_the_web(
 
 
 @mcp.tool()
-async def schedule_question(
-    question: Annotated[str, Field(description="The question to ask again, as the person would ask it.")],
-    connection: Annotated[str, Field(description="The connection id the question is about.")],
-    cron: Annotated[str, Field(description="When, as a five-field cron in the organisation's time zone, e.g. '0 9 * * 1' for Mondays at 09:00.")],
-    name: Annotated[str, Field(description="A short name the person will recognise; the question when empty.")] = "",
-    stop_after_minutes: Annotated[int, Field(description="Stop asking after this many minutes (\"for the next half hour\" is 30); 0 keeps it until someone stops it.")] = 0,
+async def schedule(
+    request: Annotated[str, Field(description=(
+        "What to run and when, in the person's own words, with anything they said about where it goes: "
+        "'every Monday at 9, GMV by platform', 'in five minutes, a summary of yesterday's orders', "
+        "'every weekday at 8, post revenue to #general', 'on the first of each month, email the margin report to "
+        "x@y.com'. Pass their words; do not translate them into a cron."))],
+    connection: Annotated[str, Field(description="The connection the schedule runs against.")],
+    timezone: Annotated[str, Field(description="Only a clock the person NAMED ('at 9 London time' → Europe/London), as an IANA name; empty when they named none.")] = "",
+    browser_time_zone: Annotated[str, Field(description="The browser time zone you were given for this request, e.g. Asia/Kolkata; empty if you were given none.")] = "",
 ) -> dict:
-    """Ask a question again on a rhythm — "every Monday, revenue by category". Pramanyx's own scheduler runs it as
-    an automation, so each run is governed like any answer and traced; it does not depend on this conversation
-    staying open, and it is listed with the organisation's other automations. Say back when it will run and the note this returns."""
-    return await _client.schedule_question(question, connection, cron, name, stop_after_minutes)
+    """Set up anything on a schedule from a sentence — a question asked again, a write-up, a Slack post, an email, once
+    or on a rhythm. The platform's own designer drafts the whole chain from what this install has, checks it as a
+    save would, and makes it; it runs on the platform's scheduler, governed and traced, whether or not this
+    conversation is open. Returns `scheduled` with `when` and `next_run` (say them back as returned), or `needs`: a
+    choice the request left open (a channel, a sender) — ask the person and call again with their answer — or a
+    `reason` it could not be made."""
+    return await _client.schedule(request, connection, timezone, browser_time_zone)
 
 
 @mcp.tool()
@@ -614,6 +683,17 @@ import logging as _logging
 import re as _re
 
 _log = _logging.getLogger("pramanyx.mcp")
+
+
+class _NotTheVersionCheck(_logging.Filter):
+    """The policy watch asks every few seconds (`watch_the_policy`); its request line would bury the others."""
+
+    def filter(self, record: _logging.LogRecord) -> bool:
+        from pramanyx.orgsettings.agent_policy import POLICY_VERSION_ROUTE
+        return POLICY_VERSION_ROUTE not in record.getMessage()
+
+
+_logging.getLogger("httpx").addFilter(_NotTheVersionCheck())
 
 #: A tool name an MCP client will accept, derived from the automation's own name.
 _SLUG_OK = _re.compile(r"[^a-z0-9_]+")

@@ -34,7 +34,9 @@ const SAYINGS = {
       ? { to: said.to.trim().slice(0, 320), subject: text(said.subject, 300), body: text(said.body, 100000),
           // The analysis to attach, when the person chose one: an answer's id and one of the four export formats.
           ...(ID.test(said.attach_answer || "") && ["pdf", "xlsx", "docx", "pptx"].includes(said.attach_format)
-            ? { attach_answer: said.attach_answer, attach_format: said.attach_format } : {}) } : null),
+            ? { attach_answer: said.attach_answer, attach_format: said.attach_format } : {}),
+          // The draft's own name, so its send is journaled under it and the draft reads as sent after a reload.
+          ...(typeof said.draft === "string" && /^[A-Za-z0-9:_.-]{1,80}$/.test(said.draft) ? { draft: said.draft } : {}) } : null),
   },
   "/pramanyx-verdict": {
     to: "/verify/verdict",

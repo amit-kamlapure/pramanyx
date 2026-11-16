@@ -10,8 +10,13 @@ SQLite store, `PRAMANYX_ORG_LLM_DB`; not a new store):
 * ``connections`` — an allowlist of connection ids, or None for every connection;
 * ``tools`` — an allowlist of tool names, or None for every tool the level allows.
 
-An install with no saved policy runs at ``run`` — today's exposure, made explicit — and
-``act`` is given only by a person (the route refuses an agent setting its own policy). The
+An install with no saved policy lets its agents ``act`` (the user, 2026-11-16: "it should know when
+to act, when to run and when to do both — that's the whole point of the harness"). The level is a
+ceiling, not a mode: under ``act`` an agent still reads when reading answers the question, and
+what an act sends stays held for a person where it always was (a drafted Slack post asks for
+approval; an email leaves only on a person's own click). Until that date the default was ``run``,
+and ``act`` was given only by a person. A person with ADMIN_MANAGE_ORG lowers it to ``run`` or
+``read``, and an agent can never set its own policy (the route refuses it). The
 ENVIRONMENT can only narrow what is saved (`PRAMANYX_AGENT_POLICY_LEVEL`,
 `PRAMANYX_AGENT_POLICY_CONNECTIONS`, `PRAMANYX_AGENT_POLICY_TOOLS`), never widen it: an operator
 can pin a deployment below what its organisations allow, not above. The policy is read on
@@ -31,6 +36,9 @@ from pramanyx.db.sqlite_util import resolve_db_path
 from pramanyx.db.store_pool import ensure_once
 
 LEVELS: tuple[str, ...] = ("read", "run", "act")
+#: What an organisation's agents may do when nobody saved a policy. A saved level this code does not know reads as
+#: ``run`` instead (`load_agent_policy`): a policy that cannot be read is no grant.
+DEFAULT_LEVEL = "act"
 
 # The same store as the organisation's LLM binding — the one per-org setting this install
 # already keeps — so the two per-org facts live in one place.
@@ -71,7 +79,7 @@ def rank(level: str) -> int:
 
 @dataclass(frozen=True)
 class AgentPolicy:
-    level: str = "run"
+    level: str = DEFAULT_LEVEL
     connections: Optional[tuple[str, ...]] = None     # None = every connection
     tools: Optional[tuple[str, ...]] = None           # None = every tool the level allows
     set_by: str = ""                                  # "" = nobody: the install's default
@@ -191,6 +199,20 @@ def narrow(policy: AgentPolicy, env: Optional[dict] = None) -> AgentPolicy:
     if narrowed:
         out = replace(out, source="narrowed", narrowed_by=tuple(narrowed))
     return out
+
+
+#: Where an agent asks whether the policy changed — the one route an agent reaches that is not recorded as its call: it
+#: reads no data (`rbac/agent_gate.py`).
+POLICY_VERSION_ROUTE = "/org-settings/agent-policy/version"
+
+
+def policy_version(org_id: str) -> str:
+    """A short fingerprint of what applies to the organisation's agents right now — it changes when the saved policy,
+    the default or the environment's narrowing does, and says nothing else. The MCP server watches it so a running
+    coworker sees a change without a restart (2026-11-16)."""
+    import hashlib
+    eff = effective_agent_policy(org_id).as_dict()
+    return hashlib.sha256(json.dumps(eff, sort_keys=True).encode()).hexdigest()[:16]
 
 
 def effective_agent_policy(org_id: str) -> AgentPolicy:

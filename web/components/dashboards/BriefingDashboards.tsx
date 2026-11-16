@@ -75,7 +75,7 @@ import {
 import { appWords } from "@/lib/dashboards/appVersion";
 import { MAX_CAPTION, MAX_NOTE, type Layout } from "@/lib/dashboards/catalog";
 import {
-  cardsPlaced, editNote, layOut, placeCard, placeImage, placeNote, placePiece, placeQuestion, recaption, regrid, sectionsOf, setFilterWidth, swapCard, takeOff, takeOffCard,
+  cardsPlaced, editNote, layOut, moveTo, placeCard, placeImage, placeNote, placePiece, placeQuestion, recaption, regrid, sectionsOf, setFilterWidth, swapCard, takeOff, takeOffCard,
   type DashboardSpec,
   type Box,
 } from "@/lib/dashboards/edit";
@@ -83,6 +83,9 @@ import { hostStateOf } from "@/lib/dashboards/hostStatus";
 import { SHAPES } from "@/lib/dashboards/shapes";
 import { emptyDashboardSpec, overdueSegmentOf, processDashboardHolds, processDashboardSpec, startDashboard } from "@/lib/dashboards/start";
 import { valuesRead } from "@/lib/dashboards/values";
+import { focusFor, useDashboardFocus } from "@/lib/dashboards/focus";
+import { isOtherKind, tileShape } from "@/components/dashboards/DashboardTile";
+import { CardSql, ChartDock, QueryKindPick } from "@/components/dashboards/CardInspector";
 import { formatDateTime, utcDayWords } from "@/lib/format";
 import { withUniqueKeys } from "@/lib/listKeys";
 import { foldNavFor } from "@/lib/navCollapse";
@@ -636,6 +639,8 @@ function SharedDashboardView({ connectionId, schema, owner, dashboardId, range, 
   const [problem, setProblem] = useState("");
   const [busy, setBusy] = useState(false);
   const rangeKey = JSON.stringify(range ?? null);
+  // the board study — what this reader chose by clicking a mark, kept in their browser for this dashboard
+  const fx = useDashboardFocus(`${connectionId}:shared:${owner}:${dashboardId}`);
   useEffect(() => {
     let cancelled = false;
     setProblem("");
@@ -646,7 +651,7 @@ function SharedDashboardView({ connectionId, schema, owner, dashboardId, range, 
         const runs = await Promise.all(read.cards.filter(c => placed.has(c.id)).map(async (card): Promise<CardState> => {
           // Arc AP-8 — a query reading the dashboard's values is run by its own cell, with them
           if (valuesRead(card.sql).length) return { card };
-          try { return { card, run: await runCard(card.id, range, { compare: true }) }; }
+          try { return { card, run: await runCard(card.id, range, { compare: true, focus: focusFor(fx.focus, card.id) }) }; }
           catch { return { card, failed: true }; }
         }));
         if (cancelled) return;
@@ -656,15 +661,15 @@ function SharedDashboardView({ connectionId, schema, owner, dashboardId, range, 
       }
     })();
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- the range is read through its key
-  }, [connectionId, owner, dashboardId, rangeKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the range and the focus are read through their keys
+  }, [connectionId, owner, dashboardId, rangeKey, fx.key]);
   const doors = useMemo<DashboardDoors>(() => ({
     onRefresh: async (id: string) => {
-      try { const run = await runCard(id, range, { compare: true }); setCards(cs => cs.map(c => (c.card.id === id ? { ...c, run, failed: false } : c))); }
+      try { const run = await runCard(id, range, { compare: true, focus: focusFor(fx.focus, id) }); setCards(cs => cs.map(c => (c.card.id === id ? { ...c, run, failed: false } : c))); }
       catch { setCards(cs => cs.map(c => (c.card.id === id ? { ...c, failed: true } : c))); }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- the range is read through its key
-  }), [rangeKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the range and the focus are read through their keys
+  }), [rangeKey, fx.key]);
   const host = useMemo(() => hostStateOf(data?.range.status ?? "standing", cards), [data?.range.status, cards]);
   const images = useMemo<Record<string, ImageStamp>>(() => Object.fromEntries(
     Object.entries(data?.images ?? {}).map(([id, s]) => [id, { ...s, url: dashboardImageUrl(connectionId, id) }])), [data?.images, connectionId]);
@@ -694,7 +699,8 @@ function SharedDashboardView({ connectionId, schema, owner, dashboardId, range, 
       </div>
       {data.ontology && <PinStrip pin={data.ontology} spec={data.cockpit.spec} />}
       <ComposedDashboard spec={data.cockpit.spec} cards={cards} host={host} doors={doors} sym={data.currency_symbol || "$"}
-        images={images} range={range} schema={schema} connectionId={connectionId} dashboardId={`shared:${owner}:${dashboardId}`} />
+        images={images} range={range} schema={schema} connectionId={connectionId} dashboardId={`shared:${owner}:${dashboardId}`}
+        focus={fx.focus} onFocus={fx.setFocus} />
     </div>
   );
 }
@@ -827,6 +833,9 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
     return () => { cancelled = true; };
   }, [connectionId, tick]);
 
+  // the board study — what this reader chose by clicking a mark, kept in their browser for the dashboard open
+  const fx = useDashboardFocus(chosen && chosen !== METRICS_DASHBOARD && !chosen.startsWith("shared:") ? `${connectionId}:${chosen}` : null);
+
   // The chosen dashboard, read for the page's range, each card it places run through the guards.
   useEffect(() => {
     if (!chosen || chosen === METRICS_DASHBOARD || chosen.startsWith("shared:")) { setData(null); return; }
@@ -839,7 +848,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
         const runs = await Promise.all(read.cards.filter(c => placed.has(c.id)).map(async (card): Promise<CardState> => {
           // Arc AP-8 — a query reading the dashboard's values is run by its own cell, with them
           if (valuesRead(card.sql).length) return { card };
-          try { return { card, run: await runCard(card.id, range, { compare: true }) }; }
+          try { return { card, run: await runCard(card.id, range, { compare: true, focus: focusFor(fx.focus, card.id) }) }; }
           catch { return { card, failed: true }; }
         }));
         if (cancelled) return;
@@ -866,8 +875,8 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
       }
     })();
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- the range is read through its key
-  }, [connectionId, chosen, rangeKey, tick]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the range and the focus are read through their keys
+  }, [connectionId, chosen, rangeKey, tick, fx.key]);
 
   const write = useCallback(async (act: () => Promise<DashboardKept>, done: (k: DashboardKept) => string) => {
     setBusy(true); setRefusal(null);
@@ -894,14 +903,14 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
 
   const refreshOne = useCallback(async (id: string) => {
     try {
-      const run = await runCard(id, range, { compare: true });
+      const run = await runCard(id, range, { compare: true, focus: focusFor(fx.focus, id) });
       setCards(cs => cs.map(c => (c.card.id === id ? { ...c, run, failed: false } : c)));
     } catch {
       setCards(cs => cs.map(c => (c.card.id === id ? { ...c, failed: true } : c)));
       toast.error("Couldn't refresh card", { description: "The query failed the trust guards or the source is unavailable." });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- the range is read through its key
-  }, [rangeKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the range and the focus are read through their keys
+  }, [rangeKey, fx.key]);
 
   // One edit of the spec by hand, kept as the next version: what every door on a tile comes to. It is made on the newest
   // spec — a burst still waiting is folded into it, not kept after it — and kept after any keep already on its way, so
@@ -993,6 +1002,8 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
       onPlaceTable: (entity: string, segment: string) => on(s => placePiece(s, "ObjectTable", { entity, segment, size: "wide" }).spec,
         "an objects table placed from a process board"),
       onRegrid: (key: string, box: Box, measured: Record<string, Box>) => on(s => regrid(s, key, box, measured), "resized by hand"),
+      // the board study — a piece dragged by its header, or Alt+Shift+arrows, lands beside another
+      onMove: (key: string, target: string, place: "before" | "after") => on(s => moveTo(s, key, target, place), "moved by hand"),
       onFilterWidth: (grades: number) => on(s => setFilterWidth(s, grades), "the filter column resized by hand"),
       // Arc AP-4 — an empty section's offer: the piece picker for it, or sections of its own
       onAddPiece: (section: string) => setAdding({ section }),
@@ -1255,6 +1266,19 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
               </Button>
             </>
           )}
+          // the board study — the card's own chart editor held in the panel, and the statement it ran
+          cardChart={cardId => {
+            const cs = cards.find(c => c.card.id === cardId);
+            const viz = (cs?.card.render as { viz?: { type?: string } } | undefined)?.viz;
+            const own = !!(cs?.card.render as { shown?: unknown } | undefined)?.shown;
+            // a person's own query on its own six draws no answer's chart yet: the kinds it can be drawn as instead
+            if (cs && own && !isOtherKind(viz?.type)) return <QueryKindPick key={cardId} cs={cs} onKept={reload} />;
+            return <ChartDock key={cardId} cardKey={cardId} charted={!!cs && (tileShape(cs) === "rows" || (own && isOtherKind(viz?.type)))} />;
+          }}
+          cardSql={cardId => {
+            const cs = cards.find(c => c.card.id === cardId);
+            return <CardSql cs={cs} readsValues={!!cs && valuesRead(cs.card.sql).length > 0} />;
+          }}
           cardSetup={cardId => {
             // Arc AP-7 — a card of the person's own query is set up here: its SQL, how it is shown, and Keep
             const held = data.cards.find(c => c.id === cardId);
@@ -1330,7 +1354,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
           ) : (
             <ComposedDashboard spec={current} cards={cards} host={host} doors={{ ...editDoors, onSelect, onReadState }} sym={data.currency_symbol || "$"}
               images={images} range={range} schema={schema} connectionId={connectionId} dashboardId={`${connectionId}:${chosen}`}
-              selected={selected} handle={handle} reads={reads} />
+              selected={selected} handle={handle} reads={reads} focus={fx.focus} onFocus={fx.setFocus} />
           ))}
         </DashboardBuilder>
       </div>
@@ -1507,7 +1531,8 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
           <div aria-busy={reading || undefined}
             style={{ opacity: reading ? 0.45 : 1, transition: "opacity 120ms ease-out", pointerEvents: reading ? "none" : undefined }}>
             <ComposedDashboard spec={draft ?? kept.spec} cards={cards} host={host} doors={readDoors} sym={data.currency_symbol || "$"}
-              images={images} range={range} schema={schema} connectionId={connectionId} dashboardId={`${connectionId}:${chosen}`} />
+              images={images} range={range} schema={schema} connectionId={connectionId} dashboardId={`${connectionId}:${chosen}`}
+              focus={fx.focus} onFocus={fx.setFocus} />
           </div>
         </>
       ) : !problem ? (

@@ -16,6 +16,7 @@
 import { cleanLabel, detectGranularity, fmtDate } from "@/lib/format";
 import { periodsSpanned, timeBarFit } from "@/components/charts/vega/bandFit";
 import { dateAxis, utcScale } from "@/components/charts/vega/timeAxis";
+import { emphasisOpacity, emphasisTest, RECEDE } from "@/components/charts/vega/emphasis";
 
 export interface FormCtx {
   columns: string[];
@@ -41,6 +42,8 @@ export interface FormCtx {
   exhibit?: {
     label_points?: boolean | null;
     quadrant?: { x?: number | null; y?: number | null } | null;
+    /** The chosen values: they stay lit and the rest recede (`vega/emphasis.ts`). */
+    emphasis?: string[] | null;
   } | null;
 }
 
@@ -58,7 +61,22 @@ export const EXTENDED_TYPES = new Set([
   "small-multiples", "small_multiples", "delta-bar", "delta_bar",
   "waterfall", "pareto", "line-forecast", "line_forecast",
   "choropleth", "point-map", "point_map",
+  // storytelling kinds (the board study, 2026-11-16): a ranking to read, before → after, two points in time, a figure
+  // against its target, retention by cohort, an estimate with its uncertainty
+  "lollipop", "leaderboard", "dumbbell", "slope", "bullet", "cohort", "interval",
 ]);
+
+/** A column holding the value one period earlier, a target, a cohort's age, or an estimate's bounds — read by name. */
+const PREVIOUS = /(^|_)(prev|previous|prior|last|before|earlier)(_|$)/i;
+const TARGET = /(^|_)(target|goal|plan|budget|quota)(_|$)/i;
+const PERIOD = /(^|_)(period|age|month_number|week_number|months_since|weeks_since|days_since|index|tenure)(_|$)/i;
+const LOWER = /lower|lo_|_low|p10/i;
+const UPPER = /upper|hi_|_high|p90/i;
+/** A stem, a join or a range is DATA, drawn solid — the theme's dashed rule is for a reference line. */
+const SOLID = { strokeDash: [] as number[] };
+/** A share reads as one: by its name, or by every value being a fraction. */
+const isShare = (col: string, rows: unknown[][], i: number) =>
+  /rate|retention|share|pct|percent|conversion/i.test(col) || rows.every((r) => { const v = Number(r[i]); return !Number.isFinite(v) || Math.abs(v) <= 1.5; });
 
 const fmt = (f?: string | null) => (f && f.trim() ? f : "~s");
 const title = (explicit: string | null | undefined, field: string) =>
@@ -81,6 +99,12 @@ export function resolveExtendedForm(type: string, c: FormCtx): FormResult | null
   const yT = title(c.yTitle, measure);
   /** A bar's band: a real date on time, a number period (`timeCol` unset) one ordinal band each, a label nominal. */
   const bandType = (field: string) => field === c.timeCol ? "temporal" : field === dateCol ? "ordinal" : "nominal";
+  const chosen = ex?.emphasis ?? null;
+  /** Opacity lighting the chosen values of any of `fields` — a heatmap's row or column, a stack's band or series. */
+  const lit = (...fields: (string | undefined)[]) => {
+    const test = emphasisTest(chosen, fields.map((f) => (f ? { field: f, isDate: f === dateCol } : null)));
+    return test ? { opacity: { condition: { test, value: 1 }, value: RECEDE } } : {};
+  };
 
   switch (type) {
     // ── relation ───────────────────────────────────────────────────────────
@@ -98,7 +122,7 @@ export function resolveExtendedForm(type: string, c: FormCtx): FormResult | null
       // turn a cloud into four readable regions. Both are exhibit semantics, and without
       // them a "rich" scatter was byte-identical to a plain one.
       const label = c.columns.find((n) => n !== x && n !== y && !c.numCols.includes(n));
-      const layers: Record<string, unknown>[] = [{ mark: { type: "point", tooltip: true } }];
+      const layers: Record<string, unknown>[] = [{ mark: { type: "point", tooltip: true }, encoding: { ...lit(label ?? catCols[0]) } }];
       if (ex?.label_points && label) {
         layers.push({
           mark: { type: "text", align: "left", dx: 6, dy: -4, fontSize: 10 },
@@ -117,7 +141,7 @@ export function resolveExtendedForm(type: string, c: FormCtx): FormResult | null
       return { resolved: "scatter", defaultH: 340, xCategories: 0,
                spec: layers.length > 1
                  ? { ...base, layer: layers, encoding: enc }
-                 : { ...base, ...layers[0], encoding: enc } };
+                 : { ...base, ...layers[0], encoding: { ...enc, ...(layers[0].encoding as Record<string, unknown>) } } };
     }
 
     // ── two dimensions and a magnitude ─────────────────────────────────────
@@ -141,6 +165,7 @@ export function resolveExtendedForm(type: string, c: FormCtx): FormResult | null
             // A magnitude is a single-hue ramp, never a rainbow. `heatmap` is the config's.
             color: { field: measure, type: "quantitative", scale: { range: "heatmap" },
                      legend: { title: yT, format: fmt(c.format) } },
+            ...lit(x, y),
           },
         },
       };
@@ -242,6 +267,7 @@ export function resolveExtendedForm(type: string, c: FormCtx): FormResult | null
                    axis: valueAxis(title(c.yTitle, "value"), c.format) },
               color: { field: "__measure", type: "nominal", sort: null },
               ...(grouped ? { xOffset: { field: "__measure", sort: null } } : {}),
+              ...lit(bandField),
             },
           },
         };
@@ -251,6 +277,7 @@ export function resolveExtendedForm(type: string, c: FormCtx): FormResult | null
         y: { field: measure, type: "quantitative", stack: grouped ? null : "zero",
              axis: valueAxis(yT, c.format) },
         color: { field: series, type: "nominal", sort: null },
+        ...lit(bandField, series),
       };
       if (grouped) enc.xOffset = { field: series, sort: null };
       return { resolved: grouped ? "grouped-bar" : "stacked-bar", defaultH: 320,
@@ -299,6 +326,7 @@ export function resolveExtendedForm(type: string, c: FormCtx): FormResult | null
             // pair. Two colours, and neither of them written into the spec.
             color: { field: measure, type: "quantitative",
                      scale: { type: "threshold", domain: [0], range: "diverging" }, legend: null },
+            ...lit(cat),
           },
         },
       };
@@ -325,6 +353,7 @@ export function resolveExtendedForm(type: string, c: FormCtx): FormResult | null
             y2: { field: "__end" },
             color: { field: measure, type: "quantitative",
                      scale: { type: "threshold", domain: [0], range: "diverging" }, legend: null },
+            ...lit(step),
           },
         },
       };
@@ -350,7 +379,7 @@ export function resolveExtendedForm(type: string, c: FormCtx): FormResult | null
           // cumulative line and the bars are expressed in the same unit instead.
           layer: [
             { mark: { type: "bar", tooltip: true },
-              encoding: { y: { field: "__share", type: "quantitative", axis: valueAxis("Share of total", ".0%") } } },
+              encoding: { y: { field: "__share", type: "quantitative", axis: valueAxis("Share of total", ".0%") }, ...lit(cat) } },
             { mark: { type: "line", point: true },
               encoding: { y: { field: "__cum", type: "quantitative" } } },
           ],
@@ -387,6 +416,196 @@ export function resolveExtendedForm(type: string, c: FormCtx): FormResult | null
       };
     }
 
+    // ── storytelling (the board study, 2026-11-16) ─────────────────────────
+    case "lollipop": {
+      // A ranking with less ink than a bar: a stem to the value and a dot on it, largest first.
+      const cat = catCols[0] ?? c.band;
+      if (!cat || !numCols.length) return null;
+      const n = new Set(rows.map((r) => r[columns.indexOf(cat)])).size;
+      return {
+        resolved: "lollipop", defaultH: Math.max(180, n * 26 + 60), xCategories: 0,
+        spec: {
+          ...base,
+          encoding: { y: { field: cat, type: "nominal", sort: { field: measure, order: "descending" }, axis: bandAxis(title(c.xTitle, cat)) }, ...lit(cat) },
+          layer: [
+            // the stem runs from the value back to zero, on the value's own scale
+            { mark: { type: "rule", ...SOLID }, encoding: { x: { field: measure, type: "quantitative", axis: valueAxis(yT, c.format) }, x2: { datum: 0 } } },
+            { mark: { type: "point", filled: true, size: 90, tooltip: true },
+              encoding: { x: { field: measure, type: "quantitative" } } },
+          ],
+        },
+      };
+    }
+
+    case "leaderboard": {
+      // A ranking to READ: each row its rank, its name and its value — and its change, when the result holds the value
+      // one period earlier beside it.
+      const cat = catCols[0] ?? c.band;
+      if (!cat || !numCols.length) return null;
+      const prev = numCols.find((n) => n !== measure && PREVIOUS.test(n));
+      const n = new Set(rows.map((r) => r[columns.indexOf(cat)])).size;
+      const valueText = `format(datum['${measure}'], '${c.format?.trim() || ".3~s"}')`;
+      // room at the right for the label each bar carries
+      const mi = columns.indexOf(measure);
+      const top = Math.max(0, ...rows.map((r) => Number(r[mi])).filter(Number.isFinite));
+      const changeText = prev
+        ? ` + (datum['${prev}'] ? ((datum['${measure}'] >= datum['${prev}'] ? '  ▲ ' : '  ▼ ') + format(abs(datum['${measure}'] - datum['${prev}']) / abs(datum['${prev}']), '.0%')) : '')`
+        : "";
+      return {
+        resolved: "leaderboard", defaultH: Math.max(180, n * 28 + 50), xCategories: 0,
+        spec: {
+          ...base,
+          transform: [
+            { window: [{ op: "row_number", as: "__rank" }], sort: [{ field: measure, order: "descending" }] },
+            { calculate: `datum.__rank + '.  ' + datum['${cat}']`, as: "__who" },
+            { calculate: `${valueText}${changeText}`, as: "__said" },
+          ],
+          encoding: { y: { field: "__who", type: "nominal", sort: { field: "__rank", order: "ascending" }, axis: bandAxis("") }, ...lit(cat) },
+          layer: [
+            { mark: { type: "bar", tooltip: true, height: { band: 0.6 } },
+              encoding: { x: { field: measure, type: "quantitative", axis: valueAxis(yT, c.format),
+                               scale: { domainMax: top * (prev ? 1.45 : 1.25) } } } },
+            { mark: { type: "text", align: "left", dx: 6 },
+              encoding: { x: { field: measure, type: "quantitative" }, text: { field: "__said", type: "nominal" } } },
+          ],
+        },
+      };
+    }
+
+    case "dumbbell": {
+      // Before → after per item: both ends drawn and joined, so a reader sees the level AND the move — what a delta
+      // bar, showing only the move, leaves out.
+      const cat = catCols[0] ?? c.band;
+      const pair = (c.plotted && c.plotted.length >= 2 ? c.plotted : numCols).slice(0, 2);
+      if (!cat || pair.length < 2) return null;
+      const [a, b] = pair;
+      const n = new Set(rows.map((r) => r[columns.indexOf(cat)])).size;
+      return {
+        resolved: "dumbbell", defaultH: Math.max(180, n * 28 + 70), xCategories: 0,
+        spec: {
+          ...base,
+          encoding: { y: { field: cat, type: "nominal", sort: { field: b, order: "descending" }, axis: bandAxis(title(c.xTitle, cat)) }, ...lit(cat) },
+          layer: [
+            { mark: { type: "rule", strokeWidth: 2, ...SOLID },
+              encoding: { x: { field: a, type: "quantitative", axis: valueAxis(title(c.yTitle, "value"), c.format) }, x2: { field: b } } },
+            { transform: [{ fold: [a, b], as: ["__end", "__value"] }],
+              mark: { type: "point", filled: true, size: 100, tooltip: true },
+              encoding: { x: { field: "__value", type: "quantitative" },
+                          color: { field: "__end", type: "nominal", sort: [a, b],
+                                   legend: { orient: "top", title: null,
+                                             labelExpr: `datum.label === ${JSON.stringify(a)} ? ${JSON.stringify(cleanLabel(a))} : datum.label === ${JSON.stringify(b)} ? ${JSON.stringify(cleanLabel(b))} : datum.label` } } } },
+          ],
+        },
+      };
+    }
+
+    case "slope": {
+      // Two points in time per item, joined: who rose, who fell, who crossed whom. Either (item, period, value) with
+      // exactly two periods, or (item, before, after).
+      const periodCol = dateCol ?? (catCols.length >= 2 ? catCols[1] : undefined);
+      const itemCol = catCols.find((x) => x !== periodCol);
+      if (!itemCol) return null;
+      const periods = periodCol ? new Set(rows.map((r) => String(r[columns.indexOf(periodCol)]))).size : 0;
+      const pair = numCols.slice(0, 2);
+      const folded = !(periodCol && periods === 2);
+      if (folded && pair.length < 2) return null;
+      const x = folded ? "__period" : (periodCol as string);
+      const y = folded ? "__value" : measure;
+      return {
+        resolved: "slope", defaultH: 340, xCategories: 2,
+        spec: {
+          ...base,
+          ...(folded ? { transform: [{ fold: pair, as: ["__period", "__value"] }] } : {}),
+          encoding: {
+            x: { field: x, type: "ordinal", sort: folded ? pair : "ascending", axis: { ...bandAxis(""), labelAngle: 0 } },
+            y: { field: y, type: "quantitative", axis: valueAxis(yT, c.format) },
+            color: { field: itemCol, type: "nominal", sort: null, legend: null },
+            ...lit(itemCol),
+          },
+          layer: [
+            { mark: { type: "line" } },
+            { mark: { type: "point", filled: true, tooltip: true } },
+            { transform: [{ window: [{ op: "rank", as: "__r" }], sort: [{ field: x, order: "descending" }], groupby: [itemCol] },
+                          { filter: "datum.__r === 1" }],
+              mark: { type: "text", align: "left", dx: 8 }, encoding: { text: { field: itemCol, type: "nominal" } } },
+          ],
+        },
+      };
+    }
+
+    case "bullet": {
+      // A figure against its target, per item: the bar is the value, the tick the target.
+      const cat = catCols[0] ?? c.band;
+      const target = numCols.find((n) => n !== measure && TARGET.test(n));
+      if (!cat || !target) return null;
+      const n = new Set(rows.map((r) => r[columns.indexOf(cat)])).size;
+      return {
+        resolved: "bullet", defaultH: Math.max(140, n * 36 + 50), xCategories: 0,
+        spec: {
+          ...base,
+          encoding: { y: { field: cat, type: "nominal", sort: null, axis: bandAxis(title(c.xTitle, cat)) }, ...lit(cat) },
+          layer: [
+            { mark: { type: "bar", height: { band: 0.4 }, tooltip: true },
+              encoding: { x: { field: measure, type: "quantitative", axis: valueAxis(yT, c.format) } } },
+            { mark: { type: "tick", thickness: 3, tooltip: true }, encoding: { x: { field: target, type: "quantitative" } } },
+          ],
+        },
+      };
+    }
+
+    case "cohort": {
+      // Retention by cohort: each row a cohort, each column its age, each cell the share still there. A heatmap whose
+      // second axis is an ORDER, read left to right.
+      const cohortCol = dateCol ?? catCols[0];
+      const periodCol = numCols.find((n) => PERIOD.test(n));
+      if (!cohortCol || !periodCol) return null;
+      const valueCol = numCols.filter((n) => n !== periodCol).pop();
+      if (!valueCol) return null;
+      const cohorts = new Set(rows.map((r) => r[columns.indexOf(cohortCol)])).size;
+      const cellFmt = c.format?.trim() || (isShare(valueCol, rows, columns.indexOf(valueCol)) ? ".1%" : "~s");
+      return {
+        resolved: "cohort", defaultH: Math.max(220, cohorts * 26 + 70), xCategories: 0,
+        spec: {
+          ...base,
+          encoding: {
+            x: { field: periodCol, type: "ordinal", axis: { ...bandAxis(title(c.xTitle, periodCol)), labelAngle: 0 } },
+            y: { field: cohortCol, type: "ordinal", sort: "ascending", axis: bandAxis(title(null, cohortCol)) },
+            ...lit(cohortCol),
+          },
+          layer: [
+            { mark: { type: "rect", tooltip: true },
+              encoding: { color: { field: valueCol, type: "quantitative", scale: { range: "heatmap" },
+                                   legend: { title: title(c.yTitle, valueCol), format: cellFmt } } } },
+            ...(rows.length <= 150
+              ? [{ mark: { type: "text", fontSize: 10 }, encoding: { text: { field: valueCol, type: "quantitative", format: cellFmt } } }]
+              : []),
+          ],
+        },
+      };
+    }
+
+    case "interval": {
+      // An estimate with its uncertainty: the dot is the estimate, the bar its range — never a bare point that reads as
+      // certain.
+      const x = dateCol ?? catCols[0] ?? c.band;
+      const lower = columns.find((n) => LOWER.test(n));
+      const upper = columns.find((n) => UPPER.test(n));
+      const est = numCols.find((n) => n !== lower && n !== upper);
+      if (!x || !lower || !upper || !est) return null;
+      return {
+        resolved: "interval", defaultH: 300, xCategories: new Set(rows.map((r) => r[columns.indexOf(x)])).size,
+        spec: {
+          ...base,
+          encoding: { x: { field: x, type: x === dateCol ? "temporal" : "nominal", axis: bandAxis(title(c.xTitle, x)) }, ...lit(x) },
+          layer: [
+            { mark: { type: "rule", strokeWidth: 2, ...SOLID },
+              encoding: { y: { field: lower, type: "quantitative", axis: valueAxis(title(c.yTitle, est), c.format) }, y2: { field: upper } } },
+            { mark: { type: "point", filled: true, size: 70, tooltip: true }, encoding: { y: { field: est, type: "quantitative" } } },
+          ],
+        },
+      };
+    }
+
     // ── geography ──────────────────────────────────────────────────────────
     case "choropleth": {
       const place = catCols[0];
@@ -407,6 +626,7 @@ export function resolveExtendedForm(type: string, c: FormCtx): FormResult | null
           encoding: {
             color: { field: measure, type: "quantitative", scale: { range: "heatmap" },
                      legend: { title: yT, format: fmt(c.format) } },
+            ...(emphasisOpacity(chosen, "properties.name") ? { opacity: emphasisOpacity(chosen, "properties.name") } : {}),
           },
         },
       };

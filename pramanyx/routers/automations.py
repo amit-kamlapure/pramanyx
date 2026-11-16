@@ -72,6 +72,12 @@ class CreateAutomationRequest(BaseModel):
     #: Honoured on CREATE, for a drafted chain finished in the editor; an update keeps the
     #: stored one, as it always has. An id that names no agent is refused.
     agent_id: str = ""
+    #: 2026-11-15 — a schedule made by SENTENCE starts at its first scheduled time, not at the moment it is made
+    #: (SP-7's rule, which the inbox's accepted draft already follows). A new cron has no previous run to be due
+    #: since, so the heartbeat fires it on its next tick: "every Monday at nine", asked for on a Wednesday, ran that
+    #: Wednesday. The door that makes a schedule from a person's words (the coworker's `schedule`) sends this; the canvas,
+    #: where a person presses Create and may want the run that proves it, does not. Read on create only.
+    start_at_first_run: bool = False
 
 
 class ProposeRequest(BaseModel):
@@ -79,6 +85,14 @@ class ProposeRequest(BaseModel):
 
     outcome: str = Field(description="What the chain should achieve, in the user's words.")
     conn_id: str = Field(description="The connection the chain runs against.")
+    #: 2026-11-16 — the clock the person speaks in ("in five minutes", "at nine"): one they named, else their own
+    #: setting, else where they are, else the organisation's (`propose.the_clock`).
+    timezone: str = Field(default="", max_length=64, description="An IANA clock the person named, e.g. Asia/Kolkata.")
+    clock_here: str = Field(default="", max_length=64,
+                            description="The IANA clock where the person is (the browser's): read when they named none "
+                                        "and set none of their own.")
+    #: The request came from a conversation (the coworker), which shows each run itself: "here" needs no sending step.
+    from_conversation: bool = False
 
 
 class PauseRequest(BaseModel):
@@ -290,7 +304,8 @@ def propose(body: ProposeRequest):
     """
     from pramanyx.automations.propose import propose_chain
 
-    proposal = propose_chain(body.outcome, conn_id=body.conn_id)
+    proposal = propose_chain(body.outcome, conn_id=body.conn_id, timezone_name=body.timezone,
+                             clock_here=body.clock_here, from_conversation=body.from_conversation)
     if proposal.verdict != "proposed":
         # 200, not 4xx: "nothing here can do that" is an ANSWER to the question that was
         # asked, and the reason is the useful half of it. A 422 would make the client
@@ -495,6 +510,31 @@ def _admitted_triggers(payload: dict) -> dict:
     return payload
 
 
+def _a_schedule_that_can_run(automation: Automation, wait_for_first: bool) -> Automation:
+    """Two things a NEW schedule is held to. A recurrence with no run left is refused: "once, yesterday at three" would be
+    saved, look armed, and never run. And when the caller asked for it (`start_at_first_run`), a chain whose every
+    trigger is a cron is muted until its first scheduled time — the mute that already exists, with its end, so the
+    run history reads "muted until …" and a person can lift it. A recurrence needs no mute: it is never due merely for
+    being new (`engine._schedule_fired`)."""
+    from datetime import datetime, timezone
+
+    from pramanyx.automations.engine import next_fire_utc
+    from pramanyx.automations.recurrence import is_recurrence, said
+    now = datetime.now(timezone.utc)
+    for c in automation.conditions:
+        if c.kind == "schedule" and is_recurrence(c.cron) and next_fire_utc(c.cron, now, automation.timezone) is None:
+            raise HTTPException(status_code=422, detail=(
+                f"this schedule has no run left — {said(c.cron, automation.timezone) or 'its recurrence'} is already "
+                "past. Give it a later start."))
+    if wait_for_first and not automation.paused_until \
+            and all(c.kind == "schedule" and not is_recurrence(c.cron) for c in automation.conditions):
+        from pramanyx.automations.store import first_scheduled_time
+        first = first_scheduled_time(automation)
+        if first:
+            automation = automation.model_copy(update={"paused_until": first})
+    return automation
+
+
 @router.post("/automations")
 def create(body: CreateAutomationRequest):
     """Create an automation. A malformed condition or effect is rejected HERE, at construction —
@@ -507,6 +547,7 @@ def create(body: CreateAutomationRequest):
             # workspace (a pack install) stays honestly unowned.
             from pramanyx.workspace.context import current_workspace_id
             payload["workspace_id"] = current_workspace_id() or ""
+        wait_for_first = bool(payload.pop("start_at_first_run", False))
         automation = Automation(**_admitted_triggers(_keyed_triggers(payload)))
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=_validation_detail(exc)) from exc
@@ -515,6 +556,7 @@ def create(body: CreateAutomationRequest):
         if get_agent(automation.agent_id) is None:
             raise HTTPException(status_code=422,
                                 detail=f"no agent with id {automation.agent_id!r} to run this chain as")
+    automation = _a_schedule_that_can_run(automation, wait_for_first)
     # HB-2 — a DECLARED automation is born on probation, addressed to its declarer.
     # With identity off `current_user_id()` is "" and the gate's probation check is
     # inert (nobody to address the review to) — built and waiting on OIDC, exactly as
@@ -541,7 +583,7 @@ def update(automation_id: str, body: CreateAutomationRequest):
         # And the fields set by OTHER doors — the MCP flag, the schedule's clock — are kept
         # unless this request actually sends them: the canvas saves the whole record it
         # draws, which never included either, and was resetting both on every save.
-        authored = body.model_dump(exclude={"agent_id"})
+        authored = body.model_dump(exclude={"agent_id", "start_at_first_run"})
         for kept in ("exposed_as_tool", "timezone"):
             if kept not in body.model_fields_set:
                 authored[kept] = getattr(existing, kept)
@@ -599,6 +641,125 @@ def set_exposed(automation_id: str, exposed: bool = True):
     if a is None:
         raise HTTPException(status_code=404, detail="Automation not found")
     return a.model_dump()
+
+
+@router.get("/automations/{automation_id}/schedule")
+def schedule_of(automation_id: str):
+    """When this automation runs, in words, and where it stands — one read for a surface that shows a schedule as a
+    card (the coworker's, under the turn that made it). Read every time the card is drawn: whether a schedule is on,
+    muted, ended or gone is a fact about the schedule, not about the page that made it."""
+    from datetime import datetime, timezone
+
+    from pramanyx.automations.engine import ended_reason, next_fire_utc
+    from pramanyx.automations.recurrence import said_when
+    a = get_automation(automation_id)
+    if a is None:
+        raise HTTPException(status_code=404, detail="Automation not found")
+    now = datetime.now(timezone.utc)
+
+    def moment(stamp) -> Optional[datetime]:
+        try:
+            read = datetime.fromisoformat(str(stamp or "").replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        return read if read.tzinfo else read.replace(tzinfo=timezone.utc)
+
+    # Runs are counted from the engine's own "since last time": its last tick, else when the automation was made. A
+    # schedule whose time has come but whose tick has not is DUE, with a run still to come — not ended, and not
+    # without a next run.
+    ticked = moment(a.last_run_at) or moment(a.created_at) or now
+    ended = ended_reason(a, now, since=ticked)
+    now = min(ticked, now)
+    muted_until = ""
+    until = moment(a.paused_until)
+    if until is not None and until > datetime.now(timezone.utc):
+        muted_until, now = str(a.paused_until), until
+    whens = [c for c in a.conditions if c.kind == "schedule"]
+    times = [t for c in whens if (t := next_fire_utc(c.cron, now, a.timezone)) is not None]
+    state = "ended" if ended else "off" if not a.enabled else "muted" if muted_until else "on"
+    return {
+        "id": a.id, "name": a.name, "conn_id": a.conn_id, "state": state, "ended": ended,
+        "said": [said_when(c.cron, a.timezone) for c in whens],
+        "timezone": a.timezone or "UTC",
+        # The next run only while there will be one: an ended or switched-off schedule has none to promise.
+        "next_run": min(times).strftime("%Y-%m-%dT%H:%M:%SZ") if times and state in ("on", "muted") else "",
+        "muted_until": muted_until, "expires_at": a.expires_at or "",
+        "last_run_at": a.last_run_at or "", "last_status": a.last_status or "",
+        "steps": [e.kind for e in a.effects],
+        "runs": _what_runs_found(a.id),
+        # 2026-11-16 — whether a run's figures may still change, said once by the platform from what it learned of the
+        # source; the model is not asked to say it at length in every answer.
+        "provisional": _provisional(a.conn_id),
+    }
+
+
+#: How many of a schedule's runs the conversation that set it up shows.
+RUNS_SHOWN = 3
+#: How many of an answer's rows a run's card is handed; it says how many there were.
+ROWS_SHOWN = 200
+
+
+def _provisional(conn_id: str) -> str:
+    try:
+        from pramanyx.settling.answer import settling_answer
+        return settling_answer(conn_id).in_brief()
+    except Exception as exc:  # noqa: BLE001 — not knowing how the source settles is no reason to withhold its runs
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "how the source settles could not be read for a schedule's card", counter="automations.provisional",
+                 conn_id=conn_id)
+        return ""
+
+
+def _shown_answer(envelope: dict) -> Optional[dict]:
+    """A run's answer as an answer is shown (2026-11-16, the user: "why is the result not chart or table?"): its
+    headline, its rows, and the chart it chose — from the envelope its report keeps. None when it kept no rows."""
+    if not isinstance(envelope, dict) or not envelope:
+        return None
+    grid = envelope.get("grid") if isinstance(envelope.get("grid"), dict) else {}
+    columns, rows = list(grid.get("columns") or []), list(grid.get("rows") or [])
+    if not columns or not rows:
+        return None
+    chart = envelope.get("chart") if isinstance(envelope.get("chart"), dict) else {}
+    return {"headline": str(envelope.get("headline") or "").strip(), "columns": columns, "rows": rows[:ROWS_SHOWN],
+            "row_count": len(rows), "chart_type": chart.get("chart_type") or "auto",
+            "chart_config": chart.get("chart_config") or {}}
+
+
+def _what_runs_found(automation_id: str) -> list[dict]:
+    """The latest runs that did something, newest first, each with what its steps found — an analysis's answer as an
+    answer is shown (headline, rows, chart), a write-up's text — and the investigation behind it. The conversation that
+    set the schedule up shows these under its card (2026-11-16: "deliver it here"); a run that did nothing is not one
+    to show. How it was answered — the tables, the window, the SQL — is the investigation's page, not the card's."""
+    from pramanyx.runners.investigation import submitted_job, what_the_job_became
+    out: list[dict] = []
+    for run in get_runs(automation_id=automation_id, limit=RUNS_SHOWN, outcomes=("fired", "paused", "error")):
+        found = []
+        for e in run.effects:
+            data = e.data or {}
+            said = str(data.get("summary") or data.get("answer") or data.get("text") or "").strip()
+            answer = _shown_answer(data.get("envelope") or {})
+            step = {"kind": e.kind, "status": e.status, "said": said[:1500], "answer": answer,
+                    "investigation_id": e.investigation_id or str(data.get("investigation_id") or ""),
+                    "message": (e.message or "")[:300], "answering": False}
+            # A step that submitted its analysis and returned holds only the job's id (2026-11-16: the card said "it
+            # found nothing to say" while the analysis ran): what it found is read where it was kept, and one still
+            # running is said to be.
+            job = submitted_job(e.message or "") if not said and not step["investigation_id"] else ""
+            became = what_the_job_became(job) if job else {}
+            if became.get("state") == "answering":
+                step["answering"] = True
+            elif became.get("state") == "answered":
+                step.update(said=became["said"][:1500], investigation_id=became["investigation_id"],
+                            answer=_shown_answer(became.get("envelope") or {}))
+            elif became.get("state") == "stopped":
+                step.update(status="failed", message=became["reason"][:300],
+                            investigation_id=became.get("investigation_id") or "")
+            # An answer with rows is shown by its headline and exhibit; the report's paragraph is not repeated.
+            if step["answer"] and step["answer"]["headline"]:
+                step["said"] = step["answer"]["headline"]
+            found.append(step)
+        out.append({"at": run.started_at, "outcome": run.outcome, "reason": (run.reason or "")[:300], "steps": found})
+    return out
 
 
 @router.get("/automations/{automation_id}/doors")

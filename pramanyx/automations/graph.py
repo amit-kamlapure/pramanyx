@@ -41,7 +41,10 @@ def condition_label(cond: Any) -> str:
     kind = getattr(cond, "kind", "")
     cfg = getattr(cond, "config", {}) or {}
     if kind == "schedule":
-        return f"schedule · {cfg.get('cron', '')}".strip(" ·")
+        # A cron as written; a recurrence (`automations.recurrence`) in words, since its two lines are not a label.
+        from pramanyx.automations.recurrence import is_recurrence, said
+        cron = str(cfg.get("cron", "") or "")
+        return f"schedule · {(said(cron) or cron.replace(chr(10), ' ')) if is_recurrence(cron) else cron}".strip(" ·")
     if kind == "metric":
         return f"metric · monitor {cfg.get('monitor_id', '')}".strip(" ·")
     if kind in ("source_change", "entity_appears"):

@@ -226,7 +226,9 @@ def test_a_secret_port_is_marked_as_one():
 # ── search and filtering ──────────────────────────────────────────────────────
 
 def test_search_matches_label_description_kind_and_family():
-    assert [c.id for c in components(q="slack")] == ["effect:slack_post"]
+    # The Slack post step by its label; the coworker's `schedule` (2026-11-16) by its description, which says it can
+    # set up "a Slack post".
+    assert [c.id for c in components(q="slack")] == ["effect:slack_post", "mcp_tool:schedule"]
     assert all(c.family == "connector" for c in components(q="connector"))
     assert components(q="zzzz-no-such-thing") == []
 

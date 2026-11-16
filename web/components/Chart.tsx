@@ -146,7 +146,7 @@ export function Chart({
 
   const built = useMemo<Built | null>(() => {
     // Tier 3 first — the four forms Vega-Lite cannot express are hand-authored Vega.
-    const t3 = resolveTier3Spec({ columns, rows, chartType: String(chartType ?? "") });
+    const t3 = resolveTier3Spec({ columns, rows, chartType: String(chartType ?? ""), emphasis: exhibit?.emphasis ?? null });
     if (t3) return { spec: t3.spec, defaultH: t3.defaultH, xCategories: 0, tier: 3 };
 
     const v = resolveVegaSpec({

@@ -77,13 +77,13 @@ def test_a_typoed_clock_refuses_at_construction():
 def test_the_first_run_mute_and_the_draft_speak_the_same_instant(monkeypatch, tmp_path):
     """The store mutes a fresh chain until its first SCHEDULED time — in the chain's
     own clock now — and the drafted first_run states the same instant."""
-    from pramanyx.automations.store import _first_scheduled_time
+    from pramanyx.automations.store import first_scheduled_time
     from pramanyx.automations.models import Automation, Condition, Effect
 
     a = Automation(conn_id="c", name="x", timezone="Europe/Berlin",
                    conditions=[Condition(kind="schedule", config={"cron": "0 9 * * *"})],
                    effects=[Effect(kind="notify", config={"trigger_id": "t"})])
-    iso = _first_scheduled_time(a)
+    iso = first_scheduled_time(a)
     from datetime import datetime as dt
     t = dt.fromisoformat(iso.replace("Z", "+00:00"))
     assert t.astimezone(timezone.utc).hour in (7, 8)   # 09:00 Berlin, whatever season

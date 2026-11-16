@@ -22,14 +22,28 @@
 - id: tool-plugin-manager
   disabled: true
 
+# ── off: the shell's own scheduler — its store of timed reminders, its page, its clock marks on a conversation.
+#    There is one scheduler and it is Pramanyx's (the user, 2026-11-15: "the scheduler needs to be one across the
+#    platform"). Measured side by side that day: the shell's delivers an instruction into a conversation at a time
+#    and nothing more — no trigger but the clock, no step but "say this to the agent", no record of what the run
+#    produced, no owner, and it stops when this process does. Pramanyx's fires on a clock or on the data, runs
+#    governed steps, keeps every run, and is the one every other surface already lists. What the shell's said that
+#    Pramanyx's could not — once, every N from a start, the first Monday, five times — Pramanyx's now says
+#    (`pramanyx/automations/recurrence.py`). The sidebar's Schedules entry is ours (`plugins/home`) and opens the app's
+#    own page. `tool-schedule` is out of the agent preset below for the same reason.
+- id: schedule
+  disabled: true
+- id: ui-schedule
+  disabled: true
+
 # ── the agent preset. THIS is where an agent's tools are mounted; the rows above are the tools' own services, and
 #    turning those off alone left every tool in the agent's hands (checked from inside a session, 2026-11-13: it
 #    still listed bash, read, write, edit, web_search, web_fetch and plugin_manager). A patch can only replace a
 #    preset's config whole, so what follows is the shell's `standard` preset as 0.2.2-rc.1 ships it, minus
 #    tool-bash, tool-pwsh, tool-fs, tool-fs-search, tool-jobs, tool-web, tool-plugin-manager, tool-plugin-market,
-#    workflow-ptc, tool-workflow and tool-schedule, with the persona rewritten. The shell's scheduler is left out
-#    because a schedule held there stops when the shell does and is seen by no one else: a question asked again on a
-#    rhythm is Pramanyx's automation (the `schedule_question` tool), run by the platform's own scheduler.
+#    workflow-ptc, tool-workflow and tool-schedule, with the persona rewritten. The shell's scheduler is off whole
+#    (above): anything set up on a schedule, from a sentence, is Pramanyx's automation (the `schedule` tool,
+#    designed by the platform's own designer), run by the platform's own scheduler.
 #    RE-DERIVE IT when the shell is upgraded: a tool
 #    the shell adds to its own preset later is not in this copy, and one it renames is not removed by it.
 #    Subagents run under `standard` too, so this is also what a spawned agent gets.
@@ -85,9 +99,16 @@
             answer's investigation_id) and attach_format (pdf, xlsx, docx or pptx).
 
 
-            Asked to ask something again on a rhythm ("every Monday"), set it up with schedule_question and say
-            back when it will run and anything its note says. If you have no such tool, say that setting up a
-            schedule needs an admin to let the coworker act, in Settings, under the agent policy.
+            Asked to have anything happen on a schedule — a question asked again, a summary, a Slack post, an
+            email; on a rhythm ("every Monday at 9", "every 90 minutes") or once ("in five minutes", "tomorrow
+            at three") — set it up with schedule, passing the person's own words as the request, the
+            connection, a time zone only if they named one, and the browser time zone you were given for this
+            request. Do not turn their words into a cron yourself. Say back its
+            `when` and `next_run` exactly as returned. If it returns `needs`, ask the person that one thing and
+            set it up again with their answer; if it returns a `reason`, say it. Each run's result is shown in
+            this conversation, under the request, and the schedule can be changed by hand on its page, under
+            Schedules in the sidebar. If you have no such tool, say that setting up a schedule needs an admin to
+            let the coworker act, in Settings, under the agent policy.
 
 
             For what else was going on outside the business (a public holiday, the news, a competitor's
@@ -99,6 +120,32 @@
             asked about before you ask for its figures, check an answer that looks off before you report
             it, and for a question about why something happened or what is driving it, run a deep analysis
             rather than a string of single questions.
+
+
+            Work alone unless the investigation needs helpers. Start helpers (the subagent tool) only when it
+            is wide — three or more questions that do not depend on each other; long — two or more separate
+            whys, each a deep analysis of its own; or across sources — a database and a spreadsheet, or more
+            than one system, one helper per source. Never for one figure or one breakdown, and never for what
+            one question can ask. Before starting them, read once the approved definitions they share. Give
+            each helper a short brief: the one question it answers, the connection to ask, the definitions it
+            needs, and that its reply is the answer's headline, figures and investigation_id. Start them all
+            at once, with agent_preset quick for a question and standard for a why; in All sources, start
+            each in its source's folder (cwd, from your instructions) — a helper started in no source's folder is
+            refused. Then end your turn in one sentence saying what you are waiting
+            for. When a helper reports and others are still working, reply with the one word Waiting. When
+            every helper has reported, write the one answer to the question: what their answers say together,
+            led by the finding, with each figure you rely on exactly as its helper gave it, what could not be
+            compared and why, and nothing none of them found. That close is the only answer the reader is
+            shown — the helpers' answers are kept as the work behind it — so do not leave a figure the
+            answer needs in a helper's reply alone, and do not end with remarks or offers. If a helper's report
+            arrives after you have written that answer, reply with the one word Done.
+
+
+            If you are a helper — your instructions say you are a delegated subagent — answer your brief and
+            only it: ask its one question on the connection it names, as it says, and start no helpers of your
+            own. Your final reply is what the agent that started you reads, and only it: give the answer's
+            headline, its figures exactly as they came back, and its investigation_id. If it could not be
+            answered, say what was missing.
       - &agent_instructions
         id: agent-instructions
         name: '@deepseek-ai/dsh-agent-instructions'
@@ -207,8 +254,12 @@
             config:
               provider: spawn
               toolName: subagent
-              modelSelection: true
-              modelDiscovery: true
+              # A helper answers one question as Quick does, or works a why through as Agent does — the agent picks
+              # (`agent_preset`), Quick by default. One level only: a helper starts no helpers. No model choice: the
+              # model is Pramanyx's, chosen by an admin (2026-11-15).
+              agentPreset: quick
+              allowedAgentPresets: [quick, standard]
+              maxDepth: 1
           - id: tool-subagent-fork
             name: '@deepseek-ai/dsh-tool-subagent'
             config:
@@ -359,6 +410,13 @@
                 for the person to read, change and send. You cannot send it, so never say it was sent. The body is
                 the summary they asked for; when they want the analysis itself, attach it with attach_answer (the
                 answer's investigation_id) and attach_format (pdf, xlsx, docx or pptx).
+
+
+                If you are a helper — your instructions say you are a delegated subagent — answer your brief and
+                only it: ask its one question on the connection it names, as it says, and start no helpers of your
+                own. Your final reply is what the agent that started you reads, and only it: give the answer's
+                headline, its figures exactly as they came back, and its investigation_id. If it could not be
+                answered, say what was missing.
           - *agent_instructions
           - *time_context
           - *compaction

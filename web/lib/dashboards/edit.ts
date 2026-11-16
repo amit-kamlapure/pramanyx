@@ -246,6 +246,29 @@ export function moveWithin(spec: unknown, key: string, delta: -1 | 1): Dashboard
   return s;
 }
 
+/** Move an element beside another — before or after it — in its own section or another that holds pieces (the board
+ *  study, 2026-11-16: a card dragged by its header lands where the marker showed). A move across sections keeps the
+ *  element's room on the grid it lands in, as moving it to a section does. */
+export function moveTo(spec: unknown, key: string, target: string, place: "before" | "after"): DashboardSpec {
+  const s = copy(spec);
+  if (key === target || !(key in s.elements) || !(target in s.elements)) return s;
+  const from = parentOf(s, key);
+  const to = parentOf(s, target);
+  if (!from || !to || !holdsPieces(s, to)) return s;
+  if (from === to) {
+    const kids = s.elements[to].children;
+    kids.splice(kids.indexOf(key), 1);
+    kids.splice(kids.indexOf(target) + (place === "after" ? 1 : 0), 0, key);
+    return s;
+  }
+  detach(s, key, false);
+  if (!(to in s.elements) || !s.elements[to].children.includes(target)) return copy(spec);
+  const kids = s.elements[to].children;
+  kids.splice(kids.indexOf(target) + (place === "after" ? 1 : 0), 0, key);
+  fitTo(s, to, key);
+  return settle(s);
+}
+
 /** Move a card to the end of another section. */
 export function moveCardTo(spec: unknown, key: string, sectionKey: string): DashboardSpec {
   const s = copy(spec);

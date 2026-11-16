@@ -41,9 +41,10 @@ TOOL_LEVELS: dict[str, Level] = {
     "list_jobs": "read",
     "get_job": "read",
     "cancel_job": "act",
-    # The coworker plan, 2026-11-15 — a question asked again on a rhythm makes an automation: it changes what the
-    # platform does unattended, so it is an act, hidden until an organisation lets its agents act.
-    "schedule_question": "act",
+    # The coworker plan, 2026-11-15 — a schedule set up from a sentence makes an automation (`schedule`, 2026-11-16,
+    # which took `schedule_question`'s place): it changes what the platform does unattended, so it is an act, hidden
+    # until an organisation lets its agents act.
+    "schedule": "act",
     # A web search changes nothing and starts no model work: a read, behind the organisation's own `web_search` setting.
     "search_the_web": "read",
     # 2026-11-15 — a draft changes nothing and sends nothing: the person sends it (`routers/email.py`).

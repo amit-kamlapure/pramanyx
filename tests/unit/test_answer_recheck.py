@@ -184,6 +184,7 @@ def test_a_query_that_fails_now_is_recorded_as_unchecked(con, lag):
 
 def test_the_daily_pass_runs_once_a_day_and_skips_fresh_rechecks(con, lag, monkeypatch):
     monkeypatch.setattr(recheck, "_last_run_day", None)
+    monkeypatch.setattr("pramanyx.kernel.once_a_day.first_today", lambda job, day: True)   # a day no one has claimed
     from pramanyx.db import history
     answer = answer_from(con)
     real = history.recent_chat_answers
@@ -266,6 +267,7 @@ def test_a_move_from_zero_states_no_percentage():
 
 def test_the_daily_pass_reaches_the_answer_checked_longest_ago_first(con, lag, monkeypatch):
     monkeypatch.setattr(recheck, "_last_run_day", None)
+    monkeypatch.setattr("pramanyx.kernel.once_a_day.first_today", lambda job, day: True)   # a day no one has claimed
     monkeypatch.setattr(recheck, "PER_RUN", 1)
     from pramanyx.db import history
     old, new = answer_from(con, session_id="s-old"), answer_from(con, session_id="s-new")

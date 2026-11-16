@@ -169,7 +169,10 @@ describe("a size", () => {
     const run = { ...CARDS[0].run, value: 0.1003, scoped: { covers: "July 2026", standing: false, why: "", grain: "orders.created_at" } } as CardRunResult;
     render(<DashboardTile cs={{ card: metricCard, run }} status="within" sym="$" doors={READER}
       place={{ elementKey: "card-rate", size: "small", range: { preset: "previous_month" } }} />);
+    // the card look's base figure (CLARITY.md, 2026-11-16) at the type scale's display size, not grown as a bigger
+    // tile's is
     expect(screen.getByTestId("tile-figure").style.fontSize).toBe("");
+    expect(screen.getByTestId("tile-figure").className).toContain("aug-fs-display");
     expect(screen.queryByTestId("tile-trend")).toBeNull();
     expect(readMetricTrend).not.toHaveBeenCalled();
   });

@@ -35,6 +35,36 @@ def unheld(spec: Any, card_ids: Any) -> list[str]:
     return said
 
 
+def unread(spec: Any, card_ids: Any) -> list[str]:
+    """A sentence for each value the reader sets on the page — a control, or a what-if's slider — that nothing on the
+    dashboard reads: no query it places names it as ``{{name}}``, and no set compares with it. Moving that control changes
+    nothing, and a reader who moves it learns the figures do not depend on it. A value the author sets is never drawn on
+    the page, and one counted, summed or read is a figure of its own, so neither is held to this.
+
+    Not asked of a person's hand edit in the builder: a value is unread from the moment it is added until it is wired.
+    Asked of a model's dashboard as it is kept, and of every dashboard as it is published (`versions`)."""
+    from pramanyx.dashboards.queries import params_of
+    from pramanyx.cards.store import get_card
+    read: set[str] = set()
+    for cid in card_ids or ():
+        card = get_card(str(cid))
+        read.update(params_of(getattr(card, "sql", "") or "") if card is not None else ())
+    for s in _named(spec, "sets").values():
+        for c in (s.get("where") if isinstance(s, dict) and isinstance(s.get("where"), list) else ()):
+            if isinstance(c, dict) and c.get("value_from"):
+                read.add(str(c["value_from"]))
+    said: list[str] = []
+    for name, v in _named(spec, "values").items():
+        source = v.get("from") if isinstance(v, dict) and isinstance(v.get("from"), dict) else {}
+        if source.get("by") != "reader" or name in read:
+            continue
+        label = str(v.get("label") or name)
+        said.append(f'The reader sets "{label}" on the page, and nothing on this dashboard reads it: no query names '
+                    f"{{{{{name}}}}} and no set compares with it. Moving it would change nothing. Read it in a query or a "
+                    "set, or take it away.")
+    return said
+
+
 def not_resolved(connection_id: str, spec: Any, *, graph: Optional[Any] = None, wiring: Optional[dict] = None) -> list[str]:
     """A sentence for each value read off a chosen object whose property that object's entity does not have; (Arc AP-8c)
     for each value summed over a set by a property its objects do not have, or have as something other than a number;

@@ -283,3 +283,67 @@ def test_an_authorable_kind_is_offered_even_with_an_empty_catalogue():
     line = next(ln for ln in p.system.splitlines() if ln.startswith("- trusted_query"))
     assert "UNAVAILABLE" not in line
     assert "(a list: rows)" in line
+
+
+# ── 2026-11-16: a sentence is the way to schedule anything ───────────────────────────────────────────────────────────
+
+def test_the_designer_is_told_the_time_in_the_persons_clock_so_in_five_minutes_can_be_drawn():
+    """The user, after the agent shell's scheduler took "deliver me AI news in the next 5 minutes here": the
+    designer was never told the time, so it could draft only a rhythm."""
+    once = "DTSTART:20991116T115800\nRRULE:FREQ=DAILY;COUNT=1"
+    p = _Provider(_chain(conditions=[{"kind": "schedule", "config": {"cron": once}}]))
+    out = propose_chain("in five minutes, how is the pipeline?", conn_id=CONN, provider=p, timezone_name="Asia/Kolkata")
+    assert "NOW: " in p.system and "in Asia/Kolkata" in p.system and "Write every time in Asia/Kolkata" in p.system
+    assert "COUNT=1" in p.system                                  # it is taught how to say once
+    assert out.verdict == "proposed" and out.draft["timezone"] == "Asia/Kolkata"
+    assert out.draft["conditions"][0]["config"]["cron"] == once
+    assert out.first_run.startswith("2099-11-16T06:28")           # 11:58 in Kolkata, as the scheduler reads it
+
+
+def test_a_sentences_times_are_read_in_the_zone_named_then_the_persons_then_where_they_are_then_the_orgs(monkeypatch):
+    """The user, 2026-11-16 ("Yes, my clock"): a draft on the Automations page read "9 in the morning" as 09:00 UTC,
+    because neither the person nor the organisation had set a clock — though the browser knew it."""
+    import pramanyx.db.user_prefs as prefs
+    import pramanyx.orgsettings.store as org
+    from pramanyx.automations.propose import the_clock
+    mine, ours = {"tz": ""}, {"tz": ""}
+    monkeypatch.setattr(prefs, "preferred_timezone", lambda: mine["tz"])
+    monkeypatch.setattr(org, "load_org_settings", lambda: type("S", (), {"timezone": ours["tz"]})())
+    assert the_clock() == ""                                                   # nothing known: UTC
+    ours["tz"] = "Europe/Berlin"
+    assert the_clock() == "Europe/Berlin"
+    assert the_clock(here="Asia/Kolkata") == "Asia/Kolkata"                    # where they are, before the org's
+    mine["tz"] = "America/New_York"
+    assert the_clock(here="Asia/Kolkata") == "America/New_York"                # their own choice, before the browser
+    assert the_clock("Europe/London", "Asia/Kolkata") == "Europe/London"       # a zone they named, before all
+    assert the_clock("Mars/Olympus", "Asia/Kolkata") == "America/New_York"     # one nobody can read is passed over
+    p = _Provider(_chain())
+    mine["tz"] = ""
+    out = propose_chain("every day at nine, how is the pipeline", conn_id=CONN, provider=p, clock_here="Asia/Kolkata")
+    assert "Write every time in Asia/Kolkata" in p.system and out.draft["timezone"] == "Asia/Kolkata"
+
+
+def test_a_request_from_a_conversation_needs_no_sending_step_for_here():
+    p = _Provider(_chain())
+    propose_chain("every Monday, how is the pipeline — here", conn_id=CONN, provider=p, from_conversation=True)
+    assert "THE PERSON ASKED IN A CONVERSATION" in p.system and "need no sending step" in p.system
+    p = _Provider(_chain())
+    propose_chain("every Monday, how is the pipeline", conn_id=CONN, provider=p)
+    assert "THE PERSON ASKED IN A CONVERSATION" not in p.system   # the Automations page's box is not a conversation
+
+
+def test_a_recurrence_the_designer_writes_wrongly_is_refused_like_any_unsaveable_draft():
+    p = _Provider(_chain(conditions=[{"kind": "schedule", "config": {"cron": "DTSTART:20991116T090000\nRRULE:FREQ=SECONDLY"}}]))
+    out = propose_chain("every second", conn_id=CONN, provider=p)
+    assert out.verdict == "refused" and "FREQ must be one of" in out.reason
+
+
+def test_the_designer_writes_a_question_as_asked_never_how_to_report_it():
+    """The user, 2026-11-16, of a scheduled answer that opened on "order_items.sale_price joined to products.category…":
+    the designer had written into the question "State the date range and source you used", and the answer obeyed."""
+    p = _Provider(_chain())
+    propose_chain("every Monday, top 5 categories by revenue", conn_id=CONN, provider=p)
+    assert "Never tell the analysis\nhow to report" in p.system and "state the date range or source you used" in p.system
+    # Found beside the agent shell's own scheduler, which kept "yesterday" relative to each run: the designer had
+    # written "For yesterday (2026-11-15, …)" — right once, wrong every morning after for a daily schedule.
+    assert "Keep a period as the person said it" in p.system and "Never turn it into a calendar date" in p.system

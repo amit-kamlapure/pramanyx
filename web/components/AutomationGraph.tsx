@@ -47,6 +47,7 @@ import {
   blankDraft, DesignControls, StepInspector, updatePayload, type Draft, type DraftKeeps,
 } from "@/components/automations/AutomationAuthor";
 import { DeployMenu } from "@/components/automations/DeployMenu";
+import { cronWords, isRecurrence } from "@/components/automations/ScheduleEditor";
 import {
   AutomationPalette, PALETTE_DRAG_TYPE, readPaletteDrag,
   type PaletteGroup, type PalettePlacement,
@@ -783,8 +784,14 @@ function DesignStepNodeInner({ data, selected }: { data: DesignNodeData; selecte
 
 /** One condition, humanised. The cron stays visible because it is the truth; the words
  *  in front of it are for scanning, not a translation layer that could drift. */
-function conditionLine(c: { kind: string; config: Record<string, unknown> }): string {
-  if (c.kind === "schedule") return `on schedule · ${c.config.cron ?? ""}`;
+function conditionLine(c: { kind: string; config: Record<string, unknown> }, timezone = ""): string {
+  if (c.kind === "schedule") {
+    // A cron stays as written. A recurrence (once, every N from a start) is two lines of notation, which is not a
+    // label: it is said in words here — in the chain's own clock, which its start is read in — and its text is one
+    // click away in the trigger's editor.
+    const cron = String(c.config.cron ?? "");
+    return `on schedule · ${isRecurrence(cron) ? cronWords(cron, timezone) : cron}`;
+  }
   if (c.kind === "metric") return `monitor ${c.config.monitor_id ?? ""} fires`;
   if (c.kind === "source_change") return `${c.config.table ?? "a table"} changes`;
   if (c.kind === "entity_appears") return `new key in ${c.config.table ?? "a table"}`;
@@ -798,7 +805,7 @@ function conditionLine(c: { kind: string; config: Record<string, unknown> }): st
 
 function DesignTriggerNode({ data }: {
   data: { conditions: { kind: string; config: Record<string, unknown> }[]; logic: string;
-          scheduling?: string };
+          scheduling?: string; timezone?: string };
 }) {
   return (
     <div style={{
@@ -827,7 +834,7 @@ function DesignTriggerNode({ data }: {
         )}
         {data.conditions.map((c, i) => (
           <span key={i} className="aug-fs-sm" style={{ color: "var(--t2)" }}>
-            {conditionLine(c)}
+            {conditionLine(c, data.timezone)}
           </span>
         ))}
         {/* DS-7 — a spine-less picture must say why: the frontier starts every root
@@ -1489,7 +1496,8 @@ export function AutomationGraph({ automationId, automation, create, onCreated, h
       position: livePos["__trigger"] ?? positions["__trigger"] ?? { x: 0, y: 60 },
       data: { conditions: draft.conditions,
               logic: automation?.condition_logic ?? "all",
-              scheduling: automation?.scheduling ?? "ordered" },
+              scheduling: automation?.scheduling ?? "ordered",
+              timezone: automation?.timezone || create?.keeps?.timezone || "" },
     }, ...steps.map((s, i) => ({
       id: s.alias,
       type: "designStep" as const,

@@ -46,18 +46,19 @@ at `POST /ledger/v1/principals/service`) and is held to the same agent policy as
 
 Every tool is one of three things, and says so in its MCP hints: a **read** (`readOnlyHint`)
 looks things up; a **run** starts explorations and analyses, which spend model calls; an
-**act** (`destructiveHint`) changes something — `cancel_job`, an exposed automation, Spotlight's
-staged acts. Which of the three an outside agent may do is the organisation's **agent policy**:
+**act** (`destructiveHint`) changes something — `cancel_job`, `schedule`, an exposed automation,
+Spotlight's staged acts. Which of the three an outside agent may do is the organisation's **agent policy**:
 
 | | |
 |---|---|
 | Where it lives | `GET /org-settings/agent-policy` — the saved policy, the environment's narrowing and the effective result. Kept with the organisation's other per-org setting (the LLM binding's store), not a new store. |
-| Default | `run`, set by nobody: today's exposure made explicit. `act` is given only by a person. |
+| Default | `act`, set by nobody (since 2026-11-16; `run` before). The level is a ceiling, not a mode: the agent reads, runs or acts as the question needs, and what an act sends still waits for a person (a drafted Slack post asks for approval; an email leaves on a person's click). A person lowers it; the server lists `run`'s tools while it cannot read the policy. |
 | Who sets it | `PUT /org-settings/agent-policy` `{"level": "read"\|"run"\|"act", "connections": [...]?, "tools": [...]?}` — a person with `ADMIN_MANAGE_ORG`. An agent that tries is refused with `AGENT_POLICY_NOT_SELF_SET`. `DELETE` returns to the default. |
 | Allowlists | `connections` (connection ids) and `tools` (tool names); `null` means all. |
 | Environment | `PRAMANYX_AGENT_POLICY_LEVEL`, `PRAMANYX_AGENT_POLICY_CONNECTIONS`, `PRAMANYX_AGENT_POLICY_TOOLS` (server side) can only **narrow** what is saved, never widen it. |
 | Enforcement | Every call this client makes carries `X-Pramanyx-Agent: mcp` and `X-Pramanyx-Tool: <tool>`; the API checks the policy on those calls and refuses with a 403 whose `detail.code` is one of `AGENT_LEVEL_DENIED`, `AGENT_TOOL_DENIED`, `AGENT_CONNECTION_DENIED`, `AGENT_POLICY_NOT_SELF_SET`. The server also hides a disallowed tool from `tools/list` and refuses one called by name with the same code. |
-| Audit | Every agent call, allowed or refused, is a `mcp.tool_call` event in the Ledger with its principal, tool, route, verdict and bounded arguments — listed on the governance feed under *data access*. |
+| Changes | Picked up without a restart (since 2026-11-16). The server asks `GET /org-settings/agent-policy/version` every ten seconds while a client holds a list; when the fingerprint moves it sends `notifications/tools/list_changed`, and the client re-lists under the new policy. |
+| Audit | Every agent call, allowed or refused, is a `mcp.tool_call` event in the Ledger with its principal, tool, route, verdict and bounded arguments — listed on the governance feed under *data access*. The one exception is the version question above: it reads no data, and a row every ten seconds would bury the calls an agent made; the read of the policy that follows a change is recorded. |
 
 ## Architecture
 

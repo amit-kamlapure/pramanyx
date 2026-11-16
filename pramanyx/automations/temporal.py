@@ -55,11 +55,19 @@ _PREVIOUS_REPORT_END = "narrating the difference as a business change."
 
 
 def cadence_of(cron: str) -> str:
-    """``daily`` | ``weekly`` | ``monthly`` from a 5-field cron, best-effort.
+    """``daily`` | ``weekly`` | ``monthly`` from a schedule's expression (a 5-field cron, or a recurrence), best-effort.
 
     A fixed day-of-month reads as monthly, a fixed day-of-week as weekly, anything
     else (including shapes this doesn't understand) as daily — the safest default,
     because a daily note about complete days is still TRUE under any cadence."""
+    from pramanyx.automations.recurrence import RecurrenceError, is_recurrence, parse
+    if is_recurrence(cron):
+        # A recurrence (`automations.recurrence`) names its own rhythm; one that cannot be read takes the safe default.
+        try:
+            freq = parse(str(cron).strip()).freq
+        except RecurrenceError:
+            return "daily"
+        return {"WEEKLY": "weekly", "MONTHLY": "monthly", "YEARLY": "monthly"}.get(freq, "daily")
     fields = (cron or "").split()
     if len(fields) != 5:
         return "daily"

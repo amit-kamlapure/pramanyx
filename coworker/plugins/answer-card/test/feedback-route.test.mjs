@@ -122,3 +122,12 @@ test("the analysis rides along only as an answer's id and one of the four format
     { to: "ben@example.com", subject: "", body: "x", attach_answer: "abc123", attach_format: "pdf" },
     { to: "ben@example.com", subject: "", body: "x" }]);
 });
+
+test("an email goes on under its draft's name, and only a name", async () => {
+  heard.length = 0;
+  await say("/pramanyx-email", { to: "ben@example.com", body: "x", draft: "d-0123456789abcdef" });
+  await say("/pramanyx-email", { to: "ben@example.com", body: "x", draft: "../../not a name" });
+  assert.deepEqual(heard.map((h) => h.body), [
+    { to: "ben@example.com", subject: "", body: "x", draft: "d-0123456789abcdef" },
+    { to: "ben@example.com", subject: "", body: "x" }]);
+});

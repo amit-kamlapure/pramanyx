@@ -1114,10 +1114,16 @@ def _is_year(numeral) -> bool:
             and 1900.0 <= float(numeral.value) <= 2100.0)
 
 
+def stated_figures(text: str) -> list:
+    """The figures a text states, as numerals, in order: what law 1 and law 7 read — dates and clock times taken out,
+    and a bare small count, a rank or a calendar year not counted as a claim ("3 regions" costs nothing)."""
+    from pramanyx.explorer.grounding import extract_numerals
+    return [n for n in extract_numerals(_strip_dates(text)) if _assertive(n)]
+
+
 def significant_values(text: str) -> list[float]:
     """The numbers law 7 compares between two sends of one message, in order."""
-    from pramanyx.explorer.grounding import extract_numerals
-    return [float(n.value) for n in extract_numerals(_strip_dates(text)) if _assertive(n)]
+    return [float(n.value) for n in stated_figures(text)]
 
 
 def message_shape_key(text: str) -> str:
