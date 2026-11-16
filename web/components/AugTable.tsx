@@ -283,27 +283,50 @@ export function SqlResultTable({
     const filtered = isFiltering(colFilters[idx]);
     // what shows at rest, and what only where the pointer is: the sort and the ▾ at the head's right edge, each drawn
     // while it is in force — a sort, a filter, an open menu — as the SQL Editor's grid does (the user, 2026-11-09)
-    const onHover = "hidden group-hover:inline-flex group-focus-within:inline-flex";
     const open = menu?.col === idx;
+    const sortInForce = !!sorted;
+    const menuInForce = filtered || open;
+    // WHAT THE POINTER REVEALS TAKES NO ROOM (the user, 2026-11-16: hovering a head pushed every column out of line
+    // with its rows). The grid's column widths are measured from a hidden copy of these heads inside the body, and a
+    // `display:none` that the pointer lifts lifts it in the visible copy only: the hovered head grew (91 → 129px
+    // measured) and the header strip slid 68px out of step with the rows. So with nothing in force the two controls
+    // float over the head's right edge, on its own hover colour; once either is in force both sit in the head, in
+    // both copies alike, and the other is only made invisible, so its room is the same hovered or not.
+    const sortMark = (
+      <Icon name={sorted === "asc" ? "sortasc" : sorted === "desc" ? "sortdesc" : "sort"} size={13} />
+    );
+    const menuMark = filterable ? (
+      <ColumnFilterButton column={cleanLabel(col)} filtered={filtered} open={open}
+        onOpen={anchor => setMenu(m => (m?.col === idx ? null : { col: idx, anchor }))} />
+    ) : null;
+    const sortColour = { color: sortInForce ? "var(--blue4)" : "var(--t3)" };
+    const reveal = "invisible group-hover:visible group-focus-within:visible";
     return {
       key: dataKey,
       fixed: pinned.includes(idx) ? ("left" as const) : undefined,
       onHeaderCell: () => ({ className: "group" }),
       title: (
-        <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 4, position: "relative" }}>
           <span title={cleanLabel(col)} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0,
             flex: "1 1 auto", textAlign: isNum ? "right" : "left" }}>
             {pinned.includes(idx) && <Icon name="pin" size={10} label="Pinned" />} {cleanLabel(col)}
           </span>
           {/* The sort: the head's own carets are not drawn (`sortIcon`); a click on the head sorts. */}
-          <span aria-hidden className={sorted ? "inline-flex" : onHover}
-            style={{ flexShrink: 0, color: sorted ? "var(--blue4)" : "var(--t3)" }}>
-            <Icon name={sorted === "asc" ? "sortasc" : sorted === "desc" ? "sortdesc" : "sort"} size={13} />
-          </span>
-          {filterable && (
-            <span className={filtered || open ? "inline-flex" : onHover} style={{ flexShrink: 0 }}>
-              <ColumnFilterButton column={cleanLabel(col)} filtered={filtered} open={open}
-                onOpen={anchor => setMenu(m => (m?.col === idx ? null : { col: idx, anchor }))} />
+          {sortInForce || menuInForce ? (
+            <>
+              <span aria-hidden className={sortInForce ? "inline-flex" : `inline-flex ${reveal}`} style={{ flexShrink: 0, ...sortColour }}>
+                {sortMark}
+              </span>
+              {menuMark && (
+                <span className={menuInForce ? "inline-flex" : `inline-flex ${reveal}`} style={{ flexShrink: 0 }}>{menuMark}</span>
+              )}
+            </>
+          ) : (
+            <span data-testid="head-controls" className="hidden group-hover:inline-flex group-focus-within:inline-flex"
+              style={{ position: "absolute", right: 0, top: "50%", transform: "translateY(-50%)", alignItems: "center", gap: 4,
+                       paddingLeft: 12, background: "linear-gradient(to right, transparent, var(--bg-4) 12px)" }}>
+              <span aria-hidden style={{ display: "inline-flex", ...sortColour }}>{sortMark}</span>
+              {menuMark}
             </span>
           )}
         </span>

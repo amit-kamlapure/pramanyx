@@ -98,6 +98,28 @@ describe("the arrow at each column's head", () => {
     expect(units.querySelector(".tabler-icon-chevron-down")).not.toBeNull();
   });
 
+  it("takes no room where it is drawn only for the pointer: it floats over the head's right edge (2026-11-16)", () => {
+    // The user, on the catalog's preview: hovering a head pushed every column out of line with its rows. The grid's
+    // widths are measured from a hidden copy of the heads, and the hovered head grew where the copy did not.
+    mount();
+    for (const a of arrows()) {
+      const controls = a.parentElement as HTMLElement;
+      expect(controls).toHaveAttribute("data-testid", "head-controls");
+      expect(controls.style.position).toBe("absolute");
+      expect(controls.style.right).toBe("0px");
+    }
+  });
+
+  it("once its column is sorted, keeps its room hovered or not: made invisible, never taken away", () => {
+    mount();
+    fireEvent.click(screen.getAllByRole("columnheader")[1]);
+    const [, units] = arrows();
+    const holder = units.parentElement as HTMLElement;
+    expect(holder.style.position).toBe("");                              // in the head's row, in both copies
+    expect(holder.className).toContain("invisible group-hover:visible");
+    expect(holder.className).not.toContain("hidden");
+  });
+
   it("is not drawn on a table of one row, which has nothing to sort or narrow", () => {
     mount([["North", "9", "2024-03-01"]]);
     expect(screen.queryAllByTestId("column-filter")).toHaveLength(0);
