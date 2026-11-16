@@ -698,15 +698,29 @@ def _what_runs_found(automation_id: str) -> list[dict]:
     """The latest runs that did something, newest first, each with what its steps found — the answer an investigate
     step gave, a write-up's text — and the investigation behind it. The conversation that set the schedule up shows
     these under its card (2026-11-16: "deliver it here"); a run that did nothing is not one to show."""
+    from pramanyx.runners.investigation import submitted_job, what_the_job_became
     out: list[dict] = []
     for run in get_runs(automation_id=automation_id, limit=RUNS_SHOWN, outcomes=("fired", "paused", "error")):
         found = []
         for e in run.effects:
             data = e.data or {}
             said = str(data.get("summary") or data.get("answer") or data.get("text") or "").strip()
-            found.append({"kind": e.kind, "status": e.status, "said": said[:1500],
-                          "investigation_id": e.investigation_id or str(data.get("investigation_id") or ""),
-                          "message": (e.message or "")[:300]})
+            step = {"kind": e.kind, "status": e.status, "said": said[:1500],
+                    "investigation_id": e.investigation_id or str(data.get("investigation_id") or ""),
+                    "message": (e.message or "")[:300], "answering": False}
+            # A step that submitted its analysis and returned holds only the job's id (2026-11-16: the card said "it
+            # found nothing to say" while the analysis ran): what it found is read where it was kept, and one still
+            # running is said to be.
+            job = submitted_job(e.message or "") if not said and not step["investigation_id"] else ""
+            became = what_the_job_became(job) if job else {}
+            if became.get("state") == "answering":
+                step["answering"] = True
+            elif became.get("state") == "answered":
+                step.update(said=became["said"][:1500], investigation_id=became["investigation_id"])
+            elif became.get("state") == "stopped":
+                step.update(status="failed", message=became["reason"][:300],
+                            investigation_id=became.get("investigation_id") or "")
+            found.append(step)
         out.append({"at": run.started_at, "outcome": run.outcome, "reason": (run.reason or "")[:300], "steps": found})
     return out
 

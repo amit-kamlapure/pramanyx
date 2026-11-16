@@ -328,3 +328,39 @@ def test_the_schedule_read_carries_what_each_run_found_for_the_conversation_that
     runs = client.get(f"/automations/{made['id']}/schedule").json()["runs"]
     assert [r["steps"][0]["said"] for r in runs] == ["GMV led by NET-A-PORTER", "GMV led by Mytheresa at €1.2M"]
     assert runs[0]["steps"][0]["investigation_id"] == "inv2"         # a run that did nothing is not shown
+
+
+def test_a_run_whose_analysis_is_still_running_says_so_and_shows_its_answer_once_kept(flag_on, monkeypatch):
+    """Found trying it live, 2026-11-16: a one-off's step handed its analysis to the queue and held only "job <id>",
+    so the coworker's card said "it found nothing to say" while the analysis ran. The read follows the job: running,
+    it is said to be; done, its answer and the investigation behind it are shown; stopped, the reason is."""
+    from pramanyx.automations.models import AutomationRun, EffectOutcome
+    from pramanyx.automations.store import append_run
+    import pramanyx.db.history as history
+    import pramanyx.kernel.ledger as ledger_mod
+    from pramanyx.runners.investigation import DISPATCH_EVENT, submitted_job
+
+    assert submitted_job("job 7fb1f967901f") == "7fb1f967901f" and submitted_job("ran inline (caller waited)") == ""
+    jobs = {"j-running": {"state": "RUNNING"}, "j-done": {"state": "SUCCEEDED"}, "j-broke": {"state": "FAILED",
+                                                                                            "error": "BigQuery timed out"}}
+    joined = {"j-done": "inv-done"}
+
+    class _Ledger:
+        def events(self, *, kind=None, job_id=None, limit=200, **_):
+            assert kind == DISPATCH_EVENT
+            return [{"payload": {"investigation_id": joined[job_id]}}] if job_id in joined else []
+
+        def job_get(self, job_id):
+            return jobs.get(job_id)
+    made = client.post("/automations", json=_body("0 9 * * 1")).json()
+    for i, job in enumerate(["j-broke", "j-done", "j-running"]):
+        append_run(AutomationRun(automation_id=made["id"], outcome="fired", started_at=f"2026-11-1{i}T09:00:00Z",
+                                 effects=[EffectOutcome(kind="investigate", status="executed", message=f"job {job}")]))
+    monkeypatch.setattr(ledger_mod.Ledger, "default", classmethod(lambda cls: _Ledger()))
+    monkeypatch.setattr(history, "get_investigation", lambda inv_id: {
+        "id": inv_id, "headline": "Top categories", "report": {"executive_summary": "Outerwear & Coats led with 4,686.58"}})
+    running, done, broke = [r["steps"][0] for r in client.get(f"/automations/{made['id']}/schedule").json()["runs"]]
+    assert running["answering"] is True and running["said"] == "" and running["status"] == "executed"
+    assert done["said"] == "Outerwear & Coats led with 4,686.58" and done["investigation_id"] == "inv-done"
+    assert done["answering"] is False
+    assert broke["status"] == "failed" and broke["message"] == "BigQuery timed out" and broke["said"] == ""

@@ -629,12 +629,15 @@ function RunFound({ run }) {
   const found = (run.steps ?? []).filter((step) => step.said);
   const failed = (run.steps ?? []).filter((step) => !["executed", "skipped"].includes(String(step.status)));
   const analysis = (run.steps ?? []).map((step) => step.investigation_id).find(Boolean);
+  // A step that handed its analysis to the platform's queue: the run is recorded before the answer exists.
+  const answering = (run.steps ?? []).some((step) => step.answering);
   return h("div", { style: { borderTop: `1px solid ${line}`, paddingTop: 6 } },
     h("div", { style: { ...quiet, fontSize: 12.5 } },
       `Ran ${whenNext(run.at)}`, run.outcome === "paused" ? " · waiting for a person" : run.outcome === "error" ? " · did not run" : ""),
     found.length ? found.map((step, i) => h("div", { key: i, style: { whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight: 1.5 } }, step.said))
       : h("div", { style: quiet }, run.outcome === "error" ? (run.reason || "It broke before it found anything.")
-        : failed.length ? (failed[0].message || "A step did not finish.") : "It found nothing to say."),
+        : failed.length ? (failed[0].message || "A step did not finish.")
+          : answering ? "Still being answered. The answer shows here when it is done." : "It found nothing to say."),
     analysis && hasPane() ? h("div", null, h("button", { type: "button", className: "pramanyx-link",
       onClick: () => openBeside("page", pageFor.receipt(analysis)) }, "How it was answered")) : null);
 }
