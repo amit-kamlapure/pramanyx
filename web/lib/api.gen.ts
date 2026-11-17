@@ -3283,8 +3283,8 @@ export interface paths {
         };
         /**
          * List Chat Sessions Route
-         * @description Recent chat sessions for the threads rail (CI-6a) — id, opening question as the
-         *     title, turn count, last activity. Org-scoped in the store, like the turns read.
+         * @description The caller's threads for the threads rail (CI-6a): the ones they began and the ones they were added to — id,
+         *     title, turns, last activity, and who is in it. Org-scoped in the store, like the turns read.
          */
         get: operations["list_chat_sessions_route_chat_sessions_get"];
         put?: never;
@@ -3326,6 +3326,47 @@ export interface paths {
         patch: operations["rename_chat_session_route_chat_sessions__session_id__patch"];
         trace?: never;
     };
+    "/chat-sessions/{session_id}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Thread Members Route
+         * @description Add people to a conversation, or take them out — its owner's choice, never an agent's. Each must be one of the
+         *     organisation's people when the organisation has a people directory.
+         */
+        put: operations["set_thread_members_route_chat_sessions__session_id__members_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/chat-sessions/{session_id}/members/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Leave Thread Route
+         * @description A member leaves a conversation they were added to.
+         */
+        delete: operations["leave_thread_route_chat_sessions__session_id__members_me_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/chat-sessions/{session_id}/messages": {
         parameters: {
             query?: never;
@@ -3337,9 +3378,30 @@ export interface paths {
          * Get Chat Session Messages
          * @description The thread as AI-SDK ``UIMessage[]`` (CA-1) — thread selection on the web
          *     is ``setMessages`` over this, the same shape the live stream accumulates.
-         *     Org-scoped in the store, like the turns read.
+         *     Org-scoped in the store, like the turns read. In a conversation more than one person is in, each question says
+         *     who asked it.
          */
         get: operations["get_chat_session_messages_chat_sessions__session_id__messages_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/chat-sessions/{session_id}/people": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Thread People Route
+         * @description Who is in a conversation: who began it, who they added, who has asked in it.
+         */
+        get: operations["thread_people_route_chat_sessions__session_id__people_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4427,7 +4489,7 @@ export interface paths {
         put?: never;
         /**
          * Pin Answer
-         * @description Record which variant is correct. The warrant becomes "a person decided".
+         * @description Record which variant is correct. The warrant becomes "a person decided" — the person signed in, never an agent.
          */
         post: operations["pin_answer_consistency_pin_post"];
         delete?: never;
@@ -4526,11 +4588,12 @@ export interface paths {
         };
         /**
          * Where The Coworker Is
-         * @description Whether a coworker is running, and the address to open. Reads what was last said; asks nothing.
+         * @description Whether the caller's own coworker is running, and the address to open. Reads what was last said; starts nothing.
          *
-         *     The address carries the coworker shell's access token, so it is given only to a caller on this machine — the
-         *     only place a coworker on this machine's loopback can be opened from anyway (People, 2026-11-15: until then any
-         *     caller that could reach the API read the token). Anyone else is told one is running, and not where.
+         *     Each person's coworker is their own (2026-11-17): the address given is the caller's, never another person's. On an
+         *     install without sign-in there is one person, and the coworker start_all.sh starts is theirs. The address carries
+         *     the coworker shell's access token, so it is given only to a caller on this machine — the only place a coworker on
+         *     this machine's loopback can be opened from anyway. Anyone else is told it is running, and not where.
          */
         get: operations["where_the_coworker_is_coworker_get"];
         put?: never;
@@ -4598,6 +4661,29 @@ export interface paths {
          */
         put: operations["claim_the_next_answer_coworker_claim_put"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/coworker/mine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start My Coworker
+         * @description Start the caller's own coworker if it is not running (2026-11-17: "Each user must get its own co-worker").
+         *     Its first start sets up its own home and takes a minute; the app asks `GET /coworker` until it is there. A person
+         *     only, from this machine; on an install without sign-in the one coworker start_all.sh starts is the person's, and
+         *     none is started here.
+         */
+        post: operations["start_my_coworker_coworker_mine_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -8576,7 +8662,9 @@ export interface paths {
         /**
          * Get Investigations
          * @description Recent investigations/chats. When `workspace_id` is given, only those whose
-         *     connection belongs to that workspace are returned (data-path tenancy).
+         *     connection belongs to that workspace are returned (data-path tenancy). ``mine`` keeps the caller's own questions
+         *     (2026-11-17: a person's own coworker lists theirs, not everyone's); on an install without sign-in there is one
+         *     person, and it changes nothing.
          */
         get: operations["get_investigations_investigations_get"];
         put?: never;
@@ -20918,6 +21006,12 @@ export interface components {
         /** CoworkerAddress */
         CoworkerAddress: {
             /**
+             * Person
+             * @description Whose coworker it is; empty for the install's first, started by start_all.sh.
+             * @default
+             */
+            person: string;
+            /**
              * Url
              * @description The address a person opens to reach the coworker.
              */
@@ -20952,12 +21046,30 @@ export interface components {
         CoworkerDoor: {
             /**
              * Available
-             * @description Whether a coworker has said it is running within the last two minutes.
+             * @description Whether the caller's own coworker has said it is running in the last two minutes.
              */
             available: boolean;
             /**
+             * Can Start
+             * @description Whether this install starts a coworker for the caller on request.
+             * @default false
+             */
+            can_start: boolean;
+            /**
+             * Reason
+             * @description Why none can be started, when none can.
+             * @default
+             */
+            reason: string;
+            /**
+             * Starting
+             * @description Whether the caller's coworker is starting now.
+             * @default false
+             */
+            starting: boolean;
+            /**
              * Url
-             * @description The address to open, when one is running.
+             * @description The address to open, when it is running.
              */
             url?: string | null;
         };
@@ -25241,6 +25353,14 @@ export interface components {
             type: "text";
         } & {
             [key: string]: unknown;
+        };
+        /**
+         * ThreadMembersRequest
+         * @description The people a thread's owner adds: each by the email they sign in with.
+         */
+        ThreadMembersRequest: {
+            /** Members */
+            members?: string[];
         };
         /**
          * Tool
@@ -33509,7 +33629,102 @@ export interface operations {
             };
         };
     };
+    set_thread_members_route_chat_sessions__session_id__members_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ThreadMembersRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    leave_thread_route_chat_sessions__session_id__members_me_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_chat_session_messages_chat_sessions__session_id__messages_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    thread_people_route_chat_sessions__session_id__people_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -35563,6 +35778,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_my_coworker_coworker_mine_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoworkerDoor"];
                 };
             };
         };
@@ -41968,6 +42203,7 @@ export interface operations {
             query?: {
                 limit?: number;
                 workspace_id?: string | null;
+                mine?: boolean;
             };
             header?: never;
             path?: never;
