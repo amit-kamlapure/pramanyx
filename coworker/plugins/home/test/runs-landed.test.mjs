@@ -120,3 +120,14 @@ test("a schedule's card runs it now or switches it off, as the person, from this
   assert.equal((await ask({ automation: "auto_1", action: "delete" })).status, 422);
   assert.equal(sent.length, 3, "a refused call reaches nothing");
 });
+
+test("a connection's instructions carry what the platform says about its agents, or nothing", async () => {
+  const { agentsWords } = await import("../lib/index.js");
+  const said = await agentsWords("http://api", "c 1", { send: async (url) => {
+    assert.equal(url, "http://api/agents/custom/routing?connection_id=c%201");
+    return new Response(JSON.stringify({ words: "## Its agent\n\nAsk through `ask_margin_analyst`." }));
+  } });
+  assert.match(said, /ask_margin_analyst/);
+  assert.equal(await agentsWords("http://api", "c1", { send: async () => new Response("{}", { status: 404 }) }), "");
+  assert.equal(await agentsWords("http://api", "c1", { send: async () => { throw new Error("down"); } }), "");
+});

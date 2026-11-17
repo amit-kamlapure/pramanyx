@@ -44,6 +44,19 @@ import { dirname, join } from "node:path";
  * Run at start. A connection added later appears on the next start; one that was removed keeps its workspace, and
  * the conversations in it, and Pramanyx answers that it no longer exists.
  */
+/** What the coworker is told about a connection's agents ("" when it has none, or when the platform cannot say). */
+export async function agentsWords(api, connection, { send = fetch } = {}) {
+  try {
+    const answer = await send(`${api}/agents/custom/routing?connection_id=${encodeURIComponent(connection)}`,
+                              { headers: { accept: "application/json" } });
+    if (!answer.ok) return "";
+    const got = await answer.json();
+    return typeof got?.words === "string" ? got.words : "";
+  } catch {
+    return "";
+  }
+}
+
 async function workspacePerConnection(ctx, api) {
   const home = process.env.DSH_HOME || join(homedir(), ".dsh");
   const answer = await fetch(`${api}/connections`, { headers: { accept: "application/json" } });
@@ -62,6 +75,9 @@ async function workspacePerConnection(ctx, api) {
       `Use \`${id}\` as the connection for every question, read and analysis in this conversation, unless the person names`,
       "another connection themselves.",
       "",
+      // Its own agent, or its agents to choose between (punch list 93, 2026-11-18): the platform says which and in what
+      // words (`GET /agents/custom/routing`), so the first question already goes to the agent that fits it.
+      await agentsWords(api, id),
     ].join("\n"));
     const known = await ctx.workspaceRegistry.resolveByPath(folder);
     if (!known) await ctx.workspaceRegistry.create(folder, name);
