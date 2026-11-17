@@ -131,3 +131,20 @@ test("a connection's instructions carry what the platform says about its agents,
   assert.equal(await agentsWords("http://api", "c1", { send: async () => new Response("{}", { status: 404 }) }), "");
   assert.equal(await agentsWords("http://api", "c1", { send: async () => { throw new Error("down"); } }), "");
 });
+
+test("a running deep analysis answers now at the person's word, from this page only", async () => {
+  const { answerNowDoor } = await import("../lib/index.js");
+  const sent = [];
+  const send = async (url, init) => { sent.push({ url, init }); return new Response(JSON.stringify({ answering_now: true })); };
+  const ask = async (body, headers = { "sec-fetch-site": "same-origin" }) => {
+    const res = resOf();
+    await answerNowDoor(reqOf("POST", JSON.stringify(body), headers), res, "http://api", { send, person: async () => ({ "x-pramanyx-delegation": "d" }) });
+    return { status: res.out.status || 200, body: res.out.body ? JSON.parse(res.out.body) : {} };
+  };
+  assert.deepEqual((await ask({ investigation: "inv_9" })).body, { answering_now: true });
+  assert.equal(sent[0].url, "http://api/investigations/inv_9/answer-now");
+  assert.equal(sent[0].init.headers["x-pramanyx-delegation"], "d");
+  assert.equal((await ask({ investigation: "inv_9" }, { "sec-fetch-site": "cross-site" })).status, 403);
+  assert.equal((await ask({ investigation: "../x" })).status, 422);
+  assert.equal(sent.length, 1);
+});

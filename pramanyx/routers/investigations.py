@@ -4956,7 +4956,7 @@ async def _stream_investigation(
                 ada = merged["answer_report"]
                 qh = merged.get("query_history", [])
                 yield _sse("tables_used", {"tables": _extract_tables(" ".join(r.sql for r in qh if r.sql))})
-                yield _sse("answer_report", {"answer_report": ada, "investigation_id": inv_id, "query_mode": "investigate", "mode": "investigate"})
+                yield _sse("answer_report", {"answer_report": ada, "investigation_id": inv_id, "query_mode": "investigate", "mode": "investigate", **_early(inv_id)})
                 try:
                     from pramanyx.agent.followups import (
                         artifact_from_history, followup_system, followup_user)
@@ -5044,7 +5044,7 @@ async def _stream_investigation(
                 sq_raw = [sq.model_dump() for sq in merged.get("sub_questions", [])]
                 sa_raw = [a.model_dump() for a in answers]
                 yield _sse("tables_used", {"tables": _extract_tables(" ".join(r.sql for r in qh if r.sql))})
-                yield _sse("explore_report", {"explore_report": er.model_dump(), "sub_questions": sq_raw, "subq_answers": sa_raw, "query_count": len(qh), "investigation_id": inv_id, "query_mode": "explore", "frame": merged.get("ontology_frame")})
+                yield _sse("explore_report", {"explore_report": er.model_dump(), "sub_questions": sq_raw, "subq_answers": sa_raw, "query_count": len(qh), "investigation_id": inv_id, "query_mode": "explore", "frame": merged.get("ontology_frame"), **_early(inv_id)})
                 try:
                     from pramanyx.agent.followups import (
                         artifact_from_history, followup_system, followup_user)
@@ -5069,7 +5069,7 @@ async def _stream_investigation(
             elif node_name == "synthesize" and merged.get("report"):
                 qh = merged.get("query_history", [])
                 yield _sse("tables_used", {"tables": _extract_tables(" ".join(r.sql for r in qh if r.sql))})
-                yield _sse("report", {"report": merged["report"].model_dump(), "hypotheses": [h.model_dump() for h in merged.get("hypotheses", [])], "query_count": len(qh), "query_history": [{"hypothesis_id": r.hypothesis_id, "sql": r.sql, "row_count": r.row_count, "error": r.error, "columns": r.columns, "rows": r.rows[:50], "stats": [s.model_dump() for s in (r.stats or [])]} for r in qh], "investigation_id": inv_id, "query_mode": merged.get("query_mode")})
+                yield _sse("report", {"report": merged["report"].model_dump(), "hypotheses": [h.model_dump() for h in merged.get("hypotheses", [])], "query_count": len(qh), "query_history": [{"hypothesis_id": r.hypothesis_id, "sql": r.sql, "row_count": r.row_count, "error": r.error, "columns": r.columns, "rows": r.rows[:50], "stats": [s.model_dump() for s in (r.stats or [])]} for r in qh], "investigation_id": inv_id, "query_mode": merged.get("query_mode"), **_early(inv_id)})
                 try:
                     from pramanyx.agent.followups import (
                         artifact_from_history, followup_system, followup_user)
@@ -5296,7 +5296,7 @@ async def _stream_resume(inv_id: str, feedback: str, request: Request,
             merged = {**merged, **(event[node_name] or {})}
             if node_name == "synthesize" and merged.get("report"):
                 qh = merged.get("query_history", [])
-                yield _sse("report", {"report": merged["report"].model_dump(), "hypotheses": [h.model_dump() for h in merged.get("hypotheses", [])], "query_count": len(qh), "query_history": [{"hypothesis_id": r.hypothesis_id, "sql": r.sql, "row_count": r.row_count, "error": r.error, "columns": r.columns, "rows": r.rows[:50], "stats": [s.model_dump() for s in (r.stats or [])]} for r in qh], "investigation_id": inv_id})
+                yield _sse("report", {"report": merged["report"].model_dump(), "hypotheses": [h.model_dump() for h in merged.get("hypotheses", [])], "query_count": len(qh), "query_history": [{"hypothesis_id": r.hypothesis_id, "sql": r.sql, "row_count": r.row_count, "error": r.error, "columns": r.columns, "rows": r.rows[:50], "stats": [s.model_dump() for s in (r.stats or [])]} for r in qh], "investigation_id": inv_id, **_early(inv_id)})
                 complete_investigation(inv_id, report=merged["report"], hypotheses=merged.get("hypotheses", []), query_history=qh, question=inv["question"], connection_id=inv.get("connection_id", ""))
                 _record_memory(inv_id, inv.get("connection_id", ""), inv["question"], merged)
             elif node_name == "reason_over_result":
@@ -5315,7 +5315,7 @@ async def _stream_resume(inv_id: str, feedback: str, request: Request,
                 sq_raw = [sq.model_dump() for sq in merged.get("sub_questions", [])]
                 sa_raw = [a.model_dump() for a in answers]
                 yield _sse("tables_used", {"tables": _extract_tables(" ".join(r.sql for r in qh if r.sql))})
-                yield _sse("explore_report", {"explore_report": er.model_dump(), "sub_questions": sq_raw, "subq_answers": sa_raw, "query_count": len(qh), "investigation_id": inv_id, "query_mode": "explore", "frame": merged.get("ontology_frame")})
+                yield _sse("explore_report", {"explore_report": er.model_dump(), "sub_questions": sq_raw, "subq_answers": sa_raw, "query_count": len(qh), "investigation_id": inv_id, "query_mode": "explore", "frame": merged.get("ontology_frame"), **_early(inv_id)})
                 explore_save = {"_report_type": "explore", **er.model_dump(), "sub_questions": sq_raw, "subq_answers": sa_raw}
                 complete_investigation(inv_id, report=explore_save, hypotheses=[], query_history=qh, question=inv["question"], connection_id=inv.get("connection_id", ""))
                 _record_memory(inv_id, inv.get("connection_id", ""), inv["question"], merged)
@@ -6618,6 +6618,12 @@ def said_asker(principal_ref: str) -> str:
     return raw if raw.startswith(_DOOR_PREFIXES) else f"said:{raw}"
 
 
+def _early(inv_id: str) -> dict:
+    """``{"answered_early": <what it says>}`` on a report the person had answered now (punch list 89), else nothing."""
+    from pramanyx.agent import answer_now
+    return {"answered_early": answer_now.SAID} if answer_now.was_asked(inv_id) else {}
+
+
 def _job_id_for_investigation(inv_id: str) -> Optional[str]:
     """The kernel job running (or that ran) this investigation — read from the
     journal, where every investigation.* event is job-stamped. No extra state."""
@@ -6639,6 +6645,24 @@ def cancel_investigation_route(inv_id: str):
         raise HTTPException(status_code=404, detail="No kernel job found for this investigation")
     cancelled = kernel().cancel(job_id, reason="cancelled on request")
     return {"investigation_id": inv_id, "job_id": job_id, "cancelled": cancelled}
+
+
+@router.post("/investigations/{inv_id}/answer-now")
+def answer_now_route(inv_id: str, request: Request):
+    """Answer now (punch list 89): the person stops a running deep analysis and has it answer from what it has found —
+    where cancelling answers nothing. Every place the run decides whether to keep going goes to its write-up, which says
+    it was answered early. A person's own word: an agent is refused. 409 for a run that is not running."""
+    from pramanyx.agent import answer_now
+    from pramanyx.rbac.agent_gate import is_agent_request
+    if is_agent_request(request):
+        raise HTTPException(status_code=403, detail="answering now is the person's own call; an agent cannot make it")
+    inv = get_investigation(inv_id)
+    if not inv:
+        raise HTTPException(status_code=404, detail="No such investigation")
+    if str(inv.get("status") or "") not in ("running", "pending", "started"):
+        raise HTTPException(status_code=409, detail="It is not running: there is nothing to answer early.")
+    answer_now.ask(inv_id)
+    return {"investigation_id": inv_id, "answering_now": True}
 
 
 def build_resume_stream(inv_id: str, request: "Request | None", *, feedback: str = "",

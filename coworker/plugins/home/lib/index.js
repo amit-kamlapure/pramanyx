@@ -1136,6 +1136,33 @@ export async function scheduleDoor(req, res, api, { send = fetch, person = perso
   }
 }
 
+/**
+ * ANSWER NOW (punch list 89, 2026-11-18): the person stops a running deep analysis and has it answer from what it has
+ * found. The card offers it on the running analysis; this door takes it from this page only and asks the platform as
+ * the person (`POST /investigations/<id>/answer-now`), which refuses an agent and a run that is not running.
+ */
+export async function answerNowDoor(req, res, api, { send = fetch, person = personHeader } = {}) {
+  const reply = (status, body) => { res.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" }); res.end(JSON.stringify(body)); };
+  if (req.method !== "POST") return reply(405, { detail: "POST only" });
+  const from = req.headers["sec-fetch-site"];
+  if (from && from !== "same-origin") return reply(403, { detail: "Only this page may do this" });
+  let body = "";
+  for await (const chunk of req) { body += chunk; if (body.length > 2000) return reply(413, { detail: "Too long" }); }
+  let asked = {};
+  try { asked = JSON.parse(body || "{}"); } catch { return reply(400, { detail: "Not JSON" }); }
+  const id = String(asked.investigation || "");
+  if (!AUTOMATION_ID.test(id)) return reply(422, { detail: "Which analysis" });
+  try {
+    const answer = await send(`${api}/investigations/${encodeURIComponent(id)}/answer-now`, {
+      method: "POST", body: "{}", headers: { "content-type": "application/json", accept: "application/json", ...(await person()) } });
+    const got = await answer.json().catch(() => ({}));
+    if (!answer.ok) return reply(answer.status, { detail: typeof got?.detail === "string" ? got.detail : `The platform said ${answer.status}` });
+    return reply(200, { answering_now: true });
+  } catch {
+    return reply(502, { detail: "The platform is not answering" });
+  }
+}
+
 export const inject = ["webServer", "workspaceRegistry"];
 
 export function apply(ctx) {
@@ -1169,6 +1196,11 @@ export function apply(ctx) {
     path: "/pramanyx-schedule",
     handler: (req, res) => scheduleDoor(req, res, api),
   }), "pramanyx-home: a schedule's Run now and Switch off, as the person");
+  ctx.effect(() => ctx.webServer.register({
+    kind: "exact",
+    path: "/pramanyx-answer-now",
+    handler: (req, res) => answerNowDoor(req, res, api),
+  }), "pramanyx-home: a running deep analysis answers now, at the person's word");
   ctx.effect(() => ctx.webServer.register({
     kind: "exact",
     path: "/pramanyx-helper",

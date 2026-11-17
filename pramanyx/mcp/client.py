@@ -489,6 +489,9 @@ class PramanyxClient:
                     acc["error"] = ev.get("message")
                 elif t == "done":
                     acc["status"] = "complete"
+                if ev.get("answered_early"):
+                    # The person had it answer now (punch list 89): the report says less than the run planned.
+                    acc["answered_early"] = ev.get("answered_early")
         except httpx.TimeoutException:
             # A long run exceeded the read timeout. If it has started, hand back the id
             # to poll; otherwise it never got going. (Genuine errors — a 402 lock, a bad

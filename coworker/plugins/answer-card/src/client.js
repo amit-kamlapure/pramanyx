@@ -332,8 +332,53 @@ export function SkillDoor({ text }) {
       "Save as a skill"));
 }
 
-const DeepAnalysisCard = inTail((props) => h(ToolStep, props),
-  (props) => (props.phase === "result" && !props.block?.isError ? h(SkillDoor, { text: resultText(props.block) }) : null));
+/**
+ * ANSWER NOW (punch list 89, 2026-11-18). While a deep analysis runs, its row offers to stop it and answer from what it
+ * has found — cancelling answers nothing. The running analysis is found among the person's own (`/investigations?mine=1`,
+ * the newest running one asking this question) and asked through this coworker's door, as the person. Its report then
+ * says it was answered early.
+ */
+function AnswerNow({ question }) {
+  const [state, setState] = useState("");          // "" | "asking" | "asked" | <what went wrong>
+  const ask = async () => {
+    setState("asking");
+    try {
+      const listed = await fetch("/pramanyx/investigations?mine=1&limit=20", { headers: { accept: "application/json" } });
+      const rows = listed.ok ? await listed.json() : [];
+      const running = (Array.isArray(rows) ? rows : []).find((r) => ["running", "pending", "started"].includes(String(r.status))
+        && String(r.question || "").trim() === String(question || "").trim());
+      if (!running) { setState("This analysis could not be found running."); return; }
+      const answer = await fetch("/pramanyx-answer-now", { method: "POST", headers: { "content-type": "application/json" },
+                                                            body: JSON.stringify({ investigation: running.id }) });
+      const got = await answer.json().catch(() => ({}));
+      setState(answer.ok ? "asked" : (typeof got.detail === "string" ? got.detail : `Not asked (${answer.status})`));
+    } catch (error) {
+      setState(error instanceof Error ? error.message : String(error));
+    }
+  };
+  if (state === "asked") return h("div", { "data-pramanyx-answer-now": "asked", style: { ...quiet, fontSize: 12.5, padding: "2px 0 6px" } },
+    "Answering now, from what it has found so far.");
+  return h("div", { "data-pramanyx-answer-now": "", style: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "2px 0 6px", fontSize: 12.5 } },
+    h("button", { type: "button", style: button(false), disabled: state === "asking", onClick: () => { void ask(); },
+                  title: "Stop it here and have it answer from what it has found — some planned steps will not run" },
+      state === "asking" ? "Asking…" : "Answer now"),
+    state && state !== "asking" ? h("span", { style: { color: "#c2410c" } }, state) : null);
+}
+
+/** What an analysis answered early says, under it. */
+function AnsweredEarly({ text }) {
+  let got = null;
+  try { got = JSON.parse(text); } catch { got = null; }
+  return got?.answered_early ? h("div", { "data-pramanyx-answered-early": "", style: { ...quiet, fontSize: 12.5, paddingTop: 4 } },
+    String(got.answered_early)) : null;
+}
+
+const DeepAnalysisCard = inTail(
+  (props) => h("div", null, h(ToolStep, props),
+    props.phase !== "result" ? h(AnswerNow, { question: argsOf(props.block).question }) : null),
+  (props) => (props.phase === "result" && !props.block?.isError
+    ? h("div", null, h(AnsweredEarly, { text: resultText(props.block) }), h(SkillDoor, { text: resultText(props.block) }))
+    : null));
 
 /**
  * The turns a helpers question takes after its first: each starts with a helper's report (a helper under Agent mode
