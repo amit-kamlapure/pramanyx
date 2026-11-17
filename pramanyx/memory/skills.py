@@ -323,10 +323,28 @@ def propose_skill_from_investigation(
             source_table=table,
             origin="learned",
             usage_count=0,
+            metrics=held_to(question, sql, inv.get("connection_id") or "")[0],
         )
     except Exception as exc:
         logger.debug("propose_skill: build candidate failed for %s: %s", inv_id, exc)
         return None
+
+
+def held_to(question: str, sql: str, connection_id: str = "") -> tuple[list[str], list[str]]:
+    """``(computed as approved, computed otherwise)`` — the approved metrics a skill's SQL computes exactly as they are
+    approved, and those it names and computes some other way (punch list 88). Read by the platform's one enforcement
+    check (`semantic.enforcement.check_metric_enforcement`, the receipt's), never by a model; nothing when the
+    metrics cannot be read."""
+    try:
+        from pramanyx.semantic.enforcement import check_metric_enforcement
+        from pramanyx.semantic.metrics import list_metrics
+        verdicts = check_metric_enforcement(question or "", sql or "", list_metrics(connection_id=connection_id or None))
+    except Exception as exc:  # noqa: BLE001 — unread, nothing is claimed
+        logger.debug("held_to: the metrics could not be read: %s", exc)
+        return [], []
+    used = sorted({str(v["metric"]) for v in verdicts if v.get("status") == "used"})
+    other = sorted({str(v["metric"]) for v in verdicts if v.get("status") != "used"} - set(used))
+    return used, other
 
 
 def _autonomy_level(connection_id: str) -> int:

@@ -1977,6 +1977,8 @@ export interface QueryTemplate {
   source_table: string;
   origin?: "structural" | "learned" | "manual";  // learned skills carry these
   usage_count?: number;
+  /** The approved metrics it computes as they are approved (punch list 88). */
+  metrics?: string[];
 }
 
 export interface OntologyMetric {

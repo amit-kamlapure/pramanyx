@@ -355,10 +355,13 @@ export const pageFor = {
   toKeep: (question, connection, first = "") =>
     `/questions/keep?conn=${encodeURIComponent(connection)}&question=${encodeURIComponent(question)}${first ? `&first=${encodeURIComponent(first)}` : ""}`,
   toAgent: (question, connection) => `/agents/new?conn=${encodeURIComponent(connection)}&description=${encodeURIComponent(question)}`,
+  // A deep analysis kept as a skill (punch list 88): its method, to run again on other values.
+  toSkill: (investigation, connection) => `/skills/new?conn=${encodeURIComponent(connection)}&inv=${encodeURIComponent(investigation)}`,
 };
 const NAMED = [[/^\/metrics\/([^/?]+)/, "Metric"], [/^\/ontology\/([^/?]+)/, "Ontology"], [/^\/receipt\//, "Why this number"],
                [/^\/sheets\/[^/?]+/, "Sheet"], [/^\/definitions\/([^/?]+)/, "Definition"], [/^\/automations\?/, "Schedule"],
-               [/^\/questions\/keep\?/, "Keep on a dashboard"], [/^\/agents\/new\?/, "New agent"]];
+               [/^\/questions\/keep\?/, "Keep on a dashboard"], [/^\/agents\/new\?/, "New agent"],
+               [/^\/skills\/new\?/, "Save as a skill"]];
 
 /** A referenced spreadsheet's tab is called by its own name and nothing else — "Olist orders", not "Sheet". */
 function sheetName(path) {

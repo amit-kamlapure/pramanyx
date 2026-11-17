@@ -1006,6 +1006,9 @@ class QueryTemplate(BaseModel):
     origin: Literal["structural", "learned", "manual"] = "structural"
     # How many times a learned skill has been reused — feeds per-skill autonomy.
     usage_count: int = 0
+    #: The approved metrics this template computes as they are approved (punch list 88, 2026-11-18: a skill names the
+    #: approved metrics it is held to). Read by the platform's own enforcement check from its SQL, never typed.
+    metrics: list[str] = Field(default_factory=list)
 
 
 # ── Wave K: declared, governed actions (the kinetic plane) ───────────────────────────

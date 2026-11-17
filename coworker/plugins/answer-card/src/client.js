@@ -310,8 +310,30 @@ function Analysis({ text }) {
   return h("div", { style: frame },
     h("div", { style: { ...quiet, fontSize: 12.5, paddingBottom: 6 } }, "Deep analysis"),
     h("div", { style: { whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight: 1.5, maxHeight: 420, overflow: "auto" } },
-      report || (got?.status === "running" ? "Still running when the helper last looked." : "The report could not be read here.")));
+      report || (got?.status === "running" ? "Still running when the helper last looked." : "The report could not be read here.")),
+    h(SkillDoor, { text }));
 }
+
+/**
+ * SAVE AS A SKILL (punch list 88, 2026-11-18). A finished deep analysis can be kept as a skill — its method, to run
+ * again on other values — on the app's own page beside the conversation (`/skills/new`), which shows what it runs and
+ * the approved metrics it is held to; only the person's click there keeps it. A quick answer is not a method, so it is
+ * offered under a deep analysis only.
+ */
+export function SkillDoor({ text }) {
+  let got = null;
+  try { got = JSON.parse(text); } catch { got = null; }
+  const investigation = String(got?.investigation_id || "");
+  const connection = String(got?.connection || got?.connection_id || "");
+  if (!investigation || !connection || got?.status === "running" || got?.error || !hasPane()) return null;
+  return h("div", { "data-pramanyx-skill-door": "", style: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", paddingTop: 6, fontSize: 13 } },
+    h("span", { style: quiet }, "Its method can be kept, to run again on other values."),
+    h("button", { type: "button", style: button(false), onClick: () => openBeside("page", pageFor.toSkill(investigation, connection)) },
+      "Save as a skill"));
+}
+
+const DeepAnalysisCard = inTail((props) => h(ToolStep, props),
+  (props) => (props.phase === "result" && !props.block?.isError ? h(SkillDoor, { text: resultText(props.block) }) : null));
 
 /**
  * The turns a helpers question takes after its first: each starts with a helper's report (a helper under Agent mode
@@ -1647,6 +1669,7 @@ export function apply(ctx) {
         decided(ANSWERS.test(name) ? AnswerCard : name === PREFIX + "draft_email" ? DraftCard
           : name === PREFIX + "bring_in_file" ? BroughtInCard
           : name === PREFIX + "draft_definition" ? DraftedDefinitionCard
+          : name === PREFIX + "deep_analysis" ? DeepAnalysisCard
           : SCHEDULES.test(name) ? ScheduleCard : ToolStep)));
   };
   // What a Pramanyx step waits on is asked in the conversation, under the step; the foot of the page says where. The
