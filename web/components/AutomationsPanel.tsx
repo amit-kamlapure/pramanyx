@@ -79,12 +79,14 @@ function muteUntilISO(hours = 24): string {
 
 type Props = {
   connId?: string; workspaceId?: string;
+  /** Words to start the sentence box with — a question from the coworker, to set on a schedule (2026-11-17). */
+  sentence?: string;
   /** AO-4 — an automation to open on arrival (an "Open automation" that carries its id,
    *  from an agent's Doors or Map, Attention, Departures or the Hub). */
   focusId?: string | null;
 };
 
-export function AutomationsPanel({ connId, focusId }: Props) {
+export function AutomationsPanel({ connId, focusId, sentence = "" }: Props) {
   const conn = connId || "";
   const [view, setView] = useState<View>("list");
   const [automations, setAutomations] = useState<Automation[]>([]);
@@ -114,7 +116,7 @@ export function AutomationsPanel({ connId, focusId }: Props) {
                 *  saved chain must keep. */
                keeps?: DraftKeeps } | null>(null);
   const [createName, setCreateName] = useState("");
-  const [outcome, setOutcome] = useState("");
+  const [outcome, setOutcome] = useState(sentence);
   const [proposing, setProposing] = useState(false);
   /** The automation whose CANVAS fills the panel. The flow used to render as a 420px
    *  strip inside its list row — a workflow in a drawer. The flow gets the whole room

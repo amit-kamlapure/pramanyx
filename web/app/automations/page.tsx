@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * `/automations?conn=<connection>&focus=<automation>`: the platform's schedules and automations as a page of their
+ * `/automations?conn=<connection>&focus=<automation>[&sentence=<words>]`: the platform's schedules and automations as a page of their
  * own. Opened by the coworker's "Schedules" entry, in a frame: there is ONE scheduler (the user, 2026-11-15: "the
  * scheduler needs to be one across the platform"), so the coworker shows this page and keeps no list of its own. A
  * LAYOUT over `AutomationsPanel`, the panel Agent Ops shows: same app, same tokens, same auth, and everything on it
@@ -33,6 +33,8 @@ export default function AutomationsRoute({ searchParams }: {
   const query = use(searchParams);
   const asked = one(query.conn);
   const focus = one(query.focus);
+  // A question the coworker hands over to set on a schedule: in the sentence box, for the person to finish.
+  const sentence = one(query.sentence);
   const [connections, setConnections] = useState<Connection[] | null>(null);
   const [failed, setFailed] = useState("");
   const [chosen, setChosen] = useState(asked);
@@ -68,7 +70,7 @@ export default function AutomationsRoute({ searchParams }: {
       </div>
       <div style={{ flex: "1 1 auto", minHeight: 0 }}>
         {chosen
-          ? <AutomationsPanel key={chosen} connId={chosen} focusId={focus || null} />
+          ? <AutomationsPanel key={chosen} connId={chosen} focusId={focus || null} sentence={sentence} />
           : <p className="aug-fs-sm" style={{ padding: 20, color: "var(--t2)" }}>There is no connection yet. A schedule asks its question of one.</p>}
       </div>
     </main>

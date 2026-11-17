@@ -1192,6 +1192,17 @@ function Exhibit({ answer, whole, asked }) {
   const objects = ground ? ground.objects : [];
   const tables = [...objects, ...(answer.tables_used ?? []).filter((t) => !objects.some((o) => same(o, t)))];
   const receipt = answer.receipt?.artifact?.id || "";
+  // What this answer can become (2026-11-17): each the app's own flow, opened beside the conversation from the
+  // answer's question and connection, and finished there by the person — nothing is made by the click alone. Saving
+  // the method as a skill is a deep analysis's, and is not offered for a quick answer.
+  const askedAs = String(answer.question || asked || "").trim();
+  const onConnection = String(answer.connection || "");
+  const becomes = askedAs && onConnection && hasPane() ? [
+    ["Schedule it", pageFor.toSchedule(askedAs, onConnection), "Set this question on a schedule — you choose when, and where the answer goes"],
+    ["Keep on a dashboard", pageFor.toKeep(askedAs, onConnection, answer.investigation_id ? String(answer.investigation_id) : ""),
+     "Keep it on the connection's dashboard, asked again on a rhythm you choose"],
+    ["Make an agent from it", pageFor.toAgent(askedAs, onConnection), "Draft an agent that answers questions like this one — you read it before it is made"],
+  ] : [];
   const connection = String(answer.connection || answer.receipt?.artifact?.conn_id || "");
   const told = answer.narrative && typeof answer.narrative === "object" ? answer.narrative : null;
   const words = told && typeof told.narrative === "string" ? told.narrative.trim() : "";
@@ -1271,7 +1282,14 @@ function Exhibit({ answer, whole, asked }) {
         onClick: () => openBeside("page", pageFor.receipt(receipt)) }, "Why this number") : null,
       h("span", { key: "gap2", style: { width: 12 } }),
       h("button", { key: "how", type: "button", className: "pramanyx-link", "aria-expanded": open === "how", onClick: () => toggle("how") }, "How it was answered"),
+      becomes.length ? h("span", { key: "gap3", style: { width: 12 } }) : null,
+      becomes.length ? h("button", { key: "more", type: "button", className: "pramanyx-link", "aria-expanded": open === "more",
+        title: "What this answer can become: on a schedule, on a dashboard, an agent", onClick: () => toggle("more") }, "More") : null,
     ] }),
+    open === "more" ? h("div", { role: "group", "aria-label": "What this answer can become",
+      style: { display: "flex", flexWrap: "wrap", gap: 14, padding: "2px 6px 6px 0", fontSize: 13 } },
+      becomes.map(([label, path, hint]) => h("button", { key: label, type: "button", className: "pramanyx-link", title: hint,
+        onClick: () => openBeside("page", path) }, label))) : null,
     open === "how" ? h("div", { style: { border: `1px solid ${line}`, borderRadius: 6, padding: 12 } }, h(How, { answer, whole })) : null);
 }
 

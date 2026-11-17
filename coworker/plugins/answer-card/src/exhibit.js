@@ -350,9 +350,15 @@ export const pageFor = {
   sheet: (id, name = "") => `/sheets/${encodeURIComponent(id)}${name ? `?name=${encodeURIComponent(name)}` : ""}`,
   // A schedule, on the app's own page of schedules and automations, opened on that one.
   schedule: (id, connection) => `/automations?conn=${encodeURIComponent(connection)}&focus=${encodeURIComponent(id)}`,
+  // What an answer can become (2026-11-17), each the app's own flow, started from the answer, finished by the person.
+  toSchedule: (question, connection) => `/automations?conn=${encodeURIComponent(connection)}&sentence=${encodeURIComponent(question)}`,
+  toKeep: (question, connection, first = "") =>
+    `/questions/keep?conn=${encodeURIComponent(connection)}&question=${encodeURIComponent(question)}${first ? `&first=${encodeURIComponent(first)}` : ""}`,
+  toAgent: (question, connection) => `/agents/new?conn=${encodeURIComponent(connection)}&description=${encodeURIComponent(question)}`,
 };
 const NAMED = [[/^\/metrics\/([^/?]+)/, "Metric"], [/^\/ontology\/([^/?]+)/, "Ontology"], [/^\/receipt\//, "Why this number"],
-               [/^\/sheets\/[^/?]+/, "Sheet"], [/^\/definitions\/([^/?]+)/, "Definition"], [/^\/automations\?/, "Schedule"]];
+               [/^\/sheets\/[^/?]+/, "Sheet"], [/^\/definitions\/([^/?]+)/, "Definition"], [/^\/automations\?/, "Schedule"],
+               [/^\/questions\/keep\?/, "Keep on a dashboard"], [/^\/agents\/new\?/, "New agent"]];
 
 /** A referenced spreadsheet's tab is called by its own name and nothing else — "Olist orders", not "Sheet". */
 function sheetName(path) {
