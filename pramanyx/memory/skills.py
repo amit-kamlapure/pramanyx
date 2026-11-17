@@ -323,7 +323,11 @@ def propose_skill_from_investigation(
     sql = _primary_sql(inv)
     if not sql or not _is_read_only(sql):
         return None
-    question = (inv.get("question") or "").strip()
+    # A scheduled run's question carries the code-written context it ran with; the skill is named by what was asked
+    # (found live 2026-11-18: a kept schedule was named "[Scheduled-run context — written by code…").
+    from pramanyx.automations.temporal import ask_of
+    raw = (inv.get("question") or "").strip()
+    question = ask_of(raw).strip() or raw
     table = _primary_table(sql)
     t2e = table_to_entity or {}
     entity = t2e.get(table) or t2e.get(table.split(".")[-1]) or (table.split(".")[-1].rstrip("s").title() if table else "")

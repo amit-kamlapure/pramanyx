@@ -61,3 +61,18 @@ def test_a_deep_analysis_is_kept_by_the_query_its_report_leads_with():
     assert S._primary_sql({"report": report}) == "SELECT day, SUM(x) FROM t GROUP BY 1"
     assert S._primary_sql({"report": {"sql": "SELECT 1"}}) == "SELECT 1"
     assert S._primary_sql({"report": {"phases": []}}) == ""
+
+
+def test_a_scheduled_run_is_kept_by_what_was_asked_not_by_the_context_it_ran_with(monkeypatch):
+    """Found live 2026-11-18: a scheduled run's question starts with the code-written context it ran with, and the skill
+    proposed from it was named "[Scheduled-run context — written by code, not inferred]…"."""
+    from pramanyx.automations.temporal import OBSERVATION_HEADER
+    asked = "Which product categories sold most yesterday?"
+    inv = {"question": f"{OBSERVATION_HEADER}\nThis is a scheduled daily run; the most recent complete day is 2026-11-17.\n\n{asked}",
+           "connection_id": "c1", "report": {"sql": "SELECT category, COUNT(*) FROM orders GROUP BY 1"}}
+    monkeypatch.setattr("pramanyx.db.history.get_investigation", lambda _id: inv)
+    monkeypatch.setattr(S, "held_to", lambda q, sql, c="": ([], []))
+    out = S.propose_skill_from_investigation("inv-1")
+    assert out is not None and out.display_name == asked and "Scheduled-run" not in out.returns
+    inv["question"] = asked
+    assert S.propose_skill_from_investigation("inv-1").display_name == asked
