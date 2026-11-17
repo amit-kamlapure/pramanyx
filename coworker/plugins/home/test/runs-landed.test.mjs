@@ -95,3 +95,28 @@ test("the page reads the marks and says when a conversation was opened; another 
   await runsDoor(reqOf("POST", "{}"), res, runs);
   assert.equal(res.out.status, 422);
 });
+
+test("a schedule's card runs it now or switches it off, as the person, from this page only", async () => {
+  const { scheduleDoor } = await import("../lib/index.js");
+  const sent = [];
+  const send = async (url, init) => {
+    sent.push({ url, init });
+    if (url.endsWith("/run")) return new Response(JSON.stringify({ outcome: "fired", reason: "run now" }));
+    return new Response(JSON.stringify({ enabled: url.endsWith("enabled=true") }));
+  };
+  const ask = async (body, headers = { "sec-fetch-site": "same-origin" }, method = "POST") => {
+    const res = resOf();
+    await scheduleDoor(reqOf(method, JSON.stringify(body), headers), res, "http://api", { send, person: async () => ({ "x-pramanyx-delegation": "d" }), clock: async () => ({}) });
+    return { status: res.out.status || 200, body: res.out.body ? JSON.parse(res.out.body) : {} };
+  };
+  assert.deepEqual((await ask({ automation: "auto_1", action: "run" })).body, { ran: true, outcome: "fired", reason: "run now" });
+  assert.equal(sent[0].url, "http://api/automations/auto_1/run");
+  assert.equal(sent[0].init.headers["x-pramanyx-delegation"], "d", "as the person the coworker acts for");
+  assert.deepEqual((await ask({ automation: "auto_1", action: "off" })).body, { enabled: false });
+  assert.equal(sent[1].url, "http://api/automations/auto_1/enabled?enabled=false");
+  assert.deepEqual((await ask({ automation: "auto_1", action: "on" })).body, { enabled: true });
+  assert.equal((await ask({ automation: "auto_1", action: "run" }, { "sec-fetch-site": "cross-site" })).status, 403);
+  assert.equal((await ask({ automation: "../x", action: "run" })).status, 422);
+  assert.equal((await ask({ automation: "auto_1", action: "delete" })).status, 422);
+  assert.equal(sent.length, 3, "a refused call reaches nothing");
+});

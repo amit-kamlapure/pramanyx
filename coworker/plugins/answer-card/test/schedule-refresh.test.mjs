@@ -30,3 +30,23 @@ test("nothing coming: ended, switched off, gone, or a run long past that never c
 test("a run days away waits for it, within what a timer can hold", () => {
   assert.equal(readAgainIn({ state: "on", next_run: "2026-12-30T00:00:00Z", runs: [] }, AT), 2 ** 31 - 1);
 });
+
+test("the card says how long until the next run, what each run does, and where the schedule stands", async () => {
+  const { untilWords, whatHappens, statusWords } = await import("../src/runs.js");
+  assert.equal(untilWords("2026-11-17T20:05:00Z", AT), "in 28 min");
+  assert.equal(untilWords("2026-11-17T21:42:00Z", AT), "in 2 h 5 min");
+  assert.equal(untilWords("2026-11-17T22:37:00Z", AT), "in 3 h");
+  assert.equal(untilWords("2026-11-20T19:37:00Z", AT), "in 3 days");
+  assert.equal(untilWords("2026-11-17T19:30:00Z", AT), "now");
+  assert.equal(untilWords("", AT), "");
+  assert.equal(whatHappens({ state: "on", steps: ["investigate"] }), "Each run asks the question, and what it finds shows here.");
+  assert.equal(whatHappens({ state: "on", steps: ["investigate", "synthesize", "email"] }),
+    "Each run asks the question, then writes it up, and what it finds shows here; it also emails it.");
+  assert.equal(whatHappens({ state: "off", steps: ["investigate"] }), "Switched off: it does not run until it is switched on again.");
+  assert.equal(whatHappens({ state: "ended", steps: ["investigate"] }), "");
+  assert.equal(statusWords({ state: "on", next_run: "2026-11-17T20:05:00Z" }, AT), "Next run in 28 min");
+  assert.equal(statusWords({ state: "ended", last_run_at: "2026-11-17T19:40:22Z" }, AT), "Ended · it ran its last run");
+  assert.equal(statusWords({ state: "off" }, AT), "Switched off");
+  assert.equal(statusWords(null, AT), "Removed");
+  assert.equal(statusWords(undefined, AT), "");
+});

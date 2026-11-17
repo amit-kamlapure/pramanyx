@@ -14,7 +14,7 @@
  */
 import { createElement as h, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { readAgainIn } from "./runs.js";
+import { readAgainIn, statusWords, whatHappens } from "./runs.js";
 import { drawChart, labelOf, numericColumns } from "./chart";
 import {
   PANE, PANE_PATTERN, PaneBody, downloadCsv, groundingOf, pageFor, PaneTitle, ResultGrid, button, faint, hasPane, idOf, line,
@@ -556,28 +556,131 @@ const DraftCard = inTail((props) => h(ToolStep, props),
  * made in a conversation is one of its automations — so this card draws no copy of it. It names what was set and
  * asks the platform where it stands every time it is drawn (`GET /automations/<id>/schedule`, through the relay):
  * when it runs, in the platform's own words; when next; and whether it is on, waiting for its first run, switched
- * off, ended or gone. Its button opens the app's own page of schedules beside the conversation, on this one, where a
- * person changes it, mutes it, runs it now and reads what each run did.
+ * off, ended or gone. The card (below) opens the app's own page of schedules beside the conversation, on this one,
+ * where a person changes it, mutes it, runs it now and reads what each run did.
  */
 const whenNext = (at) => {
   const d = new Date(at);
   return Number.isNaN(d.getTime()) ? "" : d.toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 };
 
-/** Where a schedule stands, as one sentence. `now` is the platform's read: null when the schedule is gone. */
-export function standing(now) {
-  if (now === null) return "This schedule was removed.";
-  const next = whenNext(now.next_run);
-  if (now.state === "ended") return `Ended: ${now.ended || "it has no run left"}.`;
-  if (now.state === "off") return "Switched off. It runs again when it is switched on, on the schedule's page.";
-  if (now.state === "muted") return next ? `First run ${next}, your time.` : "Waiting for its first run.";
-  return next ? `Next run ${next}, your time.` : "On.";
+/**
+ * THE SCHEDULE CARD (2026-11-18; the user: "Design a decent schedule card that deliver good UX … take inspiration … of
+ * Genie One", and "the harness should have this element/component already"). It is the harness's own card for a
+ * task — the shell's `ScheduleCreateCard`: a soft filled card with a hairline edge, a clock tile, the name and when it
+ * runs, the whole card opening the schedule — drawn in the shell's own tokens and with its own buttons and icons, so it
+ * reads as the coworker's own. The shell's card cannot be used as it is: it is its own scheduler's, which is off, and
+ * there is one scheduler, the platform's. As Genie One's card does, it carries Run now and a menu (Open the schedule,
+ * Switch off or on), each the person's own click through this coworker's door, as the person (`/pramanyx-schedule`).
+ * Under it, with no frame: what each run does, and the latest run's answer whole, the earlier ones a line each.
+ */
+let primitivesRead;
+/** The shell's own buttons and icons, as its plugins use them; null when this shell has none to lend. */
+function primitives() {
+  if (primitivesRead === undefined) {
+    try { primitivesRead = require("@deepseek-ai/dsh-client-ui-primitives"); } catch { primitivesRead = null; }
+  }
+  return primitivesRead;
+}
+
+function shellIcon(name, size) {
+  const Icon = primitives()?.[name];
+  return typeof Icon === "function" ? h(Icon, { size }) : null;
+}
+
+/** A clock, for a shell that lends no icon. */
+const CLOCK = h("svg", { width: 18, height: 18, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.6, "aria-hidden": true },
+  h("circle", { cx: 12, cy: 12, r: 9 }), h("path", { d: "M12 7v5l3 2", strokeLinecap: "round" }));
+
+function ShellButton({ children, onClick, disabled, label, title }) {
+  const Button = primitives()?.Button;
+  const stop = (event) => { event.stopPropagation(); onClick?.(event); };
+  if (typeof Button === "function") {
+    return h(Button, { variant: "outline", size: "sm", disabled, onClick: stop, "aria-label": label, title }, children);
+  }
+  return h("button", { type: "button", disabled, onClick: stop, "aria-label": label, title,
+                       style: { ...button(false), display: "inline-flex", alignItems: "center", gap: 6, height: 28 } }, children);
+}
+
+const SCHEDULE_LOOK = `
+.pramanyx-sched { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; font-size: 13.5px; }
+.pramanyx-sched-card {
+  --card-fill: var(--dsw-static-neutral-50, color-mix(in srgb, currentColor 4%, transparent));
+  --card-hover: var(--dsw-static-neutral-100, color-mix(in srgb, currentColor 7%, transparent));
+  box-sizing: border-box; position: relative; width: 100%; padding: 8px 10px; background: var(--card-fill);
+  border: .5px solid var(--dsw-alias-border-l1, color-mix(in srgb, currentColor 18%, transparent));
+  border-radius: var(--dsw-radius-lg, 12px); transition: background-color .12s;
+}
+body[data-ds-dark-theme] .pramanyx-sched-card {
+  --card-fill: var(--dsw-static-neutral-850, color-mix(in srgb, currentColor 5%, transparent));
+  --card-hover: var(--dsw-static-neutral-800, color-mix(in srgb, currentColor 8%, transparent));
+}
+@media (hover: hover) { .pramanyx-sched-card:has(.pramanyx-sched-open):hover { background: var(--card-hover); } }
+.pramanyx-sched-open { position: absolute; inset: 0; z-index: 1; padding: 0; border: 0; border-radius: inherit;
+  background: transparent; cursor: pointer; }
+.pramanyx-sched-open:focus-visible { outline: none;
+  box-shadow: inset 0 0 0 2px var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary, currentColor)); }
+.pramanyx-sched-row { position: relative; z-index: 2; pointer-events: none; display: flex; align-items: center; gap: 10px;
+  min-width: 0; min-height: 44px; }
+.pramanyx-sched-leading { box-sizing: border-box; flex: none; width: 40px; height: 40px; display: grid; place-items: center;
+  border-radius: 10px; border: .5px solid var(--dsw-alias-border-l1, color-mix(in srgb, currentColor 18%, transparent));
+  background: color-mix(in srgb, var(--dsw-static-neutral-00, #fff) 50%, transparent);
+  color: var(--dsw-alias-label-secondary, currentColor); }
+body[data-ds-dark-theme] .pramanyx-sched-leading { background: color-mix(in srgb, var(--dsw-static-neutral-00, #fff) 5%, transparent); }
+.pramanyx-sched-body { flex: auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.pramanyx-sched-title { font-size: 13px; font-weight: 500; line-height: 20px; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; }
+.pramanyx-sched-when, .pramanyx-sched-status { font-size: 12px; line-height: 18px; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; color: var(--dsw-alias-label-tertiary, currentColor); }
+.pramanyx-sched-status[data-tone="due"] { color: var(--dsw-alias-label-secondary, currentColor); }
+.pramanyx-sched-status[data-tone="problem"] { color: var(--dsw-alias-state-error-primary, #c2410c); }
+.pramanyx-sched-actions { pointer-events: auto; flex: none; position: relative; display: flex; align-items: center; gap: 6px; }
+.pramanyx-sched-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 5; min-width: 190px; padding: 4px;
+  display: flex; flex-direction: column; border-radius: var(--dsw-radius-lg, 10px);
+  border: .5px solid var(--dsw-alias-border-l2, color-mix(in srgb, currentColor 22%, transparent));
+  background: var(--dsw-alias-bg-base, Canvas); box-shadow: 0 8px 24px rgba(0, 0, 0, .18); }
+.pramanyx-sched-menu button { font: inherit; font-size: 13px; text-align: left; padding: 6px 10px; border: 0;
+  border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
+.pramanyx-sched-menu button:hover, .pramanyx-sched-menu button:focus-visible { outline: none;
+  background: var(--dsw-alias-interactive-bg-hover, color-mix(in srgb, currentColor 8%, transparent)); }
+.pramanyx-sched-what { font-size: 13px; line-height: 1.5; color: var(--dsw-alias-label-secondary, currentColor); }
+.pramanyx-sched-earlier { font: inherit; font-size: 12.5px; text-align: left; padding: 4px 0; border: 0; background: transparent;
+  color: var(--dsw-alias-label-tertiary, currentColor); cursor: pointer; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; }
+.pramanyx-sched-earlier:hover { color: var(--dsw-alias-label-secondary, currentColor); }
+`;
+
+function wearScheduleLook() {
+  let style = document.getElementById("pramanyx-schedule-look");
+  if (!style) {
+    style = document.createElement("style");
+    style.id = "pramanyx-schedule-look";
+    document.head.appendChild(style);
+  }
+  style.textContent = SCHEDULE_LOOK;
+}
+
+/** A clock that ticks every half minute, so "next run in 28 min" stays true while the card is on the page. */
+function useTicking() {
+  const [at, setAt] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setAt(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
+  return at;
 }
 
 export function Scheduled({ made }) {
   const [now, setNow] = useState(undefined);        // undefined while it is read; null when the schedule is gone
   const [unread, setUnread] = useState(false);
-  const [asked, setAsked] = useState(0);             // read again: a run was due, or the coworker said one landed
+  const [asked, setAsked] = useState(0);             // read again: a run was due, the coworker saw one land, or it was acted on
+  const [acting, setActing] = useState("");          // "run" | "on" | "off" while the person's click is answered
+  const [problem, setProblem] = useState("");
+  const [menu, setMenu] = useState(false);
+  const [earlier, setEarlier] = useState(-1);        // which earlier run is open
+  const menuAt = useRef(null);
+  const at = useTicking();
+  useEffect(() => { wearScheduleLook(); }, []);
   useEffect(() => {
     let live = true;
     fetch(`/pramanyx/automations/${encodeURIComponent(made.id)}/schedule`, { headers: { accept: "application/json" } })
@@ -602,39 +705,87 @@ export function Scheduled({ made }) {
     window.addEventListener("pramanyx:run-landed", landed);
     return () => window.removeEventListener("pramanyx:run-landed", landed);
   }, [made.id]);
-  const frame = { margin: "12px 0", display: "flex", flexDirection: "column", gap: 6, fontSize: 13.5 };
-  const said = now && Array.isArray(now.said) && now.said.length ? now.said.join("; ") : String(made.when || "");
-  const steps = now && Array.isArray(now.steps) ? now.steps : [];
-  const sends = steps.filter((kind) => kind === "email" || kind === "slack_post" || kind === "notify");
+  useEffect(() => {
+    if (!menu) return undefined;
+    const away = (event) => { if (!menuAt.current?.contains(event.target)) setMenu(false); };
+    const escape = (event) => { if (event.key === "Escape") setMenu(false); };
+    document.addEventListener("pointerdown", away);
+    document.addEventListener("keydown", escape);
+    return () => { document.removeEventListener("pointerdown", away); document.removeEventListener("keydown", escape); };
+  }, [menu]);
+
+  const act = async (action) => {
+    setMenu(false); setActing(action); setProblem("");
+    try {
+      const answer = await fetch("/pramanyx-schedule", { method: "POST", headers: { "content-type": "application/json" },
+                                                         body: JSON.stringify({ automation: made.id, action }) });
+      const got = await answer.json().catch(() => ({}));
+      if (!answer.ok) throw new Error(typeof got.detail === "string" ? got.detail : String(answer.status));
+      if (action === "run" && got.outcome && got.outcome !== "fired") setProblem(got.reason || `It did not run (${got.outcome}).`);
+    } catch (error) {
+      setProblem(`Not done: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setActing("");
+      setAsked((n) => n + 1);
+    }
+  };
+
+  const name = String(now?.name || made.name || "A schedule");
+  const when = now && Array.isArray(now.said) && now.said.length ? now.said.join("; ") : String(made.when || "");
+  const status = acting === "run" ? "Running now — its answer shows here when it is done"
+    : acting ? (acting === "off" ? "Switching off…" : "Switching on…")
+    : unread ? "Where it stands could not be read just now"
+    : now === undefined ? "Reading where it stands…" : statusWords(now, at);
+  const tone = problem || unread ? "problem" : acting || (now && now.state === "on") ? "due" : "";
+  const gone = now === null;
+  const ended = now?.state === "ended";
+  const opens = !gone && hasPane();
+  const open = () => openBeside("page", pageFor.schedule(made.id, String(now?.conn_id || made.connection || "")));
   const runs = now && Array.isArray(now.runs) ? now.runs : [];
-  return h("div", { "data-pramanyx-schedule": now === null ? "gone" : now?.state || "reading", style: frame },
-    h("div", { role: "heading", "aria-level": 4, style: { fontWeight: 600 } }, "Schedule"),
-    h("div", null, String(now?.name || made.name || "")),
-    said ? h("div", { style: quiet }, said) : null,
-    unread ? h("div", { style: quiet }, "Where this schedule stands could not be read just now.")
-      : now === undefined ? h("div", { style: quiet }, "Reading where this schedule stands…")
-        : h("div", { role: "status" }, standing(now)),
-    now && now.expires_at && now.state !== "ended" ? h("div", { style: quiet }, `It stops on ${whenNext(now.expires_at)}.`) : null,
-    steps.length ? h("div", { style: quiet }, `It ${steps.map((kind) => STEP_WORDS[kind] || kind.replace(/_/g, " ")).join(", then ")}.`) : null,
-    now && sends.length ? h("div", { style: quiet },
-      `Each run is also sent on: ${sends.map((kind) => ({ email: "email", slack_post: "Slack", notify: "a notification" })[kind]).join(", ")}.`) : null,
-    // WHAT EACH RUN FOUND, HERE (2026-11-16: "deliver it here"). Read with the schedule each time the card is drawn.
-    runs.length ? h("div", { "data-pramanyx-runs": "", style: { display: "flex", flexDirection: "column", gap: 6, paddingTop: 4 } },
-      runs.map((run, i) => h(RunFound, { key: `${run.at}-${i}`, run, provisional: String(now?.provisional || "") }))) : null,
-    now !== null && hasPane() ? h("div", null, h("button", { type: "button", style: button(false),
-      onClick: () => openBeside("page", pageFor.schedule(made.id, String(now?.conn_id || made.connection || ""))) }, "Open the schedule")) : null);
+  const [latest, ...older] = runs;
+  const what = whatHappens(now);
+
+  return h("div", { className: "pramanyx-sched", "data-pramanyx-schedule": gone ? "gone" : now?.state || "reading" },
+    h("div", { className: "pramanyx-sched-card" },
+      opens ? h("button", { type: "button", className: "pramanyx-sched-open", "aria-label": `Open the schedule ${name}`, onClick: open }) : null,
+      h("div", { className: "pramanyx-sched-row" },
+        h("span", { className: "pramanyx-sched-leading" }, shellIcon("IconClockOutlineRegular", 18) ?? CLOCK),
+        h("span", { className: "pramanyx-sched-body" },
+          h("span", { className: "pramanyx-sched-title" }, name),
+          when ? h("span", { className: "pramanyx-sched-when", title: when }, when) : null,
+          h("span", { className: "pramanyx-sched-status", role: "status", "data-tone": tone }, problem || status)),
+        gone ? null : h("span", { className: "pramanyx-sched-actions", ref: menuAt },
+          h(ShellButton, { onClick: () => { void act("run"); }, disabled: Boolean(acting) || now === undefined,
+                           title: "Run it now, once — it spends what a run spends" },
+            shellIcon("IconPlayOutlineRegular", 14), acting === "run" ? "Running…" : "Run now"),
+          h(ShellButton, { onClick: () => setMenu((was) => !was), disabled: Boolean(acting), label: "More: open the schedule, switch it off or on" },
+            shellIcon("IconEllipsisOutlineRegular", 16) ?? "⋯"),
+          menu ? h("div", { className: "pramanyx-sched-menu", role: "menu" },
+            opens ? h("button", { type: "button", role: "menuitem", onClick: () => { setMenu(false); open(); } }, "Open the schedule") : null,
+            ended ? null : now?.state === "off"
+              ? h("button", { type: "button", role: "menuitem", onClick: () => { void act("on"); } }, "Switch on")
+              : h("button", { type: "button", role: "menuitem", onClick: () => { void act("off"); } }, "Switch off")) : null))),
+    what ? h("div", { className: "pramanyx-sched-what" }, what) : null,
+    // WHAT EACH RUN FOUND, HERE (2026-11-16: "deliver it here"): the latest whole, the earlier ones a line each.
+    latest ? h("div", { "data-pramanyx-runs": "", style: { display: "flex", flexDirection: "column", gap: 4 } },
+      h(RunFound, { run: latest, provisional: String(now?.provisional || "") }),
+      older.map((run, i) => (earlier === i
+        ? h(RunFound, { key: `${run.at}-${i}`, run, provisional: String(now?.provisional || "") })
+        : h("button", { key: `${run.at}-${i}`, type: "button", className: "pramanyx-sched-earlier", onClick: () => setEarlier(i) },
+            `Ran ${whenNext(run.at)} · ${earlierWords(run)}`)))) : null);
+}
+
+/** An earlier run, in a line: its headline, or what it said, or how it went. */
+function earlierWords(run) {
+  const step = (run.steps ?? []).find((s) => s.answer?.headline || s.said);
+  if (step?.answer?.headline) return step.answer.headline;
+  if (step?.said) return String(step.said).split("\n")[0].slice(0, 140);
+  return run.outcome === "error" ? "did not run" : "open to read";
 }
 
 /** The tools that set up a schedule: `schedule` (a sentence, 2026-11-16) and the question-only one it replaced, whose
  *  cards in earlier conversations still draw. */
 const SCHEDULES = /^mcp__pramanyx__schedule(_question)?$/;
-
-/** What a schedule's steps do, in words. */
-const STEP_WORDS = {
-  investigate: "asks the question", synthesize: "writes it up", slack_post: "posts it to Slack", email: "emails it",
-  notify: "sends a notification", metric_value: "reads the metric", trusted_query: "runs the trusted query",
-  subchain: "runs another automation", kinetic_action: "takes the declared action", expectations: "checks the table's expectations",
-};
 
 /**
  * A run's answer, shown as an answer is (2026-11-16, the user: "why is the result not chart or table?"): the headline,

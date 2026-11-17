@@ -1087,6 +1087,39 @@ export async function runsDoor(req, res, runs) {
   return reply(200, { cleared: runs.seen(session) });
 }
 
+/**
+ * WHAT A SCHEDULE'S CARD DOES, AS THE PERSON (2026-11-18). The card under a turn that made a schedule offers Run now and
+ * Switch off / Switch on, as the app's page of schedules does. Each is the person's own click on this page: the door
+ * takes a call from this page only (`sec-fetch-site`), and asks the platform as the person the coworker acts for. A
+ * model never reaches it: the agent has no way to call a page's address. Run now waits for the run, as the platform's
+ * own door does, and says how it went.
+ */
+export async function scheduleDoor(req, res, api, { send = fetch, person = personHeader, clock = clockHeader } = {}) {
+  const reply = (status, body) => { res.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" }); res.end(JSON.stringify(body)); };
+  if (req.method !== "POST") return reply(405, { detail: "POST only" });
+  const from = req.headers["sec-fetch-site"];
+  if (from && from !== "same-origin") return reply(403, { detail: "Only this page may do this" });
+  let body = "";
+  for await (const chunk of req) { body += chunk; if (body.length > 2000) return reply(413, { detail: "Too long" }); }
+  let asked = {};
+  try { asked = JSON.parse(body || "{}"); } catch { return reply(400, { detail: "Not JSON" }); }
+  const id = String(asked.automation || "");
+  const action = String(asked.action || "");
+  if (!AUTOMATION_ID.test(id) || !["run", "on", "off"].includes(action)) return reply(422, { detail: "Which schedule, and run, on or off" });
+  const url = action === "run" ? `${api}/automations/${encodeURIComponent(id)}/run`
+    : `${api}/automations/${encodeURIComponent(id)}/enabled?enabled=${action === "on"}`;
+  try {
+    const answer = await send(url, { method: "POST", body: "{}",
+      headers: { "content-type": "application/json", accept: "application/json", ...(await person()), ...(await clock()) } });
+    const got = await answer.json().catch(() => ({}));
+    if (!answer.ok) return reply(answer.status, { detail: typeof got?.detail === "string" ? got.detail : `The platform said ${answer.status}` });
+    return reply(200, action === "run" ? { ran: true, outcome: String(got?.outcome || ""), reason: String(got?.reason || "") }
+      : { enabled: Boolean(got?.enabled) });
+  } catch {
+    return reply(502, { detail: "The platform is not answering" });
+  }
+}
+
 export const inject = ["webServer", "workspaceRegistry"];
 
 export function apply(ctx) {
@@ -1115,6 +1148,11 @@ export function apply(ctx) {
     path: "/pramanyx-runs",
     handler: (req, res) => runsDoor(req, res, runs),
   }), "pramanyx-home: the conversations a run landed in");
+  ctx.effect(() => ctx.webServer.register({
+    kind: "exact",
+    path: "/pramanyx-schedule",
+    handler: (req, res) => scheduleDoor(req, res, api),
+  }), "pramanyx-home: a schedule's Run now and Switch off, as the person");
   ctx.effect(() => ctx.webServer.register({
     kind: "exact",
     path: "/pramanyx-helper",

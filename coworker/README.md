@@ -134,7 +134,10 @@ turned back on from the interface.
   Pramanyx's automations: it starts at its first scheduled time, runs whether or not the coworker is open, is
   listed under Schedules, and opens on the canvas, where a person can change it by hand. Under the turn that made
   it is a card that draws no copy: it reads where the schedule stands each time it is drawn, and **shows each run's
-  result here** — "deliver it here" needs no sending step. A Slack post a model drafted waits for a person on each
+  result here** — "deliver it here" needs no sending step. The card is the harness's own task card in its own tokens,
+  buttons and icons (a clock tile, the name, when it runs, "next run in 28 min"), with Run now and a menu to open the
+  schedule or switch it off or on — each the person's own click, asked of the platform as them (2026-11-18). Under it,
+  unframed: what each run does, the latest run's answer whole and the earlier ones a line each. A Slack post a model drafted waits for a person on each
   run until one says "always allow"; an email from a new schedule is held at departure while it is on probation.
   Its times are read in a zone the person named, else their own saved clock, else their browser's (the shell tells
   the agent which, on every message), else the organisation's, else UTC — the platform's one clock
