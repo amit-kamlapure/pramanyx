@@ -55,6 +55,13 @@ const EMPTY: OrgSettings = {
   chart_palette: "", chat_first_home: false, priorities: [],
 };
 
+/** The base map choices (`orgsettings/base_map.py`), as a person reads them. */
+const BASE_MAPS: Record<string, string> = {
+  "": "None — shapes on a blank ground",
+  openfreemap: "OpenFreeMap's public map",
+  own: "Your own tile server",
+};
+
 const CURRENCIES = ["", "USD", "EUR", "GBP", "JPY", "CNY", "INR", "AUD", "CAD", "CHF", "SGD", "BRL", "ZAR"];
 const DATE_FORMATS = ["", "YYYY-MM-DD", "DD/MM/YYYY", "MM/DD/YYYY", "DD MMM YYYY"];
 const TIMEZONES = [
@@ -410,6 +417,24 @@ export function OrgSettingsPanel({ workspaceId, workspaceName }: { workspaceId?:
               {ALLOWS.map(allowField)}
             </div>
             <Note>Off unless chosen here. Everything else Pramanyx does is part of the platform, not a switch.</Note>
+          </Card>
+          {/* 2026-11-17 — the map drawn under a map answer, in the coworker's card (`orgsettings/base_map.py`). */}
+          <Card label="Base map">
+            <div style={FIELDS}>
+              {SettingSelect("base_map", "Under a map answer", ["", "openfreemap", "own"], (o) => BASE_MAPS[String(o)] ?? String(o))}
+              {s.base_map === "own" && (
+                <Field label="Your tile server's style URL" htmlFor="org-base-map-url">
+                  <Input id="org-base-map-url" value={s.base_map_url ?? ""} onChange={onChange("base_map_url")}
+                    placeholder="https://tiles.example.org/styles/basic" />
+                </Field>
+              )}
+            </div>
+            <Note>None by default: an answer&apos;s shapes and points are drawn on a blank ground, and its rows never leave.</Note>
+            <Details>
+              With a base map, each viewer&apos;s browser fetches the map squares they look at from that tile server, so
+              which squares are viewed leave this install. OpenFreeMap is free and needs no key, sets no cookies and keeps
+              no IP addresses in its logs; its data is © OpenStreetMap contributors, credited under every map.
+            </Details>
           </Card>
         </Pair>
       )}

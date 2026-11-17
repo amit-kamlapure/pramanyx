@@ -37,6 +37,15 @@ def get_org_allows():
     return {k: {"allowed": allows(k), "set": getattr(stored, k) is not None} for k in FORMER_ENV}
 
 
+@router.get("/org-settings/base-map")
+def get_base_map():
+    """The map drawn under a map answer (2026-11-17): none, OpenFreeMap's public tiles or the organisation's own tile
+    server, with the sentence that says what leaves. Read by every viewer's browser, so it carries no secret; it is
+    chosen in the organisation settings (`base_map`, `base_map_url`) by whoever may save them."""
+    from pramanyx.orgsettings.base_map import base_map
+    return base_map()
+
+
 class AllowChoice(BaseModel):
     allowed: bool
 

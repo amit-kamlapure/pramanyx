@@ -233,6 +233,12 @@ admin allows "Let the coworker ask its models through Pramanyx" in Settings ▸ 
   each concluded — are not drawn, and it has no card.
 - A Pramanyx tool added since this was written, and each custom agent's, is named from the end of the first turn
   that calls it; until then that one call shows the shell's plain row.
+- A map answer (points from latitude and longitude, or countries and US states filled by a figure) is drawn by
+  MapLibre GL, which the card's own server serves with its worker (`/pramanyx-map/…`, copied by `build.sh`) and the
+  page loads only when an answer is a map. The base map under it is the organisation's setting, none by default
+  (Settings ▸ Organization ▸ Base map): OpenFreeMap's public tiles or an own tile server, from which the browser
+  fetches the squares a person views. Regions, districts, cities and Indian states have no shapes yet; addresses
+  are not geocoded; a `.geojson` file is not yet opened as a map.
 - The chart is drawn from the answer's grid, its chart type and the app's own `chart_config`, all carried over MCP.
   The app's editor also offers a transform (period over period, share, rolling, cumulative), an annotation and a
   pivot; those are not here.

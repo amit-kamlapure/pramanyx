@@ -1,3 +1,5 @@
 # Built by build.sh from src/ and the web app's chart code.
 plugins/*/lib/client.js
+# MapLibre and the install's shapes, copied by build.sh for the answer card's map.
+plugins/answer-card/lib/map/
 node_modules/

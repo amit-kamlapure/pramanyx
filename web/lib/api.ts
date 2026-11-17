@@ -216,6 +216,10 @@ export interface OrgSettings {
   coworker_models?: boolean | null;
   /** 2026-11-15 — the coworker may search the web for outside context, cited and never a figure. */
   web_search?: boolean | null;
+  /** 2026-11-17 — the map under a map answer: "" none (shapes on a blank ground), OpenFreeMap's public tiles, or the
+   *  organisation's own tile server at `base_map_url`. Which map squares are viewed leave for that server. */
+  base_map?: "" | "openfreemap" | "own";
+  base_map_url?: string;
 }
 
 /** Whether a coworker is running beside the app, and the address to open (`routers/coworker.py`). */

@@ -12,6 +12,7 @@ import { availableChartTypes, classifyColumns, inferChartType, CHART_TYPE_LABEL,
 import { buildVegaConfig, buildVegaRuntimeConfig, readVegaTokens } from "@/components/charts/vega/config";
 import { namesOf } from "@/components/charts/vega/names";
 import { cleanLabel } from "@/lib/format";
+import { drawMap } from "./map";
 
 /** What a person chose in "Edit visualization". Every field is optional: none set is the chart as it was answered. */
 export interface Viz {
@@ -111,10 +112,16 @@ export function drawChart(el: HTMLElement, req: ChartRequest): (() => void) | nu
     const inferred = inferChartType(columns, rows);
     if (inferred && TIER3_TYPES.has(inferred.type)) chartType = inferred.type;
   }
-  // The base map is fetched from the app's own origin, which this page is not.
-  if (chartType === "choropleth" || chartType === "point_map" || chartType === "point-map") return null;
-
   const tokens = tokensFor(el);
+  // A map is drawn by MapLibre from the answer's own rows, on the organisation's base map (`./map.ts`), with the
+  // grid as it came: the editor's axis choices arrange a chart, not a map.
+  if (chartType === "choropleth" || chartType === "point_map" || chartType === "point-map") {
+    return drawMap(el, {
+      columns: req.columns ?? [], rows: req.rows ?? [], column_units: req.column_units ?? null,
+      kind: chartType === "choropleth" ? "shapes" : "points",
+    }, tokens);
+  }
+
   const width = Math.max(320, Math.floor(el.clientWidth || 640));
   let runtime: ReturnType<typeof vega.parse>;
 

@@ -43,7 +43,9 @@ EXOTIC_SHAPES: dict[str, str] = {
     "small_multiples": "1 date + 1 category (>10 values) + 1 numeric — one mini-line per series",
     "line_forecast": "1 date + 1 numeric where a projection beyond the data is the point",
     "gantt": "task/name column + start date + end date",
-    "choropleth": "region/country/state NAMES + 1 numeric — a shaded map",
+    # The shapes the install ships (`web/components/charts/geo/places.ts`): countries and US states. A region,
+    # district or city column has none, so it is a bar, not a map (2026-11-17).
+    "choropleth": "COUNTRY or US-STATE names or codes + 1 numeric — a shaded map (regions, districts, cities: a bar)",
     "point_map": "latitude + longitude columns (+ optional numeric) — dots on a map",
     "treemap": "1 additive measure across MANY parts (7–24) — proportional tiles",
     "heatmap": "2 dimensions × 1 measure — a colour grid",

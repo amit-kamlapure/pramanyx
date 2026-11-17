@@ -77,10 +77,59 @@ async function personHeader() {
   }
 }
 
+/**
+ * 2026-11-17 — the map in the card. A map answer is drawn by MapLibre in the page from the answer's own rows; the
+ * page asks this server for MapLibre and its worker, for the shapes the install ships, and for the organisation's
+ * base map. Only these files, read from `lib/map/` where `build.sh` puts them, and only by GET: nothing a caller
+ * names is read from disk.
+ */
+const MAP = "/pramanyx-map";
+const MAP_FILES = {
+  "/maplibre-gl.mjs": ["maplibre-gl.mjs", "text/javascript; charset=utf-8"],
+  "/maplibre-gl-worker.mjs": ["maplibre-gl-worker.mjs", "text/javascript; charset=utf-8"],
+  "/maplibre-gl.css": ["maplibre-gl.css", "text/css; charset=utf-8"],
+  "/shapes/countries.json": ["world.json", "application/json"],
+  "/shapes/us_states.json": ["us-states.json", "application/json"],
+};
+
+/** The file a map path names, or null. Exported for the test. */
+export function mapFileFor(pathname) {
+  if (!pathname.startsWith(MAP + "/")) return null;
+  return Object.prototype.hasOwnProperty.call(MAP_FILES, pathname.slice(MAP.length)) ? MAP_FILES[pathname.slice(MAP.length)] : null;
+}
+
+async function serveMap(req, res, api) {
+  if (req.method !== "GET" && req.method !== "HEAD") return reply(res, 405, { detail: "GET only" });
+  const pathname = new URL(req.url || "/", "http://x").pathname;
+  if (pathname === `${MAP}/base`) {
+    // The organisation's choice, as the person reads it. It names no secret: every viewer's browser fetches the style.
+    try {
+      const answer = await fetch(api + "/org-settings/base-map", { headers: { accept: "application/json", ...(await personHeader()) } });
+      const kept = await answer.text();
+      res.writeHead(answer.status, { "content-type": "application/json", "cache-control": "no-store" });
+      return res.end(kept);
+    } catch {
+      return reply(res, 502, { detail: "The platform is not answering" });
+    }
+  }
+  const file = mapFileFor(pathname);
+  if (!file) return reply(res, 404, { detail: "Not a map file" });
+  try {
+    const { readFile } = await import("node:fs/promises");
+    const body = await readFile(new URL(`./map/${file[0]}`, import.meta.url));
+    res.writeHead(200, { "content-type": file[1], "cache-control": "public, max-age=3600" });
+    return res.end(req.method === "HEAD" ? undefined : body);
+  } catch {
+    return reply(res, 404, { detail: "The map files are not built — run coworker/build.sh" });
+  }
+}
+
 export const inject = ["webServer"];
 
 export function apply(ctx) {
   const api = (process.env.PRAMANYX_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
+  ctx.effect(() => ctx.webServer.register({ kind: "prefix", path: MAP, handler: (req, res) => serveMap(req, res, api) }),
+             `pramanyx-answer-card: ${MAP}`);
   for (const [path, saying] of Object.entries(SAYINGS)) {
     ctx.effect(() => ctx.webServer.register({
       kind: "exact",

@@ -177,6 +177,29 @@ class OrgSettings(BaseModel):
                     "Off by default.",
     )
 
+    # 2026-11-17 (the coworker as a two-way door, maps) — `pramanyx/orgsettings/base_map.py`. The answer's points and
+    # shapes are drawn in the browser from its own rows; a base map under them is fetched square by square from a
+    # tile server, so which squares a person views leave for that server. None by default: shapes on a blank ground.
+    base_map: Literal["", "openfreemap", "own"] = Field(
+        default="",
+        description="The map drawn under a map answer: '' none (shapes on a blank ground), 'openfreemap' OpenFreeMap's "
+                    "public tiles (free, no key; only which map squares are viewed leave), 'own' the organisation's "
+                    "own tile server at base_map_url.",
+    )
+    base_map_url: str = Field(
+        default="",
+        description="The style URL of the organisation's own tile server, read when base_map is 'own'.",
+    )
+
+    @field_validator("base_map_url")
+    @classmethod
+    def _a_web_address(cls, v: str) -> str:
+        """A style is fetched by the browser, so only a web address is one: a `javascript:` or `file:` URL is refused."""
+        v = (v or "").strip()
+        if v and not v.lower().startswith(("https://", "http://")):
+            raise ValueError("the tile server's style URL must start with https:// or http://")
+        return v
+
     # ── The areas of the business (the ontology study, Phase 1, 2026-11-17) ──
     areas: list[AreaDeclaration] = Field(
         default_factory=list,

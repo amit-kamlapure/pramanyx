@@ -22,6 +22,7 @@ import { withUniqueKeys } from "@/lib/listKeys";
 import { requestTab } from "@/lib/navigate";
 import { getObjectCatalog } from "@/lib/objects";
 import { objectHref, objectKeyColumns } from "@/lib/objectLinks";
+import { matchPlaces, SHAPES } from "@/components/charts/geo/places";
 
 export const BLOCK_TYPES = ["lead", "figure", "bridge", "compare", "table", "map", "multiples", "heat", "progress",
                             "line", "control", "decision", "quiet", "context"] as const;
@@ -293,12 +294,15 @@ const BODY: Record<BlockType, (p: BodyProps) => React.ReactNode> = {
   map: ({ block, src, ctx }) => {
     if (!src) return null;
     const rows = pairRows(block, src).filter(r => r.now !== null);
-    const values = rows.map(r => ({ place: r.label, now: r.now, change: r.base ? (r.now as number) / r.base - 1 : null }));
+    // Countries or US states, whichever the places name, by name, spelling or code — as every map reads them.
+    const match = matchPlaces(rows.map(r => r.label));
+    const values = rows.map(r => ({ place: match?.shapes.get(String(r.label ?? "").trim()) ?? r.label, now: r.now,
+                                    change: r.base ? (r.now as number) / r.base - 1 : null }));
     const ranked = [...rows].sort((a, b) => ((b.base ? (b.now as number) / b.base : 0) - (a.base ? (a.now as number) / a.base : 0)));
     const fmt = fmtFor(src, block.value, ctx.currency);
     const spec = {
-      data: { url: "/geo/world.json", format: { property: "features" } },
-      projection: { type: "equalEarth" },
+      data: { url: SHAPES[match?.set ?? "countries"].url, format: { property: "features" } },
+      projection: { type: match?.set === "us_states" ? "albersUsa" : "equalEarth" },
       transform: [{ lookup: "properties.name", from: { data: { values }, key: "place", fields: ["change", "now"] } }],
       mark: { type: "geoshape", tooltip: true },
       encoding: { color: { field: "change", type: "quantitative", scale: { range: "diverging", domainMid: 0 },

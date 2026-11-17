@@ -156,7 +156,8 @@ def test_two_principals_with_different_grants_list_different_tools(client, held,
         shared = _session(tc, {"authorization": "Bearer the-shared-token"})
         assert mine and theirs and mine != theirs
         assert set(mine) <= {n for n, a in P.TOOL_AREAS.items() if a == "catalog:read"} and "list_connections" in mine
-        assert set(theirs) == {"read_contract", "read_claims", "read_restatements", "post_claim"}
+        # `draft_definition` (2026-11-17) writes a person's Definition draft into the record: a ledger write
+        assert set(theirs) == {"read_contract", "read_claims", "read_restatements", "post_claim", "draft_definition"}
         assert set(mine) | set(theirs) < set(shared)                     # the shared token: the policy's whole list
         # the call ran as the caller, not as this process: the API audited it under the principal's own name
         from pramanyx.kernel.ledger import Ledger

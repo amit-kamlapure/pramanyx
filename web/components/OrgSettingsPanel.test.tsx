@@ -6,7 +6,7 @@
  * link made in the owners' panel is announced, and the count follows it. An owners read that fails is said, never
  * taken for "nobody is unresolved". The one Save still writes the settings the form holds.
  */
-import { act, fireEvent, render, screen, waitFor, within } from "@/lib/testing";
+import { act, change, fireEvent, optionsOf, render, screen, valueOf, waitFor, within } from "@/lib/testing";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { IndustryChoice, OrgSettings, OwnerEntry } from "@/lib/api";
@@ -138,5 +138,21 @@ describe("Settings ▸ Organization", () => {
     expect(screen.getByTestId("org-allows-share_aggregates")).toHaveAttribute("data-on", "true");
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(api.updateOrgSettings).toHaveBeenCalledWith(expect.objectContaining({ share_aggregates: true })));
+  });
+
+  // 2026-11-17 — the map under a map answer: none unless chosen, an own tile server by its style URL.
+  it("draws no base map unless one is chosen, and saves an own tile server with its style URL", async () => {
+    render(<OrgSettingsPanel />);
+    const choice = await screen.findByLabelText("Under a map answer");
+    expect(valueOf(choice)).toBe("");
+    expect(optionsOf(choice).map((o) => o.text)).toEqual(
+      ["None — shapes on a blank ground", "OpenFreeMap's public map", "Your own tile server"]);
+    expect(screen.queryByLabelText("Your tile server's style URL")).toBeNull();
+    change(choice, { target: { value: "own" } });
+    fireEvent.change(await screen.findByLabelText("Your tile server's style URL"),
+                     { target: { value: "https://tiles.example.org/styles/basic" } });
+    fireEvent.click(within(screen.getByTestId("org-save")).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(api.updateOrgSettings).toHaveBeenCalledWith(expect.objectContaining({
+      base_map: "own", base_map_url: "https://tiles.example.org/styles/basic" })));
   });
 });

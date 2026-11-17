@@ -297,3 +297,33 @@ describe("a value axis keeps its end labels inside the chart", () => {
     expect(Math.max(...ends)).toBeLessThanOrEqual(view.width());
   });
 });
+
+// 2026-11-17 — a shaded map fills the shapes the install ships, read by `geo/places.ts`, the coworker's matcher too.
+describe("the choropleth fills the shapes its places name", () => {
+  type Geo = { data: { url: string }; projection: { type: string };
+               transform: { from: { key: string; data: { values: Record<string, unknown>[] } } }[] };
+
+  it("reads theLook's spellings into the world's countries", () => {
+    const out = resolveVegaSpec({ columns: ["country", "revenue"], chartType: "choropleth",
+      rows: [["Brasil", 10], ["España", 7], ["United States", 30], ["China", 22]] })!;
+    const spec = out.spec as unknown as Geo;
+    expect(spec.data.url).toBe("/geo/world.json");
+    expect(spec.projection.type).toBe("equalEarth");
+    expect(spec.transform[0].from.key).toBe("__shape");
+    expect(spec.transform[0].from.data.values.map((v) => v.__shape)).toEqual(["Brazil", "Spain", "United States", "China"]);
+  });
+
+  it("fills US states, on the projection made for them, when the places are states", () => {
+    const out = resolveVegaSpec({ columns: ["state", "orders"], chartType: "choropleth",
+      rows: [["CA", 10], ["TX", 7], ["New York", 30], ["Florida", 22]] })!;
+    const spec = out.spec as unknown as Geo;
+    expect(spec.data.url).toBe("/geo/us-states.json");
+    expect(spec.projection.type).toBe("albersUsa");
+    expect(spec.transform[0].from.data.values.map((v) => v.__shape)).toEqual(["California", "Texas", "New York", "Florida"]);
+  });
+
+  it("draws no map for places no shape ships for", () => {
+    expect(resolveVegaSpec({ columns: ["region", "revenue"], chartType: "choropleth",
+      rows: [["North", 1], ["South", 2], ["East", 3]] })).toBeNull();
+  });
+});

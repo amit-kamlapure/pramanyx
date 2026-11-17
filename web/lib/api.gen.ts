@@ -14749,6 +14749,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/org-settings/base-map": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Base Map
+         * @description The map drawn under a map answer (2026-11-17): none, OpenFreeMap's public tiles or the organisation's own tile
+         *     server, with the sentence that says what leaves. Read by every viewer's browser, so it carries no secret; it is
+         *     chosen in the organisation settings (`base_map`, `base_map_url`) by whoever may save them.
+         */
+        get: operations["get_base_map_org_settings_base_map_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/org-settings/effective": {
         parameters: {
             query?: never;
@@ -23302,6 +23324,19 @@ export interface components {
              * @description The areas the organisation declares, and the owners and places it gives an industry package's own — written by a curator, never inferred.
              */
             areas?: components["schemas"]["AreaDeclaration"][];
+            /**
+             * Base Map
+             * @description The map drawn under a map answer: '' none (shapes on a blank ground), 'openfreemap' OpenFreeMap's public tiles (free, no key; only which map squares are viewed leave), 'own' the organisation's own tile server at base_map_url.
+             * @default
+             * @enum {string}
+             */
+            base_map: "" | "openfreemap" | "own";
+            /**
+             * Base Map Url
+             * @description The style URL of the organisation's own tile server, read when base_map is 'own'.
+             * @default
+             */
+            base_map_url: string;
             /**
              * Briefing Metric Cap
              * @description How many approved headline metrics a Briefing measures, read by area in the map's order; 0 = the platform's default, 24. Each metric costs three warehouse queries per Briefing.
@@ -52486,6 +52521,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_base_map_org_settings_base_map_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };
