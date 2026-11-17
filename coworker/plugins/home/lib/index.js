@@ -20,6 +20,9 @@ export const READS = [
   // An answer as a file — Excel, PowerPoint, Word or PDF — built by Pramanyx from the answer's stored rows, never by
   // code the model wrote (`pramanyx/export`). A GET like the rest; the bytes are passed through as they come.
   /^\/investigations\/[A-Za-z0-9_-]{1,64}\/export$/,
+  // Several of a person's answers as one deck (punch list 92, 2026-11-18), built the same way from their stored reports;
+  // which answers is the query (`?ids=a,b`), and each is checked as the person's own by Pramanyx.
+  /^\/exports\/answers$/,
   // What went out from one email draft (`pramanyx/routers/email.py`): a draft that was sent says so whenever the
   // conversation is opened, because "sent" is read from Pramanyx's journal and not remembered by the page.
   /^\/email\/sent$/,

@@ -27,13 +27,13 @@ import re
 try:
     from .document import ExportDoc, build_export_doc
     from .pdf import render_pdf
-    from .slides import render_pptx
+    from .slides import render_pptx, render_pptx_many
     from .office import render_docx, render_xlsx
     EXPORT_AVAILABLE = True
     _EXPORT_IMPORT_ERROR = ""
 except ImportError as _exc:                       # pragma: no cover — depends on install
     ExportDoc = build_export_doc = None           # type: ignore[assignment,misc]
-    render_pdf = render_pptx = render_docx = render_xlsx = None   # type: ignore[assignment]
+    render_pdf = render_pptx = render_pptx_many = render_docx = render_xlsx = None   # type: ignore[assignment]
     EXPORT_AVAILABLE = False
     _EXPORT_IMPORT_ERROR = str(_exc)
 
@@ -42,7 +42,7 @@ class ExportUnavailable(RuntimeError):
     """Raised when a report export is requested without the `export` extra installed."""
 
 
-__all__ = ["export_report", "build_export_doc", "ExportDoc", "FORMATS",
+__all__ = ["export_report", "export_answers", "build_export_doc", "ExportDoc", "FORMATS",
            "EXPORT_AVAILABLE", "ExportUnavailable"]
 
 _MEDIA = {
@@ -79,3 +79,29 @@ def export_report(inv: dict, fmt: str = "pdf", *, narrate: bool = False,
     data = (render_pdf(doc) if fmt == "pdf" else render_pptx(doc) if fmt == "pptx"
             else render_xlsx(doc, inv.get("report") or {}) if fmt == "xlsx" else render_docx(doc))
     return data, f"{_slug(doc.title)}.{fmt}", _MEDIA[fmt]
+
+
+#: The most answers one deck holds: a conversation longer than this is cut by the asker, not silently.
+MAX_ANSWERS = 30
+
+
+def export_answers(invs: list[dict], *, title: str = "", money_symbols: list[str] | None = None) -> tuple[bytes, str, str]:
+    """Several stored answers as one PowerPoint deck, in the order given (punch list 92, 2026-11-18: a conversation's
+    answers as a deck, as Genie One makes one). Each answer is drawn from its stored report exactly as its own export
+    draws it — never from code a model wrote — and its figures cite its own receipt. Returns (bytes, filename, media)."""
+    if not invs:
+        raise ValueError("a deck needs at least one answer")
+    if len(invs) > MAX_ANSWERS:
+        raise ValueError(f"a deck holds at most {MAX_ANSWERS} answers")
+    if not EXPORT_AVAILABLE:
+        raise ExportUnavailable(
+            "Report export needs the 'export' extra (reportlab, python-pptx, "
+            "matplotlib). Install it with:  uv sync --extra export   —  "
+            f"underlying import error: {_EXPORT_IMPORT_ERROR}")
+    symbols = list(money_symbols or [])
+    docs = [build_export_doc(inv, money_symbol=(symbols[i] if i < len(symbols) else ""))
+            for i, inv in enumerate(invs)]
+    name = (title or "").strip()[:120] or (docs[0].title if len(docs) == 1 else f"{len(docs)} answers")
+    from datetime import date
+    meta = [f"{len(docs)} answer{'s' if len(docs) != 1 else ''}", date.today().isoformat()]
+    return render_pptx_many(name, docs, meta=meta), f"{_slug(name)}.pptx", _MEDIA["pptx"]

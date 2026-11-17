@@ -6951,6 +6951,46 @@ def export_investigation(inv_id: str, format: str = "pdf", narrate: bool = False
     )
 
 
+@router.get("/exports/answers")
+def export_answers_route(ids: str, title: str = "", principal=Depends(get_principal)):
+    """Several answers as one PowerPoint deck, in the order given (punch list 92, 2026-11-18): a conversation's answers,
+    each drawn from its stored report as its own export draws it. `ids` is a comma-separated list of investigation ids,
+    at most 30; each must be the caller's to read, and one that is not, or is gone, refuses the whole deck by name."""
+    from fastapi.responses import Response
+    from pramanyx.security.authz import check_owner
+
+    wanted = [i for i in dict.fromkeys(x.strip() for x in (ids or "").split(",")) if i]
+    if not wanted:
+        raise HTTPException(status_code=400, detail="Name the answers the deck is made of (ids=a,b,c)")
+    if len(wanted) > 30:
+        raise HTTPException(status_code=400, detail="A deck holds at most 30 answers; choose the ones it is for")
+    invs = []
+    for inv_id in wanted:
+        check_owner("investigation", inv_id, principal)
+        inv = get_investigation(inv_id)
+        if not inv:
+            raise HTTPException(status_code=404, detail=f"Answer {inv_id} is not there any more")
+        invs.append(inv)
+    try:
+        from pramanyx.export import ExportUnavailable, export_answers
+    except ImportError as exc:
+        logger.warning("deck export requested but its extra failed to import: %s", exc)
+        raise HTTPException(status_code=501, detail=(
+            "Report export needs the 'export' extra (reportlab, python-pptx, matplotlib). "
+            f"Install it with:  uv sync --extra export   —  underlying import error: {exc}"))
+    try:
+        symbols = [resolve_currency_symbol(inv.get("connection_id") or "", inv.get("schema_name")) for inv in invs]
+        data, filename, media_type = export_answers(invs, title=title, money_symbols=symbols)
+    except ExportUnavailable as exc:
+        logger.warning("deck export requested but unavailable: %s", exc)
+        raise HTTPException(status_code=501, detail=str(exc))
+    except Exception:  # never leak a stack trace to the client
+        logger.exception("deck export failed for %s", ",".join(wanted))
+        raise HTTPException(status_code=500, detail="export failed")
+    return Response(content=data, media_type=media_type,
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
 @router.delete("/investigations", status_code=200)
 def clear_investigations(workspace_id: str | None = None):
     """Bulk-delete investigations the caller can see — platform-wide, or scoped to a

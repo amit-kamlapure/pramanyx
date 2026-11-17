@@ -265,11 +265,41 @@ class _Deck:
             self._orphaned_caption = ""
         # code blocks are omitted from slides (they live in the PDF appendix)
 
+    def divider(self, doc: ExportDoc, number: int, of: int):
+        """The slide that opens one answer in a deck of several (punch list 92): which of how many, its question, and
+        what it was asked of. Its own slides follow, each figure citing that answer's own receipt."""
+        s = _blank(self.prs)
+        box = s.shapes.add_textbox(_MARGIN, Inches(2.3), _W - _MARGIN * 2, Inches(2.6))
+        tf = box.text_frame
+        tf.word_wrap = True
+        _para(tf, f"{number} of {of}", size=12, color=_MUTED)
+        _para(tf, doc.title, size=28, bold=True, color=_INK, space_before=6)
+        if doc.subtitle and doc.subtitle != doc.title:
+            _para(tf, doc.subtitle, size=14, color=_MUTED, space_before=8)
+        if doc.meta:
+            _para(tf, "   ·   ".join(doc.meta), size=11, color=_MUTED, space_before=12)
+        self.section = None
+        self._orphaned_caption = ""
+
     def render(self) -> bytes:
         buf = io.BytesIO()
         self.prs.save(buf)
         buf.seek(0)
         return buf.read()
+
+
+def render_pptx_many(title: str, docs: list[ExportDoc], *, subtitle: str = "", meta: list[str] | None = None) -> bytes:
+    """Several answers as one deck (punch list 92, 2026-11-18): a title slide, then each answer opened by its own
+    divider and drawn as its single export draws it, in the order given. A figure's footer cites the receipt of the
+    answer it came from, never another's."""
+    deck = _Deck()
+    deck.title_slide(ExportDoc(title=title, subtitle=subtitle, meta=list(meta or [])))
+    for n, doc in enumerate(docs, 1):
+        deck.source_text, deck.source_url = doc.source_text(), doc.source_url
+        deck.divider(doc, n, len(docs))
+        for b in doc.blocks:
+            deck.add(b)
+    return deck.render()
 
 
 def render_pptx(doc: ExportDoc) -> bytes:

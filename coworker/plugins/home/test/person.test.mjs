@@ -97,3 +97,11 @@ test("the relay reads where one schedule stands, and nothing else of the schedul
     assert.ok(!relayed(path), path);
   }
 });
+
+test("the relay passes a deck of a person's answers through, and nothing else under exports", async () => {
+  // Punch list 92 (2026-11-18): Pramanyx builds the deck from the answers' stored reports and checks each is theirs.
+  const { READS } = await import("../lib/index.js");
+  const relayed = (path) => READS.some((allowed) => allowed.test(path));
+  assert.ok(relayed("/exports/answers"));
+  for (const path of ["/exports", "/exports/answers/x", "/exports/other", "/ledger/export"]) assert.ok(!relayed(path), path);
+});

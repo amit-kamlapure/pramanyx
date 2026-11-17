@@ -125,6 +125,10 @@ turned back on from the interface.
   the page says where the question is (it asks there only if the step is not drawn). The shell's own card for it,
   which took the question box's place under a strip of its own, is not drawn for Pramanyx's steps; the answer goes to
   the same request, so what is recorded is the person's own click, as before.
+- **A deck of the conversation** (2026-11-18). Asked for slides or a PowerPoint of the conversation, or of some of
+  its answers, the agent names those answers to `deck_of_answers`, and Pramanyx builds one deck from their stored
+  reports, each answer as its own export draws it and each figure citing its own receipt (`GET /exports/answers`).
+  The step shows what the deck holds, in order, and the download; the model never makes slides itself.
 - **Anything on a schedule, from a sentence** (2026-11-16). Asked to have something happen on a schedule — a
   question asked again, a summary, a Slack post, an email; every Monday, or once in five minutes — the agent passes
   the person's own words to `schedule` (a call that drops their words saying when — "once", "in 4 minutes", "every

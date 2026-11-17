@@ -50,6 +50,8 @@ def test_server_registers_the_governed_tools():
         "list_connections", "ask", "deep_analysis", "get_investigation", "get_metric", "get_definitions", "read_learned", "bring_in_file", "draft_definition",
         # punch list 90 (2026-11-18) — what a person asked to be remembered about how they ask: theirs alone.
         "remember_for_me", "my_memories", "forget_for_me",
+        # punch list 92 (2026-11-18) — a conversation's answers as one deck, from their stored reports (a read).
+        "deck_of_answers",
         "list_findings", "get_briefing", "explore", "list_jobs", "get_job", "cancel_job",
         # Wave S6 — knowledge reads over the stores the L→G→O→Q program built. Added to
         # this exact set deliberately: the assertion exists so growing the external agent

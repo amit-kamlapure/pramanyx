@@ -15,6 +15,7 @@
 import { createElement as h, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { readAgainIn, statusWords, whatHappens } from "./runs.js";
+import { deckOf } from "./deck.js";
 import { drawChart, labelOf, numericColumns } from "./chart";
 import {
   PANE, PANE_PATTERN, PaneBody, downloadCsv, groundingOf, pageFor, PaneTitle, ResultGrid, button, faint, hasPane, idOf, line,
@@ -1038,6 +1039,7 @@ const DOES = {
   remember_for_me: ["Remembered for you", ["text"]],
   my_memories: ["Read what you asked me to remember", []],
   forget_for_me: ["Forgot one thing you asked me to remember", []],
+  deck_of_answers: ["Made a deck of answers", ["title"]],
 };
 const PREFIX = "mcp__pramanyx__";
 
@@ -1589,6 +1591,32 @@ function BroughtInCard(props) {
     h("div", { style: quiet }, `Only you can see it until you share it. ${doc.chunks ? `Read in ${doc.chunks} passages, which now reach answers.` : ""}`));
 }
 
+/**
+ * A deck of this conversation's answers (punch list 92, 2026-11-18): what it holds, in order, and the download. Pramanyx
+ * built it from the answers' stored reports; this page only passes the file through.
+ */
+function DeckCard(props) {
+  const ids = argsOf(props.block).investigation_ids;
+  const n = Array.isArray(ids) ? ids.length : 0;
+  if (props.phase !== "result") {
+    return h(Step, { kind: "read", busy: true, title: n ? `Making a deck of ${n} answer${n === 1 ? "" : "s"}` : "Making a deck" });
+  }
+  const deck = deckOf(resultText(props.block));
+  if (deck.failed || props.block?.isError) {
+    return h(Step, { kind: "read", failed: true, title: "The deck was not made" },
+      h("div", { style: quiet }, deck.failed || "The platform did not make it."));
+  }
+  const count = deck.answers.length;
+  return h(Step, { kind: "read", title: `A deck of ${count} answer${count === 1 ? "" : "s"}${deck.title ? `: ${deck.title}` : ""}` },
+    h("div", { style: { display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" } },
+      h("a", { href: deck.href, download: "", style: { ...button(false), textDecoration: "none" } }, "Download the deck (PowerPoint)"),
+      deck.missing.length
+        ? h("span", { style: quiet }, `${deck.missing.length} answer${deck.missing.length === 1 ? "" : "s"} could not be read and ${deck.missing.length === 1 ? "is" : "are"} not in it.`)
+        : null),
+    h("ol", { style: { ...quiet, margin: "8px 0 0", paddingLeft: 20 } },
+      deck.answers.map((a) => h("li", { key: a.id }, a.question || a.id))));
+}
+
 /** What the coworker drafted for the person, and the Definition's own page to read and publish it (2026-11-17). */
 function DraftedDefinitionCard(props) {
   const args = argsOf(props.block);
@@ -1718,6 +1746,7 @@ export function apply(ctx) {
           : name === PREFIX + "bring_in_file" ? BroughtInCard
           : name === PREFIX + "draft_definition" ? DraftedDefinitionCard
           : name === PREFIX + "deep_analysis" ? DeepAnalysisCard
+          : name === PREFIX + "deck_of_answers" ? DeckCard
           : SCHEDULES.test(name) ? ScheduleCard : ToolStep)));
   };
   // What a Pramanyx step waits on is asked in the conversation, under the step; the foot of the page says where. The

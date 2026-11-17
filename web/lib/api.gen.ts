@@ -7682,6 +7682,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/exports/answers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Answers Route
+         * @description Several answers as one PowerPoint deck, in the order given (punch list 92, 2026-11-18): a conversation's answers,
+         *     each drawn from its stored report as its own export draws it. `ids` is a comma-separated list of investigation ids,
+         *     at most 30; each must be the caller's to read, and one that is not, or is gone, refuses the whole deck by name.
+         */
+        get: operations["export_answers_route_exports_answers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/factcheck": {
         parameters: {
             query?: never;
@@ -40809,6 +40831,38 @@ export interface operations {
                 connection_id: string;
                 insight_id: string;
             };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_answers_route_exports_answers_get: {
+        parameters: {
+            query: {
+                ids: string;
+                title?: string;
+            };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;

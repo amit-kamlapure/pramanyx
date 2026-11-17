@@ -726,6 +726,31 @@ class PramanyxClient:
         await self._delete(f"/me/memories/{quote(memory_id, safe='')}")
         return {"forgotten": memory_id}
 
+    async def deck_of_answers(self, investigation_ids: list[str], *, title: str = "") -> dict:
+        """Several of the person's answers as one PowerPoint deck (punch list 92). Each answer is read first, so one that
+        is gone or not theirs is named instead of breaking the download; the deck itself is built by the platform from
+        the stored reports (`GET /exports/answers`), never by code a model wrote."""
+        from urllib.parse import urlencode
+        wanted = [i for i in dict.fromkeys(str(x).strip() for x in investigation_ids or []) if i]
+        if not wanted:
+            return {"deck": None, "why": "Name the answers the deck is made of: their investigation ids, as each answer returned it."}
+        if len(wanted) > 30:
+            return {"deck": None, "why": "A deck holds at most 30 answers; ask the person which ones it is for."}
+        answers, missing = [], []
+        for inv_id in wanted:
+            try:
+                inv = await self._get(f"/investigations/{inv_id}")
+            except PramanyxError:
+                missing.append(inv_id)
+                continue
+            answers.append({"id": inv_id, "question": str((inv or {}).get("question") or "")[:200]})
+        if not answers:
+            return {"deck": None, "missing": missing, "why": "None of those answers could be read."}
+        query = urlencode({"ids": ",".join(a["id"] for a in answers), **({"title": title.strip()[:120]} if title.strip() else {})})
+        return {"deck": {"title": title.strip()[:120] or (answers[0]["question"] if len(answers) == 1 else f"{len(answers)} answers"),
+                         "answers": answers, "format": "pptx", "download": f"/exports/answers?{query}"},
+                "missing": missing}
+
     async def bring_in_file(self, path: str, *, name: str = "") -> dict:
         """A file the person attached in the coworker, brought into Pramanyx as theirs (the ontology study, Phase 2,
         2026-11-17): a table-shaped file becomes a SHEET on the Sheets connection, anything else to read a DOCUMENT

@@ -509,6 +509,18 @@ async def forget_for_me(
 
 
 @mcp.tool()
+async def deck_of_answers(
+    investigation_ids: Annotated[list[str], Field(description="The answers the deck is made of, in the order they were asked: each one's investigation_id, as `ask` or `deep_analysis` returned it.")],
+    title: Annotated[str, Field(description="The deck's title, in the person's words; empty names it by its answers.")] = "",
+) -> dict:
+    """When the person asks for a deck, slides or a PowerPoint of this conversation (or of some of its answers): one
+    deck of those answers, each drawn from its stored report as its own export is, its figures citing its own receipt.
+    Pass every answer they mean, in the order asked. Returns where to download it; the conversation shows the person the
+    link — say what the deck holds, never make slides yourself. An answer that could not be read is named in `missing`."""
+    return await _client.deck_of_answers(investigation_ids, title=title)
+
+
+@mcp.tool()
 async def bring_in_file(
     path: Annotated[str, Field(description="The saved path the attachment line gives for the file the person attached.")],
     name: Annotated[str, Field(description="The file's name as the person attached it.")] = "",
