@@ -8,8 +8,8 @@ import DefinitionRoute from "@/app/definitions/[term]/page";
 const base = { statement: { text: "Paid in the last 30 days." }, tier: "approved", state: "published", author: "user:ana",
   approved_by: "user:ana", approved_on: "2026-11-17", aliases: ["paying customer"], links: [{ kind: "metric", ref: "active_customers", label: "Active customers" }],
   suggestions: [], versions: [] };
-const FINANCE = { ...base, term: "Active customer", area: "Finance", owner: "user:ana" };
-const MARKETING = { ...base, term: "Active customer", area: "Marketing", owner: "user:bo", tier: "declared", state: "draft",
+const FINANCE = { ...base, term: "Active customer", area: "finance", owner: "user:ana" };
+const MARKETING = { ...base, term: "Active customer", area: "marketing", owner: "user:bo", tier: "declared", state: "draft",
   statement: { text: "Opened an email in 90 days." }, aliases: [], links: [],
   suggestions: [{ id: "s1", by: "user:cai", at: "2026-11-17", why: "we count clicks", text: "Clicked an email in 90 days." }] };
 
@@ -17,6 +17,9 @@ function serve(me: string, rows: unknown[], posted: { path: string; body: Record
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
     const path = String(url).replace(/^https?:\/\/[^/]+/, "");
     if (path.startsWith("/record/you")) return new Response(JSON.stringify({ principal: me }));
+    if (path.startsWith("/areas/")) return new Response(JSON.stringify({ placed: { tables: {}, metrics: {}, connection: null }, areas: [
+      { id: "finance", name: "Finance", question: "", parent: "", business_owners: [], technical_owners: [], source: "organisation", pack_id: "" },
+      { id: "marketing", name: "Marketing", question: "", parent: "", business_owners: [], technical_owners: [], source: "organisation", pack_id: "" }] }));
     if (init?.method === "POST") {
       posted.push({ path: path.split("?")[0], body: JSON.parse(String(init.body)) });
       return new Response(JSON.stringify({ ...FINANCE, suggested: path === "/record/definitions" && me !== "user:ana" ? { id: "s9" } : null }));
@@ -39,7 +42,7 @@ afterEach(() => vi.unstubAllGlobals());
 describe("the Definition page (2026-11-17)", () => {
   it("shows a published definition with its area, other names and what it refers to, and the areas it has", async () => {
     serve("user:ana", [FINANCE, MARKETING]);
-    await show("Finance");
+    await show("finance");
     expect(await screen.findByText("Paid in the last 30 days.")).toBeInTheDocument();
     expect(screen.getByTestId("definition-state")).toHaveTextContent("Published");
     expect(screen.getByText("in Finance")).toBeInTheDocument();
@@ -52,7 +55,7 @@ describe("the Definition page (2026-11-17)", () => {
 
   it("offers anyone else a suggested edit, and only its owner accepts one", async () => {
     const posted = serve("user:cai", [FINANCE, MARKETING]);
-    await show("Marketing");
+    await show("marketing");
     expect(await screen.findByText("Opened an email in 90 days.")).toBeInTheDocument();
     expect(screen.getByTestId("definition-state")).toHaveTextContent("Draft");
     expect(screen.getByTestId("definition-suggestions")).toHaveTextContent("Clicked an email in 90 days.");
@@ -61,15 +64,15 @@ describe("the Definition page (2026-11-17)", () => {
     fireEvent.change(screen.getByLabelText("What “Active customer” means here"), { target: { value: "Clicked in 60 days." } });
     fireEvent.click(screen.getByRole("button", { name: "Suggest this edit" }));
     await waitFor(() => expect(posted[0]?.path).toBe("/record/definitions"));
-    expect(posted[0].body).toMatchObject({ connection_id: "shop", term: "Active customer", area: "Marketing", text: "Clicked in 60 days." });
+    expect(posted[0].body).toMatchObject({ connection_id: "shop", term: "Active customer", area: "marketing", text: "Clicked in 60 days." });
     expect(await screen.findByRole("status")).toHaveTextContent("as a suggested edit");
   });
 
   it("lets its owner accept a suggestion", async () => {
     const posted = serve("user:bo", [MARKETING]);
-    await show("Marketing");
+    await show("marketing");
     fireEvent.click(await screen.findByRole("button", { name: "Accept" }));
     await waitFor(() => expect(posted[0]?.path).toBe("/record/definitions/suggestions/decide"));
-    expect(posted[0].body).toMatchObject({ suggestion_id: "s1", accept: true, area: "Marketing" });
+    expect(posted[0].body).toMatchObject({ suggestion_id: "s1", accept: true, area: "marketing" });
   });
 });

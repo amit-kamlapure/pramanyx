@@ -236,6 +236,9 @@ def write_record_definition(req: DefinitionRequest, principal=Depends(get_princi
     if not _visible(req.connection_id):
         raise HTTPException(status_code=404, detail="No such connection")
     _persons_own(request, "writing a definition")
+    from pramanyx.semantic.areas import unknown_area
+    if (why_not := unknown_area(req.connection_id, req.area)):
+        raise HTTPException(status_code=422, detail=why_not)
     who = _who(principal)
     if not who:
         raise HTTPException(status_code=422, detail="nobody is signed in to this request — a definition is a person's")

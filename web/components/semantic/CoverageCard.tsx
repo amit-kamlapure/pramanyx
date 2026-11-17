@@ -12,6 +12,7 @@ import { useEffect, useState, type CSSProperties } from "react";
 
 import { Card, Chip, Empty, MUTED, NUM, ONE_LINE, ROW, RULE, type Tone } from "@/components/clarity/kit";
 import { AdoptProposals } from "@/components/semantic/AdoptProposals";
+import { AreaOwnersEditor, DeclareArea } from "@/components/semantic/AreaControls";
 import { rowButtonStyle } from "@/components/semantic/parts";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
@@ -19,6 +20,7 @@ import {
   getMetricCoverage, runMetricCoverage, writeMetricCoverage,
   type CatalogueMetric, type CoverageArea, type CoverageGate, type CoverageProposal, type MetricCoverage,
 } from "@/lib/api";
+import { ownersWords, readAreas, type BusinessArea } from "@/lib/areas";
 import { countNoun, formatCount } from "@/lib/format";
 import { withUniqueKeys } from "@/lib/listKeys";
 import { ORIGIN_WORDS, dayWords } from "@/lib/semanticMetrics";
@@ -72,6 +74,11 @@ export function CoverageCard({ connId, schema, rows, onAdopted }: {
   const [open, setOpen] = useState<string | null>(null);
   const [busy, setBusy] = useState<"" | "run" | "write">("");
   const [note, setNote] = useState("");
+  // The organisation's word on its areas — owners, places, its own areas (2026-11-17); unread, the map stands alone.
+  const [declared, setDeclared] = useState<BusinessArea[]>([]);
+  useEffect(() => { readAreas(connId, schema).then(r => setDeclared(r.areas)).catch(() => setDeclared([])); }, [connId, schema]);
+  const ownersOf = (id: string) => declared.find(d => d.id === id);
+  const savedAreas = (next: BusinessArea[]) => { setDeclared(next); void load(); };
 
   async function load(figures = false) {
     try {
@@ -123,6 +130,7 @@ export function CoverageCard({ connId, schema, rows, onAdopted }: {
       <Button size="xs" variant="ghost" disabled={!!busy} onClick={() => void run()} title="Proposes by code — no model call">
         {busy === "run" ? "Proposing…" : "Propose by code"}
       </Button>
+      <DeclareArea connId={connId} schema={schema} areas={declared} onSaved={savedAreas} />
       {toWrite > 0 && <Button size="xs" variant="ghost" disabled={!!busy} onClick={() => void write()}
         title={`One model call for each of the ${toWrite} areas whose data has patterns no metric computes yet`}>
         {busy === "write" ? "Starting…" : `Write from the knowledge base · ${countNoun(toWrite, "call")}`}
@@ -148,6 +156,11 @@ export function CoverageCard({ connId, schema, rows, onAdopted }: {
                   <span style={{ minWidth: 0 }}>
                     <span className="aug-fs-chrome" style={{ ...ONE_LINE, display: "block", color: "var(--t1)", fontWeight: 500 }}>{a.name}</span>
                     <span className="aug-fs-xs" style={{ ...MUTED, ...ONE_LINE, display: "block" }}>{a.question}</span>
+                    {ownersOf(a.id) && ownersWords(ownersOf(a.id)!) && (
+                      <span className="aug-fs-xs" data-testid="coverage-area-owners" style={{ ...MUTED, ...ONE_LINE, display: "block" }}>
+                        {ownersWords(ownersOf(a.id)!)}
+                      </span>
+                    )}
                   </span>
                   <span className="aug-fs-sm" style={{ ...NUM, color: a.has_data ? "var(--t2)" : "var(--t3)" }}>
                     {a.has_data ? `${formatCount(a.rows)} rows · ${countNoun(a.tables.length, "table")}` : "—"}
@@ -163,6 +176,11 @@ export function CoverageCard({ connId, schema, rows, onAdopted }: {
                   </span>
                   <span style={{ display: "inline-flex", color: "var(--t3)" }}><Icon name={isOpen ? "chevd" : "chevr"} size={12} /></span>
                 </Button>
+                {isOpen && ownersOf(a.id) && (
+                  <div style={{ padding: "6px 0 0 14px" }}>
+                    <AreaOwnersEditor connId={connId} schema={schema} areas={declared} area={ownersOf(a.id)!} onSaved={savedAreas} />
+                  </div>
+                )}
                 {isOpen && <AreaDetail coverage={coverage} area={a} connId={connId} schema={schema} rows={rows}
                   onAdopted={() => { onAdopted(); void load(); }} />}
               </div>

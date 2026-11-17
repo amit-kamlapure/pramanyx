@@ -154,9 +154,16 @@ def list_knowledge(conn_id: str):
     return [e.to_dict() for e in entries]
 
 
+def _known_area(conn_id: str, area: str) -> None:
+    from pramanyx.semantic.areas import unknown_area
+    if (why_not := unknown_area(conn_id, area)):
+        raise HTTPException(status_code=422, detail=why_not)
+
+
 @router.post("/{conn_id}/knowledge", status_code=201, dependencies=[gate(Capability.SEMANTIC_EDIT)])
 def create_knowledge(conn_id: str, body: KnowledgeEntryIn):
     from pramanyx.semantic.connection_kb import KnowledgeEntry, upsert_entry
+    _known_area(conn_id, body.area)
     entry = KnowledgeEntry(
         id=body.id or "",
         title=body.title,
@@ -173,6 +180,7 @@ def create_knowledge(conn_id: str, body: KnowledgeEntryIn):
 @router.put("/{conn_id}/knowledge/{entry_id}", status_code=200, dependencies=[gate(Capability.SEMANTIC_EDIT)])
 def update_knowledge(conn_id: str, entry_id: str, body: KnowledgeEntryIn):
     from pramanyx.semantic.connection_kb import KnowledgeEntry, upsert_entry, load_entries
+    _known_area(conn_id, body.area)
     existing = {e.id: e for e in load_entries(conn_id)}
     if entry_id not in existing:
         raise HTTPException(status_code=404, detail="Knowledge entry not found")

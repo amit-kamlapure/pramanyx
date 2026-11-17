@@ -187,10 +187,12 @@ def test_the_doors_file_anyone_else_s_change_as_a_suggestion_and_refuse_an_agent
     conn = _conn()
     monkeypatch.setattr(R, "_visible", lambda c: True)
     monkeypatch.setattr(R, "_refresh_definitions", lambda c: None)
+    monkeypatch.setattr("pramanyx.semantic.areas.areas_for", lambda c, schema=None, workspace_id=None: [{"id": "Finance"}])
     app = FastAPI()
     app.include_router(R.router)
     client = TestClient(app)
     monkeypatch.setattr(R, "_who", lambda principal: "user:ana")
+    assert client.post("/record/definitions", json={"connection_id": conn, "term": "x", "text": "y", "area": "Nowhere"}).status_code == 422
     body = {"connection_id": conn, "term": "Active customer", "area": "Finance", "text": "Paid in 30 days.",
             "aliases": ["paying customer"], "links": [{"kind": "metric", "ref": "active_customers", "label": "Active customers"}]}
     wrote = client.post("/record/definitions", json=body).json()

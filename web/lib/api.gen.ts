@@ -1172,6 +1172,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/areas/{conn_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Areas
+         * @description Every area a connection is read by — its industry's, in its order, then the organisation's own — with each one's
+         *     owners and place, and what people placed in them.
+         */
+        get: operations["get_areas_areas__conn_id__get"];
+        /**
+         * Put Areas
+         * @description A curator declares the organisation's areas — new ones, and owners and places for the industry's own — whole,
+         *     as the Settings page saves the organisation's priorities. Refused with every problem said: a parent that is no area,
+         *     a cycle, more than five levels.
+         */
+        put: operations["put_areas_areas__conn_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/areas/{conn_id}/placement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Area Placement
+         * @description A person places a table, a whole connection or a metric in an area — what it means, never who may read it. It
+         *     outranks every placement by evidence. An agent cannot make it.
+         */
+        put: operations["put_area_placement_areas__conn_id__placement_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/arrivals/claims": {
         parameters: {
             query?: never;
@@ -19697,6 +19745,54 @@ export interface components {
             picks?: number[] | null;
         };
         /**
+         * AreaDeclaration
+         * @description An area of the business as the organisation declares it (the ontology study, Phase 1, 2026-11-17): a new one, or
+         *     an industry package's own (named by its id) given owners or a place under another. Written by a curator, never
+         *     inferred; an area is the glossary's word for a part of the business (`docs/GLOSSARY.md`).
+         */
+        AreaDeclaration: {
+            /**
+             * Business Owners
+             * @description Who answers for what it means
+             */
+            business_owners?: string[];
+            /**
+             * Id
+             * @description A short id: an industry package's area id to annotate it, or a new one
+             */
+            id: string;
+            /**
+             * Name
+             * @description What people call it; empty keeps the package's name
+             * @default
+             */
+            name: string;
+            /**
+             * Parent
+             * @description The area it sits under, by id; empty at the top (at most five levels)
+             * @default
+             */
+            parent: string;
+            /**
+             * Question
+             * @description The question the area answers, as a person running it asks it
+             * @default
+             */
+            question: string;
+            /**
+             * Technical Owners
+             * @description Who answers for its data
+             */
+            technical_owners?: string[];
+        };
+        /** AreasIn */
+        AreasIn: {
+            /** Areas */
+            areas: {
+                [key: string]: unknown;
+            }[];
+        };
+        /**
          * AskFocus
          * @description SP-15 — what is on screen when Spotlight is summoned: one object by kind and id.
          *
@@ -23133,6 +23229,11 @@ export interface components {
          */
         OrgSettings: {
             /**
+             * Areas
+             * @description The areas the organisation declares, and the owners and places it gives an industry package's own — written by a curator, never inferred.
+             */
+            areas?: components["schemas"]["AreaDeclaration"][];
+            /**
              * Briefing Metric Cap
              * @description How many approved headline metrics a Briefing measures, read by area in the map's order; 0 = the platform's default, 24. Each metric costs three warehouse queries per Briefing.
              * @default 0
@@ -23584,6 +23685,26 @@ export interface components {
             entity_id: string;
             /** Key */
             key: string;
+        };
+        /** PlacementIn */
+        PlacementIn: {
+            /**
+             * Area
+             * @default
+             */
+            area: string;
+            /** Kind */
+            kind: string;
+            /**
+             * Ref
+             * @default
+             */
+            ref: string;
+            /**
+             * Schema Name
+             * @default
+             */
+            schema_name: string;
         };
         /** PlaybookEntryRequest */
         PlaybookEntryRequest: {
@@ -29408,6 +29529,113 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["AllowRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_areas_areas__conn_id__get: {
+        parameters: {
+            query?: {
+                schema?: string | null;
+            };
+            header?: never;
+            path: {
+                conn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_areas_areas__conn_id__put: {
+        parameters: {
+            query?: {
+                schema?: string | null;
+            };
+            header?: never;
+            path: {
+                conn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AreasIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_area_placement_areas__conn_id__placement_put: {
+        parameters: {
+            query?: {
+                connection_id?: string | null;
+            };
+            header?: never;
+            path: {
+                conn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlacementIn"];
             };
         };
         responses: {

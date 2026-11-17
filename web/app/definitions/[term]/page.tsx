@@ -20,6 +20,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { fastApiError } from "@/lib/api";
 import { installAuthFetch } from "@/lib/auth";
 import { getApiBase } from "@/lib/config";
+import { readAreas, type BusinessArea } from "@/lib/areas";
 import { LINK_KINDS, earlierWordings, linkHref, names, same, who, type Definition, type DefinitionLink } from "@/lib/definitions";
 import { fmtDate } from "@/lib/format";
 
@@ -65,6 +66,10 @@ export default function DefinitionRoute({ params, searchParams }: {
   }, [connection, term]);
 
   useEffect(() => { if (connection) void read(); }, [connection, read]);
+  // The connection's areas of the business: a definition is written in one of them, chosen, never typed (2026-11-17).
+  const [areas, setAreas] = useState<BusinessArea[]>([]);
+  useEffect(() => { if (connection) readAreas(connection).then((r) => setAreas(r.areas)).catch(() => setAreas([])); }, [connection]);
+  const areaName = (id: string) => areas.find((a) => a.id === id)?.name || id;
   useEffect(() => {
     fetch(`${getApiBase()}/record/you`).then((r) => (r.ok ? r.json() : null)).then((r) => setMe(String(r?.principal ?? ""))).catch(() => setMe(""));
   }, []);
@@ -99,7 +104,7 @@ export default function DefinitionRoute({ params, searchParams }: {
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <h1 className="aug-fs-h1" style={{ margin: 0, color: "var(--t1)" }}>{found?.term || term}</h1>
           {found && <Badge variant={published ? "green" : "amber"} data-testid="definition-state">{published ? "Published" : "Draft"}</Badge>}
-          {found?.area && <Badge variant="outline">in {found.area}</Badge>}
+          {found?.area && <Badge variant="outline">in {areaName(found.area)}</Badge>}
         </div>
         {found && (
           <p className="aug-fs-xs" style={{ margin: "4px 0 0", ...MUTED }}>
@@ -112,7 +117,7 @@ export default function DefinitionRoute({ params, searchParams }: {
             <span className="aug-fs-xs" style={MUTED}>Means something different in each of {all.length} areas:</span>
             {all.map((d) => (
               <Button key={d.area || "-"} size="xs" variant={same(d.area, found?.area ?? "") ? "secondary" : "ghost"}
-                onClick={() => { setArea(d.area); setWriting(false); }}>{d.area || "no area"}</Button>
+                onClick={() => { setArea(d.area); setWriting(false); }}>{d.area ? areaName(d.area) : "no area"}</Button>
             ))}
           </div>
         )}
@@ -151,8 +156,11 @@ export default function DefinitionRoute({ params, searchParams }: {
           <Input id="definition-aliases" value={draft.aliases} onChange={(e) => setDraft((d) => ({ ...d, aliases: e.target.value }))} />
           {!found && (
             <>
-              <label htmlFor="definition-area" className="aug-fs-sm" style={MUTED}>Area of the business, when it means something particular there (optional)</label>
-              <Input id="definition-area" value={draft.area} onChange={(e) => setDraft((d) => ({ ...d, area: e.target.value }))} />
+              <label htmlFor="definition-area" className="aug-fs-sm" style={MUTED}>Area of the business, when it means something particular there</label>
+              <SelectField id="definition-area" value={draft.area} onChange={(e) => setDraft((d) => ({ ...d, area: e.target.value }))}>
+                <option value="">Everywhere — no one area</option>
+                {areas.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+              </SelectField>
             </>
           )}
           <span className="aug-fs-sm" style={MUTED}>What it refers to</span>
