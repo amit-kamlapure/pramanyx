@@ -475,14 +475,47 @@ const argsOf = (args) => {
 /** Whether a tool's result says the person (or the shell's review, on their behalf) refused it. */
 export const refusedResult = (message) => Boolean(message?.isError) && /\brejected\b/i.test(textOf(message?.content));
 
+/**
+ * WHEN IT RUNS IS THE PERSON'S WORDS (2026-11-18). The schedule tool asks for the person's sentence copied exactly —
+ * "in 2 minutes" is once, "every 2 minutes" a rhythm — and a model still shortened "run once, 4 minutes from now, and
+ * never again: ask how many titles…" to "ask how many titles…", and asked the person to allow a schedule with no time
+ * in it. The phrases of the person's own last message that say when are read here; a schedule call missing any of them
+ * goes back to the agent, with the sentence to copy, before the person is asked to allow anything.
+ */
+const TIMING = new RegExp(String.raw`\b(?:once|twice|never\s+again|every\s+(?:other\s+)?(?:\d+\s+)?[a-z]+|` +
+  String.raw`in\s+(?:\d+|an?|one|two|three|four|five|six|ten|fifteen|twenty|thirty)\s+(?:minute|hour|day|week|month)s?|` +
+  String.raw`(?:\d+|an?|one|two|three|four|five|six|ten|fifteen|twenty|thirty)\s+(?:minute|hour|day|week)s?\s+from\s+now|` +
+  String.raw`at\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?|daily|weekly|monthly|hourly|nightly|tomorrow|tonight|` +
+  String.raw`(?:mon|tues|wednes|thurs|fri|satur|sun)days?|weekdays?|weekends?)\b`, "gi");
+const plain = (text) => String(text ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+
+/** The phrases saying when in what the person said that a schedule request left out. */
+export function timingLost(personSaid, request) {
+  const asked = plain(request);
+  return [...new Set([...plain(personSaid).matchAll(TIMING)].map((m) => m[0]))].filter((phrase) => !asked.includes(phrase));
+}
+
+export function timingRefusal(personSaid, request) {
+  const lost = timingLost(personSaid, request);
+  if (!lost.length) return undefined;
+  const said = String(personSaid).trim().slice(0, 600);
+  return `Not set up: the request leaves out when it runs (${lost.map((w) => `“${w}”`).join(", ")}). The person said: ` +
+    `“${said}”. Call schedule again with that sentence as \`request\`, copied exactly — not reworded or shortened.`;
+}
+
 export function askBeforeActing(ctx) {
   const declined = new Map();        // conversation → what the person declined since they last wrote
   const asked = new Map();           // call → what it would be declined as
+  const lastSaid = new Map();        // conversation → the person's own last message
   ctx.on("session/event", (session, event) => {
     try {
       const id = String(session?.id ?? "");
       const data = event?.data ?? {};
-      if (event?.type === "user/message" && data.source?.kind === "user") { declined.delete(id); return; }
+      if (event?.type === "user/message" && data.source?.kind === "user") {
+        declined.delete(id);
+        lastSaid.set(id, textOf(data.content));
+        return;
+      }
       if (event?.type === "tool/call" && data.callId) {
         const key = declinedKey(data.name, data.arguments);
         if (key) asked.set(data.callId, key);
@@ -503,6 +536,12 @@ export function askBeforeActing(ctx) {
     const id = String((session && typeof session === "object" ? session.id : session) ?? "");
     const key = declinedKey(call?.name, call?.arguments);
     if (key && declined.get(id)?.has(key)) return { kind: "deny", reason: NO_STANDS };
+    if (SCHEDULES_CALL.test(String(call?.name))) {
+      // A helper's call answers what was said in the conversation that started it.
+      const parent = session && typeof session === "object" && typeof session.header?.parentSession === "string" ? session.header.parentSession : "";
+      const refused = timingRefusal(lastSaid.get(id) ?? lastSaid.get(parent) ?? "", argsOf(call?.arguments).request);
+      if (refused) return { kind: "deny", reason: refused };
+    }
     return askFor(call?.name, call?.arguments) ?? decided;
   });
 }
