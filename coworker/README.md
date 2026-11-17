@@ -120,7 +120,9 @@ turned back on from the interface.
   used it, and refuses once a second has (`plugins/home`, `recallRefusal`).
 - **Anything on a schedule, from a sentence** (2026-11-16). Asked to have something happen on a schedule — a
   question asked again, a summary, a Slack post, an email; every Monday, or once in five minutes — the agent passes
-  the person's own words to `schedule`, and the platform's own designer (the one behind the Automations page's
+  the person's own words to `schedule` (a call that drops their words saying when — "once", "in 4 minutes", "every
+  Monday", "at 9" — goes back to the agent with their sentence to copy before anyone is asked to allow it, 2026-11-18),
+  and the platform's own designer (the one behind the Automations page's
   sentence box, `automations/propose.py`) drafts the whole chain from what the install has: when it runs, what it
   does, where it goes. The same checks a save runs refuse a draft that could not be saved; a draft that left a
   choice open (a Slack channel the person did not name) is not made, and the agent asks. What is made is one of
