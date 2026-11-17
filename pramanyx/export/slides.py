@@ -120,6 +120,9 @@ class _Deck:
         # convert at). So the picture goes, and with it the only place the title lived:
         # a customer received an UNTITLED table. Held here and spent on the next table.
         self._orphaned_caption = ""
+        # The heading a section's slide is drawn under, once something is written beneath it (2026-11-18): a heading
+        # followed by a full-slide chart or table, or by a block a deck leaves out (the query), drew an empty slide.
+        self._pending_heading = ""
 
     def title_slide(self, doc: ExportDoc):
         s = _blank(self.prs)
@@ -137,6 +140,12 @@ class _Deck:
         bar.line.fill.background()
 
     def _new_section(self, heading: str):
+        self.section = None
+        self._pending_heading = heading
+
+    def _open_section(self):
+        heading = self._pending_heading or "Details"
+        self._pending_heading = ""
         s = _blank(self.prs)
         _title_bar(s, heading)
         box = s.shapes.add_textbox(_MARGIN, Inches(1.7), _W - _MARGIN * 2, _H - Inches(2.4))
@@ -146,7 +155,7 @@ class _Deck:
 
     def _body_tf(self):
         if self.section is None:
-            self._new_section("Details")
+            self._open_section()
         return self.section[1]
 
     def image_slide(self, png: bytes, caption: str):
@@ -280,6 +289,7 @@ class _Deck:
             _para(tf, "   ·   ".join(doc.meta), size=11, color=_MUTED, space_before=12)
         self.section = None
         self._orphaned_caption = ""
+        self._pending_heading = ""
 
     def render(self) -> bytes:
         buf = io.BytesIO()

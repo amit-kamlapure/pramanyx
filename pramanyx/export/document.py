@@ -737,6 +737,12 @@ def build_export_doc(inv: dict, *, narrate: bool = False, money_symbol: str = ""
     The stored `kind` is a coarse hint; the report dict's own `_report_type` /
     field set is authoritative (an 'investigation' row often holds a deep-analysis report)."""
     from pramanyx.answer.envelope import envelope_of_report
+    from pramanyx.automations.temporal import ask_of
+    # A scheduled run's question carries the code-written context it ran with; a document says what was asked
+    # (found in a deck of answers, 2026-11-18: its divider printed "[Scheduled-run context — written by code…").
+    asked = ask_of(str(inv.get("question") or "")).strip()
+    if asked and asked != str(inv.get("question") or "").strip():
+        inv = {**inv, "question": asked}
     rep = inv.get("report") or {}
     env = envelope_of_report(rep, question=str(inv.get("question") or ""))
     if rep.get("exhibits") and env.get("exhibits"):

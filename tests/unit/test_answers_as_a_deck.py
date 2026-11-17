@@ -86,3 +86,17 @@ def test_the_coworker_s_tool_reads_each_answer_names_the_missing_and_hands_back_
     assert got["deck"]["download"] == "/exports/answers?ids=b%2Ca&title=This+week" and got["deck"]["title"] == "This week"
     assert asyncio.run(api.deck_of_answers([]))["deck"] is None
     assert asyncio.run(api.deck_of_answers(["gone"]))["deck"] is None
+
+
+def test_a_deck_draws_no_empty_slide_and_names_a_scheduled_answer_by_what_was_asked():
+    """Found reading a live deck, 2026-11-18: a heading followed by a full-slide table, or by the query a deck leaves
+    out, drew an empty slide; and a scheduled answer's divider printed the code-written context it ran with."""
+    from pramanyx.automations.temporal import OBSERVATION_HEADER
+    inv = _inv("Orders by city", "r1", [["Mumbai", 910]])
+    inv["report"]["sql"] = "SELECT city, COUNT(*) FROM orders GROUP BY 1"
+    inv["question"] = f"{OBSERVATION_HEADER}\nThis is a scheduled daily run.\n\nOrders by city"
+    slides = _slides(E.export_answers([inv, _inv("Returns by city", "r2", [["Pune", 3]])])[0])
+    bodies = [t for t in slides if t.split(" | ")[0] in ("Summary", "Evidence", "Query", "Details")]
+    assert bodies and all(any(part.strip() for part in t.split(" | ")[1:]) for t in bodies), slides
+    assert not any(t.startswith(("Evidence", "Query")) for t in slides), slides
+    assert not any("Scheduled-run" in t for t in slides), slides
