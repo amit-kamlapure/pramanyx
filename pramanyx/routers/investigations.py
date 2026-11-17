@@ -1286,13 +1286,71 @@ def _numberless_prefix(text: str) -> str:
     return text[:cut].rstrip() if cut > 0 else ""
 
 
-def _ground_headline(headline, columns, rows):
+_COUNT_WORDS = {"two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+                "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15, "sixteen": 16,
+                "seventeen": 17, "eighteen": 18, "nineteen": 19, "twenty": 20}
+_COUNT_NAMES = {n: w for w, n in _COUNT_WORDS.items()}
+#: "across five Indian metros", "all 3 regions", "these twelve stores": a headline counting the things its rows are.
+_COUNT_CLAIM_RE = re.compile(
+    r"\b(?:across|all|these)\s+(?:the\s+)?(\d+|" + "|".join(_COUNT_WORDS) + r")\s+"
+    r"((?:[A-Za-z][\w-]*\s+){0,2}?)([A-Za-z]+s)\b", re.I)
+#: A count of time ("across 12 months") is the period the rows add up, not the rows; and a count with a ranking
+#: word ("across the 3 largest cities", "these five other stores") is of some of the rows, not all of them.
+_COUNT_OF_TIME = re.compile(r"^(?:second|minute|hour|day|week|month|quarter|year|period)s$", re.I)
+_COUNT_OF_SOME = re.compile(r"(?:est|^top|^bottom|^leading|^first|^last|^other|^remaining|^major|^main|^key)$", re.I)
+
+
+def _singular(word: str) -> str:
+    w = word.lower()
+    if w.endswith("ies"):
+        return w[:-3] + "y"
+    if re.search(r"(?:s|x|ch|sh)es$", w):
+        return w[:-2]
+    return w[:-1]
+
+
+def _correct_count_claim(headline: str, columns, rows, sql: str = "") -> str:
+    """The headline with a count of its rows' things corrected to what the rows show (2026-11-17: an attached sheet's
+    answer said "across five Indian metros" over ten cities, and the map beneath it drew ten). The digit check below
+    leaves small numbers in a breakdown alone — they are counts, not figures — so a count was never checked at all.
+
+    Fires only where the rows refute it: they hold MORE distinct things than the headline counts. A count larger
+    than the rows show is left alone (a breakdown can add up things it does not list), as is a count of time, a
+    count of some of the rows ("the 3 largest"), and a count of something the statement filters on but does not
+    return ("across 3 regions" over cities WHERE region IN …). Only the number changes; the rest is the model's."""
+    m = _COUNT_CLAIM_RE.search(headline or "")
+    if not m or not rows or not columns:
+        return headline
+    said_text, between, noun = m.group(1), m.group(2), m.group(3)
+    said = int(said_text) if said_text.isdigit() else _COUNT_WORDS[said_text.lower()]
+    if said < 2 or _COUNT_OF_TIME.match(noun) or any(_COUNT_OF_SOME.search(w) for w in between.split()):
+        return headline
+    thing = _singular(noun)
+    texts = [i for i in range(len(columns)) if not _col_is_numeric(rows, i)]
+    named = [i for i in range(len(columns)) if thing in str(columns[i]).lower()]   # a store_id counts stores too
+    distinct = {i: len({str(r[i]) for r in rows if i < len(r)}) for i in {*texts, *named}}
+    if not named and thing in (sql or "").lower():
+        return headline              # the statement filters on it but does not return it: the rows cannot count it
+    if said in distinct.values() or said == len(rows):
+        return headline
+    counted = distinct[named[0]] if named else (distinct[texts[0]] if texts else len(rows))
+    if said >= counted:
+        return headline
+    right = _COUNT_NAMES[counted] if not said_text.isdigit() and counted in _COUNT_NAMES else str(counted)
+    if said_text[:1].isupper():
+        right = right.capitalize()
+    return headline[:m.start(1)] + right + headline[m.end(1):]
+
+
+def _ground_headline(headline, columns, rows, sql: str = ""):
     """Return the headline unchanged when it is consistent with the data; otherwise a
     grounded replacement built from the actual top row. Conservative: only fires on a
     clear contradiction (a sizable number matching nothing — not even a column sum/mean
-    — or a superlative naming a non-leader entity)."""
+    — or a superlative naming a non-leader entity). A count of the rows' things the rows
+    refute ("across five metros" over ten) is corrected in place first."""
     if not headline or not rows or not columns:
         return headline
+    headline = _correct_count_claim(headline, columns, rows, sql)
     # pool of acceptable numbers: individual cell values (top rows) + each column's sum & mean
     pool = [f for r in rows[:8] for f in (_hl_to_float(v) for v in r) if f is not None]
     for ci in range(len(columns)):
@@ -3139,7 +3197,7 @@ def _answer_core(
 
         # Ground the headline in the ACTUAL rows — the coder's headline is a pre-execution
         # prediction and can contradict the data it ran on.
-        _grounded_headline = _ground_headline(answer.headline, result.columns, result.rows)
+        _grounded_headline = _ground_headline(answer.headline, result.columns, result.rows, final_sql)
         if _not_as_asked is not None:
             # A headline is a finding, and there is none: the rows are not what was asked for. The answer says that
             # where the finding would be, and why beside it (the `inspect_warning` below).
