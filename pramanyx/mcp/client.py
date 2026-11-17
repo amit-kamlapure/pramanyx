@@ -593,7 +593,8 @@ class PramanyxClient:
         return await self._get("/web/search", params={"q": query, "n": n})
 
     # ── A question on a rhythm, run by the platform (the coworker plan, 2026-11-15) ────────────────
-    async def schedule(self, request: str, connection: str, timezone: str = "", browser_time_zone: str = "") -> dict:
+    async def schedule(self, request: str, connection: str, timezone: str = "", browser_time_zone: str = "",
+                       confirm_rhythm: bool = False) -> dict:
         """ANYTHING ON A SCHEDULE, FROM A SENTENCE (2026-11-16). The person's words go to the platform's own designer
         (`POST /automations/propose`, `automations/propose.py`): a model drafts the whole chain — when it runs, what
         it does, where it goes — from what this install has, and the same checks a save runs refuse a draft that
@@ -603,10 +604,13 @@ class PramanyxClient:
         for the agent to ask. One scheduler — the platform's; one designer — the one the Automations page uses.
 
         ``timezone`` is a zone the person named; ``browser_time_zone`` the one the shell tells the agent the person's
-        browser is in. Which the times are read in is the platform's order (`automations.propose.the_clock`)."""
+        browser is in. Which the times are read in is the platform's order (`automations.propose.the_clock`).
+
+        ``confirm_rhythm`` says the person confirmed a rhythm more often than hourly, which is otherwise left open and
+        asked (2026-11-17: an agent passed "in 2 minutes" on as "every 2 minutes", and that schedule was made)."""
         drafted = await self._post("/automations/propose", json_body={
             "outcome": request, "conn_id": connection, "timezone": timezone.strip(),
-            "clock_here": browser_time_zone.strip(), "from_conversation": True})
+            "clock_here": browser_time_zone.strip(), "from_conversation": True, "confirmed_rhythm": bool(confirm_rhythm)})
         drafted = drafted if isinstance(drafted, dict) else {}
         if drafted.get("verdict") != "proposed" or not drafted.get("draft"):
             return {"scheduled": False, "reason": drafted.get("reason") or "the request could not be made into a schedule",

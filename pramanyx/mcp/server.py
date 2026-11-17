@@ -386,21 +386,25 @@ async def search_the_web(
 @mcp.tool()
 async def schedule(
     request: Annotated[str, Field(description=(
-        "What to run and when, in the person's own words, with anything they said about where it goes: "
-        "'every Monday at 9, GMV by platform', 'in five minutes, a summary of yesterday's orders', "
-        "'every weekday at 8, post revenue to #general', 'on the first of each month, email the margin report to "
-        "x@y.com'. Pass their words; do not translate them into a cron."))],
+        "The person's own sentence, COPIED EXACTLY — never reworded, shortened or summarised: 'in 2 minutes' is once, "
+        "'every 2 minutes' is a rhythm, and swapping one for the other makes the wrong schedule. Include anything they "
+        "said about where it goes: 'every Monday at 9, GMV by platform', 'in five minutes, a summary of yesterday's "
+        "orders', 'every weekday at 8, post revenue to #general'. Do not translate it into a cron."))],
     connection: Annotated[str, Field(description="The connection the schedule runs against.")],
     timezone: Annotated[str, Field(description="Only a clock the person NAMED ('at 9 London time' → Europe/London), as an IANA name; empty when they named none.")] = "",
     browser_time_zone: Annotated[str, Field(description="The browser time zone you were given for this request, e.g. Asia/Kolkata; empty if you were given none.")] = "",
+    confirm_rhythm: Annotated[bool, Field(description=(
+        "True only after `needs` asked whether a rhythm more often than hourly is what the person meant, you said it "
+        "back to them, and they said yes. Never true on a first call."))] = False,
 ) -> dict:
     """Set up anything on a schedule from a sentence — a question asked again, a write-up, a Slack post, an email, once
     or on a rhythm. The platform's own designer drafts the whole chain from what this install has, checks it as a
     save would, and makes it; it runs on the platform's scheduler, governed and traced, whether or not this
     conversation is open. Returns `scheduled` with `when` and `next_run` (say them back as returned), or `needs`: a
-    choice the request left open (a channel, a sender) — ask the person and call again with their answer — or a
-    `reason` it could not be made."""
-    return await _client.schedule(request, connection, timezone, browser_time_zone)
+    choice the request left open (a channel, a sender, a rhythm more often than hourly to confirm) — ask the person
+    and call again with their answer — or a `reason` it could not be made. Setting it up is the whole of the reply:
+    do not also answer the question now unless the person asked for it now as well."""
+    return await _client.schedule(request, connection, timezone, browser_time_zone, confirm_rhythm)
 
 
 @mcp.tool()

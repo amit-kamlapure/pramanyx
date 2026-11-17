@@ -93,6 +93,9 @@ class ProposeRequest(BaseModel):
                                         "and set none of their own.")
     #: The request came from a conversation (the coworker), which shows each run itself: "here" needs no sending step.
     from_conversation: bool = False
+    #: 2026-11-17 — the person confirmed a rhythm more often than hourly, which a conversation's draft otherwise leaves open
+    #: (`propose.rhythm_to_confirm`).
+    confirmed_rhythm: bool = False
 
 
 class PauseRequest(BaseModel):
@@ -314,9 +317,16 @@ def propose(body: ProposeRequest):
                 "notes": proposal.notes, "draft": proposal.draft}
     # SP-7 — the choices the request did not make stay OPEN in the draft (the canvas's
     # incomplete gate collects them), and the first run is stated by the scheduler's clock.
+    to_fill = list(proposal.to_fill or [])
+    # 2026-11-17 — from a conversation nobody looks at a canvas before the schedule is made, so a rhythm more often than
+    # hourly is one more open choice: said back in words, and made only once the person confirms it.
+    if body.from_conversation and not body.confirmed_rhythm:
+        from pramanyx.automations.propose import rhythm_to_confirm
+        if (ask := rhythm_to_confirm(proposal.draft or {})):
+            to_fill.append(ask)
     return {"verdict": "proposed", "draft": proposal.draft,
             "dry_run": proposal.dry_run, "notes": proposal.notes,
-            "to_fill": proposal.to_fill, "first_run": proposal.first_run,
+            "to_fill": to_fill, "first_run": proposal.first_run,
             "reason": ""}
 
 

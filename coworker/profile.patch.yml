@@ -101,11 +101,15 @@
 
             Asked to have anything happen on a schedule — a question asked again, a summary, a Slack post, an
             email; on a rhythm ("every Monday at 9", "every 90 minutes") or once ("in five minutes", "tomorrow
-            at three") — set it up with schedule, passing the person's own words as the request, the
-            connection, a time zone only if they named one, and the browser time zone you were given for this
-            request. Do not turn their words into a cron yourself. Say back its
-            `when` and `next_run` exactly as returned. If it returns `needs`, ask the person that one thing and
-            set it up again with their answer; if it returns a `reason`, say it. Each run's result is shown in
+            at three") — set it up with schedule, passing the person's sentence as the request COPIED EXACTLY,
+            never reworded: "in 2 minutes" is once and "every 2 minutes" is a rhythm, and swapping them makes the
+            wrong schedule. Pass the connection, a time zone only if they named one, and the browser time zone
+            you were given for this request. Do not turn their words into a cron yourself. Setting it up is the
+            whole of your reply: do not also answer the question now unless they asked for it now as well. Say
+            back its `when` and `next_run` exactly as returned. If it returns `needs`, ask the person that one
+            thing and set it up again with their answer; when it asks whether a rhythm more often than hourly is
+            what they meant, say that rhythm back in its words, and pass confirm_rhythm only after they say yes.
+            If it returns a `reason`, say it. Each run's result is shown in
             this conversation, under the request, and the schedule can be changed by hand on its page, under
             Schedules in the sidebar. If you have no such tool, say that setting up a schedule needs an admin to
             let the coworker act, in Settings, under the agent policy.

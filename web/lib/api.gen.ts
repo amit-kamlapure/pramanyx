@@ -26902,6 +26902,11 @@ export interface components {
              */
             clock_here: string;
             /**
+             * Confirmed Rhythm
+             * @default false
+             */
+            confirmed_rhythm: boolean;
+            /**
              * Conn Id
              * @description The connection the chain runs against.
              */

@@ -418,6 +418,45 @@ def _first_run(conditions: list, now: datetime, timezone: str = "") -> str:
     return min(times).strftime("%Y-%m-%dT%H:%M:%SZ") if times else ""
 
 
+#: A schedule set up from a conversation that would run more often than this is not made until the person says the rhythm
+#: is what they meant (2026-11-17, found testing the merged coworker: "In 2 minutes, show me …" reached the designer as
+#: "every 2 minutes, show …", and an analysis every two minutes, with no end, was made and armed).
+CONFIRM_MORE_OFTEN_THAN_MINUTES = 60
+
+
+def rhythm_to_confirm(draft: dict, now: Optional[datetime] = None) -> str:
+    """The open choice a sub-hourly rhythm leaves, in words the person can answer — or "" when the draft runs once, or no
+    more often than hourly. Read by the scheduler's own clock (`next_fire_utc`): the two next runs, and the gap between."""
+    from datetime import timedelta
+
+    from pramanyx.automations.engine import next_fire_utc
+    from pramanyx.automations.recurrence import RecurrenceError, is_recurrence, parse, said_when
+    now = now or datetime.now(timezone.utc)
+    clock = str(draft.get("timezone") or "")
+    for c in draft.get("conditions") or []:
+        if c.get("kind") != "schedule":
+            continue
+        cron = str((c.get("config") or {}).get("cron") or "")
+        first = next_fire_utc(cron, now, clock)
+        second = next_fire_utc(cron, first + timedelta(seconds=1), clock) if first else None
+        if first is None or second is None:
+            continue
+        minutes = int((second - first).total_seconds() // 60)
+        if minutes >= CONFIRM_MORE_OFTEN_THAN_MINUTES:
+            continue
+        try:
+            read = parse(cron, clock) if is_recurrence(cron) else None
+        except RecurrenceError:
+            read = None                         # a cron, or a rule its trigger already read: no end it can name
+        ends = bool(draft.get("expires_at")) or bool(read and (read.count or read.until))
+        every = "every minute" if minutes <= 1 else f"every {minutes} minutes"
+        return (f"How often: as drafted it runs {every}{'' if ends else ', with no end'} ({said_when(cron, clock)}) — "
+                "more often than once an hour. Say that rhythm back to the person in those words and ask whether it is "
+                "what they meant; set it up again with confirm_rhythm only if they say yes, or with their own words for "
+                "when it should run.")
+    return ""
+
+
 def propose_chain(outcome: str, *, conn_id: str, provider: Any = None, timezone_name: str = "",
                   clock_here: str = "", from_conversation: bool = False) -> ChainProposal:
     """Draft a chain for ``outcome``, validate it, dry-run it. Never saves.
