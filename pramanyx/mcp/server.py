@@ -455,6 +455,19 @@ async def get_metric(
 
 
 @mcp.tool()
+async def get_definitions(
+    connection: Annotated[str, Field(description="A connection id from list_connections.")],
+    term: Annotated[Optional[str], Field(description="A business word. Omit to list every definition on the connection.")] = None,
+) -> dict:
+    """Read what business words mean on a connection — the organisation's Definitions (its Pages). Each says whose word
+    it is: `published` (its owner approved it — use it exactly), `draft` (written, not yet published — use it and say
+    so), the domain it holds in (one word may mean one thing in Finance and another in Marketing: when more than one
+    domain defines it and the question does not say which, ask), its other names, and what it refers to (metrics,
+    tables). Pending suggested edits are counted, never applied."""
+    return await _client.get_definitions(connection, term=term)
+
+
+@mcp.tool()
 async def list_findings(
     connection: Annotated[str, Field(description="A connection id from list_connections.")],
     schema: Annotated[Optional[str], Field(description="Optional schema name to scope a multi-schema connection.")] = None,

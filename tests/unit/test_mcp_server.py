@@ -47,7 +47,7 @@ def test_server_registers_the_governed_tools():
     # hidden; the default, since 2026-11-16, is `act`. `test_de2b_agent_policy.py` holds the listing.
     tools = set(mcp._tool_manager._tools)
     assert tools == {
-        "list_connections", "ask", "deep_analysis", "get_investigation", "get_metric",
+        "list_connections", "ask", "deep_analysis", "get_investigation", "get_metric", "get_definitions",
         "list_findings", "get_briefing", "explore", "list_jobs", "get_job", "cancel_job",
         # Wave S6 — knowledge reads over the stores the L→G→O→Q program built. Added to
         # this exact set deliberately: the assertion exists so growing the external agent

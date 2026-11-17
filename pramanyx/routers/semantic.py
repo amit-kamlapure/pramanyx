@@ -67,6 +67,7 @@ class KnowledgeEntryIn(BaseModel):
     body:  str
     kind:  str = "note"          # metric | synonym | rule | join | note
     tags:  list[str] = []
+    domain: str = ""             # the domain it is defined in; one word may mean more than one thing (2026-11-17)
 
 
 class BenchmarkCaseIn(BaseModel):
@@ -163,6 +164,7 @@ def create_knowledge(conn_id: str, body: KnowledgeEntryIn):
         kind=body.kind,          # type: ignore[arg-type]
         tags=body.tags,
         connection_id=conn_id,
+        domain=body.domain,
     )
     saved = upsert_entry(conn_id, entry)
     return saved.to_dict()
@@ -181,6 +183,7 @@ def update_knowledge(conn_id: str, entry_id: str, body: KnowledgeEntryIn):
         kind=body.kind,          # type: ignore[arg-type]
         tags=body.tags,
         connection_id=conn_id,
+        domain=body.domain,
     )
     saved = upsert_entry(conn_id, entry)
     return saved.to_dict()
@@ -188,8 +191,12 @@ def update_knowledge(conn_id: str, entry_id: str, body: KnowledgeEntryIn):
 
 @router.delete("/{conn_id}/knowledge/{entry_id}", status_code=200)
 def delete_knowledge(conn_id: str, entry_id: str):
+    from pramanyx.record.writers import NotTheOwner
     from pramanyx.semantic.connection_kb import delete_entry
-    ok = delete_entry(conn_id, entry_id)
+    try:
+        ok = delete_entry(conn_id, entry_id)
+    except NotTheOwner as exc:
+        raise HTTPException(status_code=403, detail=f"This definition is not yours to take away: {exc}.")
     if not ok:
         raise HTTPException(status_code=404, detail="Knowledge entry not found")
     return {"ok": True}

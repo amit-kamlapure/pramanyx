@@ -654,6 +654,12 @@ class PramanyxClient:
                 "open": f"/automations?conn={connection}&focus={made.get('id')}"}
 
     # ── DE-2c: the knowledge tools, through the API like everything else ───────────
+    async def get_definitions(self, connection: str, *, term: Optional[str] = None) -> dict:
+        rows = await self._get("/record/definitions", params={"connection_id": connection, **({"term": term} if term else {})})
+        keep = ("term", "domain", "state", "owner", "aliases", "links", "approved_by", "approved_on")
+        return {"definitions": [{**{k: r.get(k) for k in keep}, "text": (r.get("statement") or {}).get("text", ""),
+                                 "suggested_edits_pending": len(r.get("suggestions") or [])} for r in rows or []]}
+
     async def search_graph(self, connection: str, query: str, *, limit: int = 10) -> dict:
         return await self._get(f"/knowledge/{connection}/graph/search", params={"q": query, "limit": limit})
 

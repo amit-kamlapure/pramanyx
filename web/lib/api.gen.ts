@@ -16419,15 +16419,16 @@ export interface paths {
         };
         /**
          * List Definitions
-         * @description A connection's Definitions, or the one for ``term``. Read by the app's Definition page and by an answer that
-         *     leaned on one.
+         * @description A connection's Definitions, or the ones for ``term`` — one per domain it is defined in, or the one in ``domain``.
+         *     Read by the app's Definition page and by an answer that leaned on one.
          */
         get: operations["list_definitions_record_definitions_get"];
         put?: never;
         /**
          * Write Record Definition
-         * @description A person writes what a business word means on a connection. Theirs, at tier ``declared``; writing it again
-         *     keeps the earlier wording beneath it, and a new wording waits for approval again.
+         * @description A person writes what a business word means on a connection, in a domain. A word nobody has defined there is
+         *     their draft; their own definition they change directly; anyone else's change is filed as a suggested edit for its
+         *     owner (the ontology study, 2026-11-17), and the response says so (``suggested``).
          */
         post: operations["write_record_definition_record_definitions_post"];
         delete?: never;
@@ -16447,9 +16448,49 @@ export interface paths {
         put?: never;
         /**
          * Approve Record Definition
-         * @description Its owner approves a definition as written; anyone else is refused, and told whose it is.
+         * @description Its owner publishes a definition as written; anyone else is refused, and told whose it is.
          */
         post: operations["approve_record_definition_record_definitions_approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/record/definitions/suggestions/decide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decide Record Definition Suggestion
+         * @description Its owner accepts or declines a suggested edit.
+         */
+        post: operations["decide_record_definition_suggestion_record_definitions_suggestions_decide_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/record/definitions/unpublish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Unpublish Record Definition
+         * @description Its owner takes a published definition back to a draft.
+         */
+        post: operations["unpublish_record_definition_record_definitions_unpublish_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -21170,19 +21211,48 @@ export interface components {
         DefinitionApproval: {
             /** Connection Id */
             connection_id: string;
+            /**
+             * Domain
+             * @default
+             */
+            domain: string;
             /** Term */
             term: string;
+        };
+        /** DefinitionLink */
+        DefinitionLink: {
+            /** Kind */
+            kind: string;
+            /**
+             * Label
+             * @default
+             */
+            label: string;
+            /** Ref */
+            ref: string;
         };
         /** DefinitionRequest */
         DefinitionRequest: {
             /** Aliases */
-            aliases?: string[];
+            aliases?: string[] | null;
             /** Connection Id */
             connection_id: string;
+            /**
+             * Domain
+             * @default
+             */
+            domain: string;
+            /** Links */
+            links?: components["schemas"]["DefinitionLink"][] | null;
             /** Term */
             term: string;
             /** Text */
             text: string;
+            /**
+             * Why
+             * @default
+             */
+            why: string;
         };
         /** DeltaStatusIn */
         DeltaStatusIn: {
@@ -22398,6 +22468,11 @@ export interface components {
         KnowledgeEntryIn: {
             /** Body */
             body: string;
+            /**
+             * Domain
+             * @default
+             */
+            domain: string;
             /** Id */
             id?: string | null;
             /**
@@ -24681,6 +24756,27 @@ export interface components {
              * @default []
              */
             tables: string[];
+        };
+        /** SuggestionDecision */
+        SuggestionDecision: {
+            /** Accept */
+            accept: boolean;
+            /** Connection Id */
+            connection_id: string;
+            /**
+             * Domain
+             * @default
+             */
+            domain: string;
+            /** Suggestion Id */
+            suggestion_id: string;
+            /** Term */
+            term: string;
+            /**
+             * Why
+             * @default
+             */
+            why: string;
         };
         /** SuiteIn */
         SuiteIn: {
@@ -54832,6 +54928,7 @@ export interface operations {
             query: {
                 connection_id: string;
                 term?: string | null;
+                domain?: string | null;
             };
             header?: never;
             path?: never;
@@ -54899,6 +54996,80 @@ export interface operations {
         };
     };
     approve_record_definition_record_definitions_approve_post: {
+        parameters: {
+            query?: {
+                connection_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DefinitionApproval"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decide_record_definition_suggestion_record_definitions_suggestions_decide_post: {
+        parameters: {
+            query?: {
+                connection_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SuggestionDecision"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unpublish_record_definition_record_definitions_unpublish_post: {
         parameters: {
             query?: {
                 connection_id?: string | null;
