@@ -360,7 +360,7 @@ function Doors({ connId, schema, onStaged, knowledgeConns }: {
       {door === "file" && (
         <div className="aug-fs-sm" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <input ref={fileRef} type="file" hidden data-testid="intake-file-input"
-            accept=".csv,.tsv,.xlsx,.json,.md,.markdown,.yaml,.yml"
+            accept=".csv,.tsv,.xlsx,.json,.lkml,.bim,.tmdl,.md,.markdown"
             onChange={e => {
               const f = e.target.files?.[0];
               if (f) run(() => uploadIntakeFile(f, connId, actorName(), "", schema ?? ""),
@@ -377,8 +377,10 @@ function Doors({ connId, schema, onStaged, knowledgeConns }: {
           <span style={{ color: "var(--t3)" }}>
             A metric file (CSV / TSV / XLSX) — its name, SQL, dataset, dates and grain, unit, caveats and
             targets{schema ? <> (a row with no dataset belongs to <strong>{schema}</strong>)</> : null} —
-            a dbt <span style={{ fontFamily: "var(--font-mono)" }}>manifest.json</span>, or a SKILL.md.
-            Every object still waits for your verdict.
+            a dbt <span style={{ fontFamily: "var(--font-mono)" }}>manifest.json</span> (its descriptions and its
+            metrics), a LookML <span style={{ fontFamily: "var(--font-mono)" }}>.lkml</span>, a Power BI model
+            (<span style={{ fontFamily: "var(--font-mono)" }}>model.bim</span> or a <span style={{ fontFamily: "var(--font-mono)" }}>.tmdl</span>),
+            or a SKILL.md. Every object still waits for your verdict.
           </span>
           <MetricFileColumns />
         </div>
@@ -498,6 +500,7 @@ export function IntakePanel({ connId, schema }: { connId: string; schema?: strin
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [applyErrors, setApplyErrors] = useState<Record<string, string>>({});
   const [refused, setRefused] = useState<string[]>([]);
+  const [notTranslated, setNotTranslated] = useState<string[]>([]);
   const [resolveNote, setResolveNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -512,7 +515,7 @@ export function IntakePanel({ connId, schema }: { connId: string; schema?: strin
 
   useEffect(() => {
     setSelected(""); setPlan(null); setDecisions({}); setEdits({});
-    setApplyErrors({}); setRefused([]); setResolveNote(""); setErr(""); setExportText(null);
+    setApplyErrors({}); setRefused([]); setNotTranslated([]); setResolveNote(""); setErr(""); setExportText(null);
     loadBundles();
   }, [connId, loadBundles]);
 
@@ -531,6 +534,7 @@ export function IntakePanel({ connId, schema }: { connId: string; schema?: strin
 
   function onStaged(r: IntakeStageResult) {
     setRefused(r.refused ?? []);
+    setNotTranslated(r.mapped?.not_translated ?? []);
     loadBundles();
     setSelected(r.bundle.id);
     setPlan({ bundle: r.bundle, summary: r.summary, candidates: r.candidates });
@@ -595,6 +599,20 @@ export function IntakePanel({ connId, schema }: { connId: string; schema?: strin
           <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
             {refused.slice(0, 5).map((r, i) => <li key={i}>{r}</li>)}
             {refused.length > 5 && <li>…and {refused.length - 5} more</li>}
+          </ul>
+        </div>
+      )}
+
+      {/* A BI tool's formula the lane cannot carry over exactly (DAX, a dbt derived metric, LookML's Liquid) came in
+          as the Definition of its word, quoting the formula — not refused, and not guessed into SQL. */}
+      {notTranslated.length > 0 && (
+        <div className="aug-fs-xs" data-testid="intake-not-translated"
+          style={{ border: "1px solid var(--b2)", borderRadius: "var(--r2)", padding: "8px 12px", color: "var(--t2)" }}>
+          {notTranslated.length === 1 ? "One formula was" : `${notTranslated.length} formulas were`} not turned into SQL,
+          so {notTranslated.length === 1 ? "it comes" : "they come"} in as Definitions quoting the tool&rsquo;s own formula:
+          <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
+            {notTranslated.slice(0, 5).map((r, i) => <li key={i}>{r}</li>)}
+            {notTranslated.length > 5 && <li>…and {notTranslated.length - 5} more</li>}
           </ul>
         </div>
       )}

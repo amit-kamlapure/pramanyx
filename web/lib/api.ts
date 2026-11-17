@@ -12122,7 +12122,8 @@ export interface IntakePlan {
 export interface IntakeStageResult extends IntakePlan {
   duplicate: boolean;
   refused: string[];
-  mapped?: { file?: string; sheet?: string; ignored_headers: string[] };
+  /** `not_translated` (2026-11-17): what a BI tool's file holds that came in as a Definition, not a metric. */
+  mapped?: { file?: string; sheet?: string; ignored_headers: string[]; not_translated?: string[] };
 }
 
 async function intakeError(res: Response): Promise<never> {
