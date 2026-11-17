@@ -491,6 +491,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/agents/custom/routing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Agents Routing
+         * @description A connection's agents and what the coworker is told about them (punch list 93): its own agent to ask
+         *     through, or each agent's purpose to choose by. Declared before `/agents/custom/{agent_id}` so the word is not
+         *     read as an agent's id.
+         */
+        get: operations["agents_routing_agents_custom_routing_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/agents/custom/{agent_id}": {
         parameters: {
             query?: never;
@@ -1199,6 +1221,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/areas/{conn_id}/not-an-area": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Not An Area
+         * @description A curator says a suggested area is not an area of the business: it is not suggested again (or, taken back, it
+         *     is). A person's own call, as declaring one is.
+         */
+        put: operations["put_not_an_area_areas__conn_id__not_an_area_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/areas/{conn_id}/placement": {
         parameters: {
             query?: never;
@@ -1213,6 +1256,27 @@ export interface paths {
          *     outranks every placement by evidence. An agent cannot make it.
          */
         put: operations["put_area_placement_areas__conn_id__placement_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/areas/{conn_id}/suggested": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Suggested Areas
+         * @description Areas the model suggests from its own labels for the data, for a curator to declare or set aside (punch list
+         *     87). A suggestion is never an area until a curator declares it.
+         */
+        get: operations["get_suggested_areas_areas__conn_id__suggested_get"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -8785,6 +8849,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/investigations/{inv_id}/answer-now": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Answer Now Route
+         * @description Answer now (punch list 89): the person stops a running deep analysis and has it answer from what it has found —
+         *     where cancelling answers nothing. Every place the run decides whether to keep going goes to its write-up, which says
+         *     it was answered early. A person's own word: an agent is refused. 409 for a run that is not running.
+         */
+        post: operations["answer_now_route_investigations__inv_id__answer_now_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/investigations/{inv_id}/cancel": {
         parameters: {
             query?: never;
@@ -9728,7 +9814,8 @@ export interface paths {
         /**
          * Delete Resolution
          * @description S5 cited memory — revoke one remembered reading. The next matching question
-         *     re-ambiguates instead of inheriting a reading the user no longer stands behind.
+         *     re-ambiguates instead of inheriting a reading the user no longer stands behind. A person's own row is revoked
+         *     by its person alone; to anyone else it does not exist.
          */
         delete: operations["delete_resolution_learning_resolutions__res_id__delete"];
         options?: never;
@@ -10908,6 +10995,51 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/memories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * My Memories
+         * @description What the person asking asked to be remembered about how they ask — theirs alone.
+         */
+        get: operations["my_memories_me_memories_get"];
+        put?: never;
+        /**
+         * Remember
+         * @description Remember something about how the person asking asks, for them alone. Through the coworker it is asked first: the
+         *     person allows it in the conversation.
+         */
+        post: operations["remember_me_memories_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/memories/{res_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Forget
+         * @description Forget one of the person's own memories; anyone else's does not exist to them.
+         */
+        delete: operations["forget_me_memories__res_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -23221,6 +23353,16 @@ export interface components {
              */
             waiting_for: string;
         };
+        /** NotAnAreaIn */
+        NotAnAreaIn: {
+            /** Label */
+            label: string;
+            /**
+             * Not An Area
+             * @default true
+             */
+            not_an_area: boolean;
+        };
         /**
          * ObjectFilter
          * @description One condition. `path` is a property of the object type (`status`), a property reached
@@ -23544,6 +23686,11 @@ export interface components {
              * @default
              */
             industry: string;
+            /**
+             * Not Areas
+             * @description Model-suggested area names a curator said are not areas of the business — not suggested again.
+             */
+            not_areas?: string[];
             /**
              * Outside Row Model
              * @description Send row text to an outside, cheaper model (TypeSafe's Jev) to judge rows before your own strong model. Row text leaves the install. Off by default.
@@ -24234,6 +24381,8 @@ export interface components {
             entity: string;
             /** Id */
             id: string;
+            /** Metrics */
+            metrics?: string[];
             /**
              * Origin
              * @default structural
@@ -24344,6 +24493,11 @@ export interface components {
              * @default
              */
             actor: string;
+        };
+        /** RememberIn */
+        RememberIn: {
+            /** Text */
+            text: string;
         };
         /** RemoveRowsRequest */
         RemoveRowsRequest: {
@@ -28653,6 +28807,37 @@ export interface operations {
             };
         };
     };
+    agents_routing_agents_custom_routing_get: {
+        parameters: {
+            query: {
+                connection_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_user_agent_agents_custom__agent_id__get: {
         parameters: {
             query?: never;
@@ -29871,6 +30056,41 @@ export interface operations {
             };
         };
     };
+    put_not_an_area_areas__conn_id__not_an_area_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotAnAreaIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     put_area_placement_areas__conn_id__placement_put: {
         parameters: {
             query?: {
@@ -29887,6 +30107,39 @@ export interface operations {
                 "application/json": components["schemas"]["PlacementIn"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_suggested_areas_areas__conn_id__suggested_get: {
+        parameters: {
+            query?: {
+                schema?: string | null;
+            };
+            header?: never;
+            path: {
+                conn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -42439,6 +42692,37 @@ export interface operations {
             };
         };
     };
+    answer_now_route_investigations__inv_id__answer_now_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                inv_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     cancel_investigation_route_investigations__inv_id__cancel_post: {
         parameters: {
             query?: never;
@@ -46000,6 +46284,88 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    my_memories_me_memories_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    remember_me_memories_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RememberIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    forget_me_memories__res_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                res_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
