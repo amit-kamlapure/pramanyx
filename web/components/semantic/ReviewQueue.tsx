@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * Review — what waits on a person for this connection's knowledge, in one list (Phase 3, 2026-11-17; Genie's Ontology
- * Manager is the reference). A ledger leads with its list (CLARITY): one line of what waits, an area to narrow it to,
+ * Review — what waits on a person for this connection's knowledge, in one list (Phase 3, 2026-11-17; a governed
+ * ontology's review queue is the reference). A ledger leads with its list (CLARITY): one line of what waits, an area to narrow it to,
  * then each row — what kind it is, what it says, how often it was asked or complained about, its area and who it is
  * for, and the button that opens the page where it is decided. Nothing is decided here: each kind keeps its own door.
  *

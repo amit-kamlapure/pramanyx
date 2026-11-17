@@ -37,8 +37,8 @@ export interface Review {
 }
 
 export async function readReview(connectionId: string, area = ""): Promise<Review> {
-  const q = new URLSearchParams(area ? { area } : {});
-  const res = await fetch(`${getApiBase()}/knowledge/${encodeURIComponent(connectionId)}/review${area ? `?${q}` : ""}`);
+  const url = `${getApiBase()}/knowledge/${encodeURIComponent(connectionId)}/review`;
+  const res = await fetch(area ? `${url}?${new URLSearchParams({ area })}` : url);
   if (!res.ok) throw new Error(`The review list could not be read (${res.status})`);
   return res.json();
 }

@@ -1,8 +1,8 @@
 """What waits on a person for a connection's knowledge, in one list (Phase 3, 2026-11-17).
 
-Databricks Genie's Ontology Manager keeps one review queue of gaps, learned candidates and conflicts. Here each of
+A governed ontology keeps one review queue of gaps, learned candidates and conflicts. Here each of
 those already lives in its own store with its own lifecycle, and this module stores nothing: it is a VIEW, read fresh
-(the `GET /control-room/needs-human` pattern), each row deep-linked to the page where it is decided.
+(the needs-human view's pattern), each row deep-linked to the page where it is decided.
 
 - **Gaps** — what people asked that the knowledge did not cover: questions that framed on no definition
   (`ontology/framing_misses.py`), and questions no run could answer (`intake/suggestions.unresolved_questions`).
