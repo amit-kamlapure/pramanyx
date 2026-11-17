@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * `/skills/new?conn=<connection>&inv=<investigation>`: keep an analysis as a skill — the method, to run again on other
+ * `/skills/new?conn=<connection>&inv=<deep analysis id>`: keep an analysis as a skill — the method, to run again on other
  * values — as a page of its own (punch list 88, 2026-11-18). Opened beside a coworker conversation by "Save as a skill"
  * under a deep analysis. The platform shapes the skill from the run; the page shows what it runs, its inputs and the
  * approved metrics it is held to, and only the person's click keeps it. One that computes an approved metric some other
