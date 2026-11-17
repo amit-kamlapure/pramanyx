@@ -22,6 +22,17 @@
 - id: tool-plugin-manager
   disabled: true
 
+# ── on: finding a conversation by what was said in it, not only by its title (Phase 3, 2026-11-17). The sidebar's
+#    search box asks this index once someone searches; it is kept beside the conversations, so it survives a restart.
+#    It covers every conversation on this install, as the sidebar lists every one: one shell holds one person at a
+#    time, and a conversation another person began is refused to the coworker's tools (`plugins/home`,
+#    `heldToItsPerson`). The agent's own tools for searching past conversations stay off until the list is one
+#    person's — they would bring one person's words into another's answer.
+- id: session-query-sqlite
+  config:
+    path: !!js dshHomePath('session-search.db')
+    openAt: first-search
+
 # ── off: the shell's own scheduler — its store of timed reminders, its page, its clock marks on a conversation.
 #    There is one scheduler and it is Pramanyx's (the user, 2026-11-15: "the scheduler needs to be one across the
 #    platform"). Measured side by side that day: the shell's delivers an instruction into a conversation at a time

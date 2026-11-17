@@ -123,6 +123,25 @@ def test_a_helpers_work_is_written_inside_the_call_that_started_it(taken):
     assert seen[1]["payload"] == {"helper": "f6602a4c-e2ec-4ff3-98fb-dfe4d7516b02", "description": "GMV by platform FY2027"}
 
 
+def test_a_turn_is_filed_under_the_person_the_coworker_acts_for(taken, monkeypatch):
+    """Phase 3 (2026-11-17): the coworker sends its delegation with a turn, and the turn is written under that person,
+    so the trace index's filter by person finds their coworker turns. None presented is nobody named; none is left
+    bound after the call."""
+    from pramanyx.org.context import current_user_id
+    from pramanyx.security import delegation
+    from pramanyx.security.authz import Principal
+    client, seen = taken
+    import pramanyx.obs.session_log as session_log
+    monkeypatch.setattr(session_log, "emit", lambda kind, **kw: seen.append({"kind": kind, "user": current_user_id(), **kw}))
+    monkeypatch.setattr(delegation, "resolve", lambda secret, audience=delegation.AUDIENCE:
+                        Principal(user_id="user:ana", org_id="default") if secret == "d" * 30 else None)
+    client.post("/coworker/trace", json={**TURN, "events": [{"kind": "final_response", "ok": True}]},
+                headers={delegation.HEADER: "d" * 30})
+    client.post("/coworker/trace", json={**TURN, "events": [{"kind": "final_response", "ok": True}]})
+    assert [e["user"] for e in seen] == ["user:ana", ""]
+    assert current_user_id() == ""
+
+
 def test_the_session_id_is_not_left_bound_after_the_call(taken):
     from pramanyx.org.context import current_session_id
     client, _ = taken

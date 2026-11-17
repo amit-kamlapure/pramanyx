@@ -28,9 +28,10 @@ export const READS = [
   /^\/automations\/[A-Za-z0-9_-]{1,64}\/schedule$/,
 ];
 
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 /**
  * ONE WORKSPACE PER CONNECTION. The shell files a conversation under a workspace — a folder — and gives its agent
@@ -225,6 +226,56 @@ export async function keepTheClock(req, res) {
   }
 }
 
+/**
+ * A CONVERSATION IS ITS PERSON'S (Phase 3, 2026-11-17). One shell holds one person at a time — whoever the app last
+ * handed it — so on a shared install a conversation one person started, opened later while the coworker acts for
+ * another, would have asked Pramanyx in the second person's name. Each conversation is bound to the person it began
+ * with (kept in DSH_HOME, so a restart keeps it), and while the coworker acts for someone else its Pramanyx tools are
+ * refused there, saying whose it is. A conversation begun with nobody delegated is bound to nobody, as before. The
+ * sidebar still lists every conversation on the install: one shell per person is what would hide them.
+ */
+let personNow = "";
+
+export function readPersonNow() {
+  const file = process.env.PRAMANYX_DELEGATION_FILE || "";
+  if (!file) return "";
+  try { return readFileSync(`${file}.who`, "utf8").trim().slice(0, 200); } catch { return ""; }
+}
+
+export function personRefusal(owner, now) {
+  if (!owner || !now || owner === now) return undefined;
+  return `This conversation is ${owner}'s, and the coworker now acts for ${now}: it does not ask Pramanyx in one ` +
+    "person's name inside another's conversation. Tell them so: they start a new conversation of their own.";
+}
+
+export function heldToItsPerson(ctx, { keep = join(process.env.DSH_HOME || join(homedir(), ".dsh"), "conversation-people.json"),
+                                      now = () => personNow } = {}) {
+  const owners = new Map();
+  try { for (const [id, who] of Object.entries(JSON.parse(readFileSync(keep, "utf8")))) owners.set(id, String(who)); } catch { /* none kept yet */ }
+  const save = () => {
+    try { mkdirSync(dirname(keep), { recursive: true }); writeFileSync(keep, JSON.stringify(Object.fromEntries(owners)), { mode: 0o600 }); }
+    catch { /* unkept: held for as long as this process runs */ }
+  };
+  ctx.on("session/event", (session, event) => {
+    try {
+      const id = String(session?.id ?? "");
+      if (!id || owners.has(id)) return;
+      const parent = typeof session?.header?.parentSession === "string" ? session.header.parentSession : "";
+      if (event?.type === "turn/start" && parent && owners.has(parent)) { owners.set(id, owners.get(parent)); save(); return; }
+      if (event?.type === "user/message" && event?.data?.source?.kind === "user" && now()) { owners.set(id, now()); save(); }
+    } catch { /* unbound: the conversation is held to nobody, as before */ }
+  });
+  ctx.inject(["tools"], (at) => {
+    at.effect(() => at.tools.guard((call) => {
+      if (!/^mcp__pramanyx__/.test(String(call?.name))) return undefined;
+      const session = call.agent?.session;
+      const id = String((session && typeof session === "object" ? session.id : session) ?? "");
+      return personRefusal(owners.get(id), now());
+    }), "pramanyx-home: a conversation is its person's");
+  });
+  return owners;
+}
+
 export async function keepThePerson(req, res, api) {
   const reply = (status, body) => { res.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" }); res.end(JSON.stringify(body)); };
   if (req.method !== "POST") return reply(405, { detail: "POST only" });
@@ -245,6 +296,9 @@ export async function keepThePerson(req, res, api) {
     const { dirname } = await import("node:path");
     await mkdir(dirname(file), { recursive: true });
     await writeFile(file, token, { mode: 0o600 });
+    // Who it is, beside it (not a secret): a conversation is held to the person who started it (`heldToItsPerson`).
+    await writeFile(`${file}.who`, String(who.user_id || ""), { mode: 0o600 });
+    personNow = String(who.user_id || "");
     return reply(200, { user_id: who.user_id });
   } catch {
     return reply(502, { detail: "The platform is not answering" });
@@ -799,8 +853,10 @@ function recordTurns(ctx, api, holds) {
   let warned = false;
   const send = (trace, session, events) => {
     // One after another, so the record reads in the order things happened.
-    sending = sending.then(() => fetch(`${api}/coworker/trace`, {
-      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ trace_id: trace, session, events }),
+    // Whose turn it is goes with it (Phase 3, 2026-11-17): the platform files the turn under that person.
+    sending = sending.then(async () => fetch(`${api}/coworker/trace`, {
+      method: "POST", headers: { "content-type": "application/json", ...(await personHeader()) },
+      body: JSON.stringify({ trace_id: trace, session, events }),
     })).then((answer) => { if (!answer.ok) throw new Error(String(answer.status)); }).catch((error) => {
       if (!warned) console.warn(`pramanyx-home: a turn was not recorded in the platform's trace store (${error?.message ?? error})`);
       warned = true;
@@ -869,6 +925,8 @@ export function apply(ctx) {
   // record read the same answer.
   const holds = new Map();
   holdToConnection(ctx, holds);
+  personNow = readPersonNow();
+  heldToItsPerson(ctx);
   askBeforeActing(ctx);
   recordTurns(ctx, api, holds);
   ctx.effect(() => ctx.webServer.register({

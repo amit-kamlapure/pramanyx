@@ -156,10 +156,15 @@ def take_a_coworker_turn(body: CoworkerTraceBatch, request: Request) -> Coworker
     if not TRACE_NAME.match(body.trace_id) or not _SESSION_NAME.match(body.session):
         raise HTTPException(status_code=422, detail="A coworker turn's trace is named cw-<session>-<turn>.")
     from pramanyx.obs import session_log
-    from pramanyx.org.context import reset_session_id, set_session_id
+    from pramanyx.org.context import reset_session_id, reset_user_id, set_session_id, set_user_id
+    from pramanyx.security import delegation
 
     # The door a run came in by is read off its session id's prefix (`slack:…`, `mcp:…`); this is `coworker:…`.
     token = set_session_id(f"coworker:{body.session}")
+    # Whose turn it was (Phase 3, 2026-11-17): the person the app delegated to the coworker, when it presents them, so
+    # the trace index's filter by person finds a person's coworker turns. Nobody presented is nobody named.
+    who = delegation.resolve(request.headers.get(delegation.HEADER)) if delegation.presented(request) else None
+    person = set_user_id(who.user_id) if who else None
     try:
         for event in body.events:
             session_log.emit(
@@ -169,6 +174,8 @@ def take_a_coworker_turn(body: CoworkerTraceBatch, request: Request) -> Coworker
                 payload={k: v for k, v in event.payload.items() if k in _PAYLOAD_KEYS},
             )
     finally:
+        if person is not None:
+            reset_user_id(person)
         reset_session_id(token)
     return CoworkerTraceTaken(written=len(body.events))
 
