@@ -155,7 +155,7 @@ export function SuggestedAreas({ connId, schema, areas, onSaved }: {
         Suggested by the model, from what it called the data. An area only once you declare it.
       </span>
       {suggested.map((s) => (
-        <span key={s.label} data-testid="suggested-area" style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+        <span key={s.id} data-testid="suggested-area" style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
           <span className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: 500 }}>{s.label}</span>
           <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>
             {countNoun(s.tables.length, "table")}{s.tables.length ? `: ${s.tables.slice(0, 4).join(", ")}${s.tables.length > 4 ? "…" : ""}` : ""}
