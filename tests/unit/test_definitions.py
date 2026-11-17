@@ -211,3 +211,37 @@ def test_the_doors_file_anyone_else_s_change_as_a_suggestion_and_refuse_an_agent
     assert decided["statement"]["text"] == "Paid in 60 days." and decided["state"] == "published" and decided["suggestions"] == []
     listed = client.get("/record/definitions", params={"connection_id": conn, "term": "active customer"}).json()
     assert [d["area"] for d in listed] == ["Finance"]
+
+
+def test_the_coworker_drafts_for_a_person_and_never_writes_their_word(monkeypatch):
+    """2026-11-17: "remember that active means paid in 30 days" — a draft only said, owned by the person it was drafted
+    for, used by no answer until they publish it; a word already defined becomes a suggested edit marked as the agent's.
+    The one definition door an agent may use."""
+    from pramanyx.mcp.client import AGENT_HEADER, AGENT_MARK
+    from pramanyx.routers import record as R
+    conn = _conn()
+    monkeypatch.setattr(R, "_visible", lambda c: True)
+    monkeypatch.setattr(R, "_refresh_definitions", lambda c: None)
+    monkeypatch.setattr(R, "_who", lambda principal: "user:ana")
+    app = FastAPI()
+    app.include_router(R.router)
+    client = TestClient(app)
+    agent = {AGENT_HEADER: AGENT_MARK}
+    made = client.post("/record/definitions/draft", json={"connection_id": conn, "term": "Active", "text": "Paid in 30 days."},
+                       headers=agent).json()
+    assert (made["made"], made["state"], made["owner"], made["tier"], made["drafted_by_agent"]) == (
+        "draft", "draft", "user:ana", "said", True)
+    assert made["author"] == "agent:coworker" and made["publish_at"] == f"/definitions/Active?conn={conn}"
+    # the agent still cannot publish it, nor write a person's draft
+    assert client.post("/record/definitions/approve", json={"connection_id": conn, "term": "Active"}, headers=agent).status_code == 403
+    assert client.post("/record/definitions", json={"connection_id": conn, "term": "Other", "text": "x"}, headers=agent).status_code == 403
+    # the person publishes it: their word now
+    published = client.post("/record/definitions/approve", json={"connection_id": conn, "term": "Active"}).json()
+    assert (published["state"], published["tier"], published["drafted_by_agent"]) == ("published", "approved", False)
+    again = client.post("/record/definitions/draft", json={"connection_id": conn, "term": "Active", "text": "Paid in 60 days.",
+                                                          "why": "quarterly payers"}, headers=agent).json()
+    assert again["made"] == "suggestion" and again["statement"]["text"] == "Paid in 30 days."           # it stands
+    assert again["suggestions"][0]["by_agent"] is True and again["suggestions"][0]["by"] == "user:ana"
+    monkeypatch.setattr(R, "_who", lambda principal: "")
+    assert client.post("/record/definitions/draft", json={"connection_id": conn, "term": "X", "text": "y"},
+                       headers=agent).status_code == 422

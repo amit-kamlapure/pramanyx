@@ -108,7 +108,9 @@ export default function DefinitionRoute({ params, searchParams }: {
         </div>
         {found && (
           <p className="aug-fs-xs" style={{ margin: "4px 0 0", ...MUTED }}>
-            {published ? `Published by ${who(found.approved_by || found.owner)} on ${fmtDate(found.approved_on, "day")}` : "Written, not yet published by its owner"}
+            {published ? `Published by ${who(found.approved_by || found.owner)} on ${fmtDate(found.approved_on, "day")}`
+              : found.drafted_by_agent ? `Drafted by the coworker for ${who(found.owner)}, from what they said — not used until they publish it`
+              : "Written, not yet published by its owner"}
             {" · "}owned by {who(found.owner) || "no one named"}
           </p>
         )}

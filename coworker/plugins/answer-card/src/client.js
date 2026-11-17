@@ -804,6 +804,7 @@ const DOES = {
   get_definitions: ["Read what the words mean", ["term"]],
   read_learned: ["Read what is already learned", ["about"]],
   bring_in_file: ["Brought in a file", ["name"]],
+  draft_definition: ["Drafted what a word means", ["term"]],
 };
 const PREFIX = "mcp__pramanyx__";
 
@@ -1332,6 +1333,27 @@ function BroughtInCard(props) {
     h("div", { style: quiet }, `Only you can see it until you share it. ${doc.chunks ? `Read in ${doc.chunks} passages, which now reach answers.` : ""}`));
 }
 
+/** What the coworker drafted for the person, and the Definition's own page to read and publish it (2026-11-17). */
+function DraftedDefinitionCard(props) {
+  const args = argsOf(props.block);
+  const term = String(args.term || "a word");
+  if (props.phase !== "result") return h(Step, { kind: "read", busy: true, title: `Drafting what “${term}” means` });
+  let got = null;
+  try { got = JSON.parse(resultText(props.block)); } catch { got = null; }
+  if (!got || props.block?.isError || !got.made) {
+    return h(Step, { kind: "read", failed: true, title: `“${term}” was not drafted` },
+      h("div", { style: quiet }, String(got?.detail || got?.why || "The platform did not take it.")));
+  }
+  const page = pageFor.definition(String(got.term || term), String(args.connection || "")) + (got.area ? `&area=${encodeURIComponent(got.area)}` : "");
+  const title = got.made === "draft" ? `Drafted what “${got.term || term}” means — yours to publish`
+    : `Suggested an edit to “${got.term || term}” for its owner`;
+  return h(Step, { kind: "read", title },
+    h("div", { style: { display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" } },
+      h("span", { style: quiet }, got.made === "draft" ? "No answer uses it until it is published." : "The published wording stands until its owner accepts."),
+      h("button", { type: "button", style: button(false), onClick: () => openBeside("page", page) },
+        got.made === "draft" ? "Open to publish" : "Open the definition")));
+}
+
 function Card(props) {
   const frame = { border: `1px solid ${line}`, borderRadius: 6, padding: 12, margin: "6px 0", fontSize: 13 };
   const asked = String(argsOf(props.block).question || "");
@@ -1371,6 +1393,7 @@ export function apply(ctx) {
       ctx.slots.register({ name: "tool.call.toolview", key: name },
         ANSWERS.test(name) ? AnswerCard : name === PREFIX + "draft_email" ? DraftCard
           : name === PREFIX + "bring_in_file" ? BroughtInCard
+          : name === PREFIX + "draft_definition" ? DraftedDefinitionCard
           : SCHEDULES.test(name) ? ScheduleCard : ToolStep));
   };
   // The tools known when this was written are named from the first call. A view is keyed by exact tool name, so

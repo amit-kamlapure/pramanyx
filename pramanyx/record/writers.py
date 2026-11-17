@@ -701,6 +701,33 @@ def suggest_definition_edit(*, connection_id: str, term: str, by: str, area: str
     return suggestion
 
 
+def draft_definition_for(*, connection_id: str, term: str, text: str, person: str, area: str = "",
+                         aliases: Optional[list[str]] = None, links: Optional[list[dict]] = None, why: str = "") -> dict:
+    """An agent drafts what a word means FOR a person — "remember that active means paid in 30 days" (the ontology
+    study, Phase 2, 2026-11-17). Never a person's word: a word nobody has defined in that area becomes a draft at tier
+    ``said``, owned by the person it was drafted for, who reads it and publishes it themselves; a word already defined
+    becomes a suggested edit, marked as the agent's, for its owner. Returns ``{"made": "draft" | "suggestion", ...}``."""
+    term, text, person = (term or "").strip(), (text or "").strip(), (person or "").strip()
+    if not (term and text and person):
+        raise ValueError("a drafted definition names its word, says what it means, and whom it was drafted for")
+    key = definition_key(connection_id, term, area)
+    prior = _claims.latest(key)
+    if prior is not None and prior.state != "withdrawn":
+        return {"made": "suggestion", "owner": prior.owner,
+                "suggestion": suggest_definition_edit(connection_id=connection_id, term=term, area=area, by=person,
+                                                      text=text, aliases=aliases, links=links, why=why, by_agent=True)}
+    claim = _claims.Claim(
+        kind="definition", tier="said", status="Final", as_of=_today(),
+        about=_claims.About(kind="connection", key=connection_id),
+        statement=_claims.Statement(text=text[:4000]),
+        owner=person, author="agent:coworker", author_kind="agent",
+        extra={"term": term[:120], "area": area[:120], "aliases": _clean_aliases(aliases), "links": _clean_links(links),
+               "drafted_by_agent": True, "drafted_for": person, **({"why": why[:400]} if why else {})},
+    )
+    cid = _claims.restate(key, claim, conn_id=connection_id) if prior else _claims.book(claim, key=key, conn_id=connection_id)
+    return {"made": "draft", "owner": person, "claim_id": cid}
+
+
 def decide_definition_suggestion(*, connection_id: str, term: str, suggestion_id: str, by: str, accept: bool,
                                  area: str = "", why: str = "") -> str:
     """Its OWNER accepts or declines a suggested edit. Accepted, the edit is applied as the owner's own (a published

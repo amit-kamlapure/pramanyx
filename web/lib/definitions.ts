@@ -10,6 +10,8 @@ export interface Definition {
   term: string; area: string; statement: { text: string }; tier: string; state: "published" | "draft"; owner: string;
   author: string; approved_by: string; approved_on: string; aliases: string[]; links: DefinitionLink[];
   suggestions: Suggestion[]; versions: Version[];
+  /** The coworker drafted it for its owner, who has not published it yet (2026-11-17). */
+  drafted_by_agent?: boolean;
 }
 
 export const LINK_KINDS = ["metric", "table", "definition", "dashboard", "document", "person", "url"] as const;

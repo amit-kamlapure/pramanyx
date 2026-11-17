@@ -468,6 +468,22 @@ async def get_definitions(
 
 
 @mcp.tool()
+async def draft_definition(
+    connection: Annotated[str, Field(description="A connection id from list_connections.")],
+    term: Annotated[str, Field(description="The business word, as the person says it.")],
+    text: Annotated[str, Field(description="What it means here, in the person's own words — what they told you.")],
+    area: Annotated[str, Field(description="The area of the business it means this in, by id; empty for everywhere.")] = "",
+    aliases: Annotated[Optional[list[str]], Field(description="Other names people use for it.")] = None,
+    why: Annotated[str, Field(description="Why, for the owner, when it changes an existing definition.")] = "",
+) -> dict:
+    """Draft what a business word means, FOR the person — when they tell you ("remember that active means paid in the
+    last 30 days") or correct one ("no, churn is 120 days"). A word nobody has defined becomes their DRAFT, which they
+    read and publish themselves; a word already defined becomes a SUGGESTED EDIT for its owner. Nothing you draft is
+    used as the definition until a person publishes it. Say so, and give them `publish_at` to open."""
+    return await _client.draft_definition(connection, term=term, text=text, area=area, aliases=aliases, why=why)
+
+
+@mcp.tool()
 async def bring_in_file(
     path: Annotated[str, Field(description="The saved path the attachment line gives for the file the person attached.")],
     name: Annotated[str, Field(description="The file's name as the person attached it.")] = "",

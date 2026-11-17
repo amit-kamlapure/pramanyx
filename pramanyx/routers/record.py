@@ -198,6 +198,7 @@ def _definition_view(c: C.Claim) -> dict:
     return {**_claim_view(c), "term": x.get("term", ""), "area": x.get("area", ""), "aliases": x.get("aliases") or [],
             "links": x.get("links") or [], "state": "published" if c.tier == "approved" else "draft",
             "approved_by": x.get("approved_by", ""), "approved_on": x.get("approved_on", ""),
+            "drafted_by_agent": bool(x.get("drafted_by_agent")) and c.tier != "approved",
             "suggestions": x.get("suggestions") or [], "declined": (x.get("declined") or [])[-5:],
             "accepted": (x.get("accepted") or [])[-5:],
             "versions": [{"id": v.id, "text": v.statement.text, "tier": v.tier, "author": v.author,
@@ -256,6 +257,45 @@ def write_record_definition(req: DefinitionRequest, principal=Depends(get_princi
         raise HTTPException(status_code=422, detail=str(exc))
     _refresh_definitions(req.connection_id)
     return {**_definition_view(C.get(cid)), "suggested": suggested}
+
+
+class DraftForRequest(BaseModel):
+    connection_id: str = Field(min_length=1, max_length=80)
+    term: str = Field(min_length=1, max_length=120)
+    text: str = Field(min_length=1, max_length=4000)
+    area: str = Field("", max_length=120)
+    aliases: Optional[list[str]] = Field(None, max_length=50)
+    links: Optional[list[DefinitionLink]] = Field(None, max_length=30)
+    why: str = Field("", max_length=400)
+
+
+@router.post("/record/definitions/draft", status_code=201)
+def draft_record_definition(req: DraftForRequest, principal=Depends(get_principal)) -> dict:
+    """An agent drafts a definition FOR the person it acts for — the one definition door an agent may use (2026-11-17).
+    Nothing it writes is a person's word: a new word is a draft only said, owned by that person, until they publish it;
+    a word already defined becomes a suggested edit for its owner, marked as the agent's. With nobody to act for it is
+    refused."""
+    from pramanyx.record.writers import draft_definition_for
+    from pramanyx.semantic.areas import unknown_area
+    if not _visible(req.connection_id):
+        raise HTTPException(status_code=404, detail="No such connection")
+    if (why_not := unknown_area(req.connection_id, req.area)):
+        raise HTTPException(status_code=422, detail=why_not)
+    person = _who(principal)
+    if not person or person == "unidentified":
+        raise HTTPException(status_code=422, detail="a definition is drafted for a person — none is named on this request")
+    try:
+        made = draft_definition_for(connection_id=req.connection_id, term=req.term, text=req.text, person=person,
+                                    area=req.area, aliases=req.aliases,
+                                    links=[link.model_dump() for link in req.links] if req.links is not None else None,
+                                    why=req.why)
+    except (ValueError, C.ClaimRefused) as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    _refresh_definitions(req.connection_id)
+    from pramanyx.record.writers import definition_key
+    now = C.latest(definition_key(req.connection_id, req.term, req.area))
+    return {**_definition_view(now), "made": made["made"], "suggested": made.get("suggestion"),
+            "publish_at": f"/definitions/{req.term}?conn={req.connection_id}" + (f"&area={req.area}" if req.area else "")}
 
 
 def _owners_act(fn, req, principal, request, what: str):

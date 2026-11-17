@@ -16553,6 +16553,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/record/definitions/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Draft Record Definition
+         * @description An agent drafts a definition FOR the person it acts for — the one definition door an agent may use (2026-11-17).
+         *     Nothing it writes is a person's word: a new word is a draft only said, owned by that person, until they publish it;
+         *     a word already defined becomes a suggested edit for its owner, marked as the agent's. With nobody to act for it is
+         *     refused.
+         */
+        post: operations["draft_record_definition_record_definitions_draft_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/record/definitions/suggestions/decide": {
         parameters: {
             query?: never;
@@ -21609,6 +21632,29 @@ export interface components {
              * @default
              */
             schema: string;
+        };
+        /** DraftForRequest */
+        DraftForRequest: {
+            /** Aliases */
+            aliases?: string[] | null;
+            /**
+             * Area
+             * @default
+             */
+            area: string;
+            /** Connection Id */
+            connection_id: string;
+            /** Links */
+            links?: components["schemas"]["DefinitionLink"][] | null;
+            /** Term */
+            term: string;
+            /** Text */
+            text: string;
+            /**
+             * Why
+             * @default
+             */
+            why: string;
         };
         /** DraftRequest */
         DraftRequest: {
@@ -55416,6 +55462,41 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    draft_record_definition_record_definitions_draft_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftForRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };

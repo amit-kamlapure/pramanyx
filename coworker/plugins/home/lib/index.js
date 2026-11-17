@@ -335,6 +335,39 @@ export function refusalFor(name, args, held, also = []) {
   return undefined;
 }
 
+/**
+ * ASKED FIRST (2026-11-17). A call that changes what the platform does unattended, or what the organisation's
+ * knowledge holds, waits for the person's own Allow in the conversation — the shell's approval prompt — whatever the
+ * organisation's agent policy allows: setting something on a schedule, and drafting what a word means. The prompt
+ * says what will happen in the person's own words. Reading, asking a question and bringing in a file they attached
+ * are not asked about.
+ */
+const ASKED_FIRST = {
+  "mcp__pramanyx__schedule": (args) => `Set this up on a schedule: “${clipped(args.request)}”?`,
+  "mcp__pramanyx__draft_definition": (args) =>
+    `Draft what “${clipped(args.term, 80)}” means${args.area ? ` in ${args.area}` : ""}: “${clipped(args.text)}”? It is not used until its owner publishes it.`,
+};
+const clipped = (value, most = 240) => {
+  const text = String(value ?? "").trim();
+  return text.length > most ? `${text.slice(0, most)}…` : text;
+};
+
+/** The approval to ask for before a call, or undefined when it is not asked about. */
+export function askFor(name, args) {
+  const say = ASKED_FIRST[String(name)];
+  if (!say) return undefined;
+  const words = say(args && typeof args === "object" ? args : {});
+  return { kind: "ask", reason: words, displayReason: { en: words } };
+}
+
+function askBeforeActing(ctx) {
+  ctx.on("tools/pre-execute", async (call, next) => {
+    const decided = await next();
+    if (!decided || decided.kind !== "allow") return decided;      // a denial or a cancel stands
+    return askFor(call?.name, call?.arguments) ?? decided;
+  });
+}
+
 function holdToConnection(ctx, holds) {
   // The connections a conversation's own brought-in files opened to it, by conversation.
   const opened = new Map();
@@ -786,6 +819,7 @@ export function apply(ctx) {
   // record read the same answer.
   const holds = new Map();
   holdToConnection(ctx, holds);
+  askBeforeActing(ctx);
   recordTurns(ctx, api, holds);
   ctx.effect(() => ctx.webServer.register({
     kind: "exact",

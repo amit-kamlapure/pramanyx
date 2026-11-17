@@ -694,6 +694,15 @@ class PramanyxClient:
         return {"definitions": [{**{k: r.get(k) for k in keep}, "text": (r.get("statement") or {}).get("text", ""),
                                  "suggested_edits_pending": len(r.get("suggestions") or [])} for r in rows or []]}
 
+    async def draft_definition(self, connection: str, *, term: str, text: str, area: str = "",
+                               aliases: Optional[list[str]] = None, why: str = "") -> dict:
+        body = {"connection_id": connection, "term": term, "text": text, "area": area, "why": why,
+                **({"aliases": aliases} if aliases is not None else {})}
+        got = await self._post("/record/definitions/draft", json_body=body)
+        return {"made": got.get("made"), "term": got.get("term"), "area": got.get("area"), "state": got.get("state"),
+                "owner": got.get("owner"), "text": (got.get("statement") or {}).get("text"),
+                "suggestion": got.get("suggested"), "publish_at": got.get("publish_at")}
+
     async def bring_in_file(self, path: str, *, name: str = "") -> dict:
         """A file the person attached in the coworker, brought into Pramanyx as theirs (the ontology study, Phase 2,
         2026-11-17): a table-shaped file becomes a SHEET on the Sheets connection, anything else to read a DOCUMENT
