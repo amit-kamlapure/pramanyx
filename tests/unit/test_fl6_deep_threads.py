@@ -111,7 +111,8 @@ def test_deep_turn_restores_as_the_live_wire_shape():
     user, assistant = _turn_to_ui_messages(t)
 
     assert user["parts"] == [{"type": "text", "text": "what drives the west?"}]
-    assert user["metadata"] == {"mode": "investigate"}
+    # Who asked it rides along since group conversations (2026-11-17); a row from before says nobody named.
+    assert user["metadata"] == {"mode": "investigate", "asked_by": ""}
     [part] = assistant["parts"]
     assert part["type"] == "data-answer_report"
     assert part["data"]["answer_report"] == REPORT

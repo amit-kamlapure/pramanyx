@@ -12,6 +12,14 @@ import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/brief/StatusChip";
 import { SourcePanel, type SourcePanelData } from "./ChatMessage";
 import { PartsMessage } from "./chat/PartsMessage";
+import { ThreadPeople } from "./chat/ThreadPeople";
+import { isShared, readThreadPeople, type ThreadPeople as People } from "@/lib/threads";
+
+/** Who asked a question in a shared conversation: you (a question sent from this page carries no name yet), or them. */
+function askedByWords(askedBy: string | undefined, people: People | null): string {
+  const who = (askedBy || "").toLowerCase();
+  return !who || who === people?.you ? "You asked" : `${who} asked`;
+}
 import { ErrorBoundary } from "./ErrorBoundary";
 import { WhyThisNumber } from "./WhyThisNumber";
 
@@ -627,6 +635,31 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
 
   const busy = status === "submitted" || status === "streaming";
 
+  // ── who is in this conversation (group conversations, 2026-11-17) ──────────
+  // Read again as the conversation grows: its first question makes it the asker's. In a conversation more than one
+  // person is in, each question says who asked it, and what the others ask arrives while it is open and quiet.
+  const [people, setPeople] = useState<People | null>(null);
+  useEffect(() => {
+    let gone = false;
+    readThreadPeople(sessionId).then((p) => { if (!gone) setPeople(p); }).catch(() => { if (!gone) setPeople(null); });
+    return () => { gone = true; };
+  }, [sessionId, messages.length]);
+  const shared = isShared(people);
+  const messageCount = useRef(0);
+  messageCount.current = messages.length;
+  useEffect(() => {
+    if (!shared || busy) return;
+    const look = window.setInterval(() => {
+      fetch(`${getApiBase()}/chat-sessions/${encodeURIComponent(sessionId)}/messages`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((msgs: PramanyxUIMessage[] | null) => {
+          if (Array.isArray(msgs) && msgs.length !== messageCount.current) setMessages(msgs);
+        })
+        .catch(() => {});
+    }, 5_000);
+    return () => window.clearInterval(look);
+  }, [shared, busy, sessionId, setMessages]);
+
   // ── messages → turns: the projection that replaced the reducer ─────────────
   // `projectThread` is pure, so this is a derivation, not a second store.
   const turns = useMemo(() => projectThread(messages, {
@@ -1208,6 +1241,9 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
             {/* Scrollable messages */}
             <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0 h-full">
               <div className="py-8 w-full max-w-[var(--measure-chat)] px-[var(--chat-gutter)] mx-auto">
+                {people && turns.length > 0 && (
+                  <ThreadPeople sessionId={sessionId} people={people} onChange={setPeople} onLeft={() => clear()} />
+                )}
                 {turns.map(({ turn, userMsg, assistantMsg }, i) => (
                   <div
                     key={turn.id}
@@ -1218,6 +1254,11 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                     }}
                   >
                     {i > 0 && <div className="border-t border-zinc-800 my-8" />}
+                    {shared && (
+                      <div className="aug-fs-xs" data-testid="turn-asked-by" style={{ color: "var(--t3)", marginBottom: 6 }}>
+                        {askedByWords((userMsg?.metadata as { asked_by?: string } | undefined)?.asked_by, people)}
+                      </div>
+                    )}
                     <DepthBanner
                       turn={turn}
                       onRerun={(depth) => sendQuestion(turn.question, "auto", { depth })}

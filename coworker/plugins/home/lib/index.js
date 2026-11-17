@@ -14,7 +14,8 @@ export const READS = [
   /^\/connections$/,          // which databases there are, to say whose questions these are
   /^\/suggestions$/,          // starter questions for one connection (cached; a first read may cost a model call)
   /^\/agents\/custom$/,       // a person's own agents
-  /^\/investigations$/,       // recent questions
+  /^\/investigations$/,       // recent questions — a person's own (`?mine=1`): each coworker is its person's
+  /^\/chat-sessions$/,        // the group conversations a person is in (2026-11-17), opened as the app's own thread
   /^\/sheets$/,               // the sheets by name, so an answer that read one can open it
   // An answer as a file — Excel, PowerPoint, Word or PDF — built by Pramanyx from the answer's stored rows, never by
   // code the model wrote (`pramanyx/export`). A GET like the rest; the bytes are passed through as they come.

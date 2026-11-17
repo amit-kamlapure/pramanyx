@@ -128,7 +128,7 @@ function Block({ inputActions, here }) {
 
   useEffect(() => {
     let live = true;
-    Promise.all([read("/connections"), read("/investigations?limit=6"), read("/agents/custom")])
+    Promise.all([read("/connections"), read("/investigations?limit=6&mine=1"), read("/agents/custom")])
       .then(([all, asked, mine]) => {
         if (!live) return;
         setConnections(all); setRecent(asked); setAgents(mine.filter((a) => a.enabled !== false));
@@ -297,6 +297,60 @@ function SchedulesPage() {
   });
 }
 
+const WITH_OTHERS = "pramanyx-with-others";
+
+/** The sidebar's drawing for conversations with others: two heads. */
+function WithOthersIcon({ size = 16 }) {
+  return h("svg", { width: size, height: size, viewBox: "0 0 16 16", fill: "none", stroke: "currentColor", strokeWidth: 1.3, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" },
+    h("circle", { cx: 6, cy: 5.5, r: 2.2 }), h("path", { d: "M2 13c.4-2.3 2-3.6 4-3.6s3.6 1.3 4 3.6" }),
+    h("circle", { cx: 11.2, cy: 6.3, r: 1.8 }), h("path", { d: "M11.4 9.6c1.5.2 2.4 1.3 2.6 3" }));
+}
+
+/**
+ * CONVERSATIONS WITH OTHERS (group conversations, 2026-11-17; the user: "there cannot be shared conversations unless
+ * users add other users in it"). This coworker is its person's alone; a conversation more than one person is in lives
+ * on the platform, where each person is known, and is the app's own thread: everyone added sees it as it grows and
+ * asks in it as themselves. This page lists the ones its person is in and opens one as the app's own page, in a
+ * frame — the same thread, the same answers, the same "Add people".
+ */
+export function withOthers(threads) {
+  return (Array.isArray(threads) ? threads : []).filter((t) => t && t.shared);
+}
+
+function WithOthersPage() {
+  const [threads, setThreads] = useState(null);
+  const [open, setOpen] = useState(null);
+  useEffect(() => {
+    let live = true;
+    read("/chat-sessions?limit=50").then((all) => { if (live) setThreads(withOthers(all)); }).catch(() => { if (live) setThreads([]); });
+    return () => { live = false; };
+  }, []);
+  if (open) {
+    const conn = /^[A-Za-z0-9_-]{1,64}$/.test(open.connection || "") ? `&conn=${encodeURIComponent(open.connection)}` : "";
+    return h("div", { style: { display: "flex", flexDirection: "column", height: "100%" } },
+      h("div", { style: { padding: "8px 14px", fontSize: 12.5, display: "flex", gap: 10, alignItems: "center" } },
+        h("button", { type: "button", onClick: () => setOpen(null),
+                      style: { font: "inherit", color: "inherit", background: "transparent", border: `1px solid ${line}`, borderRadius: 4, padding: "2px 10px", cursor: "pointer" } },
+          "All conversations with others"),
+        h("span", { style: quiet }, open.title)),
+      h("iframe", {
+        src: `${appOrigin()}/?tab=chat&chat=${encodeURIComponent(open.session_id)}${conn}`, title: open.title,
+        referrerPolicy: "no-referrer", style: { flex: "1 1 auto", width: "100%", border: 0, display: "block", background: "var(--dsw-alias-bg-base)" },
+      }));
+  }
+  return h("div", { style: { padding: "22px 26px", fontSize: 13, maxWidth: 760 } },
+    h("div", { style: { fontSize: 15, fontWeight: 600, paddingBottom: 4 } }, "Conversations with others"),
+    h("div", { style: { ...quiet, paddingBottom: 14 } },
+      "This coworker is yours alone. A conversation with others is the platform's: everyone added sees it as it grows and asks in it as themselves. Start one in the app, then Add people."),
+    threads === null ? h("div", { style: quiet }, "Reading your conversations with others…")
+      : !threads.length ? h("div", { style: quiet }, "You are in no conversation with others yet.")
+        : threads.map((t) => h(Row, {
+          key: t.session_id,
+          text: `${t.title} — ${t.owner ? `${t.owner}'s, ` : ""}with ${(t.members || []).length + 1} people`,
+          onPick: () => setOpen(t),
+        })));
+}
+
 const BACK = "pramanyx.coworker.back";
 const CARRIED = "#pramanyx:";
 
@@ -462,4 +516,9 @@ export function apply(ctx) {
   ctx.slots.inject("sidebar.panellist", () =>
     ctx.slots.register({ name: "sidebar.panellist", id: SCHEDULES, order: 6, label: () => "Schedules" }, SchedulesIcon));
   ctx.slots.inject("main", () => ctx.slots.register({ name: "main", key: SCHEDULES }, SchedulesPage));
+
+  // Conversations with others (2026-11-17): the group conversations this person is in, as the app's own threads.
+  ctx.slots.inject("sidebar.panellist", () =>
+    ctx.slots.register({ name: "sidebar.panellist", id: WITH_OTHERS, order: 7, label: () => "With others" }, WithOthersIcon));
+  ctx.slots.inject("main", () => ctx.slots.register({ name: "main", key: WITH_OTHERS }, WithOthersPage));
 }

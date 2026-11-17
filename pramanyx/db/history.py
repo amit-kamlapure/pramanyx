@@ -151,6 +151,15 @@ def _migrate_v7(c: sqlite3.Connection) -> None:
     add_column_if_missing(c, "investigations", "trace_id", "TEXT NOT NULL DEFAULT ''")
 
 
+def _migrate_v8(c: sqlite3.Connection) -> None:
+    """Group conversations (2026-11-17; the user: "there cannot be shared conversations unless users add other users in
+    it"). A thread has an owner — the person who began it — and the people they added; each turn records who asked it.
+    Additive: a thread begun before this has no owner, and a turn no asker ('' — unknown)."""
+    add_column_if_missing(c, "investigations", "asked_by", "TEXT NOT NULL DEFAULT ''")
+    add_column_if_missing(c, "chat_session_meta", "owner", "TEXT NOT NULL DEFAULT ''")
+    add_column_if_missing(c, "chat_session_meta", "members", "TEXT NOT NULL DEFAULT '[]'")
+
+
 _MIGRATIONS = [
     Migration(2, "additive columns + backfills (through 2026-07)", _migrate_v2),
     Migration(3, "add agent_id (per-agent run history)", _migrate_v3),
@@ -159,6 +168,7 @@ _MIGRATIONS = [
     Migration(6, "investigation failure reason (the row said failed and never why)",
               _migrate_v6),
     Migration(7, "trace id on the row (a guard fire outlives the 14-day session log)", _migrate_v7),
+    Migration(8, "group conversations: a thread's owner and members, a turn's asker", _migrate_v8),
 ]
 
 
@@ -217,10 +227,10 @@ def create_investigation(
     c = _conn()
     ensure_once(c, _ensure_schema)
     c.execute(
-        "INSERT INTO investigations (id, question, connection_id, canvas_id, started_at, status, org_id, agent_id, purpose, session_id, trace_id) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO investigations (id, question, connection_id, canvas_id, started_at, status, org_id, agent_id, purpose, session_id, trace_id, asked_by) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
         (inv_id, question, connection_id, canvas_id, _now(), "running", current_org_id(), agent_id, purpose or "",
-         (session_id or None), _trace_id()),
+         (session_id or None), _trace_id(), person_now()),
     )
     c.commit()
     c.close()
@@ -439,12 +449,12 @@ def save_chat_turn(
         """INSERT INTO investigations
            (id, question, connection_id, canvas_id, started_at, completed_at,
             status, hypothesis_count, query_count, headline,
-            report_json, kind, session_id, org_id, purpose, agent_id, trace_id)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            report_json, kind, session_id, org_id, purpose, agent_id, trace_id, asked_by)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (inv_id, question, connection_id, canvas_id, now, now,
          status, 0, 1, headline,
          json.dumps(report),
-         "chat", sid, current_org_id(), purpose or "", agent_id, _trace_id()),
+         "chat", sid, current_org_id(), purpose or "", agent_id, _trace_id(), person_now()),
     )
     c.commit()
     c.close()
@@ -890,7 +900,7 @@ def get_session_turns(session_id: str) -> list[dict]:
     _org, _op = ((" AND org_id = ?", [current_org_id()])
                  if require_identity_enabled() else ("", []))
     rows = c.execute(
-        f"""SELECT id, question, headline, report_json, started_at, status, kind, trace_id
+        f"""SELECT id, question, headline, report_json, started_at, status, kind, trace_id, asked_by
            FROM investigations
            WHERE session_id = ? AND {_THREAD_TURN_KINDS}{_org}
            ORDER BY started_at ASC""",
@@ -952,7 +962,8 @@ def get_session_turns(session_id: str) -> list[dict]:
     return result
 
 
-def list_chat_sessions(connection_id: Optional[str] = None, *, limit: int = 30) -> list[dict]:
+def list_chat_sessions(connection_id: Optional[str] = None, *, limit: int = 30, person: str = "",
+                       single_person: bool = True) -> list[dict]:
     """Recent chat sessions, newest activity first — the threads rail's read (CI-6a).
 
     One row per session: its id, the FIRST question as the title (what the user opened
@@ -978,7 +989,9 @@ def list_chat_sessions(connection_id: Optional[str] = None, *, limit: int = 30) 
            GROUP BY session_id
            ORDER BY last_at DESC
            LIMIT ?""",
-        (*_conn_p, *_op, max(1, min(int(limit), 100))),
+        # With sign-in, a person lists only their own threads and the ones they were added to (2026-11-17): read
+        # further back, then keep theirs.
+        (*_conn_p, *_op, max(1, min(int(limit), 100)) * (1 if single_person else 10)),
     ).fetchall()
     out = []
     for r in rows:
@@ -1000,12 +1013,97 @@ def list_chat_sessions(connection_id: Optional[str] = None, *, limit: int = 30) 
         out.append({
             "session_id": d["session_id"],
             "title": title or "(untitled)",
-            "renamed": bool(custom),
+            "renamed": bool(custom and custom["title"]),
             "turns": d["turns"],
             "last_at": d["last_at"],
         })
     c.close()
-    return out
+    kept = []
+    for t in out:
+        if not single_person and not may_see_thread(t["session_id"], person, single_person=False):
+            continue
+        people = thread_people(t["session_id"])
+        t.update(owner=people["owner"], members=people["members"], shared=bool(people["members"]))
+        kept.append(t)
+        if len(kept) >= max(1, min(int(limit), 100)):
+            break
+    return kept
+
+
+# ── group conversations (2026-11-17) ────────────────────────────────────────────────────────────────────────────
+# The user: "there cannot be shared conversations unless users add other users in it". A thread is its owner's — the
+# person who began it — and the people they add; nobody else lists it, reads it or asks in it. Each turn records who
+# asked it, and is asked as them (the request is theirs). A thread begun before this has no owner: on an install
+# without sign-in it is the one person's, as everything there is; with sign-in, nobody's but its askers'.
+
+
+def person_now() -> str:
+    """Who the running request is, as a thread names people: the signed-in person (their email), else the install's
+    operator; lower-cased, without the ``user:`` a write's record puts in front."""
+    from pramanyx.org.context import current_actor, current_user_id
+    who = (current_user_id() or current_actor() or "").strip()
+    return (who[5:] if who.startswith("user:") else who).lower()
+
+
+def _clean_person(who: str) -> str:
+    who = (who or "").strip().lower()
+    return who[5:] if who.startswith("user:") else who
+
+
+def thread_people(session_id: str) -> dict:
+    """``{"owner", "members", "askers"}`` of a thread: who began it, who they added, who has asked in it."""
+    c = _conn()
+    ensure_once(c, _ensure_schema)
+    row = c.execute("SELECT owner, members FROM chat_session_meta WHERE session_id = ?", (session_id,)).fetchone()
+    askers = [r["asked_by"] for r in c.execute(
+        "SELECT DISTINCT asked_by FROM investigations WHERE session_id = ? AND asked_by != ''", (session_id,)).fetchall()]
+    c.close()
+    try:
+        members = [m for m in json.loads(row["members"] or "[]") if isinstance(m, str)] if row else []
+    except ValueError:
+        members = []
+    return {"owner": (row["owner"] if row else "") or "", "members": members, "askers": askers}
+
+
+def may_see_thread(session_id: str, person: str, *, single_person: bool) -> bool:
+    """Whether ``person`` may list, read and ask in a thread: its owner or a member; a thread with no owner yet, its
+    askers — or, on an install without sign-in, the one person."""
+    if single_person:
+        return True
+    person = _clean_person(person)
+    if not person:
+        return False
+    people = thread_people(session_id)
+    if people["owner"]:
+        return person == people["owner"] or person in people["members"]
+    return bool(people["askers"]) and all(a == person for a in people["askers"])
+
+
+def claim_thread(session_id: str, person: str) -> None:
+    """A thread with no owner is its first asker's: they began it."""
+    person = _clean_person(person)
+    if not session_id or not person:
+        return
+    c = _conn()
+    ensure_once(c, _ensure_schema)
+    c.execute(
+        "INSERT INTO chat_session_meta (session_id, title, org_id, renamed_at, owner, members) VALUES (?, '', ?, ?, ?, '[]') "
+        "ON CONFLICT(session_id) DO UPDATE SET owner = excluded.owner WHERE chat_session_meta.owner = ''",
+        (session_id, current_org_id() or DEFAULT_ORG_ID, datetime.now(timezone.utc).isoformat(), person))
+    c.commit()
+    c.close()
+
+
+def set_thread_members(session_id: str, members: list[str]) -> list[str]:
+    """The people a thread's owner added (each a person's sign-in email); its owner is never one of them."""
+    owner = thread_people(session_id)["owner"]
+    clean = sorted({_clean_person(m) for m in members if _clean_person(m) and _clean_person(m) != owner})[:50]
+    c = _conn()
+    ensure_once(c, _ensure_schema)
+    c.execute("UPDATE chat_session_meta SET members = ? WHERE session_id = ?", (json.dumps(clean), session_id))
+    c.commit()
+    c.close()
+    return clean
 
 
 def rename_chat_session(session_id: str, title: str) -> bool:
@@ -1038,7 +1136,8 @@ def rename_chat_session(session_id: str, title: str) -> bool:
              datetime.now(timezone.utc).isoformat()),
         )
     else:
-        c.execute("DELETE FROM chat_session_meta WHERE session_id = ?", (session_id,))
+        # Cleared: the title only — the thread's owner and members stay (group conversations, 2026-11-17).
+        c.execute("UPDATE chat_session_meta SET title = '' WHERE session_id = ?", (session_id,))
     c.commit()
     c.close()
     return True
@@ -1521,8 +1620,9 @@ def purge_ids(inv_ids: list[str]) -> int:
     return n
 
 
-def list_investigations(limit: int = 50) -> list[dict]:
-    """Return summary rows newest-first, collapsing chat turns into one item per session."""
+def list_investigations(limit: int = 50, *, asked_by: str = "") -> list[dict]:
+    """Return summary rows newest-first, collapsing chat turns into one item per session. ``asked_by`` keeps the rows
+    one person asked (group conversations, 2026-11-17: a person's own coworker lists their own questions)."""
     c = _conn()
     ensure_once(c, _ensure_schema)
 
@@ -1531,6 +1631,8 @@ def list_investigations(limit: int = 50) -> list[dict]:
     # request. No-op (empty clause) in localhost mode.
     from pramanyx.security.authz import require_identity_enabled
     _org, _op = (" AND org_id = ?", [current_org_id()]) if require_identity_enabled() else ("", [])
+    if asked_by:
+        _org, _op = _org + " AND asked_by = ?", [*_op, _clean_person(asked_by)]
 
     # Non-chat rows (investigations)
     inv_rows = c.execute(

@@ -32,6 +32,10 @@ export interface ChatSessionSummary {
   renamed?: boolean;
   turns: number;
   last_at: string;
+  /** Group conversations (2026-11-17): who began it and the people they added. */
+  owner?: string;
+  members?: string[];
+  shared?: boolean;
 }
 
 /** Threads past this count get a filter box — below it, the eye is faster. */
@@ -196,6 +200,11 @@ export function ThreadsRail({
                 </span>
                 <span className="aug-fs-xs block" style={{ color: "var(--t3)", marginTop: 2 }}>
                   {t.turns} {t.turns === 1 ? "turn" : "turns"} · {relTime(t.last_at)} ago
+                  {t.shared && (
+                    <span data-testid="thread-shared" title={[t.owner, ...(t.members ?? [])].filter(Boolean).join(", ")}>
+                      {" · "}with {(t.members ?? []).length + 1} people
+                    </span>
+                  )}
                 </span>
               </Button>
 
