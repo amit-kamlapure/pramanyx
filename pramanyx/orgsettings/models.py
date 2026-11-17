@@ -207,6 +207,13 @@ class OrgSettings(BaseModel):
                     "own — written by a curator, never inferred.",
     )
 
+    #: What a curator said is not an area of the business, of the areas the model suggested from its own labels for
+    #: the data (punch list 87, 2026-11-18): not suggested again. A model never writes it.
+    not_areas: list[str] = Field(
+        default_factory=list,
+        description="Model-suggested area names a curator said are not areas of the business — not suggested again.",
+    )
+
     # ── Working memory (CB-6) ──
     priorities: list[Priority] = Field(
         default_factory=list,

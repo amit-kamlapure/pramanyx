@@ -54,6 +54,42 @@ def areas_for(connection_id: str, schema_name: Optional[str] = None, *, workspac
     return out
 
 
+def _plain(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", (text or "").lower()).strip()
+
+
+def suggested_areas(connection_id: str, schema_name: Optional[str] = None) -> list[dict]:
+    """Areas the model suggests from its own labels for the data, each ``{label, id, tables}`` — what the ontology's
+    enricher called the business area of each entity (``entity.domain``) where no area of the connection already
+    answers to it and a curator has not said it is none (punch list 87, 2026-11-18). A suggestion is only that: an area
+    is declared by a curator (`PUT /areas`), never by the model. Reads what is stored; no model."""
+    from pramanyx.ontology.store import load_latest_ontology
+    from pramanyx.semantic.metric_map import best_areas, map_for
+    from pramanyx.orgsettings.store import effective_settings
+    graph = load_latest_ontology(connection_id, schema_name or None)
+    tables: dict[str, set[str]] = {}
+    names: dict[str, str] = {}
+    for e in (getattr(graph, "entities", None) or {}).values():
+        label = str(getattr(e, "domain", "") or "").strip()
+        if not label:
+            continue
+        key = _plain(label)
+        names.setdefault(key, label)
+        tables.setdefault(key, set()).update(str(t).split(".")[-1] for t in (getattr(e, "source_tables", None) or []))
+    if not tables:
+        return []
+    known = {_plain(a["id"]) for a in areas_for(connection_id, schema_name)} | {
+        _plain(a["name"]) for a in areas_for(connection_id, schema_name)}
+    industry = [a for a in map_for(connection_id, schema_name).areas if not a.generic]
+    said_not = {_plain(x) for x in (getattr(effective_settings(None), "not_areas", None) or [])}
+    out = []
+    for key, label in names.items():
+        if key in known or key in said_not or best_areas(label, industry):
+            continue
+        out.append({"label": label, "id": key.replace(" ", "_")[:60], "tables": sorted(t for t in tables[key] if t)})
+    return sorted(out, key=lambda s: (-len(s["tables"]), s["label"].lower()))
+
+
 def unknown_area(connection_id: str, area: str) -> str:
     """Why ``area`` is not one of the connection's areas, or "" when it is (or is empty: everywhere). A definition, a
     placement and a question read areas by id, so a typed name that is no area is refused, never kept as a stray."""

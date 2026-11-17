@@ -5,12 +5,16 @@
  * a new area a curator declares, and where a person places a table. The server decides who may — a curator declares
  * and owns, anyone who edits the semantic layer places — and its refusal is said here.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SelectField } from "@/components/ui/select";
-import { declarationsOf, people, placeInArea, saveAreas, type AreaPlaced, type BusinessArea } from "@/lib/areas";
+import {
+  declarationsOf, people, placeInArea, readSuggestedAreas, saveAreas, setNotAnArea,
+  type AreaPlaced, type BusinessArea, type SuggestedArea,
+} from "@/lib/areas";
+import { countNoun } from "@/lib/format";
 
 const MUTED = { color: "var(--t2)" };
 
@@ -112,5 +116,55 @@ export function AreaPlacement({ connId, schema, table, areas, placed, onPlaced }
       </SelectField>
       {error && <span className="aug-fs-xs" role="alert" style={{ color: "var(--red4)" }}>{error}</span>}
     </span>
+  );
+}
+
+/**
+ * The areas the model suggests from its own labels for the data (punch list 87, 2026-11-18): what the ontology's enricher
+ * called each entity's business area, where no area answers to it yet. A curator declares one — it is then an area like
+ * any other — or says it is not one, and it is not suggested again. Nothing here is an area until a person says so.
+ */
+export function SuggestedAreas({ connId, schema, areas, onSaved }: {
+  connId: string; schema?: string; areas: BusinessArea[]; onSaved: (areas: BusinessArea[]) => void;
+}) {
+  const [suggested, setSuggested] = useState<SuggestedArea[] | null>(null);
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let live = true;
+    readSuggestedAreas(connId, schema).then((s) => { if (live) setSuggested(s); }).catch(() => { if (live) setSuggested([]); });
+    return () => { live = false; };
+  }, [connId, schema]);
+  if (!suggested?.length) return null;
+  const gone = (label: string) => setSuggested((was) => (was ?? []).filter((s) => s.label !== label));
+  const declare = async (s: SuggestedArea) => {
+    setBusy(s.label); setError("");
+    try {
+      onSaved(await saveAreas(connId, [...declarationsOf(areas), { id: s.id, name: s.label, question: "", parent: "" }], schema));
+      gone(s.label);
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(""); }
+  };
+  const notOne = async (s: SuggestedArea) => {
+    setBusy(s.label); setError("");
+    try { await setNotAnArea(connId, s.label); gone(s.label); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(""); }
+  };
+  return (
+    <div data-testid="suggested-areas" style={{ display: "flex", flexDirection: "column", gap: 6, margin: "0 0 12px" }}>
+      <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>
+        Suggested by the model, from what it called the data. An area only once you declare it.
+      </span>
+      {suggested.map((s) => (
+        <span key={s.label} data-testid="suggested-area" style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <span className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: 500 }}>{s.label}</span>
+          <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>
+            {countNoun(s.tables.length, "table")}{s.tables.length ? `: ${s.tables.slice(0, 4).join(", ")}${s.tables.length > 4 ? "…" : ""}` : ""}
+          </span>
+          <Button size="xs" variant="outline" disabled={!!busy} onClick={() => void declare(s)}>Declare it</Button>
+          <Button size="xs" variant="ghost" disabled={!!busy} onClick={() => void notOne(s)}>Not an area</Button>
+        </span>
+      ))}
+      {error && <span className="aug-fs-xs" role="alert" style={{ color: "var(--red4)" }}>{error}</span>}
+    </div>
   );
 }

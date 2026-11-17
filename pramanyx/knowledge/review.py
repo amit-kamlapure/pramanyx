@@ -46,6 +46,8 @@ def _links(connection_id: str) -> dict[str, Callable[..., str]]:
     c = quote(connection_id, safe="")
     return {
         "definitions_tab": lambda: f"/?tab=semantic&semtab=definitions&conn={c}",
+        # The areas are declared on the Metrics tab's coverage card, where the model's suggestions wait.
+        "areas": lambda: f"/?tab=semantic&conn={c}",
         "import_tab": lambda: f"/?tab=semantic&semtab=import&conn={c}",
         "record": lambda: f"/?tab=record&conn={c}",
         # One claim, opened in the Record's reader — where it is confirmed or marked wrong.
@@ -160,6 +162,18 @@ def _proposed_synonyms(connection_id: str, link: dict) -> list[dict]:
             for s in synonyms_for(connection_id) if str(getattr(s, "source", "")) == "llm_candidate"]
 
 
+def _suggested_areas(connection_id: str, link: dict) -> list[dict]:
+    from pramanyx.semantic.areas import suggested_areas
+    out = []
+    for s in suggested_areas(connection_id)[:PER_SOURCE]:
+        shown = ", ".join(s["tables"][:4]) + (f" and {len(s['tables']) - 4} more" if len(s["tables"]) > 4 else "")
+        out.append(_row(source="suggested_area", ref=s["id"], kind="candidate", title=f"“{s['label']}” as an area",
+                        detail=f"The model labelled {len(s['tables'])} table{'s' if len(s['tables']) != 1 else ''} so"
+                               f"{f' ({shown})' if shown else ''}. Not an area until a curator declares it.",
+                        count=len(s["tables"]) or None, href=link["areas"](), action="Declare it, or say it is not one"))
+    return out
+
+
 def _imports(connection_id: str, link: dict) -> list[dict]:
     from pramanyx.intake import store
     from pramanyx.org.context import current_org_id
@@ -232,6 +246,7 @@ def _answered_two_ways(connection_id: str, link: dict) -> list[dict]:
 SOURCES: tuple[tuple[str, Callable[[str, dict], list[dict]]], ...] = (
     ("framing_miss", _framing_misses), ("unanswered", _unanswered),
     ("unconfirmed", _unconfirmed), ("definitions", _definitions), ("synonym", _proposed_synonyms),
+    ("suggested_area", _suggested_areas),
     ("import", _imports), ("verdict", _marked_wrong), ("unhelpful", _unhelpful),
     ("rival_meanings", _rivals), ("divergence", _answered_two_ways),
 )

@@ -267,6 +267,40 @@ def put_areas(conn_id: str, body: AreasIn, request: Request, schema: Optional[st
     return {"areas": areas_for(conn_id, schema)}
 
 
+@router.get("/areas/{conn_id}/suggested")
+def get_suggested_areas(conn_id: str, schema: Optional[str] = None):
+    """Areas the model suggests from its own labels for the data, for a curator to declare or set aside (punch list
+    87). A suggestion is never an area until a curator declares it."""
+    from pramanyx.semantic.areas import suggested_areas
+    return {"suggested": suggested_areas(conn_id, schema or _declared_schema(conn_id))}
+
+
+class NotAnAreaIn(BaseModel):
+    label: str
+    not_an_area: bool = True   # False takes the word back: it is suggested again
+
+
+@router.put("/areas/{conn_id}/not-an-area")
+def put_not_an_area(conn_id: str, body: NotAnAreaIn, request: Request):
+    """A curator says a suggested area is not an area of the business: it is not suggested again (or, taken back, it
+    is). A person's own call, as declaring one is."""
+    from pramanyx.orgsettings.store import load_org_settings, save_org_settings
+    from pramanyx.rbac.permissions import Permission
+    from pramanyx.rbac.resolver import has_permission
+    _persons_own(request, "saying what is not an area of the business")
+    if not has_permission(getattr(request.state, "principal", None), Permission.ADMIN_MANAGE_ORG):
+        raise HTTPException(status_code=403, detail="only a curator — whoever administers the organisation — says what is not an area")
+    label = (body.label or "").strip()
+    if not label:
+        raise HTTPException(status_code=422, detail="which suggestion is not an area")
+    settings = load_org_settings()
+    kept = [x for x in settings.not_areas if x.strip().lower() != label.lower()]
+    if body.not_an_area:
+        kept.append(label)
+    save_org_settings(settings.model_copy(update={"not_areas": kept}))
+    return {"not_areas": kept}
+
+
 class PlacementIn(BaseModel):
     kind: str            # table · connection · metric
     ref: str = ""        # the table's or the metric's name; empty for a connection
