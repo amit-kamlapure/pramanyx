@@ -648,3 +648,87 @@ def map_tmdl(text: str) -> tuple[dict, list[str]]:
             notes = []
         i += 1
     return _sections([], definitions, joins), ([f"{_DAX_NOTE} ({count})."] if count else [])
+
+
+# ── a whole project, as a .zip (2026-11-17) ──────────────────────────────────────────────────────────────────────
+
+#: What a project archive may hold: files, their total once unpacked, and one file's size. Read in memory, never
+#: written to disk; an archive past these is refused, not partly read.
+MAX_FILES, MAX_TOTAL, MAX_FILE = 2000, 50 * 1024 * 1024, 5 * 1024 * 1024
+
+
+def _merge(into: dict, sections: dict) -> None:
+    """One file's sections into the project's: the first metric, definition, join or table of a name stands."""
+    keys = {"metrics": lambda x: x.get("name"), "definitions": lambda x: (x.get("title", "").lower(), x.get("area", "")),
+            "joins": lambda x: x.get("title", "").lower(), "glossary": lambda x: x.get("table")}
+    for section, rows in sections.items():
+        have = into.setdefault(section, [])
+        seen = {keys[section](x): x for x in have} if section in keys else {}
+        for row in rows:
+            k = keys[section](row) if section in keys else None
+            if k is not None and k in seen:
+                if section == "glossary":   # one table's columns, from several files
+                    seen[k].setdefault("columns", {}).update({c: v for c, v in (row.get("columns") or {}).items()
+                                                              if c not in seen[k].get("columns", {})})
+                continue
+            have.append(row)
+            if k is not None:
+                seen[k] = row
+
+
+def map_project_zip(data: bytes) -> tuple[dict, list[str]]:
+    """A project archive → ``(sections, notes)``: a LookML project (its ``.lkml`` files), a Power BI project (``.tmdl``
+    files, or a ``model.bim``) or a dbt ``manifest.json``, each file read by its own mapper and the results merged.
+    Each note names its file. A file none of them reads is named too."""
+    import io
+    import json
+    import zipfile
+
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(data))
+    except zipfile.BadZipFile as exc:
+        raise ValueError("the file is not a .zip archive") from exc
+    members = [m for m in archive.infolist() if not m.is_dir()
+               and not any(part.startswith((".", "__MACOSX")) for part in m.filename.split("/"))]
+    if len(members) > MAX_FILES:
+        raise ValueError(f"the archive holds {len(members)} files; a project is read up to {MAX_FILES}")
+    if sum(m.file_size for m in members) > MAX_TOTAL:
+        raise ValueError(f"the archive unpacks to more than {MAX_TOTAL // (1024 * 1024)} MB")
+    sections: dict = {}
+    notes: list[str] = []
+    read = skipped = 0
+    for m in sorted(members, key=lambda m: m.filename):
+        name, lower = m.filename, m.filename.lower()
+        if not lower.endswith((".lkml", ".tmdl", ".bim", ".json")):
+            skipped += 1
+            continue
+        if m.file_size > MAX_FILE:
+            notes.append(f"{name}: larger than {MAX_FILE // (1024 * 1024)} MB, not read")
+            continue
+        text = archive.read(m).decode("utf-8-sig", errors="replace")
+        try:
+            if lower.endswith(".lkml"):
+                got, said = map_lookml(text)
+            elif lower.endswith(".tmdl"):
+                got, said = map_tmdl(text)
+            else:
+                doc = json.loads(text)
+                if looks_like_powerbi_model(doc):
+                    got, said = map_powerbi_model(doc)
+                else:
+                    from pramanyx.intake.mappers import looks_like_dbt_manifest, map_dbt_manifest_whole
+                    if not looks_like_dbt_manifest(doc):
+                        skipped += 1
+                        continue
+                    got, said = map_dbt_manifest_whole(doc)
+        except ValueError as exc:
+            notes.append(f"{name}: {exc}")
+            continue
+        read += 1
+        _merge(sections, got)
+        notes.extend(f"{name}: {s}" for s in said)
+    if not read:
+        raise ValueError("the archive holds no .lkml, .tmdl, model.bim or dbt manifest.json this can read")
+    if skipped:
+        notes.append(f"{skipped} other file{'s' if skipped != 1 else ''} in the archive {'were' if skipped != 1 else 'was'} not read")
+    return sections, notes

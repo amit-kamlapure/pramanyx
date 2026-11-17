@@ -243,3 +243,56 @@ def test_an_accepted_definition_carries_its_aliases_and_area_never_its_provenanc
     with pytest.raises(ValueError, match="no area of this connection"):
         apply_candidate(CONN, "definition", {"title": "Churn", "body": "Lost customers.", "area": "made-up"},
                         actor="ana@example.com", source="test")
+
+
+# ── a whole project, as a .zip (2026-11-17) ───────────────────────────────────────────────────────────────────────
+
+def _zip(files: dict[str, str]) -> bytes:
+    import io
+    import zipfile
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        for name, text in files.items():
+            z.writestr(name, text)
+    return buf.getvalue()
+
+
+MODEL_LKML = '''
+explore: orders {
+  join: users { type: left_outer sql_on: ${orders.user_id} = ${users.id} ;; relationship: many_to_one }
+}
+'''
+
+
+def test_a_lookml_and_power_bi_project_is_read_whole_and_merged():
+    data = _zip({"views/order_items.view.lkml": LOOKML, "models/shop.model.lkml": MODEL_LKML,
+                 "views/broken.view.lkml": "view: broken { sql_table_name: x ",
+                 "definition/tables/Sales.tmdl": TMDL, "README.md": "# the project",
+                 "__MACOSX/._order_items.view.lkml": "junk"})
+    sections, notes = bi_models.map_project_zip(data)
+    assert {m["name"] for m in sections["metrics"]} >= {"order_items_total_revenue", "order_items_count"}
+    assert {j["title"] for j in sections["joins"]} == {"order_items joins users", "orders joins users", "Sales Orders joins Customer"}
+    assert any(d["title"] == "Total Sales" for d in sections["definitions"])
+    said = " | ".join(notes)
+    assert "views/broken.view.lkml: the LookML could not be read" in said
+    assert "views/order_items.view.lkml: LookML measure order_items.user_count" in said
+    assert "1 other file in the archive was not read" in said            # the README; the macOS junk is not counted
+
+
+def test_an_archive_that_is_not_one_or_is_too_large_is_refused(monkeypatch):
+    with pytest.raises(ValueError, match="not a .zip"):
+        bi_models.map_project_zip(b"not a zip")
+    with pytest.raises(ValueError, match="no .lkml"):
+        bi_models.map_project_zip(_zip({"notes.txt": "hello"}))
+    monkeypatch.setattr(bi_models, "MAX_TOTAL", 10)
+    with pytest.raises(ValueError, match="unpacks to more than"):
+        bi_models.map_project_zip(_zip({"a.lkml": LOOKML}))
+
+
+def test_a_project_archive_enters_the_lane_through_the_file_door(stores):
+    r = client.post("/intake/files", files={"file": ("shop-lookml.zip", _zip({"order_items.view.lkml": LOOKML,
+                                                                              "shop.model.lkml": MODEL_LKML}), "application/zip")},
+                    data={"connection_id": CONN, "actor": "ana@example.com"})
+    assert r.status_code == 201, r.text
+    assert {c["kind"] for c in r.json()["candidates"]} == {"metric", "definition", "join", "glossary"}
+    assert any(n.startswith("order_items.view.lkml: ") for n in r.json()["mapped"]["not_translated"])

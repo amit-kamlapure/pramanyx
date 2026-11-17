@@ -189,6 +189,15 @@ async def upload_file(request: Request,
         else:
             raise HTTPException(status_code=422, detail="the JSON is neither a dbt manifest (nodes/sources + "
                                 "metadata) nor a Power BI model (model.tables)")
+    elif lower.endswith(".zip"):
+        # A whole project: a LookML project's views and models, a Power BI project's tables, or a dbt manifest.
+        from pramanyx.intake import bi_models
+        try:
+            sections, not_translated = bi_models.map_project_zip(data)
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+        if not sections:
+            raise HTTPException(status_code=422, detail="the project carries no measures, described fields or joins")
     elif lower.endswith((".lkml", ".tmdl")):
         from pramanyx.intake import bi_models
         text = data.decode("utf-8-sig", errors="replace")

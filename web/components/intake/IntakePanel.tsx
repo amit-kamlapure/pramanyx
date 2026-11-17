@@ -360,7 +360,7 @@ function Doors({ connId, schema, onStaged, knowledgeConns }: {
       {door === "file" && (
         <div className="aug-fs-sm" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <input ref={fileRef} type="file" hidden data-testid="intake-file-input"
-            accept=".csv,.tsv,.xlsx,.json,.lkml,.bim,.tmdl,.md,.markdown"
+            accept=".csv,.tsv,.xlsx,.json,.lkml,.bim,.tmdl,.zip,.md,.markdown"
             onChange={e => {
               const f = e.target.files?.[0];
               if (f) run(() => uploadIntakeFile(f, connId, actorName(), "", schema ?? ""),
@@ -380,6 +380,7 @@ function Doors({ connId, schema, onStaged, knowledgeConns }: {
             a dbt <span style={{ fontFamily: "var(--font-mono)" }}>manifest.json</span> (its descriptions and its
             metrics), a LookML <span style={{ fontFamily: "var(--font-mono)" }}>.lkml</span>, a Power BI model
             (<span style={{ fontFamily: "var(--font-mono)" }}>model.bim</span> or a <span style={{ fontFamily: "var(--font-mono)" }}>.tmdl</span>),
+            a whole LookML or Power BI project as a <span style={{ fontFamily: "var(--font-mono)" }}>.zip</span>,
             or a SKILL.md. Every object still waits for your verdict.
           </span>
           <MetricFileColumns />
