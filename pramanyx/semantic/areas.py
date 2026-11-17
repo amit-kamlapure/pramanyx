@@ -131,25 +131,48 @@ def placed_by_people(connection_id: str) -> dict:
     return out
 
 
-def rival_meanings(question: str, connection_id: str) -> list[dict]:
-    """The words of ``question`` that mean one thing in one area of the business and another in the next — each
-    ``{term, meanings: [{area, area_name, text, standing}], chosen}``, where ``chosen`` is the area the question itself
-    names ("" when it names none of them: then the person is asked, or each meaning is answered and named). A word with
-    one meaning, or meanings no one has written, is no rival. Reads what is stored; no model."""
+def _rival_claims(connection_id: str) -> tuple[list[list], dict[str, str]]:
+    """The published Definitions of each word defined in two or more areas, and the areas' names."""
     from pramanyx.record.writers import definition_term, definitions
-    q = f" {re.sub(r'[^a-z0-9]+', ' ', (question or '').lower())} "
     groups: dict[str, list] = {}
     for c in definitions(connection_id):
         if c.tier in ("approved", "declared") and (c.extra.get("area") or "").strip():
             groups.setdefault(definition_term(c.extra.get("term", "")), []).append(c)
-    if not any(len({c.extra.get("area") for c in g}) > 1 for g in groups.values()):
-        return []
+    rivals = [g for g in groups.values() if len({c.extra.get("area") for c in g}) > 1]
+    if not rivals:
+        return [], {}
     try:
         names = {a["id"]: a["name"] for a in areas_for(connection_id)}
     except Exception as exc:  # noqa: BLE001 — unread, an area is said by its id
         from pramanyx.kernel.errors import tolerate
         tolerate(exc, "the areas could not be read; rival meanings are said by area id", counter="areas.rivals")
         names = {}
+    return rivals, names
+
+
+def _meanings(group: list, names: dict[str, str]) -> list[dict]:
+    return [{"area": c.extra.get("area"), "area_name": names.get(c.extra.get("area"), c.extra.get("area")),
+             "text": c.statement.text, "standing": "published" if c.tier == "approved" else "draft"}
+            for c in sorted(group, key=lambda c: (c.tier != "approved", c.extra.get("area")))]
+
+
+def rival_groups(connection_id: str) -> list[dict]:
+    """Every word published with one meaning in one area and another in the next — ``{term, meanings}`` — with no
+    question: the review queue's conflicts (Phase 3, 2026-11-17). `rival_meanings` narrows them to a question's words."""
+    rivals, names = _rival_claims(connection_id)
+    return sorted(({"term": g[0].extra.get("term", ""), "meanings": _meanings(g, names)} for g in rivals),
+                  key=lambda r: str(r["term"]).lower())
+
+
+def rival_meanings(question: str, connection_id: str) -> list[dict]:
+    """The words of ``question`` that mean one thing in one area of the business and another in the next — each
+    ``{term, meanings: [{area, area_name, text, standing}], chosen}``, where ``chosen`` is the area the question itself
+    names ("" when it names none of them: then the person is asked, or each meaning is answered and named). A word with
+    one meaning, or meanings no one has written, is no rival. Reads what is stored; no model."""
+    q = f" {re.sub(r'[^a-z0-9]+', ' ', (question or '').lower())} "
+    rivals, names = _rival_claims(connection_id)
+    if not rivals:
+        return []
 
     def said(word: str) -> bool:
         w = re.sub(r"[^a-z0-9]+", " ", (word or "").lower()).strip()
@@ -157,15 +180,11 @@ def rival_meanings(question: str, connection_id: str) -> list[dict]:
         return bool(w) and re.search(rf"(?<![a-z0-9]){re.escape(w)}(?:s|es)?(?![a-z0-9])", q) is not None
 
     out: list[dict] = []
-    for group in groups.values():
-        if len({c.extra.get("area") for c in group}) < 2:
-            continue
+    for group in rivals:
         words = {group[0].extra.get("term", "")} | {a for c in group for a in (c.extra.get("aliases") or [])}
         if not any(said(w) for w in words):
             continue
-        meanings = [{"area": c.extra.get("area"), "area_name": names.get(c.extra.get("area"), c.extra.get("area")),
-                     "text": c.statement.text, "standing": "published" if c.tier == "approved" else "draft"}
-                    for c in sorted(group, key=lambda c: (c.tier != "approved", c.extra.get("area")))]
+        meanings = _meanings(group, names)
         named = [m["area"] for m in meanings if said(m["area_name"]) or said(str(m["area"]).replace("_", " "))]
         out.append({"term": group[0].extra.get("term", ""), "meanings": meanings, "chosen": named[0] if len(named) == 1 else ""})
     return out

@@ -920,6 +920,17 @@ def read_learned(connection_id: str, about: str = "", area: str = "", limit: int
     return {**out, "items": items}
 
 
+@router.get("/knowledge/{connection_id}/review")
+def read_review(connection_id: str, area: str = "", limit: int = Query(200, ge=1, le=500)):
+    """What waits on a person for this connection's knowledge, in one list (Phase 3, 2026-11-17): gaps (questions that
+    framed on no definition, questions no run answered), candidates (unconfirmed findings and usage, Definition drafts
+    and suggested edits, proposed synonyms, an import's candidates, answers marked wrong or unhelpful) and conflicts (a
+    word meaning two things across areas, a question answered two ways). Busiest first; each row names its area's
+    owners and the page it is decided on. A view over the stores that hold them — a source not read is named."""
+    from pramanyx.knowledge.review import review
+    return review(connection_id, area=area, limit=limit)
+
+
 @router.get("/knowledge/{connection_id}/graph/search")
 def knowledge_search_graph(connection_id: str, q: str = Query(..., min_length=1),
                            limit: int = Query(10, ge=1, le=50)):

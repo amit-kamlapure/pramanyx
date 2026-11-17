@@ -25,6 +25,7 @@ import { Card, Chip, Empty, MUTED, NUM, Page, ROW, RULE } from "@/components/cla
 import { IntakePanel } from "@/components/intake/IntakePanel";
 import { MetricsPanel } from "@/components/MetricsPanel";
 import { MissedQuestions } from "@/components/semantic/MissedQuestions";
+import { ReviewQueue } from "@/components/semantic/ReviewQueue";
 import { FoldLine, Sql, ToolsMenu } from "@/components/semantic/parts";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -675,7 +676,8 @@ function BenchmarksTab({ connId }: { connId: string }) {
 // Metrics leads: it is the governed answer to "what does this number mean", and the one tab whose contents the AI
 // reuses in every chart and answer. It was third, behind two tabs of annotation, so the definitions a connection already
 // carried were the last thing anyone saw.
-const TABS = ["Metrics", "Annotations", "Definitions", "Benchmarks", "Import"];
+// Review (Phase 3, 2026-11-17): what waits on a person for this connection's knowledge — gaps, candidates, conflicts.
+const TABS = ["Metrics", "Annotations", "Definitions", "Review", "Benchmarks", "Import"];
 //: The landing tab, and the one that carries no `?semtab=`. Derived from TABS so reordering the array cannot leave the
 //: default pointing at a tab that moved.
 const DEFAULT_TAB = TABS[0];
@@ -839,6 +841,7 @@ export function SemanticLayerPanel({ connectionId, connName, connections = [] }:
         {activeTab === "Metrics"     && <MetricsPanel connId={activeConn} schema={metricsSchema || undefined} datasets={schemas} />}
         {activeTab === "Annotations" && <AnnotationsTab connId={activeConn} scopeTable={scopeTable} />}
         {activeTab === "Definitions" && <KnowledgeTab   connId={activeConn} />}
+        {activeTab === "Review"      && <Page testId="semantic-review"><ReviewQueue connId={activeConn} /></Page>}
         {activeTab === "Benchmarks"  && <BenchmarksTab  connId={activeConn} />}
         {activeTab === "Import"      && (
           <Page testId="semantic-import"><IntakePanel connId={activeConn} schema={scopeSchema} /></Page>
