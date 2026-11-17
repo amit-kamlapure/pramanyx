@@ -8203,8 +8203,9 @@ export interface paths {
         /**
          * Upload File
          * @description KI-2 — the file door: a metric file (CSV / TSV / XLSX in the columns of
-         *     `mappers.METRIC_COLUMNS` — `GET /intake/templates/metrics.csv`) or a dbt `manifest.json`
-         *     becomes a bundle through a DETERMINISTIC mapper and enters the SAME lane.
+         *     `mappers.METRIC_COLUMNS` — `GET /intake/templates/metrics.csv`), a dbt `manifest.json` (its
+         *     descriptions and its semantic layer), a LookML `.lkml`, or a Power BI model (`model.bim`, a `.tmdl`)
+         *     becomes a bundle through a DETERMINISTIC mapper and enters the SAME lane (`intake/bi_models.py`).
          *     The mapper judges nothing: every object still waits for a human verdict.
          *     ``schema`` — the dataset in view: a row that names no dataset belongs to it.
          */
@@ -9403,6 +9404,30 @@ export interface paths {
          *     yet, and says so.
          */
         get: operations["read_learned_knowledge__connection_id__learned_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/knowledge/{connection_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Review
+         * @description What waits on a person for this connection's knowledge, in one list (Phase 3, 2026-11-17): gaps (questions that
+         *     framed on no definition, questions no run answered), candidates (unconfirmed findings and usage, Definition drafts
+         *     and suggested edits, proposed synonyms, an import's candidates, answers marked wrong or unhelpful) and conflicts (a
+         *     word meaning two things across areas, a question answered two ways). Busiest first; each row names its area's
+         *     owners and the page it is decided on. A view over the stores that hold them — a source not read is named.
+         */
+        get: operations["read_review_knowledge__connection_id__review_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -43258,6 +43283,40 @@ export interface operations {
         parameters: {
             query?: {
                 about?: string;
+                area?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                connection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_review_knowledge__connection_id__review_get: {
+        parameters: {
+            query?: {
                 area?: string;
                 limit?: number;
             };
