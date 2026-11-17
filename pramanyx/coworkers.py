@@ -101,11 +101,13 @@ def _listening(port: int) -> bool:
 
 
 def _alive(pid: Optional[int]) -> bool:
+    """Whether a person's coworker process still runs — asked the one way the platform asks (`db/serving._alive`),
+    which never signals a process on Windows."""
     if not pid:
         return False
+    from pramanyx.db.serving import _alive as alive
     try:
-        os.kill(int(pid), 0)
-        return True
+        return alive(int(pid))
     except (OSError, ValueError):
         return False
 
