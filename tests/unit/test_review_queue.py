@@ -169,3 +169,14 @@ def test_unanswered_questions_are_grouped_by_what_was_asked(monkeypatch):
                                                         ("Where are we losing money?", 2)]
     assert rows[0]["detail"] == "No run could answer it (failed); 2 of them on a schedule."
 
+
+def test_a_finding_opens_its_own_claim_in_the_record(monkeypatch):
+    import pramanyx.knowledge.learned as L
+    monkeypatch.setattr(L, "learned_items", lambda c, limit=50, about="": {"items": [
+        {"kind": "finding", "standing": "measured", "standing_said": "measured by a run", "source": "the explorer",
+         "text": "Outerwear under-earns its inventory.", "ref": "clm_42", "area": "", "as_of": "2026-11-16"},
+        {"kind": "finding", "standing": "approved", "standing_said": "confirmed by a person", "source": "the explorer",
+         "text": "Already confirmed.", "ref": "clm_7", "area": "", "as_of": "2026-11-16"}]})
+    [row] = R._unconfirmed("c1", R._links("c1"))
+    assert row["resolve"]["href"] == "/?tab=record&layer=claims&id=clm_42&conn=c1"
+

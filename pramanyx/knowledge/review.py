@@ -48,6 +48,8 @@ def _links(connection_id: str) -> dict[str, Callable[..., str]]:
         "definitions_tab": lambda: f"/?tab=semantic&semtab=definitions&conn={c}",
         "import_tab": lambda: f"/?tab=semantic&semtab=import&conn={c}",
         "record": lambda: f"/?tab=record&conn={c}",
+        # One claim, opened in the Record's reader — where it is confirmed or marked wrong.
+        "claim": lambda claim_id: f"/?tab=record&layer=claims&id={quote(claim_id, safe='')}&conn={c}",
         "definition": lambda term, area="": (f"/definitions/{quote(term, safe='')}?conn={c}"
                                              + (f"&area={quote(area, safe='')}" if area else "")),
     }
@@ -124,7 +126,7 @@ def _unconfirmed(connection_id: str, link: dict) -> list[dict]:
         out.append(_row(source=i["kind"], ref=i["ref"], kind="candidate", title=i["text"],
                         detail=f"{i['standing_said'].capitalize()}, from {i['source']}; no answer leans on it until a "
                                "person confirms it.",
-                        area=i.get("area") or "", at=i.get("as_of") or "", href=link["record"](),
+                        area=i.get("area") or "", at=i.get("as_of") or "", href=link["claim"](i["ref"]),
                         action="Confirm it, or mark it wrong"))
     return out
 
