@@ -11,7 +11,7 @@ from __future__ import annotations
 import datetime as _dt
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from pramanyx.licensing import Capability, gate
@@ -279,6 +279,40 @@ def mark_record_claim_wrong(claim_id: str, req: MarkWrongRequest, principal=Depe
         raise HTTPException(status_code=422, detail=str(exc))
     return {**get_record_claim(out["claim_id"]), "superseded": out["superseded"],
             "woke_inquiries": out.get("woke_inquiries", []), "reopened_decisions": out.get("reopened_decisions", [])}
+
+
+class ConfirmRequest(BaseModel):
+    why: str = ""                  # optional: what the person checked
+    by: str = ""                   # ignored: the person signed in confirms it
+
+
+@router.post("/record/claims/{claim_id}/right", status_code=201)
+def confirm_record_claim(claim_id: str, req: ConfirmRequest, principal=Depends(get_principal),
+                         request: Request = None) -> dict:
+    """A person says a measured claim is right: restated at tier ``approved``, their word. From then on an explorer
+    finding is ground an answer may build on (2026-11-17: findings reach an answer only once a person confirmed them).
+    A call an agent makes is refused, whoever it acts for — a confirmation is a person's own click."""
+    if request is not None:
+        from pramanyx.rbac.agent_gate import is_agent_request
+        if is_agent_request(request):
+            raise HTTPException(status_code=403, detail="a confirmation is a person's own click; an agent cannot give one")
+    c = C.get(claim_id)
+    if c is None or not _visible(c.about.key if c.about.kind == "connection" else ""):
+        raise HTTPException(status_code=404, detail="No such claim")
+    try:
+        out = C.confirm(claim_id, by=_who(principal), why=req.why)
+    except C.ClaimRefused as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    if c.about.kind == "connection" and c.about.key:
+        try:
+            from pramanyx.feedback.verdicts import refresh_graphs_behind
+            from pramanyx.org.context import current_org_id
+            refresh_graphs_behind(c.about.key, current_org_id())
+        except Exception as exc:  # noqa: BLE001 — confirmed either way; the graph shows it at its next build
+            from pramanyx.kernel.errors import tolerate
+            tolerate(exc, "the claim is confirmed; the graph shows it at its next build", counter="record.confirm_graph",
+                     conn_id=c.about.key)
+    return {**get_record_claim(out["claim_id"]), "superseded": out["superseded"]}
 
 
 # ── decisions ──────────────────────────────────────────────────────────────────────────────

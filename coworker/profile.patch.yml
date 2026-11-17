@@ -299,6 +299,36 @@
 - id: entry-customization          # "Create your plugin": a person writing a plugin in the page is the same way back
   disabled: true
 
+# ── off: the host services still mounted behind those pages (2026-11-17, read from the shell's own profile). Each
+#    reaches this machine for whoever holds the page, whatever the agent's tools: the terminal's service (its page was
+#    off, its remote calls were not); the workspace file service, whose reads may name any path on the machine, with
+#    the file tree, the document preview and the @file mentions that read through it; the host folder picker; "Open
+#    in…", which launches the machine's own applications; the host runners for plugin code and programmatic tool
+#    calls, which nothing here uses; and the context that told the agent this checkout's path and the page's address.
+#    A file a person brings in goes to Pramanyx, as theirs (the coworker's next step), and opens there.
+- id: terminal-controller
+  disabled: true
+- id: workspace-files
+  disabled: true
+- id: ui-sidebar-files
+  disabled: true
+- id: ui-sidebar-documentpreview
+  disabled: true
+- id: file-reference-local
+  disabled: true
+- id: directory-picker
+  disabled: true
+- id: open-in-app
+  disabled: true
+- id: ui-open-in-app
+  disabled: true
+- id: cordis-host-runner
+  disabled: true
+- id: ptc-runtime
+  disabled: true
+- id: harness-dev-context
+  disabled: true
+
 # ── off: everything that reports to the shell's maker, and the feedback buttons that would feed it.
 - id: session-telemetry-otel
   disabled: true

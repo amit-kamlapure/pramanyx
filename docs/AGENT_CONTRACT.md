@@ -38,6 +38,7 @@ Every run books one, never an empty result: `answered` · `contradicted` · `no_
 2. No model-authored fact: tier `inferred` is not a claim. What a model concludes without a run behind it is a `hypothesis` at tier `said`, and stays one until a run or a person raises it.
 3. Confidence is counted or absent: no author sets it. It is filled on read as the hit rate of the claim's reference class with its n, or left empty.
 4. The ledger API refuses a claim that names no warrant at all, whatever its tier: an outside author's claim enters through the one door, with what entitles it to be relied on.
+5. Tiers `approved` and `declared` are a person's own word: an agent — a service principal, or a call an agent makes for a person — posts at `said`, `mined` or `measured`, and a person raises the claim by their own verdict or approval. An attestation an agent names does not stand in for one.
 
 ## Who may book
 

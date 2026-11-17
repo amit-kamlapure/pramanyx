@@ -303,7 +303,23 @@ def _lexical_rank(question: str, entries: list, top_k: int) -> list:
 
 #: The PROMPT header — an instruction addressed to a model. Reader-facing renders
 #: must never carry it (see retrieve_for_reader).
-_PROMPT_HEADER = "DOMAIN KNOWLEDGE (use these definitions exactly when writing SQL):"
+_PROMPT_HEADER = ("DOMAIN KNOWLEDGE — what words mean on this connection. Each says whose word it is: one APPROVED BY ITS "
+                  "OWNER is the business's definition, used exactly when writing SQL; one NOT YET APPROVED is someone's "
+                  "wording — use it, and say in the answer that its definition is not yet approved; one only SAID is a "
+                  "hint, never the definition.")
+
+
+def standing_words(standing: dict) -> str:
+    """Whose word a Definition is, for the planner (2026-11-17: an owner's approval changed nothing the model saw — the
+    block said "use these exactly" of every definition, approved or not, and named no owner)."""
+    tier = str((standing or {}).get("tier") or "")
+    owner = str((standing or {}).get("owner") or "").strip()
+    by = str((standing or {}).get("approved_by") or "").strip()
+    if tier == "approved":
+        return f"APPROVED BY ITS OWNER{f' ({by or owner})' if (by or owner) else ''}"
+    if tier == "declared":
+        return f"NOT YET APPROVED by its owner{f' ({owner})' if owner else ''}"
+    return "SAID only, never approved — a hint, not the definition"
 
 
 def _render_block(entries: list, header: str | None = _PROMPT_HEADER) -> str:
@@ -313,7 +329,8 @@ def _render_block(entries: list, header: str | None = _PROMPT_HEADER) -> str:
     for e in entries:
         if lines:
             lines.append("")
-        lines.append(e.render())
+        # The planner is told whose word each is; a reader's answer gets the definition's own prose.
+        lines.append(e.render() + (f"\n   [{standing_words(e.standing)}]" if header else ""))
     return "\n".join(lines)
 
 

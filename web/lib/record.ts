@@ -156,6 +156,15 @@ export const getClaimCrossLinks = (id: string) =>
 export const markClaimWrong = (id: string, body: { corrected?: string; why?: string; by?: string }) =>
   send<MarkedWrong>(`/record/claims/${encodeURIComponent(id)}/wrong`, body);
 
+/** A person says a measured claim is right: restated at tier `approved`, their word (2026-11-17). */
+export const confirmClaim = (id: string, body: { why?: string } = {}) =>
+  send<Claim & { superseded: string }>(`/record/claims/${encodeURIComponent(id)}/right`, body);
+
+/** The kinds a person confirms here — what a run measured or found — and only while measured. */
+export const CONFIRMABLE_KINDS = ["observation", "finding", "reading", "cause"];
+export const confirmable = (c: Pick<Claim, "kind" | "tier" | "state">) =>
+  CONFIRMABLE_KINDS.includes(c.kind) && c.tier === "measured" && c.state !== "withdrawn";
+
 // ── inquiries ────────────────────────────────────────────────────────────────────────────
 
 export type RunVerdictKind =

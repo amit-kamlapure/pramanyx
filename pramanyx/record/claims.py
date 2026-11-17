@@ -366,6 +366,51 @@ def restated_consequences(prior_id: str, new_id: str, *, how: str) -> dict:
     return out
 
 
+def is_persons_word(by: str) -> bool:
+    """Whether ``by`` names a person — never an agent, the system, a model or nobody."""
+    who = (by or "").strip()
+    return bool(who) and who != "unidentified" and who != "model" and not who.startswith(("agent:", "system", "service:"))
+
+
+#: The kinds a person confirms: what was measured or found. A hypothesis is supported by a run, a prediction scored on its
+#: day, a definition approved by its owner — each at a door of its own.
+CONFIRMABLE = ("observation", "finding", "reading", "cause")
+
+
+def confirm(claim_id: str, *, by: str, why: str = "") -> dict:
+    """A person says a claim is right (2026-11-17: an explorer finding is ground for an answer only once a person has
+    confirmed it, and until now nothing let a person confirm one). Restated under its own key at tier ``approved``, its
+    words and warrants kept and an attestation added that names the person — the tier the graph shows the planner as
+    ground. Only a measured claim is raised: what a run found, not what someone said. Returns the new version's id."""
+    who = (by or "").strip()
+    if not is_persons_word(who):
+        raise ClaimRefused("a person confirms a claim — say who")
+    asked = get(claim_id)
+    if asked is None:
+        raise ClaimRefused(f"no claim {claim_id!r}")
+    prior = latest(asked.key) or asked
+    if prior.kind not in CONFIRMABLE:
+        raise ClaimRefused(f"a {prior.kind} is not confirmed here; what is confirmed is what a run found "
+                           f"({', '.join(CONFIRMABLE)})")
+    if prior.state == "withdrawn":
+        raise ClaimRefused("this claim was withdrawn; confirm what stands instead")
+    if prior.tier in ("approved", "declared"):
+        raise ClaimRefused("a person already stands behind this claim")
+    if prior.tier != "measured":
+        raise ClaimRefused(f"only a measured claim is confirmed: this one is at tier {prior.tier!r}, and what was not "
+                           "measured is measured first")
+    new = prior.model_copy(deep=True)
+    new.confidence = None
+    new.tier = "approved"
+    today = _dt.datetime.now(_dt.timezone.utc).date().isoformat()
+    new.warrants = [*prior.warrants, Warrant(kind="attestation", ref=who,
+                                              detail=(why or f"confirmed by {who} on {today}")[:400])]
+    new.extra = {**prior.extra, "approved_by": who, "approved_on": today, "cause": "confirmed"}
+    conn = prior.about.key if prior.about.kind == "connection" else None
+    new_id = book(new, key=prior.key, conn_id=conn)
+    return {"claim_id": new_id, "superseded": prior.id}
+
+
 def mark_wrong(claim_id: str, *, by: str, corrected: str = "", why: str = "") -> dict:
     """A person says a claim is wrong. It is RESTATED under its own key — the wrong version kept,
     superseded — and never deleted: a hypothesis as refuted, with the person's reason as its

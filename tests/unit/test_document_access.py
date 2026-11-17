@@ -182,3 +182,64 @@ def test_a_by_id_door_refuses_a_page_not_shared_with_the_reader_and_says_why(cor
     assert refused.value.status_code == 403 and "Confluence restricts" in refused.value.detail
     identity(ANA)
     K._document_owner_guard(request)                                                 # ana opens it
+
+
+# ── an upload is its uploader's, private until they share it (the user, 2026-11-17) ─────────────────────────────
+
+def test_an_upload_is_read_only_by_its_uploader_until_they_share_it(corpus, identity):
+    corpus("upload-ana", A.upload_access(ANA))
+    corpus("upload-old")                                       # uploaded before: the organisation's, as it was
+    identity(ANA)
+    assert _ids(idx.search_documents("q", top_k=10)) == ["upload-ana", "upload-old"]
+    identity(BEN)
+    assert _ids(idx.search_documents("q", top_k=10)) == ["upload-old"]
+    assert A.upload_access(ANA)["owner"] == ANA and "private to them until they share it" in A.upload_access(ANA)["why"]
+    assert A.upload_access("")["sharing"] == A.ORG                # nobody named: the organisation's, and said
+
+
+def test_only_its_owner_shares_an_upload_and_never_through_an_agent(corpus, identity, monkeypatch):
+    from types import SimpleNamespace
+
+    from fastapi import HTTPException
+
+    from pramanyx.mcp.client import AGENT_HEADER, AGENT_MARK
+    from pramanyx.routers import knowledge as K
+    corpus("upload-ana", A.upload_access(ANA))
+    plain = SimpleNamespace(headers={}, state=SimpleNamespace(principal=None))
+    identity(BEN)
+    with pytest.raises(HTTPException) as e:
+        K.share_document("upload-ana", K.DocumentSharing(sharing="org"), request=plain)
+    assert e.value.status_code == 403 and ANA in e.value.detail
+    identity(ANA)
+    agent = SimpleNamespace(headers={AGENT_HEADER: AGENT_MARK}, state=SimpleNamespace(principal=None))
+    with pytest.raises(HTTPException) as e:
+        K.share_document("upload-ana", K.DocumentSharing(sharing="org"), request=agent)
+    assert e.value.status_code == 403 and "owner's own choice" in e.value.detail
+    out = K.share_document("upload-ana", K.DocumentSharing(sharing="chosen", people=[BEN]), request=plain)
+    assert {s["id"] for s in out["access"]["shared_with"]} == {ANA, BEN} and out["access"]["owner"] == ANA
+    identity(BEN)
+    assert _ids(idx.search_documents("q", top_k=10)) == ["upload-ana"]
+    with pytest.raises(HTTPException):
+        K.share_document("nothing", K.DocumentSharing(sharing="org"), request=plain)
+
+
+def test_the_upload_door_stamps_its_uploader(monkeypatch, identity):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from pramanyx.routers import knowledge as K
+    seen: dict = {}
+
+    def index_text(**kw):
+        seen.update(kw)
+        return {"doc_id": "d1", "title": kw["title"], "chunk_count": 1}
+    monkeypatch.setattr("pramanyx.knowledge.indexer.index_text", index_text)
+    for name in ("put_original", "put_markdown"):
+        monkeypatch.setattr(f"pramanyx.knowledge.blobs.{name}", lambda *a, **k: None)
+    monkeypatch.setattr("pramanyx.knowledge.blobs.info", lambda doc_id: {})
+    identity(ANA)
+    app = FastAPI()
+    app.include_router(K.router)
+    r = TestClient(app).post("/documents/upload", files={"file": ("plan.md", b"# Plan\n\n" + b"The plan for next year. " * 10, "text/markdown")})
+    assert r.status_code == 201, r.text
+    assert seen["access"]["owner"] == ANA and [s["id"] for s in seen["access"]["shared_with"]] == [ANA]

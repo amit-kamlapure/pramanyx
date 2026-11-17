@@ -38,7 +38,7 @@ def test_the_contract_reads_the_enforcing_modules_never_a_copy():
     c = K.contract()
     assert c["version"] == K.VERSION and c["verdicts"] == list(VERDICTS)
     assert c["entry"]["tiers"] == list(C.TIERS) and "inferred" not in c["entry"]["tiers"]
-    assert c["entry"]["kinds"] == list(get_args(C.ClaimKind)) and len(c["entry"]["laws"]) == 4
+    assert c["entry"]["kinds"] == list(get_args(C.ClaimKind)) and len(c["entry"]["laws"]) == 5
     assert "confidence" in c["entry"]["read_only"] and "confidence" not in c["entry"]["fields"]
     assert c["levels"]["authority"]["ladder"] == {f"L{k}": v for k, v in LEVELS.items()}
     assert set(c["refusals"]) >= {P.CODE_LEVEL, P.CODE_TOOL, P.CODE_CONNECTION, P.CODE_SELF_SET, "CLAIM_REFUSED"}

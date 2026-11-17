@@ -56,6 +56,11 @@ LAWS: tuple[str, ...] = (
 API_LAW = ("The ledger API refuses a claim that names no warrant at all, whatever its tier: an outside author's claim "
            "enters through the one door, with what entitles it to be relied on.")
 
+#: And a person's tier is a person's own (2026-11-17): an attestation an agent names is not checked, so it cannot stand in.
+PERSONS_TIER_LAW = ("Tiers `approved` and `declared` are a person's own word: an agent — a service principal, or a call an "
+                    "agent makes for a person — posts at `said`, `mined` or `measured`, and a person raises the claim by "
+                    "their own verdict or approval. An attestation an agent names does not stand in for one.")
+
 
 def _claim_vocabulary() -> dict[str, Any]:
     from pramanyx.record import claims as C
@@ -155,7 +160,7 @@ def _refusals() -> dict[str, str]:
 def contract() -> dict[str, Any]:
     """The contract as data — what the API, the MCP server and the document all read."""
     return {"version": VERSION, "duties": [dict(d) for d in DUTIES], "verdicts": _verdicts(),
-            "entry": {**_claim_vocabulary(), "laws": list(LAWS) + [API_LAW]},
+            "entry": {**_claim_vocabulary(), "laws": list(LAWS) + [API_LAW, PERSONS_TIER_LAW]},
             "principals": _principals(), "levels": _levels(), "doors": _doors(), "scoring": _scoring(),
             "refusals": _refusals()}
 

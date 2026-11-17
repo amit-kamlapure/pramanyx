@@ -146,16 +146,36 @@ def _claim_view(c: C.Claim) -> dict:
     return view
 
 
+#: Kinds this door does not book: each has a door of its own that decides who may write it.
+_OWN_DOORS = {
+    "definition": "a definition is written and approved at /record/definitions, by a person, and published by its owner",
+    "usage": "a usage claim is mined by the platform from the warehouse's own query history, never posted",
+}
+
+
 @router.post("/claims", status_code=201)
-def post_claim(req: ClaimIn, principal=Depends(get_principal)) -> dict:
+def post_claim(req: ClaimIn, principal=Depends(get_principal), request: Request = None) -> dict:
     """Post a claim with its warrant. The claims' three laws are enforced at the door, plus the
     API's own: a claim that names no warrant at all is refused. The author is the principal; a
-    natural key is the author's own and cannot restate another author's claim."""
-    from pramanyx.kernel.contract import API_LAW
+    natural key is the author's own and cannot restate another author's claim.
+
+    A person's tier is a person's own (2026-11-17): a claim an agent posts — a service principal, or a request carrying
+    the MCP client's mark, whoever it acts for — is the agent's, and cannot be posted at ``approved`` or ``declared``
+    whatever warrant it names. The attestation such a claim named was never checked, and the graph showed it to the
+    planner as a finding a person had confirmed. A person raises a claim by their own Right or approval."""
+    from pramanyx.kernel.contract import API_LAW, PERSONS_TIER_LAW
     from pramanyx.security.service_principals import allowed_connection, is_service
     author, author_kind = _author(principal)
+    if request is not None and author_kind == "person":
+        from pramanyx.rbac.agent_gate import is_agent_request
+        if is_agent_request(request):
+            author_kind = "agent"         # the model wrote it, for this person: theirs to answer for, not their word
     if not req.warrants:
         raise HTTPException(status_code=422, detail={"code": "CLAIM_REFUSED", "why": API_LAW})
+    if req.kind in _OWN_DOORS:
+        raise HTTPException(status_code=422, detail={"code": "CLAIM_REFUSED", "why": _OWN_DOORS[req.kind]})
+    if req.tier in ("approved", "declared") and author_kind != "person":
+        raise HTTPException(status_code=422, detail={"code": "CLAIM_REFUSED", "why": PERSONS_TIER_LAW})
     conn = req.about.key if req.about.kind == "connection" else ""
     if conn and not _visible(conn):
         raise HTTPException(status_code=404, detail="No such connection")

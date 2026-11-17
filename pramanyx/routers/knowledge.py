@@ -315,9 +315,11 @@ async def upload_document(file: UploadFile = File(...),
 
     title = _Path(filename).stem.replace("_", " ").replace("-", " ").title()
     try:
+        from pramanyx.knowledge.access import upload_access, uploader
         from pramanyx.knowledge.indexer import index_text
+        # Its uploader's, private until they share it (2026-11-17); it was the whole organisation's, owned by no one.
         entry = index_text(text=markdown, title=title, source=filename,
-                           settings=settings)
+                           settings=settings, access=upload_access(uploader()))
     except Exception:
         logger.exception("Document indexing failed")
         raise HTTPException(status_code=500, detail="Indexing failed")
@@ -642,6 +644,38 @@ def delete_document_endpoint(doc_id: str):
         raise HTTPException(status_code=404, detail="Document not found")
     blobs.delete(doc_id)
     return {"ok": True, "doc_id": doc_id}
+
+
+class DocumentSharing(BaseModel):
+    sharing: str                    # "org" — the whole organisation — or "chosen": the people and groups named
+    people: list[str] = []
+    groups: list[str] = []
+
+
+@router.put("/documents/{doc_id}/access")
+def share_document(doc_id: str, body: DocumentSharing, request: Request = None):
+    """An uploaded document's OWNER chooses who may read it (2026-11-17: an upload is private until its owner shares
+    it). Nobody else may, an agent least of all — a call carrying the agent's mark is refused, whoever it acts for."""
+    from pramanyx.knowledge.access import access_of, shared_access, uploader
+    from pramanyx.knowledge.indexer import get_document, set_document_access
+    if request is not None:
+        from pramanyx.rbac.agent_gate import is_agent_request
+        if is_agent_request(request):
+            raise HTTPException(status_code=403, detail="sharing a document is its owner's own choice; an agent cannot make it")
+    entry = get_document(doc_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+    owner = str(access_of(entry).get("owner") or "")
+    who = uploader()
+    if not owner or owner.lower() != who.lower():
+        raise HTTPException(status_code=403, detail=(f"only its owner, {owner}, shares this document" if owner
+                                                     else "this document has no owner to share it; it is the organisation's"))
+    try:
+        access = shared_access(owner, body.sharing, body.people, body.groups)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    row = set_document_access(doc_id, access)
+    return {"doc_id": doc_id, "access": (row or {}).get("access", access)}
 
 
 @router.post("/documents/search")

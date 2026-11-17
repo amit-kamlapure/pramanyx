@@ -5624,6 +5624,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/documents/{doc_id}/access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Share Document
+         * @description An uploaded document's OWNER chooses who may read it (2026-11-17: an upload is private until its owner shares
+         *     it). Nobody else may, an agent least of all — a call carrying the agent's mark is refused, whoever it acts for.
+         */
+        put: operations["share_document_documents__doc_id__access_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/documents/{doc_id}/convert": {
         parameters: {
             query?: never;
@@ -9734,6 +9755,11 @@ export interface paths {
          * @description Post a claim with its warrant. The claims' three laws are enforced at the door, plus the
          *     API's own: a claim that names no warrant at all is refused. The author is the principal; a
          *     natural key is the author's own and cannot restate another author's claim.
+         *
+         *     A person's tier is a person's own (2026-11-17): a claim an agent posts — a service principal, or a request carrying
+         *     the MCP client's mark, whoever it acts for — is the agent's, and cannot be posted at ``approved`` or ``declared``
+         *     whatever warrant it names. The attestation such a claim named was never checked, and the graph showed it to the
+         *     planner as a finding a person had confirmed. A person raises a claim by their own Right or approval.
          */
         post: operations["post_claim_ledger_v1_claims_post"];
         delete?: never;
@@ -16077,6 +16103,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/record/claims/{claim_id}/right": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm Record Claim
+         * @description A person says a measured claim is right: restated at tier ``approved``, their word. From then on an explorer
+         *     finding is ground an answer may build on (2026-11-17: findings reach an answer only once a person confirmed them).
+         *     A call an agent makes is refused, whoever it acts for — a confirmation is a person's own click.
+         */
+        post: operations["confirm_record_claim_record_claims__claim_id__right_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/record/claims/{claim_id}/versions": {
         parameters: {
             query?: never;
@@ -20529,6 +20577,19 @@ export interface components {
              */
             question: string;
         };
+        /** ConfirmRequest */
+        ConfirmRequest: {
+            /**
+             * By
+             * @default
+             */
+            by: string;
+            /**
+             * Why
+             * @default
+             */
+            why: string;
+        };
         /** ConstraintIn */
         ConstraintIn: {
             /**
@@ -21247,6 +21308,21 @@ export interface components {
             type: "document";
         } & {
             [key: string]: unknown;
+        };
+        /** DocumentSharing */
+        DocumentSharing: {
+            /**
+             * Groups
+             * @default []
+             */
+            groups: string[];
+            /**
+             * People
+             * @default []
+             */
+            people: string[];
+            /** Sharing */
+            sharing: string;
         };
         /** DoorAsk */
         DoorAsk: {
@@ -36520,6 +36596,41 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    share_document_documents__doc_id__access_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocumentSharing"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -54130,6 +54241,43 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_record_claim_record_claims__claim_id__right_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                claim_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };

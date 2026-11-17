@@ -407,6 +407,22 @@ def book_explorer_finding(*, finding: dict, sql: str, connection_id: str, receip
     return _claims.book(claim, key=key, conn_id=connection_id)
 
 
+def confirmed_explorer_findings(connection_id: str) -> set[str]:
+    """The ids of the explorer's findings on this connection that a person has confirmed — their claim stands at a
+    person's tier, not withdrawn. The user, 2026-11-17: a finding reaches an answer only once a person confirmed it, on
+    every answer path (the graph slice already held to that since 11-13; the quick answer's "what the platform already
+    knows" and the exploration annotations did not)."""
+    if not connection_id:
+        return set()
+    out: set[str] = set()
+    for c in _claims.list_claims(kind="finding", conn_id=connection_id, limit=5000):
+        if c.extra.get("writer") == "explorer" and c.tier in ("approved", "declared") and c.state != "withdrawn":
+            fid = str(c.extra.get("finding_id") or "")
+            if fid:
+                out.add(fid)
+    return out
+
+
 def withdraw_explorer_finding(*, connection_id: str, finding_id: str, reason: str,
                               schema_name: str = "", by: str = "system") -> Optional[str]:
     """A finding the re-validation found no longer holds, or a person dismissed, is WITHDRAWN in the

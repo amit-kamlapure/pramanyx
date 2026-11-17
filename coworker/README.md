@@ -26,6 +26,11 @@ tools taken out, under the shell's MIT licence.
   shell 0.2.2-rc.1 and has to be taken again when the shell is upgraded.
 - **The person's terminal, the embedded browser, and installing plugins from the page.** Each is a way back to
   the above.
+- **The host services still behind those pages** (2026-11-17): the terminal's service, the workspace file service
+  (its reads may name any path on the machine) with the file tree, the document preview and @file mentions that read
+  through it, the host folder picker, "Open in…" (it launches the machine's applications), the host runners for plugin
+  code and programmatic tool calls, and the context that told the agent this checkout's path and the page's address.
+  A file a person brings in is to go to Pramanyx, as theirs, and open there.
 - **Everything that reports to the shell's maker**, and the feedback buttons that would feed it.
 - **The shell's own account**: its sign-in, its account settings, its session-log export and "Feedback" entry.
   A person here is who Pramanyx says they are.
@@ -303,7 +308,6 @@ admin allows "Let the coworker ask its models through Pramanyx" in Settings ▸ 
 - A custom agent's answer has a card, seen live once. It has no Right and Wrong: the agent's answer does not say
   which connection it was for. An agent's turn may run several queries; the card shows the last one's grid and
   SQL, which is what the platform's fold keeps, and that is not always the one the answer is about.
-- The person's file panel is still on.
 - No test covers the card's drawing or the tool removal. `node --test plugins/answer-card/test/feedback-route.test.mjs`
   covers the feedback routes. The card was checked by eye on three real answers, one of them
   live; the tool removal by asking a fresh session to list its tools.

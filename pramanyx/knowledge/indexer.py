@@ -76,6 +76,17 @@ def _register(doc_id: str, filename: str, title: str, chunk_count: int, uploaded
     _save_registry(docs)
 
 
+def set_document_access(doc_id: str, access: dict) -> Optional[dict]:
+    """Restate who may read one document (its owner's sharing choice). The registry row, or None when there is none."""
+    docs = _load_registry()
+    row = next((d for d in docs if d["doc_id"] == doc_id), None)
+    if row is None:
+        return None
+    row["access"] = access
+    _save_registry(docs)
+    return row
+
+
 def _ownership(doc_id: str, previous: Optional[dict] = None) -> dict:
     """The registry fields that say whose a document is, stamped when it is indexed.
 

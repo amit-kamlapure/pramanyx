@@ -304,11 +304,11 @@ async def read_restatements(
 
 @mcp.tool()
 async def post_claim(
-    kind: Annotated[str, Field(description="observation · finding · reading · hypothesis · prediction · said · cause (a definition is a person's).")],
+    kind: Annotated[str, Field(description="observation · finding · reading · hypothesis · prediction · said · cause. A definition is written at its own door, by a person; a usage claim is mined by the platform.")],
     text: Annotated[str, Field(description="The statement, in words.")],
     warrants: Annotated[list[dict], Field(description="At least one: [{kind: run|document|attestation|claim, ref: <receipt id, document locator, verdict id or claim id>, detail?}].")],
     connection: Annotated[Optional[str], Field(description="The connection the claim is about; omit for an organisation-wide claim.")] = None,
-    tier: Annotated[str, Field(description="said (default) · mined · measured (needs a run warrant); approved and declared are a person's.")] = "said",
+    tier: Annotated[str, Field(description="said (default) · mined · measured (needs a run warrant). approved and declared are a person's own word and are refused here, whatever warrant is named: a person raises a claim by their own verdict.")] = "said",
     metric: Annotated[str, Field(description="The metric the statement is about, when one; required for a prediction.")] = "",
     value: Annotated[Optional[float], Field(description="The typed value, when one.")] = None,
     unit: Annotated[str, Field(description="The value's unit.")] = "",

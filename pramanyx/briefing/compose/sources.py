@@ -577,10 +577,16 @@ def known_context(conn_id: str, schema: Optional[str] = None, *, today: Optional
         lines.append(f"- Said in {f.get('where')} by {f.get('who')} on {f.get('when')}: \"{f.get('said')}\"")
 
     def findings():
+        # Only what a person confirmed (the user, 2026-11-17: "confirmed only", on every answer path). An unread Record
+        # withholds them all — the read below fails closed.
         from pramanyx.knowledge.period_brief import findings_for
-        return known_findings(findings_for(conn_id, schema)[0], limit=limit)
+        from pramanyx.record.writers import confirmed_explorer_findings
+        confirmed = confirmed_explorer_findings(conn_id)
+        by_domain = {d: [f for f in items or [] if isinstance(f, dict) and str(f.get("id") or "") in confirmed]
+                     for d, items in (findings_for(conn_id, schema)[0] or {}).items()}
+        return known_findings(by_domain, limit=limit)
     for fd in read("findings", findings):
-        lines.append(f"- Explorer finding: {fd.facts.get('finding')}")
+        lines.append(f"- Explorer finding, confirmed by a person: {fd.facts.get('finding')}")
     if not lines:
         return ""
     return ("WHAT THE PLATFORM ALREADY KNOWS about this dataset — its earlier work and what people said, to read before "

@@ -262,7 +262,13 @@ def _build(question: str, connection_id: str, org_id: str, top_k: int,
         for t in terms[:_MAX_TERMS]:
             if t.id in seen or not t.summary:
                 continue
-            lines.append(f'  • "{t.label}" = {_clip(t.summary)}  [{t.id}]')
+            # A Definition says whose word it is (2026-11-17: an owner's approval changed nothing the planner saw).
+            data = t.data if isinstance(getattr(t, "data", None), dict) else {}
+            standing = ""
+            if data.get("definition"):
+                from pramanyx.semantic.connection_kb import standing_words
+                standing = f"  ({standing_words(data)})"
+            lines.append(f'  • "{t.label}" = {_clip(t.summary)}  [{t.id}]{standing}')
             cited.append(t.id)
 
     if declarations:

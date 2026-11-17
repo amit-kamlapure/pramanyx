@@ -277,3 +277,21 @@ def test_with_no_confirmed_finding_none_is_shown_as_established(monkeypatch, tmp
     assert "Findings a person has confirmed" not in prior.section
     assert "nine percent" not in prior.section and "224 million" not in prior.section
     assert "2 earlier findings on these entities have not been confirmed by a person and are not shown" in prior.section
+
+
+def test_a_definition_says_whose_word_it_is(monkeypatch, tmp_path):
+    """2026-11-17: an owner's approval changed nothing the planner saw — a Definition's line named no tier or owner."""
+    from pramanyx.ontology.context_graph import DEFINITION_NODE_PREFIX
+    from pramanyx.ontology.context_graph_readback import build_graph_prior
+    cg = _graph()
+    for slug, term, text, tier, owner in (("terminal", "terminal state", "delivered, returned or cancelled", "approved", "user:ana"),
+                                          ("never", "never reach", "no terminal event within 90 days", "declared", "user:bo")):
+        cg.add_node(GraphNode(id=f"{DEFINITION_NODE_PREFIX}{slug}", kind="glossary_term", label=term, summary=text,
+                              provenance=Provenance(source="record", note=f"tier={tier}"),
+                              data={"definition": True, "term": term, "tier": tier, "owner": owner,
+                                    "approved_by": owner if tier == "approved" else ""}))
+    _save(cg, monkeypatch, tmp_path)
+    section = build_graph_prior("which orders never reach a terminal state", "c", org_id="o").section
+    assert '"terminal state" = delivered, returned or cancelled' in section
+    assert "(APPROVED BY ITS OWNER (user:ana))" in section
+    assert '"never reach" = no terminal event within 90 days' in section and "(NOT YET APPROVED by its owner (user:bo))" in section

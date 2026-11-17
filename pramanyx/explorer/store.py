@@ -419,16 +419,32 @@ def render_exploration_annotations(connection_id: str) -> str:
     # ── Domain intelligence findings ──────────────────────────────────────────
     insights: list = state.get("insights", [])
     if insights:
-        # Group by domain for the schema context block
+        # Only the findings a person has confirmed are handed to an answer (the user, 2026-11-17: "confirmed only", on
+        # every answer path). The rest are what the explorer computed once — counted and said to be withheld, never
+        # silently dropped, and never "authoritative". The structural facts above are each a verified query, and stay.
+        from pramanyx.kernel.errors import tolerate
+        try:
+            from pramanyx.record.writers import confirmed_explorer_findings
+            confirmed = confirmed_explorer_findings(connection_id)
+        except Exception as exc:  # noqa: BLE001 — unread, none counts as confirmed: withheld, not shown
+            tolerate(exc, "which findings a person confirmed could not be read; none is shown",
+                     counter="explorer.confirmed_findings")
+            confirmed = set()
+        kept = [ins for ins in insights if str(ins.get("id") or "") in confirmed]
         by_domain: dict[str, list] = {}
-        for ins in insights:
+        for ins in kept:
             d = ins.get("domain", "General")
             by_domain.setdefault(d, []).append(ins)
-        lines = ["BUSINESS INTELLIGENCE (domain-level findings, autonomously discovered):"]
+        lines = ["BUSINESS INTELLIGENCE (findings a person has confirmed):"] if by_domain else []
         for domain, dins in by_domain.items():
             lines.append(f"  [{domain}]")
             for ins in dins[:4]:
                 lines.append(f"    • {ins.get('finding', '')}")
+        withheld = len(insights) - len(kept)
+        if withheld:
+            lines.append(f"  {withheld} other finding{'s' if withheld != 1 else ''} the explorer computed "
+                         f"{'have' if withheld != 1 else 'has'} not been confirmed by a person and "
+                         f"{'are' if withheld != 1 else 'is'} not shown: measure what you need from the data.")
         sections.append("\n".join(lines))
 
     if not sections:
