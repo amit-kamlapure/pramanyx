@@ -582,13 +582,13 @@ def definition_term(term: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", (term or "").strip().lower()).strip("-")[:80]
 
 
-def definition_key(connection_id: str, term: str, domain: str = "") -> str:
-    """One Definition per word per DOMAIN on a connection (2026-11-17, the ontology study: a governed definition's name
-    is unique within its domain, so one word can mean one thing to Finance and another to Marketing). A word with no
-    domain keeps the key it always had."""
+def definition_key(connection_id: str, term: str, area: str = "") -> str:
+    """One Definition per word per AREA on a connection (2026-11-17, the ontology study: a governed definition's name is
+    unique within its area, so one word can mean one thing to Finance and another to Marketing — "area" is the glossary's
+    word for a part of the business, `docs/GLOSSARY.md`). A word with no area keeps the key it always had."""
     parts = [connection_id or "-", definition_term(term)]
-    if definition_term(domain):
-        parts.append("in-" + definition_term(domain))
+    if definition_term(area):
+        parts.append("in-" + definition_term(area))
     return _claims.claim_key("definition", *parts)
 
 
@@ -632,20 +632,20 @@ def _same(a: str, b: str) -> bool:
 
 def write_definition(*, connection_id: str, term: str, text: str, by: str,
                      aliases: Optional[list[str]] = None, kind: str = "", entry_id: str = "",
-                     by_person: bool = True, domain: str = "", links: Optional[list[dict]] = None) -> str:
-    """A person writes what a business word means on a connection, in a domain: a Record claim of kind ``definition``.
+                     by_person: bool = True, area: str = "", links: Optional[list[dict]] = None) -> str:
+    """A person writes what a business word means on a connection, in a area: a Record claim of kind ``definition``.
 
-    - A word nobody has defined in that domain is a DRAFT (tier ``declared``), the writer its owner.
+    - A word nobody has defined in that area is a DRAFT (tier ``declared``), the writer its owner.
     - Its OWNER changes it directly; a published one stays published — the owner read the words they wrote.
     - Anyone else's change is refused here (`NotTheOwner`): it is a suggested edit (`suggest_definition_edit`), and the
       published wording stands until the owner accepts it. Until 2026-11-17 anyone's new wording replaced the owner's
       approved one at once, unapproved, and the planner lost the approved definition.
 
     Written by no person (a migration), it is what was said, not what anyone declared."""
-    term, text, domain = (term or "").strip(), (text or "").strip(), (domain or "").strip()
+    term, text, area = (term or "").strip(), (text or "").strip(), (area or "").strip()
     if not (term and text and by):
         raise ValueError("a definition names its word, says what it means, and is a person's")
-    key = definition_key(connection_id, term, domain)
+    key = definition_key(connection_id, term, area)
     prior = _claims.latest(key)
     live = prior if prior is not None and prior.state != "withdrawn" else None   # a withdrawn word is written anew
     if live is not None and live.owner and by_person and not _same(live.owner, by):
@@ -653,7 +653,7 @@ def write_definition(*, connection_id: str, term: str, text: str, by: str,
     published = live is not None and live.tier == "approved"
     tier = ("approved" if published else "declared") if by_person else "said"
     extra = {**(live.extra if live else {}),
-             "term": term[:120], "domain": domain[:120],
+             "term": term[:120], "area": area[:120],
              "aliases": _clean_aliases(aliases if aliases is not None else (live.extra.get("aliases") if live else [])),
              "links": _clean_links(links if links is not None else (live.extra.get("links") if live else [])),
              **({"kb_kind": kind} if kind else {}), **({"entry_id": entry_id} if entry_id else {})}
@@ -673,7 +673,7 @@ def write_definition(*, connection_id: str, term: str, text: str, by: str,
         _claims.book(claim, key=key, conn_id=connection_id)
 
 
-def suggest_definition_edit(*, connection_id: str, term: str, by: str, domain: str = "", text: str = "",
+def suggest_definition_edit(*, connection_id: str, term: str, by: str, area: str = "", text: str = "",
                             aliases: Optional[list[str]] = None, links: Optional[list[dict]] = None, why: str = "",
                             by_agent: bool = False) -> dict:
     """Anyone suggests an edit to a Definition (the user, 2026-11-17: "anyone drafts or suggests; only the owner
@@ -683,7 +683,7 @@ def suggest_definition_edit(*, connection_id: str, term: str, by: str, domain: s
     import uuid as _uuid
     if not by:
         raise ValueError("a suggestion says whose it is")
-    key = definition_key(connection_id, term, domain)
+    key = definition_key(connection_id, term, area)
     prior = _claims.latest(key)
     if prior is None or prior.state == "withdrawn":
         raise ValueError("there is no such definition to suggest an edit to; write it instead")
@@ -702,11 +702,11 @@ def suggest_definition_edit(*, connection_id: str, term: str, by: str, domain: s
 
 
 def decide_definition_suggestion(*, connection_id: str, term: str, suggestion_id: str, by: str, accept: bool,
-                                 domain: str = "", why: str = "") -> str:
+                                 area: str = "", why: str = "") -> str:
     """Its OWNER accepts or declines a suggested edit. Accepted, the edit is applied as the owner's own (a published
     definition stays published: the owner read the words). Declined, it is kept beside the definition as declined.
     Returns the new version's id."""
-    key = definition_key(connection_id, term, domain)
+    key = definition_key(connection_id, term, area)
     prior = _claims.latest(key)
     if prior is None or prior.state == "withdrawn":
         raise ValueError("there is no such definition")
@@ -724,7 +724,7 @@ def decide_definition_suggestion(*, connection_id: str, term: str, suggestion_id
                      "declined": [*(prior.extra.get("declined") or []),
                                   {**found, "declined_by": by, "declined_on": _today(), "declined_why": why[:400]}][-20:]}
         return _claims.restate(key, new, conn_id=connection_id)
-    cid = write_definition(connection_id=connection_id, term=prior.extra.get("term", term), domain=domain,
+    cid = write_definition(connection_id=connection_id, term=prior.extra.get("term", term), area=area,
                            text=found.get("text") or prior.statement.text, by=by,
                            aliases=found.get("aliases") if "aliases" in found else None,
                            links=found.get("links") if "links" in found else None)
@@ -736,12 +736,12 @@ def decide_definition_suggestion(*, connection_id: str, term: str, suggestion_id
     return _claims.restate(key, new, conn_id=connection_id) if cid else cid
 
 
-def approve_definition(*, connection_id: str, term: str, by: str, domain: str = "") -> Optional[str]:
+def approve_definition(*, connection_id: str, term: str, by: str, area: str = "") -> Optional[str]:
     """Its OWNER publishes a definition as written (the user, 2026-11-14: "Definition can be approved by the owner
     only"; publishing it): restated at tier ``approved``, its words unchanged, with an attestation naming who
     approved it and when. Raises `NotTheOwner` for anyone else. None when there is no such definition, or it already
     stands published."""
-    key = definition_key(connection_id, term, domain)
+    key = definition_key(connection_id, term, area)
     prior = _claims.latest(key)
     if prior is None or prior.tier == "approved" or not by or prior.state == "withdrawn":
         return None
@@ -756,9 +756,9 @@ def approve_definition(*, connection_id: str, term: str, by: str, domain: str = 
     return _claims.restate(key, new, conn_id=connection_id)
 
 
-def unpublish_definition(*, connection_id: str, term: str, by: str, domain: str = "") -> Optional[str]:
+def unpublish_definition(*, connection_id: str, term: str, by: str, area: str = "") -> Optional[str]:
     """Its OWNER takes a published definition back to a draft: the planner is told it is not yet approved."""
-    key = definition_key(connection_id, term, domain)
+    key = definition_key(connection_id, term, area)
     prior = _claims.latest(key)
     if prior is None or prior.tier != "approved" or prior.state == "withdrawn":
         return None
@@ -771,11 +771,11 @@ def unpublish_definition(*, connection_id: str, term: str, by: str, domain: str 
     return _claims.restate(key, new, conn_id=connection_id)
 
 
-def withdraw_definition(*, connection_id: str, term: str, by: str, reason: str = "", domain: str = "",
+def withdraw_definition(*, connection_id: str, term: str, by: str, reason: str = "", area: str = "",
                         by_platform: bool = False) -> Optional[str]:
     """A definition taken away is WITHDRAWN, its wording kept beneath it — never deleted. Its OWNER takes it away
     (2026-11-17); the platform does when its connection is removed (``by_platform``)."""
-    key = definition_key(connection_id, term, domain)
+    key = definition_key(connection_id, term, area)
     prior = _claims.latest(key)
     if prior is None or prior.state == "withdrawn":
         return None
@@ -790,7 +790,7 @@ def withdraw_definition(*, connection_id: str, term: str, by: str, reason: str =
 
 
 def definitions_of(connection_id: str, term: str) -> list[_claims.Claim]:
-    """Every current definition of one word on a connection, one per domain it is defined in."""
+    """Every current definition of one word on a connection, one per area it is defined in."""
     slug = definition_term(term)
     return [c for c in definitions(connection_id) if definition_term(c.extra.get("term", "")) == slug]
 

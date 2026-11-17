@@ -615,16 +615,16 @@ def _project_definitions(cg: ContextGraph, definitions: list) -> None:
             term = str(d.get("term") or "").strip()
             if not term or not str(d.get("text") or "").strip():
                 continue
-            # One node per word per domain (2026-11-17): "active customer" in Finance and in Marketing are two meanings.
-            domain_slug = str(d.get("domain_slug") or "")
+            # One node per word per area (2026-11-17): one word in Finance and in Marketing is two meanings.
+            area_slug = str(d.get("area_slug") or "")
             node = GraphNode(
-                id=f"{DEFINITION_NODE_PREFIX}{d.get('slug') or term.lower()}" + (f"@{domain_slug}" if domain_slug else ""),
+                id=f"{DEFINITION_NODE_PREFIX}{d.get('slug') or term.lower()}" + (f"@{area_slug}" if area_slug else ""),
                 kind="glossary_term", label=term, summary=str(d["text"]),
                 provenance=Provenance(source="record", note=f"tier={d.get('tier', '')} claim={d.get('claim_key', '')}"),
                 data={"definition": True, "term": term, "aliases": list(d.get("aliases") or []),
                       "claim_id": d.get("claim_id", ""), "claim_key": d.get("claim_key", ""),
                       "tier": d.get("tier", ""), "owner": d.get("owner", ""), "approved_by": d.get("approved_by", ""),
-                      "domain": str(d.get("domain") or ""), "links": list(d.get("links") or [])},
+                      "area": str(d.get("area") or ""), "links": list(d.get("links") or [])},
             )
             cg.add_node(node)
             for link in d.get("links") or []:

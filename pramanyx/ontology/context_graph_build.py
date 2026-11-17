@@ -209,8 +209,8 @@ def load_record_definitions(connection_id: str) -> list[dict]:
     from pramanyx.record.writers import definition_term, definitions
     return [{"term": c.extra.get("term", ""), "slug": definition_term(c.extra.get("term", "")), "text": c.statement.text,
              "aliases": c.extra.get("aliases") or [], "tier": c.tier, "claim_id": c.id, "claim_key": c.key,
-             "owner": c.owner, "approved_by": c.extra.get("approved_by", ""), "domain": c.extra.get("domain", ""),
-             "domain_slug": definition_term(c.extra.get("domain", "")), "links": c.extra.get("links") or []}
+             "owner": c.owner, "approved_by": c.extra.get("approved_by", ""), "area": c.extra.get("area", ""),
+             "area_slug": definition_term(c.extra.get("area", "")), "links": c.extra.get("links") or []}
             for c in definitions(connection_id) if c.tier in ("declared", "approved")]   # a person's word, nothing less
 
 

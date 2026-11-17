@@ -461,8 +461,8 @@ async def get_definitions(
 ) -> dict:
     """Read what business words mean on a connection — the organisation's Definitions (its Pages). Each says whose word
     it is: `published` (its owner approved it — use it exactly), `draft` (written, not yet published — use it and say
-    so), the domain it holds in (one word may mean one thing in Finance and another in Marketing: when more than one
-    domain defines it and the question does not say which, ask), its other names, and what it refers to (metrics,
+    so), the area of the business it holds in (one word may mean one thing in Finance and another in Marketing: when
+    more than one area defines it and the question does not say which, ask), its other names, and what it refers to (metrics,
     tables). Pending suggested edits are counted, never applied."""
     return await _client.get_definitions(connection, term=term)
 

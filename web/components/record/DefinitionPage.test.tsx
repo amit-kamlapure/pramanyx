@@ -8,8 +8,8 @@ import DefinitionRoute from "@/app/definitions/[term]/page";
 const base = { statement: { text: "Paid in the last 30 days." }, tier: "approved", state: "published", author: "user:ana",
   approved_by: "user:ana", approved_on: "2026-11-17", aliases: ["paying customer"], links: [{ kind: "metric", ref: "active_customers", label: "Active customers" }],
   suggestions: [], versions: [] };
-const FINANCE = { ...base, term: "Active customer", domain: "Finance", owner: "user:ana" };
-const MARKETING = { ...base, term: "Active customer", domain: "Marketing", owner: "user:bo", tier: "declared", state: "draft",
+const FINANCE = { ...base, term: "Active customer", area: "Finance", owner: "user:ana" };
+const MARKETING = { ...base, term: "Active customer", area: "Marketing", owner: "user:bo", tier: "declared", state: "draft",
   statement: { text: "Opened an email in 90 days." }, aliases: [], links: [],
   suggestions: [{ id: "s1", by: "user:cai", at: "2026-11-17", why: "we count clicks", text: "Clicked an email in 90 days." }] };
 
@@ -26,9 +26,9 @@ function serve(me: string, rows: unknown[], posted: { path: string; body: Record
   return posted;
 }
 
-const show = async (domain = "") => {
+const show = async (area = "") => {
   const params = Promise.resolve({ term: "Active%20customer" });
-  const searchParams = Promise.resolve({ conn: "shop", ...(domain ? { domain } : {}) });
+  const searchParams = Promise.resolve({ conn: "shop", ...(area ? { area } : {}) });
   await act(async () => {
     render(<Suspense fallback="…"><DefinitionRoute params={params} searchParams={searchParams} /></Suspense>);
   });
@@ -37,7 +37,7 @@ const show = async (domain = "") => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("the Definition page (2026-11-17)", () => {
-  it("shows a published definition with its domain, other names and what it refers to, and the domains it has", async () => {
+  it("shows a published definition with its area, other names and what it refers to, and the areas it has", async () => {
     serve("user:ana", [FINANCE, MARKETING]);
     await show("Finance");
     expect(await screen.findByText("Paid in the last 30 days.")).toBeInTheDocument();
@@ -45,7 +45,7 @@ describe("the Definition page (2026-11-17)", () => {
     expect(screen.getByText("in Finance")).toBeInTheDocument();
     expect(screen.getByTestId("definition-aliases")).toHaveTextContent("Also called paying customer");
     expect(screen.getByRole("link", { name: "metric Active customers" })).toHaveAttribute("href", "/metrics/active_customers?conn=shop");
-    expect(screen.getByTestId("definition-domains")).toHaveTextContent("2 domains");
+    expect(screen.getByTestId("definition-areas")).toHaveTextContent("2 areas");
     expect(screen.getByRole("button", { name: "Change it" })).toBeInTheDocument();        // Ana owns it
     expect(screen.getByRole("button", { name: "Unpublish" })).toBeInTheDocument();
   });
@@ -61,7 +61,7 @@ describe("the Definition page (2026-11-17)", () => {
     fireEvent.change(screen.getByLabelText("What “Active customer” means here"), { target: { value: "Clicked in 60 days." } });
     fireEvent.click(screen.getByRole("button", { name: "Suggest this edit" }));
     await waitFor(() => expect(posted[0]?.path).toBe("/record/definitions"));
-    expect(posted[0].body).toMatchObject({ connection_id: "shop", term: "Active customer", domain: "Marketing", text: "Clicked in 60 days." });
+    expect(posted[0].body).toMatchObject({ connection_id: "shop", term: "Active customer", area: "Marketing", text: "Clicked in 60 days." });
     expect(await screen.findByRole("status")).toHaveTextContent("as a suggested edit");
   });
 
@@ -70,6 +70,6 @@ describe("the Definition page (2026-11-17)", () => {
     await show("Marketing");
     fireEvent.click(await screen.findByRole("button", { name: "Accept" }));
     await waitFor(() => expect(posted[0]?.path).toBe("/record/definitions/suggestions/decide"));
-    expect(posted[0].body).toMatchObject({ suggestion_id: "s1", accept: true, domain: "Marketing" });
+    expect(posted[0].body).toMatchObject({ suggestion_id: "s1", accept: true, area: "Marketing" });
   });
 });

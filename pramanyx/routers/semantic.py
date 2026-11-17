@@ -67,7 +67,7 @@ class KnowledgeEntryIn(BaseModel):
     body:  str
     kind:  str = "note"          # metric | synonym | rule | join | note
     tags:  list[str] = []
-    domain: str = ""             # the domain it is defined in; one word may mean more than one thing (2026-11-17)
+    area: str = ""               # the area it is defined in; one word may mean more than one thing (2026-11-17)
 
 
 class BenchmarkCaseIn(BaseModel):
@@ -164,7 +164,7 @@ def create_knowledge(conn_id: str, body: KnowledgeEntryIn):
         kind=body.kind,          # type: ignore[arg-type]
         tags=body.tags,
         connection_id=conn_id,
-        domain=body.domain,
+        area=body.area,
     )
     saved = upsert_entry(conn_id, entry)
     return saved.to_dict()
@@ -183,7 +183,7 @@ def update_knowledge(conn_id: str, entry_id: str, body: KnowledgeEntryIn):
         kind=body.kind,          # type: ignore[arg-type]
         tags=body.tags,
         connection_id=conn_id,
-        domain=body.domain,
+        area=body.area,
     )
     saved = upsert_entry(conn_id, entry)
     return saved.to_dict()

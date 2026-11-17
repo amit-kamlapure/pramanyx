@@ -299,8 +299,8 @@ interface KnowledgeEntry {
   kind: string;
   tags: string[];
   connection_id: string;
-  /** The domain it is defined in: one word may mean one thing in one domain and another in the next (2026-11-17). */
-  domain?: string;
+  /** The area of the business it is defined in: one word may mean one thing in one area and another in the next (2026-11-17). */
+  area?: string;
   /** The Definition's standing (`record/writers.py`): a draft when written, published once its owner publishes it. */
   standing?: { tier: string; owner: string; approved_by: string; suggestions?: number };
   /** Set when a save was filed as a suggested edit for the definition's owner. */
@@ -345,7 +345,7 @@ const KIND_HINTS: Record<string, { title: string; body: string; hint: string }> 
              hint: "Any other context that helps the AI reason about your data." },
 };
 
-const EMPTY_ENTRY = { id: "", title: "", body: "", kind: "note", tags: "", domain: "" };
+const EMPTY_ENTRY = { id: "", title: "", body: "", kind: "note", tags: "", area: "" };
 
 function KnowledgeTab({ connId }: { connId: string }) {
   const [entries, setEntries]     = useState<KnowledgeEntry[]>([]);
@@ -372,7 +372,7 @@ function KnowledgeTab({ connId }: { connId: string }) {
   function startAdd() { setEditId("__new__"); setForm(EMPTY_ENTRY); }
   function startEdit(e: KnowledgeEntry) {
     setEditId(e.id);
-    setForm({ id: e.id, title: e.title, body: e.body, kind: e.kind, tags: e.tags.join(", "), domain: e.domain ?? "" });
+    setForm({ id: e.id, title: e.title, body: e.body, kind: e.kind, tags: e.tags.join(", "), area: e.area ?? "" });
   }
 
   async function saveEntry() {
@@ -380,7 +380,7 @@ function KnowledgeTab({ connId }: { connId: string }) {
     setSaving(true);
     try {
       const payload = { id: form.id || undefined, title: form.title, body: form.body, kind: form.kind, tags: tagList(form.tags),
-                        domain: form.domain.trim() };
+                        area: form.area.trim() };
       const saved: KnowledgeEntry = editId === "__new__"
         ? await post(`/semantic/${connId}/knowledge`, payload)
         : await put(`/semantic/${connId}/knowledge/${editId}`, payload);
@@ -429,13 +429,13 @@ function KnowledgeTab({ connId }: { connId: string }) {
               <div style={ROW}>
                 <span className="aug-fs-chrome" style={{ color: "var(--t1)", fontWeight: 500 }}>{e.title}</span>
                 <Chip>{KIND_WORD[e.kind] ?? e.kind}</Chip>
-                {e.domain && <Chip>in {e.domain}</Chip>}
+                {e.area && <Chip>in {e.area}</Chip>}
                 {e.tags.map(t => <span key={t} className="aug-fs-xs" style={MUTED}>#{t}</span>)}
               </div>
               {e.standing && (
                 <div className="aug-fs-xs" style={{ ...MUTED, marginTop: 2 }}>
                   {standingWords(e.standing)} ·{" "}
-                  <a href={`/definitions/${encodeURIComponent(e.title)}?conn=${encodeURIComponent(connId)}${e.domain ? `&domain=${encodeURIComponent(e.domain)}` : ""}`}>
+                  <a href={`/definitions/${encodeURIComponent(e.title)}?conn=${encodeURIComponent(connId)}${e.area ? `&area=${encodeURIComponent(e.area)}` : ""}`}>
                     {e.standing.tier === "approved" ? "Open" : "Open to publish"}
                   </a>
                 </div>
@@ -466,7 +466,7 @@ function KnowledgeTab({ connId }: { connId: string }) {
           <Input value={form.tags} onChange={v => setForm(f => ({ ...f, tags: v }))} label="Other names for it"
             placeholder="e.g. revenue, net bookings" hint="Comma-separated — the other words people use for it" />
         </div>
-        <Input value={form.domain} onChange={v => setForm(f => ({ ...f, domain: v }))} label="Domain"
+        <Input value={form.area} onChange={v => setForm(f => ({ ...f, area: v }))} label="Area of the business"
           placeholder="e.g. Finance" hint="When the word means something particular in one part of the business — leave empty when it means one thing everywhere" />
       </FormDialog>
     </Page>

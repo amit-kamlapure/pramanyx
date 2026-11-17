@@ -16444,14 +16444,14 @@ export interface paths {
         };
         /**
          * List Definitions
-         * @description A connection's Definitions, or the ones for ``term`` — one per domain it is defined in, or the one in ``domain``.
+         * @description A connection's Definitions, or the ones for ``term`` — one per area it is defined in, or the one in ``area``.
          *     Read by the app's Definition page and by an answer that leaned on one.
          */
         get: operations["list_definitions_record_definitions_get"];
         put?: never;
         /**
          * Write Record Definition
-         * @description A person writes what a business word means on a connection, in a domain. A word nobody has defined there is
+         * @description A person writes what a business word means on a connection, in a area. A word nobody has defined there is
          *     their draft; their own definition they change directly; anyone else's change is filed as a suggested edit for its
          *     owner (the ontology study, 2026-11-17), and the response says so (``suggested``).
          */
@@ -21261,13 +21261,13 @@ export interface components {
         };
         /** DefinitionApproval */
         DefinitionApproval: {
-            /** Connection Id */
-            connection_id: string;
             /**
-             * Domain
+             * Area
              * @default
              */
-            domain: string;
+            area: string;
+            /** Connection Id */
+            connection_id: string;
             /** Term */
             term: string;
         };
@@ -21287,13 +21287,13 @@ export interface components {
         DefinitionRequest: {
             /** Aliases */
             aliases?: string[] | null;
-            /** Connection Id */
-            connection_id: string;
             /**
-             * Domain
+             * Area
              * @default
              */
-            domain: string;
+            area: string;
+            /** Connection Id */
+            connection_id: string;
             /** Links */
             links?: components["schemas"]["DefinitionLink"][] | null;
             /** Term */
@@ -22518,13 +22518,13 @@ export interface components {
         };
         /** KnowledgeEntryIn */
         KnowledgeEntryIn: {
-            /** Body */
-            body: string;
             /**
-             * Domain
+             * Area
              * @default
              */
-            domain: string;
+            area: string;
+            /** Body */
+            body: string;
             /** Id */
             id?: string | null;
             /**
@@ -24813,13 +24813,13 @@ export interface components {
         SuggestionDecision: {
             /** Accept */
             accept: boolean;
-            /** Connection Id */
-            connection_id: string;
             /**
-             * Domain
+             * Area
              * @default
              */
-            domain: string;
+            area: string;
+            /** Connection Id */
+            connection_id: string;
             /** Suggestion Id */
             suggestion_id: string;
             /** Term */
@@ -55046,7 +55046,7 @@ export interface operations {
             query: {
                 connection_id: string;
                 term?: string | null;
-                domain?: string | null;
+                area?: string | null;
             };
             header?: never;
             path?: never;

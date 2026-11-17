@@ -1,12 +1,12 @@
 "use client";
 
 /**
- * `/definitions/<word>?conn=<connection>[&domain=<domain>]`: what a business word means on a connection — a Definition,
+ * `/definitions/<word>?conn=<connection>[&area=<area>]`: what a business word means on a connection — a Definition,
  * a governed definition (a Record claim of kind `definition`, `pramanyx/record/writers.py`).
  *
  * Since 2026-11-17 (the ontology study): anyone drafts a word nobody has defined and owns it; its OWNER
  * edits and publishes it; anyone else's change is a SUGGESTED EDIT the owner accepts or declines, and the published
- * wording stands until then. One word may mean one thing in one domain and another in the next — each its own
+ * wording stands until then. One word may mean one thing in one area of the business and another in the next — each its own
  * definition, chosen here. It carries the other names people use for it and what it refers to. Opened beside an answer
  * that was given it (the coworker's right-hand pane), and where a person writes, suggests or publishes one.
  */
@@ -35,9 +35,9 @@ function segment(value: string): string {
 
 const MUTED = { color: "var(--t2)" };
 
-interface Draft { text: string; aliases: string; links: DefinitionLink[]; domain: string; why: string }
-const fromDefinition = (d: Definition | null | undefined, domain: string): Draft => ({
-  text: d?.statement.text ?? "", aliases: (d?.aliases ?? []).join(", "), links: d?.links ?? [], domain: d?.domain ?? domain, why: "",
+interface Draft { text: string; aliases: string; links: DefinitionLink[]; area: string; why: string }
+const fromDefinition = (d: Definition | null | undefined, area: string): Draft => ({
+  text: d?.statement.text ?? "", aliases: (d?.aliases ?? []).join(", "), links: d?.links ?? [], area: d?.area ?? area, why: "",
 });
 
 export default function DefinitionRoute({ params, searchParams }: {
@@ -47,7 +47,7 @@ export default function DefinitionRoute({ params, searchParams }: {
   const term = segment(use(params).term);
   const query = use(searchParams);
   const connection = typeof query.conn === "string" ? query.conn : "";
-  const [domain, setDomain] = useState(typeof query.domain === "string" ? query.domain : "");
+  const [area, setArea] = useState(typeof query.area === "string" ? query.area : "");
   const [all, setAll] = useState<Definition[] | null | undefined>(undefined);
   const [me, setMe] = useState("");
   const [draft, setDraft] = useState<Draft>(fromDefinition(null, ""));
@@ -55,7 +55,7 @@ export default function DefinitionRoute({ params, searchParams }: {
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState("");
 
-  const found = all?.find((d) => same(d.domain, domain)) ?? (all && !domain ? all[0] : undefined) ?? (all ? null : undefined);
+  const found = all?.find((d) => same(d.area, area)) ?? (all && !area ? all[0] : undefined) ?? (all ? null : undefined);
 
   const read = useCallback(async () => {
     const q = new URLSearchParams({ connection_id: connection, term });
@@ -73,12 +73,12 @@ export default function DefinitionRoute({ params, searchParams }: {
     setBusy(true); setSaid("");
     try {
       const res = await fetch(`${getApiBase()}${path}`, { method: "POST", headers: { "Content-Type": "application/json" },
-                                                         body: JSON.stringify({ connection_id: connection, term, domain: found?.domain ?? domain, ...body }) });
+                                                         body: JSON.stringify({ connection_id: connection, term, area: found?.area ?? area, ...body }) });
       const out = await res.json().catch(() => ({}));
       if (!res.ok) { setSaid(fastApiError(out, `${done} failed (${res.status})`)); return; }
       setWriting(false);
       setSaid(out?.suggested ? `Sent to its owner, ${who(out.owner)}, as a suggested edit. The wording stands until they accept it.` : done);
-      if (out?.domain !== undefined) setDomain(out.domain);
+      if (out?.area !== undefined) setArea(out.area);
       await read();
     } finally { setBusy(false); }
   };
@@ -88,7 +88,7 @@ export default function DefinitionRoute({ params, searchParams }: {
   }
   const mine = !!found && !!me && same(found.owner, me);
   const published = found?.state === "published";
-  const startWriting = () => { setDraft(fromDefinition(found, domain)); setWriting(true); };
+  const startWriting = () => { setDraft(fromDefinition(found, area)); setWriting(true); };
   const setLink = (i: number, patch: Partial<DefinitionLink>) =>
     setDraft((d) => ({ ...d, links: d.links.map((l, j) => (j === i ? { ...l, ...patch } : l)) }));
 
@@ -99,7 +99,7 @@ export default function DefinitionRoute({ params, searchParams }: {
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <h1 className="aug-fs-h1" style={{ margin: 0, color: "var(--t1)" }}>{found?.term || term}</h1>
           {found && <Badge variant={published ? "green" : "amber"} data-testid="definition-state">{published ? "Published" : "Draft"}</Badge>}
-          {found?.domain && <Badge variant="outline">in {found.domain}</Badge>}
+          {found?.area && <Badge variant="outline">in {found.area}</Badge>}
         </div>
         {found && (
           <p className="aug-fs-xs" style={{ margin: "4px 0 0", ...MUTED }}>
@@ -108,11 +108,11 @@ export default function DefinitionRoute({ params, searchParams }: {
           </p>
         )}
         {all && all.length > 1 && (
-          <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginTop: 8 }} data-testid="definition-domains">
-            <span className="aug-fs-xs" style={MUTED}>Means something different in each of {all.length} domains:</span>
+          <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginTop: 8 }} data-testid="definition-areas">
+            <span className="aug-fs-xs" style={MUTED}>Means something different in each of {all.length} areas:</span>
             {all.map((d) => (
-              <Button key={d.domain || "-"} size="xs" variant={same(d.domain, found?.domain ?? "") ? "secondary" : "ghost"}
-                onClick={() => { setDomain(d.domain); setWriting(false); }}>{d.domain || "no domain"}</Button>
+              <Button key={d.area || "-"} size="xs" variant={same(d.area, found?.area ?? "") ? "secondary" : "ghost"}
+                onClick={() => { setArea(d.area); setWriting(false); }}>{d.area || "no area"}</Button>
             ))}
           </div>
         )}
@@ -151,8 +151,8 @@ export default function DefinitionRoute({ params, searchParams }: {
           <Input id="definition-aliases" value={draft.aliases} onChange={(e) => setDraft((d) => ({ ...d, aliases: e.target.value }))} />
           {!found && (
             <>
-              <label htmlFor="definition-domain" className="aug-fs-sm" style={MUTED}>Domain, when it means something particular there (optional)</label>
-              <Input id="definition-domain" value={draft.domain} onChange={(e) => setDraft((d) => ({ ...d, domain: e.target.value }))} />
+              <label htmlFor="definition-area" className="aug-fs-sm" style={MUTED}>Area of the business, when it means something particular there (optional)</label>
+              <Input id="definition-area" value={draft.area} onChange={(e) => setDraft((d) => ({ ...d, area: e.target.value }))} />
             </>
           )}
           <span className="aug-fs-sm" style={MUTED}>What it refers to</span>
@@ -180,7 +180,7 @@ export default function DefinitionRoute({ params, searchParams }: {
         {writing ? (
           <>
             <Button size="sm" disabled={busy || !draft.text.trim()} onClick={() => void send("/record/definitions", {
-              text: draft.text.trim(), aliases: names(draft.aliases), why: draft.why.trim(), domain: found?.domain ?? draft.domain.trim(),
+              text: draft.text.trim(), aliases: names(draft.aliases), why: draft.why.trim(), area: found?.area ?? draft.area.trim(),
               links: draft.links.filter((l) => l.ref.trim()).map((l) => ({ kind: l.kind, ref: l.ref.trim(), label: l.label.trim() })),
             }, found ? "Changed" : "Written as a draft — publish it when it is right")}>
               {!found ? "Keep this draft" : mine ? "Keep the change" : "Suggest this edit"}

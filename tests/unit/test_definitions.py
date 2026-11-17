@@ -82,14 +82,14 @@ def test_its_owner_edits_it_directly_and_a_published_one_stays_published():
         W.write_definition(connection_id=conn, term="Churn", text="x", by="user:ana", links=[{"kind": "spaceship", "ref": "x"}])
 
 
-def test_one_word_can_mean_one_thing_in_one_domain_and_another_in_the_next():
+def test_one_word_can_mean_one_thing_in_one_area_and_another_in_the_next():
     conn = _conn()
-    W.write_definition(connection_id=conn, term="Active customer", domain="Finance", text="Paid in the last 30 days.", by="user:ana")
-    W.write_definition(connection_id=conn, term="Active customer", domain="Marketing", text="Opened an email in 90 days.", by="user:bo")
+    W.write_definition(connection_id=conn, term="Active customer", area="Finance", text="Paid in the last 30 days.", by="user:ana")
+    W.write_definition(connection_id=conn, term="Active customer", area="Marketing", text="Opened an email in 90 days.", by="user:bo")
     both = W.definitions_of(conn, "active customer")
-    assert sorted((c.extra["domain"], c.owner) for c in both) == [("Finance", "user:ana"), ("Marketing", "user:bo")]
+    assert sorted((c.extra["area"], c.owner) for c in both) == [("Finance", "user:ana"), ("Marketing", "user:bo")]
     assert W.definition_key(conn, "Active customer", "Finance") != W.definition_key(conn, "Active customer", "Marketing")
-    assert W.definition_key(conn, "GMV") == W.definition_key(conn, "GMV", "")             # no domain: the key it always had
+    assert W.definition_key(conn, "GMV") == W.definition_key(conn, "GMV", "")             # no area: the key it always had
 
 
 def test_a_definition_is_a_term_the_planner_is_shown_at_a_persons_warrant():
@@ -191,21 +191,21 @@ def test_the_doors_file_anyone_else_s_change_as_a_suggestion_and_refuse_an_agent
     app.include_router(R.router)
     client = TestClient(app)
     monkeypatch.setattr(R, "_who", lambda principal: "user:ana")
-    body = {"connection_id": conn, "term": "Active customer", "domain": "Finance", "text": "Paid in 30 days.",
+    body = {"connection_id": conn, "term": "Active customer", "area": "Finance", "text": "Paid in 30 days.",
             "aliases": ["paying customer"], "links": [{"kind": "metric", "ref": "active_customers", "label": "Active customers"}]}
     wrote = client.post("/record/definitions", json=body).json()
-    assert (wrote["state"], wrote["domain"], wrote["owner"], wrote["suggested"]) == ("draft", "Finance", "user:ana", None)
-    assert client.post("/record/definitions/approve", json={"connection_id": conn, "term": "Active customer", "domain": "Finance"}).json()["state"] == "published"
+    assert (wrote["state"], wrote["area"], wrote["owner"], wrote["suggested"]) == ("draft", "Finance", "user:ana", None)
+    assert client.post("/record/definitions/approve", json={"connection_id": conn, "term": "Active customer", "area": "Finance"}).json()["state"] == "published"
     monkeypatch.setattr(R, "_who", lambda principal: "user:cai")
     theirs = client.post("/record/definitions", json={**body, "text": "Paid in 60 days.", "why": "quarterly payers"}).json()
     assert theirs["statement"]["text"] == "Paid in 30 days." and theirs["state"] == "published"        # it stands
     assert theirs["suggested"]["by"] == "user:cai" and theirs["suggestions"][0]["why"] == "quarterly payers"
     monkeypatch.setattr(R, "_who", lambda principal: "user:ana")
-    agent = client.post("/record/definitions/unpublish", json={"connection_id": conn, "term": "Active customer", "domain": "Finance"},
+    agent = client.post("/record/definitions/unpublish", json={"connection_id": conn, "term": "Active customer", "area": "Finance"},
                         headers={AGENT_HEADER: AGENT_MARK})
     assert agent.status_code == 403 and "person's own act" in agent.json()["detail"]
     decided = client.post("/record/definitions/suggestions/decide", json={"connection_id": conn, "term": "Active customer",
-                          "domain": "Finance", "suggestion_id": theirs["suggested"]["id"], "accept": True}).json()
+                          "area": "Finance", "suggestion_id": theirs["suggested"]["id"], "accept": True}).json()
     assert decided["statement"]["text"] == "Paid in 60 days." and decided["state"] == "published" and decided["suggestions"] == []
     listed = client.get("/record/definitions", params={"connection_id": conn, "term": "active customer"}).json()
-    assert [d["domain"] for d in listed] == ["Finance"]
+    assert [d["area"] for d in listed] == ["Finance"]

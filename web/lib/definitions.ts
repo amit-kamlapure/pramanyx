@@ -1,13 +1,13 @@
 /**
  * A Definition as the app reads it (`GET /record/definitions`), and the small helpers its page and its tests share.
  * Since 2026-11-17 (the ontology study) a Definition has drafts, published by its owner only,
- * suggested edits from anyone, one domain, other names, and what it refers to.
+ * suggested edits from anyone, one area of the business, other names, and what it refers to.
  */
 export interface Version { id: string; text: string; tier: string; author: string; recorded_at: string }
 export interface DefinitionLink { kind: string; ref: string; label: string }
 export interface Suggestion { id: string; by: string; at: string; why: string; by_agent?: boolean; text?: string; aliases?: string[]; links?: DefinitionLink[] }
 export interface Definition {
-  term: string; domain: string; statement: { text: string }; tier: string; state: "published" | "draft"; owner: string;
+  term: string; area: string; statement: { text: string }; tier: string; state: "published" | "draft"; owner: string;
   author: string; approved_by: string; approved_on: string; aliases: string[]; links: DefinitionLink[];
   suggestions: Suggestion[]; versions: Version[];
 }

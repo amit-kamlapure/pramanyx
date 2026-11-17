@@ -656,7 +656,7 @@ class PramanyxClient:
     # ── DE-2c: the knowledge tools, through the API like everything else ───────────
     async def get_definitions(self, connection: str, *, term: Optional[str] = None) -> dict:
         rows = await self._get("/record/definitions", params={"connection_id": connection, **({"term": term} if term else {})})
-        keep = ("term", "domain", "state", "owner", "aliases", "links", "approved_by", "approved_on")
+        keep = ("term", "area", "state", "owner", "aliases", "links", "approved_by", "approved_on")
         return {"definitions": [{**{k: r.get(k) for k in keep}, "text": (r.get("statement") or {}).get("text", ""),
                                  "suggested_edits_pending": len(r.get("suggestions") or [])} for r in rows or []]}
 
