@@ -578,7 +578,9 @@ def test_the_table_that_holds_the_data_back_is_named():
             "tables": {"returns": date(2026, 10, 5), "orders": date(2026, 10, 7)}}
     week = _edge("current_week", edge=held)
     assert (week.start, week.last_day) == (date(2026, 10, 5), date(2026, 10, 5))
-    assert "returns has no rows after 2026-10-05; orders runs later." in week.edge_note
+    # never "nothing after it has arrived yet" of data whose orders run two days later (theLook, 2026-11-17)
+    assert week.edge_note == ("Figures run to 2026-10-05, the newest day every table has rows for. returns has no rows "
+                              "after 2026-10-05; orders runs later.")
 
 
 def test_a_custom_range_past_the_data_is_cut_and_says_so_and_without_an_edge_reads_as_asked():

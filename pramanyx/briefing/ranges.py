@@ -205,12 +205,17 @@ def _edge_note(*, today: date, through: Optional[date], complete: date, held_by:
                tables: dict, fell_back: Optional[str], asked_to: Optional[date]) -> str:
     """What the data's edge did to a range, in words a reader checks: where the data ends, which
     table holds it there, and what the range became because of it."""
+    # The edge is the newest day EVERY table has rows for: when another table runs later, "no rows" and "nothing has
+    # arrived" are false of the data as a whole (theLook, 2026-11-17: orders ended yesterday, three tables had today).
+    later = through is not None and any(d > through for d in tables.values())
     if through is None:
         said = (f"Whether data has arrived after {_d(complete)} was not read, so figures run to it, "
                 "yesterday.")
     elif through >= today:
         said = (f"Today ({_d(today)}) is still loading, so it is left out: figures run to "
                 f"{_d(complete)}, the newest complete day.")
+    elif later:
+        said = f"Figures run to {_d(through)}, the newest day every table has rows for."
     elif through == today - timedelta(days=1):
         said = f"Data runs to {_d(through)}: today ({_d(today)}) has no rows yet."
     else:
