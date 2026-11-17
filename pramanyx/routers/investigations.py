@@ -1486,6 +1486,19 @@ def _narrator_sample(columns, rows, n: int = 20):
     return rows[:n], False
 
 
+def _narrator_rows_label(sample_rows, total: int, is_time_series: bool) -> str:
+    """What the narrator is told the rows it reads are. Every result used to be "a sample of N rows", the whole of it
+    too, and the narrator said so: a sheet of ten cities, all ten shown, was summed up as "the sample covers only 10 of
+    the plotted cities" (2026-11-17). A whole result is said to be whole; a longer one says how much is shown."""
+    shown = len(sample_rows)
+    if is_time_series:
+        return (f"Results (TIME SERIES — series start then the {shown - 1} most recent of {total} periods, "
+                "oldest→newest):")
+    if shown >= total:
+        return f"Results (all {total} rows: the whole result, not a sample):"
+    return f"Results (the first {shown} of {total} rows):"
+
+
 def _prior_turn_context(history) -> str:
     """The previous turn's question — the ground-first resolver mines it for entities a
     follow-up inherits (so "break that down by platform" keeps the earlier filter). Handles
@@ -3458,7 +3471,8 @@ def _answer_core(
                 )
                 _system = (
                     "You are an analytical data interpreter writing for a clean published brief. "
-                    "Given a user question, the SQL that answered it, and a sample of the results: "
+                    "Given a user question, the SQL that answered it, and its results (all of them, or the first "
+                    "rows of a longer result, as the results line says): "
                     "(1) produce a tight analytical narrative (2-3 sentences) that LEADS WITH THE ANSWER, "
                     "wraps each decisive number in **double asterisks** for bold (e.g. **$2,112**, **+18%**), "
                     "names any genuine anomaly (unexpected value, spike, drop, outlier) in plain words, and "
@@ -3472,11 +3486,7 @@ def _answer_core(
                     "Given a user question and its answer, " + _FOLLOWUP_CLAUSE
                     + " Leave the narrative empty."
                 )
-            _rows_label = (
-                f"Results (TIME SERIES — series start then the {len(_sample_rows) - 1} most "
-                f"recent of {len(result.rows)} periods, oldest→newest):"
-                if _is_ts else f"Results (sample of {len(_sample_rows)} rows):"
-            )
+            _rows_label = _narrator_rows_label(_sample_rows, max(len(result.rows), result.row_count or 0), _is_ts)
             # The resolution's single caveat leads the narrator too, so the
             # narrative + follow-ups agree with the answer instead of re-deciding.
             _res_note = ""

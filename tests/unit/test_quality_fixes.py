@@ -2,7 +2,7 @@
 A) headline grounding, B) missing-column repair diagnosis, C) unsafe-metric guard.
 Each locks a concrete bug found by reading real outputs."""
 from pramanyx.routers.investigations import (
-    _ground_headline, _apply_currency, _is_time_series, _narrator_sample,
+    _ground_headline, _apply_currency, _is_time_series, _narrator_sample, _narrator_rows_label,
 )
 from pramanyx.agent.investigate import (
     _missing_column_hint, _unsafe_metric_sql, _safe_metric_fallback,
@@ -67,6 +67,21 @@ def test_narrator_sample_short_series_unchanged():
     rows = [["2025-01", 1], ["2025-02", 2], ["2025-03", 3]]
     sample, _ = _narrator_sample(["month", "x"], rows, n=20)
     assert sample == rows  # ≤ n rows → all kept
+
+def test_the_narrator_is_told_a_whole_result_is_whole():
+    # An attached sheet, 2026-11-17: all ten cities were shown, labelled "sample of 10 rows", and the summary said
+    # "the sample covers only 10 of the plotted cities".
+    ten = [[f"city{i}", i] for i in range(10)]
+    sample, is_ts = _narrator_sample(["city", "orders"], ten)
+    label = _narrator_rows_label(sample, 10, is_ts)
+    assert label == "Results (all 10 rows: the whole result, not a sample):" and "sample of" not in label
+    many = [[f"city{i}", i] for i in range(60)]
+    sample, is_ts = _narrator_sample(["city", "orders"], many)
+    assert _narrator_rows_label(sample, 60, is_ts) == "Results (the first 20 of 60 rows):"
+    sample, is_ts = _narrator_sample(["month", "turnover"], _TS_ROWS, n=20)
+    assert _narrator_rows_label(sample, len(_TS_ROWS), is_ts).startswith(
+        f"Results (TIME SERIES — series start then the 19 most recent of {len(_TS_ROWS)} periods")
+
 
 _SCHEMA = """TABLE: analytics.invoices  (1000 rows)
   invoice_id  BIGINT
