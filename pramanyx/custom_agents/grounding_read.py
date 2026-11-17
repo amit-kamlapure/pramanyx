@@ -51,6 +51,7 @@ ABSENT_WHY: dict[str, str] = {
     "pack": "no pack steers this question here: it takes an active pack that matches, a person's pinned binding on "
             "this connection, and — when the agent names packs — one of those",
     "instructions": "no custom instructions are kept for this connection",
+    "person_memory": "the person asking asked for nothing to be remembered",
     "trusted": "no trusted query matched the question",
     "corrections": "no correction on record matched the question",
     "hub_notes": "nothing people noted reached the question; notes reach a prompt only once their source measured lift",

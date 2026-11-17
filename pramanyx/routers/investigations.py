@@ -2412,6 +2412,12 @@ def _answer_core(
         _instr_sec = _grounding_instructions(connection_id, canvas_id or "")
         if _instr_sec:
             prompt = _instr_sec + prompt
+        # What the person asking asked to be remembered (punch list 90): theirs alone, every connection. Mirrored in
+        # grounding._BLOCKS ("person_memory"). Empty when they asked for nothing: a byte-identical prompt.
+        from pramanyx.agent.grounding import person_memory as _person_memory
+        _memory_sec = _person_memory()
+        if _memory_sec:
+            prompt = _memory_sec + prompt
         # ON-10 — the question framed against the DECLARED ontology, as the deep investigation frames it: each business
         # term's declared definition with the SQL the object door compiles for it. No model call here — an ambiguous
         # frame lists every definition the words fit. Empty where nothing declared is reached: byte-identical prompts.

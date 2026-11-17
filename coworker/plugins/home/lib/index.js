@@ -451,6 +451,8 @@ const ASKED_FIRST = {
   "mcp__pramanyx__schedule": (args) => `Set this up on a schedule: “${clipped(args.request)}”?`,
   "mcp__pramanyx__draft_definition": (args) =>
     `Draft what “${clipped(args.term, 80)}” means${args.area ? ` in ${args.area}` : ""}: “${clipped(args.text)}”? It is not used until its owner publishes it.`,
+  // punch list 90 — a person's own memory, read into their own questions: theirs to allow.
+  "mcp__pramanyx__remember_for_me": (args) => `Remember this for you, in your own questions only: “${clipped(args.text)}”?`,
 };
 const clipped = (value, most = 240) => {
   const text = String(value ?? "").trim();

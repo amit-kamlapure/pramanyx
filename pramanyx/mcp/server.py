@@ -484,6 +484,31 @@ async def draft_definition(
 
 
 @mcp.tool()
+async def remember_for_me(
+    text: Annotated[str, Field(description="What to remember about how the person asks or likes answers, in their own words.")],
+) -> dict:
+    """Remember something about how THIS PERSON asks or likes answers — "I prefer figures in EUR", "when I say revenue
+    I mean net revenue", "I look after the North region" — for them alone: it is read into each of their questions on
+    every connection, and no one else's. What a business word means for everyone is `draft_definition`, not this. The
+    person allows it in the conversation first. Say what you will remember, in their words."""
+    return await _client.remember_for_me(text)
+
+
+@mcp.tool()
+async def my_memories() -> dict:
+    """What this person asked you to remember about how they ask, newest first, each with its id."""
+    return await _client.my_memories()
+
+
+@mcp.tool()
+async def forget_for_me(
+    memory_id: Annotated[str, Field(description="The id of one of the person's memories, from my_memories.")],
+) -> dict:
+    """Forget one thing the person asked you to remember, at their word."""
+    return await _client.forget_for_me(memory_id)
+
+
+@mcp.tool()
 async def bring_in_file(
     path: Annotated[str, Field(description="The saved path the attachment line gives for the file the person attached.")],
     name: Annotated[str, Field(description="The file's name as the person attached it.")] = "",

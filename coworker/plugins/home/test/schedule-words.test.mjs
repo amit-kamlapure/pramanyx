@@ -45,3 +45,10 @@ test("a schedule call that dropped the person's timing goes back to the agent be
   const asked = await call({ id: "s1" }, "mcp__pramanyx__ask", { question: "how many titles" });
   assert.equal(asked.kind, "allow");
 });
+
+test("the coworker asks before it remembers something for the person (punch list 90)", async () => {
+  const { askFor } = await import("../lib/index.js");
+  const asked = askFor("mcp__pramanyx__remember_for_me", { text: "I prefer figures in EUR" });
+  assert.equal(asked?.kind, "ask");
+  assert.match(JSON.stringify(asked), /Remember this for you, in your own questions only: “I prefer figures in EUR”\?/);
+});

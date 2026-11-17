@@ -42,6 +42,10 @@ TOOL_LEVELS: dict[str, Level] = {
     "bring_in_file": "act",
     # A drafted definition changes what the organisation's knowledge holds, as a draft or a suggestion only: an act.
     "draft_definition": "act",
+    # 2026-11-18 (punch list 90) — what the person asked to be remembered about how they ask: theirs alone.
+    "remember_for_me": "act",
+    "my_memories": "read",
+    "forget_for_me": "act",
     "list_findings": "read",
     "get_briefing": "run",          # POST /exploration/{c}/briefing may spend a model call to synthesise
     "explore": "run",
@@ -148,6 +152,8 @@ TOOL_AREAS: dict[str, str] = {
     "list_connections": "catalog:read", "get_investigation": "catalog:read", "get_metric": "catalog:read",
     "get_definitions": "catalog:read", "read_learned": "catalog:read", "bring_in_file": "analysis:run",
     "draft_definition": "ledger:write",
+    # A person's own memory is theirs, as a file they bring in is: no one else's catalog or ledger.
+    "remember_for_me": "analysis:run", "my_memories": "analysis:run", "forget_for_me": "analysis:run",
     "list_findings": "catalog:read", "list_jobs": "catalog:read", "get_job": "catalog:read",
     "search_graph": "catalog:read", "describe_entity": "catalog:read", "get_table_health": "catalog:read",
     "list_trusted_queries": "catalog:read", "list_runs": "catalog:read", "inspect_run": "catalog:read",

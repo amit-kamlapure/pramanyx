@@ -239,6 +239,14 @@ class PramanyxClient:
                 raise PramanyxError(f"POST {path} failed — is the Pramanyx API running at {self.base_url}? ({e})") from e
         return self._unwrap(r, path)
 
+    async def _delete(self, path: str) -> Any:
+        async with self._mk_client() as c:
+            try:
+                r = await c.delete(path)
+            except httpx.HTTPError as e:
+                raise PramanyxError(f"DELETE {path} failed — is the Pramanyx API running at {self.base_url}? ({e})") from e
+        return self._unwrap(r, path)
+
     async def _post_file(self, path: str, name: str, data: bytes) -> Any:
         async with self._mk_client() as c:
             try:
@@ -705,6 +713,18 @@ class PramanyxClient:
         return {"made": got.get("made"), "term": got.get("term"), "area": got.get("area"), "state": got.get("state"),
                 "owner": got.get("owner"), "text": (got.get("statement") or {}).get("text"),
                 "suggestion": got.get("suggested"), "publish_at": got.get("publish_at")}
+
+    async def remember_for_me(self, text: str) -> dict:
+        """Remember something about how the person asks, for them alone (punch list 90)."""
+        return await self._post("/me/memories", json_body={"text": text})
+
+    async def my_memories(self) -> dict:
+        return await self._get("/me/memories")
+
+    async def forget_for_me(self, memory_id: str) -> dict:
+        from urllib.parse import quote
+        await self._delete(f"/me/memories/{quote(memory_id, safe='')}")
+        return {"forgotten": memory_id}
 
     async def bring_in_file(self, path: str, *, name: str = "") -> dict:
         """A file the person attached in the coworker, brought into Pramanyx as theirs (the ontology study, Phase 2,

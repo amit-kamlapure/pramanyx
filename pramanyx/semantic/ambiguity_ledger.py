@@ -67,6 +67,8 @@ _MIGRATIONS: list = [  # forward-only
 
 #: The facet of a person's pick between a word's rival meanings (`keep_meaning`): one person's, never everyone's.
 MEANING = "meaning"
+#: The facet of what a person asked to be remembered about how they ask (`remember_for`, punch list 90): theirs alone.
+MEMORY = "memory"
 
 
 class Reading(BaseModel):
@@ -247,6 +249,39 @@ def kept_meanings(connection_id: str, person: str, org_id: str = "") -> dict[str
         return {}
     return {r.subject.strip().lower(): r.resolved_reading for r in list_resolutions(connection_id, org_id=org_id)
             if r.dim_facet == MEANING and r.person == who}
+
+
+def remember_for(person: str, text: str, *, org_id: str = "") -> Optional[AmbiguityResolution]:
+    """A person asked to be remembered something about how they ask — "I prefer figures in EUR", "when I say revenue I
+    mean net revenue" (punch list 90, 2026-11-18). Kept as THEIRS: read into their own questions on every connection,
+    said where it shaped an answer, never anyone else's prior, and not an event anything subscribes to (the Record's
+    claims are, which is why a memory is not one). Revoked by its person alone."""
+    who = (person or "").strip().lower()
+    said = " ".join((text or "").split())[:500]
+    if not (who and said):
+        return None
+    return save_resolution(AmbiguityResolution(
+        connection_id="", org_id=org_id, dim_kind="AmbiIntent", dim_facet=MEMORY, subject=said, resolved_reading=said,
+        resolution_source="user", person=who, evidence="asked to be remembered by its person"))
+
+
+def memories_of(person: str, org_id: str = "") -> list[AmbiguityResolution]:
+    """What ``person`` asked to be remembered, newest first."""
+    who = (person or "").strip().lower()
+    if not who:
+        return []
+    return [r for r in list_resolutions("", org_id=org_id) if r.dim_facet == MEMORY and r.person == who]
+
+
+def owner_of(res_id: str) -> Optional[str]:
+    """Whose row ``res_id`` is: a person's own, "" for one the connection shares, None when there is no such row."""
+    with _LOCK:
+        c = _conn()
+        try:
+            row = c.execute("SELECT person FROM ambiguity_resolutions WHERE id = ?", (res_id,)).fetchone()
+        finally:
+            c.close()
+    return None if row is None else str(row["person"] or "")
 
 
 def crystallize_verdict(connection_id: str, subject: str, *, org_id: str = "",

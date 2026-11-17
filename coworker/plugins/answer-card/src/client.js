@@ -1035,6 +1035,9 @@ const DOES = {
   read_learned: ["Read what is already learned", ["about"]],
   bring_in_file: ["Brought in a file", ["name"]],
   draft_definition: ["Drafted what a word means", ["term"]],
+  remember_for_me: ["Remembered for you", ["text"]],
+  my_memories: ["Read what you asked me to remember", []],
+  forget_for_me: ["Forgot one thing you asked me to remember", []],
 };
 const PREFIX = "mcp__pramanyx__";
 
