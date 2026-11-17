@@ -1,0 +1,209 @@
+{
+  "manifest_version": "0.3",
+  "name": "pramanyx",
+  "display_name": "Pramanyx",
+  "version": "0.1.0",
+  "description": "Governed answers from your Pramanyx install: questions, deep analyses, metrics and definitions, each with its Trust Receipt.",
+  "long_description": "Runs the MCP server of the Pramanyx install on this computer (`python -m pramanyx.mcp`), a thin client of that install's API: every answer takes the governed path the app takes, and the organisation's agent policy decides which of these tools are offered. It is not self-contained: choose the Python inside your Pramanyx install's virtual environment, and say where its API answers. A Pramanyx on another machine is reached with its HTTP transport instead (docs/MCP_SERVER.md).",
+  "author": {
+    "name": "Pramanyx"
+  },
+  "license": "Apache-2.0",
+  "keywords": [
+    "analytics",
+    "governed",
+    "semantic layer",
+    "metrics",
+    "sql"
+  ],
+  "icon": "icon.png",
+  "server": {
+    "type": "python",
+    "entry_point": "server/main.py",
+    "mcp_config": {
+      "command": "${user_config.python}",
+      "args": [
+        "${__dirname}/server/main.py"
+      ],
+      "env": {
+        "PRAMANYX_API_URL": "${user_config.api_url}",
+        "PRAMANYX_API_KEY": "${user_config.api_key}"
+      }
+    }
+  },
+  "user_config": {
+    "python": {
+      "type": "file",
+      "title": "Pramanyx's Python",
+      "required": true,
+      "description": "The python inside your Pramanyx install's virtual environment: <install>/.venv/bin/python (on Windows, <install>\\.venv\\Scripts\\python.exe)."
+    },
+    "api_url": {
+      "type": "string",
+      "title": "Pramanyx API",
+      "required": true,
+      "default": "http://127.0.0.1:8000",
+      "description": "Where your Pramanyx API answers."
+    },
+    "api_key": {
+      "type": "string",
+      "title": "API key",
+      "required": false,
+      "sensitive": true,
+      "description": "Your Pramanyx API key, when the install asks for one. Leave it empty on an install without sign-in."
+    }
+  },
+  "tools": [
+    {
+      "name": "list_connections",
+      "description": "List the databases Pramanyx can answer about."
+    },
+    {
+      "name": "ask",
+      "description": "A question in words, answered by Pramanyx's governed path, with its Trust Receipt."
+    },
+    {
+      "name": "deep_analysis",
+      "description": "A multi-step analysis for why and what-drove-it questions."
+    },
+    {
+      "name": "get_investigation",
+      "description": "Read a deep analysis by its id, finished or still running."
+    },
+    {
+      "name": "get_metric",
+      "description": "A governed metric's value and definition."
+    },
+    {
+      "name": "get_definitions",
+      "description": "What the organisation's business words mean."
+    },
+    {
+      "name": "draft_definition",
+      "description": "Draft what a word means for the person, for its owner to publish."
+    },
+    {
+      "name": "read_learned",
+      "description": "What Pramanyx has learned about a connection, each item with where it came from."
+    },
+    {
+      "name": "bring_in_file",
+      "description": "Bring a file the person attached into Pramanyx as their own sheet or document."
+    },
+    {
+      "name": "remember_for_me",
+      "description": "Remember how this person asks or likes answers, for them alone."
+    },
+    {
+      "name": "my_memories",
+      "description": "What this person asked to be remembered."
+    },
+    {
+      "name": "forget_for_me",
+      "description": "Forget one thing this person asked to be remembered."
+    },
+    {
+      "name": "deck_of_answers",
+      "description": "Several answers as one PowerPoint deck, built from their stored reports."
+    },
+    {
+      "name": "search_my_drive",
+      "description": "Find files in this person's own Google Drive by name: names and links, never contents."
+    },
+    {
+      "name": "list_findings",
+      "description": "What Pramanyx's explorer has already found on a connection."
+    },
+    {
+      "name": "get_briefing",
+      "description": "The executive Briefing for a connection."
+    },
+    {
+      "name": "explore",
+      "description": "Start Pramanyx's background exploration of a connection."
+    },
+    {
+      "name": "list_jobs",
+      "description": "Pramanyx's running and recent background work."
+    },
+    {
+      "name": "get_job",
+      "description": "One background job: its agent, state and cost."
+    },
+    {
+      "name": "cancel_job",
+      "description": "Cancel a running background job."
+    },
+    {
+      "name": "search_graph",
+      "description": "Search what Pramanyx knows about a connection: tables, metrics, terms, findings."
+    },
+    {
+      "name": "describe_entity",
+      "description": "What one business object type is, as Pramanyx's ontology measured it."
+    },
+    {
+      "name": "get_table_health",
+      "description": "A table's data-quality verdicts and how fresh each is."
+    },
+    {
+      "name": "list_trusted_queries",
+      "description": "The verified query patterns for a connection, each with its warrant."
+    },
+    {
+      "name": "list_runs",
+      "description": "Recent runs, newest first."
+    },
+    {
+      "name": "inspect_run",
+      "description": "Where one run's time and cost went, and what failed."
+    },
+    {
+      "name": "read_run_span",
+      "description": "One step of a run, its input and output."
+    },
+    {
+      "name": "read_contract",
+      "description": "The contract Pramanyx holds every agent to."
+    },
+    {
+      "name": "read_claims",
+      "description": "What the organisation holds true, now or as recorded on a date."
+    },
+    {
+      "name": "read_restatements",
+      "description": "What the ledger changed its mind about since a cursor."
+    },
+    {
+      "name": "post_claim",
+      "description": "Post a claim with its warrant, as yourself."
+    },
+    {
+      "name": "list_objects",
+      "description": "A page of a business entity's objects through the published ontology."
+    },
+    {
+      "name": "schedule",
+      "description": "Set anything up on a schedule from a sentence."
+    },
+    {
+      "name": "search_the_web",
+      "description": "Outside context from the web, when the organisation allows it."
+    },
+    {
+      "name": "draft_email",
+      "description": "Draft an email for the person to read, change and send themselves."
+    }
+  ],
+  "tools_generated": true,
+  "compatibility": {
+    "platforms": [
+      "darwin",
+      "linux",
+      "win32"
+    ],
+    "runtimes": {
+      "python": ">=3.11"
+    }
+  }
+}
