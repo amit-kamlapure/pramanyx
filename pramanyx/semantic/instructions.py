@@ -69,23 +69,48 @@ def set_canvas_instructions(canvas_id: str, text: str) -> None:
     _save(_canvas_file(), canvas_id, text)
 
 
+def organisation_instructions() -> str:
+    """What the organisation wrote for every question on every connection (punch list 94, 2026-11-18): Settings ▸
+    Organization ▸ Instructions for every answer, saved with the organisation settings. '' when nothing is written, or
+    when the settings cannot be read — a connection's own instructions still apply then."""
+    try:
+        from pramanyx.orgsettings.store import load_org_settings
+        return (load_org_settings().instructions or "").strip()
+    except Exception as exc:  # noqa: BLE001 — said, and the connection's own instructions still render
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "the organisation's instructions could not be read; the connection's own still apply",
+                 counter="instructions.organisation_read")
+        return ""
+
+
 def build_instructions_block(connection_id: str, canvas_id: str = "") -> str:
     """The prompt block for one (connection, canvas) — '' when nothing is stored,
     so the prompt stays byte-identical for everyone who never wrote instructions.
+
+    The organisation's text (punch list 94) leads, for every connection; the
+    connection's follows and is labelled as taking precedence, being the narrower
+    scope. With no organisation text the block is what it always was.
 
     Canvas text renders AFTER connection text and is labelled as taking precedence:
     the Canvas is the narrower scope, and Sprint 53 split the stores precisely so a
     Canvas could sharpen (or contradict) the connection-wide rules.
     """
+    org_text = organisation_instructions()
     conn_text = connection_instructions(connection_id).strip() if connection_id else ""
     canvas_text = canvas_instructions(canvas_id).strip() if canvas_id else ""
-    if not conn_text and not canvas_text:
+    if not org_text and not conn_text and not canvas_text:
         return ""
     lines = ["CUSTOM INSTRUCTIONS (user-authored; follow them when writing SQL and presenting results):"]
+    if org_text:
+        lines.append("For the whole organisation:")
+        lines.append(org_text)
     if conn_text:
+        if org_text:
+            lines.append("")
+            lines.append("For this connection (takes precedence on conflict):")
         lines.append(conn_text)
     if canvas_text:
-        if conn_text:
+        if conn_text or org_text:
             lines.append("")
             lines.append("For this Canvas specifically (takes precedence on conflict):")
         lines.append(canvas_text)

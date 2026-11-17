@@ -197,6 +197,8 @@ export interface OrgSettings {
   chat_first_home: boolean;
   /** CB-6 — what the organisation is trying to do this quarter, written by people. */
   priorities: Priority[];
+  /** Punch list 94 — what every answer is told, on every connection; a connection's own instructions take precedence. */
+  instructions?: string;
   /** The exploration principles §7 — the organisation's monthly budget, in model tokens, for what the
    *  Explorer spends on its own initiative; 0 = none. */
   exploration_monthly_tokens?: number;

@@ -214,6 +214,15 @@ class OrgSettings(BaseModel):
         description="Model-suggested area names a curator said are not areas of the business — not suggested again.",
     )
 
+    #: What the organisation tells every answer, on every connection (punch list 94, 2026-11-18): "fiscal year starts
+    #: in February", "exclude test accounts". It leads each question's custom instructions; a connection's own follow
+    #: and take precedence. Written by a person in Settings ▸ Organization, never by a model.
+    instructions: str = Field(
+        default="",
+        description="Instructions for every answer on every connection, written by people; a connection's own take "
+                    "precedence.",
+    )
+
     # ── Working memory (CB-6) ──
     priorities: list[Priority] = Field(
         default_factory=list,
@@ -236,7 +245,7 @@ class OrgSettings(BaseModel):
         return v
 
     @field_validator(
-        "company_name", "website", "hq_location", "industry", "timezone", "date_format", "chart_palette"
+        "company_name", "website", "hq_location", "industry", "timezone", "date_format", "chart_palette", "instructions"
     )
     @classmethod
     def _strip(cls, v: str) -> str:

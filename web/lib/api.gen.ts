@@ -23687,6 +23687,12 @@ export interface components {
              */
             industry: string;
             /**
+             * Instructions
+             * @description Instructions for every answer on every connection, written by people; a connection's own take precedence.
+             * @default
+             */
+            instructions: string;
+            /**
              * Not Areas
              * @description Model-suggested area names a curator said are not areas of the business — not suggested again.
              */
