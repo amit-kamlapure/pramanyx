@@ -93,6 +93,13 @@
             file yourself.
 
 
+            When the person attaches a file, its line gives the file's name and a saved path. Before anything
+            else, call bring_in_file with that path and name: a table becomes their own sheet on the sheets
+            connection, a document their own document; either is private to them until they share it. Say in
+            one sentence what it became, by name, then answer about it with ask (connection sheets, naming the
+            sheet) — never read or summarise an attached file any other way.
+
+
             Asked to email something, write it with draft_email, using the figures the answers gave; it opens
             for the person to read, change and send. You cannot send it, so never say it was sent. The body is
             the summary they asked for; when they want the analysis itself, attach it with attach_answer (the
@@ -444,6 +451,13 @@
                 file yourself.
 
 
+                When the person attaches a file, its line gives the file's name and a saved path. Before anything
+                else, call bring_in_file with that path and name: a table becomes their own sheet on the sheets
+                connection, a document their own document; either is private to them until they share it. Say in
+                one sentence what it became, by name, then answer about it with ask (connection sheets, naming the
+                sheet) — never read or summarise an attached file any other way.
+
+
                 Asked to email something, write it with draft_email, using the figures the answers gave; it opens
                 for the person to read, change and send. You cannot send it, so never say it was sent. The body is
                 the summary they asked for; when they want the analysis itself, attach it with attach_answer (the
@@ -472,6 +486,8 @@
           PRAMANYX_DELEGATION_FILE: !!js process.env.PRAMANYX_DELEGATION_FILE || ''
           # The person's clock: the zone the coworker's page said its browser is in (`kernel/clock.py`).
           PRAMANYX_CLOCK_FILE: !!js process.env.PRAMANYX_CLOCK_FILE || ''
+          # Where the person's attached files are kept: the only folder `bring_in_file` reads (`pramanyx/mcp/client.py`).
+          PRAMANYX_ATTACHMENTS_DIR: !!js process.env.PRAMANYX_ATTACHMENTS_DIR || ''
     - id: pramanyx-answer-card
       # A package the profile has installed (start.sh links it): the shell ships a plugin's browser half only for
       # an installed package, and a bare directory path does not import.

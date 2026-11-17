@@ -37,6 +37,9 @@ TOOL_LEVELS: dict[str, Level] = {
     "get_metric": "read",
     "get_definitions": "read",
     "read_learned": "read",
+    # 2026-11-17 — a file the person attached becomes their own private sheet or document: a write the person asked
+    # for by attaching it, so an act like any write, and nothing leaves the install.
+    "bring_in_file": "act",
     "list_findings": "read",
     "get_briefing": "run",          # POST /exploration/{c}/briefing may spend a model call to synthesise
     "explore": "run",
@@ -141,7 +144,7 @@ def tool_level(name: str) -> Level:
 #: hides what it may not call from `tools/list`. A tool added at start-up is placed by its registrar (`DYNAMIC_AREAS`).
 TOOL_AREAS: dict[str, str] = {
     "list_connections": "catalog:read", "get_investigation": "catalog:read", "get_metric": "catalog:read",
-    "get_definitions": "catalog:read", "read_learned": "catalog:read",
+    "get_definitions": "catalog:read", "read_learned": "catalog:read", "bring_in_file": "analysis:run",
     "list_findings": "catalog:read", "list_jobs": "catalog:read", "get_job": "catalog:read",
     "search_graph": "catalog:read", "describe_entity": "catalog:read", "get_table_health": "catalog:read",
     "list_trusted_queries": "catalog:read", "list_runs": "catalog:read", "inspect_run": "catalog:read",

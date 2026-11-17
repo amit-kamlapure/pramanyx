@@ -468,6 +468,19 @@ async def get_definitions(
 
 
 @mcp.tool()
+async def bring_in_file(
+    path: Annotated[str, Field(description="The saved path the attachment line gives for the file the person attached.")],
+    name: Annotated[str, Field(description="The file's name as the person attached it.")] = "",
+) -> dict:
+    """The person attached a file in this conversation: bring it into Pramanyx as theirs. A table (CSV, TSV, Excel,
+    Parquet, JSON) becomes a SHEET on the `sheets` connection — then ask about it with `ask` on connection `sheets`,
+    naming the sheet; a document (PDF, Word, PowerPoint, Markdown, text, HTML) becomes a DOCUMENT whose passages reach
+    answers. Either is private to the person until they share it. Call it once per attached file, before answering
+    about it; never read or summarise an attached file any other way. Say what it became, by name."""
+    return await _client.bring_in_file(path, name=name)
+
+
+@mcp.tool()
 async def read_learned(
     connection: Annotated[str, Field(description="A connection id from list_connections.")],
     about: Annotated[str, Field(description="Words to narrow it to — a metric, a table, a business word. Empty for all.")] = "",

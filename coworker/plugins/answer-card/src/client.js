@@ -801,6 +801,9 @@ const DOES = {
   platform_runs: ["Read the platform's runs", []],
   platform_traces: ["Read the platform's traces", []],
   platform_usage: ["Read usage and spend", []],
+  get_definitions: ["Read what the words mean", ["term"]],
+  read_learned: ["Read what is already learned", ["about"]],
+  bring_in_file: ["Brought in a file", ["name"]],
 };
 const PREFIX = "mcp__pramanyx__";
 
@@ -1302,6 +1305,33 @@ function Files({ answer, id }) {
     emailing ? h(Draft, { draft: emailOf(answer) }) : null);
 }
 
+/**
+ * A file the person attached, brought into Pramanyx as theirs (2026-11-17): what it became, by name, and its own page
+ * beside the conversation — a sheet opens as the sheet. Never a summary of the file drawn here.
+ */
+function BroughtInCard(props) {
+  const args = argsOf(props.block);
+  const named = String(args.name || "a file");
+  if (props.phase !== "result") return h(Step, { kind: "read", busy: true, title: `Bringing in ${named}` });
+  let got = null;
+  try { got = JSON.parse(resultText(props.block)); } catch { got = null; }
+  if (!got || props.block?.isError || got.brought_in !== true) {
+    return h(Step, { kind: "read", failed: true, title: `${named} was not brought in` },
+      h("div", { style: quiet }, String(got?.why || "The platform did not take it.")));
+  }
+  if (got.kind === "sheet") {
+    const sheets = Array.isArray(got.sheets) ? got.sheets : [];
+    return h(Step, { kind: "read", title: `Brought in ${got.file || named} as your sheet${sheets.length > 1 ? "s" : ""} ${sheets.map((x) => x.name).join(", ")}` },
+      h("div", { style: { display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" } },
+        h("span", { style: quiet }, "Only you can see it until you share it."),
+        ...sheets.map((x) => h("button", { key: x.id, type: "button", style: button(false),
+          onClick: () => openBeside("page", pageFor.sheet(x.id, x.name)) }, sheets.length > 1 ? `Open ${x.name}` : "Open the sheet"))));
+  }
+  const doc = got.document || {};
+  return h(Step, { kind: "read", title: `Brought in ${got.file || named} as your document ${doc.title || ""}`.trim() },
+    h("div", { style: quiet }, `Only you can see it until you share it. ${doc.chunks ? `Read in ${doc.chunks} passages, which now reach answers.` : ""}`));
+}
+
 function Card(props) {
   const frame = { border: `1px solid ${line}`, borderRadius: 6, padding: 12, margin: "6px 0", fontSize: 13 };
   const asked = String(argsOf(props.block).question || "");
@@ -1340,6 +1370,7 @@ export function apply(ctx) {
     ctx.slots.inject("tool.call.toolview", () =>
       ctx.slots.register({ name: "tool.call.toolview", key: name },
         ANSWERS.test(name) ? AnswerCard : name === PREFIX + "draft_email" ? DraftCard
+          : name === PREFIX + "bring_in_file" ? BroughtInCard
           : SCHEDULES.test(name) ? ScheduleCard : ToolStep));
   };
   // The tools known when this was written are named from the first call. A view is keyed by exact tool name, so

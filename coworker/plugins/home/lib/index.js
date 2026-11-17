@@ -289,7 +289,23 @@ export function holdOf(holds, id, header, now = "") {
 }
 
 /** The refusal for one call from a conversation held to `held`, or undefined when the call may run. Pure. */
-export function refusalFor(name, args, held) {
+/**
+ * WHAT A CONVERSATION BROUGHT IN (2026-11-17). A file the person attaches becomes their own sheet on the Sheets
+ * connection (`bring_in_file`); a conversation held to another connection may then ask the Sheets connection — the
+ * person's own private sheets, nothing else of anyone's. Kept per conversation, from the tool's own result.
+ */
+export const BRING_IN = /^mcp__pramanyx__bring_in_file$/;
+
+/** The connections a brought-in file opened to a conversation, from that call's result; [] when it opened none. */
+export function openedBy(name, resultText) {
+  if (!BRING_IN.test(String(name))) return [];
+  try {
+    const got = JSON.parse(resultText);
+    return got && got.brought_in === true && got.kind === "sheet" && got.connection === "sheets" ? ["sheets"] : [];
+  } catch { return []; }
+}
+
+export function refusalFor(name, args, held, also = []) {
   if (typeof name === "string" && SPAWNS.test(name)) {
     // EVERY HELPER IS HELD TO ONE SOURCE. A helper of a held conversation is held to its connection; started in
     // another connection's folder it would read that one. A helper of a conversation held to none (All sources) is
@@ -309,6 +325,7 @@ export function refusalFor(name, args, held) {
   const given = args && typeof args === "object" ? (args.connection ?? args.connection_id) : undefined;
   const named = typeof given === "string" ? given.trim() : "";
   const here = `This conversation is held to the connection \`${held}\``;
+  if (named && named !== held && also.includes(named)) return undefined;     // the person's own sheet, brought in here
   if (named && named !== held) {
     return `${here}. It cannot read \`${named}\`. Tell the person so: to ask about another connection they start a conversation on it.`;
   }
@@ -319,14 +336,34 @@ export function refusalFor(name, args, held) {
 }
 
 function holdToConnection(ctx, holds) {
+  // The connections a conversation's own brought-in files opened to it, by conversation.
+  const opened = new Map();
+  const names = new Map();
+  ctx.on("session/event", (session, event) => {
+    try {
+      const id = String(session?.id ?? "");
+      const data = event?.data ?? {};
+      if (event?.type === "tool/call" && data.callId && BRING_IN.test(String(data.name))) names.set(data.callId, data.name);
+      if (event?.type === "tool/result") {
+        const message = data.message ?? {};
+        const name = names.get(message.toolCallId);
+        if (!name) return;
+        names.delete(message.toolCallId);
+        if (message.isError) return;
+        const more = openedBy(name, textOf(message.content));
+        if (id && more.length) opened.set(id, [...new Set([...(opened.get(id) ?? []), ...more])]);
+      }
+    } catch { /* nothing opened: the hold stands as it was */ }
+  });
   ctx.inject(["tools", "workingDirectory"], (at) => {
     at.effect(() => at.tools.guard((call) => {
       const session = call.agent?.session;
       const id = String((session && typeof session === "object" ? session.id : session) ?? "");
       let folder = "";
       try { folder = call.agent ? String(at.workingDirectory.get(call.agent.session) || "") : ""; } catch { folder = ""; }
-      if (id && holds.has(id)) return refusalFor(call.name, call.arguments, holdOf(holds, id, {}, folder));
-      return refusalFor(call.name, call.arguments, HELD_FOLDER.exec(folder)?.[1] ?? "");
+      const also = opened.get(id) ?? [];
+      if (id && holds.has(id)) return refusalFor(call.name, call.arguments, holdOf(holds, id, {}, folder), also);
+      return refusalFor(call.name, call.arguments, HELD_FOLDER.exec(folder)?.[1] ?? "", also);
     }), "pramanyx-home: a conversation is held to its connection");
   });
 }
