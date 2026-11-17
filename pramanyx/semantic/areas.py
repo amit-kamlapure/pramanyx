@@ -54,6 +54,56 @@ def areas_for(connection_id: str, schema_name: Optional[str] = None, *, workspac
     return out
 
 
+def _who(person: str) -> str:
+    who = (person or "").strip().lower()
+    return who[5:] if who.startswith("user:") else who
+
+
+def _area_of_tables(tables: list[str], connection_id: str) -> str:
+    """The area a set of tables is read in: where a person placed one of them, else the area whose words name one."""
+    from pramanyx.semantic.metric_map import best_areas, map_for
+    people = placed_by_people(connection_id)["tables"]
+    named = [a for a in map_for(connection_id).areas if not a.generic]
+    for t in tables:
+        bare = str(t).split(".")[-1].lower()
+        if bare in people:
+            return people[bare][0]
+        hits = best_areas(bare, named)
+        if hits:
+            return hits[0][0].id
+    return ""
+
+
+def standing(person: str, area: str, connection_id: str) -> tuple[int, int]:
+    """A person's standing in an area of the business (punch list 86, 2026-11-18): ``(owner, right)`` — 1 when they
+    are a declared owner of the area (its business or technical owners), and how many answers in it they said were
+    right (their own Right verdicts on answers drawn from the area's tables). Compared as a tuple, so an owner stands
+    above any count. Used ONLY to order knowledge of the same tier: popularity never lifts a draft over a published
+    definition. ``(0, 0)`` for no one, or no area."""
+    who = _who(person)
+    if not who or not area:
+        return (0, 0)
+    owner = 0
+    for a in areas_for(connection_id):
+        if a["id"] == area and who in {_who(p) for p in [*a.get("business_owners", []), *a.get("technical_owners", [])]}:
+            owner = 1
+            break
+    right = 0
+    try:
+        from pramanyx.db.history import get_investigation
+        from pramanyx.feedback.verdicts import accepted_by
+        for v in accepted_by(who, connection_id):
+            inv = get_investigation(v["investigation_id"]) or {}
+            report = inv.get("report") if isinstance(inv.get("report"), dict) else {}
+            tables = list((report or {}).get("tables_used") or inv.get("tables_used") or [])
+            if tables and _area_of_tables(tables, connection_id) == area:
+                right += 1
+    except Exception as exc:  # noqa: BLE001 — unread, the owner's word still stands
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "a person's verdicts could not be read for their standing", counter="areas.standing")
+    return (owner, right)
+
+
 def _plain(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", (text or "").lower()).strip()
 

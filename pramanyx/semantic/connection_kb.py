@@ -336,6 +336,28 @@ _PROMPT_HEADER = ("DOMAIN KNOWLEDGE — what words mean on this connection. Each
                   "hint, never the definition.")
 
 
+_TIER_ORDER = {"approved": 0, "declared": 1}
+
+
+def _behind(entry, connection_id: str) -> tuple[int, int]:
+    """The standing of the person behind a definition — who published it, else who owns it — in its own area, as a
+    sort key (punch list 86): within a tier, an area's owner's word first, then the person whose answers in that area
+    were most often right. Never across tiers; relevance orders what stands equal."""
+    st = entry.standing or {}
+    person = str(st.get("approved_by") or st.get("owner") or "")
+    area = str(st.get("area") or "")
+    if not person or not area:
+        return (0, 0)
+    try:
+        from pramanyx.semantic.areas import standing
+        owner, right = standing(person, area, connection_id)
+    except Exception as exc:  # noqa: BLE001 — unread standing orders nothing
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "a definition's standing could not be read", counter="connection_kb.standing")
+        return (0, 0)
+    return (-owner, -right)
+
+
 def standing_words(standing: dict) -> str:
     """Whose word a Definition is, for the planner (2026-11-17: an owner's approval changed nothing the model saw — the
     block said "use these exactly" of every definition, approved or not, and named no owner)."""
@@ -389,7 +411,8 @@ def retrieve_for_question(question: str, connection_id: str, top_k: int = _TOP_K
     first, with the area the question chose — or the instruction to answer each meaning, named, never one picked.
     """
     entries = sorted(_relevant_entries(question, connection_id, top_k),
-                     key=lambda e: {"approved": 0, "declared": 1}.get(str((e.standing or {}).get("tier") or ""), 2))
+                     key=lambda e: (_TIER_ORDER.get(str((e.standing or {}).get("tier") or ""), 2),
+                                    _behind(e, connection_id)))
     rivals = ""
     try:
         from pramanyx.semantic.areas import rival_meanings, rival_meanings_block
