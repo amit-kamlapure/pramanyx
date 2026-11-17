@@ -105,9 +105,9 @@ def _alive(pid: Optional[int]) -> bool:
     which never signals a process on Windows."""
     if not pid:
         return False
-    from pramanyx.db.serving import _alive as alive
+    from pramanyx.db.serving import process_alive
     try:
-        return alive(int(pid))
+        return process_alive(int(pid))
     except (OSError, ValueError):
         return False
 
