@@ -38,7 +38,7 @@ test("what the person declined is not asked again, on any connection, until they
   event("tool/call", { callId: "c1", name: "mcp__pramanyx__draft_definition", arguments: JSON.stringify(draft) });
   event("tool/result", { message: { toolCallId: "c1", isError: true,
                                     content: [{ type: "text", text: 'the user rejected tool "mcp__pramanyx__draft_definition"' }] } });
-  const again = await decide("mcp__pramanyx__draft_definition", { ...draft, connection: "8233e4fd", term: "Big City " });
+  const again = await decide("mcp__pramanyx__draft_definition", { ...draft, connection: "conn-held", term: "Big City " });
   assert.deepEqual(again, { kind: "deny", reason: NO_STANDS });
   // Another word is its own question; so is a schedule.
   assert.equal((await decide("mcp__pramanyx__draft_definition", { ...draft, term: "small city" })).kind, "ask");

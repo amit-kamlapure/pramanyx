@@ -17,8 +17,8 @@ test("a brought-in sheet opens the Sheets connection to its conversation", () =>
 });
 
 test("a held conversation asks its own sheet, and still no other connection", () => {
-  assert.match(refusalFor(ASK, { connection: "sheets", question: "x" }, "8233e4fd"), /held to the connection/);
-  assert.equal(refusalFor(ASK, { connection: "sheets", question: "x" }, "8233e4fd", ["sheets"]), undefined);
-  assert.match(refusalFor(ASK, { connection: "dcc63d83", question: "x" }, "8233e4fd", ["sheets"]), /cannot read `dcc63d83`/);
-  assert.equal(refusalFor(BRING, { path: "/x" }, "8233e4fd"), undefined);
+  assert.match(refusalFor(ASK, { connection: "sheets", question: "x" }, "conn-held"), /held to the connection/);
+  assert.equal(refusalFor(ASK, { connection: "sheets", question: "x" }, "conn-held", ["sheets"]), undefined);
+  assert.match(refusalFor(ASK, { connection: "conn-other", question: "x" }, "conn-held", ["sheets"]), /cannot read `conn-other`/);
+  assert.equal(refusalFor(BRING, { path: "/x" }, "conn-held"), undefined);
 });
