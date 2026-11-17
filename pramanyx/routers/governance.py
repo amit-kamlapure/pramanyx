@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 router = APIRouter(tags=["governance"])
@@ -239,3 +239,69 @@ def get_governed_tags(key: str | None = None, securable_prefix: str | None = Non
     from pramanyx.govern.tag_store import list_tags
     return [asdict(t) for t in
             list_tags(key=key, securable_prefix=securable_prefix, limit=limit)]
+
+
+# ── certified and deprecated (the ontology study, Phase 1, 2026-11-17) ───────────────────────────────────────────────
+
+class CertificationIn(BaseModel):
+    kind: str = Field(min_length=1, max_length=20)      # table · document · dashboard
+    ref: str = Field(min_length=1, max_length=300)      # the table's name, or the asset's id
+    connection_id: str = Field("", max_length=80)
+    schema_name: str = Field("", alias="schema", max_length=120)
+    status: str = Field("", max_length=20)              # certified · deprecated · "" to clear
+    why: str = Field("", max_length=400)
+
+
+def _curator_or_owner(kind: str, ref: str, who: str, principal) -> bool:
+    """A curator — whoever administers the organisation — certifies anything; a document's owner certifies their own."""
+    from pramanyx.rbac.permissions import Permission
+    from pramanyx.rbac.resolver import has_permission
+    if has_permission(principal, Permission.ADMIN_MANAGE_ORG):
+        return True
+    if kind == "document":
+        from pramanyx.knowledge.access import access_of
+        from pramanyx.knowledge.indexer import get_document
+        entry = get_document(ref) or {}
+        owner = str(access_of(entry).get("owner") or "") if entry else ""
+        return bool(owner) and owner.lower() == who.replace("user:", "").lower()
+    return False
+
+
+@router.put("/governance/certification")
+def put_certification(body: CertificationIn, request: Request):
+    """Certify or deprecate a table, document or dashboard — a curator's word (a document's owner's for
+    their own), never an agent's. A deprecation says why. Clearing it is an empty ``status``."""
+    from pramanyx.govern.certification import securable_for, set_certification
+    from pramanyx.rbac.agent_gate import is_agent_request
+    from pramanyx.security.authz import acting_person
+    if is_agent_request(request):
+        raise HTTPException(status_code=403, detail="certifying or deprecating an asset is a person's own call; an agent cannot make it")
+    principal = getattr(request.state, "principal", None)
+    who = acting_person(principal)
+    if not _curator_or_owner(body.kind, body.ref, who, principal):
+        raise HTTPException(status_code=403, detail="only a curator — the organisation's owner or an admin — certifies "
+                                                    "or deprecates this; a document's owner does their own")
+    try:
+        securable = securable_for(body.kind, body.ref, connection_id=body.connection_id, schema=body.schema_name)
+        now = set_certification(securable, body.status, by=who, why=body.why)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return {"securable": securable, "certification": now}
+
+
+@router.get("/governance/certification")
+def get_certification(kind: str, connection_id: str = "", ref: str = ""):
+    """What is certified or deprecated: one asset (``ref``), or every one of a kind (a connection's tables)."""
+    from pramanyx.govern import certification as K
+    try:
+        if ref:
+            return {"certification": K.certification_of(K.securable_for(kind, ref, connection_id=connection_id))}
+        if kind == "table":
+            if not connection_id:
+                raise ValueError("a connection's tables are read by its id")
+            return {"by_ref": K.tables_of(connection_id)}
+        if kind not in K.KINDS:
+            raise ValueError(f"one of {', '.join(K.KINDS)}")
+        return {"by_ref": K.artifacts_of(kind)}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))

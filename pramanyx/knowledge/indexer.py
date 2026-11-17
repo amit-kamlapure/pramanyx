@@ -649,6 +649,15 @@ def build_external_context_section(query: str, top_k: int = 4,
         return DOCUMENTS_UNAVAILABLE_SECTION
     if allowed is not None:
         hits = [h for h in hits if h.get("doc_id") in allowed]
+    # A document a curator (or its owner) deprecated is not handed to an answer; a certified one says so (the
+    # ontology study, 2026-11-17). Unread, nothing is marked and nothing is held back.
+    marks = _document_marks()
+    held_back = sum(1 for h in pinned_hits + hits if (marks.get(h.get("doc_id") or "") or {}).get("status") == "deprecated")
+    pinned_hits = [h for h in pinned_hits if (marks.get(h.get("doc_id") or "") or {}).get("status") != "deprecated"]
+    hits = [h for h in hits if (marks.get(h.get("doc_id") or "") or {}).get("status") != "deprecated"]
+    for h in pinned_hits + hits:
+        if (marks.get(h.get("doc_id") or "") or {}).get("status") == "certified":
+            h["certified"] = True
     seen = {(h.get("doc_id"), h.get("chunk_index")) for h in pinned_hits}
     hits = [h for h in hits
             if (h.get("doc_id"), h.get("chunk_index")) not in seen][:top_k]
@@ -657,6 +666,9 @@ def build_external_context_section(query: str, top_k: int = 4,
         return ""
 
     lines: list[str] = []
+    if held_back:
+        lines.append(f"({held_back} passage{'s' if held_back != 1 else ''} from deprecated documents "
+                     f"{'were' if held_back != 1 else 'was'} left out.)")
     words = matched_by_words(pinned_hits + hits)
     if words:
         # FA-1 — a passage the words matched shares the question's words, not necessarily its meaning: said first
@@ -676,6 +688,17 @@ def build_external_context_section(query: str, top_k: int = 4,
     return "\n".join(lines)
 
 
+def _document_marks() -> dict:
+    """The organisation's certified and deprecated documents, by id; {} when they could not be read."""
+    try:
+        from pramanyx.govern.certification import artifacts_of
+        return artifacts_of("document")
+    except Exception as exc:  # noqa: BLE001 — unread, nothing is marked and nothing held back
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "which documents are certified or deprecated could not be read", counter="knowledge.document_marks")
+        return {}
+
+
 def _context_lines(hits: list[dict]) -> list[str]:
     """One retrieved chunk per stanza, each carrying where it came from."""
     lines: list[str] = []
@@ -683,6 +706,8 @@ def _context_lines(hits: list[dict]) -> list[str]:
         # R8a — a compiled schema doc cites its ontology node (the FQN) so the
         # model can name exactly where a fact came from; uploads keep the filename.
         provenance = h.get("fqn") or h.get("filename", "")
+        if h.get("certified"):
+            provenance += "; CERTIFIED by the organisation"
         lines.append(f"\n── {h['title']} ({provenance}) ──")
         lines.append(h["text"])
     return lines

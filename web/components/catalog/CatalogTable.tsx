@@ -29,6 +29,7 @@ import { toast } from "@/components/ui/toast";
 import { useOpenInQuery } from "@/lib/openInQuery";
 import { tableStarter } from "@/lib/query/workbench";
 import { GlossaryPanel } from "@/components/catalog/GlossaryPanel";
+import { CertificationMark } from "@/components/govern/CertificationMark";
 import { programLine, TableProgram } from "@/components/DatasetProgram";
 import { Chevron } from "@/components/icons/catalog";
 import { ColumnTypeIcon } from "@/components/icons/columnType";
@@ -246,6 +247,8 @@ export function CatalogTable({ connId, catalogName, schemaName, table, view, onA
           {objectName
             ? <Chip title={`The business object read from ${table.name}`} testId="catalog-table-object">{objectName}</Chip>
             : graph !== undefined && <Chip title="No business object is read from this table">Not mapped</Chip>}
+          {/* the organisation's word on the table — the planner reads it under the table's name (2026-11-17) */}
+          <CertificationMark target={{ kind: "table", ref: bare(table.name), connectionId: connId, schema: schemaName }} />
         </>}
         actions={<>
           {openInSql && (

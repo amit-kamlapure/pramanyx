@@ -23,6 +23,7 @@ import { BROWSER_RENDERABLE, DocumentUploader } from "@/components/DocumentUploa
 import { FactCheckPanel } from "@/components/FactCheckPanel";
 import { KnowledgeSourcesSection } from "@/components/KnowledgeSourcesSection";
 import { FoldLine, GroupHead } from "@/components/semantic/parts";
+import { CertificationMark } from "@/components/govern/CertificationMark";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Loading, ReadFailed } from "@/components/ui/states";
@@ -51,6 +52,7 @@ import {
 import {
   addedWords, chunksOf, chunkWords, dateWords, documentFigures, documentName, driftedDocuments, formatLabel,
 } from "@/lib/documents";
+import { readCertifications, type Certification } from "@/lib/certification";
 import { countNoun, formatCount, formatTimestamp } from "@/lib/format";
 import { connectionLabel } from "@/lib/names";
 
@@ -70,6 +72,9 @@ export function DocumentsPage({ connectionId, connections = [] }: {
   connections?: ReadonlyArray<Conn>;
 }) {
   const [docs, setDocs] = useState<DocumentEntry[] | null>(null);
+  // Which documents a curator certified or deprecated — one read for the list, each row shown its own (2026-11-17).
+  const [certs, setCerts] = useState<Record<string, Certification>>({});
+  useEffect(() => { readCertifications("document").then(setCerts).catch(() => setCerts({})); }, [docs]);
   const [docsFailed, setDocsFailed] = useState<string | null>(null);
   const [status, setStatus] = useState<KnowledgeStatus | null>(null);
   const [statusRead, setStatusRead] = useState(false);
@@ -189,6 +194,7 @@ export function DocumentsPage({ connectionId, connections = [] }: {
 
   const docRow = (doc: DocumentEntry, i: number) => (
     <DocumentRow key={doc.doc_id} doc={doc} first={i === 0} status={status} connections={connections} now={now}
+      cert={certs[doc.doc_id] ?? null}
       maxChunks={maxChunks} open={openDocId === doc.doc_id} removing={deletingId === doc.doc_id}
       removeFailed={deleteFailed?.docId === doc.doc_id ? deleteFailed.error : null}
       onView={() => setOpenDocId(prev => (prev === doc.doc_id ? null : doc.doc_id))}
@@ -473,8 +479,10 @@ function useDriftFix(drifted: Drifted[], onChanged: () => void): { detail: React
 const ROW_GRID = "64px minmax(0, 1fr) minmax(48px, 140px) 128px 92px 76px";
 const SCHEMA_ROW_GRID = "minmax(0, 1fr) minmax(48px, 140px) 128px 92px";
 
-function DocumentRow({ doc, first, status, connections, now, maxChunks, open, removing, removeFailed, onView, onRemove }: {
+function DocumentRow({ doc, first, status, connections, now, maxChunks, open, removing, removeFailed, onView, onRemove, cert }: {
   doc: DocumentEntry; first: boolean; status: KnowledgeStatus | null; connections: ReadonlyArray<Conn>; now: number;
+  /** A curator's word on it: a deprecated document is never handed to an answer (2026-11-17). */
+  cert: Certification | null;
   maxChunks: number; open: boolean; removing: boolean; removeFailed: string | null; onView: () => void; onRemove: () => void;
 }) {
   // Remove deletes the row, its chunks and the original file — asked once more on the row before it runs.
@@ -493,6 +501,7 @@ function DocumentRow({ doc, first, status, connections, now, maxChunks, open, re
             {name}
           </div>
           {meta && <div className="aug-fs-xs" style={{ ...MUTED, ...ONE_LINE }}>{meta}</div>}
+          {!doc.generated && <CertificationMark compact target={{ kind: "document", ref: doc.doc_id }} initial={cert} />}
         </div>
         <span title={`${countNoun(c.indexed, "chunk")} in the index`}><Bar value={c.indexed} max={maxChunks} /></span>
         <span className="aug-fs-sm" style={{ ...NUM, textAlign: "right", color: "var(--t2)" }}>

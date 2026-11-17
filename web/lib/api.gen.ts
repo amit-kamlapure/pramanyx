@@ -7636,6 +7636,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/governance/certification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Certification
+         * @description What is certified or deprecated: one asset (``ref``), or every one of a kind (a connection's tables).
+         */
+        get: operations["get_certification_governance_certification_get"];
+        /**
+         * Put Certification
+         * @description Certify or deprecate a table, document or dashboard — a curator's word (a document's owner's for
+         *     their own), never an agent's. A deprecation says why. Clearing it is an empty ``status``.
+         */
+        put: operations["put_certification_governance_certification_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/governance/gate-map": {
         parameters: {
             query?: never;
@@ -20251,6 +20276,33 @@ export interface components {
             cells: {
                 [key: string]: unknown;
             }[];
+        };
+        /** CertificationIn */
+        CertificationIn: {
+            /**
+             * Connection Id
+             * @default
+             */
+            connection_id: string;
+            /** Kind */
+            kind: string;
+            /** Ref */
+            ref: string;
+            /**
+             * Schema
+             * @default
+             */
+            schema: string;
+            /**
+             * Status
+             * @default
+             */
+            status: string;
+            /**
+             * Why
+             * @default
+             */
+            why: string;
         };
         /** ChangeOut */
         ChangeOut: {
@@ -40205,6 +40257,72 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_certification_governance_certification_get: {
+        parameters: {
+            query: {
+                kind: string;
+                connection_id?: string;
+                ref?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_certification_governance_certification_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CertificationIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
