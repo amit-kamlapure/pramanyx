@@ -5913,7 +5913,7 @@ async def _stream_ask(req: "AskRequest", request: Request, conn_id: str) -> Asyn
     if (req.depth == "auto" and not req.escalate and not req.insight_id
             and not req.skip_clarify):
         from pramanyx.agent.clarify import assess_clarification
-        decision = assess_clarification(req.question)
+        decision = assess_clarification(req.question, conn_id)
         if decision.should_ask:
             yield _sse("clarify", decision.to_event())
             yield _sse("done", {})

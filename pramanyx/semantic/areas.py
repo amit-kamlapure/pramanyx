@@ -129,3 +129,60 @@ def placed_by_people(connection_id: str) -> dict:
         if t.securable == f"catalog:{connection_id}":
             out["connection"] = (t.value, t.set_by)
     return out
+
+
+def rival_meanings(question: str, connection_id: str) -> list[dict]:
+    """The words of ``question`` that mean one thing in one area of the business and another in the next — each
+    ``{term, meanings: [{area, area_name, text, standing}], chosen}``, where ``chosen`` is the area the question itself
+    names ("" when it names none of them: then the person is asked, or each meaning is answered and named). A word with
+    one meaning, or meanings no one has written, is no rival. Reads what is stored; no model."""
+    from pramanyx.record.writers import definition_term, definitions
+    q = f" {re.sub(r'[^a-z0-9]+', ' ', (question or '').lower())} "
+    groups: dict[str, list] = {}
+    for c in definitions(connection_id):
+        if c.tier in ("approved", "declared") and (c.extra.get("area") or "").strip():
+            groups.setdefault(definition_term(c.extra.get("term", "")), []).append(c)
+    if not any(len({c.extra.get("area") for c in g}) > 1 for g in groups.values()):
+        return []
+    try:
+        names = {a["id"]: a["name"] for a in areas_for(connection_id)}
+    except Exception as exc:  # noqa: BLE001 — unread, an area is said by its id
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "the areas could not be read; rival meanings are said by area id", counter="areas.rivals")
+        names = {}
+
+    def said(word: str) -> bool:
+        w = re.sub(r"[^a-z0-9]+", " ", (word or "").lower()).strip()
+        # the word as written, or its plural ("active customers")
+        return bool(w) and re.search(rf"(?<![a-z0-9]){re.escape(w)}(?:s|es)?(?![a-z0-9])", q) is not None
+
+    out: list[dict] = []
+    for group in groups.values():
+        if len({c.extra.get("area") for c in group}) < 2:
+            continue
+        words = {group[0].extra.get("term", "")} | {a for c in group for a in (c.extra.get("aliases") or [])}
+        if not any(said(w) for w in words):
+            continue
+        meanings = [{"area": c.extra.get("area"), "area_name": names.get(c.extra.get("area"), c.extra.get("area")),
+                     "text": c.statement.text, "standing": "published" if c.tier == "approved" else "draft"}
+                    for c in sorted(group, key=lambda c: (c.tier != "approved", c.extra.get("area")))]
+        named = [m["area"] for m in meanings if said(m["area_name"]) or said(str(m["area"]).replace("_", " "))]
+        out.append({"term": group[0].extra.get("term", ""), "meanings": meanings, "chosen": named[0] if len(named) == 1 else ""})
+    return out
+
+
+def rival_meanings_block(rivals: list[dict]) -> str:
+    """The rival meanings, said to the planner: the one the question chose, or each one to be answered and named."""
+    if not rivals:
+        return ""
+    lines = ["WORDS WITH MORE THAN ONE MEANING HERE — each area of the business means its own:"]
+    for r in rivals:
+        each = "; ".join(f"in {m['area_name']} ({m['standing']}): {m['text']}" for m in r["meanings"])
+        lines.append(f"  • “{r['term']}” — {each}")
+        if r["chosen"]:
+            name = next(m["area_name"] for m in r["meanings"] if m["area"] == r["chosen"])
+            lines.append(f"    The question is about {name}: use {name}'s meaning, and say so.")
+        else:
+            lines.append("    The question does not say which area: answer for each meaning, each named with its area, "
+                         "or ask the person which they mean — never pick one silently.")
+    return "\n".join(lines)

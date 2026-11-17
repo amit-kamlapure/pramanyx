@@ -383,8 +383,22 @@ def retrieve_for_question(question: str, connection_id: str, top_k: int = _TOP_K
 
     Returns empty string if nothing is relevant or if the knowledge store is
     empty — callers should skip injecting when the result is falsy.
+
+    One authority order (2026-11-17): of the relevant entries, a published definition is read before a draft and a
+    draft before one only said. A word the organisation defines differently in two areas of the business is said
+    first, with the area the question chose — or the instruction to answer each meaning, named, never one picked.
     """
-    return _render_block(_relevant_entries(question, connection_id, top_k))
+    entries = sorted(_relevant_entries(question, connection_id, top_k),
+                     key=lambda e: {"approved": 0, "declared": 1}.get(str((e.standing or {}).get("tier") or ""), 2))
+    rivals = ""
+    try:
+        from pramanyx.semantic.areas import rival_meanings, rival_meanings_block
+        rivals = rival_meanings_block(rival_meanings(question, connection_id))
+    except Exception as exc:  # noqa: BLE001 — unread, the definitions are said without it
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "rival meanings could not be read", counter="connection_kb.rivals")
+    block = _render_block(entries)
+    return "\n\n".join(x for x in (rivals, block) if x)
 
 
 def _relevant_entries(question: str, connection_id: str, top_k: int = _TOP_K) -> list:
