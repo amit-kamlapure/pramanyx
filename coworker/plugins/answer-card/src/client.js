@@ -1493,10 +1493,12 @@ export function apply(ctx) {
           : name === PREFIX + "draft_definition" ? DraftedDefinitionCard
           : SCHEDULES.test(name) ? ScheduleCard : ToolStep)));
   };
-  // What a Pramanyx step waits on is asked in the conversation, under the step; the foot of the page says where.
+  // What a Pramanyx step waits on is asked in the conversation, under the step; the foot of the page says where. The
+  // composer's occupants are tried lowest priority first, and the shell's approval card is 1 (its question card 0, a
+  // read-only helper's view -10): this one, -1, answers only Pramanyx's approvals and passes everything else on.
   ctx.slots.inject("conversation.composer", () => ctx.slots.register({
     name: "conversation.composer",
-    priority: 2,
+    priority: -1,
     select: ({ pendingInteraction: waiting }) =>
       (waiting && waiting.kind === "approval" && String(waiting.toolName || "").startsWith(PREFIX) ? waiting : null),
   }, WaitingAbove));

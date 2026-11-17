@@ -118,6 +118,11 @@ turned back on from the interface.
   agent searches and reads the person's own past conversations (the shell's session tools, over the sidebar's search
   index). A person's own coworker holds only theirs; the install's first coworker searches only while one person has
   used it, and refuses once a second has (`plugins/home`, `recallRefusal`).
+- **Asked in the conversation** (2026-11-18). What the coworker asks before doing — setting up a schedule, drafting
+  what a word means — is asked under the step that waits on it, with Reject and Allow once, and the box at the foot of
+  the page says where the question is (it asks there only if the step is not drawn). The shell's own card for it,
+  which took the question box's place under a strip of its own, is not drawn for Pramanyx's steps; the answer goes to
+  the same request, so what is recorded is the person's own click, as before.
 - **Anything on a schedule, from a sentence** (2026-11-16). Asked to have something happen on a schedule — a
   question asked again, a summary, a Slack post, an email; every Monday, or once in five minutes — the agent passes
   the person's own words to `schedule` (a call that drops their words saying when — "once", "in 4 minutes", "every
