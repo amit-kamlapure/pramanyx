@@ -175,7 +175,26 @@ def _primary_sql(inv: dict) -> str:
     for q in reversed(inv.get("query_history") or []):
         if isinstance(q, dict) and (q.get("sql") or "").strip() and not q.get("error"):
             return q["sql"].strip()
-    return ""
+    return _phase_sql(report) if isinstance(report, dict) else ""
+
+
+def _phase_sql(report: dict) -> str:
+    """A deep analysis keeps its queries in its report's phases, not in a query history (found live, 2026-11-18: no
+    finished deep analysis on the reference install could be kept as a skill): the query behind the finding the report
+    leads with (its first exhibit), else its first significant finding that ran, else its first that ran."""
+    ran = [f for ph in (report.get("phases") or []) if isinstance(ph, dict)
+           for f in (ph.get("findings") or []) if isinstance(f, dict) and (f.get("sql") or "").strip() and not f.get("error")]
+    if not ran:
+        return ""
+    led = [e.get("finding_id") for e in (report.get("exhibits") or []) if isinstance(e, dict) and e.get("finding_id")]
+    for fid in led:
+        for f in ran:
+            if f.get("finding_id") == fid:
+                return f["sql"].strip()
+    for f in ran:
+        if f.get("is_significant"):
+            return f["sql"].strip()
+    return ran[0]["sql"].strip()
 
 
 def _finding_text(inv: dict) -> str:

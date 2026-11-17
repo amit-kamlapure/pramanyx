@@ -43,3 +43,21 @@ def test_a_skill_computing_an_approved_metric_otherwise_is_refused_and_one_held_
     monkeypatch.setattr("pramanyx.memory.skills.held_to", lambda q, sql, c="": (["revenue"], []))
     out = O.save_learned_skill(_template(), connection_id="c1")
     assert out["metrics"] == ["revenue"] and kept["a"].metrics == ["revenue"]
+
+
+def test_a_deep_analysis_is_kept_by_the_query_its_report_leads_with():
+    """Found live 2026-11-18: a deep analysis keeps its queries in its report's phases and no finished one could be
+    kept as a skill. The query behind the report's first exhibit is its method; else a significant finding's."""
+    report = {"phases": [
+        {"findings": [{"finding_id": "f0", "sql": "", "error": None},
+                      {"finding_id": "f1", "sql": "SELECT day, SUM(x) FROM t GROUP BY 1", "error": None}]},
+        {"findings": [{"finding_id": "f2", "sql": "SELECT region, SUM(x) FROM t GROUP BY 1", "is_significant": True},
+                      {"finding_id": "f3", "sql": "SELECT broken", "error": "syntax"}]}],
+        "exhibits": [{"finding_id": "f2"}, {"finding_id": "f1"}]}
+    assert S._primary_sql({"report": report}) == "SELECT region, SUM(x) FROM t GROUP BY 1"
+    report["exhibits"] = []
+    assert S._primary_sql({"report": report}) == "SELECT region, SUM(x) FROM t GROUP BY 1"
+    report["phases"][1]["findings"][0]["is_significant"] = False
+    assert S._primary_sql({"report": report}) == "SELECT day, SUM(x) FROM t GROUP BY 1"
+    assert S._primary_sql({"report": {"sql": "SELECT 1"}}) == "SELECT 1"
+    assert S._primary_sql({"report": {"phases": []}}) == ""
