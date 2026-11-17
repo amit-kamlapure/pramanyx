@@ -78,6 +78,19 @@ def semantic_key(sql: str) -> str:
     return s.strip()
 
 
+#: A date or a moment written into SQL, and a year — what a question about a moving period changes every day it is
+#: asked ("yesterday" asked on the 16th and on the 17th is one question answered one way, twice).
+_DATED = re.compile(r"'\d{4}-\d{2}-\d{2}[^']*'")
+_YEAR = re.compile(r"\b(?:19|20)\d{2}\b")
+
+
+def moving_key(sql: str) -> str:
+    """`semantic_key` with its dates and years left out — for a question that names a period counted from today
+    (`kernel/clock.names_a_relative_period`), whose SQL names a different day each day it is asked (2026-11-17:
+    theLook's review list showed "the last 12 months" as answered twenty ways)."""
+    return _YEAR.sub("<year>", _DATED.sub("'<date>'", semantic_key(sql)))
+
+
 @dataclass
 class Variant:
     """One way the question has been answered."""
@@ -209,8 +222,10 @@ def detect(connection_id: str, *, org_id: Optional[str] = None, min_runs: int = 
         if is_pinned and not include_settled:
             continue
         grouped: dict[str, Variant] = {}
+        from pramanyx.kernel.clock import names_a_relative_period
+        keyed = moving_key if names_a_relative_period(display[key][1]) else semantic_key
         for r in runs:
-            sk = semantic_key(r["sql"])
+            sk = keyed(r["sql"])
             v = grouped.get(sk)
             if v is None:
                 grouped[sk] = Variant(sql=r["sql"], key=sk, tables=r["tables"], run_count=1,
@@ -359,7 +374,7 @@ def measure_impact(divergence: Divergence, connection_id: str, *,
 # ── the human decision ────────────────────────────────────────────────────────────
 
 def pin(connection_id: str, question: str, sql: str, *, tables: Optional[list[str]] = None,
-        note: str = "") -> Any:
+        note: str = "", by: str = "") -> Any:
     """Record a human's choice of the correct variant as a trusted query.
 
     The warrant is :data:`HUMAN_TAG` — a person decided — which is stronger than the
@@ -388,7 +403,7 @@ def pin(connection_id: str, question: str, sql: str, *, tables: Optional[list[st
         # KI-0: a pin IS a human approval — the reviewer chose this variant over the
         # alternatives, which is a stronger warrant than any seed-and-approve flow.
         status="approved", version=1, source="divergence_review",
-        verified_by="reviewer", verified_at=now,
+        verified_by=by or "reviewer", verified_at=now,
     )
     save_trusted(tq)
     return tq

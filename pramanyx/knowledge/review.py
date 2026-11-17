@@ -225,7 +225,7 @@ def _answered_two_ways(connection_id: str, link: dict) -> list[dict]:
     return [_row(source="divergence", ref=d.question_key, kind="conflict",
                  title=f"Answered {d.variant_count} ways: {d.question}",
                  detail=f"Asked {d.run_count} times; the most-used answer was reused {d.top_reuse} times.",
-                 count=d.run_count, href=None, action="Settle it by approving one answer as a trusted query")
+                 count=d.run_count, href=None, action="Settle it")
             for d in detect(connection_id)[:PER_SOURCE] if not d.pinned and ask_of(d.question) == d.question]
 
 

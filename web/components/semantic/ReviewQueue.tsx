@@ -14,6 +14,7 @@ import { Chip, Empty, MUTED, ROW, RULE } from "@/components/clarity/kit";
 import { Button } from "@/components/ui/button";
 import { SelectField } from "@/components/ui/select";
 import { Loading, ReadFailed } from "@/components/ui/states";
+import { SettleDivergence } from "@/components/semantic/SettleDivergence";
 import { countNoun } from "@/lib/format";
 import { busyWords, forWhom, readReview, SOURCE_WORDS, type Review, type ReviewItem, type ReviewKind } from "@/lib/review";
 
@@ -23,7 +24,9 @@ const KIND: Record<ReviewKind, { word: string; tone: "amber" | "plain" | "down" 
   conflict: { word: "Conflict", tone: "down" },
 };
 
-function Row({ item, areaName }: { item: ReviewItem; areaName: (id: string) => string }) {
+function Row({ item, areaName, onSettle }: {
+  item: ReviewItem; areaName: (id: string) => string; onSettle: (questionKey: string) => void;
+}) {
   const busy = busyWords(item);
   const areas = item.area.split(",").filter(Boolean).map(areaName).join(" · ");
   return (
@@ -37,7 +40,12 @@ function Row({ item, areaName }: { item: ReviewItem; areaName: (id: string) => s
         </span>
       </div>
       <div style={{ flexShrink: 0 }}>
-        {item.resolve.href ? (
+        {item.source === "divergence" ? (
+          // Settled here: which answer is right is chosen in a form, by the person (2026-11-17).
+          <Button size="sm" variant="secondary" onClick={() => onSettle(item.id.slice("divergence:".length))}>
+            {item.resolve.action}
+          </Button>
+        ) : item.resolve.href ? (
           <Button size="sm" variant="secondary" onClick={() => window.location.assign(item.resolve.href as string)}>
             {item.resolve.action}
           </Button>
@@ -55,6 +63,7 @@ export function ReviewQueue({ connId }: { connId: string }) {
   const [area, setArea] = useState("");
   const [review, setReview] = useState<Review | null>(null);
   const [failed, setFailed] = useState("");
+  const [settling, setSettling] = useState("");
 
   const load = useCallback(() => {
     setFailed("");
@@ -70,6 +79,10 @@ export function ReviewQueue({ connId }: { connId: string }) {
   const k = review.by_kind;
   return (
     <div data-testid="review-queue" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {settling && (
+        <SettleDivergence connId={connId} questionKey={settling} onClose={() => setSettling("")}
+          onSettled={() => { setSettling(""); load(); }} />
+      )}
       <div style={{ ...ROW, justifyContent: "space-between" }}>
         <span className="aug-fs-sm" data-testid="review-summary" style={{ color: "var(--t2)" }}>
           {review.total === 0 ? "Nothing waits" : `${review.total} wait${review.total === 1 ? "s" : ""}`}
@@ -95,7 +108,7 @@ export function ReviewQueue({ connId }: { connId: string }) {
         <Empty>{area ? `Nothing waits in ${areaName(area)}.` : "Nothing waits on anyone for this connection's knowledge."}</Empty>
       ) : (
         <div>
-          {review.items.map((i) => <Row key={i.id} item={i} areaName={areaName} />)}
+          {review.items.map((i) => <Row key={i.id} item={i} areaName={areaName} onSettle={setSettling} />)}
           {review.total > review.items.length && (
             <div className="aug-fs-xs" style={{ ...MUTED, padding: "8px 0" }}>
               The {review.items.length} busiest of {review.total} are listed.

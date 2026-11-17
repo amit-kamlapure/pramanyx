@@ -166,3 +166,51 @@ def test_the_module_never_picks_a_winner():
     exported = {n for n in dir(AD) if not n.startswith("_")}
     for forbidden in ("auto_pin", "promote", "resolve", "pick_winner", "auto_resolve"):
         assert forbidden not in exported
+
+
+# ── a question about a moving period (2026-11-17) ─────────────────────────────
+
+def test_a_moving_period_asked_on_different_days_is_answered_one_way(monkeypatch):
+    """theLook's review list showed "the last 12 months" as answered twenty ways: its SQL names a different day each
+    day it is asked. Its dates and years are left out of the comparison — and only for such a question."""
+    sql = "SELECT SUM(sale_price) FROM order_items WHERE created_at >= '{d}' AND EXTRACT(YEAR FROM created_at) >= {y}"
+    _patch_receipts(monkeypatch, [
+        _receipt("r1", "Revenue over the last 12 months", sql.format(d="2025-11-16", y=2025), at="2026-11-16T09:00:00Z"),
+        _receipt("r2", "Revenue over the last 12 months", sql.format(d="2025-11-17", y=2025), at="2026-11-17T09:00:00Z"),
+        _receipt("r3", "Revenue over the last 12 months", sql.format(d="2025-11-17", y=2025), at="2026-11-17T10:00:00Z"),
+    ])
+    assert AD.detect("c1") == []
+    # A real difference in a moving-period question is still one.
+    _patch_receipts(monkeypatch, [
+        _receipt("r1", "Revenue yesterday", "SELECT SUM(x) FROM o WHERE d = '2026-11-16'"),
+        _receipt("r2", "Revenue yesterday", "SELECT SUM(x) FROM o WHERE d = '2026-11-16'"),
+        _receipt("r3", "Revenue yesterday", "SELECT SUM(x) FROM o WHERE d = '2026-11-17' AND status <> 'cancelled'"),
+    ])
+    [d] = AD.detect("c1")
+    assert d.variant_count == 2
+    # A question about a fixed period keeps its dates: July 2026 and August 2026 are two answers.
+    assert AD.semantic_key("SELECT 1 WHERE d >= '2026-07-01'") != AD.semantic_key("SELECT 1 WHERE d >= '2026-08-01'")
+
+
+def test_which_answer_is_right_is_a_named_persons_decision_never_an_agents(monkeypatch, tmp_path):
+    """Settle it (2026-11-17): the pin names the person who chose, and an agent cannot pin."""
+    from types import SimpleNamespace
+
+    import pytest
+    from fastapi import HTTPException
+
+    import pramanyx.rbac.agent_gate as gate
+    from pramanyx.routers import consistency as C
+    saved = []
+    import pramanyx.semantic.trusted_queries as T
+    monkeypatch.setattr(T, "save_trusted", lambda tq: saved.append(tq))
+    request = SimpleNamespace(headers={}, state=SimpleNamespace())
+    import pramanyx.security.authz as authz
+    monkeypatch.setattr(authz, "get_principal", lambda r: None)
+    monkeypatch.setattr(authz, "caller", lambda: "ana")
+    C.pin_answer(C.PinIn(connection_id="c1", question="revenue last month", sql="SELECT 1"), request)
+    assert saved[0].verified_by == "user:ana" and saved[0].status == "approved"
+    monkeypatch.setattr(gate, "is_agent_request", lambda r: True)
+    with pytest.raises(HTTPException) as refused:
+        C.pin_answer(C.PinIn(connection_id="c1", question="q", sql="SELECT 2"), request)
+    assert refused.value.status_code == 403 and len(saved) == 1

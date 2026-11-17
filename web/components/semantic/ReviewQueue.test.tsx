@@ -32,7 +32,7 @@ const REVIEW: Review = {
       owners: ["user:ana"], resolve: { href: "/definitions/Big%20city?conn=c1", action: "Publish it, or change it" } },
     { id: "divergence:c", source: "divergence", kind: "conflict", title: "Answered 2 ways: revenue last month",
       detail: "", area: "finance,marketing", count: 3, complaints: 0, at: "", owners: ["user:ana"],
-      resolve: { href: null, action: "Settle it by approving one answer as a trusted query" } },
+      resolve: { href: null, action: "Settle it" } },
   ],
 };
 
@@ -55,7 +55,7 @@ describe("Review", () => {
     fireEvent.click(screen.getByRole("button", { name: "Publish it, or change it" }));
     expect(assign).toHaveBeenCalledWith("/definitions/Big%20city?conn=c1");
     expect(screen.getByTestId("review-row-divergence")).toHaveTextContent("Finance · Marketing");
-    expect(screen.getByTestId("review-row-divergence")).toHaveTextContent("no page for it yet");
+    expect(screen.getByTestId("review-row-divergence")).toHaveTextContent("Settle it");
     expect(screen.getByTestId("review-unread")).toHaveTextContent("Not read: imports.");
     vi.unstubAllGlobals();
   });
@@ -73,5 +73,29 @@ describe("Review", () => {
     render(<ReviewQueue connId="c1" />);
     expect(await screen.findByText("Nothing waits on anyone for this connection's knowledge.")).toBeTruthy();
     expect(screen.getByTestId("review-summary")).toHaveTextContent("Nothing waits");
+  });
+});
+
+describe("settling a question answered more than one way", () => {
+  it("opens the form from the row, and the person's choice is kept as theirs", async () => {
+    readReview.mockResolvedValue(REVIEW);
+    const calls: { url: string; body?: string }[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url: String(url), body: init?.body as string | undefined });
+      if (String(url).includes("/consistency/divergences")) {
+        return new Response(JSON.stringify({ divergences: [{ question: "revenue last month", question_key: "c", run_count: 3,
+          variants: [{ sql: "SELECT SUM(x) FROM o", key: "a", tables: ["o"], run_count: 2, first_seen: "2026-11-01", last_seen: "2026-11-10" },
+                     { sql: "SELECT SUM(x) FROM o WHERE s <> 'c'", key: "b", tables: ["o"], run_count: 1, first_seen: "2026-11-12", last_seen: "2026-11-12" }] }] }));
+      }
+      return new Response(JSON.stringify({ pinned: {} }));
+    }));
+    render(<ReviewQueue connId="c1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Settle it" }));
+    expect(await screen.findAllByTestId("settle-variant")).toHaveLength(2);
+    fireEvent.click(screen.getAllByRole("button", { name: "This one is right" })[1]);
+    await waitFor(() => expect(calls.some((c) => c.url.includes("/consistency/pin"))).toBe(true));
+    const pin = JSON.parse(calls.find((c) => c.url.includes("/consistency/pin"))!.body!);
+    expect(pin).toEqual({ connection_id: "c1", question: "revenue last month", sql: "SELECT SUM(x) FROM o WHERE s <> 'c'", tables: ["o"] });
+    vi.unstubAllGlobals();
   });
 });

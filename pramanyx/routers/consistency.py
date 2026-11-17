@@ -4,13 +4,13 @@ Three routes over :mod:`pramanyx.semantic.answer_divergence`: what has been answ
 one way, what that costs when the variants are actually executed, and a human's decision about
 which one is right.
 
-Every route is gated on ``consistency.divergence`` (default off ⇒ 404, byte-identical). The
-gate is on the ROUTES rather than inside the module because detection is a pure read over
-receipts the platform already stores — there is no live-path behaviour to make conditional.
+Detection is a pure read over receipts the platform already stores. The one write is a person's: which answer is
+right (`POST /consistency/pin`), opened from Semantic Layer ▸ Review's "Settle it" (2026-11-17) — never an agent's,
+and recorded under the person who decided.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from pramanyx.security.authz import connection_owner_guard
 
@@ -74,11 +74,15 @@ def divergence_impact(connection_id: str, question_key: str, max_variants: int =
 
 
 @router.post("/consistency/pin")
-def pin_answer(body: PinIn):
-    """Record which variant is correct. The warrant becomes "a person decided"."""
+def pin_answer(body: PinIn, request: Request):
+    """Record which variant is correct. The warrant becomes "a person decided" — the person signed in, never an agent."""
+    from pramanyx.rbac.agent_gate import is_agent_request
+    from pramanyx.security.authz import acting_person, get_principal
     from pramanyx.semantic.answer_divergence import pin
+    if is_agent_request(request):
+        raise HTTPException(status_code=403, detail="Which answer is right is a person's decision; an agent does not pin.")
     tq = pin(body.connection_id, body.question, body.sql,
-             tables=body.tables, note=body.note)
+             tables=body.tables, note=body.note, by=acting_person(get_principal(request)))
     return {"pinned": tq.model_dump()}
 
 

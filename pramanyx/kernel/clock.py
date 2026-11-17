@@ -18,6 +18,8 @@ model's own reading. Now:
 """
 from __future__ import annotations
 
+import re
+
 import contextvars
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
@@ -159,3 +161,18 @@ def provisional_line(settle_days: int, clock: str = "", now: Optional[datetime] 
     since = today_for(clock, now) - timedelta(days=n)
     return (f"This source keeps revising its most recent {n} days: figures for days after {since.isoformat()} are "
             "provisional — say so in one short clause, and still answer for the period asked.")
+
+
+#: A period counted from today — "yesterday", "last month", "the past 6 months", "so far" (moved here 2026-11-17 from
+#: `agent/investigate.py`, so the answer path and the answer-divergence detector read one definition).
+RELATIVE_PERIOD_RE = re.compile(
+    r"\b(today|yesterday|tonight|this\s+(?:day|week|month|quarter|year)|last|past|previous|prior|recent(?:ly)?|"
+    r"trailing|so\s+far|to\s+date|mtd|qtd|ytd)\b", re.I)
+
+
+def names_a_relative_period(question: str) -> bool:
+    """True when the question names a period counted from today — "yesterday", "last month", "the past 6 months",
+    "recent" — which is read on the person's clock from today and never from the data's last day (the user,
+    2026-11-17)."""
+    return bool(RELATIVE_PERIOD_RE.search(question or ""))
+

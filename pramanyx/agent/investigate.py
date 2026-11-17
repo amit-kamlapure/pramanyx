@@ -4967,16 +4967,11 @@ def _monthly_counts(conn_id: str, table: str, date_col: str, start: str, end: st
                                "returned", counter="deep_analysis.intake_probe_close")
 
 
-_RELATIVE_PERIOD_RE = re.compile(
-    r"\b(today|yesterday|tonight|this\s+(?:day|week|month|quarter|year)|last|past|previous|prior|recent(?:ly)?|"
-    r"trailing|so\s+far|to\s+date|mtd|qtd|ytd)\b", re.I)
-
-
 def _names_a_relative_period(question: str) -> bool:
-    """True when the question names a period counted from today — "yesterday", "last month", "the past 6 months",
-    "recent" — which is read on the person's clock from today and never from the data's last day (`kernel/clock.py`,
-    the user, 2026-11-17)."""
-    return bool(_RELATIVE_PERIOD_RE.search(question or ""))
+    """True when the question names a period counted from today (`kernel/clock.names_a_relative_period`, the one
+    definition the answer-divergence detector reads too)."""
+    from pramanyx.kernel.clock import names_a_relative_period
+    return names_a_relative_period(question)
 
 
 def _question_pins_period(question: str, obs_start: str, obs_end: str) -> bool:
