@@ -17,7 +17,16 @@ import { formatCount } from "@/lib/format";
 
 interface Variant { sql: string; key: string; tables: string[]; run_count: number; first_seen: string; last_seen: string }
 interface Divergence { question: string; question_key: string; run_count: number; variants: Variant[] }
-interface Result { key: string; row_count: number; numeric_total: number | null; error: string | null }
+interface Result { key: string; row_count: number; columns: string[]; numeric_total: number | null; error: string | null }
+
+/** One answer's result in words. A total is said only for a one-figure answer: the detector adds every number in a
+ *  row, so two columns that each count 124,916 orders would read as 249,832 (theLook, 2026-11-17). */
+function resultWords(r: Result): string {
+  if (r.error) return `Could not run: ${r.error}`;
+  const rows = `${formatCount(r.row_count)} row${r.row_count === 1 ? "" : "s"}`;
+  if ((r.columns ?? []).length === 1 && r.numeric_total != null) return `${rows}, ${r.columns[0]} totalling ${formatCount(r.numeric_total)}`;
+  return `${rows} of ${(r.columns ?? []).join(", ")}`;
+}
 
 async function json<T>(res: Response, what: string): Promise<T> {
   const body = await res.json().catch(() => ({}));
@@ -30,7 +39,7 @@ export function SettleDivergence({ connId, questionKey, onClose, onSettled }: {
 }) {
   const [div, setDiv] = useState<Divergence | null>(null);
   const [results, setResults] = useState<Map<string, Result> | null>(null);
-  const [differ, setDiffer] = useState<boolean | null>(null);
+  const [differ, setDiffer] = useState<"" | "results" | "columns" | "same">("");
   const [busy, setBusy] = useState("");
   const [problem, setProblem] = useState("");
 
@@ -52,7 +61,8 @@ export function SettleDivergence({ connId, questionKey, onClose, onSettled }: {
       const got = await json<{ impact: { results_differ: boolean; results: Result[] } }>(
         await fetch(`${getApiBase()}/consistency/impact?${q}`), "They could not be run");
       setResults(new Map(got.impact.results.map((r) => [r.key, r])));
-      setDiffer(got.impact.results_differ);
+      const shapes = new Set(got.impact.results.filter((r) => !r.error).map((r) => (r.columns ?? []).join(",")));
+      setDiffer(shapes.size > 1 ? "columns" : got.impact.results_differ ? "results" : "same");
     } catch (e) {
       setProblem(e instanceof Error ? e.message : String(e));
     } finally {
@@ -90,9 +100,11 @@ export function SettleDivergence({ connId, questionKey, onClose, onSettled }: {
             <Button size="sm" variant="secondary" onClick={() => { void runEach(); }} disabled={!!busy}>
               {busy === "run" ? "Running each…" : "Run each to compare"}
             </Button>
-            {differ !== null && (
-              <span className="aug-fs-xs" data-testid="settle-differ" style={{ color: differ ? "var(--amb4)" : "var(--t3)" }}>
-                {differ ? "They return different results." : "They return the same results; the SQL differs, the data does not."}
+            {differ && (
+              <span className="aug-fs-xs" data-testid="settle-differ" style={{ color: differ === "same" ? "var(--t3)" : "var(--amb4)" }}>
+                {differ === "columns" ? "They return different columns: read what each one counts."
+                  : differ === "results" ? "They return different results."
+                  : "They return the same results; the SQL differs, the data does not."}
               </span>
             )}
           </div>
@@ -108,8 +120,8 @@ export function SettleDivergence({ connId, questionKey, onClose, onSettled }: {
                   {v.first_seen.slice(0, 10)}{v.last_seen && v.last_seen.slice(0, 10) !== v.first_seen.slice(0, 10) ? ` to ${v.last_seen.slice(0, 10)}` : ""}
                 </span>
                 {r && (
-                  <span className="aug-fs-xs" style={{ color: r.error ? "var(--amb4)" : "var(--t2)" }}>
-                    {r.error ? `Could not run: ${r.error}` : `${formatCount(r.row_count)} rows${r.numeric_total != null ? `, totalling ${formatCount(r.numeric_total)}` : ""}`}
+                  <span className="aug-fs-xs" data-testid="settle-result" style={{ color: r.error ? "var(--amb4)" : "var(--t2)" }}>
+                    {resultWords(r)}
                   </span>
                 )}
                 <span style={{ flex: 1 }} />

@@ -99,3 +99,27 @@ describe("settling a question answered more than one way", () => {
     vi.unstubAllGlobals();
   });
 });
+
+describe("comparing the answers", () => {
+  it("names each answer's columns, totals only a one-figure answer, and says when the columns differ", async () => {
+    readReview.mockResolvedValue(REVIEW);
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (String(url).includes("/consistency/divergences")) {
+        return new Response(JSON.stringify({ divergences: [{ question: "How many orders are in this dataset?", question_key: "c", run_count: 3,
+          variants: [{ sql: "SELECT COUNT(*) AS total_orders FROM orders", key: "a", tables: ["orders"], run_count: 2, first_seen: "2026-08-26", last_seen: "2026-08-26" },
+                     { sql: "SELECT COUNT(DISTINCT order_id) AS distinct_orders, COUNT(*) AS total_rows FROM orders", key: "b", tables: ["orders"], run_count: 1, first_seen: "2026-08-26", last_seen: "2026-08-26" }] }] }));
+      }
+      // theLook, 2026-11-17: both count 124,916 orders; the second's two columns summed to 249,832.
+      return new Response(JSON.stringify({ impact: { results_differ: true, results: [
+        { key: "a", row_count: 1, columns: ["total_orders"], numeric_total: 124916, error: null },
+        { key: "b", row_count: 1, columns: ["distinct_orders", "total_rows"], numeric_total: 249832, error: null }] } }));
+    }));
+    render(<ReviewQueue connId="c1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Settle it" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Run each to compare" }));
+    await waitFor(() => expect(screen.getByTestId("settle-differ")).toHaveTextContent("They return different columns"));
+    const said = screen.getAllByTestId("settle-result").map((e) => e.textContent);
+    expect(said).toEqual(["1 row, total_orders totalling 124,916", "1 row of distinct_orders, total_rows"]);
+    vi.unstubAllGlobals();
+  });
+});
