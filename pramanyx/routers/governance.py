@@ -13,8 +13,10 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
+
+from pramanyx.security.authz import connection_owner_guard
 
 router = APIRouter(tags=["governance"])
 
@@ -267,7 +269,7 @@ def _curator_or_owner(kind: str, ref: str, who: str, principal) -> bool:
     return False
 
 
-@router.put("/governance/certification")
+@router.put("/governance/certification", dependencies=[Depends(connection_owner_guard)])
 def put_certification(body: CertificationIn, request: Request):
     """Certify or deprecate a table, document or dashboard — a curator's word (a document's owner's for
     their own), never an agent's. A deprecation says why. Clearing it is an empty ``status``."""
@@ -289,7 +291,7 @@ def put_certification(body: CertificationIn, request: Request):
     return {"securable": securable, "certification": now}
 
 
-@router.get("/governance/certification")
+@router.get("/governance/certification", dependencies=[Depends(connection_owner_guard)])
 def get_certification(kind: str, connection_id: str = "", ref: str = ""):
     """What is certified or deprecated: one asset (``ref``), or every one of a kind (a connection's tables)."""
     from pramanyx.govern import certification as K
