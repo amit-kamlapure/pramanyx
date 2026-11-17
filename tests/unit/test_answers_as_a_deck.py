@@ -100,3 +100,15 @@ def test_a_deck_draws_no_empty_slide_and_names_a_scheduled_answer_by_what_was_as
     assert bodies and all(any(part.strip() for part in t.split(" | ")[1:]) for t in bodies), slides
     assert not any(t.startswith(("Evidence", "Query")) for t in slides), slides
     assert not any("Scheduled-run" in t for t in slides), slides
+
+
+def test_an_answer_whose_envelope_keeps_the_run_context_is_still_named_by_what_was_asked():
+    """The live case: a concluded answer's envelope stores the question as the run was given it."""
+    from pramanyx.automations.temporal import OBSERVATION_HEADER
+    from pramanyx.export.document import build_export_doc
+    asked = "How many titles are in the sheet?"
+    raw = f"{OBSERVATION_HEADER}\nThis is a scheduled daily run.\n\n{asked}"
+    inv = {"id": "x", "kind": "chat", "question": raw, "connection_id": "c1",
+           "report": {"headline": "8,807 titles", "envelope": {"question": raw, "headline": "8,807 titles",
+                                                              "body": "The sheet holds 8,807 titles."}}}
+    assert build_export_doc(inv).subtitle == asked

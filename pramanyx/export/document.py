@@ -397,7 +397,9 @@ def _build_envelope(inv: dict, money_symbol: str = "") -> ExportDoc:
     if prov.get("guard_receipts"):
         blocks.append(_h("Checks"))
         blocks.append(_bul([_receipt_line(r) for r in prov["guard_receipts"] if isinstance(r, dict)]))
-    return ExportDoc(title=headline, subtitle=env.get("question") or inv.get("question") or "",
+    # The envelope keeps the question as the run was given it; a scheduled run's carries its code-written context.
+    from pramanyx.automations.temporal import ask_of
+    return ExportDoc(title=headline, subtitle=ask_of(str(env.get("question") or inv.get("question") or "")).strip(),
                      meta=meta, kind="investigation" if rep.get("phases") else "chat", blocks=blocks)
 
 
