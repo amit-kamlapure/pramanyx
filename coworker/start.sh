@@ -33,8 +33,11 @@ command -v pnpm >/dev/null 2>&1 || { echo "start: pnpm is not on PATH — the sh
 curl -fsS -o /dev/null --max-time 5 "$PRAMANYX_API_URL/health" \
   || { echo "start: no Pramanyx API at $PRAMANYX_API_URL — start it first" >&2; exit 1; }
 
+# Built when a plugin's bundle is missing or older than its source — a checkout moved to new code serves the new card.
 for plugin in "$here"/plugins/*/; do
-  [ -f "${plugin}lib/client.js" ] || { "$here/build.sh"; break; }
+  if [ ! -f "${plugin}lib/client.js" ] || [ -n "$(find "${plugin}src" -newer "${plugin}lib/client.js" -type f 2>/dev/null | head -1)" ]; then
+    "$here/build.sh"; break
+  fi
 done
 
 mkdir -p "$DSH_HOME" "$DSH_HOME/work"

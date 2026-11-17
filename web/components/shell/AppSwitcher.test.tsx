@@ -2,16 +2,19 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const door = vi.hoisted(() => ({ answer: { available: false } as { available: boolean; url?: string | null }, asked: 0, minted: 0 }));
+type Door = { available: boolean; url?: string | null; can_start?: boolean; reason?: string };
+const door = vi.hoisted(() => ({ answer: { available: false } as Door, started: { available: false } as Door,
+                                 asked: 0, minted: 0, starts: 0 }));
 vi.mock("@/lib/api", () => ({
   fetchCoworkerDoor: () => { door.asked += 1; return Promise.resolve(door.answer); },
   mintCoworkerDelegation: () => { door.minted += 1; return Promise.resolve("person-token"); },
+  startMyCoworker: () => { door.starts += 1; return Promise.resolve(door.started); },
 }));
 
 import { AppSwitcher, coworkerHref } from "@/components/shell/AppSwitcher";
 
 describe("the way to the coworker", () => {
-  beforeEach(() => { door.asked = 0; door.minted = 0; });
+  beforeEach(() => { door.asked = 0; door.minted = 0; door.starts = 0; });
   afterEach(cleanup);
 
   it("draws nothing when no coworker is running", async () => {
@@ -97,4 +100,32 @@ describe("what is carried to the coworker", () => {
   it("returns an address it cannot read as it was given", () => {
     expect(coworkerHref("not an address", { connectionId: "abc" })).toBe("not an address");
   });
+
+  // 2026-11-17 — each person has their own coworker: not running yet, it is offered, started on the click, and opened.
+  it("offers a person's own coworker before it runs, starts it on the click, and opens it", async () => {
+    door.answer = { available: false, can_start: true };
+    door.started = { available: true, url: "http://127.0.0.1:3101/?token=mine", can_start: true };
+    const assign = vi.fn();
+    vi.stubGlobal("location", { ...window.location, href: window.location.href, assign });
+    render(<AppSwitcher connectionId="c1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Switch to" }));
+    const start = screen.getByTestId("app-switcher-start");
+    expect(start).toHaveTextContent("Your own coworker: started for you when you open it.");
+    fireEvent.click(start);
+    await waitFor(() => expect(assign).toHaveBeenCalled());
+    expect(door.starts).toBe(1);
+    expect(new URL(assign.mock.calls[0][0]).origin + new URL(assign.mock.calls[0][0]).pathname)
+      .toBe("http://127.0.0.1:3101/pramanyx-enter");
+    vi.unstubAllGlobals();
+  });
+
+  it("says why a person's coworker cannot be started", async () => {
+    door.answer = { available: false, can_start: true };
+    door.started = { available: false, can_start: false, reason: "The coworker's shell is not installed." };
+    render(<AppSwitcher />);
+    fireEvent.click(await screen.findByRole("button", { name: "Switch to" }));
+    fireEvent.click(screen.getByTestId("app-switcher-start"));
+    await waitFor(() => expect(screen.getByTestId("app-switcher-start")).toHaveTextContent("The coworker's shell is not installed."));
+  });
 });
+

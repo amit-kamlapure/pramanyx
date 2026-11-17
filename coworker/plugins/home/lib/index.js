@@ -113,8 +113,10 @@ function sayWhereThisIs(ctx, api) {
     const say = async () => {
       try {
         const url = String(at.connection.authenticatedUrl(at.webApp.getAdvertisedUrl()));
+        // Whose coworker this is (2026-11-17: each person has their own): the platform gives this address only to them.
         await fetch(`${api}/coworker/address`, {
-          method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ url }),
+          method: "PUT", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ url, person: ownerOfThisCoworker() }),
         });
       } catch {
         // Pramanyx is not answering, or is older than this route: the app draws no way in, and this tries again.
@@ -276,6 +278,18 @@ export function heldToItsPerson(ctx, { keep = join(process.env.DSH_HOME || join(
   return owners;
 }
 
+/** Whose coworker this is: the person the platform started it for, or "" for the install's first (start_all.sh's). */
+export function ownerOfThisCoworker() {
+  return String(process.env.PRAMANYX_COWORKER_PERSON || "").trim();
+}
+
+/** Why a delegation for ``user`` is refused here, or "" when it is taken: a coworker started for one person acts for
+ *  no one else (each person has their own; the install's first takes whoever the app hands it, as before). */
+export function notThisCoworkersPerson(user) {
+  const owner = ownerOfThisCoworker();
+  return owner && String(user || "") !== owner ? "This coworker is another person's; open your own from the app." : "";
+}
+
 export async function keepThePerson(req, res, api) {
   const reply = (status, body) => { res.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" }); res.end(JSON.stringify(body)); };
   if (req.method !== "POST") return reply(405, { detail: "POST only" });
@@ -292,6 +306,8 @@ export async function keepThePerson(req, res, api) {
     const answer = await fetch(api + "/auth/delegation", { headers: { accept: "application/json", "x-pramanyx-delegation": token } });
     if (!answer.ok) return reply(401, { detail: "Pramanyx did not recognise the person" });
     const who = await answer.json();
+    const refused = notThisCoworkersPerson(who.user_id);
+    if (refused) return reply(403, { detail: refused });
     const { writeFile, mkdir } = await import("node:fs/promises");
     const { dirname } = await import("node:path");
     await mkdir(dirname(file), { recursive: true });

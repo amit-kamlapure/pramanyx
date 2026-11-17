@@ -54,3 +54,21 @@ test("with nobody delegated, a conversation is held to nobody, as before", () =>
   assert.equal(personRefusal("user:ana", ""), undefined);
   assert.equal(personRefusal("user:ana", "user:ana"), undefined);
 });
+
+// Each person has their own coworker (2026-11-17): one started for a person acts for no one else; the install's first
+// (started by start_all.sh, owned by nobody named) takes whoever the app hands it, as before.
+import { notThisCoworkersPerson, ownerOfThisCoworker } from "../lib/index.js";
+
+test("a coworker started for one person refuses anyone else's delegation", () => {
+  const was = process.env.PRAMANYX_COWORKER_PERSON;
+  try {
+    process.env.PRAMANYX_COWORKER_PERSON = "ana";
+    assert.equal(ownerOfThisCoworker(), "ana");
+    assert.equal(notThisCoworkersPerson("ana"), "");
+    assert.match(notThisCoworkersPerson("bo"), /another person's/);
+    delete process.env.PRAMANYX_COWORKER_PERSON;
+    assert.equal(notThisCoworkersPerson("bo"), "", "the install's first takes whoever the app hands it");
+  } finally {
+    if (was === undefined) delete process.env.PRAMANYX_COWORKER_PERSON; else process.env.PRAMANYX_COWORKER_PERSON = was;
+  }
+});

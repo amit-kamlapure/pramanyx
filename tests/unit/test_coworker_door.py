@@ -5,6 +5,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from pramanyx import coworkers as K
 from pramanyx.routers import coworker as C
 
 
@@ -12,23 +13,30 @@ from pramanyx.routers import coworker as C
 def door(monkeypatch):
     clock = {"t": 1000.0}
     monkeypatch.setattr(C, "_now", lambda: clock["t"])
-    monkeypatch.setattr(C, "_last", {"url": "", "at": 0.0})
+    monkeypatch.setattr(K, "_now", lambda: clock["t"])
+    monkeypatch.setattr(K, "_announced", {})
+    monkeypatch.delenv("PRAMANYX_REQUIRE_IDENTITY", raising=False)
     app = FastAPI()
     app.include_router(C.router)
     # The test client's caller is "testclient"; a coworker's is this machine.
     return TestClient(app, client=("127.0.0.1", 50000)), clock
 
 
+def _door(client) -> dict:
+    got = client.get("/coworker").json()
+    return {"available": got["available"], "url": got["url"]}
+
+
 def test_no_coworker_has_said_anything_so_none_is_offered(door):
     client, _ = door
-    assert client.get("/coworker").json() == {"available": False, "url": None}
+    assert _door(client) == {"available": False, "url": None}
 
 
 def test_a_coworker_says_where_it_is_and_the_app_is_told(door):
     client, _ = door
     said = client.put("/coworker/address", json={"url": "http://127.0.0.1:3090/?token=abc"})
     assert said.status_code == 200
-    assert client.get("/coworker").json() == {"available": True, "url": "http://127.0.0.1:3090/?token=abc"}
+    assert _door(client) == {"available": True, "url": "http://127.0.0.1:3090/?token=abc"}
 
 
 def test_a_coworker_that_has_stopped_saying_so_is_not_offered(door):
@@ -37,7 +45,7 @@ def test_a_coworker_that_has_stopped_saying_so_is_not_offered(door):
     clock["t"] += C.FRESH_FOR
     assert client.get("/coworker").json()["available"] is True          # the last second it stands
     clock["t"] += 1
-    assert client.get("/coworker").json() == {"available": False, "url": None}
+    assert _door(client) == {"available": False, "url": None}
     client.put("/coworker/address", json={"url": "http://localhost:3090/"})
     assert client.get("/coworker").json()["available"] is True          # and it comes back when it says so again
 
@@ -63,7 +71,7 @@ def test_an_ipv6_loopback_address_is_this_machine(door):
 
 
 def test_another_machine_may_not_say_where_the_coworker_is(monkeypatch):
-    monkeypatch.setattr(C, "_last", {"url": "", "at": 0.0})
+    monkeypatch.setattr(K, "_announced", {})
     app = FastAPI()
     app.include_router(C.router)
     stranger = TestClient(app, client=("203.0.113.9", 50000))

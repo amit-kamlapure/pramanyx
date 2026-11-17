@@ -52,14 +52,12 @@ from pramanyx.security.authz import connection_owner_guard
 
 router = APIRouter(tags=["coworker"])
 
-#: How long the last announcement stands. The coworker says where it is every 30 seconds; four missed is gone.
-FRESH_FOR = 120.0
-
-_last: dict = {"url": "", "at": 0.0}
+#: How long an announcement stands (`pramanyx/coworkers.py`, which keeps them: one per person's coworker).
+from pramanyx.coworkers import FRESH_FOR  # noqa: E402,F401 — re-exported for readers of this router
 
 
 def _now() -> float:
-    """A seam, so a test moves the clock."""
+    """A seam, so a test moves the clock (the answer claims below)."""
     return time.monotonic()
 
 
@@ -76,11 +74,29 @@ def _on_this_machine(host: Optional[str]) -> bool:
 
 class CoworkerAddress(BaseModel):
     url: str = Field(max_length=2048, description="The address a person opens to reach the coworker.")
+    person: str = Field(default="", max_length=200,
+                        description="Whose coworker it is; empty for the install's first, started by start_all.sh.")
 
 
 class CoworkerDoor(BaseModel):
-    available: bool = Field(description="Whether a coworker has said it is running within the last two minutes.")
-    url: Optional[str] = Field(default=None, description="The address to open, when one is running.")
+    available: bool = Field(description="Whether the caller's own coworker has said it is running in the last two minutes.")
+    url: Optional[str] = Field(default=None, description="The address to open, when it is running.")
+    can_start: bool = Field(default=False, description="Whether this install starts a coworker for the caller on request.")
+    starting: bool = Field(default=False, description="Whether the caller's coworker is starting now.")
+    reason: str = Field(default="", description="Why none can be started, when none can.")
+
+
+def _person(request: Request) -> str:
+    """Who the caller is, as a delegation names them (`routers/authcfg.py`): the signed-in person, else the install's
+    operator — so a coworker's owner and the delegations it takes always agree."""
+    from pramanyx.security.authz import caller, get_principal
+    principal = get_principal(request)
+    return principal.user_id if principal else caller()
+
+
+def _single_person() -> bool:
+    from pramanyx.security.authz import require_identity_enabled
+    return not require_identity_enabled()
 
 
 @router.put("/coworker/address", response_model=CoworkerDoor)
@@ -91,21 +107,48 @@ def say_where_the_coworker_is(body: CoworkerAddress, request: Request) -> Cowork
     parts = urlsplit(body.url)
     if parts.scheme not in ("http", "https") or not _on_this_machine(parts.hostname):
         raise HTTPException(status_code=422, detail="The coworker's address must be an http(s) address on this machine.")
-    _last["url"], _last["at"] = body.url, _now()
+    from pramanyx import coworkers
+    coworkers.announce(body.url, body.person)
     return CoworkerDoor(available=True, url=body.url)
 
 
 @router.get("/coworker", response_model=CoworkerDoor)
 def where_the_coworker_is(request: Request) -> CoworkerDoor:
-    """Whether a coworker is running, and the address to open. Reads what was last said; asks nothing.
+    """Whether the caller's own coworker is running, and the address to open. Reads what was last said; starts nothing.
 
-    The address carries the coworker shell's access token, so it is given only to a caller on this machine — the
-    only place a coworker on this machine's loopback can be opened from anyway (People, 2026-11-15: until then any
-    caller that could reach the API read the token). Anyone else is told one is running, and not where."""
-    if _last["url"] and _now() - _last["at"] <= FRESH_FOR:
-        here = _on_this_machine(request.client.host if request.client else None)
-        return CoworkerDoor(available=True, url=_last["url"] if here else None)
-    return CoworkerDoor(available=False)
+    Each person's coworker is their own (2026-11-17): the address given is the caller's, never another person's. On an
+    install without sign-in there is one person, and the coworker start_all.sh starts is theirs. The address carries
+    the coworker shell's access token, so it is given only to a caller on this machine — the only place a coworker on
+    this machine's loopback can be opened from anyway. Anyone else is told it is running, and not where."""
+    from pramanyx import coworkers
+    single = _single_person()
+    url = coworkers.address_of(_person(request), single_person=single)
+    here = _on_this_machine(request.client.host if request.client else None)
+    if url:
+        return CoworkerDoor(available=True, url=url if here else None, can_start=not single)
+    return CoworkerDoor(available=False, can_start=not single and here)
+
+
+@router.post("/coworker/mine", response_model=CoworkerDoor)
+def start_my_coworker(request: Request) -> CoworkerDoor:
+    """Start the caller's own coworker if it is not running (2026-11-17: "Each user must get its own co-worker").
+    Its first start sets up its own home and takes a minute; the app asks `GET /coworker` until it is there. A person
+    only, from this machine; on an install without sign-in the one coworker start_all.sh starts is the person's, and
+    none is started here."""
+    from pramanyx import coworkers
+    from pramanyx.rbac.agent_gate import is_agent_request
+    from pramanyx.security import delegation
+    if is_agent_request(request) or delegation.presented(request):
+        raise HTTPException(status_code=403, detail="A person starts their own coworker; an agent does not.")
+    if not _on_this_machine(request.client.host if request.client else None):
+        raise HTTPException(status_code=403, detail="A coworker is started for a person on this machine.")
+    if _single_person():
+        url = coworkers.address_of(_person(request), single_person=True)
+        return CoworkerDoor(available=bool(url), url=url, reason="" if url else (
+            "This install has one coworker, started with the platform (scripts/start_all.sh); it is not running."))
+    got = coworkers.ensure(_person(request))
+    return CoworkerDoor(available=got["state"] == "running", url=got.get("url"), can_start=got["state"] != "unavailable",
+                        starting=got["state"] == "starting", reason=got.get("reason", ""))
 
 
 # ── a coworker turn, as a trace ──────────────────────────────────────────────────────────────────────────────────

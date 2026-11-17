@@ -223,12 +223,22 @@ export interface OrgSettings {
 }
 
 /** Whether a coworker is running beside the app, and the address to open (`routers/coworker.py`). */
-export type CoworkerDoor = { available: boolean; url?: string | null };
+/** The caller's own coworker (2026-11-17: each person has their own): running at `url`, or startable on request. */
+export type CoworkerDoor = {
+  available: boolean; url?: string | null; can_start?: boolean; starting?: boolean; reason?: string;
+};
 
 /** Where the coworker is. An API from before the route, or one not answering, is "none running". */
 export async function fetchCoworkerDoor(): Promise<CoworkerDoor> {
   const res = await fetch(`${getApiBase()}/coworker`);
   if (!res.ok) return { available: false };
+  return res.json();
+}
+
+/** Start the caller's own coworker if it is not running (`POST /coworker/mine`); ask `fetchCoworkerDoor` until it is. */
+export async function startMyCoworker(): Promise<CoworkerDoor> {
+  const res = await fetch(`${getApiBase()}/coworker/mine`, { method: "POST" });
+  if (!res.ok) throw await refused(res, "Starting your coworker");
   return res.json();
 }
 
