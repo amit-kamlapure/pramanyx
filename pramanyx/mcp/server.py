@@ -509,6 +509,18 @@ async def forget_for_me(
 
 
 @mcp.tool()
+async def search_my_drive(
+    words: Annotated[str, Field(description="Words from the file's name: 'Q3 budget', 'board deck'.")],
+    limit: Annotated[int, Field(description="How many files at most, 1 to 25.")] = 10,
+) -> dict:
+    """Find files in THIS PERSON's own Google Drive by words in their names, newest first: each file's name, type, last
+    change and link — never its contents. Use it when they ask for a file, deck or sheet someone made ("the Q3 budget
+    sheet", "last week's board deck"). Only their own Google connection is used; when they have none, `why` says how
+    to connect one — tell them. Give each file as a link by its name."""
+    return await _client.search_my_drive(words, limit=limit)
+
+
+@mcp.tool()
 async def deck_of_answers(
     investigation_ids: Annotated[list[str], Field(description="The answers the deck is made of, in the order they were asked: each one's investigation_id, as `ask` or `deep_analysis` returned it.")],
     title: Annotated[str, Field(description="The deck's title, in the person's words; empty names it by its answers.")] = "",

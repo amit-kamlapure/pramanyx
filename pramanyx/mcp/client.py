@@ -726,6 +726,10 @@ class PramanyxClient:
         await self._delete(f"/me/memories/{quote(memory_id, safe='')}")
         return {"forgotten": memory_id}
 
+    async def search_my_drive(self, words: str, *, limit: int = 10) -> dict:
+        """Files in the person's own Google Drive whose names hold the words (punch list 91): names and links only."""
+        return await self._get("/integrations/drive/files", params={"words": words, "limit": limit})
+
     async def deck_of_answers(self, investigation_ids: list[str], *, title: str = "") -> dict:
         """Several of the person's answers as one PowerPoint deck (punch list 92). Each answer is read first, so one that
         is gone or not theirs is named instead of breaking the download; the deck itself is built by the platform from

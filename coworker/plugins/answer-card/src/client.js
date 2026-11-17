@@ -16,6 +16,7 @@ import { createElement as h, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { readAgainIn, statusWords, whatHappens } from "./runs.js";
 import { deckOf } from "./deck.js";
+import { driveFilesOf } from "./drive.js";
 import { drawChart, labelOf, numericColumns } from "./chart";
 import {
   PANE, PANE_PATTERN, PaneBody, downloadCsv, groundingOf, pageFor, PaneTitle, ResultGrid, button, faint, hasPane, idOf, line,
@@ -1040,6 +1041,7 @@ const DOES = {
   my_memories: ["Read what you asked me to remember", []],
   forget_for_me: ["Forgot one thing you asked me to remember", []],
   deck_of_answers: ["Made a deck of answers", ["title"]],
+  search_my_drive: ["Searched your Drive", ["words"]],
 };
 const PREFIX = "mcp__pramanyx__";
 
@@ -1617,6 +1619,23 @@ function DeckCard(props) {
       deck.answers.map((a) => h("li", { key: a.id }, a.question || a.id))));
 }
 
+/** The person's own Drive, searched (punch list 91, 2026-11-18): each file by name, linked to Google's own page. */
+function DriveCard(props) {
+  const words = String(argsOf(props.block).words || "");
+  if (props.phase !== "result") return h(Step, { kind: "read", busy: true, title: words ? `Searching your Drive: ${words}` : "Searching your Drive" });
+  const got = driveFilesOf(resultText(props.block));
+  if (got.failed || props.block?.isError) {
+    return h(Step, { kind: "read", failed: true, title: "Your Drive was not searched" },
+      h("div", { style: quiet }, got.failed || "Drive was not searched."));
+  }
+  const n = got.files.length;
+  return h(Step, { kind: "read", title: n ? `Found ${n} file${n === 1 ? "" : "s"} in your Drive${words ? `: ${words}` : ""}` : `Nothing in your Drive is named ${words || "that"}` },
+    n ? h("ul", { style: { margin: "4px 0 0", paddingLeft: 20, fontSize: 13.5 } },
+      got.files.map((f, i) => h("li", { key: `${f.link || f.name}-${i}` },
+        f.link ? h("a", { href: f.link, target: "_blank", rel: "noopener noreferrer", className: "pramanyx-link" }, f.name) : f.name,
+        h("span", { style: quiet }, [f.type, f.modified].filter(Boolean).map((x) => ` · ${x}`).join(""))))) : null);
+}
+
 /** What the coworker drafted for the person, and the Definition's own page to read and publish it (2026-11-17). */
 function DraftedDefinitionCard(props) {
   const args = argsOf(props.block);
@@ -1747,6 +1766,7 @@ export function apply(ctx) {
           : name === PREFIX + "draft_definition" ? DraftedDefinitionCard
           : name === PREFIX + "deep_analysis" ? DeepAnalysisCard
           : name === PREFIX + "deck_of_answers" ? DeckCard
+          : name === PREFIX + "search_my_drive" ? DriveCard
           : SCHEDULES.test(name) ? ScheduleCard : ToolStep)));
   };
   // What a Pramanyx step waits on is asked in the conversation, under the step; the foot of the page says where. The

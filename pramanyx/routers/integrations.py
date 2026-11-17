@@ -329,6 +329,52 @@ def revoke(conn_id: str):
     }
 
 
+# ── a person's own Drive, searched (punch list 91, 2026-11-18) ──────────────────────
+#
+# The Genie One study's "external sources": a question about the business often wants the deck or sheet someone made
+# about it. Google grants are already each person's own (`call_operation` refuses another's); this is the first of
+# their operations a conversation can use directly — a read of names and links, never contents.
+
+def _drive_query(words: str) -> str:
+    """Drive's search syntax for files whose names hold every one of ``words``. Each word is quoted, never passed
+    through as syntax: a quote or a backslash in it is escaped, and at most eight words are used."""
+    import re
+    terms = [w for w in re.split(r"\s+", (words or "").strip()) if w][:8]
+    quoted = [w.replace("\\", "\\\\").replace("'", "\\'") for w in terms]
+    return " and ".join([f"name contains '{w}'" for w in quoted] + ["trashed = false"])
+
+
+@router.get("/integrations/drive/files")
+def search_my_drive(words: str = "", limit: int = 10):
+    """Files in the asker's OWN Google Drive whose names hold the words, newest first: name, type, last change and
+    link — never contents. Only the asker's own grant is used; with none that can find Drive files, it says how to
+    connect one instead of searching anyone else's."""
+    from pramanyx.integrations.call import call_operation
+    from pramanyx.integrations.operations import get_operation, missing_scopes
+
+    if not (words or "").strip():
+        raise HTTPException(422, "Say what to look for: words from the file's name")
+    op = get_operation("drive.files.list")
+    me = _user()
+    google = [c for c in store.list_connections(me) if c.provider == "google" and c.status == "active"]
+    usable = [c for c in google if op is not None and not missing_scopes(op, c.scopes)]
+    if not usable:
+        why = ("Google is not connected for you: connect Google Drive under Settings ▸ Integrations, then ask again."
+               if not google else
+               "Your Google connection does not let Pramanyx find Drive files: add Google Drive to it under "
+               "Settings ▸ Integrations, then ask again.")
+        return {"searched": False, "files": [], "why": why}
+    got = call_operation(usable[0].id, "drive.files.list",
+                         {"q": _drive_query(words), "pageSize": max(1, min(int(limit or 10), 25))},
+                         actor=me or "unidentified")
+    if not got.ok:
+        return {"searched": False, "files": [], "why": f"Google did not answer the search: {got.message or got.status}"}
+    files = [{"name": str(f.get("name") or ""), "type": str(f.get("mimeType") or ""),
+              "modified": str(f.get("modifiedTime") or ""), "link": str(f.get("webViewLink") or "")}
+             for f in (got.data.get("items") or []) if isinstance(f, dict)]
+    return {"searched": True, "words": words.strip(), "files": files}
+
+
 # ── what a grant may DO (DS-11) ──────────────────────────────────────────────────
 
 @router.get("/integrations/operations")

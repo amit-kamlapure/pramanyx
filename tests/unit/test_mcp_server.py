@@ -52,6 +52,8 @@ def test_server_registers_the_governed_tools():
         "remember_for_me", "my_memories", "forget_for_me",
         # punch list 92 (2026-11-18) — a conversation's answers as one deck, from their stored reports (a read).
         "deck_of_answers",
+        # punch list 91 (2026-11-18) — the person's own Drive, by file names, through their own grant (a read).
+        "search_my_drive",
         "list_findings", "get_briefing", "explore", "list_jobs", "get_job", "cancel_job",
         # Wave S6 — knowledge reads over the stores the L→G→O→Q program built. Added to
         # this exact set deliberately: the assertion exists so growing the external agent

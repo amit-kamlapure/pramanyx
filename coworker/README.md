@@ -129,6 +129,10 @@ turned back on from the interface.
   its answers, the agent names those answers to `deck_of_answers`, and Pramanyx builds one deck from their stored
   reports, each answer as its own export draws it and each figure citing its own receipt (`GET /exports/answers`).
   The step shows what the deck holds, in order, and the download; the model never makes slides itself.
+- **The person's own Drive** (2026-11-18). Asked for a file someone made — "the Q3 budget sheet", "last week's board
+  deck" — the agent searches the person's own Google Drive by words in file names (`search_my_drive`, through
+  `GET /integrations/drive/files`): names, types, dates and links, never contents, and only through their own Google
+  connection. With none, the step says how to connect one. Each file is a link to Google's own page.
 - **Anything on a schedule, from a sentence** (2026-11-16). Asked to have something happen on a schedule — a
   question asked again, a summary, a Slack post, an email; every Monday, or once in five minutes — the agent passes
   the person's own words to `schedule` (a call that drops their words saying when — "once", "in 4 minutes", "every

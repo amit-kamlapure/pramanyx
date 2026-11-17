@@ -8650,6 +8650,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/integrations/drive/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search My Drive
+         * @description Files in the asker's OWN Google Drive whose names hold the words, newest first: name, type, last change and
+         *     link — never contents. Only the asker's own grant is used; with none that can find Drive files, it says how to
+         *     connect one instead of searching anyone else's.
+         */
+        get: operations["search_my_drive_integrations_drive_files_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/integrations/operations": {
         parameters: {
             query?: never;
@@ -42352,6 +42374,38 @@ export interface operations {
             path: {
                 conn_id: string;
             };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_my_drive_integrations_drive_files_get: {
+        parameters: {
+            query?: {
+                words?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;

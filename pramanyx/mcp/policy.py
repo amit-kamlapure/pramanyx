@@ -48,6 +48,8 @@ TOOL_LEVELS: dict[str, Level] = {
     "forget_for_me": "act",
     # 2026-11-18 (punch list 92) — a conversation's answers as one deck, built from their stored reports: a read.
     "deck_of_answers": "read",
+    # 2026-11-18 (punch list 91) — the person's own Drive, by file names, through their own Google grant: a read.
+    "search_my_drive": "read",
     "list_findings": "read",
     "get_briefing": "run",          # POST /exploration/{c}/briefing may spend a model call to synthesise
     "explore": "run",
@@ -158,6 +160,8 @@ TOOL_AREAS: dict[str, str] = {
     "remember_for_me": "analysis:run", "my_memories": "analysis:run", "forget_for_me": "analysis:run",
     # A person's own answers, read back as a deck: what `get_investigation` reads.
     "deck_of_answers": "catalog:read",
+    # The person's own Drive through their own grant, as their memory is theirs: no one else's catalog.
+    "search_my_drive": "analysis:run",
     "list_findings": "catalog:read", "list_jobs": "catalog:read", "get_job": "catalog:read",
     "search_graph": "catalog:read", "describe_entity": "catalog:read", "get_table_health": "catalog:read",
     "list_trusted_queries": "catalog:read", "list_runs": "catalog:read", "inspect_run": "catalog:read",
