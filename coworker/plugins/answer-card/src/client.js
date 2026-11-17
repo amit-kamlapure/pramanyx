@@ -14,6 +14,7 @@
  */
 import { createElement as h, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { readAgainIn } from "./runs.js";
 import { drawChart, labelOf, numericColumns } from "./chart";
 import {
   PANE, PANE_PATTERN, PaneBody, downloadCsv, groundingOf, pageFor, PaneTitle, ResultGrid, button, faint, hasPane, idOf, line,
@@ -305,7 +306,7 @@ function Analysis({ text }) {
   let got = null;
   try { got = JSON.parse(text); } catch { got = null; }
   const report = typeof got?.report === "string" ? got.report : (typeof got?.report?.summary === "string" ? got.report.summary : "");
-  const frame = { border: `1px solid ${line}`, borderRadius: 6, padding: 12, margin: "6px 0", fontSize: 13 };
+  const frame = { margin: "8px 0", fontSize: 13 };
   return h("div", { style: frame },
     h("div", { style: { ...quiet, fontSize: 12.5, paddingBottom: 6 } }, "Deep analysis"),
     h("div", { style: { whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight: 1.5, maxHeight: 420, overflow: "auto" } },
@@ -476,8 +477,7 @@ export function Draft({ draft }) {
   }, [name]);
   const field = { width: "100%", boxSizing: "border-box", font: "inherit", fontSize: 13.5, padding: "6px 8px",
                   border: `1px solid ${line}`, borderRadius: 6, background: "transparent", color: "inherit" };
-  const frame = { border: `1px solid ${line}`, borderRadius: 6, padding: 12, margin: "10px 0",
-                  display: "flex", flexDirection: "column", gap: 8, fontSize: 13.5 };
+  const frame = { margin: "12px 0", display: "flex", flexDirection: "column", gap: 8, fontSize: 13.5 };
   const send = async () => {
     setState({ busy: true, said: "" });
     try {
@@ -577,6 +577,7 @@ export function standing(now) {
 export function Scheduled({ made }) {
   const [now, setNow] = useState(undefined);        // undefined while it is read; null when the schedule is gone
   const [unread, setUnread] = useState(false);
+  const [asked, setAsked] = useState(0);             // read again: a run was due, or the coworker said one landed
   useEffect(() => {
     let live = true;
     fetch(`/pramanyx/automations/${encodeURIComponent(made.id)}/schedule`, { headers: { accept: "application/json" } })
@@ -585,12 +586,23 @@ export function Scheduled({ made }) {
         if (!answer.ok) throw new Error(String(answer.status));
         return answer.json();
       })
-      .then((got) => { if (live) setNow(got); })
+      .then((got) => { if (live) { setNow(got); setUnread(false); } })
       .catch(() => { if (live) setUnread(true); });
     return () => { live = false; };
+  }, [made.id, asked]);
+  useEffect(() => {
+    const wait = readAgainIn(now);
+    if (wait === null) return undefined;
+    const timer = setTimeout(() => setAsked((n) => n + 1), wait);
+    return () => clearTimeout(timer);
+  }, [now]);
+  useEffect(() => {
+    // The coworker's own reading of the runs (`plugins/home`, `RunLanded`) says when one landed in a schedule.
+    const landed = (event) => { if (!event?.detail?.automation || event.detail.automation === made.id) setAsked((n) => n + 1); };
+    window.addEventListener("pramanyx:run-landed", landed);
+    return () => window.removeEventListener("pramanyx:run-landed", landed);
   }, [made.id]);
-  const frame = { border: `1px solid ${line}`, borderRadius: 6, padding: 12, margin: "10px 0",
-                  display: "flex", flexDirection: "column", gap: 6, fontSize: 13.5 };
+  const frame = { margin: "12px 0", display: "flex", flexDirection: "column", gap: 6, fontSize: 13.5 };
   const said = now && Array.isArray(now.said) && now.said.length ? now.said.join("; ") : String(made.when || "");
   const steps = now && Array.isArray(now.steps) ? now.steps : [];
   const sends = steps.filter((kind) => kind === "email" || kind === "slack_post" || kind === "notify");
@@ -725,7 +737,7 @@ function Icon({ kind, busy }) {
 function Step({ kind, title, note, busy, failed, children }) {
   const [open, setOpen] = useState(false);
   const opens = Boolean(children);
-  return h("div", { className: "pramanyx-step", style: { border: `1px solid ${line}`, borderRadius: 4, margin: "3px 0", fontSize: 13 } },
+  return h("div", { className: "pramanyx-step", style: { borderRadius: 4, margin: "1px 0", fontSize: 13 } },
     h("button", {
       type: "button", disabled: !opens, "aria-expanded": opens ? open : undefined, onClick: () => setOpen((was) => !was),
       style: { display: "flex", gap: 8, alignItems: "center", width: "100%", textAlign: "left", font: "inherit", color: "inherit",
@@ -1290,7 +1302,7 @@ function Exhibit({ answer, whole, asked }) {
       style: { display: "flex", flexWrap: "wrap", gap: 14, padding: "2px 6px 6px 0", fontSize: 13 } },
       becomes.map(([label, path, hint]) => h("button", { key: label, type: "button", className: "pramanyx-link", title: hint,
         onClick: () => openBeside("page", path) }, label))) : null,
-    open === "how" ? h("div", { style: { border: `1px solid ${line}`, borderRadius: 6, padding: 12 } }, h(How, { answer, whole })) : null);
+    open === "how" ? h("div", { style: { padding: "4px 0" } }, h(How, { answer, whole })) : null);
 }
 
 /**
@@ -1373,7 +1385,7 @@ function DraftedDefinitionCard(props) {
 }
 
 function Card(props) {
-  const frame = { border: `1px solid ${line}`, borderRadius: 6, padding: 12, margin: "6px 0", fontSize: 13 };
+  const frame = { margin: "8px 0", fontSize: 13 };
   const asked = String(argsOf(props.block).question || "");
 
   if (props.phase !== "result") {
@@ -1394,6 +1406,73 @@ function Card(props) {
   return h(Exhibit, { answer: read.answer, whole: read.whole, asked });
 }
 
+/**
+ * ALLOW ONCE, IN THE CONVERSATION (2026-11-18; the user: "this 'Allow Once' card should appear inside the conversation
+ * panel right? Why does it pop-out like Windows 98 info tab?"). Something the coworker asks before doing — a schedule,
+ * a draft of what a word means — was put to the person by the shell's own card, which takes the question box's place
+ * at the foot of the page, under a strip of its own. It is asked here instead: under the step that waits on it, in the
+ * conversation, in the conversation's own type, with Reject and Allow once. The box at the foot says where the
+ * question is. The answer goes to the same request the shell's card would answer (`answer("allowed-once")`), so what
+ * is recorded is unchanged: the person's own click.
+ */
+function waitingApprovalOf(props) {
+  const pick = (all) => {
+    for (const status of all?.values?.() ?? []) {
+      const waiting = status?.pendingInteraction;
+      if (waiting && waiting.kind === "approval" && waiting.callId === props.callId && waiting.answerable !== false) return waiting;
+    }
+    return null;
+  };
+  return typeof props.useSessionStatus === "function" ? props.useSessionStatus(pick) : null;
+}
+
+function reasonOf(approval) {
+  if (typeof approval?.reason === "string" && approval.reason) return approval.reason;
+  const said = approval?.displayReason;
+  return (said && typeof said.en === "string" && said.en) || "Go ahead with this?";
+}
+
+export function Decision({ approval }) {
+  const [busy, setBusy] = useState(false);
+  const answer = (outcome) => {
+    setBusy(true);
+    Promise.resolve(approval.answer(outcome)).catch(() => setBusy(false));
+  };
+  return h("div", { "data-pramanyx-decision": String(approval.callId || ""),
+                    style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 12px", padding: "6px 0 10px", fontSize: 13.5 } },
+    h("span", { style: { flex: "1 1 260px", minWidth: 0, lineHeight: 1.45 } }, reasonOf(approval)),
+    h("span", { style: { display: "flex", gap: 8, flex: "none" } },
+      h("button", { type: "button", disabled: busy, style: button(false), onClick: () => answer("rejected") }, "Reject"),
+      h("button", { type: "button", disabled: busy, style: { ...button(true), fontWeight: 600 }, onClick: () => answer("allowed-once") }, "Allow once")));
+}
+
+/** A Pramanyx step, with the question it waits on under it while it waits. */
+const decided = (View) => function DecidedStep(props) {
+  const approval = waitingApprovalOf(props);
+  return h("div", null, h(View, props), approval ? h(Decision, { approval }) : null);
+};
+
+/** The foot of the page while a Pramanyx step waits: where the question is. Should the step not be drawn — a
+ *  conversation scrolled away from it — the question is asked here, the same way. */
+function WaitingAbove(props) {
+  const approval = props.matched;
+  const [inPlace, setInPlace] = useState(true);
+  useEffect(() => {
+    const look = () => setInPlace(Boolean(document.querySelector(`[data-pramanyx-decision="${CSS.escape(String(approval?.callId || ""))}"]`)));
+    look();
+    const timer = setInterval(look, 1000);
+    return () => clearInterval(timer);
+  }, [approval?.callId]);
+  if (!approval) return null;
+  return h("div", { "data-pramanyx-waiting-above": "", style: { padding: "10px 16px" } },
+    inPlace
+      ? h("div", { style: { display: "flex", alignItems: "center", gap: 10, fontSize: 13.5 } },
+          h("span", { style: quiet }, "Waiting for your answer in the conversation: Allow once or Reject."),
+          h("button", { type: "button", className: "pramanyx-link",
+            onClick: () => document.querySelector(`[data-pramanyx-decision="${CSS.escape(String(approval.callId || ""))}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" }) }, "Show it"))
+      : h(Decision, { approval }));
+}
+
 export const inject = ["slots"];
 
 /**
@@ -1409,11 +1488,18 @@ export function apply(ctx) {
     named.add(name);
     ctx.slots.inject("tool.call.toolview", () =>
       ctx.slots.register({ name: "tool.call.toolview", key: name },
-        ANSWERS.test(name) ? AnswerCard : name === PREFIX + "draft_email" ? DraftCard
+        decided(ANSWERS.test(name) ? AnswerCard : name === PREFIX + "draft_email" ? DraftCard
           : name === PREFIX + "bring_in_file" ? BroughtInCard
           : name === PREFIX + "draft_definition" ? DraftedDefinitionCard
-          : SCHEDULES.test(name) ? ScheduleCard : ToolStep));
+          : SCHEDULES.test(name) ? ScheduleCard : ToolStep)));
   };
+  // What a Pramanyx step waits on is asked in the conversation, under the step; the foot of the page says where.
+  ctx.slots.inject("conversation.composer", () => ctx.slots.register({
+    name: "conversation.composer",
+    priority: 2,
+    select: ({ pendingInteraction: waiting }) =>
+      (waiting && waiting.kind === "approval" && String(waiting.toolName || "").startsWith(PREFIX) ? waiting : null),
+  }, WaitingAbove));
   // The tools known when this was written are named from the first call. A view is keyed by exact tool name, so
   // one added to Pramanyx since — and each custom agent's — gets its view at the end of the first turn that calls it.
   nameStepsOf(TOOL);

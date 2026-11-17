@@ -1749,15 +1749,19 @@ export function AutomationGraph({ automationId, automation, create, onCreated, h
       {/* DS-1R — ONE strip: identity · mode · truth chips · the design's verbs. The
           rail and the second header row died into it, so the workflow below gets the
           room ("the actual workflow should be the primary driver" — user, 2026-09-02). */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, paddingBottom: 6,
-        minWidth: 0 }}>
+      {/* The strip wraps (2026-11-18): beside a conversation it is narrow, and its verbs were squeezed until Dry run
+          slid under Deploy. They keep their size and go to the next line together when the line is full. */}
+      <div data-testid="canvas-strip" style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, rowGap: 6,
+        paddingBottom: 6, minWidth: 0 }}>
         {stripBack}
         {stripName}
         {stripEnabled}
         {stripMode}
         {stripTruths}
-        <span style={{ flex: 1 }} />
-        {stripVerbs}
+        <span data-testid="canvas-verbs" style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center",
+          flexWrap: "wrap", gap: 6, flexShrink: 0 }}>
+          {stripVerbs}
+        </span>
       </div>
       <div style={{ flex: 1, minHeight: 220, display: "flex", gap: 8 }}>
         {/* DS-1 P2 — the rail: one slim strip of sections beside the canvas. Palette

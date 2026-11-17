@@ -9,6 +9,10 @@
  *
  * The panel lists one connection's automations, and in the app the top bar chooses which. This page has no top bar,
  * so it carries the choice itself; the panel already says when the others hold some.
+ *
+ * `beside=1`: opened beside a conversation, on one schedule or a question to set on one (2026-11-18; the user: the
+ * Automations, Runs and Inbox tabs and the connection picker are "not needed" there). The page is that schedule on
+ * the conversation's connection, and nothing else.
  */
 import { use, useEffect, useState } from "react";
 
@@ -35,6 +39,7 @@ export default function AutomationsRoute({ searchParams }: {
   const focus = one(query.focus);
   // A question the coworker hands over to set on a schedule: in the sentence box, for the person to finish.
   const sentence = one(query.sentence);
+  const beside = one(query.beside) === "1";
   const [connections, setConnections] = useState<Connection[] | null>(null);
   const [failed, setFailed] = useState("");
   const [chosen, setChosen] = useState(asked);
@@ -61,16 +66,18 @@ export default function AutomationsRoute({ searchParams }: {
 
   return (
     <main style={{ display: "flex", flexDirection: "column", height: "100vh", minHeight: 0, background: "var(--bg-0)" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 20px 0", flexShrink: 0 }}>
-        <label htmlFor="automations-connection" className="aug-fs-sm" style={{ color: "var(--t3)" }}>Schedules and automations on</label>
-        <SelectField id="automations-connection" value={chosen} aria-label="Connection"
-          onChange={(e) => setChosen(e.target.value)} style={{ width: 280 }}>
-          {connections.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </SelectField>
-      </div>
+      {!beside && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 20px 0", flexShrink: 0 }}>
+          <label htmlFor="automations-connection" className="aug-fs-sm" style={{ color: "var(--t3)" }}>Schedules and automations on</label>
+          <SelectField id="automations-connection" value={chosen} aria-label="Connection"
+            onChange={(e) => setChosen(e.target.value)} style={{ width: 280 }}>
+            {connections.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </SelectField>
+        </div>
+      )}
       <div style={{ flex: "1 1 auto", minHeight: 0 }}>
         {chosen
-          ? <AutomationsPanel key={chosen} connId={chosen} focusId={focus || null} sentence={sentence} />
+          ? <AutomationsPanel key={chosen} connId={chosen} focusId={focus || null} sentence={sentence} beside={beside} />
           : <p className="aug-fs-sm" style={{ padding: 20, color: "var(--t2)" }}>There is no connection yet. A schedule asks its question of one.</p>}
       </div>
     </main>

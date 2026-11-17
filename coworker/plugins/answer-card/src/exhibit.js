@@ -349,9 +349,9 @@ export const pageFor = {
   // The sheet's own name rides the address, so its tab can carry it: the app's page reads only the id.
   sheet: (id, name = "") => `/sheets/${encodeURIComponent(id)}${name ? `?name=${encodeURIComponent(name)}` : ""}`,
   // A schedule, on the app's own page of schedules and automations, opened on that one.
-  schedule: (id, connection) => `/automations?conn=${encodeURIComponent(connection)}&focus=${encodeURIComponent(id)}`,
+  schedule: (id, connection) => `/automations?conn=${encodeURIComponent(connection)}&focus=${encodeURIComponent(id)}&beside=1`,
   // What an answer can become (2026-11-17), each the app's own flow, started from the answer, finished by the person.
-  toSchedule: (question, connection) => `/automations?conn=${encodeURIComponent(connection)}&sentence=${encodeURIComponent(question)}`,
+  toSchedule: (question, connection) => `/automations?conn=${encodeURIComponent(connection)}&sentence=${encodeURIComponent(question)}&beside=1`,
   toKeep: (question, connection, first = "") =>
     `/questions/keep?conn=${encodeURIComponent(connection)}&question=${encodeURIComponent(question)}${first ? `&first=${encodeURIComponent(first)}` : ""}`,
   toAgent: (question, connection) => `/agents/new?conn=${encodeURIComponent(connection)}&description=${encodeURIComponent(question)}`,

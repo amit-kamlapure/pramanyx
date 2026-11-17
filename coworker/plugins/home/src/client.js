@@ -488,8 +488,15 @@ function SwitcherInTheCorner() {
 const landed = { unread: {}, listeners: new Set(), started: false };
 
 function publishLanded(unread) {
+  const was = landed.unread;
   landed.unread = unread && typeof unread === "object" ? unread : {};
   for (const listen of landed.listeners) listen(landed.unread);
+  // A run newly landed: the schedule's card in its conversation reads its runs again (`answer-card`, `Scheduled`).
+  for (const [conversation, run] of Object.entries(landed.unread)) {
+    if (run && was[conversation]?.at !== run.at) {
+      window.dispatchEvent(new CustomEvent("pramanyx:run-landed", { detail: { automation: String(run.automation || ""), conversation } }));
+    }
+  }
 }
 
 function readLanded() {
