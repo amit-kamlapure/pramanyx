@@ -270,6 +270,7 @@ export function heldToItsPerson(ctx, { keep = join(process.env.DSH_HOME || join(
   });
   ctx.inject(["tools"], (at) => {
     at.effect(() => at.tools.guard((call) => {
+      if (RECALL.test(String(call?.name))) return recallRefusal(owners, now());
       if (!/^mcp__pramanyx__/.test(String(call?.name))) return undefined;
       const session = call.agent?.session;
       const id = String((session && typeof session === "object" ? session.id : session) ?? "");
@@ -277,6 +278,23 @@ export function heldToItsPerson(ctx, { keep = join(process.env.DSH_HOME || join(
     }), "pramanyx-home: a conversation is its person's");
   });
   return owners;
+}
+
+/** The shell's tools for searching and reading past conversations (`@deepseek-ai/dsh-tool-session-query`). */
+export const RECALL = /^session_(search|event_search|trace|event_trace|event_read)$/;
+
+/** Why the agent may not search past conversations here, or undefined when it may (punch list 84). They search every
+ *  conversation this coworker holds, whoever began it: a person's own coworker holds only theirs; the install's first
+ *  holds one person's only while one person has used it. Once a second person has, it searches nobody's — it would
+ *  bring one person's words into another's answer. Nobody is named. */
+export function recallRefusal(owners, now, owner = ownerOfThisCoworker()) {
+  if (owner) return undefined;
+  const people = new Set([...owners.values()].filter(Boolean));
+  if (now) people.add(now);
+  return people.size > 1
+    ? "This coworker holds other people's conversations too, so it does not search past conversations for anyone. " +
+      "Tell the person so: their own coworker, opened from the app, searches only theirs."
+    : undefined;
 }
 
 /** Whose coworker this is: the person the platform started it for, or "" for the install's first (start_all.sh's). */
@@ -929,6 +947,107 @@ function recordTurns(ctx, api, holds) {
   });
 }
 
+/**
+ * A SCHEDULED RUN REACHES ITS PERSON (punch list 85, 2026-11-18). A schedule made in a conversation is one of the
+ * platform's automations, and its card reads its runs only when the conversation is drawn: a run that landed while the
+ * person was away waited, unseen, for them to happen to open that conversation. Here the coworker remembers which
+ * conversation made which schedule (from the `schedule` call's own result), reads each one's runs every couple of
+ * minutes as the person (`GET /automations/<id>/schedule`), and marks the conversation unread when a new run has landed
+ * — on the sidebar's row, until the conversation is opened (`/pramanyx-runs`, the page's `RunLanded`). Kept in this
+ * coworker's home, so it survives a restart; a schedule the platform no longer has is forgotten.
+ */
+export const SCHEDULES_CALL = /^mcp__pramanyx__schedule$/;
+const AUTOMATION_ID = /^[A-Za-z0-9_-]{1,64}$/;
+
+/** The schedule a `schedule` call's result made, or "" — a call that asked instead or could not made none. */
+export function scheduleMadeBy(text) {
+  try {
+    const got = JSON.parse(String(text || "{}"));
+    return got && got.scheduled !== false && AUTOMATION_ID.test(String(got.id ?? "")) ? String(got.id) : "";
+  } catch {
+    return "";
+  }
+}
+
+/** The latest run's time in a schedule's read, or "". */
+export function latestRun(read) {
+  const runs = Array.isArray(read?.runs) ? read.runs : [];
+  return runs.map((run) => String(run?.at ?? "")).filter(Boolean).sort().at(-1) ?? "";
+}
+
+export function runsReachThePerson(ctx, api, {
+  keep = join(process.env.DSH_HOME || join(homedir(), ".dsh"), "conversation-runs.json"),
+  readSchedule = async (id) => {
+    const answer = await fetch(`${api}/automations/${encodeURIComponent(id)}/schedule`,
+                               { headers: { accept: "application/json", ...(await personHeader()) } });
+    if (answer.status === 404) return null;
+    if (!answer.ok) throw new Error(String(answer.status));
+    return answer.json();
+  },
+} = {}) {
+  const state = { schedules: {}, seen: {}, unread: {} };
+  try { Object.assign(state, JSON.parse(readFileSync(keep, "utf8"))); } catch { /* none kept yet */ }
+  const save = () => {
+    try { mkdirSync(dirname(keep), { recursive: true }); writeFileSync(keep, JSON.stringify(state), { mode: 0o600 }); }
+    catch { /* unkept: held for as long as this process runs */ }
+  };
+  const calls = new Map();
+  ctx.on("session/event", (session, event) => {
+    try {
+      const id = String(session?.id ?? "");
+      const data = event?.data ?? {};
+      if (event?.type === "tool/call" && data.callId && SCHEDULES_CALL.test(String(data.name))) calls.set(data.callId, id);
+      if (event?.type === "tool/result") {
+        const message = data.message ?? {};
+        const where = calls.get(message.toolCallId);
+        if (where === undefined) return;
+        calls.delete(message.toolCallId);
+        const made = message.isError ? "" : scheduleMadeBy(textOf(message.content));
+        // A helper's schedule is its conversation's: the person reads the conversation they asked in.
+        const parent = typeof session?.header?.parentSession === "string" ? session.header.parentSession : "";
+        if (made) { state.schedules[made] = parent || where; state.seen[made] ??= ""; save(); }
+      }
+    } catch { /* not remembered: its runs show when the conversation is opened, as before */ }
+  });
+  const tick = async () => {
+    let changed = false;
+    for (const [automation, conversation] of Object.entries(state.schedules)) {
+      let read;
+      try { read = await readSchedule(automation); } catch { continue; }      // unread this time: asked again next
+      if (read === null) { delete state.schedules[automation]; delete state.seen[automation]; changed = true; continue; }
+      const at = latestRun(read);
+      if (at && at > String(state.seen[automation] || "")) {
+        state.seen[automation] = at;
+        state.unread[conversation] = { at, name: String(read?.name || ""), automation };
+        changed = true;
+      }
+    }
+    if (changed) save();
+  };
+  const seen = (conversation) => {
+    if (!state.unread[conversation]) return false;
+    delete state.unread[conversation];
+    save();
+    return true;
+  };
+  return { state, tick, seen };
+}
+
+/** `GET /pramanyx-runs` — the conversations a run landed in since they were last opened; `POST {session}` — opened. */
+export async function runsDoor(req, res, runs) {
+  const reply = (status, body) => { res.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" }); res.end(JSON.stringify(body)); };
+  if (req.method === "GET") return reply(200, { unread: runs.state.unread });
+  if (req.method !== "POST") return reply(405, { detail: "GET or POST" });
+  const from = req.headers["sec-fetch-site"];
+  if (from && from !== "same-origin") return reply(403, { detail: "Only this page may say this" });
+  let body = "";
+  for await (const chunk of req) { body += chunk; if (body.length > 2000) return reply(413, { detail: "Too long" }); }
+  let session = "";
+  try { session = String(JSON.parse(body || "{}").session || ""); } catch { return reply(400, { detail: "Not JSON" }); }
+  if (!session) return reply(422, { detail: "Which conversation was opened" });
+  return reply(200, { cleared: runs.seen(session) });
+}
+
 export const inject = ["webServer", "workspaceRegistry"];
 
 export function apply(ctx) {
@@ -946,6 +1065,17 @@ export function apply(ctx) {
   heldToItsPerson(ctx);
   askBeforeActing(ctx);
   recordTurns(ctx, api, holds);
+  const runs = runsReachThePerson(ctx, api);
+  ctx.effect(() => {
+    const timer = setInterval(() => { runs.tick().catch(() => {}); }, 120_000);
+    timer.unref?.();
+    return () => clearInterval(timer);
+  }, "pramanyx-home: a scheduled run reaches its person");
+  ctx.effect(() => ctx.webServer.register({
+    kind: "exact",
+    path: "/pramanyx-runs",
+    handler: (req, res) => runsDoor(req, res, runs),
+  }), "pramanyx-home: the conversations a run landed in");
   ctx.effect(() => ctx.webServer.register({
     kind: "exact",
     path: "/pramanyx-helper",

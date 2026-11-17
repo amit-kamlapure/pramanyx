@@ -1499,6 +1499,28 @@ def _narrator_rows_label(sample_rows, total: int, is_time_series: bool) -> str:
     return f"Results (the first {shown} of {total} rows):"
 
 
+def _keep_clarify_answer(req, conn_id: str) -> None:
+    """I4 — this turn is the person ANSWERING a clarify (a reading chosen from the chips): kept BEFORE the answer, so it
+    is an authoritative prior on this turn and every later one. Which area's meaning of a word they meant is THEIR pick,
+    kept for them alone (punch list 83) — crystallized for the connection, it answered everyone's question with one
+    person's choice; any other reading is the connection's, as before. Best-effort."""
+    if not req.clarify_reading:
+        return
+    try:
+        if req.clarify_source == "rival_meanings":
+            from pramanyx.semantic.areas import keep_pick
+            keep_pick(req.clarify_subject or req.question, req.clarify_reading, conn_id)
+        else:
+            from pramanyx.org.context import current_org_id
+            from pramanyx.semantic.ambiguity_ledger import crystallize_user_choice
+            crystallize_user_choice(
+                conn_id, req.clarify_subject or req.question, req.clarify_reading,
+                org_id=current_org_id() or "", clarify_source=req.clarify_source)
+    except Exception as exc:
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "clarify-choice crystallization is best-effort", counter="ask.clarify_crystallize")
+
+
 def _prior_turn_context(history) -> str:
     """The previous turn's question — the ground-first resolver mines it for entities a
     follow-up inherits (so "break that down by platform" keeps the earlier filter). Handles
@@ -5944,17 +5966,7 @@ async def _stream_ask(req: "AskRequest", request: Request, conn_id: str) -> Asyn
     # crystallize that choice into the Ambiguity Ledger (source=user) BEFORE we answer, so the
     # resolution is an authoritative prior on this turn and every future one — the class never
     # re-ambiguates on this connection. Best-effort.
-    if req.clarify_reading:
-        try:
-            from pramanyx.org.context import current_org_id
-            from pramanyx.semantic.ambiguity_ledger import crystallize_user_choice
-            crystallize_user_choice(
-                conn_id, req.clarify_subject or req.question, req.clarify_reading,
-                org_id=current_org_id() or "", clarify_source=req.clarify_source)
-        except Exception as exc:
-            from pramanyx.kernel.errors import tolerate
-            tolerate(exc, "clarify-choice crystallization is best-effort",
-                     counter="ask.clarify_crystallize")
+    _keep_clarify_answer(req, conn_id)
 
     # Ask-vs-guess (Phase 3): when the question is materially ambiguous and this is a
     # fresh auto turn (not an explicit depth override, deep-drill, dossier, or a turn

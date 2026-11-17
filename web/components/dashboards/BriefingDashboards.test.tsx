@@ -39,6 +39,9 @@ vi.mock("@/components/ui/toast", async (original) => ({ ...(await original<typeo
 const composer = vi.hoisted(() => ({ onCreated: null as null | (() => void) }));
 
 vi.mock("@/lib/api", async (original) => ({ ...(await original<typeof import("@/lib/api")>()), ...api }));
+const readCertification = vi.fn(async (_t: unknown) => null as unknown);
+vi.mock("@/lib/certification", async (original) => ({ ...(await original<typeof import("@/lib/certification")>()),
+  readCertification: (t: unknown) => readCertification(t) }));
 vi.mock("@/components/dashboards/ComposedDashboard", () => ({
   ComposedDashboard: (props: Record<string, unknown>) => { drawn.props.push(props); return <div data-testid="composed-stub" />; },
 }));
@@ -617,6 +620,15 @@ describe("building a dashboard in place (Arc AP-1)", () => {
   type Doors = Record<string, unknown> & { onRegrid?: (k: string, b: { w: number; h: number }, m: object) => void };
   const doors = () => drawn.props.at(-1)!.doors as Doors;
   const shown = () => (drawn.props.at(-1)!.spec as { elements: Record<string, { props: Record<string, unknown> }> }).elements;
+
+  it("says the organisation's word on the dashboard — certified, named by connection, owner and id (punch list 81)", async () => {
+    readCertification.mockResolvedValue({ securable: "artifact:dashboard:x", status: "certified", why: "Finance's weekly", by: "user:admin", at: "2026-11-18" });
+    show();
+    expect(await screen.findByTestId("certification-chip")).toHaveTextContent("Certified");
+    const asked = readCertification.mock.calls.map(([t]) => t as { kind: string; ref: string; connectionId: string });
+    expect(asked.some((t) => t.kind === "dashboard" && t.connectionId === "thelook" && /^thelook:.+:returns-1$/.test(t.ref))).toBe(true);
+    readCertification.mockResolvedValue(null);
+  });
 
   it("a dashboard opens to be read: one bar — its history and Edit — and the reader's own doors only", async () => {
     show();

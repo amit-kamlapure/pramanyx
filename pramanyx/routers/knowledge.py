@@ -614,17 +614,28 @@ def list_documents_endpoint():
     row that never offered one.
     """
     from pramanyx.knowledge import blobs
+    from pramanyx.knowledge.access import access_of, uploader
     from pramanyx.knowledge.indexer import in_scope, is_generated, list_documents
     from pramanyx.security.authz import tenant_scope
 
     org_id = tenant_scope()      # None with sign-in off: one tenant owns every row
-    return [{**doc, **blobs.info(doc["doc_id"]),
-             # Compiled schema documentation shares this collection with uploads, which
-             # is right for retrieval and wrong for this list. Flagged rather than
-             # filtered: the surface decides how to present them, and a caller that
-             # wants everything still gets everything.
-             "generated": is_generated(doc["doc_id"])}
-            for doc in list_documents() if in_scope(doc, org_id=org_id)]
+    me = uploader().lower()
+    rows = []
+    for doc in list_documents():
+        if not in_scope(doc, org_id=org_id):
+            continue
+        access = access_of(doc)
+        owner = str(access.get("owner") or "")
+        rows.append({**doc, **blobs.info(doc["doc_id"]),
+                     # Compiled schema documentation shares this collection with uploads, which
+                     # is right for retrieval and wrong for this list. Flagged rather than
+                     # filtered: the surface decides how to present them, and a caller that
+                     # wants everything still gets everything.
+                     "generated": is_generated(doc["doc_id"]),
+                     # Who may read it, and whether it is the reader's own to share (punch list 82): the server
+                     # says, so the page never matches names itself.
+                     "access": access, "yours": bool(owner) and bool(me) and owner.lower() == me})
+    return rows
 
 
 @router.delete("/documents/{doc_id}")

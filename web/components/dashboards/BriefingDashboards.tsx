@@ -60,6 +60,7 @@ import { Input } from "@/components/ui/input";
 import { SelectField } from "@/components/ui/select";
 import { TabStrip } from "@/components/ui/tab-strip";
 import { ChromeActions, ChromeFacts, ChromeStatus, ChromeToolbar, useInShell, usePageChrome } from "@/components/shell/PageChrome";
+import { CertificationMark } from "@/components/govern/CertificationMark";
 import { ErrorState, Loading, Refusal } from "@/components/ui/states";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
@@ -72,6 +73,7 @@ import {
   type BriefingRange, type DashboardAudience, type DashboardDrafted, type DashboardKept, type DashboardList, type DashboardVersion,
   type PersonDashboard, type ShapeName, type SharedDashboard, type SharedDashboardListed, type StagedProposal,
 } from "@/lib/api";
+import { dashboardRef } from "@/lib/certification";
 import { appWords } from "@/lib/dashboards/appVersion";
 import { MAX_CAPTION, MAX_NOTE, type Layout } from "@/lib/dashboards/catalog";
 import {
@@ -693,6 +695,7 @@ function SharedDashboardView({ connectionId, schema, owner, dashboardId, range, 
         <span className="aug-fs-sm" data-testid="dashboard-shared-by" style={{ color: "var(--t2)" }}>
           An App by {personName(data.published_by)}, for {data.published_to.map(t => t.name).join(", ")} · version {data.cockpit.version} · read-only
         </span>
+        <CertificationMark compact target={{ kind: "dashboard", ref: dashboardRef(connectionId, owner, dashboardId), connectionId }} />
         <Button size="xs" variant="secondary" disabled={busy} style={{ marginLeft: "auto" }} onClick={() => void start()}>
           Start my dashboard from this
         </Button>
@@ -1374,6 +1377,11 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
     <PeriodPicker value={chosenRange} onChange={setChosenRange} disabled={busy} reading={reading}
       showing={data.range.status === "standing" || reading ? null : data.range} />
   ) : null;
+  // The organisation's word on this dashboard — Certified or Deprecated — set by a curator (the ontology plan, Phase 1;
+  // punch list 81). Named by connection, owner and id: two people's dashboards may share an id's words.
+  const certMark = ownOpen && data ? (
+    <CertificationMark compact target={{ kind: "dashboard", ref: dashboardRef(connectionId, data.owner, chosen), connectionId }} />
+  ) : null;
   // The title row's doors in view, as the mockup draws them: View | Edit, History, Publish… (the primary), ⋯ for the rare.
   const viewDoors = (
     <>
@@ -1497,6 +1505,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
                 <span data-testid="dashboard-facts">
                   Owner {data.owner === "default" || data.owner === "local" ? "you" : person(data.owner)} · version {kept.version}{readAt ? ` · last read ${utcDayWords(readAt, true)}` : ""}
                 </span>
+                {certMark}
               </ChromeFacts>
               <ChromeActions>{viewDoors}</ChromeActions>
               <ChromeStatus>
@@ -1510,6 +1519,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
           ) : (
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
               {periodPicker}
+              {certMark}
               <span style={{ marginLeft: "auto", display: "flex", gap: 4 }}>{viewDoors}</span>
             </div>
           )}

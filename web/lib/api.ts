@@ -1,3 +1,4 @@
+import type { DocumentAccess } from "@/lib/documentAccess";
 import type { EvalBasis } from "./agentEval";
 import { getActiveWorkspace } from "./workspace";
 import { getApiBase } from "./config";
@@ -4191,6 +4192,9 @@ export interface DocumentEntry {
    *  They share a collection because retrieval wants them together; this surface does
    *  not, and without the flag one real file looked like sixteen documents. */
   generated?: boolean;
+  /** Who may read it, and whether it is the reader's own to share (punch list 82) — the server says both. */
+  access?: DocumentAccess;
+  yours?: boolean;
 }
 
 /** What a document WOULD become, before anything is indexed or paid for. */

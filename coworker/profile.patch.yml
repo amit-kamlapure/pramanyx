@@ -23,15 +23,23 @@
   disabled: true
 
 # ── on: finding a conversation by what was said in it, not only by its title (Phase 3, 2026-11-17). The sidebar's
-#    search box asks this index once someone searches; it is kept beside the conversations, so it survives a restart.
-#    It covers every conversation on this install, as the sidebar lists every one: one shell holds one person at a
-#    time, and a conversation another person began is refused to the coworker's tools (`plugins/home`,
-#    `heldToItsPerson`). The agent's own tools for searching past conversations stay off until the list is one
-#    person's — they would bring one person's words into another's answer.
+#    search box asks this index once someone searches; it is kept beside the conversations, so it survives a restart,
+#    and its first search reads every conversation already held.
 - id: session-query-sqlite
   config:
     path: !!js dshHomePath('session-search.db')
     openAt: first-search
+
+# ── on: the agent searches and reads the person's own past conversations (punch list 84, 2026-11-18) — "what did we
+#    find about returns last week?". It reads the same index. Each person has their own coworker, whose home holds only
+#    their conversations; the install's first coworker searches only while one person has used it, and refuses once a
+#    second has (`plugins/home`, `recallRefusal`): one person's words never reach another's answer.
+- insert:
+    - id: tool-session-query
+      name: '@deepseek-ai/dsh-tool-session-query'
+      config:
+        maxSearchResults: 20
+        searchTimeoutMs: 30000
 
 # ── off: the shell's own scheduler — its store of timed reminders, its page, its clock marks on a conversation.
 #    There is one scheduler and it is Pramanyx's (the user, 2026-11-15: "the scheduler needs to be one across the

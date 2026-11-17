@@ -114,6 +114,10 @@ turned back on from the interface.
   schedules and automations (`/automations`), in a frame: the one list, where a person makes a schedule, changes
   when it runs, mutes it, runs it now and reads what each run did. The one-list view is the shell's own option,
   chosen once on a first visit.
+- **Past conversations, searched by the agent** (2026-11-18). Asked "what did we find about returns last week?", the
+  agent searches and reads the person's own past conversations (the shell's session tools, over the sidebar's search
+  index). A person's own coworker holds only theirs; the install's first coworker searches only while one person has
+  used it, and refuses once a second has (`plugins/home`, `recallRefusal`).
 - **Anything on a schedule, from a sentence** (2026-11-16). Asked to have something happen on a schedule — a
   question asked again, a summary, a Slack post, an email; every Monday, or once in five minutes — the agent passes
   the person's own words to `schedule`, and the platform's own designer (the one behind the Automations page's
@@ -288,9 +292,10 @@ admin allows "Let the coworker ask its models through Pramanyx" in Settings ▸ 
   in. A bare whole number under 1,000 is not checked, as the gate does not check one. Nothing is held: the answer is
   already shown. It has no Right/Wrong of its own. A helper's answers are kept on this machine (`$DSH_HOME/helpers`) and are not in Pramanyx's store.
 - **A schedule's result is shown, not sent, here.** The shell's scheduler put each run into a chat as a new turn,
-  which the agent then answered. Here a run's result appears in the card under the request the next time the
-  conversation is drawn: nothing starts a turn or notifies the person when it lands. Only the last three runs are
-  shown. A request needing a step the platform has none of — the news from the web — is refused with the reason.
+  which the agent then answered. Here a run's result appears in the card under the request, and the conversation's
+  row in the sidebar is marked when a run lands, until it is opened (2026-11-18): the coworker reads the runs of
+  each schedule a conversation made every two minutes, as the person. Nothing starts a turn, and no notification
+  leaves the page; a schedule made before 2026-11-18 is not watched. Only the last three runs are shown. A request needing a step the platform has none of — the news from the web — is refused with the reason.
 - **A schedule made here spends model calls unattended.** It is a person's own request, so the organisation's
   setting for model work nobody asked for does not apply to it; nothing else caps it but the usage limits.
 - The Schedules page opens on the connection last chosen on the first screen, and the frame takes the app's own

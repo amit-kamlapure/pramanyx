@@ -72,3 +72,35 @@ test("a coworker started for one person refuses anyone else's delegation", () =>
     if (was === undefined) delete process.env.PRAMANYX_COWORKER_PERSON; else process.env.PRAMANYX_COWORKER_PERSON = was;
   }
 });
+
+test("past conversations are searched for the coworker's own person, and for nobody once a second person has used it", async () => {
+  const { recallRefusal, RECALL } = await import("../lib/index.js");
+  assert.ok(RECALL.test("session_search") && RECALL.test("session_event_read") && !RECALL.test("mcp__pramanyx__ask"));
+  // A person's own coworker holds only their conversations.
+  assert.equal(recallRefusal(new Map([["s1", "user:ana"], ["s2", "user:bo"]]), "user:ana", "ana@example.com"), undefined);
+  // The install's first: one person's while one person has used it.
+  assert.equal(recallRefusal(new Map(), "", ""), undefined);
+  assert.equal(recallRefusal(new Map([["s1", "user:ana"]]), "user:ana", ""), undefined);
+  assert.equal(recallRefusal(new Map([["s1", "user:ana"]]), "", ""), undefined);
+  // A second person: it searches for nobody, and names nobody.
+  const refused = recallRefusal(new Map([["s1", "user:ana"]]), "user:bo", "");
+  assert.match(refused, /holds other people's conversations too/);
+  assert.doesNotMatch(refused, /ana|bo\b/);
+  assert.match(recallRefusal(new Map([["s1", "user:ana"], ["s2", "user:bo"]]), "user:ana", ""), /other people's/);
+});
+
+test("the guard puts the recall tools behind the same person", () => {
+  const was = process.env.PRAMANYX_COWORKER_PERSON;
+  delete process.env.PRAMANYX_COWORKER_PERSON;          // the install's first coworker
+  try {
+    const keep = join(mkdtempSync(join(tmpdir(), "held-")), "people.json");
+    const who = { now: "user:ana" };
+    const { event, call } = aShell(keep, who);
+    event("s1", "user/message", { source: { kind: "user" } });
+    assert.equal(call("s9", "session_search"), undefined);
+    who.now = "user:bo";
+    assert.match(call("s9", "session_search"), /other people's/);
+  } finally {
+    if (was !== undefined) process.env.PRAMANYX_COWORKER_PERSON = was;
+  }
+});
