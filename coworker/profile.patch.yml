@@ -324,6 +324,10 @@
   disabled: true
 - id: cordis-host-runner
   disabled: true
+- id: cordis-client-runner         # its browser half, which asked the host half for every page and drew 404s
+  disabled: true
+- id: ui-cordis
+  disabled: true
 - id: ptc-runtime
   disabled: true
 - id: harness-dev-context
