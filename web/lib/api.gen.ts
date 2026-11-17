@@ -9388,6 +9388,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/knowledge/{connection_id}/learned": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Learned
+         * @description What the platform has learned about a connection, in one shape (the ontology study, 2026-11-17): what each item
+         *     says, where it came from, who wrote it, its area, how it stands, when, what it rests on — confirmed and approved
+         *     first, then measured, then mined; held to the reader's clearance, what was withheld counted. Use is not counted
+         *     yet, and says so.
+         */
+        get: operations["read_learned_knowledge__connection_id__learned_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/knowledge/{connection_id}/table-health": {
         parameters: {
             query?: never;
@@ -43120,6 +43143,41 @@ export interface operations {
         parameters: {
             query: {
                 q: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                connection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_learned_knowledge__connection_id__learned_get: {
+        parameters: {
+            query?: {
+                about?: string;
+                area?: string;
                 limit?: number;
             };
             header?: never;

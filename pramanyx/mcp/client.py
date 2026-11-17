@@ -660,6 +660,10 @@ class PramanyxClient:
         return {"definitions": [{**{k: r.get(k) for k in keep}, "text": (r.get("statement") or {}).get("text", ""),
                                  "suggested_edits_pending": len(r.get("suggestions") or [])} for r in rows or []]}
 
+    async def read_learned(self, connection: str, *, about: str = "", area: str = "") -> dict:
+        return await self._get(f"/knowledge/{connection}/learned",
+                               params={k: v for k, v in (("about", about), ("area", area)) if v})
+
     async def search_graph(self, connection: str, query: str, *, limit: int = 10) -> dict:
         return await self._get(f"/knowledge/{connection}/graph/search", params={"q": query, "limit": limit})
 

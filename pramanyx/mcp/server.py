@@ -468,6 +468,20 @@ async def get_definitions(
 
 
 @mcp.tool()
+async def read_learned(
+    connection: Annotated[str, Field(description="A connection id from list_connections.")],
+    about: Annotated[str, Field(description="Words to narrow it to — a metric, a table, a business word. Empty for all.")] = "",
+    area: Annotated[str, Field(description="An area of the business, by id, to narrow it to. Empty for all.")] = "",
+) -> dict:
+    """What the platform has learned about a connection, each item in one shape: what it says, where it came from (the
+    explorer, an answer, people's own queries, a trusted query), who wrote or confirmed it, the area of the business it
+    is about, how it stands — CONFIRMED by a person or APPROVED (ground you may build on), MEASURED by a run (to measure
+    again before relying on it), MINED from query history (a hint) — when, and what it rests on. Confirmed first. What
+    the reader's clearance withholds is counted, never shown. Use is not counted yet."""
+    return await _client.read_learned(connection, about=about, area=area)
+
+
+@mcp.tool()
 async def list_findings(
     connection: Annotated[str, Field(description="A connection id from list_connections.")],
     schema: Annotated[Optional[str], Field(description="Optional schema name to scope a multi-schema connection.")] = None,

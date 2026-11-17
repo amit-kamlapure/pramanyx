@@ -908,6 +908,18 @@ async def create_knowledge_source(body: KnowledgeSourceIn):
 # router's `connection_owner_guard` — so the MCP client reads the same data with the same
 # clearances as a person at the web app.
 
+@router.get("/knowledge/{connection_id}/learned")
+def read_learned(connection_id: str, about: str = "", area: str = "", limit: int = Query(50, ge=1, le=200)):
+    """What the platform has learned about a connection, in one shape (the ontology study, 2026-11-17): what each item
+    says, where it came from, who wrote it, its area, how it stands, when, what it rests on — confirmed and approved
+    first, then measured, then mined; held to the reader's clearance, what was withheld counted. Use is not counted
+    yet, and says so."""
+    from pramanyx.knowledge.learned import area_filter, learned_items
+    out = learned_items(connection_id, about=about, limit=200)
+    items = area_filter(out["items"], area or None)[:limit]
+    return {**out, "items": items}
+
+
 @router.get("/knowledge/{connection_id}/graph/search")
 def knowledge_search_graph(connection_id: str, q: str = Query(..., min_length=1),
                            limit: int = Query(10, ge=1, le=50)):
