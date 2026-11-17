@@ -87,7 +87,7 @@ MAX_ANSWERS = 30
 
 def export_answers(invs: list[dict], *, title: str = "", money_symbols: list[str] | None = None) -> tuple[bytes, str, str]:
     """Several stored answers as one PowerPoint deck, in the order given (punch list 92, 2026-11-18: a conversation's
-    answers as a deck, as Genie One makes one). Each answer is drawn from its stored report exactly as its own export
+    answers as a deck, as peer products make one). Each answer is drawn from its stored report exactly as its own export
     draws it — never from code a model wrote — and its figures cite its own receipt. Returns (bytes, filename, media)."""
     if not invs:
         raise ValueError("a deck needs at least one answer")

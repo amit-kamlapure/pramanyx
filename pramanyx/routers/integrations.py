@@ -331,7 +331,7 @@ def revoke(conn_id: str):
 
 # ── a person's own Drive, searched (punch list 91, 2026-11-18) ──────────────────────
 #
-# The Genie One study's "external sources": a question about the business often wants the deck or sheet someone made
+# Outside sources (the 2026-11-17 study of a peer product): a question about the business often wants the deck or sheet someone made
 # about it. Google grants are already each person's own (`call_operation` refuses another's); this is the first of
 # their operations a conversation can use directly — a read of names and links, never contents.
 
