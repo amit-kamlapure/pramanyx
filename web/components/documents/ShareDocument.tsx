@@ -69,7 +69,7 @@ function ShareForm({ docId, name, access, onClose, onSaved }: {
   return (
     <FormDialog open onOpenChange={(o) => { if (!o) onClose(); }} title={`Who may read “${name}”`} width={520}
       testId="document-share" busy={busy}
-      description="Only you decide. Whoever may read it can find it, and answers can quote it for them; nobody else's can.">
+      description="Only you decide. Whoever may read it can find it, and their answers can quote it.">
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         <Segmented label="Who may read it" value={choice} onChange={setChoice}
           options={[{ value: "me", label: "Only me" }, { value: "people", label: "People I choose" },
