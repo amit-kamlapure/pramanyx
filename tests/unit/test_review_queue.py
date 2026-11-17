@@ -119,3 +119,53 @@ def test_the_route_serves_the_view(monkeypatch, areas):
                                                         "title": "q", "count": 2}])),))
     body = TestClient(app).get("/knowledge/cx/review").json()
     assert body["total"] == 1 and body["items"][0]["resolve"]["href"] == "/?tab=semantic&semtab=definitions&conn=cx"
+
+
+def test_the_platforms_own_checks_are_not_listed_as_a_persons_question(monkeypatch):
+    """theLook's live list, 2026-11-17: its busiest 'gap' was an agent's check against its certified questions, 44
+    times, read from the run's own name. A person's question is listed; the platform's own runs are one row, said."""
+    import pramanyx.ontology.framing_misses as F
+    monkeypatch.setattr(F, "misses", lambda c, limit=200, graph=None, keep=25: {"misses": 47, "recent": [
+        *[{"question": "Checking the agent The Look Analyst against 5 certified questions", "started_by": "agent_eval",
+           "at": "2026-11-17"}] * 44,
+        {"question": "net sales by store", "started_by": "", "at": "2026-11-16"},
+        {"question": "net sales by store", "started_by": "", "at": "2026-11-15"},
+        {"question": None, "started_by": "", "at": "2026-11-01"}]})
+    rows = R._framing_misses("c1", R._links("c1"))
+    assert [(r["title"], r["count"]) for r in rows] == [
+        ("net sales by store", 2),
+        ("44 questions in the platform's own checks framed on no definition", None),
+        ("1 more question framed on no definition", 1)]
+    assert "agent_eval" in rows[1]["detail"]
+
+
+def test_a_scheduled_question_is_not_a_conflict(monkeypatch):
+    """A schedule over a moving period answers differently every time by design; theLook's live list showed three as
+    conflicts, under their code-written preamble."""
+    from types import SimpleNamespace
+
+    import pramanyx.semantic.answer_divergence as D
+    sched = "[Scheduled-run context — written by code, not inferred]\nThis is a scheduled run.\n\nWhat changed yesterday?"
+    monkeypatch.setattr(D, "detect", lambda c: [
+        SimpleNamespace(question="What was revenue in July 2026?", question_key="k1", variant_count=3, run_count=9,
+                        top_reuse=5, pinned=False),
+        SimpleNamespace(question=sched, question_key="k2", variant_count=19, run_count=20, top_reuse=2, pinned=False)])
+    rows = R._answered_two_ways("c1", R._links("c1"))
+    assert [r["title"] for r in rows] == ["Answered 3 ways: What was revenue in July 2026?"]
+
+
+def test_unanswered_questions_are_grouped_by_what_was_asked(monkeypatch):
+    """Each scheduled run carries a preamble naming its date; theLook's live list showed one schedule as a dozen
+    different unanswered questions."""
+    import pramanyx.intake.suggestions as S
+    pre = "[Scheduled-run context — written by code, not inferred]\nThis is a scheduled daily run at {d}.\n\n"
+    monkeypatch.setattr(S, "unresolved_questions", lambda c, limit=200: [
+        {"question": pre.format(d="2026-09-16") + "What changed in theLook in the last day?", "count": 1, "statuses": ["failed"]},
+        {"question": pre.format(d="2026-09-17") + "What changed in theLook in the last day?", "count": 1, "statuses": ["failed"]},
+        {"question": "What changed in theLook in the last day?", "count": 3, "statuses": ["failed"]},
+        {"question": "Where are we losing money?", "count": 2, "statuses": ["error"]}])
+    rows = R._unanswered("c1", R._links("c1"))
+    assert [(r["title"], r["count"]) for r in rows] == [("What changed in theLook in the last day?", 5),
+                                                        ("Where are we losing money?", 2)]
+    assert rows[0]["detail"] == "No run could answer it (failed); 2 of them on a schedule."
+

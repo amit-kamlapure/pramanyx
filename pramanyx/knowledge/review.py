@@ -62,31 +62,56 @@ def _framing_misses(connection_id: str, link: dict) -> list[dict]:
     rows = got.get("recent") or []
     asked: Counter = Counter()
     last: dict[str, str] = {}
+    own: Counter = Counter()
     unkept = got.get("misses", 0) - sum(1 for r in rows if r.get("question"))
     for r in rows:
         q = (r.get("question") or "").strip()
-        if q:
+        if q and r.get("started_by"):
+            # The platform's own run (an agent checked against its certified questions): its first event names the
+            # run, not a question a person asked, so it is not listed as one (found on theLook's live list, 44 of them).
+            own[str(r["started_by"])] += 1
+        elif q:
             asked[q] += 1
             last[q] = max(last.get(q, ""), str(r.get("at") or ""))
     out = [_row(source="framing_miss", ref=_ref(q), kind="gap", title=q,
                 detail="Framed on no definition: the words it used are not ones the business declared.",
                 count=n, at=last[q], href=link["definitions_tab"](), action="Add the words it used")
            for q, n in asked.most_common()]
+    if own:
+        n = sum(own.values())
+        out.append(_row(source="framing_miss", ref="own-runs", kind="gap",
+                        title=f"{n} question{'' if n == 1 else 's'} in the platform's own checks framed on no definition",
+                        detail=f"From runs the platform started itself ({', '.join(sorted(own))}), such as an agent "
+                               "checked against its certified questions — not questions a person asked.",
+                        href=link["definitions_tab"](), action="See the questions"))
     if unkept > 0:
         out.append(_row(source="framing_miss", ref="unkept", kind="gap",
-                        title=f"{unkept} more questions framed on no definition",
+                        title=f"{unkept} more question{'' if unkept == 1 else 's'} framed on no definition",
                         detail="Their words are no longer kept by the session log; only that they missed is.",
                         count=unkept, href=link["definitions_tab"](), action="See what is still kept"))
     return out
 
 
 def _unanswered(connection_id: str, link: dict) -> list[dict]:
+    """Questions no run could answer, grouped by what was ASKED: a scheduled run carries a code-written preamble that
+    names its date, so each of its runs read as a different question (theLook's live list, 2026-11-17)."""
+    from pramanyx.automations.temporal import ask_of
     from pramanyx.intake.suggestions import unresolved_questions
-    return [_row(source="unanswered", ref=_ref(str(r.get("question") or "")), kind="gap",
-                 title=str(r.get("question") or ""),
-                 detail=f"No run could answer it ({', '.join(r.get('statuses') or []) or 'not complete'}).",
-                 count=int(r.get("count") or 0), href=link["definitions_tab"](), action="Define what it needs")
-            for r in unresolved_questions(connection_id, limit=PER_SOURCE)]
+    asked: dict[str, dict] = {}
+    for r in unresolved_questions(connection_id, limit=500):
+        raw = str(r.get("question") or "")
+        ask = ask_of(raw).strip() or raw.strip()
+        cur = asked.setdefault(ask.lower(), {"title": ask, "count": 0, "statuses": set(), "scheduled": 0})
+        cur["count"] += int(r.get("count") or 0)
+        cur["statuses"].update(r.get("statuses") or [])
+        if ask != raw.strip():
+            cur["scheduled"] += int(r.get("count") or 0)
+    rows = sorted(asked.values(), key=lambda a: -a["count"])[:PER_SOURCE]
+    return [_row(source="unanswered", ref=_ref(a["title"]), kind="gap", title=a["title"],
+                 detail=f"No run could answer it ({', '.join(sorted(a['statuses'])) or 'not complete'})"
+                        + (f"; {a['scheduled']} of them on a schedule." if a["scheduled"] else "."),
+                 count=a["count"], href=link["definitions_tab"](), action="Define what it needs")
+            for a in rows]
 
 
 def _unconfirmed(connection_id: str, link: dict) -> list[dict]:
@@ -190,12 +215,16 @@ def _rivals(connection_id: str, link: dict) -> list[dict]:
 
 
 def _answered_two_ways(connection_id: str, link: dict) -> list[dict]:
+    """A question answered more than one way. A scheduled question is left out: its answer moves with the period it
+    asks about by design, so a schedule over "last week" is answered differently every week (theLook's live list,
+    2026-11-17, showed three such schedules as conflicts, under their code-written preamble)."""
+    from pramanyx.automations.temporal import ask_of
     from pramanyx.semantic.answer_divergence import detect
     return [_row(source="divergence", ref=d.question_key, kind="conflict",
                  title=f"Answered {d.variant_count} ways: {d.question}",
                  detail=f"Asked {d.run_count} times; the most-used answer was reused {d.top_reuse} times.",
                  count=d.run_count, href=None, action="Settle it by approving one answer as a trusted query")
-            for d in detect(connection_id)[:PER_SOURCE] if not d.pinned]
+            for d in detect(connection_id)[:PER_SOURCE] if not d.pinned and ask_of(d.question) == d.question]
 
 
 SOURCES: tuple[tuple[str, Callable[[str, dict], list[dict]]], ...] = (

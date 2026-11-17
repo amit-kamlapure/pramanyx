@@ -63,6 +63,7 @@ def misses(connection_id: str, *, limit: int = 200, graph: Any = None, keep: int
         trace = r.get("trace_id") or ""
         question = ""
         scheduled = False
+        started_by = ""
         if trace:
             try:
                 # The question is on the run's FIRST event. This read the newest twenty events
@@ -75,10 +76,13 @@ def misses(connection_id: str, *, limit: int = 200, graph: Any = None, keep: int
                     from pramanyx.automations.temporal import ask_of
                     question = ask_of(asked)
                     scheduled = question != asked
+                    # A run the platform started itself (`obs/own_run.py`: an agent's check against its certified
+                    # questions) names itself here, not a person's question (2026-11-17).
+                    started_by = str(payload.get("started_by") or "")
             except Exception:  # noqa: BLE001 — an aged-out question reads as not kept, never as an error
                 question = ""
         row = {"at": r.get("at"), "trace_id": trace, "question": question or None,
-               "scheduled": scheduled}
+               "scheduled": scheduled, "started_by": started_by}
         if graph is not None and question:
             from pramanyx.ontology.near_match import near_candidates
             row["might_mean"] = [{"name": c["name"], "label": c["label"], "score": c["score"]}
