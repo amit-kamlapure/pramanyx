@@ -28,6 +28,7 @@ A read. No model; the warehouse only to read approved metrics' figures (`figures
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
@@ -202,6 +203,47 @@ def place_metric(m: Any, mmap: MetricMap, table_areas: dict[str, list[Placement]
     return Placement(OTHER, "nothing in its name or its tables names an area")
 
 
+# ── the organisation's word on the map (the ontology study, Phase 1, 2026-11-17) ─────────────────────────────────────
+
+def _who(by: str) -> str:
+    return str(by or "a person").replace("user:", "")
+
+
+def _placed_by_people(connection_id: str) -> dict:
+    try:
+        from pramanyx.semantic.areas import placed_by_people
+        return placed_by_people(connection_id)
+    except Exception as exc:  # noqa: BLE001 — unread, placement is by evidence alone, as before
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "people's placements could not be read; placed by evidence", counter="metric_coverage.people")
+        return {"tables": {}, "metrics": {}, "connection": None}
+
+
+def _with_declared(mmap: MetricMap) -> MetricMap:
+    """The map with the organisation's own areas after the industry's, named and asked as declared; a package's own
+    area renamed when the organisation named it otherwise. The map read is never changed in place."""
+    try:
+        from pramanyx.semantic.areas import declarations
+        decls = declarations()
+    except Exception as exc:  # noqa: BLE001 — unread, the industry's map stands alone
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "the organisation's areas could not be read", counter="metric_coverage.declared")
+        return mmap
+    if not decls:
+        return mmap
+    from dataclasses import replace as _replace
+    by_id = {d.id: d for d in decls}
+    areas = [(_replace(a, name=by_id[a.id].name or a.name, question=by_id[a.id].question or a.question)
+              if a.id in by_id else a) for a in mmap.areas]
+    known = {a.id for a in areas}
+    words = lambda d: tuple(w for w in re.findall(r"[a-z0-9]+", (d.name or d.id).lower()) if len(w) > 2)  # noqa: E731
+    new = [Area(id=d.id, name=d.name or d.id, question=d.question, pack_id="organisation", words=words(d))
+           for d in decls if d.id not in known]
+    generic = [a for a in areas if a.generic]
+    return MetricMap(areas=[a for a in areas if not a.generic] + new + generic, industry_pack=mmap.industry_pack,
+                     problems=list(mmap.problems))
+
+
 # ── the matrix ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
 def defined_metrics(connection_id: str, schema_name: Optional[str]) -> list:
@@ -248,7 +290,7 @@ def coverage(connection_id: str, schema_name: Optional[str] = None, *, figures: 
     with every placement's reason, and what could not be read said."""
     from pramanyx.semantic.metric_map import map_for
 
-    mmap = mmap or map_for(connection_id, schema_name)
+    mmap = _with_declared(mmap or map_for(connection_id, schema_name))
     tables = tables_of(connection_id, schema_name)
     domains = _domains(connection_id, schema_name)
     said: list[str] = list(mmap.problems)
@@ -256,6 +298,16 @@ def coverage(connection_id: str, schema_name: Optional[str] = None, *, figures: 
         said.append("the profiler has not read this dataset's tables yet — profile it to place them")
     areas = mmap.readable
     by_table: dict[str, list[Placement]] = {t.name: place_table(t, areas, domains.get(t.name, "")) for t in tables}
+    # A person's placement outranks every placement by evidence (2026-11-17), and a connection placed whole places the
+    # tables no one placed one by one.
+    people = _placed_by_people(connection_id)
+    whole = people.get("connection")
+    for t in tables:
+        mine = people["tables"].get(t.name.lower())
+        if mine and mmap.area(mine[0]):
+            by_table[t.name] = [Placement(mine[0], f"{_who(mine[1])} placed it here")]
+        elif whole and mmap.area(whole[0]):
+            by_table[t.name] = [Placement(whole[0], f"{_who(whole[1])} placed its connection here")]
 
     from pramanyx.semantic.metric_time import tables_read
 
@@ -263,7 +315,9 @@ def coverage(connection_id: str, schema_name: Optional[str] = None, *, figures: 
     moved = _moves(metrics, connection_id, figures=figures)
     placed_metrics: dict[str, list[tuple[Any, Placement]]] = {}
     for m in metrics:
-        p = place_metric(m, mmap, by_table)
+        mine = people["metrics"].get(m.name)
+        p = (Placement(mine[0], f"{_who(mine[1])} placed it here") if mine and mmap.area(mine[0])
+             else place_metric(m, mmap, by_table))
         placed_metrics.setdefault(p.area, []).append((m, p))
         for t in tables_read(m):
             bare = _bare(t)

@@ -110,25 +110,29 @@ def render_period_markdown(block: dict, sections: list, cut: int) -> str:
 
     period = block.get("period", "period")
     withheld = block.get("compare_withheld")
+    clock = block.get("clock") or "UTC"
     lines = [f"# {block.get('label', '')} Briefing — {block.get('covers', '')}",
-             (f"*Not compared: {withheld}. All dates UTC.*" if withheld
-              else f"*Compared with {block.get('compared_with', '')}. All dates UTC.*")]
+             (f"*Not compared: {withheld}. All dates {clock}.*" if withheld
+              else f"*Compared with {block.get('compared_with', '')}. All dates {clock}.*")]
     lag = int(block.get("lag_days") or 1)
+    # 2026-11-17 — one definition of a period (`kernel/clock.py`): it is the one asked; a source still revising its
+    # days makes the newest provisional, and data that ended before it holds nothing for it.
     if answer_of_block(block).live:
         # a sheet (Arc SH, SH-6): ended or not, none of its figures is final
         lines.append(f"*{answer_of_block(block).says()}*")
+    elif block.get("no_data"):
+        lines.append(f"*The data ended on {block.get('data_through')}, before this {period}: there is no data for it.*")
     elif block.get("data_ended") and block.get("still_moving"):
         lines.append(f"*No data has arrived since {block.get('data_through')}, and its tables had not settled when it "
                      "stopped: figures read from them may still move.*")
     elif block.get("data_ended"):
         lines.append(f"*The data ended on {block.get('data_through')}: every figure here is final.*")
     elif answer_of_block(block).never_settled:
-        lines.append(f"*This {period} ends {lag} days before today. {answer_of_block(block).says()}*")
+        lines.append(f"*{answer_of_block(block).says()} Its newest figures are provisional.*")
     elif lag > 1:
-        lines.append(f"*This {period} ends {lag} days before today: newer days are still "
-                     "settling as late rows arrive"
-                     + (", a lag the platform measured" if block.get("lag_source") == "learned"
-                        else "") + ".*")
+        lines.append(f"*Its newest {lag} days are still being revised as late rows arrive"
+                     + (", a lag the platform measured" if block.get("lag_source") == "learned" else "")
+                     + ": their figures are provisional.*")
     lines.append("")
     for kind, items in sections:
         lines.append(f"## {_SHEET_TITLES.get(kind, kind).format(period=period)}")
@@ -384,12 +388,14 @@ def _book_delivery(sub: BriefSubscription, built: dict, verdict, result: dict, *
 
 
 def _paused_on_ended_data(sub: BriefSubscription) -> str:
-    """Why a scheduled Briefing is not sent, when its data has ENDED and the edition it would send is
-    one this subscription already sent — "" when it should go. Data that stopped does not move, so the
-    same edition every morning is noise; the send resumes by itself when new rows move the edge (the
-    anchored range then covers new days). Read before building: a paused send spends no model call."""
+    """Why a scheduled Briefing is not sent, when its data has ENDED before the period it would send — "" when it
+    should go. Its period is counted from today (`kernel/clock.py`), so it holds no rows; the first such Briefing goes
+    and says so, and the later ones pause: "no data" every morning is noise. The send resumes by itself when new rows
+    move the edge. Read before building: a paused send spends no model call."""
+    from datetime import timedelta
+
     from pramanyx.briefing import ranges
-    from pramanyx.briefing.deliveries import sent_at_for
+    from pramanyx.briefing.deliveries import last_sent
     try:
         spec, _why = ranges.resolve_for(sub.conn_id, ranges.PERIOD_PRESET.get(sub.period, "yesterday"),
                                         workspace_id=sub.workspace_id or None, schema=sub.schema_name or None)
@@ -398,14 +404,17 @@ def _paused_on_ended_data(sub: BriefSubscription) -> str:
         tolerate(exc, "whether the data has ended could not be read; the Briefing is sent",
                  counter="briefs.delivery.pause", conn_id=sub.conn_id)
         return ""
-    if spec is None or not spec.data_ended:
+    if spec is None or not spec.no_data:
         return ""
-    covers = ranges.phrases(spec)["covers"]
-    sent = sent_at_for(sub.conn_id, sub.id, covers)
-    if not sent:
+    # A Briefing sent once the data read as ended already said so — the one before this rule, of the data's last
+    # period, and the one after it, of a period with no rows.
+    read_as_ended = spec.data_through + timedelta(days=ranges.STOPPED_DAYS + 1)
+    sent = last_sent(sub.conn_id, sub.id)
+    if not sent or sent[:10] < read_as_ended.isoformat():
         return ""
-    return (f"paused: the data ended on {ranges._d(spec.data_through)} and has not moved since the Briefing "
-            f"for {covers} was sent on {sent[:10]}; sending resumes when new rows arrive")
+    return (f"paused: the data ended on {ranges._d(spec.data_through)}, so there is no data for "
+            f"{ranges.phrases(spec)['covers']}; the Briefing sent on {sent[:10]} said the data had ended, and sending "
+            "resumes when new rows arrive")
 
 
 def _deliver_period(sub: BriefSubscription, trigger, result: dict, *, delivery_key: str = "") -> None:

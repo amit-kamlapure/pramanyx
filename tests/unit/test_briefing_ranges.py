@@ -28,11 +28,16 @@ SEP26 = date(2026, 9, 26)
 
 @pytest.mark.parametrize("preset, period", sorted(ranges.PRESET_PERIOD.items()))
 def test_a_named_preset_is_exactly_the_period_section_3_27_reads(preset, period):
+    """A person's preset is counted from today (2026-11-17, one definition of a period): the source's 13-day lag stays on
+    the spec, to say its newest figures are provisional, and moves nothing. A settled reader still reads 13 days back."""
     spec, why = ranges.resolve_range(preset, today=SEP26, lag_days=13)
-    w = complete_period(period, SEP26, 13)
+    w = complete_period(period, SEP26, 1)
     assert why == "" and (spec.start, spec.end, spec.previous_start, spec.previous_end) == (
         w.start, w.end, w.previous_start, w.previous_end)
-    assert spec.period == period
+    assert spec.period == period and spec.lag_days == 13
+    settled, _ = ranges.resolve_range(preset, today=SEP26, lag_days=13, settled=True)
+    s13 = complete_period(period, SEP26, 13)
+    assert (settled.start, settled.end) == (s13.start, s13.end)
 
 
 def test_the_users_range_is_compared_with_the_days_just_before():
@@ -52,11 +57,12 @@ def test_the_users_range_is_compared_with_the_days_just_before():
     assert {(x.as_of - x.last_day).days for x in w.values()} == {31}
 
 
-def test_month_to_date_ends_at_the_last_settled_day_and_compares_like_for_like():
+def test_month_to_date_ends_yesterday_and_compares_like_for_like():
+    """Up to yesterday (2026-11-17), not up to the last settled day: the lag makes the newest days provisional."""
     spec, _ = ranges.resolve_range("month_to_date", today=SEP26, lag_days=13)
-    assert (spec.start, spec.last_day) == (date(2026, 9, 1), date(2026, 9, 13))
-    assert (spec.previous_start, spec.previous_end) == (date(2026, 8, 1), date(2026, 8, 14))
-    assert (spec.last_year_start, spec.last_year_end) == (date(2025, 9, 1), date(2025, 9, 14))
+    assert (spec.start, spec.last_day) == (date(2026, 9, 1), date(2026, 9, 25))
+    assert (spec.previous_start, spec.previous_end) == (date(2026, 8, 1), date(2026, 8, 26))
+    assert (spec.last_year_start, spec.last_year_end) == (date(2025, 9, 1), date(2025, 9, 26))
 
 
 @pytest.mark.parametrize("kw, why", [
@@ -188,10 +194,11 @@ def test_a_scheduled_briefing_is_its_periods_range_remeasured_at_the_send(con, n
     assert "## Headline metrics" in sent["markdown"] and "Revenue" in sent["markdown"]
     assert not any("Revenue" in h for h in sent["held_lines"]), sent["held_lines"]
 
-    con.execute("INSERT INTO orders VALUES (TIMESTAMP '2026-09-08 12:00', 500000.0, 'done')")
+    # last week is 14–20 September, counted from today (2026-11-17): a late row lands in it
+    con.execute("INSERT INTO orders VALUES (TIMESTAMP '2026-09-15 12:00', 500000.0, 'done')")
     late = delivery.build_period_departure(sub, runner=_runner(con))      # the brief is cached; the send re-runs
-    assert any(h.startswith("“Revenue moved from 52,000 to 70,000") and "re-measured at departure: 70,000 is not in"
-               in h for h in late["held_lines"]), late["held_lines"]
+    assert any(h.startswith("“Revenue") and "re-measured at departure" in h and "is not in" in h
+               for h in late["held_lines"]), late["held_lines"]
     assert "## Headline metrics" not in late["markdown"]
 
 
@@ -276,15 +283,15 @@ def test_measures_that_cannot_open_the_connection_say_so():
 
 
 @pytest.mark.parametrize("kw, n, expected", [
-    # a day is read against the same weekday: seven days back each time
-    ({"preset": "yesterday"}, 3, [(date(2026, 8, 30), date(2026, 8, 31)), (date(2026, 9, 6), date(2026, 9, 7)),
-                                  (date(2026, 9, 13), date(2026, 9, 14))]),
+    # a day is read against the same weekday: seven days back each time — from yesterday (2026-11-17)
+    ({"preset": "yesterday"}, 3, [(date(2026, 9, 11), date(2026, 9, 12)), (date(2026, 9, 18), date(2026, 9, 19)),
+                                  (date(2026, 9, 25), date(2026, 9, 26))]),
     # whole calendar months, whatever their length
     ({"preset": "last_month"}, 3, [(date(2026, 6, 1), date(2026, 7, 1)), (date(2026, 7, 1), date(2026, 8, 1)),
                                    (date(2026, 8, 1), date(2026, 9, 1))]),
     # a month to date reads the same days of each earlier month
-    ({"preset": "month_to_date"}, 3, [(date(2026, 7, 1), date(2026, 7, 14)), (date(2026, 8, 1), date(2026, 8, 14)),
-                                      (date(2026, 9, 1), date(2026, 9, 14))]),
+    ({"preset": "month_to_date"}, 3, [(date(2026, 7, 1), date(2026, 7, 26)), (date(2026, 8, 1), date(2026, 8, 26)),
+                                      (date(2026, 9, 1), date(2026, 9, 26))]),
     ({"preset": "last_year"}, 2, [(date(2024, 1, 1), date(2025, 1, 1)), (date(2025, 1, 1), date(2026, 1, 1))]),
     # a custom range steps back by its own length, back to back, as its comparison does
     ({"start": date(2026, 8, 17), "end": date(2026, 8, 26)}, 3,
@@ -368,7 +375,7 @@ def test_the_measures_route_hands_back_a_young_briefings_figures_and_measures_ot
 def test_the_range_after_this_one_keeps_its_kind_and_its_step_back():
     day, _ = ranges.resolve_range("yesterday", today=SEP26, lag_days=13)
     nxt = ranges.later_spec(day)
-    assert (nxt.start, nxt.end) == (date(2026, 9, 14), date(2026, 9, 15))
+    assert (nxt.start, nxt.end) == (date(2026, 9, 26), date(2026, 9, 27))       # the day after yesterday: today
     assert nxt.start - nxt.previous_start == day.start - day.previous_start          # still the same weekday back
     month, _ = ranges.resolve_range("last_month", today=SEP26, lag_days=13)
     assert (ranges.later_spec(month).start, ranges.later_spec(month).end) == (date(2026, 9, 1), date(2026, 10, 1))
@@ -505,15 +512,25 @@ def _edge(preset, today=OCT8, edge=LOADING, **kw):
     return spec
 
 
-def test_a_current_day_is_the_newest_complete_day_and_today_still_loading_is_left_out():
-    """The user: most warehouses hold yesterday at best, and a current day read off the calendar is
-    empty. A day still loading is part of a day, and a part against a whole is no comparison."""
+def test_a_current_day_is_today_as_it_stands_and_is_not_compared():
+    """The user, 2026-11-17: one definition of a period — today is today. A day still loading is part of a day, and a
+    part against a whole is no comparison, so it is read as it stands and not compared; it is never yesterday instead,
+    and when no row has arrived for it, it says so."""
     day = _edge("current_day")
-    assert (day.start, day.last_day, day.previous_start) == (date(2026, 10, 7), date(2026, 10, 7), date(2026, 9, 30))
-    assert day.edge_note.startswith("Today (2026-10-08) is still loading, so it is left out")
+    assert (day.start, day.last_day, day.under_way) == (date(2026, 10, 8), date(2026, 10, 8), True)
+    assert day.compare_withheld == "today is still under way" and day.last_year_start is None
+    assert day.edge_note == "Today (2026-10-08) is still under way: it is read as it stands and not compared with any other day."
+    assert ranges.phrases(day)["covers"] == "today so far, 2026-10-08"          # never "the fiscal year from …"
+    assert ranges.phrases(day)["compared_with"] == "no earlier period (today is still under way)"
     behind = _edge("current_day", edge={"through": date(2026, 10, 7)})
-    assert behind.last_day == date(2026, 10, 7)
-    assert behind.edge_note == "Data runs to 2026-10-07: today (2026-10-08) has no rows yet."
+    assert behind.last_day == date(2026, 10, 8)
+    assert behind.edge_note == "Data runs to 2026-10-07: today has no rows yet."
+    # theLook, 2026-11-17: one table ending yesterday held the edge while orders had today's rows — "no rows" is said of
+    # the table that has none, never of today beside today's figure
+    held = _edge("current_day", edge={"through": date(2026, 10, 7), "held_by": ["events"],
+                                      "tables": {"events": date(2026, 10, 7), "orders": OCT8}})
+    assert held.edge_note == ("Today (2026-10-08) is still under way: it is read as it stands and not compared with any "
+                              "other day. events has no rows for it yet; orders has.")
 
 
 def test_a_period_so_far_is_compared_with_the_same_days_of_the_one_before():
@@ -549,11 +566,11 @@ def test_a_last_period_is_the_calendar_one_before_the_one_under_way():
     assert (nxt.start, nxt.end) == (date(2026, 10, 1), date(2026, 11, 1))
 
 
-def test_a_current_period_with_no_data_yet_reads_the_newest_that_has_and_says_so():
+def test_a_current_period_with_no_data_yet_says_so_and_never_reads_the_one_before():
     monday = date(2026, 10, 12)
     week = _edge("current_week", today=monday, edge={"through": date(2026, 10, 11)})
-    assert (week.start, week.last_day, week.under_way) == (date(2026, 10, 5), date(2026, 10, 11), False)
-    assert week.edge_note.startswith("The week of 2026-10-12 has no complete day yet, so this is the newest that has.")
+    assert (week.start, week.last_day, week.under_way) == (date(2026, 10, 12), date(2026, 10, 12), True)
+    assert week.edge_note == "Data runs to 2026-10-11: this week has no rows yet."
 
 
 def test_the_table_that_holds_the_data_back_is_named():
@@ -561,7 +578,9 @@ def test_the_table_that_holds_the_data_back_is_named():
             "tables": {"returns": date(2026, 10, 5), "orders": date(2026, 10, 7)}}
     week = _edge("current_week", edge=held)
     assert (week.start, week.last_day) == (date(2026, 10, 5), date(2026, 10, 5))
-    assert "returns has no rows after 2026-10-05; orders runs later." in week.edge_note
+    # never "nothing after it has arrived yet" of data whose orders run two days later (theLook, 2026-11-17)
+    assert week.edge_note == ("Figures run to 2026-10-05, the newest day every table has rows for. returns has no rows "
+                              "after 2026-10-05; orders runs later.")
 
 
 def test_a_custom_range_past_the_data_is_cut_and_says_so_and_without_an_edge_reads_as_asked():
@@ -617,9 +636,9 @@ def test_where_the_data_ends_says_why_when_it_cannot_be_read(monkeypatch):
     monkeypatch.setattr(ranges, "governed_metrics", lambda conn_id, schema=None: [_dated("revenue", "orders")])
     unread = ranges.data_edge("c1", today=OCT8, runner=closed)
     assert unread["through"] is None and "could not be opened" in unread["why"]
-    # unread, a current day reads yesterday and says it did not know
+    # unread, a current day is still today, read as it stands (2026-11-17)
     day = _edge("current_day", edge=unread)
-    assert day.last_day == date(2026, 10, 7) and day.edge_note.startswith("Whether data has arrived after 2026-10-07 was not read")
+    assert day.last_day == date(2026, 10, 8) and day.compare_withheld == "today is still under way"
 
 
 def test_every_range_reads_the_edge_and_live_data_resolves_as_before(monkeypatch):
@@ -634,7 +653,7 @@ def test_every_range_reads_the_edge_and_live_data_resolves_as_before(monkeypatch
     assert asked == ["c1"] * 3
     assert (month.start, month.end, month.data_ended) == (date(2026, 9, 1), date(2026, 10, 1), False)
     assert (old.start, old.last_day, old.data_ended) == (date(2025, 1, 1), date(2025, 1, 31), False)
-    assert day.last_day == date(2026, 10, 7) and not day.data_ended
+    assert day.last_day == date(2026, 10, 8) and not day.data_ended
 
 
 def test_a_cohorts_earlier_ranges_are_read_at_one_age_unless_its_table_is_still_moving(con, approved):

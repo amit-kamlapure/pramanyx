@@ -15,6 +15,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { getDepartures, getJobs, getNeedsHuman, type Connection, type Departure, type JobRow, type NeedsHuman } from "@/lib/api";
+import { readReview } from "@/lib/review";
 import { subscribeKernelEvents } from "@/lib/events";
 import { approverName } from "@/lib/auth";
 import { getApiBase } from "@/lib/config";
@@ -91,18 +92,28 @@ async function readWeek(): Promise<Week> {
   return { weekStart, sent, budgets, held: heldView.held, capped, noLedger: rows === null };
 }
 
+/** A connection's knowledge with something to review (Semantic Layer ▸ Review, 2026-11-17). */
+interface KnowledgeWaiting { connectionId: string; total: number; gaps: number; candidates: number; conflicts: number }
+
 interface Waiting {
   decisions: Decision[];
   inquiries: Inquiry[];
   departures: Departure[];
   needs: NeedsHuman;
+  knowledge: KnowledgeWaiting[];
 }
 
-async function readWaiting(): Promise<Waiting> {
-  const [decisions, inquiries, owed, needs] = await Promise.all([
+async function readWaiting(connectionIds: string[] = []): Promise<Waiting> {
+  const [decisions, inquiries, owed, needs, knowledge] = await Promise.all([
     listDecisions({ due: true }), listInquiries({ due: true }), getDepartures({ awaiting: true, limit: 50 }), getNeedsHuman(50),
+    // Each connection's review list, read for its count; one that cannot be read is left out of this list, not
+    // counted as nothing (its own tab says why).
+    Promise.all(connectionIds.map(id => readReview(id).then(r => ({
+      connectionId: id, total: r.total, gaps: r.by_kind.gap, candidates: r.by_kind.candidate, conflicts: r.by_kind.conflict,
+    })).catch(() => null))),
   ]);
-  return { decisions, inquiries, departures: (owed ?? []).filter(d => owes(d) !== null), needs };
+  return { decisions, inquiries, departures: (owed ?? []).filter(d => owes(d) !== null), needs,
+           knowledge: knowledge.filter((k): k is KnowledgeWaiting => !!k && k.total > 0) };
 }
 
 async function readOrgBriefing(): Promise<OrgBriefing> {
@@ -141,7 +152,8 @@ export function NowPanel({ connections, contextReady, doors }: {
   doors: NowDoors;
 }) {
   const week = useLoad(readWeek, []);
-  const waiting = useLoad(readWaiting, []);
+  const connectionIds = useMemo(() => connections.map(c => c.id).sort().join(","), [connections]);
+  const waiting = useLoad(() => readWaiting(connectionIds ? connectionIds.split(",") : []), [connectionIds]);
   const aside = useLoad(getSetAside, []);
   const corrections = useLoad(() => getCorrections({ limit: 60 }), []);
   const briefing = useLoad(readOrgBriefing, []);
@@ -311,6 +323,8 @@ function rowsOf(w: Waiting): WaitingRow[] {
     ...w.inquiries.map(q => ({ kind: "inquiry" as const, ref: q.key, id: q.id, title: inquiryLabel(q.question, q.extra?.scheduled === true).text })),
     ...w.departures.map(d => ({ kind: "departure" as const, ref: d.id, id: d.id, title: summaryLine(d) })),
     ...w.needs.rows.map(r => ({ kind: "approval" as const, ref: `${r.source}:${r.id}`, id: `${r.source}:${r.id}`, title: needsYouTitle(r.title).display })),
+    ...(w.knowledge ?? []).map(k => ({ kind: "knowledge" as const, ref: k.connectionId, id: k.connectionId,
+                                       title: `${countNoun(k.total, "thing", "things")} to review in what the platform knows` })),
   ];
 }
 
@@ -319,6 +333,7 @@ const asideKey = (kind: string, ref: string) => `${kind}:${ref}`;
 const KIND_NOUN: Record<SetAsideKind, [string, string]> = {
   decision: ["review", "reviews"], inquiry: ["inquiry", "inquiries"], departure: ["send", "sends"],
   approval: ["approval", "approvals"],
+  knowledge: ["knowledge review", "knowledge reviews"],
 };
 
 /** How many wait, how many were set aside, and what the waiting ones are: "1 review · 2 approvals". */
@@ -464,7 +479,7 @@ function WaitingList({ waiting, aside, returned, connections, doors, inspect, on
       {decided && <p className="aug-fs-sm" role="status" style={{ color: "var(--t2)", margin: "0 0 8px" }}>{decided}</p>}
       {error && <p className="aug-fs-sm" role="alert" style={{ color: "var(--red4)", margin: "0 0 8px" }}>{error}</p>}
       {shown === 0 && (
-        <Empty title="Checked: review dates that have come, inquiries due, sends waiting on an answer, and open approvals">
+        <Empty title="Checked: review dates that have come, inquiries due, sends waiting on an answer, open approvals, and each connection's knowledge to review">
           {asideRows.length ? "Nothing else waits on you." : "Nothing waits on you."}
         </Empty>
       )}
@@ -525,6 +540,23 @@ function WaitingList({ waiting, aside, returned, connections, doors, inspect, on
                 </div>
               )}
             </>} />
+        );
+      })}
+      {(waiting.knowledge ?? []).filter(k => !isHidden("knowledge", k.connectionId)).map(k => {
+        const x = notNow("knowledge", k.connectionId);
+        return (
+          <WaitRow key={`knowledge:${k.connectionId}`} first={first()}
+            title={`${countNoun(k.total, "thing", "things")} to review in what the platform knows`}
+            meta={<>
+              <span>knowledge · {connectionLabel(k.connectionId, connections)} · {[
+                k.gaps ? countNoun(k.gaps, "gap", "gaps") : "", k.candidates ? `${formatCount(k.candidates)} to decide` : "",
+                k.conflicts ? countNoun(k.conflicts, "conflict", "conflicts") : ""].filter(Boolean).join(", ")}</span>
+              {x.note}
+            </>}
+            buttons={<>{x.button}<Button size="xs" variant="secondary"
+              onClick={() => window.location.assign(`/?tab=semantic&semtab=review&conn=${encodeURIComponent(k.connectionId)}`)}>
+              Review</Button></>}
+            below={x.form} />
         );
       })}
       {asideRows.length > 0 && (

@@ -14,7 +14,8 @@ export const READS = [
   /^\/connections$/,          // which databases there are, to say whose questions these are
   /^\/suggestions$/,          // starter questions for one connection (cached; a first read may cost a model call)
   /^\/agents\/custom$/,       // a person's own agents
-  /^\/investigations$/,       // recent questions
+  /^\/investigations$/,       // recent questions — a person's own (`?mine=1`): each coworker is its person's
+  /^\/chat-sessions$/,        // the group conversations a person is in (2026-11-17), opened as the app's own thread
   /^\/sheets$/,               // the sheets by name, so an answer that read one can open it
   // An answer as a file — Excel, PowerPoint, Word or PDF — built by Pramanyx from the answer's stored rows, never by
   // code the model wrote (`pramanyx/export`). A GET like the rest; the bytes are passed through as they come.
@@ -28,9 +29,10 @@ export const READS = [
   /^\/automations\/[A-Za-z0-9_-]{1,64}\/schedule$/,
 ];
 
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 /**
  * ONE WORKSPACE PER CONNECTION. The shell files a conversation under a workspace — a folder — and gives its agent
@@ -112,8 +114,10 @@ function sayWhereThisIs(ctx, api) {
     const say = async () => {
       try {
         const url = String(at.connection.authenticatedUrl(at.webApp.getAdvertisedUrl()));
+        // Whose coworker this is (2026-11-17: each person has their own): the platform gives this address only to them.
         await fetch(`${api}/coworker/address`, {
-          method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ url }),
+          method: "PUT", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ url, person: ownerOfThisCoworker() }),
         });
       } catch {
         // Pramanyx is not answering, or is older than this route: the app draws no way in, and this tries again.
@@ -173,6 +177,120 @@ async function personHeader() {
   }
 }
 
+/**
+ * THE PERSON'S CLOCK (2026-11-17: "Yesterday means day before current date.. based on the users time setting" — for the
+ * coworker and the platform alike). The coworker's page says which zone its browser is in when it loads; it is kept in
+ * one file (PRAMANYX_CLOCK_FILE, set by start.sh) that the MCP server and the relays below send on every call, so the
+ * platform counts "yesterday" from this person's today (`pramanyx/kernel/clock.py`).
+ */
+export function readableZone(zone) {
+  const name = String(zone || "").trim();
+  if (!name || name.length > 64) return "";
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: name });
+    return name;
+  } catch {
+    return "";
+  }
+}
+
+async function clockHeader() {
+  const file = process.env.PRAMANYX_CLOCK_FILE || "";
+  if (!file) return {};
+  try {
+    const { readFile } = await import("node:fs/promises");
+    const zone = readableZone((await readFile(file, "utf8")).trim());
+    return zone ? { "x-pramanyx-clock": zone } : {};
+  } catch {
+    return {};
+  }
+}
+
+export async function keepTheClock(req, res) {
+  const reply = (status, body) => { res.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" }); res.end(JSON.stringify(body)); };
+  if (req.method !== "POST") return reply(405, { detail: "POST only" });
+  const from = req.headers["sec-fetch-site"];
+  if (from && from !== "same-origin") return reply(403, { detail: "Only this page may say this" });
+  const file = process.env.PRAMANYX_CLOCK_FILE || "";
+  if (!file) return reply(501, { detail: "No place to keep the clock (PRAMANYX_CLOCK_FILE is unset)" });
+  let raw = "";
+  for await (const part of req) { raw += part; if (raw.length > 256) return reply(413, { detail: "Too long" }); }
+  let zone = "";
+  try { zone = readableZone(JSON.parse(raw).zone); } catch { zone = ""; }
+  if (!zone) return reply(422, { detail: "Not a time zone" });
+  try {
+    const { writeFile, mkdir } = await import("node:fs/promises");
+    const { dirname } = await import("node:path");
+    await mkdir(dirname(file), { recursive: true });
+    await writeFile(file, zone, { mode: 0o600 });
+    return reply(200, { zone });
+  } catch {
+    return reply(500, { detail: "The clock could not be kept" });
+  }
+}
+
+/**
+ * A CONVERSATION IS ITS PERSON'S (Phase 3, 2026-11-17). One shell holds one person at a time — whoever the app last
+ * handed it — so on a shared install a conversation one person started, opened later while the coworker acts for
+ * another, would have asked Pramanyx in the second person's name. Each conversation is bound to the person it began
+ * with (kept in DSH_HOME, so a restart keeps it), and while the coworker acts for someone else its Pramanyx tools are
+ * refused there, saying whose it is. A conversation begun with nobody delegated is bound to nobody, as before. The
+ * sidebar still lists every conversation on the install: one shell per person is what would hide them.
+ */
+let personNow = "";
+
+export function readPersonNow() {
+  const file = process.env.PRAMANYX_DELEGATION_FILE || "";
+  if (!file) return "";
+  try { return readFileSync(`${file}.who`, "utf8").trim().slice(0, 200); } catch { return ""; }
+}
+
+export function personRefusal(owner, now) {
+  if (!owner || !now || owner === now) return undefined;
+  return `This conversation is ${owner}'s, and the coworker now acts for ${now}: it does not ask Pramanyx in one ` +
+    "person's name inside another's conversation. Tell them so: they start a new conversation of their own.";
+}
+
+export function heldToItsPerson(ctx, { keep = join(process.env.DSH_HOME || join(homedir(), ".dsh"), "conversation-people.json"),
+                                      now = () => personNow } = {}) {
+  const owners = new Map();
+  try { for (const [id, who] of Object.entries(JSON.parse(readFileSync(keep, "utf8")))) owners.set(id, String(who)); } catch { /* none kept yet */ }
+  const save = () => {
+    try { mkdirSync(dirname(keep), { recursive: true }); writeFileSync(keep, JSON.stringify(Object.fromEntries(owners)), { mode: 0o600 }); }
+    catch { /* unkept: held for as long as this process runs */ }
+  };
+  ctx.on("session/event", (session, event) => {
+    try {
+      const id = String(session?.id ?? "");
+      if (!id || owners.has(id)) return;
+      const parent = typeof session?.header?.parentSession === "string" ? session.header.parentSession : "";
+      if (event?.type === "turn/start" && parent && owners.has(parent)) { owners.set(id, owners.get(parent)); save(); return; }
+      if (event?.type === "user/message" && event?.data?.source?.kind === "user" && now()) { owners.set(id, now()); save(); }
+    } catch { /* unbound: the conversation is held to nobody, as before */ }
+  });
+  ctx.inject(["tools"], (at) => {
+    at.effect(() => at.tools.guard((call) => {
+      if (!/^mcp__pramanyx__/.test(String(call?.name))) return undefined;
+      const session = call.agent?.session;
+      const id = String((session && typeof session === "object" ? session.id : session) ?? "");
+      return personRefusal(owners.get(id), now());
+    }), "pramanyx-home: a conversation is its person's");
+  });
+  return owners;
+}
+
+/** Whose coworker this is: the person the platform started it for, or "" for the install's first (start_all.sh's). */
+export function ownerOfThisCoworker() {
+  return String(process.env.PRAMANYX_COWORKER_PERSON || "").trim();
+}
+
+/** Why a delegation for ``user`` is refused here, or "" when it is taken: a coworker started for one person acts for
+ *  no one else (each person has their own; the install's first takes whoever the app hands it, as before). */
+export function notThisCoworkersPerson(user) {
+  const owner = ownerOfThisCoworker();
+  return owner && String(user || "") !== owner ? "This coworker is another person's; open your own from the app." : "";
+}
+
 export async function keepThePerson(req, res, api) {
   const reply = (status, body) => { res.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" }); res.end(JSON.stringify(body)); };
   if (req.method !== "POST") return reply(405, { detail: "POST only" });
@@ -189,10 +307,15 @@ export async function keepThePerson(req, res, api) {
     const answer = await fetch(api + "/auth/delegation", { headers: { accept: "application/json", "x-pramanyx-delegation": token } });
     if (!answer.ok) return reply(401, { detail: "Pramanyx did not recognise the person" });
     const who = await answer.json();
+    const refused = notThisCoworkersPerson(who.user_id);
+    if (refused) return reply(403, { detail: refused });
     const { writeFile, mkdir } = await import("node:fs/promises");
     const { dirname } = await import("node:path");
     await mkdir(dirname(file), { recursive: true });
     await writeFile(file, token, { mode: 0o600 });
+    // Who it is, beside it (not a secret): a conversation is held to the person who started it (`heldToItsPerson`).
+    await writeFile(`${file}.who`, String(who.user_id || ""), { mode: 0o600 });
+    personNow = String(who.user_id || "");
     return reply(200, { user_id: who.user_id });
   } catch {
     return reply(502, { detail: "The platform is not answering" });
@@ -237,7 +360,23 @@ export function holdOf(holds, id, header, now = "") {
 }
 
 /** The refusal for one call from a conversation held to `held`, or undefined when the call may run. Pure. */
-export function refusalFor(name, args, held) {
+/**
+ * WHAT A CONVERSATION BROUGHT IN (2026-11-17). A file the person attaches becomes their own sheet on the Sheets
+ * connection (`bring_in_file`); a conversation held to another connection may then ask the Sheets connection — the
+ * person's own private sheets, nothing else of anyone's. Kept per conversation, from the tool's own result.
+ */
+export const BRING_IN = /^mcp__pramanyx__bring_in_file$/;
+
+/** The connections a brought-in file opened to a conversation, from that call's result; [] when it opened none. */
+export function openedBy(name, resultText) {
+  if (!BRING_IN.test(String(name))) return [];
+  try {
+    const got = JSON.parse(resultText);
+    return got && got.brought_in === true && got.kind === "sheet" && got.connection === "sheets" ? ["sheets"] : [];
+  } catch { return []; }
+}
+
+export function refusalFor(name, args, held, also = []) {
   if (typeof name === "string" && SPAWNS.test(name)) {
     // EVERY HELPER IS HELD TO ONE SOURCE. A helper of a held conversation is held to its connection; started in
     // another connection's folder it would read that one. A helper of a conversation held to none (All sources) is
@@ -257,6 +396,7 @@ export function refusalFor(name, args, held) {
   const given = args && typeof args === "object" ? (args.connection ?? args.connection_id) : undefined;
   const named = typeof given === "string" ? given.trim() : "";
   const here = `This conversation is held to the connection \`${held}\``;
+  if (named && named !== held && also.includes(named)) return undefined;     // the person's own sheet, brought in here
   if (named && named !== held) {
     return `${here}. It cannot read \`${named}\`. Tell the person so: to ask about another connection they start a conversation on it.`;
   }
@@ -266,15 +406,118 @@ export function refusalFor(name, args, held) {
   return undefined;
 }
 
+/**
+ * ASKED FIRST (2026-11-17). A call that changes what the platform does unattended, or what the organisation's
+ * knowledge holds, waits for the person's own Allow in the conversation — the shell's approval prompt — whatever the
+ * organisation's agent policy allows: setting something on a schedule, and drafting what a word means. The prompt
+ * says what will happen in the person's own words. Reading, asking a question and bringing in a file they attached
+ * are not asked about.
+ */
+const ASKED_FIRST = {
+  "mcp__pramanyx__schedule": (args) => `Set this up on a schedule: “${clipped(args.request)}”?`,
+  "mcp__pramanyx__draft_definition": (args) =>
+    `Draft what “${clipped(args.term, 80)}” means${args.area ? ` in ${args.area}` : ""}: “${clipped(args.text)}”? It is not used until its owner publishes it.`,
+};
+const clipped = (value, most = 240) => {
+  const text = String(value ?? "").trim();
+  return text.length > most ? `${text.slice(0, most)}…` : text;
+};
+
+/** The approval to ask for before a call, or undefined when it is not asked about. */
+export function askFor(name, args) {
+  const say = ASKED_FIRST[String(name)];
+  if (!say) return undefined;
+  const words = say(args && typeof args === "object" ? args : {});
+  return { kind: "ask", reason: words, displayReason: { en: words } };
+}
+
+/**
+ * A PERSON'S NO STANDS (2026-11-17). On the first live run a person rejected a draft and the coworker, reasoning the
+ * refusal "might be because of the connection choice", asked again at once on another connection. What a person
+ * declines is not asked again until they next write — on any connection — and the agent is told why. The key is the
+ * tool, and for a draft the word: a draft of another word is still asked about.
+ */
+export function declinedKey(name, args) {
+  if (!ASKED_FIRST[String(name)]) return "";
+  if (String(name) === "mcp__pramanyx__draft_definition") {
+    return `${name}:${String(argsOf(args).term ?? "").trim().toLowerCase()}`;
+  }
+  return String(name);
+}
+
+export const NO_STANDS =
+  "The person declined this a moment ago. It was not done, and it is not asked again — on this connection or another — " +
+  "until they ask for it. Tell them it was not done.";
+
+const argsOf = (args) => {
+  if (args && typeof args === "object") return args;
+  try { const parsed = JSON.parse(String(args ?? "")); return parsed && typeof parsed === "object" ? parsed : {}; } catch { return {}; }
+};
+
+/** Whether a tool's result says the person (or the shell's review, on their behalf) refused it. */
+export const refusedResult = (message) => Boolean(message?.isError) && /\brejected\b/i.test(textOf(message?.content));
+
+export function askBeforeActing(ctx) {
+  const declined = new Map();        // conversation → what the person declined since they last wrote
+  const asked = new Map();           // call → what it would be declined as
+  ctx.on("session/event", (session, event) => {
+    try {
+      const id = String(session?.id ?? "");
+      const data = event?.data ?? {};
+      if (event?.type === "user/message" && data.source?.kind === "user") { declined.delete(id); return; }
+      if (event?.type === "tool/call" && data.callId) {
+        const key = declinedKey(data.name, data.arguments);
+        if (key) asked.set(data.callId, key);
+      }
+      if (event?.type === "tool/result") {
+        const message = data.message ?? {};
+        const key = asked.get(message.toolCallId);
+        if (!key) return;
+        asked.delete(message.toolCallId);
+        if (id && refusedResult(message)) declined.set(id, new Set([...(declined.get(id) ?? []), key]));
+      }
+    } catch { /* nothing remembered: the next call is asked about, as before */ }
+  });
+  ctx.on("tools/pre-execute", async (call, next) => {
+    const decided = await next();
+    if (!decided || decided.kind !== "allow") return decided;      // a denial or a cancel stands
+    const session = call?.agent?.session;
+    const id = String((session && typeof session === "object" ? session.id : session) ?? "");
+    const key = declinedKey(call?.name, call?.arguments);
+    if (key && declined.get(id)?.has(key)) return { kind: "deny", reason: NO_STANDS };
+    return askFor(call?.name, call?.arguments) ?? decided;
+  });
+}
+
 function holdToConnection(ctx, holds) {
+  // The connections a conversation's own brought-in files opened to it, by conversation.
+  const opened = new Map();
+  const names = new Map();
+  ctx.on("session/event", (session, event) => {
+    try {
+      const id = String(session?.id ?? "");
+      const data = event?.data ?? {};
+      if (event?.type === "tool/call" && data.callId && BRING_IN.test(String(data.name))) names.set(data.callId, data.name);
+      if (event?.type === "tool/result") {
+        const message = data.message ?? {};
+        const name = names.get(message.toolCallId);
+        if (!name) return;
+        names.delete(message.toolCallId);
+        if (message.isError) return;
+        const more = openedBy(name, textOf(message.content));
+        if (id && more.length) opened.set(id, [...new Set([...(opened.get(id) ?? []), ...more])]);
+      }
+    } catch { /* nothing opened: the hold stands as it was */ }
+  });
   ctx.inject(["tools", "workingDirectory"], (at) => {
     at.effect(() => at.tools.guard((call) => {
       const session = call.agent?.session;
       const id = String((session && typeof session === "object" ? session.id : session) ?? "");
       let folder = "";
       try { folder = call.agent ? String(at.workingDirectory.get(call.agent.session) || "") : ""; } catch { folder = ""; }
-      if (id && holds.has(id)) return refusalFor(call.name, call.arguments, holdOf(holds, id, {}, folder));
-      return refusalFor(call.name, call.arguments, HELD_FOLDER.exec(folder)?.[1] ?? "");
+      const also = opened.get(id) ?? [];
+      if (id && holds.has(id)) return refusalFor(call.name, call.arguments, holdOf(holds, id, {}, folder), also);
+      return refusalFor(call.name, call.arguments, HELD_FOLDER.exec(folder)?.[1] ?? "", also);
     }), "pramanyx-home: a conversation is held to its connection");
   });
 }
@@ -627,8 +870,10 @@ function recordTurns(ctx, api, holds) {
   let warned = false;
   const send = (trace, session, events) => {
     // One after another, so the record reads in the order things happened.
-    sending = sending.then(() => fetch(`${api}/coworker/trace`, {
-      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ trace_id: trace, session, events }),
+    // Whose turn it is goes with it (Phase 3, 2026-11-17): the platform files the turn under that person.
+    sending = sending.then(async () => fetch(`${api}/coworker/trace`, {
+      method: "POST", headers: { "content-type": "application/json", ...(await personHeader()) },
+      body: JSON.stringify({ trace_id: trace, session, events }),
     })).then((answer) => { if (!answer.ok) throw new Error(String(answer.status)); }).catch((error) => {
       if (!warned) console.warn(`pramanyx-home: a turn was not recorded in the platform's trace store (${error?.message ?? error})`);
       warned = true;
@@ -697,6 +942,9 @@ export function apply(ctx) {
   // record read the same answer.
   const holds = new Map();
   holdToConnection(ctx, holds);
+  personNow = readPersonNow();
+  heldToItsPerson(ctx);
+  askBeforeActing(ctx);
   recordTurns(ctx, api, holds);
   ctx.effect(() => ctx.webServer.register({
     kind: "exact",
@@ -734,6 +982,11 @@ export function apply(ctx) {
     handler: (req, res) => keepThePerson(req, res, api),
   }), "pramanyx-home: the person the coworker acts for");
   ctx.effect(() => ctx.webServer.register({
+    kind: "exact",
+    path: "/pramanyx-clock",
+    handler: (req, res) => keepTheClock(req, res),
+  }), "pramanyx-home: the person's clock");
+  ctx.effect(() => ctx.webServer.register({
     kind: "prefix",
     path: "/pramanyx",          // no trailing slash: the server matches the prefix itself, or the prefix and a "/"
     resource: async (request) => {
@@ -741,7 +994,8 @@ export function apply(ctx) {
       const path = url.pathname.slice("/pramanyx".length);
       if (!READS.some((allowed) => allowed.test(path))) return new Response("Not relayed", { status: 404 });
       try {
-        const answer = await fetch(api + path + url.search, { headers: { accept: "*/*", ...(await personHeader()) } });
+        const answer = await fetch(api + path + url.search,
+                                   { headers: { accept: "*/*", ...(await personHeader()), ...(await clockHeader()) } });
         const headers = { "content-type": answer.headers.get("content-type") || "application/json", "cache-control": "no-store" };
         const named = answer.headers.get("content-disposition");
         if (named) headers["content-disposition"] = named;

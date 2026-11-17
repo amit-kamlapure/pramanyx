@@ -25,6 +25,22 @@ class PreferenceValue(BaseModel):
     value: Any = None
 
 
+@router.get("/me/clock")
+def get_my_clock():
+    """The person's clock as the platform resolves it for this request, and the periods it counts from today
+    (`kernel/clock.py`, 2026-11-17: one definition of "yesterday" for the platform and the coworker). Reads nothing
+    else; changes nothing. ``source`` says where the zone came from."""
+    from pramanyx.db.user_prefs import preferred_timezone
+    from pramanyx.kernel.clock import clock_here, periods, person_clock, readable_zone
+    zone = person_clock()
+    source = ("your setting" if zone and zone == readable_zone(preferred_timezone())
+              else "your browser" if zone and zone == clock_here()
+              else "the organisation" if zone else "UTC, nothing else being set")
+    p = periods(zone)
+    return {"zone": zone or "UTC", "source": source, "today": p.today.isoformat(), "yesterday": p.yesterday.isoformat(),
+            "last_week": [d.isoformat() for d in p.last_week], "last_month": [d.isoformat() for d in p.last_month]}
+
+
 @router.put("/me/preferences/{key}")
 def write_preference(key: str, body: PreferenceValue):
     from pramanyx.db.user_prefs import set_preference

@@ -5,7 +5,7 @@ import asyncio
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from pramanyx.licensing import Capability, gate
@@ -211,6 +211,84 @@ def get_metric_coverage(conn_id: str, schema: Optional[str] = None, figures: boo
     out["run"] = {"run_at": run.get("run_at"), "why": run.get("why") or "", "spend": run.get("spend"),
                   "said": run.get("said") or []} if run else None
     return out
+
+
+# ── the areas of the business, as the organisation declares them (the ontology study, Phase 1, 2026-11-17) ──────────
+
+@router.get("/areas/{conn_id}")
+def get_areas(conn_id: str, schema: Optional[str] = None):
+    """Every area a connection is read by — its industry's, in its order, then the organisation's own — with each one's
+    owners and place, and what people placed in them."""
+    from pramanyx.semantic.areas import areas_for, placed_by_people
+    schema = schema or _declared_schema(conn_id)
+    people = placed_by_people(conn_id)
+    return {"areas": areas_for(conn_id, schema),
+            "placed": {"tables": {t: {"area": a, "by": b} for t, (a, b) in people["tables"].items()},
+                       "metrics": {m: {"area": a, "by": b} for m, (a, b) in people["metrics"].items()},
+                       "connection": ({"area": people["connection"][0], "by": people["connection"][1]}
+                                      if people["connection"] else None)}}
+
+
+class AreasIn(BaseModel):
+    areas: list[dict]
+
+
+def _persons_own(request, what: str) -> None:
+    if request is not None:
+        from pramanyx.rbac.agent_gate import is_agent_request
+        if is_agent_request(request):
+            raise HTTPException(status_code=403, detail=f"{what} is a person's own call; an agent cannot make it")
+
+
+@router.put("/areas/{conn_id}")
+def put_areas(conn_id: str, body: AreasIn, request: Request, schema: Optional[str] = None):
+    """A curator declares the organisation's areas — new ones, and owners and places for the industry's own — whole,
+    as the Settings page saves the organisation's priorities. Refused with every problem said: a parent that is no area,
+    a cycle, more than five levels."""
+    from pramanyx.orgsettings.models import AreaDeclaration
+    from pramanyx.orgsettings.store import load_org_settings, save_org_settings
+    from pramanyx.rbac.permissions import Permission
+    from pramanyx.rbac.resolver import has_permission
+    from pramanyx.semantic.areas import areas_for, check_declarations
+    from pramanyx.semantic.metric_map import map_for
+    _persons_own(request, "declaring the areas of the business")
+    if not has_permission(getattr(request.state, "principal", None), Permission.ADMIN_MANAGE_ORG):
+        raise HTTPException(status_code=403, detail="only a curator — whoever administers the organisation — declares its areas")
+    try:
+        decls = [AreaDeclaration(**a) for a in body.areas]
+    except Exception as exc:  # noqa: BLE001 — a malformed row is refused, said
+        raise HTTPException(status_code=422, detail=f"an area is an id, a name, a question, a parent and its owners: {exc}")
+    schema = schema or _declared_schema(conn_id)
+    problems = check_declarations(decls, known={a.id for a in map_for(conn_id, schema).areas if not a.generic})
+    if problems:
+        raise HTTPException(status_code=422, detail={"code": "AREAS_REFUSED", "problems": problems})
+    settings = load_org_settings()
+    save_org_settings(settings.model_copy(update={"areas": decls}))
+    return {"areas": areas_for(conn_id, schema)}
+
+
+class PlacementIn(BaseModel):
+    kind: str            # table · connection · metric
+    ref: str = ""        # the table's or the metric's name; empty for a connection
+    area: str = ""       # an area id, or "" to take it out
+    schema_name: str = ""
+
+
+@router.put("/areas/{conn_id}/placement", dependencies=[gate(Capability.SEMANTIC_EDIT)])
+def put_area_placement(conn_id: str, body: PlacementIn, request: Request):
+    """A person places a table, a whole connection or a metric in an area — what it means, never who may read it. It
+    outranks every placement by evidence. An agent cannot make it."""
+    from pramanyx.security.authz import acting_person
+    from pramanyx.semantic.areas import areas_for, place
+    _persons_own(request, "placing an asset in an area")
+    if body.area and body.area not in {a["id"] for a in areas_for(conn_id, body.schema_name or None)}:
+        raise HTTPException(status_code=422, detail=f"{body.area!r} is no area of this connection; declare it first")
+    try:
+        now = place(body.kind, body.ref, body.area, by=acting_person(getattr(request.state, "principal", None)),
+                    connection_id=conn_id, schema_name=body.schema_name)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return {"kind": body.kind, "ref": body.ref, "area": now}
 
 
 @router.post("/metrics/coverage/{conn_id}/run", status_code=202, dependencies=[gate(Capability.METRICS_DEFINE)])

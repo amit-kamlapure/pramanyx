@@ -47,6 +47,36 @@ def access_of(entry: dict) -> dict:
     return org_wide("the organisation's", "upload")
 
 
+def uploader() -> str:
+    """Who is uploading: the signed-in person (the id `may_read` matches readers by), else this install's operator. ""
+    when neither is known."""
+    from pramanyx.org.context import current_user_id
+    who = current_user_id()
+    if not who:
+        from pramanyx.security.authz import caller
+        who = caller() or ""
+    return str(who).strip()
+
+
+def upload_access(who: str) -> dict:
+    """An uploaded document is its uploader's, private to them until they share it (the user, 2026-11-17: "Private
+    until shared"). Until then an upload was the whole organisation's the moment it was indexed, with no owner named.
+    With nobody named at all — no one signed in and no operator — it stays the organisation's, and says so."""
+    if not who:
+        return org_wide("uploaded with nobody named, so the organisation's", "upload")
+    return {**chosen([who], [], f"uploaded by {who}; private to them until they share it", "upload"), "owner": who}
+
+
+def shared_access(owner: str, sharing: str, people: list[str], groups: list[str]) -> dict:
+    """What an upload's owner chose: the whole organisation, or the people and groups named (the owner always kept)."""
+    if sharing == ORG:
+        return {**org_wide(f"shared with the organisation by {owner}", "upload"), "owner": owner}
+    if sharing != CHOSEN:
+        raise ValueError("sharing is 'org' or 'chosen'")
+    return {**chosen([owner, *people], groups, f"shared by {owner} with the people and groups named", "upload"),
+            "owner": owner}
+
+
 def _reader_groups(reader: str) -> set[str]:
     try:
         from pramanyx.metastore.models import user_principal

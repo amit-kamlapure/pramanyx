@@ -35,15 +35,17 @@ def test_the_engine_is_named_as_the_statement_must_be_written():
     assert C.engine_dialect(None) == ""
     block = C.sql_context(_Native(), today="2026-09-30", coverage_end="2026-10-02")
     assert block.startswith("SQL DIALECT: BigQuery (GoogleSQL) — write every statement for this engine")
-    assert "TODAY: 2026-09-30 (UTC)." in block
-    assert "The data runs to 2026-10-02; the newest day to read is 2026-09-29" in block
-    assert "CURRENT_DATE" in block and "counts back from that day" in block
+    # 2026-11-17 — one definition of the date (`kernel/clock.py`): today, and every relative period counted from it.
+    assert "TODAY: Wednesday 2026-09-30 in UTC." in block and "yesterday is 2026-09-29" in block
+    assert "The data runs to 2026-10-02" in block
+    assert "CURRENT_DATE" in block and "counted from today" in block and "never moved" in block
 
 
 def test_no_engine_known_means_no_engine_line_and_still_a_clock():
     block = C.sql_context(None, today="2026-09-30")
     assert "SQL DIALECT" not in block
-    assert block.startswith("TODAY: 2026-09-30 (UTC). The newest day to read is 2026-09-29.")
+    assert block.startswith("TODAY: Wednesday 2026-09-30 in UTC. Every relative period in the question is counted "
+                            "from today on this clock: yesterday is 2026-09-29")
 
 
 @pytest.mark.parametrize("today, end, settle, expected", [
@@ -188,7 +190,8 @@ def test_an_empty_intake_reply_is_asked_once_more(monkeypatch):
              "scan_context": "", "events_context": "", "investigation_phases": []}
     out = I.ada_intake(state, None)
     assert len(calls) == 2 and "TODAY: " in calls[0]           # the date rides the intake prompt
-    assert f"The newest day to read is {C.settled_day(C.today_utc(), '', 29)}." in calls[0]
+    # 2026-11-17 — the learned lag makes the newest 29 days provisional; it no longer moves the day counted from.
+    assert "keeps revising its most recent 29 days" in calls[0] and "still answer for the period asked" in calls[0]
     assert not out.get("_intake_failed")
     assert out["_ada_intake"]["metric_sql"] == "SUM(sale_price)"
     assert "TODAY: " in out["_ada_intake"]["sql_context"]

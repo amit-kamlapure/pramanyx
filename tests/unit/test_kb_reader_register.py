@@ -50,12 +50,20 @@ def test_connection_kb_registers_split(monkeypatch):
 
     from pramanyx.semantic import connection_kb
 
-    entries = [SimpleNamespace(render=lambda: "net_revenue: GMV minus returns and cancellations.")]
+    entries = [SimpleNamespace(render=lambda: "net_revenue: GMV minus returns and cancellations.",
+                               standing={"tier": "approved", "owner": "user:ana", "approved_by": "user:ana"}),
+               SimpleNamespace(render=lambda: "active customer: ordered in the last 90 days.",
+                               standing={"tier": "declared", "owner": "user:bo"}),
+               SimpleNamespace(render=lambda: "vip: spends a lot.", standing={"tier": "said"})]
     monkeypatch.setattr(connection_kb, "_relevant_entries", lambda q, c, top_k=4: entries)
 
     prompt = connection_kb.retrieve_for_question("what is net revenue?", "conn-x")
     reader = connection_kb.retrieve_for_reader("what is net revenue?", "conn-x")
-    assert prompt.startswith("DOMAIN KNOWLEDGE (use these definitions exactly when writing SQL):")
-    assert "use these definitions exactly" not in reader, \
-        "an answer never carries an instruction addressed to a model"
+    assert prompt.startswith("DOMAIN KNOWLEDGE — what words mean on this connection.")
+    # 2026-11-17: the planner is told whose word each definition is; only an owner's approval is "used exactly"
+    assert "net_revenue: GMV minus returns and cancellations.\n   [APPROVED BY ITS OWNER (user:ana)]" in prompt
+    assert "active customer: ordered in the last 90 days.\n   [NOT YET APPROVED by its owner (user:bo)]" in prompt
+    assert "vip: spends a lot.\n   [SAID only, never approved — a hint, not the definition]" in prompt
+    for model_words in ("DOMAIN KNOWLEDGE", "APPROVED", "used exactly"):
+        assert model_words not in reader, "an answer never carries an instruction addressed to a model"
     assert "net_revenue: GMV minus returns" in reader

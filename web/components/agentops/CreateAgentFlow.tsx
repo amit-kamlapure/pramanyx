@@ -98,9 +98,14 @@ function schemasFor(tree: CatalogTree | null, connId: string): string[] {
   return [];
 }
 
-export function CreateAgentFlow({ onCreated, onCancel, onSaved, inDialog = false }: {
+export function CreateAgentFlow({ onCreated, onCancel, onSaved, inDialog = false, initialDescription = "",
+  initialConnectionId = "" }: {
   onCreated: (agent: UserAgent) => void;
   onCancel: () => void;
+  /** What the agent should answer, to start from — an answer's question, when it is made from one (2026-11-17). */
+  initialDescription?: string;
+  /** The connection it will answer on, to start from. */
+  initialConnectionId?: string;
   /** Told the moment the agent is SAVED (before the Reach step), so a host that can be dismissed
    *  from outside the flow — a dialog's Escape or close button — closes it as the flow's own Close
    *  would, onto the agent, and not as a cancel. */
@@ -122,7 +127,7 @@ export function CreateAgentFlow({ onCreated, onCancel, onSaved, inDialog = false
   // store always had the column, no door let a person write it.
   const [purpose, setPurpose] = useState("");
   const [instructions, setInstructions] = useState("");
-  const [connectionId, setConnectionId] = useState("");
+  const [connectionId, setConnectionId] = useState(initialConnectionId);
   const [schemaScope, setSchemaScope] = useState("");
   const [docIds, setDocIds] = useState<string[]>([]);
   const [packIds, setPackIds] = useState<string[]>([]);
@@ -132,7 +137,7 @@ export function CreateAgentFlow({ onCreated, onCancel, onSaved, inDialog = false
 
   // The describe step. `proposal` is what the platform drafted; nothing is created until
   // the person adopts it and walks the rest of the flow.
-  const [description, setDescription] = useState("");
+  const [description, setDescription] = useState(initialDescription);
   const [proposal, setProposal] = useState<AgentProposal | null>(null);
   const [drafting, setDrafting] = useState(false);
 

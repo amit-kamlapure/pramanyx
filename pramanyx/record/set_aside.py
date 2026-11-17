@@ -20,8 +20,9 @@ from typing import Any, Optional
 from pydantic import BaseModel
 
 KIND = "set_aside"
-#: What can be set aside: the four kinds of row "Waiting on you" lists.
-ITEM_KINDS: tuple[str, ...] = ("decision", "inquiry", "departure", "approval")
+#: What can be set aside: the kinds of row "Waiting on you" lists — the fifth (2026-11-17) is a connection's knowledge
+#: to review (`knowledge/review.py`), named by the connection.
+ITEM_KINDS: tuple[str, ...] = ("decision", "inquiry", "departure", "approval", "knowledge")
 #: A set-aside whose day came this long ago is no longer listed as returned — its row is either
 #: dealt with or simply on the list again.
 RETURNED_LISTED_DAYS = 30

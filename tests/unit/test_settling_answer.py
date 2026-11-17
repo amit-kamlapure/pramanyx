@@ -206,7 +206,7 @@ def test_a_send_is_headed_by_what_is_true_of_its_source():
     md = render_period_markdown(ranges.range_block(_spec(REWRITES)), [], 0)
     assert "rewrites its history at each refresh" in md and "settling as late rows arrive" not in md
     md = render_period_markdown(ranges.range_block(_spec(SETTLES, preset="last_week")), [], 0)
-    assert "rewrites its history" not in md and "settling as late rows arrive, a lag the platform measured" in md
+    assert "rewrites its history" not in md and "still being revised as late rows arrive, a lag the platform measured" in md
     assert _SHEET_TITLES["not_read"] == "Not read as a move" and "Still settling" not in _SHEET_TITLES["early"]
     assert render_period_markdown.__doc__ and "as it leaves" in render_period_markdown.__doc__
 
@@ -214,7 +214,7 @@ def test_a_send_is_headed_by_what_is_true_of_its_source():
 def test_the_narrator_is_told_of_a_source_that_rewrites():
     from pramanyx.knowledge.period_brief import period_note
     note = period_note(ranges.range_block(_spec(REWRITES)), TODAY)
-    assert "rewrites its history at each refresh" in note and "do not call any figure from it final" in note
+    assert "rewrites its history at each refresh" in note and "do not call any of them final" in note
     assert "do not read a difference against an earlier period as a move" in note
     moving = period_note(ranges.range_block(_spec(MOVING)), TODAY)
     assert "rewrites" not in moving and "do not read a difference against an earlier period as a move" in moving
@@ -232,7 +232,8 @@ def test_a_block_read_back_into_a_conversation_says_the_same():
 def test_the_desk_says_a_source_that_rewrites_as_one():
     from pramanyx.briefing import desk
     out = desk.gaps([], [], {"lag_days": 29, "key": "k", "lag_source": "beyond_horizon", "still_moving": ["items"], "rewrites": ["items"]})
-    assert out[0]["title"] == "Figures are read 29 days behind" and "rewrites its history" in out[0]["text"]
+    # 2026-11-17 — the period is the one asked; the lag only makes its newest figures provisional
+    assert out[0]["title"] == "The newest 29 days are provisional" and "rewrites its history" in out[0]["text"]
 
 
 def test_the_guide_writer_is_not_told_a_floor_is_a_settling_lag(source, monkeypatch):

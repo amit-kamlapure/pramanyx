@@ -333,7 +333,7 @@ def looks_like_dbt_manifest(doc: dict) -> bool:
 def map_dbt_manifest(manifest: dict) -> dict:
     """A dbt manifest → a `glossary` section, through the SAME parser the
     env-configured dbt layer uses (`semantic/dbt.glossary_from_manifest`) — one
-    reading of dbt's shape, not two."""
+    reading of dbt's shape, not two. Its semantic layer is `map_dbt_manifest_whole`'s."""
     from pramanyx.semantic.dbt import glossary_from_manifest
 
     tables = (glossary_from_manifest(manifest) or {}).get("tables") or {}
@@ -346,3 +346,14 @@ def map_dbt_manifest(manifest: dict) -> dict:
             row["columns"] = entry["columns"]
         entries.append(row)
     return {"glossary": entries} if entries else {}
+
+
+def map_dbt_manifest_whole(manifest: dict) -> tuple[dict, list[str]]:
+    """A dbt manifest → its glossary (models' and sources' descriptions) and its semantic layer (metrics and what
+    they mean, `intake/bi_models.map_dbt_semantic`), with what was not translated (Phase 3, 2026-11-17)."""
+    from pramanyx.intake.bi_models import map_dbt_semantic
+
+    sections = dict(map_dbt_manifest(manifest))
+    semantic, not_translated = map_dbt_semantic(manifest)
+    sections.update(semantic)
+    return sections, not_translated

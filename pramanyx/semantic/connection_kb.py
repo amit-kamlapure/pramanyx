@@ -52,8 +52,11 @@ class KnowledgeEntry:
         tags: list[str] | None = None,
         connection_id: str = "",
         standing: dict | None = None,
+        area: str = "",
     ) -> None:
         self.standing      = standing or {}     # the Definition's: tier, owner, approved_by
+        self.area          = area               # the area it is defined in (one word may mean more than one thing)
+        self.suggested: dict | None = None      # set when a write was filed as a suggested edit for its owner
         self.id            = id
         self.title         = title
         self.body          = body
@@ -69,7 +72,9 @@ class KnowledgeEntry:
             "kind":          self.kind,
             "tags":          self.tags,
             "connection_id": self.connection_id,
+            "area":          self.area,
             **({"standing": self.standing} if self.standing else {}),
+            **({"suggested": self.suggested} if self.suggested else {}),
         }
 
     @classmethod
@@ -81,6 +86,7 @@ class KnowledgeEntry:
             kind=d.get("kind", "note"),
             tags=d.get("tags", []),
             connection_id=d.get("connection_id", ""),
+            area=d.get("area", "") or "",
         )
 
     def _stable_id(self) -> str:
@@ -122,7 +128,8 @@ def purge_connection(connection_id: str) -> int:
     from pramanyx.record.writers import definitions, withdraw_definition
     gone = 0
     for c in definitions(connection_id):
-        if withdraw_definition(connection_id=connection_id, term=str(c.extra.get("term") or ""), by="connection removed",
+        if withdraw_definition(connection_id=connection_id, term=str(c.extra.get("term") or ""),
+                               area=str(c.extra.get("area") or ""), by_platform=True, by="connection removed",
                                reason="the connection was removed"):
             gone += 1
     p = _path(connection_id)
@@ -157,10 +164,14 @@ def _fold_legacy_file(connection_id: str) -> None:
 def _entry_of(claim) -> KnowledgeEntry:
     from pramanyx.record.writers import definition_term
     term = str(claim.extra.get("term") or "")
-    return KnowledgeEntry(id=str(claim.extra.get("entry_id") or definition_term(term)), title=term,
+    area = str(claim.extra.get("area") or "")
+    default_id = definition_term(term) + (f"-in-{definition_term(area)}" if definition_term(area) else "")
+    return KnowledgeEntry(id=str(claim.extra.get("entry_id") or default_id), title=term,
                           body=claim.statement.text, kind=claim.extra.get("kb_kind") or "note",
-                          tags=list(claim.extra.get("aliases") or []), connection_id=claim.about.key,
-                          standing={"tier": claim.tier, "owner": claim.owner, "approved_by": claim.extra.get("approved_by", "")})
+                          tags=list(claim.extra.get("aliases") or []), connection_id=claim.about.key, area=area,
+                          standing={"tier": claim.tier, "owner": claim.owner, "approved_by": claim.extra.get("approved_by", ""),
+                                    "area": area, "links": claim.extra.get("links") or [],
+                                    "suggestions": len(claim.extra.get("suggestions") or [])})
 
 
 def load_entries(connection_id: str) -> list[KnowledgeEntry]:
@@ -189,16 +200,32 @@ def _who() -> tuple[str, bool]:
 def upsert_entry(connection_id: str, entry: KnowledgeEntry) -> KnowledgeEntry:
     """Write an entry as the Definition of its title. An entry whose title changed withdraws the Definition of the old
     one: the id stays the entry's, the word is the Definition's."""
-    from pramanyx.record.writers import definition_term, withdraw_definition, write_definition
+    from pramanyx.record.writers import (
+        NotTheOwner,
+        definition_term,
+        suggest_definition_edit,
+        withdraw_definition,
+        write_definition,
+    )
     entry.connection_id = connection_id
     if not entry.id:
-        entry.id = definition_term(entry.title) or str(uuid.uuid4())[:8]
+        entry.id = (definition_term(entry.title) + (f"-in-{definition_term(entry.area)}" if definition_term(entry.area)
+                                                    else "")) or str(uuid.uuid4())[:8]
     who, person = _who()
     previous = next((e for e in load_entries(connection_id) if e.id == entry.id), None)
-    if previous is not None and definition_term(previous.title) != definition_term(entry.title):
-        withdraw_definition(connection_id=connection_id, term=previous.title, by=who, reason=f"renamed to {entry.title}")
-    write_definition(connection_id=connection_id, term=entry.title, text=entry.body, by=who, aliases=entry.tags,
-                     kind=entry.kind, entry_id=entry.id, by_person=person)
+    try:
+        if previous is not None and (definition_term(previous.title), definition_term(previous.area)) != \
+                (definition_term(entry.title), definition_term(entry.area)):
+            withdraw_definition(connection_id=connection_id, term=previous.title, area=previous.area, by=who,
+                                reason=f"renamed to {entry.title}")
+        write_definition(connection_id=connection_id, term=entry.title, text=entry.body, by=who, aliases=entry.tags,
+                         kind=entry.kind, entry_id=entry.id, by_person=person, area=entry.area)
+    except NotTheOwner:
+        # Someone else's definition: the change is a suggested edit for its owner, and the wording stands until then.
+        entry.suggested = suggest_definition_edit(connection_id=connection_id, term=(previous or entry).title,
+                                                  area=(previous or entry).area, by=who, text=entry.body,
+                                                  aliases=entry.tags)
+        return entry
     _index_entry(entry)
     _invalidate_linker_hints(connection_id)
     return entry
@@ -210,7 +237,7 @@ def delete_entry(connection_id: str, entry_id: str) -> bool:
     entry = next((e for e in load_entries(connection_id) if e.id == entry_id), None)
     if entry is None:
         return False
-    withdraw_definition(connection_id=connection_id, term=entry.title, by=_who()[0], reason="removed")
+    withdraw_definition(connection_id=connection_id, term=entry.title, area=entry.area, by=_who()[0], reason="removed")
     _delete_from_index(connection_id, entry_id)
     _invalidate_linker_hints(connection_id)
     return True
@@ -303,7 +330,29 @@ def _lexical_rank(question: str, entries: list, top_k: int) -> list:
 
 #: The PROMPT header — an instruction addressed to a model. Reader-facing renders
 #: must never carry it (see retrieve_for_reader).
-_PROMPT_HEADER = "DOMAIN KNOWLEDGE (use these definitions exactly when writing SQL):"
+_PROMPT_HEADER = ("DOMAIN KNOWLEDGE — what words mean on this connection. Each says whose word it is: one APPROVED BY ITS "
+                  "OWNER is the business's definition, used exactly when writing SQL; one NOT YET APPROVED is someone's "
+                  "wording — use it, and say in the answer that its definition is not yet approved; one only SAID is a "
+                  "hint, never the definition.")
+
+
+def standing_words(standing: dict) -> str:
+    """Whose word a Definition is, for the planner (2026-11-17: an owner's approval changed nothing the model saw — the
+    block said "use these exactly" of every definition, approved or not, and named no owner)."""
+    tier = str((standing or {}).get("tier") or "")
+    owner = str((standing or {}).get("owner") or "").strip()
+    by = str((standing or {}).get("approved_by") or "").strip()
+    area = str((standing or {}).get("area") or "").strip()
+    where = f"in {area}: " if area else ""
+    if tier == "approved":
+        said = f"{where}APPROVED BY ITS OWNER{f' ({by or owner})' if (by or owner) else ''}"
+    elif tier == "declared":
+        said = f"{where}NOT YET APPROVED by its owner{f' ({owner})' if owner else ''}"
+    else:
+        said = f"{where}SAID only, never approved — a hint, not the definition"
+    links = [f"{link.get('kind')} {link.get('label') or link.get('ref')}" for link in (standing or {}).get("links") or []
+             if link.get("kind") in ("table", "metric", "definition")]
+    return said + (f"; refers to {', '.join(links[:6])}" if links else "")
 
 
 def _render_block(entries: list, header: str | None = _PROMPT_HEADER) -> str:
@@ -313,7 +362,8 @@ def _render_block(entries: list, header: str | None = _PROMPT_HEADER) -> str:
     for e in entries:
         if lines:
             lines.append("")
-        lines.append(e.render())
+        # The planner is told whose word each is; a reader's answer gets the definition's own prose.
+        lines.append(e.render() + (f"\n   [{standing_words(e.standing)}]" if header else ""))
     return "\n".join(lines)
 
 
@@ -333,8 +383,22 @@ def retrieve_for_question(question: str, connection_id: str, top_k: int = _TOP_K
 
     Returns empty string if nothing is relevant or if the knowledge store is
     empty — callers should skip injecting when the result is falsy.
+
+    One authority order (2026-11-17): of the relevant entries, a published definition is read before a draft and a
+    draft before one only said. A word the organisation defines differently in two areas of the business is said
+    first, with the area the question chose — or the instruction to answer each meaning, named, never one picked.
     """
-    return _render_block(_relevant_entries(question, connection_id, top_k))
+    entries = sorted(_relevant_entries(question, connection_id, top_k),
+                     key=lambda e: {"approved": 0, "declared": 1}.get(str((e.standing or {}).get("tier") or ""), 2))
+    rivals = ""
+    try:
+        from pramanyx.semantic.areas import rival_meanings, rival_meanings_block
+        rivals = rival_meanings_block(rival_meanings(question, connection_id))
+    except Exception as exc:  # noqa: BLE001 — unread, the definitions are said without it
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "rival meanings could not be read", counter="connection_kb.rivals")
+    block = _render_block(entries)
+    return "\n\n".join(x for x in (rivals, block) if x)
 
 
 def _relevant_entries(question: str, connection_id: str, top_k: int = _TOP_K) -> list:

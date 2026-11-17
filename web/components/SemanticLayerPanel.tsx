@@ -25,6 +25,7 @@ import { Card, Chip, Empty, MUTED, NUM, Page, ROW, RULE } from "@/components/cla
 import { IntakePanel } from "@/components/intake/IntakePanel";
 import { MetricsPanel } from "@/components/MetricsPanel";
 import { MissedQuestions } from "@/components/semantic/MissedQuestions";
+import { ReviewQueue } from "@/components/semantic/ReviewQueue";
 import { FoldLine, Sql, ToolsMenu } from "@/components/semantic/parts";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -299,16 +300,21 @@ interface KnowledgeEntry {
   kind: string;
   tags: string[];
   connection_id: string;
-  /** The Definition's standing (`record/writers.py`): declared when written, approved once its owner approves it. */
-  standing?: { tier: string; owner: string; approved_by: string };
+  /** The area of the business it is defined in: one word may mean one thing in one area and another in the next (2026-11-17). */
+  area?: string;
+  /** The Definition's standing (`record/writers.py`): a draft when written, published once its owner publishes it. */
+  standing?: { tier: string; owner: string; approved_by: string; suggestions?: number };
+  /** Set when a save was filed as a suggested edit for the definition's owner. */
+  suggested?: { id: string } | null;
 }
 
 /** Whose a definition is, and whether its owner approved it, in a few words. */
 function standingWords(s: KnowledgeEntry["standing"]): string {
   if (!s) return "";
   const who = (ref: string) => String(ref || "").replace(/^(user|person):/, "");
-  if (s.tier === "approved") return `approved by ${who(s.approved_by)}`;
-  if (s.tier === "declared") return `written by ${who(s.owner)}, not yet approved`;
+  const waiting = s.suggestions ? ` · ${s.suggestions} suggested edit${s.suggestions === 1 ? "" : "s"} for its owner` : "";
+  if (s.tier === "approved") return `published by ${who(s.approved_by || s.owner)}${waiting}`;
+  if (s.tier === "declared") return `a draft of ${who(s.owner)}'s, not yet published${waiting}`;
   return "brought in from a file, no one has declared it";
 }
 
@@ -340,7 +346,7 @@ const KIND_HINTS: Record<string, { title: string; body: string; hint: string }> 
              hint: "Any other context that helps the AI reason about your data." },
 };
 
-const EMPTY_ENTRY = { id: "", title: "", body: "", kind: "note", tags: "" };
+const EMPTY_ENTRY = { id: "", title: "", body: "", kind: "note", tags: "", area: "" };
 
 function KnowledgeTab({ connId }: { connId: string }) {
   const [entries, setEntries]     = useState<KnowledgeEntry[]>([]);
@@ -367,19 +373,20 @@ function KnowledgeTab({ connId }: { connId: string }) {
   function startAdd() { setEditId("__new__"); setForm(EMPTY_ENTRY); }
   function startEdit(e: KnowledgeEntry) {
     setEditId(e.id);
-    setForm({ id: e.id, title: e.title, body: e.body, kind: e.kind, tags: e.tags.join(", ") });
+    setForm({ id: e.id, title: e.title, body: e.body, kind: e.kind, tags: e.tags.join(", "), area: e.area ?? "" });
   }
 
   async function saveEntry() {
     if (!form.title.trim() || !form.body.trim()) { setErr("Title and body are required"); return; }
     setSaving(true);
     try {
-      const payload = { id: form.id || undefined, title: form.title, body: form.body, kind: form.kind, tags: tagList(form.tags) };
-      if (editId === "__new__") {
-        await post(`/semantic/${connId}/knowledge`, payload);
-      } else {
-        await put(`/semantic/${connId}/knowledge/${editId}`, payload);
-      }
+      const payload = { id: form.id || undefined, title: form.title, body: form.body, kind: form.kind, tags: tagList(form.tags),
+                        area: form.area.trim() };
+      const saved: KnowledgeEntry = editId === "__new__"
+        ? await post(`/semantic/${connId}/knowledge`, payload)
+        : await put(`/semantic/${connId}/knowledge/${editId}`, payload);
+      // Someone else's definition: the change went to its owner as a suggested edit, and the wording stands until then.
+      setNote(saved?.suggested ? `“${form.title}” is someone else's: your change went to its owner as a suggested edit.` : "");
       setEditId(null); setErr(""); await load();
     } catch (e: unknown) { setErr(String(e)); }
     finally { setSaving(false); }
@@ -423,13 +430,14 @@ function KnowledgeTab({ connId }: { connId: string }) {
               <div style={ROW}>
                 <span className="aug-fs-chrome" style={{ color: "var(--t1)", fontWeight: 500 }}>{e.title}</span>
                 <Chip>{KIND_WORD[e.kind] ?? e.kind}</Chip>
+                {e.area && <Chip>in {e.area}</Chip>}
                 {e.tags.map(t => <span key={t} className="aug-fs-xs" style={MUTED}>#{t}</span>)}
               </div>
               {e.standing && (
                 <div className="aug-fs-xs" style={{ ...MUTED, marginTop: 2 }}>
                   {standingWords(e.standing)} ·{" "}
-                  <a href={`/definitions/${encodeURIComponent(e.title)}?conn=${encodeURIComponent(connId)}`}>
-                    {e.standing.tier === "approved" ? "Open" : "Open to approve"}
+                  <a href={`/definitions/${encodeURIComponent(e.title)}?conn=${encodeURIComponent(connId)}${e.area ? `&area=${encodeURIComponent(e.area)}` : ""}`}>
+                    {e.standing.tier === "approved" ? "Open" : "Open to publish"}
                   </a>
                 </div>
               )}
@@ -459,6 +467,8 @@ function KnowledgeTab({ connId }: { connId: string }) {
           <Input value={form.tags} onChange={v => setForm(f => ({ ...f, tags: v }))} label="Other names for it"
             placeholder="e.g. revenue, net bookings" hint="Comma-separated — the other words people use for it" />
         </div>
+        <Input value={form.area} onChange={v => setForm(f => ({ ...f, area: v }))} label="Area of the business"
+          placeholder="e.g. Finance" hint="When the word means something particular in one part of the business — leave empty when it means one thing everywhere" />
       </FormDialog>
     </Page>
   );
@@ -666,7 +676,8 @@ function BenchmarksTab({ connId }: { connId: string }) {
 // Metrics leads: it is the governed answer to "what does this number mean", and the one tab whose contents the AI
 // reuses in every chart and answer. It was third, behind two tabs of annotation, so the definitions a connection already
 // carried were the last thing anyone saw.
-const TABS = ["Metrics", "Annotations", "Definitions", "Benchmarks", "Import"];
+// Review (Phase 3, 2026-11-17): what waits on a person for this connection's knowledge — gaps, candidates, conflicts.
+const TABS = ["Metrics", "Annotations", "Definitions", "Review", "Benchmarks", "Import"];
 //: The landing tab, and the one that carries no `?semtab=`. Derived from TABS so reordering the array cannot leave the
 //: default pointing at a tab that moved.
 const DEFAULT_TAB = TABS[0];
@@ -830,6 +841,7 @@ export function SemanticLayerPanel({ connectionId, connName, connections = [] }:
         {activeTab === "Metrics"     && <MetricsPanel connId={activeConn} schema={metricsSchema || undefined} datasets={schemas} />}
         {activeTab === "Annotations" && <AnnotationsTab connId={activeConn} scopeTable={scopeTable} />}
         {activeTab === "Definitions" && <KnowledgeTab   connId={activeConn} />}
+        {activeTab === "Review"      && <Page testId="semantic-review"><ReviewQueue connId={activeConn} /></Page>}
         {activeTab === "Benchmarks"  && <BenchmarksTab  connId={activeConn} />}
         {activeTab === "Import"      && (
           <Page testId="semantic-import"><IntakePanel connId={activeConn} schema={scopeSchema} /></Page>

@@ -6,8 +6,9 @@ confidence and the period it read, with every earlier answer beside it. Opening 
 answers already kept. Asking costs a full agent run, and that is said before a question is kept and beside each answer.
 
 No new store. The rhythm is an AUTOMATION — a schedule and an ``investigate`` step, the machinery theLook's daily
-question already runs on, which writes the period into the question by code (the last complete day, week or month at
-the connection's settling lag, against the one before) and hands the previous answer over for consistency
+question already runs on, which writes the period into the question by code (yesterday, last week or last month on the
+person's clock, against the one before; since 2026-11-17 a settling lag makes its newest figures provisional and no
+longer moves the period) and hands the previous answer over for consistency
 (``automations/temporal.py``). "Only when I ask" is the same automation behind a webhook trigger: it never fires on its
 own. Every answer is an investigation filed under the question's own session, ``question:<id>``, and read back by that
 tag (``history.list_investigations_for_session``) — not from an inquiry, which closes once answered and is re-opened by
@@ -20,11 +21,12 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-#: How often a question is asked, as the cron its automation runs on: 09:00 UTC, as theLook's daily question is.
+#: How often a question is asked, as the cron its automation runs on: 09:00 on the person's clock (2026-11-17; it was
+#: 09:00 UTC, as theLook's daily question is).
 #: Weekly asks on Mondays and monthly on the 1st, so each reads the period that has just closed.
 RHYTHMS: dict[str, Optional[str]] = {"daily": "0 9 * * *", "weekly": "0 9 * * mon", "monthly": "0 9 1 * *", "ask": None}
-RHYTHM_WORDS = {"daily": "Daily · 09:00 UTC", "weekly": "Weekly · Mondays 09:00 UTC",
-                "monthly": "Monthly · the 1st, 09:00 UTC", "ask": "Only when asked"}
+RHYTHM_WORDS = {"daily": "Daily · 09:00 your time", "weekly": "Weekly · Mondays 09:00 your time",
+                "monthly": "Monthly · the 1st, 09:00 your time", "ask": "Only when asked"}
 #: The approved default (the user, 2026-10-23): about four runs a month per question.
 DEFAULT_RHYTHM = "weekly"
 SESSION_PREFIX = "question:"
@@ -94,9 +96,11 @@ def keep(*, connection_id: str, question: str, rhythm: str = DEFAULT_RHYTHM, sch
     config: dict[str, Any] = {"question": question, "session_id": session}
     if schema:
         config["schema_name"] = schema
+    from pramanyx.kernel.clock import person_clock
     from pramanyx.routers.automations import CreateAutomationRequest, create
     saved = create(CreateAutomationRequest(
-        conn_id=connection_id, name=NAME_PREFIX + question[:80],
+        # 2026-11-17 — kept on the person's clock: it runs at 09:00 their time, and its "yesterday" is theirs.
+        conn_id=connection_id, name=NAME_PREFIX + question[:80], timezone=person_clock(),
         description=("Kept on a dashboard. Each answer re-asks the agent the Data Canvas uses for the last complete "
                      "period against the one before, and is filed under " + session + "."),
         conditions=_conditions(rhythm), effects=[{"kind": "investigate", "config": config}]))

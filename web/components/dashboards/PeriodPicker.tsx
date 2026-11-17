@@ -14,9 +14,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/u
 import type { DashboardRange } from "@/lib/api";
 import { Input } from "@/components/ui/input";
 
-// "Current" is the period under way and "last" the one before (the user, 2026-10-08). Each is read
-// only over days whose data has arrived: the server reads where the data ends, so a current day on
-// a source a day behind is yesterday, and the range says so.
+// "Current" is the period under way and "last" the one before (the user, 2026-10-08), counted from the person's
+// today (2026-11-17, `pramanyx/kernel/clock.py`). Each is read over the days whose data has arrived; a current period
+// with no complete day yet is read as it stands, not compared — never the period before in its place.
 const CHOICES: { v: string; t: string }[] = [
   { v: "standing", t: "As written" },
   { v: "current_day", t: "Current day" },

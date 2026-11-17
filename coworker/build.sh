@@ -28,3 +28,18 @@ for plugin in "$here"/plugins/*/; do
   } > "$plugin/lib/client.js"
   echo "build: wrote ${plugin#"$here"/}/lib/client.js ($(wc -c < "$plugin/lib/client.js" | tr -d ' ') bytes)"
 done
+
+# 2026-11-17 — the map in the answer card. MapLibre and its worker as the package ships them (BSD-3-Clause, its licence
+# copied beside them), and the shapes the install ships, served to the page by the card's own server (`lib/index.js`).
+# The page loads them only when an answer is a map.
+# Without MapLibre installed the rest of the card still builds: a map answer then says it could not be drawn.
+if [ -d "$modules/maplibre-gl/dist" ]; then
+  map="$here/plugins/answer-card/lib/map"
+  mkdir -p "$map"
+  for f in maplibre-gl.mjs maplibre-gl-worker.mjs maplibre-gl.css; do cp "$modules/maplibre-gl/dist/$f" "$map/"; done
+  cp "$modules/maplibre-gl/LICENSE.txt" "$map/MAPLIBRE-LICENSE.txt"
+  cp "$here/../web/public/geo/world.json" "$here/../web/public/geo/us-states.json" "$map/"
+  echo "build: wrote plugins/answer-card/lib/map (MapLibre $(node -p "require('$modules/maplibre-gl/package.json').version") and the shapes)"
+else
+  echo "build: no maplibre-gl in $modules — maps are not drawn until npm install has run in web/" >&2
+fi

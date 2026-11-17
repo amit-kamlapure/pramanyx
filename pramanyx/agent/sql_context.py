@@ -16,8 +16,9 @@ runs. What that cost, run by run:
   and lost two statements to the engine before finding BigQuery's spelling by trial;
 - the writer scheduled a recommendation for "Q1 2026", nine months in the past.
 
-Each prompt now carries the same short block: the dialect to write, the date, and the
-last SETTLED day of the data — the day up to which a period is complete — and every
+Each prompt now carries the same short block: the dialect to write and the date — today on the person's clock, with
+every relative period counted from it (`kernel/clock.py`, 2026-11-17: one definition of "yesterday" for the whole
+platform; a source still revising its recent days makes them provisional, never moves the period) — and every
 window is handed over as a half-open filter, ready to paste, so the end bound is never
 the model's to spell.
 """
@@ -75,26 +76,37 @@ def dialect_line(conn=None, *, dialect: str = "") -> str:
     return f"SQL DIALECT: {_ENGINE_NAMES.get(d, d)} — write every statement for this engine, in its own spelling."
 
 
+def clock_block(*, today: str = "", coverage_end: str = "", settle_days: int = 1) -> str:
+    """The clock half of every prompt, alone — the platform's one definition of the date (`kernel/clock.py`, the user,
+    2026-11-17: "Yesterday means day before current date.. based on the users time setting.. if no data exists, it
+    should say so"): today on the person's clock, every relative period counted from it and never moved. A source that
+    keeps revising its recent days (``settle_days``) makes their figures provisional — said — and no longer moves the
+    period back to a settled day. ``today`` (an ISO date) fixes the day when a caller has one."""
+    from pramanyx.kernel.clock import clock_line, person_clock, provisional_line
+    clock, now = person_clock(), None
+    if (today or "")[:10]:
+        try:
+            fixed = date.fromisoformat(today[:10])
+            clock, now = "", datetime(fixed.year, fixed.month, fixed.day, 12, tzinfo=timezone.utc)
+        except ValueError:
+            now = None
+    said = clock_line(clock, now)
+    if coverage_end:
+        said += f" The data runs to {(coverage_end or '')[:10]}: a period after that has no rows yet — say so."
+    if (provisional := provisional_line(settle_days, clock, now)):
+        said += " " + provisional
+    return said + " Never anchor a window on CURRENT_DATE or NOW(): use the literal dates you are given."
+
+
 def sql_context(conn=None, *, dialect: str = "", today: str = "", coverage_end: str = "",
                 settle_days: int = 1) -> str:
-    """The block: one line for the engine, one for the clock. Either half is left out
-    only when nothing is known for it, never guessed."""
+    """The block: one line for the engine, one for the clock (`clock_block`). The engine half is left out only when
+    nothing is known of it, never guessed."""
     lines: list[str] = []
     engine = dialect_line(conn, dialect=dialect)
     if engine:
         lines.append(engine)
-    t = (today or "")[:10] or today_utc()
-    settled = settled_day(t, coverage_end, settle_days)
-    clock = f"TODAY: {t} (UTC)."
-    if coverage_end:
-        clock += (f" The data runs to {(coverage_end or '')[:10]}; the newest day to read is {settled} — "
-                  "rows dated after it may still change, so no period ending later is complete.")
-    else:
-        clock += f" The newest day to read is {settled}."
-    clock += (" A relative period (\"last 6 months\", \"recent\") counts back from that day, "
-              "never from a sample value. Never anchor a window on CURRENT_DATE or NOW(): use "
-              "the literal dates you are given.")
-    lines.append(clock)
+    lines.append(clock_block(today=today, coverage_end=coverage_end, settle_days=settle_days))
     return "\n".join(lines)
 
 

@@ -26,6 +26,11 @@ tools taken out, under the shell's MIT licence.
   shell 0.2.2-rc.1 and has to be taken again when the shell is upgraded.
 - **The person's terminal, the embedded browser, and installing plugins from the page.** Each is a way back to
   the above.
+- **The host services still behind those pages** (2026-11-17): the terminal's service, the workspace file service
+  (its reads may name any path on the machine) with the file tree, the document preview and @file mentions that read
+  through it, the host folder picker, "Open in…" (it launches the machine's applications), the host runners for plugin
+  code and programmatic tool calls, and the context that told the agent this checkout's path and the page's address.
+  A file a person brings in is to go to Pramanyx, as theirs, and open there.
 - **Everything that reports to the shell's maker**, and the feedback buttons that would feed it.
 - **The shell's own account**: its sign-in, its account settings, its session-log export and "Feedback" entry.
   A person here is who Pramanyx says they are.
@@ -121,8 +126,15 @@ turned back on from the interface.
   result here** — "deliver it here" needs no sending step. A Slack post a model drafted waits for a person on each
   run until one says "always allow"; an email from a new schedule is held at departure while it is on probation.
   Its times are read in a zone the person named, else their own saved clock, else their browser's (the shell tells
-  the agent which, on every message), else the organisation's, else UTC. Setting one up is an act: the organisation's
-  agent policy allows it by default (since 2026-11-16; `run` before), and an admin can lower it.
+  the agent which, on every message), else the organisation's, else UTC — the platform's one clock
+  (`pramanyx/kernel/clock.py`). The coworker's page tells its host the browser's zone when it loads; the host keeps it
+  in `PRAMANYX_CLOCK_FILE` and every call to Pramanyx carries it (`X-Pramanyx-Clock`), so "yesterday" asked here is
+  the day before this person's today, counted the same way as in the app — never moved by a source's settling, and
+  said to hold no data when it holds none (2026-11-17). Setting one up is an act: the organisation's
+  agent policy allows it by default (since 2026-11-16; `run` before), and an admin can lower it. A schedule that
+  would run more often than once an hour is not made until the person confirms the rhythm, said back to them in
+  words (2026-11-17: the agent once passed "in 2 minutes" on as "every 2 minutes"); the agent copies the person's
+  sentence exactly, and setting a schedule up is the whole of its reply.
 - **The first screen.** The mark on a tile over a large headline, then the question box. Under it: questions worth
   asking of a chosen connection as plain lines, and two cards — the questions asked lately (each with its
   connection and how long ago) and a person's own agents. Each row writes a question into the box; nothing is
@@ -211,8 +223,9 @@ admin allows "Let the coworker ask its models through Pramanyx" in Settings ▸ 
 - When an answer is shown, the agent's closing remark is not: the answer is the output. The remark is still
   written and kept in the conversation's record. The platform's follow-up questions are carried over MCP and not
   yet shown.
-- Figures in the words and the chart are as the platform formats them (€17,857,124.67; 17.9M on a bar). The
-  shortened form of the mockup (€17.86m) needs a column's unit, which is not carried over MCP.
+- A money column carries its currency over MCP (`chart_config.column_units`, read 2026-11-17), and the card prints
+  it in the table and the chart. A share or a rate carries no unit: it is printed as the number the rows hold, since
+  0.42 and 42 cannot be told apart without one.
 - The claim that puts the platform's work inside a turn's trace is matched on the question and the connection,
   because a tool call carries nothing else. It covers `ask`; a custom agent's answer and a deep analysis are
   still recorded as runs of their own. The Trajectory tab in the coworker still shows a call to the platform as one row.
@@ -220,12 +233,15 @@ admin allows "Let the coworker ask its models through Pramanyx" in Settings ▸ 
   each concluded — are not drawn, and it has no card.
 - A Pramanyx tool added since this was written, and each custom agent's, is named from the end of the first turn
   that calls it; until then that one call shows the shell's plain row.
-- The chart is drawn from the answer's grid and chart type. The app's own `chart_config` and column units are
-  not carried over MCP yet, so a chart the app would have labelled or formatted specially is drawn plainly here.
-- The table shows plain numbers: a column's unit (€, %) is not carried over MCP, so nothing is formatted as
-  money. The app's editor also offers a transform (period over period, share, rolling, cumulative), an annotation
-  and a pivot; those are not here. Nothing but an answer opens in the right-hand pane yet: not an object of the
-  ontology, a metric's definition, a document or a sheet.
+- A map answer (points from latitude and longitude, or countries and US states filled by a figure) is drawn by
+  MapLibre GL, which the card's own server serves with its worker (`/pramanyx-map/…`, copied by `build.sh`) and the
+  page loads only when an answer is a map. The base map under it is the organisation's setting, none by default
+  (Settings ▸ Organization ▸ Base map): OpenFreeMap's public tiles or an own tile server, from which the browser
+  fetches the squares a person views. Regions, districts, cities and Indian states have no shapes yet; addresses
+  are not geocoded; a `.geojson` file is not yet opened as a map.
+- The chart is drawn from the answer's grid, its chart type and the app's own `chart_config`, all carried over MCP.
+  The app's editor also offers a transform (period over period, share, rolling, cumulative), an annotation and a
+  pivot; those are not here.
 - The app's pages are found at the address the coworker was reached from, else `http://localhost:3000`. An install
   that serves the app elsewhere and is opened directly shows an empty frame.
 - The exhibit, the table and the editor were checked by hand on a live answer (sort, totals against the approved
@@ -296,7 +312,6 @@ admin allows "Let the coworker ask its models through Pramanyx" in Settings ▸ 
 - A custom agent's answer has a card, seen live once. It has no Right and Wrong: the agent's answer does not say
   which connection it was for. An agent's turn may run several queries; the card shows the last one's grid and
   SQL, which is what the platform's fold keeps, and that is not always the one the answer is about.
-- The person's file panel is still on.
 - No test covers the card's drawing or the tool removal. `node --test plugins/answer-card/test/feedback-route.test.mjs`
   covers the feedback routes. The card was checked by eye on three real answers, one of them
   live; the tool removal by asking a fresh session to list its tools.

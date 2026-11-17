@@ -174,49 +174,45 @@ def complete_period(period: str, today: date, lag_days: int = DEFAULT_LAG_DAYS,
     return PeriodWindow(period, start, end, _add_years(start, -1), start, lag)
 
 
-def observation_note(now: datetime, cron: str, lag_days: int = DEFAULT_LAG_DAYS) -> str:
-    """The code-written sentence naming what a scheduled run should observe."""
-    now = now.astimezone(timezone.utc)
-    today: date = now.date()
+def observation_note(now: datetime, cron: str, lag_days: int = DEFAULT_LAG_DAYS, clock: str = "") -> str:
+    """The code-written sentences naming what a scheduled run should observe — on the schedule's clock, with the
+    platform's one definition of a period (`kernel/clock.py`, the user, 2026-11-17: "Yesterday means day before current
+    date.. based on the users time setting.. if no data exists, it should say so"). A period the question names is
+    counted from today on that clock and never moved; the cadence's default applies only when it names none, and only
+    a person's own ``observation_lag_days`` on the step moves that default back."""
+    from pramanyx.kernel.clock import clock_line, now_in
+    local = now_in(clock, now)
+    today: date = local.date()
+    zone = clock or "UTC"
     lag = clamp_lag(lag_days)
     cadence = cadence_of(cron)
     anchor = today - timedelta(days=lag)
 
     lines = [
         OBSERVATION_HEADER,
-        f"This is a scheduled {cadence} run at {now.strftime('%Y-%m-%dT%H:%M')}Z.",
+        f"This is a scheduled {cadence} run at {local:%Y-%m-%d %H:%M} {zone}.",
+        clock_line(clock, now),
     ]
     if cadence == "weekly":
         week = complete_period(_CADENCE_PERIOD[cadence], today, lag)
-        lines.append(
-            f"Observe the most recent COMPLETE week: {week.start.isoformat()} to "
-            f"{week.last_day.isoformat()} (UTC).")
+        default = f"the most recent COMPLETE week, {week.start.isoformat()} to {week.last_day.isoformat()}"
     elif cadence == "monthly":
         month = complete_period(_CADENCE_PERIOD[cadence], today, lag)
-        lines.append(
-            f"Observe the most recent COMPLETE month: "
-            f"{month.start.strftime('%Y-%m')} (UTC).")
+        default = f"the most recent COMPLETE month, {month.start.strftime('%Y-%m')}"
     else:
-        lines.append(
-            f"Observe {anchor.isoformat()} (UTC), the most recent complete day"
-            + ("" if lag == 1 else
-               f" given this automation's observation lag of {lag} days — periods "
-               "younger than that are configured as not yet reliable for this source")
-            + ".")
+        default = f"{anchor.isoformat()}" + (", yesterday" if lag == 1 else "")
+    lines.append(f"If the question names no period, observe {default} ({zone}).")
     lines.append(
         f"Never treat the current, in-progress period (today is {today.isoformat()} "
-        "UTC and it is partial by construction) as an observation period, and never "
+        f"{zone} and it is partial by construction) as an observation period, and never "
         "compare a partial period against a complete one.")
     if lag > 1:
-        # Without this the reader gets a correctly-lagged report that LOOKS stale: the
-        # theLook briefing posted "On September 5th..." on September 8 with nothing
-        # saying why, and the first thing its owner said was "today's date is wrong".
+        # A person's own setting on the step: the theLook briefing posted "On September 5th..." on September 8 with
+        # nothing saying why, and the first thing its owner said was "today's date is wrong".
         lines.append(
-            f"Say in the report which period you observed AND that it is {lag} days "
-            f"behind today ({today.isoformat()} UTC), because this source restates its "
-            "most recent days. A reader must never have to guess why the newest figure "
-            "you quote is dated earlier than today — undated, a lagged report is "
-            "indistinguishable from a broken one.")
+            f"This automation's own setting reads {lag} days back when the question names no period: say which "
+            f"period you observed AND that it is {lag} days behind today ({today.isoformat()} {zone}). A reader must "
+            "never have to guess why the newest figure you quote is dated earlier than today.")
     return "\n".join(lines)
 
 
@@ -384,13 +380,18 @@ def scheduled_grounding(automation, effect_config: dict,
     else:
         return ""
     now = now or datetime.now(timezone.utc)
-    lag = resolve_lag(effect_config, learned_lag)
-    parts = [observation_note(now, cron, lag)]
-    unsettled = unsettled_note(lag, learned_lag)
-    if unsettled:
-        parts[0] = parts[0] + "\n" + unsettled
+    # 2026-11-17 — the schedule's own clock (set from the person's when it was made), else the person's; the learned
+    # settling lag makes the newest days provisional and no longer moves the period observed. Only a person's own
+    # ``observation_lag_days`` on the step moves the default back.
+    from pramanyx.kernel.clock import person_clock, provisional_line
+    clock = str(getattr(automation, "timezone", "") or "") or person_clock()
+    explicit = (effect_config or {}).get("observation_lag_days")
+    lag = clamp_lag(explicit if explicit is not None else DEFAULT_LAG_DAYS)
+    parts = [observation_note(now, cron, lag, clock)]
     if never_settles:
         parts[0] = parts[0] + "\n" + never_settles
+    elif (provisional := provisional_line(int(learned_lag or 0), clock, now)):
+        parts[0] = parts[0] + "\n" + provisional
     prev = previous_report_note(getattr(automation, "id", ""))
     if prev:
         parts.append(prev)

@@ -407,6 +407,22 @@ def book_explorer_finding(*, finding: dict, sql: str, connection_id: str, receip
     return _claims.book(claim, key=key, conn_id=connection_id)
 
 
+def confirmed_explorer_findings(connection_id: str) -> set[str]:
+    """The ids of the explorer's findings on this connection that a person has confirmed — their claim stands at a
+    person's tier, not withdrawn. The user, 2026-11-17: a finding reaches an answer only once a person confirmed it, on
+    every answer path (the graph slice already held to that since 11-13; the quick answer's "what the platform already
+    knows" and the exploration annotations did not)."""
+    if not connection_id:
+        return set()
+    out: set[str] = set()
+    for c in _claims.list_claims(kind="finding", conn_id=connection_id, limit=5000):
+        if c.extra.get("writer") == "explorer" and c.tier in ("approved", "declared") and c.state != "withdrawn":
+            fid = str(c.extra.get("finding_id") or "")
+            if fid:
+                out.add(fid)
+    return out
+
+
 def withdraw_explorer_finding(*, connection_id: str, finding_id: str, reason: str,
                               schema_name: str = "", by: str = "system") -> Optional[str]:
     """A finding the re-validation found no longer holds, or a person dismissed, is WITHDRAWN in the
@@ -566,50 +582,197 @@ def definition_term(term: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", (term or "").strip().lower()).strip("-")[:80]
 
 
-def definition_key(connection_id: str, term: str) -> str:
-    return _claims.claim_key("definition", connection_id or "-", definition_term(term))
+def definition_key(connection_id: str, term: str, area: str = "") -> str:
+    """One Definition per word per AREA on a connection (2026-11-17, the ontology study: a governed definition's name is
+    unique within its area, so one word can mean one thing to Finance and another to Marketing — "area" is the glossary's
+    word for a part of the business, `docs/GLOSSARY.md`). A word with no area keeps the key it always had."""
+    parts = [connection_id or "-", definition_term(term)]
+    if definition_term(area):
+        parts.append("in-" + definition_term(area))
+    return _claims.claim_key("definition", *parts)
+
+
+#: What a Definition may link to (the assets it refers to), and how many synonyms and links it carries.
+LINK_KINDS = ("table", "metric", "definition", "dashboard", "document", "person", "url")
+MAX_SYNONYMS = 50
+MAX_LINKS = 30
+
+
+class NotTheOwner(PermissionError):
+    """Only a definition's owner publishes it, edits it directly, or decides on a suggested edit."""
+
+
+def _clean_aliases(aliases: Optional[list[str]]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for a in aliases or []:
+        a = str(a or "").strip()[:120]
+        if a and a.lower() not in seen:
+            seen.add(a.lower())
+            out.append(a)
+    return out[:MAX_SYNONYMS]
+
+
+def _clean_links(links: Optional[list[dict]]) -> list[dict]:
+    out: list[dict] = []
+    for link in links or []:
+        if not isinstance(link, dict):
+            continue
+        kind, ref = str(link.get("kind") or "").strip().lower(), str(link.get("ref") or "").strip()[:300]
+        if kind not in LINK_KINDS:
+            raise ValueError(f"a definition links to a {', '.join(LINK_KINDS)}; not a {kind or 'nothing'}")
+        if ref and not any(o["kind"] == kind and o["ref"] == ref for o in out):
+            out.append({"kind": kind, "ref": ref, "label": str(link.get("label") or "").strip()[:120]})
+    return out[:MAX_LINKS]
+
+
+def _same(a: str, b: str) -> bool:
+    return (a or "").strip().lower() == (b or "").strip().lower()
 
 
 def write_definition(*, connection_id: str, term: str, text: str, by: str,
                      aliases: Optional[list[str]] = None, kind: str = "", entry_id: str = "",
-                     by_person: bool = True) -> str:
-    """A person writes what a business word means on a connection: a Record claim of kind ``definition`` at tier
-    ``declared``, authored and owned by them. Writing it again restates it — the earlier wording kept — and a
-    changed wording is no longer approved: an approval is of the words the approver read."""
-    term, text = (term or "").strip(), (text or "").strip()
+                     by_person: bool = True, area: str = "", links: Optional[list[dict]] = None) -> str:
+    """A person writes what a business word means on a connection, in a area: a Record claim of kind ``definition``.
+
+    - A word nobody has defined in that area is a DRAFT (tier ``declared``), the writer its owner.
+    - Its OWNER changes it directly; a published one stays published — the owner read the words they wrote.
+    - Anyone else's change is refused here (`NotTheOwner`): it is a suggested edit (`suggest_definition_edit`), and the
+      published wording stands until the owner accepts it. Until 2026-11-17 anyone's new wording replaced the owner's
+      approved one at once, unapproved, and the planner lost the approved definition.
+
+    Written by no person (a migration), it is what was said, not what anyone declared."""
+    term, text, area = (term or "").strip(), (text or "").strip(), (area or "").strip()
     if not (term and text and by):
         raise ValueError("a definition names its word, says what it means, and is a person's")
-    key = definition_key(connection_id, term)
+    key = definition_key(connection_id, term, area)
     prior = _claims.latest(key)
-    # What the Semantic Layer called each entry (`semantic/connection_kb.py`: metric, synonym, rule, join, note) and the
-    # id it gave it ride along, so its readers keep reading what they read. Written by no person (a migration), it is
-    # what was said, not what anyone declared.
+    live = prior if prior is not None and prior.state != "withdrawn" else None   # a withdrawn word is written anew
+    if live is not None and live.owner and by_person and not _same(live.owner, by):
+        raise NotTheOwner(f"this definition is {live.owner}'s; a change from anyone else is a suggested edit")
+    published = live is not None and live.tier == "approved"
+    tier = ("approved" if published else "declared") if by_person else "said"
+    extra = {**(live.extra if live else {}),
+             "term": term[:120], "area": area[:120],
+             "aliases": _clean_aliases(aliases if aliases is not None else (live.extra.get("aliases") if live else [])),
+             "links": _clean_links(links if links is not None else (live.extra.get("links") if live else [])),
+             **({"kb_kind": kind} if kind else {}), **({"entry_id": entry_id} if entry_id else {})}
+    warrants = list(live.warrants) if published else []
+    if published:
+        extra.update(approved_by=by, approved_on=_today())
+        warrants.append(_claims.Warrant(kind="attestation", ref=f"approval:{by}",
+                                        detail=f"edited and kept published by its owner, {by}, on {_today()}"))
     claim = _claims.Claim(
-        kind="definition", tier="declared" if by_person else "said", status="Final", as_of=_today(),
+        kind="definition", tier=tier, status="Final", as_of=_today(),
         about=_claims.About(kind="connection", key=connection_id),
         statement=_claims.Statement(text=text[:4000]),
-        owner=(prior.owner if prior and prior.owner else (by if by_person else "")), author=by,
-        author_kind="person" if by_person else "system",
-        extra={"term": term[:120], "aliases": [a.strip()[:120] for a in (aliases or []) if a and a.strip()][:20],
-               **({"kb_kind": kind} if kind else {}), **({"entry_id": entry_id} if entry_id else {})},
+        owner=(live.owner if live and live.owner else (by if by_person else "")), author=by,
+        author_kind="person" if by_person else "system", warrants=warrants, extra=extra,
     )
     return _claims.restate(key, claim, conn_id=connection_id) if prior else \
         _claims.book(claim, key=key, conn_id=connection_id)
 
 
-class NotTheOwner(PermissionError):
-    """Only a definition's owner approves it."""
-
-
-def approve_definition(*, connection_id: str, term: str, by: str) -> Optional[str]:
-    """Its OWNER approves a definition as written (the user, 2026-11-14: "Definition can be approved by the owner
-    only"): restated at tier ``approved``, its words unchanged, with an attestation naming who approved it and when.
-    Raises `NotTheOwner` for anyone else. None when there is no such definition, or it already stands approved."""
-    key = definition_key(connection_id, term)
+def suggest_definition_edit(*, connection_id: str, term: str, by: str, area: str = "", text: str = "",
+                            aliases: Optional[list[str]] = None, links: Optional[list[dict]] = None, why: str = "",
+                            by_agent: bool = False) -> dict:
+    """Anyone suggests an edit to a Definition (the user, 2026-11-17: "anyone drafts or suggests; only the owner
+    publishes"). The suggestion rides on the Definition, pending; the wording it would change stands until its owner
+    accepts it. ``by_agent`` marks one an agent drafted for ``by``: it is said as such, and decided like any other.
+    Returns the suggestion."""
+    import uuid as _uuid
+    if not by:
+        raise ValueError("a suggestion says whose it is")
+    key = definition_key(connection_id, term, area)
     prior = _claims.latest(key)
-    if prior is None or prior.tier == "approved" or not by:
+    if prior is None or prior.state == "withdrawn":
+        raise ValueError("there is no such definition to suggest an edit to; write it instead")
+    if not ((text or "").strip() or aliases is not None or links is not None):
+        raise ValueError("a suggestion changes the wording, the other names or the links")
+    suggestion = {"id": _uuid.uuid4().hex[:10], "by": by, "at": _today(), "why": (why or "").strip()[:400],
+                  "by_agent": bool(by_agent),
+                  **({"text": text.strip()[:4000]} if (text or "").strip() else {}),
+                  **({"aliases": _clean_aliases(aliases)} if aliases is not None else {}),
+                  **({"links": _clean_links(links)} if links is not None else {})}
+    new = prior.model_copy(deep=True)
+    new.confidence = None
+    new.extra = {**prior.extra, "suggestions": [*(prior.extra.get("suggestions") or []), suggestion][-20:]}
+    _claims.restate(key, new, conn_id=connection_id)
+    return suggestion
+
+
+def draft_definition_for(*, connection_id: str, term: str, text: str, person: str, area: str = "",
+                         aliases: Optional[list[str]] = None, links: Optional[list[dict]] = None, why: str = "") -> dict:
+    """An agent drafts what a word means FOR a person — "remember that active means paid in 30 days" (the ontology
+    study, Phase 2, 2026-11-17). Never a person's word: a word nobody has defined in that area becomes a draft at tier
+    ``said``, owned by the person it was drafted for, who reads it and publishes it themselves; a word already defined
+    becomes a suggested edit, marked as the agent's, for its owner. Returns ``{"made": "draft" | "suggestion", ...}``."""
+    term, text, person = (term or "").strip(), (text or "").strip(), (person or "").strip()
+    if not (term and text and person):
+        raise ValueError("a drafted definition names its word, says what it means, and whom it was drafted for")
+    key = definition_key(connection_id, term, area)
+    prior = _claims.latest(key)
+    if prior is not None and prior.state != "withdrawn":
+        return {"made": "suggestion", "owner": prior.owner,
+                "suggestion": suggest_definition_edit(connection_id=connection_id, term=term, area=area, by=person,
+                                                      text=text, aliases=aliases, links=links, why=why, by_agent=True)}
+    claim = _claims.Claim(
+        kind="definition", tier="said", status="Final", as_of=_today(),
+        about=_claims.About(kind="connection", key=connection_id),
+        statement=_claims.Statement(text=text[:4000]),
+        owner=person, author="agent:coworker", author_kind="agent",
+        extra={"term": term[:120], "area": area[:120], "aliases": _clean_aliases(aliases), "links": _clean_links(links),
+               "drafted_by_agent": True, "drafted_for": person, **({"why": why[:400]} if why else {})},
+    )
+    cid = _claims.restate(key, claim, conn_id=connection_id) if prior else _claims.book(claim, key=key, conn_id=connection_id)
+    return {"made": "draft", "owner": person, "claim_id": cid}
+
+
+def decide_definition_suggestion(*, connection_id: str, term: str, suggestion_id: str, by: str, accept: bool,
+                                 area: str = "", why: str = "") -> str:
+    """Its OWNER accepts or declines a suggested edit. Accepted, the edit is applied as the owner's own (a published
+    definition stays published: the owner read the words). Declined, it is kept beside the definition as declined.
+    Returns the new version's id."""
+    key = definition_key(connection_id, term, area)
+    prior = _claims.latest(key)
+    if prior is None or prior.state == "withdrawn":
+        raise ValueError("there is no such definition")
+    if not _same(prior.owner, by):
+        raise NotTheOwner(f"only its owner, {prior.owner or 'no one named'}, decides on a suggested edit")
+    pending = list(prior.extra.get("suggestions") or [])
+    found = next((s for s in pending if s.get("id") == suggestion_id), None)
+    if found is None:
+        raise ValueError("no such pending suggestion")
+    rest = [s for s in pending if s.get("id") != suggestion_id]
+    if not accept:
+        new = prior.model_copy(deep=True)
+        new.confidence = None
+        new.extra = {**prior.extra, "suggestions": rest,
+                     "declined": [*(prior.extra.get("declined") or []),
+                                  {**found, "declined_by": by, "declined_on": _today(), "declined_why": why[:400]}][-20:]}
+        return _claims.restate(key, new, conn_id=connection_id)
+    cid = write_definition(connection_id=connection_id, term=prior.extra.get("term", term), area=area,
+                           text=found.get("text") or prior.statement.text, by=by,
+                           aliases=found.get("aliases") if "aliases" in found else None,
+                           links=found.get("links") if "links" in found else None)
+    now = _claims.latest(key)
+    new = now.model_copy(deep=True)
+    new.confidence = None
+    new.extra = {**now.extra, "suggestions": rest,
+                 "accepted": [*(now.extra.get("accepted") or []), {**found, "accepted_by": by, "accepted_on": _today()}][-20:]}
+    return _claims.restate(key, new, conn_id=connection_id) if cid else cid
+
+
+def approve_definition(*, connection_id: str, term: str, by: str, area: str = "") -> Optional[str]:
+    """Its OWNER publishes a definition as written (the user, 2026-11-14: "Definition can be approved by the owner
+    only"; publishing it): restated at tier ``approved``, its words unchanged, with an attestation naming who
+    approved it and when. Raises `NotTheOwner` for anyone else. None when there is no such definition, or it already
+    stands published."""
+    key = definition_key(connection_id, term, area)
+    prior = _claims.latest(key)
+    if prior is None or prior.tier == "approved" or not by or prior.state == "withdrawn":
         return None
-    if (prior.owner or "").strip().lower() != by.strip().lower():
+    if not _same(prior.owner, by):
         raise NotTheOwner(f"only its owner, {prior.owner or 'no one named'}, approves this definition")
     new = prior.model_copy(deep=True)
     new.confidence = None
@@ -620,18 +783,43 @@ def approve_definition(*, connection_id: str, term: str, by: str) -> Optional[st
     return _claims.restate(key, new, conn_id=connection_id)
 
 
-def withdraw_definition(*, connection_id: str, term: str, by: str, reason: str = "") -> Optional[str]:
-    """A definition taken away is WITHDRAWN, its wording kept beneath it — never deleted."""
-    key = definition_key(connection_id, term)
+def unpublish_definition(*, connection_id: str, term: str, by: str, area: str = "") -> Optional[str]:
+    """Its OWNER takes a published definition back to a draft: the planner is told it is not yet approved."""
+    key = definition_key(connection_id, term, area)
+    prior = _claims.latest(key)
+    if prior is None or prior.tier != "approved" or prior.state == "withdrawn":
+        return None
+    if not _same(prior.owner, by):
+        raise NotTheOwner(f"only its owner, {prior.owner or 'no one named'}, unpublishes this definition")
+    new = prior.model_copy(deep=True)
+    new.confidence = None
+    new.tier = "declared"
+    new.extra = {**prior.extra, "unpublished_by": by, "unpublished_on": _today()}
+    return _claims.restate(key, new, conn_id=connection_id)
+
+
+def withdraw_definition(*, connection_id: str, term: str, by: str, reason: str = "", area: str = "",
+                        by_platform: bool = False) -> Optional[str]:
+    """A definition taken away is WITHDRAWN, its wording kept beneath it — never deleted. Its OWNER takes it away
+    (2026-11-17); the platform does when its connection is removed (``by_platform``)."""
+    key = definition_key(connection_id, term, area)
     prior = _claims.latest(key)
     if prior is None or prior.state == "withdrawn":
         return None
+    if not by_platform and prior.owner and not _same(prior.owner, by):
+        raise NotTheOwner(f"only its owner, {prior.owner}, takes this definition away")
     new = prior.model_copy(deep=True)
     new.confidence = None
     new.state = "withdrawn"
     new.valid_until = _today()
     new.extra = {**prior.extra, "withdrawn_by": by or "a person", "withdrawn_reason": (reason or "")[:400]}
     return _claims.restate(key, new, conn_id=connection_id)
+
+
+def definitions_of(connection_id: str, term: str) -> list[_claims.Claim]:
+    """Every current definition of one word on a connection, one per area it is defined in."""
+    slug = definition_term(term)
+    return [c for c in definitions(connection_id) if definition_term(c.extra.get("term", "")) == slug]
 
 
 def definitions(connection_id: str, *, limit: int = 500) -> list[_claims.Claim]:

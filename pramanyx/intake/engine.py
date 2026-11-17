@@ -202,7 +202,8 @@ def _plan_kb(connection_id: str, cand_kind: str, rows: list[dict],
     from pramanyx.semantic.connection_kb import load_entries
 
     kb_kind = _KB_KIND[cand_kind]
-    live = {e.title.strip().lower(): e for e in load_entries(connection_id)
+    # A word may mean one thing in each area of the business (Phase 1): it is the same entry only in the same area.
+    live = {(e.title.strip().lower(), _area_key(e.area)): e for e in load_entries(connection_id)
             if e.kind == kb_kind}
     out = []
     for raw in rows:
@@ -211,7 +212,7 @@ def _plan_kb(connection_id: str, cand_kind: str, rows: list[dict],
         if not title or not body:
             refused.append(f"{cand_kind}: title and body are required: {raw!r}")
             continue
-        cur = live.get(title.lower())
+        cur = live.get((title.lower(), _area_key(raw.get("area"))))
         if cur is None:
             out.append(_cand(cand_kind, "new", raw))
         elif cur.body.strip() == body:
@@ -409,18 +410,32 @@ def _apply_glossary(payload: dict) -> dict:
     return {"target_ref": f"glossary:{table}", "landed_as": "glossary"}
 
 
+def _area_key(area: Any) -> str:
+    return str(area or "").strip().lower()
+
+
 def _apply_kb(connection_id: str, kind: str, payload: dict) -> dict:
+    """An accepted rule, join or definition becomes the Definition of its title, in its area.
+
+    Its other names come from ``aliases`` and drive matching (Phase 1, 2026-11-17). A candidate's ``tags`` say where
+    it came from ("mined:llm", "dictionary") and stay in the intake record: carried onto the Definition they became
+    synonyms, and a question about a "dictionary" would have matched every word a dictionary defined."""
+    from pramanyx.semantic.areas import unknown_area
     from pramanyx.semantic.connection_kb import KnowledgeEntry, upsert_entry
 
     title = str(payload.get("title") or "").strip()
     body = str(payload.get("body") or "").strip()
     if not title or not body:
         raise ValueError(f"a {kind} candidate needs title and body")
-    entry_id = _kb_id(kind, title)
+    area = str(payload.get("area") or "").strip()
+    why = unknown_area(connection_id, area)
+    if why:
+        raise ValueError(why)
+    entry_id = _kb_id(kind, title + (f"|{_area_key(area)}" if area else ""))
     upsert_entry(connection_id, KnowledgeEntry(
         id=entry_id, title=title, body=body, kind=kind,  # type: ignore[arg-type]
-        tags=[str(t) for t in (payload.get("tags") or [])],
-        connection_id=connection_id))
+        tags=[str(t) for t in (payload.get("aliases") or [])],
+        connection_id=connection_id, area=area))
     return {"target_ref": f"kb:{connection_id}:{entry_id}", "landed_as": kind}
 
 
@@ -469,6 +484,14 @@ def _apply_trusted(connection_id: str, payload: dict, actor: str, source: str) -
 # ── export (the round-trip half) ─────────────────────────────────────────────────────
 
 
+def _kb_out(e: Any) -> dict:
+    """A KB entry as the bundle carries it: its other names as ``aliases``, and its area when it has one."""
+    out = {"title": e.title, "body": e.body, "aliases": list(e.tags or [])}
+    if getattr(e, "area", ""):
+        out["area"] = e.area
+    return out
+
+
 def export(connection_id: str) -> dict:
     """The extended bundle, read from the live stores — the other half of the receipt:
     exported from one deployment, planned on another, and an identical re-import plans
@@ -492,12 +515,9 @@ def export(connection_id: str) -> dict:
         "glossary": [{"table": key, **{k: v for k, v in entry.items()
                                        if k in ("description", "grain", "joins", "columns")}}
                      for key, entry in sorted(gloss.items())],
-        "rules": [{"title": e.title, "body": e.body, "tags": e.tags}
-                  for e in kb if e.kind == "rule"],
-        "joins": [{"title": e.title, "body": e.body, "tags": e.tags}
-                  for e in kb if e.kind == "join"],
-        "definitions": [{"title": e.title, "body": e.body, "tags": e.tags}
-                        for e in kb if e.kind == "metric"],
+        "rules": [_kb_out(e) for e in kb if e.kind == "rule"],
+        "joins": [_kb_out(e) for e in kb if e.kind == "join"],
+        "definitions": [_kb_out(e) for e in kb if e.kind == "metric"],
         "trusted_queries": [{"question": t.question, "sql": t.sql, "tables": t.tables,
                              "note": t.note, "tags": t.tags}
                             for t in list_trusted(connection_id)],

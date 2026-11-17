@@ -39,7 +39,8 @@ def test_the_persons_words_go_to_the_platforms_designer_and_what_it_draws_is_mad
     (path, asked), (made_at, made) = sent["posts"]
     assert path == "/automations/propose" and asked == {"outcome": "in five minutes, GMV by platform, here",
                                                        "conn_id": "conn-1", "timezone": "Asia/Kolkata",
-                                                       "clock_here": "", "from_conversation": True}
+                                                       "clock_here": "", "from_conversation": True,
+                                                       "confirmed_rhythm": False}
     assert made_at == "/automations" and made["conditions"] == DRAFT["conditions"] and made["start_at_first_run"] is True
     assert got["scheduled"] is True and got["when"].startswith("Once, on Mon 16 Nov 2026")
     assert got["steps"] == ["investigate"] and got["open"] == "/automations?conn=conn-1&focus=a1"
@@ -84,3 +85,30 @@ def test_the_coworker_mounts_no_scheduler_of_its_own_and_tells_its_agent_to_use_
     profile = (Path(__file__).resolve().parents[2] / "coworker" / "profile.patch.yml").read_text()
     assert "name: '@deepseek-ai/dsh-tool-schedule'" not in profile
     assert "schedule_question" not in profile and "with schedule," in profile
+
+
+def test_a_rhythm_more_often_than_hourly_is_asked_back_and_made_only_once_the_person_confirms_it():
+    """Found testing the merged coworker (2026-11-17): "In 2 minutes, show me …" reached the designer as "every 2
+    minutes, show …", and an analysis every two minutes with no end was made and armed. The platform leaves such a
+    rhythm open (`propose.rhythm_to_confirm`); the agent asks; only a call that says the person confirmed makes it."""
+    ask = "How often: as drafted it runs every 2 minutes, with no end (…) — more often than once an hour."
+    c, sent = _client({"verdict": "proposed", "draft": DRAFT, "to_fill": [ask], "notes": ""})
+    got = asyncio.run(c.schedule("every 2 minutes, top categories", "conn-1"))
+    assert got["scheduled"] is False and got["needs"] == [ask]
+    assert [p for p, _ in sent["posts"]] == ["/automations/propose"]              # nothing was made
+    c, sent = _client({"verdict": "proposed", "draft": DRAFT, "to_fill": [], "notes": ""})
+    asyncio.run(c.schedule("every 2 minutes, top categories", "conn-1", confirm_rhythm=True))
+    assert sent["posts"][0][1]["confirmed_rhythm"] is True and sent["posts"][1][0] == "/automations"
+
+
+def test_the_coworker_is_told_to_copy_the_sentence_exactly_and_not_to_answer_alongside():
+    from pathlib import Path
+    told = (Path(__file__).resolve().parents[2] / "coworker" / "profile.patch.yml").read_text()
+    said = " ".join(told.split())
+    assert "passing the person's sentence as the request COPIED EXACTLY, never reworded" in said
+    assert "do not also answer the question now unless they asked for it now as well" in said
+    assert "pass confirm_rhythm only after they say yes" in said
+    from pramanyx.mcp import server as S
+    tool = S.mcp._tool_manager._tools["schedule"]
+    assert "COPIED EXACTLY" in tool.parameters["properties"]["request"]["description"]
+    assert "confirm_rhythm" in tool.parameters["properties"]

@@ -428,21 +428,27 @@ def test_a_persons_lag_wins_the_learned_lag_beats_the_default_and_is_clamped():
     assert resolve_lag(None, learned_lag=0) == DEFAULT_LAG_DAYS
 
 
-def test_the_scheduled_grounding_observes_at_the_learned_lag_when_the_step_sets_none():
+def test_the_scheduled_grounding_says_the_learned_lag_as_provisional_and_moves_nothing():
+    """The user, 2026-11-17: one definition of a period — the lag learned for a source makes its newest days
+    provisional; only a person's own setting on the step moves the default it observes."""
     from types import SimpleNamespace
 
     from pramanyx.automations.temporal import scheduled_grounding
     auto = SimpleNamespace(id="a1", conditions=[SimpleNamespace(kind="schedule", config={"cron": "0 9 * * *"})])
     now = datetime(2026, 9, 23, 9, 0, tzinfo=timezone.utc)
     learned = scheduled_grounding(auto, {"question": "q"}, now=now, learned_lag=6)
-    assert "observation lag of 6 days" in learned and "6 days behind today" in learned
+    assert "observe 2026-09-22, yesterday (UTC)" in learned                 # not moved back to 2026-09-17
+    assert "figures for days after 2026-09-17 are provisional" in learned
     explicit = scheduled_grounding(auto, {"observation_lag_days": 8}, now=now, learned_lag=6)
-    assert "observation lag of 8 days" in explicit and "6 days" not in explicit
+    assert "own setting reads 8 days back" in explicit and "observe 2026-09-15 (UTC)" in explicit
     plain = scheduled_grounding(auto, {}, now=now, learned_lag=None)
-    assert "observation lag" not in plain
+    assert "own setting" not in plain and "provisional" not in plain
 
 
-def test_the_deep_run_window_ends_at_the_last_settled_day_not_merely_yesterday():
+def test_the_deep_run_window_ends_at_yesterday_and_the_days_still_revised_are_said_provisional():
+    """The user, 2026-11-17 ("there cannot be disagreement.. Yesterday means day before current date"): the learned
+    settling lag no longer moves a window back to a settled day — it makes those days provisional, said in the note.
+    Only today, still filling, is trimmed from a window the question did not name."""
     from types import SimpleNamespace
 
     from pramanyx.agent.investigate import _clamp_intake_to_coverage
@@ -457,9 +463,9 @@ def test_the_deep_run_window_ends_at_the_last_settled_day_not_merely_yesterday()
     it = intake()
     note = _clamp_intake_to_coverage(it, "2025-01-01", "2026-09-23", question="what changed?",
                                      today="2026-09-23", settle_days=8)
-    assert it.observation_end == "2026-09-15"
+    assert it.observation_end == "2026-09-22"                    # yesterday — not the settled 2026-09-15
     assert note and "may still change" in note and "8 days after a day ends, learned from observation" in note
-    assert "newest day to read, 2026-09-15" in note
+    assert "days after 2026-09-15" in note and "PROVISIONAL" in note
 
     # A window that ends on a settled day is left alone even though the data reaches today.
     it2 = intake()

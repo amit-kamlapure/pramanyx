@@ -130,8 +130,9 @@ async def upload_file(request: Request,
                       source: str = Form(""),
                       schema: str = Form("")):
     """KI-2 — the file door: a metric file (CSV / TSV / XLSX in the columns of
-    `mappers.METRIC_COLUMNS` — `GET /intake/templates/metrics.csv`) or a dbt `manifest.json`
-    becomes a bundle through a DETERMINISTIC mapper and enters the SAME lane.
+    `mappers.METRIC_COLUMNS` — `GET /intake/templates/metrics.csv`), a dbt `manifest.json` (its
+    descriptions and its semantic layer), a LookML `.lkml`, or a Power BI model (`model.bim`, a `.tmdl`)
+    becomes a bundle through a DETERMINISTIC mapper and enters the SAME lane (`intake/bi_models.py`).
     The mapper judges nothing: every object still waits for a human verdict.
     ``schema`` — the dataset in view: a row that names no dataset belongs to it."""
     from pramanyx.intake import mappers
@@ -145,6 +146,8 @@ async def upload_file(request: Request,
     src = (source or "").strip() or name
     ignored: list[str] = []
     mapper_refused: list[str] = []
+    # What a BI tool's file says that came in as a Definition rather than a metric — not refused: said.
+    not_translated: list[str] = []
     if name.lower().endswith((".md", ".markdown")):
         # A markdown file with SKILL.md frontmatter is a skill import (KI's last
         # deferral, landed): it stages a `pack` candidate whose accept writes a
@@ -165,19 +168,48 @@ async def upload_file(request: Request,
         out = _stage(bundle, connection_id, source=src, actor=caller())
         out["mapped"] = {"file": name, "ignored_headers": []}
         return out
-    if name.lower().endswith(".json"):
+    lower = name.lower()
+    if lower.endswith((".json", ".bim")):
         import json as _json
+
+        from pramanyx.intake import bi_models
         try:
             doc = _json.loads(data.decode("utf-8-sig"))
         except Exception:
             raise HTTPException(status_code=422, detail="not parseable JSON")
-        if not mappers.looks_like_dbt_manifest(doc):
-            raise HTTPException(status_code=422, detail="the JSON is not a dbt "
-                                "manifest (no nodes/sources + metadata)")
-        sections = mappers.map_dbt_manifest(doc)
+        if mappers.looks_like_dbt_manifest(doc):
+            sections, not_translated = mappers.map_dbt_manifest_whole(doc)
+            if not sections:
+                raise HTTPException(status_code=422, detail="the manifest carries no "
+                                    "described models or sources, and no metrics")
+        elif bi_models.looks_like_powerbi_model(doc):
+            sections, not_translated = bi_models.map_powerbi_model(doc)
+            if not sections:
+                raise HTTPException(status_code=422, detail="the Power BI model carries no measures or relationships")
+        else:
+            raise HTTPException(status_code=422, detail="the JSON is neither a dbt manifest (nodes/sources + "
+                                "metadata) nor a Power BI model (model.tables)")
+    elif lower.endswith(".zip"):
+        # A whole project: a LookML project's views and models, a Power BI project's tables, or a dbt manifest.
+        from pramanyx.intake import bi_models
+        try:
+            sections, not_translated = bi_models.map_project_zip(data)
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e))
         if not sections:
-            raise HTTPException(status_code=422, detail="the manifest carries no "
-                                "described models or sources")
+            raise HTTPException(status_code=422, detail="the project carries no measures, described fields or joins")
+    elif lower.endswith((".lkml", ".tmdl")):
+        from pramanyx.intake import bi_models
+        text = data.decode("utf-8-sig", errors="replace")
+        try:
+            sections, not_translated = (bi_models.map_lookml(text) if lower.endswith(".lkml")
+                                        else bi_models.map_tmdl(text))
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+        if not sections:
+            raise HTTPException(status_code=422, detail=(
+                "the LookML carries no measures, described fields or joins" if lower.endswith(".lkml")
+                else "the TMDL carries no measures or relationships"))
     else:
         try:
             headers, rows = mappers.read_tabular(name, data)
@@ -196,7 +228,7 @@ async def upload_file(request: Request,
               "source_file": name, "sections": sections}
     out = _stage(bundle, connection_id, source=src, actor=caller(),
                  mapper_refused=mapper_refused)
-    out["mapped"] = {"file": name, "ignored_headers": ignored}
+    out["mapped"] = {"file": name, "ignored_headers": ignored, "not_translated": not_translated}
     return out
 
 

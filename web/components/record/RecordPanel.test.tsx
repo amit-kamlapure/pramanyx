@@ -7,7 +7,7 @@ import type { Claim, ClaimCrossLink } from "@/lib/record";
 
 import { RecordPanel } from "./RecordPanel";
 
-const record = vi.hoisted(() => ({ getClaim: vi.fn(), getClaimVersions: vi.fn(), getClaimCrossLinks: vi.fn() }));
+const record = vi.hoisted(() => ({ getClaim: vi.fn(), getClaimVersions: vi.fn(), getClaimCrossLinks: vi.fn(), confirmClaim: vi.fn() }));
 vi.mock("@/lib/record", async (original) => ({ ...(await original<typeof import("@/lib/record")>()), ...record }));
 
 const CONNECTIONS = [{ id: "shop", name: "The shop" }, { id: "crm", name: "The CRM" }] as unknown as Connection[];
@@ -25,8 +25,8 @@ const LINK: ClaimCrossLink = {
   far_claims: [{ id: "far-1", text: "Enterprise accounts renew at 91%", kind: "finding", tier: "measured", status: "Final", as_of: "2026-10-01" }],
 };
 
-const show = (onInspectClaim = vi.fn()) => {
-  render(<RecordPanel connections={CONNECTIONS} selectedConn="shop" openId="c1" onOpen={() => undefined}
+const show = (onInspectClaim = vi.fn(), onOpen: (id: string | null) => void = () => undefined) => {
+  render(<RecordPanel connections={CONNECTIONS} selectedConn="shop" openId="c1" onOpen={onOpen}
     onOpenDecision={() => undefined} onInspectClaim={onInspectClaim} onOpenRun={() => undefined}
     onOpenReceipt={() => undefined} onOpenDefinitions={() => undefined} onOpenMap={() => undefined} />);
   return onInspectClaim;
@@ -68,5 +68,30 @@ describe("a claim's page cites links into other connections", () => {
     record.getClaimCrossLinks.mockRejectedValue(new Error("The organisation's ontology could not be read (500)"));
     show();
     expect(await screen.findByText(/could not be read just now, so no link is listed/)).toBeInTheDocument();
+  });
+});
+
+describe("a person confirms a measured claim (2026-11-17)", () => {
+  it("offers Confirm on a measured finding and follows the confirmed version", async () => {
+    record.getClaimCrossLinks.mockResolvedValue([]);
+    record.confirmClaim.mockResolvedValue({ ...claim({ tier: "approved", version: 2 }), id: "c2", superseded: "c1" });
+    const opened = vi.fn();
+    show(vi.fn(), opened);
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm" }));
+    expect(record.confirmClaim).toHaveBeenCalledWith("c1");
+    await vi.waitFor(() => expect(opened).toHaveBeenCalledWith("c2"));
+  });
+
+  it("does not offer it on what a person already stands behind, or on what was never measured", async () => {
+    record.getClaimCrossLinks.mockResolvedValue([]);
+    for (const extra of [{ tier: "approved" }, { tier: "said" }, { kind: "hypothesis" }, { state: "withdrawn" }] as Partial<Claim>[]) {
+      record.getClaim.mockResolvedValue(claim(extra));
+      const view = render(<RecordPanel connections={CONNECTIONS} selectedConn="shop" openId="c1" onOpen={() => undefined}
+        onOpenDecision={() => undefined} onOpenRun={() => undefined} onOpenReceipt={() => undefined}
+        onOpenDefinitions={() => undefined} onOpenMap={() => undefined} />);
+      expect((await screen.findAllByText("Orders fell 4% in September")).length).toBeGreaterThan(0);
+      expect(screen.queryByRole("button", { name: "Confirm" })).toBeNull();
+      view.unmount();
+    }
   });
 });

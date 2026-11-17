@@ -2286,6 +2286,11 @@ def _answer_core(
         _dialect_block = _writer_rules(db)
         if _dialect_block:
             prompt = _dialect_block + "\n\n" + prompt
+        # 2026-11-17 — the date, on the person's clock: the quick path was told none, so "yesterday" was whatever the
+        # model guessed and "last month" the data's latest month (`kernel/clock.py`, one definition for the platform).
+        from pramanyx.agent.sql_context import clock_block as _clock_block
+        from pramanyx.agent.sql_context import learned_settle_days as _learned_settle
+        prompt = _clock_block(settle_days=_learned_settle(connection_id)) + "\n\n" + prompt
         # User-agent brief (flag `agents.user_defined`) — the active agent's pinned
         # instructions lead the prompt, rules_block-style. Empty (inert) when no
         # agent is active.
@@ -5316,6 +5321,7 @@ def _refuse_unless_answerable(request: "Request | None", conn_id: str) -> None:
 
 @router.post("/chat")
 async def chat_endpoint(req: ChatRequest, request: Request):
+    _thread_door(req.session_id or "")
     conn_id = _resolve_conn(req)
     _refuse_unless_answerable(request, conn_id)
     # The legacy door gets the same session log as /ask — it has its own endpoint
@@ -5908,7 +5914,7 @@ async def _stream_ask(req: "AskRequest", request: Request, conn_id: str) -> Asyn
     if (req.depth == "auto" and not req.escalate and not req.insight_id
             and not req.skip_clarify):
         from pramanyx.agent.clarify import assess_clarification
-        decision = assess_clarification(req.question)
+        decision = assess_clarification(req.question, conn_id)
         if decision.should_ask:
             yield _sse("clarify", decision.to_event())
             yield _sse("done", {})
@@ -6122,6 +6128,7 @@ def build_ask_stream(req: "AskRequest", request: "Request | None") -> AsyncGener
     generator — exactly as the endpoint always did — so those surface as HTTP errors, not as
     mid-stream SSE. ``request`` is threaded only for ``_stream_ask``'s signature parity; nothing
     on the path dereferences it (a caller with no HTTP request may pass ``None``)."""
+    _thread_door(getattr(req, "session_id", "") or "")
     conn_id = _resolve_conn(req)
     agent = _resolve_ask_agent(req)
     if agent is not None:
@@ -6586,16 +6593,20 @@ async def submit_feedback(inv_id: str, req: FeedbackRequest, request: Request):
 
 
 @router.get("/investigations")
-def get_investigations(limit: int = 50, workspace_id: str | None = None):
+def get_investigations(limit: int = 50, workspace_id: str | None = None, mine: bool = False):
     """Recent investigations/chats. When `workspace_id` is given, only those whose
-    connection belongs to that workspace are returned (data-path tenancy)."""
+    connection belongs to that workspace are returned (data-path tenancy). ``mine`` keeps the caller's own questions
+    (2026-11-17: a person's own coworker lists theirs, not everyone's); on an install without sign-in there is one
+    person, and it changes nothing."""
+    from pramanyx.db.history import person_now
     from pramanyx.metastore import accessible_catalog_ids
+    asked_by = person_now() if mine and not _single_person() else ""
     allowed = accessible_catalog_ids(workspace_id)
     if allowed is None:
-        return _as_asked(list_investigations(limit=limit))
+        return _as_asked(list_investigations(limit=limit, asked_by=asked_by))
     # Fetch wider when scoping so a workspace's items aren't truncated by the global
     # newest-first limit before filtering, then trim back to `limit`.
-    rows = list_investigations(limit=max(limit, 200))
+    rows = list_investigations(limit=max(limit, 200), asked_by=asked_by)
     scoped = [r for r in rows if r.get("connection_id") in allowed]
     return _as_asked(scoped[:limit])
 
@@ -6874,12 +6885,102 @@ def reindex_investigations():
     return {"indexed": indexed, "skipped": skipped}
 
 
+# ── group conversations (2026-11-17) ─────────────────────────────────────────────────────────────────────────────
+# The user: "there cannot be shared conversations unless users add other users in it". A thread is its owner's and the
+# people they add (`db/history.py`); every door that lists, reads, asks in, renames or deletes one checks that first.
+# One a person may not see answers "not found", as one that does not exist does — a guess at an id learns nothing.
+
+
+def _single_person() -> bool:
+    from pramanyx.security.authz import require_identity_enabled
+    return not require_identity_enabled()
+
+
+def _thread_door(session_id: str) -> None:
+    """Before a question is asked in a thread: a new thread becomes the asker's; another person's is refused unless
+    they were added to it. Each question is asked as the person asking — the request is theirs."""
+    if not session_id:
+        return
+    from pramanyx.db.history import claim_thread, may_see_thread, person_now, thread_people
+    people = thread_people(session_id)
+    if not people["owner"] and not people["askers"]:
+        claim_thread(session_id, person_now())
+        return
+    if not may_see_thread(session_id, person_now(), single_person=_single_person()):
+        raise HTTPException(status_code=404, detail="Session not found")
+
+
+def _seen_or_404(session_id: str) -> dict:
+    from pramanyx.db.history import may_see_thread, person_now, thread_people
+    if not may_see_thread(session_id, person_now(), single_person=_single_person()):
+        raise HTTPException(status_code=404, detail="Session not found")
+    return thread_people(session_id)
+
+
+def _owner_only(session_id: str, what: str) -> dict:
+    """A thread's owner renames it, deletes it and chooses who is in it; on an install without sign-in, the one
+    person. A member may leave."""
+    from pramanyx.db.history import person_now
+    people = _seen_or_404(session_id)
+    if not _single_person() and people["owner"] and people["owner"] != person_now():
+        raise HTTPException(status_code=403, detail=f"Only {people['owner']}, who began this conversation, {what}.")
+    return people
+
+
 @router.get("/chat-sessions")
 def list_chat_sessions_route(conn_id: Optional[str] = None, limit: int = 30):
-    """Recent chat sessions for the threads rail (CI-6a) — id, opening question as the
-    title, turn count, last activity. Org-scoped in the store, like the turns read."""
-    from pramanyx.db.history import list_chat_sessions
-    return list_chat_sessions(conn_id, limit=limit)
+    """The caller's threads for the threads rail (CI-6a): the ones they began and the ones they were added to — id,
+    title, turns, last activity, and who is in it. Org-scoped in the store, like the turns read."""
+    from pramanyx.db.history import list_chat_sessions, person_now
+    return list_chat_sessions(conn_id, limit=limit, person=person_now(), single_person=_single_person())
+
+
+class ThreadMembersRequest(BaseModel):
+    """The people a thread's owner adds: each by the email they sign in with."""
+    members: list[str] = Field(default_factory=list, max_length=50)
+
+
+@router.get("/chat-sessions/{session_id}/people")
+def thread_people_route(session_id: str):
+    """Who is in a conversation: who began it, who they added, who has asked in it."""
+    from pramanyx.db.history import person_now
+    people = _seen_or_404(session_id)
+    return {**people, "you": person_now(), "single_person": _single_person()}
+
+
+@router.put("/chat-sessions/{session_id}/members")
+def set_thread_members_route(session_id: str, req: ThreadMembersRequest, request: Request):
+    """Add people to a conversation, or take them out — its owner's choice, never an agent's. Each must be one of the
+    organisation's people when the organisation has a people directory."""
+    from pramanyx.rbac.agent_gate import is_agent_request
+    if is_agent_request(request):
+        raise HTTPException(status_code=403, detail="A person adds people to a conversation; an agent does not.")
+    _owner_only(session_id, "chooses who is in it")
+    import re as _re
+
+    from pramanyx.db.history import set_thread_members
+    from pramanyx.org.context import current_org_id
+    from pramanyx.rbac.directory import people as directory
+    wanted = [m.strip().lower() for m in req.members if m.strip()]
+    bad = [m for m in wanted if not _re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", m)]
+    if bad:
+        raise HTTPException(status_code=422, detail=f"Not a person's sign-in email: {', '.join(bad[:5])}")
+    known = {p.email.lower() for p in directory(current_org_id() or "default")}
+    unknown = [m for m in wanted if known and m not in known]
+    if unknown:
+        raise HTTPException(status_code=422, detail=f"Not one of your organisation's people: {', '.join(unknown[:5])}")
+    return {"session_id": session_id, "members": set_thread_members(session_id, wanted)}
+
+
+@router.delete("/chat-sessions/{session_id}/members/me", status_code=204)
+def leave_thread_route(session_id: str):
+    """A member leaves a conversation they were added to."""
+    from pramanyx.db.history import person_now, set_thread_members
+    people = _seen_or_404(session_id)
+    me = person_now()
+    if me not in people["members"]:
+        raise HTTPException(status_code=409, detail="You were not added to this conversation; its owner deletes it.")
+    set_thread_members(session_id, [m for m in people["members"] if m != me])
 
 
 class RenameChatSessionRequest(BaseModel):
@@ -6894,6 +6995,7 @@ def rename_chat_session_route(session_id: str, req: RenameChatSessionRequest):
     question — a good default, a bad permanent name. Org-scoped in the store, like
     every other read and write keyed by a session id."""
     from pramanyx.db.history import rename_chat_session
+    _owner_only(session_id, "renames it")
     if not rename_chat_session(session_id, req.title):
         raise HTTPException(status_code=404, detail="Session not found")
     return {"session_id": session_id, "title": req.title.strip()[:200]}
@@ -6909,6 +7011,7 @@ def delete_chat_session_route(session_id: str):
     future analysis from the RAG index would be the same lie CA-0 went after.
     """
     from pramanyx.db.purge import purge_chat_session_artifacts
+    _owner_only(session_id, "deletes it")
     counts = purge_chat_session_artifacts(session_id)
     # FL-6 — a deep-only thread deletes by UNFILING its runs (they survive for
     # Fleet/agent history); that is a successful delete of the THREAD, so it
@@ -6919,6 +7022,7 @@ def delete_chat_session_route(session_id: str):
 
 @router.get("/chat-sessions/{session_id}/turns")
 def get_chat_session_turns(session_id: str):
+    _seen_or_404(session_id)
     turns = get_session_turns(session_id)
     if not turns:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -6976,7 +7080,7 @@ def _turn_to_ui_messages(t: dict) -> list[dict]:
         return [
             {"id": f"{t['id']}-q", "role": "user",
              "parts": [{"type": "text", "text": t.get("question") or ""}],
-             "metadata": {"mode": "investigate"}},
+             "metadata": {"mode": "investigate", "asked_by": t.get("asked_by") or ""}},
             {"id": t["id"], "role": "assistant", "parts": parts},
         ]
 
@@ -7025,8 +7129,10 @@ def _turn_to_ui_messages(t: dict) -> list[dict]:
         # if this turn predates receipts.
         parts.append({"type": "data-done", "data": {"has_receipt": True, "inv_id": t["id"]}})
     return [
+        # Who asked it (group conversations, 2026-11-17): '' for a turn from before that was kept.
         {"id": f"{t['id']}-q", "role": "user",
-         "parts": [{"type": "text", "text": t.get("question") or ""}]},
+         "parts": [{"type": "text", "text": t.get("question") or ""}],
+         "metadata": {"asked_by": t.get("asked_by") or ""}},
         {"id": t["id"], "role": "assistant", "parts": parts},
     ]
 
@@ -7035,7 +7141,9 @@ def _turn_to_ui_messages(t: dict) -> list[dict]:
 def get_chat_session_messages(session_id: str):
     """The thread as AI-SDK ``UIMessage[]`` (CA-1) — thread selection on the web
     is ``setMessages`` over this, the same shape the live stream accumulates.
-    Org-scoped in the store, like the turns read."""
+    Org-scoped in the store, like the turns read. In a conversation more than one person is in, each question says
+    who asked it."""
+    _seen_or_404(session_id)
     turns = get_session_turns(session_id)
     if not turns:
         raise HTTPException(status_code=404, detail="Session not found")

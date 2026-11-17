@@ -315,9 +315,11 @@ async def upload_document(file: UploadFile = File(...),
 
     title = _Path(filename).stem.replace("_", " ").replace("-", " ").title()
     try:
+        from pramanyx.knowledge.access import upload_access, uploader
         from pramanyx.knowledge.indexer import index_text
+        # Its uploader's, private until they share it (2026-11-17); it was the whole organisation's, owned by no one.
         entry = index_text(text=markdown, title=title, source=filename,
-                           settings=settings)
+                           settings=settings, access=upload_access(uploader()))
     except Exception:
         logger.exception("Document indexing failed")
         raise HTTPException(status_code=500, detail="Indexing failed")
@@ -644,6 +646,38 @@ def delete_document_endpoint(doc_id: str):
     return {"ok": True, "doc_id": doc_id}
 
 
+class DocumentSharing(BaseModel):
+    sharing: str                    # "org" — the whole organisation — or "chosen": the people and groups named
+    people: list[str] = []
+    groups: list[str] = []
+
+
+@router.put("/documents/{doc_id}/access")
+def share_document(doc_id: str, body: DocumentSharing, request: Request = None):
+    """An uploaded document's OWNER chooses who may read it (2026-11-17: an upload is private until its owner shares
+    it). Nobody else may, an agent least of all — a call carrying the agent's mark is refused, whoever it acts for."""
+    from pramanyx.knowledge.access import access_of, shared_access, uploader
+    from pramanyx.knowledge.indexer import get_document, set_document_access
+    if request is not None:
+        from pramanyx.rbac.agent_gate import is_agent_request
+        if is_agent_request(request):
+            raise HTTPException(status_code=403, detail="sharing a document is its owner's own choice; an agent cannot make it")
+    entry = get_document(doc_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+    owner = str(access_of(entry).get("owner") or "")
+    who = uploader()
+    if not owner or owner.lower() != who.lower():
+        raise HTTPException(status_code=403, detail=(f"only its owner, {owner}, shares this document" if owner
+                                                     else "this document has no owner to share it; it is the organisation's"))
+    try:
+        access = shared_access(owner, body.sharing, body.people, body.groups)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    row = set_document_access(doc_id, access)
+    return {"doc_id": doc_id, "access": (row or {}).get("access", access)}
+
+
 @router.post("/documents/search")
 def search_documents_endpoint(body: dict, request: Request):
     """Search the corpus the caller may read (`search_documents`): with ``connection_id`` in the
@@ -873,6 +907,29 @@ async def create_knowledge_source(body: KnowledgeSourceIn):
 # same bodies in the API process, under the request's organisation, user and RBAC — and this
 # router's `connection_owner_guard` — so the MCP client reads the same data with the same
 # clearances as a person at the web app.
+
+@router.get("/knowledge/{connection_id}/learned")
+def read_learned(connection_id: str, about: str = "", area: str = "", limit: int = Query(50, ge=1, le=200)):
+    """What the platform has learned about a connection, in one shape (the ontology study, 2026-11-17): what each item
+    says, where it came from, who wrote it, its area, how it stands, when, what it rests on — confirmed and approved
+    first, then measured, then mined; held to the reader's clearance, what was withheld counted. Use is not counted
+    yet, and says so."""
+    from pramanyx.knowledge.learned import area_filter, learned_items
+    out = learned_items(connection_id, about=about, limit=200)
+    items = area_filter(out["items"], area or None)[:limit]
+    return {**out, "items": items}
+
+
+@router.get("/knowledge/{connection_id}/review")
+def read_review(connection_id: str, area: str = "", limit: int = Query(200, ge=1, le=500)):
+    """What waits on a person for this connection's knowledge, in one list (Phase 3, 2026-11-17): gaps (questions that
+    framed on no definition, questions no run answered), candidates (unconfirmed findings and usage, Definition drafts
+    and suggested edits, proposed synonyms, an import's candidates, answers marked wrong or unhelpful) and conflicts (a
+    word meaning two things across areas, a question answered two ways). Busiest first; each row names its area's
+    owners and the page it is decided on. A view over the stores that hold them — a source not read is named."""
+    from pramanyx.knowledge.review import review
+    return review(connection_id, area=area, limit=limit)
+
 
 @router.get("/knowledge/{connection_id}/graph/search")
 def knowledge_search_graph(connection_id: str, q: str = Query(..., min_length=1),

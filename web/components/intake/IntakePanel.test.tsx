@@ -22,6 +22,7 @@ const listIntakeBundles = vi.fn();
 const getIntakePlan = vi.fn();
 const resolveIntakeBundle = vi.fn();
 const getConnections = vi.fn();
+const uploadIntakeFile = vi.fn();
 
 vi.mock("@/lib/api", async importOriginal => {
   const actual = await importOriginal<Record<string, unknown>>();
@@ -35,7 +36,7 @@ vi.mock("@/lib/api", async importOriginal => {
     exportIntakeBundle: vi.fn(),
     mineIntakeUsage: vi.fn(),
     uploadIntakeBundleYaml: vi.fn(),
-    uploadIntakeFile: vi.fn(),
+    uploadIntakeFile: (...a: unknown[]) => uploadIntakeFile(...a),
     uploadIntakeProse: vi.fn(),
     uploadIntakeSheet: vi.fn(),
   };
@@ -146,4 +147,22 @@ describe("IntakePanel", () => {
       ic_new: { name: "Gross Margin", sql: "SUM(profit)/NULLIF(SUM(sales),0)" },
     });
   });
+
+  // Phase 3 (2026-11-17): a BI tool's formula the lane does not translate came in as a Definition — said, not refused.
+  it("says which formulas came in as Definitions, and does not call them refused", async () => {
+    uploadIntakeFile.mockResolvedValue({
+      ...plan, duplicate: false, refused: [],
+      mapped: { file: "model.bim", ignored_headers: [],
+                not_translated: ["Power BI's measures are DAX, which is not translated into SQL (2)."] },
+    });
+    render(<IntakePanel connId="c1" />);
+    const input = await screen.findByTestId("intake-file-input");
+    expect(input.getAttribute("accept")).toContain(".lkml");
+    fireEvent.change(input, { target: { files: [new File(["{}"], "model.bim")] } });
+    const note = await screen.findByTestId("intake-not-translated");
+    expect(note.textContent).toContain("One formula was not turned into SQL");
+    expect(note.textContent).toContain("DAX");
+    expect(screen.queryByText(/refused at the door/)).toBeNull();
+  });
 });
+

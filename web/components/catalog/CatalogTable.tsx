@@ -29,6 +29,9 @@ import { toast } from "@/components/ui/toast";
 import { useOpenInQuery } from "@/lib/openInQuery";
 import { tableStarter } from "@/lib/query/workbench";
 import { GlossaryPanel } from "@/components/catalog/GlossaryPanel";
+import { CertificationMark } from "@/components/govern/CertificationMark";
+import { AreaPlacement } from "@/components/semantic/AreaControls";
+import { readAreas, type AreasRead } from "@/lib/areas";
 import { programLine, TableProgram } from "@/components/DatasetProgram";
 import { Chevron } from "@/components/icons/catalog";
 import { ColumnTypeIcon } from "@/components/icons/columnType";
@@ -225,6 +228,9 @@ export function CatalogTable({ connId, catalogName, schemaName, table, view, onA
     } },
   ];
 
+  // The areas of the business this table can be placed in, and where a person placed it (2026-11-17).
+  const [areas, setAreas] = useState<AreasRead | null>(null);
+  useEffect(() => { readAreas(connId, schemaName).then(setAreas).catch(() => setAreas(null)); }, [connId, schemaName]);
   const readers = metrics ? metricsOf(approvedMetrics(metrics, schemaName), table.name) : null;
   const links = useMemo(() => linksOf(Object.values(graph?.relationships ?? {}), table.name, entity), [graph, table.name, entity]);
   const TABS: { id: Tab; label: string }[] = [
@@ -246,6 +252,13 @@ export function CatalogTable({ connId, catalogName, schemaName, table, view, onA
           {objectName
             ? <Chip title={`The business object read from ${table.name}`} testId="catalog-table-object">{objectName}</Chip>
             : graph !== undefined && <Chip title="No business object is read from this table">Not mapped</Chip>}
+          {/* the organisation's word on the table — the planner reads it under the table's name (2026-11-17) */}
+          <CertificationMark target={{ kind: "table", ref: bare(table.name), connectionId: connId, schema: schemaName }} />
+          {areas && areas.areas.length > 0 && (
+            <AreaPlacement connId={connId} schema={schemaName} table={bare(table.name)} areas={areas.areas}
+              placed={areas.placed.tables[bare(table.name).toLowerCase()] ?? null}
+              onPlaced={() => { readAreas(connId, schemaName).then(setAreas).catch(() => setAreas(null)); }} />
+          )}
         </>}
         actions={<>
           {openInSql && (

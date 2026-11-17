@@ -275,3 +275,35 @@ def test_a_table_node_with_no_source_tables_is_kept(monkeypatch):
     out_nodes, _, notice = RB.trim_graph_by_clearance(
         [node], [], connection_id="c", schema_name="s")
     assert out_nodes == [node] and notice == ""
+
+
+# ── the two outside reads that handed findings and queries out untrimmed (2026-11-17) ─────────────────────────────
+
+def _block_salaries(monkeypatch):
+    blocked = {securable_for_table("c1", "", "salaries")}
+    monkeypatch.setattr("pramanyx.govern.tags.check", lambda securable, held, bypass=False: _checker(blocked)(securable, held))
+
+
+def test_the_findings_read_withholds_a_finding_over_a_restricted_table_and_says_so(monkeypatch):
+    from pramanyx.routers import exploration as X
+    _block_salaries(monkeypatch)
+    state = {"phase": "complete", "insights": [
+        {"id": "a", "finding": "Pay rose 4%", "sql": "SELECT AVG(amount) FROM salaries"},
+        {"id": "b", "finding": "Orders fell 2%", "signature": {"tables": ["orders"]}, "sql": "SELECT COUNT(*) FROM orders"}]}
+    monkeypatch.setattr(X, "_load_state", lambda conn, schema: state)
+    monkeypatch.setattr("pramanyx.routers._shared.canonical_schema", lambda conn, schema: schema)
+    monkeypatch.setattr(X, "_needs_filter", lambda conn, schema: False)
+    out = X.get_exploration_findings("c1")
+    assert [f["id"] for f in out["findings"]] == ["b"] and out["findings"] is out["insights"]
+    assert out["withheld"]["withheld"] == 1 and "salaries" not in out["withheld"]["notice"]
+
+
+def test_the_trusted_queries_read_withholds_a_query_over_a_restricted_table(monkeypatch):
+    from pramanyx.mcp import knowledge_tools as KT
+    _block_salaries(monkeypatch)
+    rows = [SimpleNamespace(question="average pay", sql="SELECT AVG(amount) FROM salaries", tags=["human_pinned"]),
+            SimpleNamespace(question="orders", sql="SELECT COUNT(*) FROM orders", tags=[])]
+    monkeypatch.setattr("pramanyx.semantic.trusted_queries.list_trusted", lambda conn: rows)
+    out = KT.list_trusted_queries("c1")
+    assert [q["question"] for q in out["queries"]] == ["orders"] and out["count"] == 1
+    assert out["withheld"]["withheld"] == 1

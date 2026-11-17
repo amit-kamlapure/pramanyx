@@ -73,6 +73,9 @@ def _period_lines(period: dict[str, Any]) -> list[str]:
         line += f"; read as of {as_of}"
     if answer_of_block(period).live:
         line += f"; {answer_of_block(period).clause()}"
+    elif period.get("no_data"):
+        # 2026-11-17 — the period is the one asked (`kernel/clock.py`): data that ended before it holds nothing for it.
+        line += f"; the data ended on {period.get('data_through')}, before it, so there is no data for this period"
     elif period.get("data_ended") and period.get("still_moving"):
         line += f"; no data has arrived since {period.get('data_through')}, and its tables had not settled when it stopped"
     elif period.get("data_ended"):

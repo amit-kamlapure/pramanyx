@@ -14,6 +14,8 @@ attribute them without threading a return value through the string-only inject s
 """
 from __future__ import annotations
 
+from typing import Optional
+
 import contextvars
 from dataclasses import dataclass, field
 
@@ -111,9 +113,17 @@ class _Order:
     first, and the newer should lead. Nothing here reads a join's overlap to decide what was MEANT
     (J4) — a join is ordered by whether both its ends were asked about, then by how it is known."""
 
-    def __init__(self, question: str, seeds: list):
+    def __init__(self, question: str, seeds: list, marks: Optional[dict] = None):
         self.question = question
         self.seeds = {n.id for n, _ in seeds}
+        #: The organisation's word on each table (2026-11-17): certified leads, deprecated trails — by bare name.
+        self.marks = marks or {}
+
+    def vouched(self, node) -> int:
+        """0 for a table the organisation certified, 1 for one nobody marked, 2 for one it deprecated."""
+        names = [str(t).rsplit(".", 1)[-1].lower() for t in ((node.data or {}).get("source_tables") or [node.label])]
+        status = {(self.marks.get(n) or {}).get("status") for n in names}
+        return 2 if "deprecated" in status else 0 if "certified" in status else 1
 
     def matched(self, node_id: str) -> int:
         """0 for a node the search matched to the question, 1 for a neighbour of one."""
@@ -132,8 +142,12 @@ class _Order:
 
     def named(self, node) -> tuple:
         """A table, a term or a declaration: matched before neighbour, then by how much of the question it covers,
-        then by name."""
-        return (self.matched(node.id), -self.covers(node), node.label, node.id)
+        then by name. A term a person published before one only drafted; a table the organisation certified before one
+        nobody marked, and a deprecated one last (2026-11-17: one authority order on the answer path)."""
+        data = node.data or {}
+        published = 0 if (not data.get("definition") or data.get("tier") == "approved") else 1
+        return (self.matched(node.id), self.vouched(node) if node.kind == "table" else 1, published,
+                -self.covers(node), node.label, node.id)
 
     def join(self, edge) -> tuple:
         from pramanyx.ontology.graph_warrant import WARRANT_ORDER, warrant_of_edge
@@ -186,7 +200,14 @@ def _build(question: str, connection_id: str, org_id: str, top_k: int,
     by_id = {n.id: n for n in nodes}
     cited: list[str] = []
 
-    order = _Order(question, seeds)
+    marks: dict = {}
+    try:
+        from pramanyx.govern.certification import tables_of as _certified_tables
+        marks = _certified_tables(connection_id)
+    except Exception as exc:  # noqa: BLE001 — unread, the tables are ordered as before
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "which tables are certified could not be read", counter="graph_prior.certification")
+    order = _Order(question, seeds, marks)
     tables = sorted((n for n in nodes if n.kind == "table"), key=order.named)
     findings = sorted((n for n in nodes if n.kind == "finding"), key=order.finding)
     terms = sorted((n for n in nodes if n.kind == "glossary_term"), key=order.named)
@@ -201,7 +222,10 @@ def _build(question: str, connection_id: str, org_id: str, top_k: int,
     ]
 
     if tables:
-        names = ", ".join(t.label for t in tables[:8])
+        def _named(t) -> str:
+            v = order.vouched(t)
+            return t.label + (" (certified)" if v == 0 else " (deprecated — do not use unless the question names it)" if v == 2 else "")
+        names = ", ".join(_named(t) for t in tables[:8])
         lines.append(f"\nRelevant entities: {names}")
         cited += [t.id for t in tables[:8]]
 
@@ -262,7 +286,13 @@ def _build(question: str, connection_id: str, org_id: str, top_k: int,
         for t in terms[:_MAX_TERMS]:
             if t.id in seen or not t.summary:
                 continue
-            lines.append(f'  • "{t.label}" = {_clip(t.summary)}  [{t.id}]')
+            # A Definition says whose word it is (2026-11-17: an owner's approval changed nothing the planner saw).
+            data = t.data if isinstance(getattr(t, "data", None), dict) else {}
+            standing = ""
+            if data.get("definition"):
+                from pramanyx.semantic.connection_kb import standing_words
+                standing = f"  ({standing_words(data)})"
+            lines.append(f'  • "{t.label}" = {_clip(t.summary)}  [{t.id}]{standing}')
             cited.append(t.id)
 
     if declarations:

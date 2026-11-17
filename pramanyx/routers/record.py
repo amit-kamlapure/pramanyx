@@ -11,7 +11,7 @@ from __future__ import annotations
 import datetime as _dt
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from pramanyx.licensing import Capability, gate
@@ -165,77 +165,186 @@ def book_record_said(req: SaidRequest, principal=Depends(get_principal)) -> dict
 
 # ── Definitions: what a business word means, written by a person, approved by one ─────────────────────────────
 
+class DefinitionLink(BaseModel):
+    kind: str = Field(min_length=1, max_length=20)          # table · metric · definition · dashboard · document · person · url
+    ref: str = Field(min_length=1, max_length=300)
+    label: str = Field("", max_length=120)
+
+
 class DefinitionRequest(BaseModel):
     connection_id: str = Field(min_length=1, max_length=80)
     term: str = Field(min_length=1, max_length=120)
     text: str = Field(min_length=1, max_length=4000)
-    aliases: list[str] = Field(default_factory=list, max_length=20)
+    area: str = Field("", max_length=120)
+    aliases: Optional[list[str]] = Field(None, max_length=50)
+    links: Optional[list[DefinitionLink]] = Field(None, max_length=30)
+    why: str = Field("", max_length=400)                    # said with a suggestion, when the change is one
 
 
 class DefinitionApproval(BaseModel):
     connection_id: str = Field(min_length=1, max_length=80)
     term: str = Field(min_length=1, max_length=120)
+    area: str = Field("", max_length=120)
+
+
+class SuggestionDecision(DefinitionApproval):
+    suggestion_id: str = Field(min_length=1, max_length=40)
+    accept: bool
+    why: str = Field("", max_length=400)
 
 
 def _definition_view(c: C.Claim) -> dict:
-    return {**_claim_view(c), "term": c.extra.get("term", ""), "aliases": c.extra.get("aliases") or [],
-            "approved_by": c.extra.get("approved_by", ""), "approved_on": c.extra.get("approved_on", ""),
+    x = c.extra or {}
+    return {**_claim_view(c), "term": x.get("term", ""), "area": x.get("area", ""), "aliases": x.get("aliases") or [],
+            "links": x.get("links") or [], "state": "published" if c.tier == "approved" else "draft",
+            "approved_by": x.get("approved_by", ""), "approved_on": x.get("approved_on", ""),
+            "drafted_by_agent": bool(x.get("drafted_by_agent")) and c.tier != "approved",
+            "suggestions": x.get("suggestions") or [], "declined": (x.get("declined") or [])[-5:],
+            "accepted": (x.get("accepted") or [])[-5:],
             "versions": [{"id": v.id, "text": v.statement.text, "tier": v.tier, "author": v.author,
                           "recorded_at": v.recorded_at} for v in C.versions(c.key, limit=20)]}
 
 
+def _persons_own(request, what: str) -> None:
+    """A publish, an edit, a decision on a suggestion: a person's own click. A call an agent makes is refused."""
+    if request is not None:
+        from pramanyx.rbac.agent_gate import is_agent_request
+        if is_agent_request(request):
+            raise HTTPException(status_code=403, detail=f"{what} is a person's own act; an agent cannot do it")
+
+
 @router.get("/record/definitions")
-def list_definitions(connection_id: str, term: Optional[str] = None) -> list[dict]:
-    """A connection's Definitions, or the one for ``term``. Read by the app's Definition page and by an answer that
-    leaned on one."""
-    from pramanyx.record.writers import definition_key, definitions
+def list_definitions(connection_id: str, term: Optional[str] = None, area: Optional[str] = None) -> list[dict]:
+    """A connection's Definitions, or the ones for ``term`` — one per area it is defined in, or the one in ``area``.
+    Read by the app's Definition page and by an answer that leaned on one."""
+    from pramanyx.record.writers import definition_term, definitions, definitions_of
     if not _visible(connection_id):
         raise HTTPException(status_code=404, detail="No such connection")
     if term:
-        one = C.latest(definition_key(connection_id, term))
-        return [_definition_view(one)] if one is not None and one.state != "withdrawn" else []
+        rows = definitions_of(connection_id, term)
+        if area is not None:
+            rows = [c for c in rows if definition_term(c.extra.get("area", "")) == definition_term(area)]
+        return [_definition_view(c) for c in rows]
     return [_definition_view(c) for c in definitions(connection_id)]
 
 
 @router.post("/record/definitions", status_code=201, dependencies=[gate(Capability.SEMANTIC_EDIT)])
-def write_record_definition(req: DefinitionRequest, principal=Depends(get_principal)) -> dict:
-    """A person writes what a business word means on a connection. Theirs, at tier ``declared``; writing it again
-    keeps the earlier wording beneath it, and a new wording waits for approval again."""
-    from pramanyx.record.writers import write_definition
+def write_record_definition(req: DefinitionRequest, principal=Depends(get_principal), request: Request = None) -> dict:
+    """A person writes what a business word means on a connection, in a area. A word nobody has defined there is
+    their draft; their own definition they change directly; anyone else's change is filed as a suggested edit for its
+    owner (the ontology study, 2026-11-17), and the response says so (``suggested``)."""
+    from pramanyx.record.writers import NotTheOwner, definition_key, suggest_definition_edit, write_definition
     if not _visible(req.connection_id):
         raise HTTPException(status_code=404, detail="No such connection")
+    _persons_own(request, "writing a definition")
+    from pramanyx.semantic.areas import unknown_area
+    if (why_not := unknown_area(req.connection_id, req.area)):
+        raise HTTPException(status_code=422, detail=why_not)
     who = _who(principal)
     if not who:
         raise HTTPException(status_code=422, detail="nobody is signed in to this request — a definition is a person's")
+    links = [link.model_dump() for link in req.links] if req.links is not None else None
+    suggested = None
     try:
-        cid = write_definition(connection_id=req.connection_id, term=req.term, text=req.text, by=who,
-                               aliases=req.aliases)
+        try:
+            cid = write_definition(connection_id=req.connection_id, term=req.term, text=req.text, by=who,
+                                   aliases=req.aliases, area=req.area, links=links)
+        except NotTheOwner:
+            suggested = suggest_definition_edit(connection_id=req.connection_id, term=req.term, area=req.area,
+                                                by=who, text=req.text, aliases=req.aliases, links=links, why=req.why)
+            cid = C.latest(definition_key(req.connection_id, req.term, req.area)).id
     except (ValueError, C.ClaimRefused) as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     _refresh_definitions(req.connection_id)
-    return _definition_view(C.get(cid))
+    return {**_definition_view(C.get(cid)), "suggested": suggested}
 
 
-@router.post("/record/definitions/approve", dependencies=[gate(Capability.SEMANTIC_EDIT)])
-def approve_record_definition(req: DefinitionApproval, principal=Depends(get_principal)) -> dict:
-    """Its owner approves a definition as written; anyone else is refused, and told whose it is."""
-    from pramanyx.record.writers import approve_definition, definition_key
+class DraftForRequest(BaseModel):
+    connection_id: str = Field(min_length=1, max_length=80)
+    term: str = Field(min_length=1, max_length=120)
+    text: str = Field(min_length=1, max_length=4000)
+    area: str = Field("", max_length=120)
+    aliases: Optional[list[str]] = Field(None, max_length=50)
+    links: Optional[list[DefinitionLink]] = Field(None, max_length=30)
+    why: str = Field("", max_length=400)
+
+
+@router.post("/record/definitions/draft", status_code=201)
+def draft_record_definition(req: DraftForRequest, principal=Depends(get_principal)) -> dict:
+    """An agent drafts a definition FOR the person it acts for — the one definition door an agent may use (2026-11-17).
+    Nothing it writes is a person's word: a new word is a draft only said, owned by that person, until they publish it;
+    a word already defined becomes a suggested edit for its owner, marked as the agent's. With nobody to act for it is
+    refused."""
+    from pramanyx.record.writers import draft_definition_for
+    from pramanyx.semantic.areas import unknown_area
     if not _visible(req.connection_id):
         raise HTTPException(status_code=404, detail="No such connection")
+    if (why_not := unknown_area(req.connection_id, req.area)):
+        raise HTTPException(status_code=422, detail=why_not)
+    person = _who(principal)
+    if not person or person == "unidentified":
+        raise HTTPException(status_code=422, detail="a definition is drafted for a person — none is named on this request")
+    try:
+        made = draft_definition_for(connection_id=req.connection_id, term=req.term, text=req.text, person=person,
+                                    area=req.area, aliases=req.aliases,
+                                    links=[link.model_dump() for link in req.links] if req.links is not None else None,
+                                    why=req.why)
+    except (ValueError, C.ClaimRefused) as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    _refresh_definitions(req.connection_id)
+    from pramanyx.record.writers import definition_key
+    now = C.latest(definition_key(req.connection_id, req.term, req.area))
+    return {**_definition_view(now), "made": made["made"], "suggested": made.get("suggestion"),
+            "publish_at": f"/definitions/{req.term}?conn={req.connection_id}" + (f"&area={req.area}" if req.area else "")}
+
+
+def _owners_act(fn, req, principal, request, what: str):
+    from pramanyx.record.writers import NotTheOwner, definition_key
+    if not _visible(req.connection_id):
+        raise HTTPException(status_code=404, detail="No such connection")
+    _persons_own(request, what)
     who = _who(principal)
     if not who:
-        raise HTTPException(status_code=422, detail="nobody is signed in to this request — an approval is a person's")
-    current = C.latest(definition_key(req.connection_id, req.term))
-    if current is None:
+        raise HTTPException(status_code=422, detail=f"nobody is signed in to this request — {what} is a person's")
+    current = C.latest(definition_key(req.connection_id, req.term, req.area))
+    if current is None or current.state == "withdrawn":
         raise HTTPException(status_code=404, detail="No such definition")
-    from pramanyx.record.writers import NotTheOwner
     try:
-        cid = approve_definition(connection_id=req.connection_id, term=req.term, by=who)
+        cid = fn(who)
     except NotTheOwner as exc:
-        raise HTTPException(status_code=403, detail=f"This definition is not yours to approve: {exc}.")
+        raise HTTPException(status_code=403, detail=f"This definition is not yours: {exc}.")
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
     if cid:
         _refresh_definitions(req.connection_id)
     return _definition_view(C.get(cid) if cid else current)
+
+
+@router.post("/record/definitions/approve", dependencies=[gate(Capability.SEMANTIC_EDIT)])
+def approve_record_definition(req: DefinitionApproval, principal=Depends(get_principal), request: Request = None) -> dict:
+    """Its owner publishes a definition as written; anyone else is refused, and told whose it is."""
+    from pramanyx.record.writers import approve_definition
+    return _owners_act(lambda who: approve_definition(connection_id=req.connection_id, term=req.term, by=who,
+                                                      area=req.area), req, principal, request, "publishing a definition")
+
+
+@router.post("/record/definitions/unpublish", dependencies=[gate(Capability.SEMANTIC_EDIT)])
+def unpublish_record_definition(req: DefinitionApproval, principal=Depends(get_principal), request: Request = None) -> dict:
+    """Its owner takes a published definition back to a draft."""
+    from pramanyx.record.writers import unpublish_definition
+    return _owners_act(lambda who: unpublish_definition(connection_id=req.connection_id, term=req.term, by=who,
+                                                        area=req.area), req, principal, request, "unpublishing a definition")
+
+
+@router.post("/record/definitions/suggestions/decide", dependencies=[gate(Capability.SEMANTIC_EDIT)])
+def decide_record_definition_suggestion(req: SuggestionDecision, principal=Depends(get_principal),
+                                        request: Request = None) -> dict:
+    """Its owner accepts or declines a suggested edit."""
+    from pramanyx.record.writers import decide_definition_suggestion
+    return _owners_act(lambda who: decide_definition_suggestion(connection_id=req.connection_id, term=req.term,
+                                                                area=req.area, suggestion_id=req.suggestion_id,
+                                                                by=who, accept=req.accept, why=req.why),
+                       req, principal, request, "deciding on a suggested edit")
 
 
 def _refresh_definitions(connection_id: str) -> None:
@@ -279,6 +388,40 @@ def mark_record_claim_wrong(claim_id: str, req: MarkWrongRequest, principal=Depe
         raise HTTPException(status_code=422, detail=str(exc))
     return {**get_record_claim(out["claim_id"]), "superseded": out["superseded"],
             "woke_inquiries": out.get("woke_inquiries", []), "reopened_decisions": out.get("reopened_decisions", [])}
+
+
+class ConfirmRequest(BaseModel):
+    why: str = ""                  # optional: what the person checked
+    by: str = ""                   # ignored: the person signed in confirms it
+
+
+@router.post("/record/claims/{claim_id}/right", status_code=201)
+def confirm_record_claim(claim_id: str, req: ConfirmRequest, principal=Depends(get_principal),
+                         request: Request = None) -> dict:
+    """A person says a measured claim is right: restated at tier ``approved``, their word. From then on an explorer
+    finding is ground an answer may build on (2026-11-17: findings reach an answer only once a person confirmed them).
+    A call an agent makes is refused, whoever it acts for — a confirmation is a person's own click."""
+    if request is not None:
+        from pramanyx.rbac.agent_gate import is_agent_request
+        if is_agent_request(request):
+            raise HTTPException(status_code=403, detail="a confirmation is a person's own click; an agent cannot give one")
+    c = C.get(claim_id)
+    if c is None or not _visible(c.about.key if c.about.kind == "connection" else ""):
+        raise HTTPException(status_code=404, detail="No such claim")
+    try:
+        out = C.confirm(claim_id, by=_who(principal), why=req.why)
+    except C.ClaimRefused as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    if c.about.kind == "connection" and c.about.key:
+        try:
+            from pramanyx.feedback.verdicts import refresh_graphs_behind
+            from pramanyx.org.context import current_org_id
+            refresh_graphs_behind(c.about.key, current_org_id())
+        except Exception as exc:  # noqa: BLE001 — confirmed either way; the graph shows it at its next build
+            from pramanyx.kernel.errors import tolerate
+            tolerate(exc, "the claim is confirmed; the graph shows it at its next build", counter="record.confirm_graph",
+                     conn_id=c.about.key)
+    return {**get_record_claim(out["claim_id"]), "superseded": out["superseded"]}
 
 
 # ── decisions ──────────────────────────────────────────────────────────────────────────────

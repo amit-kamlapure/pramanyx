@@ -262,6 +262,10 @@ def list_trusted_queries(connection_id: str, *, limit: int = 25) -> dict:
                  counter="mcp.trusted_queries")
         return {"available": False, "queries": []}
 
+    # A query over a table the reader's clearance withholds is withheld, as the graph slice withholds it (2026-11-17).
+    from pramanyx.govern.retrieval_trim import tables_of_sql, trim_by_tables
+    trimmed = trim_by_tables(rows, lambda q: tables_of_sql(str(getattr(q, "sql", "") or "")), connection_id=connection_id)
+    rows = trimmed.kept
     out: list[dict[str, Any]] = []
     for q in rows:
         tags = list(getattr(q, "tags", None) or [])
@@ -272,4 +276,5 @@ def list_trusted_queries(connection_id: str, *, limit: int = 25) -> dict:
                         else ("eval_promoted" if tags else "recorded")),
             "tags": tags,
         })
-    return {"available": True, "count": len(out), "queries": out}
+    return {"available": True, "count": len(out), "queries": out,
+            **({"withheld": trimmed.to_dict()} if trimmed.trimmed else {})}

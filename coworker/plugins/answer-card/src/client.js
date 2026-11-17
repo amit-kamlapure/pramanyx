@@ -801,6 +801,10 @@ const DOES = {
   platform_runs: ["Read the platform's runs", []],
   platform_traces: ["Read the platform's traces", []],
   platform_usage: ["Read usage and spend", []],
+  get_definitions: ["Read what the words mean", ["term"]],
+  read_learned: ["Read what is already learned", ["about"]],
+  bring_in_file: ["Brought in a file", ["name"]],
+  draft_definition: ["Drafted what a word means", ["term"]],
 };
 const PREFIX = "mcp__pramanyx__";
 
@@ -1188,6 +1192,17 @@ function Exhibit({ answer, whole, asked }) {
   const objects = ground ? ground.objects : [];
   const tables = [...objects, ...(answer.tables_used ?? []).filter((t) => !objects.some((o) => same(o, t)))];
   const receipt = answer.receipt?.artifact?.id || "";
+  // What this answer can become (2026-11-17): each the app's own flow, opened beside the conversation from the
+  // answer's question and connection, and finished there by the person — nothing is made by the click alone. Saving
+  // the method as a skill is a deep analysis's, and is not offered for a quick answer.
+  const askedAs = String(answer.question || asked || "").trim();
+  const onConnection = String(answer.connection || "");
+  const becomes = askedAs && onConnection && hasPane() ? [
+    ["Schedule it", pageFor.toSchedule(askedAs, onConnection), "Set this question on a schedule — you choose when, and where the answer goes"],
+    ["Keep on a dashboard", pageFor.toKeep(askedAs, onConnection, answer.investigation_id ? String(answer.investigation_id) : ""),
+     "Keep it on the connection's dashboard, asked again on a rhythm you choose"],
+    ["Make an agent from it", pageFor.toAgent(askedAs, onConnection), "Draft an agent that answers questions like this one — you read it before it is made"],
+  ] : [];
   const connection = String(answer.connection || answer.receipt?.artifact?.conn_id || "");
   const told = answer.narrative && typeof answer.narrative === "object" ? answer.narrative : null;
   const words = told && typeof told.narrative === "string" ? told.narrative.trim() : "";
@@ -1267,7 +1282,14 @@ function Exhibit({ answer, whole, asked }) {
         onClick: () => openBeside("page", pageFor.receipt(receipt)) }, "Why this number") : null,
       h("span", { key: "gap2", style: { width: 12 } }),
       h("button", { key: "how", type: "button", className: "pramanyx-link", "aria-expanded": open === "how", onClick: () => toggle("how") }, "How it was answered"),
+      becomes.length ? h("span", { key: "gap3", style: { width: 12 } }) : null,
+      becomes.length ? h("button", { key: "more", type: "button", className: "pramanyx-link", "aria-expanded": open === "more",
+        title: "What this answer can become: on a schedule, on a dashboard, an agent", onClick: () => toggle("more") }, "More") : null,
     ] }),
+    open === "more" ? h("div", { role: "group", "aria-label": "What this answer can become",
+      style: { display: "flex", flexWrap: "wrap", gap: 14, padding: "2px 6px 6px 0", fontSize: 13 } },
+      becomes.map(([label, path, hint]) => h("button", { key: label, type: "button", className: "pramanyx-link", title: hint,
+        onClick: () => openBeside("page", path) }, label))) : null,
     open === "how" ? h("div", { style: { border: `1px solid ${line}`, borderRadius: 6, padding: 12 } }, h(How, { answer, whole })) : null);
 }
 
@@ -1300,6 +1322,54 @@ function Files({ answer, id }) {
       href: `/pramanyx/investigations/${encodeURIComponent(id)}/export?format=${fmt}` }, label))
       : h("span", { style: quiet }, "This answer was not stored, so only its rows can be taken.")),
     emailing ? h(Draft, { draft: emailOf(answer) }) : null);
+}
+
+/**
+ * A file the person attached, brought into Pramanyx as theirs (2026-11-17): what it became, by name, and its own page
+ * beside the conversation — a sheet opens as the sheet. Never a summary of the file drawn here.
+ */
+function BroughtInCard(props) {
+  const args = argsOf(props.block);
+  const named = String(args.name || "a file");
+  if (props.phase !== "result") return h(Step, { kind: "read", busy: true, title: `Bringing in ${named}` });
+  let got = null;
+  try { got = JSON.parse(resultText(props.block)); } catch { got = null; }
+  if (!got || props.block?.isError || got.brought_in !== true) {
+    return h(Step, { kind: "read", failed: true, title: `${named} was not brought in` },
+      h("div", { style: quiet }, String(got?.why || "The platform did not take it.")));
+  }
+  if (got.kind === "sheet") {
+    const sheets = Array.isArray(got.sheets) ? got.sheets : [];
+    return h(Step, { kind: "read", title: `Brought in ${got.file || named} as your sheet${sheets.length > 1 ? "s" : ""} ${sheets.map((x) => x.name).join(", ")}` },
+      h("div", { style: { display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" } },
+        h("span", { style: quiet }, "Only you can see it until you share it."),
+        ...sheets.map((x) => h("button", { key: x.id, type: "button", style: button(false),
+          onClick: () => openBeside("page", pageFor.sheet(x.id, x.name)) }, sheets.length > 1 ? `Open ${x.name}` : "Open the sheet"))));
+  }
+  const doc = got.document || {};
+  return h(Step, { kind: "read", title: `Brought in ${got.file || named} as your document ${doc.title || ""}`.trim() },
+    h("div", { style: quiet }, `Only you can see it until you share it. ${doc.chunks ? `Read in ${doc.chunks} passages, which now reach answers.` : ""}`));
+}
+
+/** What the coworker drafted for the person, and the Definition's own page to read and publish it (2026-11-17). */
+function DraftedDefinitionCard(props) {
+  const args = argsOf(props.block);
+  const term = String(args.term || "a word");
+  if (props.phase !== "result") return h(Step, { kind: "read", busy: true, title: `Drafting what “${term}” means` });
+  let got = null;
+  try { got = JSON.parse(resultText(props.block)); } catch { got = null; }
+  if (!got || props.block?.isError || !got.made) {
+    return h(Step, { kind: "read", failed: true, title: `“${term}” was not drafted` },
+      h("div", { style: quiet }, String(got?.detail || got?.why || "The platform did not take it.")));
+  }
+  const page = pageFor.definition(String(got.term || term), String(args.connection || "")) + (got.area ? `&area=${encodeURIComponent(got.area)}` : "");
+  const title = got.made === "draft" ? `Drafted what “${got.term || term}” means — yours to publish`
+    : `Suggested an edit to “${got.term || term}” for its owner`;
+  return h(Step, { kind: "read", title },
+    h("div", { style: { display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" } },
+      h("span", { style: quiet }, got.made === "draft" ? "No answer uses it until it is published." : "The published wording stands until its owner accepts."),
+      h("button", { type: "button", style: button(false), onClick: () => openBeside("page", page) },
+        got.made === "draft" ? "Open to publish" : "Open the definition")));
 }
 
 function Card(props) {
@@ -1340,6 +1410,8 @@ export function apply(ctx) {
     ctx.slots.inject("tool.call.toolview", () =>
       ctx.slots.register({ name: "tool.call.toolview", key: name },
         ANSWERS.test(name) ? AnswerCard : name === PREFIX + "draft_email" ? DraftCard
+          : name === PREFIX + "bring_in_file" ? BroughtInCard
+          : name === PREFIX + "draft_definition" ? DraftedDefinitionCard
           : SCHEDULES.test(name) ? ScheduleCard : ToolStep));
   };
   // The tools known when this was written are named from the first call. A view is keyed by exact tool name, so

@@ -26,8 +26,9 @@ import {
   isIdLike, INSTRUMENTATION_COL as INSTRUMENTATION,
   SHARE_COL, CHANGE_METRIC_COL as CHANGE_METRIC, PERCENT_CHANGE_COL as PERCENT_CHANGE, ADDITIVE_COL, isPriorPeriodCol,
   countUnique, classifyColumns, isUngraphableGrid, plottedMeasures, uniqueLabelBand,
-  GEO_NAME_COL, LAT_COL, LON_COL,
+  LAT_COL, LON_COL,
 } from "./columnRoles";
+import { placeColumn } from "./geo/places";
 
 // Re-exported so existing importers of these from chartTypeInference keep working while the
 // single source of truth lives in columnRoles.ts.
@@ -408,7 +409,9 @@ export function availableChartTypes(columns: string[], rows: unknown[][]): Chart
   const hasLat = columns.some((c) => LAT_COL.test(c));
   const hasLon = columns.some((c) => LON_COL.test(c));
   if (hasLat && hasLon) add("point-map");
-  if (catIdxs.some((i) => GEO_NAME_COL.test(columns[i])) && nNum >= 1) add("choropleth");
+  // A shaded map only when a label column's values name shapes the install ships (`geo/places.ts`): a column named
+  // "region" holding North and South has none, and offering the map drew an empty world.
+  if (nNum >= 1 && placeColumn(columns, rows, catIdxs)) add("choropleth");
   if (dateIdxs.length >= 2) add("gantt");   // a label + start + end span
 
   if (!nNum) return out;   // the standard charts below all need a measure

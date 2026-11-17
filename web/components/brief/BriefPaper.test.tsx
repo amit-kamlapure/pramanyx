@@ -32,6 +32,14 @@ describe("the paper on data that ended (design-mockups/briefing-data-ended.html)
     expect(screen.queryByText(/settles/)).toBeNull();
   });
 
+  it("says no data, never final, when the data ended before the edition's period", () => {
+    render(<PaperDateline today="Friday 23 October 2026" covers="covering September 2026" lagDays={0} records={0}
+      endedOn="2018-10-17" noData />);
+    expect(screen.getByTestId("paper-no-data")).toHaveTextContent("no data");
+    expect(screen.queryByTestId("paper-final")).toBeNull();
+    expect(screen.getByTestId("paper-ended")).toHaveTextContent("data ended Wed 17 Oct 2018");
+  });
+
   it("calls nothing final when its tables had not settled when the data stopped: that is a pause", () => {
     render(<PaperDateline today="Monday 30 November 2026" covers="covering 19 October" lagDays={0} records={0}
       endedOn="2026-10-29" stillMoving={["orders"]} />);

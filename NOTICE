@@ -36,6 +36,44 @@ The following third-party assets are redistributed under their own licenses.
    Both licensed under the SIL Open Font License, Version 1.1.
    Full license text: https://openfontlicense.org
 
+2. MapLibre GL JS (the coworker's map)
+
+   Copied from the npm package maplibre-gl by coworker/build.sh into the answer
+   card's build output, with its licence beside it as MAPLIBRE-LICENSE.txt. Not
+   checked into this repository.
+
+   Copyright (c) 2023, MapLibre contributors; portions Copyright (c) 2020,
+   Mapbox. Licensed under the 3-Clause BSD License; the licence file copied
+   beside it carries the notices of the code MapLibre itself includes
+   (https://github.com/maplibre/maplibre-gl-js/blob/main/LICENSE.txt).
+
+3. Map shapes (web/public/geo/)
+
+   world.json — country shapes from Natural Earth (https://www.naturalearthdata.com),
+   in the public domain.
+
+   us-states.json — US state shapes from the US Census Bureau's cartographic
+   boundary files (2017, public domain), converted from us-atlas 3.0.1
+   (https://github.com/topojson/us-atlas):
+
+     Copyright 2013-2019 Michael Bostock
+
+     Permission to use, copy, modify, and/or distribute this software for any
+     purpose with or without fee is hereby granted, provided that the above
+     copyright notice and this permission notice appear in all copies.
+
+     THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+     WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+     MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+     SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+     WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+     OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+     CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+   A base map, when an organisation chooses OpenFreeMap's public tiles, is
+   fetched by the viewer's browser and is not redistributed: its data is
+   © OpenStreetMap contributors, credited under every map it draws.
+
 --------------------------------------------------------------------------------
 THIRD-PARTY CODE ADAPTED INTO THIS REPOSITORY
 --------------------------------------------------------------------------------

@@ -21,7 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Loading, ReadFailed } from "@/components/ui/states";
 import { formatCount, pct } from "@/lib/format";
 import type { CsvCell } from "@/lib/query/csv";
-import { markClaimWrong, type Claim, type MarkedWrong } from "@/lib/record";
+import { confirmClaim, confirmable, markClaimWrong, type Claim, type MarkedWrong } from "@/lib/record";
 import { useMe } from "@/lib/useMe";
 
 // ── a read ───────────────────────────────────────────────────────────────────────────────
@@ -588,6 +588,37 @@ export function MarkWrong({ claim, actor, onMarked }: {
         {error && <span className="aug-fs-sm" role="alert" style={{ color: "var(--red4)" }}>{error}</span>}
       </div>
     </div>
+  );
+}
+
+/**
+ * A person says a measured claim is right (2026-11-17). An explorer finding reaches an answer only once a person has
+ * confirmed it; this is where they do. Restated at tier `approved` as their word; the page follows the new version.
+ */
+export function ConfirmRight({ claim, onConfirmed }: {
+  claim: Pick<Claim, "id" | "kind" | "tier" | "state">;
+  onConfirmed: (newId: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  if (!confirmable(claim)) return null;
+  const go = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      onConfirmed((await confirmClaim(claim.id)).id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <span style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
+      <Button size="xs" variant="secondary" disabled={busy} onClick={() => void go()}
+        title="Say it is right: answers may then build on it, as your word">Confirm</Button>
+      {error && <span className="aug-fs-sm" role="alert" style={{ color: "var(--red4)" }}>{error}</span>}
+    </span>
   );
 }
 

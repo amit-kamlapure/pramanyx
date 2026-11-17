@@ -90,64 +90,67 @@ def phrases(window: PeriodWindow) -> tuple[str, str]:
 
 def period_note(block: dict, today: Optional[date] = None) -> str:
     """The code-written block that tells the narrator which version it is writing."""
-    today = today or datetime.now(timezone.utc).date()
+    from pramanyx.kernel.clock import person_clock, today_for
+    clock = str(block.get("clock") or "") or person_clock() or "UTC"
+    today = today or today_for("" if clock == "UTC" else clock)
     label = block["label"].upper()
     withheld = block.get("compare_withheld")
     lines = [
         "[Briefing period — written by code, not inferred]",
-        (f"This is the {label} briefing. It covers {block['covers']} (UTC). It is not compared with an "
+        (f"This is the {label} briefing. It covers {block['covers']} ({clock}). It is not compared with an "
          f"earlier period, because {withheld}: state no change against any earlier period."
          if withheld else
-         f"This is the {label} briefing. It covers {block['covers']} (UTC) and compares it with "
+         f"This is the {label} briefing. It covers {block['covers']} ({clock}) and compares it with "
          f"{block['compared_with']}."),
         f"Speak about that {block['period']} only. Every finding below is from inside it or is a "
         "measurement of it; do not describe anything as happening in it that the findings do not "
         "place there, and do not compare it with any period other than the one named.",
     ]
+    # 2026-11-17 — one definition of a period (`kernel/clock.py`): the period is the one asked, counted from today. A
+    # source still revising its days makes the newest ones provisional — said — and never moves the period; data that
+    # ended before it holds nothing for it — said — and no other period is read in its place.
     lag = int(block.get("lag_days") or 1)
+    revised_from = (today - timedelta(days=lag)).isoformat()
     from pramanyx.settling.answer import answer_of_block
     if answer_of_block(block).live:
         # a sheet (Arc SH, SH-6): ended or not, none of its figures is final, and its comparisons are read at one moment
         lines.append(
             f"{answer_of_block(block).says()} Say so in one plain sentence and do not call any figure final; a difference "
             "against an earlier period was read at the same moment, so it is the source's own.")
+    elif block.get("no_data"):
+        lines.append(
+            f"The data ended on {block.get('data_through')}, before this {block['period']}: there are no rows for it. "
+            "Say so once, plainly; state no figure for it, and do not describe any other period in its place.")
     elif block.get("data_ended") and block.get("still_moving"):
         lines.append(
             f"No data has arrived since {block.get('data_through')}, more than a month before today "
-            f"({today.isoformat()}), and {', '.join(block['still_moving'])} had not settled when it stopped: this "
-            f"{block['period']} is read as if today were the day after it, and its figures may still move. Say so in one "
-            "plain sentence, and do not call any of those figures final.")
+            f"({today.isoformat()}), and {', '.join(block['still_moving'])} had not settled when it stopped: figures in "
+            f"this {block['period']} may still move. Say so in one plain sentence, and do not call any of them final.")
     elif block.get("data_ended"):
-        # Gap 38 (the Olist run): an unconditional settling sentence was written about a range eight
-        # years settled. Data that ENDED has no lag; its figures are final, and that is what is said.
+        # Gap 38 (the Olist run): a settling sentence was written about a range eight years settled. Data that ENDED
+        # has no lag; the rows it holds for this period are final, and that is what is said.
         lines.append(
-            f"The data ended on {block.get('data_through')}, more than a month before today "
-            f"({today.isoformat()}): this {block['period']} is read as if today were the day after it, "
-            "and every figure in it is final. Say so once, plainly. Do not mention settling, late rows "
+            f"The data ended on {block.get('data_through')}, more than a month before today ({today.isoformat()}): "
+            f"every figure in this {block['period']} is final. Say so once, plainly. Do not mention settling, late rows "
             "or confirming a figure later.")
     elif lag > 1 and block.get("rewrites"):
         lines.append(
-            f"The {block['period']} ends {lag} days before today ({today.isoformat()}). {answer_of_block(block).says()} Say so "
-            "in one plain sentence, do not call any figure from it final, and do not read a difference against an earlier "
-            "period as a move.")
+            f"{answer_of_block(block).says()} Figures for days after {revised_from} are provisional: say so in one plain "
+            "sentence, do not call any of them final, and do not read a difference against an earlier period as a move.")
     elif lag > 1 and block.get("lag_source") == "beyond_horizon":
         moving = list(block.get("still_moving") or [])
         tables, verb, it = (", ".join(moving) or "a table",
                             *(("were", "them") if len(moving) > 1 else ("was", "it")))
         lines.append(
-            f"The {block['period']} ends {lag} days before today ({today.isoformat()}) because "
-            f"{tables} {verb} still changing {lag - 1} days after a day ended, and the platform has "
-            f"not yet seen {it} stop: figures read from {it} may still move. Say so in one plain "
-            "sentence, do not call any of those figures final, and do not read a difference against an earlier period as "
-            "a move.")
+            f"{tables} {verb} still changing {lag - 1} days after a day ended, and the platform has not yet seen {it} "
+            f"stop: figures for days after {revised_from} may still move. Say so in one plain sentence, do not call "
+            "any of them final, and do not read a difference against an earlier period as a move.")
     elif lag > 1:
         why = ("the platform measured" if block.get("lag_source") == "learned"
                else "this source is configured with")
         lines.append(
-            f"The {block['period']} ends {lag} days before today ({today.isoformat()}) because "
-            f"{why} a {lag}-day settling lag: newer days are still changing as late rows arrive. "
-            "Say so in one plain sentence, so the reader never has to guess why the newest "
-            "figure is dated before today.")
+            f"This source's days keep changing for {lag} days after they end ({why} the lag): figures for days after "
+            f"{revised_from} are provisional, as late rows arrive. Say so in one plain sentence.")
     if block.get("unreachable"):
         lines.append(f"The data could not be reached for this {block['period']} ({block['unreachable']}), so "
                      "nothing was measured. State no figure for it; say once that the data could not be reached.")

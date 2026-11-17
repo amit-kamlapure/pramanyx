@@ -101,12 +101,15 @@ def test_a_persons_own_click_is_their_verdict_and_the_agent_cannot_give_one():
 
 
 def test_the_coworkers_address_and_its_token_go_only_to_this_machine(monkeypatch):
+    from pramanyx import coworkers as K
     from pramanyx.routers import coworker as C
-    monkeypatch.setattr(C, "_last", {"url": "http://127.0.0.1:3090/?token=abc", "at": C._now()})
+    monkeypatch.setattr(K, "_announced", {"": {"url": "http://127.0.0.1:3090/?token=abc", "at": K._now()}})
+    monkeypatch.delenv("PRAMANYX_REQUIRE_IDENTITY", raising=False)
     app = FastAPI()
     app.include_router(C.router)
     assert TestClient(app, client=("127.0.0.1", 1)).get("/coworker").json()["url"].endswith("token=abc")
-    assert TestClient(app, client=("203.0.113.9", 1)).get("/coworker").json() == {"available": True, "url": None}
+    away = TestClient(app, client=("203.0.113.9", 1)).get("/coworker").json()
+    assert away["available"] is True and away["url"] is None
 
 
 def test_the_mcp_client_presents_the_kept_person_and_nothing_a_tool_could_set(tmp_path, monkeypatch):

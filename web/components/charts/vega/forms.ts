@@ -17,6 +17,7 @@ import { cleanLabel, detectGranularity, fmtDate } from "@/lib/format";
 import { periodsSpanned, timeBarFit } from "@/components/charts/vega/bandFit";
 import { dateAxis, utcScale } from "@/components/charts/vega/timeAxis";
 import { emphasisOpacity, emphasisTest, RECEDE } from "@/components/charts/vega/emphasis";
+import { placeColumn, SHAPES } from "@/components/charts/geo/places";
 
 export interface FormCtx {
   columns: string[];
@@ -608,25 +609,31 @@ export function resolveExtendedForm(type: string, c: FormCtx): FormResult | null
 
     // ── geography ──────────────────────────────────────────────────────────
     case "choropleth": {
-      const place = catCols[0];
-      if (!place || !numCols.length) return null;
+      // The column whose values name shapes the install ships — countries or US states, by name, spelling or code
+      // (`geo/places.ts`) — not merely the first label column. A column of regions names no shape: no map.
+      const found = placeColumn(columns, rows, catCols.map((col) => columns.indexOf(col)));
+      if (!found || !numCols.length) return null;
+      const { column: place, match } = found;
+      const keyed = { values: data.values.map((r) => ({ ...r, __shape: match.shapes.get(String(r[place] ?? "").trim()) ?? null })) };
+      const chosenShapes = chosen ? chosen.map((v) => match.shapes.get(String(v).trim()) ?? v) : chosen;
       return {
         resolved: "choropleth", defaultH: 380, xCategories: 0,
         spec: {
           ...base,
-          data: WORLD,
-          projection: PROJECTION,
+          data: { url: SHAPES[match.set].url, format: { property: "features" } },
+          projection: match.set === "us_states" ? { type: "albersUsa" } : PROJECTION,
           transform: [{
             // The map is the spine and the answer is looked up INTO it, so a country with
             // no row still draws — an absent value reads as absent, not as zero.
             lookup: "properties.name",
-            from: { data, key: place, fields: [measure] },
+            from: { data: keyed, key: "__shape", fields: [measure] },
           }],
           mark: { type: "geoshape", tooltip: true },
           encoding: {
             color: { field: measure, type: "quantitative", scale: { range: "heatmap" },
                      legend: { title: yT, format: fmt(c.format) } },
-            ...(emphasisOpacity(chosen, "properties.name") ? { opacity: emphasisOpacity(chosen, "properties.name") } : {}),
+            // The chosen places as the shapes name them: a person chose "Brasil", the shape is "Brazil".
+            ...(emphasisOpacity(chosenShapes, "properties.name") ? { opacity: emphasisOpacity(chosenShapes, "properties.name") } : {}),
           },
         },
       };

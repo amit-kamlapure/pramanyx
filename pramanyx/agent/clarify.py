@@ -51,7 +51,7 @@ _GROUNDED_NEAR = re.compile(
 class ClarifyDecision:
     """Whether to ask, and what to ask — the payload of the ``clarify`` SSE event."""
     should_ask: bool
-    source: str = ""                          # "underspecified" | "ambiguous_term" | ""
+    source: str = ""                          # "underspecified" | "ambiguous_term" | "rival_meanings" | ""
     question: str = ""                        # the one targeted clarifying question
     options: list = field(default_factory=list)   # grounded options the user can click (best-effort)
     terms: list = field(default_factory=list)     # ambiguous terms detected (for Source B)
@@ -62,7 +62,7 @@ class ClarifyDecision:
                 "source": self.source, "terms": list(self.terms), "reason": self.reason}
 
 
-def assess_clarification(question: str) -> ClarifyDecision:
+def assess_clarification(question: str, connection_id: str = "") -> ClarifyDecision:
     """Decide whether one clarifying question would materially improve the answer. Deterministic.
 
     Returns ``should_ask=False`` for well-specified questions (the common case), so the door stays
@@ -70,6 +70,27 @@ def assess_clarification(question: str) -> ClarifyDecision:
     q = (question or "").strip()
     if not q:
         return ClarifyDecision(False)
+
+    # Source C (the ontology study, 2026-11-17) — a word the organisation has defined differently in two areas of the
+    # business, and the question names neither: ask which, with each area as a choice. Rivals are said, never picked.
+    if connection_id:
+        try:
+            from pramanyx.semantic.areas import rival_meanings
+            open_ = [r for r in rival_meanings(q, connection_id) if not r["chosen"]]
+        except Exception as exc:  # noqa: BLE001 — unread, nothing is asked on its account
+            from pramanyx.kernel.errors import tolerate
+            tolerate(exc, "rival meanings could not be read", counter="clarify.rivals")
+            open_ = []
+        if open_:
+            r = open_[0]
+            names = [m["area_name"] for m in r["meanings"]]
+            return ClarifyDecision(
+                True, source="rival_meanings", terms=[r["term"]],
+                question=f"“{r['term']}” means one thing in {' and '.join(names[:2])}{' and others' if len(names) > 2 else ''}"
+                         " here. Which do you mean?",
+                options=[f"in {n}" for n in names],
+                reason=f"the organisation defines “{r['term']}” differently in {len(names)} areas of the business",
+            )
 
     # Source A — under-specification (vague reference, no concrete metric / time anchor).
     if assess_complexity(q).ambiguous:
@@ -82,9 +103,13 @@ def assess_clarification(question: str) -> ClarifyDecision:
             reason="the question is under-specified (no concrete metric or time window)",
         )
 
-    # Source B — a subjective qualifier that implies an unstated value filter, not already grounded.
+    # Source B — a subjective qualifier that implies an unstated value filter, not already grounded. A qualifier inside
+    # a word the organisation has defined ("active" in a written "active customer") is defined, not vague (2026-11-17).
     ql = q.lower()
     terms = [t for t in _QUALIFIER_TERMS if re.search(rf"(?<![\w-]){re.escape(t)}(?![\w-])", ql)]
+    if terms and connection_id:
+        defined = _defined_words_in(ql, connection_id)
+        terms = [t for t in terms if not any(t in d for d in defined)]
     if terms and not _GROUNDED_NEAR.search(ql):
         t = terms[0]
         return ClarifyDecision(
@@ -95,3 +120,20 @@ def assess_clarification(question: str) -> ClarifyDecision:
         )
 
     return ClarifyDecision(False)
+
+
+def _defined_words_in(question: str, connection_id: str) -> list[str]:
+    """The written Definitions' words (and other names) the question says, lowercased; [] when none, or unread."""
+    try:
+        from pramanyx.record.writers import definitions
+        out = []
+        for c in definitions(connection_id):
+            for w in [c.extra.get("term", ""), *(c.extra.get("aliases") or [])]:
+                w = re.sub(r"[^a-z0-9]+", " ", str(w).lower()).strip()
+                if w and re.search(rf"(?<![a-z0-9]){re.escape(w)}(?:s|es)?(?![a-z0-9])", question):
+                    out.append(w)
+        return out
+    except Exception as exc:  # noqa: BLE001 — unread, every qualifier is asked about as before
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "the definitions could not be read", counter="clarify.defined")
+        return []

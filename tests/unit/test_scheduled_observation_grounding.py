@@ -37,15 +37,15 @@ def test_cadence_is_read_from_the_cron_shape():
 
 def test_daily_note_names_yesterday_and_forbids_today():
     note = temporal.observation_note(NOW, "0 9 * * *")
-    assert "Observe 2026-09-05 (UTC), the most recent complete day." in note
+    assert "If the question names no period, observe 2026-09-05, yesterday (UTC)." in note
     assert "today is 2026-09-06" in note and "partial by construction" in note
 
 
 def test_lag_moves_the_anchor_and_says_why():
     note = temporal.observation_note(NOW, "0 9 * * *", lag_days=3)
-    assert "Observe 2026-09-03 (UTC)" in note
-    assert "observation lag of 3 days" in note
-    assert "not yet reliable for this source" in note
+    assert "observe 2026-09-03 (UTC)" in note
+    assert "own setting reads 3 days back" in note
+    assert "own setting reads 3 days back" in note
 
 
 def test_weekly_and_monthly_name_complete_periods():
@@ -53,7 +53,7 @@ def test_weekly_and_monthly_name_complete_periods():
     # Sep 6 2026 is a Sunday; anchor Sep 5 (Sat) ⇒ last COMPLETE Mon–Sun week
     assert "2026-08-24 to 2026-08-30" in weekly
     monthly = temporal.observation_note(NOW, "0 9 1 * *")
-    assert "COMPLETE month: 2026-08" in monthly
+    assert "COMPLETE month, 2026-08" in monthly
 
 
 def test_lag_is_clamped_never_trusted():
@@ -122,7 +122,7 @@ def test_lag_makes_the_report_disclose_its_own_age(runs_store):
     """
     note = temporal.observation_note(NOW, "0 9 * * *", lag_days=3)
     assert "3 days behind today (2026-09-06 UTC)" in note
-    assert "restates its most recent days" in note
+    assert "days behind today" in note
 
 
 def test_no_lag_means_no_disclosure_sentence(runs_store):
@@ -164,7 +164,7 @@ def test_scheduled_dispatch_is_grounded_and_target_stays_raw(runs_store, monkeyp
     outcome = _dispatch_investigate(auto.effects[0], auto)
     q = captured["question"]
     assert q.startswith("[Scheduled-run context")
-    assert "most recent complete day" in q
+    assert "If the question names no period, observe" in q
     assert q.rstrip().endswith("what changed?")
     # The run history shows the human's question, not the machinery's preamble.
     assert outcome.target == "what changed?"
@@ -177,7 +177,7 @@ def test_lag_setting_on_the_effect_config_is_honoured(runs_store, monkeypatch):
     auto.effects[0].config["observation_lag_days"] = 3
 
     _dispatch_investigate(auto.effects[0], auto)
-    assert "observation lag of 3 days" in captured["question"]
+    assert "own setting reads 3 days back" in captured["question"]
 
 
 def test_unscheduled_automations_keep_a_byte_identical_question(runs_store, monkeypatch):
@@ -264,8 +264,9 @@ def test_no_sentence_when_the_lag_is_the_learned_one_or_none_was_learned():
 def test_the_sentence_rides_the_generated_block_and_leaves_the_persons_words(runs_store, monkeypatch):
     auto = _automation([Condition(kind="schedule", config={"cron": "0 9 * * *"})])
     block = temporal.scheduled_grounding(auto, {"observation_lag_days": 8}, learned_lag=29)
-    assert "reads at 8 by its own setting" in block
+    # 2026-11-17 — what the platform learned of the source makes the newest 29 days provisional; it moves nothing.
+    assert "keeps revising its most recent 29 days" in block and "still answer for the period asked" in block
     asked = "What changed in theLook in the last day?"
     assert temporal.ask_of(block + "\n\n" + asked) == asked
-    # The person's lag still wins: the window is 8 days back, not 29.
-    assert "observation lag of 8 days" in block
+    # The person's own lag still sets the default when the question names no period: 8 days back, not 29.
+    assert "own setting reads 8 days back" in block

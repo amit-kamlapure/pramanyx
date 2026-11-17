@@ -38,14 +38,58 @@ def test_a_definition_is_a_persons_and_an_approval_keeps_its_words():
     assert W.approve_definition(connection_id=conn, term="Active  Customer!", by="user:ana") is None   # already
 
 
-def test_a_new_wording_waits_for_approval_again_and_the_earlier_is_kept():
+def test_anyone_else_s_wording_is_a_suggestion_and_the_published_one_stands_until_its_owner_accepts():
+    """Until 2026-11-17 a new wording from anyone replaced the owner's approved one at once, unapproved, and the planner
+    lost the approved definition. Now it is a suggested edit: the owner accepts or declines it."""
     conn = _conn()
     W.write_definition(connection_id=conn, term="GMV", text="Gross merchandise value, before returns.", by="user:ana")
     W.approve_definition(connection_id=conn, term="GMV", by="user:ana")
-    W.write_definition(connection_id=conn, term="gmv", text="Gross merchandise value, net of cancellations.", by="user:cai")
+    with pytest.raises(W.NotTheOwner, match="suggested edit"):
+        W.write_definition(connection_id=conn, term="gmv", text="Gross merchandise value, net of cancellations.", by="user:cai")
+    s = W.suggest_definition_edit(connection_id=conn, term="gmv", by="user:cai",
+                                  text="Gross merchandise value, net of cancellations.", why="finance nets them")
     now = C.latest(W.definition_key(conn, "GMV"))
-    assert now.tier == "declared" and now.owner == "user:ana"                      # the owner stays the owner
-    assert [v.statement.text for v in C.versions(now.key)][-1] == "Gross merchandise value, before returns."
+    assert (now.tier, now.owner, now.statement.text) == ("approved", "user:ana", "Gross merchandise value, before returns.")
+    assert [p["id"] for p in now.extra["suggestions"]] == [s["id"]] and now.extra["suggestions"][0]["by"] == "user:cai"
+    with pytest.raises(W.NotTheOwner):
+        W.decide_definition_suggestion(connection_id=conn, term="GMV", suggestion_id=s["id"], by="user:cai", accept=True)
+    W.decide_definition_suggestion(connection_id=conn, term="GMV", suggestion_id=s["id"], by="user:ana", accept=True)
+    now = C.latest(W.definition_key(conn, "GMV"))
+    assert (now.tier, now.statement.text) == ("approved", "Gross merchandise value, net of cancellations.")
+    assert now.extra["suggestions"] == [] and now.extra["accepted"][0]["by"] == "user:cai"
+    assert "Gross merchandise value, before returns." in [v.statement.text for v in C.versions(now.key)]   # kept
+    # declined: kept beside it, the wording unchanged
+    s2 = W.suggest_definition_edit(connection_id=conn, term="GMV", by="user:cai", aliases=["gross sales"])
+    W.decide_definition_suggestion(connection_id=conn, term="GMV", suggestion_id=s2["id"], by="user:ana", accept=False,
+                                   why="not what finance calls it")
+    now = C.latest(W.definition_key(conn, "GMV"))
+    assert now.extra["aliases"] == [] and now.extra["declined"][0]["declined_why"] == "not what finance calls it"
+
+
+def test_its_owner_edits_it_directly_and_a_published_one_stays_published():
+    conn = _conn()
+    W.write_definition(connection_id=conn, term="Churn", text="No order in 180 days.", by="user:ana")
+    assert C.latest(W.definition_key(conn, "Churn")).tier == "declared"                  # a draft
+    W.approve_definition(connection_id=conn, term="Churn", by="user:ana")
+    W.write_definition(connection_id=conn, term="Churn", text="No order in 120 days.", by="user:ana",
+                       aliases=["lapsed"], links=[{"kind": "metric", "ref": "churn_rate", "label": "Churn rate"}])
+    now = C.latest(W.definition_key(conn, "Churn"))
+    assert (now.tier, now.statement.text, now.extra["aliases"]) == ("approved", "No order in 120 days.", ["lapsed"])
+    assert now.extra["links"] == [{"kind": "metric", "ref": "churn_rate", "label": "Churn rate"}]
+    W.unpublish_definition(connection_id=conn, term="Churn", by="user:ana")
+    assert C.latest(W.definition_key(conn, "Churn")).tier == "declared"
+    with pytest.raises(ValueError, match="links to a"):
+        W.write_definition(connection_id=conn, term="Churn", text="x", by="user:ana", links=[{"kind": "spaceship", "ref": "x"}])
+
+
+def test_one_word_can_mean_one_thing_in_one_area_and_another_in_the_next():
+    conn = _conn()
+    W.write_definition(connection_id=conn, term="Active customer", area="Finance", text="Paid in the last 30 days.", by="user:ana")
+    W.write_definition(connection_id=conn, term="Active customer", area="Marketing", text="Opened an email in 90 days.", by="user:bo")
+    both = W.definitions_of(conn, "active customer")
+    assert sorted((c.extra["area"], c.owner) for c in both) == [("Finance", "user:ana"), ("Marketing", "user:bo")]
+    assert W.definition_key(conn, "Active customer", "Finance") != W.definition_key(conn, "Active customer", "Marketing")
+    assert W.definition_key(conn, "GMV") == W.definition_key(conn, "GMV", "")             # no area: the key it always had
 
 
 def test_a_definition_is_a_term_the_planner_is_shown_at_a_persons_warrant():
@@ -135,3 +179,69 @@ def test_an_old_knowledge_file_is_folded_in_once_and_kept_beside(tmp_path, monke
     c = C.latest(W.definition_key(conn, "AOV"))
     assert c.tier == "said" and c.author_kind == "system"                          # no person declared it here
     assert B.load_record_definitions(conn) == []                                    # so the planner is not shown it
+
+
+def test_the_doors_file_anyone_else_s_change_as_a_suggestion_and_refuse_an_agent(monkeypatch):
+    from pramanyx.mcp.client import AGENT_HEADER, AGENT_MARK
+    from pramanyx.routers import record as R
+    conn = _conn()
+    monkeypatch.setattr(R, "_visible", lambda c: True)
+    monkeypatch.setattr(R, "_refresh_definitions", lambda c: None)
+    monkeypatch.setattr("pramanyx.semantic.areas.areas_for", lambda c, schema=None, workspace_id=None: [{"id": "Finance"}])
+    app = FastAPI()
+    app.include_router(R.router)
+    client = TestClient(app)
+    monkeypatch.setattr(R, "_who", lambda principal: "user:ana")
+    assert client.post("/record/definitions", json={"connection_id": conn, "term": "x", "text": "y", "area": "Nowhere"}).status_code == 422
+    body = {"connection_id": conn, "term": "Active customer", "area": "Finance", "text": "Paid in 30 days.",
+            "aliases": ["paying customer"], "links": [{"kind": "metric", "ref": "active_customers", "label": "Active customers"}]}
+    wrote = client.post("/record/definitions", json=body).json()
+    assert (wrote["state"], wrote["area"], wrote["owner"], wrote["suggested"]) == ("draft", "Finance", "user:ana", None)
+    assert client.post("/record/definitions/approve", json={"connection_id": conn, "term": "Active customer", "area": "Finance"}).json()["state"] == "published"
+    monkeypatch.setattr(R, "_who", lambda principal: "user:cai")
+    theirs = client.post("/record/definitions", json={**body, "text": "Paid in 60 days.", "why": "quarterly payers"}).json()
+    assert theirs["statement"]["text"] == "Paid in 30 days." and theirs["state"] == "published"        # it stands
+    assert theirs["suggested"]["by"] == "user:cai" and theirs["suggestions"][0]["why"] == "quarterly payers"
+    monkeypatch.setattr(R, "_who", lambda principal: "user:ana")
+    agent = client.post("/record/definitions/unpublish", json={"connection_id": conn, "term": "Active customer", "area": "Finance"},
+                        headers={AGENT_HEADER: AGENT_MARK})
+    assert agent.status_code == 403 and "person's own act" in agent.json()["detail"]
+    decided = client.post("/record/definitions/suggestions/decide", json={"connection_id": conn, "term": "Active customer",
+                          "area": "Finance", "suggestion_id": theirs["suggested"]["id"], "accept": True}).json()
+    assert decided["statement"]["text"] == "Paid in 60 days." and decided["state"] == "published" and decided["suggestions"] == []
+    listed = client.get("/record/definitions", params={"connection_id": conn, "term": "active customer"}).json()
+    assert [d["area"] for d in listed] == ["Finance"]
+
+
+def test_the_coworker_drafts_for_a_person_and_never_writes_their_word(monkeypatch):
+    """2026-11-17: "remember that active means paid in 30 days" — a draft only said, owned by the person it was drafted
+    for, used by no answer until they publish it; a word already defined becomes a suggested edit marked as the agent's.
+    The one definition door an agent may use."""
+    from pramanyx.mcp.client import AGENT_HEADER, AGENT_MARK
+    from pramanyx.routers import record as R
+    conn = _conn()
+    monkeypatch.setattr(R, "_visible", lambda c: True)
+    monkeypatch.setattr(R, "_refresh_definitions", lambda c: None)
+    monkeypatch.setattr(R, "_who", lambda principal: "user:ana")
+    app = FastAPI()
+    app.include_router(R.router)
+    client = TestClient(app)
+    agent = {AGENT_HEADER: AGENT_MARK}
+    made = client.post("/record/definitions/draft", json={"connection_id": conn, "term": "Active", "text": "Paid in 30 days."},
+                       headers=agent).json()
+    assert (made["made"], made["state"], made["owner"], made["tier"], made["drafted_by_agent"]) == (
+        "draft", "draft", "user:ana", "said", True)
+    assert made["author"] == "agent:coworker" and made["publish_at"] == f"/definitions/Active?conn={conn}"
+    # the agent still cannot publish it, nor write a person's draft
+    assert client.post("/record/definitions/approve", json={"connection_id": conn, "term": "Active"}, headers=agent).status_code == 403
+    assert client.post("/record/definitions", json={"connection_id": conn, "term": "Other", "text": "x"}, headers=agent).status_code == 403
+    # the person publishes it: their word now
+    published = client.post("/record/definitions/approve", json={"connection_id": conn, "term": "Active"}).json()
+    assert (published["state"], published["tier"], published["drafted_by_agent"]) == ("published", "approved", False)
+    again = client.post("/record/definitions/draft", json={"connection_id": conn, "term": "Active", "text": "Paid in 60 days.",
+                                                          "why": "quarterly payers"}, headers=agent).json()
+    assert again["made"] == "suggestion" and again["statement"]["text"] == "Paid in 30 days."           # it stands
+    assert again["suggestions"][0]["by_agent"] is True and again["suggestions"][0]["by"] == "user:ana"
+    monkeypatch.setattr(R, "_who", lambda principal: "")
+    assert client.post("/record/definitions/draft", json={"connection_id": conn, "term": "X", "text": "y"},
+                       headers=agent).status_code == 422

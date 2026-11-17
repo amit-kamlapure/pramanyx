@@ -22,6 +22,17 @@
 - id: tool-plugin-manager
   disabled: true
 
+# ── on: finding a conversation by what was said in it, not only by its title (Phase 3, 2026-11-17). The sidebar's
+#    search box asks this index once someone searches; it is kept beside the conversations, so it survives a restart.
+#    It covers every conversation on this install, as the sidebar lists every one: one shell holds one person at a
+#    time, and a conversation another person began is refused to the coworker's tools (`plugins/home`,
+#    `heldToItsPerson`). The agent's own tools for searching past conversations stay off until the list is one
+#    person's — they would bring one person's words into another's answer.
+- id: session-query-sqlite
+  config:
+    path: !!js dshHomePath('session-search.db')
+    openAt: first-search
+
 # ── off: the shell's own scheduler — its store of timed reminders, its page, its clock marks on a conversation.
 #    There is one scheduler and it is Pramanyx's (the user, 2026-11-15: "the scheduler needs to be one across the
 #    platform"). Measured side by side that day: the shell's delivers an instruction into a conversation at a time
@@ -93,6 +104,20 @@
             file yourself.
 
 
+            When the person tells you what a business word means ("remember that active means paid in the last
+            30 days") or corrects one, draft it with draft_definition, in their words. It is a draft for them
+            to publish, or a suggested edit for the word's owner — nothing is used until a person publishes it.
+            Say which, in one sentence. When a word means different things in different areas of the business
+            and the question does not say which, ask the person which they mean before answering.
+
+
+            When the person attaches a file, its line gives the file's name and a saved path. Before anything
+            else, call bring_in_file with that path and name: a table becomes their own sheet on the sheets
+            connection, a document their own document; either is private to them until they share it. Say in
+            one sentence what it became, by name, then answer about it with ask (connection sheets, naming the
+            sheet) — never read or summarise an attached file any other way.
+
+
             Asked to email something, write it with draft_email, using the figures the answers gave; it opens
             for the person to read, change and send. You cannot send it, so never say it was sent. The body is
             the summary they asked for; when they want the analysis itself, attach it with attach_answer (the
@@ -101,11 +126,15 @@
 
             Asked to have anything happen on a schedule — a question asked again, a summary, a Slack post, an
             email; on a rhythm ("every Monday at 9", "every 90 minutes") or once ("in five minutes", "tomorrow
-            at three") — set it up with schedule, passing the person's own words as the request, the
-            connection, a time zone only if they named one, and the browser time zone you were given for this
-            request. Do not turn their words into a cron yourself. Say back its
-            `when` and `next_run` exactly as returned. If it returns `needs`, ask the person that one thing and
-            set it up again with their answer; if it returns a `reason`, say it. Each run's result is shown in
+            at three") — set it up with schedule, passing the person's sentence as the request COPIED EXACTLY,
+            never reworded: "in 2 minutes" is once and "every 2 minutes" is a rhythm, and swapping them makes the
+            wrong schedule. Pass the connection, a time zone only if they named one, and the browser time zone
+            you were given for this request. Do not turn their words into a cron yourself. Setting it up is the
+            whole of your reply: do not also answer the question now unless they asked for it now as well. Say
+            back its `when` and `next_run` exactly as returned. If it returns `needs`, ask the person that one
+            thing and set it up again with their answer; when it asks whether a rhythm more often than hourly is
+            what they meant, say that rhythm back in its words, and pass confirm_rhythm only after they say yes.
+            If it returns a `reason`, say it. Each run's result is shown in
             this conversation, under the request, and the schedule can be changed by hand on its page, under
             Schedules in the sidebar. If you have no such tool, say that setting up a schedule needs an admin to
             let the coworker act, in Settings, under the agent policy.
@@ -295,6 +324,40 @@
 - id: entry-customization          # "Create your plugin": a person writing a plugin in the page is the same way back
   disabled: true
 
+# ── off: the host services still mounted behind those pages (2026-11-17, read from the shell's own profile). Each
+#    reaches this machine for whoever holds the page, whatever the agent's tools: the terminal's service (its page was
+#    off, its remote calls were not); the workspace file service, whose reads may name any path on the machine, with
+#    the file tree, the document preview and the @file mentions that read through it; the host folder picker; "Open
+#    in…", which launches the machine's own applications; the host runners for plugin code and programmatic tool
+#    calls, which nothing here uses; and the context that told the agent this checkout's path and the page's address.
+#    A file a person brings in goes to Pramanyx, as theirs (the coworker's next step), and opens there.
+- id: terminal-controller
+  disabled: true
+- id: workspace-files
+  disabled: true
+- id: ui-sidebar-files
+  disabled: true
+- id: ui-sidebar-documentpreview
+  disabled: true
+- id: file-reference-local
+  disabled: true
+- id: directory-picker
+  disabled: true
+- id: open-in-app
+  disabled: true
+- id: ui-open-in-app
+  disabled: true
+- id: cordis-host-runner
+  disabled: true
+- id: cordis-client-runner         # its browser half, which asked the host half for every page and drew 404s
+  disabled: true
+- id: ui-cordis
+  disabled: true
+- id: ptc-runtime
+  disabled: true
+- id: harness-dev-context
+  disabled: true
+
 # ── off: everything that reports to the shell's maker, and the feedback buttons that would feed it.
 - id: session-telemetry-otel
   disabled: true
@@ -406,6 +469,20 @@
                 file yourself.
 
 
+                When the person tells you what a business word means ("remember that active means paid in the last
+                30 days") or corrects one, draft it with draft_definition, in their words. It is a draft for them
+                to publish, or a suggested edit for the word's owner — nothing is used until a person publishes it.
+                Say which, in one sentence. When a word means different things in different areas of the business
+                and the question does not say which, ask the person which they mean before answering.
+
+
+                When the person attaches a file, its line gives the file's name and a saved path. Before anything
+                else, call bring_in_file with that path and name: a table becomes their own sheet on the sheets
+                connection, a document their own document; either is private to them until they share it. Say in
+                one sentence what it became, by name, then answer about it with ask (connection sheets, naming the
+                sheet) — never read or summarise an attached file any other way.
+
+
                 Asked to email something, write it with draft_email, using the figures the answers gave; it opens
                 for the person to read, change and send. You cannot send it, so never say it was sent. The body is
                 the summary they asked for; when they want the analysis itself, attach it with attach_answer (the
@@ -432,6 +509,10 @@
           PRAMANYX_API_URL: !!js process.env.PRAMANYX_API_URL || 'http://127.0.0.1:8000'
           # The person the app handed the coworker; the MCP client presents it on every call (`pramanyx/mcp/client.py`).
           PRAMANYX_DELEGATION_FILE: !!js process.env.PRAMANYX_DELEGATION_FILE || ''
+          # The person's clock: the zone the coworker's page said its browser is in (`kernel/clock.py`).
+          PRAMANYX_CLOCK_FILE: !!js process.env.PRAMANYX_CLOCK_FILE || ''
+          # Where the person's attached files are kept: the only folder `bring_in_file` reads (`pramanyx/mcp/client.py`).
+          PRAMANYX_ATTACHMENTS_DIR: !!js process.env.PRAMANYX_ATTACHMENTS_DIR || ''
     - id: pramanyx-answer-card
       # A package the profile has installed (start.sh links it): the shell ships a plugin's browser half only for
       # an installed package, and a bare directory path does not import.

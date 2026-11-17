@@ -20,7 +20,7 @@ import {
   type Claim, type ClaimCrossLink, type Onboarding,
 } from "@/lib/record";
 import {
-  Absent, BackHeader, Counted, Facet, Fact, Gate, ListCard, ListRow, MarkWrong, Page, Section, StatusMark, TierMark,
+  Absent, BackHeader, ConfirmRight, Counted, Facet, Fact, Gate, ListCard, ListRow, MarkWrong, Page, Section, StatusMark, TierMark,
   countedWords, day, markedWords, tierWords, useActor, useChosen, useLoad,
   type ListColumn, type Load,
 } from "@/components/record/kit";
@@ -440,8 +440,9 @@ function ClaimReader({ id, connections, onBack, onOpen, onInspectClaim, onOpenDe
                 <Counted claim={claim} />
               </div>
               {!claim.superseded_by && (
-                <div style={{ display: "flex", flexWrap: "wrap", marginTop: 8 }}>
-                  {/* The page follows the claim to the version the correction booked. */}
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginTop: 8 }}>
+                  {/* The page follows the claim to the version the correction (or the confirmation) booked. */}
+                  <ConfirmRight claim={claim} onConfirmed={id => { setSaid("Confirmed: answers may now build on it, as your word."); onOpen(id); }} />
                   <MarkWrong claim={claim} actor={actor} onMarked={out => { setSaid(markedWords(out)); onOpen(out.id); }} />
                 </div>
               )}

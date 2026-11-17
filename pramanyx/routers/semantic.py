@@ -67,6 +67,7 @@ class KnowledgeEntryIn(BaseModel):
     body:  str
     kind:  str = "note"          # metric | synonym | rule | join | note
     tags:  list[str] = []
+    area: str = ""               # the area it is defined in; one word may mean more than one thing (2026-11-17)
 
 
 class BenchmarkCaseIn(BaseModel):
@@ -153,9 +154,16 @@ def list_knowledge(conn_id: str):
     return [e.to_dict() for e in entries]
 
 
+def _known_area(conn_id: str, area: str) -> None:
+    from pramanyx.semantic.areas import unknown_area
+    if (why_not := unknown_area(conn_id, area)):
+        raise HTTPException(status_code=422, detail=why_not)
+
+
 @router.post("/{conn_id}/knowledge", status_code=201, dependencies=[gate(Capability.SEMANTIC_EDIT)])
 def create_knowledge(conn_id: str, body: KnowledgeEntryIn):
     from pramanyx.semantic.connection_kb import KnowledgeEntry, upsert_entry
+    _known_area(conn_id, body.area)
     entry = KnowledgeEntry(
         id=body.id or "",
         title=body.title,
@@ -163,6 +171,7 @@ def create_knowledge(conn_id: str, body: KnowledgeEntryIn):
         kind=body.kind,          # type: ignore[arg-type]
         tags=body.tags,
         connection_id=conn_id,
+        area=body.area,
     )
     saved = upsert_entry(conn_id, entry)
     return saved.to_dict()
@@ -171,6 +180,7 @@ def create_knowledge(conn_id: str, body: KnowledgeEntryIn):
 @router.put("/{conn_id}/knowledge/{entry_id}", status_code=200, dependencies=[gate(Capability.SEMANTIC_EDIT)])
 def update_knowledge(conn_id: str, entry_id: str, body: KnowledgeEntryIn):
     from pramanyx.semantic.connection_kb import KnowledgeEntry, upsert_entry, load_entries
+    _known_area(conn_id, body.area)
     existing = {e.id: e for e in load_entries(conn_id)}
     if entry_id not in existing:
         raise HTTPException(status_code=404, detail="Knowledge entry not found")
@@ -181,6 +191,7 @@ def update_knowledge(conn_id: str, entry_id: str, body: KnowledgeEntryIn):
         kind=body.kind,          # type: ignore[arg-type]
         tags=body.tags,
         connection_id=conn_id,
+        area=body.area,
     )
     saved = upsert_entry(conn_id, entry)
     return saved.to_dict()
@@ -188,8 +199,12 @@ def update_knowledge(conn_id: str, entry_id: str, body: KnowledgeEntryIn):
 
 @router.delete("/{conn_id}/knowledge/{entry_id}", status_code=200)
 def delete_knowledge(conn_id: str, entry_id: str):
+    from pramanyx.record.writers import NotTheOwner
     from pramanyx.semantic.connection_kb import delete_entry
-    ok = delete_entry(conn_id, entry_id)
+    try:
+        ok = delete_entry(conn_id, entry_id)
+    except NotTheOwner as exc:
+        raise HTTPException(status_code=403, detail=f"This definition is not yours to take away: {exc}.")
     if not ok:
         raise HTTPException(status_code=404, detail="Knowledge entry not found")
     return {"ok": True}

@@ -1172,6 +1172,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/areas/{conn_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Areas
+         * @description Every area a connection is read by — its industry's, in its order, then the organisation's own — with each one's
+         *     owners and place, and what people placed in them.
+         */
+        get: operations["get_areas_areas__conn_id__get"];
+        /**
+         * Put Areas
+         * @description A curator declares the organisation's areas — new ones, and owners and places for the industry's own — whole,
+         *     as the Settings page saves the organisation's priorities. Refused with every problem said: a parent that is no area,
+         *     a cycle, more than five levels.
+         */
+        put: operations["put_areas_areas__conn_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/areas/{conn_id}/placement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Area Placement
+         * @description A person places a table, a whole connection or a metric in an area — what it means, never who may read it. It
+         *     outranks every placement by evidence. An agent cannot make it.
+         */
+        put: operations["put_area_placement_areas__conn_id__placement_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/arrivals/claims": {
         parameters: {
             query?: never;
@@ -3235,8 +3283,8 @@ export interface paths {
         };
         /**
          * List Chat Sessions Route
-         * @description Recent chat sessions for the threads rail (CI-6a) — id, opening question as the
-         *     title, turn count, last activity. Org-scoped in the store, like the turns read.
+         * @description The caller's threads for the threads rail (CI-6a): the ones they began and the ones they were added to — id,
+         *     title, turns, last activity, and who is in it. Org-scoped in the store, like the turns read.
          */
         get: operations["list_chat_sessions_route_chat_sessions_get"];
         put?: never;
@@ -3278,6 +3326,47 @@ export interface paths {
         patch: operations["rename_chat_session_route_chat_sessions__session_id__patch"];
         trace?: never;
     };
+    "/chat-sessions/{session_id}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Thread Members Route
+         * @description Add people to a conversation, or take them out — its owner's choice, never an agent's. Each must be one of the
+         *     organisation's people when the organisation has a people directory.
+         */
+        put: operations["set_thread_members_route_chat_sessions__session_id__members_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/chat-sessions/{session_id}/members/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Leave Thread Route
+         * @description A member leaves a conversation they were added to.
+         */
+        delete: operations["leave_thread_route_chat_sessions__session_id__members_me_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/chat-sessions/{session_id}/messages": {
         parameters: {
             query?: never;
@@ -3289,9 +3378,30 @@ export interface paths {
          * Get Chat Session Messages
          * @description The thread as AI-SDK ``UIMessage[]`` (CA-1) — thread selection on the web
          *     is ``setMessages`` over this, the same shape the live stream accumulates.
-         *     Org-scoped in the store, like the turns read.
+         *     Org-scoped in the store, like the turns read. In a conversation more than one person is in, each question says
+         *     who asked it.
          */
         get: operations["get_chat_session_messages_chat_sessions__session_id__messages_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/chat-sessions/{session_id}/people": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Thread People Route
+         * @description Who is in a conversation: who began it, who they added, who has asked in it.
+         */
+        get: operations["thread_people_route_chat_sessions__session_id__people_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4379,7 +4489,7 @@ export interface paths {
         put?: never;
         /**
          * Pin Answer
-         * @description Record which variant is correct. The warrant becomes "a person decided".
+         * @description Record which variant is correct. The warrant becomes "a person decided" — the person signed in, never an agent.
          */
         post: operations["pin_answer_consistency_pin_post"];
         delete?: never;
@@ -4478,11 +4588,12 @@ export interface paths {
         };
         /**
          * Where The Coworker Is
-         * @description Whether a coworker is running, and the address to open. Reads what was last said; asks nothing.
+         * @description Whether the caller's own coworker is running, and the address to open. Reads what was last said; starts nothing.
          *
-         *     The address carries the coworker shell's access token, so it is given only to a caller on this machine — the
-         *     only place a coworker on this machine's loopback can be opened from anyway (People, 2026-11-15: until then any
-         *     caller that could reach the API read the token). Anyone else is told one is running, and not where.
+         *     Each person's coworker is their own (2026-11-17): the address given is the caller's, never another person's. On an
+         *     install without sign-in there is one person, and the coworker start_all.sh starts is theirs. The address carries
+         *     the coworker shell's access token, so it is given only to a caller on this machine — the only place a coworker on
+         *     this machine's loopback can be opened from anyway. Anyone else is told it is running, and not where.
          */
         get: operations["where_the_coworker_is_coworker_get"];
         put?: never;
@@ -4550,6 +4661,29 @@ export interface paths {
          */
         put: operations["claim_the_next_answer_coworker_claim_put"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/coworker/mine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start My Coworker
+         * @description Start the caller's own coworker if it is not running (2026-11-17: "Each user must get its own co-worker").
+         *     Its first start sets up its own home and takes a minute; the app asks `GET /coworker` until it is there. A person
+         *     only, from this machine; on an install without sign-in the one coworker start_all.sh starts is the person's, and
+         *     none is started here.
+         */
+        post: operations["start_my_coworker_coworker_mine_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5619,6 +5753,27 @@ export interface paths {
          *     nothing in the product can see or reach.
          */
         delete: operations["delete_document_endpoint_documents__doc_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/documents/{doc_id}/access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Share Document
+         * @description An uploaded document's OWNER chooses who may read it (2026-11-17: an upload is private until its owner shares
+         *     it). Nobody else may, an agent least of all — a call carrying the agent's mark is refused, whoever it acts for.
+         */
+        put: operations["share_document_documents__doc_id__access_put"];
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -7615,6 +7770,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/governance/certification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Certification
+         * @description What is certified or deprecated: one asset (``ref``), or every one of a kind (a connection's tables).
+         */
+        get: operations["get_certification_governance_certification_get"];
+        /**
+         * Put Certification
+         * @description Certify or deprecate a table, document or dashboard — a curator's word (a document's owner's for
+         *     their own), never an agent's. A deprecation says why. Clearing it is an empty ``status``.
+         */
+        put: operations["put_certification_governance_certification_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/governance/gate-map": {
         parameters: {
             query?: never;
@@ -8109,8 +8289,9 @@ export interface paths {
         /**
          * Upload File
          * @description KI-2 — the file door: a metric file (CSV / TSV / XLSX in the columns of
-         *     `mappers.METRIC_COLUMNS` — `GET /intake/templates/metrics.csv`) or a dbt `manifest.json`
-         *     becomes a bundle through a DETERMINISTIC mapper and enters the SAME lane.
+         *     `mappers.METRIC_COLUMNS` — `GET /intake/templates/metrics.csv`), a dbt `manifest.json` (its
+         *     descriptions and its semantic layer), a LookML `.lkml`, or a Power BI model (`model.bim`, a `.tmdl`)
+         *     becomes a bundle through a DETERMINISTIC mapper and enters the SAME lane (`intake/bi_models.py`).
          *     The mapper judges nothing: every object still waits for a human verdict.
          *     ``schema`` — the dataset in view: a row that names no dataset belongs to it.
          */
@@ -8481,7 +8662,9 @@ export interface paths {
         /**
          * Get Investigations
          * @description Recent investigations/chats. When `workspace_id` is given, only those whose
-         *     connection belongs to that workspace are returned (data-path tenancy).
+         *     connection belongs to that workspace are returned (data-path tenancy). ``mine`` keeps the caller's own questions
+         *     (2026-11-17: a person's own coworker lists theirs, not everyone's); on an install without sign-in there is one
+         *     person, and it changes nothing.
          */
         get: operations["get_investigations_investigations_get"];
         put?: never;
@@ -9294,6 +9477,53 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/knowledge/{connection_id}/learned": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Learned
+         * @description What the platform has learned about a connection, in one shape (the ontology study, 2026-11-17): what each item
+         *     says, where it came from, who wrote it, its area, how it stands, when, what it rests on — confirmed and approved
+         *     first, then measured, then mined; held to the reader's clearance, what was withheld counted. Use is not counted
+         *     yet, and says so.
+         */
+        get: operations["read_learned_knowledge__connection_id__learned_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/knowledge/{connection_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Review
+         * @description What waits on a person for this connection's knowledge, in one list (Phase 3, 2026-11-17): gaps (questions that
+         *     framed on no definition, questions no run answered), candidates (unconfirmed findings and usage, Definition drafts
+         *     and suggested edits, proposed synonyms, an import's candidates, answers marked wrong or unhelpful) and conflicts (a
+         *     word meaning two things across areas, a question answered two ways). Busiest first; each row names its area's
+         *     owners and the page it is decided on. A view over the stores that hold them — a source not read is named.
+         */
+        get: operations["read_review_knowledge__connection_id__review_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/knowledge/{connection_id}/table-health": {
         parameters: {
             query?: never;
@@ -9734,6 +9964,11 @@ export interface paths {
          * @description Post a claim with its warrant. The claims' three laws are enforced at the door, plus the
          *     API's own: a claim that names no warrant at all is refused. The author is the principal; a
          *     natural key is the author's own and cannot restate another author's claim.
+         *
+         *     A person's tier is a person's own (2026-11-17): a claim an agent posts — a service principal, or a request carrying
+         *     the MCP client's mark, whoever it acts for — is the agent's, and cannot be posted at ``approved`` or ``declared``
+         *     whatever warrant it names. The attestation such a claim named was never checked, and the graph showed it to the
+         *     planner as a finding a person had confirmed. A person raises a claim by their own Right or approval.
          */
         post: operations["post_claim_ledger_v1_claims_post"];
         delete?: never;
@@ -10650,6 +10885,28 @@ export interface paths {
          * @description Forget the token set. The registration stays; the next begin signs the person in again.
          */
         post: operations["oauth_sign_out_mcp_servers__server_id__oauth_sign_out_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/clock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get My Clock
+         * @description The person's clock as the platform resolves it for this request, and the periods it counts from today
+         *     (`kernel/clock.py`, 2026-11-17: one definition of "yesterday" for the platform and the coworker). Reads nothing
+         *     else; changes nothing. ``source`` says where the zone came from.
+         */
+        get: operations["get_my_clock_me_clock_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -14605,6 +14862,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/org-settings/base-map": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Base Map
+         * @description The map drawn under a map answer (2026-11-17): none, OpenFreeMap's public tiles or the organisation's own tile
+         *     server, with the sentence that says what leaves. Read by every viewer's browser, so it carries no secret; it is
+         *     chosen in the organisation settings (`base_map`, `base_map_url`) by whoever may save them.
+         */
+        get: operations["get_base_map_org_settings_base_map_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/org-settings/effective": {
         parameters: {
             query?: never;
@@ -16055,6 +16334,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/record/claims/{claim_id}/right": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm Record Claim
+         * @description A person says a measured claim is right: restated at tier ``approved``, their word. From then on an explorer
+         *     finding is ground an answer may build on (2026-11-17: findings reach an answer only once a person confirmed them).
+         *     A call an agent makes is refused, whoever it acts for — a confirmation is a person's own click.
+         */
+        post: operations["confirm_record_claim_record_claims__claim_id__right_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/record/claims/{claim_id}/versions": {
         parameters: {
             query?: never;
@@ -16349,15 +16650,16 @@ export interface paths {
         };
         /**
          * List Definitions
-         * @description A connection's Definitions, or the one for ``term``. Read by the app's Definition page and by an answer that
-         *     leaned on one.
+         * @description A connection's Definitions, or the ones for ``term`` — one per area it is defined in, or the one in ``area``.
+         *     Read by the app's Definition page and by an answer that leaned on one.
          */
         get: operations["list_definitions_record_definitions_get"];
         put?: never;
         /**
          * Write Record Definition
-         * @description A person writes what a business word means on a connection. Theirs, at tier ``declared``; writing it again
-         *     keeps the earlier wording beneath it, and a new wording waits for approval again.
+         * @description A person writes what a business word means on a connection, in a area. A word nobody has defined there is
+         *     their draft; their own definition they change directly; anyone else's change is filed as a suggested edit for its
+         *     owner (the ontology study, 2026-11-17), and the response says so (``suggested``).
          */
         post: operations["write_record_definition_record_definitions_post"];
         delete?: never;
@@ -16377,9 +16679,72 @@ export interface paths {
         put?: never;
         /**
          * Approve Record Definition
-         * @description Its owner approves a definition as written; anyone else is refused, and told whose it is.
+         * @description Its owner publishes a definition as written; anyone else is refused, and told whose it is.
          */
         post: operations["approve_record_definition_record_definitions_approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/record/definitions/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Draft Record Definition
+         * @description An agent drafts a definition FOR the person it acts for — the one definition door an agent may use (2026-11-17).
+         *     Nothing it writes is a person's word: a new word is a draft only said, owned by that person, until they publish it;
+         *     a word already defined becomes a suggested edit for its owner, marked as the agent's. With nobody to act for it is
+         *     refused.
+         */
+        post: operations["draft_record_definition_record_definitions_draft_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/record/definitions/suggestions/decide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decide Record Definition Suggestion
+         * @description Its owner accepts or declines a suggested edit.
+         */
+        post: operations["decide_record_definition_suggestion_record_definitions_suggestions_decide_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/record/definitions/unpublish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Unpublish Record Definition
+         * @description Its owner takes a published definition back to a draft.
+         */
+        post: operations["unpublish_record_definition_record_definitions_unpublish_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -19561,6 +19926,54 @@ export interface components {
             picks?: number[] | null;
         };
         /**
+         * AreaDeclaration
+         * @description An area of the business as the organisation declares it (the ontology study, Phase 1, 2026-11-17): a new one, or
+         *     an industry package's own (named by its id) given owners or a place under another. Written by a curator, never
+         *     inferred; an area is the glossary's word for a part of the business (`docs/GLOSSARY.md`).
+         */
+        AreaDeclaration: {
+            /**
+             * Business Owners
+             * @description Who answers for what it means
+             */
+            business_owners?: string[];
+            /**
+             * Id
+             * @description A short id: an industry package's area id to annotate it, or a new one
+             */
+            id: string;
+            /**
+             * Name
+             * @description What people call it; empty keeps the package's name
+             * @default
+             */
+            name: string;
+            /**
+             * Parent
+             * @description The area it sits under, by id; empty at the top (at most five levels)
+             * @default
+             */
+            parent: string;
+            /**
+             * Question
+             * @description The question the area answers, as a person running it asks it
+             * @default
+             */
+            question: string;
+            /**
+             * Technical Owners
+             * @description Who answers for its data
+             */
+            technical_owners?: string[];
+        };
+        /** AreasIn */
+        AreasIn: {
+            /** Areas */
+            areas: {
+                [key: string]: unknown;
+            }[];
+        };
+        /**
          * AskFocus
          * @description SP-15 — what is on screen when Spotlight is summoned: one object by kind and id.
          *
@@ -20141,6 +20554,33 @@ export interface components {
                 [key: string]: unknown;
             }[];
         };
+        /** CertificationIn */
+        CertificationIn: {
+            /**
+             * Connection Id
+             * @default
+             */
+            connection_id: string;
+            /** Kind */
+            kind: string;
+            /** Ref */
+            ref: string;
+            /**
+             * Schema
+             * @default
+             */
+            schema: string;
+            /**
+             * Status
+             * @default
+             */
+            status: string;
+            /**
+             * Why
+             * @default
+             */
+            why: string;
+        };
         /** ChangeOut */
         ChangeOut: {
             /** Describe */
@@ -20507,6 +20947,19 @@ export interface components {
              */
             question: string;
         };
+        /** ConfirmRequest */
+        ConfirmRequest: {
+            /**
+             * By
+             * @default
+             */
+            by: string;
+            /**
+             * Why
+             * @default
+             */
+            why: string;
+        };
         /** ConstraintIn */
         ConstraintIn: {
             /**
@@ -20553,6 +21006,12 @@ export interface components {
         /** CoworkerAddress */
         CoworkerAddress: {
             /**
+             * Person
+             * @description Whose coworker it is; empty for the install's first, started by start_all.sh.
+             * @default
+             */
+            person: string;
+            /**
              * Url
              * @description The address a person opens to reach the coworker.
              */
@@ -20587,12 +21046,30 @@ export interface components {
         CoworkerDoor: {
             /**
              * Available
-             * @description Whether a coworker has said it is running within the last two minutes.
+             * @description Whether the caller's own coworker has said it is running in the last two minutes.
              */
             available: boolean;
             /**
+             * Can Start
+             * @description Whether this install starts a coworker for the caller on request.
+             * @default false
+             */
+            can_start: boolean;
+            /**
+             * Reason
+             * @description Why none can be started, when none can.
+             * @default
+             */
+            reason: string;
+            /**
+             * Starting
+             * @description Whether the caller's coworker is starting now.
+             * @default false
+             */
+            starting: boolean;
+            /**
              * Url
-             * @description The address to open, when one is running.
+             * @description The address to open, when it is running.
              */
             url?: string | null;
         };
@@ -21085,21 +21562,50 @@ export interface components {
         };
         /** DefinitionApproval */
         DefinitionApproval: {
+            /**
+             * Area
+             * @default
+             */
+            area: string;
             /** Connection Id */
             connection_id: string;
             /** Term */
             term: string;
         };
+        /** DefinitionLink */
+        DefinitionLink: {
+            /** Kind */
+            kind: string;
+            /**
+             * Label
+             * @default
+             */
+            label: string;
+            /** Ref */
+            ref: string;
+        };
         /** DefinitionRequest */
         DefinitionRequest: {
             /** Aliases */
-            aliases?: string[];
+            aliases?: string[] | null;
+            /**
+             * Area
+             * @default
+             */
+            area: string;
             /** Connection Id */
             connection_id: string;
+            /** Links */
+            links?: components["schemas"]["DefinitionLink"][] | null;
             /** Term */
             term: string;
             /** Text */
             text: string;
+            /**
+             * Why
+             * @default
+             */
+            why: string;
         };
         /** DeltaStatusIn */
         DeltaStatusIn: {
@@ -21226,6 +21732,21 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** DocumentSharing */
+        DocumentSharing: {
+            /**
+             * Groups
+             * @default []
+             */
+            groups: string[];
+            /**
+             * People
+             * @default []
+             */
+            people: string[];
+            /** Sharing */
+            sharing: string;
+        };
         /** DoorAsk */
         DoorAsk: {
             /**
@@ -21270,6 +21791,29 @@ export interface components {
              * @default
              */
             schema: string;
+        };
+        /** DraftForRequest */
+        DraftForRequest: {
+            /** Aliases */
+            aliases?: string[] | null;
+            /**
+             * Area
+             * @default
+             */
+            area: string;
+            /** Connection Id */
+            connection_id: string;
+            /** Links */
+            links?: components["schemas"]["DefinitionLink"][] | null;
+            /** Term */
+            term: string;
+            /** Text */
+            text: string;
+            /**
+             * Why
+             * @default
+             */
+            why: string;
         };
         /** DraftRequest */
         DraftRequest: {
@@ -22298,6 +22842,11 @@ export interface components {
         };
         /** KnowledgeEntryIn */
         KnowledgeEntryIn: {
+            /**
+             * Area
+             * @default
+             */
+            area: string;
             /** Body */
             body: string;
             /** Id */
@@ -22908,6 +23457,24 @@ export interface components {
          */
         OrgSettings: {
             /**
+             * Areas
+             * @description The areas the organisation declares, and the owners and places it gives an industry package's own — written by a curator, never inferred.
+             */
+            areas?: components["schemas"]["AreaDeclaration"][];
+            /**
+             * Base Map
+             * @description The map drawn under a map answer: '' none (shapes on a blank ground), 'openfreemap' OpenFreeMap's public tiles (free, no key; only which map squares are viewed leave), 'own' the organisation's own tile server at base_map_url.
+             * @default
+             * @enum {string}
+             */
+            base_map: "" | "openfreemap" | "own";
+            /**
+             * Base Map Url
+             * @description The style URL of the organisation's own tile server, read when base_map is 'own'.
+             * @default
+             */
+            base_map_url: string;
+            /**
              * Briefing Metric Cap
              * @description How many approved headline metrics a Briefing measures, read by area in the map's order; 0 = the platform's default, 24. Each metric costs three warehouse queries per Briefing.
              * @default 0
@@ -23359,6 +23926,26 @@ export interface components {
             entity_id: string;
             /** Key */
             key: string;
+        };
+        /** PlacementIn */
+        PlacementIn: {
+            /**
+             * Area
+             * @default
+             */
+            area: string;
+            /** Kind */
+            kind: string;
+            /**
+             * Ref
+             * @default
+             */
+            ref: string;
+            /**
+             * Schema Name
+             * @default
+             */
+            schema_name: string;
         };
         /** PlaybookEntryRequest */
         PlaybookEntryRequest: {
@@ -24584,6 +25171,27 @@ export interface components {
              */
             tables: string[];
         };
+        /** SuggestionDecision */
+        SuggestionDecision: {
+            /** Accept */
+            accept: boolean;
+            /**
+             * Area
+             * @default
+             */
+            area: string;
+            /** Connection Id */
+            connection_id: string;
+            /** Suggestion Id */
+            suggestion_id: string;
+            /** Term */
+            term: string;
+            /**
+             * Why
+             * @default
+             */
+            why: string;
+        };
         /** SuiteIn */
         SuiteIn: {
             /** Config */
@@ -24745,6 +25353,14 @@ export interface components {
             type: "text";
         } & {
             [key: string]: unknown;
+        };
+        /**
+         * ThreadMembersRequest
+         * @description The people a thread's owner adds: each by the email they sign in with.
+         */
+        ThreadMembersRequest: {
+            /** Members */
+            members?: string[];
         };
         /**
          * Tool
@@ -26901,6 +27517,11 @@ export interface components {
              * @default
              */
             clock_here: string;
+            /**
+             * Confirmed Rhythm
+             * @default false
+             */
+            confirmed_rhythm: boolean;
             /**
              * Conn Id
              * @description The connection the chain runs against.
@@ -29157,6 +29778,113 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["AllowRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_areas_areas__conn_id__get: {
+        parameters: {
+            query?: {
+                schema?: string | null;
+            };
+            header?: never;
+            path: {
+                conn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_areas_areas__conn_id__put: {
+        parameters: {
+            query?: {
+                schema?: string | null;
+            };
+            header?: never;
+            path: {
+                conn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AreasIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_area_placement_areas__conn_id__placement_put: {
+        parameters: {
+            query?: {
+                connection_id?: string | null;
+            };
+            header?: never;
+            path: {
+                conn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlacementIn"];
             };
         };
         responses: {
@@ -32901,7 +33629,102 @@ export interface operations {
             };
         };
     };
+    set_thread_members_route_chat_sessions__session_id__members_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ThreadMembersRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    leave_thread_route_chat_sessions__session_id__members_me_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_chat_session_messages_chat_sessions__session_id__messages_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    thread_people_route_chat_sessions__session_id__people_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -34959,6 +35782,26 @@ export interface operations {
             };
         };
     };
+    start_my_coworker_coworker_mine_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoworkerDoor"];
+                };
+            };
+        };
+    };
     take_a_coworker_turn_coworker_trace_post: {
         parameters: {
             query?: never;
@@ -36493,6 +37336,41 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    share_document_documents__doc_id__access_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocumentSharing"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -39992,6 +40870,72 @@ export interface operations {
             };
         };
     };
+    get_certification_governance_certification_get: {
+        parameters: {
+            query: {
+                kind: string;
+                connection_id?: string;
+                ref?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_certification_governance_certification_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CertificationIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_gate_map_governance_gate_map_get: {
         parameters: {
             query?: never;
@@ -41259,6 +42203,7 @@ export interface operations {
             query?: {
                 limit?: number;
                 workspace_id?: string | null;
+                mine?: boolean;
             };
             header?: never;
             path?: never;
@@ -42540,6 +43485,75 @@ export interface operations {
         parameters: {
             query: {
                 q: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                connection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_learned_knowledge__connection_id__learned_get: {
+        parameters: {
+            query?: {
+                about?: string;
+                area?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                connection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_review_knowledge__connection_id__review_get: {
+        parameters: {
+            query?: {
+                area?: string;
                 limit?: number;
             };
             header?: never;
@@ -44966,6 +45980,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_my_clock_me_clock_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };
@@ -51786,6 +52820,26 @@ export interface operations {
             };
         };
     };
+    get_base_map_org_settings_base_map_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
     get_effective_settings_org_settings_effective_get: {
         parameters: {
             query?: {
@@ -54103,6 +55157,43 @@ export interface operations {
             };
         };
     };
+    confirm_record_claim_record_claims__claim_id__right_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                claim_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_record_claim_versions_record_claims__claim_id__versions_get: {
         parameters: {
             query?: never;
@@ -54637,6 +55728,7 @@ export interface operations {
             query: {
                 connection_id: string;
                 term?: string | null;
+                area?: string | null;
             };
             header?: never;
             path?: never;
@@ -54704,6 +55796,115 @@ export interface operations {
         };
     };
     approve_record_definition_record_definitions_approve_post: {
+        parameters: {
+            query?: {
+                connection_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DefinitionApproval"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    draft_record_definition_record_definitions_draft_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftForRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decide_record_definition_suggestion_record_definitions_suggestions_decide_post: {
+        parameters: {
+            query?: {
+                connection_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SuggestionDecision"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unpublish_record_definition_record_definitions_unpublish_post: {
         parameters: {
             query?: {
                 connection_id?: string | null;

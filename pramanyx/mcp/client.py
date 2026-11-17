@@ -47,6 +47,20 @@ AGENT_HEADER = "X-Pramanyx-Agent"
 DELEGATION_HEADER = "X-Pramanyx-Delegation"
 
 
+def _kept_clock() -> str:
+    """The zone the coworker's page said its browser is in (``PRAMANYX_CLOCK_FILE``), or ""."""
+    path = os.environ.get("PRAMANYX_CLOCK_FILE", "").strip()
+    if not path:
+        return ""
+    try:
+        with open(path, encoding="utf-8") as f:
+            zone = f.read(64).strip()
+    except OSError:
+        return ""
+    from pramanyx.kernel.clock import readable_zone
+    return readable_zone(zone)
+
+
 def _delegation() -> str:
     """The delegation the coworker's host keeps (``PRAMANYX_DELEGATION_FILE``), or ""."""
     path = os.environ.get("PRAMANYX_DELEGATION_FILE", "").strip()
@@ -67,6 +81,32 @@ CURRENT_TOOL: ContextVar[str] = ContextVar("pramanyx_mcp_current_tool", default=
 SERVICE_NAME_HEADER = "X-Pramanyx-Service"
 SERVICE_KEY_HEADER = "X-Pramanyx-Service-Key"
 CURRENT_CALLER: ContextVar[Optional[tuple[str, str]]] = ContextVar("pramanyx_mcp_current_caller", default=None)
+
+
+#: What a brought-in file becomes, by its extension: a table to ask about, or a document to read.
+SHEET_EXTENSIONS = frozenset({".csv", ".tsv", ".xlsx", ".parquet", ".parq", ".json"})
+DOCUMENT_EXTENSIONS = frozenset({".pdf", ".docx", ".doc", ".pptx", ".ppt", ".md", ".markdown", ".txt", ".html", ".htm",
+                                 ".rtf", ".odt"})
+#: The most a brought-in file may weigh: the sheets' own staging limit.
+MAX_ATTACHED_BYTES = 512 * 1024 * 1024
+
+
+def attached_file(path: str) -> "tuple[str, int] | str":
+    """``(real path, size)`` of a file the person attached in the coworker, or why it cannot be read. Only a file inside
+    the coworker's attachments folder is read — resolved, so neither ``..`` nor a link leads out of it."""
+    root = (os.environ.get("PRAMANYX_ATTACHMENTS_DIR") or "").strip()
+    if not root:
+        return "attached files are not readable here: the coworker did not say where it keeps them"
+    root_real = os.path.realpath(root)
+    real = os.path.realpath(os.path.expanduser(str(path or "").strip()))
+    if not real.startswith(root_real + os.sep):
+        return "only a file the person attached in this conversation is brought in; that path is not one"
+    if not os.path.isfile(real):
+        return "no attached file is there"
+    size = os.path.getsize(real)
+    if size > MAX_ATTACHED_BYTES:
+        return f"the file is {size // (1024 * 1024)} MB; the most brought in is {MAX_ATTACHED_BYTES // (1024 * 1024)} MB"
+    return real, size
 
 
 class PramanyxError(RuntimeError):
@@ -143,6 +183,12 @@ class PramanyxClient:
             person = _delegation()
             if person:
                 h[DELEGATION_HEADER] = person
+            # 2026-11-17 — the person's clock, kept beside them by the coworker's host: the platform counts "yesterday"
+            # from this person's today (`kernel/clock.py`).
+            zone = _kept_clock()
+            if zone:
+                from pramanyx.kernel.clock import CLOCK_HEADER
+                h[CLOCK_HEADER] = zone
         tool = CURRENT_TOOL.get()
         if tool:
             h[TOOL_HEADER] = tool
@@ -189,6 +235,14 @@ class PramanyxClient:
         async with self._mk_client() as c:
             try:
                 r = await c.post(path, json=json_body, params=_clean(params))
+            except httpx.HTTPError as e:
+                raise PramanyxError(f"POST {path} failed — is the Pramanyx API running at {self.base_url}? ({e})") from e
+        return self._unwrap(r, path)
+
+    async def _post_file(self, path: str, name: str, data: bytes) -> Any:
+        async with self._mk_client() as c:
+            try:
+                r = await c.post(path, files={"file": (name, data)}, timeout=180.0)
             except httpx.HTTPError as e:
                 raise PramanyxError(f"POST {path} failed — is the Pramanyx API running at {self.base_url}? ({e})") from e
         return self._unwrap(r, path)
@@ -593,7 +647,8 @@ class PramanyxClient:
         return await self._get("/web/search", params={"q": query, "n": n})
 
     # ── A question on a rhythm, run by the platform (the coworker plan, 2026-11-15) ────────────────
-    async def schedule(self, request: str, connection: str, timezone: str = "", browser_time_zone: str = "") -> dict:
+    async def schedule(self, request: str, connection: str, timezone: str = "", browser_time_zone: str = "",
+                       confirm_rhythm: bool = False) -> dict:
         """ANYTHING ON A SCHEDULE, FROM A SENTENCE (2026-11-16). The person's words go to the platform's own designer
         (`POST /automations/propose`, `automations/propose.py`): a model drafts the whole chain — when it runs, what
         it does, where it goes — from what this install has, and the same checks a save runs refuse a draft that
@@ -603,10 +658,13 @@ class PramanyxClient:
         for the agent to ask. One scheduler — the platform's; one designer — the one the Automations page uses.
 
         ``timezone`` is a zone the person named; ``browser_time_zone`` the one the shell tells the agent the person's
-        browser is in. Which the times are read in is the platform's order (`automations.propose.the_clock`)."""
+        browser is in. Which the times are read in is the platform's order (`automations.propose.the_clock`).
+
+        ``confirm_rhythm`` says the person confirmed a rhythm more often than hourly, which is otherwise left open and
+        asked (2026-11-17: an agent passed "in 2 minutes" on as "every 2 minutes", and that schedule was made)."""
         drafted = await self._post("/automations/propose", json_body={
             "outcome": request, "conn_id": connection, "timezone": timezone.strip(),
-            "clock_here": browser_time_zone.strip(), "from_conversation": True})
+            "clock_here": browser_time_zone.strip(), "from_conversation": True, "confirmed_rhythm": bool(confirm_rhythm)})
         drafted = drafted if isinstance(drafted, dict) else {}
         if drafted.get("verdict") != "proposed" or not drafted.get("draft"):
             return {"scheduled": False, "reason": drafted.get("reason") or "the request could not be made into a schedule",
@@ -630,6 +688,62 @@ class PramanyxClient:
                 "open": f"/automations?conn={connection}&focus={made.get('id')}"}
 
     # ── DE-2c: the knowledge tools, through the API like everything else ───────────
+    async def get_definitions(self, connection: str, *, term: Optional[str] = None) -> dict:
+        rows = await self._get("/record/definitions", params={"connection_id": connection, **({"term": term} if term else {})})
+        keep = ("term", "area", "state", "owner", "aliases", "links", "approved_by", "approved_on")
+        return {"definitions": [{**{k: r.get(k) for k in keep}, "text": (r.get("statement") or {}).get("text", ""),
+                                 "suggested_edits_pending": len(r.get("suggestions") or [])} for r in rows or []]}
+
+    async def draft_definition(self, connection: str, *, term: str, text: str, area: str = "",
+                               aliases: Optional[list[str]] = None, why: str = "") -> dict:
+        body = {"connection_id": connection, "term": term, "text": text, "area": area, "why": why,
+                **({"aliases": aliases} if aliases is not None else {})}
+        got = await self._post("/record/definitions/draft", json_body=body)
+        return {"made": got.get("made"), "term": got.get("term"), "area": got.get("area"), "state": got.get("state"),
+                "owner": got.get("owner"), "text": (got.get("statement") or {}).get("text"),
+                "suggestion": got.get("suggested"), "publish_at": got.get("publish_at")}
+
+    async def bring_in_file(self, path: str, *, name: str = "") -> dict:
+        """A file the person attached in the coworker, brought into Pramanyx as theirs (the ontology study, Phase 2,
+        2026-11-17): a table-shaped file becomes a SHEET on the Sheets connection, anything else to read a DOCUMENT
+        the answers search — each private to the person until they share it. Read only from the coworker's own
+        attachments (`PRAMANYX_ATTACHMENTS_DIR`): a path anywhere else is refused, so the model can never point this
+        at another file on the machine."""
+        found = attached_file(path)
+        if isinstance(found, str):
+            return {"brought_in": False, "why": found}
+        real, size = found
+        shown = (name or os.path.basename(real)).strip()[:200] or "attached file"
+        ext = os.path.splitext(shown.lower())[1] or os.path.splitext(real.lower())[1]
+        with open(real, "rb") as fh:
+            data = fh.read()
+        if ext in SHEET_EXTENSIONS:
+            staged = await self._post_file("/sheets/files", shown, data)
+            tabs = staged.get("tabs") or [{"tab": ""}]
+            base = os.path.splitext(shown)[0][:80] or "Attached sheet"
+            plans = [{"tab": t.get("tab", ""), "name": base if len(tabs) == 1 else f"{base} · {t.get('tab') or i + 1}"}
+                     for i, t in enumerate(tabs)]
+            made = await self._post("/sheets", json_body={"source": "file", "token": staged.get("token", ""), "tabs": plans})
+            sheets = [{"id": x.get("id"), "name": x.get("name"), "table": x.get("table"), "rows": x.get("row_count"),
+                       "open": f"/sheets/{x.get('id')}"} for x in (made or {}).get("sheets") or []]
+            return {"brought_in": True, "kind": "sheet", "connection": "sheets", "file": shown, "bytes": size,
+                    "sheets": sheets, "private": "only the person can see it until they share it",
+                    "next": "ask about it with `ask` on connection `sheets`, naming the sheet"}
+        if ext in DOCUMENT_EXTENSIONS:
+            doc = await self._post_file("/documents/upload", shown, data)
+            return {"brought_in": True, "kind": "document", "file": shown, "bytes": size,
+                    "document": {"id": doc.get("doc_id"), "title": doc.get("title"), "chunks": doc.get("chunk_count"),
+                                 "pages_needing_ocr": doc.get("pages_needing_ocr") or []},
+                    "private": "only the person can see it until they share it",
+                    "next": "its passages now reach answers on any connection the person asks about"}
+        return {"brought_in": False, "why": f"a {ext or 'nameless'} file is neither a table nor a document Pramanyx reads; "
+                                            f"tables: {', '.join(sorted(SHEET_EXTENSIONS))}; documents: "
+                                            f"{', '.join(sorted(DOCUMENT_EXTENSIONS))}"}
+
+    async def read_learned(self, connection: str, *, about: str = "", area: str = "") -> dict:
+        return await self._get(f"/knowledge/{connection}/learned",
+                               params={k: v for k, v in (("about", about), ("area", area)) if v})
+
     async def search_graph(self, connection: str, query: str, *, limit: int = 10) -> dict:
         return await self._get(f"/knowledge/{connection}/graph/search", params={"q": query, "limit": limit})
 

@@ -347,3 +347,39 @@ def test_the_designer_writes_a_question_as_asked_never_how_to_report_it():
     # Found beside the agent shell's own scheduler, which kept "yesterday" relative to each run: the designer had
     # written "For yesterday (2026-11-15, …)" — right once, wrong every morning after for a daily schedule.
     assert "Keep a period as the person said it" in p.system and "Never turn it into a calendar date" in p.system
+
+
+# ── 2026-11-17: a rhythm more often than hourly, from a conversation, is confirmed before it is made ─────────────────
+
+def test_a_sub_hourly_rhythm_is_said_back_in_words_and_once_or_hourly_or_daily_needs_nothing():
+    from datetime import datetime, timezone as tz
+    from pramanyx.automations.propose import rhythm_to_confirm
+    now = datetime(2026, 11, 17, 1, 40, tzinfo=tz.utc)
+    draft = lambda cron, **kw: {"timezone": "Asia/Calcutta", "conditions": [{"kind": "schedule", "config": {"cron": cron}}], **kw}
+    runaway = rhythm_to_confirm(draft("DTSTART:20261117T074500\nRRULE:FREQ=MINUTELY;INTERVAL=2"), now)
+    assert "runs every 2 minutes, with no end" in runaway and "confirm_rhythm" in runaway
+    assert "every 2 minutes, with no end" in rhythm_to_confirm(draft("*/2 * * * *"), now)
+    bounded = rhythm_to_confirm(draft("DTSTART:20261117T074500\nRRULE:FREQ=MINUTELY;INTERVAL=15;COUNT=4"), now)
+    assert "every 15 minutes (" in bounded and "with no end" not in bounded       # still asked: a quarter-hourly analysis
+    assert "with no end" not in rhythm_to_confirm(draft("*/5 * * * *", expires_at="2026-11-18T00:00:00Z"), now)
+    for fine in ("DTSTART:20261117T074500\nRRULE:FREQ=DAILY;COUNT=1",    # once, in five minutes
+                 "0 * * * *",                                              # hourly
+                 "0 8 * * 1-5"):                                           # weekday mornings
+        assert rhythm_to_confirm(draft(fine), now) == "", fine
+    assert rhythm_to_confirm({"conditions": [{"kind": "metric", "config": {}}]}, now) == ""
+
+
+def test_the_propose_door_leaves_a_conversations_sub_hourly_rhythm_open_but_not_the_pages_or_a_confirmed_one(monkeypatch):
+    from fastapi.testclient import TestClient
+    import pramanyx.automations.propose as P
+    from pramanyx.api import app
+    every_two = {"conn_id": CONN, "name": "Top categories", "timezone": "UTC",
+                 "conditions": [{"kind": "schedule", "config": {"cron": "*/2 * * * *"}}],
+                 "effects": [{"kind": "investigate", "config": {"question": "Top 5 categories by revenue yesterday"}}]}
+    monkeypatch.setattr(P, "propose_chain", lambda *a, **k: P.ChainProposal(verdict="proposed", draft=every_two))
+    client = TestClient(app)
+    ask = lambda **kw: client.post("/automations/propose", json={"outcome": "every 2 minutes, top categories",
+                                                                  "conn_id": CONN, **kw}).json()["to_fill"]
+    assert any("every 2 minutes, with no end" in x for x in ask(from_conversation=True))
+    assert ask(from_conversation=True, confirmed_rhythm=True) == []
+    assert ask() == []                         # the Automations page draws the draft on the canvas for a person to check

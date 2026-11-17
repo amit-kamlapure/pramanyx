@@ -151,6 +151,49 @@ def test_a_service_principal_posts_a_claim_with_its_warrant_and_the_laws_hold_at
     assert record["n"] == 1 and record["by_kind"] == {"observation": 1} and record["restated"] == 1
 
 
+def test_a_person_s_tier_is_never_posted_by_an_agent_whatever_attestation_it_names():
+    """2026-11-17: the door let a non-person post tier `approved` or `declared` with any `attestation` warrant, unchecked.
+    The graph then showed the claim to the planner as a finding a person had confirmed. An agent posts as the agent —
+    the MCP client's call for a signed-in person included — and only a person raises a claim."""
+    from pramanyx.mcp.client import AGENT_HEADER, AGENT_MARK
+    from pramanyx.org.context import reset_actor, set_actor
+    conn, name = _conn(), "acme-" + uuid.uuid4().hex[:6]
+    SP.mint(name, org_id="default", by="user:ana", connections=[conn])
+    service = authz.Principal(user_id=f"service:{name}", org_id="default")
+    agent_call = _req({AGENT_HEADER: AGENT_MARK}, principal=PERSON)       # the coworker, acting for Ana
+    verdict = [R.WarrantIn(kind="attestation", ref="verdict:" + uuid.uuid4().hex[:8], detail="a person said so")]
+
+    def body(tier, kind="finding"):
+        return R.ClaimIn(kind=kind, statement=R.StatementIn(text="Revenue is net of refunds"), tier=tier,
+                         about=R.AboutIn(kind="connection", key=conn), warrants=verdict)
+    for tier in ("approved", "declared"):
+        for principal, request in ((service, None), (PERSON, agent_call)):
+            with pytest.raises(HTTPException) as e:
+                R.post_claim(body(tier), principal=principal, request=request)
+            assert e.value.status_code == 422 and e.value.detail["code"] == "CLAIM_REFUSED"
+            assert "person's own word" in e.value.detail["why"], e.value.detail
+    # the coworker's own claim, at its own tier, is booked as the agent's, for the person it acted for
+    said = R.post_claim(body("said"), principal=PERSON, request=agent_call)
+    assert (said["author"], said["author_kind"], said["tier"]) == ("user:ana", "agent", "said")
+    # with identity off, the MCP client's mark still makes it the agent's
+    token = set_actor("operator-ana")
+    try:
+        with pytest.raises(HTTPException):
+            R.post_claim(body("approved"), principal=None, request=_req({AGENT_HEADER: AGENT_MARK}))
+    finally:
+        reset_actor(token)
+    # a person, signed in and not through an agent, still declares what they know
+    mine = R.post_claim(body("declared"), principal=PERSON, request=_req({}))
+    assert (mine["author_kind"], mine["tier"]) == ("person", "declared")
+    # a definition and a usage claim have doors of their own, for anyone
+    for kind, door in (("definition", "/record/definitions"), ("usage", "query history")):
+        with pytest.raises(HTTPException) as e:
+            R.post_claim(body("said", kind=kind), principal=PERSON, request=_req({}))
+        assert door in e.value.detail["why"]
+    from pramanyx.kernel.contract import contract
+    assert any("person's own word" in law for law in contract()["entry"]["laws"])
+
+
 # ── restatements, subscriptions, events out ────────────────────────────────────────────────
 
 @pytest.fixture

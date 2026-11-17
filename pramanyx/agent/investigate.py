@@ -4791,10 +4791,11 @@ _SPEC_MAX_WINDOW_DAYS = 366
 def _clock_section(intake_data: dict) -> str:
     """The date, for the writer: a recommendation was scheduled for "Q1 2026" in September
     2026 (2026-09-29). One line — the writer writes no SQL, so the engine is not its business."""
-    from pramanyx.agent.sql_context import today_utc
+    from pramanyx.kernel.clock import person_clock, today_for
     _end = str((intake_data or {}).get("data_coverage_end") or "")[:10]
-    return (f"TODAY: {today_utc()}. A timeline or deadline you write is AFTER this date."
-            + (f" The data runs to {_end}." if _end else ""))
+    clock = person_clock()
+    return (f"TODAY: {today_for(clock).isoformat()} in {clock or 'UTC'}. A timeline or deadline you write is AFTER this "
+            "date." + (f" The data runs to {_end}." if _end else ""))
 
 
 def _metric_definition_receipt(intake_data: dict) -> str:
@@ -4966,6 +4967,13 @@ def _monthly_counts(conn_id: str, table: str, date_col: str, start: str, end: st
                                "returned", counter="deep_analysis.intake_probe_close")
 
 
+def _names_a_relative_period(question: str) -> bool:
+    """True when the question names a period counted from today (`kernel/clock.names_a_relative_period`, the one
+    definition the answer-divergence detector reads too)."""
+    from pramanyx.kernel.clock import names_a_relative_period
+    return names_a_relative_period(question)
+
+
 def _question_pins_period(question: str, obs_start: str, obs_end: str) -> bool:
     """True when the question explicitly names a calendar period (a 4-digit year) that the
     observation window already covers — the user asked for THIS specific period, so it must
@@ -5107,8 +5115,9 @@ def _clamp_intake_to_coverage(intake, dmin, dmax, question: str = "", today: str
     The LLM-retry path merely *asks* for a correction; this enforces it. Returns a
     coverage note (str) when anything was adjusted, else None.
 
-    - Observation is clipped to [dmin, dmax]; if it misses the data entirely it
-      becomes the full available history.
+    - Observation is clipped to [dmin, dmax] where it overlaps the data. A window that misses the data entirely is
+      KEPT, and the note says the period holds no rows (2026-11-17: "if no data exists, it should say so") — it is
+      never swapped for another period.
     - A RELATIVE 'last-N / recent' window the LLM mis-anchored to an OLDER in-range
       period is re-anchored to END at dmax (the data's latest point), and its
       comparison set to the prior window — so we analyse the most recent data and a
@@ -5123,10 +5132,11 @@ def _clamp_intake_to_coverage(intake, dmin, dmax, question: str = "", today: str
       variation" as a finding (the Direkteingabe specimen, 2026-08-19).
     - When the available history is short (<~45 days), the label says so and the
       note tells the planner to use a daily/weekly grain and skip MoM/YoY.
-    - A window ending on the wall-clock TODAY — a day still FILLING — is trimmed to end
-      at the last complete day (`today` is injectable for tests). See the guard below.
+    - A window ending on TODAY (the person's, `kernel/clock.py`) — a day still FILLING — is trimmed to end
+      at yesterday unless the question names it (`today` is injectable for tests). A source that keeps revising its
+      recent days makes their figures PROVISIONAL, said in the note; it no longer moves the window back.
     """
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
 
     # A cross-sectional intake used to be exempt. Its window still reaches every SQL-writing
     # prompt through the spec, so the same "last 6 months" the model placed in 2024 was
@@ -5145,6 +5155,12 @@ def _clamp_intake_to_coverage(intake, dmin, dmax, question: str = "", today: str
         return cs, ce, (cs != s or ce != e)
 
     os_, oe_, o_changed = _clip(intake.observation_start, intake.observation_end)
+    _asked_s, _asked_e = (intake.observation_start or "")[:10], (intake.observation_end or "")[:10]
+    _named = _names_a_relative_period(question) or bool(re.search(r"\b20\d{2}\b", question or ""))
+    if _asked_s and _asked_e and (_asked_e < dmin or _asked_s > dmax) and _named:
+        # A period the question names that holds no rows stays as asked; the check below says it is empty. A window the
+        # model chose for a question that names no period is its mistake, and still becomes the data's span.
+        o_changed = False
     if o_changed:
         notes.append(
             f"observation window clipped to the data's actual coverage [{os_} → {oe_}] "
@@ -5166,61 +5182,44 @@ def _clamp_intake_to_coverage(intake, dmin, dmax, question: str = "", today: str
     # erase real data on every run forever. A question that PINS the period (an
     # explicit year — "September 2nd, 2026") keeps its window and gets the warning
     # instead: the reader asked about today knowing it is today.
-    _today = (today or "")[:10] or datetime.now(timezone.utc).date().isoformat()
+    from pramanyx.kernel.clock import person_clock, today_for
+    _today = (today or "")[:10] or today_for(person_clock()).isoformat()
     _partial_anchor_max = dmax[:10]
     # Idea 4 — a source that keeps restating its recent days is "in progress" for longer
     # than one day: the last SETTLED day is `settle_days` back (learned from successive
     # daily counts, `settling.learned_lag_days`). With the default of 1, every line below
     # reads exactly as it did — "unsettled from" is today, the last settled day yesterday.
+    # 2026-11-17 — one definition of a period (`kernel/clock.py`): a source that keeps revising its recent days makes
+    # their figures provisional (said below); it no longer moves a window back to a settled day. Only TODAY, still
+    # filling, is trimmed — from a window the question did not name.
     _settle = max(1, int(settle_days or 1))
     _settle_why = settle_clause or f"its numbers keep moving for {_settle} days after a day ends, learned from observation"
-    try:
-        _unsettled_from = (datetime.fromisoformat(_today)
-                           - timedelta(days=_settle - 1)).date().isoformat()
-    except (ValueError, TypeError):
-        _unsettled_from = _today
+    _unsettled_from = _today
     try:
         if dmax[:10] >= _unsettled_from and dmin[:10] < _unsettled_from:
-            _last_complete = (datetime.fromisoformat(_today)
-                              - timedelta(days=_settle)).date().isoformat()
+            _last_complete = (datetime.fromisoformat(_today) - timedelta(days=1)).date().isoformat()
             _partial_anchor_max = min(dmax[:10], _last_complete)
             _oe_p = (intake.observation_end or "")[:10]
             _os_p = (intake.observation_start or "")[:10]
             if _oe_p >= _unsettled_from:
-                if _question_pins_period(question, _os_p, _oe_p):
-                    if _settle > 1:
-                        notes.append(
-                            f"the observation window ends on {_oe_p}, a day this source may "
-                            f"still change ({_settle_why}) — kept because the question "
-                            f"names it explicitly, but totals for that day are PROVISIONAL and "
-                            f"must not be read as a decline against older days"
-                        )
-                    else:
-                        notes.append(
-                            f"the observation window ends on {_today}, a day still in progress — "
-                            f"kept because the question names it explicitly, but totals for that "
-                            f"day are PARTIAL and must not be read as a decline against complete days"
-                        )
+                if _question_pins_period(question, _os_p, _oe_p) or re.search(r"\btoday\b", question or "", re.I):
+                    notes.append(
+                        f"the observation window ends on {_today}, a day still in progress — "
+                        f"kept because the question names it, but totals for that "
+                        f"day are PARTIAL and must not be read as a decline against complete days"
+                    )
                 else:
                     intake.observation_end = _last_complete
                     if _os_p > _last_complete:
                         intake.observation_start = _last_complete
                     intake.observation_label = _window_label(
                         intake.observation_start[:10], _last_complete)
-                    if _settle > 1:
-                        notes.append(
-                            f"the observation window reached into days this source may still "
-                            f"change ({dmax[:10]} is the data's latest point; {_settle_why}) "
-                            f"— it now ends at the newest day to read, {_last_complete}: totals over a "
-                            f"newer day read as a false collapse against older days"
-                        )
-                    else:
-                        notes.append(
-                            f"the observation window ended on {_today}, a day still in progress "
-                            f"({dmax[:10]} is the data's latest point) — it now ends at the last "
-                            f"complete day {_last_complete}: totals over a partial day read as a "
-                            f"false collapse against complete days"
-                        )
+                    notes.append(
+                        f"the observation window ended on {_today}, a day still in progress "
+                        f"({dmax[:10]} is the data's latest point) — it now ends at yesterday, "
+                        f"{_last_complete}: totals over a partial day read as a "
+                        f"false collapse against complete days"
+                    )
     except (ValueError, TypeError) as _exc:
         from pramanyx.kernel.errors import tolerate
         tolerate(_exc, "the partial-day trim is best-effort on malformed dates; the window "
@@ -5239,14 +5238,19 @@ def _clamp_intake_to_coverage(intake, dmin, dmax, question: str = "", today: str
         if _os0 and _oe0 and not _question_pins_period(question, _os0, _oe0):
             # The partial-day ceiling, not raw dmax: re-anchoring a stale window onto a
             # day still in progress would reintroduce the artifact the guard above trims.
-            _dmax_d = datetime.fromisoformat(_partial_anchor_max)
+            # A period the question counts from today ends YESTERDAY on the person's clock, whatever the data holds
+            # (2026-11-17); a window the model chose for a question that names no period still moves to the data's
+            # latest point, as before.
+            _relative = _names_a_relative_period(question)
+            _yesterday = (datetime.fromisoformat(_today) - timedelta(days=1)).date().isoformat()
+            _dmax_d = datetime.fromisoformat(_yesterday if _relative else _partial_anchor_max)
             _dmin_d = datetime.fromisoformat(dmin[:10])
             _oe_d = datetime.fromisoformat(_oe0)
             _os_d = datetime.fromisoformat(_os0)
             _win = (_oe_d - _os_d).days
             _gap = (_dmax_d - _oe_d).days
             if _win >= 0 and _gap > 31:   # window ends >1 month before the data's latest point
-                _new_os = max(_dmax_d - timedelta(days=_win), _dmin_d)
+                _new_os = (_dmax_d - timedelta(days=_win)) if _relative else max(_dmax_d - timedelta(days=_win), _dmin_d)
                 intake.observation_start = _new_os.date().isoformat()
                 intake.observation_end = _dmax_d.date().isoformat()
                 _new_ce = _new_os - timedelta(days=1)
@@ -5254,14 +5258,16 @@ def _clamp_intake_to_coverage(intake, dmin, dmax, question: str = "", today: str
                 intake.comparison_end = _new_ce.date().isoformat()
                 _months = max(1, round(_win / 30.44))
                 _unit = "month" if _months == 1 else "months"
-                intake.observation_label = f"Last {_months} {_unit} (most recent in data)"
+                intake.observation_label = (f"Last {_months} {_unit}" if _relative
+                                            else f"Last {_months} {_unit} (most recent in data)")
                 intake.comparison_label = f"Prior {_months} {_unit}"
+                _onto = "the period the question counts from today" if _relative else "the data's most recent window"
                 notes.append(
-                    f"observation re-anchored to the data's most recent window "
+                    f"observation re-anchored to {_onto} "
                     f"[{intake.observation_start} → {intake.observation_end}] — a relative "
                     f"'last/recent' framing had been placed at an older window ending {_oe0}, "
-                    f"{_gap} days before the latest data {dmax[:10]}; the prior-period (YoY) "
-                    f"comparison is now available"
+                    f"{_gap} days before {'yesterday' if _relative else 'the latest data ' + dmax[:10]}; the "
+                    f"prior-period comparison is set to the window before it"
                 )
     except (ValueError, TypeError) as _exc:
         from pramanyx.kernel.errors import tolerate
@@ -5288,6 +5294,21 @@ def _clamp_intake_to_coverage(intake, dmin, dmax, question: str = "", today: str
             _ce_new = (datetime.fromisoformat(_start) - timedelta(days=1)).date().isoformat()
             intake.comparison_start, intake.comparison_end = _last_n_start(question, _ce_new), _ce_new
             intake.comparison_label = _window_label(intake.comparison_start, _ce_new)
+
+    # 2026-11-17 — what the window holds, said once it is settled: days this source still revises are provisional; a
+    # period with no rows is said to have none, and is answered as such — never swapped for another.
+    _os_f, _oe_f = (intake.observation_start or "")[:10], (intake.observation_end or "")[:10]
+    if _os_f and _oe_f and (_oe_f < dmin[:10] or _os_f > dmax[:10]):
+        notes.append(f"the period asked, {_os_f} → {_oe_f}, holds no rows — the data spans {dmin[:10]} → "
+                     f"{dmax[:10]}. Say so plainly; do not answer for another period instead")
+    elif _settle > 1 and _oe_f:
+        try:
+            _revised_from = (datetime.fromisoformat(_today) - timedelta(days=_settle)).date().isoformat()
+        except (ValueError, TypeError):
+            _revised_from = ""
+        if _revised_from and _oe_f > _revised_from:
+            notes.append(f"days after {_revised_from} are ones this source may still change ({_settle_why}): figures "
+                         f"for them are PROVISIONAL — say so in one clause, and still answer for the period asked")
 
     # A cross-sectional answer ranks across a dimension and has no comparison window, so the
     # comparison verdicts below do not apply to it — they judged whatever placeholder the model

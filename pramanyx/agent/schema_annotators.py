@@ -79,6 +79,29 @@ def _routing(conn, base: str) -> str:
     return "\n".join(out)
 
 
+def _certification(conn, base: str) -> str:
+    """Say under a table what the organisation said of it: certified (vouched for, preferred) or deprecated (not to be
+    used unless the question names it), with who and why (the ontology study, 2026-11-17). Nothing is removed: a
+    deprecated table stays in the schema, marked. No mark stored ⇒ byte-identical, by construction."""
+    from pramanyx.govern.certification import tables_of, words
+    try:
+        marks = tables_of(_cid(conn))
+    except Exception as exc:  # noqa: BLE001 — unread, no mark is said; the schema itself stands
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "which tables are certified or deprecated could not be read", counter="schema.certification")
+        return base
+    if not marks:
+        return base
+    import re as _re
+    out: list[str] = []
+    for line in base.split("\n"):
+        out.append(line)
+        m = _re.match(r"^TABLE:\s+([\w.]+)", line)
+        if m and (mark := marks.get(m.group(1).strip().lower().rsplit(".", 1)[-1])):
+            out.append(f"  -- {words(mark)}")
+    return "\n".join(out)
+
+
 def _exploration(conn, base: str) -> str:
     from pramanyx.explorer.store import render_exploration_annotations
     expl_block = render_exploration_annotations(_cid(conn))
@@ -460,3 +483,5 @@ def register() -> None:
     # Routing guidance runs on BOTH phases: it is the human's own instruction, and a
     # cheap `get_schema()` answer must honour it exactly as a deep build does.
     register_schema_annotator("routing", _routing, phase="all")
+    # A curator's mark on a table — certified or deprecated — is the organisation's word, on every phase like routing.
+    register_schema_annotator("certification", _certification, phase="all")

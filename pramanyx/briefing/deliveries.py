@@ -83,14 +83,13 @@ def deliveries_of(conn_id: str, briefing: dict, *, scope_key: str, limit: int = 
     return {"deliveries": mine, "current_version": current}
 
 
-def sent_at_for(conn_id: str, subscription_id: str, covers: str) -> Optional[str]:
-    """When this subscription last sent the Briefing that covers ``covers``, or None if it never has.
-    A send pauses on it while data that ENDED does not move: the next edition would cover the same days."""
-    if not (subscription_id and covers):
+def last_sent(conn_id: str, subscription_id: str) -> Optional[str]:
+    """When this subscription last sent a Briefing, or None if it never has. A send over data that ENDED pauses on
+    it once one has gone out: every later period holds no rows, and saying so every morning is noise."""
+    if not subscription_id:
         return None
     rows = [_row(a) for a in _ledger().artifacts_of_kind(KIND, conn_id=conn_id, limit=500)]
-    sent = sorted(str(r.get("sent_at") or "") for r in rows
-                  if r.get("subscription_id") == subscription_id and r.get("covers") == covers)
+    sent = sorted(str(r.get("sent_at") or "") for r in rows if r.get("subscription_id") == subscription_id)
     return sent[-1] if sent else None
 
 

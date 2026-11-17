@@ -99,6 +99,12 @@ def _alive(pid: int) -> bool:
     return True
 
 
+def process_alive(pid: int) -> bool:
+    """Whether a process with this pid is running — the platform's one way to ask (`_alive`), for a caller outside
+    this module (each person's coworker, `pramanyx/coworkers.py`)."""
+    return _alive(pid)
+
+
 def _alive_on_windows(pid: int) -> bool:
     """Open the process and ask whether it has exited, which sends it nothing."""
     import ctypes

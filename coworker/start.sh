@@ -19,6 +19,10 @@ export DSH_TELEMETRY_MODE=DISABLED
 export PRAMANYX_API_URL="${PRAMANYX_API_URL:-http://127.0.0.1:8000}"
 # The person the app hands this coworker (a short-lived delegation), kept where the host and the MCP server read it.
 export PRAMANYX_DELEGATION_FILE="${PRAMANYX_DELEGATION_FILE:-$DSH_HOME/delegation}"
+# The person's clock — the zone the coworker's page says its browser is in — kept where the host and the MCP server read it.
+export PRAMANYX_CLOCK_FILE="${PRAMANYX_CLOCK_FILE:-$DSH_HOME/clock}"
+# The person's attached files, kept by the shell: the only folder the MCP server's `bring_in_file` reads.
+export PRAMANYX_ATTACHMENTS_DIR="${PRAMANYX_ATTACHMENTS_DIR:-$DSH_HOME/attachments}"
 # The shell's provider plugin will not send a request without a key. The model door takes none, so this is a
 # placeholder and not a secret.
 export PRAMANYX_DOOR_KEY="${PRAMANYX_DOOR_KEY:-no-key-the-door-takes-none}"
@@ -29,8 +33,11 @@ command -v pnpm >/dev/null 2>&1 || { echo "start: pnpm is not on PATH — the sh
 curl -fsS -o /dev/null --max-time 5 "$PRAMANYX_API_URL/health" \
   || { echo "start: no Pramanyx API at $PRAMANYX_API_URL — start it first" >&2; exit 1; }
 
+# Built when a plugin's bundle is missing or older than its source — a checkout moved to new code serves the new card.
 for plugin in "$here"/plugins/*/; do
-  [ -f "${plugin}lib/client.js" ] || { "$here/build.sh"; break; }
+  if [ ! -f "${plugin}lib/client.js" ] || [ -n "$(find "${plugin}src" -newer "${plugin}lib/client.js" -type f 2>/dev/null | head -1)" ]; then
+    "$here/build.sh"; break
+  fi
 done
 
 mkdir -p "$DSH_HOME" "$DSH_HOME/work"

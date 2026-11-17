@@ -86,9 +86,9 @@ def test_a_monthly_run_on_the_first_observes_the_month_that_just_ended():
     """The rule this replaced told a monthly automation firing on 1 October to observe
     August (measured 2026-09-23). September is complete on 1 October."""
     note = observation_note(datetime(2026, 10, 1, 8, 0, tzinfo=timezone.utc), "0 8 1 * *", 1)
-    assert "COMPLETE month: 2026-09" in note
+    assert "COMPLETE month, 2026-09" in note
     weekly = observation_note(datetime(2026, 9, 21, 8, 0, tzinfo=timezone.utc), "0 8 * * 1", 1)
-    assert "COMPLETE week: 2026-09-14 to 2026-09-20" in weekly
+    assert "COMPLETE week, 2026-09-14 to 2026-09-20" in weekly
 
 
 # ── measuring a period ──────────────────────────────────────────────────────────────────────
@@ -128,7 +128,8 @@ def test_deleting_a_connection_or_schema_drops_its_period_briefs_too(narrator):
 
 
 @pytest.mark.parametrize("source, moving, said", [
-    ("learned", [], "the platform measured a 8-day settling lag"),
+    # 2026-11-17 — the lag is said as provisional days, never as the period moved back
+    ("learned", [], "This source's days keep changing for 8 days after they end (the platform measured the lag)"),
     # theLook 2026-09-25: a table still moving at the horizon is named, and nothing is final
     ("beyond_horizon", ["order_items"], "order_items was still changing 7 days after a day ended"),
 ])

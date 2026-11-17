@@ -573,6 +573,14 @@ def get_exploration_findings(conn_id: str, schema: str | None = None):
             result = {k: ([] if isinstance(v, list) else {}) for k, v in result.items()} | {
                 "scope_error": str(e),
             }
+    # A finding over a table the reader's clearance withholds is withheld here too, as the graph slice withholds it
+    # (2026-11-17: this read — the MCP `list_findings` tool's — handed them out untrimmed), and said, never thinned.
+    from pramanyx.govern.retrieval_trim import tables_of_sql, trim_by_tables
+    trimmed = trim_by_tables(result["insights"] or [], lambda f: (f.get("signature") or {}).get("tables")
+                             or tables_of_sql(str(f.get("sql") or "")), connection_id=conn_id, schema_name=schema or "")
+    if trimmed.trimmed:
+        result["insights"] = trimmed.kept
+        result["withheld"] = trimmed.to_dict()
     # `findings` is the current key. The retired one mirrors the SAME list object and is kept
     # for one release; mirrored AFTER the schema filter so neither can serve unscoped rows.
     result["findings"] = result["insights"]

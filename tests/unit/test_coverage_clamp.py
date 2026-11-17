@@ -303,11 +303,14 @@ class TestIntakeCoverageClamp:
                                          settle_days=29)
         assert (it.observation_start, it.observation_end) == ("2026-03-05", "2026-09-04")
         assert note and "began 2026-03-04" in note
+        # 2026-11-17 — "the last 12 months" is counted from today, never from a settled day: a window the model ended
+        # on 31 August (32 days before yesterday) is moved to end yesterday, and the days the source still revises are
+        # said to be provisional.
         it = _intake(observation_start="2025-09-01", observation_end="2026-08-31",
                      comparison_start="2024-09-01", comparison_end="2025-08-31")
-        assert _clamp_intake_to_coverage(it, "2019-01-09", "2026-10-02", question="over the last 12 months",
-                                         today="2026-10-03", settle_days=29) is None
-        assert it.observation_start == "2025-09-01"
+        note = _clamp_intake_to_coverage(it, "2019-01-09", "2026-10-02", question="over the last 12 months",
+                                         today="2026-10-03", settle_days=29)
+        assert it.observation_end == "2026-10-02" and note and "PROVISIONAL" in note
         it = _intake(observation_start="2026-03-04", observation_end="2026-09-04",
                      comparison_start="2025-09-04", comparison_end="2026-03-03")
         _clamp_intake_to_coverage(it, "2019-01-09", "2026-10-02", today="2026-10-03", settle_days=29,

@@ -5,6 +5,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from pramanyx import coworkers as K
 from pramanyx.routers import coworker as C
 
 
@@ -12,23 +13,30 @@ from pramanyx.routers import coworker as C
 def door(monkeypatch):
     clock = {"t": 1000.0}
     monkeypatch.setattr(C, "_now", lambda: clock["t"])
-    monkeypatch.setattr(C, "_last", {"url": "", "at": 0.0})
+    monkeypatch.setattr(K, "_now", lambda: clock["t"])
+    monkeypatch.setattr(K, "_announced", {})
+    monkeypatch.delenv("PRAMANYX_REQUIRE_IDENTITY", raising=False)
     app = FastAPI()
     app.include_router(C.router)
     # The test client's caller is "testclient"; a coworker's is this machine.
     return TestClient(app, client=("127.0.0.1", 50000)), clock
 
 
+def _door(client) -> dict:
+    got = client.get("/coworker").json()
+    return {"available": got["available"], "url": got["url"]}
+
+
 def test_no_coworker_has_said_anything_so_none_is_offered(door):
     client, _ = door
-    assert client.get("/coworker").json() == {"available": False, "url": None}
+    assert _door(client) == {"available": False, "url": None}
 
 
 def test_a_coworker_says_where_it_is_and_the_app_is_told(door):
     client, _ = door
     said = client.put("/coworker/address", json={"url": "http://127.0.0.1:3090/?token=abc"})
     assert said.status_code == 200
-    assert client.get("/coworker").json() == {"available": True, "url": "http://127.0.0.1:3090/?token=abc"}
+    assert _door(client) == {"available": True, "url": "http://127.0.0.1:3090/?token=abc"}
 
 
 def test_a_coworker_that_has_stopped_saying_so_is_not_offered(door):
@@ -37,7 +45,7 @@ def test_a_coworker_that_has_stopped_saying_so_is_not_offered(door):
     clock["t"] += C.FRESH_FOR
     assert client.get("/coworker").json()["available"] is True          # the last second it stands
     clock["t"] += 1
-    assert client.get("/coworker").json() == {"available": False, "url": None}
+    assert _door(client) == {"available": False, "url": None}
     client.put("/coworker/address", json={"url": "http://localhost:3090/"})
     assert client.get("/coworker").json()["available"] is True          # and it comes back when it says so again
 
@@ -63,7 +71,7 @@ def test_an_ipv6_loopback_address_is_this_machine(door):
 
 
 def test_another_machine_may_not_say_where_the_coworker_is(monkeypatch):
-    monkeypatch.setattr(C, "_last", {"url": "", "at": 0.0})
+    monkeypatch.setattr(K, "_announced", {})
     app = FastAPI()
     app.include_router(C.router)
     stranger = TestClient(app, client=("203.0.113.9", 50000))
@@ -121,6 +129,25 @@ def test_a_helpers_work_is_written_inside_the_call_that_started_it(taken):
     assert r.status_code == 200
     assert seen[0]["parent_span_id"] == "spawn_1" and seen[1]["parent_span_id"] is None
     assert seen[1]["payload"] == {"helper": "f6602a4c-e2ec-4ff3-98fb-dfe4d7516b02", "description": "GMV by platform FY2027"}
+
+
+def test_a_turn_is_filed_under_the_person_the_coworker_acts_for(taken, monkeypatch):
+    """Phase 3 (2026-11-17): the coworker sends its delegation with a turn, and the turn is written under that person,
+    so the trace index's filter by person finds their coworker turns. None presented is nobody named; none is left
+    bound after the call."""
+    from pramanyx.org.context import current_user_id
+    from pramanyx.security import delegation
+    from pramanyx.security.authz import Principal
+    client, seen = taken
+    import pramanyx.obs.session_log as session_log
+    monkeypatch.setattr(session_log, "emit", lambda kind, **kw: seen.append({"kind": kind, "user": current_user_id(), **kw}))
+    monkeypatch.setattr(delegation, "resolve", lambda secret, audience=delegation.AUDIENCE:
+                        Principal(user_id="user:ana", org_id="default") if secret == "d" * 30 else None)
+    client.post("/coworker/trace", json={**TURN, "events": [{"kind": "final_response", "ok": True}]},
+                headers={delegation.HEADER: "d" * 30})
+    client.post("/coworker/trace", json={**TURN, "events": [{"kind": "final_response", "ok": True}]})
+    assert [e["user"] for e in seen] == ["user:ana", ""]
+    assert current_user_id() == ""
 
 
 def test_the_session_id_is_not_left_bound_after_the_call(taken):

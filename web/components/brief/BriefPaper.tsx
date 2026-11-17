@@ -53,12 +53,14 @@ export function PaperMasthead({ scope, edition, tools }: { scope: string; editio
   );
 }
 
-export function PaperDateline({ today, covers, lagDays, records, endedOn, stillMoving }: {
+export function PaperDateline({ today, covers, lagDays, records, endedOn, stillMoving, noData }: {
   today: string; covers: string; lagDays?: number | null; records: number;
   /** The data ENDED on this day: the edition is final, and no settling lag is said. */
   endedOn?: string | null;
   /** Tables that had not settled when the data stopped: that is a pause, and nothing in it is final. */
   stillMoving?: string[];
+  /** The data ended before the edition's period: it holds no row for it, so nothing is final — there is nothing. */
+  noData?: boolean;
 }) {
   return (
     <div className="aug-fs-sm" style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", padding: "7px 0",
@@ -67,7 +69,13 @@ export function PaperDateline({ today, covers, lagDays, records, endedOn, stillM
       <span>{covers}</span>
       {endedOn && (
         <>
-          {!stillMoving?.length && (
+          {noData && (
+            <span className="aug-fs-xs" data-testid="paper-no-data"
+              style={{ padding: "2px 8px", borderRadius: "var(--r-pill)", border: RULE, color: "var(--t2)" }}>
+              no data
+            </span>
+          )}
+          {!noData && !stillMoving?.length && (
             <span className="aug-fs-xs" data-testid="paper-final"
               style={{ padding: "2px 8px", borderRadius: "var(--r-pill)", background: "var(--grn1)", color: "var(--grn4)" }}>
               final

@@ -78,10 +78,12 @@ def test_gaps_say_the_disagreement_the_parked_question_the_missing_formula_and_t
     assert out[0]["action"] == {"verb": "Settle it", "kind": "inquiry", "ref": "q-rev"}
     assert out[2]["title"] == "Still open: What is causing delivery delays?" and "until 2026-11-08" in out[2]["text"]
     assert out[1]["title"] == "Cart-to-order conversion rate isn't measured"
-    assert out[3]["title"] == "Figures are read 29 days behind" and "not been seen to stop" in out[3]["text"]
+    assert out[3]["title"] == "The newest 29 days are provisional" and "not been seen to stop" in out[3]["text"]
     assert "settled" not in out[3]["title"] and "settles" not in out[3]["text"]
     learned = D.gaps([], [], {"lag_days": 29, "key": "range:yesterday", "lag_source": "learned"})[0]
-    assert learned["title"] == "The newest settled day is 29 days old" and learned["text"] == "The data settles 29 days late."
+    # 2026-11-17 — the period is the one asked; the lag only makes its newest figures provisional
+    assert learned["title"] == "The newest 29 days are provisional"
+    assert learned["text"] == "The data settles 29 days late: figures for those days may still change."
 
 
 def test_a_disagreeing_question_is_said_once_not_also_as_parked():

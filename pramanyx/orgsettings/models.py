@@ -36,6 +36,18 @@ class Priority(BaseModel):
     note: str = Field(default="", description="Why it matters, one line")
 
 
+class AreaDeclaration(BaseModel):
+    """An area of the business as the organisation declares it (the ontology study, Phase 1, 2026-11-17): a new one, or
+    an industry package's own (named by its id) given owners or a place under another. Written by a curator, never
+    inferred; an area is the glossary's word for a part of the business (`docs/GLOSSARY.md`)."""
+    id: str = Field(description="A short id: an industry package's area id to annotate it, or a new one")
+    name: str = Field(default="", description="What people call it; empty keeps the package's name")
+    question: str = Field(default="", description="The question the area answers, as a person running it asks it")
+    parent: str = Field(default="", description="The area it sits under, by id; empty at the top (at most five levels)")
+    business_owners: list[str] = Field(default_factory=list, description="Who answers for what it means")
+    technical_owners: list[str] = Field(default_factory=list, description="Who answers for its data")
+
+
 class OrgSettings(BaseModel):
     """App-wide organization settings (the singleton) and the shape of a
     workspace's resolved effective settings."""
@@ -163,6 +175,36 @@ class OrgSettings(BaseModel):
         description="Let the coworker search the web for outside context (holidays, news, an announcement), cited "
                     "and never used as a figure about the business. The words searched go to the search provider. "
                     "Off by default.",
+    )
+
+    # 2026-11-17 (the coworker as a two-way door, maps) — `pramanyx/orgsettings/base_map.py`. The answer's points and
+    # shapes are drawn in the browser from its own rows; a base map under them is fetched square by square from a
+    # tile server, so which squares a person views leave for that server. None by default: shapes on a blank ground.
+    base_map: Literal["", "openfreemap", "own"] = Field(
+        default="",
+        description="The map drawn under a map answer: '' none (shapes on a blank ground), 'openfreemap' OpenFreeMap's "
+                    "public tiles (free, no key; only which map squares are viewed leave), 'own' the organisation's "
+                    "own tile server at base_map_url.",
+    )
+    base_map_url: str = Field(
+        default="",
+        description="The style URL of the organisation's own tile server, read when base_map is 'own'.",
+    )
+
+    @field_validator("base_map_url")
+    @classmethod
+    def _a_web_address(cls, v: str) -> str:
+        """A style is fetched by the browser, so only a web address is one: a `javascript:` or `file:` URL is refused."""
+        v = (v or "").strip()
+        if v and not v.lower().startswith(("https://", "http://")):
+            raise ValueError("the tile server's style URL must start with https:// or http://")
+        return v
+
+    # ── The areas of the business (the ontology study, Phase 1, 2026-11-17) ──
+    areas: list[AreaDeclaration] = Field(
+        default_factory=list,
+        description="The areas the organisation declares, and the owners and places it gives an industry package's "
+                    "own — written by a curator, never inferred.",
     )
 
     # ── Working memory (CB-6) ──

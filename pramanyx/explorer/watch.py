@@ -52,7 +52,12 @@ def settled_period(conn_id: str, grain: str, *, today: date, resolve: Optional[C
     base = resolve or R.resolve_for
 
     def scoped(*args, **kwargs):
-        return base(*args, **kwargs, **({"schema": schema} if schema else {}))
+        extra = {"schema": schema} if schema else {}
+        if resolve is None:
+            # The platform's own reader (2026-11-17): a person's preset no longer moves back by the settling lag, but a
+            # baseline and an alert still read the newest SETTLED period — a period still being revised reads as a move.
+            extra["settled"] = True
+        return base(*args, **kwargs, **extra)
 
     if grain == "quarter":
         return _quarter_spec(conn_id, scoped, today)

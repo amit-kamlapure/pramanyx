@@ -43,11 +43,12 @@ export function PeriodMeasures({ block }: { block: BriefingPeriodBlock }) {
       </div>
       {block.lag_days > 1 && (
         <div style={{ color: "var(--t3)", marginBottom: 6 }}>
+          {/* 2026-11-17 — the period is the one asked; a source still revising its days makes the newest provisional. */}
           {block.lag_source === "beyond_horizon"
-            ? <>Ends {block.lag_days} days before today: {(block.still_moving ?? []).join(", ") || "a table"}{" "}
+            ? <>The newest {block.lag_days} days are provisional: {(block.still_moving ?? []).join(", ") || "a table"}{" "}
                 {(block.still_moving ?? []).length > 1 ? "were" : "was"} still changing {block.lag_days - 1} days
                 after a day ended, so their figures may still move.</>
-            : <>Ends {block.lag_days} days before today: newer days are still settling
+            : <>The newest {block.lag_days} days are provisional: they are still being revised as late rows arrive
                 {block.lag_source === "learned" ? ", a lag the platform measured" : ""}.</>}
         </div>
       )}

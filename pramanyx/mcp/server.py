@@ -304,11 +304,11 @@ async def read_restatements(
 
 @mcp.tool()
 async def post_claim(
-    kind: Annotated[str, Field(description="observation · finding · reading · hypothesis · prediction · said · cause (a definition is a person's).")],
+    kind: Annotated[str, Field(description="observation · finding · reading · hypothesis · prediction · said · cause. A definition is written at its own door, by a person; a usage claim is mined by the platform.")],
     text: Annotated[str, Field(description="The statement, in words.")],
     warrants: Annotated[list[dict], Field(description="At least one: [{kind: run|document|attestation|claim, ref: <receipt id, document locator, verdict id or claim id>, detail?}].")],
     connection: Annotated[Optional[str], Field(description="The connection the claim is about; omit for an organisation-wide claim.")] = None,
-    tier: Annotated[str, Field(description="said (default) · mined · measured (needs a run warrant); approved and declared are a person's.")] = "said",
+    tier: Annotated[str, Field(description="said (default) · mined · measured (needs a run warrant). approved and declared are a person's own word and are refused here, whatever warrant is named: a person raises a claim by their own verdict.")] = "said",
     metric: Annotated[str, Field(description="The metric the statement is about, when one; required for a prediction.")] = "",
     value: Annotated[Optional[float], Field(description="The typed value, when one.")] = None,
     unit: Annotated[str, Field(description="The value's unit.")] = "",
@@ -386,21 +386,25 @@ async def search_the_web(
 @mcp.tool()
 async def schedule(
     request: Annotated[str, Field(description=(
-        "What to run and when, in the person's own words, with anything they said about where it goes: "
-        "'every Monday at 9, GMV by platform', 'in five minutes, a summary of yesterday's orders', "
-        "'every weekday at 8, post revenue to #general', 'on the first of each month, email the margin report to "
-        "x@y.com'. Pass their words; do not translate them into a cron."))],
+        "The person's own sentence, COPIED EXACTLY — never reworded, shortened or summarised: 'in 2 minutes' is once, "
+        "'every 2 minutes' is a rhythm, and swapping one for the other makes the wrong schedule. Include anything they "
+        "said about where it goes: 'every Monday at 9, GMV by platform', 'in five minutes, a summary of yesterday's "
+        "orders', 'every weekday at 8, post revenue to #general'. Do not translate it into a cron."))],
     connection: Annotated[str, Field(description="The connection the schedule runs against.")],
     timezone: Annotated[str, Field(description="Only a clock the person NAMED ('at 9 London time' → Europe/London), as an IANA name; empty when they named none.")] = "",
     browser_time_zone: Annotated[str, Field(description="The browser time zone you were given for this request, e.g. Asia/Kolkata; empty if you were given none.")] = "",
+    confirm_rhythm: Annotated[bool, Field(description=(
+        "True only after `needs` asked whether a rhythm more often than hourly is what the person meant, you said it "
+        "back to them, and they said yes. Never true on a first call."))] = False,
 ) -> dict:
     """Set up anything on a schedule from a sentence — a question asked again, a write-up, a Slack post, an email, once
     or on a rhythm. The platform's own designer drafts the whole chain from what this install has, checks it as a
     save would, and makes it; it runs on the platform's scheduler, governed and traced, whether or not this
     conversation is open. Returns `scheduled` with `when` and `next_run` (say them back as returned), or `needs`: a
-    choice the request left open (a channel, a sender) — ask the person and call again with their answer — or a
-    `reason` it could not be made."""
-    return await _client.schedule(request, connection, timezone, browser_time_zone)
+    choice the request left open (a channel, a sender, a rhythm more often than hourly to confirm) — ask the person
+    and call again with their answer — or a `reason` it could not be made. Setting it up is the whole of the reply:
+    do not also answer the question now unless the person asked for it now as well."""
+    return await _client.schedule(request, connection, timezone, browser_time_zone, confirm_rhythm)
 
 
 @mcp.tool()
@@ -448,6 +452,62 @@ async def get_metric(
     Returns: {metrics:[…]} when listing, or {name, definition, value, unit, sql} for one metric.
     """
     return await _client.get_metric(connection=connection, name=name)
+
+
+@mcp.tool()
+async def get_definitions(
+    connection: Annotated[str, Field(description="A connection id from list_connections.")],
+    term: Annotated[Optional[str], Field(description="A business word. Omit to list every definition on the connection.")] = None,
+) -> dict:
+    """Read what business words mean on a connection — the organisation's Definitions (its Pages). Each says whose word
+    it is: `published` (its owner approved it — use it exactly), `draft` (written, not yet published — use it and say
+    so), the area of the business it holds in (one word may mean one thing in Finance and another in Marketing: when
+    more than one area defines it and the question does not say which, ask), its other names, and what it refers to (metrics,
+    tables). Pending suggested edits are counted, never applied."""
+    return await _client.get_definitions(connection, term=term)
+
+
+@mcp.tool()
+async def draft_definition(
+    connection: Annotated[str, Field(description="A connection id from list_connections.")],
+    term: Annotated[str, Field(description="The business word, as the person says it.")],
+    text: Annotated[str, Field(description="What it means here, in the person's own words — what they told you.")],
+    area: Annotated[str, Field(description="The area of the business it means this in, by id; empty for everywhere.")] = "",
+    aliases: Annotated[Optional[list[str]], Field(description="Other names people use for it.")] = None,
+    why: Annotated[str, Field(description="Why, for the owner, when it changes an existing definition.")] = "",
+) -> dict:
+    """Draft what a business word means, FOR the person — when they tell you ("remember that active means paid in the
+    last 30 days") or correct one ("no, churn is 120 days"). A word nobody has defined becomes their DRAFT, which they
+    read and publish themselves; a word already defined becomes a SUGGESTED EDIT for its owner. Nothing you draft is
+    used as the definition until a person publishes it. Say so, and give them `publish_at` to open."""
+    return await _client.draft_definition(connection, term=term, text=text, area=area, aliases=aliases, why=why)
+
+
+@mcp.tool()
+async def bring_in_file(
+    path: Annotated[str, Field(description="The saved path the attachment line gives for the file the person attached.")],
+    name: Annotated[str, Field(description="The file's name as the person attached it.")] = "",
+) -> dict:
+    """The person attached a file in this conversation: bring it into Pramanyx as theirs. A table (CSV, TSV, Excel,
+    Parquet, JSON) becomes a SHEET on the `sheets` connection — then ask about it with `ask` on connection `sheets`,
+    naming the sheet; a document (PDF, Word, PowerPoint, Markdown, text, HTML) becomes a DOCUMENT whose passages reach
+    answers. Either is private to the person until they share it. Call it once per attached file, before answering
+    about it; never read or summarise an attached file any other way. Say what it became, by name."""
+    return await _client.bring_in_file(path, name=name)
+
+
+@mcp.tool()
+async def read_learned(
+    connection: Annotated[str, Field(description="A connection id from list_connections.")],
+    about: Annotated[str, Field(description="Words to narrow it to — a metric, a table, a business word. Empty for all.")] = "",
+    area: Annotated[str, Field(description="An area of the business, by id, to narrow it to. Empty for all.")] = "",
+) -> dict:
+    """What the platform has learned about a connection, each item in one shape: what it says, where it came from (the
+    explorer, an answer, people's own queries, a trusted query), who wrote or confirmed it, the area of the business it
+    is about, how it stands — CONFIRMED by a person or APPROVED (ground you may build on), MEASURED by a run (to measure
+    again before relying on it), MINED from query history (a hint) — when, and what it rests on. Confirmed first. What
+    the reader's clearance withholds is counted, never shown. Use is not counted yet."""
+    return await _client.read_learned(connection, about=about, area=area)
 
 
 @mcp.tool()

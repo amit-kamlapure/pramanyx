@@ -195,3 +195,21 @@ def clearance_context(clearances: Iterable[str]) -> Iterator[None]:
         yield
     finally:
         reset_clearances(token)
+
+
+def trim_by_tables(items: Sequence[T], tables_of: Callable[[T], Iterable[str]], *, connection_id: str,
+                   schema_name: str = "") -> TrimResult:
+    """``partition`` for anything that rests on tables — a finding, a trusted query — read by the tables it names. The
+    graph slice trimmed its findings this way; two outside reads handed the same findings and queries out untrimmed
+    (2026-11-17). An item that names no table is kept, as ``partition`` keeps it."""
+    return partition(list(items),
+                     lambda item: [securable_for_table(connection_id, schema_name, t) for t in tables_of(item) if t] or None,
+                     caller_clearances())
+
+
+def tables_of_sql(sql: str) -> list[str]:
+    """The tables a statement reads, for ``trim_by_tables``. None read when it cannot be parsed."""
+    if not sql:
+        return []
+    from pramanyx.explorer.scope import tables_in_sql
+    return sorted(tables_in_sql(sql))

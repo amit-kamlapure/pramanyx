@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
-import { fetchCoworkerDoor, mintCoworkerDelegation, type CoworkerDoor } from "@/lib/api";
+import { fetchCoworkerDoor, mintCoworkerDelegation, startMyCoworker, type CoworkerDoor } from "@/lib/api";
 
 /**
  * The nine dots: the way from the app to the coworker, and the place a person learns there is one.
@@ -64,6 +64,10 @@ export function AppSwitcher({ connectionId, theme }: { connectionId?: string; th
   const [delegation, setDelegation] = useState<string | undefined>(undefined);
   const asked = useRef(false);
   const host = useRef<HTMLDivElement | null>(null);
+  // Each person has their own coworker (2026-11-17). Not running yet, it is started on the click and opened when it
+  // says where it is — the first start sets up its home, so it takes a minute.
+  const [starting, setStarting] = useState<"" | "starting" | "failed">("");
+  const [startNote, setStartNote] = useState("");
 
   const look = useCallback(() => {
     fetchCoworkerDoor().then(setDoor).catch(() => setDoor(null));
@@ -89,10 +93,28 @@ export function AppSwitcher({ connectionId, theme }: { connectionId?: string; th
     return () => { document.removeEventListener("mousedown", away); document.removeEventListener("keydown", key); };
   }, [open]);
 
-  if (!door?.available || !door.url) return null;
-  const href = coworkerHref(door.url, {
+  if (!(door?.available && door.url) && !door?.can_start) return null;
+  const hrefOf = (url: string) => coworkerHref(url, {
     connectionId, theme, delegation, back: typeof window === "undefined" ? undefined : window.location.href,
   });
+  const href = door.available && door.url ? hrefOf(door.url) : null;
+  const startMine = async () => {
+    setStarting("starting"); setStartNote("");
+    try {
+      const first = await startMyCoworker();
+      if (first.available && first.url) { window.location.assign(hrefOf(first.url)); return; }
+      if (!first.can_start) { setStarting("failed"); setStartNote(first.reason || "Your coworker could not be started."); return; }
+      const until = Date.now() + 180_000;
+      while (Date.now() < until) {
+        await new Promise((r) => setTimeout(r, 2_000));
+        const now = await fetchCoworkerDoor().catch(() => null);
+        if (now?.available && now.url) { setDoor(now); window.location.assign(hrefOf(now.url)); return; }
+      }
+      setStarting("failed"); setStartNote("Your coworker did not start within three minutes; its log is in its own folder.");
+    } catch (e) {
+      setStarting("failed"); setStartNote(e instanceof Error ? e.message : String(e));
+    }
+  };
   return (
     <div ref={host} style={{ position: "relative" }}>
       <Button variant="ghost" size="icon-xs" aria-label="Switch to" title="Switch to the coworker" aria-expanded={open} data-testid="app-switcher"
@@ -124,13 +146,29 @@ export function AppSwitcher({ connectionId, theme }: { connectionId?: string; th
               <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>The platform. You are here.</span>
             </span>
           </div>
-          <a role="menuitem" href={href} className="aug-switch-row" style={row}>
-            <span className="aug-fs-chrome" style={tile} aria-hidden>C</span>
-            <span style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
-              <span className="aug-fs-sm" style={{ fontWeight: 600 }}>Coworker</span>
-              <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>Ask, and have it worked through.</span>
-            </span>
-          </a>
+          {href ? (
+            <a role="menuitem" href={href} className="aug-switch-row" style={row}>
+              <span className="aug-fs-chrome" style={tile} aria-hidden>C</span>
+              <span style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
+                <span className="aug-fs-sm" style={{ fontWeight: 600 }}>Coworker</span>
+                <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>Your own: ask, and have it worked through.</span>
+              </span>
+            </a>
+          ) : (
+            <button type="button" role="menuitem" className="aug-switch-row" data-testid="app-switcher-start"
+              disabled={starting === "starting"} onClick={() => { void startMine(); }}
+              style={{ ...row, background: "transparent", border: "none", textAlign: "left", cursor: "pointer", font: "inherit" }}>
+              <span className="aug-fs-chrome" style={tile} aria-hidden>C</span>
+              <span style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
+                <span className="aug-fs-sm" style={{ fontWeight: 600 }}>Coworker</span>
+                <span className="aug-fs-xs" style={{ color: starting === "failed" ? "var(--amb4)" : "var(--t3)" }}>
+                  {starting === "starting" ? "Starting your own coworker — a minute the first time…"
+                    : starting === "failed" ? startNote
+                    : "Your own coworker: started for you when you open it."}
+                </span>
+              </span>
+            </button>
+          )}
         </div>
       )}
     </div>

@@ -216,15 +216,29 @@ export interface OrgSettings {
   coworker_models?: boolean | null;
   /** 2026-11-15 — the coworker may search the web for outside context, cited and never a figure. */
   web_search?: boolean | null;
+  /** 2026-11-17 — the map under a map answer: "" none (shapes on a blank ground), OpenFreeMap's public tiles, or the
+   *  organisation's own tile server at `base_map_url`. Which map squares are viewed leave for that server. */
+  base_map?: "" | "openfreemap" | "own";
+  base_map_url?: string;
 }
 
 /** Whether a coworker is running beside the app, and the address to open (`routers/coworker.py`). */
-export type CoworkerDoor = { available: boolean; url?: string | null };
+/** The caller's own coworker (2026-11-17: each person has their own): running at `url`, or startable on request. */
+export type CoworkerDoor = {
+  available: boolean; url?: string | null; can_start?: boolean; starting?: boolean; reason?: string;
+};
 
 /** Where the coworker is. An API from before the route, or one not answering, is "none running". */
 export async function fetchCoworkerDoor(): Promise<CoworkerDoor> {
   const res = await fetch(`${getApiBase()}/coworker`);
   if (!res.ok) return { available: false };
+  return res.json();
+}
+
+/** Start the caller's own coworker if it is not running (`POST /coworker/mine`); ask `fetchCoworkerDoor` until it is. */
+export async function startMyCoworker(): Promise<CoworkerDoor> {
+  const res = await fetch(`${getApiBase()}/coworker/mine`, { method: "POST" });
+  if (!res.ok) throw await refused(res, "Starting your coworker");
   return res.json();
 }
 
@@ -8179,9 +8193,11 @@ export interface BriefingRangeBlock {
   edge_note?: string;
   /** The period holding the range goes on past it: a period so far. */
   under_way?: boolean;
-  /** The data ENDED (its newest day is more than a month old): the range was read as if today were
-   *  the day after `data_through`, and every figure in it is final. */
+  /** The data ENDED (its newest day is more than a month old): the rows it holds for the range are final. */
   data_ended?: boolean;
+  /** The data ended before the range starts, so it holds no row for it (2026-11-17: a person's period is counted
+   *  from today, and "if no data exists, it should say so"). */
+  no_data?: boolean;
   /** The first day the data holds, when the edge was read. */
   data_from?: string | null;
   /** Why the range is not compared with the one before ("" when it is): the earlier range starts
@@ -12116,7 +12132,8 @@ export interface IntakePlan {
 export interface IntakeStageResult extends IntakePlan {
   duplicate: boolean;
   refused: string[];
-  mapped?: { file?: string; sheet?: string; ignored_headers: string[] };
+  /** `not_translated` (2026-11-17): what a BI tool's file holds that came in as a Definition, not a metric. */
+  mapped?: { file?: string; sheet?: string; ignored_headers: string[]; not_translated?: string[] };
 }
 
 async function intakeError(res: Response): Promise<never> {

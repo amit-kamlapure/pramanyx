@@ -615,15 +615,25 @@ def _project_definitions(cg: ContextGraph, definitions: list) -> None:
             term = str(d.get("term") or "").strip()
             if not term or not str(d.get("text") or "").strip():
                 continue
+            # One node per word per area (2026-11-17): one word in Finance and in Marketing is two meanings.
+            area_slug = str(d.get("area_slug") or "")
             node = GraphNode(
-                id=f"{DEFINITION_NODE_PREFIX}{d.get('slug') or term.lower()}",
+                id=f"{DEFINITION_NODE_PREFIX}{d.get('slug') or term.lower()}" + (f"@{area_slug}" if area_slug else ""),
                 kind="glossary_term", label=term, summary=str(d["text"]),
                 provenance=Provenance(source="record", note=f"tier={d.get('tier', '')} claim={d.get('claim_key', '')}"),
                 data={"definition": True, "term": term, "aliases": list(d.get("aliases") or []),
                       "claim_id": d.get("claim_id", ""), "claim_key": d.get("claim_key", ""),
-                      "tier": d.get("tier", ""), "owner": d.get("owner", ""), "approved_by": d.get("approved_by", "")},
+                      "tier": d.get("tier", ""), "owner": d.get("owner", ""), "approved_by": d.get("approved_by", ""),
+                      "area": str(d.get("area") or ""), "links": list(d.get("links") or [])},
             )
             cg.add_node(node)
+            for link in d.get("links") or []:
+                # a metric it links to is what it defines, said by its owner rather than matched by name
+                mid = metric_by_name.get(str(link.get("ref") or "").strip().lower()) if link.get("kind") == "metric" else None
+                if mid:
+                    cg.add_edge(GraphEdge(id=_edge_id(node.id, "defines", mid), kind="defines", from_id=node.id,
+                                          to_id=mid, provenance=Provenance(source="record", note="linked by the definition's owner"),
+                                          label="defines"))
             for word in [term, *(d.get("aliases") or [])]:
                 mid = metric_by_name.get(str(word).strip().lower())
                 if mid:
