@@ -223,8 +223,9 @@ admin allows "Let the coworker ask its models through Pramanyx" in Settings ▸ 
 - When an answer is shown, the agent's closing remark is not: the answer is the output. The remark is still
   written and kept in the conversation's record. The platform's follow-up questions are carried over MCP and not
   yet shown.
-- Figures in the words and the chart are as the platform formats them (€17,857,124.67; 17.9M on a bar). The
-  shortened form of the mockup (€17.86m) needs a column's unit, which is not carried over MCP.
+- A money column carries its currency over MCP (`chart_config.column_units`, read 2026-11-17), and the card prints
+  it in the table and the chart. A share or a rate carries no unit: it is printed as the number the rows hold, since
+  0.42 and 42 cannot be told apart without one.
 - The claim that puts the platform's work inside a turn's trace is matched on the question and the connection,
   because a tool call carries nothing else. It covers `ask`; a custom agent's answer and a deep analysis are
   still recorded as runs of their own. The Trajectory tab in the coworker still shows a call to the platform as one row.
@@ -232,12 +233,9 @@ admin allows "Let the coworker ask its models through Pramanyx" in Settings ▸ 
   each concluded — are not drawn, and it has no card.
 - A Pramanyx tool added since this was written, and each custom agent's, is named from the end of the first turn
   that calls it; until then that one call shows the shell's plain row.
-- The chart is drawn from the answer's grid and chart type. The app's own `chart_config` and column units are
-  not carried over MCP yet, so a chart the app would have labelled or formatted specially is drawn plainly here.
-- The table shows plain numbers: a column's unit (€, %) is not carried over MCP, so nothing is formatted as
-  money. The app's editor also offers a transform (period over period, share, rolling, cumulative), an annotation
-  and a pivot; those are not here. Nothing but an answer opens in the right-hand pane yet: not an object of the
-  ontology, a metric's definition, a document or a sheet.
+- The chart is drawn from the answer's grid, its chart type and the app's own `chart_config`, all carried over MCP.
+  The app's editor also offers a transform (period over period, share, rolling, cumulative), an annotation and a
+  pivot; those are not here.
 - The app's pages are found at the address the coworker was reached from, else `http://localhost:3000`. An install
   that serves the app elsewhere and is opened directly shows an empty frame.
 - The exhibit, the table and the editor were checked by hand on a live answer (sort, totals against the approved
