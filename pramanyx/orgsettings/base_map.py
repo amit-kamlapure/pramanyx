@@ -14,7 +14,8 @@ addresses themselves.
 """
 from __future__ import annotations
 
-from pramanyx.orgsettings.allows import WHERE
+#: Where an admin chooses it: its own card beside what Pramanyx may do.
+WHERE = "Settings ▸ Organization ▸ Base map"
 
 #: OpenFreeMap's styles: a quiet light one and its dark one, so the map wears the page's theme.
 OPENFREEMAP = {

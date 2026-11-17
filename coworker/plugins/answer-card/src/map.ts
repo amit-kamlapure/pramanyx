@@ -13,7 +13,7 @@
  *
  * Everything a row says reaches the page as text, never as markup: a place name is data.
  */
-import { classifyColumns, LAT_COL, LON_COL } from "@/components/charts/columnRoles";
+import { classifyColumns, isIdLike, LAT_COL, LON_COL, plottedMeasures } from "@/components/charts/columnRoles";
 import { placeColumn, SHAPES, type ShapeSet } from "@/components/charts/geo/places";
 import { cleanLabel } from "@/lib/format";
 
@@ -116,10 +116,20 @@ const num = (v: unknown): number | null => {
   return Number.isFinite(n) ? n : null;
 };
 
-/** The measure: the first number column that is not a coordinate. */
-function measureOf(columns: string[], rows: unknown[][]): number {
+/** A sheet's row number (`_row`) and its kin: a position in the file, never a figure to draw. */
+const ROW_NUMBER = /^_?row(_?(num|number|no|idx|index))?$/i;
+
+/**
+ * The measure: among the number columns that are not a coordinate, an id or a row number, the one the app's charts
+ * would plot first (`plottedMeasures`). The first live map of a sheet sized its cities by `_row`, 1 to 10.
+ */
+export function measureOf(columns: string[], rows: unknown[][]): number {
   const { numericIdxs } = classifyColumns(columns, rows);
-  return numericIdxs.find((i) => !LAT_COL.test(columns[i]) && !LON_COL.test(columns[i])) ?? -1;
+  const figures = numericIdxs.filter((i) => {
+    const c = columns[i] ?? "";
+    return !LAT_COL.test(c) && !LON_COL.test(c) && !isIdLike(c) && !ROW_NUMBER.test(c);
+  });
+  return figures.length ? plottedMeasures(columns, rows, figures)[0] ?? -1 : -1;
 }
 
 interface Layout {
@@ -141,7 +151,8 @@ export function mapLayout(req: MapRequest): Layout | null {
     const lat = columns.findIndex((c) => LAT_COL.test(c));
     const lon = columns.findIndex((c) => LON_COL.test(c));
     if (lat < 0 || lon < 0) return null;
-    return { kind: "points", measure, label: catIdxs[0] ?? -1, lat, lon };
+    const named = catIdxs.find((i) => !isIdLike(columns[i] ?? "") && !ROW_NUMBER.test(columns[i] ?? ""));
+    return { kind: "points", measure, label: named ?? catIdxs[0] ?? -1, lat, lon };
   }
   const place = placeColumn(columns, rows, catIdxs);
   if (!place || measure < 0) return null;
@@ -263,13 +274,18 @@ export function drawMap(box: HTMLElement, req: MapRequest, tokens: MapTokens): (
       const all = await shapesOf(set);
       if (gone) return;
       const valueOf = new Map<string, number>();
-      let repeated = 0;
+      const saidAs = new Map<string, string>();
+      const repeated: string[] = [];
       for (const r of rows) {
-        const shape = match.shapes.get(String(r[layout.label] ?? "").trim());
+        const said = String(r[layout.label] ?? "").trim();
+        const shape = match.shapes.get(said);
         const v = num(r[layout.measure]);
         if (!shape || v === null) continue;
-        if (valueOf.has(shape)) { repeated += 1; continue; }
+        // Two rows for one place ("Spain" and "España"): the first row's figure is drawn and the other is named, not
+        // added — whether two figures add up is the question's to say, not the map's.
+        if (valueOf.has(shape)) { repeated.push(`"${said}" is drawn as ${shape}, which the row "${saidAs.get(shape)}" already fills; its figure, ${fmt(v)}, is not on the map.`); continue; }
         valueOf.set(shape, v);
+        saidAs.set(shape, said);
         low = Math.min(low, v); high = Math.max(high, v);
       }
       const features = (all.features ?? []).filter((f: any) => valueOf.has(f.properties?.name)).map((f: any) => {
@@ -284,7 +300,8 @@ export function drawMap(box: HTMLElement, req: MapRequest, tokens: MapTokens): (
         const more = match.unmatched.length - NAMED;
         say(`Not on the map, no shape ships for them: ${named}${more > 0 ? ` and ${more.toLocaleString()} more` : ""}.`);
       }
-      if (repeated) say(`${repeated.toLocaleString()} ${repeated === 1 ? "row names a place" : "rows name places"} already drawn; the first row's figure is shown.`);
+      for (const line of repeated.slice(0, NAMED)) say(line);
+      if (repeated.length > NAMED) say(`${(repeated.length - NAMED).toLocaleString()} more rows name a place already drawn.`);
     }
     say(chosen.says);
 

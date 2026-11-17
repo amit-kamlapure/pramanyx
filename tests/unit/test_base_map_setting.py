@@ -20,7 +20,7 @@ def _isolated(tmp_path, monkeypatch):
 def test_unset_names_no_tile_server_and_says_where_to_choose_one():
     out = R.get_base_map()
     assert out["kind"] == "none" and out["light"] == "" and out["dark"] == ""
-    assert "blank ground" in out["says"] and "Settings ▸ Organization" in out["says"]
+    assert "blank ground" in out["says"] and "Settings ▸ Organization ▸ Base map" in out["says"]
 
 
 def test_openfreemap_when_chosen_with_what_leaves_said():

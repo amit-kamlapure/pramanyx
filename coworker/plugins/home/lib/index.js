@@ -360,10 +360,60 @@ export function askFor(name, args) {
   return { kind: "ask", reason: words, displayReason: { en: words } };
 }
 
-function askBeforeActing(ctx) {
+/**
+ * A PERSON'S NO STANDS (2026-11-17). On the first live run a person rejected a draft and the coworker, reasoning the
+ * refusal "might be because of the connection choice", asked again at once on another connection. What a person
+ * declines is not asked again until they next write — on any connection — and the agent is told why. The key is the
+ * tool, and for a draft the word: a draft of another word is still asked about.
+ */
+export function declinedKey(name, args) {
+  if (!ASKED_FIRST[String(name)]) return "";
+  if (String(name) === "mcp__pramanyx__draft_definition") {
+    return `${name}:${String(argsOf(args).term ?? "").trim().toLowerCase()}`;
+  }
+  return String(name);
+}
+
+export const NO_STANDS =
+  "The person declined this a moment ago. It was not done, and it is not asked again — on this connection or another — " +
+  "until they ask for it. Tell them it was not done.";
+
+const argsOf = (args) => {
+  if (args && typeof args === "object") return args;
+  try { const parsed = JSON.parse(String(args ?? "")); return parsed && typeof parsed === "object" ? parsed : {}; } catch { return {}; }
+};
+
+/** Whether a tool's result says the person (or the shell's review, on their behalf) refused it. */
+export const refusedResult = (message) => Boolean(message?.isError) && /\brejected\b/i.test(textOf(message?.content));
+
+export function askBeforeActing(ctx) {
+  const declined = new Map();        // conversation → what the person declined since they last wrote
+  const asked = new Map();           // call → what it would be declined as
+  ctx.on("session/event", (session, event) => {
+    try {
+      const id = String(session?.id ?? "");
+      const data = event?.data ?? {};
+      if (event?.type === "user/message" && data.source?.kind === "user") { declined.delete(id); return; }
+      if (event?.type === "tool/call" && data.callId) {
+        const key = declinedKey(data.name, data.arguments);
+        if (key) asked.set(data.callId, key);
+      }
+      if (event?.type === "tool/result") {
+        const message = data.message ?? {};
+        const key = asked.get(message.toolCallId);
+        if (!key) return;
+        asked.delete(message.toolCallId);
+        if (id && refusedResult(message)) declined.set(id, new Set([...(declined.get(id) ?? []), key]));
+      }
+    } catch { /* nothing remembered: the next call is asked about, as before */ }
+  });
   ctx.on("tools/pre-execute", async (call, next) => {
     const decided = await next();
     if (!decided || decided.kind !== "allow") return decided;      // a denial or a cancel stands
+    const session = call?.agent?.session;
+    const id = String((session && typeof session === "object" ? session.id : session) ?? "");
+    const key = declinedKey(call?.name, call?.arguments);
+    if (key && declined.get(id)?.has(key)) return { kind: "deny", reason: NO_STANDS };
     return askFor(call?.name, call?.arguments) ?? decided;
   });
 }
