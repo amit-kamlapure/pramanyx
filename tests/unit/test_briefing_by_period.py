@@ -128,7 +128,8 @@ def test_deleting_a_connection_or_schema_drops_its_period_briefs_too(narrator):
 
 
 @pytest.mark.parametrize("source, moving, said", [
-    ("learned", [], "the platform measured a 8-day settling lag"),
+    # 2026-11-17 — the lag is said as provisional days, never as the period moved back
+    ("learned", [], "This source's days keep changing for 8 days after they end (the platform measured the lag)"),
     # theLook 2026-09-25: a table still moving at the horizon is named, and nothing is final
     ("beyond_horizon", ["order_items"], "order_items was still changing 7 days after a day ended"),
 ])

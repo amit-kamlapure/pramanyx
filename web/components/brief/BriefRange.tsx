@@ -29,12 +29,12 @@ export type RangeChoice = { preset: "standing" } | BriefingRange;
 
 const SEGMENTS: { value: "standing" | RangePreset; label: string; title: string }[] = [
   { value: "standing", label: "What we know", title: "Everything the platform has learned, not tied to dates" },
-  { value: "yesterday", label: "Day", title: "The newest day old enough to read" },
-  { value: "last_week", label: "Week", title: "The last complete week old enough to read" },
-  { value: "last_month", label: "Month", title: "The last complete month old enough to read" },
+  { value: "yesterday", label: "Day", title: "Yesterday, on your clock" },
+  { value: "last_week", label: "Week", title: "Last week, Monday to Sunday" },
+  { value: "last_month", label: "Month", title: "Last calendar month" },
   { value: "last_year", label: "Year", title: "The last complete (fiscal) year" },
-  { value: "month_to_date", label: "Month to date", title: "This month up to the newest day old enough to read" },
-  { value: "year_to_date", label: "Year to date", title: "This year up to the newest day old enough to read" },
+  { value: "month_to_date", label: "Month to date", title: "This month, up to yesterday" },
+  { value: "year_to_date", label: "Year to date", title: "This year, up to yesterday" },
 ];
 
 export function RangeControl({ value, onChange, disabled, standing, label = "Briefing range", presets }: {

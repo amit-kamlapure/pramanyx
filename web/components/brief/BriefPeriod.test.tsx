@@ -41,9 +41,10 @@ describe("PeriodMeasures", () => {
     expect(screen.queryByText(/still settling/)).toBeNull();
   });
 
-  it("says why the period ends before today when the source settles slowly", () => {
+  it("says the newest days are provisional when the source settles slowly, and never moves the period", () => {
     render(<PeriodMeasures block={block({ lag_days: 8, lag_source: "learned" })} />);
-    expect(screen.getByText(/Ends 8 days before today: newer days are still settling, a lag the platform measured/)).toBeTruthy();
+    expect(screen.getByText(/The newest 8 days are provisional: they are still being revised as late rows arrive, a lag the platform measured/)).toBeTruthy();
+    expect(screen.queryByText(/before today/)).toBeNull();
   });
 });
 

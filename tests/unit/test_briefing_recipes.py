@@ -109,7 +109,12 @@ def test_the_day_reads_the_days_still_settling_as_early(con, revenue):
                                sql="SUM(CASE WHEN returned_at IS NOT NULL THEN 1.0 ELSE 0.0 END) / COUNT(*)",
                                status="approved", time_kind="cohort", time_column="created_at",
                                outcome_column="returned_at", settles_after_days=5)
-    spec, _ = ranges.resolve_range("yesterday", today=SEP26, lag_days=13)
+    # A person's Day is yesterday (2026-11-17, one definition of a period): nothing is left between it and today.
+    mine, _ = ranges.resolve_range("yesterday", today=SEP26, lag_days=13)
+    assert mine.start == date(2026, 9, 25) and mine.lag_days == 13          # the lag stays, to say it is provisional
+    assert recipes.early_read([revenue, returns], mine, _run(con), dialect="duckdb")["figures"] == []
+    # A settled reader's day is 13 days back, and the days after it are read early, as before.
+    spec, _ = ranges.resolve_range("yesterday", today=SEP26, lag_days=13, settled=True)
     assert spec.start == date(2026, 9, 13)
     early = recipes.early_read([revenue, returns], spec, _run(con), dialect="duckdb")
     assert [f["name"] for f in early["figures"]] == ["Revenue"]
@@ -146,12 +151,21 @@ def test_the_day_is_built_by_its_recipe_and_the_narrator_is_told_so(con, revenue
     def runner():
         yield _run(con), "duckdb"
 
-    spec, _ = ranges.resolve_range("yesterday", today=SEP26, lag_days=13)
+    # The Day is yesterday (2026-11-17). On a source whose days settle the day after, yesterday is read against the same
+    # day a week before, as a move.
+    spec, _ = ranges.resolve_range("yesterday", today=SEP26, lag_days=1)
     brief = ranges.build_range_briefing("c1", spec, scope_key="c1", domain_data={}, profile=None,
                                         runner=runner)
     block = brief["period"]
     assert block["recipe"] == "day" and "early_read" in block["sections"]
-    assert block["early"]["figures"] and block["moves"]
+    assert block["early"]["figures"] == [] and block["moves"]
+    # On one still revising its last 13 days, yesterday is provisional: not read as a move against a day that has
+    # settled further (the theLook spike every morning), and said — never moved back to a settled day.
+    young, _ = ranges.resolve_range("yesterday", today=SEP26, lag_days=13)
+    assert young.start == date(2026, 9, 25)
+    held = ranges.build_range_briefing("c1", young, scope_key="c1:young", domain_data={}, profile=None,
+                                       runner=runner)["period"]
+    assert held["moves"] == []
     system, user = fake.calls[-1]
     assert "This is the DAY briefing, written for acting today." in system
     assert "Revenue for region north" in user

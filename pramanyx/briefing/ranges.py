@@ -34,9 +34,10 @@ from pramanyx.semantic.metric_time import Window
 from pramanyx.settling.answer import answer_from
 
 #: The Dashboard's periods (the user, 2026-10-08): the day, week, month or year under way — "current" —
-#: and the one before it — "last". Each is read only over days whose data has ARRIVED (``data_through``,
-#: read from the warehouse): most sources hold yesterday at best, so a current day read off the calendar
-#: alone is empty. The Briefing's settled presets above are unchanged.
+#: and the one before it — "last". Each is read over the days whose data has ARRIVED (``data_through``,
+#: read from the warehouse). Since 2026-11-17 (one definition of a period, `kernel/clock.py`) a current period with no
+#: complete day yet — a current day always — is read as it stands, under way and not compared, and says when it has no
+#: rows; it no longer falls back to the period before.
 CURRENT_PRESETS = ("current_day", "current_week", "current_month", "current_year")
 PREVIOUS_PRESETS = ("previous_week", "previous_month", "previous_year")
 EDGE_PRESETS = CURRENT_PRESETS + PREVIOUS_PRESETS
@@ -111,6 +112,12 @@ class RangeSpec:
     @property
     def last_day(self) -> date:
         return self.end - timedelta(days=1)
+
+    @property
+    def no_data(self) -> bool:
+        """The data ENDED before the range starts, so it holds no row for it (2026-11-17: "if no data exists, it
+        should say so") — a person's preset counted from today, over a dataset that stopped."""
+        return bool(self.data_ended and self.data_through is not None and self.data_through < self.start)
 
     @property
     def days(self) -> int:
@@ -237,11 +244,13 @@ def _edge_range(preset: str, *, today: date, through: Optional[date], held_by: t
     else:
         s = _unit_before(unit, _unit_start(unit, today, fiscal))
     fell_back = None
+    so_far = ""
     if complete < s:
-        if unit != "day":
-            fell_back = {"week": f"The week of {_d(s)}", "month": s.strftime("%B %Y"),
-                         "year": _year_words(s)[0].upper() + _year_words(s)[1:]}[unit]
-        s = _unit_start(unit, complete, fiscal)
+        # No day of it is complete yet (a current day always; a week on its Monday, a month on its 1st). It is read
+        # so far — today, still under way — and not compared: never the period before in its place (2026-11-17, "if
+        # no data exists, it should say so"; until then it fell back to the newest period that had data).
+        so_far = {"day": "today", "week": "this week", "month": "this month", "year": "this year"}[unit]
+        complete = today
     whole = _unit_end(unit, s)
     e = min(whole, complete + timedelta(days=1))
     days = e - s
@@ -268,6 +277,17 @@ def _edge_range(preset: str, *, today: date, through: Optional[date], held_by: t
     shaped = preset in CURRENT_PRESETS or fell_back is not None or e < whole
     note = _edge_note(today=today, through=through, complete=complete, held_by=held_by, tables=tables,
                       fell_back=fell_back, asked_to=None) if shaped else ""
+    if so_far:
+        if through is not None and through < s:
+            note = f"Data runs to {_d(through)}: {so_far} has no rows yet."
+        elif unit == "day":
+            note = f"Today ({_d(today)}) is still under way: it is read as it stands and not compared with any other day."
+        else:
+            note = (f"No day of {so_far} is complete yet: it is read as it stands at {_d(today)}, still under way, and "
+                    "not compared with any other period.")
+        return RangeSpec(preset, s, e, ps, pe, None, None, period=unit, data_through=through, edge_note=note,
+                         under_way=True, fiscal_start_month=fiscal,
+                         compare_withheld=f"{so_far} is still under way", **common)
     return RangeSpec(preset, s, e, ps, pe, ly_s, ly_e, period=unit, data_through=through, edge_note=note,
                      under_way=e < whole, fiscal_start_month=fiscal, **common)
 
@@ -276,9 +296,10 @@ def phrases(spec: RangeSpec) -> dict:
     """What the Briefing covers and what it is compared with, in words a reader checks against a
     calendar — ISO dates, never "last week", which is ambiguous the day after."""
     words = _phrases(spec)
-    if spec.data_ended:
-        # The data stopped: a period it ends inside is read to its last day, not "so far" — nothing
-        # more is coming — and "to date" would name today, eight years after the data.
+    if spec.data_ended and spec.data_through == spec.last_day:
+        # A platform reader's period anchored to the data's last row (`_ended_range`): it is read to that day, not
+        # "so far" — nothing more is coming — and "to date" would name today, eight years after the data. A person's
+        # period is counted from today and keeps its own words.
         words["covers"] = (words["covers"].replace(" so far,", ", to the data's last day,")
                            .replace(" to date,", " to the data's last day,"))
     if spec.compare_withheld:
@@ -351,12 +372,21 @@ def compared_word(spec: RangeSpec) -> str:
 def resolve_range(preset: Optional[str] = None, *, start: Optional[date] = None,
                   end: Optional[date] = None, today: date, lag_days: int = 1,
                   lag_source: str = "default", still_moving: tuple = (), rewrites: tuple = (), horizon: int = 0,
-                  fiscal_start_month: int = 1, edge: Optional[dict] = None) -> tuple[Optional[RangeSpec], str]:
+                  fiscal_start_month: int = 1, edge: Optional[dict] = None,
+                  settled: bool = False) -> tuple[Optional[RangeSpec], str]:
     """The range a Briefing reads, or ``(None, why)``. ``end`` is the LAST day, inclusive, as a
     calendar picks it; the spec's ``end`` is exclusive. Pure: no clock, no store.
 
     ``edge`` is ``data_edge``'s reading — where the data ends. The current and last periods are read
-    to it; a custom range that runs past it is cut there and says so."""
+    to it; a custom range that runs past it is cut there and says so.
+
+    A preset a PERSON picks is counted from today, the platform's one definition (`kernel/clock.py`, the user,
+    2026-11-17: "Yesterday means day before current date.. if no data exists, it should say so"): ``lag_days`` — the
+    source's learned settling lag — stays on the spec so its newest figures read as provisional, and no longer moves
+    the period; a dataset that ENDED is read for the period asked and said to hold no data for it. ``settled`` is for
+    the platform's own readers (a monitor's baseline, the explorer's watch), which read the newest settled period and
+    re-anchor ended data as before: they interpret nobody's words, and a period still being revised would raise
+    false alerts."""
     from pramanyx.automations.temporal import clamp_lag, complete_period
 
     preset = preset or ("custom" if start else "")
@@ -364,10 +394,16 @@ def resolve_range(preset: Optional[str] = None, *, start: Optional[date] = None,
         return None, f"a range is one of {', '.join(PRESETS)}"
     ended = _ended(edge, today)
     if ended is not None and preset != "custom":
-        return _ended_range(preset, today=today, through=ended, edge=edge or {},
-                            fiscal_start_month=fiscal_start_month, still_moving=still_moving, rewrites=rewrites, horizon=horizon)
+        if settled:
+            return _ended_range(preset, today=today, through=ended, edge=edge or {}, fiscal_start_month=fiscal_start_month,
+                                still_moving=still_moving, rewrites=rewrites, horizon=horizon)
+        return _asked_after_the_end(preset, today=today, through=ended, edge=edge or {},
+                                    fiscal_start_month=fiscal_start_month, still_moving=still_moving,
+                                    rewrites=rewrites, horizon=horizon)
     lag = clamp_lag(lag_days)
-    anchor = today - timedelta(days=lag)          # the newest settled day
+    # A person's period is counted from today: yesterday is the day before it. Only a settled reader moves it back.
+    shift = lag if settled else 1
+    anchor = today - timedelta(days=shift)
     common = dict(as_of=today, lag_days=lag, lag_source=lag_source, still_moving=tuple(still_moving),
                   rewrites=tuple(rewrites), horizon=horizon)
     fiscal = fiscal_start_month if 1 <= int(fiscal_start_month or 1) <= 12 else 1
@@ -377,7 +413,7 @@ def resolve_range(preset: Optional[str] = None, *, start: Optional[date] = None,
         return _edge_range(preset, today=today, through=through, held_by=tuple(edge.get("held_by") or ()),
                            tables=dict(edge.get("tables") or {}), fiscal=fiscal, common=common), ""
     if preset in PRESET_PERIOD:
-        w = complete_period(PRESET_PERIOD[preset], today, lag, fiscal_start_month=fiscal_start_month)
+        w = complete_period(PRESET_PERIOD[preset], today, shift, fiscal_start_month=fiscal_start_month)
         if w.period == "year":
             ly_start, ly_end = None, None          # the comparison already is the year before
         elif w.period == "month":
@@ -494,6 +530,43 @@ def _ended_range(preset: str, *, today: date, through: date, edge: dict, fiscal_
     return replace(spec, edge_note=_ended_note(through, edge, covers=phrases(spec)["covers"])), ""
 
 
+def _asked_after_the_end(preset: str, *, today: date, through: date, edge: dict, fiscal_start_month: int,
+                         still_moving: tuple = (), rewrites: tuple = (), horizon: int = 0) -> tuple[Optional[RangeSpec], str]:
+    """A person's preset over data that has ENDED (2026-11-17, replacing the 2026-10-23 anchor to the data's last row):
+    the period asked, counted from today — never another period read in its place. The data holds all of it (read,
+    final unless a table was still moving when it stopped), part of it (read as it stands and not compared: a part
+    against a whole is not a comparison), or none of it — "if no data exists, it should say so"."""
+    from dataclasses import replace
+
+    spec, why = resolve_range(preset, today=today, lag_days=1, lag_source="data_ended",
+                              fiscal_start_month=fiscal_start_month, edge={**edge, "through": None})
+    if spec is None:
+        return None, why
+    data_from = edge.get("from")
+    ended = f"{_d(through)} ({through.strftime('%A')})"
+    withheld, ly_s, ly_e = "", spec.last_year_start, spec.last_year_end
+    if through < spec.start:
+        withheld = f"the data ended on {_d(through)}, before it"
+    elif through < spec.last_day:
+        withheld = f"the data ended on {_d(through)}, part-way through it"
+    elif data_from is not None and spec.previous_start < data_from:
+        withheld = f"the data starts on {_d(data_from)}, so {_phrases(spec)['compared_with']} holds only part of its days"
+    if data_from is not None and ly_s is not None and ly_s < data_from:
+        ly_s, ly_e = None, None
+    spec = replace(spec, lag_days=0, lag_source="data_ended", still_moving=tuple(still_moving), rewrites=tuple(rewrites),
+                   horizon=horizon, data_through=through, data_ended=True, data_from=data_from,
+                   compare_withheld=withheld, last_year_start=None if withheld else ly_s,
+                   last_year_end=None if withheld else ly_e)
+    covers = phrases(spec)["covers"]
+    if spec.no_data:
+        note = f"No data for {covers}: the data ended on {ended}."
+    elif through < spec.last_day:
+        note = f"The data ended on {ended}, part-way through {covers}: it is read to that day."
+    else:
+        note = _ended_note(through, edge)
+    return replace(spec, edge_note=note), ""
+
+
 def not_read_rows(figures: list[dict], name_key: str, against_usual: bool = True) -> list[dict]:
     """The figures whose difference was not read as a move, one row per reason: on theLook eight figures gave one
     sentence eight times. ``against_usual`` says what an edition read them against; a send with no guide read only the
@@ -517,6 +590,11 @@ def _spec_answer(spec: RangeSpec):
                         "rewrites": spec.rewrites, "horizon": spec.horizon, "live": spec.live})
 
 
+def _clock_of_the_reader() -> str:
+    from pramanyx.kernel.clock import person_clock
+    return person_clock() or "UTC"
+
+
 def range_block(spec: RangeSpec) -> dict:
     """The block a range Briefing carries — what §3.27's period block carries, plus the range's
     own key, its last-year comparison and its as-of."""
@@ -532,13 +610,15 @@ def range_block(spec: RangeSpec) -> dict:
             "compared_with": words["compared_with"], "last_year_label": words["last_year"],
             "data_through": _d(spec.data_through) if spec.data_through else None,
             "edge_note": spec.edge_note, "under_way": spec.under_way,
-            "data_ended": spec.data_ended,
+            "data_ended": spec.data_ended, "no_data": spec.no_data,
             "data_from": _d(spec.data_from) if spec.data_from else None,
             "compare_withheld": spec.compare_withheld,
             "rewrites": list(spec.rewrites), "horizon": spec.horizon, "live": spec.live,
             # a dataset that ended and had settled has nothing left to say of its days — a live one, ended or not, does
             "settling": (None if spec.data_ended and not spec.still_moving and not spec.live
                          else _spec_answer(spec).as_block()),
+            # 2026-11-17 — the clock its dates are on: the person's (`kernel/clock.py`), never assumed to be UTC.
+            "clock": _clock_of_the_reader(),
             "measured": [], "unmeasured": []}
 
 
@@ -1477,13 +1557,16 @@ def build_range_briefing(conn_id: str, spec: RangeSpec, *, scope_key: str, domai
 
 def resolve_for(conn_id: str, preset: Optional[str] = None, *, start: Optional[date] = None,
                 end: Optional[date] = None, workspace_id: Optional[str] = None,
-                today: Optional[date] = None, schema: Optional[str] = None) -> tuple[Optional[RangeSpec], str]:
+                today: Optional[date] = None, schema: Optional[str] = None,
+                settled: bool = False) -> tuple[Optional[RangeSpec], str]:
     """``resolve_range`` with this connection's lag (idea 4, honest about unsettled tables), the
     organisation's fiscal year and — for a current or last period, or a custom range reaching the
-    last month — where the data ends (``data_edge``)."""
+    last month — where the data ends (``data_edge``). Today is the person's (`kernel/clock.py`);
+    ``settled`` is for the platform's own readers (`resolve_range`)."""
+    from pramanyx.kernel.clock import person_clock, today_for
     from pramanyx.knowledge.period_brief import resolve_window
 
-    today = today or datetime.now(timezone.utc).date()
+    today = today or today_for(person_clock())
     _w, lag_source, moving = resolve_window(conn_id, "day", workspace_id=workspace_id, today=today)
     lag = (today - _w.start).days          # the day window starts at the newest settled day
     fiscal = 1
@@ -1495,9 +1578,8 @@ def resolve_for(conn_id: str, preset: Optional[str] = None, *, start: Optional[d
         tolerate(exc, "org settings unreadable; a year range is the calendar year",
                  counter="briefing.range.fiscal")
     # Every range reads where the data ends (one statement per table, kept ten minutes): a dataset
-    # that ENDED is known only by reading it, and its editions read as if today were the day after
-    # its last day. Until 2026-10-23 only the Dashboard's periods and a recent custom range read it, and
-    # Olist's six editions anchored to 2026 over data that stops in 2018.
+    # that ENDED is known only by reading it. A person's edition then says what the data holds of the period it
+    # names (all, part or none of it — 2026-11-17); a settled reader reads the data's last periods instead.
     edge = data_edge(conn_id, schema, today=today)
     rewrites: list = []
     horizon = 0
@@ -1511,7 +1593,7 @@ def resolve_for(conn_id: str, preset: Optional[str] = None, *, start: Optional[d
     spec, why = resolve_range(preset, start=start, end=end, today=today, lag_days=lag,
                               lag_source=lag_source, still_moving=tuple(moving), rewrites=tuple(rewrites), horizon=horizon,
                               fiscal_start_month=fiscal,
-                              edge=edge)
+                              edge=edge, settled=settled)
     from pramanyx.db.registry import is_live
     if spec is not None and is_live(conn_id):
         from dataclasses import replace

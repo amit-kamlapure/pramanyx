@@ -107,11 +107,16 @@ def test_a_sheets_figure_is_its_own_total_never_final_and_still_read_as_a_move(e
     sheet = _sheet(env, ENDED)
     client = _client()
     _approve_paid(client, sheet)
+    # the data ended on 2 September 2018: a person's last week is counted from today, so it has no data (2026-11-17)
     r = client.post("/exploration/sheets/briefing/measures?preset=last_week")
     assert r.status_code == 200, r.text
+    week = r.json()["period"]
+    assert week["data_ended"] and week["no_data"] and not [m for m in week["measured"] if m["metric"] == "paid"]
+    # the week holding the data's last day, asked by its dates, against the week before
+    r = client.post("/exploration/sheets/briefing/measures?preset=custom&start=2018-08-27&end=2018-09-02")
+    assert r.status_code == 200, r.text
     period = r.json()["period"]
-    # the data ended on 2 September 2018: last week is the week holding it, against the week before
-    assert period["data_ended"] and period["covers"] == "the week 2018-08-27 to 2018-09-02"
+    assert period["data_ended"] and not period["no_data"] and period["last_day"] == "2018-09-02"
     paid = _paid(period)
     assert paid["current"] == _grid_sum(sheet, date(2018, 8, 27), date(2018, 9, 3)) == 170.0
     assert paid["previous"] == _grid_sum(sheet, date(2018, 8, 20), date(2018, 8, 27)) == 65.0
@@ -133,8 +138,8 @@ def test_the_send_and_the_narrator_say_a_sheet_is_live_and_never_that_its_figure
     from pramanyx.knowledge.period_brief import period_note
     sheet = _sheet(env, ENDED)
     _approve_paid(_client(), sheet)
-    spec, why = ranges.resolve_for("sheets", "last_week")
-    assert spec is not None and spec.live and spec.data_ended, why
+    spec, why = ranges.resolve_for("sheets", "custom", start=date(2018, 8, 27), end=date(2018, 9, 2))
+    assert spec is not None and spec.live and spec.data_ended and not spec.no_data, why
     block = ranges.range_block(spec)
     md = render_period_markdown(block, [], 0)
     assert "none of its days settles" in md and "final" not in md

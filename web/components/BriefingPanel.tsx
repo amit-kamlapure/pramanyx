@@ -3388,9 +3388,9 @@ export function BriefingPanel({
         covers={editionBlock ? `covering ${editionBlock.covers}` : rangeSelected ? "covering this range" : "everything recorded, not tied to dates"}
         lagDays={editionBlock?.lag_days} records={paperRefs.length}
         endedOn={rangeSelected && editionBlock?.data_ended ? editionBlock.data_through ?? null : null}
-        stillMoving={editionBlock?.still_moving} />
-      {/* The data ENDED (design-mockups/briefing-data-ended.html): one line saying where, and what this
-          edition became because of it; the table below lists where every edition landed. */}
+        stillMoving={editionBlock?.still_moving} noData={rangeSelected && !!editionBlock?.no_data} />
+      {/* The data ENDED (design-mockups/briefing-data-ended.html): one line saying where, and what the data holds of
+          this edition's period — all, part or none of it (2026-11-17); the table below lists every edition. */}
       {rangeSelected && editionBlock?.data_ended && editionBlock.edge_note && (
         <PaperEdgeNotice note={editionBlock.edge_note} onCovers={scrollToCovers} />
       )}

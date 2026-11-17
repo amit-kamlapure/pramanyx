@@ -322,7 +322,7 @@ def verify_edit(conn_id: str, schema: Optional[str], edited: BriefingGuide, *, r
                if c.id not in was or any(getattr(c, f) != getattr(was[c.id], f) for f in _DEFINITION)]
     if not changed:
         return edited
-    spec, why = ranges.resolve_for(conn_id, "last_week", schema=schema)
+    spec, why = ranges.resolve_for(conn_id, "last_week", settled=True, schema=schema)
     if spec is None:
         raise ValueError(f"the changed checks cannot be measured: the last complete week could not be read ({why})")
     metrics_by_name = {m.name: m for m in ranges.governed_metrics(conn_id, schema)}
@@ -544,7 +544,7 @@ def draft_guide(conn_id: str, schema: Optional[str] = None, *, today: Optional[d
         llm = get_provider("coder")
     draft: _Draft = llm.complete(system=_SYSTEM, user=_context(conn_id, schema, today=today),
                                  response_model=_Draft, temperature=0.2)
-    spec, why = ranges.resolve_for(conn_id, "last_week", schema=schema, today=today)
+    spec, why = ranges.resolve_for(conn_id, "last_week", settled=True, schema=schema, today=today)
     if spec is None:
         raise ValueError(f"the last complete week could not be resolved: {why}")
     metrics_by_name = {m.name: m for m in ranges.governed_metrics(conn_id, schema)}
@@ -648,7 +648,7 @@ def add_reader(conn_id: str, schema: Optional[str], *, group_id: str, name: str,
                                          temperature=0.2)
         check_ids = list(got.check_ids)
         if got.new_checks:
-            spec, why = ranges.resolve_for(conn_id, "last_week", schema=schema)
+            spec, why = ranges.resolve_for(conn_id, "last_week", settled=True, schema=schema)
             if spec is None:
                 raise ValueError(f"the last complete week could not be resolved: {why}")
             metrics_by_name = {m.name: m for m in ranges.governed_metrics(conn_id, schema)}

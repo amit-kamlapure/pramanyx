@@ -1,8 +1,8 @@
 /**
  * What each of the Briefing's six editions covers, when the data has ENDED (the Olist run, 2026-10-22;
- * design-mockups/briefing-data-ended.html, approved 2026-10-23). Every edition reads as if today were
- * the day after the data's last row, so the reader checks here where each one landed, what it is
- * compared with, and the lead approved metric's figure for each. A comparison whose earlier range
+ * design-mockups/briefing-data-ended.html, approved 2026-10-23). Since 2026-11-17 each edition reads the period it
+ * names, counted from today (one definition of a period, `pramanyx/kernel/clock.py`), so over data that ended each
+ * row says it has no data and when the data ended — never another period read in its place. A comparison whose earlier range
  * starts before the data does is withheld, and the row says why. Measured when shown: warehouse
  * queries, no model call.
  */

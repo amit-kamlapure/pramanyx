@@ -199,8 +199,10 @@ def gaps(inquiries: list[Any], metrics: list[Any], period: Optional[dict]) -> li
         from pramanyx.settling.answer import answer_of_block
         answer = answer_of_block(period)
         out.append({"kind": "lag",
-                    "title": f"Figures are read {lag} days behind" if answer.never_settled else f"The newest settled day is {lag} days old",
-                    "text": answer.says() if answer.never_settled else f"The data settles {lag} days late.",
+                    # 2026-11-17 — the period is the one asked; the lag only makes its newest figures provisional
+                    "title": f"The newest {lag} days are provisional",
+                    "text": answer.says() if answer.never_settled else f"The data settles {lag} days late: figures "
+                                                                       "for those days may still change.",
                     "source": _source("range", (period or {}).get("key", ""), "The range's own data horizon")})
     return out
 

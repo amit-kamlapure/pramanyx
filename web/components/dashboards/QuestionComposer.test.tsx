@@ -18,7 +18,7 @@ describe("keeping a question", () => {
     const onKept = vi.fn();
     render(<QuestionComposer connectionId="8233e4fd" question="Why did revenue change last month, against the month before?"
       firstRun="d4039693" onKept={onKept} onClose={() => {}} />);
-    expect(screen.getByTestId("question-period")).toHaveTextContent("Mondays at 09:00 UTC, for the last complete week against the week before.");
+    expect(screen.getByTestId("question-period")).toHaveTextContent("Mondays at 09:00 your time, for last week against the week before.");
     expect(await screen.findByText(/about 6 min on this install · about 4 runs a month\. The answer it is kept from is its first\./)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("radio", { name: "Monthly" }));
     expect(screen.getByTestId("question-period")).toHaveTextContent("The 1st of each month");

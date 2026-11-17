@@ -8179,9 +8179,11 @@ export interface BriefingRangeBlock {
   edge_note?: string;
   /** The period holding the range goes on past it: a period so far. */
   under_way?: boolean;
-  /** The data ENDED (its newest day is more than a month old): the range was read as if today were
-   *  the day after `data_through`, and every figure in it is final. */
+  /** The data ENDED (its newest day is more than a month old): the rows it holds for the range are final. */
   data_ended?: boolean;
+  /** The data ended before the range starts, so it holds no row for it (2026-11-17: a person's period is counted
+   *  from today, and "if no data exists, it should say so"). */
+  no_data?: boolean;
   /** The first day the data holds, when the edge was read. */
   data_from?: string | null;
   /** Why the range is not compared with the one before ("" when it is): the earlier range starts
