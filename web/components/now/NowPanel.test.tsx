@@ -6,7 +6,7 @@
  *
  * Every read goes through `fetch`, which is answered here — nothing reaches the live API from jsdom.
  */
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // jsdom has no EventSource: the live refresh is stubbed, as every panel test that subscribes does.
@@ -41,6 +41,7 @@ function answer(url: string): unknown {
   if (p === "/record/corrections") return routes.corrections;
   if (p === "/briefing/organisation") return routes.briefing;
   if (p === "/jobs") return routes.jobs ?? [];
+  if (p === "/knowledge/c1/review") return routes.review ?? { total: 0, by_kind: { gap: 0, candidate: 0, conflict: 0 } };
   if (p === "/rbac/me") return { user_id: null, actor: "amit", signed_in: false, org_id: "default", roles: [], permissions: [] };
   return {};
 }
@@ -209,3 +210,16 @@ describe("keptBriefing", () => {
     expect(keptBriefing({ connection_id: "a", connection_name: "A" })).toBeNull();
   });
 });
+
+
+// 2026-11-17 — a connection's knowledge with something to review waits on a person too, and opens its Review tab.
+describe("knowledge to review", () => {
+  it("is one row per connection, with what kinds wait, and counts in Waiting on you", async () => {
+    routes.review = { total: 3, by_kind: { gap: 1, candidate: 2, conflict: 0 } };
+    mount();
+    const row = await screen.findByText("3 things to review in what the platform knows");
+    expect(row.closest("[data-testid]")?.textContent ?? document.body.textContent).toContain("knowledge · theLook · 1 gap, 2 to decide");
+    await waitFor(() => expect(screen.getByTestId("now-fig-waiting")).toHaveTextContent("1 knowledge review"));
+  });
+});
+
