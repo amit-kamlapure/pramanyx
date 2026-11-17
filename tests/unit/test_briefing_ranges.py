@@ -520,9 +520,17 @@ def test_a_current_day_is_today_as_it_stands_and_is_not_compared():
     assert (day.start, day.last_day, day.under_way) == (date(2026, 10, 8), date(2026, 10, 8), True)
     assert day.compare_withheld == "today is still under way" and day.last_year_start is None
     assert day.edge_note == "Today (2026-10-08) is still under way: it is read as it stands and not compared with any other day."
+    assert ranges.phrases(day)["covers"] == "today so far, 2026-10-08"          # never "the fiscal year from …"
+    assert ranges.phrases(day)["compared_with"] == "no earlier period (today is still under way)"
     behind = _edge("current_day", edge={"through": date(2026, 10, 7)})
     assert behind.last_day == date(2026, 10, 8)
     assert behind.edge_note == "Data runs to 2026-10-07: today has no rows yet."
+    # theLook, 2026-11-17: one table ending yesterday held the edge while orders had today's rows — "no rows" is said of
+    # the table that has none, never of today beside today's figure
+    held = _edge("current_day", edge={"through": date(2026, 10, 7), "held_by": ["events"],
+                                      "tables": {"events": date(2026, 10, 7), "orders": OCT8}})
+    assert held.edge_note == ("Today (2026-10-08) is still under way: it is read as it stands and not compared with any "
+                              "other day. events has no rows for it yet; orders has.")
 
 
 def test_a_period_so_far_is_compared_with_the_same_days_of_the_one_before():

@@ -278,13 +278,18 @@ def _edge_range(preset: str, *, today: date, through: Optional[date], held_by: t
     note = _edge_note(today=today, through=through, complete=complete, held_by=held_by, tables=tables,
                       fell_back=fell_back, asked_to=None) if shaped else ""
     if so_far:
-        if through is not None and through < s:
+        note = (f"Today ({_d(today)}) is still under way: it is read as it stands and not compared with any other day."
+                if unit == "day" else
+                f"No day of {so_far} is complete yet: it is read as it stands at {_d(today)}, still under way, and not "
+                "compared with any other period.")
+        # "No rows" is said of the tables that have none: on theLook a table ending yesterday held the edge there while
+        # orders had today's rows, and the note said "today has no rows yet" beside today's revenue (2026-11-17).
+        ahead = sorted(t for t, d in tables.items() if d >= s)
+        if through is not None and through < s and ahead and held_by:
+            note += (f" {', '.join(held_by)} {'has' if len(held_by) == 1 else 'have'} no rows for it yet; "
+                     f"{', '.join(ahead)} {'has' if len(ahead) == 1 else 'have'}.")
+        elif through is not None and through < s:
             note = f"Data runs to {_d(through)}: {so_far} has no rows yet."
-        elif unit == "day":
-            note = f"Today ({_d(today)}) is still under way: it is read as it stands and not compared with any other day."
-        else:
-            note = (f"No day of {so_far} is complete yet: it is read as it stands at {_d(today)}, still under way, and "
-                    "not compared with any other period.")
         return RangeSpec(preset, s, e, ps, pe, None, None, period=unit, data_through=through, edge_note=note,
                          under_way=True, fiscal_start_month=fiscal,
                          compare_withheld=f"{so_far} is still under way", **common)
@@ -311,7 +316,10 @@ def phrases(spec: RangeSpec) -> dict:
 def _phrases(spec: RangeSpec) -> dict:
     unit = EDGE_UNIT.get(spec.preset)
     if unit and spec.under_way:
-        if unit == "week":
+        if unit == "day":
+            covers = f"today so far, {_span(spec.start, spec.end)}"
+            against = f"the same weekday a week earlier, {_span(spec.previous_start, spec.previous_end)}"
+        elif unit == "week":
             covers = f"the week of {_d(spec.start)} so far, {_span(spec.start, spec.end)}"
             against = f"the same days of the week before, {_span(spec.previous_start, spec.previous_end)}"
         elif unit == "month":
