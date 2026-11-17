@@ -415,6 +415,32 @@ class _WorkspaceContextMiddleware:
                          counter="workspace.reset")
 
 
+class _ClockMiddleware:
+    """The person's clock, for the whole request (`kernel/clock.py`, 2026-11-17): the browser's IANA zone the app and
+    the coworker send as ``X-Pramanyx-Clock``. Pure ASGI, as the workspace one is, so sync handlers see it. A zone this
+    install cannot read is passed over; absent, the clock order goes on to the organisation's, then UTC."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        zone = ""
+        for raw_k, raw_v in scope.get("headers") or []:
+            if raw_k == b"x-pramanyx-clock":
+                zone = raw_v.decode("latin-1").strip()
+                break
+        if not zone:
+            return await self.app(scope, receive, send)
+        from pramanyx.kernel.clock import reset_clock_here, set_clock_here
+        token = set_clock_here(zone)
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            reset_clock_here(token)
+
+
 class _OntologyViewMiddleware:
     """Arc OC-2 — which declarations a request reads (`ontology.overrides.viewing`): the DRAFT laid over the published
     ontology when the client asks (`X-Pramanyx-Ontology-View: draft`, or `?ontology_view=draft` — the ontology's own
@@ -482,6 +508,7 @@ app = FastAPI(title="Pramanyx API", lifespan=_lifespan,
               dependencies=[Depends(_require_auth), Depends(enforce_rbac), Depends(enforce_agent_policy)])
 app.add_middleware(_OrgContextMiddleware)
 app.add_middleware(_WorkspaceContextMiddleware)
+app.add_middleware(_ClockMiddleware)
 app.add_middleware(_OntologyViewMiddleware)
 app.add_middleware(_TraceFlushMiddleware)
 

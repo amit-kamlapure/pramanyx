@@ -173,6 +173,58 @@ async function personHeader() {
   }
 }
 
+/**
+ * THE PERSON'S CLOCK (2026-11-17: "Yesterday means day before current date.. based on the users time setting" — for the
+ * coworker and the platform alike). The coworker's page says which zone its browser is in when it loads; it is kept in
+ * one file (PRAMANYX_CLOCK_FILE, set by start.sh) that the MCP server and the relays below send on every call, so the
+ * platform counts "yesterday" from this person's today (`pramanyx/kernel/clock.py`).
+ */
+export function readableZone(zone) {
+  const name = String(zone || "").trim();
+  if (!name || name.length > 64) return "";
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: name });
+    return name;
+  } catch {
+    return "";
+  }
+}
+
+async function clockHeader() {
+  const file = process.env.PRAMANYX_CLOCK_FILE || "";
+  if (!file) return {};
+  try {
+    const { readFile } = await import("node:fs/promises");
+    const zone = readableZone((await readFile(file, "utf8")).trim());
+    return zone ? { "x-pramanyx-clock": zone } : {};
+  } catch {
+    return {};
+  }
+}
+
+export async function keepTheClock(req, res) {
+  const reply = (status, body) => { res.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" }); res.end(JSON.stringify(body)); };
+  if (req.method !== "POST") return reply(405, { detail: "POST only" });
+  const from = req.headers["sec-fetch-site"];
+  if (from && from !== "same-origin") return reply(403, { detail: "Only this page may say this" });
+  const file = process.env.PRAMANYX_CLOCK_FILE || "";
+  if (!file) return reply(501, { detail: "No place to keep the clock (PRAMANYX_CLOCK_FILE is unset)" });
+  let raw = "";
+  for await (const part of req) { raw += part; if (raw.length > 256) return reply(413, { detail: "Too long" }); }
+  let zone = "";
+  try { zone = readableZone(JSON.parse(raw).zone); } catch { zone = ""; }
+  if (!zone) return reply(422, { detail: "Not a time zone" });
+  try {
+    const { writeFile, mkdir } = await import("node:fs/promises");
+    const { dirname } = await import("node:path");
+    await mkdir(dirname(file), { recursive: true });
+    await writeFile(file, zone, { mode: 0o600 });
+    return reply(200, { zone });
+  } catch {
+    return reply(500, { detail: "The clock could not be kept" });
+  }
+}
+
 export async function keepThePerson(req, res, api) {
   const reply = (status, body) => { res.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" }); res.end(JSON.stringify(body)); };
   if (req.method !== "POST") return reply(405, { detail: "POST only" });
@@ -734,6 +786,11 @@ export function apply(ctx) {
     handler: (req, res) => keepThePerson(req, res, api),
   }), "pramanyx-home: the person the coworker acts for");
   ctx.effect(() => ctx.webServer.register({
+    kind: "exact",
+    path: "/pramanyx-clock",
+    handler: (req, res) => keepTheClock(req, res),
+  }), "pramanyx-home: the person's clock");
+  ctx.effect(() => ctx.webServer.register({
     kind: "prefix",
     path: "/pramanyx",          // no trailing slash: the server matches the prefix itself, or the prefix and a "/"
     resource: async (request) => {
@@ -741,7 +798,8 @@ export function apply(ctx) {
       const path = url.pathname.slice("/pramanyx".length);
       if (!READS.some((allowed) => allowed.test(path))) return new Response("Not relayed", { status: 404 });
       try {
-        const answer = await fetch(api + path + url.search, { headers: { accept: "*/*", ...(await personHeader()) } });
+        const answer = await fetch(api + path + url.search,
+                                   { headers: { accept: "*/*", ...(await personHeader()), ...(await clockHeader()) } });
         const headers = { "content-type": answer.headers.get("content-type") || "application/json", "cache-control": "no-store" };
         const named = answer.headers.get("content-disposition");
         if (named) headers["content-disposition"] = named;

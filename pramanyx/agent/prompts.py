@@ -284,7 +284,7 @@ TEMPORAL NARROWING — CRITICAL: when the user asks to restrict the time period 
   1. Take the previous SQL as the base query.
   2. REMOVE the date/month column from GROUP BY and SELECT — it is now a filter, not a dimension.
   3. Keep every NON-TIME GROUP BY dimension intact (e.g. product_category AND customer_state stay in GROUP BY).
-  4. Add a WHERE clause to lock the period: WHERE month_col = (SELECT MAX(month_col) FROM ...) for "any/most recent month".
+  4. Add a WHERE clause to lock the period. A period named from today ("yesterday", "last month", "this year") is the dates the TODAY line gives, on the person's clock — never the data's latest month; if the data holds no rows for it, say so. Only "any month" or "the most recent month in the data" locks to WHERE month_col = (SELECT MAX(month_col) FROM ...).
   5. NEVER use LIMIT N as a substitute for a time filter — LIMIT caps row count, it does NOT restrict to one period.
   6. chart_type for a single-period category×dimension result → 'heatmap' (no time axis left, so multi_line is WRONG).
   WRONG: CTE aggregates all months, outer query adds LIMIT 100 → still spans many months, multi_line shows flat useless lines

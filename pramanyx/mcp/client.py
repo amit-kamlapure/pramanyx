@@ -47,6 +47,20 @@ AGENT_HEADER = "X-Pramanyx-Agent"
 DELEGATION_HEADER = "X-Pramanyx-Delegation"
 
 
+def _kept_clock() -> str:
+    """The zone the coworker's page said its browser is in (``PRAMANYX_CLOCK_FILE``), or ""."""
+    path = os.environ.get("PRAMANYX_CLOCK_FILE", "").strip()
+    if not path:
+        return ""
+    try:
+        with open(path, encoding="utf-8") as f:
+            zone = f.read(64).strip()
+    except OSError:
+        return ""
+    from pramanyx.kernel.clock import readable_zone
+    return readable_zone(zone)
+
+
 def _delegation() -> str:
     """The delegation the coworker's host keeps (``PRAMANYX_DELEGATION_FILE``), or ""."""
     path = os.environ.get("PRAMANYX_DELEGATION_FILE", "").strip()
@@ -143,6 +157,12 @@ class PramanyxClient:
             person = _delegation()
             if person:
                 h[DELEGATION_HEADER] = person
+            # 2026-11-17 — the person's clock, kept beside them by the coworker's host: the platform counts "yesterday"
+            # from this person's today (`kernel/clock.py`).
+            zone = _kept_clock()
+            if zone:
+                from pramanyx.kernel.clock import CLOCK_HEADER
+                h[CLOCK_HEADER] = zone
         tool = CURRENT_TOOL.get()
         if tool:
             h[TOOL_HEADER] = tool

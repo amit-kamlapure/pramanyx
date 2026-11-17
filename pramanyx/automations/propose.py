@@ -134,35 +134,12 @@ already passed.
 """
 
 
-def _readable_zone(name: str) -> str:
-    from zoneinfo import ZoneInfo
-    name = (name or "").strip()
-    if not name:
-        return ""
-    try:
-        ZoneInfo(name)
-        return name
-    except Exception:  # noqa: BLE001 — a zone this install cannot read is passed over for the next clock, never guessed
-        return ""
-
-
 def the_clock(named: str = "", here: str = "") -> str:
-    """The clock a sentence's times are read in (2026-11-16; the user: "Yes, my clock"): the zone the person named;
-    else the clock they chose for themselves; else the clock where they are (their browser's, which the app sends and
-    the coworker is told); else the organisation's; else "" — UTC, the platform's default. A zone this install cannot
-    read is passed over."""
-    from pramanyx.db.user_prefs import preferred_timezone
-    for zone in (named, preferred_timezone(), here):
-        if (readable := _readable_zone(zone)):
-            return readable
-    try:
-        from pramanyx.orgsettings.store import load_org_settings
-        return _readable_zone(str(load_org_settings().timezone or ""))
-    except Exception as exc:  # noqa: BLE001 — the organisation's settings unreadable: UTC, as before any were kept
-        from pramanyx.kernel.errors import tolerate
-        tolerate(exc, "the organisation's clock could not be read; a sentence's times are read in UTC",
-                 counter="automations.propose.clock")
-        return ""
+    """The clock a sentence's times are read in — the person's clock, one order for the whole platform
+    (`kernel.clock.person_clock`): a zone they named; else their own; else where they are (``here``, else the browser
+    zone this request carried); else the organisation's; else "" — UTC."""
+    from pramanyx.kernel.clock import person_clock
+    return person_clock(named, here)
 
 
 def _time_section(clock: str) -> str:

@@ -2286,6 +2286,11 @@ def _answer_core(
         _dialect_block = _writer_rules(db)
         if _dialect_block:
             prompt = _dialect_block + "\n\n" + prompt
+        # 2026-11-17 — the date, on the person's clock: the quick path was told none, so "yesterday" was whatever the
+        # model guessed and "last month" the data's latest month (`kernel/clock.py`, one definition for the platform).
+        from pramanyx.agent.sql_context import clock_block as _clock_block
+        from pramanyx.agent.sql_context import learned_settle_days as _learned_settle
+        prompt = _clock_block(settle_days=_learned_settle(connection_id)) + "\n\n" + prompt
         # User-agent brief (flag `agents.user_defined`) — the active agent's pinned
         # instructions lead the prompt, rules_block-style. Empty (inert) when no
         # agent is active.

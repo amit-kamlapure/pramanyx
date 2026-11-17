@@ -436,6 +436,8 @@
           PRAMANYX_API_URL: !!js process.env.PRAMANYX_API_URL || 'http://127.0.0.1:8000'
           # The person the app handed the coworker; the MCP client presents it on every call (`pramanyx/mcp/client.py`).
           PRAMANYX_DELEGATION_FILE: !!js process.env.PRAMANYX_DELEGATION_FILE || ''
+          # The person's clock: the zone the coworker's page said its browser is in (`kernel/clock.py`).
+          PRAMANYX_CLOCK_FILE: !!js process.env.PRAMANYX_CLOCK_FILE || ''
     - id: pramanyx-answer-card
       # A package the profile has installed (start.sh links it): the shell ships a plugin's browser half only for
       # an installed package, and a bare directory path does not import.

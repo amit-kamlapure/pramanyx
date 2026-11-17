@@ -362,8 +362,9 @@ def test_the_system_prompt_names_the_engine_its_rules_and_the_clock(monkeypatch)
     engine nor the date: on theLook (BigQuery) every `date_trunc('month', x)` and every `::`
     cast it wrote failed. It carries the quick path's writer rules and the clock now — and the
     clock even when the connection cannot be opened."""
-    from pramanyx.agent.sql_context import today_utc
     from pramanyx.db.dialects import writer_rules
+    from pramanyx.kernel.clock import person_clock, today_for
+    today_utc = lambda: f"{today_for(person_clock()):%A %Y-%m-%d}"   # noqa: E731 — the one definition's today
 
     bq = SimpleNamespace(dialect="bigquery", writes_native_sql=True)
     monkeypatch.setattr(ct, "_connection", lambda cid, **kw: bq)

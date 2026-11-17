@@ -17,14 +17,17 @@ class FakeIntake:
 
 
 TWO_YR = ("2023-01-01", "2024-12-30")   # data spans two full years
+#: The day these are asked on: the data runs to yesterday, so a period counted from today ends at its latest point.
+TODAY = "2024-12-31"
 
 
 class TestReanchorsRelativeWindow:
     def test_the_bug_last_12_months_anchored_to_old_year(self):
         # LLM put "last 12 months" at calendar 2023; data runs through 2024-12-30.
         it = FakeIntake("2023-01-01", "2023-12-31", "2022-01-01", "2022-12-31")
-        note = _clamp_intake_to_coverage(it, *TWO_YR, question="why did AOV change in the last 12 months?")
-        assert it.observation_end == "2024-12-30"          # re-anchored to the data's latest point
+        note = _clamp_intake_to_coverage(it, *TWO_YR, question="why did AOV change in the last 12 months?",
+                                         today=TODAY)
+        assert it.observation_end == "2024-12-30"          # re-anchored to yesterday, which is the data's latest point
         # the twelve months to it (twelve months to 30 December begin on 31 December), and the twelve
         # before from the data's first day
         assert it.observation_start == "2023-12-31"
@@ -33,7 +36,7 @@ class TestReanchorsRelativeWindow:
 
     def test_last_3_months_anchored_recently(self):
         it = FakeIntake("2023-01-01", "2023-03-31")   # an old 3-month window
-        _clamp_intake_to_coverage(it, *TWO_YR, question="revenue trend over the last 3 months")
+        _clamp_intake_to_coverage(it, *TWO_YR, question="revenue trend over the last 3 months", today=TODAY)
         assert it.observation_end == "2024-12-30"
         # ~3-month window preserved
         assert it.observation_start.startswith("2024")
@@ -41,6 +44,25 @@ class TestReanchorsRelativeWindow:
     def test_no_date_in_question_is_relative(self):
         it = FakeIntake("2023-01-01", "2023-12-31")
         _clamp_intake_to_coverage(it, *TWO_YR, question="how is average order value doing?")
+        assert it.observation_end == "2024-12-30"
+
+
+class TestAPeriodCountedFromTodayIsNeverMoved:
+    """The user, 2026-11-17: "Yesterday means day before current date.. if no data exists, it should say so" — a period
+    the question counts from today is counted from today, whatever the data holds; it is never moved to the data's
+    latest point, and when it holds no rows the note says so."""
+
+    def test_data_that_ended_long_ago_is_said_to_hold_nothing_for_the_last_12_months(self):
+        it = FakeIntake("2023-12-31", "2024-12-30", "2022-12-31", "2023-12-30")   # the model anchored on the data
+        note = _clamp_intake_to_coverage(it, *TWO_YR, question="why did AOV change in the last 12 months?",
+                                         today="2026-11-17")
+        assert (it.observation_start, it.observation_end) == ("2025-11-17", "2026-11-16")   # counted from today
+        assert note and "holds no rows" in note and "do not answer for another period" in note
+        assert "most recent in data" not in (it.observation_label or "")
+
+    def test_a_question_that_names_no_period_still_reads_the_data_when_the_model_missed_it(self):
+        it = FakeIntake("2019-01-01", "2019-12-31")                               # the model's mistake
+        _clamp_intake_to_coverage(it, *TWO_YR, question="how is average order value doing?", today="2026-11-17")
         assert it.observation_end == "2024-12-30"
 
 
@@ -66,7 +88,7 @@ class TestNoChangeWhenAlreadyCorrect:
     def test_window_already_ends_at_dmax(self):
         # twelve months to 30 December begin on 31 December
         it = FakeIntake("2023-12-31", "2024-12-30", "2022-12-31", "2023-12-30")
-        _clamp_intake_to_coverage(it, *TWO_YR, question="last 12 months trend")
+        _clamp_intake_to_coverage(it, *TWO_YR, question="last 12 months trend", today=TODAY)
         assert it.observation_start == "2023-12-31"   # gap ~0 → untouched
         assert it.observation_end == "2024-12-30"
 
@@ -85,7 +107,7 @@ class TestNoChangeWhenAlreadyCorrect:
         # window compared against itself returned abs_change 0 on every row and the narrator
         # reported "no significant variation" — the Direkteingabe specimen).
         it = FakeIntake("2023-01-01", "2023-12-31", "2022-01-01", "2022-12-31")
-        _clamp_intake_to_coverage(it, "2023-01-01", "2023-12-31", question="last 12 months")
+        _clamp_intake_to_coverage(it, "2023-01-01", "2023-12-31", question="last 12 months", today="2024-01-01")
         assert it.observation_start == "2023-01-01" and it.observation_end == "2023-12-31"  # gap 0
         assert (it.comparison_start, it.comparison_end) == ("", "")
         assert it.no_prior_period is True

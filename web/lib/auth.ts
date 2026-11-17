@@ -13,6 +13,8 @@
    `claimsOf` decodes a token for DISPLAY only — trusting a claim client-side would be
    decorating, not authenticating; the server verifies it before any session exists. */
 
+import { installClockHeader } from "@/lib/clock";
+
 const WHO_KEY = "pramanyx_signed_in";            // the email shown in the chip; never a token
 const LEGACY_TOKEN_KEY = "pramanyx_id_token";    // what the page used to keep — cleared on sight
 export const AUTH_EXPIRED_EVENT = "pramanyx-auth-expired";
@@ -104,6 +106,8 @@ let installed = false;
 export function installAuthFetch(apiBase: string): void {
   if (installed || typeof window === "undefined") return;
   installed = true;
+  // Every page that talks to the API installs this, so the person's clock rides with it (`lib/clock.ts`).
+  installClockHeader(apiBase);
   const raw = window.fetch.bind(window);
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString()

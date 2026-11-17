@@ -86,9 +86,9 @@ def test_a_monthly_run_on_the_first_observes_the_month_that_just_ended():
     """The rule this replaced told a monthly automation firing on 1 October to observe
     August (measured 2026-09-23). September is complete on 1 October."""
     note = observation_note(datetime(2026, 10, 1, 8, 0, tzinfo=timezone.utc), "0 8 1 * *", 1)
-    assert "COMPLETE month: 2026-09" in note
+    assert "COMPLETE month, 2026-09" in note
     weekly = observation_note(datetime(2026, 9, 21, 8, 0, tzinfo=timezone.utc), "0 8 * * 1", 1)
-    assert "COMPLETE week: 2026-09-14 to 2026-09-20" in weekly
+    assert "COMPLETE week, 2026-09-14 to 2026-09-20" in weekly
 
 
 # ── measuring a period ──────────────────────────────────────────────────────────────────────

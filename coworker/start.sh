@@ -19,6 +19,8 @@ export DSH_TELEMETRY_MODE=DISABLED
 export PRAMANYX_API_URL="${PRAMANYX_API_URL:-http://127.0.0.1:8000}"
 # The person the app hands this coworker (a short-lived delegation), kept where the host and the MCP server read it.
 export PRAMANYX_DELEGATION_FILE="${PRAMANYX_DELEGATION_FILE:-$DSH_HOME/delegation}"
+# The person's clock — the zone the coworker's page says its browser is in — kept where the host and the MCP server read it.
+export PRAMANYX_CLOCK_FILE="${PRAMANYX_CLOCK_FILE:-$DSH_HOME/clock}"
 # The shell's provider plugin will not send a request without a key. The model door takes none, so this is a
 # placeholder and not a secret.
 export PRAMANYX_DOOR_KEY="${PRAMANYX_DOOR_KEY:-no-key-the-door-takes-none}"

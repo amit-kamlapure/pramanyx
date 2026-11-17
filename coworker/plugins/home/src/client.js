@@ -427,9 +427,20 @@ function SwitcherInTheCorner() {
 
 export const inject = ["slots", "uiWorkspace"];
 
+/** The zone this page's browser is in, told to the coworker's server once per load (`keepTheClock`, 2026-11-17): the
+ *  platform counts "yesterday" from it whenever the person set no clock of their own. */
+function tellTheClock() {
+  let zone = "";
+  try { zone = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch { zone = ""; }
+  if (!zone) return;
+  fetch("/pramanyx-clock", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ zone }) })
+    .catch(() => {});
+}
+
 export function apply(ctx) {
   wearHomeLook();
   arrive(ctx);
+  tellTheClock();
   ctx.slots.inject("shell.overlay", () =>
     ctx.slots.register({ name: "shell.overlay", id: "pramanyx-switcher" }, SwitcherInTheCorner));
   ctx.slots.inject("conversation.hero.options", () =>

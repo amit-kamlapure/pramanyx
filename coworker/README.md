@@ -121,7 +121,11 @@ turned back on from the interface.
   result here** — "deliver it here" needs no sending step. A Slack post a model drafted waits for a person on each
   run until one says "always allow"; an email from a new schedule is held at departure while it is on probation.
   Its times are read in a zone the person named, else their own saved clock, else their browser's (the shell tells
-  the agent which, on every message), else the organisation's, else UTC. Setting one up is an act: the organisation's
+  the agent which, on every message), else the organisation's, else UTC — the platform's one clock
+  (`pramanyx/kernel/clock.py`). The coworker's page tells its host the browser's zone when it loads; the host keeps it
+  in `PRAMANYX_CLOCK_FILE` and every call to Pramanyx carries it (`X-Pramanyx-Clock`), so "yesterday" asked here is
+  the day before this person's today, counted the same way as in the app — never moved by a source's settling, and
+  said to hold no data when it holds none (2026-11-17). Setting one up is an act: the organisation's
   agent policy allows it by default (since 2026-11-16; `run` before), and an admin can lower it. A schedule that
   would run more often than once an hour is not made until the person confirms the rhythm, said back to them in
   words (2026-11-17: the agent once passed "in 2 minutes" on as "every 2 minutes"); the agent copies the person's

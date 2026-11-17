@@ -10656,6 +10656,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/clock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get My Clock
+         * @description The person's clock as the platform resolves it for this request, and the periods it counts from today
+         *     (`kernel/clock.py`, 2026-11-17: one definition of "yesterday" for the platform and the coworker). Reads nothing
+         *     else; changes nothing. ``source`` says where the zone came from.
+         */
+        get: operations["get_my_clock_me_clock_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/preferences": {
         parameters: {
             query?: never;
@@ -44971,6 +44993,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_my_clock_me_clock_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };
