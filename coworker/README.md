@@ -88,6 +88,8 @@ turned back on from the interface.
   answer, "Read the definition of the metric: gmv" for a read. A row opens to the SQL and the rows, or to what
   came back. The shell's second fold, one per group of calls, is gone; the turn's own fold stays, and folds all
   of it — the calls and what was said between them — down to the answer.
+- **No thinking in the conversation** (2026-11-18). Opened, a turn's work is what was done and what the agent said;
+  the model's own thinking is not drawn there ("too verbose") and stays, every word, in the conversation's Trajectory.
 - **A running turn is folded to its latest row.** While an answer is worked on, one row shows — the call still
   running, or the last one made — above the shell's running line, which carries "Show the work" to open it all.
   The shell keeps a running turn wide open; a long one pushed the question off the screen. The next run starts

@@ -1010,6 +1010,11 @@ function ToolStep(props) {
  * change, the column is drawn as the shell draws it.
  */
 const STEPS_LOOK = `
+/* The model's thinking is not drawn in the conversation (2026-11-18; the user, opening a turn's work: "the thinking part
+   … its too verbose" — "Yes, hide them"). Opened, a turn's work is what was done, a line each, and what the agent said;
+   every word of its thinking stays in the conversation's Trajectory. The shell marks a thinking part
+   \`data-chat-group-part="reasoning"\` and what is said to the person "response". */
+[data-chat-flow-kind="assistant-step"][data-chat-group-part="reasoning"] { display: none; }
 [data-chat-flow-kind="assistant-step"]:has(+ [data-step-process]),
 [data-step-process] {
   position: relative; margin-left: 7px; padding-left: 16px;
