@@ -19,7 +19,7 @@ beforeEach(() => importDashboard.mockReset());
 
 describe("reading in a dashboard file", () => {
   it("opens what it made", async () => {
-    importDashboard.mockResolvedValue({ imported: true, cockpit_id: "sales-1", title: "Sales", version: 1 });
+    importDashboard.mockResolvedValue({ imported: true, dashboard_id: "sales-1", title: "Sales", version: 1 });
     const onImported = vi.fn();
     render(<ImportDashboard connectionId="c" onImported={onImported} onRefused={vi.fn()} />);
     handed('{"format":"pramanyx.dashboard"}');

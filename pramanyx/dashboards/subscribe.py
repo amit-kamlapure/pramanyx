@@ -118,7 +118,8 @@ def build_departure(sub: Any, *, read: Callable[[str, str, Optional[str]], dict]
 
     reader = str(sub.reader or "").removeprefix("user:") or sub.dashboard_owner
     try:
-        kept = sharing.read_shared(sub.conn_id, sub.dashboard_owner, sub.dashboard, reader=reader)["cockpit"]
+        got = sharing.read_shared(sub.conn_id, sub.dashboard_owner, sub.dashboard, reader=reader)
+        kept = next(v for k, v in got.items() if k != "home")            # the version its readers read
     except sharing.Refused as exc:
         raise ValueError(str(exc)) from exc
     preset = ranges.PERIOD_PRESET.get(sub.period, "yesterday")

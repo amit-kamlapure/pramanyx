@@ -877,6 +877,9 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
   // when this browser last saw a burst kept, and whether one is waiting or on its way — the builder's "saved" says them
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [pending, setPending] = useState(false);
+  // the dashboard open now, by its id and its title
+  const openId = data?.cockpit_id ?? "";
+  const heldTitle = titleOfSpec(data?.cockpit.spec) || openId;
   // the builder's undo and redo: the specs before and after, in this sitting — each step back is kept as a version too
   const NO_STEPS = { past: [] as DashboardSpec[], future: [] as DashboardSpec[] };
   const [stacks, setStacks] = useState(NO_STEPS);
@@ -1315,7 +1318,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
           }}
           onUndo={stacks.past.length > 0 ? undo : undefined} onRedo={stacks.future.length > 0 ? redo : undefined}
           askPiece={(key, type) => (ASKS_OF_A_PIECE(type) ? (
-            <AskPiece key={key} connectionId={connectionId} dashboardId={data.cockpit_id} schema={schema} pieceKey={key} actor={ACTOR}
+            <AskPiece key={key} connectionId={connectionId} dashboardId={openId} schema={schema} pieceKey={key} actor={ACTOR}
               beforeAsk={async () => { sendBurst(); await burst.current.chain; }}
               onKept={() => { setStacks(st => ({ past: [...st.past.slice(-49), current], future: [] })); reload(); }} />
           ) : null)}
@@ -1485,7 +1488,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
         </Button>
       </span>
       <Button size="xs" variant="ghost" data-testid="ask-about-dashboard" title="Ask about this dashboard, for the period on screen" onClick={() => {
-        const subject = data ? dashboardSubject(connectionId, `${connectionId}:${data.cockpit_id}`, titleOfSpec(data.cockpit.spec) || data.cockpit_id,
+        const subject = data ? dashboardSubject(connectionId, `${connectionId}:${openId}`, heldTitle,
           data.range.status === "standing" ? null : data.range) : null;
         if (subject) askAbout(subject);
       }}>
@@ -1513,7 +1516,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
           <DropdownMenu.Item data-testid="dashboard-subscribe-open" disabled={!(kept?.published_to?.length)} onSelect={() => setSubscribing(true)}>
             {(kept?.published_to?.length ?? 0) > 0 ? "Subscribe…" : "Subscribe… (publish it first)"}
           </DropdownMenu.Item>
-          <DropdownMenu.Item data-testid="dashboard-export" onSelect={() => { if (data) void exportToFile(connectionId, data.cockpit_id); }}>Export as JSON</DropdownMenu.Item>
+          <DropdownMenu.Item data-testid="dashboard-export" onSelect={() => { if (data) void exportToFile(connectionId, openId); }}>Export as JSON</DropdownMenu.Item>
           <DropdownMenu.Separator />
           <DropdownMenu.Item onSelect={() => setRetiring(true)} data-testid="dashboard-retire-open-view">Retire this dashboard…</DropdownMenu.Item>
         </DropdownMenu.Content>
@@ -1525,8 +1528,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
     <div data-testid="briefing-dashboards" data-dashboard-ground="" style={{ flex: 1, overflow: "auto", padding: "14px 32px 32px", background: "var(--bg-0)" }}>
       {/* On the home, the page's one action. Inside the app it sits in the title row; outside it, above the list. */}
       {data && subscribing && (
-        <SubscribeDashboard open onClose={() => setSubscribing(false)} connectionId={connectionId} dashboardId={data.cockpit_id}
-          title={titleOfSpec(data.cockpit.spec) || data.cockpit_id} />
+        <SubscribeDashboard open onClose={() => setSubscribing(false)} connectionId={connectionId} dashboardId={openId} title={heldTitle} />
       )}
       {!chosen && (inShell ? <ChromeActions>{newDoor}</ChromeActions> : <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>{newDoor}</div>)}
       {/* Outside the app there is no title row to carry the way back. */}

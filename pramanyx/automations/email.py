@@ -27,6 +27,11 @@ _SEND_URL = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send"
 _ADDRESS = re.compile(r"^[^@\s,;<>]+@[^@\s,;<>]+\.[^@\s,;<>]+$")
 
 
+def is_address(to: str) -> bool:
+    """Whether ``to`` is written as one email address."""
+    return bool(_ADDRESS.match((to or "").strip()))
+
+
 def email_text(effect, automation, rendered: str) -> tuple[str, str]:
     """The subject and body: the step's own subject, else the automation's name; the rendered answer as the body."""
     subject = str(effect.config.get("subject") or "").strip() or (automation.name or "Pramanyx")

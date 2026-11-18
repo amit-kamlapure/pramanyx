@@ -59,16 +59,20 @@ export function homeItems(connectionId: string, person_: string, own: DashboardL
   return [
     { id: metricsId, title: "Metrics", kind: "metrics", pinned: true, modifiedAt: "", owner: "This connection", mine: false,
       state: "Pinned", mark: null, cards: null, version: null, change: "The connection's approved metrics", audience: [], outline: METRICS_OUTLINE },
-    ...own.filter(c => !c.retired).map((c): HomeItem => ({
-      id: c.cockpit_id, title: c.title || c.cockpit_id, kind: "own", pinned: false, modifiedAt: c.kept_at, owner: "You", mine: true,
-      state: ownState(c), mark: marks[dashboardRef(connectionId, person_, c.cockpit_id)] ?? null, cards: c.cards?.length ?? 0,
-      version: c.version, change: sentence(c.note), audience: (c.published_to ?? []).map(t => t.name),
-      outline: (c as { outline?: OutlineBox[] }).outline ?? [] })),
-    ...shared.map((s): HomeItem => ({
-      id: `shared:${s.owner}/${s.cockpit_id}`, title: s.title || s.cockpit_id, kind: "shared", pinned: false, modifiedAt: s.kept_at,
-      owner: person(s.published_by || s.owner), mine: false, state: "Shared with you",
-      mark: marks[dashboardRef(connectionId, s.owner, s.cockpit_id)] ?? null, cards: null, version: s.version, change: "",
-      audience: (s.published_to ?? []).map(t => t.name), outline: (s as { outline?: OutlineBox[] }).outline ?? [] })),
+    ...own.filter(c => !c.retired).map((c): HomeItem => {
+      const id = c.cockpit_id;
+      return { id, title: c.title || id, kind: "own", pinned: false, modifiedAt: c.kept_at, owner: "You", mine: true,
+        state: ownState(c), mark: marks[dashboardRef(connectionId, person_, id)] ?? null, cards: c.cards?.length ?? 0,
+        version: c.version, change: sentence(c.note), audience: (c.published_to ?? []).map(t => t.name),
+        outline: (c as { outline?: OutlineBox[] }).outline ?? [] };
+    }),
+    ...shared.map((s): HomeItem => {
+      const id = s.cockpit_id;
+      return { id: `shared:${s.owner}/${id}`, title: s.title || id, kind: "shared", pinned: false, modifiedAt: s.kept_at,
+        owner: person(s.published_by || s.owner), mine: false, state: "Shared with you",
+        mark: marks[dashboardRef(connectionId, s.owner, id)] ?? null, cards: null, version: s.version, change: "",
+        audience: (s.published_to ?? []).map(t => t.name), outline: (s as { outline?: OutlineBox[] }).outline ?? [] };
+    }),
   ];
 }
 

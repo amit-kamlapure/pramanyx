@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from pramanyx.dashboards import ask, versions
 
 SPEC = {"root": "r", "elements": {
-    "r": {"type": "Cockpit", "props": {"title": "Sales"}, "children": ["c1", "n1"]},
+    "r": {"props": {"title": "Sales"}, "children": ["c1", "n1"]},
     "c1": {"type": "Card", "props": {"card": "a"}, "children": []},
     "n1": {"type": "Note", "props": {"text": "Mine"}, "children": []},
 }}

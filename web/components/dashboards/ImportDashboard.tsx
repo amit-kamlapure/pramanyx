@@ -23,7 +23,7 @@ export function ImportDashboard({ connectionId, onImported, onRefused }: {
       let doc: unknown;
       try { doc = JSON.parse(await file.text()); } catch { onRefused([`${file.name} is not a JSON file.`]); return; }
       const out = await importDashboard(connectionId, doc);
-      if (out.imported) onImported(out.cockpit_id, out.title);
+      if (out.imported) onImported(out.dashboard_id, out.title);
       else onRefused(out.sentences);
     } catch (e) {
       onRefused([(e as Error).message]);

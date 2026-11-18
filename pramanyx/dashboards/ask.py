@@ -54,6 +54,9 @@ SYSTEM_EDIT = (
 )
 
 
+#: Where a change asked for in words is traced.
+EDIT_SITE = "cockpit.edit"
+
 #: Asked of one piece (the study's R19): the same law, held to the element chosen.
 SYSTEM_PIECE = SYSTEM_EDIT + (
     " The person chose one element of the dashboard and asks about it alone: change that element and nothing else. "
@@ -165,9 +168,9 @@ def edit_in_words(connection_id: str, owner: str, cockpit_id: str, words: str, *
             return _not("A note or an image is yours to change by hand.")
         return _run(home, SYSTEM_PIECE, f'Of their dashboard "{title}", about the element "{target}" alone '
                     f'(a {element.get("type")}), the person asks: {words}', said=words, schema=schema, provider=provider,
-                    site="cockpit.edit", nothing="The model drafted no change for this, and gave no reason.", target=target)
+                    site=EDIT_SITE, nothing="The model drafted no change for this, and gave no reason.", target=target)
     return _run(home, SYSTEM_EDIT, f'Of their dashboard "{title}", the person asks: {words}', said=words,
-                schema=schema, provider=provider, site="cockpit.edit",
+                schema=schema, provider=provider, site=EDIT_SITE,
                 nothing="The model drafted no change for this, and gave no reason.")
 
 

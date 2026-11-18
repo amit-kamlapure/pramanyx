@@ -565,11 +565,11 @@ def ask_dashboard(request: Request, cockpit_id: str, connection_id: str, req: As
     return edit_in_words(connection_id, person_of(request), home.cockpit_id, req.words, schema=req.schema_name, target=req.target)
 
 
-@router.get("/dashboards/{cockpit_id}/export")
-def export_dashboard(request: Request, cockpit_id: str, connection_id: str) -> dict:
+@router.get("/dashboards/{dashboard_id}/export")
+def export_dashboard(request: Request, dashboard_id: str, connection_id: str) -> dict:
     """The dashboard as it stands, as a JSON file's contents: its spec and the cards it places, each with its source."""
     from pramanyx.dashboards.transfer import export_of
-    out = export_of(_home(request, connection_id, cockpit_id))
+    out = export_of(_home(request, connection_id, dashboard_id))
     if out is None:
         raise HTTPException(status_code=404, detail="There is no dashboard here to export.")
     return out

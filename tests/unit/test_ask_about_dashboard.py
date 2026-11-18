@@ -12,7 +12,7 @@ from pramanyx.agent import ask_subject as S
 from pramanyx.routers.investigations import AskFocus
 
 SPEC = {"root": "r", "elements": {
-    "r": {"type": "Cockpit", "props": {"title": "Sales"}, "children": ["c1", "c2"]},
+    "r": {"props": {"title": "Sales"}, "children": ["c1", "c2"]},
     "c1": {"type": "Card", "props": {"card": "rev", "title": "Revenue here"}, "children": []},
     "c2": {"type": "Card", "props": {"card": "ord"}, "children": []},
 }}

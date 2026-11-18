@@ -57,10 +57,10 @@ def _validate_destination(body: "_SubscriptionBody") -> None:
     replaces only an automation of its own connection. Refused with the reason."""
     from pramanyx.notifications.store import get_trigger
     if body.email_to:
-        from pramanyx.automations.email import _ADDRESS
+        from pramanyx.automations.email import is_address
         if body.content != "dashboard":
             raise HTTPException(status_code=422, detail="only a dashboard subscription goes by email")
-        if not _ADDRESS.match(body.email_to.strip()):
+        if not is_address(body.email_to):
             raise HTTPException(status_code=422, detail="that is not an email address")
         return
     if body.bot_id:

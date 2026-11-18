@@ -3645,7 +3645,7 @@ export async function exportDashboard(connectionId: string, dashboardId: string)
   return res.json();
 }
 
-export type DashboardImported = { imported: true; cockpit_id: string; title: string; version: number } | { imported: false; sentences: string[] };
+export type DashboardImported = { imported: true; dashboard_id: string; title: string; version: number } | { imported: false; sentences: string[] };
 
 /** A dashboard file read into this connection: made whole, or refused by name with nothing made. */
 export async function importDashboard(connectionId: string, doc: unknown): Promise<DashboardImported> {

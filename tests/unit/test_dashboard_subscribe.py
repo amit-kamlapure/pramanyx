@@ -13,7 +13,7 @@ from pramanyx.dashboards import sharing, subscribe as S
 from pramanyx.routers import briefs
 
 SPEC = {"root": "r", "elements": {
-    "r": {"type": "Cockpit", "props": {"title": "Sales"}, "children": ["c1", "c2", "c3"]},
+    "r": {"props": {"title": "Sales"}, "children": ["c1", "c2", "c3"]},
     "c1": {"type": "Card", "props": {"card": "rev", "title": "Revenue"}, "children": []},
     "c2": {"type": "Card", "props": {"card": "list"}, "children": []},
     "c3": {"type": "Card", "props": {"card": "off", "title": "Stock"}, "children": []},
@@ -35,7 +35,7 @@ def _sub(**kw) -> BriefSubscription:
 def published(monkeypatch):
     import pramanyx.briefing.ranges as ranges
     import pramanyx.cards.store as store
-    monkeypatch.setattr(sharing, "read_shared", lambda *_a, **_k: {"cockpit": {"spec": SPEC, "version": 4}})
+    monkeypatch.setattr(sharing, "read_shared", lambda *_a, **_k: {"read": {"spec": SPEC, "version": 4}})
     monkeypatch.setattr(ranges, "resolve_for", lambda *_a, **_k: (SimpleNamespace(start=date(2026, 10, 1)), ""))
     monkeypatch.setattr(ranges, "phrases", lambda _s: {"covers": COVERS})
     monkeypatch.setattr(store, "get_card", lambda cid: SimpleNamespace(title="Orders by channel") if cid == "list" else None)
@@ -132,7 +132,7 @@ def _body(**kw):
 def test_a_person_subscribes_only_to_a_published_version_they_may_read(monkeypatch):
     import pramanyx.dashboards.home as H
     monkeypatch.setattr(H, "person_of", lambda _r: "ana")
-    monkeypatch.setattr(sharing, "read_shared", lambda *_a, **_k: {"cockpit": {}})
+    monkeypatch.setattr(sharing, "read_shared", lambda *_a, **_k: {"read": {}})
     assert briefs._dashboard_reader(_body(), None) == ("ana", "ana")
     with pytest.raises(HTTPException, match="PDF or a PNG"):
         briefs._dashboard_reader(_body(file_format="gif"), None)

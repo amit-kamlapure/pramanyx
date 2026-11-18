@@ -15,7 +15,7 @@ from typing import Any, Optional
 from pramanyx.dashboards.home import Home, new_id
 
 FORMAT = "pramanyx.dashboard"
-FORMAT_VERSION = 1
+FILE_EDITION = 1
 #: The most cards a file may bring: as many as a dashboard may place, with room for a person's own limits to say the rest.
 MAX_CARDS = 200
 #: What a card's source may be (`cards.models.StoredCard.source`).
@@ -38,6 +38,7 @@ def export_of(home: Home) -> Optional[dict]:
     kept = versions.latest(home)
     if kept is None or kept.get("retired") or not kept.get("spec"):
         return None
+    named = home.cockpit_id
     held = {c.id: c for c in cards.cards_of(home)}
     written = []
     for card_id in _placed(kept["spec"]):
@@ -47,9 +48,9 @@ def export_of(home: Home) -> Optional[dict]:
         written.append({"id": card.id, "title": card.title, "kind": card.kind, "source": card.source, "sql": card.sql,
                         "render": card.render, "thresholds": card.thresholds, "body": card.body,
                         "provenance": card.provenance.model_dump(mode="json"), "shared": card.scope != cards.OWN})
-    return {"format": FORMAT, "format_version": FORMAT_VERSION, "exported_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-            "title": versions.title_of(kept["spec"]) or home.cockpit_id,
-            "from": {"connection": home.connection_id, "dashboard": home.cockpit_id, "version": kept.get("version")},
+    return {"format": FORMAT, "format_version": FILE_EDITION, "exported_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "title": versions.title_of(kept["spec"]) or named,
+            "from": {"connection": home.connection_id, "dashboard": named, "version": kept.get("version")},
             "spec": kept["spec"], "cards": written}
 
 
@@ -116,8 +117,8 @@ def problems(doc: Any, connection_id: str) -> list[str]:
 
     if not isinstance(doc, dict) or doc.get("format") != FORMAT:
         return ["This is not a dashboard file: it does not say it is one."]
-    if doc.get("format_version") != FORMAT_VERSION:
-        return [f"This file is format {doc.get('format_version')}, and this platform reads format {FORMAT_VERSION}."]
+    if doc.get("format_version") != FILE_EDITION:
+        return [f"This file is format {doc.get('format_version')}, and this platform reads format {FILE_EDITION}."]
     spec, listed = doc.get("spec"), doc.get("cards")
     if not isinstance(spec, dict) or not isinstance(spec.get("elements"), dict) or not isinstance(listed, list):
         return ["This file holds no dashboard to read."]
@@ -160,7 +161,7 @@ def problems(doc: Any, connection_id: str) -> list[str]:
 
 
 def import_into(connection_id: str, owner: str, doc: Any, *, approved_by: str) -> dict:
-    """Read a file into this person's dashboards: ``{"imported": True, "cockpit_id", "title", "version"}`` or
+    """Read a file into this person's dashboards: ``{"imported": True, "dashboard_id", "title", "version"}`` or
     ``{"imported": False, "sentences": [...]}`` with nothing made."""
     from pramanyx.cards.models import CardProvenance, StoredCard
     from pramanyx.cards.store import delete_card, upsert_card
@@ -170,7 +171,8 @@ def import_into(connection_id: str, owner: str, doc: Any, *, approved_by: str) -
     from pramanyx.kernel.errors import tolerate
 
     title = str((doc or {}).get("title") or "Imported dashboard")[:120] if isinstance(doc, dict) else "Imported dashboard"
-    home = Home(connection_id, owner, new_id(title))
+    made_id = new_id(title)
+    home = Home(connection_id, owner, made_id)
     said = problems(doc, connection_id)
     if said:
         return {"imported": False, "sentences": said}
@@ -208,4 +210,4 @@ def import_into(connection_id: str, owner: str, doc: Any, *, approved_by: str) -
     if not kept.kept:
         undo()
         return {"imported": False, "sentences": list(kept.sentences) or ["The dashboard in the file was refused."]}
-    return {"imported": True, "cockpit_id": home.cockpit_id, "title": title, "version": kept.version}
+    return {"imported": True, "dashboard_id": made_id, "title": title, "version": kept.version}

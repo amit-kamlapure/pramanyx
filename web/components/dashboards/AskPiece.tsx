@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/toast";
 import { acceptProposal, askDashboard, rejectProposal, type DashboardDrafted } from "@/lib/api";
 
-export const ASKS_OF_A_PIECE = (type: string | undefined) => !!type && !["Note", "Image", "Cockpit", "Tabs", "Tab"].includes(type);
+export const ASKS_OF_A_PIECE = (type: string | undefined) => !!type && !["Note", "Image", "Tabs", "Tab"].includes(type);
 
 export function AskPiece({ connectionId, dashboardId, schema, pieceKey, actor, beforeAsk, onKept }: {
   connectionId: string; dashboardId: string; schema?: string; pieceKey: string; actor: string;

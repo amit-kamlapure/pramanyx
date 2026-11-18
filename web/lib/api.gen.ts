@@ -5265,26 +5265,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/dashboards/{cockpit_id}/export": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Export Dashboard
-         * @description The dashboard as it stands, as a JSON file's contents: its spec and the cards it places, each with its source.
-         */
-        get: operations["export_dashboard_dashboards__cockpit_id__export_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/dashboards/{cockpit_id}/publish": {
         parameters: {
             query?: never;
@@ -5361,6 +5341,26 @@ export interface paths {
          * @description Stop sharing a dashboard. A version too: its history says when it reached whom.
          */
         post: operations["unpublish_dashboard_dashboards__cockpit_id__unpublish_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dashboards/{dashboard_id}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Dashboard
+         * @description The dashboard as it stands, as a JSON file's contents: its spec and the cards it places, each with its source.
+         */
+        get: operations["export_dashboard_dashboards__dashboard_id__export_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -37063,41 +37063,6 @@ export interface operations {
             };
         };
     };
-    export_dashboard_dashboards__cockpit_id__export_get: {
-        parameters: {
-            query: {
-                connection_id: string;
-            };
-            header?: never;
-            path: {
-                cockpit_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     publish_dashboard_dashboards__cockpit_id__publish_post: {
         parameters: {
             query: {
@@ -37223,6 +37188,41 @@ export interface operations {
             header?: never;
             path: {
                 cockpit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_dashboard_dashboards__dashboard_id__export_get: {
+        parameters: {
+            query: {
+                connection_id: string;
+            };
+            header?: never;
+            path: {
+                dashboard_id: string;
             };
             cookie?: never;
         };

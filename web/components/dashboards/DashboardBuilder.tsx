@@ -446,7 +446,7 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
               connectionId={connectionId} schema={schema} cardReads={cardReads} cardTitle={cardTitle}
               onRenamed={n => setWire(`value:${n}`)} queryCards={queryCards} />
               : wireKind === "choice" ? <ChoiceSetup spec={spec} name={wireName} />
-                : <>{selected && askPiece?.(selected, el?.type)}<PieceSetup spec={spec} selected={selected} onChange={apply} connectionId={connectionId} schema={schema} cardTitle={cardTitle}
+                : <>{selected && movable && askPiece?.(selected, el?.type)}<PieceSetup spec={spec} selected={selected} onChange={apply} connectionId={connectionId} schema={schema} cardTitle={cardTitle}
                   entityTitle={entityTitle} cardSetup={cardSetup} cardChart={cardChart} cardSql={cardSql}
                   onOpenLayout={() => openPane("layout")} cardDates={cardDates} cardHolds={cardHolds} release={release} /></>)}
         </aside>

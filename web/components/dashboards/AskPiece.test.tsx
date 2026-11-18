@@ -9,7 +9,7 @@ import { ASKS_OF_A_PIECE, AskPiece } from "@/components/dashboards/AskPiece";
 const api = vi.hoisted(() => ({ askDashboard: vi.fn(), acceptProposal: vi.fn(), rejectProposal: vi.fn() }));
 vi.mock("@/lib/api", async (original) => ({ ...(await original<typeof import("@/lib/api")>()), ...api }));
 
-const STAGED = { staged: true, proposal_id: "p1", cockpit_id: "d1", summary: "Proposed an edit to the dashboard.", rounds: 1, stop_reason: "", sentences: [] };
+const STAGED = { staged: true, proposal_id: "p1", summary: "Proposed an edit to the dashboard.", rounds: 1, stop_reason: "", sentences: [] };
 const props = () => ({ connectionId: "c", dashboardId: "d1", pieceKey: "card-1", actor: "briefing", beforeAsk: vi.fn(async () => {}), onKept: vi.fn() });
 const propose = (words: string) => {
   fireEvent.change(screen.getByLabelText("Change this in words"), { target: { value: words } });
@@ -51,8 +51,8 @@ describe("asking about one piece", () => {
     expect(await screen.findByTestId("ask-piece-refused")).toHaveTextContent("no longer on the dashboard");
   });
 
-  it("is not offered on a note, an image or the dashboard itself", () => {
-    expect(["Note", "Image", "Cockpit", "Tab"].some(ASKS_OF_A_PIECE)).toBe(false);
+  it("is not offered on a note, an image or a page", () => {
+    expect(["Note", "Image", "Tabs", "Tab"].some(ASKS_OF_A_PIECE)).toBe(false);
     expect(ASKS_OF_A_PIECE("Card")).toBe(true);
   });
 });

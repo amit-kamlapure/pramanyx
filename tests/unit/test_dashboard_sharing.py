@@ -253,7 +253,7 @@ def test_publish_read_as_a_reader_and_copy_over_http(client, monkeypatch):
 
 def test_a_page_hidden_from_readers_is_not_in_what_they_are_given():
     spec = {"root": "r", "state": {"tab": "plans"}, "elements": {
-        "r": {"type": "Cockpit", "props": {"title": "T"}, "children": ["tabs"]},
+        "r": {"props": {"title": "T"}, "children": ["tabs"]},
         "tabs": {"type": "Tabs", "props": {"value": {"$bindState": "/tab"}}, "children": ["open", "plans"]},
         "open": {"type": "Tab", "props": {"name": "open", "label": "Open"}, "children": ["s1"]},
         "plans": {"type": "Tab", "props": {"name": "plans", "label": "Plans", "hidden": True}, "children": ["s2"]},
@@ -269,5 +269,5 @@ def test_a_page_hidden_from_readers_is_not_in_what_they_are_given():
     assert read["state"]["tab"] == "open"                              # it opens on a page the reader has
     assert "secret" not in json.dumps(read)
     assert json.dumps(spec) == before                                  # the kept spec is not changed
-    plain = {"root": "r", "elements": {"r": {"type": "Cockpit", "props": {}, "children": []}}}
+    plain = {"root": "r", "elements": {"r": {"props": {}, "children": []}}}
     assert sharing.without_hidden_pages(plain) is plain

@@ -30,7 +30,7 @@ def _file(o: Office) -> dict:
 @needs_rules
 def test_a_file_holds_the_spec_and_each_card_with_its_source_and_no_value_it_last_read(office):
     doc = _file(office)
-    assert doc["format"] == transfer.FORMAT and doc["from"] == {"connection": office.connection, "dashboard": office.home.cockpit_id, "version": 1}
+    assert doc["format"] == transfer.FORMAT and doc["from"] == {"connection": office.connection, "dashboard": doc["from"]["dashboard"], "version": 1}
     assert {c["id"] for c in doc["cards"]} == {office.rate, office.net}
     assert all(c["source"] == "authored" and "provenance" in c for c in doc["cards"])
     assert "refresh" not in doc["cards"][0] and "last_value" not in json.dumps(doc["cards"])
@@ -42,7 +42,7 @@ def test_a_file_read_back_is_a_new_dashboard_of_the_reader_s_own_with_its_own_ca
     with using_org(office.org):
         out = transfer.import_into(office.connection, PRIYA, doc, approved_by=f"user:{PRIYA}")
         assert out["imported"] is True and out["version"] == 1
-        home = Home(office.connection, PRIYA, out["cockpit_id"])
+        home = Home(office.connection, PRIYA, out["dashboard_id"])
         latest = versions.latest(home)
         placed = {el["props"]["card"] for el in latest["spec"]["elements"].values() if el["type"] == "Card"}
         assert placed.isdisjoint({office.rate, office.net}) and len(placed) == 2

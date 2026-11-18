@@ -537,6 +537,25 @@ function checkCondition(key: string, cond: unknown, out: DashboardIssue[], state
 
 const REFUSED: DashboardCheck = { valid: false, issues: [], cards: [], stateCards: [], texts: [] };
 
+/** The dashboard as its readers receive it: without the pages kept from them and what those pages hold (the server's
+ *  `sharing.without_hidden_pages`). The spec itself when no page is hidden. */
+export function withoutHiddenPages<T extends Record<string, unknown>>(spec: T): T {
+  const elements = spec.elements as Record<string, { type?: string; props?: Record<string, unknown>; children?: string[] }>;
+  const hidden = Object.values(elements).filter(el => el?.type === "Tabs").flatMap(el => el.children ?? [])
+    .filter(k => elements[k]?.props?.hidden === true);
+  if (!hidden.length) return spec;
+  const gone = new Set<string>();
+  const drop = (k: string) => { if (gone.has(k)) return; gone.add(k); (elements[k]?.children ?? []).forEach(drop); };
+  hidden.forEach(drop);
+  const kept = Object.fromEntries(Object.entries(elements).filter(([k]) => !gone.has(k))
+    .map(([k, el]) => [k, el?.type === "Tabs" ? { ...el, children: (el.children ?? []).filter(c => !gone.has(c)) } : el]));
+  const tabs = Object.values(kept).find(el => el?.type === "Tabs");
+  const first = kept[tabs?.children?.[0] ?? ""]?.props?.name;
+  const state = spec.state as Record<string, unknown> | undefined;
+  const opensHidden = !!state && hidden.some(k => elements[k]?.props?.name === state.tab);
+  return { ...spec, elements: kept, ...(opensHidden ? { state: { ...state, tab: first } } : {}) };
+}
+
 export function checkDashboardSpec(spec: unknown): DashboardCheck {
   const issues: DashboardIssue[] = [];
   const cards: string[] = [];
@@ -858,6 +877,15 @@ export function checkDashboardSpec(spec: unknown): DashboardCheck {
     }
   }
   if (issues.length) return done();
+  // v18 — readers are given the dashboard without its hidden pages, so what is left has to stand on its own
+  const forReaders = withoutHiddenPages(spec);
+  if (forReaders !== spec) {
+    const left = checkDashboardSpec(forReaders);
+    if (!left.valid) {
+      issues.push(...left.issues.map(i => ({ ...i, message: `A page hidden from readers holds what another page needs. ${i.message}` })));
+      return done();
+    }
+  }
   return { valid: true, issues: [], cards, stateCards: [...stateCards], texts };
 }
 

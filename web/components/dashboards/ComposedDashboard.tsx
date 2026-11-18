@@ -178,6 +178,10 @@ function useDashboard(): DashboardContextValue {
   return ctx;
 }
 
+/** What the dashboard is called, as its root says. */
+const boardTitleOf = (elements: Spec["elements"]) =>
+  (Object.values(elements).find(el => el?.type === "Cockpit")?.props as { title?: string } | undefined)?.title;
+
 function sameList(a: unknown, b: unknown): boolean {
   return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((v, i) => v === b[i]);
 }
@@ -514,8 +518,7 @@ function PiecesSection({ element, children }: ComponentRenderProps<SectionProps>
   const { elements, doors, selected } = useDashboard();
   // A section named as the dashboard is named says nothing new: its heading is not drawn (a dashboard started from an
   // object holds one such section).
-  const named = Object.values(elements).find(el => el?.type === "Cockpit")?.props as { title?: string } | undefined;
-  const heading = element.props.title !== named?.title;
+  const heading = element.props.title !== boardTitleOf(elements);
   const waiting = useWaiting(element.children);
   const [ref, columns, width] = useColumns(element.props.columns);
   // Arc AP-1 — on the grid: twelve columns and rows of one grade, each element placed by its w and h
@@ -1115,7 +1118,7 @@ function DashboardCard({ element }: ComponentRenderProps<{ card: string; tone?: 
   const valued = useValuedRun(cards.get(id), range);
   const cs = valued.cs;
   const own = valued.onRefresh;
-  const boardTitle = String(Object.values(elements).find(el => el?.type === "Cockpit")?.props?.title ?? "");
+  const boardTitle = boardTitleOf(elements) ?? "";
   const shownRange = period?.showing ?? null;
   const reading = !pageDoors.onSelect;
   const doors = useMemo(() => {

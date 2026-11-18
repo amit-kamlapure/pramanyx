@@ -122,6 +122,19 @@ describe("a dashboard's pages", () => {
     expect(checkDashboardSpec(both).issues.map(i => i.message)).toContain("Every page of this dashboard is hidden from its readers. Keep one for them to open.");
   });
 
+  it("refuses to hide a page that holds what a page readers keep needs", () => {
+    const s = premise();
+    s.elements["orders-table"] = { type: "ObjectTable", props: { entity: "order", size: "wide" }, children: [] };
+    s.elements["sec-limits"].children.push("orders-table");
+    s.elements["order-detail"] = { type: "ObjectDetail", props: { follows: "orders-table" }, children: [] };
+    s.elements["sec-headline"].children.push("order-detail");
+    expect(checkDashboardSpec(s).issues).toEqual([]);
+    const said = checkDashboardSpec(setProps(s, tabKey(s, "Watches"), { hidden: true })).issues.map(i => i.message);
+    expect(said.some(m => m.startsWith("A page hidden from readers holds what another page needs."))).toBe(true);
+    // the page that only reads may be hidden: nothing readers keep needs it
+    expect(checkDashboardSpec(setProps(s, tabKey(s, "Overview"), { hidden: true })).issues).toEqual([]);
+  });
+
   it("shows a reader only the pages meant for them; the builder shows all and adds, renames and hides", async () => {
     const s = premise();
     const spec = setProps(s, tabKey(s, "Watches"), { hidden: true });
