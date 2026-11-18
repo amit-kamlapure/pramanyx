@@ -9,6 +9,10 @@ import { SegmentedControl } from "@radix-ui/themes"
  *   <Segmented label="Range" value={range} onChange={setRange}
  *     options={[{ value: "1h", label: "1h" }, { value: "24h", label: "24h", title: "The last day" }]} />
  */
+/** What an option whose value is "" is called inside the control: Radix hands back "" when the chosen item is pressed
+ *  again, so an empty value could never be chosen ("Plain", "Auto", "Everything"). */
+const EMPTY_OPTION = "__empty__"
+
 export interface SegmentedOption<T extends string> {
   value: T
   label: React.ReactNode
@@ -38,13 +42,15 @@ export function Segmented<T extends string>({
   className?: string
   style?: React.CSSProperties
 }) {
+  const inner = (v: string) => (v === "" ? EMPTY_OPTION : v)
+  const offersEmpty = options.some(o => o.value === "")
   return (
-    <SegmentedControl.Root data-slot="segmented" size={size} value={value} aria-label={label}
+    <SegmentedControl.Root data-slot="segmented" size={size} value={value === "" && !offersEmpty ? "" : inner(value)} aria-label={label}
       // Radix hands back "" when the chosen item is pressed again; a choice stays chosen.
-      onValueChange={next => { if (next) onChange(next as T) }}
+      onValueChange={next => { if (next) onChange((next === EMPTY_OPTION ? "" : next) as T) }}
       disabled={disabled} className={className} style={style}>
       {options.map(o => (
-        <SegmentedControl.Item key={o.value} value={o.value} title={o.title}>
+        <SegmentedControl.Item key={o.value} value={inner(o.value)} title={o.title}>
           {/* An icon in a label sits beside its word, not above it. */}
           <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>{o.label}</span>
         </SegmentedControl.Item>
