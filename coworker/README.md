@@ -108,6 +108,11 @@ turned back on from the interface.
   the page can make, and the route is narrow: POST and JSON only, refused when a browser marks the request as
   another site's, ids checked, the body rebuilt from named fields, two fixed destinations. What was said is
   remembered in the browser by the answer's id, so a card opened again says it and does not ask twice.
+- **The screen before it opens** (2026-11-18). The shell draws its own card while its plugins load, and on a failure
+  its raw error under "Failed to load plugins". The brand plugin's host half adds a style and a small script to the
+  page's head (`webserver/index-inject`): the card shows the mark and the name, "Opening your coworker…", a quieter
+  line if it takes a while and one that says to reload if it takes too long; a failure says the coworker couldn't
+  open, with Reload, and the raw error folded under Details (`plugins/brand/lib/index.js`).
 - **Pramanyx's identity.** The mark and name in the sidebar and over a new conversation, the tab's title and icon,
   the first screen's wording, the app's dark palette, small corners, and a plain ring where the shell draws its
   animal while an answer is worked on.
