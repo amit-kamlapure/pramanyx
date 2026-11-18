@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { PramanyxMark } from "@/components/ui/brand";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { fetchCoworkerDoor, mintCoworkerDelegation, startMyCoworker, type CoworkerDoor } from "@/lib/api";
@@ -140,7 +141,7 @@ export function AppSwitcher({ connectionId, theme }: { connectionId?: string; th
         }}>
           <span className="aug-fs-xs" style={{ color: "var(--t3)", padding: "2px 9px 6px" }}>Switch to</span>
           <div role="menuitem" aria-current="page" style={{ ...row, background: "var(--bg-2)" }}>
-            <span className="aug-fs-chrome" style={tile} aria-hidden>P</span>
+            <span style={{ ...tile, background: "transparent", border: "none", color: "var(--t1)" }} aria-hidden><PramanyxMark size={24} /></span>
             <span style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
               <span className="aug-fs-sm" style={{ fontWeight: 600 }}>Pramanyx</span>
               <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>The platform. You are here.</span>

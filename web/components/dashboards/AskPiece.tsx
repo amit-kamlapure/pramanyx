@@ -7,6 +7,7 @@
  */
 import { useState } from "react";
 
+import { BrandSpark } from "@/components/ui/brand";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/toast";
@@ -55,7 +56,7 @@ export function AskPiece({ connectionId, dashboardId, schema, pieceKey, actor, b
 
   return (
     <div data-testid="ask-piece" style={{ display: "flex", flexDirection: "column", gap: 6, padding: "10px 12px", borderBottom: "1px solid var(--b1)" }}>
-      <label className="aug-fs-xs" htmlFor="ask-piece-words" style={{ color: "var(--t3)" }}>Change this in words</label>
+      <label className="aug-fs-xs" htmlFor="ask-piece-words" style={{ color: "var(--t3)", display: "inline-flex", alignItems: "center", gap: 5 }}><BrandSpark size={12} /> Change this in words</label>
       <div style={{ display: "flex", gap: 6 }}>
         <Input id="ask-piece-words" value={words} onChange={e => setWords(e.target.value)} disabled={asking || !!staged} placeholder="Make it a bar chart"
           onKeyDown={e => { if (e.key === "Enter") void ask(); }} style={{ flex: 1, minWidth: 0 }} />

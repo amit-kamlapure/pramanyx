@@ -27,7 +27,7 @@
  * what is chosen, the rail folded to its icons until Done. Every change there is drawn at once and kept as one version
  * a moment after a burst of them, with undo and redo. No model; a change asked in words is the one exception, as here.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 import { NewCardComposer } from "@/components/brief/NewCardComposer";
 import type { RangeChoice } from "@/components/brief/BriefRange";
@@ -61,6 +61,7 @@ import type { IconName } from "@/components/ui/icon";
 import { EmptyState } from "@/components/ui/empty-state";
 import { DropdownMenu } from "@radix-ui/themes";
 import { ASKS_OF_A_PIECE, AskPiece } from "@/components/dashboards/AskPiece";
+import { BrandSpark, brandEdge } from "@/components/ui/brand";
 import { askAbout, dashboardSubject } from "@/lib/askSubject";
 import { ImportDashboard } from "@/components/dashboards/ImportDashboard";
 import { SubscribeDashboard } from "@/components/dashboards/SubscribeDashboard";
@@ -340,6 +341,9 @@ function DraftReview({ connectionId, dashboardId, result, proposal, held, onKept
 /** A new dashboard, three ways (2026-10-09): empty — its name and a first note in the person's words, since a dashboard
  *  holding nothing is refused; for a declared process — its board, its open-and-overdue objects and one beside them;
  *  or drafted by a model for an area, the one way here that asks one. The walk-through found only the last. */
+/** The box a new dashboard is described in: the one place on this page the brand's colours stand. */
+const ASK_BOX: CSSProperties = { ...brandEdge("var(--bg-2)"), position: "relative", width: "100%", borderRadius: 12, padding: "12px 52px 12px 14px" };
+
 type NewWay = "draft" | "tables" | "sql" | "file" | "object" | "pack" | "process" | "empty";
 /** The ways to start other than describing it, along the foot of the new dashboard's page. */
 const WAYS: { way: Exclude<NewWay, "draft">; label: string; icon: IconName }[] = [
@@ -421,9 +425,10 @@ function NewDashboard({ connectionId, schema, sym, onKept, onClose, onBusy }: {
         <div data-testid="dashboard-new-ask" style={{ width: "min(720px, 100%)", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, textAlign: "center" }}>
           <div className="aug-fs-display" style={{ color: "var(--t1)", fontWeight: 600 }}>Create a dashboard</div>
           <div className="aug-fs-ui" style={{ color: "var(--t2)", marginBottom: 12 }}>Describe what you want to see, and a model drafts it for you to review.</div>
-          <div style={{ position: "relative", width: "100%", background: "var(--bg-2)", border: "1.5px solid var(--accent)", borderRadius: "var(--r3)", padding: "8px 48px 8px 8px" }}>
-            <Textarea bespoke autoFocus variant="soft" color="gray" resize="none" rows={3} aria-label="What this dashboard is for" placeholder="Returns by category, what they cost, and which products drive them"
-              value={area} onChange={e => setArea(e.target.value)} disabled={drafting || !!proposal} style={{ width: "100%", background: "transparent", textAlign: "left" }}
+          <div style={ASK_BOX}>
+            <textarea autoFocus rows={3} aria-label="What this dashboard is for" placeholder="Returns by category, what they cost, and which products drive them" className="aug-focus-frame aug-fs-ui"
+              value={area} onChange={e => setArea(e.target.value)} disabled={drafting || !!proposal}
+              style={{ display: "block", width: "100%", background: "transparent", border: "none", outline: "none", resize: "none", color: "var(--t1)", fontFamily: "inherit", textAlign: "left" }}
               onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (area.trim() && !drafting && !proposal) void draft(); } }} />
             <Button size="icon-sm" aria-label="Draft it" title="Draft it" disabled={!area.trim() || drafting || !!proposal} onClick={() => void draft()}
               style={{ position: "absolute", right: 10, bottom: 10 }}><Icon name="send" size={15} /></Button>
@@ -1527,7 +1532,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
           data.range.status === "standing" ? null : data.range) : null;
         if (subject) askAbout(subject);
       }}>
-        <Icon name="chat" /> Ask
+        <BrandSpark size={14} /> Ask
       </Button>
       <Button size="xs" variant="ghost" aria-expanded={showHistory} onClick={() => {
         // a resize kept since the page was read is not in its history yet: read it again once

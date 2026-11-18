@@ -25,6 +25,7 @@ import type { DashboardHandle, ReadState } from "@/components/dashboards/Compose
 import { PieceSetup, type CardDate } from "@/components/dashboards/PieceSetup";
 import type { CardHolds } from "@/lib/dashboards/cardHolds";
 import { ChoiceSetup, DataPane, SetSetup, ValueSetup, readingElements } from "@/components/dashboards/WiringSetup";
+import { BrandSpark } from "@/components/ui/brand";
 import { Segmented } from "@/components/ui/segmented";
 import { Button } from "@/components/ui/button";
 import { Icon, type IconName } from "@/components/ui/icon";
@@ -532,7 +533,7 @@ function CanvasToolbar({ tools, onChart, onFilter, onUndo, onRedo }: {
       disabled={!onClick || (tools?.busy && testid !== "builder-tool-choose")} onClick={onClick}
       style={{ width: 34, height: 34, borderRadius: 8, color: accent ? "var(--accent-11)" : undefined,
         background: on ? "color-mix(in srgb, var(--accent) 24%, transparent)" : undefined }}>
-      <Icon name={icon} size={18} />
+      {testid === "builder-tool-ask" ? <BrandSpark size={18} /> : <Icon name={icon} size={18} />}
     </Button>
   );
   const rule = (k: string) => <span key={k} aria-hidden="true" style={{ width: 1, height: 20, background: "var(--b1)", margin: "0 4px" }} />;

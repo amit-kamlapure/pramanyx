@@ -8,6 +8,7 @@ import { projectThread, newSessionId, type PramanyxUIMessage, type ChatTurn } fr
 import { usePramanyxChat } from "@/lib/usePramanyxChat";
 import { focusOf, setAskSubject, subjectWords, useAskSubject } from "@/lib/askSubject";
 import { useStickToBottom } from "@/lib/useStickToBottom";
+import { brandEdge } from "@/components/ui/brand";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/brief/StatusChip";
 import { SourcePanel, type SourcePanelData } from "./ChatMessage";
@@ -120,14 +121,11 @@ function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, se
     <div
       className="flex flex-col overflow-hidden"
       style={{
-        // The composer is a field: radius 4, --bg-3 and a --b2 hairline, with no shadow.
-        // Focus draws the one ring (2px --bfocus at 2px offset) on the frame, so the
-        // textarea inside keeps no outline of its own (aug-focus-frame).
+        // The composer is a field: --bg-3 and a --b2 hairline, with no shadow. Focus is drawn on the frame,
+        // so the textarea inside keeps no outline of its own (aug-focus-frame).
         borderRadius: "var(--r-composer)",
-        background: "var(--bg-3)",
-        border: "1px solid var(--b2)",
-        outline: focused ? "2px solid var(--bfocus)" : "none",
-        outlineOffset: 2,
+        // at rest a hairline; while a person is writing to the model, the edge takes the brand's colours
+        ...(focused ? brandEdge("var(--bg-3)") : { background: "var(--bg-3)", border: "1.5px solid var(--b2)" }),
       }}
     >
       {/* Arc FA-2 — the subject the question carries, chosen on a dashboard */}

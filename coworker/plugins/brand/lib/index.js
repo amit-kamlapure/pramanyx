@@ -53,7 +53,7 @@ body[data-ds-dark-theme] [data-dsh-boot] {
   letter-spacing: 0; font-size: 15px; line-height: 20px; font-weight: 600;
 }
 [data-dsh-boot] [data-pramanyx-mark] {
-  display: inline-block; width: 40px; height: 32px; background: currentColor;
+  display: inline-block; width: 36px; height: 36px; background: currentColor;
   -webkit-mask: url("${MARK}") center / contain no-repeat; mask: url("${MARK}") center / contain no-repeat;
 }
 [data-dsh-boot] [class*="_hint_"] { font-size: 13px; line-height: 19px; text-align: center; max-width: 320px; }

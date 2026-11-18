@@ -1,5 +1,6 @@
 "use client";
 import { CONNECTORS } from "@/lib/connectors.gen";
+import { PramanyxMark, PramanyxName } from "@/components/ui/brand";
 import { ErrorState } from "@/components/ui/states";
 import { toast } from "@/components/ui/toast";
 
@@ -272,7 +273,9 @@ function Topbar({
       </Tooltip>
       {/* The wordmark, then the scope it applies to — the workspace switcher sits beside
           the name because everything below the topbar is read through it. */}
-      <span className="aug-wordmark">Pramanyx</span>
+      <span className="aug-wordmark" style={{ display: "inline-flex", alignItems: "center", gap: 7, fontFamily: "inherit", textTransform: "none", letterSpacing: 0, fontWeight: 700 }}>
+        <PramanyxMark size={20} /><span className="aug-fs-h2"><PramanyxName /></span>
+      </span>
       <WorkspaceSwitcher
         workspaces={workspaces}
         selectedWorkspace={selectedWorkspace}

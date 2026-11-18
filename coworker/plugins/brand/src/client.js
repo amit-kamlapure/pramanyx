@@ -27,10 +27,22 @@ function ink(url, width, height, label) {
   });
 }
 
-/** The mark is wider than it is tall (160 × 129); it is fitted inside the square the shell asks for. */
+/** The mark's outer line: a circle with eight soft lobes (the app draws the same one, `web/components/ui/brand.tsx`). */
+const SCALLOP = `${Array.from({ length: 160 }, (_, i) => {
+  const a = (i / 160) * 2 * Math.PI;
+  const r = 41 + 2.6 * Math.cos(8 * a);
+  return `${i ? "L" : "M"}${(50 + r * Math.cos(a)).toFixed(2)} ${(50 + r * Math.sin(a)).toFixed(2)}`;
+}).join("")}Z`;
+const RING = [["0%", "#FF2E8B"], ["38%", "#D926F5"], ["72%", "#3A86FF"], ["100%", "#00DCFF"]];
+
+/** The mark: its outer line in the text's colour, around the ring in the logo's colours. */
 function Mark({ size, className }) {
   return h("span", { className, style: { display: "inline-flex", width: size, height: size, alignItems: "center", justifyContent: "center" } },
-    ink(mark, size, Math.round(size * 129 / 160), NAME));
+    h("svg", { width: size, height: size, viewBox: "0 0 100 100", fill: "none", role: "img", "aria-label": NAME },
+      h("defs", null, h("linearGradient", { id: "pramanyx-ring", x1: "0.05", y1: "0.2", x2: "0.75", y2: "1" },
+        RING.map(([offset, stopColor]) => h("stop", { key: offset, offset, stopColor })))),
+      h("path", { d: SCALLOP, stroke: "currentColor", strokeWidth: 7, strokeLinejoin: "round" }),
+      h("circle", { cx: 50, cy: 50, r: 22, stroke: "url(#pramanyx-ring)", strokeWidth: 7 })));
 }
 
 function Name() {
@@ -130,7 +142,7 @@ function markTheTab() {
     canvas.width = edge; canvas.height = edge;
     const pen = canvas.getContext("2d");
     if (!pen) return;
-    const width = 60, height = Math.round(width * 129 / 160);
+    const width = 60, height = 60;
     pen.drawImage(art, (edge - width) / 2, (edge - height) / 2, width, height);
     pen.globalCompositeOperation = "source-in";
     pen.fillStyle = dark.matches ? "#edeef0" : "#111113";
