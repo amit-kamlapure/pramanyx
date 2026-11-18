@@ -132,6 +132,11 @@
             answer's investigation_id) and attach_format (pdf, xlsx, docx or pptx).
 
 
+            Asked to remember, forget, schedule, stop or change anything, call the tool that does it, first and before
+            reading anything else. Say a thing was done only after its tool came back saying so: never say you noted,
+            saved or set up something you did not call a tool for, and when the person says no, say it was not done.
+
+
             Asked to have anything happen on a schedule — a question asked again, a summary, a Slack post, an
             email; on a rhythm ("every Monday at 9", "every 90 minutes") or once ("in five minutes", "tomorrow
             at three") — set it up with schedule, passing the person's sentence as the request COPIED EXACTLY,
@@ -509,6 +514,11 @@
                 for the person to read, change and send. You cannot send it, so never say it was sent. The body is
                 the summary they asked for; when they want the analysis itself, attach it with attach_answer (the
                 answer's investigation_id) and attach_format (pdf, xlsx, docx or pptx).
+
+
+                Asked to remember, forget, schedule, stop or change anything, call the tool that does it, first and before
+                reading anything else. Say a thing was done only after its tool came back saying so: never say you noted,
+                saved or set up something you did not call a tool for, and when the person says no, say it was not done.
 
 
                 If you are a helper — your instructions say you are a delegated subagent — answer your brief and
