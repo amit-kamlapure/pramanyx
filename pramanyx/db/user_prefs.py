@@ -218,6 +218,26 @@ LOOK_TYPEFACES = ("inter", "source-sans")
 #: 2026-11-10 (ROADMAP §6 item 64): how tall a table's rows are — 32 · 36 · 44px. Named rows, not density (retired 2026-10).
 LOOK_ROWS = ("compact", "default", "comfortable")
 
+#: How many dashboards one person may star.
+MAX_DASHBOARD_STARS = 200
+
+
+def _dashboard_stars(v: Any) -> list[str]:
+    """The dashboards a person starred on the dashboards home, each named by its connection and id."""
+    if not isinstance(v, list):
+        raise ValueError("must be a list of dashboards")
+    out: list[str] = []
+    for item in v:
+        name = str(item or "").strip()
+        if not name or len(name) > 300:
+            raise ValueError("a starred dashboard is named by its connection and its id")
+        if name not in out:
+            out.append(name)
+    if len(out) > MAX_DASHBOARD_STARS:
+        raise ValueError(f"at most {MAX_DASHBOARD_STARS} dashboards may be starred")
+    return out
+
+
 ALLOWED_KEYS: dict[str, tuple] = {
     "theme": (_one_of("dark", "light", "system"), "UI theme"),
     "accent": (_one_of(*LOOK_ACCENTS), "accent colour: buttons, links, selection"),
@@ -228,6 +248,9 @@ ALLOWED_KEYS: dict[str, tuple] = {
     "typeface": (_one_of(*LOOK_TYPEFACES), "the face the interface is set in"),
     "rows": (_one_of(*LOOK_ROWS), "how tall a table's rows are"),
     "default_connection": (_connection_id, "connection new conversations open on"),
+    # The dashboards home: how its list is drawn, and the dashboards a person starred to find again.
+    "dashboards_view": (_one_of("list", "detail", "grid"), "how the dashboards home lists your dashboards"),
+    "dashboard_stars": (_dashboard_stars, "the dashboards you starred"),
     "ontology_map_layout": (_map_layout, "where you dragged the cards on the ontology map"),
     # The canvas (B1): the Briefing's switches. Cosmetic and self-scoped — which of its sections
     # you see and in what order, and which dashboard of yours rides with it; its content is the

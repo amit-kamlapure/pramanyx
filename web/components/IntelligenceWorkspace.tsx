@@ -195,7 +195,8 @@ export function IntelligenceWorkspace({ connectionId, onInvestigate, layer, onLa
   const showConnPicker = !canvasId && !!onConnectionChange && (connections?.length ?? 0) > 1;
   const showSchema = !canvasId && schemas.length > 1;
   // The exploration principles: the scope's maturity, beside the picker that chose it.
-  const showMaturity = !canvasId && !!connectionId && schemaResolved;
+  // not on the dashboards, whose room is the dashboard's (the user, 2026-11-18); the Catalog says a dataset's maturity in full
+  const showMaturity = !canvasId && !!connectionId && schemaResolved && layer !== "dashboards";
 
   const headerControls = (showConnPicker || showSchema || showMaturity) ? (
     <>

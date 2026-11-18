@@ -134,7 +134,7 @@ def shared_with(connection_id: str, user_id: str) -> list[dict]:
             continue
         spec, number, at = read["spec"], read["version"], read["kept_at"]
         out.append({"owner": owner, "cockpit_id": cockpit_id, "title": versions.title_of(spec),
-                    "version": number, "kept_at": at,
+                    "version": number, "kept_at": at, "outline": versions.outline_of(spec),
                     "published_by": payload.get("published_by") or "", "published_to": list(payload["published_to"])})
     return sorted(out, key=lambda c: (c["title"].lower(), c["owner"]))
 

@@ -642,6 +642,12 @@ textarea.aug-input, .aug-textarea { min-height: 56px; padding: 7px 9px; line-hei
 
 /* Citation marker, inline in prose: the dashed underline says the figure is checkable, the
    superscript says where. An amber superscript is a note that argues with the sentence. */
+/* A row of the dashboards home that opens what it names. */
+.aug-row-hover { transition: background-color 120ms ease-out; }
+.aug-row-hover:hover { background-color: var(--bg-hover); }
+.aug-home-card { background-color: var(--bg-2); transition: background-color 120ms ease-out; }
+.aug-home-card:hover { background-color: var(--bg-hover); }
+
 /* A chart's tooltip (vega-tooltip, theme "aug"): the app's raised surface, its text and a hairline, in either
    theme, where the library drew a white box. A line's hover rule writes the date and a row per series there,
    largest first, each beside its line's colour (study R25, `charts/vega/hoverTooltip.ts`). */

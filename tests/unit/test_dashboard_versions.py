@@ -522,3 +522,30 @@ def test_history_says_in_words_what_each_version_changed(desk):
     words = [(h["version"], h["said"]) for h in versions.history(desk.home)]
     assert words == [(4, ["Brought the dashboard back"]), (3, ["Retired the dashboard"]),
                      (2, ["Renamed the dashboard to Returns, weekly"]), (1, ["Started the dashboard"])]
+
+
+# ── the dashboards home's miniature ───────────────────────────────────────────
+
+def test_a_dashboards_outline_is_the_room_its_opening_tab_takes_and_nothing_it_read():
+    spec = {"root": "c", "elements": {
+        "c": {"type": "Cockpit", "props": {"title": "Sales"}, "children": ["filters", "tabs"]},
+        "filters": {"type": "ObjectFilters", "props": {"entity": "order"}, "children": []},
+        "tabs": {"type": "Tabs", "props": {"value": "x"}, "children": ["t1", "t2"]},
+        "t1": {"type": "Tab", "props": {"name": "one", "label": "One"}, "children": ["s1"]},
+        "t2": {"type": "Tab", "props": {"name": "two", "label": "Two"}, "children": ["s2"]},
+        "s1": {"type": "Section", "props": {"title": "Top"}, "children": ["a", "b"]},
+        "s2": {"type": "Section", "props": {"title": "Other"}, "children": ["z"]},
+        "a": {"type": "Card", "props": {"card": "c7f3a001", "title": "Secret title", "size": "wide"}, "children": []},
+        "b": {"type": "Note", "props": {"text": "Private words", "w": 4, "h": 3}, "children": []},
+        "z": {"type": "Card", "props": {"card": "c91b2002"}, "children": []},
+    }}
+    assert versions.outline_of(spec) == [{"kind": "Card", "size": "wide"}, {"kind": "Note", "w": 4, "h": 3}]
+    spec["state"] = {"tab": "two"}
+    assert versions.outline_of(spec) == [{"kind": "Card"}]
+
+
+def test_an_outline_of_nothing_readable_is_empty_and_a_long_one_is_cut():
+    assert versions.outline_of(None) == [] and versions.outline_of({"elements": "no"}) == []
+    many = {f"p{i}": {"type": "Card", "props": {}, "children": []} for i in range(versions.MAX_OUTLINE + 9)}
+    spec = {"root": "c", "elements": {"c": {"type": "Cockpit", "props": {}, "children": list(many)}, **many}}
+    assert len(versions.outline_of(spec)) == versions.MAX_OUTLINE

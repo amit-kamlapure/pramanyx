@@ -115,6 +115,11 @@ export function useChromeBack(fn: (() => void) | null): void {
   }, [store?.setBack, visible, owner, on]);
 }
 
+/** Where the page on screen goes back to, or null at its start: the rail's row for the section a reader is inside goes there. */
+export function useChromeBackTo(): (() => void) | null {
+  return useContext(ChromeContext)?.back ?? null;
+}
+
 /** The words the page on screen has said — for the shell's rows. */
 export function usePageChromeSpec(): PageChromeSpec {
   return useContext(ChromeContext)?.spec ?? {};

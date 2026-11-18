@@ -65,12 +65,19 @@ export function processDashboardHolds(process: Pick<ProcessDetail, "stages">): s
     : "Its board — it promises nothing, so there is nothing to list as overdue.";
 }
 
+/** Where another page leaves the dashboard to open when Dashboards next opens: read once, then Dashboards opens on its home. */
+export const dashboardToOpenKey = (connectionId: string) => `pramanyx:dashboard-to-open:${connectionId}`;
+
+export function askToOpenDashboard(connectionId: string, dashboardId: string) {
+  try { localStorage.setItem(dashboardToOpenKey(connectionId), dashboardId); } catch { /* Dashboards opens on its home */ }
+}
+
 /** Keep a new dashboard under an id of its own (the server's shape, a random suffix — never another dashboard's), and
  *  remember it as the one to open. Returns its id. */
 export async function startDashboard(connectionId: string, title: string, spec: unknown, note: string): Promise<string> {
   const id = dashboardIdFor(title);
   await keepDashboard(connectionId, id, spec, note);
-  try { localStorage.setItem(`pramanyx:cockpit:${connectionId}`, id); } catch { /* the dashboard opens on its own tab */ }
+  askToOpenDashboard(connectionId, id);
   return id;
 }
 

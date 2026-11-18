@@ -44,7 +44,7 @@ import { Workspace as WorkspaceShell, type WorkspaceLayer } from "@/components/W
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { NAVIGATE_EVENT, type NavigateRequest } from "@/lib/navigate";
 import { NAV_DESTINATIONS, NAV_SECTION_IDS, destinationOf } from "@/lib/navDestinations";
-import { ChromeActions, ChromeFacts, ChromeToolbar, PageChromeProvider, PageHeader, StatusStrip } from "@/components/shell/PageChrome";
+import { ChromeActions, ChromeFacts, ChromeToolbar, PageChromeProvider, PageHeader, StatusStrip, useChromeBackTo } from "@/components/shell/PageChrome";
 import { InspectorHost, InspectorProvider } from "@/components/shell/Inspector";
 import { OVERVIEW_LAYER, agentOpsLayerOf, type AgentOpsLayer as AgentsLayer } from "@/lib/agentOpsLayers";
 import type { RecordLayer } from "@/components/record/RecordWorkspace";
@@ -334,6 +334,7 @@ function Sidebar({
   /** Badge counts from read-only sources — see components/shell/useNavCounts.ts. */
   counts?: NavCounts;
 }) {
+  const backToStart = useChromeBackTo();
   // A badge is amber when what it counts waits on a human, neutral when it is only a count.
   const badgeFor = (id: string): { value: number; waiting: boolean; noun: string } | null => {
     if (id === "monitors" && counts?.unackedAlerts) return { value: counts.unackedAlerts, waiting: true, noun: "unacknowledged" };
@@ -386,7 +387,8 @@ function Sidebar({
       tip: item.blurb ? `${said} — ${item.blurb}` : said,
       alwaysTip: !!item.blurb,
       active: tab === item.id,
-      onClick: () => onNavigate(item.id as NavTab),
+      // the row of the section a reader is inside takes them to its start: an open dashboard back to the dashboards home
+      onClick: () => { if (tab === item.id && backToStart) backToStart(); else onNavigate(item.id as NavTab); },
       trailing: badgeTrail(badge),
       className,
     });
