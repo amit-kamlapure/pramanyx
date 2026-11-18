@@ -2935,7 +2935,7 @@ export interface CardRunResult {
   ran?: { sql: string; params: Record<string, unknown> | null } | null;
   /** The board study — present when the run was asked with the dashboard's focus: whether it was cut by every chosen
    *  value (`by` what), and why not by the rest — a card that cannot be cut says so in its own place. */
-  cut?: { applied: boolean; by: string[]; why: string } | null;
+  cut?: { applied: boolean; by: string[]; why: string; through?: string[] } | null;
   /** Arc AP-7 — a card of a person's own query, as it is shown: its figure, its table or its chart's points. */
   shown?: QueryShaped | null;
   duration_ms?: number;

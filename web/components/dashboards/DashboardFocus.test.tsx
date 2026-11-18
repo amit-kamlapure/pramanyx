@@ -55,7 +55,7 @@ describe("choosing a value", () => {
 });
 
 const premise = () => JSON.parse(readFileSync(resolve(process.cwd(), "lib/dashboards/premise.fixture.json"), "utf8"));
-function card(id: string, title: string, value: number, cut?: { applied: boolean; by: string[]; why: string }): CardState {
+function card(id: string, title: string, value: number, cut?: { applied: boolean; by: string[]; why: string; through?: string[] }): CardState {
   const refresh = { cadence: "daily", last_run: "2026-09-28T06:00:00Z", last_value: value, prev_value: null, history: [value] };
   const c: StoredCard = {
     id, connection_id: "thelook", scope: "canvas", scope_ref: "cv", source: "authored", kind: "kpi", title, sql: "SELECT 1",
@@ -87,6 +87,15 @@ describe("the dashboard with a focus", () => {
     const marks = screen.getAllByTestId("not-filtered");
     expect(marks).toHaveLength(1);
     expect(marks[0]).toHaveAttribute("title", why);
+  });
+
+  it("names the column a card was cut through when the value reached it by a link", () => {
+    const by = "traffic_source = Search, through order_items.user_id";
+    const cards = [card("c7f3a001", "Return rate", 0.1, { applied: true, by: ["traffic_source = Search"], why: "", through: [by] }), card("c91b2002", "Net revenue", 341000)];
+    render(<ComposedDashboard spec={premise()} cards={cards} host={HOST} doors={{ onRefresh: vi.fn() }} focus={[SEARCH]} onFocus={vi.fn()} />);
+    const said = screen.getAllByTestId("cut-through")[0];
+    expect(said).toHaveTextContent("Through order_items.user_id");
+    expect(said).toHaveAttribute("title", by);
   });
 
   it("draws no bar, and marks nothing, without a focus", () => {

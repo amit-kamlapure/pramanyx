@@ -1093,6 +1093,18 @@ function useValuedRun(cs: CardState | undefined, range: BriefingRange | null | u
   return { cs: { card, run: got.run, failed: got.failed }, waits: null, onRefresh };
 }
 
+/** A card a chosen value reached through a link: which column it used (the study's R16). */
+function CutThrough({ ways }: { ways: string[] }) {
+  const columns = [...new Set(ways.map(w => w.split(", through ").pop() ?? w))];
+  return (
+    <span className="aug-fs-xs" data-testid="cut-through" title={ways.join(". ")}
+      style={{ position: "absolute", top: 10, right: 12, zIndex: 1, color: "var(--t3)", background: "var(--bg-3)",
+        border: "1px solid var(--b1)", borderRadius: "var(--r-chip)", padding: "1px 7px" }}>
+      Through {columns.join(", ")}
+    </span>
+  );
+}
+
 function DashboardCard({ element }: ComponentRenderProps<{ card: string; tone?: Tone | null; size?: Size | null }>) {
   const { cards, host, tileDoors, sym, range, schema } = useDashboard();
   const id = element.props.card;
@@ -1127,7 +1139,7 @@ function DashboardCard({ element }: ComponentRenderProps<{ card: string; tone?: 
       extra={{ attrs: { "data-card": id, "data-tone": tone ?? undefined },
         style: { boxShadow: tone ? `inset 3px 0 0 ${TONE_RULE[tone]}` : undefined, paddingLeft: tone ? 3 : 0 } }}>
       {key => <>{optedOut ? cutBySomething && <NotFiltered why="Its author set this card not to be cut by the dashboard's filters." />
-        : notCut ? <NotFiltered why={cut?.why || undefined} /> : filtering.on && <NotFiltered />}{status === "withheld"
+        : notCut ? <NotFiltered why={cut?.why || undefined} /> : cut?.through?.length ? <CutThrough ways={cut.through} /> : filtering.on && <NotFiltered />}{status === "withheld"
         ? <WithheldTile />
         : !cs
           ? <SaidTile what="Not one of your cards">The dashboard places a card you do not have.</SaidTile>

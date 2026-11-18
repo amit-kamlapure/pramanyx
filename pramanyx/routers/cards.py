@@ -446,12 +446,15 @@ def run_card_route(card_id: str, preset: Optional[str] = None, start: Optional[s
     # was made went stale the moment the definition was corrected (the user, 2026-10-07: "no static
     # or stale metrics").
     base = _metric_statement(metric) or card.sql
+    # the table a card's period is read from is the card's own: a table a focus reached it through is not one to date it by
+    as_written = base
     shown, unread = _shown_of(card)
     focus_cut: Optional[dict] = None
     if focus and not unread:
         # the board study — every card, a person's own query too, cut the same way: each table it reads replaced by itself
         # filtered to the value, schema-qualified or not; before the range is cut, so its comparison is cut alike
-        base, focus_cut = F.cut_statement(base, focus, str(getattr(db, "dialect", "") or "duckdb"))
+        base, focus_cut = F.cut_statement(base, focus, str(getattr(db, "dialect", "") or "duckdb"),
+                                          links=lambda: F.links_of(card.connection_id))
     sql, scoped, cut_on = base, None, None
     reads = (_reads_values(card) or bool(body and body.filters)) if shown is not None else False
     # A dashboard made from a file reads the whole file: a Briefing's "last month" is no question of it
@@ -473,7 +476,7 @@ def run_card_route(card_id: str, preset: Optional[str] = None, start: Optional[s
 
         dialect = str(getattr(db, "dialect", "") or "duckdb")
         covers = phrases(spec)["covers"]
-        table, col, why = grain_for(base, [], profile_entry_for(card.connection_id, statement_tables(base)) or {}, dialect)
+        table, col, why = grain_for(as_written, [], profile_entry_for(card.connection_id, statement_tables(as_written)) or {}, dialect)
         cut = None
         if table is not None:
             cut, why, _ = scoped_statement(base, table, window_predicate(col, spec.start, spec.end), dialect=dialect)
@@ -663,15 +666,20 @@ def _metric_card_for_range(card, metric, spec, compare: bool, focus: Optional[li
         if first is not None:
             by, part = first.column, str(first.value)
         cut = F.verdict([F.words(first)] if first else [],
-                        [f"Not cut by {F.words(f)}: the metric is measured on {grain}, not {F.bare(f.table)}."
-                         for f in focus if F.bare(f.table) != grain]
-                        + [f"Not cut by {F.words(f)}: a metric is cut by one value at a time." for f in usable[1:]])
+                        [f"Not cut by {F.words(f)}: a metric is cut by one value at a time." for f in usable[1:]])
+    elsewhere = [f for f in focus or [] if F.bare(f.table) != grain] if focus else []
     statement = None
     try:
         with period_brief.connection_runner(card.connection_id) as (run_sql, dialect):
-            rows, why = mt.run_measure(metric, spec.windows(), run_sql, dialect=dialect, by=by, part=part)
-            # the metric's own measurement, as it ran — built again, never run again
-            statement, _ = mt.measure_sql(metric, spec.windows(), dialect=dialect, by=by, part=part)
+            # the metric's own measurement, as it ran
+            statement, why = mt.measure_sql(metric, spec.windows(), dialect=dialect, by=by, part=part)
+            rows: list = []
+            if statement is not None and elsewhere:
+                # a value on another table reaches the measurement through the links the ontology holds, on the metric's own dates
+                statement, reached = F.cut_statement(statement, elsewhere, dialect, links=lambda: F.links_of(card.connection_id))
+                cut = F.verdict(cut["by"] + reached["by"], [w for w in (cut["why"], reached["why"]) if w], reached.get("through"))
+            if statement is not None:
+                rows, why = mt.run_measure_sql(statement, run_sql, by=by)
     except Exception as exc:  # noqa: BLE001 — the cut below still answers
         tolerate(exc, "a metric card could not be measured for its range; it is cut instead",
                  counter="dashboard.card_measure")

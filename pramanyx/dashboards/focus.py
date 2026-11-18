@@ -10,16 +10,30 @@ A card is cut by a focus when it reads the focus's table: the table is replaced,
 filtered to the value (`metric_statement.scoped_statement`), so the card's arithmetic runs over those rows only. The value
 is written by the SQL parser as a literal of the statement's dialect — quoted and escaped by it, never pasted into the
 text. The table's column is known to exist: the focus was traced to it from a card that ran. A card that reads none of the
-focus's tables is not cut, and says why in its own place (withheld is said, never implied).
+focus's tables is cut through the links the connection's ontology holds (the study's R16): a table it reads keeps only the rows
+that belong to the value, ``user_id IN (SELECT id FROM users WHERE traffic_source = 'Search')``, which can never count a row
+twice. A link is followed only from the many side to the one, where a row belongs to exactly one value; two equally short ways
+to the table are refused by name, as is a card no link reaches, and a card cut this way says which column it used.
 """
 from __future__ import annotations
 
-from typing import Any, Optional, Union
+from collections.abc import Callable, Iterable
+from typing import Any, NamedTuple, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
 #: The most a focus holds at once — beyond it a dashboard is a query, not a view.
 MAX_FOCUS = 6
+#: The most links a cut follows. Further than this a value says little about the row it reaches.
+MAX_HOPS = 3
+
+
+class Link(NamedTuple):
+    """A step from a table to the one its column points at: each row of ``table`` belongs to one row of ``to_table``."""
+    table: str
+    column: str
+    to_table: str
+    to_column: str
 
 
 class Focus(BaseModel):
@@ -106,30 +120,152 @@ def words(f: Focus) -> str:
     return f"{f.column} = {f.value}"
 
 
-def cut_statement(sql: str, focus: list[Focus], dialect: Optional[str]) -> tuple[str, dict[str, Any]]:
-    """``sql`` cut by every focus it can be — each table it reads replaced by itself filtered to the value — and the
-    verdict: ``{"applied": bool, "why": str}``, ``why`` naming each focus it could not be cut by."""
+def links_of(connection_id: str) -> list[Link]:
+    """The links of a connection's ontology a cut may follow, each from its many side to its one. A link with no shared
+    values, one across two sources and a many-to-many one are not followed."""
+    from pramanyx.ontology.store import load_latest_ontology
+
+    graph = load_latest_ontology(connection_id)
+    return links_from(graph.relationships.values()) if graph is not None else []
+
+
+def links_from(relationships: Iterable[Any]) -> list[Link]:
+    found: set[Link] = set()
+    for r in relationships:
+        if getattr(r, "traversal", "join") != "join" or getattr(r, "value_overlap", None) == 0:
+            continue
+        ahead = Link(bare(r.from_table), r.from_col, bare(r.to_table), r.to_col)
+        back = Link(ahead.to_table, ahead.to_column, ahead.table, ahead.column)
+        if r.cardinality in ("N:1", "1:1"):
+            found.add(ahead)
+        if r.cardinality in ("1:N", "1:1"):
+            found.add(back)
+    return sorted(found)
+
+
+def ways_to(start: str, goal: str, links: list[Link]) -> list[list[Link]]:
+    """Every shortest way from ``start`` to ``goal``, within `MAX_HOPS` links; none when there is none."""
+    ways: list[list[Link]] = [[]]
+    for _ in range(MAX_HOPS):
+        ways = [w + [k] for w in ways for k in links
+                if k.table == (w[-1].to_table if w else start) and k.to_table not in {start, *(x.to_table for x in w)}]
+        done = [w for w in ways if w[-1].to_table == goal]
+        if done or not ways:
+            return done
+    return []
+
+
+def _in_table(name: str, like: Any) -> Any:
+    """A table the card does not read, named as the card names its neighbours: under the same catalog and schema."""
+    from sqlglot import exp
+    return exp.Table(this=exp.to_identifier(name), db=like.args.get("db"), catalog=like.args.get("catalog"))
+
+
+def through(way: list[Link], f: Focus, like: Any) -> Any:
+    """``column IN (SELECT key FROM next WHERE …)`` along a way, over the columns of the table it starts from."""
+    from sqlglot import exp
+    where = condition(f.column, f.value)
+    for link in reversed(way):
+        inner = exp.select(exp.column(link.to_column)).from_(_in_table(link.to_table, like)).where(where)
+        where = exp.column(link.column).isin(query=inner)
+    return where
+
+
+def way_words(way: list[Link]) -> str:
+    return " then ".join(f"{k.table}.{k.column}" for k in way)
+
+
+def _read_tables(sql: str, dialect: str) -> dict[str, Any]:
+    """Each table a statement reads, by its bare name, as the statement names it."""
+    import sqlglot
+    from sqlglot import exp
+
+    from pramanyx.sql.lineage import sqlglot_dialect
+    tree = sqlglot.parse_one(sql, read=sqlglot_dialect(dialect))
+    ctes = {c.alias_or_name.lower() for c in tree.find_all(exp.CTE)}
+    return {t.name.lower(): t for t in tree.find_all(exp.Table) if t.name and t.name.lower() not in ctes}
+
+
+def _sets_of_rows(sql: str, dialect: str) -> bool:
+    """Whether a statement adds sets of rows together, where one table left uncut would leave its rows in the figure."""
+    import sqlglot
+    from sqlglot import exp
+
+    from pramanyx.sql.lineage import sqlglot_dialect
+    return sqlglot.parse_one(sql, read=sqlglot_dialect(dialect)).find(exp.SetOperation) is not None
+
+
+def _cut_through(sql: str, written: str, f: Focus, dialect: str, links: list[Link]) -> tuple[Optional[str], str, list[str]]:
+    """``sql`` cut by a focus on a table ``written``, the statement as it stood before any cut, does not read:
+    ``(sql, "", ways used)``, or ``(None, why, [])``."""
+    from pramanyx.semantic.metric_statement import scoped_statement
+
+    goal = bare(f.table)
+    try:
+        read = _read_tables(written, dialect)
+    except Exception:  # noqa: BLE001 — a statement the parser cannot read is said, never cut by guesswork
+        return None, "its statement does not parse", []
+    reach = {name: ways_to(name, goal, links) for name in read}
+    reached = {name: ways for name, ways in reach.items() if ways}
+    if not reached:
+        return None, f"it reads no {goal}, and no link leads from what it reads to {goal}", []
+    if _sets_of_rows(written, dialect) and len(reached) < len(read):
+        left = ", ".join(sorted(set(read) - set(reached)))
+        return None, f"it adds {left} to its rows, and no link leads from there to {goal}", []
+    for name, ways in sorted(reached.items()):
+        if len(ways) > 1:
+            return None, f"{name} reaches {goal} by more than one way ({', '.join(sorted(way_words(w) for w in ways))})", []
+    used: list[str] = []
+    for name, ways in sorted(reached.items()):
+        cut, why, _ = scoped_statement(sql, name, through(ways[0], f, read[name]), dialect=dialect)
+        if cut is None:
+            return None, why, []
+        sql = cut
+        used.append(way_words(ways[0]))
+    return sql, "", used
+
+
+def cut_statement(sql: str, focus: list[Focus], dialect: Optional[str],
+                  links: Optional[Callable[[], list[Link]]] = None) -> tuple[str, dict[str, Any]]:
+    """``sql`` cut by every focus it can be — each table it reads replaced by itself filtered to the value, or, for a table
+    it does not read, by the rows that belong to the value along the connection's links — and the verdict:
+    ``{"applied": bool, "by": [...], "why": str}``, with ``through`` naming the columns a cut through a link used."""
     from pramanyx.semantic.metric_statement import scoped_statement, statement_tables
 
-    tables = {bare(t) for t in statement_tables(sql, dialect or "duckdb")}
+    said = dialect or "duckdb"
+    written = sql
+    tables = {bare(t) for t in statement_tables(sql, said)}
     applied: list[str] = []
     not_cut: list[str] = []
+    used: list[str] = []
+    known: Optional[list[Link]] = None
     for f in focus:
         if bare(f.table) not in tables:
-            not_cut.append(f"Not cut by {words(f)}: it reads no {bare(f.table)}.")
+            if links is None:
+                not_cut.append(f"Not cut by {words(f)}: it reads no {bare(f.table)}.")
+                continue
+            known = links() if known is None else known
+            cut, why, ways = _cut_through(sql, written, f, said, known)
+            if cut is None:
+                not_cut.append(f"Not cut by {words(f)}: {why}.")
+                continue
+            sql = cut
+            applied.append(words(f))
+            used.extend(f"{words(f)}, through {w}" for w in ways)
             continue
-        cut, why, _ = scoped_statement(sql, bare(f.table), condition(f.column, f.value), dialect=dialect or "duckdb")
+        cut, why, _ = scoped_statement(sql, bare(f.table), condition(f.column, f.value), dialect=said)
         if cut is None:
             not_cut.append(f"Not cut by {words(f)}: {why}.")
             continue
         sql = cut
         applied.append(words(f))
-    return sql, verdict(applied, not_cut)
+    return sql, verdict(applied, not_cut, used)
 
 
-def verdict(applied: list[str], not_cut: list[str]) -> dict[str, Any]:
+def verdict(applied: list[str], not_cut: list[str], through_: Optional[list[str]] = None) -> dict[str, Any]:
     """Applied when the card was cut by every focus; otherwise what it was cut by and why not the rest."""
-    return {"applied": not not_cut and bool(applied), "by": applied, "why": " ".join(not_cut)}
+    return {"applied": not not_cut and bool(applied), "by": applied, "why": " ".join(not_cut),
+            **({"through": through_} if through_ else {})}
 
 
 def parsed(raw: list[dict[str, Any]]) -> list[Focus]:

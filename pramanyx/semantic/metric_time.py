@@ -728,6 +728,11 @@ def run_measure(metric: Any, windows: list[Window], run_sql: RunSql, *, dialect:
     sql, why = measure_sql(metric, windows, dialect=dialect, by=by, part=part)
     if sql is None:
         return [], why
+    return run_measure_sql(sql, run_sql, by=by)
+
+
+def run_measure_sql(sql: str, run_sql: RunSql, *, by: Optional[str] = None) -> tuple[list[dict], str]:
+    """A statement `measure_sql` wrote, run and read — a reader's focus may have cut it first."""
     try:
         _cols, rows, error = run_sql(sql)
     except Exception as exc:  # noqa: BLE001
