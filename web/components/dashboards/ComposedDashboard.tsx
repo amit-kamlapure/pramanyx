@@ -539,7 +539,7 @@ const HANDLE = "opacity-0 transition-opacity group-hover:opacity-100 group-focus
 function GridHandles({ cell, kind, from, gridded, chosen = false, onPreview, onDone }: {
   cell: RefObject<HTMLDivElement | null>;
   kind: GridKind;
-  /** The element the builder has chosen: its eight handles are drawn at rest (the Databricks study, R1, 2026-11-18). */
+  /** The element the builder has chosen: its eight handles are drawn at rest (the dashboards study, R1, 2026-11-18). */
   chosen?: boolean;
   /** The element's room now: its own on the grid; null off it, where it is measured when a drag begins. */
   from: Box | null;

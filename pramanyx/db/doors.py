@@ -188,6 +188,16 @@ def stamp_asker(statement: str, *, internal: bool = False) -> str:
     return f"{body}\n/* pramanyx asked_by={who} */"
 
 
+_STAMP_TAIL = re.compile(r"\n/\* pramanyx asked_by=[A-Za-z0-9@._+\-]* \*/\s*$")
+
+
+def split_stamp(statement: str) -> tuple[str, str]:
+    """``(statement without its stamp, the stamp)`` — for a step that rewrites the statement (the row policy), which takes
+    the stamp off and puts it back, so who asked reaches the engine whatever the rewrite does with comments."""
+    found = _STAMP_TAIL.search(statement or "")
+    return (statement[:found.start()], statement[found.start():]) if found else (statement, "")
+
+
 def through_door(conn: Any, sql: str, sql_dialect: Optional[str], run: Callable[[str], Any], *,
                  internal: bool = False) -> Any:
     """One statement through a connection's door, with the path it took stamped on its result.

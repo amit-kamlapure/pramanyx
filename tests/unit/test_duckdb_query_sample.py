@@ -193,8 +193,10 @@ def test_the_row_policy_is_handed_the_statement_as_written_and_its_rewrite_runs(
     finally:
         reset_user_id(user)
         reset_org_id(org)
-    assert handed == [written]
+    # who asked rides on the statement (punch list 96), and the policy's rewrite keeps it to the engine
+    assert handed == [written + "\n/* pramanyx asked_by=u1 */"]
     assert not result.error, f"{result.error}\nran: {result.sql}"
+    assert "/* pramanyx asked_by=u1 */" in str(result.sql), result.sql   # DuckDB's normaliser may move it inward
     assert result.rows == [["0"], ["11"], ["22"]]          # the policy's rows, every one of them sampled
 
 

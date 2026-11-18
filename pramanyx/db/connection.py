@@ -411,6 +411,16 @@ def _row_policy_principal() -> "tuple[str, str, list[str]] | None":
 
 def enforce_row_policy(conn: "DatabaseConnection", hypothesis_id: str,
                        sql: str) -> "tuple[str, QueryResult | None]":
+    """The row and object policies (`_enforce_row_policy`) over the statement without its stamp of who asked (punch
+    list 96), which is put back on what they return: a rewrite never loses it, and never reads it as part of the query."""
+    from pramanyx.db.doors import split_stamp
+    body, stamp = split_stamp(sql)
+    out, blocked = _enforce_row_policy(conn, hypothesis_id, body)
+    return (out + stamp if stamp and blocked is None else out), blocked
+
+
+def _enforce_row_policy(conn: "DatabaseConnection", hypothesis_id: str,
+                        sql: str) -> "tuple[str, QueryResult | None]":
     """RBAC row-level policy (Rec 7): AND the caller's per-role row filters into ``sql`` before execution.
 
     Returns ``(sql, None)`` to proceed with the (possibly rewritten) SQL, or ``(sql, blocked_result)`` to

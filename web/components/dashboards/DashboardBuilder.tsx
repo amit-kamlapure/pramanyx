@@ -127,7 +127,7 @@ const Rule = () => <span aria-hidden="true" style={{ width: 1, height: 16, backg
 export function DashboardBuilder({ spec, onChange, cardTitle, bar, add, words, aside, above, connectionId, schema,
   onAddPiece, checks, cardSetup, cardChart, cardSql, cardReads, queryCards, onUndo, onRedo, children }: {
   spec: DashboardSpec;
-  /** The edit bar's Undo and Redo, which the editing keys reach too (the Databricks study, R3, 2026-11-18). */
+  /** The edit bar's Undo and Redo, which the editing keys reach too (the dashboards study, R3, 2026-11-18). */
   onUndo?: () => void;
   onRedo?: () => void;
   /** Every change, as the next spec and the version's note. */
@@ -239,7 +239,7 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, add, words, a
   const target = selected && holds(selected) ? selected
     : selected ? Object.keys(spec.elements).find(k => holds(k) && spec.elements[k].children.includes(selected)) ?? null : null;
 
-  // The editing keys (the Databricks study, R3, 2026-11-18), each a door the builder already has: Cmd/Ctrl-Z and
+  // The editing keys (the dashboards study, R3, 2026-11-18), each a door the builder already has: Cmd/Ctrl-Z and
   // Shift-Cmd/Ctrl-Z (or Ctrl-Y) undo and redo; Delete or Backspace takes the chosen element off, as Take off does, and
   // an undo puts it back; Cmd/Ctrl-D duplicates it; Escape lets it go. Never while a person types in a field.
   const keys = useRef({ spec, selected, el, onUndo, onRedo, apply, setSelected, setWire });
