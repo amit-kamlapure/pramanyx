@@ -141,9 +141,9 @@ export function queryChartSpec(c: QueryChart, setup: Pick<QueryShown, "segments"
       ? { transform: [...only, { aggregate: [{ op: "sum", field: "v", as: "total" }], groupby: ["x"] }],
         mark: { type: "text", dy: -6, fontSize: 10.5 },
         encoding: { x: { field: "x", type: x.type, sort: xSort }, y: { field: "total", type: "quantitative" },
-          text: { field: "total", type: "quantitative", format: ".3~s" } } }
+          text: { field: "total", type: "quantitative", format: small ? ".2~f" : ".3~s" } } }
       : { transform: [...only, ...lead], mark: { type: "text", dy: -6, fontSize: 10.5 },
-        encoding: { x, y: { field: "v", type: "quantitative", stack }, text: { field: "v", type: "quantitative", format: ".3~s" },
+        encoding: { x, y: { field: "v", type: "quantitative", stack }, text: { field: "v", type: "quantitative", format: small ? ".2~f" : ".3~s" },
           ...(bars && split && setup.segments === "side_by_side" ? { xOffset: { field: "s", sort: named } } : {}) } });
   }
   // the hover rule last, so its voronoi is over every mark it reads for

@@ -88,8 +88,8 @@ describe("a query card's chart", () => {
     expect((queryChartSpec(span, setup(), COLOURS).data as { values: { x: string }[] }).values[0].x).toMatch(/2025/);
     const [bars, label] = layers(one);
     expect((bars.encoding.color.legend as { direction: string }).direction).toBe("horizontal");
-    expect((bars.encoding.y.axis as { format: string }).format).toBe(".3~s");
-    expect(label.encoding.text.format).toBe(".3~s");
+    expect((bars.encoding.y.axis as { format: string }).format).toBe(".2~f");
+    expect(label.encoding.text.format).toBe(".2~f");
   });
 
   it("gives Other the grey wherever it sits, and the series their colours in order", () => {
@@ -153,7 +153,9 @@ describe("a chart drafted from a file", () => {
     expect(first(queryChartSpec(small, setup, colours)).y.axis?.format).toBe(".2~f");
     const days = chart({ series: [""], tones: {}, points: [{ x: "Jan", s: "", v: 2.1 }] });
     expect(first(queryChartSpec(days, setup, colours)).y.axis?.format).toBe(".2~f");       // a tick of 0.5 is never "500m"
-    expect(first(queryChartSpec(chart(), setup, colours)).y.axis?.format).toBe(".3~s");
+    expect(first(queryChartSpec(chart(), setup, colours)).y.axis?.format).toBe(".2~f");
+    const large = chart({ series: [""], tones: {}, points: [{ x: "Jeans", s: "", v: 48000 }] });
+    expect(first(queryChartSpec(large, setup, colours)).y.axis?.format).toBe(".3~s");
   });
 });
 
