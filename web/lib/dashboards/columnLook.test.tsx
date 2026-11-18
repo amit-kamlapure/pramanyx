@@ -90,8 +90,11 @@ describe("what a card offers its panel", () => {
       .toEqual({ numbers: ["n"], fields: [] });
     expect(cardHolds({ shown: { as: "bar", series: ["Email", "Search", "Other"] } as unknown as QueryShaped }, { split: "channel" }))
       .toEqual({ numbers: [], fields: [{ field: "channel", values: ["Email", "Search"] }] });
-    expect(cardHolds({ columns: ["month", "channel", "orders"], rows: [["2025-01-01", "Email", 3], ["2025-02-01", "Search", 4]] }, null))
-      .toEqual({ numbers: [], fields: [{ field: "channel", values: ["Email", "Search"] }] });
+    // an answer offers only a field its chart colours by: a trend by channel does, a bar of one colour does not
+    const trend = { columns: ["month", "channel", "orders"],
+      rows: [["2025-01-01", "Email", 3], ["2025-01-01", "Search", 5], ["2025-02-01", "Email", 4], ["2025-02-01", "Search", 6]] };
+    expect(cardHolds(trend, null, { type: "multi-line" })).toEqual({ numbers: [], fields: [{ field: "channel", values: ["Email", "Search"] }] });
+    expect(cardHolds({ columns: ["channel", "orders"], rows: [["Email", 3], ["Search", 4]] }, null, { type: "bar" })).toEqual({ numbers: [], fields: [] });
     expect(cardHolds(null, null)).toEqual({ numbers: [], fields: [] });
   });
 });

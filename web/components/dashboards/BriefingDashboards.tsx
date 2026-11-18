@@ -1261,7 +1261,11 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
           cardHolds={cardId => {
             // v17 — what the card's last run offers to draw: number columns of its table, fields whose values it colours
             const cs = cards.find(c => c.card.id === cardId);
-            return holdsOf(cs?.run as Parameters<typeof holdsOf>[0], (cs?.card.render as { shown?: Partial<QueryShown> } | undefined)?.shown);
+            const render = (cs?.card.render ?? {}) as { shown?: Partial<QueryShown>; chartType?: string | null;
+              viz?: { type?: string; metric?: string | null; colorField?: string; colorScale?: string } };
+            return holdsOf(cs?.run as Parameters<typeof holdsOf>[0], render.shown, {
+              type: render.viz?.type && render.viz.type !== "auto" ? render.viz.type : render.chartType ?? null,
+              measure: render.viz?.metric ?? null, colorField: render.viz?.colorField ?? null, colorScale: render.viz?.colorScale ?? null });
           }}
           onUndo={stacks.past.length > 0 ? undo : undefined} onRedo={stacks.future.length > 0 ? redo : undefined}
           bar={(

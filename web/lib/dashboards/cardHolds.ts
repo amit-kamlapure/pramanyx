@@ -1,10 +1,13 @@
 /**
  * What a placed card holds that the builder's panel offers to draw (dashboard format v17; study R10, R11): the number
  * columns of the table it shows, for a bar or a colour scale, and each field whose values it colours, with those
- * values, for a colour kept on the whole dashboard. Read off the card's last run: a card not yet read offers nothing.
+ * values, for a colour kept on the whole dashboard — only a field its chart does colour by, so nothing is offered that
+ * the chart would not honour. Read off the card's last run: a card not yet read offers nothing.
  */
 import type { QueryShaped, QueryShown } from "@/lib/api";
 import { MAX_COLOR_VALUES } from "@/lib/dashboards/catalog";
+import { resolveVegaSpec } from "@/components/charts/vega/resolveSpec";
+import { colouredFields } from "@/lib/dashboards/valueColors";
 
 export interface CardHolds {
   /** The number columns of the table the card shows; none for a figure or a chart. */
@@ -19,8 +22,12 @@ const NUMERIC_TYPE = /INT|DOUBLE|FLOAT|DECIMAL|NUMERIC|REAL|NUMBER/i;
 
 interface HeldRun { columns?: string[]; rows?: unknown[][]; shown?: QueryShaped | null }
 
-/** What a card's run offers: a person's own query by how it is shown, an answer's rows by their text columns. */
-export function cardHolds(run: HeldRun | null | undefined, setup: Partial<QueryShown> | null | undefined): CardHolds {
+/** How an answer's chart is drawn, as its card keeps it: the kind, the measure and a colour bound to a column. */
+export interface HeldChart { type?: string | null; measure?: string | null; colorField?: string | null; colorScale?: string | null }
+
+/** What a card's run offers: a person's own query by how it is shown, an answer by how its chart colours. */
+export function cardHolds(run: HeldRun | null | undefined, setup: Partial<QueryShown> | null | undefined,
+  chart?: HeldChart | null): CardHolds {
   if (!run) return HOLDS_NOTHING;
   const shaped = run.shown ?? null;
   if (shaped) {
@@ -29,15 +36,13 @@ export function cardHolds(run: HeldRun | null | undefined, setup: Partial<QueryS
     const values = shaped.series.filter(s => s && s !== "Other");
     return setup?.split && values.length > 1 ? { numbers: [], fields: [{ field: setup.split, values }] } : HOLDS_NOTHING;
   }
-  // an answer's chart colours by a text column: each one with two or more values, up to the most a dashboard keeps
+  // an answer's chart: the fields its chart colours by, as the chart is resolved — none for a bar of one colour
   const columns = run.columns ?? [];
   const rows = run.rows ?? [];
-  const fields = columns.flatMap((field, i) => {
-    const cells = rows.map(r => r[i]).filter(v => v !== null && v !== undefined && v !== "");
-    if (!cells.length || cells.every(v => typeof v === "number" || Number.isFinite(Number(v)))) return [];
-    if (cells.every(v => /^\d{4}-\d{2}(-\d{2})?/.test(String(v)))) return [];                // dates are not colours
-    const values = [...new Set(cells.map(String))];
-    return values.length > 1 && values.length <= MAX_COLOR_VALUES ? [{ field, values }] : [];
-  });
+  if (!columns.length || !rows.length) return HOLDS_NOTHING;
+  const resolved = resolveVegaSpec({ columns, rows, chartType: chart?.type ?? null, measure: chart?.measure ?? null,
+    exhibit: chart?.colorField ? { color: { mode: chart.colorScale === "continuous" ? "continuous" : "categorical", field: chart.colorField } } : null });
+  const fields = colouredFields(resolved?.spec)
+    .filter(f => f.values.length > 1 && f.values.length <= MAX_COLOR_VALUES && columns.includes(f.field));
   return { numbers: [], fields };
 }

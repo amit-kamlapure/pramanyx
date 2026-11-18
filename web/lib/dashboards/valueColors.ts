@@ -72,3 +72,24 @@ export function withValueColors<T extends Obj>(spec: T, kept: ValueColors | null
   visit(out);
   return out as T;
 }
+
+/** The fields a Vega-Lite spec colours by (a nominal colour channel, nested layers too), each with its values in the
+ *  chart's order: what a dashboard can keep a colour for on this chart, and nothing it would not honour. */
+export function colouredFields(spec: Obj | null | undefined): { field: string; values: string[] }[] {
+  const rows = ((spec?.data as { values?: Obj[] } | undefined)?.values) ?? null;
+  if (!spec || !Array.isArray(rows)) return [];
+  const found = new Map<string, string[]>();
+  const visit = (node: Obj) => {
+    const color = (node.encoding as Obj | undefined)?.color as Obj | undefined;
+    const field = typeof color?.field === "string" ? color.field : null;
+    if (color && field && color.type !== "quantitative" && !found.has(field)) {
+      const given = Array.isArray(color.sort) ? (color.sort as unknown[]).map(String) : null;
+      const seen = [...new Set(rows.map(r => r[field]).filter(v => v !== null && v !== undefined && v !== "").map(String))];
+      found.set(field, given ? [...given, ...seen.filter(v => !given.includes(v))] : seen);
+    }
+    for (const child of (node.layer as Obj[] | undefined) ?? []) visit(child);
+  };
+  visit(spec);
+  return [...found].map(([field, values]) => ({ field, values }));
+}
+
