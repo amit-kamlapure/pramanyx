@@ -1420,7 +1420,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
   );
 
   return (
-    <div data-testid="briefing-dashboards" style={{ flex: 1, overflow: "auto", padding: "14px 32px 32px" }}>
+    <div data-testid="briefing-dashboards" data-dashboard-ground="" style={{ flex: 1, overflow: "auto", padding: "14px 32px 32px", background: "var(--bg-0)" }}>
       {/* The strip: the connection's metrics first (nobody's to arrange), then the person's own
           cockpits under the layer's label — violet is the user's, as the Briefing has always marked
           it — and, at the end, the door to a new one. */}

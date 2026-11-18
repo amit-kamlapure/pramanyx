@@ -396,7 +396,7 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, add, words, a
               {scale < 1 ? `Fit · ${zoom}%` : "100%"}
             </Button>
           </div>
-          <div ref={canvas} data-testid="builder-canvas" style={{ flex: 1, minHeight: 0, overflow: "auto", padding: PAD }}>
+          <div ref={canvas} data-testid="builder-canvas" data-dashboard-ground="" style={{ flex: 1, minHeight: 0, overflow: "auto", padding: PAD, background: "var(--bg-0)" }}>
             {above}
             <div style={{ width: layout ? layout * scale : undefined, height: room.height ? room.height * scale : undefined }}>
               <div ref={page} data-testid="builder-page" data-zoom={zoom}
