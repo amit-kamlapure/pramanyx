@@ -98,8 +98,8 @@ export function queryChartSpec(c: QueryChart, setup: Pick<QueryShown, "segments"
   const shares = setup.segments === "shares" && (c.as === "bar" || c.as === "area");
   const stack = c.as === "line" || c.as === "scatter" || !split ? null
     : shares ? "normalize" : setup.segments === "side_by_side" ? null : "zero";
-  // A share reads as a percent and money with its symbol. Below one, the SI form says "50m" for 0.05: never what a reader means.
-  const small = Math.max(0, ...values.map(p => Math.abs(p.v ?? 0))) < 1;
+  // A share reads as a percent and money with its symbol. Below a thousand, the SI form says "500m" for a tick of 0.5: never what a reader means.
+  const small = Math.max(0, ...values.map(p => Math.abs(p.v ?? 0))) < 1000;
   const axisFormat = shares || c.format === "percent" ? ".0%" : c.format === "money" ? "$.3~s" : small ? ".2~f" : ".3~s";
   const chosenScale = valueAxisScale(options, values.map(p => p.v).filter((v): v is number => typeof v === "number"));
   const y = {

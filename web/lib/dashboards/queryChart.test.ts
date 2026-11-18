@@ -151,6 +151,8 @@ describe("a chart drafted from a file", () => {
     expect(first(queryChartSpec(chart({ series: [""], tones: {}, points: [{ x: "Jeans", s: "", v: 0.05 }], format: "percent" }), setup, colours)).y.axis?.format).toBe(".0%");
     expect(first(queryChartSpec(chart({ format: "money" }), setup, colours)).y.axis?.format).toBe("$.3~s");
     expect(first(queryChartSpec(small, setup, colours)).y.axis?.format).toBe(".2~f");
+    const days = chart({ series: [""], tones: {}, points: [{ x: "Jan", s: "", v: 2.1 }] });
+    expect(first(queryChartSpec(days, setup, colours)).y.axis?.format).toBe(".2~f");       // a tick of 0.5 is never "500m"
     expect(first(queryChartSpec(chart(), setup, colours)).y.axis?.format).toBe(".3~s");
   });
 });
