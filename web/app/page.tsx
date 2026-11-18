@@ -132,7 +132,6 @@ import {
   type AgentRosterEntry,
 } from "@/lib/api";
 import { costSummary, fmtCompact, fmtMs } from "@/lib/cost";
-import { Segmented } from "@/components/ui/segmented";
 import { TabStrip } from "@/components/ui/tab-strip";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -240,7 +239,6 @@ function Topbar({
   onUpdateWorkspace,
   onDeleteWorkspace,
   theme,
-  onThemeChange,
 }: {
   onSearchOpen: () => void;
   onNavigate: (t: NavTab) => void;
@@ -257,7 +255,6 @@ function Topbar({
   onDeleteWorkspace: (id: string) => Promise<void>;
   /** The active theme and the setter Settings uses — a click here persists exactly as a click there. */
   theme: Theme;
-  onThemeChange: (t: Theme) => void;
 }) {
   // The rail's toggle, left of the wordmark (the user, 2026-11-10: "Place the collapse icon right at the top, left of
   // Pramanyx logo/text.. this will reduce the overall length of the rail"). It owns ⌘\ too.
@@ -295,9 +292,6 @@ function Topbar({
           </span>
           <kbd>⌘K</kbd>
         </button>
-        {/* The theme toggle: a segmented pair, one click from every screen. */}
-        <Segmented label="Theme" value={theme} onChange={onThemeChange}
-          options={[{ value: "dark", label: "dark" }, { value: "light", label: "light" }]} />
         {/* The nine dots — the way to the coworker. Drawn only while one is running. */}
         <AppSwitcher connectionId={selectedConn || undefined} theme={theme} />
         <AuthControl />
@@ -1868,7 +1862,6 @@ export default function Home() {
       {/* Topbar */}
       <Topbar
         theme={theme}
-        onThemeChange={setTheme}
         onSearchOpen={() => setShowSearch(true)}
         onNavigate={handleNavigate}
         connections={wsConnections}
