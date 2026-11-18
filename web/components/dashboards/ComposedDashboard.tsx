@@ -1636,7 +1636,7 @@ function FilteredBy({ objects = null }: { objects?: ObjectBarWords | null }) {
     ...narrowing.map((n): BarChip => ({ key: `query:${n.column}`, testid: "query-filter-chip", words: `${n.column.replace(/_/g, " ")}: ${n.values.join(", ")}`,
       clear: () => n.values.forEach(v => toggle(n.column, String(v), n.grain)) })),
     ...values,
-    ...focused.map((f): BarChip => ({ key: `focus:${f.table}.${f.column}`, testid: "focus-chip", words: focusWords(f),
+    ...focused.map((f): BarChip => ({ key: `focus:${f.source.card}:${f.table}.${f.column}`, testid: "focus-chip", words: focusWords(f),
       clear: () => setFocus?.(focused.filter(x => x !== f)) })),
   ];
   const count = objects?.count ?? null;
