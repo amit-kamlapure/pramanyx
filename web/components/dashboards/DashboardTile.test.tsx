@@ -9,7 +9,7 @@
  * The trend's chart is a browser question (jsdom draws nothing); what is pinned for it is the
  * spec it is handed: the line, the newest point labelled, and the limit drawn across it.
  */
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@/lib/testing";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { CardState } from "@/components/brief/PinnedCardBody";

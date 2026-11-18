@@ -3,7 +3,7 @@
  * description under it, and how its numbers are written — decimals, compact or whole, negatives in parentheses — with
  * the unit the card's own.
  */
-import { render, screen } from "@testing-library/react";
+import { render, screen } from "@/lib/testing";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { CardState } from "@/components/brief/PinnedCardBody";
