@@ -65,6 +65,7 @@ import {
 import { Chart } from "@/components/Chart";
 import { ResultChartCard } from "@/components/charts/ResultChartCard";
 import { mapHintFor } from "@/components/charts/chartTypeInference";
+import { mapLayout } from "@/components/charts/geo/mapDrawing";
 import { deriveFigureSource } from "@/lib/figureSource";
 import {
   DATE_COL,
@@ -391,7 +392,11 @@ function ResultFigure({
       ? hasNum
       : rows.length >= 3 && hasNum && (hasDate || hasCat)) && chartDataReady;
 
-  const sourceTitle = inferSourceTitle(columns, rows);
+  // A map is titled by what it sizes and what it places, never by a coordinate.
+  const mapped = chartType === "point_map" ? mapLayout({ columns, rows, kind: "points" }) : chartType === "choropleth" ? mapLayout({ columns, rows, kind: "shapes" }) : null;
+  const sourceTitle = mapped && mapped.measure >= 0 && mapped.label >= 0
+    ? `${cleanLabel(columns[mapped.measure])} by ${cleanLabel(columns[mapped.label])}`
+    : inferSourceTitle(columns, rows);
 
   function handleSourceClick() {
     onShowSource?.({

@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
+import { withUniqueKeys } from "@/lib/listKeys";
 import { useNarrowScreen } from "@/lib/useNarrowScreen";
 import { OBJECTS_SHOWN, answerSources, type AnswerSource } from "@/lib/answerSources";
 import { getReceiptSources, type ReceiptSources } from "@/lib/api";
@@ -84,8 +85,8 @@ function TableSource({ connection, name }: { connection: string; name: string })
         {table.columns.length === 1 ? "1 column" : `${table.columns.length} columns`}{table.row_count ? ` · ${table.row_count} rows` : ""}
       </p>
       <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }}>
-        {table.columns.map(c => (
-          <li key={c.name} className="aug-fs-sm" style={{ display: "flex", justifyContent: "space-between", gap: 12, minWidth: 0 }}>
+        {withUniqueKeys(table.columns, c => c.name).map(([key, c]) => (
+          <li key={key} className="aug-fs-sm" style={{ display: "flex", justifyContent: "space-between", gap: 12, minWidth: 0 }}>
             <span style={{ minWidth: 0, overflowWrap: "anywhere", color: "var(--t1)", fontFamily: "var(--font-mono)" }}>{c.name}</span>
             <span style={{ flexShrink: 0, color: "var(--t3)" }}>{c.type}</span>
           </li>
