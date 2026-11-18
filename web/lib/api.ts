@@ -3638,6 +3638,27 @@ export async function restoreDashboard(connectionId: string, dashboardId: string
 
 /** ⚑ Spends model calls. A change to one of the asker's dashboards, asked for in words: a proposal
  *  to keep or not — an edit against the version on screen, or a publish. */
+/** A dashboard as a file's contents: its spec and the cards it places, each with its source (the study's R22). */
+export async function exportDashboard(connectionId: string, dashboardId: string): Promise<{ title: string } & Record<string, unknown>> {
+  const res = await fetch(dashboardUrl(`/dashboards/${encodeURIComponent(dashboardId)}/export`, connectionId));
+  if (!res.ok) throw new Error(fastApiError(await res.json().catch(() => ({})), "The dashboard could not be exported"));
+  return res.json();
+}
+
+export type DashboardImported = { imported: true; cockpit_id: string; title: string; version: number } | { imported: false; sentences: string[] };
+
+/** A dashboard file read into this connection: made whole, or refused by name with nothing made. */
+export async function importDashboard(connectionId: string, doc: unknown): Promise<DashboardImported> {
+  const res = await fetch(dashboardUrl("/dashboards/import", connectionId), {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(doc),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (res.ok) return body as DashboardImported;
+  const said = (body as { detail?: { sentences?: string[] } }).detail?.sentences;
+  if (res.status === 422 && said?.length) return { imported: false, sentences: said };
+  throw new Error(fastApiError(body, "The file could not be read in"));
+}
+
 export async function askDashboard(connectionId: string, dashboardId: string, words: string, schema?: string, target?: string): Promise<DashboardDrafted> {
   const res = await fetch(dashboardUrl(`/dashboards/${encodeURIComponent(dashboardId)}/ask`, connectionId), {
     method: "POST", headers: { "Content-Type": "application/json" },

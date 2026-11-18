@@ -61,6 +61,8 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { DropdownMenu } from "@radix-ui/themes";
 import { ASKS_OF_A_PIECE, AskPiece } from "@/components/dashboards/AskPiece";
 import { askAbout, dashboardSubject } from "@/lib/askSubject";
+import { ImportDashboard } from "@/components/dashboards/ImportDashboard";
+import { downloadText } from "@/lib/query/csv";
 import { Chip } from "@/components/clarity/kit";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
@@ -70,7 +72,7 @@ import { CertificationMark } from "@/components/govern/CertificationMark";
 import { ErrorState, Loading, Refusal } from "@/components/ui/states";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
-import {
+import { exportDashboard,
   DashboardRefused, acceptProposal, askDashboard, dashboardAudiences, dashboardImageUrl, copySharedDashboard, draftDashboard, findingOfCard,
   getDeclaredActions,
   getDashboard, getGroups, getProposalById, getSharedDashboard, getSuggestedShapes, keepDashboard, listDashboards, listSharedDashboards, moveCanvasDashboard,
@@ -104,6 +106,17 @@ import { getProcesses, type ProcessDetail } from "@/lib/objectTypes";
 /** The name the Briefing gives when it keeps something for a person. The server writes the
  *  signed-in person's own name where there is one. */
 const ACTOR = "briefing";
+
+/** Write a dashboard out as a JSON file, named for it. */
+async function exportToFile(connectionId: string, dashboardId: string): Promise<void> {
+  try {
+    const doc = await exportDashboard(connectionId, dashboardId);
+    const name = String(doc.title).replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "dashboard";
+    downloadText(`${name}.dashboard.json`, JSON.stringify(doc, null, 2), "application/json");
+  } catch (e) {
+    toast.error("The dashboard could not be exported", { description: (e as Error).message.slice(0, 160) });
+  }
+}
 
 /** A dashboard's title, as its spec says it. */
 const titleOfSpec = (spec: unknown): string => {
@@ -817,6 +830,8 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
   const [newOpen, setNewOpen] = useState(false);
   const [newBusy, setNewBusy] = useState(false);
   const openNew = () => { setNewBusy(false); setNewOpen(true); };
+  // what a dashboard file was refused for, said above the home's list until the next one is read in
+  const [importSaid, setImportSaid] = useState<string[]>([]);
   const [composing, setComposing] = useState(false);
   // The two doors by hand only: a note's words and an image are the person's, never a model's.
   const [noting, setNoting] = useState(false);
@@ -1431,7 +1446,13 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
     );
   }
 
-  const newDoor = <Button size="sm" variant="default" data-testid="dashboard-new-open" onClick={openNew}><Icon name="plus" size={14} /> Create dashboard</Button>;
+  const newDoor = (
+    <span style={{ display: "inline-flex", gap: 6 }}>
+      <ImportDashboard connectionId={connectionId} onRefused={setImportSaid}
+        onImported={(id, title) => { setImportSaid([]); toast.success(`“${title}” read in.`); choose(id); reload(); }} />
+      <Button size="sm" variant="default" data-testid="dashboard-new-open" onClick={openNew}><Icon name="plus" size={14} /> Create dashboard</Button>
+    </span>
+  );
   const periodPicker = data && !periodPlaced && !cards.every(c => (c.card.render as { standing?: boolean } | undefined)?.standing === true) ? (
     <PeriodPicker value={chosenRange} onChange={setChosenRange} disabled={busy} reading={reading}
       showing={data.range.status === "standing" || reading ? null : data.range} />
@@ -1482,11 +1503,13 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
       </Button>
       <DropdownMenu.Root>
         <DropdownMenu.Trigger>
-          <Button size="icon-xs" variant="ghost" aria-label="More: retire this dashboard" data-testid="dashboard-more">
+          <Button size="icon-xs" variant="ghost" aria-label="More for this dashboard" data-testid="dashboard-more">
             <Icon name="morev" size={14} />
           </Button>
         </DropdownMenu.Trigger>
         <DropdownMenu.Content size="1" align="end">
+          <DropdownMenu.Item data-testid="dashboard-export" onSelect={() => { if (data) void exportToFile(connectionId, data.cockpit_id); }}>Export as JSON</DropdownMenu.Item>
+          <DropdownMenu.Separator />
           <DropdownMenu.Item onSelect={() => setRetiring(true)} data-testid="dashboard-retire-open-view">Retire this dashboard…</DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu.Root>
@@ -1534,10 +1557,20 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
       )}
 
       {!chosen ? (
-        <DashboardHome connectionId={connectionId} onOpen={choose}
-          items={homeItems(connectionId, list.person, live, shared, certified, METRICS_DASHBOARD)}>
-          {live.length === 0 && <div style={{ marginTop: 14 }}>{noneYet}</div>}
-        </DashboardHome>
+        <>
+          {importSaid.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <Refusal kind="Not read in" claim="Nothing was made from this file."
+                detail={<ul data-testid="dashboard-import-refused" style={{ margin: 0, paddingLeft: 18 }}>
+                  {importSaid.map((s, i) => <li key={`${i}-${s.slice(0, 24)}`}>{s}</li>)}
+                </ul>} />
+            </div>
+          )}
+          <DashboardHome connectionId={connectionId} onOpen={choose}
+            items={homeItems(connectionId, list.person, live, shared, certified, METRICS_DASHBOARD)}>
+            {live.length === 0 && <div style={{ marginTop: 14 }}>{noneYet}</div>}
+          </DashboardHome>
+        </>
       ) : chosen === METRICS_DASHBOARD ? (
         <MetricsDashboard connectionId={connectionId} schema={schema}
           value={chosenRange} onChange={setChosenRange} />

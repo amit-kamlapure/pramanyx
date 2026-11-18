@@ -565,6 +565,28 @@ def ask_dashboard(request: Request, cockpit_id: str, connection_id: str, req: As
     return edit_in_words(connection_id, person_of(request), home.cockpit_id, req.words, schema=req.schema_name, target=req.target)
 
 
+@router.get("/dashboards/{cockpit_id}/export")
+def export_dashboard(request: Request, cockpit_id: str, connection_id: str) -> dict:
+    """The dashboard as it stands, as a JSON file's contents: its spec and the cards it places, each with its source."""
+    from pramanyx.dashboards.transfer import export_of
+    out = export_of(_home(request, connection_id, cockpit_id))
+    if out is None:
+        raise HTTPException(status_code=404, detail="There is no dashboard here to export.")
+    return out
+
+
+@router.post("/dashboards/import", status_code=201)
+def import_dashboard(request: Request, connection_id: str, doc: dict[str, Any]) -> dict:
+    """A dashboard file read into the asker's dashboards on this connection. All of it or none: whatever does not resolve here
+    is refused by name, with a 422 and nothing made."""
+    from pramanyx.dashboards.home import person_of
+    from pramanyx.dashboards.transfer import import_into
+    out = import_into(connection_id, person_of(request), doc, approved_by=_approved_by(request))
+    if not out["imported"]:
+        raise HTTPException(status_code=422, detail=out)
+    return out
+
+
 @router.post("/dashboards/{cockpit_id}/publish")
 def publish_dashboard(request: Request, cockpit_id: str, connection_id: str, req: PublishRequest) -> dict:
     """Publish the dashboard as it stands to groups the asker belongs to and roles they may publish
