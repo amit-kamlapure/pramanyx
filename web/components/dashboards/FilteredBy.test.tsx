@@ -10,7 +10,7 @@ import { resolve } from "node:path";
 import { fireEvent, render, screen, waitFor, within } from "@/lib/testing";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ComposedDashboard, type PageDoors } from "@/components/dashboards/ComposedDashboard";
+import { ComposedDashboard, type PageDoors, type PeriodDoor } from "@/components/dashboards/ComposedDashboard";
 import type { CardState } from "@/components/brief/PinnedCardBody";
 import type { StoredCard } from "@/lib/api";
 import { addPage, duplicatePage, removePage, setProps, tabsOf, type DashboardSpec } from "@/lib/dashboards/edit";
@@ -59,6 +59,15 @@ describe("the one bar", () => {
     expect(screen.getByRole("button", { name: "Open on Overview" })).toBeTruthy();
     expect(onFocus).not.toHaveBeenCalled();
     expect(screen.getAllByTestId("focus-chip")).toHaveLength(1);
+  });
+
+  it("says the period only where a card was cut to it", () => {
+    const period = { value: { preset: "previous_month" }, onChange: vi.fn(), showing: { covers: "October 2026" } } as unknown as PeriodDoor;
+    const read = (standing: boolean): CardState[] => CARDS.map(c => ({ ...c, run: { ...c.run, scoped: { covers: "October 2026", standing, why: "", grain: null } } } as CardState));
+    const { rerender } = render(<ComposedDashboard spec={premise()} cards={read(true)} host={HOST} doors={{ onRefresh: vi.fn() }} focus={[SEARCH]} onFocus={vi.fn()} period={period} />);
+    expect(screen.queryByTestId("filtered-by-period")).toBeNull();
+    rerender(<ComposedDashboard spec={premise()} cards={read(false)} host={HOST} doors={{ onRefresh: vi.fn() }} focus={[SEARCH]} onFocus={vi.fn()} period={period} />);
+    expect(screen.getByTestId("filtered-by-period")).toHaveTextContent("October 2026");
   });
 
   it("offers no page a reader may not open", () => {

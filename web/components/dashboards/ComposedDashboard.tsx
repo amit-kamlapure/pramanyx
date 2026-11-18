@@ -1532,10 +1532,10 @@ const NO_IMAGES: Record<string, ImageStamp> = {};
 const NO_FOCUS: DashboardFocus[] = [];
 
 /** Everything a dashboard is cut by, in one place (the study's R14): the filter column's ticks, the query filters, the values a
- *  reader moved and the marks they clicked, each a chip that takes it off, and one Clear all. The period is said beside them; it
- *  is changed where it is chosen. With nothing cutting the dashboard the bar is not drawn, so the pieces keep the room. */
+ *  reader moved and the marks they clicked, each a chip that takes it off, and one Clear all. The period is said beside them
+ *  when a card was cut to it; it is changed where it is chosen. With nothing cutting the dashboard the bar is not drawn, so the pieces keep the room. */
 function FilteredBy({ objects = null, spaced = true }: { objects?: ObjectBarWords | null; spaced?: boolean }) {
-  const { focus, setFocus, period, host, elements, doors } = useDashboard();
+  const { focus, setFocus, period, host, elements, doors, cards } = useDashboard();
   const values = useValueChips();
   const { narrowing, toggle, clear: clearNarrowing } = useQueryNarrowing();
   const { get, set } = useStateStore();
@@ -1550,7 +1550,9 @@ function FilteredBy({ objects = null, spaced = true }: { objects?: ObjectBarWord
   ];
   const count = objects?.count ?? null;
   if (!chips.length && !count) return null;
-  const covers = period?.showing?.covers || (host.range as { covers?: string }).covers || "";
+  // the period is said only where a card was cut to it: a dashboard that reads a whole file is filtered by no month
+  const cutToPeriod = [...cards.values()].some(c => c.run?.scoped && !c.run.scoped.standing);
+  const covers = cutToPeriod ? period?.showing?.covers || (host.range as { covers?: string }).covers || "" : "";
   const clearAll = () => {
     objects?.clearAll?.();
     clearNarrowing();
