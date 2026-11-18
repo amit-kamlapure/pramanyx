@@ -22,7 +22,6 @@ import asyncio
 import contextvars
 import json
 import logging
-import re
 import threading
 from collections.abc import AsyncIterator
 from typing import Any, Callable, Optional
@@ -90,10 +89,6 @@ def outside_piece(args: dict, target: str) -> list[str]:
     return [] if reach else [f"The draft changes nothing of the element {target}."]
 
 
-#: A tool call the model wrote out as words instead of making it: never a sentence for a person to read.
-_TOOL_MARKUP = re.compile(r"</?\s*(?:tool_call|function|parameter)\b", re.IGNORECASE)
-
-
 class _Left(Exception):
     """The person watching a draft left, so the model is asked nothing more."""
 
@@ -123,7 +118,7 @@ def _run(home: Home, system: str, ask: str, *, said: str, schema: Optional[str],
     does it, in its own counts and the titles of cards it has checked, never the model's words. Once ``stop`` is set the
     run ends at its next step."""
     from pramanyx.agent.dashboard_tool import drafting_tool
-    from pramanyx.agent.tool_loop import ToolSpec, run_tool_loop
+    from pramanyx.agent.tool_loop import TOOL_MARKUP, ToolSpec, run_tool_loop
 
     if provider is None:
         from pramanyx.agent.converse_tools import binding_calls_tools
@@ -183,7 +178,7 @@ def _run(home: Home, system: str, ask: str, *, said: str, schema: Optional[str],
     refused = list((results[-1] if results else {}).get("refused") or [])
     said_ = (result.answer or "").strip()
     from pramanyx.dashboards.validate import stated_figures
-    if said_ and not stated_figures(said_) and not _TOOL_MARKUP.search(said_):
+    if said_ and not stated_figures(said_) and not TOOL_MARKUP.search(said_):
         refused = [said_[:400], *refused] if not refused else refused
     if not refused:
         refused = [nothing]

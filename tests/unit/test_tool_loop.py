@@ -504,3 +504,18 @@ def test_a_loop_nobody_asked_to_finish_runs_as_it_did(provider):
     set_responses(["four"])
     result = run_tool_loop(provider, "sys", "what is 2+2?", [_tool()], finish_now=lambda: False)
     assert (result.answer, result.stop_reason) == ("four", "answered")
+
+
+MARKUP = "<tool_call> <function=conclude> <parameter=answer> 412 orders </tool_call>"
+
+
+def test_a_closing_answer_written_as_a_tool_call_is_asked_for_again_in_sentences(provider):
+    set_responses([MARKUP, "There were 412 orders."])
+    result = run_tool_loop(provider, "sys", "how many orders?", [_tool()], finish_now=lambda: True)
+    assert (result.answer, result.stop_reason) == ("There were 412 orders.", "budget_answered")
+
+
+def test_a_tool_call_written_twice_never_reaches_a_person(provider):
+    set_responses([MARKUP, MARKUP])
+    result = run_tool_loop(provider, "sys", "how many orders?", [_tool()], finish_now=lambda: True)
+    assert (result.answer, result.stop_reason) == (None, "budget")
