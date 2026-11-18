@@ -113,6 +113,11 @@ turned back on from the interface.
   page's head (`webserver/index-inject`): the card shows the mark and the name, "Opening your coworker…", a quieter
   line if it takes a while and one that says to reload if it takes too long; a failure says the coworker couldn't
   open, with Reload, and the raw error folded under Details (`plugins/brand/lib/index.js`).
+- **Every load opens on the first screen** (2026-11-18). The shell reopens the conversation last open, and lists the
+  empty one it opens for a new question as a "New Session" row. The home plugin's host half adds two rows to the
+  page's head: a script that forgets the conversation last open, so a load or a restart lands on "Ask your data
+  anything", and a style that draws no row for an empty conversation. A conversation is in the list once the person
+  has written in it (`plugins/home/lib/index.js`, `firstScreenRows`).
 - **Pramanyx's identity.** The mark and name in the sidebar and over a new conversation, the tab's title and icon,
   the first screen's wording, the app's dark palette, small corners, and a plain ring where the shell draws its
   animal while an answer is worked on.

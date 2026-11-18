@@ -1168,6 +1168,32 @@ export async function answerNowDoor(req, res, api, { send = fetch, person = pers
   }
 }
 
+/**
+ * EVERY LOAD OPENS ON THE FIRST SCREEN (the user, 2026-11-18: "always this screen whenever harness loads/restarts..
+ * and no 'new conversation' on the left panel.. conversation starts only when input is given by the user").
+ *
+ * The shell keeps the conversation last open in the browser (`dsh.sessions.current`) and reopens it on the next
+ * load. For the first screen it opens an empty conversation, and lists that as a "New Session" row at the top of
+ * the list. Two rows go in the page's head, before the shell's own scripts:
+ *
+ *   - a script that forgets the conversation last open, so the shell opens its empty one, which is the first screen;
+ *   - a style that draws no row for an empty conversation. The shell's row for one is the only conversation row
+ *     without its "…" menu. A conversation the person has written in has that menu, and its row shows as always.
+ *
+ * A conversation still opens from the list, from search and from the app; only a load starts on the first screen.
+ * "New conversation" stays where it is.
+ */
+export const OPENED_KEY = "dsh.sessions.current";
+export const OPEN_ON_FIRST_SCREEN =
+  `(function () { try { localStorage.removeItem(${JSON.stringify(OPENED_KEY)}); } catch (e) { /* the shell's choice stands */ } })();`;
+export const NO_EMPTY_ROW =
+  `[role="treeitem"][data-row-key^="session:"]:not(:has([data-context-menu-trigger])) { display: none; }`;
+
+/** The rows the page's head takes, before the shell's own scripts. */
+export function firstScreenRows() {
+  return [{ kind: "script", placement: "head", text: OPEN_ON_FIRST_SCREEN }, { kind: "style", text: NO_EMPTY_ROW }];
+}
+
 export const inject = ["webServer", "workspaceRegistry"];
 
 export function apply(ctx) {
@@ -1236,6 +1262,7 @@ export function apply(ctx) {
       return res.end(req.method === "HEAD" ? undefined : ENTER);
     },
   }), "pramanyx-home: the way in from the app");
+  ctx.on("webserver/index-inject", (table) => { table.push(...firstScreenRows()); });
   ctx.effect(() => ctx.webServer.register({
     kind: "exact",
     path: "/pramanyx-person",
