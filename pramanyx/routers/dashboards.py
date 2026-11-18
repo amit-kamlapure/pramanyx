@@ -398,9 +398,11 @@ def filter_fields(connection_id: str) -> dict:
     simple = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")               # what a focus may name (`focus.Focus.column`)
     out = []
     for table, columns in tables.items():
-        held = [c for c in columns if simple.match(c[0])]
+        # a sheet's row number is the platform's own, never a field of the data
+        own = [c for c in columns if c[0] != "_row"]
+        held = [c for c in own if simple.match(c[0])]
         out.append({"table": table, "columns": [{"name": n, "type": t, "kind": kind_of(t)} for n, t in held],
-                    "left_out": len(columns) - len(held)})
+                    "left_out": len(own) - len(held)})
     return {"tables": sorted(out, key=lambda t: t["table"].lower())}
 
 

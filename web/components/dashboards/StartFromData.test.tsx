@@ -64,5 +64,6 @@ describe("starting from tables", () => {
   it("writes a name that needs quoting as the connection quotes it", () => {
     expect(tableSql({ schema: "my shop", table: "orders" }, "`")).toBe("SELECT * FROM `my shop`.orders");
     expect(tableSql({ schema: "", table: "order lines" }, '"')).toBe('SELECT * FROM "order lines"');
+    expect(tableSql({ schema: "main", table: "titles" }, '"', true)).toBe("SELECT * EXCLUDE (_row) FROM main.titles");
   });
 });

@@ -1061,7 +1061,7 @@ export function PieceSetup({ spec, selected, onChange, connectionId, schema, car
       : "problem" in ef ? <div className="aug-fs-sm" style={{ padding: "10px 14px", color: "var(--t2)" }}>What {noun} holds could not be read: {ef.problem}</div>
         : body(ef)
   );
-  const placed = !["Cockpit", "Tabs", "Tab", "Section", "ObjectFilters", "ActionButton", "Drawer"].includes(el.type);
+  const placed = !["Cockpit", "Tabs", "Tab", "Section", "ObjectFilters", "GlobalFilter", "ActionButton", "Drawer"].includes(el.type);
   return (
     <div data-testid="piece-setup" data-kind={el.type}>
       <div style={{ padding: "12px 14px 8px", borderBottom: "1px solid var(--b1)" }}>

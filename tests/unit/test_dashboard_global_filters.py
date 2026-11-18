@@ -81,7 +81,7 @@ def test_a_clicked_value_reads_as_it_always_did():
 
 @pytest.fixture
 def door(con, monkeypatch):
-    tables = {"titles": [("id", "INTEGER"), ("kind", "VARCHAR"), ("added", "TIMESTAMP"), ("two words", "VARCHAR")]}
+    tables = {"titles": [("_row", "BIGINT"), ("id", "INTEGER"), ("kind", "VARCHAR"), ("added", "TIMESTAMP"), ("two words", "VARCHAR")]}
     monkeypatch.setattr(R, "_filter_tables", lambda _c: (tables, "duckdb"))
     monkeypatch.setattr(R, "_filter_rows", lambda _c, sql: con.execute(sql).fetchall())
 

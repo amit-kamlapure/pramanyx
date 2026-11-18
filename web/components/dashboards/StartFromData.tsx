@@ -24,18 +24,19 @@ const nameOf = (t: TableChoice) => (t.schema ? `${t.schema}.${t.table}` : t.tabl
 const words = (name: string) => { const s = name.replace(/[_-]+/g, " ").trim(); return s.charAt(0).toUpperCase() + s.slice(1); };
 
 /** A name as a statement writes it: bare where it can be, quoted as the connection quotes where it cannot. */
-export function tableSql(t: TableChoice, quote: string): string {
+export function tableSql(t: TableChoice, quote: string, sheet = false): string {
   const part = (s: string) => (/^[A-Za-z_][A-Za-z0-9_]*$/.test(s) ? s : `${quote}${s.split(quote).join(quote + quote)}${quote}`);
-  return `SELECT * FROM ${[t.schema, t.table].filter(Boolean).map(part).join(".")}`;
+  // a sheet's row number is the platform's own, never a column of the data
+  return `SELECT *${sheet ? " EXCLUDE (_row)" : ""} FROM ${[t.schema, t.table].filter(Boolean).map(part).join(".")}`;
 }
 
 /** Keep one card of each table and start the dashboard that places them; what could not be read is said by name. */
-export async function startFromTables(connectionId: string, title: string, chosen: TableChoice[], quote: string): Promise<{ id: string; left: string[] }> {
+export async function startFromTables(connectionId: string, title: string, chosen: TableChoice[], quote: string, sheet = false): Promise<{ id: string; left: string[] }> {
   const kept: { card: string; size: string }[] = [];
   const left: string[] = [];
   for (const t of chosen) {
     try {
-      const { card } = await keepDashboardQuery(connectionId, { sql: tableSql(t, quote), shown: { ...QUERY_DEFAULT, as: "table" }, title: words(t.table) });
+      const { card } = await keepDashboardQuery(connectionId, { sql: tableSql(t, quote, sheet), shown: { ...QUERY_DEFAULT, as: "table" }, title: words(t.table) });
       kept.push({ card: card.id, size: "full" });
     } catch (e) {
       left.push(`${nameOf(t)}: ${e instanceof QueryRefused ? e.reasons.join(" ") : (e as Error).message}`);
@@ -51,6 +52,7 @@ export function FromTables({ connectionId, onKept, onBusy }: {
 }) {
   const [tables, setTables] = useState<TableChoice[] | null>(null);
   const [quote, setQuote] = useState('"');
+  const [sheet, setSheet] = useState(false);
   const [name, setName] = useState("");
   const [term, setTerm] = useState("");
   const [picked, setPicked] = useState<string[]>([]);
@@ -62,6 +64,7 @@ export function FromTables({ connectionId, onKept, onBusy }: {
       if (!alive) return;
       const entry = tree.sections.flatMap(s => s.entries).find(e => e.conn_id === connectionId);
       setQuote(/bigquery|mysql/i.test(String(entry?.conn_type ?? "")) ? "`" : '"');
+      setSheet(entry?.conn_type === "sheets");
       setTables((entry?.schemas ?? []).flatMap(s => s.tables.map(t => ({ schema: s.name, table: t.name }))));
     }).catch(e => { if (alive) { setTables([]); setProblem((e as Error).message); } });
     return () => { alive = false; };
@@ -75,7 +78,7 @@ export function FromTables({ connectionId, onKept, onBusy }: {
     setStarting(true); onBusy?.(true); setProblem("");
     try {
       const chosen = (tables ?? []).filter(t => picked.includes(nameOf(t)));
-      const out = await startFromTables(connectionId, name.trim(), chosen, quote);
+      const out = await startFromTables(connectionId, name.trim(), chosen, quote, sheet);
       onKept(out.id);
     } catch (e) {
       setProblem((e as Error).message);
