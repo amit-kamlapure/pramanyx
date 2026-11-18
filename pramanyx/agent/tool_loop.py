@@ -139,6 +139,7 @@ def _run_tool_loop(
     replay_args: Optional[dict] = None,
     stop_check: Optional[Callable[[str], Optional[str]]] = None,
     preface: str = "",
+    finish_now: Optional[Callable[[], bool]] = None,
 ) -> LoopResult:
     """Run one converse turn to an answer, or until the budget runs out.
 
@@ -180,6 +181,9 @@ def _run_tool_loop(
     ask for and must still read as results. It rides the question's own message, never as a tool
     call the model did not make (see `_exchange`); the decision records keep the bare question.
     Empty (every caller but the analyst) leaves the loop exactly as it was.
+
+    ``finish_now`` says the person wants the answer from what is in hand (Answer now): it is read before each step, and
+    once true the loop takes no further step and goes to the tool-free closing request the budget's end goes to.
     """
     by_name = {t.name: t for t in tools}
     wire = [t.as_wire() for t in tools]
@@ -213,6 +217,8 @@ def _run_tool_loop(
 
     asked = f"{question}\n\n{preface}" if preface else question
     for call_index in range(budget):
+        if finish_now is not None and finish_now():
+            break
         turn: ToolTurn = provider.complete_with_tools(
             system, asked, wire, history=history or None)
 

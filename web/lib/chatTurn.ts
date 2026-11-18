@@ -710,6 +710,9 @@ const PART_PROJECTORS: Record<string, (t: ChatTurn, d: Payload) => void> = {
 function projectDeepReport(t: ChatTurn, d: Payload) {
   projectCacheMeta(t, d);
   t.deepReport = (d.answer_report ?? d.ada_report) as AnswerReport;
+  // the report keeps it too, so a conversation read back later still says it was answered early
+  const kept = (t.deepReport as { answered_early?: unknown } | null)?.answered_early;
+  if (typeof kept === "string") t.answeredEarly = kept;
   t.reportStream = null;
   t.queryMode = (d.query_mode as string) ?? "investigate";
   t.statusText = null;

@@ -40,6 +40,7 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Any, Callable, Optional
 
+from pramanyx.agent import answer_now
 from pramanyx.agent.tool_loop import LoopResult, LoopStep, ToolSpec, run_tool_loop
 
 logger = logging.getLogger(__name__)
@@ -2237,6 +2238,8 @@ def run_analyst(
             site="analyst.tool",
             stop_check=lambda _answer: _every_result_warned(turn),
             preface=_measured_preface(turn),
+            # Answer now (punch list 89): the person's word ends the looking, and what was found is written up.
+            finish_now=lambda: answer_now.was_asked(inv_id),
             # JD-4: the builder's arguments. `intake` is MODEL OUTPUT (the intake step's) and cannot be
             # recomputed, and it is where the analyst's state lives — `_spec_section(intake)` sits
             # mid-prompt — so it is the argument a shuffle actually swaps. Serialised to a string
@@ -2254,6 +2257,7 @@ def run_analyst(
         )
 
     answer = (result.answer or "").strip()
+    early = {"answered_early": answer_now.SAID} if answer_now.was_asked(inv_id) else {}
     state["_analyst_conclusion"] = answer
     # P1 — the structured conclusion, when the turn ended on `conclude`; None when it ended in
     # prose (the flag off, or the budget's tool-free closing request), which is the path as before.
@@ -2274,6 +2278,8 @@ def run_analyst(
         except Exception:
             logger.warning("analyst: synthesis failed; the phases stand without a report",
                            exc_info=True)
+    if early and report is None and answer:   # an answer with no report has only its words to say it was answered early
+        answer = f"{answer}\n\n{answer_now.SAID}"
     if report is not None:
         # The question's shape rides the report — a describe answer measured what was asked and
         # tested no hypotheses, and the trace said "Multi-hypothesis analysis" over every one.
@@ -2282,8 +2288,9 @@ def run_analyst(
             str(t) for p in (state.get("investigation_phases") or [])
             for f in (p.get("findings") or [])
             for t in _tables_of(f.get("sql") or "")})})
+        report.update(early)
         emit("answer_report", {"answer_report": report, "investigation_id": inv_id or None,
-                               "query_mode": "investigate", "mode": "investigate"})
+                               "query_mode": "investigate", "mode": "investigate", **early})
     if persist and inv_id:
         try:
             from pramanyx.db.history import complete_investigation, fail_investigation
