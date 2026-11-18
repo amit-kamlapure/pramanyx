@@ -411,16 +411,6 @@ def _row_policy_principal() -> "tuple[str, str, list[str]] | None":
 
 def enforce_row_policy(conn: "DatabaseConnection", hypothesis_id: str,
                        sql: str) -> "tuple[str, QueryResult | None]":
-    """The row and object policies (`_enforce_row_policy`) over the statement without its stamp of who asked (punch
-    list 96), which is put back on what they return: a rewrite never loses it, and never reads it as part of the query."""
-    from pramanyx.db.doors import split_stamp
-    body, stamp = split_stamp(sql)
-    out, blocked = _enforce_row_policy(conn, hypothesis_id, body)
-    return (out + stamp if stamp and blocked is None else out), blocked
-
-
-def _enforce_row_policy(conn: "DatabaseConnection", hypothesis_id: str,
-                        sql: str) -> "tuple[str, QueryResult | None]":
     """RBAC row-level policy (Rec 7): AND the caller's per-role row filters into ``sql`` before execution.
 
     Returns ``(sql, None)`` to proceed with the (possibly rewritten) SQL, or ``(sql, blocked_result)`` to
@@ -433,16 +423,26 @@ def _enforce_row_policy(conn: "DatabaseConnection", hypothesis_id: str,
     so the wrapped subqueries transpile with the rest of the statement.
 
     Arc ED, ED-1 — then the released ontology's own declarations: the reader's objects and masked properties, as the
-    object doors apply them (`_enforce_object_policies`)."""
+    object doors apply them (`_enforce_object_policies`).
+
+    Punch list 96 — the policies read the statement without its stamp of who asked (`db.doors.stamp_asker`), which is
+    put back on what they hand on: a rewrite never loses it, and never reads it as part of the query."""
+    from pramanyx.db.doors import split_stamp
+    sql, stamp = split_stamp(sql)
+
+    def onward(statement: str) -> "tuple[str, QueryResult | None]":
+        out, blocked = _enforce_object_policies(conn, hypothesis_id, statement)
+        return (out + stamp if stamp and blocked is None else out), blocked
+
     try:
         ctx = _row_policy_principal()
         if ctx is None:
-            return _enforce_object_policies(conn, hypothesis_id, sql)
+            return onward(sql)
         org, user, roles = ctx
         from pramanyx.rbac.row_policy import resolve_row_filters
         filters = resolve_row_filters(roles, org, user)
         if not filters:
-            return _enforce_object_policies(conn, hypothesis_id, sql)
+            return onward(sql)
         from pramanyx.sql.rls import inject_row_filters
         from pramanyx.db.dialects import authored_dialect
         filtered = inject_row_filters(sql, filters, authored_dialect(conn))
@@ -455,7 +455,7 @@ def _enforce_row_policy(conn: "DatabaseConnection", hypothesis_id: str,
         return sql, QueryResult(
             hypothesis_id=hypothesis_id, sql=sql, columns=[], rows=[], row_count=0,
             error="[ROW POLICY] query blocked — the row-level access policy could not be safely applied")
-    return _enforce_object_policies(conn, hypothesis_id, filtered)
+    return onward(filtered)
 
 
 def _enforce_object_policies(conn: "DatabaseConnection", hypothesis_id: str,
