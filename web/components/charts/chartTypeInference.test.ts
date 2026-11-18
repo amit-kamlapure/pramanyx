@@ -7,7 +7,7 @@
  * the years. The dates bound each row; the measure is by platform.
  */
 import { describe, expect, it } from "vitest";
-import { inferChartType } from "./chartTypeInference";
+import { mapHintFor, inferChartType } from "./chartTypeInference";
 
 const COLUMNS = ["ep", "ap", "records", "ev", "mn", "mx"];
 const ROWS = [
@@ -35,5 +35,30 @@ describe("a per-category summary with date bounds", () => {
     const got = inferChartType(columns, rows);
     expect(got).not.toBeNull();
     expect(got!.xCol).toBe(1);
+  });
+});
+
+describe("the map an answer is drawn as", () => {
+  const POINTS = { columns: ["state", "latitude", "longitude", "locations"], rows: [["SP", -23.1, -47.0, 404268], ["RJ", -22.7, -43.1, 121169], ["MG", -19.8, -44.4, 126336]] };
+  const COUNTRIES = { columns: ["country", "orders"], rows: [["Brazil", 40], ["France", 20], ["Japan", 10]] };
+
+  it("draws rows with coordinates as points, unless the answer chose another chart", () => {
+    expect(mapHintFor("Where are our warehouses?", POINTS.columns, POINTS.rows, "auto")).toBe("point_map");
+    expect(mapHintFor("Where are our warehouses?", POINTS.columns, POINTS.rows, null)).toBe("point_map");
+    expect(mapHintFor("Which state has the most?", POINTS.columns, POINTS.rows, "bar")).toBeNull();
+  });
+
+  it("lets the person's own word win over the chart chosen", () => {
+    expect(mapHintFor("Show these on a map", POINTS.columns, POINTS.rows, "bar")).toBe("point_map");
+    expect(mapHintFor("Orders by country on a map", COUNTRIES.columns, COUNTRIES.rows, "bar")).toBe("choropleth");
+  });
+
+  it("keeps a bar for countries nobody asked to see on a map", () => {
+    expect(mapHintFor("Orders by country", COUNTRIES.columns, COUNTRIES.rows, "auto")).toBeNull();
+  });
+
+  it("offers no map the rows cannot draw, and does not read a mapping table as a map", () => {
+    expect(mapHintFor("Show regions on a map", ["region", "orders"], [["North", 1], ["South", 2], ["East", 3]], "auto")).toBeNull();
+    expect(mapHintFor("Check the mapping table by country", COUNTRIES.columns, COUNTRIES.rows, "auto")).toBeNull();
   });
 });

@@ -64,6 +64,7 @@ import {
 } from "@/lib/format";
 import { Chart } from "@/components/Chart";
 import { ResultChartCard } from "@/components/charts/ResultChartCard";
+import { mapHintFor } from "@/components/charts/chartTypeInference";
 import { deriveFigureSource } from "@/lib/figureSource";
 import {
   DATE_COL,
@@ -361,7 +362,8 @@ function ResultFigure({
   /** ON-3 — the connection whose object catalog turns key columns into object links. */
   connectionId?: string;
 }) {
-  const { columns, rows, chartType } = turn;
+  const { columns, rows } = turn;
+  const chartType = mapHintFor(turn.question, columns, rows, turn.chartType) ?? turn.chartType;
   // Before any early return: a hook cannot be skipped while the rows are still arriving.
   const objectLinks = useObjectColumnLinks(columns, connectionId, { rows });
   if (!columns.length) return streaming ? <FigureSkeleton /> : null;
