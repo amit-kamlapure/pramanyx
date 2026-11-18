@@ -87,11 +87,11 @@ function Marks({ item }: { item: HomeItem }) {
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
       {item.pinned
-        ? <Chip testId="dashboard-pinned"><Icon name="pin" size={11} /> Pinned</Chip>
-        : <span className="aug-fs-sm" style={{ color: "var(--t2)" }}>{item.state}</span>}
+        ? <Chip testId="dashboard-pinned"><Icon name="pin" size={12} /> <span className="aug-fs-ui">Pinned</span></Chip>
+        : <span className="aug-fs-ui" style={{ color: "var(--t2)" }}>{item.state}</span>}
       {item.mark && (
         <Chip tone={item.mark.status === "certified" ? "up" : "amber"} title={certificationTitle(item.mark)}>
-          {item.mark.status === "certified" ? "Certified" : "Deprecated"}
+          <span className="aug-fs-ui">{item.mark.status === "certified" ? "Certified" : "Deprecated"}</span>
         </Chip>
       )}
     </span>
@@ -119,7 +119,7 @@ function Name({ item, onOpen }: { item: HomeItem; onOpen: () => void }) {
   return (
     <Button variant="plain" size="xs" data-testid="dashboard-open" onClick={e => { e.stopPropagation(); onOpen(); }}
       title={item.title} style={{ minWidth: 0, maxWidth: "100%", justifyContent: "flex-start", paddingInline: 0, color: "var(--t1)", fontWeight: 600 }}>
-      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.title}</span>
+      <span className="aug-fs-ui" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.title}</span>
     </Button>
   );
 }
@@ -129,7 +129,7 @@ const CELL: CSSProperties = { padding: "8px 12px", borderBottom: "1px solid var(
 
 function ListView({ items, stars, onStar, onOpen }: ViewProps) {
   return (
-    <table className="aug-fs-sm" data-testid="dashboards-list" style={{ width: "100%", borderCollapse: "collapse" }}>
+    <table className="aug-fs-ui" data-testid="dashboards-list" style={{ width: "100%", borderCollapse: "collapse" }}>
       <thead><tr><th style={HEAD}>Name</th><th style={HEAD}>Modified</th><th style={HEAD}>Owner</th><th style={HEAD}>Status</th></tr></thead>
       <tbody>
         {items.map(item => (
@@ -170,8 +170,8 @@ function DetailView({ items, stars, onStar, onOpen }: ViewProps) {
           <Miniature item={item} height={84} />
           <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
             <Name item={item} onOpen={() => onOpen(item.id)} />
-            {item.change && <div className="aug-fs-sm" style={{ color: "var(--t2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.change}</div>}
-            <div className="aug-fs-xs" style={{ color: "var(--t3)" }}>{facts(item)}</div>
+            {item.change && <div className="aug-fs-ui" style={{ color: "var(--t2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.change}</div>}
+            <div className="aug-fs-ui" style={{ color: "var(--t3)" }}>{facts(item)}</div>
           </div>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
             <Marks item={item} />
@@ -194,7 +194,7 @@ function GridView({ items, stars, onStar, onOpen }: ViewProps) {
             <span style={{ flex: 1, minWidth: 0, display: "flex" }}><Name item={item} onOpen={() => onOpen(item.id)} /></span>
             <Star item={item} on={stars.includes(item.id)} onToggle={() => onStar(item.id)} />
           </div>
-          <div className="aug-fs-xs" style={{ color: "var(--t3)" }}>{item.modifiedAt ? `${modifiedWords(item.modifiedAt)} · ` : ""}{item.owner}</div>
+          <div className="aug-fs-ui" style={{ color: "var(--t3)" }}>{item.modifiedAt ? `${modifiedWords(item.modifiedAt)} · ` : ""}{item.owner}</div>
           <Marks item={item} />
         </div>
       ))}
@@ -223,15 +223,15 @@ export function DashboardHome({ connectionId, items, onOpen, children }: {
         leading={<Icon name="search" size={15} />} value={filters.words} onChange={e => setFilters(f => ({ ...f, words: e.target.value }))} />
       <div role="group" aria-label="Filters" style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
         {CHIPS.map(c => (
-          <Button key={c.key} size="xs" variant={filters[c.key] ? "secondary" : "ghost"} aria-pressed={filters[c.key]} data-testid={`dashboards-filter-${c.key}`}
+          <Button key={c.key} size="sm" variant={filters[c.key] ? "secondary" : "ghost"} aria-pressed={filters[c.key]} data-testid={`dashboards-filter-${c.key}`}
             onClick={() => setFilters(f => ({ ...f, [c.key]: !f[c.key] }))}>
-            <Icon name={c.icon} size={13} /> {c.label}
+            <Icon name={c.icon} size={14} /> <span className="aug-fs-ui">{c.label}</span>
           </Button>
         ))}
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 6 }}>
         <span className="aug-fs-ui" style={{ fontWeight: 600, color: "var(--t1)" }}>{filtering ? "Matching dashboards" : "All dashboards"}</span>
-        <span className="aug-fs-sm" data-testid="dashboards-count" style={{ color: "var(--t3)", fontVariantNumeric: "tabular-nums" }}>
+        <span className="aug-fs-ui" data-testid="dashboards-count" style={{ color: "var(--t3)", fontVariantNumeric: "tabular-nums" }}>
           {filtering ? `${shown.length} of ${items.length}` : items.length}
         </span>
         <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 8 }}>
@@ -242,14 +242,14 @@ export function DashboardHome({ connectionId, items, onOpen, children }: {
           <DropdownMenu.Root>
             <DropdownMenu.Trigger>
               <Button size="sm" variant="ghost" data-testid="dashboards-view" aria-label={`View: ${VIEW_WORDS[view].label}`}>
-                <Icon name={VIEW_WORDS[view].icon} size={14} /> {VIEW_WORDS[view].label} <Icon name="chevd" size={12} />
+                <Icon name={VIEW_WORDS[view].icon} size={14} /> <span className="aug-fs-ui">{VIEW_WORDS[view].label}</span> <Icon name="chevd" size={12} />
               </Button>
             </DropdownMenu.Trigger>
             <DropdownMenu.Content size="1" align="end">
               <DropdownMenu.RadioGroup value={view} onValueChange={v => { if (isView(v)) chooseView(v); }}>
                 {HOME_VIEWS.map(v => (
                   <DropdownMenu.RadioItem key={v} value={v} data-testid={`dashboards-view-${v}`}>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><Icon name={VIEW_WORDS[v].icon} size={14} /> {VIEW_WORDS[v].label}</span>
+                    <span className="aug-fs-ui" style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><Icon name={VIEW_WORDS[v].icon} size={14} /> {VIEW_WORDS[v].label}</span>
                   </DropdownMenu.RadioItem>
                 ))}
               </DropdownMenu.RadioGroup>
@@ -258,9 +258,9 @@ export function DashboardHome({ connectionId, items, onOpen, children }: {
         </span>
       </div>
       {shown.length > 0 ? <Drawn items={shown} stars={stars} onStar={toggleStar} onOpen={onOpen} /> : (
-        <div className="aug-fs-sm" data-testid="dashboards-none-match" style={{ display: "flex", alignItems: "center", gap: 10, padding: "20px 12px", color: "var(--t2)" }}>
+        <div className="aug-fs-ui" data-testid="dashboards-none-match" style={{ display: "flex", alignItems: "center", gap: 10, padding: "20px 12px", color: "var(--t2)" }}>
           No dashboard matches these filters.
-          <Button size="xs" variant="ghost" onClick={() => setFilters(NO_FILTERS)}>Clear filters</Button>
+          <Button size="sm" variant="ghost" onClick={() => setFilters(NO_FILTERS)}><span className="aug-fs-ui">Clear filters</span></Button>
         </div>
       )}
       {children}

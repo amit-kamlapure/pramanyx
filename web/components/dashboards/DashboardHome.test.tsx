@@ -115,6 +115,17 @@ describe("the home", () => {
     expect(screen.getAllByTestId("dashboard-miniature").length).toBe(3);             // this App's fixture says no layout
   });
 
+  it("writes names and details at the platform's reading size, in every view", async () => {
+    prefs.getMyPreferences.mockResolvedValue({ user: "local", preferences: { dashboards_view: "grid" } });
+    draw();
+    const grid = await screen.findByTestId("dashboards-grid");
+    expect(within(grid).getAllByText("Returns")[0]).toHaveClass("aug-fs-ui");
+    expect(within(grid).getByText(/ago · You/)).toHaveClass("aug-fs-ui");
+    expect(within(grid).getByText("Pinned")).toHaveClass("aug-fs-ui");
+    // a chip's own class is its shape: the words inside it are at the reading size
+    for (const small of grid.querySelectorAll(".aug-fs-xs, .aug-fs-sm")) expect(small.querySelector(".aug-fs-ui")).not.toBeNull();
+  });
+
   it("draws the detail with what last changed and the facts", async () => {
     prefs.getMyPreferences.mockResolvedValue({ user: "local", preferences: { dashboards_view: "detail" } });
     draw();
