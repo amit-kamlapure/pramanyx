@@ -36,6 +36,11 @@ export async function setCertification(t: CertTarget, status: CertStatus | "", w
   return ((await res.json()) as { certification: Certification | null }).certification;
 }
 
+/** A dashboard as the mark names it: its connection, its owner and its id — the three that make it one dashboard. */
+export function dashboardRef(connectionId: string, owner: string, dashboardId: string): string {
+  return `${connectionId}:${owner}:${dashboardId}`;
+}
+
 /** The mark's title: who said it, and why. */
 export function certificationTitle(c: Certification): string {
   const who = String(c.by || "").replace(/^user:/, "");

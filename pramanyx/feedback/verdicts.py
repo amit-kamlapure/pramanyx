@@ -405,6 +405,26 @@ def list_verdicts(connection_id: Optional[str] = None, limit: int = 50) -> list[
     return [dict(r) for r in rows]
 
 
+def accepted_by(person: str, connection_id: str, limit: int = 200) -> list[dict]:
+    """The answers ``person`` said were right on ``connection_id``, newest first (punch list 86: a person's standing is
+    read from their own verdicts). ``person`` as a verdict names its person, ``user:<id>``; an unnamed verdict (from
+    before verdicts named a person) is nobody's."""
+    who = (person or "").strip()
+    if not who:
+        return []
+    who = who if who.startswith("user:") else f"user:{who}"
+    c = _conn()
+    try:
+        rows = c.execute(
+            "SELECT investigation_id, created_at FROM finding_verdicts WHERE org_id=? AND connection_id=? "
+            "AND verdict='accept' AND lower(judged_by)=lower(?) ORDER BY id DESC LIMIT ?",
+            (current_org_id(), connection_id, who, max(1, min(int(limit), 1000))),
+        ).fetchall()
+    finally:
+        c.close()
+    return [dict(r) for r in rows]
+
+
 def list_for_export(kinds: tuple[str, ...] = ("accept",), *, require_sql: bool = True,
                     limit: int = 100000) -> list[dict]:
     """Verdicts as TRAINING material, oldest first — MI-3's read path.

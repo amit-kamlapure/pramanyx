@@ -17,6 +17,7 @@ reader, and it is the one place those words live.
 """
 from __future__ import annotations
 
+import re
 from contextvars import ContextVar
 from typing import Any, Callable, Iterable, Optional
 
@@ -67,6 +68,8 @@ WORDS: dict[str, str] = {
     "bytes-processed": "read {d} bytes on the engine",
     "bytes-billed": "billed by the engine for {d} bytes",
     "cache-hit": "answered from the engine's result cache: nothing billed",
+    # Punch list 96 (the user, 2026-11-18): the engine's own query history names who asked.
+    "stamped": "carries who asked, for the engine's own query history",
 }
 
 #: The guards a statement can be checked by, as a reader knows them.
@@ -157,6 +160,44 @@ def engine_posture(conn: Any) -> Optional[str]:
     return "engine-read-write" if read_only is False else "engine-undeclared"
 
 
+#: What a name may keep inside the stamp's comment: never a character that could close it or start another statement.
+_STAMP_UNSAFE = re.compile(r"[^A-Za-z0-9@._+\-]")
+
+
+def stamp_asker(statement: str, *, internal: bool = False) -> str:
+    """``statement`` with who asked written on it, for the engine's own query history (punch list 96; the user,
+    2026-11-18: "Stamp who asked, but we do per-person sign-in later"). Every connection is queried with its own
+    credentials, so a warehouse's history and audit name the connection and never the person; this comment names them.
+    It enforces nothing — the warehouse's row filters still see the connection — which per-person sign-in will change.
+
+    A trailing block comment, after any closing semicolon is taken off: a statement the door later wraps
+    (``SELECT * FROM (…) LIMIT n``) keeps its parentheses, and a check that reads how the statement starts reads it
+    as it was. Platform plumbing (``internal``) and a statement with nobody asking carry nothing."""
+    if internal:
+        return statement
+    try:
+        from pramanyx.db.history import person_now
+        who = _STAMP_UNSAFE.sub("", person_now() or "")[:120]
+    except Exception:  # noqa: BLE001 — who asked cannot be read: the statement goes as written
+        who = ""
+    if not who or not (statement or "").strip():
+        return statement
+    body = statement.rstrip()
+    if body.endswith(";"):
+        body = body[:-1].rstrip()
+    return f"{body}\n/* pramanyx asked_by={who} */"
+
+
+_STAMP_TAIL = re.compile(r"\n/\* pramanyx asked_by=[A-Za-z0-9@._+\-]* \*/\s*$")
+
+
+def split_stamp(statement: str) -> tuple[str, str]:
+    """``(statement without its stamp, the stamp)`` — for a step that rewrites the statement (the row policy), which takes
+    the stamp off and puts it back, so who asked reaches the engine whatever the rewrite does with comments."""
+    found = _STAMP_TAIL.search(statement or "")
+    return (statement[:found.start()], statement[found.start():]) if found else (statement, "")
+
+
 def through_door(conn: Any, sql: str, sql_dialect: Optional[str], run: Callable[[str], Any], *,
                  internal: bool = False) -> Any:
     """One statement through a connection's door, with the path it took stamped on its result.
@@ -180,6 +221,10 @@ def through_door(conn: Any, sql: str, sql_dialect: Optional[str], run: Callable[
         statement = sql_for_engine(conn, sql, sql_dialect)
         if statement != sql:
             passed(f"translated:duckdb→{getattr(conn, 'dialect', '')}")
+        stamped = stamp_asker(statement, internal=internal)
+        if stamped != statement:
+            statement = stamped
+            passed("stamped")
         posture = engine_posture(conn)
         if posture:
             passed(posture)

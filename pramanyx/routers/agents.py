@@ -401,6 +401,18 @@ def create_user_agent(body: UserAgentCreate):
     return agent.model_dump()
 
 
+@router.get("/agents/custom/routing")
+def agents_routing(connection_id: str):
+    """A connection's agents and what the coworker is told about them (punch list 93): its own agent to ask
+    through, or each agent's purpose to choose by. Declared before `/agents/custom/{agent_id}` so the word is not
+    read as an agent's id."""
+    from pramanyx.custom_agents import list_agents
+    from pramanyx.custom_agents.routing import agents_for_connection, routing_words
+    from pramanyx.metastore import scoped_to_workspace
+    agents = agents_for_connection(connection_id, scoped_to_workspace(list_agents(), key="connection_id"))
+    return {"connection_id": connection_id, "agents": agents, "words": routing_words(agents)}
+
+
 @router.get("/agents/custom/{agent_id}")
 def get_user_agent(agent_id: str):
     from pramanyx.custom_agents import get_agent

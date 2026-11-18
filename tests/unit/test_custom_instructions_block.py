@@ -26,7 +26,15 @@ def stores(tmp_path, monkeypatch):
     resolved per call, so setenv wins without a module reload)."""
     monkeypatch.setenv("PRAMANYX_INSTRUCTIONS_FILE", str(tmp_path / "instructions.json"))
     monkeypatch.setenv("PRAMANYX_CANVAS_INSTRUCTIONS_FILE", str(tmp_path / "canvas_instructions.json"))
+    # The organisation's instructions (punch list 94) live in its settings, whose path is fixed at import.
+    from pramanyx.orgsettings import store as org_store
+    monkeypatch.setattr(org_store, "_PATH", tmp_path / "org_settings.json")
     return tmp_path
+
+
+def _organisation_says(text: str) -> None:
+    from pramanyx.orgsettings.store import load_org_settings, save_org_settings
+    save_org_settings(load_org_settings().model_copy(update={"instructions": text}))
 
 
 # ── the block itself ──────────────────────────────────────────────────────────
@@ -60,6 +68,47 @@ def test_canvas_text_is_labelled_as_the_narrower_scope(stores):
     block = I.build_instructions_block("conn_a", "cv_1")
     assert block.index("net_revenue") < block.index("takes precedence")
     assert block.index("takes precedence") < block.index("gross_revenue")
+
+
+# ── the organisation's instructions (punch list 94, 2026-11-18) ───────────────
+
+def test_the_organisation_s_instructions_reach_every_connection(stores):
+    _organisation_says("Fiscal year starts in February.")
+    for conn in ("conn_a", "conn_b"):
+        block = I.build_instructions_block(conn)
+        assert block.startswith("CUSTOM INSTRUCTIONS") and "For the whole organisation:\nFiscal year starts in February." in block
+        assert "For this connection" not in block
+
+
+def test_a_connection_s_own_instructions_follow_the_organisation_s_and_take_precedence(stores):
+    _organisation_says("Revenue means gross_revenue.")
+    I.set_connection_instructions("conn_a", "Revenue means net_revenue.")
+    I.set_canvas_instructions("cv_1", "Exclude test accounts.")
+    block = I.build_instructions_block("conn_a", "cv_1")
+    assert block.index("gross_revenue") < block.index("For this connection (takes precedence on conflict):")
+    assert block.index("For this connection") < block.index("net_revenue") < block.index("For this Canvas") < block.index("Exclude")
+    assert "For this Canvas specifically" in I.build_instructions_block("conn_b", "cv_1")
+
+
+def test_with_nothing_from_the_organisation_the_block_is_what_it_always_was(stores):
+    I.set_connection_instructions("conn_a", "Revenue means net_revenue.")
+    before = I.build_instructions_block("conn_a")
+    assert before == "CUSTOM INSTRUCTIONS (user-authored; follow them when writing SQL and presenting results):\nRevenue means net_revenue.\n\n"
+    _organisation_says("   ")
+    assert I.build_instructions_block("conn_a") == before
+
+
+def test_what_the_settings_page_saves_is_what_the_prompt_gets(stores):
+    """Through the door the Settings page uses: the whole settings, PUT."""
+    from fastapi.testclient import TestClient
+    from pramanyx.api import app
+    client = TestClient(app)
+    whole = client.get("/org-settings").json()
+    r = client.put("/org-settings", json={**whole, "instructions": "  Exclude test accounts.  "})
+    assert r.status_code == 200, r.text
+    assert r.json()["instructions"] == "Exclude test accounts."
+    by_key = {b.key: b for b in G.build_grounding_context("q", "conn_a").blocks}
+    assert by_key["instructions"].present and "Exclude test accounts." in by_key["instructions"].content
 
 
 # ── the grounding context (the receipt == the prompt's blocks) ────────────────

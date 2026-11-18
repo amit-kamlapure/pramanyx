@@ -88,6 +88,8 @@ turned back on from the interface.
   answer, "Read the definition of the metric: gmv" for a read. A row opens to the SQL and the rows, or to what
   came back. The shell's second fold, one per group of calls, is gone; the turn's own fold stays, and folds all
   of it — the calls and what was said between them — down to the answer.
+- **No thinking in the conversation** (2026-11-18). Opened, a turn's work is what was done and what the agent said;
+  the model's own thinking is not drawn there ("too verbose") and stays, every word, in the conversation's Trajectory.
 - **A running turn is folded to its latest row.** While an answer is worked on, one row shows — the call still
   running, or the last one made — above the shell's running line, which carries "Show the work" to open it all.
   The shell keeps a running turn wide open; a long one pushed the question off the screen. The next run starts
@@ -114,16 +116,38 @@ turned back on from the interface.
   schedules and automations (`/automations`), in a frame: the one list, where a person makes a schedule, changes
   when it runs, mutes it, runs it now and reads what each run did. The one-list view is the shell's own option,
   chosen once on a first visit.
+- **Past conversations, searched by the agent** (2026-11-18). Asked "what did we find about returns last week?", the
+  agent searches and reads the person's own past conversations (the shell's session tools, over the sidebar's search
+  index). A person's own coworker holds only theirs; the install's first coworker searches only while one person has
+  used it, and refuses once a second has (`plugins/home`, `recallRefusal`).
+- **Asked in the conversation** (2026-11-18). What the coworker asks before doing — setting up a schedule, drafting
+  what a word means — is asked under the step that waits on it, with Reject and Allow once, and the box at the foot of
+  the page says where the question is (it asks there only if the step is not drawn). The shell's own card for it,
+  which took the question box's place under a strip of its own, is not drawn for Pramanyx's steps; the answer goes to
+  the same request, so what is recorded is the person's own click, as before.
+- **A deck of the conversation** (2026-11-18). Asked for slides or a PowerPoint of the conversation, or of some of
+  its answers, the agent names those answers to `deck_of_answers`, and Pramanyx builds one deck from their stored
+  reports, each answer as its own export draws it and each figure citing its own receipt (`GET /exports/answers`).
+  The step shows what the deck holds, in order, and the download; the model never makes slides itself.
+- **The person's own Drive** (2026-11-18). Asked for a file someone made — "the Q3 budget sheet", "last week's board
+  deck" — the agent searches the person's own Google Drive by words in file names (`search_my_drive`, through
+  `GET /integrations/drive/files`): names, types, dates and links, never contents, and only through their own Google
+  connection. With none, the step says how to connect one. Each file is a link to Google's own page.
 - **Anything on a schedule, from a sentence** (2026-11-16). Asked to have something happen on a schedule — a
   question asked again, a summary, a Slack post, an email; every Monday, or once in five minutes — the agent passes
-  the person's own words to `schedule`, and the platform's own designer (the one behind the Automations page's
+  the person's own words to `schedule` (a call that drops their words saying when — "once", "in 4 minutes", "every
+  Monday", "at 9" — goes back to the agent with their sentence to copy before anyone is asked to allow it, 2026-11-18),
+  and the platform's own designer (the one behind the Automations page's
   sentence box, `automations/propose.py`) drafts the whole chain from what the install has: when it runs, what it
   does, where it goes. The same checks a save runs refuse a draft that could not be saved; a draft that left a
   choice open (a Slack channel the person did not name) is not made, and the agent asks. What is made is one of
   Pramanyx's automations: it starts at its first scheduled time, runs whether or not the coworker is open, is
   listed under Schedules, and opens on the canvas, where a person can change it by hand. Under the turn that made
   it is a card that draws no copy: it reads where the schedule stands each time it is drawn, and **shows each run's
-  result here** — "deliver it here" needs no sending step. A Slack post a model drafted waits for a person on each
+  result here** — "deliver it here" needs no sending step. The card is the harness's own task card in its own tokens,
+  buttons and icons (a clock tile, the name, when it runs, "next run in 28 min"), with Run now and a menu to open the
+  schedule or switch it off or on — each the person's own click, asked of the platform as them (2026-11-18). Under it,
+  unframed: what each run does, the latest run's answer whole and the earlier ones a line each. A Slack post a model drafted waits for a person on each
   run until one says "always allow"; an email from a new schedule is held at departure while it is on probation.
   Its times are read in a zone the person named, else their own saved clock, else their browser's (the shell tells
   the agent which, on every message), else the organisation's, else UTC — the platform's one clock
@@ -288,9 +312,10 @@ admin allows "Let the coworker ask its models through Pramanyx" in Settings ▸ 
   in. A bare whole number under 1,000 is not checked, as the gate does not check one. Nothing is held: the answer is
   already shown. It has no Right/Wrong of its own. A helper's answers are kept on this machine (`$DSH_HOME/helpers`) and are not in Pramanyx's store.
 - **A schedule's result is shown, not sent, here.** The shell's scheduler put each run into a chat as a new turn,
-  which the agent then answered. Here a run's result appears in the card under the request the next time the
-  conversation is drawn: nothing starts a turn or notifies the person when it lands. Only the last three runs are
-  shown. A request needing a step the platform has none of — the news from the web — is refused with the reason.
+  which the agent then answered. Here a run's result appears in the card under the request, and the conversation's
+  row in the sidebar is marked when a run lands, until it is opened (2026-11-18): the coworker reads the runs of
+  each schedule a conversation made every two minutes, as the person. Nothing starts a turn, and no notification
+  leaves the page; a schedule made before 2026-11-18 is not watched. Only the last three runs are shown. A request needing a step the platform has none of — the news from the web — is refused with the reason.
 - **A schedule made here spends model calls unattended.** It is a person's own request, so the organisation's
   setting for model work nobody asked for does not apply to it; nothing else caps it but the usage limits.
 - The Schedules page opens on the connection last chosen on the first screen, and the frame takes the app's own

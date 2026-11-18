@@ -223,6 +223,25 @@ def test_only_its_owner_shares_an_upload_and_never_through_an_agent(corpus, iden
         K.share_document("nothing", K.DocumentSharing(sharing="org"), request=plain)
 
 
+def test_the_list_says_who_reads_each_upload_and_whose_it_is_to_share(corpus, identity, monkeypatch):
+    """Punch list 82: the Documents page shows who may read an upload and gives its owner Share; the server says whose
+    it is, so the page never matches names itself."""
+    from pramanyx.knowledge import blobs
+    from pramanyx.routers import knowledge as K
+    monkeypatch.setattr(blobs, "info", lambda doc_id: {})
+    corpus("upload-ana", A.upload_access(ANA))
+    corpus("upload-old")
+    identity(ANA)
+    rows = {r["doc_id"]: r for r in K.list_documents_endpoint()}
+    assert rows["upload-ana"]["yours"] is True and rows["upload-ana"]["access"]["owner"] == ANA
+    assert rows["upload-ana"]["access"]["sharing"] == A.CHOSEN
+    assert rows["upload-old"]["yours"] is False and rows["upload-old"]["access"]["sharing"] == A.ORG
+    K.share_document("upload-ana", K.DocumentSharing(sharing="org"), request=None)
+    identity(BEN)
+    rows = {r["doc_id"]: r for r in K.list_documents_endpoint()}
+    assert rows["upload-ana"]["yours"] is False and rows["upload-ana"]["access"]["sharing"] == A.ORG
+
+
 def test_the_upload_door_stamps_its_uploader(monkeypatch, identity):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient

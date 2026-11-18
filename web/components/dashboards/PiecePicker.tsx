@@ -16,7 +16,6 @@ import {
   entityFields, isCategory, isNumber, isText, isTime, nameField, placesOf, ranked, timesOf, type EntityFields,
 } from "@/components/dashboards/PieceSetup";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
 import { SelectField } from "@/components/ui/select";
@@ -31,11 +30,11 @@ import { getProcesses } from "@/lib/objectTypes";
 
 /** A piece the page places with its own composer — a card from the store, a note in the person's words, an image they
  *  upload, a recorded finding — in the section the picker was opened for. */
-export type HandOff = "card" | "note" | "image" | "finding" | "query";
-const HANDED: readonly string[] = ["card", "note", "image", "finding", "query"];
+export type HandOff = "card" | "note" | "image" | "finding" | "query" | "question" | "ontology";
+const HANDED: readonly string[] = ["card", "note", "image", "finding", "query", "question", "ontology"];
 
 type Placed = "ObjectTable" | "ObjectDetail" | "ObjectFigure" | "ObjectChart" | "ObjectBreakdown" | "ProcessBoard"
-  | "ActionButtons" | "ObjectList" | "ObjectMap" | "ObjectTimeline" | "ChooseOne" | "ObjectSearch";
+  | "ActionButtons" | "ObjectList" | "ObjectMap" | "ObjectTimeline" | "ChooseOne" | "ObjectSearch" | "Period";
 /** "Linked" places two things: a set of what the chosen object links to, and a table of it; a drawer is the dashboard's own,
  *  holding a detail of the object it opens on. */
 type Kind = Placed | "ObjectFilters" | "Linked" | "Drawer" | HandOff;
@@ -49,6 +48,7 @@ const GROUPS: { group: string; pieces: Entry[] }[] = [
     { kind: "ObjectDetail", label: "Object detail", says: "The chosen object's properties and its actions." },
     { kind: "Linked", label: "Linked objects", says: "What the chosen one links to — an order's lines." },
     { kind: "Drawer", label: "Drawer", says: "The chosen one, opened beside the page." },
+    { kind: "ontology", label: "From the ontology, by id", says: "A process board, a table, a detail or a button, named by its id." },
   ] },
   { group: "Measure", pieces: [
     { kind: "ObjectFigure", label: "Figure", says: "One number of a set, beside the whole." },
@@ -58,8 +58,10 @@ const GROUPS: { group: string; pieces: Entry[] }[] = [
     { kind: "card", label: "Card", says: "A measured card from the card store." },
     { kind: "query", label: "Your own query", says: "SQL over any table, shown as a table, a figure or a chart." },
     { kind: "finding", label: "Finding", says: "A recorded finding, with its evidence." },
+    { kind: "question", label: "Question", says: "Asked in words, answered by the agent on a rhythm." },
   ] },
   { group: "Filter", pieces: [
+    { kind: "Period", label: "Period · a date range", says: "The period every card is cut to, on the dashboard; a reader chooses another." },
     { kind: "ObjectFilters", label: "Filter column", says: "Values with how many hold each; a reader ticks." },
     { kind: "ObjectSearch", label: "Search", says: "Words that narrow every piece over the same objects." },
     { kind: "ChooseOne", label: "Choose one", says: "One object found by name, for the pieces that follow it." },
@@ -91,8 +93,13 @@ function firstEntity(spec: DashboardSpec): string {
   return "";
 }
 
-export function PiecePicker({ spec, section, connectionId, schema, onPlace, onHandOff, onClose }: {
+/** Which of the groups the canvas toolbar asked for: a chart (what measures, and what shows objects), a filter, or all. */
+const ONLY: Record<"chart" | "filter", string[]> = { chart: ["Measure", "Show objects"], filter: ["Filter"] };
+
+export function PiecePicker({ spec, section, connectionId, schema, onPlace, onHandOff, onClose, only }: {
   spec: DashboardSpec;
+  /** The canvas toolbar's ask (2026-11-18): only the pieces for a chart, or for a filter; every piece without one. */
+  only?: "chart" | "filter" | "all" | null;
   /** The section a piece goes in; the first that holds pieces when none is named. */
   section: string | null;
   connectionId: string;
@@ -102,6 +109,8 @@ export function PiecePicker({ spec, section, connectionId, schema, onPlace, onHa
   onClose: () => void;
 }) {
   const target = section ?? sectionsOf(spec)[0]?.key ?? null;
+  const [every, setEvery] = useState(false);
+  const groups = only && only !== "all" && !every ? ONLY[only] : null;
   const sectionTitle = target ? String(spec.elements[target]?.props.title ?? "the section") : "";
   const [entities, setEntities] = useState<{ value: string; label: string }[]>([]);
   const [entity, setEntity] = useState(() => firstEntity(spec));
@@ -190,6 +199,10 @@ export function PiecePicker({ spec, section, connectionId, schema, onPlace, onHa
         if (!name) return { why: `${noun} holds no name to find one by. A click in a table or a list chooses one.` };
         return { why: "", props: { ...scope, chooses: freshWireName(spec, `chosen ${noun}`), label: name.path } };
       }
+      case "Period":
+        // v15 — the dashboard's one period, placed as a piece; it reads no entity
+        if (Object.values(spec.elements).some(el => el.type === "Period")) return { why: "The dashboard holds its period already." };
+        return { why: "", props: {} };
       case "ObjectSearch": {
         if (!of) return { why: "Choose what it searches above." };
         if (!ef) return { why: "Reading what the ontology offers…" };
@@ -285,7 +298,7 @@ export function PiecePicker({ spec, section, connectionId, schema, onPlace, onHa
       // what it shows ("The chosen order"), a row of buttons by what they do
       const name = e.kind === "ObjectDetail" ? (chosen.length ? `The ${words(String(p.props.follows))}` : "The chosen one")
         : e.kind === "ActionButtons" ? "Actions" : e.kind === "ProcessBoard" ? words(String(p.props.process)).replace(/^./, c => c.toUpperCase())
-          : e.kind === "ObjectSearch" ? "Search" : e.kind === "ChooseOne" ? `Choose ${/^[aeiou]/i.test(noun) ? "an" : "a"} ${noun.toLowerCase()}` : label;
+          : e.kind === "ObjectSearch" ? "Search" : e.kind === "Period" ? "Period" : e.kind === "ChooseOne" ? `Choose ${/^[aeiou]/i.test(noun) ? "an" : "a"} ${noun.toLowerCase()}` : label;
       next = target ? nameByPiece(placed.spec, target, name) : placed.spec;
     }
     onPlace(next, `${e.label.toLowerCase()} placed by hand`);
@@ -294,18 +307,28 @@ export function PiecePicker({ spec, section, connectionId, schema, onPlace, onHa
 
   const shown = useMemo(() => {
     const q = find.trim().toLowerCase();
-    return GROUPS.map(g => ({ ...g, pieces: g.pieces.filter(p => !q || `${p.label} ${p.says}`.toLowerCase().includes(q)) }))
+    // in the order asked: a chart's list opens on what measures, then what shows objects
+    return (groups ? groups.flatMap(name => GROUPS.filter(g => g.group === name)) : GROUPS)
+      .map(g => ({ ...g, pieces: g.pieces.filter(p => !q || `${p.label} ${p.says}`.toLowerCase().includes(q)) }))
       .filter(g => g.pieces.length);
-  }, [find]);
+  }, [find, groups]);
 
+  // drawn in the builder's setup panel, beside the dashboard it adds to — no longer a dialog over it (the dashboards
+  // study, R2, 2026-11-18): a person sees where the piece goes while choosing it
+  const heading = groups && only === "chart" ? "Add a chart" : groups && only === "filter" ? "Add a filter" : "Add a piece";
   return (
-    <Dialog open onOpenChange={o => { if (!o) onClose(); }}>
-      <DialogContent data-testid="piece-picker" style={{ maxWidth: 640 }}>
-        <DialogHeader>
-          <DialogTitle>Add a piece</DialogTitle>
-          <DialogDescription>{target ? `To ${sectionTitle}.` : "To the dashboard."} Its setup changes the rest after.</DialogDescription>
-        </DialogHeader>
-        <div style={{ display: "grid", gridTemplateColumns: sets.length ? "1fr 1fr" : "1fr", gap: 8 }}>
+    <div data-testid="piece-picker" role="region" aria-label={heading}
+      style={{ display: "flex", flexDirection: "column", gap: 10, padding: "12px 14px" }}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: 600 }}>{heading}</div>
+            <div className="aug-fs-xs" style={{ color: "var(--t3)", marginTop: 2 }}>
+              {target ? `To ${sectionTitle}.` : "To the dashboard."} Its setup changes the rest after.
+            </div>
+          </div>
+          <Button size="icon-sm" variant="ghost" aria-label="Close" data-testid="piece-picker-close" onClick={onClose}><Icon name="close" size={14} /></Button>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
           <SelectField aria-label="What it reads" value={entity} onChange={e => { setEntity(e.target.value); setReads(""); }}>
             {!entity && <option value="">Choose an entity</option>}
             {withUniqueKeys([...entities, ...(entity && !entities.some(x => x.value === entity) ? [{ value: entity, label: words(entity) }] : [])], x => x.value)
@@ -319,11 +342,11 @@ export function PiecePicker({ spec, section, connectionId, schema, onPlace, onHa
           )}
         </div>
         <Input aria-label="Find a piece" placeholder="Find a piece" value={find} onChange={e => setFind(e.target.value)} />
-        <div style={{ display: "flex", flexDirection: "column", gap: 10, maxHeight: 420, overflow: "auto" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {withUniqueKeys(shown, g => g.group).map(([gk, g]) => (
             <div key={gk}>
               <div className="aug-fs-xs" style={{ color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em", margin: "2px 0 4px" }}>{g.group}</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 6 }}>
                 {withUniqueKeys(g.pieces, e => e.kind).map(([ek, e]) => {
                   const p = HANDED.includes(e.kind) ? { why: target ? "" : "There is no section to place it in." } : plan(e.kind as Placed | "ObjectFilters" | "Linked" | "Drawer");
                   return (
@@ -342,7 +365,11 @@ export function PiecePicker({ spec, section, connectionId, schema, onPlace, onHa
           ))}
           {!shown.length && <div className="aug-fs-sm" style={{ color: "var(--t3)" }}>No piece is called that. <Icon name="search" size={12} /></div>}
         </div>
-      </DialogContent>
-    </Dialog>
+        {groups && (
+          <Button size="xs" variant="ghost" data-testid="piece-picker-every" onClick={() => setEvery(true)} style={{ alignSelf: "flex-start" }}>
+            Every piece
+          </Button>
+        )}
+    </div>
   );
 }

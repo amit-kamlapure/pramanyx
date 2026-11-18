@@ -201,6 +201,7 @@ POLICY: dict[tuple[str, str], Optional[P]] = {
     ("DELETE", "/investigations"): P.RESOURCE_DELETE,
     ("DELETE", "/investigations/{inv_id}"): P.RESOURCE_DELETE,
     ("GET", "/investigations/{inv_id}/export"): P.RESOURCE_EXPORT,
+    ("GET", "/exports/answers"): P.RESOURCE_EXPORT,
 }
 
 

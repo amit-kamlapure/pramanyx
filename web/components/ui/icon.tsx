@@ -61,6 +61,8 @@ import {
   IconGridDots,
   IconArrowsSort, IconArrowsSplit2, IconBinaryTree, IconChartDots3, IconGauge, IconHandStop, IconStack2,
   IconList, IconPaperclip, IconNumber123, IconBraces, IconBinary, createReactComponent,
+  IconPointer, IconPhoto, IconArrowBackUp, IconArrowForwardUp, IconLayoutSidebarLeftCollapse,
+  IconLayoutSidebarLeftExpand, IconTypography, IconChartLine,
 } from "@tabler/icons-react";
 import { createContext, useContext, type ComponentType, type ReactNode } from "react";
 
@@ -229,6 +231,17 @@ const ICONS = {
   sort: IconArrowsSort,
   sortasc: IconSortDownNarrowWide,
   sortdesc: IconSortDownWideNarrow,
+
+  // the dashboard builder's canvas toolbar (2026-11-18): choose, add a chart, words, a picture; undo and redo; the
+  // layout pane folded away and opened again
+  pointer: IconPointer,
+  addchart: IconChartLine,
+  words: IconTypography,
+  image: IconPhoto,
+  undo: IconArrowBackUp,
+  redo: IconArrowForwardUp,
+  fold: IconLayoutSidebarLeftCollapse,
+  unfold: IconLayoutSidebarLeftExpand,
 } satisfies Record<string, Glyph>;
 
 /** The drawing a role is — for a check that two rows do not share one (`lib/navDestinations.test.ts`). */

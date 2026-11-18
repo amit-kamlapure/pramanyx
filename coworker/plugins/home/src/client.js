@@ -479,6 +479,77 @@ function SwitcherInTheCorner() {
   return place ? createPortal(h(Switcher), place) : null;
 }
 
+/**
+ * A SCHEDULED RUN REACHES ITS PERSON (punch list 85, 2026-11-18). The coworker's server reads the runs of the schedules
+ * each conversation made and keeps which conversations a run landed in since they were last opened (`/pramanyx-runs`,
+ * `runsReachThePerson`). The sidebar's row carries a mark for each, until the conversation is opened. One read serves
+ * every row, again every half minute.
+ */
+const landed = { unread: {}, listeners: new Set(), started: false };
+
+function publishLanded(unread) {
+  const was = landed.unread;
+  landed.unread = unread && typeof unread === "object" ? unread : {};
+  for (const listen of landed.listeners) listen(landed.unread);
+  // A run newly landed: the schedule's card in its conversation reads its runs again (`answer-card`, `Scheduled`).
+  for (const [conversation, run] of Object.entries(landed.unread)) {
+    if (run && was[conversation]?.at !== run.at) {
+      window.dispatchEvent(new CustomEvent("pramanyx:run-landed", { detail: { automation: String(run.automation || ""), conversation } }));
+    }
+  }
+}
+
+function readLanded() {
+  fetch("/pramanyx-runs", { headers: { accept: "application/json" } })
+    .then((answer) => (answer.ok ? answer.json() : null))
+    .then((got) => { if (got) publishLanded(got.unread); })
+    .catch(() => {});
+}
+
+function useLanded() {
+  const [unread, setUnread] = useState(landed.unread);
+  useEffect(() => {
+    landed.listeners.add(setUnread);
+    if (!landed.started) {
+      landed.started = true;
+      readLanded();
+      setInterval(readLanded, 30_000);
+    }
+    return () => { landed.listeners.delete(setUnread); };
+  }, []);
+  return unread;
+}
+
+/** The time a run landed, in the person's own clock. */
+function landedAt(stamp) {
+  const d = new Date(stamp);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+/** The mark on a conversation's row: a scheduled run landed in it since it was last opened. */
+export function RunLanded({ sessionId }) {
+  const unread = useLanded();
+  const run = unread[String(sessionId)];
+  if (!run) return null;
+  const said = `A scheduled run finished${run.name ? `: ${run.name}` : ""}${run.at ? `, ${landedAt(run.at)}` : ""}. Open the conversation to read it.`;
+  return h("span", { "data-pramanyx-run-landed": "", role: "img", "aria-label": said, title: said,
+                     style: { display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: "currentColor", opacity: 0.8 } });
+}
+
+/** Mounted while a conversation is open: a run that landed in it is read now, so its mark goes. */
+export function SeenWhenOpen({ sessionId }) {
+  const unread = useLanded();
+  const id = String(sessionId || "");
+  const waiting = !!(id && unread[id]);
+  useEffect(() => {
+    if (!waiting) return;
+    fetch("/pramanyx-runs", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ session: id }) })
+      .then(() => { const next = { ...landed.unread }; delete next[id]; publishLanded(next); })
+      .catch(() => {});
+  }, [id, waiting]);
+  return null;
+}
+
 export const inject = ["slots", "uiWorkspace"];
 
 /** The zone this page's browser is in, told to the coworker's server once per load (`keepTheClock`, 2026-11-17): the
@@ -521,4 +592,11 @@ export function apply(ctx) {
   ctx.slots.inject("sidebar.panellist", () =>
     ctx.slots.register({ name: "sidebar.panellist", id: WITH_OTHERS, order: 7, label: () => "With others" }, WithOthersIcon));
   ctx.slots.inject("main", () => ctx.slots.register({ name: "main", key: WITH_OTHERS }, WithOthersPage));
+
+  // A scheduled run that landed while the person was away (punch list 85): marked on its conversation's row until it
+  // is opened.
+  ctx.slots.inject("sidebar.session.row.trailing", () =>
+    ctx.slots.register({ name: "sidebar.session.row.trailing", id: "pramanyx-run-landed", order: 50 }, RunLanded));
+  ctx.slots.inject("conversation.session.header.utilities", () =>
+    ctx.slots.register({ name: "conversation.session.header.utilities", id: "pramanyx-run-seen", order: 99 }, SeenWhenOpen));
 }

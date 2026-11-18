@@ -239,6 +239,14 @@ class PramanyxClient:
                 raise PramanyxError(f"POST {path} failed — is the Pramanyx API running at {self.base_url}? ({e})") from e
         return self._unwrap(r, path)
 
+    async def _delete(self, path: str) -> Any:
+        async with self._mk_client() as c:
+            try:
+                r = await c.delete(path)
+            except httpx.HTTPError as e:
+                raise PramanyxError(f"DELETE {path} failed — is the Pramanyx API running at {self.base_url}? ({e})") from e
+        return self._unwrap(r, path)
+
     async def _post_file(self, path: str, name: str, data: bytes) -> Any:
         async with self._mk_client() as c:
             try:
@@ -489,6 +497,9 @@ class PramanyxClient:
                     acc["error"] = ev.get("message")
                 elif t == "done":
                     acc["status"] = "complete"
+                if ev.get("answered_early"):
+                    # The person had it answer now (punch list 89): the report says less than the run planned.
+                    acc["answered_early"] = ev.get("answered_early")
         except httpx.TimeoutException:
             # A long run exceeded the read timeout. If it has started, hand back the id
             # to poll; otherwise it never got going. (Genuine errors — a 402 lock, a bad
@@ -702,6 +713,47 @@ class PramanyxClient:
         return {"made": got.get("made"), "term": got.get("term"), "area": got.get("area"), "state": got.get("state"),
                 "owner": got.get("owner"), "text": (got.get("statement") or {}).get("text"),
                 "suggestion": got.get("suggested"), "publish_at": got.get("publish_at")}
+
+    async def remember_for_me(self, text: str) -> dict:
+        """Remember something about how the person asks, for them alone (punch list 90)."""
+        return await self._post("/me/memories", json_body={"text": text})
+
+    async def my_memories(self) -> dict:
+        return await self._get("/me/memories")
+
+    async def forget_for_me(self, memory_id: str) -> dict:
+        from urllib.parse import quote
+        await self._delete(f"/me/memories/{quote(memory_id, safe='')}")
+        return {"forgotten": memory_id}
+
+    async def search_my_drive(self, words: str, *, limit: int = 10) -> dict:
+        """Files in the person's own Google Drive whose names hold the words (punch list 91): names and links only."""
+        return await self._get("/integrations/drive/files", params={"words": words, "limit": limit})
+
+    async def deck_of_answers(self, investigation_ids: list[str], *, title: str = "") -> dict:
+        """Several of the person's answers as one PowerPoint deck (punch list 92). Each answer is read first, so one that
+        is gone or not theirs is named instead of breaking the download; the deck itself is built by the platform from
+        the stored reports (`GET /exports/answers`), never by code a model wrote."""
+        from urllib.parse import urlencode
+        wanted = [i for i in dict.fromkeys(str(x).strip() for x in investigation_ids or []) if i]
+        if not wanted:
+            return {"deck": None, "why": "Name the answers the deck is made of: their investigation ids, as each answer returned it."}
+        if len(wanted) > 30:
+            return {"deck": None, "why": "A deck holds at most 30 answers; ask the person which ones it is for."}
+        answers, missing = [], []
+        for inv_id in wanted:
+            try:
+                inv = await self._get(f"/investigations/{inv_id}")
+            except PramanyxError:
+                missing.append(inv_id)
+                continue
+            answers.append({"id": inv_id, "question": str((inv or {}).get("question") or "")[:200]})
+        if not answers:
+            return {"deck": None, "missing": missing, "why": "None of those answers could be read."}
+        query = urlencode({"ids": ",".join(a["id"] for a in answers), **({"title": title.strip()[:120]} if title.strip() else {})})
+        return {"deck": {"title": title.strip()[:120] or (answers[0]["question"] if len(answers) == 1 else f"{len(answers)} answers"),
+                         "answers": answers, "format": "pptx", "download": f"/exports/answers?{query}"},
+                "missing": missing}
 
     async def bring_in_file(self, path: str, *, name: str = "") -> dict:
         """A file the person attached in the coworker, brought into Pramanyx as theirs (the ontology study, Phase 2,

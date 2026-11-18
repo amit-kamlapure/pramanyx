@@ -17,7 +17,7 @@ for plugin in "$here"/plugins/*/; do
   id=$(node -p "require('$plugin/package.json').name")
   NODE_PATH="$modules" npx -y esbuild@0.25.5 "$plugin/src/client.js" \
     --bundle --format=cjs --platform=browser --minify \
-    --external:react --external:react-dom --external:react/jsx-runtime \
+    --external:react --external:react-dom --external:react/jsx-runtime --external:@deepseek-ai/dsh-client-ui-primitives \
     --loader:.png=dataurl \
     "--alias:@=$here/../web" '--define:process.env.NODE_ENV="production"' \
     --log-level=warning --outfile="$tmp/bundle.cjs"

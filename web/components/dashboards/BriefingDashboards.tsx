@@ -33,8 +33,8 @@ import { NewCardComposer } from "@/components/brief/NewCardComposer";
 import type { RangeChoice } from "@/components/brief/BriefRange";
 import type { CardState } from "@/components/brief/PinnedCardBody";
 import { DashboardArrange, type CardLine } from "@/components/dashboards/DashboardArrange";
-import { DashboardBuilder, EditBar } from "@/components/dashboards/DashboardBuilder";
-import { ComposedDashboard, type DashboardDoors, type ReadState } from "@/components/dashboards/ComposedDashboard";
+import { DashboardBuilder, EditBar, type AddWhat, type CanvasTools } from "@/components/dashboards/DashboardBuilder";
+import { ComposedDashboard, type DashboardDoors, type PeriodDoor, type ReadState } from "@/components/dashboards/ComposedDashboard";
 import { FindingPicker } from "@/components/dashboards/FindingPicker";
 import { ObjectDashboardStarter } from "@/components/dashboards/ObjectDashboardStarter";
 import { PackTemplatePicker } from "@/components/dashboards/PackTemplatePicker";
@@ -60,6 +60,7 @@ import { Input } from "@/components/ui/input";
 import { SelectField } from "@/components/ui/select";
 import { TabStrip } from "@/components/ui/tab-strip";
 import { ChromeActions, ChromeFacts, ChromeStatus, ChromeToolbar, useInShell, usePageChrome } from "@/components/shell/PageChrome";
+import { CertificationMark } from "@/components/govern/CertificationMark";
 import { ErrorState, Loading, Refusal } from "@/components/ui/states";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
@@ -72,6 +73,7 @@ import {
   type BriefingRange, type DashboardAudience, type DashboardDrafted, type DashboardKept, type DashboardList, type DashboardVersion,
   type PersonDashboard, type ShapeName, type SharedDashboard, type SharedDashboardListed, type StagedProposal,
 } from "@/lib/api";
+import { dashboardRef } from "@/lib/certification";
 import { appWords } from "@/lib/dashboards/appVersion";
 import { MAX_CAPTION, MAX_NOTE, type Layout } from "@/lib/dashboards/catalog";
 import {
@@ -629,6 +631,20 @@ function PublishPanel({ connectionId, dashboardId, publishedTo, draft = false, r
 /** A dashboard someone else published to a group the person is in or a role they hold: read as it
  *  stands, for the reader's own period, with no door that changes it — and a door to start a
  *  dashboard of their own from it. */
+/** v15 — whether a dashboard holds its period as a piece (`Period`): then it is chosen there, not above the dashboard. */
+function holdsPeriod(spec: unknown): boolean {
+  const els = (spec as DashboardSpec | null | undefined)?.elements;
+  return !!els && Object.values(els).some(e => e?.type === "Period");
+}
+
+/** The period a dashboard's Period piece says it opens on, or null. */
+function periodOpensOn(spec: unknown): string | null {
+  const els = (spec as DashboardSpec | null | undefined)?.elements;
+  const piece = els ? Object.values(els).find(e => e?.type === "Period") : undefined;
+  const o = piece?.props?.opens_on;
+  return typeof o === "string" && o ? o : null;
+}
+
 function SharedDashboardView({ connectionId, schema, owner, dashboardId, range, chosenRange, onRange, onStarted }: {
   connectionId: string; schema?: string; owner: string; dashboardId: string;
   range: BriefingRange | null; chosenRange: RangeChoice; onRange: (c: RangeChoice) => void;
@@ -686,19 +702,24 @@ function SharedDashboardView({ connectionId, schema, owner, dashboardId, range, 
   };
   if (problem) return <ErrorState kind="Not read" what="This shared dashboard could not be read." means={problem} />;
   if (!data) return <div className="aug-fs-sm" data-testid="dashboard-loading" style={{ color: "var(--t3)" }}>Reading the shared dashboard…</div>;
+  const sharedSpec = data.cockpit.spec as DashboardSpec;
   return (
     <div data-testid="dashboard-shared" data-owner={owner} data-dashboard={dashboardId}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
-        <PeriodPicker value={chosenRange} onChange={onRange} showing={data.range.status === "standing" ? null : data.range} />
+        {!holdsPeriod(sharedSpec) && (
+          <PeriodPicker value={chosenRange} onChange={onRange} showing={data.range.status === "standing" ? null : data.range} />
+        )}
         <span className="aug-fs-sm" data-testid="dashboard-shared-by" style={{ color: "var(--t2)" }}>
           An App by {personName(data.published_by)}, for {data.published_to.map(t => t.name).join(", ")} · version {data.cockpit.version} · read-only
         </span>
+        <CertificationMark compact target={{ kind: "dashboard", ref: dashboardRef(connectionId, owner, dashboardId), connectionId }} />
         <Button size="xs" variant="secondary" disabled={busy} style={{ marginLeft: "auto" }} onClick={() => void start()}>
           Start my dashboard from this
         </Button>
       </div>
       {data.ontology && <PinStrip pin={data.ontology} spec={data.cockpit.spec} />}
-      <ComposedDashboard spec={data.cockpit.spec} cards={cards} host={host} doors={doors} sym={data.currency_symbol || "$"}
+      <ComposedDashboard spec={sharedSpec} cards={cards} host={host} doors={doors} sym={data.currency_symbol || "$"}
+        period={{ value: chosenRange, onChange: onRange, showing: data.range.status === "standing" ? null : data.range }}
         images={images} range={range} schema={schema} connectionId={connectionId} dashboardId={`shared:${owner}:${dashboardId}`}
         focus={fx.focus} onFocus={fx.setFocus} />
     </div>
@@ -731,8 +752,6 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
   // The period the cards are read for: the person's pick, else the latest complete month — a
   // dashboard is watched month by month, as the mock showed it.
   const [picked, setChosenRange] = useState<RangeChoice | null>(null);
-  const chosenRange: RangeChoice = picked ?? { preset: "previous_month" };
-  const range: BriefingRange | null = chosenRange.preset === "standing" ? null : chosenRange;
   const [list, setList] = useState<DashboardList | null>(null);
   const [chosen, setChosen] = useState("");
   const [data, setData] = useState<PersonDashboard | null>(null);
@@ -778,7 +797,9 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
   const [writing, setWriting] = useState<{ section: string | null } | null>(null);
   // the picker open, for a section (none: the first that holds pieces); and where a card, a note, an image or a finding
   // handed off from it lands
-  const [adding, setAdding] = useState<{ section: string | null } | null>(null);
+  const [adding, setAdding] = useState<{ section: string | null; only?: AddWhat } | null>(null);
+  // the canvas toolbar's Ask (2026-11-18): the change asked in words, drawn above the canvas while it is open
+  const [asking, setAsking] = useState(false);
   const target = useRef<string | null>(null);
   const [editing, setEditing] = useState(false);
   useEffect(() => {
@@ -799,6 +820,11 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
   const adoptNote = useRef("");
   // Arc AP-1 — a change in the builder, or a resize, drawn at once (`draft`) and kept as one version per burst (`burst`)
   const [draft, setDraft] = useState<DashboardSpec | null>(null);
+  const current = (draft ?? data?.cockpit.spec ?? null) as DashboardSpec | null;
+  // v15 — a dashboard that holds its period as a piece opens on the period that piece says
+  const opensOn = periodOpensOn(current);
+  const chosenRange: RangeChoice = picked ?? (opensOn ? { preset: opensOn } as RangeChoice : { preset: "previous_month" });
+  const range: BriefingRange | null = chosenRange.preset === "standing" ? null : chosenRange;
   // when this browser last saw a burst kept, and whether one is waiting or on its way — the builder's "saved" says them
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [pending, setPending] = useState(false);
@@ -962,7 +988,13 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
   useEffect(() => () => { if (burst.current.timer) sendBurst(); }, [sendBurst]);
 
   // Arc AP-1 — in the builder every change goes through here: drawn at once, kept with the burst, and undoable.
-  const current = (draft ?? data?.cockpit.spec ?? null) as DashboardSpec | null;
+  // v15 — the period, for the Period piece: what the cards are read for, and the reader's choice of another
+  const periodDoor: PeriodDoor | null = data ? {
+    value: chosenRange, onChange: setChosenRange, reading, disabled: busy,
+    showing: data.range.status === "standing" || reading ? null : data.range,
+  } : null;
+  // where the dashboard holds its period as a piece, the period above it goes: it is chosen on the dashboard itself
+  const periodPlaced = holdsPeriod(current);
   const change = useCallback((next: DashboardSpec, note: string) => {
     if (!current) return;
     setStacks(st => ({ past: [...st.past.slice(-49), current], future: [] }));
@@ -1001,7 +1033,12 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
       onRecaption: (key: string, caption: string) => on(s => recaption(s, key, caption), "an image's caption changed by hand"),
       onPlaceTable: (entity: string, segment: string) => on(s => placePiece(s, "ObjectTable", { entity, segment, size: "wide" }).spec,
         "an objects table placed from a process board"),
-      onRegrid: (key: string, box: Box, measured: Record<string, Box>) => on(s => regrid(s, key, box, measured), "resized by hand"),
+      // a size, a place on the grid, or both (free placement, v14): the version says which
+      onRegrid: (key: string, box: Box, measured: Record<string, Box>) => {
+        const was = current?.elements[key]?.props ?? {};
+        const sized = box.w !== was.w || box.h !== was.h;
+        on(s => regrid(s, key, box, measured), sized ? "resized by hand" : "placed on the grid by hand");
+      },
       // the board study — a piece dragged by its header, or Alt+Shift+arrows, lands beside another
       onMove: (key: string, target: string, place: "before" | "after") => on(s => moveTo(s, key, target, place), "moved by hand"),
       onFilterWidth: (grades: number) => on(s => setFilterWidth(s, grades), "the filter column resized by hand"),
@@ -1185,14 +1222,43 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
     const saved = pending ? "Saving…"
       : `saved ${Number.isNaN(at) ? "" : new Date(at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })} · version ${kept.version}`;
     const shut = () => { setComposing(false); setNoting(false); setImaging(false); setPicking(false); setPlacing(false); setQuestioning(false); };
+    // every door of the canvas toolbar puts away what another opened, so one thing is open at a time
+    const only = (open: () => void) => () => { shut(); setAdding(null); setAsking(false); open(); };
+    const placeButtons = async () => {
+      try {
+        const declared = Object.values(await getDeclaredActions(connectionId, schema));
+        if (!declared.length) { toast.error("No action is declared here", { description: "Declare one in Ontology ▸ Actions, then place its button." }); return; }
+        const placed = placePiece(current, "ActionButtons", { buttons: [{ action: declared[0].id }] });
+        if (placed.key) change(placed.spec, "action buttons placed by hand");
+      } catch (e) {
+        toast.error("The declared actions could not be read", { description: (e as Error).message.slice(0, 160) });
+      }
+    };
+    const tools: CanvasTools = {
+      active: asking ? "ask" : adding ? (adding.only === "filter" ? "filter" : "chart")
+        : noting ? "text" : imaging ? "image" : composing || picking || placing || questioning ? "chart" : null,
+      onChoose: only(() => {}),
+      onAsk: asking ? only(() => {}) : only(() => setAsking(true)),
+      onText: only(() => setNoting(true)),
+      onImage: only(() => setImaging(true)),
+      onButtons: only(() => { void placeButtons(); }),
+      busy,
+    };
     return (
       <div data-testid="briefing-dashboards" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
         <DashboardBuilder spec={current} onChange={change} cardTitle={id => lines.get(id)?.title} connectionId={connectionId} schema={schema}
-          onAddPiece={section => setAdding({ section })} checks={checks}
+          onAddPiece={(section, what) => { shut(); setAsking(false); setAdding({ section, only: what }); }} checks={checks} tools={tools}
           cardReads={id => valuesRead(data.cards.find(c => c.id === id)?.sql)}
           queryCards={placedQueries(current, data.cards)}
+          cardDates={() => {
+            const placed = new Set(Object.values(current.elements).filter(e => e.type === "Card").map(e => String(e.props.card ?? "")));
+            return cards.filter(c => placed.has(c.card.id)).map(c => ({
+              id: c.card.id, title: c.card.title, date: c.run?.scoped?.grain ?? null, standing: !!c.run?.scoped?.standing,
+            }));
+          }}
+          onUndo={stacks.past.length > 0 ? undo : undefined} onRedo={stacks.future.length > 0 ? redo : undefined}
           bar={(
-            <EditBar saved={saved} canUndo={stacks.past.length > 0} canRedo={stacks.future.length > 0} onUndo={undo} onRedo={redo} onDone={done}
+            <EditBar saved={saved} onDone={done}
               picker={(
                 <SelectField aria-label="The dashboard being edited" value={chosen} onChange={e => choose(e.target.value, true)} style={{ maxWidth: 240 }}>
                   {live.map(c => <option key={c.cockpit_id} value={c.cockpit_id}>{c.title || c.cockpit_id}</option>)}
@@ -1221,50 +1287,6 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
                     onClick={() => setRetiring(r => !r)}><Icon name="close" /> Retire</Button>
                 </>
               )} />
-          )}
-          add={(
-            <>
-              <Button size="xs" variant="ghost" disabled={busy || composing} data-testid="dashboard-card-new" onClick={() => { shut(); setComposing(true); }}>
-                <Icon name="plus" /> Card
-              </Button>
-              <Button size="xs" variant="ghost" disabled={busy || noting} data-testid="dashboard-note-new"
-                title="Your own words on this dashboard. By hand only: a model never writes a note." onClick={() => { shut(); setNoting(true); }}>
-                <Icon name="plus" /> Note
-              </Button>
-              <Button size="xs" variant="ghost" disabled={busy || questioning} data-testid="dashboard-question-new"
-                title="A question the agent answers on a rhythm, as the Data Canvas does. By hand only." onClick={() => { shut(); setQuestioning(true); }}>
-                <Icon name="plus" /> Question
-              </Button>
-              <Button size="xs" variant="ghost" disabled={busy || imaging} data-testid="dashboard-image-new"
-                title="An image of your own on this dashboard. By hand only: a model never chooses one." onClick={() => { shut(); setImaging(true); }}>
-                <Icon name="plus" /> Image
-              </Button>
-              <Button size="xs" variant="ghost" disabled={busy || picking} data-testid="dashboard-finding-new"
-                title="Any finding the explorer has recorded on this connection, as a card: its query re-run through the guards."
-                onClick={() => { shut(); setPicking(true); }}>
-                <Icon name="plus" /> Finding
-              </Button>
-              <Button size="xs" variant="ghost" disabled={busy || placing} data-testid="dashboard-piece-new"
-                title="A process board, an objects table, an object detail or an action button — each reads what the ontology declares, by id."
-                onClick={() => { shut(); setPlacing(true); }}>
-                <Icon name="plus" /> From the ontology
-              </Button>
-              <Button size="xs" variant="ghost" disabled={busy} data-testid="dashboard-buttons-new"
-                title="Buttons that run declared actions on what a reader chose or ticked — wired in their setup."
-                onClick={async () => {
-                  shut();
-                  try {
-                    const declared = Object.values(await getDeclaredActions(connectionId, schema));
-                    if (!declared.length) { toast.error("No action is declared here", { description: "Declare one in Ontology ▸ Actions, then place its button." }); return; }
-                    const placed = placePiece(current, "ActionButtons", { buttons: [{ action: declared[0].id }] });
-                    if (placed.key) change(placed.spec, "action buttons placed by hand");
-                  } catch (e) {
-                    toast.error("The declared actions could not be read", { description: (e as Error).message.slice(0, 160) });
-                  }
-                }}>
-                <Icon name="plus" /> Action buttons
-              </Button>
-            </>
           )}
           // the board study — the card's own chart editor held in the panel, and the statement it ran
           cardChart={cardId => {
@@ -1303,6 +1325,17 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
                 target.current = writing.section; adopt.current = true; adoptNote.current = "a query of your own placed by hand";
                 setWriting(null); reload();
               }} />
+          ) : adding ? (
+            // the toolbar's Chart and Filter, and an empty section's "Add a piece", list their pieces here, in the panel
+            <PiecePicker key={`${adding.section ?? ""}:${adding.only ?? "all"}`} spec={current} section={adding.section} only={adding.only}
+              connectionId={connectionId} schema={schema} onPlace={change} onClose={() => setAdding(null)}
+              onHandOff={(kind, section) => {
+                setAdding(null); shut(); target.current = section;
+                if (kind === "query") { setShowHistory(false); setWriting({ section }); return; }
+                if (kind === "card") setComposing(true); else if (kind === "note") setNoting(true);
+                else if (kind === "image") setImaging(true); else if (kind === "question") setQuestioning(true);
+                else if (kind === "ontology") setPlacing(true); else setPicking(true);
+              }} />
           ) : undefined}
           above={(
             <>
@@ -1327,18 +1360,10 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
               {refusal && <Refused outcome={refusal} />}
               {retireConfirm}
               {composers}
-              {adding && (
-                <PiecePicker spec={current} section={adding.section} connectionId={connectionId} schema={schema}
-                  onPlace={change} onClose={() => setAdding(null)}
-                  onHandOff={(kind, section) => {
-                    setAdding(null); shut(); target.current = section;
-                    if (kind === "query") { setShowHistory(false); setWriting({ section }); return; }
-                    if (kind === "card") setComposing(true); else if (kind === "note") setNoting(true);
-                    else if (kind === "image") setImaging(true); else setPicking(true);
-                  }} />
+              {asking && (
+                <AskChange connectionId={connectionId} dashboardId={data.cockpit_id} schema={schema} held={lines}
+                  onKept={() => { setPublishing(false); setAsking(false); reload(); }} />
               )}
-              <AskChange connectionId={connectionId} dashboardId={data.cockpit_id} schema={schema} held={lines}
-                onKept={() => { setPublishing(false); reload(); }} />
               {data.ontology && (
                 <PinStrip pin={data.ontology} spec={current} busy={busy}
                   onRepin={() => void write(() => keepDashboard(connectionId, data.cockpit_id, kept.spec, `re-pinned to ${data.ontology?.current}`, true),
@@ -1348,11 +1373,11 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
           )}>
           {({ selected, onSelect, handle, reads }) => (previewing ? (
             // Arc AP-6 — read as the person and a member of the group, with no door that changes the dashboard
-            <ComposedDashboard key={`preview:${previewing}`} spec={current} cards={cards} host={host}
+            <ComposedDashboard key={`preview:${previewing}`} spec={current} cards={cards} host={host} period={periodDoor}
               doors={{ onRefresh: editDoors.onRefresh, onReadState }} sym={data.currency_symbol || "$"} images={images} range={range}
               schema={schema} connectionId={connectionId} dashboardId={`${connectionId}:${chosen}:preview`} asGroup={previewing} onSaid={onSaid} />
           ) : (
-            <ComposedDashboard spec={current} cards={cards} host={host} doors={{ ...editDoors, onSelect, onReadState }} sym={data.currency_symbol || "$"}
+            <ComposedDashboard spec={current} cards={cards} host={host} doors={{ ...editDoors, onSelect, onReadState }} sym={data.currency_symbol || "$"} period={periodDoor}
               images={images} range={range} schema={schema} connectionId={connectionId} dashboardId={`${connectionId}:${chosen}`}
               selected={selected} handle={handle} reads={reads} focus={fx.focus} onFocus={fx.setFocus} />
           ))}
@@ -1370,9 +1395,14 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
     ...shared.map(s => ({ id: `shared:${s.owner}/${s.cockpit_id}`, label: `${s.title || s.cockpit_id} · ${person(s.published_by || s.owner)}` })),
   ];
   const newDoor = <Button size="xs" variant="ghost" data-testid="dashboard-new-open" onClick={openNew}>+ New dashboard</Button>;
-  const periodPicker = data && !cards.every(c => (c.card.render as { standing?: boolean } | undefined)?.standing === true) ? (
+  const periodPicker = data && !periodPlaced && !cards.every(c => (c.card.render as { standing?: boolean } | undefined)?.standing === true) ? (
     <PeriodPicker value={chosenRange} onChange={setChosenRange} disabled={busy} reading={reading}
       showing={data.range.status === "standing" || reading ? null : data.range} />
+  ) : null;
+  // The organisation's word on this dashboard — Certified or Deprecated — set by a curator (the ontology plan, Phase 1;
+  // punch list 81). Named by connection, owner and id: two people's dashboards may share an id's words.
+  const certMark = ownOpen && data ? (
+    <CertificationMark compact target={{ kind: "dashboard", ref: dashboardRef(connectionId, data.owner, chosen), connectionId }} />
   ) : null;
   // The title row's doors in view, as the mockup draws them: View | Edit, History, Publish… (the primary), ⋯ for the rare.
   const viewDoors = (
@@ -1411,7 +1441,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
   );
 
   return (
-    <div data-testid="briefing-dashboards" style={{ flex: 1, overflow: "auto", padding: "14px 32px 32px" }}>
+    <div data-testid="briefing-dashboards" data-dashboard-ground="" style={{ flex: 1, overflow: "auto", padding: "14px 32px 32px", background: "var(--bg-0)" }}>
       {/* The strip: the connection's metrics first (nobody's to arrange), then the person's own
           cockpits under the layer's label — violet is the user's, as the Briefing has always marked
           it — and, at the end, the door to a new one. */}
@@ -1497,6 +1527,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
                 <span data-testid="dashboard-facts">
                   Owner {data.owner === "default" || data.owner === "local" ? "you" : person(data.owner)} · version {kept.version}{readAt ? ` · last read ${utcDayWords(readAt, true)}` : ""}
                 </span>
+                {certMark}
               </ChromeFacts>
               <ChromeActions>{viewDoors}</ChromeActions>
               <ChromeStatus>
@@ -1510,6 +1541,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
           ) : (
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
               {periodPicker}
+              {certMark}
               <span style={{ marginLeft: "auto", display: "flex", gap: 4 }}>{viewDoors}</span>
             </div>
           )}
@@ -1530,7 +1562,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
           )}
           <div aria-busy={reading || undefined}
             style={{ opacity: reading ? 0.45 : 1, transition: "opacity 120ms ease-out", pointerEvents: reading ? "none" : undefined }}>
-            <ComposedDashboard spec={draft ?? kept.spec} cards={cards} host={host} doors={readDoors} sym={data.currency_symbol || "$"}
+            <ComposedDashboard spec={draft ?? kept.spec} cards={cards} host={host} doors={readDoors} sym={data.currency_symbol || "$"} period={periodDoor}
               images={images} range={range} schema={schema} connectionId={connectionId} dashboardId={`${connectionId}:${chosen}`}
               focus={fx.focus} onFocus={fx.setFocus} />
           </div>

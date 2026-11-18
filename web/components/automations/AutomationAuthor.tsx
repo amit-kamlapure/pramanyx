@@ -216,7 +216,7 @@ export function DesignControls({ automation, connId, name, draft, keeps, onDraft
   };
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}
+    <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}
          data-testid="design-controls">
       {/* The blocking truth rides the row, compact; the full list is on the button's
           tooltip. An empty draft's "add at least one action" is a starting state, not

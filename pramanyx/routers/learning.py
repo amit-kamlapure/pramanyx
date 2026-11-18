@@ -120,20 +120,67 @@ def get_resolutions(connection_id: str = ""):
     """S5 cited memory — the remembered readings, listed with their citations:
     who settled each (probe/user/reviewer), when, and how many times it has been
     served as a prior. The revoke route below is what makes showing them honest."""
+    from pramanyx.db.history import person_now
     from pramanyx.org.context import current_org_id
     from pramanyx.semantic.ambiguity_ledger import list_resolutions
-    return [r.model_dump() for r in list_resolutions(connection_id, org_id=current_org_id() or "")]
+    me = person_now()
+    # A person's own rows — their pick of a meaning, what they asked to be remembered — are theirs to see alone.
+    return [r.model_dump() for r in list_resolutions(connection_id, org_id=current_org_id() or "")
+            if not r.person or r.person == me]
 
 
 @router.delete("/learning/resolutions/{res_id}", status_code=204)
 def delete_resolution(res_id: str):
     """S5 cited memory — revoke one remembered reading. The next matching question
-    re-ambiguates instead of inheriting a reading the user no longer stands behind."""
+    re-ambiguates instead of inheriting a reading the user no longer stands behind. A person's own row is revoked
+    by its person alone; to anyone else it does not exist."""
     from fastapi import HTTPException
 
-    from pramanyx.semantic.ambiguity_ledger import revoke_resolution
+    from pramanyx.db.history import person_now
+    from pramanyx.semantic.ambiguity_ledger import owner_of, revoke_resolution
+    owner = owner_of(res_id)
+    if owner and owner != person_now():
+        raise HTTPException(status_code=404, detail="No such resolution")
     if not revoke_resolution(res_id):
         raise HTTPException(status_code=404, detail="No such resolution")
+
+
+# ── a person's own memory (punch list 90) ─────────────────────────────────────────────────────────────────────────
+
+
+class RememberIn(BaseModel):
+    text: str
+
+
+@router.get("/me/memories")
+def my_memories():
+    """What the person asking asked to be remembered about how they ask — theirs alone."""
+    from pramanyx.db.history import person_now
+    from pramanyx.org.context import current_org_id
+    from pramanyx.semantic.ambiguity_ledger import memories_of
+    return {"memories": [{"id": m.id, "text": m.resolved_reading, "at": m.created_at}
+                         for m in memories_of(person_now(), org_id=current_org_id() or "")]}
+
+
+@router.post("/me/memories", status_code=201)
+def remember(body: RememberIn):
+    """Remember something about how the person asking asks, for them alone. Through the coworker it is asked first: the
+    person allows it in the conversation."""
+    from fastapi import HTTPException
+
+    from pramanyx.db.history import person_now
+    from pramanyx.org.context import current_org_id
+    from pramanyx.semantic.ambiguity_ledger import remember_for
+    kept = remember_for(person_now(), body.text, org_id=current_org_id() or "")
+    if kept is None:
+        raise HTTPException(status_code=422, detail="Say what to remember, as a person signed in or this install's own.")
+    return {"id": kept.id, "text": kept.resolved_reading}
+
+
+@router.delete("/me/memories/{res_id}", status_code=204)
+def forget(res_id: str):
+    """Forget one of the person's own memories; anyone else's does not exist to them."""
+    delete_resolution(res_id)
 
 
 # ── MI-3: the dataset plane ──────────────────────────────────────────────────────────

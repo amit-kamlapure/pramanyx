@@ -354,6 +354,22 @@ def test_real_entities_still_bind_after_the_compute_filter():
     assert _entity_candidates("returns for the Consumer segment") == ["Consumer"]
 
 
+def test_a_word_pointing_back_is_never_a_value_to_filter_by():
+    """theLook's sheet, 2026-11-17: "plotting each city at its latitude" was declined with `“its latitude” is not
+    present in this data` — on a sheet whose columns are latitude and longitude."""
+    from pramanyx.semantic.answer_resolution import _entity_candidates
+    q = "Show orders by city on a map, plotting each city at its latitude and longitude with its order count"
+    assert _entity_candidates(q) == []
+    db = _FakeDB(hits={})                       # every probe finds nothing: a candidate would abstain
+    r = R.resolve(q, schema="TABLE: coworker_test_cities\n  city  VARCHAR\n  latitude  DOUBLE\n  longitude  DOUBLE\n"
+                            "  orders  BIGINT\n", db=db)
+    assert r.not_found == [] and r.feasibility != "not_answerable"
+    for asked in ("revenue for this region", "orders and their status from these stores"):
+        assert _entity_candidates(asked) == [], asked
+    # A value the person typed still binds, and an absent one still abstains.
+    assert _entity_candidates("revenue for its Berlin store") == ["Berlin"]
+
+
 def test_derived_quantity_question_is_answerable_even_with_a_db_that_finds_nothing():
     # A db whose probe says "absent" for everything must not turn a derived-quantity
     # question into an abstain: there is no entity to be absent.

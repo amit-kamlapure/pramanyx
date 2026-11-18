@@ -64,3 +64,22 @@ export const ownersWords = (a: Pick<BusinessArea, "business_owners" | "technical
 };
 export const people = (raw: string): string[] => raw.split(",").map((s) => s.trim()).filter(Boolean)
   .map((s) => (s.includes(":") ? s : `user:${s}`));
+
+/** An area the model suggests from its own labels for the data (punch list 87): an area only once a curator declares it. */
+export interface SuggestedArea { label: string; id: string; tables: string[] }
+
+export async function readSuggestedAreas(connectionId: string, schema?: string): Promise<SuggestedArea[]> {
+  const res = await fetch(`${getApiBase()}/areas/${encodeURIComponent(connectionId)}/suggested${q(schema)}`);
+  if (!res.ok) throw new Error(fastApiError(await res.json().catch(() => ({})), `Reading the suggested areas failed (${res.status})`));
+  return ((await res.json()) as { suggested: SuggestedArea[] }).suggested ?? [];
+}
+
+/** A curator says a suggestion is not an area of the business (or takes that back). */
+export async function setNotAnArea(connectionId: string, label: string, notAnArea = true): Promise<string[]> {
+  const res = await fetch(`${getApiBase()}/areas/${encodeURIComponent(connectionId)}/not-an-area`, {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label, not_an_area: notAnArea }),
+  });
+  const out = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(fastApiError(out, `Not saved (${res.status})`));
+  return (out as { not_areas: string[] }).not_areas ?? [];
+}

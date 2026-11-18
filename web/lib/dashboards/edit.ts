@@ -14,7 +14,7 @@
  * No model, no figure. A title a person types is theirs; the server keeps it as theirs.
  */
 import {
-  FILTER_WIDTH, GRID, LIMITS, MAX_CAPTION, MAX_LABEL, MAX_NOTE, MAX_TITLE, PLACED, SPAN, type DashboardSetDef, type DashboardValueDef,
+  FILTER_WIDTH, GRID, LIMITS, MAX_CAPTION, MAX_GRID_ROW, MAX_LABEL, MAX_NOTE, MAX_TITLE, PLACED, SPAN, type DashboardSetDef, type DashboardValueDef,
   type GridKind, type Layout, type Size,
 } from "@/lib/dashboards/catalog";
 import { choicesOf, readersOf } from "@/lib/dashboards/sets";
@@ -58,8 +58,10 @@ function tabsElement(s: DashboardSpec): string | null {
   return (root?.children ?? []).find(k => s.elements[k]?.type === "Tabs") ?? null;
 }
 
-/** An element's room on a section's grid: columns across, rows down (Arc AP-1). */
-export interface Box { w: number; h: number }
+/** An element's room on a section's grid: columns across, rows down (Arc AP-1) — and, placed freely (v14, 2026-11-18),
+ *  the column its left edge is in and the row its top is in, each from 1. */
+export interface Box { w: number; h: number; x?: number; y?: number }
+type Placed = { x: number; y: number; w: number; h: number };
 
 /** The columns a section draws when it says none (`ComposedDashboard`'s most). */
 const AUTO_COLUMNS = 4;
@@ -68,11 +70,13 @@ const DEFAULT_SIZE: Record<GridKind, Size> = {
   Card: "small", Note: "small", Image: "small", ProcessBoard: "full", ObjectTable: "wide", ObjectDetail: "small",
   ObjectFigure: "small", ObjectChart: "full", ObjectBreakdown: "wide", ActionButtons: "small",
   ObjectList: "wide", ObjectMap: "wide", ObjectTimeline: "full", ChooseOne: "wide", ObjectSearch: "wide", Question: "wide", ScenarioInputs: "full", AddRow: "full",
+  Period: "small",
 };
 /** The rows a kind takes on the grid when nothing measured it: about the room one row of its size gave it. */
 const ROWS: Record<GridKind, number> = {
   Card: 4, Note: 3, Image: 5, ProcessBoard: 7, ObjectTable: 8, ObjectDetail: 7, ObjectFigure: 3, ObjectChart: 6, ObjectBreakdown: 8,
   ActionButtons: 2, ObjectList: 8, ObjectMap: 9, ObjectTimeline: 7, ChooseOne: 7, ObjectSearch: 3, Question: 14, ScenarioInputs: 4, AddRow: 2,
+  Period: 2,
 };
 
 const clamp = (lo: number, hi: number, v: number) => Math.max(lo, Math.min(hi, v));
@@ -109,6 +113,8 @@ export function onGrid(spec: unknown, sectionKey: string): boolean {
 function fitTo(s: DashboardSpec, sectionKey: string, key: string): void {
   const el = s.elements[key];
   if (!el || !(el.type in LIMITS)) return;
+  // its place was on the grid it left: here it flows into the first room that fits (v14)
+  { const { x: _x, y: _y, ...unplaced } = el.props; el.props = unplaced; }
   if (onGrid(s, sectionKey)) {
     const box = boxOf(el);
     const { size: _size, ...rest } = el.props;
@@ -365,13 +371,13 @@ export function placeImage(spec: unknown, objectId: string, caption: string, sec
  *  (`addAction`), never in a section. */
 export function placePiece(
   spec: unknown, type: "ProcessBoard" | "ObjectTable" | "ObjectDetail" | "ActionButtons" | "ObjectFigure" | "ObjectChart"
-    | "ObjectBreakdown" | "ObjectList" | "ObjectMap" | "ObjectTimeline" | "ChooseOne" | "ObjectSearch",
+    | "ObjectBreakdown" | "ObjectList" | "ObjectMap" | "ObjectTimeline" | "ChooseOne" | "ObjectSearch" | "Period",
   props: Record<string, unknown>, sectionKey?: string,
 ): { spec: DashboardSpec; key: string | null } {
   const s = copy(spec);
   const target = sectionKey ?? sectionsOf(s)[0]?.key;
   if (!target || !holdsPieces(s, target)) return { spec: s, key: null };
-  const base = type === "ProcessBoard" ? `board-${props.process}` : type === "ObjectTable"
+  const base = type === "Period" ? "period" : type === "ProcessBoard" ? `board-${props.process}` : type === "ObjectTable"
     ? `table-${props.segment || props.entity || props.set}` : type === "ActionButtons" ? "buttons"
       : type === "ObjectFigure" ? `figure-${props.set || props.entity}` : type === "ObjectChart" ? `chart-${props.set || props.entity}`
         : type === "ObjectBreakdown" ? `breakdown-${props.set || props.entity}`
@@ -469,7 +475,13 @@ export function toGrid(spec: unknown, sectionKey: string, measured: Record<strin
 }
 
 /** Arc AP-1 — give an element its room on its section's grid, held to what its kind may take. A section not yet on the
- *  grid moves onto it first, every other element keeping the room `measured` says it had. Nothing else changes. */
+ *  grid moves onto it first, every other element keeping the room `measured` says it had.
+ *
+ *  Free placement (v14; the user, 2026-11-18: "Allow free placement"): a box that says where — a column and a row — puts
+ *  the element there, as an element already placed keeps its place when only its size changes. The other elements keep
+ *  where `measured` says they were drawn, and whatever the element now covers is pushed down below it, and what that
+ *  covers in turn: nothing shares a cell, and the gaps a person left stay. An element with no place and none asked for
+ *  only changes its size, flowing as before. */
 export function regrid(spec: unknown, key: string, box: Box, measured: Record<string, Box> = {}): DashboardSpec {
   const section = parentOf(spec as DashboardSpec, key);
   if (!section || (spec as DashboardSpec).elements[section]?.type !== "Section") return copy(spec);
@@ -477,8 +489,63 @@ export function regrid(spec: unknown, key: string, box: Box, measured: Record<st
   const el = s.elements[key];
   if (!el || !(el.type in LIMITS)) return s;
   const fitted = clampBox(el.type, box);
-  el.props = { ...el.props, w: fitted.w, h: fitted.h };
+  const wantX = box.x ?? (typeof el.props.x === "number" ? el.props.x : undefined);
+  const wantY = box.y ?? (typeof el.props.y === "number" ? el.props.y : undefined);
+  if (wantX === undefined || wantY === undefined) {
+    el.props = { ...el.props, w: fitted.w, h: fitted.h };
+    return s;
+  }
+  const sec = s.elements[section];
+  // the elements already drawn keep where they were drawn: their places are written now, so a push can move them
+  for (const k of sec.children) {
+    const other = s.elements[k];
+    if (!other || k === key || !(other.type in LIMITS)) continue;
+    const seen = measured[k];
+    if (typeof other.props.x !== "number" && seen?.x !== undefined && seen?.y !== undefined) {
+      other.props = { ...other.props, x: clamp(1, GRID.columns, seen.x), y: clamp(1, MAX_GRID_ROW, seen.y) };
+    }
+  }
+  const x = clamp(1, GRID.columns - fitted.w + 1, Math.round(wantX));
+  const y = clamp(1, MAX_GRID_ROW, Math.round(wantY));
+  el.props = { ...el.props, x, y, w: fitted.w, h: fitted.h };
+  const boxes = new Map<string, Placed>();
+  for (const k of sec.children) {
+    const p = s.elements[k]?.props;
+    if (p && typeof p.x === "number" && typeof p.y === "number" && typeof p.w === "number" && typeof p.h === "number") {
+      boxes.set(k, { x: p.x, y: p.y, w: p.w, h: p.h });
+    }
+  }
+  pushDown(boxes, key);
+  for (const [k, b] of boxes) {
+    const p = s.elements[k].props;
+    if (p.y !== b.y) s.elements[k].props = { ...p, y: Math.min(b.y, MAX_GRID_ROW) };
+  }
+  // read in the order it is seen: by row, then column — once every element has its place
+  if (sec.children.every(k => !(s.elements[k]?.type in LIMITS) || boxes.has(k))) {
+    sec.children = [...sec.children].sort((a, b) => {
+      const pa = boxes.get(a), pb = boxes.get(b);
+      return pa && pb ? pa.y - pb.y || pa.x - pb.x : 0;
+    });
+  }
   return s;
+}
+
+/** v14 — whatever overlaps `moved` goes down to just below it, and whatever that overlaps in turn, so nothing shares a
+ *  cell. `moved` itself never moves: everything pushed lands below whatever pushed it, all of it below `moved`. */
+export function pushDown(boxes: Map<string, Placed>, moved: string): void {
+  const queue = [moved];
+  for (let guard = 0; queue.length && guard < 10_000; guard++) {
+    const k = queue.shift()!;
+    const a = boxes.get(k);
+    if (!a) continue;
+    for (const [o, b] of boxes) {
+      if (o === k || o === moved) continue;
+      if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h) {
+        b.y = a.y + a.h;
+        queue.push(o);
+      }
+    }
+  }
 }
 
 /** Arc AP-1 — the filter column's width in grades of 40 px, held to its least and most. */
@@ -763,8 +830,9 @@ export function duplicate(spec: unknown, key: string): { spec: DashboardSpec; ke
   const clone = (k: string): string => {
     const el = s.elements[k];
     const fresh = freshKey(s, k);
-    const { chooses: _c, ticks: _t, shows: _s, ...props } = el.props;
-    void _c; void _t; void _s;
+    // the copy flows into the first room that fits — never onto the cells the original holds (v14)
+    const { chooses: _c, ticks: _t, shows: _s, x: _x, y: _y, ...props } = el.props;
+    void _c; void _t; void _s; void _x; void _y;
     s.elements[fresh] = { ...JSON.parse(JSON.stringify(el)), props: JSON.parse(JSON.stringify(props)), children: [] };
     s.elements[fresh].children = el.children.map(clone);
     return fresh;

@@ -175,7 +175,26 @@ def _primary_sql(inv: dict) -> str:
     for q in reversed(inv.get("query_history") or []):
         if isinstance(q, dict) and (q.get("sql") or "").strip() and not q.get("error"):
             return q["sql"].strip()
-    return ""
+    return _phase_sql(report) if isinstance(report, dict) else ""
+
+
+def _phase_sql(report: dict) -> str:
+    """A deep analysis keeps its queries in its report's phases, not in a query history (found live, 2026-11-18: no
+    finished deep analysis on the reference install could be kept as a skill): the query behind the finding the report
+    leads with (its first exhibit), else its first significant finding that ran, else its first that ran."""
+    ran = [f for ph in (report.get("phases") or []) if isinstance(ph, dict)
+           for f in (ph.get("findings") or []) if isinstance(f, dict) and (f.get("sql") or "").strip() and not f.get("error")]
+    if not ran:
+        return ""
+    led = [e.get("finding_id") for e in (report.get("exhibits") or []) if isinstance(e, dict) and e.get("finding_id")]
+    for fid in led:
+        for f in ran:
+            if f.get("finding_id") == fid:
+                return f["sql"].strip()
+    for f in ran:
+        if f.get("is_significant"):
+            return f["sql"].strip()
+    return ran[0]["sql"].strip()
 
 
 def _finding_text(inv: dict) -> str:
@@ -304,7 +323,11 @@ def propose_skill_from_investigation(
     sql = _primary_sql(inv)
     if not sql or not _is_read_only(sql):
         return None
-    question = (inv.get("question") or "").strip()
+    # A scheduled run's question carries the code-written context it ran with; the skill is named by what was asked
+    # (found live 2026-11-18: a kept schedule was named "[Scheduled-run context — written by code…").
+    from pramanyx.automations.temporal import ask_of
+    raw = (inv.get("question") or "").strip()
+    question = ask_of(raw).strip() or raw
     table = _primary_table(sql)
     t2e = table_to_entity or {}
     entity = t2e.get(table) or t2e.get(table.split(".")[-1]) or (table.split(".")[-1].rstrip("s").title() if table else "")
@@ -323,10 +346,28 @@ def propose_skill_from_investigation(
             source_table=table,
             origin="learned",
             usage_count=0,
+            metrics=held_to(question, sql, inv.get("connection_id") or "")[0],
         )
     except Exception as exc:
         logger.debug("propose_skill: build candidate failed for %s: %s", inv_id, exc)
         return None
+
+
+def held_to(question: str, sql: str, connection_id: str = "") -> tuple[list[str], list[str]]:
+    """``(computed as approved, computed otherwise)`` — the approved metrics a skill's SQL computes exactly as they are
+    approved, and those it names and computes some other way (punch list 88). Read by the platform's one enforcement
+    check (`semantic.enforcement.check_metric_enforcement`, the receipt's), never by a model; nothing when the
+    metrics cannot be read."""
+    try:
+        from pramanyx.semantic.enforcement import check_metric_enforcement
+        from pramanyx.semantic.metrics import list_metrics
+        verdicts = check_metric_enforcement(question or "", sql or "", list_metrics(connection_id=connection_id or None))
+    except Exception as exc:  # noqa: BLE001 — unread, nothing is claimed
+        logger.debug("held_to: the metrics could not be read: %s", exc)
+        return [], []
+    used = sorted({str(v["metric"]) for v in verdicts if v.get("status") == "used"})
+    other = sorted({str(v["metric"]) for v in verdicts if v.get("status") != "used"} - set(used))
+    return used, other
 
 
 def _autonomy_level(connection_id: str) -> int:

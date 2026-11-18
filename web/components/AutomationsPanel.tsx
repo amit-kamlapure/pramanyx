@@ -84,9 +84,12 @@ type Props = {
   /** AO-4 — an automation to open on arrival (an "Open automation" that carries its id,
    *  from an agent's Doors or Map, Attention, Departures or the Hub). */
   focusId?: string | null;
+  /** Opened beside a conversation, on one schedule (2026-11-18): no Automations · Runs · Inbox strip, nor the list's
+   *  toolbar — the schedule, and the way back to the list, only. */
+  beside?: boolean;
 };
 
-export function AutomationsPanel({ connId, focusId, sentence = "" }: Props) {
+export function AutomationsPanel({ connId, focusId, sentence = "", beside = false }: Props) {
   const conn = connId || "";
   const [view, setView] = useState<View>("list");
   const [automations, setAutomations] = useState<Automation[]>([]);
@@ -333,8 +336,8 @@ export function AutomationsPanel({ connId, focusId, sentence = "" }: Props) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "var(--bg-0)", color: "var(--t1)" }}>
-      {/* Header: the views as a tab strip, the list's toolbar at its end. */}
-      <TabStrip label="Automation views" value={view} onChange={setView} style={{ padding: "12px 20px 0", flexShrink: 0 }}
+      {/* Header: the views as a tab strip, the list's toolbar at its end — not beside a conversation. */}
+      {!beside && <TabStrip label="Automation views" value={view} onChange={setView} style={{ padding: "12px 20px 0", flexShrink: 0 }}
         tabs={[{ id: "list", label: "Automations" }, { id: "runs", label: "Runs" }, { id: "inbox", label: "Inbox", badge: pendingCount }]}
         trailing={<>
         {view === "list" && (
@@ -360,7 +363,7 @@ export function AutomationsPanel({ connId, focusId, sentence = "" }: Props) {
             </Button>
           </>
         )}
-        </>} />
+        </>} />}
 
       {banner && (
         <div style={{

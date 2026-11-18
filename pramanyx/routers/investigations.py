@@ -1286,13 +1286,71 @@ def _numberless_prefix(text: str) -> str:
     return text[:cut].rstrip() if cut > 0 else ""
 
 
-def _ground_headline(headline, columns, rows):
+_COUNT_WORDS = {"two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+                "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15, "sixteen": 16,
+                "seventeen": 17, "eighteen": 18, "nineteen": 19, "twenty": 20}
+_COUNT_NAMES = {n: w for w, n in _COUNT_WORDS.items()}
+#: "across five Indian metros", "all 3 regions", "these twelve stores": a headline counting the things its rows are.
+_COUNT_CLAIM_RE = re.compile(
+    r"\b(?:across|all|these)\s+(?:the\s+)?(\d+|" + "|".join(_COUNT_WORDS) + r")\s+"
+    r"((?:[A-Za-z][\w-]*\s+){0,2}?)([A-Za-z]+s)\b", re.I)
+#: A count of time ("across 12 months") is the period the rows add up, not the rows; and a count with a ranking
+#: word ("across the 3 largest cities", "these five other stores") is of some of the rows, not all of them.
+_COUNT_OF_TIME = re.compile(r"^(?:second|minute|hour|day|week|month|quarter|year|period)s$", re.I)
+_COUNT_OF_SOME = re.compile(r"(?:est|^top|^bottom|^leading|^first|^last|^other|^remaining|^major|^main|^key)$", re.I)
+
+
+def _singular(word: str) -> str:
+    w = word.lower()
+    if w.endswith("ies"):
+        return w[:-3] + "y"
+    if re.search(r"(?:s|x|ch|sh)es$", w):
+        return w[:-2]
+    return w[:-1]
+
+
+def _correct_count_claim(headline: str, columns, rows, sql: str = "") -> str:
+    """The headline with a count of its rows' things corrected to what the rows show (2026-11-17: an attached sheet's
+    answer said "across five Indian metros" over ten cities, and the map beneath it drew ten). The digit check below
+    leaves small numbers in a breakdown alone — they are counts, not figures — so a count was never checked at all.
+
+    Fires only where the rows refute it: they hold MORE distinct things than the headline counts. A count larger
+    than the rows show is left alone (a breakdown can add up things it does not list), as is a count of time, a
+    count of some of the rows ("the 3 largest"), and a count of something the statement filters on but does not
+    return ("across 3 regions" over cities WHERE region IN …). Only the number changes; the rest is the model's."""
+    m = _COUNT_CLAIM_RE.search(headline or "")
+    if not m or not rows or not columns:
+        return headline
+    said_text, between, noun = m.group(1), m.group(2), m.group(3)
+    said = int(said_text) if said_text.isdigit() else _COUNT_WORDS[said_text.lower()]
+    if said < 2 or _COUNT_OF_TIME.match(noun) or any(_COUNT_OF_SOME.search(w) for w in between.split()):
+        return headline
+    thing = _singular(noun)
+    texts = [i for i in range(len(columns)) if not _col_is_numeric(rows, i)]
+    named = [i for i in range(len(columns)) if thing in str(columns[i]).lower()]   # a store_id counts stores too
+    distinct = {i: len({str(r[i]) for r in rows if i < len(r)}) for i in {*texts, *named}}
+    if not named and thing in (sql or "").lower():
+        return headline              # the statement filters on it but does not return it: the rows cannot count it
+    if said in distinct.values() or said == len(rows):
+        return headline
+    counted = distinct[named[0]] if named else (distinct[texts[0]] if texts else len(rows))
+    if said >= counted:
+        return headline
+    right = _COUNT_NAMES[counted] if not said_text.isdigit() and counted in _COUNT_NAMES else str(counted)
+    if said_text[:1].isupper():
+        right = right.capitalize()
+    return headline[:m.start(1)] + right + headline[m.end(1):]
+
+
+def _ground_headline(headline, columns, rows, sql: str = ""):
     """Return the headline unchanged when it is consistent with the data; otherwise a
     grounded replacement built from the actual top row. Conservative: only fires on a
     clear contradiction (a sizable number matching nothing — not even a column sum/mean
-    — or a superlative naming a non-leader entity)."""
+    — or a superlative naming a non-leader entity). A count of the rows' things the rows
+    refute ("across five metros" over ten) is corrected in place first."""
     if not headline or not rows or not columns:
         return headline
+    headline = _correct_count_claim(headline, columns, rows, sql)
     # pool of acceptable numbers: individual cell values (top rows) + each column's sum & mean
     pool = [f for r in rows[:8] for f in (_hl_to_float(v) for v in r) if f is not None]
     for ci in range(len(columns)):
@@ -1426,6 +1484,41 @@ def _narrator_sample(columns, rows, n: int = 20):
     if _is_time_series(columns, rows) and len(rows) > n:
         return [rows[0]] + rows[-(n - 1):], True
     return rows[:n], False
+
+
+def _narrator_rows_label(sample_rows, total: int, is_time_series: bool) -> str:
+    """What the narrator is told the rows it reads are. Every result used to be "a sample of N rows", the whole of it
+    too, and the narrator said so: a sheet of ten cities, all ten shown, was summed up as "the sample covers only 10 of
+    the plotted cities" (2026-11-17). A whole result is said to be whole; a longer one says how much is shown."""
+    shown = len(sample_rows)
+    if is_time_series:
+        return (f"Results (TIME SERIES — series start then the {shown - 1} most recent of {total} periods, "
+                "oldest→newest):")
+    if shown >= total:
+        return f"Results (all {total} rows: the whole result, not a sample):"
+    return f"Results (the first {shown} of {total} rows):"
+
+
+def _keep_clarify_answer(req, conn_id: str) -> None:
+    """I4 — this turn is the person ANSWERING a clarify (a reading chosen from the chips): kept BEFORE the answer, so it
+    is an authoritative prior on this turn and every later one. Which area's meaning of a word they meant is THEIR pick,
+    kept for them alone (punch list 83) — crystallized for the connection, it answered everyone's question with one
+    person's choice; any other reading is the connection's, as before. Best-effort."""
+    if not req.clarify_reading:
+        return
+    try:
+        if req.clarify_source == "rival_meanings":
+            from pramanyx.semantic.areas import keep_pick
+            keep_pick(req.clarify_subject or req.question, req.clarify_reading, conn_id)
+        else:
+            from pramanyx.org.context import current_org_id
+            from pramanyx.semantic.ambiguity_ledger import crystallize_user_choice
+            crystallize_user_choice(
+                conn_id, req.clarify_subject or req.question, req.clarify_reading,
+                org_id=current_org_id() or "", clarify_source=req.clarify_source)
+    except Exception as exc:
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "clarify-choice crystallization is best-effort", counter="ask.clarify_crystallize")
 
 
 def _prior_turn_context(history) -> str:
@@ -2319,6 +2412,12 @@ def _answer_core(
         _instr_sec = _grounding_instructions(connection_id, canvas_id or "")
         if _instr_sec:
             prompt = _instr_sec + prompt
+        # What the person asking asked to be remembered (punch list 90): theirs alone, every connection. Mirrored in
+        # grounding._BLOCKS ("person_memory"). Empty when they asked for nothing: a byte-identical prompt.
+        from pramanyx.agent.grounding import person_memory as _person_memory
+        _memory_sec = _person_memory()
+        if _memory_sec:
+            prompt = _memory_sec + prompt
         # ON-10 — the question framed against the DECLARED ontology, as the deep investigation frames it: each business
         # term's declared definition with the SQL the object door compiles for it. No model call here — an ambiguous
         # frame lists every definition the words fit. Empty where nothing declared is reached: byte-identical prompts.
@@ -3139,7 +3238,7 @@ def _answer_core(
 
         # Ground the headline in the ACTUAL rows — the coder's headline is a pre-execution
         # prediction and can contradict the data it ran on.
-        _grounded_headline = _ground_headline(answer.headline, result.columns, result.rows)
+        _grounded_headline = _ground_headline(answer.headline, result.columns, result.rows, final_sql)
         if _not_as_asked is not None:
             # A headline is a finding, and there is none: the rows are not what was asked for. The answer says that
             # where the finding would be, and why beside it (the `inspect_warning` below).
@@ -3400,7 +3499,8 @@ def _answer_core(
                 )
                 _system = (
                     "You are an analytical data interpreter writing for a clean published brief. "
-                    "Given a user question, the SQL that answered it, and a sample of the results: "
+                    "Given a user question, the SQL that answered it, and its results (all of them, or the first "
+                    "rows of a longer result, as the results line says): "
                     "(1) produce a tight analytical narrative (2-3 sentences) that LEADS WITH THE ANSWER, "
                     "wraps each decisive number in **double asterisks** for bold (e.g. **$2,112**, **+18%**), "
                     "names any genuine anomaly (unexpected value, spike, drop, outlier) in plain words, and "
@@ -3414,11 +3514,7 @@ def _answer_core(
                     "Given a user question and its answer, " + _FOLLOWUP_CLAUSE
                     + " Leave the narrative empty."
                 )
-            _rows_label = (
-                f"Results (TIME SERIES — series start then the {len(_sample_rows) - 1} most "
-                f"recent of {len(result.rows)} periods, oldest→newest):"
-                if _is_ts else f"Results (sample of {len(_sample_rows)} rows):"
-            )
+            _rows_label = _narrator_rows_label(_sample_rows, max(len(result.rows), result.row_count or 0), _is_ts)
             # The resolution's single caveat leads the narrator too, so the
             # narrative + follow-ups agree with the answer instead of re-deciding.
             _res_note = ""
@@ -4866,7 +4962,7 @@ async def _stream_investigation(
                 ada = merged["answer_report"]
                 qh = merged.get("query_history", [])
                 yield _sse("tables_used", {"tables": _extract_tables(" ".join(r.sql for r in qh if r.sql))})
-                yield _sse("answer_report", {"answer_report": ada, "investigation_id": inv_id, "query_mode": "investigate", "mode": "investigate"})
+                yield _sse("answer_report", {"answer_report": ada, "investigation_id": inv_id, "query_mode": "investigate", "mode": "investigate", **_early(inv_id)})
                 try:
                     from pramanyx.agent.followups import (
                         artifact_from_history, followup_system, followup_user)
@@ -4954,7 +5050,7 @@ async def _stream_investigation(
                 sq_raw = [sq.model_dump() for sq in merged.get("sub_questions", [])]
                 sa_raw = [a.model_dump() for a in answers]
                 yield _sse("tables_used", {"tables": _extract_tables(" ".join(r.sql for r in qh if r.sql))})
-                yield _sse("explore_report", {"explore_report": er.model_dump(), "sub_questions": sq_raw, "subq_answers": sa_raw, "query_count": len(qh), "investigation_id": inv_id, "query_mode": "explore", "frame": merged.get("ontology_frame")})
+                yield _sse("explore_report", {"explore_report": er.model_dump(), "sub_questions": sq_raw, "subq_answers": sa_raw, "query_count": len(qh), "investigation_id": inv_id, "query_mode": "explore", "frame": merged.get("ontology_frame"), **_early(inv_id)})
                 try:
                     from pramanyx.agent.followups import (
                         artifact_from_history, followup_system, followup_user)
@@ -4979,7 +5075,7 @@ async def _stream_investigation(
             elif node_name == "synthesize" and merged.get("report"):
                 qh = merged.get("query_history", [])
                 yield _sse("tables_used", {"tables": _extract_tables(" ".join(r.sql for r in qh if r.sql))})
-                yield _sse("report", {"report": merged["report"].model_dump(), "hypotheses": [h.model_dump() for h in merged.get("hypotheses", [])], "query_count": len(qh), "query_history": [{"hypothesis_id": r.hypothesis_id, "sql": r.sql, "row_count": r.row_count, "error": r.error, "columns": r.columns, "rows": r.rows[:50], "stats": [s.model_dump() for s in (r.stats or [])]} for r in qh], "investigation_id": inv_id, "query_mode": merged.get("query_mode")})
+                yield _sse("report", {"report": merged["report"].model_dump(), "hypotheses": [h.model_dump() for h in merged.get("hypotheses", [])], "query_count": len(qh), "query_history": [{"hypothesis_id": r.hypothesis_id, "sql": r.sql, "row_count": r.row_count, "error": r.error, "columns": r.columns, "rows": r.rows[:50], "stats": [s.model_dump() for s in (r.stats or [])]} for r in qh], "investigation_id": inv_id, "query_mode": merged.get("query_mode"), **_early(inv_id)})
                 try:
                     from pramanyx.agent.followups import (
                         artifact_from_history, followup_system, followup_user)
@@ -5206,7 +5302,7 @@ async def _stream_resume(inv_id: str, feedback: str, request: Request,
             merged = {**merged, **(event[node_name] or {})}
             if node_name == "synthesize" and merged.get("report"):
                 qh = merged.get("query_history", [])
-                yield _sse("report", {"report": merged["report"].model_dump(), "hypotheses": [h.model_dump() for h in merged.get("hypotheses", [])], "query_count": len(qh), "query_history": [{"hypothesis_id": r.hypothesis_id, "sql": r.sql, "row_count": r.row_count, "error": r.error, "columns": r.columns, "rows": r.rows[:50], "stats": [s.model_dump() for s in (r.stats or [])]} for r in qh], "investigation_id": inv_id})
+                yield _sse("report", {"report": merged["report"].model_dump(), "hypotheses": [h.model_dump() for h in merged.get("hypotheses", [])], "query_count": len(qh), "query_history": [{"hypothesis_id": r.hypothesis_id, "sql": r.sql, "row_count": r.row_count, "error": r.error, "columns": r.columns, "rows": r.rows[:50], "stats": [s.model_dump() for s in (r.stats or [])]} for r in qh], "investigation_id": inv_id, **_early(inv_id)})
                 complete_investigation(inv_id, report=merged["report"], hypotheses=merged.get("hypotheses", []), query_history=qh, question=inv["question"], connection_id=inv.get("connection_id", ""))
                 _record_memory(inv_id, inv.get("connection_id", ""), inv["question"], merged)
             elif node_name == "reason_over_result":
@@ -5225,7 +5321,7 @@ async def _stream_resume(inv_id: str, feedback: str, request: Request,
                 sq_raw = [sq.model_dump() for sq in merged.get("sub_questions", [])]
                 sa_raw = [a.model_dump() for a in answers]
                 yield _sse("tables_used", {"tables": _extract_tables(" ".join(r.sql for r in qh if r.sql))})
-                yield _sse("explore_report", {"explore_report": er.model_dump(), "sub_questions": sq_raw, "subq_answers": sa_raw, "query_count": len(qh), "investigation_id": inv_id, "query_mode": "explore", "frame": merged.get("ontology_frame")})
+                yield _sse("explore_report", {"explore_report": er.model_dump(), "sub_questions": sq_raw, "subq_answers": sa_raw, "query_count": len(qh), "investigation_id": inv_id, "query_mode": "explore", "frame": merged.get("ontology_frame"), **_early(inv_id)})
                 explore_save = {"_report_type": "explore", **er.model_dump(), "sub_questions": sq_raw, "subq_answers": sa_raw}
                 complete_investigation(inv_id, report=explore_save, hypotheses=[], query_history=qh, question=inv["question"], connection_id=inv.get("connection_id", ""))
                 _record_memory(inv_id, inv.get("connection_id", ""), inv["question"], merged)
@@ -5876,17 +5972,7 @@ async def _stream_ask(req: "AskRequest", request: Request, conn_id: str) -> Asyn
     # crystallize that choice into the Ambiguity Ledger (source=user) BEFORE we answer, so the
     # resolution is an authoritative prior on this turn and every future one — the class never
     # re-ambiguates on this connection. Best-effort.
-    if req.clarify_reading:
-        try:
-            from pramanyx.org.context import current_org_id
-            from pramanyx.semantic.ambiguity_ledger import crystallize_user_choice
-            crystallize_user_choice(
-                conn_id, req.clarify_subject or req.question, req.clarify_reading,
-                org_id=current_org_id() or "", clarify_source=req.clarify_source)
-        except Exception as exc:
-            from pramanyx.kernel.errors import tolerate
-            tolerate(exc, "clarify-choice crystallization is best-effort",
-                     counter="ask.clarify_crystallize")
+    _keep_clarify_answer(req, conn_id)
 
     # Ask-vs-guess (Phase 3): when the question is materially ambiguous and this is a
     # fresh auto turn (not an explicit depth override, deep-drill, dossier, or a turn
@@ -6538,6 +6624,12 @@ def said_asker(principal_ref: str) -> str:
     return raw if raw.startswith(_DOOR_PREFIXES) else f"said:{raw}"
 
 
+def _early(inv_id: str) -> dict:
+    """``{"answered_early": <what it says>}`` on a report the person had answered now (punch list 89), else nothing."""
+    from pramanyx.agent import answer_now
+    return {"answered_early": answer_now.SAID} if answer_now.was_asked(inv_id) else {}
+
+
 def _job_id_for_investigation(inv_id: str) -> Optional[str]:
     """The kernel job running (or that ran) this investigation — read from the
     journal, where every investigation.* event is job-stamped. No extra state."""
@@ -6559,6 +6651,24 @@ def cancel_investigation_route(inv_id: str):
         raise HTTPException(status_code=404, detail="No kernel job found for this investigation")
     cancelled = kernel().cancel(job_id, reason="cancelled on request")
     return {"investigation_id": inv_id, "job_id": job_id, "cancelled": cancelled}
+
+
+@router.post("/investigations/{inv_id}/answer-now")
+def answer_now_route(inv_id: str, request: Request):
+    """Answer now (punch list 89): the person stops a running deep analysis and has it answer from what it has found —
+    where cancelling answers nothing. Every place the run decides whether to keep going goes to its write-up, which says
+    it was answered early. A person's own word: an agent is refused. 409 for a run that is not running."""
+    from pramanyx.agent import answer_now
+    from pramanyx.rbac.agent_gate import is_agent_request
+    if is_agent_request(request):
+        raise HTTPException(status_code=403, detail="answering now is the person's own call; an agent cannot make it")
+    inv = get_investigation(inv_id)
+    if not inv:
+        raise HTTPException(status_code=404, detail="No such investigation")
+    if str(inv.get("status") or "") not in ("running", "pending", "started"):
+        raise HTTPException(status_code=409, detail="It is not running: there is nothing to answer early.")
+    answer_now.ask(inv_id)
+    return {"investigation_id": inv_id, "answering_now": True}
 
 
 def build_resume_stream(inv_id: str, request: "Request | None", *, feedback: str = "",
@@ -6839,6 +6949,46 @@ def export_investigation(inv_id: str, format: str = "pdf", narrate: bool = False
         media_type=media_type,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.get("/exports/answers")
+def export_answers_route(ids: str, title: str = "", principal=Depends(get_principal)):
+    """Several answers as one PowerPoint deck, in the order given (punch list 92, 2026-11-18): a conversation's answers,
+    each drawn from its stored report as its own export draws it. `ids` is a comma-separated list of investigation ids,
+    at most 30; each must be the caller's to read, and one that is not, or is gone, refuses the whole deck by name."""
+    from fastapi.responses import Response
+    from pramanyx.security.authz import check_owner
+
+    wanted = [i for i in dict.fromkeys(x.strip() for x in (ids or "").split(",")) if i]
+    if not wanted:
+        raise HTTPException(status_code=400, detail="Name the answers the deck is made of (ids=a,b,c)")
+    if len(wanted) > 30:
+        raise HTTPException(status_code=400, detail="A deck holds at most 30 answers; choose the ones it is for")
+    invs = []
+    for inv_id in wanted:
+        check_owner("investigation", inv_id, principal)
+        inv = get_investigation(inv_id)
+        if not inv:
+            raise HTTPException(status_code=404, detail=f"Answer {inv_id} is not there any more")
+        invs.append(inv)
+    try:
+        from pramanyx.export import ExportUnavailable, export_answers
+    except ImportError as exc:
+        logger.warning("deck export requested but its extra failed to import: %s", exc)
+        raise HTTPException(status_code=501, detail=(
+            "Report export needs the 'export' extra (reportlab, python-pptx, matplotlib). "
+            f"Install it with:  uv sync --extra export   —  underlying import error: {exc}"))
+    try:
+        symbols = [resolve_currency_symbol(inv.get("connection_id") or "", inv.get("schema_name")) for inv in invs]
+        data, filename, media_type = export_answers(invs, title=title, money_symbols=symbols)
+    except ExportUnavailable as exc:
+        logger.warning("deck export requested but unavailable: %s", exc)
+        raise HTTPException(status_code=501, detail=str(exc))
+    except Exception:  # never leak a stack trace to the client
+        logger.exception("deck export failed for %s", ",".join(wanted))
+        raise HTTPException(status_code=500, detail="export failed")
+    return Response(content=data, media_type=media_type,
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
 @router.delete("/investigations", status_code=200)

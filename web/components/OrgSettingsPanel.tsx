@@ -45,6 +45,7 @@ import { OWNERS_CHANGED, usesLabel } from "@/components/OwnersPanel";
 import { Loading } from "@/components/ui/states";
 import { SelectField } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 
 import { Details, FIELDS, Field, Note, Pair, SaveLine, Stack, goTo, plural } from "./settings/parts";
@@ -352,6 +353,17 @@ export function OrgSettingsPanel({ workspaceId, workspaceName }: { workspaceId?:
       {/* CB-6 — the quarter's priorities, written by people; saved with the organisation settings. */}
       {app && (
         <OrgPrioritiesSection value={s.priorities ?? []} onChange={(next) => { setSaved(false); setS((prev) => ({ ...prev, priorities: next })); }} />
+      )}
+
+      {/* Punch list 94 (2026-11-18) — what every answer is told, on every connection; saved with the organisation
+          settings. A connection's own instructions follow it and take precedence. */}
+      {app && (
+        <Card label="Instructions for every answer" ariaLabel="Instructions for every answer">
+          <Textarea id="org-instructions" aria-label="Instructions for every answer" rows={4}
+            value={s.instructions ?? ""} placeholder="Fiscal year starts in February. Exclude test accounts."
+            onChange={(e) => { setSaved(false); setS((prev) => ({ ...prev, instructions: e.target.value })); }} />
+          <Note>Every question on every connection reads these when it writes its query and its answer. A connection&apos;s own instructions follow them and win where the two disagree.</Note>
+        </Card>
       )}
 
       <Pair>

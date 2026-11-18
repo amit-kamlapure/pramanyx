@@ -42,7 +42,9 @@ import {
 import type { CardState } from "@/components/brief/PinnedCardBody";
 import { CanvasScale, CellBoxContext, OFF_GRID, useMeasured, type CellBox } from "@/components/dashboards/cellBox";
 import { QuestionPiece } from "@/components/dashboards/QuestionPiece";
-import { DashboardTile, SaidTile, WIDE, WithheldTile, tileShape, type QueryWaiting, type TileDoors, type TileFocus } from "@/components/dashboards/DashboardTile";
+import { DashboardTile, Frame, SaidTile, WIDE, WithheldTile, tileShape, type QueryWaiting, type TileDoors, type TileFocus } from "@/components/dashboards/DashboardTile";
+import { PeriodPicker } from "@/components/dashboards/PeriodPicker";
+import type { RangeChoice } from "@/components/brief/BriefRange";
 import { ActionButtonsPiece } from "@/components/dashboards/ActionButtonsPiece";
 import { ReadSlotContext, type ReadSlot, type ReadStatus } from "@/components/dashboards/readSlot";
 import { ChooseOnePiece, ObjectListPiece, ObjectMapPiece, ObjectSearchPiece, ObjectTimelinePiece } from "@/components/dashboards/AppPieces";
@@ -56,7 +58,7 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Refusal } from "@/components/ui/states";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { runCard, traceField, type BriefingRange, type CardRunResult, type DashboardCard, type QueryNarrowing } from "@/lib/api";
+import { runCard, traceField, type BriefingRange, type CardRunResult, type DashboardCard, type DashboardRange, type QueryNarrowing } from "@/lib/api";
 import {
   FILTER_DEFAULT_PX, FILTER_WIDTH, GRADE, GRID, LIMITS, SPAN, rowsTall, sizeOf, type ActionButtonDef, type ComponentName,
   type GridKind, type Layout, type Size, type Tone,
@@ -125,6 +127,19 @@ interface DashboardContextValue {
   /** The board study — the reader's focus, and where a click on a card's mark goes. */
   focus: DashboardFocus[];
   pick: ((cardId: string, p: ChartPick) => void) | null;
+  /** v15 — the dashboard's period and the door that changes it, read by the Period piece; null where the page offers
+   *  no choice of period (it then says the period it was read for). */
+  period: PeriodDoor | null;
+}
+
+/** The period a dashboard is read for, and the reader's choice of another (v15). */
+export interface PeriodDoor {
+  value: RangeChoice;
+  onChange: (next: RangeChoice) => void;
+  /** The range the cards on screen were read for; null while none is read. */
+  showing: DashboardRange | null;
+  reading?: boolean;
+  disabled?: boolean;
 }
 
 const DashboardContext = createContext<DashboardContextValue | null>(null);
@@ -266,6 +281,15 @@ const MAX_AUTO_COLUMNS = 4;
 const TALL_MIN = 320;
 /** A section on the grid narrower than this draws its elements one under another, each across its whole width. */
 const NARROW_GRID = 560;
+/** The builder's guides on a section's grid: dots along each column's start (one column and its gap apart) and each row's
+ *  start (one row and its gap, 40 px, apart). */
+const GUIDE_DOT = "color-mix(in srgb, var(--b1) 75%, transparent)";
+const GUIDES = {
+  backgroundImage: `radial-gradient(circle at 1px 1px, ${GUIDE_DOT} 0.9px, transparent 1.3px), `
+    + `radial-gradient(circle at 1px 1px, ${GUIDE_DOT} 0.9px, transparent 1.3px)`,
+  backgroundSize: `calc((100% + ${GRID.gap}px) / ${GRID.columns}) 8px, 8px ${GRID.row + GRID.gap}px`,
+  backgroundRepeat: "repeat",
+};
 
 /** How many columns a section draws: the spec's, when it says, never more than fit — and how wide it is. Width 0 is
  *  a section not yet measured (or a test's DOM), and draws as asked. */
@@ -424,11 +448,18 @@ function PiecesSection({ element, children }: ComponentRenderProps<SectionProps>
       </div>
       <div ref={ref} data-columns={gridded ? GRID.columns : columns} data-grid={gridded ? GRID.columns : undefined}
         style={gridded ? {
+          // the cells' offsets are read from it (`measureSection`): where each is drawn is its column and row
+          position: "relative",
           display: "grid", gap: GRID.gap, alignItems: "stretch", gridAutoRows: `${GRID.row}px`,
           gridTemplateColumns: `repeat(${stacked ? 1 : GRID.columns}, minmax(0, 1fr))`,
           // the board study: a piece moved or resized leaves no hole — a later one that fits fills it
           gridAutoFlow: "row dense",
+          // in the builder, the grid itself (the user, 2026-11-18, of a peer product's canvas: "See the grid and its logic.. its
+          // nice"): a dotted line where each of the twelve columns and each 40 px row begins, so a person sees where a
+          // drag will land. A tint behind the pieces, not a frame; a reader never sees it.
+          ...(doors.onRegrid && !stacked ? GUIDES : {}),
         } : {
+          position: "relative",
           display: "grid", gap: GAP, alignItems: "stretch", gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
           gridAutoFlow: "row dense",
         }}>
@@ -513,23 +544,38 @@ function measureSection(grid: HTMLElement): Record<string, Box> {
     // the layout's own px — the builder's canvas may draw the dashboard scaled, and the grid is laid out unscaled
     const r = { width: child.offsetWidth, height: child.offsetHeight };
     if (!key || !r.width || !r.height) continue;
-    out[key] = { w: Math.round((r.width + GRID.gap) / (colW + GRID.gap)), h: Math.round((r.height + GRID.gap) / GRADE) };
+    out[key] = {
+      w: Math.round((r.width + GRID.gap) / (colW + GRID.gap)), h: Math.round((r.height + GRID.gap) / GRADE),
+      // where it is drawn, on the twelve columns and the 40 px rows (free placement, v14)
+      x: Math.max(1, Math.round(child.offsetLeft / (colW + GRID.gap)) + 1), y: Math.max(1, Math.round(child.offsetTop / GRADE) + 1),
+    };
   }
   return out;
 }
 
-type Edge = "w" | "h" | "both";
+/** The edge or corner a handle moves: `w` the right edge (columns), `h` the bottom (rows), `both` the bottom-right
+ *  corner — and, since 2026-11-18, their twins on the left, the top and the other three corners. */
+type Edge = "w" | "h" | "both" | "left" | "top" | "nw" | "ne" | "sw";
 
-/** A handle's look: a short bar on the edge it moves, in the accent, shown while the element is pointed at or focused. */
+/** Which way a pointer's move grows the element along each axis, per handle: the left and top handles grow it as the
+ *  right and bottom ones do, the other way. Placed freely (v14; the user, 2026-11-18: "Allow free placement"), a left or
+ *  top handle moves that edge — the element's column or row moves with it and its right or bottom edge stays. */
+const GROW: Record<Edge, [number, number]> = {
+  w: [1, 0], h: [0, 1], both: [1, 1], left: [-1, 0], top: [0, -1], nw: [-1, -1], ne: [1, -1], sw: [-1, 1],
+};
+
+/** A handle shown only while its element is pointed at or focused; the chosen element's are shown at rest. */
 const HANDLE = "opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 group-focus:opacity-100";
 
 /** The handles a person drags to resize an element one grade at a time (Arc AP-1; the user, 2026-10-10: "adjusted one
  *  grade point at a time"): the right edge for its columns, the bottom edge for its rows, the corner for both. Each
  *  snaps grade by grade, says the size it would land on, and lands once, on release. On a section not yet on the grid
  *  every element is measured first, so moving the section onto the grid keeps what the reader saw. */
-function GridHandles({ cell, kind, from, gridded, onPreview, onDone }: {
+function GridHandles({ cell, kind, from, gridded, chosen = false, onPreview, onDone }: {
   cell: RefObject<HTMLDivElement | null>;
   kind: GridKind;
+  /** The element the builder has chosen: its eight handles are drawn at rest (the dashboards study, R1, 2026-11-18). */
+  chosen?: boolean;
   /** The element's room now: its own on the grid; null off it, where it is measured when a drag begins. */
   from: Box | null;
   gridded: boolean;
@@ -546,17 +592,32 @@ function GridHandles({ cell, kind, from, gridded, onPreview, onDone }: {
     ev.preventDefault();
     ev.stopPropagation();
     const target = ev.currentTarget;
-    const measured = gridded ? {} : measureSection(grid);
-    const start = from ?? measured[el.dataset.element ?? ""];
+    const [gx, gy] = GROW[edge];
+    // an edge on the left or the top moves the element's place: it is read where the element is drawn, as is every
+    // other element's, so each keeps where it is (free placement, v14)
+    const places = gx < 0 || gy < 0 || typeof from?.x === "number";
+    const measured = gridded && !places ? {} : measureSection(grid);
+    const seen = measured[el.dataset.element ?? ""];
+    const start: Box | undefined = from ? { ...from, ...(places && typeof from.x !== "number" && seen ? { x: seen.x, y: seen.y } : {}) } : seen;
     if (!start) return;
     const colW = (grid.clientWidth - GRID.gap * (GRID.columns - 1)) / GRID.columns;
     const x0 = ev.clientX, y0 = ev.clientY;
     let w = start.w, h = start.h;
     try { target.setPointerCapture(ev.pointerId); } catch { /* an engine without capture still sends the moves over the handle */ }
+    const sx = start.x, sy = start.y;
+    // the furthest a right edge may go: the twelfth column, from where the element starts
+    const most = typeof sx === "number" && gx > 0 ? Math.min(lim.w[1], GRID.columns - sx + 1) : lim.w[1];
+    let x = sx, y = sy;
     const move = (mv: PointerEvent) => {
-      const nw = edge === "h" ? start.w : clamp(lim.w[0], lim.w[1], start.w + Math.round((mv.clientX - x0) / scale / (colW + GRID.gap)));
-      const nh = edge === "w" ? start.h : clamp(lim.h[0], lim.h[1], start.h + Math.round((mv.clientY - y0) / scale / GRADE));
-      if (nw !== w || nh !== h) { w = nw; h = nh; onPreview({ w, h }, colW); setSaid({ w, h }); }
+      let nw = gx === 0 ? start.w : clamp(lim.w[0], most, start.w + gx * Math.round((mv.clientX - x0) / scale / (colW + GRID.gap)));
+      let nh = gy === 0 ? start.h : clamp(lim.h[0], lim.h[1], start.h + gy * Math.round((mv.clientY - y0) / scale / GRADE));
+      let nx = sx, ny = sy;
+      if (gx < 0 && typeof sx === "number") { nx = sx + start.w - nw; if (nx < 1) { nw += nx - 1; nx = 1; } }
+      if (gy < 0 && typeof sy === "number") { ny = sy + start.h - nh; if (ny < 1) { nh += ny - 1; ny = 1; } }
+      if (nw !== w || nh !== h || nx !== x || ny !== y) {
+        w = nw; h = nh; x = nx; y = ny;
+        onPreview(typeof x === "number" && typeof y === "number" ? { w, h, x, y } : { w, h }, colW); setSaid({ w, h });
+      }
     };
     const up = () => {
       target.removeEventListener("pointermove", move);
@@ -564,21 +625,34 @@ function GridHandles({ cell, kind, from, gridded, onPreview, onDone }: {
       target.removeEventListener("pointercancel", up);
       onPreview(null, colW);
       setSaid(null);
-      if (w !== start.w || h !== start.h) onDone({ w, h }, measured);
+      const placed = typeof x === "number" && typeof y === "number";
+      if (w !== start.w || h !== start.h || x !== sx || y !== sy) onDone(placed ? { w, h, x: x!, y: y! } : { w, h }, measured);
     };
     target.addEventListener("pointermove", move);
     target.addEventListener("pointerup", up);
     target.addEventListener("pointercancel", up);
   };
-  const bar = (edge: Edge, place: Record<string, string | number>, cursor: string, title: string) => (
-    <span key={edge} data-testid={`grid-handle-${edge}`} title={title} aria-hidden="true" onPointerDown={down(edge)} className={HANDLE}
-      style={{ position: "absolute", zIndex: 3, background: "var(--accent)", borderRadius: 3, cursor, touchAction: "none", ...place }} />
+  // On the outline the chosen element wears: a pill on each edge, a dot on each corner, in the page's own ground with an
+  // accent edge, so a handle reads as something to hold before it is pointed at.
+  const bar = (edge: Edge, place: Record<string, string | number>, cursor: string, title: string, round = false) => (
+    <span key={edge} data-testid={`grid-handle-${edge}`} data-at-rest={chosen || undefined} title={title} aria-hidden="true"
+      onPointerDown={down(edge)} className={chosen ? undefined : HANDLE}
+      style={{ position: "absolute", zIndex: 3, background: "var(--bg-1)", border: "1.5px solid var(--accent)",
+        borderRadius: round ? "50%" : 999, cursor, touchAction: "none", boxSizing: "border-box", ...place }} />
   );
+  const columns = "Drag: one column at a time";
+  const rows = "Drag: one row at a time";
+  const both = "Drag: columns and rows · Alt+arrows: one grade";
   return (
     <>
-      {bar("w", { right: -4, top: "50%", width: 5, height: 30, transform: "translateY(-50%)" }, "ew-resize", "Drag: one column at a time")}
-      {bar("h", { bottom: -4, left: "50%", height: 5, width: 30, transform: "translateX(-50%)" }, "ns-resize", "Drag: one row at a time")}
-      {bar("both", { right: -5, bottom: -5, width: 11, height: 11 }, "nwse-resize", "Drag: columns and rows · Alt+arrows: one grade")}
+      {bar("w", { right: -6, top: "50%", width: 7, height: 26, transform: "translateY(-50%)" }, "ew-resize", columns)}
+      {bar("left", { left: -6, top: "50%", width: 7, height: 26, transform: "translateY(-50%)" }, "ew-resize", columns)}
+      {bar("h", { bottom: -6, left: "50%", height: 7, width: 26, transform: "translateX(-50%)" }, "ns-resize", rows)}
+      {bar("top", { top: -6, left: "50%", height: 7, width: 26, transform: "translateX(-50%)" }, "ns-resize", rows)}
+      {bar("both", { right: -6, bottom: -6, width: 10, height: 10 }, "nwse-resize", both, true)}
+      {bar("nw", { left: -6, top: -6, width: 10, height: 10 }, "nwse-resize", both, true)}
+      {bar("ne", { right: -6, top: -6, width: 10, height: 10 }, "nesw-resize", both, true)}
+      {bar("sw", { left: -6, bottom: -6, width: 10, height: 10 }, "nesw-resize", both, true)}
       {said && (
         <span data-testid="grid-size-said" className="aug-fs-sm" style={{ position: "absolute", right: 12, bottom: 10, zIndex: 4,
           background: "var(--bg-3)", border: "1px solid var(--b2)", color: "var(--t1)", borderRadius: "var(--r2)", padding: "1px 8px",
@@ -646,20 +720,51 @@ export function readStateOf(held: { status: ReadStatus; reason: string }[]): Rea
 /** The board study (2026-11-16) — a piece moves by its header: drag it, and a marker shows the side of the piece it would
  *  land beside; let go to move it there, Escape to leave it. The grip draws at rest in the builder (an action looks like
  *  one before the pointer reaches it, CLARITY.md) and leaves the header's right end to the piece's own doors. */
-function MoveGrip({ cell, elementKey, onMove }: {
+function MoveGrip({ cell, elementKey, onMove, place }: {
   cell: RefObject<HTMLDivElement | null>; elementKey: string; onMove: (key: string, target: string, place: "before" | "after") => void;
+  /** Free placement (v14; the user, 2026-11-18: "Allow free placement"): dropped inside its own section, the element lands
+   *  on the cell under the pointer, a dashed box saying where while it moves. Without it, or dropped outside its
+   *  section, it moves beside the piece it is dropped on, as before. */
+  place?: { own: Box | null; onPlace: (box: Box, measured: Record<string, Box>) => void };
 }) {
   const [landing, setLanding] = useState<{ target: string; place: "before" | "after"; rect: DOMRect } | null>(null);
+  const [ghost, setGhost] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
   const down = (e: ReactPointerEvent<HTMLSpanElement>) => {
     if (e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
     const grip = e.currentTarget;
-    grip.setPointerCapture(e.pointerId);
+    try { grip.setPointerCapture(e.pointerId); } catch { /* an engine without capture still sends the moves over the grip */ }
     const own = cell.current;
+    const grid = own?.parentElement ?? null;
     if (own) own.style.opacity = "0.5";
+    // the grid's geometry as drawn — the builder's canvas may scale the dashboard — and where in the element it was held
+    const measured = place && grid ? measureSection(grid) : {};
+    const from: Box | undefined = place ? (place.own && typeof place.own.x === "number" ? place.own : measured[elementKey]) : undefined;
+    const gridRect = grid?.getBoundingClientRect();
+    const scale = grid && gridRect && grid.offsetWidth ? gridRect.width / grid.offsetWidth : 1;
+    const colW = grid ? (grid.clientWidth - GRID.gap * (GRID.columns - 1)) / GRID.columns : 0;
+    const colPitch = (colW + GRID.gap) * scale, rowPitch = GRADE * scale;
+    const ownRect = own?.getBoundingClientRect();
+    const heldCol = ownRect && colPitch > 0 ? Math.floor((e.clientX - ownRect.left) / colPitch) : 0;
+    const heldRow = ownRect && rowPitch > 0 ? Math.floor((e.clientY - ownRect.top) / rowPitch) : 0;
     let at: { target: string; place: "before" | "after"; rect: DOMRect } | null = null;
+    let cellAt: Box | null = null;
     const move = (ev: PointerEvent) => {
+      const r = grid?.getBoundingClientRect();
+      if (from && r && colPitch > 0 && ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top - rowPitch && ev.clientY <= r.bottom + rowPitch * 4) {
+        // inside its own section: the cell under the pointer, less where in the element it was held
+        const x = Math.max(1, Math.min(GRID.columns - from.w + 1, Math.floor((ev.clientX - r.left) / colPitch) + 1 - heldCol));
+        const y = Math.max(1, Math.floor((ev.clientY - r.top) / rowPitch) + 1 - heldRow);
+        cellAt = { w: from.w, h: from.h, x, y };
+        at = null;
+        setLanding(null);
+        setGhost({ left: r.left + (x - 1) * colPitch, top: r.top + (y - 1) * rowPitch,
+          width: from.w * colPitch - GRID.gap * scale, height: from.h * rowPitch - GRID.gap * scale });
+        return;
+      }
+      cellAt = null;
+      setGhost(null);
       const over = (document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null)?.closest<HTMLElement>("[data-element]");
       const target = over?.dataset.element;
       if (!over || !target || target === elementKey) { at = null; setLanding(null); return; }
@@ -674,7 +779,10 @@ function MoveGrip({ cell, elementKey, onMove }: {
       window.removeEventListener("keydown", esc);
       if (own) own.style.opacity = "";
       setLanding(null);
-      if (keep && at) onMove(elementKey, at.target, at.place);
+      setGhost(null);
+      const landed = cellAt as Box | null;
+      if (keep && landed && place && from && (landed.x !== from.x || landed.y !== from.y)) place.onPlace(landed, measured);
+      else if (keep && !landed && at) onMove(elementKey, at.target, at.place);
     };
     const up = () => end(true);
     const cancel = () => end(false);
@@ -686,7 +794,8 @@ function MoveGrip({ cell, elementKey, onMove }: {
   };
   return (
     <>
-      <span data-testid="move-grip" title="Drag to move it beside another piece" onPointerDown={down}
+      <span data-testid="move-grip" title={place ? "Drag to place it on the grid, or beside a piece in another section" : "Drag to move it beside another piece"}
+        onPointerDown={down}
         style={{ position: "absolute", left: 0, top: 0, right: 112, height: 34, zIndex: 2, cursor: "grab", touchAction: "none" }}>
         <span aria-hidden="true" className="aug-fs-xs" style={{ position: "absolute", left: 4, top: 4, lineHeight: 1, letterSpacing: -1,
           color: "var(--t3)", border: "1px solid var(--b1)", borderRadius: "var(--r2)", padding: "1px 2px", background: "var(--bg-2)" }}>⋮⋮</span>
@@ -695,6 +804,10 @@ function MoveGrip({ cell, elementKey, onMove }: {
         <span data-testid="move-marker" aria-hidden="true" style={{ position: "fixed", zIndex: 50, pointerEvents: "none", width: 3, borderRadius: 2,
           background: "var(--accent)", top: landing.rect.top, height: landing.rect.height,
           left: landing.place === "before" ? landing.rect.left - GRID.gap / 2 - 1 : landing.rect.right + GRID.gap / 2 - 2 }} />,
+        document.body)}
+      {ghost && typeof document !== "undefined" && createPortal(
+        <span data-testid="move-ghost" aria-hidden="true" style={{ position: "fixed", zIndex: 50, pointerEvents: "none", ...ghost,
+          border: "2px dashed var(--blue3)", borderRadius: "var(--r3)", background: "color-mix(in srgb, var(--blue3) 10%, transparent)" }} />,
         document.body)}
     </>
   );
@@ -740,7 +853,10 @@ function Cell({ type, props, size, testid, extra, children }: {
   // the size-by-name corner's own preview, where the grid is not offered
   const [corner, setCorner] = useState<{ w: number; h: number } | null>(null);
   const kind = type in LIMITS ? (type as GridKind) : null;
-  const own: Box | null = gridded ? { w: Number(props.w) || 1, h: Number(props.h) || 1 } : null;
+  const own: Box | null = gridded ? {
+    w: Number(props.w) || 1, h: Number(props.h) || 1,
+    ...(typeof props.x === "number" && typeof props.y === "number" ? { x: props.x, y: props.y } : {}),
+  } : null;
   const regrid = !!doors.onRegrid && key !== null && kind !== null;
   const movable = !!doors.onMove && key !== null;
   const { children: siblings } = useContext(SectionKeys);
@@ -753,10 +869,13 @@ function Cell({ type, props, size, testid, extra, children }: {
   const step = (dw: number, dh: number) => {
     if (!kind || !key) return;
     const grid = ref.current?.parentElement;
-    const measured = gridded || !grid ? {} : measureSection(grid);
+    const placed = typeof own?.x === "number";
+    const measured = (gridded && !placed) || !grid ? {} : measureSection(grid);
     const from = own ?? measured[key] ?? boxOf({ type, props, children: [] }, columns);
     const next = clampBox(type, { w: from.w + dw, h: from.h + dh });
-    if (next.w !== from.w || next.h !== from.h) done(next, measured);
+    // a placed element keeps its place and grows to the right and down, within the twelve columns
+    if (placed && own) next.w = Math.min(next.w, GRID.columns - own.x! + 1);
+    if (next.w !== from.w || next.h !== from.h) done(placed && own ? { ...next, x: own.x, y: own.y } : next, measured);
   };
   // the builder's − and + reach this element by its key (Arc AP-1) — registered as the layout is committed, before the
   // builder reads the room again, so its readout is never a step behind
@@ -773,8 +892,11 @@ function Cell({ type, props, size, testid, extra, children }: {
   });
 
   const box: CellBox = gridded ? { onGrid: true, w: (preview ?? own ?? { w: 1 }).w, h: (preview ?? own ?? { h: 1 }).h } : OFF_GRID;
+  // placed freely (v14): drawn from its column and row; a narrow section stacks every element in reading order instead
+  const at = !stacked ? (preview?.x !== undefined ? preview : own) : null;
   const style: Record<string, unknown> = gridded
-    ? { gridColumn: `span ${stacked ? 1 : Math.min(box.w, GRID.columns)}`, gridRow: `span ${box.h}`, minHeight: 0 }
+    ? { gridColumn: typeof at?.x === "number" ? `${at.x} / span ${Math.min(box.w, GRID.columns)}` : `span ${stacked ? 1 : Math.min(box.w, GRID.columns)}`,
+        gridRow: typeof at?.y === "number" ? `${at.y} / span ${box.h}` : `span ${box.h}`, minHeight: 0 }
     : { gridColumn: Math.min((corner ?? span).w, columns) > 1 ? `span ${Math.min((corner ?? span).w, columns)}` : undefined,
         gridRow: (corner ?? span).h > 1 ? `span ${(corner ?? span).h}` : undefined,
         minHeight: (corner ?? span).h > 1 ? TALL_MIN : undefined,
@@ -791,6 +913,15 @@ function Cell({ type, props, size, testid, extra, children }: {
       onKeyDown={regrid || movable ? e => {
         if (e.target !== e.currentTarget || !e.altKey || !(e.key in STEP)) return;
         if (e.shiftKey) {
+          // placed freely: one column or one row, everything it then covers pushed down (v14)
+          if (regrid && key && gridded && !stacked && typeof own?.x === "number" && typeof own.y === "number") {
+            const [dx, dy] = STEP[e.key];
+            const nx = Math.max(1, Math.min(GRID.columns - own.w + 1, own.x + dx)), ny = Math.max(1, own.y + dy);
+            e.preventDefault();
+            const grid = ref.current?.parentElement;
+            if (nx !== own.x || ny !== own.y) done({ ...own, x: nx, y: ny }, grid ? measureSection(grid) : {});
+            return;
+          }
           // one place earlier or later among its siblings, as a drag would land it
           if (!movable || !key) return;
           const at = siblings.indexOf(key);
@@ -813,9 +944,10 @@ function Cell({ type, props, size, testid, extra, children }: {
           width: preview.w * ghostColumn + (preview.w - 1) * GRID.gap, height: rowsTall(preview.h),
           border: "2px dashed var(--blue3)", borderRadius: "var(--r3)" }} />
       )}
-      {movable && key && <MoveGrip cell={ref} elementKey={key} onMove={doors.onMove!} />}
+      {movable && key && <MoveGrip cell={ref} elementKey={key} onMove={doors.onMove!}
+        place={regrid && !stacked && (gridded || kind !== null) ? { own, onPlace: done } : undefined} />}
       {regrid && kind && (
-        <GridHandles cell={ref} kind={kind} from={own} gridded={gridded}
+        <GridHandles cell={ref} kind={kind} from={own} gridded={gridded} chosen={!!chosen}
           onPreview={(b, col) => { setPreview(b); setGhostColumn(col); }} onDone={done} />
       )}
       {resizable && (
@@ -916,6 +1048,35 @@ function DashboardNote({ element }: ComponentRenderProps<{ text: string; size?: 
       {key => (
         <NoteTile elementKey={own ? key : null} text={element.props.text} author={element.props.author}
           writtenAt={element.props.written_at} size={element.props.size ?? "small"} doors={doors} />
+      )}
+    </Cell>
+  );
+}
+
+/** v15 — the period on the dashboard (the user, 2026-11-18: "Lets have date/range picker this way.. so that we can remove
+ *  period bar"): what every card is cut to, each by its own date, and the reader's choice of another — a piece placed,
+ *  sized and set up like any other. Where the page offers no choice it says the period the cards were read for. */
+function DashboardPeriod({ element }: ComponentRenderProps<{ label?: string | null; size?: Size | null }>) {
+  const { period, host } = useDashboard();
+  const label = element.props.label || "Period";
+  return (
+    <Cell type="Period" props={element.props as Record<string, unknown>} size={element.props.size ?? "small"} testid="dashboard-period-piece">
+      {() => (
+        <Frame testid="dashboard-period-tile">
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", minWidth: 0 }}>
+            {period ? (
+              <PeriodPicker label={label} value={period.value} onChange={period.onChange} showing={period.showing}
+                reading={period.reading} disabled={period.disabled} />
+            ) : (
+              <>
+                <span className="aug-fs-sm" style={{ color: "var(--t2)" }}>{label}</span>
+                <span className="aug-fs-sm" data-testid="dashboard-period-said" style={{ color: "var(--t1)" }}>
+                  {host.range.status === "standing" ? "As written" : (host.range as { covers?: string }).covers || "The period it was read for"}
+                </span>
+              </>
+            )}
+          </div>
+        </Frame>
       )}
     </Cell>
   );
@@ -1232,6 +1393,7 @@ const REGISTRY = {
   QueryFilters: DashboardQueryFilters,
   ScenarioInputs: DashboardScenarioInputs,
   AddRow: DashboardAddRow,
+  Period: DashboardPeriod,
 } satisfies Record<ComponentName, unknown>;
 
 const NO_IMAGES: Record<string, ImageStamp> = {};
@@ -1256,7 +1418,9 @@ function FocusBar({ focus, onFocus }: { focus: DashboardFocus[]; onFocus: (next:
 const NO_READS: readonly string[] = [];
 
 export function ComposedDashboard({ spec, cards, host, doors, sym = "$", images = NO_IMAGES, range = null, schema, connectionId, dashboardId,
-  selected = null, handle, reads = NO_READS, asGroup, onSaid, focus = NO_FOCUS, onFocus }: {
+  selected = null, handle, reads = NO_READS, asGroup, onSaid, focus = NO_FOCUS, onFocus, period = null }: {
+  /** v15 — the period the cards are read for and the door that chooses another, for the Period piece. */
+  period?: PeriodDoor | null;
   spec: unknown;
   cards: CardState[];
   host: DashboardHostState;
@@ -1332,13 +1496,14 @@ export function ComposedDashboard({ spec, cards, host, doors, sym = "$", images 
     steppers,
     reads: new Set(readsKey ? readsKey.split("\n") : []),
     focus,
+    period,
     pick: onFocus ? (cardId: string, p: ChartPick) => {
       // what the click stands for, traced off the card's own statement — or said, when a click on it filters nothing
       traceAndChoose(traceField, cardId, p, focus, onFocus, why => toast.info("This click filters nothing", { description: why }))
         .catch(e => toast.error("The click could not be read", { description: (e as Error).message }));
     } : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on what the spec and the range say
-  }), [check.valid, written, cards, host, doors, sym, images, rangeKey, schema, connectionId, selected, steppers, readsKey, focus, onFocus]);
+  }), [check.valid, written, cards, host, doors, sym, images, rangeKey, schema, connectionId, selected, steppers, readsKey, focus, onFocus, period]);
 
   if (!check.valid) {
     return (

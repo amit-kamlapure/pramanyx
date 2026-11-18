@@ -22,7 +22,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode }
 
 import { CanvasScale } from "@/components/dashboards/cellBox";
 import type { DashboardHandle, ReadState } from "@/components/dashboards/ComposedDashboard";
-import { PieceSetup } from "@/components/dashboards/PieceSetup";
+import { PieceSetup, type CardDate } from "@/components/dashboards/PieceSetup";
 import { ChoiceSetup, DataPane, SetSetup, ValueSetup, readingElements } from "@/components/dashboards/WiringSetup";
 import { Segmented } from "@/components/ui/segmented";
 import { Button } from "@/components/ui/button";
@@ -124,16 +124,21 @@ function Steps({ label, value, least, most, onStep }: { label: string; value: nu
 
 const Rule = () => <span aria-hidden="true" style={{ width: 1, height: 16, background: "var(--b2)", margin: "0 6px" }} />;
 
-export function DashboardBuilder({ spec, onChange, cardTitle, bar, add, words, aside, above, connectionId, schema,
-  onAddPiece, checks, cardSetup, cardChart, cardSql, cardReads, queryCards, children }: {
+export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words, aside, above, connectionId, schema,
+  onAddPiece, checks, cardSetup, cardChart, cardSql, cardReads, queryCards, onUndo, onRedo, cardDates, children }: {
   spec: DashboardSpec;
+  /** v15 — each placed card and the date the period cuts it by, for the Period piece's setup. */
+  cardDates?: () => CardDate[];
+  /** Undo and Redo, on the canvas toolbar and the editing keys (the dashboards study, R2 and R3, 2026-11-18). */
+  onUndo?: () => void;
+  onRedo?: () => void;
+  /** The canvas toolbar's doors the page keeps — words, a picture, buttons, asking in words — and which one is open. */
+  tools?: CanvasTools;
   /** Every change, as the next spec and the version's note. */
   onChange: (next: DashboardSpec, note: string) => void;
   cardTitle?: (id: string) => string | undefined;
   /** The edit bar, drawn by the page that keeps the dashboard. */
   bar: ReactNode;
-  /** What may be added — a card, a note, a piece — under the layout. */
-  add?: ReactNode;
   /** The change asked in words, at the foot of the layout. */
   words?: ReactNode;
   /** The history while it is open, in the setup's place. */
@@ -143,7 +148,7 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, add, words, a
   connectionId: string;
   schema?: string;
   /** Arc AP-4 — open the piece picker for a section: the one chosen, the one a chosen piece sits in, or none. */
-  onAddPiece?: (section: string | null) => void;
+  onAddPiece?: (section: string | null, what?: AddWhat) => void;
   /** Arc AP-6 — what each element drawn read, by key: the checks chip counts them and lists the ones to fix. */
   checks?: Record<string, ReadState>;
   /** Arc AP-7 — the setup of a card the page knows more of (a card of a person's own query), by its id; null for none. */
@@ -161,6 +166,9 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, add, words, a
 }) {
   const [chosen, setSelected] = useState<string | null>(null);
   const [tab, setTab] = useState<"layout" | "data">("layout");
+  // the layout pane, folded to a strip so the canvas has the room (the dashboards study, R7, 2026-11-18); one click opens it
+  const [paneOpen, setPaneOpen] = useState(false);
+  const openPane = (t: "layout" | "data") => { setTab(t); setPaneOpen(true); if (t === "layout") setWire(null); };
   // a set, a value or a choice chosen in the Data tab: `set:<name>`, `value:<name>`, `choice:<name>`
   const [wire, setWire] = useState<string | null>(null);
   const wireName = wire ? wire.slice(wire.indexOf(":") + 1) : "";
@@ -171,6 +179,17 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, add, words, a
   // an element taken off, by hand or by an undo, is no longer chosen; nor is an element while a set is
   const selected = !wire && chosen && spec.elements[chosen] ? chosen : null;
   const choose = (key: string) => { setWire(null); setSelected(key); };
+  // add, then set up (the dashboards study, R2, 2026-11-18): the one element a change brings is chosen, so the panel
+  // turns to its setup — a piece placed from the toolbar, a card pinned, a piece an undo puts back
+  const seen = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    const now = new Set(Object.keys(spec.elements));
+    const before = seen.current;
+    seen.current = now;
+    if (!before) return;
+    const fresh = [...now].filter(k => !before.has(k));
+    if (fresh.length === 1) { setWire(null); setSelected(fresh[0]); }
+  }, [spec]);
 
   /** Hand a change on — or say why the rules refuse it, and draw nothing of it. */
   const apply = (next: DashboardSpec, note: string) => {
@@ -236,14 +255,62 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, add, words, a
   const target = selected && holds(selected) ? selected
     : selected ? Object.keys(spec.elements).find(k => holds(k) && spec.elements[k].children.includes(selected)) ?? null : null;
 
+  // The editing keys (the dashboards study, R3, 2026-11-18), each a door the builder already has: Cmd/Ctrl-Z and
+  // Shift-Cmd/Ctrl-Z (or Ctrl-Y) undo and redo; Delete or Backspace takes the chosen element off, as Take off does, and
+  // an undo puts it back; Cmd/Ctrl-D duplicates it; Escape lets it go. Never while a person types in a field.
+  const keys = useRef({ spec, selected, el, onUndo, onRedo, apply, setSelected, setWire, tools });
+  keys.current = { spec, selected, el, onUndo, onRedo, apply, setSelected, setWire, tools };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const at = e.target as HTMLElement | null;
+      if (e.defaultPrevented || (at && (at.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(at.tagName)))) return;
+      const k = keys.current;
+      const mod = e.metaKey || e.ctrlKey;
+      const key = e.key.toLowerCase();
+      if (mod && !e.altKey && ((key === "z" && e.shiftKey) || (key === "y" && e.ctrlKey && !e.metaKey))) {
+        if (k.onRedo) { e.preventDefault(); k.onRedo(); }
+      } else if (mod && !e.altKey && key === "z") {
+        if (k.onUndo) { e.preventDefault(); k.onUndo(); }
+      } else if (mod && !e.altKey && !e.shiftKey && key === "d") {
+        if (!k.selected || k.el?.type === "ObjectFilters" || k.el?.type === "Drawer") return;
+        e.preventDefault();
+        const d = duplicate(k.spec, k.selected);
+        if (d.key) { k.apply(d.spec, "duplicated by hand"); k.setSelected(d.key); }
+      } else if (!mod && !e.altKey && (e.key === "Delete" || e.key === "Backspace")) {
+        if (!k.selected) return;
+        e.preventDefault();
+        k.apply(takeOffAll(k.spec, k.selected), "taken off by hand");
+      } else if (e.key === "Escape" && !mod) {
+        // Esc lets go: what the toolbar opened is put away, then the chosen element
+        if (k.tools?.active) k.tools.onChoose?.();
+        else if (k.selected) { k.setSelected(null); k.setWire(null); }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   return (
     <div data-testid="dashboard-builder" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
       {bar}
-      <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: "232px minmax(0, 1fr) 304px" }}>
+      <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: `${paneOpen ? 232 : 44}px minmax(0, 1fr) 304px` }}>
+        {!paneOpen ? (
+          <aside aria-label="Layout, folded" data-testid="builder-pane-folded"
+            style={{ minHeight: 0, borderRight: "1px solid var(--b1)", background: "var(--bg-1)", display: "flex", flexDirection: "column", alignItems: "center", gap: 6, paddingTop: 10 }}>
+            <Button size="icon-sm" variant="outline" aria-label="Open the layout" title={`Open the layout · ${lines} ${lines === 1 ? "line" : "lines"}`}
+              data-testid="builder-open-layout" onClick={() => openPane("layout")}><Icon name="unfold" size={16} /></Button>
+            <Button size="icon-sm" variant="outline" aria-label="Open the variables" title="Open the variables: sets, values and choices"
+              data-testid="builder-open-variables" onClick={() => openPane("data")}><Icon name="json" size={16} /></Button>
+          </aside>
+        ) : (
         <aside aria-label="Layout" style={{ minHeight: 0, overflow: "auto", borderRight: "1px solid var(--b1)", background: "var(--bg-1)", display: "flex", flexDirection: "column" }}>
-          <div style={{ padding: "10px 10px 0" }}>
-            <Segmented label="The left pane" value={tab} options={[{ value: "layout", label: "Layout" }, { value: "data", label: "Variables" }]}
-              onChange={v => { setTab(v as "layout" | "data"); if (v === "layout") setWire(null); }} />
+          <div style={{ padding: "10px 10px 0", display: "flex", alignItems: "center", gap: 6 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <Segmented label="The left pane" value={tab} options={[{ value: "layout", label: "Layout" }, { value: "data", label: "Variables" }]}
+                onChange={v => { setTab(v as "layout" | "data"); if (v === "layout") setWire(null); }} />
+            </div>
+            <Button size="icon-sm" variant="ghost" aria-label="Fold the layout" title="Fold the layout away: the canvas takes the room"
+              data-testid="builder-fold" onClick={() => setPaneOpen(false)}><Icon name="fold" size={16} /></Button>
           </div>
           {tab === "data" ? (
             <DataPane spec={spec} selected={wire} onSelect={key => { setWire(key); setSelected(null); }} onChange={apply}
@@ -254,25 +321,12 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, add, words, a
               <LayoutTree spec={spec} selected={selected} onSelect={choose} cardTitle={cardTitle} entityTitle={entityTitle} />
             </>
           )}
-          {(add || onAddPiece) && (
-            <>
-              <PaneLabel>Add</PaneLabel>
-              <div data-testid="builder-add" style={{ display: "flex", flexWrap: "wrap", gap: 2, padding: "0 8px 8px" }}>
-                {onAddPiece && (
-                  <Button size="xs" variant="secondary" data-testid="builder-add-piece" title="Every piece, by what it is for — placed in the section chosen."
-                    onClick={() => onAddPiece(target)}>
-                    <Icon name="plus" /> Add a piece
-                  </Button>
-                )}
-                {add}
-              </div>
-            </>
-          )}
           <div style={{ flex: 1 }} />
           {words && <div style={{ borderTop: "1px solid var(--b1)", padding: "10px 12px" }}>{words}</div>}
         </aside>
+        )}
 
-        <div style={{ minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column", background: "var(--bg-0)" }}>
+        <div style={{ minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column", background: "var(--bg-0)", position: "relative" }}>
           <div data-testid="builder-selection" className="aug-fs-sm"
             style={{ display: "flex", alignItems: "center", gap: 4, padding: "6px 12px", borderBottom: "1px solid var(--b1)", minHeight: 40, flexWrap: "wrap" }}>
             {wire ? (
@@ -316,12 +370,12 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, add, words, a
                       </>
                     )}
                     {el?.type !== "ObjectFilters" && el?.type !== "Drawer" && (
-                      <Button size="xs" variant="ghost" data-testid="builder-duplicate"
+                      <Button size="xs" variant="ghost" data-testid="builder-duplicate" title="Duplicate it · ⌘D"
                         onClick={() => { const d = duplicate(spec, selected!); if (d.key) { apply(d.spec, "duplicated by hand"); setSelected(d.key); } }}>
                         <Icon name="copy" size={13} /> Duplicate
                       </Button>
                     )}
-                    <Button size="xs" variant="ghost" data-testid="builder-take-off"
+                    <Button size="xs" variant="ghost" data-testid="builder-take-off" title="Take it off · Delete (an undo puts it back)"
                       onClick={() => apply(takeOffAll(spec, selected!), "taken off by hand")}><Icon name="trash" size={13} /> Take off</Button>
                   </>
                 )}
@@ -360,7 +414,7 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, add, words, a
               {scale < 1 ? `Fit · ${zoom}%` : "100%"}
             </Button>
           </div>
-          <div ref={canvas} data-testid="builder-canvas" style={{ flex: 1, minHeight: 0, overflow: "auto", padding: PAD }}>
+          <div ref={canvas} data-testid="builder-canvas" data-dashboard-ground="" style={{ flex: 1, minHeight: 0, overflow: "auto", padding: PAD, background: "var(--bg-0)" }}>
             {above}
             <div style={{ width: layout ? layout * scale : undefined, height: room.height ? room.height * scale : undefined }}>
               <div ref={page} data-testid="builder-page" data-zoom={zoom}
@@ -370,7 +424,12 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, add, words, a
                 </CanvasScale.Provider>
               </div>
             </div>
+            {/* room under the dashboard, so the floating toolbar never covers its last row */}
+            <div aria-hidden="true" style={{ height: 72 }} />
           </div>
+          <CanvasToolbar tools={tools} onUndo={onUndo} onRedo={onRedo}
+            onChart={onAddPiece ? () => onAddPiece(target, "chart") : undefined}
+            onFilter={onAddPiece ? () => onAddPiece(target, "filter") : undefined} />
         </div>
 
         <aside aria-label="Setup" data-testid="builder-setup"
@@ -381,7 +440,8 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, add, words, a
               onRenamed={n => setWire(`value:${n}`)} queryCards={queryCards} />
               : wireKind === "choice" ? <ChoiceSetup spec={spec} name={wireName} />
                 : <PieceSetup spec={spec} selected={selected} onChange={apply} connectionId={connectionId} schema={schema} cardTitle={cardTitle}
-                  entityTitle={entityTitle} cardSetup={cardSetup} cardChart={cardChart} cardSql={cardSql} />)}
+                  entityTitle={entityTitle} cardSetup={cardSetup} cardChart={cardChart} cardSql={cardSql}
+                  onOpenLayout={() => openPane("layout")} cardDates={cardDates} />)}
         </aside>
       </div>
     </div>
@@ -430,19 +490,68 @@ function ChecksChip({ spec, checks, onChoose, cardTitle, entityTitle }: {
 export interface EditBarProps {
   picker: ReactNode;
   saved: ReactNode;
-  canUndo: boolean;
-  canRedo: boolean;
-  onUndo: () => void;
-  onRedo: () => void;
   actions: ReactNode;
   onDone: () => void;
 }
 
+/** What the canvas toolbar opens in the setup panel: the pieces that measure or show, the filters, or every piece. */
+export type AddWhat = "chart" | "filter" | "all";
+
+/** The canvas toolbar's doors the page keeps, and which is open now (none: choosing, the pointer). */
+export interface CanvasTools {
+  active?: "ask" | "chart" | "filter" | "text" | "image" | null;
+  /** Back to choosing: whatever the toolbar opened is put away. */
+  onChoose?: () => void;
+  onAsk?: () => void;
+  onText?: () => void;
+  onImage?: () => void;
+  onButtons?: () => void;
+  busy?: boolean;
+}
+
+/**
+ * The canvas toolbar (the dashboards study, R2, 2026-11-18; the user, of a peer product's editor: "Also the floating menu"): a
+ * pill floating at the canvas's foot, a card's tone on the dashboard's ground — ask in words · choose · a chart · words ·
+ * a filter · a picture · buttons · undo · redo. Each is a door the builder already had, moved here from the layout pane's
+ * Add list and the edit bar (nothing is gone): a chart and a filter open their pieces in the setup panel, placed in the
+ * section chosen; words, a picture and buttons open the page's own composers. The open one is filled; each says its name.
+ */
+function CanvasToolbar({ tools, onChart, onFilter, onUndo, onRedo }: {
+  tools?: CanvasTools; onChart?: () => void; onFilter?: () => void; onUndo?: () => void; onRedo?: () => void;
+}) {
+  const active = tools?.active ?? null;
+  const tool = (testid: string, icon: IconName, label: string, onClick: (() => void) | undefined, on = false, accent = false, keys = "") => (
+    <Button key={testid} size="icon" variant="ghost" data-testid={testid} aria-label={label} title={keys ? `${label} · ${keys}` : label} aria-pressed={on}
+      disabled={!onClick || (tools?.busy && testid !== "builder-tool-choose")} onClick={onClick}
+      style={{ width: 34, height: 34, borderRadius: 8, color: accent ? "var(--accent-11)" : undefined,
+        background: on ? "color-mix(in srgb, var(--accent) 24%, transparent)" : undefined }}>
+      <Icon name={icon} size={18} />
+    </Button>
+  );
+  const rule = (k: string) => <span key={k} aria-hidden="true" style={{ width: 1, height: 20, background: "var(--b1)", margin: "0 4px" }} />;
+  return (
+    <div role="toolbar" aria-label="Add to the dashboard" data-testid="builder-toolbar" data-dashboard-ground=""
+      style={{ position: "absolute", left: "50%", bottom: 16, transform: "translateX(-50%)", zIndex: 5, display: "flex",
+        alignItems: "center", gap: 2, padding: 6, borderRadius: 12, background: "var(--bg-2)", border: "1px solid var(--card-edge)" }}>
+      {tool("builder-tool-ask", "spark", "Change it in words", tools?.onAsk, active === "ask", true)}
+      {rule("r1")}
+      {tool("builder-tool-choose", "pointer", "Choose", tools?.onChoose, active === null, false, "Esc")}
+      {tool("builder-add-piece", "addchart", "Add a chart, a figure, a card or a table", onChart, active === "chart")}
+      {tool("dashboard-note-new", "words", "Add words: a note of your own", tools?.onText, active === "text")}
+      {tool("builder-tool-filter", "filter", "Add a filter", onFilter, active === "filter")}
+      {tool("dashboard-image-new", "image", "Add a picture of your own", tools?.onImage, active === "image")}
+      {tool("dashboard-buttons-new", "bolt", "Add buttons that run declared actions", tools?.onButtons)}
+      {rule("r2")}
+      {tool("builder-undo", "undo", "Undo", onUndo, false, false, "⌘Z")}
+      {tool("builder-redo", "redo", "Redo", onRedo, false, false, "⇧⌘Z")}
+    </div>
+  );
+}
+
 /** The one bar of Edit mode: which dashboard, that it is being edited and when it was last kept, undo and redo, what may
  *  be added or done to it, and Done. */
-export function EditBar({ picker, saved, canUndo, canRedo, onUndo, onRedo, actions, onDone }: EditBarProps) {
-  const undo = <Button size="xs" variant="ghost" title="Undo the last change — kept as a version of its own" disabled={!canUndo} onClick={onUndo}>Undo</Button>;
-  const redo = <Button size="xs" variant="ghost" title="Redo what was undone" disabled={!canRedo} onClick={onRedo}>Redo</Button>;
+export function EditBar({ picker, saved, actions, onDone }: EditBarProps) {
+  // Undo and Redo moved to the canvas toolbar (2026-11-18), beside what they undo
   const doneDoor = <Button size="sm" data-testid="builder-done" onClick={onDone}>Done</Button>;
   return (
     <div data-testid="builder-bar" className="aug-fs-sm"
@@ -450,8 +559,6 @@ export function EditBar({ picker, saved, canUndo, canRedo, onUndo, onRedo, actio
       {picker}
       <span className="aug-tag" style={{ color: "var(--accent-11)" }}>Editing</span>
       <span data-testid="builder-saved" style={{ color: "var(--t3)" }}>{saved}</span>
-      {undo}
-      {redo}
       <span style={{ flex: 1 }} />
       {actions}
       {doneDoor}

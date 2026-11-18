@@ -12,7 +12,7 @@ import { useEffect, useState, type CSSProperties } from "react";
 
 import { Card, Chip, Empty, MUTED, NUM, ONE_LINE, ROW, RULE, type Tone } from "@/components/clarity/kit";
 import { AdoptProposals } from "@/components/semantic/AdoptProposals";
-import { AreaOwnersEditor, DeclareArea } from "@/components/semantic/AreaControls";
+import { AreaOwnersEditor, DeclareArea, SuggestedAreas } from "@/components/semantic/AreaControls";
 import { rowButtonStyle } from "@/components/semantic/parts";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
@@ -141,6 +141,7 @@ export function CoverageCard({ connId, schema, rows, onAdopted }: {
         metric whose figures move{c.open_patterns ? `; ${countNoun(c.open_patterns, "pattern")} of the knowledge base no metric computes yet` : ""}.
         {reading ? " Reading the approved metrics' figures…" : ""}
       </p>
+      <SuggestedAreas connId={connId} schema={schema} areas={declared} onSaved={savedAreas} />
       <div style={{ overflowX: "auto" }}>
         <div style={{ minWidth: 640 }}>
           <div className="aug-fs-xs" style={{ ...GRID, ...MUTED, textTransform: "uppercase", letterSpacing: ".06em", padding: "0 6px 6px" }}>

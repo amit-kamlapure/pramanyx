@@ -20,6 +20,9 @@ export const READS = [
   // An answer as a file — Excel, PowerPoint, Word or PDF — built by Pramanyx from the answer's stored rows, never by
   // code the model wrote (`pramanyx/export`). A GET like the rest; the bytes are passed through as they come.
   /^\/investigations\/[A-Za-z0-9_-]{1,64}\/export$/,
+  // Several of a person's answers as one deck (punch list 92, 2026-11-18), built the same way from their stored reports;
+  // which answers is the query (`?ids=a,b`), and each is checked as the person's own by Pramanyx.
+  /^\/exports\/answers$/,
   // What went out from one email draft (`pramanyx/routers/email.py`): a draft that was sent says so whenever the
   // conversation is opened, because "sent" is read from Pramanyx's journal and not remembered by the page.
   /^\/email\/sent$/,
@@ -44,6 +47,19 @@ import { dirname, join } from "node:path";
  * Run at start. A connection added later appears on the next start; one that was removed keeps its workspace, and
  * the conversations in it, and Pramanyx answers that it no longer exists.
  */
+/** What the coworker is told about a connection's agents ("" when it has none, or when the platform cannot say). */
+export async function agentsWords(api, connection, { send = fetch } = {}) {
+  try {
+    const answer = await send(`${api}/agents/custom/routing?connection_id=${encodeURIComponent(connection)}`,
+                              { headers: { accept: "application/json" } });
+    if (!answer.ok) return "";
+    const got = await answer.json();
+    return typeof got?.words === "string" ? got.words : "";
+  } catch {
+    return "";
+  }
+}
+
 async function workspacePerConnection(ctx, api) {
   const home = process.env.DSH_HOME || join(homedir(), ".dsh");
   const answer = await fetch(`${api}/connections`, { headers: { accept: "application/json" } });
@@ -62,6 +78,9 @@ async function workspacePerConnection(ctx, api) {
       `Use \`${id}\` as the connection for every question, read and analysis in this conversation, unless the person names`,
       "another connection themselves.",
       "",
+      // Its own agent, or its agents to choose between (punch list 93, 2026-11-18): the platform says which and in what
+      // words (`GET /agents/custom/routing`), so the first question already goes to the agent that fits it.
+      await agentsWords(api, id),
     ].join("\n"));
     const known = await ctx.workspaceRegistry.resolveByPath(folder);
     if (!known) await ctx.workspaceRegistry.create(folder, name);
@@ -270,6 +289,7 @@ export function heldToItsPerson(ctx, { keep = join(process.env.DSH_HOME || join(
   });
   ctx.inject(["tools"], (at) => {
     at.effect(() => at.tools.guard((call) => {
+      if (RECALL.test(String(call?.name))) return recallRefusal(owners, now());
       if (!/^mcp__pramanyx__/.test(String(call?.name))) return undefined;
       const session = call.agent?.session;
       const id = String((session && typeof session === "object" ? session.id : session) ?? "");
@@ -277,6 +297,23 @@ export function heldToItsPerson(ctx, { keep = join(process.env.DSH_HOME || join(
     }), "pramanyx-home: a conversation is its person's");
   });
   return owners;
+}
+
+/** The shell's tools for searching and reading past conversations (`@deepseek-ai/dsh-tool-session-query`). */
+export const RECALL = /^session_(search|event_search|trace|event_trace|event_read)$/;
+
+/** Why the agent may not search past conversations here, or undefined when it may (punch list 84). They search every
+ *  conversation this coworker holds, whoever began it: a person's own coworker holds only theirs; the install's first
+ *  holds one person's only while one person has used it. Once a second person has, it searches nobody's — it would
+ *  bring one person's words into another's answer. Nobody is named. */
+export function recallRefusal(owners, now, owner = ownerOfThisCoworker()) {
+  if (owner) return undefined;
+  const people = new Set([...owners.values()].filter(Boolean));
+  if (now) people.add(now);
+  return people.size > 1
+    ? "This coworker holds other people's conversations too, so it does not search past conversations for anyone. " +
+      "Tell the person so: their own coworker, opened from the app, searches only theirs."
+    : undefined;
 }
 
 /** Whose coworker this is: the person the platform started it for, or "" for the install's first (start_all.sh's). */
@@ -417,6 +454,8 @@ const ASKED_FIRST = {
   "mcp__pramanyx__schedule": (args) => `Set this up on a schedule: “${clipped(args.request)}”?`,
   "mcp__pramanyx__draft_definition": (args) =>
     `Draft what “${clipped(args.term, 80)}” means${args.area ? ` in ${args.area}` : ""}: “${clipped(args.text)}”? It is not used until its owner publishes it.`,
+  // punch list 90 — a person's own memory, read into their own questions: theirs to allow.
+  "mcp__pramanyx__remember_for_me": (args) => `Remember this for you, in your own questions only: “${clipped(args.text)}”?`,
 };
 const clipped = (value, most = 240) => {
   const text = String(value ?? "").trim();
@@ -457,14 +496,47 @@ const argsOf = (args) => {
 /** Whether a tool's result says the person (or the shell's review, on their behalf) refused it. */
 export const refusedResult = (message) => Boolean(message?.isError) && /\brejected\b/i.test(textOf(message?.content));
 
+/**
+ * WHEN IT RUNS IS THE PERSON'S WORDS (2026-11-18). The schedule tool asks for the person's sentence copied exactly —
+ * "in 2 minutes" is once, "every 2 minutes" a rhythm — and a model still shortened "run once, 4 minutes from now, and
+ * never again: ask how many titles…" to "ask how many titles…", and asked the person to allow a schedule with no time
+ * in it. The phrases of the person's own last message that say when are read here; a schedule call missing any of them
+ * goes back to the agent, with the sentence to copy, before the person is asked to allow anything.
+ */
+const TIMING = new RegExp(String.raw`\b(?:once|twice|never\s+again|every\s+(?:other\s+)?(?:\d+\s+)?[a-z]+|` +
+  String.raw`in\s+(?:\d+|an?|one|two|three|four|five|six|ten|fifteen|twenty|thirty)\s+(?:minute|hour|day|week|month)s?|` +
+  String.raw`(?:\d+|an?|one|two|three|four|five|six|ten|fifteen|twenty|thirty)\s+(?:minute|hour|day|week)s?\s+from\s+now|` +
+  String.raw`at\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?|daily|weekly|monthly|hourly|nightly|tomorrow|tonight|` +
+  String.raw`(?:mon|tues|wednes|thurs|fri|satur|sun)days?|weekdays?|weekends?)\b`, "gi");
+const plain = (text) => String(text ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+
+/** The phrases saying when in what the person said that a schedule request left out. */
+export function timingLost(personSaid, request) {
+  const asked = plain(request);
+  return [...new Set([...plain(personSaid).matchAll(TIMING)].map((m) => m[0]))].filter((phrase) => !asked.includes(phrase));
+}
+
+export function timingRefusal(personSaid, request) {
+  const lost = timingLost(personSaid, request);
+  if (!lost.length) return undefined;
+  const said = String(personSaid).trim().slice(0, 600);
+  return `Not set up: the request leaves out when it runs (${lost.map((w) => `“${w}”`).join(", ")}). The person said: ` +
+    `“${said}”. Call schedule again with that sentence as \`request\`, copied exactly — not reworded or shortened.`;
+}
+
 export function askBeforeActing(ctx) {
   const declined = new Map();        // conversation → what the person declined since they last wrote
   const asked = new Map();           // call → what it would be declined as
+  const lastSaid = new Map();        // conversation → the person's own last message
   ctx.on("session/event", (session, event) => {
     try {
       const id = String(session?.id ?? "");
       const data = event?.data ?? {};
-      if (event?.type === "user/message" && data.source?.kind === "user") { declined.delete(id); return; }
+      if (event?.type === "user/message" && data.source?.kind === "user") {
+        declined.delete(id);
+        lastSaid.set(id, textOf(data.content));
+        return;
+      }
       if (event?.type === "tool/call" && data.callId) {
         const key = declinedKey(data.name, data.arguments);
         if (key) asked.set(data.callId, key);
@@ -485,6 +557,12 @@ export function askBeforeActing(ctx) {
     const id = String((session && typeof session === "object" ? session.id : session) ?? "");
     const key = declinedKey(call?.name, call?.arguments);
     if (key && declined.get(id)?.has(key)) return { kind: "deny", reason: NO_STANDS };
+    if (SCHEDULES_CALL.test(String(call?.name))) {
+      // A helper's call answers what was said in the conversation that started it.
+      const parent = session && typeof session === "object" && typeof session.header?.parentSession === "string" ? session.header.parentSession : "";
+      const refused = timingRefusal(lastSaid.get(id) ?? lastSaid.get(parent) ?? "", argsOf(call?.arguments).request);
+      if (refused) return { kind: "deny", reason: refused };
+    }
     return askFor(call?.name, call?.arguments) ?? decided;
   });
 }
@@ -929,6 +1007,167 @@ function recordTurns(ctx, api, holds) {
   });
 }
 
+/**
+ * A SCHEDULED RUN REACHES ITS PERSON (punch list 85, 2026-11-18). A schedule made in a conversation is one of the
+ * platform's automations, and its card reads its runs only when the conversation is drawn: a run that landed while the
+ * person was away waited, unseen, for them to happen to open that conversation. Here the coworker remembers which
+ * conversation made which schedule (from the `schedule` call's own result), reads each one's runs every couple of
+ * minutes as the person (`GET /automations/<id>/schedule`), and marks the conversation unread when a new run has landed
+ * — on the sidebar's row, until the conversation is opened (`/pramanyx-runs`, the page's `RunLanded`). Kept in this
+ * coworker's home, so it survives a restart; a schedule the platform no longer has is forgotten.
+ */
+export const SCHEDULES_CALL = /^mcp__pramanyx__schedule$/;
+const AUTOMATION_ID = /^[A-Za-z0-9_-]{1,64}$/;
+
+/** The schedule a `schedule` call's result made, or "" — a call that asked instead or could not made none. */
+export function scheduleMadeBy(text) {
+  try {
+    const got = JSON.parse(String(text || "{}"));
+    return got && got.scheduled !== false && AUTOMATION_ID.test(String(got.id ?? "")) ? String(got.id) : "";
+  } catch {
+    return "";
+  }
+}
+
+/** The latest run's time in a schedule's read, or "". */
+export function latestRun(read) {
+  const runs = Array.isArray(read?.runs) ? read.runs : [];
+  return runs.map((run) => String(run?.at ?? "")).filter(Boolean).sort().at(-1) ?? "";
+}
+
+export function runsReachThePerson(ctx, api, {
+  keep = join(process.env.DSH_HOME || join(homedir(), ".dsh"), "conversation-runs.json"),
+  readSchedule = async (id) => {
+    const answer = await fetch(`${api}/automations/${encodeURIComponent(id)}/schedule`,
+                               { headers: { accept: "application/json", ...(await personHeader()) } });
+    if (answer.status === 404) return null;
+    if (!answer.ok) throw new Error(String(answer.status));
+    return answer.json();
+  },
+} = {}) {
+  const state = { schedules: {}, seen: {}, unread: {} };
+  try { Object.assign(state, JSON.parse(readFileSync(keep, "utf8"))); } catch { /* none kept yet */ }
+  const save = () => {
+    try { mkdirSync(dirname(keep), { recursive: true }); writeFileSync(keep, JSON.stringify(state), { mode: 0o600 }); }
+    catch { /* unkept: held for as long as this process runs */ }
+  };
+  const calls = new Map();
+  ctx.on("session/event", (session, event) => {
+    try {
+      const id = String(session?.id ?? "");
+      const data = event?.data ?? {};
+      if (event?.type === "tool/call" && data.callId && SCHEDULES_CALL.test(String(data.name))) calls.set(data.callId, id);
+      if (event?.type === "tool/result") {
+        const message = data.message ?? {};
+        const where = calls.get(message.toolCallId);
+        if (where === undefined) return;
+        calls.delete(message.toolCallId);
+        const made = message.isError ? "" : scheduleMadeBy(textOf(message.content));
+        // A helper's schedule is its conversation's: the person reads the conversation they asked in.
+        const parent = typeof session?.header?.parentSession === "string" ? session.header.parentSession : "";
+        if (made) { state.schedules[made] = parent || where; state.seen[made] ??= ""; save(); }
+      }
+    } catch { /* not remembered: its runs show when the conversation is opened, as before */ }
+  });
+  const tick = async () => {
+    let changed = false;
+    for (const [automation, conversation] of Object.entries(state.schedules)) {
+      let read;
+      try { read = await readSchedule(automation); } catch { continue; }      // unread this time: asked again next
+      if (read === null) { delete state.schedules[automation]; delete state.seen[automation]; changed = true; continue; }
+      const at = latestRun(read);
+      if (at && at > String(state.seen[automation] || "")) {
+        state.seen[automation] = at;
+        state.unread[conversation] = { at, name: String(read?.name || ""), automation };
+        changed = true;
+      }
+    }
+    if (changed) save();
+  };
+  const seen = (conversation) => {
+    if (!state.unread[conversation]) return false;
+    delete state.unread[conversation];
+    save();
+    return true;
+  };
+  return { state, tick, seen };
+}
+
+/** `GET /pramanyx-runs` — the conversations a run landed in since they were last opened; `POST {session}` — opened. */
+export async function runsDoor(req, res, runs) {
+  const reply = (status, body) => { res.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" }); res.end(JSON.stringify(body)); };
+  if (req.method === "GET") return reply(200, { unread: runs.state.unread });
+  if (req.method !== "POST") return reply(405, { detail: "GET or POST" });
+  const from = req.headers["sec-fetch-site"];
+  if (from && from !== "same-origin") return reply(403, { detail: "Only this page may say this" });
+  let body = "";
+  for await (const chunk of req) { body += chunk; if (body.length > 2000) return reply(413, { detail: "Too long" }); }
+  let session = "";
+  try { session = String(JSON.parse(body || "{}").session || ""); } catch { return reply(400, { detail: "Not JSON" }); }
+  if (!session) return reply(422, { detail: "Which conversation was opened" });
+  return reply(200, { cleared: runs.seen(session) });
+}
+
+/**
+ * WHAT A SCHEDULE'S CARD DOES, AS THE PERSON (2026-11-18). The card under a turn that made a schedule offers Run now and
+ * Switch off / Switch on, as the app's page of schedules does. Each is the person's own click on this page: the door
+ * takes a call from this page only (`sec-fetch-site`), and asks the platform as the person the coworker acts for. A
+ * model never reaches it: the agent has no way to call a page's address. Run now waits for the run, as the platform's
+ * own door does, and says how it went.
+ */
+export async function scheduleDoor(req, res, api, { send = fetch, person = personHeader, clock = clockHeader } = {}) {
+  const reply = (status, body) => { res.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" }); res.end(JSON.stringify(body)); };
+  if (req.method !== "POST") return reply(405, { detail: "POST only" });
+  const from = req.headers["sec-fetch-site"];
+  if (from && from !== "same-origin") return reply(403, { detail: "Only this page may do this" });
+  let body = "";
+  for await (const chunk of req) { body += chunk; if (body.length > 2000) return reply(413, { detail: "Too long" }); }
+  let asked = {};
+  try { asked = JSON.parse(body || "{}"); } catch { return reply(400, { detail: "Not JSON" }); }
+  const id = String(asked.automation || "");
+  const action = String(asked.action || "");
+  if (!AUTOMATION_ID.test(id) || !["run", "on", "off"].includes(action)) return reply(422, { detail: "Which schedule, and run, on or off" });
+  const url = action === "run" ? `${api}/automations/${encodeURIComponent(id)}/run`
+    : `${api}/automations/${encodeURIComponent(id)}/enabled?enabled=${action === "on"}`;
+  try {
+    const answer = await send(url, { method: "POST", body: "{}",
+      headers: { "content-type": "application/json", accept: "application/json", ...(await person()), ...(await clock()) } });
+    const got = await answer.json().catch(() => ({}));
+    if (!answer.ok) return reply(answer.status, { detail: typeof got?.detail === "string" ? got.detail : `The platform said ${answer.status}` });
+    return reply(200, action === "run" ? { ran: true, outcome: String(got?.outcome || ""), reason: String(got?.reason || "") }
+      : { enabled: Boolean(got?.enabled) });
+  } catch {
+    return reply(502, { detail: "The platform is not answering" });
+  }
+}
+
+/**
+ * ANSWER NOW (punch list 89, 2026-11-18): the person stops a running deep analysis and has it answer from what it has
+ * found. The card offers it on the running analysis; this door takes it from this page only and asks the platform as
+ * the person (`POST /investigations/<id>/answer-now`), which refuses an agent and a run that is not running.
+ */
+export async function answerNowDoor(req, res, api, { send = fetch, person = personHeader } = {}) {
+  const reply = (status, body) => { res.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" }); res.end(JSON.stringify(body)); };
+  if (req.method !== "POST") return reply(405, { detail: "POST only" });
+  const from = req.headers["sec-fetch-site"];
+  if (from && from !== "same-origin") return reply(403, { detail: "Only this page may do this" });
+  let body = "";
+  for await (const chunk of req) { body += chunk; if (body.length > 2000) return reply(413, { detail: "Too long" }); }
+  let asked = {};
+  try { asked = JSON.parse(body || "{}"); } catch { return reply(400, { detail: "Not JSON" }); }
+  const id = String(asked.investigation || "");
+  if (!AUTOMATION_ID.test(id)) return reply(422, { detail: "Which analysis" });
+  try {
+    const answer = await send(`${api}/investigations/${encodeURIComponent(id)}/answer-now`, {
+      method: "POST", body: "{}", headers: { "content-type": "application/json", accept: "application/json", ...(await person()) } });
+    const got = await answer.json().catch(() => ({}));
+    if (!answer.ok) return reply(answer.status, { detail: typeof got?.detail === "string" ? got.detail : `The platform said ${answer.status}` });
+    return reply(200, { answering_now: true });
+  } catch {
+    return reply(502, { detail: "The platform is not answering" });
+  }
+}
+
 export const inject = ["webServer", "workspaceRegistry"];
 
 export function apply(ctx) {
@@ -946,6 +1185,27 @@ export function apply(ctx) {
   heldToItsPerson(ctx);
   askBeforeActing(ctx);
   recordTurns(ctx, api, holds);
+  const runs = runsReachThePerson(ctx, api);
+  ctx.effect(() => {
+    const timer = setInterval(() => { runs.tick().catch(() => {}); }, 120_000);
+    timer.unref?.();
+    return () => clearInterval(timer);
+  }, "pramanyx-home: a scheduled run reaches its person");
+  ctx.effect(() => ctx.webServer.register({
+    kind: "exact",
+    path: "/pramanyx-runs",
+    handler: (req, res) => runsDoor(req, res, runs),
+  }), "pramanyx-home: the conversations a run landed in");
+  ctx.effect(() => ctx.webServer.register({
+    kind: "exact",
+    path: "/pramanyx-schedule",
+    handler: (req, res) => scheduleDoor(req, res, api),
+  }), "pramanyx-home: a schedule's Run now and Switch off, as the person");
+  ctx.effect(() => ctx.webServer.register({
+    kind: "exact",
+    path: "/pramanyx-answer-now",
+    handler: (req, res) => answerNowDoor(req, res, api),
+  }), "pramanyx-home: a running deep analysis answers now, at the person's word");
   ctx.effect(() => ctx.webServer.register({
     kind: "exact",
     path: "/pramanyx-helper",

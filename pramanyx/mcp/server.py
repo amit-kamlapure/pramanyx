@@ -484,6 +484,55 @@ async def draft_definition(
 
 
 @mcp.tool()
+async def remember_for_me(
+    text: Annotated[str, Field(description="What to remember about how the person asks or likes answers, in their own words.")],
+) -> dict:
+    """Remember something about how THIS PERSON asks or likes answers — "I prefer figures in EUR", "when I say revenue
+    I mean net revenue", "I look after the North region" — for them alone: it is read into each of their questions on
+    every connection, and no one else's. What a business word means for everyone is `draft_definition`, not this. The
+    person allows it in the conversation first. Say what you will remember, in their words."""
+    return await _client.remember_for_me(text)
+
+
+@mcp.tool()
+async def my_memories() -> dict:
+    """What this person asked you to remember about how they ask, newest first, each with its id."""
+    return await _client.my_memories()
+
+
+@mcp.tool()
+async def forget_for_me(
+    memory_id: Annotated[str, Field(description="The id of one of the person's memories, from my_memories.")],
+) -> dict:
+    """Forget one thing the person asked you to remember, at their word."""
+    return await _client.forget_for_me(memory_id)
+
+
+@mcp.tool()
+async def search_my_drive(
+    words: Annotated[str, Field(description="Words from the file's name: 'Q3 budget', 'board deck'.")],
+    limit: Annotated[int, Field(description="How many files at most, 1 to 25.")] = 10,
+) -> dict:
+    """Find files in THIS PERSON's own Google Drive by words in their names, newest first: each file's name, type, last
+    change and link — never its contents. Use it when they ask for a file, deck or sheet someone made ("the Q3 budget
+    sheet", "last week's board deck"). Only their own Google connection is used; when they have none, `why` says how
+    to connect one — tell them. Give each file as a link by its name."""
+    return await _client.search_my_drive(words, limit=limit)
+
+
+@mcp.tool()
+async def deck_of_answers(
+    investigation_ids: Annotated[list[str], Field(description="The answers the deck is made of, in the order they were asked: each one's investigation_id, as `ask` or `deep_analysis` returned it.")],
+    title: Annotated[str, Field(description="The deck's title, in the person's words; empty names it by its answers.")] = "",
+) -> dict:
+    """When the person asks for a deck, slides or a PowerPoint of this conversation (or of some of its answers): one
+    deck of those answers, each drawn from its stored report as its own export is, its figures citing its own receipt.
+    Pass every answer they mean, in the order asked. Returns where to download it; the conversation shows the person the
+    link — say what the deck holds, never make slides yourself. An answer that could not be read is named in `missing`."""
+    return await _client.deck_of_answers(investigation_ids, title=title)
+
+
+@mcp.tool()
 async def bring_in_file(
     path: Annotated[str, Field(description="The saved path the attachment line gives for the file the person attached.")],
     name: Annotated[str, Field(description="The file's name as the person attached it.")] = "",

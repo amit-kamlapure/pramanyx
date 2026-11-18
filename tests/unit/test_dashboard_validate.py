@@ -179,16 +179,17 @@ def test_a_spec_that_is_not_json_is_refused_before_anything_runs(premise):
 @needs_rules
 def test_the_server_reads_the_vocabulary_the_web_declares():
     vocab = V.vocabulary()
-    assert vocab["version"] == 13                # 3: the ontology's pieces (Arc OC-4); 4: a dashboard from an object; 5: sizes one grade at a time (Arc AP-1); 6: the wiring (AP-2, AP-3); 7: the structure and the picker's pieces (AP-4); 8: variables (AP-8); 9: sets read whole (AP-8b); 10: yes-no, lists, sums, queries (AP-8c); 11: a Question (PENDING 54); 12: a breakdown
+    assert vocab["version"] == 15                # 15: the period as a piece; 14: free placement (x, y); 3: the ontology's pieces (Arc OC-4); 4: a dashboard from an object; 5: sizes one grade at a time (Arc AP-1); 6: the wiring (AP-2, AP-3); 7: the structure and the picker's pieces (AP-4); 8: variables (AP-8); 9: sets read whole (AP-8b); 10: yes-no, lists, sums, queries (AP-8c); 11: a Question (PENDING 54); 12: a breakdown
     assert vocab["components"] == ["Cockpit", "Tabs", "Tab", "Section", "Card", "Note", "Image",
                                    "ProcessBoard", "ObjectTable", "ObjectDetail", "ActionButton",
                                    "ObjectFilters", "ObjectFigure", "ObjectChart", "ObjectBreakdown", "ActionButtons",
-                                   "ObjectList", "ObjectMap", "ObjectTimeline", "ChooseOne", "ObjectSearch", "Drawer", "Question", "QueryFilters", "ScenarioInputs", "AddRow"]
+                                   "ObjectList", "ObjectMap", "ObjectTimeline", "ChooseOne", "ObjectSearch", "Drawer", "Question", "QueryFilters", "ScenarioInputs", "AddRow", "Period"]
     # the server's own lists of pieces are the web's, read from it — a piece the web adds is checked here or refused
     from pramanyx.dashboards import app_pieces, pieces, questions
     # every piece is the ontology's (or the picker's) or a person's Question (PENDING 54), each held to its own rules
-    assert list(pieces.PIECES) + [questions.KIND] + list(pieces.FILE_PIECES) == vocab["components"][7:]
-    assert list(app_pieces.PIECES) == vocab["components"][-10:-4]
+    # ... and the period, the dashboard's own (v15): it reads nothing of the ontology, a file or a question
+    assert list(pieces.PIECES) + [questions.KIND] + list(pieces.FILE_PIECES) + ["Period"] == vocab["components"][7:]
+    assert list(app_pieces.PIECES) == vocab["components"][-11:-5]
     assert vocab["sizes"] == ["small", "wide", "tall", "large", "full", "hero"]
     assert vocab["range_statuses"] == ["standing", "final", "provisional", "to_date"]
     assert vocab["card_statuses"] == ["within", "over", "unmeasured", "withheld"]

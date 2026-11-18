@@ -226,6 +226,17 @@
   --shadow-md: 0 1px 2px rgba(31, 31, 31, .10), 0 6px 16px rgba(31, 31, 31, .08);
 }
 
+/* ── DASHBOARDS (the user, 2026-11-18, "Dashboards only"): in dark, a dashboard is drawn on a grey ground and its cards
+   are near-black, without an edge — the chart's ink sits on the darkest tone and the grey between cards parts them.
+   Every other page keeps cards a step above the ground. Light already draws a grey ground and white cards, so only
+   dark changes. Scoped to the containers that paint a dashboard's ground (`data-dashboard-ground`). ── */
+:root:not([data-theme="light"]) [data-dashboard-ground] {
+  --bg-0: var(--gray-3);
+  --bg-2: var(--gray-1);
+  --bg-3: var(--gray-2);
+  --card-edge: transparent;
+}
+
 /* ── The look's two knobs of our own (2026-10-25, ROADMAP §6 item 53). Each is an attribute on
    <html>, painted before the first frame by lib/themeBoot.ts and kept by app/theme-root.tsx;
    inter is what the page was, and edges on is the skin's own grammar, so a person who chose

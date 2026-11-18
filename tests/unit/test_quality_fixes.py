@@ -2,7 +2,7 @@
 A) headline grounding, B) missing-column repair diagnosis, C) unsafe-metric guard.
 Each locks a concrete bug found by reading real outputs."""
 from pramanyx.routers.investigations import (
-    _ground_headline, _apply_currency, _is_time_series, _narrator_sample,
+    _ground_headline, _apply_currency, _is_time_series, _narrator_sample, _narrator_rows_label,
 )
 from pramanyx.agent.investigate import (
     _missing_column_hint, _unsafe_metric_sql, _safe_metric_fallback,
@@ -67,6 +67,21 @@ def test_narrator_sample_short_series_unchanged():
     rows = [["2025-01", 1], ["2025-02", 2], ["2025-03", 3]]
     sample, _ = _narrator_sample(["month", "x"], rows, n=20)
     assert sample == rows  # ≤ n rows → all kept
+
+def test_the_narrator_is_told_a_whole_result_is_whole():
+    # An attached sheet, 2026-11-17: all ten cities were shown, labelled "sample of 10 rows", and the summary said
+    # "the sample covers only 10 of the plotted cities".
+    ten = [[f"city{i}", i] for i in range(10)]
+    sample, is_ts = _narrator_sample(["city", "orders"], ten)
+    label = _narrator_rows_label(sample, 10, is_ts)
+    assert label == "Results (all 10 rows: the whole result, not a sample):" and "sample of" not in label
+    many = [[f"city{i}", i] for i in range(60)]
+    sample, is_ts = _narrator_sample(["city", "orders"], many)
+    assert _narrator_rows_label(sample, 60, is_ts) == "Results (the first 20 of 60 rows):"
+    sample, is_ts = _narrator_sample(["month", "turnover"], _TS_ROWS, n=20)
+    assert _narrator_rows_label(sample, len(_TS_ROWS), is_ts).startswith(
+        f"Results (TIME SERIES — series start then the 19 most recent of {len(_TS_ROWS)} periods")
+
 
 _SCHEMA = """TABLE: analytics.invoices  (1000 rows)
   invoice_id  BIGINT
@@ -144,6 +159,45 @@ def test_headline_breakdown_small_count_not_flagged():
             ["paypal", "69.6"], ["boleto", "69.35"]]
     hl = "AOV is roughly flat across 5 payment types (69.35-70.82)"
     assert _ground_headline(hl, ["payment_type", "aov"], rows) == hl
+
+
+CITIES = [["Mumbai", 19.07, 72.88, 412], ["Delhi", 28.61, 77.21, 388], ["Bengaluru", 12.97, 77.59, 301],
+          ["Chennai", 13.08, 80.27, 254], ["Kolkata", 22.57, 88.36, 240], ["Hyderabad", 17.39, 78.49, 233],
+          ["Pune", 18.52, 73.86, 190], ["Ahmedabad", 23.02, 72.57, 162], ["Jaipur", 26.91, 75.79, 121],
+          ["Lucknow", 26.85, 80.95, 98]]
+
+
+def test_a_count_the_rows_refute_is_corrected_in_place():
+    # An attached sheet, 2026-11-17: ten cities, and the headline said five; the map under it drew ten.
+    cols = ["city", "latitude", "longitude", "orders"]
+    sql = "SELECT city, latitude, longitude, COUNT(*) AS orders FROM sheet GROUP BY 1, 2, 3"
+    assert (_ground_headline("Orders by city plotted as map points across five Indian metros", cols, CITIES, sql)
+            == "Orders by city plotted as map points across ten Indian metros")
+    assert _ground_headline("Orders across 5 cities", cols, CITIES, sql) == "Orders across 10 cities"
+    assert _ground_headline("All Five metros order steadily", cols, CITIES, sql) == "All Ten metros order steadily"
+    # a numeric id counts its things too
+    stores = [[i, 1000 + i] for i in range(1, 8)]
+    assert _ground_headline("Revenue across four stores", ["store_id", "revenue"], stores) == \
+        "Revenue across seven stores"
+
+
+def test_a_count_the_rows_do_not_refute_is_left_alone():
+    cols = ["city", "latitude", "longitude", "orders"]
+    sql = "SELECT city, latitude, longitude, COUNT(*) AS orders FROM sheet GROUP BY 1, 2, 3"
+    for said in ("Orders across ten Indian metros",                 # right
+                 "Orders across the 3 largest cities",              # some of them
+                 "Orders across these five other cities",           # some of them
+                 "Orders across 12 months, Mumbai first",           # a period the rows add up
+                 "Orders across 40 cities, ten shown",              # more than the rows: they cannot say
+                 "Top 3 cities hold a third of orders"):            # not a count of the rows
+        assert _ground_headline(said, cols, CITIES, sql) == said
+    # a count of what the statement filters on but does not return
+    by_region = "SELECT city, latitude, longitude, COUNT(*) AS orders FROM sheet WHERE region IN ('N','E','W') GROUP BY 1, 2, 3"
+    assert _ground_headline("Orders across 3 regions", cols, CITIES, by_region) == "Orders across 3 regions"
+    # the count of another column the rows hold
+    rows = [[c, t, 1] for c in ("Mumbai", "Delhi") for t in ("cash", "card", "upi")]
+    assert _ground_headline("Orders across 3 payment types", ["city", "payment_type", "orders"], rows) == \
+        "Orders across 3 payment types"
 
 
 def test_headline_scalar_year_not_flagged():

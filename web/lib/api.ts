@@ -1,3 +1,4 @@
+import type { DocumentAccess } from "@/lib/documentAccess";
 import type { EvalBasis } from "./agentEval";
 import { getActiveWorkspace } from "./workspace";
 import { getApiBase } from "./config";
@@ -196,6 +197,8 @@ export interface OrgSettings {
   chat_first_home: boolean;
   /** CB-6 — what the organisation is trying to do this quarter, written by people. */
   priorities: Priority[];
+  /** Punch list 94 — what every answer is told, on every connection; a connection's own instructions take precedence. */
+  instructions?: string;
   /** The exploration principles §7 — the organisation's monthly budget, in model tokens, for what the
    *  Explorer spends on its own initiative; 0 = none. */
   exploration_monthly_tokens?: number;
@@ -1976,6 +1979,8 @@ export interface QueryTemplate {
   source_table: string;
   origin?: "structural" | "learned" | "manual";  // learned skills carry these
   usage_count?: number;
+  /** The approved metrics it computes as they are approved (punch list 88). */
+  metrics?: string[];
 }
 
 export interface OntologyMetric {
@@ -4191,6 +4196,9 @@ export interface DocumentEntry {
    *  They share a collection because retrieval wants them together; this surface does
    *  not, and without the flag one real file looked like sixteen documents. */
   generated?: boolean;
+  /** Who may read it, and whether it is the reader's own to share (punch list 82) — the server says both. */
+  access?: DocumentAccess;
+  yours?: boolean;
 }
 
 /** What a document WOULD become, before anything is indexed or paid for. */

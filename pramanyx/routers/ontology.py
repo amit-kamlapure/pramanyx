@@ -4831,7 +4831,10 @@ def propose_learned_skill(
             status_code=422,
             detail="Run is not skill-worthy (low confidence, ungrounded, or no read-only query).",
         )
-    return {"schema_name": effective, "candidate": candidate.model_dump()}
+    from pramanyx.memory.skills import held_to
+    _used, otherwise = held_to(candidate.display_name, candidate.sql_template, connection_id)
+    # What it would be refused for, said before the person tries to save it (punch list 88).
+    return {"schema_name": effective, "candidate": candidate.model_dump(), "computed_otherwise": otherwise}
 
 
 @router.post("/ontology/skills", dependencies=[gate(Capability.ONTOLOGY_EDIT)])
@@ -4860,10 +4863,19 @@ def save_learned_skill(
             except Exception:
                 pass
 
+    # A skill is held to the approved metrics it computes (punch list 88): one that names an approved metric and
+    # computes it some other way is refused, with which; the metrics it computes as approved are recorded on it.
+    from pramanyx.memory.skills import held_to
+    used, otherwise = held_to(action.display_name, action.sql_template, connection_id)
+    if otherwise:
+        raise HTTPException(status_code=422, detail=(
+            f"Skill rejected: it computes {', '.join(otherwise)} otherwise than the approved "
+            f"{'definition' if len(otherwise) == 1 else 'definitions'}. Keep a run that uses the approved metric."))
+    action = action.model_copy(update={"metrics": used})
     ok = save_skill(connection_id, effective, action, validator=_validator)
     if not ok:
         raise HTTPException(status_code=422, detail="Skill rejected: SQL is not read-only or failed dry-run.")
-    return {"ok": True, "schema_name": effective, "id": action.id}
+    return {"ok": True, "schema_name": effective, "id": action.id, "metrics": used}
 
 
 @router.post("/ontology/skills/{action_id}/use")

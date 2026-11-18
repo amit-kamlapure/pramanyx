@@ -56,9 +56,19 @@ def _superseded_state(c: sqlite3.Connection) -> None:
     add_column_if_missing(c, "ambiguity_resolutions", "superseded_why", "TEXT NOT NULL DEFAULT ''")
 
 
+def _person(c: sqlite3.Connection) -> None:
+    add_column_if_missing(c, "ambiguity_resolutions", "person", "TEXT NOT NULL DEFAULT ''")
+
+
 _MIGRATIONS: list = [  # forward-only
     Migration(2, "a superseded resolution is kept, with why, and never served", _superseded_state),
+    Migration(3, "a resolution may be one person's own: served to them alone", _person),
 ]
+
+#: The facet of a person's pick between a word's rival meanings (`keep_meaning`): one person's, never everyone's.
+MEANING = "meaning"
+#: The facet of what a person asked to be remembered about how they ask (`remember_for`, punch list 90): theirs alone.
+MEMORY = "memory"
 
 
 class Reading(BaseModel):
@@ -88,11 +98,14 @@ class AmbiguityResolution(BaseModel):
     #: When, and why, this reading was retired — kept as history, never served (`supersede_resolution`).
     superseded_at: Optional[str] = None
     superseded_why: str = ""
+    #: A person's own resolution (a pick between a word's rival meanings): served to them alone, never as everyone's
+    #: prior. "" for one the whole connection shares, as every resolution was before.
+    person: str = ""
 
     def natural_key(self) -> str:
-        """Same dimension on same connection ⇒ same row (idempotent burn-down)."""
+        """Same dimension on same connection ⇒ same row (idempotent burn-down); a person's own is theirs alone."""
         fp = self.subject_fingerprint or _fingerprint(self.subject)
-        raw = f"{self.org_id}|{self.connection_id}|{self.dim_facet}|{fp}"
+        raw = f"{self.org_id}|{self.connection_id}|{self.dim_facet}|{fp}" + (f"|{self.person}" if self.person else "")
         return hashlib.sha1(raw.encode()).hexdigest()[:20]
 
 
@@ -177,13 +190,13 @@ def save_resolution(res: AmbiguityResolution) -> AmbiguityResolution:
                    (id, org_id, connection_id, schema_scope, dim_kind, dim_facet, subject,
                     subject_fingerprint, readings, resolved_reading, resolved_sql,
                     resolution_source, evidence, created_at, last_used_at, use_count,
-                    superseded_at, superseded_why)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    superseded_at, superseded_why, person)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (res.id, res.org_id, res.connection_id, res.schema_scope, res.dim_kind,
                  res.dim_facet, res.subject, res.subject_fingerprint,
                  json.dumps([r.model_dump() for r in res.readings]), res.resolved_reading,
                  res.resolved_sql, res.resolution_source, res.evidence, res.created_at,
-                 res.last_used_at, res.use_count, res.superseded_at, res.superseded_why),
+                 res.last_used_at, res.use_count, res.superseded_at, res.superseded_why, res.person),
             )
             c.commit()
         finally:
@@ -212,6 +225,63 @@ def crystallize_user_choice(connection_id: str, subject: str, reading: str, *,
     from pramanyx.kernel import metering
     metering.record_learning(resolutions_crystallized=1)   # per-run Learning Receipt (Wave 1·E4); no-op off-run
     return res
+
+
+def keep_meaning(connection_id: str, term: str, area: str, *, person: str,
+                 org_id: str = "") -> Optional[AmbiguityResolution]:
+    """A person, asked which area's meaning of ``term`` they meant, chose ``area`` (punch list 83; the ontology plan,
+    Phase 1.4: "when rivals remain, ask the person … and keep the choice"). Kept as THEIRS: the next time they use the
+    word without naming an area they are not asked again, and nobody else's question is answered by their pick — in
+    Finance and in Marketing a word means its own. A later answer to the same ask replaces it; the Memory page's
+    revoke removes it, and they are asked again."""
+    if not (connection_id and (term or "").strip() and (area or "").strip() and (person or "").strip()):
+        return None
+    return save_resolution(AmbiguityResolution(
+        connection_id=connection_id, org_id=org_id, dim_kind="AmbiIntent", dim_facet=MEANING,
+        subject=term.strip(), resolved_reading=area.strip(), resolution_source="user", person=person.strip().lower(),
+        evidence="chose this area's meaning when asked which they meant"))
+
+
+def kept_meanings(connection_id: str, person: str, org_id: str = "") -> dict[str, str]:
+    """``{term (lower-cased): area}`` — the meanings ``person`` chose when asked (`keep_meaning`)."""
+    who = (person or "").strip().lower()
+    if not (connection_id and who):
+        return {}
+    return {r.subject.strip().lower(): r.resolved_reading for r in list_resolutions(connection_id, org_id=org_id)
+            if r.dim_facet == MEANING and r.person == who}
+
+
+def remember_for(person: str, text: str, *, org_id: str = "") -> Optional[AmbiguityResolution]:
+    """A person asked to be remembered something about how they ask — "I prefer figures in EUR", "when I say revenue I
+    mean net revenue" (punch list 90, 2026-11-18). Kept as THEIRS: read into their own questions on every connection,
+    said where it shaped an answer, never anyone else's prior, and not an event anything subscribes to (the Record's
+    claims are, which is why a memory is not one). Revoked by its person alone."""
+    who = (person or "").strip().lower()
+    said = " ".join((text or "").split())[:500]
+    if not (who and said):
+        return None
+    return save_resolution(AmbiguityResolution(
+        connection_id="", org_id=org_id, dim_kind="AmbiIntent", dim_facet=MEMORY, subject=said, resolved_reading=said,
+        resolution_source="user", person=who, evidence="asked to be remembered by its person"))
+
+
+def memories_of(person: str, org_id: str = "") -> list[AmbiguityResolution]:
+    """What ``person`` asked to be remembered, newest first."""
+    who = (person or "").strip().lower()
+    if not who:
+        return []
+    return [r for r in list_resolutions("", org_id=org_id) if r.dim_facet == MEMORY and r.person == who]
+
+
+def owner_of(res_id: str) -> Optional[str]:
+    """Whose row ``res_id`` is: a person's own, "" for one the connection shares, None when there is no such row."""
+    with _LOCK:
+        c = _conn()
+        try:
+            row = c.execute("SELECT person FROM ambiguity_resolutions WHERE id = ?", (res_id,)).fetchone()
+        finally:
+            c.close()
+    return None if row is None else str(row["person"] or "")
 
 
 def crystallize_verdict(connection_id: str, subject: str, *, org_id: str = "",
@@ -243,6 +313,8 @@ def retrieve_resolutions(question: str, connection_id: str, *, org_id: str = "",
         return []
     scored: list[tuple[AmbiguityResolution, float]] = []
     for res in list_resolutions(connection_id, org_id=org_id):
+        if res.person:
+            continue        # one person's own: read by its own reader for them (`kept_meanings`), never everyone's prior
         stok = set((res.subject_fingerprint or _fingerprint(res.subject)).split())
         if not stok:
             continue

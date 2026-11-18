@@ -102,7 +102,15 @@ stateless and light (httpx only), so it starts fast under a stdio launcher.
 
 ## Connecting a client
 
-**Claude Desktop** — `claude_desktop_config.json`:
+**Claude Desktop, in one click** (2026-11-18) — the bundle: `python scripts/build_mcpb.py` packs
+`packaging/mcpb` into `dist/pramanyx.mcpb`; open it in Claude Desktop, and its settings ask for the Python inside your
+install's `.venv` and where the API answers (and an API key, kept secret, when the install has sign-in). The bundle
+carries no Pramanyx: its launcher runs this install's `python -m pramanyx.mcp`, and says so plainly when the chosen
+Python is not an install's. Its list of tools is the server's own (`tests/unit/test_mcp_bundle.py`); the
+organisation's agent policy still decides which are offered. Checked here: the manifest's required fields and
+settings, and the pack. Not checked here: the `mcpb validate` schema run and an install in Claude Desktop.
+
+**Claude Desktop, by hand** — `claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {

@@ -135,6 +135,23 @@ def custom_instructions(connection_id: str, canvas_id: str = "") -> str:
                  "grounding: custom instructions")
 
 
+def person_memory() -> str:
+    """What the person asking asked to be remembered about how they ask (punch list 90): theirs alone, read into each
+    of their questions, and said where it shaped the answer. '' when they asked for nothing, so their prompt is
+    byte-identical."""
+    def build() -> str:
+        from pramanyx.db.history import person_now
+        from pramanyx.semantic.ambiguity_ledger import memories_of
+        mine = memories_of(person_now())
+        if not mine:
+            return ""
+        lines = ["WHAT THE PERSON ASKING ASKED YOU TO REMEMBER — theirs alone. Follow it, and where it shapes the answer "
+                 "say so in a few words (\"as you asked me to remember\"):"]
+        lines += [f"- {m.resolved_reading}" for m in mine[:20]]
+        return "\n".join(lines) + "\n\n"
+    return _safe(build, "grounding: the person's memory")
+
+
 def vocabulary_synonyms(connection_id: str) -> str:
     """Human-curated business synonyms, rendered verbatim (not question-matched —
     an alias matters both for reading the question and for labelling the answer).
@@ -292,6 +309,8 @@ _BLOCKS: list[tuple[str, str, Callable[..., str], bool]] = [
      lambda q, c, **k: pack_brief(q, c, k.get("eff_schema") or ""), False),
     ("instructions", "Custom instructions",
      lambda q, c, **k: custom_instructions(c, k.get("canvas_id") or ""), False),
+    ("person_memory", "What the asker asked to be remembered (theirs alone)",
+     lambda q, c, **k: person_memory(), False),
     ("trusted", "Trusted query templates", lambda q, c, **k: trusted_templates(q, c), False),
     ("corrections", "Ambiguity-ledger priors (corrections)", lambda q, c, **k: correction_priors(q, c), False),
     ("hub_notes", "Context from people (ranked, provenance-stamped)",

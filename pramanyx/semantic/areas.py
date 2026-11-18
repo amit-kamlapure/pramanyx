@@ -54,6 +54,92 @@ def areas_for(connection_id: str, schema_name: Optional[str] = None, *, workspac
     return out
 
 
+def _who(person: str) -> str:
+    who = (person or "").strip().lower()
+    return who[5:] if who.startswith("user:") else who
+
+
+def _area_of_tables(tables: list[str], connection_id: str) -> str:
+    """The area a set of tables is read in: where a person placed one of them, else the area whose words name one."""
+    from pramanyx.semantic.metric_map import best_areas, map_for
+    people = placed_by_people(connection_id)["tables"]
+    named = [a for a in map_for(connection_id).areas if not a.generic]
+    for t in tables:
+        bare = str(t).split(".")[-1].lower()
+        if bare in people:
+            return people[bare][0]
+        hits = best_areas(bare, named)
+        if hits:
+            return hits[0][0].id
+    return ""
+
+
+def standing(person: str, area: str, connection_id: str) -> tuple[int, int]:
+    """A person's standing in an area of the business (punch list 86, 2026-11-18): ``(owner, right)`` — 1 when they
+    are a declared owner of the area (its business or technical owners), and how many answers in it they said were
+    right (their own Right verdicts on answers drawn from the area's tables). Compared as a tuple, so an owner stands
+    above any count. Used ONLY to order knowledge of the same tier: popularity never lifts a draft over a published
+    definition. ``(0, 0)`` for no one, or no area."""
+    who = _who(person)
+    if not who or not area:
+        return (0, 0)
+    owner = 0
+    for a in areas_for(connection_id):
+        if a["id"] == area and who in {_who(p) for p in [*a.get("business_owners", []), *a.get("technical_owners", [])]}:
+            owner = 1
+            break
+    right = 0
+    try:
+        from pramanyx.db.history import get_investigation
+        from pramanyx.feedback.verdicts import accepted_by
+        for v in accepted_by(who, connection_id):
+            inv = get_investigation(v["investigation_id"]) or {}
+            report = inv.get("report") if isinstance(inv.get("report"), dict) else {}
+            tables = list((report or {}).get("tables_used") or inv.get("tables_used") or [])
+            if tables and _area_of_tables(tables, connection_id) == area:
+                right += 1
+    except Exception as exc:  # noqa: BLE001 — unread, the owner's word still stands
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "a person's verdicts could not be read for their standing", counter="areas.standing")
+    return (owner, right)
+
+
+def _plain(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", (text or "").lower()).strip()
+
+
+def suggested_areas(connection_id: str, schema_name: Optional[str] = None) -> list[dict]:
+    """Areas the model suggests from its own labels for the data, each ``{label, id, tables}`` — what the ontology's
+    enricher called the business area of each entity (``entity.domain``) where no area of the connection already
+    answers to it and a curator has not said it is none (punch list 87, 2026-11-18). A suggestion is only that: an area
+    is declared by a curator (`PUT /areas`), never by the model. Reads what is stored; no model."""
+    from pramanyx.ontology.store import load_latest_ontology
+    from pramanyx.semantic.metric_map import best_areas, map_for
+    from pramanyx.orgsettings.store import effective_settings
+    graph = load_latest_ontology(connection_id, schema_name or None)
+    tables: dict[str, set[str]] = {}
+    names: dict[str, str] = {}
+    for e in (getattr(graph, "entities", None) or {}).values():
+        label = str(getattr(e, "domain", "") or "").strip()
+        if not label:
+            continue
+        key = _plain(label)
+        names.setdefault(key, label)
+        tables.setdefault(key, set()).update(str(t).split(".")[-1] for t in (getattr(e, "source_tables", None) or []))
+    if not tables:
+        return []
+    known = {_plain(a["id"]) for a in areas_for(connection_id, schema_name)} | {
+        _plain(a["name"]) for a in areas_for(connection_id, schema_name)}
+    industry = [a for a in map_for(connection_id, schema_name).areas if not a.generic]
+    said_not = {_plain(x) for x in (getattr(effective_settings(None), "not_areas", None) or [])}
+    out = []
+    for key, label in names.items():
+        if key in known or key in said_not or best_areas(label, industry):
+            continue
+        out.append({"label": label, "id": key.replace(" ", "_")[:60], "tables": sorted(t for t in tables[key] if t)})
+    return sorted(out, key=lambda s: (-len(s["tables"]), s["label"].lower()))
+
+
 def unknown_area(connection_id: str, area: str) -> str:
     """Why ``area`` is not one of the connection's areas, or "" when it is (or is empty: everywhere). A definition, a
     placement and a question read areas by id, so a typed name that is no area is refused, never kept as a stray."""
@@ -164,15 +250,37 @@ def rival_groups(connection_id: str) -> list[dict]:
                   key=lambda r: str(r["term"]).lower())
 
 
-def rival_meanings(question: str, connection_id: str) -> list[dict]:
+def _asker(person: Optional[str]) -> str:
+    if person is not None:
+        return person
+    from pramanyx.db.history import person_now
+    return person_now()
+
+
+def _kept(connection_id: str, person: str) -> dict[str, str]:
+    if not person:
+        return {}
+    try:
+        from pramanyx.semantic.ambiguity_ledger import kept_meanings
+        return kept_meanings(connection_id, person)
+    except Exception as exc:  # noqa: BLE001 — unread, the person is asked as before
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "a person's kept meanings could not be read; they are asked which they mean",
+                 counter="areas.kept_meanings")
+        return {}
+
+
+def rival_meanings(question: str, connection_id: str, person: Optional[str] = None) -> list[dict]:
     """The words of ``question`` that mean one thing in one area of the business and another in the next — each
-    ``{term, meanings: [{area, area_name, text, standing}], chosen}``, where ``chosen`` is the area the question itself
-    names ("" when it names none of them: then the person is asked, or each meaning is answered and named). A word with
-    one meaning, or meanings no one has written, is no rival. Reads what is stored; no model."""
+    ``{term, meanings: [{area, area_name, text, standing}], chosen, kept}``, where ``chosen`` is the area the question
+    itself names, else the one the asker chose when asked before (``kept`` True; punch list 83), else "" — then the
+    person is asked, or each meaning is answered and named. A word with one meaning, or meanings no one has written,
+    is no rival. ``person`` is the asker (the request's own when None). Reads what is stored; no model."""
     q = f" {re.sub(r'[^a-z0-9]+', ' ', (question or '').lower())} "
     rivals, names = _rival_claims(connection_id)
     if not rivals:
         return []
+    kept: Optional[dict[str, str]] = None
 
     def said(word: str) -> bool:
         w = re.sub(r"[^a-z0-9]+", " ", (word or "").lower()).strip()
@@ -185,9 +293,38 @@ def rival_meanings(question: str, connection_id: str) -> list[dict]:
         if not any(said(w) for w in words):
             continue
         meanings = _meanings(group, names)
+        term = group[0].extra.get("term", "")
         named = [m["area"] for m in meanings if said(m["area_name"]) or said(str(m["area"]).replace("_", " "))]
-        out.append({"term": group[0].extra.get("term", ""), "meanings": meanings, "chosen": named[0] if len(named) == 1 else ""})
+        chosen, from_before = (named[0] if len(named) == 1 else ""), False
+        if not chosen:
+            if kept is None:
+                kept = _kept(connection_id, _asker(person))
+            area = kept.get(str(term).strip().lower(), "")
+            if area and any(m["area"] == area for m in meanings):
+                chosen, from_before = area, True
+        out.append({"term": term, "meanings": meanings, "chosen": chosen, "kept": from_before})
     return out
+
+
+def keep_pick(question: str, reading: str, connection_id: str, person: Optional[str] = None) -> Optional[dict]:
+    """The asker answered "which do you mean?" for a word of ``question`` with ``reading`` ("in Finance", as the ask
+    offers it): kept as theirs (`ambiguity_ledger.keep_meaning`). ``{term, area}`` kept, or None when the reading names
+    no area of the word the question was asked about."""
+    who = _asker(person)
+    if not who:
+        return None
+    said = re.sub(r"^\s*in\s+", "", (reading or "").strip(), flags=re.I).strip().lower()
+    for r in rival_meanings(question, connection_id, person=""):
+        if r["chosen"]:
+            continue
+        area = next((m["area"] for m in r["meanings"]
+                     if said in (str(m["area_name"]).lower(), str(m["area"]).lower().replace("_", " "))), "")
+        if area:
+            from pramanyx.org.context import current_org_id
+            from pramanyx.semantic.ambiguity_ledger import keep_meaning
+            keep_meaning(connection_id, r["term"], area, person=who, org_id=current_org_id() or "")
+            return {"term": r["term"], "area": area}
+    return None
 
 
 def rival_meanings_block(rivals: list[dict]) -> str:
@@ -198,7 +335,11 @@ def rival_meanings_block(rivals: list[dict]) -> str:
     for r in rivals:
         each = "; ".join(f"in {m['area_name']} ({m['standing']}): {m['text']}" for m in r["meanings"])
         lines.append(f"  • “{r['term']}” — {each}")
-        if r["chosen"]:
+        if r["chosen"] and r.get("kept"):
+            name = next(m["area_name"] for m in r["meanings"] if m["area"] == r["chosen"])
+            lines.append(f"    The person asking chose {name}'s meaning when asked before: use it, say so, and say they "
+                         "can name another area for its meaning.")
+        elif r["chosen"]:
             name = next(m["area_name"] for m in r["meanings"] if m["area"] == r["chosen"])
             lines.append(f"    The question is about {name}: use {name}'s meaning, and say so.")
         else:

@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 
 /**
- * The builder's one panel for a card (the board study, 2026-11-16): What it shows · Chart · SQL. The SQL tab shows the
+ * The builder's one panel for a card (the board study, 2026-11-16; since 2026-11-18 it opens on the look, with what it
+ * reads and the SQL folded below, and with nothing chosen it is the dashboard's own setup). The SQL tab shows the
  * statement as it RAN with its values beside it, or says why it cannot; the Chart tab holds the card's own editor —
  * a dock that serves one card only.
  */
@@ -28,21 +29,36 @@ function cs(ran: CardState["run"] extends infer R ? R extends { ran?: infer X } 
 }
 
 describe("the card's panel", () => {
-  it("opens on what it shows, and its tabs show the chart editor's place and the SQL", () => {
+  it("opens on its look — the chart editor first — with what it reads and the SQL folded below (2026-11-18)", () => {
     render(<PieceSetup spec={SPEC} selected={PLACED} onChange={() => {}} connectionId="thelook"
+      cardSetup={() => <div data-testid="the-setup" />}
       cardChart={() => <div data-testid="the-chart" />} cardSql={() => <div data-testid="the-sql" />} />);
-    expect(screen.getByTestId("card-tabs")).toBeInTheDocument();
+    const panel = screen.getByTestId("card-panel");
+    expect(panel.firstElementChild).toBe(screen.getByTestId("the-chart"));
     expect(screen.getByText("Edge")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("radio", { name: "SQL" }));
+    expect(screen.queryByTestId("the-sql")).toBeNull();
+    expect(screen.queryByTestId("the-setup")).toBeNull();
+    fireEvent.click(screen.getByTestId("card-fold-sql"));
     expect(screen.getByTestId("the-sql")).toBeInTheDocument();
-    expect(screen.queryByText("Edge")).toBeNull();
-    fireEvent.click(screen.getByRole("radio", { name: "Chart" }));
-    expect(screen.getByTestId("the-chart")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("card-fold-reads"));
+    expect(screen.getByTestId("the-setup")).toBeInTheDocument();
+    expect(screen.queryByTestId("card-tabs")).toBeNull();
   });
 
-  it("shows no tabs where nothing gives them", () => {
+  it("folds nothing where nothing gives a part to fold", () => {
     render(<PieceSetup spec={SPEC} selected={PLACED} onChange={() => {}} connectionId="thelook" />);
-    expect(screen.queryByTestId("card-tabs")).toBeNull();
+    expect(screen.queryByTestId("card-fold-sql")).toBeNull();
+    expect(screen.queryByTestId("card-fold-reads")).toBeNull();
+    expect(screen.getByText("Edge")).toBeInTheDocument();
+  });
+
+  it("with nothing chosen, is the dashboard's own setup: its name, what it holds, and the way to its layout", () => {
+    let opened = 0;
+    render(<PieceSetup spec={SPEC} selected={null} onChange={() => {}} connectionId="thelook" onOpenLayout={() => { opened += 1; }} />);
+    expect(screen.getByTestId("setup-empty")).toHaveTextContent("Sales");
+    expect(screen.getByTestId("setup-empty")).toHaveTextContent(/Cards\s*1/);
+    fireEvent.click(screen.getByTestId("setup-open-layout"));
+    expect(opened).toBe(1);
   });
 });
 
@@ -84,5 +100,27 @@ describe("the Chart tab", () => {
   it("says a figure has no chart to set up", () => {
     render(<ChartDock cardKey="card1" charted={false} />);
     expect(screen.getByTestId("card-chart-none")).toHaveTextContent("draws a figure");
+  });
+});
+
+
+describe("the period's setup (v15)", () => {
+  const spec = (): DashboardSpec => {
+    const s: DashboardSpec = JSON.parse(JSON.stringify(SPEC));
+    const section = Object.entries(s.elements).find(([, e]) => e.type === "Section")![0];
+    s.elements.period = { type: "Period", props: {}, children: [] };
+    s.elements[section].children.unshift("period");
+    return s;
+  };
+
+  it("names it, says what it opens on, and which date each card is cut by", () => {
+    let next: DashboardSpec | null = null;
+    render(<PieceSetup spec={spec()} selected="period" onChange={s => { next = s; }} connectionId="thelook"
+      cardDates={() => [{ id: "card1", title: "Revenue by channel", date: "order_items.created_at", standing: false },
+        { id: "card2", title: "Every order ever", date: null, standing: true }]} />);
+    expect(screen.getByTestId("period-cuts")).toHaveTextContent("Revenue by channelorder_items.created_at");
+    expect(screen.getByTestId("period-cuts")).toHaveTextContent("Every order everno date: read as written");
+    expect(screen.getByTestId("setup-period-opens")).toHaveTextContent("Last month");
+    void next;
   });
 });

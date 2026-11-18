@@ -14,6 +14,9 @@
  */
 import { createElement as h, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { readAgainIn, statusWords, whatHappens } from "./runs.js";
+import { deckOf } from "./deck.js";
+import { driveFilesOf } from "./drive.js";
 import { drawChart, labelOf, numericColumns } from "./chart";
 import {
   PANE, PANE_PATTERN, PaneBody, downloadCsv, groundingOf, pageFor, PaneTitle, ResultGrid, button, faint, hasPane, idOf, line,
@@ -305,12 +308,79 @@ function Analysis({ text }) {
   let got = null;
   try { got = JSON.parse(text); } catch { got = null; }
   const report = typeof got?.report === "string" ? got.report : (typeof got?.report?.summary === "string" ? got.report.summary : "");
-  const frame = { border: `1px solid ${line}`, borderRadius: 6, padding: 12, margin: "6px 0", fontSize: 13 };
+  const frame = { margin: "8px 0", fontSize: 13 };
   return h("div", { style: frame },
     h("div", { style: { ...quiet, fontSize: 12.5, paddingBottom: 6 } }, "Deep analysis"),
     h("div", { style: { whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight: 1.5, maxHeight: 420, overflow: "auto" } },
-      report || (got?.status === "running" ? "Still running when the helper last looked." : "The report could not be read here.")));
+      report || (got?.status === "running" ? "Still running when the helper last looked." : "The report could not be read here.")),
+    h(SkillDoor, { text }));
 }
+
+/**
+ * SAVE AS A SKILL (punch list 88, 2026-11-18). A finished deep analysis can be kept as a skill — its method, to run
+ * again on other values — on the app's own page beside the conversation (`/skills/new`), which shows what it runs and
+ * the approved metrics it is held to; only the person's click there keeps it. A quick answer is not a method, so it is
+ * offered under a deep analysis only.
+ */
+export function SkillDoor({ text }) {
+  let got = null;
+  try { got = JSON.parse(text); } catch { got = null; }
+  const investigation = String(got?.investigation_id || "");
+  const connection = String(got?.connection || got?.connection_id || "");
+  if (!investigation || !connection || got?.status === "running" || got?.error || !hasPane()) return null;
+  return h("div", { "data-pramanyx-skill-door": "", style: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", paddingTop: 6, fontSize: 13 } },
+    h("span", { style: quiet }, "Its method can be kept, to run again on other values."),
+    h("button", { type: "button", style: button(false), onClick: () => openBeside("page", pageFor.toSkill(investigation, connection)) },
+      "Save as a skill"));
+}
+
+/**
+ * ANSWER NOW (punch list 89, 2026-11-18). While a deep analysis runs, its row offers to stop it and answer from what it
+ * has found — cancelling answers nothing. The running analysis is found among the person's own (`/investigations?mine=1`,
+ * the newest running one asking this question) and asked through this coworker's door, as the person. Its report then
+ * says it was answered early.
+ */
+function AnswerNow({ question }) {
+  const [state, setState] = useState("");          // "" | "asking" | "asked" | <what went wrong>
+  const ask = async () => {
+    setState("asking");
+    try {
+      const listed = await fetch("/pramanyx/investigations?mine=1&limit=20", { headers: { accept: "application/json" } });
+      const rows = listed.ok ? await listed.json() : [];
+      const running = (Array.isArray(rows) ? rows : []).find((r) => ["running", "pending", "started"].includes(String(r.status))
+        && String(r.question || "").trim() === String(question || "").trim());
+      if (!running) { setState("This analysis could not be found running."); return; }
+      const answer = await fetch("/pramanyx-answer-now", { method: "POST", headers: { "content-type": "application/json" },
+                                                            body: JSON.stringify({ investigation: running.id }) });
+      const got = await answer.json().catch(() => ({}));
+      setState(answer.ok ? "asked" : (typeof got.detail === "string" ? got.detail : `Not asked (${answer.status})`));
+    } catch (error) {
+      setState(error instanceof Error ? error.message : String(error));
+    }
+  };
+  if (state === "asked") return h("div", { "data-pramanyx-answer-now": "asked", style: { ...quiet, fontSize: 12.5, padding: "2px 0 6px" } },
+    "Answering now, from what it has found so far.");
+  return h("div", { "data-pramanyx-answer-now": "", style: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "2px 0 6px", fontSize: 12.5 } },
+    h("button", { type: "button", style: button(false), disabled: state === "asking", onClick: () => { void ask(); },
+                  title: "Stop it here and have it answer from what it has found — some planned steps will not run" },
+      state === "asking" ? "Asking…" : "Answer now"),
+    state && state !== "asking" ? h("span", { style: { color: "#c2410c" } }, state) : null);
+}
+
+/** What an analysis answered early says, under it. */
+function AnsweredEarly({ text }) {
+  let got = null;
+  try { got = JSON.parse(text); } catch { got = null; }
+  return got?.answered_early ? h("div", { "data-pramanyx-answered-early": "", style: { ...quiet, fontSize: 12.5, paddingTop: 4 } },
+    String(got.answered_early)) : null;
+}
+
+const DeepAnalysisCard = inTail(
+  (props) => h("div", null, h(ToolStep, props),
+    props.phase !== "result" ? h(AnswerNow, { question: argsOf(props.block).question }) : null),
+  (props) => (props.phase === "result" && !props.block?.isError
+    ? h("div", null, h(AnsweredEarly, { text: resultText(props.block) }), h(SkillDoor, { text: resultText(props.block) }))
+    : null));
 
 /**
  * The turns a helpers question takes after its first: each starts with a helper's report (a helper under Agent mode
@@ -476,8 +546,7 @@ export function Draft({ draft }) {
   }, [name]);
   const field = { width: "100%", boxSizing: "border-box", font: "inherit", fontSize: 13.5, padding: "6px 8px",
                   border: `1px solid ${line}`, borderRadius: 6, background: "transparent", color: "inherit" };
-  const frame = { border: `1px solid ${line}`, borderRadius: 6, padding: 12, margin: "10px 0",
-                  display: "flex", flexDirection: "column", gap: 8, fontSize: 13.5 };
+  const frame = { margin: "12px 0", display: "flex", flexDirection: "column", gap: 8, fontSize: 13.5 };
   const send = async () => {
     setState({ busy: true, said: "" });
     try {
@@ -556,27 +625,131 @@ const DraftCard = inTail((props) => h(ToolStep, props),
  * made in a conversation is one of its automations — so this card draws no copy of it. It names what was set and
  * asks the platform where it stands every time it is drawn (`GET /automations/<id>/schedule`, through the relay):
  * when it runs, in the platform's own words; when next; and whether it is on, waiting for its first run, switched
- * off, ended or gone. Its button opens the app's own page of schedules beside the conversation, on this one, where a
- * person changes it, mutes it, runs it now and reads what each run did.
+ * off, ended or gone. The card (below) opens the app's own page of schedules beside the conversation, on this one,
+ * where a person changes it, mutes it, runs it now and reads what each run did.
  */
 const whenNext = (at) => {
   const d = new Date(at);
   return Number.isNaN(d.getTime()) ? "" : d.toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 };
 
-/** Where a schedule stands, as one sentence. `now` is the platform's read: null when the schedule is gone. */
-export function standing(now) {
-  if (now === null) return "This schedule was removed.";
-  const next = whenNext(now.next_run);
-  if (now.state === "ended") return `Ended: ${now.ended || "it has no run left"}.`;
-  if (now.state === "off") return "Switched off. It runs again when it is switched on, on the schedule's page.";
-  if (now.state === "muted") return next ? `First run ${next}, your time.` : "Waiting for its first run.";
-  return next ? `Next run ${next}, your time.` : "On.";
+/**
+ * THE SCHEDULE CARD (2026-11-18; the user: "Design a decent schedule card that deliver good UX … take inspiration … of
+ * Genie One", and "the harness should have this element/component already"). It is the harness's own card for a
+ * task — the shell's `ScheduleCreateCard`: a soft filled card with a hairline edge, a clock tile, the name and when it
+ * runs, the whole card opening the schedule — drawn in the shell's own tokens and with its own buttons and icons, so it
+ * reads as the coworker's own. The shell's card cannot be used as it is: it is its own scheduler's, which is off, and
+ * there is one scheduler, the platform's. As Genie One's card does, it carries Run now and a menu (Open the schedule,
+ * Switch off or on), each the person's own click through this coworker's door, as the person (`/pramanyx-schedule`).
+ * Under it, with no frame: what each run does, and the latest run's answer whole, the earlier ones a line each.
+ */
+let primitivesRead;
+/** The shell's own buttons and icons, as its plugins use them; null when this shell has none to lend. */
+function primitives() {
+  if (primitivesRead === undefined) {
+    try { primitivesRead = require("@deepseek-ai/dsh-client-ui-primitives"); } catch { primitivesRead = null; }
+  }
+  return primitivesRead;
+}
+
+function shellIcon(name, size) {
+  const Icon = primitives()?.[name];
+  return typeof Icon === "function" ? h(Icon, { size }) : null;
+}
+
+/** A clock, for a shell that lends no icon. */
+const CLOCK = h("svg", { width: 18, height: 18, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.6, "aria-hidden": true },
+  h("circle", { cx: 12, cy: 12, r: 9 }), h("path", { d: "M12 7v5l3 2", strokeLinecap: "round" }));
+
+function ShellButton({ children, onClick, disabled, label, title }) {
+  const Button = primitives()?.Button;
+  const stop = (event) => { event.stopPropagation(); onClick?.(event); };
+  if (typeof Button === "function") {
+    return h(Button, { variant: "outline", size: "sm", disabled, onClick: stop, "aria-label": label, title }, children);
+  }
+  return h("button", { type: "button", disabled, onClick: stop, "aria-label": label, title,
+                       style: { ...button(false), display: "inline-flex", alignItems: "center", gap: 6, height: 28 } }, children);
+}
+
+const SCHEDULE_LOOK = `
+.pramanyx-sched { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; font-size: 13.5px; }
+.pramanyx-sched-card {
+  --card-fill: var(--dsw-static-neutral-50, color-mix(in srgb, currentColor 4%, transparent));
+  --card-hover: var(--dsw-static-neutral-100, color-mix(in srgb, currentColor 7%, transparent));
+  box-sizing: border-box; position: relative; width: 100%; padding: 8px 10px; background: var(--card-fill);
+  border: .5px solid var(--dsw-alias-border-l1, color-mix(in srgb, currentColor 18%, transparent));
+  border-radius: var(--dsw-radius-lg, 12px); transition: background-color .12s;
+}
+body[data-ds-dark-theme] .pramanyx-sched-card {
+  --card-fill: var(--dsw-static-neutral-850, color-mix(in srgb, currentColor 5%, transparent));
+  --card-hover: var(--dsw-static-neutral-800, color-mix(in srgb, currentColor 8%, transparent));
+}
+@media (hover: hover) { .pramanyx-sched-card:has(.pramanyx-sched-open):hover { background: var(--card-hover); } }
+.pramanyx-sched-open { position: absolute; inset: 0; z-index: 1; padding: 0; border: 0; border-radius: inherit;
+  background: transparent; cursor: pointer; }
+.pramanyx-sched-open:focus-visible { outline: none;
+  box-shadow: inset 0 0 0 2px var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary, currentColor)); }
+.pramanyx-sched-row { position: relative; z-index: 2; pointer-events: none; display: flex; align-items: center; gap: 10px;
+  min-width: 0; min-height: 44px; }
+.pramanyx-sched-leading { box-sizing: border-box; flex: none; width: 40px; height: 40px; display: grid; place-items: center;
+  border-radius: 10px; border: .5px solid var(--dsw-alias-border-l1, color-mix(in srgb, currentColor 18%, transparent));
+  background: color-mix(in srgb, var(--dsw-static-neutral-00, #fff) 50%, transparent);
+  color: var(--dsw-alias-label-secondary, currentColor); }
+body[data-ds-dark-theme] .pramanyx-sched-leading { background: color-mix(in srgb, var(--dsw-static-neutral-00, #fff) 5%, transparent); }
+.pramanyx-sched-body { flex: auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.pramanyx-sched-title { font-size: 13px; font-weight: 500; line-height: 20px; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; }
+.pramanyx-sched-when, .pramanyx-sched-status { font-size: 12px; line-height: 18px; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; color: var(--dsw-alias-label-tertiary, currentColor); }
+.pramanyx-sched-status[data-tone="due"] { color: var(--dsw-alias-label-secondary, currentColor); }
+.pramanyx-sched-status[data-tone="problem"] { color: var(--dsw-alias-state-error-primary, #c2410c); }
+.pramanyx-sched-actions { pointer-events: auto; flex: none; position: relative; display: flex; align-items: center; gap: 6px; }
+.pramanyx-sched-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 5; min-width: 190px; padding: 4px;
+  display: flex; flex-direction: column; border-radius: var(--dsw-radius-lg, 10px);
+  border: .5px solid var(--dsw-alias-border-l2, color-mix(in srgb, currentColor 22%, transparent));
+  background: var(--dsw-alias-bg-base, Canvas); box-shadow: 0 8px 24px rgba(0, 0, 0, .18); }
+.pramanyx-sched-menu button { font: inherit; font-size: 13px; text-align: left; padding: 6px 10px; border: 0;
+  border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
+.pramanyx-sched-menu button:hover, .pramanyx-sched-menu button:focus-visible { outline: none;
+  background: var(--dsw-alias-interactive-bg-hover, color-mix(in srgb, currentColor 8%, transparent)); }
+.pramanyx-sched-what { font-size: 13px; line-height: 1.5; color: var(--dsw-alias-label-secondary, currentColor); }
+.pramanyx-sched-earlier { font: inherit; font-size: 12.5px; text-align: left; padding: 4px 0; border: 0; background: transparent;
+  color: var(--dsw-alias-label-tertiary, currentColor); cursor: pointer; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; }
+.pramanyx-sched-earlier:hover { color: var(--dsw-alias-label-secondary, currentColor); }
+`;
+
+function wearScheduleLook() {
+  let style = document.getElementById("pramanyx-schedule-look");
+  if (!style) {
+    style = document.createElement("style");
+    style.id = "pramanyx-schedule-look";
+    document.head.appendChild(style);
+  }
+  style.textContent = SCHEDULE_LOOK;
+}
+
+/** A clock that ticks every half minute, so "next run in 28 min" stays true while the card is on the page. */
+function useTicking() {
+  const [at, setAt] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setAt(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
+  return at;
 }
 
 export function Scheduled({ made }) {
   const [now, setNow] = useState(undefined);        // undefined while it is read; null when the schedule is gone
   const [unread, setUnread] = useState(false);
+  const [asked, setAsked] = useState(0);             // read again: a run was due, the coworker saw one land, or it was acted on
+  const [acting, setActing] = useState("");          // "run" | "on" | "off" while the person's click is answered
+  const [problem, setProblem] = useState("");
+  const [menu, setMenu] = useState(false);
+  const [earlier, setEarlier] = useState(-1);        // which earlier run is open
+  const menuAt = useRef(null);
+  const at = useTicking();
+  useEffect(() => { wearScheduleLook(); }, []);
   useEffect(() => {
     let live = true;
     fetch(`/pramanyx/automations/${encodeURIComponent(made.id)}/schedule`, { headers: { accept: "application/json" } })
@@ -585,44 +758,103 @@ export function Scheduled({ made }) {
         if (!answer.ok) throw new Error(String(answer.status));
         return answer.json();
       })
-      .then((got) => { if (live) setNow(got); })
+      .then((got) => { if (live) { setNow(got); setUnread(false); } })
       .catch(() => { if (live) setUnread(true); });
     return () => { live = false; };
+  }, [made.id, asked]);
+  useEffect(() => {
+    const wait = readAgainIn(now);
+    if (wait === null) return undefined;
+    const timer = setTimeout(() => setAsked((n) => n + 1), wait);
+    return () => clearTimeout(timer);
+  }, [now]);
+  useEffect(() => {
+    // The coworker's own reading of the runs (`plugins/home`, `RunLanded`) says when one landed in a schedule.
+    const landed = (event) => { if (!event?.detail?.automation || event.detail.automation === made.id) setAsked((n) => n + 1); };
+    window.addEventListener("pramanyx:run-landed", landed);
+    return () => window.removeEventListener("pramanyx:run-landed", landed);
   }, [made.id]);
-  const frame = { border: `1px solid ${line}`, borderRadius: 6, padding: 12, margin: "10px 0",
-                  display: "flex", flexDirection: "column", gap: 6, fontSize: 13.5 };
-  const said = now && Array.isArray(now.said) && now.said.length ? now.said.join("; ") : String(made.when || "");
-  const steps = now && Array.isArray(now.steps) ? now.steps : [];
-  const sends = steps.filter((kind) => kind === "email" || kind === "slack_post" || kind === "notify");
+  useEffect(() => {
+    if (!menu) return undefined;
+    const away = (event) => { if (!menuAt.current?.contains(event.target)) setMenu(false); };
+    const escape = (event) => { if (event.key === "Escape") setMenu(false); };
+    document.addEventListener("pointerdown", away);
+    document.addEventListener("keydown", escape);
+    return () => { document.removeEventListener("pointerdown", away); document.removeEventListener("keydown", escape); };
+  }, [menu]);
+
+  const act = async (action) => {
+    setMenu(false); setActing(action); setProblem("");
+    try {
+      const answer = await fetch("/pramanyx-schedule", { method: "POST", headers: { "content-type": "application/json" },
+                                                         body: JSON.stringify({ automation: made.id, action }) });
+      const got = await answer.json().catch(() => ({}));
+      if (!answer.ok) throw new Error(typeof got.detail === "string" ? got.detail : String(answer.status));
+      if (action === "run" && got.outcome && got.outcome !== "fired") setProblem(got.reason || `It did not run (${got.outcome}).`);
+    } catch (error) {
+      setProblem(`Not done: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setActing("");
+      setAsked((n) => n + 1);
+    }
+  };
+
+  const name = String(now?.name || made.name || "A schedule");
+  const when = now && Array.isArray(now.said) && now.said.length ? now.said.join("; ") : String(made.when || "");
+  const status = acting === "run" ? "Running now — its answer shows here when it is done"
+    : acting ? (acting === "off" ? "Switching off…" : "Switching on…")
+    : unread ? "Where it stands could not be read just now"
+    : now === undefined ? "Reading where it stands…" : statusWords(now, at);
+  const tone = problem || unread ? "problem" : acting || (now && now.state === "on") ? "due" : "";
+  const gone = now === null;
+  const ended = now?.state === "ended";
+  const opens = !gone && hasPane();
+  const open = () => openBeside("page", pageFor.schedule(made.id, String(now?.conn_id || made.connection || "")));
   const runs = now && Array.isArray(now.runs) ? now.runs : [];
-  return h("div", { "data-pramanyx-schedule": now === null ? "gone" : now?.state || "reading", style: frame },
-    h("div", { role: "heading", "aria-level": 4, style: { fontWeight: 600 } }, "Schedule"),
-    h("div", null, String(now?.name || made.name || "")),
-    said ? h("div", { style: quiet }, said) : null,
-    unread ? h("div", { style: quiet }, "Where this schedule stands could not be read just now.")
-      : now === undefined ? h("div", { style: quiet }, "Reading where this schedule stands…")
-        : h("div", { role: "status" }, standing(now)),
-    now && now.expires_at && now.state !== "ended" ? h("div", { style: quiet }, `It stops on ${whenNext(now.expires_at)}.`) : null,
-    steps.length ? h("div", { style: quiet }, `It ${steps.map((kind) => STEP_WORDS[kind] || kind.replace(/_/g, " ")).join(", then ")}.`) : null,
-    now && sends.length ? h("div", { style: quiet },
-      `Each run is also sent on: ${sends.map((kind) => ({ email: "email", slack_post: "Slack", notify: "a notification" })[kind]).join(", ")}.`) : null,
-    // WHAT EACH RUN FOUND, HERE (2026-11-16: "deliver it here"). Read with the schedule each time the card is drawn.
-    runs.length ? h("div", { "data-pramanyx-runs": "", style: { display: "flex", flexDirection: "column", gap: 6, paddingTop: 4 } },
-      runs.map((run, i) => h(RunFound, { key: `${run.at}-${i}`, run, provisional: String(now?.provisional || "") }))) : null,
-    now !== null && hasPane() ? h("div", null, h("button", { type: "button", style: button(false),
-      onClick: () => openBeside("page", pageFor.schedule(made.id, String(now?.conn_id || made.connection || ""))) }, "Open the schedule")) : null);
+  const [latest, ...older] = runs;
+  const what = whatHappens(now);
+
+  return h("div", { className: "pramanyx-sched", "data-pramanyx-schedule": gone ? "gone" : now?.state || "reading" },
+    h("div", { className: "pramanyx-sched-card" },
+      opens ? h("button", { type: "button", className: "pramanyx-sched-open", "aria-label": `Open the schedule ${name}`, onClick: open }) : null,
+      h("div", { className: "pramanyx-sched-row" },
+        h("span", { className: "pramanyx-sched-leading" }, shellIcon("IconClockOutlineRegular", 18) ?? CLOCK),
+        h("span", { className: "pramanyx-sched-body" },
+          h("span", { className: "pramanyx-sched-title" }, name),
+          when ? h("span", { className: "pramanyx-sched-when", title: when }, when) : null,
+          h("span", { className: "pramanyx-sched-status", role: "status", "data-tone": tone }, problem || status)),
+        gone ? null : h("span", { className: "pramanyx-sched-actions", ref: menuAt },
+          h(ShellButton, { onClick: () => { void act("run"); }, disabled: Boolean(acting) || now === undefined,
+                           title: "Run it now, once — it spends what a run spends" },
+            shellIcon("IconPlayOutlineRegular", 14), acting === "run" ? "Running…" : "Run now"),
+          h(ShellButton, { onClick: () => setMenu((was) => !was), disabled: Boolean(acting), label: "More: open the schedule, switch it off or on" },
+            shellIcon("IconEllipsisOutlineRegular", 16) ?? "⋯"),
+          menu ? h("div", { className: "pramanyx-sched-menu", role: "menu" },
+            opens ? h("button", { type: "button", role: "menuitem", onClick: () => { setMenu(false); open(); } }, "Open the schedule") : null,
+            ended ? null : now?.state === "off"
+              ? h("button", { type: "button", role: "menuitem", onClick: () => { void act("on"); } }, "Switch on")
+              : h("button", { type: "button", role: "menuitem", onClick: () => { void act("off"); } }, "Switch off")) : null))),
+    what ? h("div", { className: "pramanyx-sched-what" }, what) : null,
+    // WHAT EACH RUN FOUND, HERE (2026-11-16: "deliver it here"): the latest whole, the earlier ones a line each.
+    latest ? h("div", { "data-pramanyx-runs": "", style: { display: "flex", flexDirection: "column", gap: 4 } },
+      h(RunFound, { run: latest, provisional: String(now?.provisional || "") }),
+      older.map((run, i) => (earlier === i
+        ? h(RunFound, { key: `${run.at}-${i}`, run, provisional: String(now?.provisional || "") })
+        : h("button", { key: `${run.at}-${i}`, type: "button", className: "pramanyx-sched-earlier", onClick: () => setEarlier(i) },
+            `Ran ${whenNext(run.at)} · ${earlierWords(run)}`)))) : null);
+}
+
+/** An earlier run, in a line: its headline, or what it said, or how it went. */
+function earlierWords(run) {
+  const step = (run.steps ?? []).find((s) => s.answer?.headline || s.said);
+  if (step?.answer?.headline) return step.answer.headline;
+  if (step?.said) return String(step.said).split("\n")[0].slice(0, 140);
+  return run.outcome === "error" ? "did not run" : "open to read";
 }
 
 /** The tools that set up a schedule: `schedule` (a sentence, 2026-11-16) and the question-only one it replaced, whose
  *  cards in earlier conversations still draw. */
 const SCHEDULES = /^mcp__pramanyx__schedule(_question)?$/;
-
-/** What a schedule's steps do, in words. */
-const STEP_WORDS = {
-  investigate: "asks the question", synthesize: "writes it up", slack_post: "posts it to Slack", email: "emails it",
-  notify: "sends a notification", metric_value: "reads the metric", trusted_query: "runs the trusted query",
-  subchain: "runs another automation", kinetic_action: "takes the declared action", expectations: "checks the table's expectations",
-};
 
 /**
  * A run's answer, shown as an answer is (2026-11-16, the user: "why is the result not chart or table?"): the headline,
@@ -725,7 +957,7 @@ function Icon({ kind, busy }) {
 function Step({ kind, title, note, busy, failed, children }) {
   const [open, setOpen] = useState(false);
   const opens = Boolean(children);
-  return h("div", { className: "pramanyx-step", style: { border: `1px solid ${line}`, borderRadius: 4, margin: "3px 0", fontSize: 13 } },
+  return h("div", { className: "pramanyx-step", style: { borderRadius: 4, margin: "1px 0", fontSize: 13 } },
     h("button", {
       type: "button", disabled: !opens, "aria-expanded": opens ? open : undefined, onClick: () => setOpen((was) => !was),
       style: { display: "flex", gap: 8, alignItems: "center", width: "100%", textAlign: "left", font: "inherit", color: "inherit",
@@ -805,6 +1037,11 @@ const DOES = {
   read_learned: ["Read what is already learned", ["about"]],
   bring_in_file: ["Brought in a file", ["name"]],
   draft_definition: ["Drafted what a word means", ["term"]],
+  remember_for_me: ["Remembered for you", ["text"]],
+  my_memories: ["Read what you asked me to remember", []],
+  forget_for_me: ["Forgot one thing you asked me to remember", []],
+  deck_of_answers: ["Made a deck of answers", ["title"]],
+  search_my_drive: ["Searched your Drive", ["words"]],
 };
 const PREFIX = "mcp__pramanyx__";
 
@@ -847,6 +1084,11 @@ function ToolStep(props) {
  * change, the column is drawn as the shell draws it.
  */
 const STEPS_LOOK = `
+/* The model's thinking is not drawn in the conversation (2026-11-18; the user, opening a turn's work: "the thinking part
+   … its too verbose" — "Yes, hide them"). Opened, a turn's work is what was done, a line each, and what the agent said;
+   every word of its thinking stays in the conversation's Trajectory. The shell marks a thinking part
+   \`data-chat-group-part="reasoning"\` and what is said to the person "response". */
+[data-chat-flow-kind="assistant-step"][data-chat-group-part="reasoning"] { display: none; }
 [data-chat-flow-kind="assistant-step"]:has(+ [data-step-process]),
 [data-step-process] {
   position: relative; margin-left: 7px; padding-left: 16px;
@@ -1290,7 +1532,7 @@ function Exhibit({ answer, whole, asked }) {
       style: { display: "flex", flexWrap: "wrap", gap: 14, padding: "2px 6px 6px 0", fontSize: 13 } },
       becomes.map(([label, path, hint]) => h("button", { key: label, type: "button", className: "pramanyx-link", title: hint,
         onClick: () => openBeside("page", path) }, label))) : null,
-    open === "how" ? h("div", { style: { border: `1px solid ${line}`, borderRadius: 6, padding: 12 } }, h(How, { answer, whole })) : null);
+    open === "how" ? h("div", { style: { padding: "4px 0" } }, h(How, { answer, whole })) : null);
 }
 
 /**
@@ -1351,6 +1593,49 @@ function BroughtInCard(props) {
     h("div", { style: quiet }, `Only you can see it until you share it. ${doc.chunks ? `Read in ${doc.chunks} passages, which now reach answers.` : ""}`));
 }
 
+/**
+ * A deck of this conversation's answers (punch list 92, 2026-11-18): what it holds, in order, and the download. Pramanyx
+ * built it from the answers' stored reports; this page only passes the file through.
+ */
+function DeckCard(props) {
+  const ids = argsOf(props.block).investigation_ids;
+  const n = Array.isArray(ids) ? ids.length : 0;
+  if (props.phase !== "result") {
+    return h(Step, { kind: "read", busy: true, title: n ? `Making a deck of ${n} answer${n === 1 ? "" : "s"}` : "Making a deck" });
+  }
+  const deck = deckOf(resultText(props.block));
+  if (deck.failed || props.block?.isError) {
+    return h(Step, { kind: "read", failed: true, title: "The deck was not made" },
+      h("div", { style: quiet }, deck.failed || "The platform did not make it."));
+  }
+  const count = deck.answers.length;
+  return h(Step, { kind: "read", title: `A deck of ${count} answer${count === 1 ? "" : "s"}${deck.title ? `: ${deck.title}` : ""}` },
+    h("div", { style: { display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" } },
+      h("a", { href: deck.href, download: "", style: { ...button(false), textDecoration: "none" } }, "Download the deck (PowerPoint)"),
+      deck.missing.length
+        ? h("span", { style: quiet }, `${deck.missing.length} answer${deck.missing.length === 1 ? "" : "s"} could not be read and ${deck.missing.length === 1 ? "is" : "are"} not in it.`)
+        : null),
+    h("ol", { style: { ...quiet, margin: "8px 0 0", paddingLeft: 20 } },
+      deck.answers.map((a) => h("li", { key: a.id }, a.question || a.id))));
+}
+
+/** The person's own Drive, searched (punch list 91, 2026-11-18): each file by name, linked to Google's own page. */
+function DriveCard(props) {
+  const words = String(argsOf(props.block).words || "");
+  if (props.phase !== "result") return h(Step, { kind: "read", busy: true, title: words ? `Searching your Drive: ${words}` : "Searching your Drive" });
+  const got = driveFilesOf(resultText(props.block));
+  if (got.failed || props.block?.isError) {
+    return h(Step, { kind: "read", failed: true, title: "Your Drive was not searched" },
+      h("div", { style: quiet }, got.failed || "Drive was not searched."));
+  }
+  const n = got.files.length;
+  return h(Step, { kind: "read", title: n ? `Found ${n} file${n === 1 ? "" : "s"} in your Drive${words ? `: ${words}` : ""}` : `Nothing in your Drive is named ${words || "that"}` },
+    n ? h("ul", { style: { margin: "4px 0 0", paddingLeft: 20, fontSize: 13.5 } },
+      got.files.map((f, i) => h("li", { key: `${f.link || f.name}-${i}` },
+        f.link ? h("a", { href: f.link, target: "_blank", rel: "noopener noreferrer", className: "pramanyx-link" }, f.name) : f.name,
+        h("span", { style: quiet }, [f.type, f.modified].filter(Boolean).map((x) => ` · ${x}`).join(""))))) : null);
+}
+
 /** What the coworker drafted for the person, and the Definition's own page to read and publish it (2026-11-17). */
 function DraftedDefinitionCard(props) {
   const args = argsOf(props.block);
@@ -1373,7 +1658,7 @@ function DraftedDefinitionCard(props) {
 }
 
 function Card(props) {
-  const frame = { border: `1px solid ${line}`, borderRadius: 6, padding: 12, margin: "6px 0", fontSize: 13 };
+  const frame = { margin: "8px 0", fontSize: 13 };
   const asked = String(argsOf(props.block).question || "");
 
   if (props.phase !== "result") {
@@ -1394,6 +1679,73 @@ function Card(props) {
   return h(Exhibit, { answer: read.answer, whole: read.whole, asked });
 }
 
+/**
+ * ALLOW ONCE, IN THE CONVERSATION (2026-11-18; the user: "this 'Allow Once' card should appear inside the conversation
+ * panel right? Why does it pop-out like Windows 98 info tab?"). Something the coworker asks before doing — a schedule,
+ * a draft of what a word means — was put to the person by the shell's own card, which takes the question box's place
+ * at the foot of the page, under a strip of its own. It is asked here instead: under the step that waits on it, in the
+ * conversation, in the conversation's own type, with Reject and Allow once. The box at the foot says where the
+ * question is. The answer goes to the same request the shell's card would answer (`answer("allowed-once")`), so what
+ * is recorded is unchanged: the person's own click.
+ */
+function waitingApprovalOf(props) {
+  const pick = (all) => {
+    for (const status of all?.values?.() ?? []) {
+      const waiting = status?.pendingInteraction;
+      if (waiting && waiting.kind === "approval" && waiting.callId === props.callId && waiting.answerable !== false) return waiting;
+    }
+    return null;
+  };
+  return typeof props.useSessionStatus === "function" ? props.useSessionStatus(pick) : null;
+}
+
+function reasonOf(approval) {
+  if (typeof approval?.reason === "string" && approval.reason) return approval.reason;
+  const said = approval?.displayReason;
+  return (said && typeof said.en === "string" && said.en) || "Go ahead with this?";
+}
+
+export function Decision({ approval }) {
+  const [busy, setBusy] = useState(false);
+  const answer = (outcome) => {
+    setBusy(true);
+    Promise.resolve(approval.answer(outcome)).catch(() => setBusy(false));
+  };
+  return h("div", { "data-pramanyx-decision": String(approval.callId || ""),
+                    style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 12px", padding: "6px 0 10px", fontSize: 13.5 } },
+    h("span", { style: { flex: "1 1 260px", minWidth: 0, lineHeight: 1.45 } }, reasonOf(approval)),
+    h("span", { style: { display: "flex", gap: 8, flex: "none" } },
+      h("button", { type: "button", disabled: busy, style: button(false), onClick: () => answer("rejected") }, "Reject"),
+      h("button", { type: "button", disabled: busy, style: { ...button(true), fontWeight: 600 }, onClick: () => answer("allowed-once") }, "Allow once")));
+}
+
+/** A Pramanyx step, with the question it waits on under it while it waits. */
+const decided = (View) => function DecidedStep(props) {
+  const approval = waitingApprovalOf(props);
+  return h("div", null, h(View, props), approval ? h(Decision, { approval }) : null);
+};
+
+/** The foot of the page while a Pramanyx step waits: where the question is. Should the step not be drawn — a
+ *  conversation scrolled away from it — the question is asked here, the same way. */
+function WaitingAbove(props) {
+  const approval = props.matched;
+  const [inPlace, setInPlace] = useState(true);
+  useEffect(() => {
+    const look = () => setInPlace(Boolean(document.querySelector(`[data-pramanyx-decision="${CSS.escape(String(approval?.callId || ""))}"]`)));
+    look();
+    const timer = setInterval(look, 1000);
+    return () => clearInterval(timer);
+  }, [approval?.callId]);
+  if (!approval) return null;
+  return h("div", { "data-pramanyx-waiting-above": "", style: { padding: "10px 16px" } },
+    inPlace
+      ? h("div", { style: { display: "flex", alignItems: "center", gap: 10, fontSize: 13.5 } },
+          h("span", { style: quiet }, "Waiting for your answer in the conversation: Allow once or Reject."),
+          h("button", { type: "button", className: "pramanyx-link",
+            onClick: () => document.querySelector(`[data-pramanyx-decision="${CSS.escape(String(approval.callId || ""))}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" }) }, "Show it"))
+      : h(Decision, { approval }));
+}
+
 export const inject = ["slots"];
 
 /**
@@ -1409,11 +1761,23 @@ export function apply(ctx) {
     named.add(name);
     ctx.slots.inject("tool.call.toolview", () =>
       ctx.slots.register({ name: "tool.call.toolview", key: name },
-        ANSWERS.test(name) ? AnswerCard : name === PREFIX + "draft_email" ? DraftCard
+        decided(ANSWERS.test(name) ? AnswerCard : name === PREFIX + "draft_email" ? DraftCard
           : name === PREFIX + "bring_in_file" ? BroughtInCard
           : name === PREFIX + "draft_definition" ? DraftedDefinitionCard
-          : SCHEDULES.test(name) ? ScheduleCard : ToolStep));
+          : name === PREFIX + "deep_analysis" ? DeepAnalysisCard
+          : name === PREFIX + "deck_of_answers" ? DeckCard
+          : name === PREFIX + "search_my_drive" ? DriveCard
+          : SCHEDULES.test(name) ? ScheduleCard : ToolStep)));
   };
+  // What a Pramanyx step waits on is asked in the conversation, under the step; the foot of the page says where. The
+  // composer's occupants are tried lowest priority first, and the shell's approval card is 1 (its question card 0, a
+  // read-only helper's view -10): this one, -1, answers only Pramanyx's approvals and passes everything else on.
+  ctx.slots.inject("conversation.composer", () => ctx.slots.register({
+    name: "conversation.composer",
+    priority: -1,
+    select: ({ pendingInteraction: waiting }) =>
+      (waiting && waiting.kind === "approval" && String(waiting.toolName || "").startsWith(PREFIX) ? waiting : null),
+  }, WaitingAbove));
   // The tools known when this was written are named from the first call. A view is keyed by exact tool name, so
   // one added to Pramanyx since — and each custom agent's — gets its view at the end of the first turn that calls it.
   nameStepsOf(TOOL);

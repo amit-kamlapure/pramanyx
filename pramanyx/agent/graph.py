@@ -10,6 +10,8 @@ from typing import Any
 import duckdb
 from langgraph.graph import END, StateGraph
 
+from pramanyx.agent.answer_now import or_write_up  # punch list 89: Answer now
+
 from pramanyx.agent.nodes import (
     answer_text_only,
     exploratory_scan,
@@ -259,7 +261,7 @@ def _compile(execute_node, scan_node, explore_execute_node, explore_scan_subq_no
         graph.add_node("ada_phase_wave", _wave_node)
         graph.add_conditional_edges(
             "ada_phase_wave",
-            route_after_phase_wave,
+            or_write_up(route_after_phase_wave, "ada_synthesize"),
             {"ada_behavioral": "ada_behavioral", "ada_synthesize": "ada_synthesize"},
         )
         _baseline_target = "ada_phase_wave"
@@ -296,17 +298,17 @@ def _compile(execute_node, scan_node, explore_execute_node, explore_scan_subq_no
 
     graph.add_conditional_edges(
         "ada_baseline",
-        route_after_baseline,
+        or_write_up(route_after_baseline, "ada_synthesize"),
         {"ada_decompose": "ada_decompose", "ada_synthesize": "ada_synthesize"},
     )
     graph.add_conditional_edges(
         "ada_decompose",
-        route_after_decompose,
+        or_write_up(route_after_decompose, "ada_synthesize"),
         {"ada_dimensional": "ada_dimensional", "ada_synthesize": "ada_synthesize"},
     )
     graph.add_conditional_edges(
         "ada_dimensional",
-        route_after_dimensional,
+        or_write_up(route_after_dimensional, "ada_synthesize"),
         {"ada_behavioral": "ada_behavioral", "ada_synthesize": "ada_synthesize"},
     )
 
@@ -328,7 +330,7 @@ def _compile(execute_node, scan_node, explore_execute_node, explore_scan_subq_no
     graph.add_edge("score_evidence", "replan")
     graph.add_conditional_edges(
         "replan",
-        route_after_replan,
+        or_write_up(route_after_replan, "synthesize"),
         {"plan_queries": "plan_queries", "synthesize": "synthesize"},
     )
     graph.add_edge("synthesize", END)
@@ -357,7 +359,7 @@ def _compile(execute_node, scan_node, explore_execute_node, explore_scan_subq_no
         graph.add_edge("plan_gate", "plan_and_execute_wave")
         graph.add_conditional_edges(
             "plan_and_execute_wave",
-            route_after_wave,
+            or_write_up(route_after_wave, "synthesize_exploration"),
             {"plan_and_execute_wave": "plan_and_execute_wave",
              "synthesize_exploration": "synthesize_exploration"},
         )
@@ -375,7 +377,7 @@ def _compile(execute_node, scan_node, explore_execute_node, explore_scan_subq_no
         graph.add_edge("plan_and_execute_subq", "reason_over_result")
         graph.add_conditional_edges(
             "reason_over_result",
-            route_after_reason,
+            or_write_up(route_after_reason, "synthesize_exploration"),
             {"plan_and_execute_subq": "plan_and_execute_subq", "synthesize_exploration": "synthesize_exploration"},
         )
     graph.add_edge("synthesize_exploration", END)

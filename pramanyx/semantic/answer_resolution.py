@@ -358,6 +358,13 @@ _COMPUTE_WORDS = frozenset({
     "orders", "order", "rows", "records", "items", "results", "entries", "values",
 })
 
+#: Words that point back to something already named — "each city at ITS latitude", "orders and THEIR status", "for
+#: THIS region". What follows one is a reference to an attribute or a thing in the question, never a value the person
+#: typed to filter by. A closed class of grammar, like "the": a window it heads is dropped, so it can only turn an
+#: abstention into an answer. (theLook's sheet, 2026-11-17: "plotting each city at its latitude and longitude" was
+#: declined with `“its latitude” is not present in this data` on a sheet whose columns are latitude and longitude.)
+_REFERRING = frozenset({"its", "their", "his", "her", "our", "your", "my", "this", "that", "these", "those"})
+
 #: Month and weekday names, with their usual abbreviations — a TIME reference first, and
 #: only sometimes a value. The capitalised-noun rule and the preposition rule both swept
 #: them up ("the month of October 2023", "in march", "on Monday"), the probe looked for a
@@ -416,7 +423,7 @@ def _split_candidates(question: str) -> tuple[list[str], list[str]]:
     for c in cands:
         raw_words = [w.lower().strip(".'&-") for w in c.split()]
         head = raw_words[0] if raw_words else ""
-        if head in _STOP or len(head) < 3 or head in seen:
+        if head in _STOP or head in _REFERRING or len(head) < 3 or head in seen:
             continue
         # A capitalised multi-word phrase is a NAME the user typed ("First Class",
         # "Same Day", "New York") — it is exempt from the grammar rules below, which

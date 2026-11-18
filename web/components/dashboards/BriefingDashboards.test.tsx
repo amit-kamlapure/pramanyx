@@ -39,6 +39,9 @@ vi.mock("@/components/ui/toast", async (original) => ({ ...(await original<typeo
 const composer = vi.hoisted(() => ({ onCreated: null as null | (() => void) }));
 
 vi.mock("@/lib/api", async (original) => ({ ...(await original<typeof import("@/lib/api")>()), ...api }));
+const readCertification = vi.fn(async (_t: unknown) => null as unknown);
+vi.mock("@/lib/certification", async (original) => ({ ...(await original<typeof import("@/lib/certification")>()),
+  readCertification: (t: unknown) => readCertification(t) }));
 vi.mock("@/components/dashboards/ComposedDashboard", () => ({
   ComposedDashboard: (props: Record<string, unknown>) => { drawn.props.push(props); return <div data-testid="composed-stub" />; },
 }));
@@ -92,6 +95,16 @@ const openBuilder = async () => {
   fireEvent.click(await screen.findByTestId("dashboard-edit"));
   await screen.findByTestId("dashboard-builder");
 };
+/** A door that moved into the canvas toolbar's Chart list (2026-11-18): a card, a finding, a question, the ontology. */
+const chartDoor = async (kind: string) => {
+  // the list reads the declared actions and processes to say which pieces can be placed
+  api.getDeclaredActions.mockResolvedValue({});
+  ontology.getProcesses.mockResolvedValue({ processes: [] });
+  fireEvent.click(screen.getByTestId("builder-add-piece"));
+  fireEvent.click((await screen.findAllByTestId("piece-picker-entry")).find(e => e.dataset.kind === kind)!);
+};
+/** The layout pane, folded to a strip until a person opens it (2026-11-18). */
+const openLayout = () => fireEvent.click(screen.getByTestId("builder-open-layout"));
 /** The strip's tabs by name — a Themes tab carries its label twice (one copy hidden), so read the visible one. */
 const stripTabs = () => screen.getAllByRole("tab").map(t => t.querySelector(".rt-TabsTriggerInner")?.textContent);
 
@@ -166,7 +179,7 @@ describe("a person's dashboards", () => {
   it("a card pinned from here lands on the dashboard in view", async () => {
     await openBuilder();
     expect(screen.queryByTestId("composer-stub")).toBeNull();
-    fireEvent.click(screen.getByTestId("dashboard-card-new"));
+    await chartDoor("card");
     await waitFor(() => expect(composer.onCreated).not.toBeNull());
     api.getDashboard.mockResolvedValue({ ...READ, cards: [...READ.cards, card("fresh0001", "Just pinned", false)] });
     composer.onCreated!();
@@ -539,7 +552,7 @@ describe("the canvas: a finding from the ledger, a change in words, publishing (
     ]);
     api.pinFinding.mockResolvedValue({ card: { id: "newcard" }, preview: { columns: [], rows: [], row_count: 0 }, caveats: [] });
     await openBuilder();
-    fireEvent.click(screen.getByTestId("dashboard-finding-new"));
+    await chartDoor("finding");
     const rows = await screen.findAllByTestId("finding-row");
     expect(rows).toHaveLength(2);
     expect(rows[1]).toHaveTextContent("no query — nothing to measure");
@@ -558,6 +571,7 @@ describe("the canvas: a finding from the ledger, a change in words, publishing (
       detail: { mode: "edit", title: "Returns", replaces_version: 3, outline: [], taken_off: [], changes: { added: [], removed: [], changed: ["card-net"] } } });
     api.acceptProposal.mockResolvedValue({});
     await openBuilder();
+    fireEvent.click(screen.getByTestId("builder-tool-ask"));
     fireEvent.change(screen.getByRole("textbox", { name: "Ask for a change in words" }), { target: { value: "make the net sales card bigger" } });
     fireEvent.click(screen.getByRole("button", { name: "Propose" }));
     await waitFor(() => expect(api.askDashboard).toHaveBeenCalledWith("thelook", "returns-1", "make the net sales card bigger", "thelook"));
@@ -573,6 +587,7 @@ describe("the canvas: a finding from the ledger, a change in words, publishing (
     api.askDashboard.mockResolvedValue({ staged: false, proposal_id: "", cockpit_id: "", summary: "", rounds: 1, stop_reason: "stop",
       sentences: ["The edit adds the note \"note-2\". A note is the person's words and an image is the person's choice: you may move one they placed, resize it or take it off, never add one."] });
     await openBuilder();
+    fireEvent.click(screen.getByTestId("builder-tool-ask"));
     fireEvent.change(screen.getByRole("textbox", { name: "Ask for a change in words" }), { target: { value: "write me a note saying returns are too high" } });
     fireEvent.click(screen.getByRole("button", { name: "Propose" }));
     expect(await screen.findByTestId("dashboard-not-proposed")).toHaveTextContent("never add one");
@@ -618,6 +633,15 @@ describe("building a dashboard in place (Arc AP-1)", () => {
   const doors = () => drawn.props.at(-1)!.doors as Doors;
   const shown = () => (drawn.props.at(-1)!.spec as { elements: Record<string, { props: Record<string, unknown> }> }).elements;
 
+  it("says the organisation's word on the dashboard — certified, named by connection, owner and id (punch list 81)", async () => {
+    readCertification.mockResolvedValue({ securable: "artifact:dashboard:x", status: "certified", why: "Finance's weekly", by: "user:admin", at: "2026-11-18" });
+    show();
+    expect(await screen.findByTestId("certification-chip")).toHaveTextContent("Certified");
+    const asked = readCertification.mock.calls.map(([t]) => t as { kind: string; ref: string; connectionId: string });
+    expect(asked.some((t) => t.kind === "dashboard" && t.connectionId === "thelook" && /^thelook:.+:returns-1$/.test(t.ref))).toBe(true);
+    readCertification.mockResolvedValue(null);
+  });
+
   it("a dashboard opens to be read: one bar — its history and Edit — and the reader's own doors only", async () => {
     show();
     expect(await screen.findByTestId("dashboard-edit")).toBeInTheDocument();
@@ -636,9 +660,11 @@ describe("building a dashboard in place (Arc AP-1)", () => {
     expect(document.documentElement.getAttribute("data-nav")).toBe("collapsed");
     expect(localStorage.getItem("pramanyx_nav_collapsed")).toBeNull();
     expect(screen.getByTestId("builder-saved")).toHaveTextContent("version 3");
-    for (const id of ["dashboard-card-new", "dashboard-note-new", "dashboard-publish-open", "dashboard-retire-open", "dashboard-ask"]) {
+    for (const id of ["builder-add-piece", "dashboard-note-new", "dashboard-image-new", "dashboard-buttons-new", "builder-tool-ask",
+      "builder-undo", "builder-redo", "dashboard-publish-open", "dashboard-retire-open"]) {
       expect(screen.getByTestId(id)).toBeInTheDocument();
     }
+    expect(screen.queryByTestId("dashboard-ask")).toBeNull();                  // asked in words from the toolbar's Ask
     expect(doors().onSelect).toBeTypeOf("function");
     fireEvent.click(screen.getByTestId("builder-done"));
     await waitFor(() => expect(screen.queryByTestId("dashboard-builder")).toBeNull());
@@ -973,7 +999,9 @@ describe("your own query on the dashboard (Arc AP-7)", () => {
     show();
     fireEvent.click(await screen.findByTestId("dashboard-edit"));
     await screen.findByTestId("dashboard-builder");
+    openLayout();
     fireEvent.click((await screen.findAllByTestId("builder-line")).find(l => l.dataset.key === "card-net")!);
+    fireEvent.click(screen.getByTestId("card-fold-reads"));
     const setup = await screen.findByTestId("query-setup");
     fireEvent.click(within(setup).getByRole("radio", { name: /Line/ }));
     fireEvent.click(within(setup).getByTestId("query-keep"));
@@ -999,7 +1027,9 @@ describe("your own query on the dashboard (Arc AP-7)", () => {
     const valued = { ...SPEC, values: { country: { label: "Country", kind: "text", value: "China", from: { by: "reader" } } } };
     api.getDashboard.mockResolvedValue({ ...READ, cockpit: { ...READ.cockpit, spec: valued }, cards: [READ.cards[0], queryCard("c91b2002"), READ.cards[2]] });
     await openBuilder();
+    openLayout();
     fireEvent.click((await screen.findAllByTestId("builder-line")).find(l => l.dataset.key === "card-net")!);
+    fireEvent.click(screen.getByTestId("card-fold-reads"));
     const setup = await screen.findByTestId("query-setup");
     expect(within(setup).getByTestId("query-values-open")).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "Variables" })).toBeInTheDocument();
@@ -1037,5 +1067,35 @@ describe("inside the app's shell (2026-11-10, the dashboard mockup)", () => {
     expect(bar).toHaveTextContent("Editing");
     expect(screen.getByTestId("builder-done").closest('[data-testid="builder-bar"]')).toBeTruthy();
     expect(screen.getByTestId("builder-saved")).toHaveTextContent("version 3");
+  });
+});
+
+describe("the period as a piece (v15; the user, 2026-11-18: 'remove period bar')", () => {
+  /** The premise (the dashboard the fixture reads) with its period placed in its first section, opening on the current
+   *  month — placed on the shared fixture for one test, and taken off after it. */
+  const placePeriod = () => {
+    const section = Object.entries(SPEC.elements as Record<string, { type: string }>).find(([, e]) => e.type === "Section")![0];
+    SPEC.elements.period = { type: "Period", props: { opens_on: "current_month" }, children: [] };
+    SPEC.elements[section].children.unshift("period");
+    return () => { delete SPEC.elements.period; SPEC.elements[section].children.shift(); };
+  };
+
+  it("opens on the period its piece says, hands the piece the period and the door to change it, and draws no period above it", async () => {
+    const takeOff = placePeriod();
+    try {
+    show();
+    await waitFor(() => expect(api.getDashboard).toHaveBeenCalledWith("thelook", "returns-1", { preset: "current_month" }));
+    await waitFor(() => expect((drawn.props.at(-1)?.period as { value?: unknown } | undefined)?.value).toEqual({ preset: "current_month" }));
+    expect(screen.queryByTestId("dashboard-period")).toBeNull();
+    const door = drawn.props.at(-1)!.period as { onChange: (c: unknown) => void };
+    act(() => door.onChange({ preset: "previous_year" }));
+    await waitFor(() => expect(api.getDashboard).toHaveBeenLastCalledWith("thelook", "returns-1", { preset: "previous_year" }));
+    } finally { takeOff(); }
+  });
+
+  it("a dashboard without the piece keeps its period above it", async () => {
+    show();
+    await waitFor(() => expect(drawn.props.length).toBeGreaterThan(0));
+    expect((drawn.props.at(-1)?.period as { value?: unknown } | undefined)?.value).toEqual({ preset: "previous_month" });
   });
 });

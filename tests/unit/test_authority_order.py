@@ -69,6 +69,58 @@ def test_the_planner_is_told_the_rivals_first_and_reads_a_published_definition_b
     assert "The question is about Marketing: use Marketing's meaning, and say so." in chose
 
 
+def test_a_persons_pick_of_a_meaning_is_kept_for_them_alone(rivals):
+    """Punch list 83: asked which area's "active customer" she meant, Ana chose Finance. She is not asked again; Bo,
+    who chose nothing, still is; a question naming an area still answers in that area; her pick never becomes the
+    connection's prior for everyone."""
+    from pramanyx.agent.clarify import assess_clarification
+    from pramanyx.semantic import ambiguity_ledger as L
+    q = "How many active customers did we have last month?"
+    assert A.keep_pick(q, "in Finance", rivals, person="ana@example.com") == {"term": "Active customer", "area": "finance"}
+    [r] = A.rival_meanings(q, rivals, person="ana@example.com")
+    assert r["chosen"] == "finance" and r["kept"] is True
+    assert "The person asking chose Finance's meaning when asked before: use it, say so" in A.rival_meanings_block([r])
+    assert A.rival_meanings(q, rivals, person="bo@example.com")[0]["chosen"] == ""
+    [named] = A.rival_meanings("active customers in marketing", rivals, person="ana@example.com")
+    assert named["chosen"] == "marketing" and named["kept"] is False
+    assert L.retrieve_resolutions(q, rivals) == []                   # never everyone's prior
+    from pramanyx.org.context import reset_user_id, set_user_id
+    t = set_user_id("ana@example.com")
+    try:
+        assert not assess_clarification(q, rivals).should_ask        # the asker's own, read from the request
+    finally:
+        reset_user_id(t)
+    t = set_user_id("bo@example.com")
+    try:
+        assert assess_clarification(q, rivals).should_ask
+    finally:
+        reset_user_id(t)
+    # A later answer replaces it; a reading that names no area of the word keeps nothing.
+    A.keep_pick(q, "in Marketing", rivals, person="ana@example.com")
+    assert A.rival_meanings(q, rivals, person="ana@example.com")[0]["chosen"] == "marketing"
+    assert A.keep_pick(q, "in Sales", rivals, person="ana@example.com") is None
+
+
+def test_the_answer_to_the_ask_is_kept_as_the_askers_not_the_connections(rivals, monkeypatch):
+    """The app sends the chip it was answered with; the door keeps it as the person's, where it used to crystallize it
+    for the whole connection."""
+    from types import SimpleNamespace
+
+    from pramanyx.routers import investigations as I
+    from pramanyx.semantic import ambiguity_ledger as L
+    kept, crystallized = [], []
+    monkeypatch.setattr(A, "keep_pick", lambda q, r, c, person=None: kept.append((q, r, c)))
+    monkeypatch.setattr(L, "crystallize_user_choice", lambda *a, **k: crystallized.append(a))
+    q = "How many active customers did we have last month?"
+    req = SimpleNamespace(clarify_reading="in Finance", clarify_subject=q, clarify_source="rival_meanings",
+                          question=f"{q} — in Finance")
+    I._keep_clarify_answer(req, rivals)
+    assert kept == [(q, "in Finance", rivals)] and crystallized == []
+    req.clarify_source = "ambiguous_term"
+    I._keep_clarify_answer(req, rivals)
+    assert len(crystallized) == 1
+
+
 def test_the_graph_slice_leads_with_a_certified_table_and_says_a_deprecated_one(monkeypatch, tmp_path):
     from pramanyx.govern.certification import securable_for, set_certification
     from pramanyx.ontology import context_graph_search as search_mod

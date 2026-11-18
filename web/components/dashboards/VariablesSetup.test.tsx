@@ -107,7 +107,9 @@ describe("the Variables pane", () => {
         {() => <div data-testid="dashboard-stub" />}
       </DashboardBuilder>,
     );
-    fireEvent.click(screen.getByRole("radio", { name: "Variables" }));
+    // the layout pane is folded to a strip; its Variables button opens it on the variables (2026-11-18)
+    fireEvent.click(screen.getByRole("button", { name: "Open the variables" }));
+    expect(screen.getByRole("radio", { name: "Variables" })).toBeChecked();
     fireEvent.click(screen.getAllByTestId("data-value")[1]);
     expect(screen.getByTestId("builder-selection")).toHaveTextContent("Variable");
     expect(screen.getByTestId("builder-selection")).toHaveTextContent("the piece that reads it is dashed");   // the query's card
