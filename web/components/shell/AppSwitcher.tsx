@@ -141,7 +141,7 @@ export function AppSwitcher({ connectionId, theme }: { connectionId?: string; th
         }}>
           <span className="aug-fs-xs" style={{ color: "var(--t3)", padding: "2px 9px 6px" }}>Switch to</span>
           <div role="menuitem" aria-current="page" style={{ ...row, background: "var(--bg-2)" }}>
-            <span style={{ ...tile, background: "transparent", border: "none", color: "var(--t1)" }} aria-hidden><PramanyxMark size={24} /></span>
+            <span style={{ ...tile, background: "transparent", border: "none", color: "var(--t1)" }} aria-hidden><PramanyxMark size={22} /></span>
             <span style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
               <span className="aug-fs-sm" style={{ fontWeight: 600 }}>Pramanyx</span>
               <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>The platform. You are here.</span>

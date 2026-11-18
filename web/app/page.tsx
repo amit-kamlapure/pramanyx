@@ -274,7 +274,7 @@ function Topbar({
       {/* The wordmark, then the scope it applies to — the workspace switcher sits beside
           the name because everything below the topbar is read through it. */}
       <span className="aug-wordmark" style={{ display: "inline-flex", alignItems: "center", gap: 7, fontFamily: "inherit", textTransform: "none", letterSpacing: 0, fontWeight: 700 }}>
-        <PramanyxMark size={20} /><span className="aug-fs-h2"><PramanyxName /></span>
+        <PramanyxMark size={22} /><PramanyxName height={16} />
       </span>
       <WorkspaceSwitcher
         workspaces={workspaces}

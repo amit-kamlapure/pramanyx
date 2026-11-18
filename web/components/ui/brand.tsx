@@ -2,14 +2,14 @@
 
 /**
  * Pramanyx's mark and its colours (the user, 2026-11-18: "see how you incorporate the color elements across the platform too.. not
- * too flashy"). The colours belong to the ring in the mark and the bar over its ā. Beyond the logo they mark one thing: where a person
- * talks to the model. They stay thin, an edge or a small icon, and never fill a surface, a button or a chart.
+ * too flashy"). The shapes and colours are the supplied artwork's (`brandArt.ts`). Beyond the logo the colours mark one thing: where a
+ * person talks to the model. They stay thin, an edge or a small icon, and never fill a surface, a button or a chart.
  */
 import { useId, type CSSProperties } from "react";
 
-export const BRAND = { pink: "#FF2E8B", magenta: "#D926F5", blue: "#3A86FF", cyan: "#00DCFF" } as const;
+import { MARK_BOX, MARK_LINE, MARK_RING, MARK_RING_COLORS, NAME_BAR, NAME_BAR_STOPS, NAME_BOX, NAME_LETTERS } from "@/components/ui/brandArt";
 
-const STOPS = `${BRAND.pink} 0%, ${BRAND.magenta} 38%, ${BRAND.blue} 72%, ${BRAND.cyan} 100%`;
+const STOPS = NAME_BAR_STOPS.map(([at, colour]) => `${colour} ${at * 100}%`).join(", ");
 export const BRAND_GRADIENT = `linear-gradient(115deg, ${STOPS})`;
 
 /** The bar over the logo's ā, stood on end: what marks the page open in the rail. */
@@ -23,41 +23,37 @@ export function brandEdge(ground: string, width = 1.5): CSSProperties {
 }
 
 function Stops() {
-  return (
-    <>
-      <stop offset="0%" stopColor={BRAND.pink} /><stop offset="38%" stopColor={BRAND.magenta} />
-      <stop offset="72%" stopColor={BRAND.blue} /><stop offset="100%" stopColor={BRAND.cyan} />
-    </>
-  );
+  return <>{NAME_BAR_STOPS.map(([at, colour]) => <stop key={at} offset={at} stopColor={colour} />)}</>;
 }
 
-/** The mark's outer line: a circle with eight soft lobes. */
-const SCALLOP = `${Array.from({ length: 160 }, (_, i) => {
-  const a = (i / 160) * 2 * Math.PI;
-  const r = 41 + 2.6 * Math.cos(8 * a);
-  return `${i ? "L" : "M"}${(50 + r * Math.cos(a)).toFixed(2)} ${(50 + r * Math.sin(a)).toFixed(2)}`;
-}).join("")}Z`;
+/** The ring, one colour a step round its circle, each step just over its neighbour so no seam shows. */
+const RING = MARK_RING_COLORS.map((fill, i) => {
+  const { cx, cy, outer: [ox, oy], inner: [ix, iy] } = MARK_RING;
+  const at = (step: number) => (step / MARK_RING_COLORS.length) * 2 * Math.PI;
+  const [a, b] = [at(i - 0.15), at(i + 1.15)];
+  const p = (angle: number, rx: number, ry: number) => `${(cx + rx * Math.cos(angle)).toFixed(1)} ${(cy + ry * Math.sin(angle)).toFixed(1)}`;
+  return { fill, d: `M${p(a, ox, oy)}A${ox} ${oy} 0 0 1 ${p(b, ox, oy)}L${p(b, ix, iy)}A${ix} ${iy} 0 0 0 ${p(a, ix, iy)}Z` };
+});
 
-/** The mark: its outer line in the text's colour, so it reads on either theme, around the ring in the brand's colours. */
+/** The mark, `size` tall: its outer line in the text's colour, so it reads on either theme, around the ring. */
 export function PramanyxMark({ size = 20, label }: { size?: number; label?: string }) {
-  const id = useId();
   return (
-    <svg width={size} height={size} viewBox="0 0 100 100" fill="none" role={label ? "img" : undefined} aria-label={label} aria-hidden={label ? undefined : true} style={{ flex: "none" }}>
-      <defs><linearGradient id={id} x1="0.05" y1="0.2" x2="0.75" y2="1"><Stops /></linearGradient></defs>
-      <path d={SCALLOP} stroke="currentColor" strokeWidth="7" strokeLinejoin="round" />
-      <circle cx="50" cy="50" r="22" stroke={`url(#${id})`} strokeWidth="7" />
+    <svg width={Math.round((size * MARK_BOX.w) / MARK_BOX.h)} height={size} viewBox={`0 0 ${MARK_BOX.w} ${MARK_BOX.h}`} role={label ? "img" : undefined} aria-label={label} aria-hidden={label ? undefined : true} style={{ flex: "none" }}>
+      <path d={MARK_LINE} fill="currentColor" fillRule="evenodd" />
+      {RING.map((w, i) => <path key={i} data-testid="brand-ring" d={w.d} fill={w.fill} />)}
     </svg>
   );
 }
 
-/** The name as the logo writes it: a short bar in the brand's colours over its ā. */
-export function PramanyxName() {
+/** The name as the logo writes it, `height` tall from the bar over its ā to the foot of its y. */
+export function PramanyxName({ height = 16 }: { height?: number }) {
+  const id = useId();
   return (
-    <span aria-label="Pramanyx" role="img" style={{ whiteSpace: "nowrap" }}>
-      <span aria-hidden="true">Pram<span style={{ position: "relative", display: "inline-block" }}>a
-        <span style={{ position: "absolute", left: "6%", right: "6%", top: "0.04em", height: "0.13em", background: BRAND_GRADIENT }} />
-      </span>nyx</span>
-    </span>
+    <svg width={Math.round((height * NAME_BOX.w) / NAME_BOX.h)} height={height} viewBox={`0 0 ${NAME_BOX.w} ${NAME_BOX.h}`} role="img" aria-label="Pramanyx" style={{ flex: "none" }}>
+      <defs><linearGradient id={id}><Stops /></linearGradient></defs>
+      <path d={NAME_LETTERS} fill="currentColor" fillRule="evenodd" />
+      <rect x={NAME_BAR.x} y={NAME_BAR.y} width={NAME_BAR.w} height={NAME_BAR.h} fill={`url(#${id})`} />
+    </svg>
   );
 }
 

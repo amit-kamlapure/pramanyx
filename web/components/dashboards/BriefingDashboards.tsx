@@ -344,6 +344,9 @@ function DraftReview({ connectionId, dashboardId, result, proposal, held, onKept
 /** The box a new dashboard is described in: the one place on this page the brand's colours stand. */
 const ASK_BOX: CSSProperties = { ...brandEdge("var(--bg-2)"), position: "relative", width: "100%", borderRadius: 12, padding: "12px 52px 12px 14px" };
 
+/** The most a new dashboard is described in: the server reads no more (`dashboards.ask.MAX_AREA`). */
+const MAX_DESCRIBED = 1500;
+
 type NewWay = "draft" | "tables" | "sql" | "file" | "object" | "pack" | "process" | "empty";
 /** The ways to start other than describing it, along the foot of the new dashboard's page. */
 const WAYS: { way: Exclude<NewWay, "draft">; label: string; icon: IconName }[] = [
@@ -426,7 +429,7 @@ function NewDashboard({ connectionId, schema, sym, onKept, onClose, onBusy }: {
           <div className="aug-fs-display" style={{ color: "var(--t1)", fontWeight: 600 }}>Create a dashboard</div>
           <div className="aug-fs-ui" style={{ color: "var(--t2)", marginBottom: 12 }}>Describe what you want to see, and a model drafts it for you to review.</div>
           <div style={ASK_BOX}>
-            <textarea autoFocus rows={3} aria-label="What this dashboard is for" placeholder="Returns by category, what they cost, and which products drive them" className="aug-focus-frame aug-fs-ui"
+            <textarea autoFocus rows={3} maxLength={MAX_DESCRIBED} aria-label="What this dashboard is for" placeholder="Returns by category, what they cost, and which products drive them" className="aug-focus-frame aug-fs-ui"
               value={area} onChange={e => setArea(e.target.value)} disabled={drafting || !!proposal}
               style={{ display: "block", width: "100%", background: "transparent", border: "none", outline: "none", resize: "none", color: "var(--t1)", fontFamily: "inherit", textAlign: "left" }}
               onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (area.trim() && !drafting && !proposal) void draft(); } }} />

@@ -24,16 +24,16 @@ from pramanyx.dashboards.home import Home, new_id
 
 #: Steps the model may take: options, a draft, and repairs.
 MAX_STEPS = 6
-#: The longest area a person may name. It is read as the ask, and a limit is set only where
-#: it names one.
-MAX_AREA = 200
+#: The longest description of a dashboard a person may write. It is read as the ask, and a limit is set only where
+#: it names one. The page holds a person to this before they send it.
+MAX_AREA = 1500
 #: The longest change a person may ask for in words.
 MAX_WORDS = 400
 
 SYSTEM = (
     "You draft ONE dashboard for a person's Briefing, for the area of the business they name. "
     "Call draft_dashboard with op options first. Then call it with op new: the whole spec, and the "
-    "cards it creates. Title the dashboard after the area, in the person's words. Choose only records "
+    "cards it creates. Title the dashboard after the area in a few of the person's words. Choose only records "
     "that bear on the area. When nothing the connection offers measures it, draft nothing and say "
     "so in one sentence. When a draft is refused, repair every point and draft again. When one is "
     "staged, stop."

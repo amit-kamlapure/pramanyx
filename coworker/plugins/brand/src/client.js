@@ -13,40 +13,34 @@
  */
 import { createElement as h } from "react";
 import mark from "../assets/mark.png";
-import wordmark from "../assets/wordmark.png";
+import { MARK_BOX, MARK_LINE, MARK_RING, MARK_RING_COLORS, NAME_BAR, NAME_BAR_STOPS, NAME_BOX, NAME_LETTERS } from "../../../../web/components/ui/brandArt";
 
 const NAME = "Pramanyx";
 const SHELL_NAME = "DeepSeek Harness";
 
-/** A one-colour artwork drawn in the text colour around it, so one file serves the dark theme and the light. */
-function ink(url, width, height, label) {
-  const paint = `url("${url}") center / contain no-repeat`;
-  return h("span", {
-    role: "img", "aria-label": label,
-    style: { display: "inline-block", width, height, flex: "none", background: "currentColor", WebkitMask: paint, mask: paint },
-  });
-}
+/** The ring, one colour a step round its circle, each step just over its neighbour so no seam shows. */
+const RING = MARK_RING_COLORS.map((fill, i) => {
+  const { cx, cy, outer: [ox, oy], inner: [ix, iy] } = MARK_RING;
+  const at = (step) => (step / MARK_RING_COLORS.length) * 2 * Math.PI;
+  const [a, b] = [at(i - 0.15), at(i + 1.15)];
+  const p = (angle, rx, ry) => `${(cx + rx * Math.cos(angle)).toFixed(1)} ${(cy + ry * Math.sin(angle)).toFixed(1)}`;
+  return { fill, d: `M${p(a, ox, oy)}A${ox} ${oy} 0 0 1 ${p(b, ox, oy)}L${p(b, ix, iy)}A${ix} ${iy} 0 0 0 ${p(a, ix, iy)}Z` };
+});
 
-/** The mark's outer line: a circle with eight soft lobes (the app draws the same one, `web/components/ui/brand.tsx`). */
-const SCALLOP = `${Array.from({ length: 160 }, (_, i) => {
-  const a = (i / 160) * 2 * Math.PI;
-  const r = 41 + 2.6 * Math.cos(8 * a);
-  return `${i ? "L" : "M"}${(50 + r * Math.cos(a)).toFixed(2)} ${(50 + r * Math.sin(a)).toFixed(2)}`;
-}).join("")}Z`;
-const RING = [["0%", "#FF2E8B"], ["38%", "#D926F5"], ["72%", "#3A86FF"], ["100%", "#00DCFF"]];
-
-/** The mark: its outer line in the text's colour, around the ring in the logo's colours. */
+/** The mark, fitted inside the square the shell asks for: its outer line in the text's colour, around the ring. */
 function Mark({ size, className }) {
   return h("span", { className, style: { display: "inline-flex", width: size, height: size, alignItems: "center", justifyContent: "center" } },
-    h("svg", { width: size, height: size, viewBox: "0 0 100 100", fill: "none", role: "img", "aria-label": NAME },
-      h("defs", null, h("linearGradient", { id: "pramanyx-ring", x1: "0.05", y1: "0.2", x2: "0.75", y2: "1" },
-        RING.map(([offset, stopColor]) => h("stop", { key: offset, offset, stopColor })))),
-      h("path", { d: SCALLOP, stroke: "currentColor", strokeWidth: 7, strokeLinejoin: "round" }),
-      h("circle", { cx: 50, cy: 50, r: 22, stroke: "url(#pramanyx-ring)", strokeWidth: 7 })));
+    h("svg", { width: size, height: Math.round(size * MARK_BOX.h / MARK_BOX.w), viewBox: `0 0 ${MARK_BOX.w} ${MARK_BOX.h}`, role: "img", "aria-label": NAME },
+      h("path", { d: MARK_LINE, fill: "currentColor", fillRule: "evenodd" }),
+      RING.map((w, i) => h("path", { key: i, d: w.d, fill: w.fill }))));
 }
 
 function Name() {
-  return ink(wordmark, 82, 20, NAME);
+  const height = 15;
+  return h("svg", { width: Math.round(height * NAME_BOX.w / NAME_BOX.h), height, viewBox: `0 0 ${NAME_BOX.w} ${NAME_BOX.h}`, role: "img", "aria-label": NAME },
+    h("defs", null, h("linearGradient", { id: "pramanyx-name-bar" }, NAME_BAR_STOPS.map(([offset, stopColor]) => h("stop", { key: offset, offset, stopColor })))),
+    h("path", { d: NAME_LETTERS, fill: "currentColor", fillRule: "evenodd" }),
+    h("rect", { x: NAME_BAR.x, y: NAME_BAR.y, width: NAME_BAR.w, height: NAME_BAR.h, fill: "url(#pramanyx-name-bar)" }));
 }
 
 /**
@@ -142,7 +136,7 @@ function markTheTab() {
     canvas.width = edge; canvas.height = edge;
     const pen = canvas.getContext("2d");
     if (!pen) return;
-    const width = 60, height = 60;
+    const width = 60, height = Math.round(width * MARK_BOX.h / MARK_BOX.w);
     pen.drawImage(art, (edge - width) / 2, (edge - height) / 2, width, height);
     pen.globalCompositeOperation = "source-in";
     pen.fillStyle = dark.matches ? "#edeef0" : "#111113";

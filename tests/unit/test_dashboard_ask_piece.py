@@ -53,3 +53,11 @@ def test_a_draft_that_reaches_past_the_piece_never_reaches_the_drafting_tool(mon
     monkeypatch.setattr(loop, "run_tool_loop", loop_once)
     got = ask.edit_in_words("c", "me", "d1", "take the note off too", target="c1", provider=object())
     assert drafted == [] and got["staged"] is False and "reach past it" in got["sentences"][0]
+
+
+def test_a_dashboard_described_at_length_reaches_the_model_whole(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(ask, "_run", lambda _home, _system, asked, **_k: seen.update(asked=asked) or {"staged": False})
+    words = "Revenue by month, returns by category and delivery times by carrier. " * 15
+    ask.draft_for_area("c", "me", words, provider=object())
+    assert len(words.strip()) < ask.MAX_AREA and seen["asked"].endswith("delivery times by carrier.")
