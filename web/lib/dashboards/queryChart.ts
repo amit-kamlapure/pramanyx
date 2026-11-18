@@ -7,6 +7,7 @@
  * Colours are the chart theme's, in a fixed order: the first series takes the first colour, Other the theme's grey — a
  * series keeps its colour whatever the reader narrows, and Other never wears a series' colour.
  */
+import type { ChartOptions } from "@/components/charts/chartCustom";
 import type { QueryShaped, QueryShown } from "@/lib/api";
 import { dayLabel } from "@/lib/dashboards/objectView";
 import { fmtDate, type Gran } from "@/lib/format";
@@ -32,6 +33,16 @@ export function xText(x: unknown, kind: string, bucket: string, manyYears = fals
   return typeof x === "number" ? x : String(x);
 }
 
+/** The value axis as a person set it: its range, and a log scale where every value is above zero. */
+function valueAxisScale(options: ChartOptions | null | undefined, values: number[]): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (typeof options?.yMin === "number") out.domainMin = options.yMin;
+  if (typeof options?.yMax === "number") out.domainMax = options.yMax;
+  if (options?.yLog && values.length && values.every(v => v > 0)) { out.type = "log"; out.zero = false; }
+  if (out.domainMin !== undefined || out.domainMax !== undefined) out.clamp = true;
+  return out;
+}
+
 /** The palette's adverse red: what went wrong wears it on a chart as on a figure. */
 const ADVERSE_AT = 5;
 
@@ -47,14 +58,21 @@ export function seriesColours(series: string[], colours: ChartColours, tones: Re
 const DATE_AS_TEXT = /^\d{4}(-(\d{2}|Q[1-4]))?(-\d{2})?$/;
 
 export function queryChartSpec(c: QueryChart, setup: Pick<QueryShown, "segments" | "labels" | "running"> & Partial<Pick<QueryShown, "across">>,
-  colours: ChartColours, emphasis?: readonly unknown[] | null, kept?: Record<string, number>): Record<string, unknown> {
+  colours: ChartColours, emphasis?: readonly unknown[] | null, kept?: Record<string, number>, options?: ChartOptions | null): Record<string, unknown> {
   const temporal = c.x.kind === "date" || c.x.kind === "time";
   const manyYears = temporal && new Set(c.points.map(p => String(p.x ?? "").slice(0, 4))).size > 1;
   // a statement's own `date_trunc('month', …)` names no bucket: months read as months, not as "1 Sept 2016"
   const wholeMonths = temporal && !c.x.bucket && c.points.length > 1 && c.points.every(p => String(p.x ?? "").slice(8, 10) === "01");
   // `xr` is the place as the query returned it, beside the words it is drawn with: what a click reports, and what a
   // dashboard's focus lights (the board study, 2026-11-16)
-  const values = c.points.map(p => ({ x: xText(p.x, c.x.kind, wholeMonths ? "month" : c.x.bucket, manyYears), xr: p.x, s: p.s || "", v: p.v }));
+  const every = c.points.map(p => ({ x: xText(p.x, c.x.kind, wholeMonths ? "month" : c.x.bucket, manyYears), xr: p.x, s: p.s || "", v: p.v }));
+  // only the largest places along the bottom, a person's choice (the study's R12): categories only, said on the chart
+  const categories = c.x.kind === "text" && c.as === "bar" && !every.every(p => DATE_AS_TEXT.test(String(p.x ?? "")));
+  const totals = new Map<unknown, number>();
+  for (const p of every) totals.set(p.x, (totals.get(p.x) ?? 0) + (p.v ?? 0));
+  const topN = categories && options?.top && options.top > 0 ? Math.floor(options.top) : 0;
+  const keep = topN && topN < totals.size ? new Set([...totals].sort((a, b) => b[1] - a[1]).slice(0, topN).map(([x]) => x)) : null;
+  const values = keep ? every.filter(p => keep.has(p.x)) : every;
   const lit = emphasisOpacity(emphasis, "xr", temporal);
   const split = c.series.length > 1 || (c.series.length === 1 && c.series[0] !== "");
   const named = c.series.filter(s => s !== "");
@@ -68,7 +86,8 @@ export function queryChartSpec(c: QueryChart, setup: Pick<QueryShown, "segments"
   // a category along the bottom reads largest first; dates and numbers in their own order. A date a statement wrote as text
   // (`strftime(day, '%Y-%m')`) is still a date: months ranked by size read as a chart of nothing.
   const datesAsText = c.x.kind === "text" && c.points.length > 0 && c.points.every(p => DATE_AS_TEXT.test(String(p.x ?? "")));
-  const xSort = c.x.kind === "text" && bars && !setup.running && !datesAsText ? { op: "sum", field: "v", order: "descending" } : null;
+  const xSort = categories && options?.sort === "label" ? "ascending" as const
+    : c.x.kind === "text" && bars && !setup.running && !datesAsText ? { op: "sum", field: "v", order: "descending" } : null;
   const x = {
     field: "x",
     type: c.as === "scatter" && numericX ? "quantitative" : "ordinal",
@@ -82,10 +101,11 @@ export function queryChartSpec(c: QueryChart, setup: Pick<QueryShown, "segments"
   // A share reads as a percent and money with its symbol. Below one, the SI form says "50m" for 0.05: never what a reader means.
   const small = Math.max(0, ...values.map(p => Math.abs(p.v ?? 0))) < 1;
   const axisFormat = shares || c.format === "percent" ? ".0%" : c.format === "money" ? "$.3~s" : small ? ".2~f" : ".3~s";
+  const chosenScale = valueAxisScale(options, values.map(p => p.v).filter((v): v is number => typeof v === "number"));
   const y = {
     field: "v", type: "quantitative", stack, title: null,
     axis: { title: null, tickCount: 4, format: axisFormat },
-    ...(c.as === "scatter" ? { scale: { zero: false } } : {}),
+    ...(c.as === "scatter" || Object.keys(chosenScale).length ? { scale: { ...(c.as === "scatter" ? { zero: false } : {}), ...chosenScale } } : {}),
   };
   const tooltip = [
     { field: "x", title: "Along the bottom" },
@@ -95,9 +115,10 @@ export function queryChartSpec(c: QueryChart, setup: Pick<QueryShown, "segments"
   // one series, so no legend and no scale: what went wrong still wears its colour
   const tone = !split ? Object.values(c.tones ?? {})[0] : undefined;
   const lone = tone === "adverse" ? { color: colours.palette[ADVERSE_AT % colours.palette.length] } : tone === "open" ? { color: colours.other } : {};
+  const shape = options?.lineShape === "smooth" ? { interpolate: "monotone" } : options?.lineShape === "step" ? { interpolate: "step-after" } : {};
   const mark = bars ? { type: "bar", tooltip: true, cornerRadiusEnd: 2, ...lone }
-    : c.as === "line" ? { type: "line", strokeWidth: 2 }
-      : c.as === "area" ? { type: "area", tooltip: true, ...(stack === null && split ? { opacity: 0.45 } : {}) }
+    : c.as === "line" ? { type: "line", strokeWidth: 2, ...shape, ...(options?.markers ? { point: true } : {}) }
+      : c.as === "area" ? { type: "area", tooltip: true, ...shape, ...(stack === null && split ? { opacity: 0.45 } : {}) }
         : { type: "point", tooltip: true, filled: true, size: 36 };
   const across = bars && !!setup.across;
   const offset = bars && split && setup.segments === "side_by_side" ? { field: "s", sort: named } : null;
@@ -129,6 +150,8 @@ export function queryChartSpec(c: QueryChart, setup: Pick<QueryShown, "segments"
   const hover = c.as === "line" ? hoverRule(x, y, color, split, named, c.format) : null;
   if (hover) layer.push(...hover.layers);
   return { $schema: "https://vega.github.io/schema/vega-lite/v5.json", background: null, data: { values }, layer,
+           // what the cut left out is said on the chart, never implied
+           ...(keep ? { title: { text: `The ${keep.size} largest of ${totals.size}`, fontSize: 11, fontWeight: "normal", anchor: "start" } } : {}),
            ...(hover ? { usermeta: { hover: hover.meta } } : {}) };
 }
 

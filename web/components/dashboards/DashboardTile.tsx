@@ -31,7 +31,7 @@ import { seriesTrend, type SeriesTrend } from "@/components/brief/Sparkline";
 import { deltaInfo, formatMetric } from "@/components/brief/metricFormat";
 import { ResultChartCard } from "@/components/charts/ResultChartCard";
 import { type ChartCustom } from "@/components/Chart";
-import { type VizConfig } from "@/components/charts/vizConfig";
+import { chartOptionsOf, type VizConfig } from "@/components/charts/vizConfig";
 import { ALL_CHART_TYPES } from "@/components/charts/chartTypeInference";
 import type { Pick as ChartPick } from "@/components/charts/selection";
 import { VegaChart } from "@/components/charts/vega/VegaChart";
@@ -577,8 +577,8 @@ function QueryTile({ cs, doors, place, focus }: { cs: CardState & { card: Dashbo
   const spec = useMemo(() => {
     if (!shaped || !setup || shaped.as === "figure" || shaped.as === "table" || anyKind) return null;
     const t = readVegaTokens();
-    return queryChartSpec(shaped, setup, { palette: t.palette, other: t.deemph }, chosen, keptColors?.[setup.split]);
-  }, [shaped, setup, anyKind, chosen, keptColors]);
+    return queryChartSpec(shaped, setup, { palette: t.palette, other: t.deemph }, chosen, keptColors?.[setup.split], chartOptionsOf(viz));
+  }, [shaped, setup, anyKind, chosen, keptColors, viz]);
   const grid = useMemo(() => (anyKind && shaped && setup ? queryGrid(shaped as Parameters<typeof queryGrid>[0], setup) : null),
     [anyKind, shaped, setup]);
   // A card drafted from a file says what it means, read off its statement: under a figure always, under a chart behind Details.

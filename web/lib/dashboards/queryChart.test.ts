@@ -187,3 +187,42 @@ describe("a query card's line: the hover rule (study R25)", () => {
     }
   });
 });
+
+describe("a query card's chart options (the study's R12)", () => {
+  const six = (): Chart => ({ as: "bar", x: { name: "channel", kind: "text", bucket: "" }, series: [""], other: false, said: [],
+    points: [["Search", 40], ["Email", 90], ["Display", 10], ["Affiliate", 55], ["Social", 25], ["Direct", 70]].map(([x, v]) => ({ x: x as string, s: "", v: v as number })) });
+  const xs = (spec: Record<string, unknown>) => (spec.data as { values: { x: string }[] }).values.map(v => v.x);
+
+  it("draws a line's shape and its markers, and leaves it as it was with none set", () => {
+    const smooth = layers(queryChartSpec(chart("line"), setup(), COLOURS, null, undefined, { lineShape: "smooth", markers: true }))[0];
+    expect(smooth.mark).toMatchObject({ type: "line", interpolate: "monotone", point: true });
+    expect(layers(queryChartSpec(chart("area"), setup(), COLOURS, null, undefined, { lineShape: "step" }))[0].mark.interpolate).toBe("step-after");
+    const plain = layers(queryChartSpec(chart("line"), setup(), COLOURS))[0].mark;
+    expect(plain.interpolate).toBeUndefined();
+    expect(plain.point).toBeUndefined();
+  });
+
+  it("holds the value axis to a range, and draws a log scale only where every value is above zero", () => {
+    const y = (o: object, c = chart("line")) => layers(queryChartSpec(c, setup(), COLOURS, null, undefined, o))[0].encoding.y.scale;
+    expect(y({ yMin: 5, yMax: 50, yLog: true })).toEqual({ domainMin: 5, domainMax: 50, type: "log", zero: false, clamp: true });
+    const zero = chart("line");
+    zero.points[0] = { ...zero.points[0], v: 0 };
+    expect(y({ yLog: true }, zero)).toBeUndefined();
+  });
+
+  it("orders a bar's categories by name, shows only the largest, and says how many of how many", () => {
+    const named = queryChartSpec(six(), setup(), COLOURS, null, undefined, { sort: "label" });
+    expect(layers(named)[0].encoding.x.sort).toBe("ascending");
+    const top = queryChartSpec(six(), setup(), COLOURS, null, undefined, { top: 3 });
+    expect(xs(top).sort()).toEqual(["Affiliate", "Direct", "Email"]);
+    expect((top.title as { text: string }).text).toBe("The 3 largest of 6");
+    expect(queryChartSpec(six(), setup(), COLOURS, null, undefined, { top: 10 }).title).toBeUndefined();
+  });
+
+  it("keeps dates in their own order, whatever is asked", () => {
+    const dated = chart("bar");
+    const spec = queryChartSpec(dated, setup(), COLOURS, null, undefined, { top: 1, sort: "label" });
+    expect(new Set(xs(spec)).size).toBe(3);
+    expect(spec.title).toBeUndefined();
+  });
+});
