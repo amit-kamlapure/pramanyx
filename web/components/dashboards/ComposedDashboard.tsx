@@ -56,7 +56,7 @@ import {
   type BarChip, type FilterProperty, type ObjectBarWords,
 } from "@/components/dashboards/OntologyPieces";
 import { GlobalFiltersColumn } from "@/components/dashboards/GlobalFilters";
-import { openedWith, stillHeld, type GlobalFilterProps } from "@/lib/dashboards/globalFilters";
+import { followsByValue, openedWith, stillHeld, type GlobalFilterProps } from "@/lib/dashboards/globalFilters";
 import { ImageTile, NoteTile, type ImageStamp, type StaticDoors } from "@/components/dashboards/StaticTile";
 import { DropdownMenu } from "@radix-ui/themes";
 import { Button } from "@/components/ui/button";
@@ -271,14 +271,16 @@ function DashboardRootBody(props: ComponentRenderProps<{ title: string }>) {
 function DashboardGlobalFilters({ element }: ComponentRenderProps<{ apply_button?: boolean | null }>) {
   const { elements, focus, setFocus, connectionId, doors, selected } = useDashboard();
   const { get } = useStateStore();
-  const { setValue } = usePieces();
+  const { setValue, readerValues, wire } = usePieces();
+  // a filter holding nothing hands its value back; one a reader never moved has nothing to hand back
+  const feed = useCallback((name: string, value: unknown) => { if (value !== undefined || name in readerValues) setValue(name, value); }, [setValue, readerValues]);
   const filters = useMemo(() => (element.children ?? []).map(key => ({ key, props: elements[key]?.props as unknown as GlobalFilterProps })), [element.children, elements]);
   const pages = pagesOf(elements, true);
   const open = get("/tab");
   const page = (pages.find(t => t.name === open) ?? pages[0])?.key ?? null;
   return (
     <GlobalFiltersColumn filters={filters} connectionId={connectionId} focus={focus} onFocus={setFocus} building={!!doors.onSelect} selected={selected}
-      applyButton={element.props.apply_button === true} page={page} onParameter={setValue}
+      applyButton={element.props.apply_button === true} page={page} onParameter={feed} valueKinds={wire.values ?? undefined}
       onChoose={doors.onSelect} onAdd={doors.onAddGlobalFilter ? () => { const key = doors.onAddGlobalFilter?.(); if (key) doors.onSelect?.(key); } : undefined} />
   );
 }
@@ -1221,8 +1223,9 @@ function DashboardCard({ element }: ComponentRenderProps<{ card: string; tone?: 
   const { narrowing } = useQueryNarrowing();
   // v18 — placed so the dashboard's filters do not cut it, and it says so while one is on
   const optedOut = (element.props as { not_filtered?: boolean | null }).not_filtered === true;
-  // v20 — a filter this card is set not to follow, while a reader is using it
-  const ignoring = ((element.props as { ignores_filters?: string[] | null }).ignores_filters ?? []).some(k => focus.some(f => f.source.card === filterSource(k)));
+  // v20 — a filter this card is set not to follow, while a reader is using it; a card reading the value it feeds does follow it
+  const ignoring = ((element.props as { ignores_filters?: string[] | null }).ignores_filters ?? [])
+    .some(k => focus.some(f => f.source.card === filterSource(k)) && !followsByValue(placedOn, k, valuesRead(cs?.card.sql)));
   const cutBySomething = focus.length > 0 || narrowing.length > 0 || filtering.on;
   const tileFocus = useMemo<TileFocus | undefined>(() => (pick
     ? { chosen: (field: string) => chosenOn(focus, id, field), onPick: (p: ChartPick) => pick(id, p),

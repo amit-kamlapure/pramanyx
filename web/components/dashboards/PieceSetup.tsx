@@ -27,7 +27,7 @@ import {
   MAX_FILTER_DESCRIPTION, MAX_FIXED_FILTERS, type GlobalFilterKind,
 } from "@/lib/dashboards/catalog";
 import { DATE_PRESETS, DAY_PRESETS, PRESET_WORDS, type DatePreset } from "@/lib/dashboards/datePresets";
-import { FILTER_KINDS, TEXT_MATCHES, fits, type FilterOpening } from "@/lib/dashboards/globalFilters";
+import { FILTER_KINDS, TEXT_MATCHES, canFeed, fits, type FilterOpening } from "@/lib/dashboards/globalFilters";
 import { dashboardFilterFields, type FilterField } from "@/lib/api";
 import {
   editNote, freshWireName, moveCardTo, moveCardToNewSection, moveSectionTo, recaption, rename, sectionsOf, setProps, tabsOf,
@@ -431,8 +431,8 @@ function GlobalFilterSetup({ p, connectionId, set, spec, onChange }: { p: Props;
   const described = wantsWords || !!p.description;
   const holder = Object.entries(spec.elements).find(([, e]) => e?.type === "GlobalFilters")?.[0];
   const pages = tabsOf(spec);
-  const parameters = Object.entries((spec as { values?: Record<string, { label?: string; from?: { by?: string } }> }).values ?? {})
-    .filter(([, v]) => v.from?.by === "reader").map(([name, v]) => ({ value: name, label: v.label ?? name }));
+  const parameters = Object.entries((spec as { values?: Record<string, { label?: string; kind?: string; from?: { by?: string } }> }).values ?? {})
+    .filter(([, v]) => v.from?.by === "reader" && canFeed(kind, v.kind)).map(([name, v]) => ({ value: name, label: v.label ?? name }));
   return (
     <div data-testid="global-filter-setup">
       <Row label="Widget">

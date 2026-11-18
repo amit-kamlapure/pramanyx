@@ -199,7 +199,7 @@ function FilterControl(props: Control & { clear: () => void }) {
   }
 }
 
-export function GlobalFiltersColumn({ filters, connectionId, focus, onFocus, building, selected, onChoose, onAdd, applyButton = false, page = null, onParameter }: {
+export function GlobalFiltersColumn({ filters, connectionId, focus, onFocus, building, selected, onChoose, onAdd, applyButton = false, page = null, onParameter, valueKinds }: {
   filters: { key: string; props: GlobalFilterProps }[];
   connectionId?: string;
   focus: DashboardFocus[];
@@ -215,6 +215,8 @@ export function GlobalFiltersColumn({ filters, connectionId, focus, onFocus, bui
   page?: string | null;
   /** A filter's choice, for the dashboard value it feeds. */
   onParameter?: (name: string, value: unknown) => void;
+  /** The kind of each value a filter can feed, so a choice arrives as that value holds it. */
+  valueKinds?: Record<string, { kind: string }>;
 }) {
   const holds = applyButton && !building;
   const [draft, setDraft] = useState<DashboardFocus[] | null>(null);
@@ -230,14 +232,13 @@ export function GlobalFiltersColumn({ filters, connectionId, focus, onFocus, bui
   useEffect(() => {
     for (const { key, props: p } of filters) {
       if (!p.parameter) continue;
-      const value = parameterValue(heldBy(focus, key, p));
+      const value = parameterValue(heldBy(focus, key, p), valueKinds?.[p.parameter]?.kind);
       const said = JSON.stringify(value ?? null);
       if (fed.current.get(p.parameter) === said) continue;
-      if (value === undefined && !fed.current.has(p.parameter)) continue;
       fed.current.set(p.parameter, said);
       onParameter?.(p.parameter, value);
     }
-  }, [applied, filters, onParameter]); // eslint-disable-line react-hooks/exhaustive-deps -- keyed on what the dashboard holds
+  }, [applied, filters, onParameter, valueKinds]); // eslint-disable-line react-hooks/exhaustive-deps -- keyed on what the dashboard holds
 
   const shown = useMemo(() => filters.filter(f => building || (f.props.table && f.props.column && (!f.props.page || !page || f.props.page === page))), [filters, building, page]);
   if (!shown.length && !building) return null;

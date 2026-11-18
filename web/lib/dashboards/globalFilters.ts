@@ -7,6 +7,7 @@
 import type { GlobalFilterKind } from "@/lib/dashboards/catalog";
 import { rangeOfPreset, type DatePreset } from "@/lib/dashboards/datePresets";
 import { filterSource, fromFilter, wireFocus, type DashboardFocus, type FocusOn, type FocusValue } from "@/lib/dashboards/focus";
+import { typedValue } from "@/lib/dashboards/values";
 
 export interface FilterOpening {
   values?: FocusValue[] | null; value?: FocusValue | null; low?: string | number | null; high?: string | number | null;
@@ -102,14 +103,32 @@ export function narrowedBy(focus: DashboardFocus[], key: string, p: GlobalFilter
   return focus.filter(f => fromFilter(f) && f.source.card !== filterSource(key) && (!f.page || !page || f.page === page)).map(wireFocus);
 }
 
-/** What a filter's choice is as the dashboard value it feeds; undefined when it holds nothing, and the value goes back to its own. */
-export function parameterValue(held: DashboardFocus | null): unknown {
+/** What a filter's choice is as the dashboard value it feeds, in that value's kind; undefined when it holds nothing, or more
+ *  than the value can hold, and the value goes back to its own. */
+export function parameterValue(held: DashboardFocus | null, kind?: string): unknown {
   if (!held) return undefined;
-  if (held.op === "in") return held.values;
-  if (held.op === "dates") return held.low ?? held.high ?? undefined;
-  if (held.op === "between") return held.low ?? undefined;
-  return held.value;
+  const said = held.op === "in" ? held.values : held.op === "dates" ? held.low ?? held.high ?? undefined : held.op === "between" ? held.low ?? undefined : held.value;
+  if (!kind || said === undefined || said === null) return said ?? undefined;
+  if (kind === "list") return Array.isArray(said) ? said : [said];
+  const one = Array.isArray(said) ? (said.length === 1 ? said[0] : undefined) : said;
+  return one === undefined ? undefined : typedValue(kind, String(one)) ?? undefined;
 }
+
+/** Whether a filter of this kind can feed a value of that kind: only a list holds several choices at once. */
+export const canFeed = (filter: GlobalFilterKind, value: string | undefined) => filter !== "multi" || value === "list";
+
+type Placed = Record<string, { type?: string; props?: Record<string, unknown> } | undefined>;
+
+/** The dashboard values a filter feeds: the filter is where a reader sets them, so they are not offered or said a second time. */
+export function valuesFed(elements: Placed | null | undefined): Set<string> {
+  return new Set(Object.values(elements ?? {}).flatMap(e => (e?.type === "GlobalFilter" && typeof e.props?.parameter === "string" ? [e.props.parameter] : [])));
+}
+
+/** Whether a card follows this filter through a value it reads, though the filter does not cut its rows. */
+export const followsByValue = (elements: Placed | null | undefined, filter: string, reads: string[]) => {
+  const fed = elements?.[filter]?.props?.parameter;
+  return typeof fed === "string" && reads.includes(fed);
+};
 
 /** The reader's choices with this filter's replaced. */
 export function withFilter(focus: DashboardFocus[], key: string, next: DashboardFocus | null): DashboardFocus[] {

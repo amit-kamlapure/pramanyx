@@ -48,6 +48,7 @@ import {
 } from "@/lib/dashboards/objectView";
 import { CHOOSERS, MAX_TICKED_RUNS, SWITCHED, rowsTall, type PieceName } from "@/lib/dashboards/catalog";
 import { choicesOf, doorConditions, isRefused, pieceSet, readSet, readsItself, type DoorCondition, type ValueNow, type WireSpec } from "@/lib/dashboards/sets";
+import { valuesFed } from "@/lib/dashboards/globalFilters";
 import { useMarkRead } from "@/components/dashboards/readSlot";
 import { queryValue, typedValue, valueFits, valueWords, valuesFor, valuesRead } from "@/lib/dashboards/values";
 import { runCard } from "@/lib/api";
@@ -1200,7 +1201,9 @@ const boxText = (v: unknown) => (v === null || v === undefined ? "" : Array.isAr
 export function ValuesBar({ spaced = true }: { spaced?: boolean }) {
   const { wire, valueOf, readerValues, setValue } = usePieces();
   // a slider is a scenario's, drawn on its own tab (`ScenarioInputs`), not in this bar
-  const offered = Object.entries(wire.values ?? {}).filter(([, v]) => v.from?.by === "reader" && !v.from.slider);
+  // nor is a value a filter feeds: the filter is where it is set
+  const fed = valuesFed(wire.elements);
+  const offered = Object.entries(wire.values ?? {}).filter(([name, v]) => v.from?.by === "reader" && !v.from.slider && !fed.has(name));
   if (!offered.length) return null;
   return (
     <div role="group" aria-label="Values you set" data-testid="dashboard-values" className="aug-fs-sm"
@@ -1328,8 +1331,10 @@ export function ObjectFilterWords({ entity, properties, set, children }: {
 /** The values a reader has moved off where the dashboard was made, each a chip that puts it back. */
 export function useValueChips(): BarChip[] {
   const { wire, valueOf, readerValues, setValue } = usePieces();
+  // a value a filter feeds is said once, by the filter's own chip
+  const fed = valuesFed(wire.elements);
   return Object.entries(wire.values ?? {}).flatMap(([name, def]): BarChip[] => {
-    if (def.from?.by !== "reader" || def.from.slider || !(name in readerValues)) return [];
+    if (def.from?.by !== "reader" || def.from.slider || !(name in readerValues) || fed.has(name)) return [];
     const now = valueOf(name);
     const value = "value" in now ? now.value : def.value ?? null;
     if (JSON.stringify(value) === JSON.stringify(def.value ?? null)) return [];

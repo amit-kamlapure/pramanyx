@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { DATE_PRESETS, rangeOfPreset } from "@/lib/dashboards/datePresets";
 import { FILTERS_PARAM, filterLink, focusOfCard, focusWords, pagesHolding, type DashboardFocus } from "@/lib/dashboards/focus";
-import { focusOfChoice, narrowedBy, openedWith, openingChoice, parameterValue, type GlobalFilterProps } from "@/lib/dashboards/globalFilters";
+import { canFeed, followsByValue, focusOfChoice, narrowedBy, openedWith, openingChoice, parameterValue, valuesFed, type GlobalFilterProps } from "@/lib/dashboards/globalFilters";
 
 const NOW = new Date(2026, 10, 19, 12);
 const P = (over: Partial<GlobalFilterProps> = {}): GlobalFilterProps => ({ title: "Country", kind: "multi", table: "users", column: "country", ...over });
@@ -113,5 +113,29 @@ describe("a filter that feeds a query's value", () => {
     expect(parameterValue(chosen("c"))).toEqual(["China"]);
     expect(parameterValue(chosen("c", { op: "dates", values: undefined, low: "2026-01-01", high: "2026-02-01" }))).toBe("2026-01-01");
     expect(parameterValue(null)).toBeUndefined();
+  });
+
+  it("arrives in the kind the value holds", () => {
+    const one = chosen("c", { op: undefined, values: undefined, value: "42" });
+    expect(parameterValue(one, "list")).toEqual(["42"]);
+    expect(parameterValue(one, "number")).toBe(42);
+    expect(parameterValue(chosen("c"), "text")).toBe("China");
+    expect(parameterValue(chosen("c", { values: ["China", "Japan"] }), "list")).toEqual(["China", "Japan"]);
+  });
+
+  it("gives the value back when it holds more than the value can", () => {
+    expect(parameterValue(chosen("c", { values: ["China", "Japan"] }), "text")).toBeUndefined();
+    expect(parameterValue(chosen("c", { op: undefined, values: undefined, value: "many" }), "number")).toBeUndefined();
+    expect(canFeed("multi", "text")).toBe(false);
+    expect(canFeed("multi", "list")).toBe(true);
+    expect(canFeed("single", "text")).toBe(true);
+  });
+
+  it("is known by the value it feeds, and a card reading that value follows it", () => {
+    const elements = { f: { type: "GlobalFilter", props: { parameter: "picked" } }, g: { type: "GlobalFilter", props: {} }, a: { type: "Card", props: { parameter: "not a filter" } } };
+    expect([...valuesFed(elements)]).toEqual(["picked"]);
+    expect(followsByValue(elements, "f", ["picked"])).toBe(true);
+    expect(followsByValue(elements, "f", ["other"])).toBe(false);
+    expect(followsByValue(elements, "g", ["picked"])).toBe(false);
   });
 });
