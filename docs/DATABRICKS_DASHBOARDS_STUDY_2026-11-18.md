@@ -453,6 +453,7 @@ change passes the four gates.
 | **R22** | **Export and import a dashboard as JSON** (the spec plus card references; an import is validated, and a card it cannot resolve is refused by name) | `.lvdash.json` parity; moving a dashboard between connections | `routers/dashboards.py`; `validate.py` | M | — | Provenance: imported cards keep their source or are refused |
 | **R23** | **Per-card downloads:** CSV of the rows and PNG of the chart, on the card's doors | Databricks' per-widget downloads; our own "tables Copy + CSV" rule | `TableActions.tsx`, `chartExport.ts` | S | — | — |
 | **R24** | **Star a dashboard** | Small and expected | the dashboard list, `TabStrip` | S | — | — |
+| **R25** | **The hover rule on a line chart** (the owner, 2026-11-18: "the dotted lines.. such a nice touch"): a dashed rule at the nearest x, a ring on the nearest line, and one tooltip with the date and every series' value there, largest first, each with its colour swatch | Today a line's tooltip is per point, one series at a time (`resolveSpec.ts:612-614`, a `point` layer with `tooltip: true`); reading several series at one date needs a hover per line | A Vega-Lite layer in `resolveSpec.ts`/`forms.ts`: `pivot` the series by x, a `rule` with a `nearest` point param on `pointermove` (`strokeDash`), a `point` filtered by it; the sorted, swatched rows through a `vega-tooltip` handler (already a dependency) | S–M | — | Colours are the series' own slots; the tooltip says each value with its unit, as the axis does |
 
 ---
 
@@ -461,7 +462,7 @@ change passes the four gates.
 | Slice | Contents | Size | What it proves on theLook |
 |---|---|---|---|
 | **A — the editing feel (first)** | R1 handles at rest · R2 canvas toolbar, add-then-configure · R3 keyboard and undo/redo keys · R6 one panel that opens on the look · R7 the left pane folds · R4 a click chooses · R5 guides | ~2 weeks | Build Executive Cockpit's top row by keyboard and toolbar alone. Resize one card by each of the eight handles. Undo every step back to the start. Each burst is one version in History |
-| **B — formatting** | R8 title and description · R9 number format · R10 conditional colour · R11 colour per value · R12 chart options · R13 note headings | ~2–3 weeks | The screenshot's table and line chart rebuilt from theLook's own cards, with a colour scale and swatches, and no colour outside the palette |
+| **B — formatting** | R8 title and description · R9 number format · R10 conditional colour · R11 colour per value · R12 chart options · R13 note headings · R25 the hover rule | ~2–3 weeks | The screenshot's table and line chart rebuilt from theLook's own cards, with a colour scale and swatches, and no colour outside the palette |
 | **C — filters and interaction** | R14 one bar · R15 not-cut cards · R16 cut through a join · R17 open on a tab | ~2 weeks | A click on Email cuts revenue through `users`, said with the column it used |
 | **D — pages and AI** | R18 pages in the builder · R19 ✦ in words · R20 ask about this dashboard | ~1–2 weeks | A page added, hidden from readers, and absent from the published read. An ask held to the period |
 | **E — lifecycle** | R21 subscriptions · R22 export and import · R23 downloads · R24 star | ~2–3 weeks | A held Slack send with the period said. An export imported into a second connection, one card refused by name |
