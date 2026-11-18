@@ -50,6 +50,24 @@ export interface VizEditorModel {
   orientValue: "" | "vertical" | "horizontal";
   orientAvailable: boolean;
   setOrient: (v: "" | "vertical" | "horizontal") => void;
+  // The chart options (the dashboards study, R12)
+  lineAvailable: boolean;
+  lineShapeValue: "" | "smooth" | "step";
+  setLineShape: (v: "" | "smooth" | "step") => void;
+  markersOn: boolean;
+  setMarkersOn: (b: boolean) => void;
+  yMinValue: string;
+  setYMin: (v: string) => void;
+  yMaxValue: string;
+  setYMax: (v: string) => void;
+  yLog: boolean;
+  setYLog: (b: boolean) => void;
+  barSortAvailable: boolean;
+  sortValue: "" | "value" | "label";
+  setSort: (v: "" | "value" | "label") => void;
+  topValue: string;
+  topOptions: VizSelectOption[];
+  setTop: (v: string) => void;
   // Transform (post-processing)
   transformValue: string;
   transformOptions: VizSelectOption[];
@@ -359,6 +377,17 @@ export function VizEditorPanel({ model, onClose, docked = false }: { model: VizE
               <>
                 <Field label="Number format"><Select value={model.numberFormatValue} options={model.numberFormatOptions} onChange={model.setNumberFormat} /></Field>
                 <Field label="Axis title"><TextInput value={model.yTitleValue} placeholder="auto" onChange={model.setYTitle} /></Field>
+                {/* the value axis's range and scale (study R12): unset is what the data asks */}
+                <Field label="Range">
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <TextInput value={model.yMinValue} placeholder="lowest: auto" onChange={model.setYMin} />
+                    <TextInput value={model.yMaxValue} placeholder="highest: auto" onChange={model.setYMax} />
+                  </div>
+                </Field>
+                <Field label="Scale">
+                  <SegToggle value={model.yLog ? "log" : "linear"} onChange={(v) => model.setYLog(v === "log")}
+                    options={[["linear", "Linear"], ["log", "Log"]]} />
+                </Field>
               </>
             }
           >
@@ -391,6 +420,25 @@ export function VizEditorPanel({ model, onClose, docked = false }: { model: VizE
 
         {chartMode && <ToggleRow title="Labels" on={model.showLabels} onChange={model.setShowLabels} />}
         {chartMode && <ToggleRow title="Tooltip" on={model.tooltipOn} onChange={model.setTooltipOn} />}
+
+        {chartMode && model.lineAvailable && (
+          <Channel title="Line">
+            <SegToggle value={model.lineShapeValue} onChange={model.setLineShape}
+              options={[["", "Straight"], ["smooth", "Smooth"], ["step", "Step"]]} />
+            <Field label="Markers">
+              <SegToggle value={model.markersOn ? "on" : "off"} onChange={(v) => model.setMarkersOn(v === "on")}
+                options={[["on", "Shown"], ["off", "Hidden"]]} />
+            </Field>
+          </Channel>
+        )}
+
+        {chartMode && model.barSortAvailable && (
+          <Channel title="Order">
+            <SegToggle value={model.sortValue} onChange={model.setSort}
+              options={[["", "Auto"], ["value", "Largest first"], ["label", "By name"]]} />
+            <Field label="Show"><Select value={model.topValue} options={model.topOptions} onChange={model.setTop} /></Field>
+          </Channel>
+        )}
 
         {chartMode && model.orientAvailable && (
           <Channel title="Orientation">

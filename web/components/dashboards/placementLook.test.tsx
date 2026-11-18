@@ -70,7 +70,7 @@ describe("a tile under its placement's look", () => {
   } as unknown as CardRunResult;
   const draw = (props: Record<string, unknown>) => render(
     <PlacementLookProvider value={placementLookOf(props)}>
-      <DashboardTile cs={{ card, run } as CardState & { card: DashboardCard }} status="unmeasured" sym="$" doors={{ onRemove: vi.fn() }} />
+      <DashboardTile cs={{ card, run } as CardState & { card: DashboardCard }} status="unmeasured" sym="$" doors={{ onRemove: vi.fn(), onRefresh: vi.fn() }} />
     </PlacementLookProvider>);
 
   it("names the card by its placement's title, with a description under it, and writes its figure the placement's way", () => {

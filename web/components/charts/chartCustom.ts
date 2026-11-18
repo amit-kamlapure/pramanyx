@@ -21,4 +21,24 @@ export interface ChartCustom {
    *  that path still round-trips through /query/postproc. */
   transform?: { op: "pop" | "contribution" | "rolling" | "cumulative"; valueCol: string;
                 window?: number; agg?: "mean" | "sum" | "min" | "max" } | null;
+  /** The chart options a person sets in the editor (the dashboards study, R12). */
+  options?: ChartOptions | null;
+}
+
+/**
+ * What a person may change of how a chart is drawn beyond its kind (study R12): a line's shape and its markers, the
+ * value axis's range and a log scale, and a bar's categories by size or by name, and only the largest. Each is unset
+ * by default, and unset draws the chart as before. A cut to the largest says so on the chart.
+ */
+export interface ChartOptions {
+  lineShape?: "straight" | "smooth" | "step" | null;
+  /** false draws a line without its points. */
+  markers?: boolean | null;
+  yMin?: number | null;
+  yMax?: number | null;
+  yLog?: boolean | null;
+  /** A bar's categories: largest first, or by name. Dates and periods keep their order. */
+  sort?: "value" | "label" | null;
+  /** Only the largest this many categories of a bar. */
+  top?: number | null;
 }

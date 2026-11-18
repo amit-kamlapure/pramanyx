@@ -26,6 +26,7 @@ import { createPortal } from "react-dom";
 import { Icon } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { Chart, type ChartCustom } from "@/components/Chart";
+import type { ChartOptions } from "@/components/charts/chartCustom";
 import { SqlResultTable } from "@/components/AugTable";
 import { PivotTable } from "@/components/PivotTable";
 import { classifyColumns, availableChartTypes, inferChartType, ALL_CHART_TYPES, CHART_TYPE_LABEL, TYPE_TO_HINT, HINT_TO_TYPE, type ChartType } from "@/components/charts/chartTypeInference";
@@ -60,6 +61,17 @@ const NUMBER_FORMATS: { v: string; t: string }[] = [
   { v: "", t: "Auto" }, { v: ",.0f", t: "1,234" }, { v: ",.2f", t: "1,234.56" }, { v: "$,.0f", t: "$1,234" },
   { v: "$,.2f", t: "$1,234.56" }, { v: "~s", t: "1.2K (compact)" }, { v: ".0%", t: "12%" }, { v: ".1%", t: "12.3%" },
 ];
+/** "Show": every category, or only the largest few (the dashboards study, R12). */
+const TOP_OPTIONS: { v: string; t: string }[] = [
+  { v: "", t: "Every category" }, { v: "5", t: "The 5 largest" }, { v: "10", t: "The 10 largest" }, { v: "20", t: "The 20 largest" },
+];
+/** A number a person typed, or null for none (or not a number). */
+function numberOrNull(text: string): number | null {
+  const t = text.trim();
+  if (!t) return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+}
 const LEGEND_POS: { v: string; t: string }[] = [
   { v: "", t: "Default" }, { v: "right", t: "Right" }, { v: "bottom", t: "Bottom" }, { v: "top", t: "Top" }, { v: "none", t: "Hidden" },
 ];
@@ -234,6 +246,17 @@ export function ResultChartCard({
   const [yTitle, setYTitle] = useState(seed.yTitle ?? "");
   const [tooltipOff, setTooltipOff] = useState(seed.tooltipOff ?? false);
   const [userRefLines, setUserRefLines] = useState<ExhibitRefLine[]>(seed.refLines ?? []);
+  // the chart options (the dashboards study, R12): line shape and markers, value axis range and log, a bar's order and top N
+  const [lineShape, setLineShape] = useState<"" | "smooth" | "step">(seed.lineShape ?? "");
+  const [markersOn, setMarkersOn] = useState(seed.markers !== false);
+  const [yMinText, setYMinText] = useState(seed.yMin !== undefined ? String(seed.yMin) : "");
+  const [yMaxText, setYMaxText] = useState(seed.yMax !== undefined ? String(seed.yMax) : "");
+  const [yLog, setYLog] = useState(!!seed.yLog);
+  const [sortBy, setSortBy] = useState<"" | "value" | "label">(seed.sortBy ?? "");
+  const [topText, setTopText] = useState(seed.top ? String(seed.top) : "");
+  const yMin = numberOrNull(yMinText);
+  const yMax = numberOrNull(yMaxText);
+  const top = numberOrNull(topText);
 
   // Default metric MUST match what <Chart> resolves when untouched, or the strip
   // label contradicts the plot. <Chart> prefers a rate/share column as its primary
@@ -317,6 +340,18 @@ export function ResultChartCard({
   const instRef = useRef<ChartInstance | null>(null);
   const handleDownload = () => { void downloadChartPng(instRef.current, title || "chart"); };
 
+  const chartOptions = useMemo<ChartOptions | null>(() => {
+    const o: ChartOptions = {};
+    if (lineShape) o.lineShape = lineShape;
+    if (!markersOn) o.markers = false;
+    if (yMin !== null) o.yMin = yMin;
+    if (yMax !== null) o.yMax = yMax;
+    if (yLog) o.yLog = true;
+    if (sortBy) o.sort = sortBy;
+    if (top !== null && top > 0) o.top = top;
+    return Object.keys(o).length ? o : null;
+  }, [lineShape, markersOn, yMin, yMax, yLog, sortBy, top]);
+
   // Customize overrides merged over the passed props (empty string = "unset" → keep the prop).
   const effCustom: ChartCustom = useMemo(() => ({
     ...(custom || {}),
@@ -328,10 +363,11 @@ export function ResultChartCard({
     ...(yTitle ? { yTitle } : {}),
     ...(tooltipOff ? { tooltip: "off" as const } : {}),
     ...(orient ? { orient } : {}),
+    ...(chartOptions ? { options: chartOptions } : {}),
     ...(declarative && transformOp !== "none" && metric
       ? { transform: { op: transformOp, valueCol: metric } as ChartCustom["transform"] } : {}),
   }), [custom, numberFormat, legendPos, colorField, xTitle, yTitle, tooltipOff, orient,
-       declarative, transformOp, metric]);
+       declarative, transformOp, metric, chartOptions]);
 
   // The color binding the user built (or null): a chosen field, its scale (explicit, else
   // auto by role — a measure ramps continuous, a dimension is categorical), and legend title.
@@ -390,9 +426,17 @@ export function ResultChartCard({
     if (userRefLines.length) c.refLines = userRefLines;
     if (transformOp !== "none") c.transform = transformOp;
     if (orient) c.orient = orient;
+    if (lineShape) c.lineShape = lineShape;
+    if (!markersOn) c.markers = false;
+    if (yMin !== null) c.yMin = yMin;
+    if (yMax !== null) c.yMax = yMax;
+    if (yLog) c.yLog = true;
+    if (sortBy) c.sortBy = sortBy;
+    if (top !== null && top > 0) c.top = top;
     return c;
   }, [view, typeSel, metricSel, dimSel, aggSel, showLabels, colorField, colorScaleSel, colorName,
       numberFormat, legendPos, xTitle, yTitle, tooltipOff, userRefLines, transformOp, orient,
+      lineShape, markersOn, yMin, yMax, yLog, sortBy, top,
       chartTypes.length, columns, rows, defaultShowLabels]);
 
   // Seeded with what we were GIVEN, so restoring a saved chart doesn't immediately save it back.
@@ -445,6 +489,16 @@ export function ResultChartCard({
     // control appears on an auto-inferred bar too — which is most of them.
     orientAvailable: /bar/.test(String(resolvedType)),
     setOrient,
+    // the chart options (the dashboards study, R12)
+    lineAvailable: /line/.test(String(resolvedType)) && !/forecast/.test(String(resolvedType)),
+    lineShapeValue: lineShape, setLineShape,
+    markersOn, setMarkersOn,
+    yMinValue: yMinText, setYMin: setYMinText,
+    yMaxValue: yMaxText, setYMax: setYMaxText,
+    yLog, setYLog,
+    barSortAvailable: /bar/.test(String(resolvedType)),
+    sortValue: sortBy, setSort: setSortBy,
+    topValue: topText, topOptions: TOP_OPTIONS, setTop: setTopText,
     transformValue: transformOp,
     transformOptions: metricCols.length >= 1 ? TRANSFORM_OPTS : [],
     setTransform: (v) => setTransformOp(v as PostprocOp | "none"),

@@ -156,6 +156,7 @@ export function Chart({
       yTitle: custom?.yTitle ?? null,
       orient: custom?.orient ?? null,
       transform: custom?.transform ?? null,
+      options: custom?.options ?? null,
     });
     if (v) return { spec: v.spec, defaultH: v.defaultH, xCategories: v.xCategories, tier: 1 };
     // A customization must never brick the chart. Saved viz-configs key by POSITION

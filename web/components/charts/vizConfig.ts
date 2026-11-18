@@ -48,6 +48,15 @@ export interface VizConfig {
    *  axes. Absent means "let the chart decide": a ranking reads horizontally, a trend over
    *  time reads vertically. Set only when the user has overridden that. */
   orient?:      "vertical" | "horizontal";
+  /** The chart options (the dashboards study, R12): a line's shape and its markers, the value axis's range and a
+   *  log scale, and a bar's categories by size or by name, and only the largest. Absent means as before. */
+  lineShape?:   "smooth" | "step";
+  markers?:     false;
+  yMin?:        number;
+  yMax?:        number;
+  yLog?:        boolean;
+  sortBy?:      "value" | "label";
+  top?:         number;
 }
 
 /** True when the config carries no user intent — nothing to persist, nothing to restore.
@@ -63,6 +72,8 @@ export function isEmptyVizConfig(c: VizConfig | null | undefined): boolean {
     !c.colorField && !c.colorScale && !c.colorName &&
     !c.numberFormat && !c.legend && !c.xTitle && !c.yTitle &&
     !c.tooltipOff && !c.orient &&
+    !c.lineShape && c.markers === undefined && c.yMin === undefined && c.yMax === undefined && !c.yLog &&
+    !c.sortBy && !c.top &&
     !(c.refLines && c.refLines.length) &&
     (c.transform === undefined || c.transform === "none")
   );
