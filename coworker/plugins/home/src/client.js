@@ -12,6 +12,7 @@
  */
 import { createElement as h, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { NAME_BAR_STOPS } from "../../../../web/components/ui/brandArt";
 
 const CHOSEN = "pramanyx.coworker.connection";
 const QUESTIONS_SHOWN = 4;
@@ -89,7 +90,10 @@ function wearHomeLook() {
 
 const drawn = { width: 18, height: 18, viewBox: "0 0 18 18", fill: "none", stroke: "currentColor", strokeWidth: 1.3, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" };
 /** A four-pointed star: a question worth asking. */
-const Spark = () => h("svg", drawn, h("path", { d: "M9 2.5c.5 3.6 2.4 5.5 6 6-3.6.5-5.5 2.4-6 6-.5-3.6-2.4-5.5-6-6 3.6-.5 5.5-2.4 6-6Z" }));
+const Spark = () => h("svg", { width: 18, height: 18, viewBox: "0 0 18 18", "aria-hidden": "true", style: { opacity: 1 } },
+  h("defs", null, h("linearGradient", { id: "pramanyx-spark", x1: 0, y1: 0, x2: 1, y2: 1 },
+    NAME_BAR_STOPS.map(([offset, stopColor]) => h("stop", { key: offset, offset, stopColor })))),
+  h("path", { fill: "url(#pramanyx-spark)", d: "M9 2.5c.5 3.6 2.4 5.5 6 6-3.6.5-5.500 2.400-6 6-.5-3.600-2.400-5.500-6-6 3.600-.5 5.500-2.400 6-6Z" }));
 /** A speech bubble: a question that was asked. */
 const Asked = () => h("svg", drawn, h("path", { d: "M3 4.5h12v8H8.5L5.5 15v-2.5H3z" }));
 

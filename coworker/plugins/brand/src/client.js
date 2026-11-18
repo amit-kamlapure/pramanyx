@@ -50,7 +50,30 @@ function Name() {
  * the corners and the type — the app's light values were not measured, and a guess would be a second palette.
  * The attribute is written twice so these outrank the shell's own rule for it, whichever loads last.
  */
+const STOPS = NAME_BAR_STOPS.map(([at, colour]) => `${colour} ${at * 100}%`).join(", ");
+
 const LOOK = `
+/*
+ * The logo's colours, where the platform uses them: a thin edge around the box a person writes to the model in, the
+ * platform's accent on its send button, and the bar that marks what is open. Never a fill.
+ */
+[data-composer-card][data-composer-card] {
+  --pramanyx-ground: #ffffff;
+  border: 1.5px solid transparent !important;
+  border-radius: 12px !important;
+  background: linear-gradient(var(--pramanyx-ground), var(--pramanyx-ground)) padding-box, linear-gradient(115deg, ${STOPS}) border-box !important;
+  box-shadow: none !important;
+}
+body[data-ds-dark-theme] [data-composer-card][data-composer-card] { --pramanyx-ground: #18191b; }
+[data-composer-card] [class*="_primary"] { background: #46a0c4 !important; color: #ffffff !important; }
+[data-composer-card] [class*="_primary"]:disabled { background: #2e3135 !important; color: #8b9099 !important; opacity: 1 !important; }
+body:not([data-ds-dark-theme]) [data-composer-card] [class*="_primary"]:disabled { background: #e8e9eb !important; color: #8b9099 !important; }
+[class*="_sessionRow"][class*="_selected"] { position: relative; }
+[class*="_sessionRow"][class*="_selected"]::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; z-index: 1;
+  background: linear-gradient(180deg, ${STOPS});
+}
+body[data-ds-dark-theme] [class*="_sessionRow"][class*="_selected"] { background: #0f3747; }
 body {
   --dsw-radius-xs: 2px; --dsw-radius-sm: 3px; --dsw-radius-md: 4px; --dsw-radius-lg: 6px; --dsw-radius-xl: 6px;
   --dsw-radius-panel: 6px;
@@ -78,8 +101,8 @@ body[data-ds-dark-theme][data-ds-dark-theme] {
 }
 /*
  * The mark beside "…for 19s" while an answer is being worked on. The shell draws its own animal there and offers
- * no place to draw another, so its two drawings are hidden and a plain open ring turns in their box. The ring is
- * an SVG used as a mask, so it takes the row's own colour. Matched by the part of the class name the shell writes
+ * no place to draw another, so its two drawings are hidden and an open ring turns in their box, in the logo's
+ * colours. The ring is an SVG used as a mask. Matched by the part of the class name the shell writes
  * by hand; if that changes, the shell's drawing simply shows again.
  */
 [data-chat-running] [class*="_runningIcon"] > * { display: none !important; }
@@ -87,7 +110,7 @@ body[data-ds-dark-theme][data-ds-dark-theme] {
   content: "";
   position: absolute;
   inset: 0;
-  background: currentColor;
+  background: conic-gradient(${STOPS}, ${NAME_BAR_STOPS[0][1]});
   -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 2.25a5.75 5.75 0 1 0 5.75 5.75' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E") center / contain no-repeat;
   mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 2.25a5.75 5.75 0 1 0 5.75 5.75' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E") center / contain no-repeat;
   animation: pramanyx-working 0.9s linear infinite;
