@@ -7,7 +7,7 @@ const READ = { receipt_id: "r1", connection_id: "c1", metrics: [{ name: "net rev
 
 describe("what an answer stood on", () => {
   it("opens each thing on the app's own page, on the answer's connection", () => {
-    expect(answerSources(READ, "c 1").map(s => s.page)).toEqual([
+    expect(answerSources(READ, "c 1", new Map(), ["Order"]).map(s => s.page)).toEqual([
       "/metrics/net%20revenue?conn=c%201", "/metrics/margin?conn=c%201", "/definitions/Active%20customer?conn=c%201", "/ontology/Order?conn=c%201",
     ]);
   });
@@ -23,11 +23,18 @@ describe("what an answer stood on", () => {
     const read = { ...READ, metrics: [], definitions: [], objects: ["main.netflix_titles", "other_table"] };
     const [sheet, other] = answerSources(read, "sheets", sheets);
     expect(sheet).toMatchObject({ kind: "sheet", label: "Netflix titles", page: "/sheets/s1?name=Netflix%20titles" });
-    expect(other).toMatchObject({ kind: "object", page: "/ontology/other_table?conn=sheets" });
+    expect(other).toMatchObject({ kind: "table", page: "", table: { connection: "sheets", name: "other_table" } });
   });
 
   it("does not take another connection's table for a spreadsheet", () => {
     const sheets = new Map([["orders", { id: "s1", name: "Orders" }]]);
-    expect(answerSources({ ...READ, metrics: [], definitions: [], objects: ["orders"] }, "c1", sheets)[0].kind).toBe("object");
+    expect(answerSources({ ...READ, metrics: [], definitions: [], objects: ["orders"] }, "c1", sheets)[0].kind).toBe("table");
+  });
+
+  it("opens a table as its object when the ontology models it, however it is spelled", () => {
+    const read = { ...READ, metrics: [], definitions: [], objects: ["main.orders", "airports"] };
+    const [order, airports] = answerSources(read, "c1", new Map(), ["Order"]);
+    expect(order).toMatchObject({ kind: "object", label: "Order", page: "/ontology/Order?conn=c1" });
+    expect(airports).toMatchObject({ kind: "table", label: "airports", page: "" });
   });
 });

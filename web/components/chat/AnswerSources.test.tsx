@@ -6,6 +6,9 @@ import { AnswerSources, SourceBeside } from "@/components/chat/AnswerSources";
 
 const getReceiptSources = vi.fn();
 vi.mock("@/lib/api", async (original) => ({ ...(await original<typeof import("@/lib/api")>()), getReceiptSources: (...a: unknown[]) => getReceiptSources(...a) }));
+vi.mock("@/lib/objectTypes", () => ({ getTypeMap: () => Promise.resolve({ object_types: [{ object_type: "A" }] }) }));
+const rich = vi.hoisted(() => ({ schema: { tables: [{ name: "main.airports", row_count: "115", columns: [{ name: "code", type: "VARCHAR" }, { name: "city", type: "VARCHAR" }] }] }, loading: false, error: null }));
+vi.mock("@/lib/schema-context", () => ({ useRichSchema: () => rich }));
 beforeEach(() => { getReceiptSources.mockReset(); });
 const READ = { receipt_id: "r1", connection_id: "c1", metrics: [{ name: "net_revenue", departed: false }], definitions: [], objects: ["A", "B", "C", "D", "E", "F"] };
 
@@ -30,6 +33,15 @@ describe("the marks under an answer", () => {
     getReceiptSources.mockRejectedValueOnce(new Error("no"));
     render(<AnswerSources receiptId="r2" connectionId="c1" onOpen={vi.fn()} />);
     expect(await screen.findByTestId("answer-sources-unread")).toBeTruthy();
+  });
+});
+
+describe("a table the ontology does not model", () => {
+  it("shows its columns instead of a page that cannot find it", () => {
+    render(<SourceBeside source={{ key: "t", kind: "table", label: "airports", title: "", page: "", table: { connection: "c1", name: "airports" } }} onClose={vi.fn()} />);
+    expect(document.querySelector("iframe")).toBeNull();
+    expect(screen.getByTestId("source-table")).toHaveTextContent("2 columns · 115 rows");
+    expect(screen.getByText("city")).toBeTruthy();
   });
 });
 

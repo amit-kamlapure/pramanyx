@@ -11,6 +11,8 @@ import { Icon } from "@/components/ui/icon";
 import { useNarrowScreen } from "@/lib/useNarrowScreen";
 import { OBJECTS_SHOWN, answerSources, type AnswerSource } from "@/lib/answerSources";
 import { getReceiptSources, type ReceiptSources } from "@/lib/api";
+import { getTypeMap } from "@/lib/objectTypes";
+import { useRichSchema } from "@/lib/schema-context";
 import { listSheets } from "@/lib/sheets";
 
 export function AnswerSources({ receiptId, connectionId, onOpen }: {
@@ -21,7 +23,14 @@ export function AnswerSources({ receiptId, connectionId, onOpen }: {
   const [read, setRead] = useState<ReceiptSources | null>(null);
   const [failed, setFailed] = useState(false);
   const [sheets, setSheets] = useState<ReadonlyMap<string, { id: string; name: string }>>(new Map());
+  const [entities, setEntities] = useState<readonly string[]>([]);
   const [all, setAll] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    // a table the ontology does not model has no object page to open
+    getTypeMap(connectionId).then(m => { if (alive) setEntities(m.object_types.map(t => t.object_type)); }).catch(() => { /* each then shows its columns */ });
+    return () => { alive = false; };
+  }, [connectionId]);
   useEffect(() => {
     let alive = true;
     getReceiptSources(receiptId).then(r => { if (alive) setRead(r); }).catch(() => { if (alive) setFailed(true); });
@@ -37,10 +46,10 @@ export function AnswerSources({ receiptId, connectionId, onOpen }: {
     }).catch(() => { /* each table then opens as what it is on the ontology */ });
     return () => { alive = false; };
   }, [connectionId]);
-  const sources = useMemo(() => (read ? answerSources(read, connectionId, sheets) : []), [read, connectionId, sheets]);
+  const sources = useMemo(() => (read ? answerSources(read, connectionId, sheets, entities) : []), [read, connectionId, sheets, entities]);
   if (failed) return <p className="aug-fs-xs" data-testid="answer-sources-unread" style={{ margin: "6px 0 0", color: "var(--t3)" }}>What this answer stood on could not be read.</p>;
   if (!sources.length) return null;
-  const objects = sources.filter(s => s.kind === "object" || s.kind === "sheet");
+  const objects = sources.filter(s => s.kind === "object" || s.kind === "sheet" || s.kind === "table");
   const held = sources.filter(s => s.kind === "metric" || s.kind === "definition");
   const shown = [...held, ...(all ? objects : objects.slice(0, OBJECTS_SHOWN))];
   return (
@@ -60,6 +69,32 @@ export function AnswerSources({ receiptId, connectionId, onOpen }: {
   );
 }
 
+/** A table the ontology does not model: what it holds, from the connection's own schema. */
+function TableSource({ connection, name }: { connection: string; name: string }) {
+  const { schema, loading, error } = useRichSchema(connection);
+  const bare = (name.split(".").pop() ?? name).toLowerCase();
+  const table = schema?.tables.find(t => t.name.toLowerCase() === name.toLowerCase()) ?? schema?.tables.find(t => (t.name.split(".").pop() ?? t.name).toLowerCase() === bare);
+  const said = (words: string) => <p className="aug-fs-sm" style={{ margin: 0, padding: 14, color: "var(--t2)" }}>{words}</p>;
+  if (error) return said("This table's columns could not be read.");
+  if (loading || !schema) return said("Reading the table…");
+  if (!table) return said(`${name} is no longer on this connection.`);
+  return (
+    <div data-testid="source-table" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 14 }}>
+      <p className="aug-fs-sm" style={{ margin: "0 0 10px", color: "var(--t2)" }}>
+        {table.columns.length === 1 ? "1 column" : `${table.columns.length} columns`}{table.row_count ? ` · ${table.row_count} rows` : ""}
+      </p>
+      <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+        {table.columns.map(c => (
+          <li key={c.name} className="aug-fs-sm" style={{ display: "flex", justifyContent: "space-between", gap: 12, minWidth: 0 }}>
+            <span style={{ minWidth: 0, overflowWrap: "anywhere", color: "var(--t1)", fontFamily: "var(--font-mono)" }}>{c.name}</span>
+            <span style={{ flexShrink: 0, color: "var(--t3)" }}>{c.type}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 /** The source's own page, beside the conversation. It pushes the conversation over, and covers it only on a narrow screen. */
 export function SourceBeside({ source, onClose }: { source: AnswerSource; onClose: () => void }) {
   const narrow = useNarrowScreen();
@@ -71,7 +106,9 @@ export function SourceBeside({ source, onClose }: { source: AnswerSource; onClos
         <span className="aug-fs-ui" title={source.label} style={{ flex: 1, minWidth: 0, color: "var(--t1)", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{source.label}</span>
         <Button size="icon-sm" variant="ghost" aria-label="Close" title="Close" data-testid="source-beside-close" onClick={onClose}><Icon name="close" size={15} /></Button>
       </div>
-      <iframe key={source.page} src={source.page} title={source.label} style={{ flex: 1, minHeight: 0, width: "100%", border: 0, background: "var(--bg-1)" }} />
+      {source.table
+        ? <TableSource connection={source.table.connection} name={source.table.name} />
+        : <iframe key={source.page} src={source.page} title={source.label} style={{ flex: 1, minHeight: 0, width: "100%", border: 0, background: "var(--bg-1)" }} />}
     </aside>
   );
 }
