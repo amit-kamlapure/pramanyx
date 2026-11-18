@@ -82,7 +82,7 @@ const OPENED = (scope: string) => `pramanyx.dashboard.filters-opened:${scope}`;
  *  clears a filter keeps it cleared, until the author sets a different opening. A choice already held, from a shared link say, stands. */
 export function openedWith(scope: string, filters: Record<string, GlobalFilterProps>, focus: DashboardFocus[]): DashboardFocus[] | null {
   const openings = Object.entries(filters).filter(([, p]) => p.table && p.column && openingChoice(p)).sort(([a], [b]) => a.localeCompare(b));
-  const said = JSON.stringify(openings.map(([k, p]) => [k, p.opens_with]));
+  const said = JSON.stringify(openings.map(([k, p]) => [k, p.table, p.column, p.opens_with]));
   try {
     if (window.localStorage.getItem(OPENED(scope)) === said) return null;
     window.localStorage.setItem(OPENED(scope), said);

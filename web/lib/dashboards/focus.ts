@@ -136,9 +136,22 @@ export const MAX_FILTER_LINK = 4000;
 const toLink = (text: string) => btoa(unescape(encodeURIComponent(text))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 const fromLink = (text: string) => decodeURIComponent(escape(atob(text.replace(/-/g, "+").replace(/_/g, "/"))));
 
-/** This page's address carrying a reader's choices, or null when they will not fit in one. */
-export function filterLink(focus: DashboardFocus[], href: string): string | null {
+/** The address parameter naming the dashboard a shared view opens on. */
+export const DASHBOARD_PARAM = "dashboard";
+
+/** The dashboard this address asks for; read once, then taken out of the address. */
+export function dashboardInAddress(): string {
+  if (typeof window === "undefined") return "";
+  const url = new URL(window.location.href);
+  const id = url.searchParams.get(DASHBOARD_PARAM) ?? "";
+  if (id) { url.searchParams.delete(DASHBOARD_PARAM); window.history.replaceState(null, "", url.toString()); }
+  return id;
+}
+
+/** This page's address opening `dashboard` on a reader's choices, or null when they will not fit in one. */
+export function filterLink(focus: DashboardFocus[], href: string, dashboard = ""): string | null {
   const url = new URL(href);
+  if (dashboard) url.searchParams.set(DASHBOARD_PARAM, dashboard);
   if (focus.length) url.searchParams.set(FILTERS_PARAM, toLink(JSON.stringify(focus)));
   else url.searchParams.delete(FILTERS_PARAM);
   const out = url.toString();

@@ -1619,7 +1619,7 @@ const NO_FOCUS: DashboardFocus[] = [];
  *  reader moved and the marks they clicked, each a chip that takes it off, and one Clear all. The period is said beside them
  *  when a card was cut to it; it is changed where it is chosen. With nothing cutting the dashboard the bar is not drawn, so the pieces keep the room. */
 function FilteredBy({ objects = null, spaced = true }: { objects?: ObjectBarWords | null; spaced?: boolean }) {
-  const { focus, setFocus, period, host, elements, doors, cards } = useDashboard();
+  const { focus, setFocus, period, host, elements, doors, cards, dashboardId } = useDashboard();
   const values = useValueChips();
   const { narrowing, toggle, clear: clearNarrowing } = useQueryNarrowing();
   const { get, set } = useStateStore();
@@ -1645,7 +1645,10 @@ function FilteredBy({ objects = null, spaced = true }: { objects?: ObjectBarWord
   };
   // v20 — this view of the dashboard, as an address another reader opens on the same filters
   const copyLink = () => {
-    const link = filterLink(focused, window.location.href);
+    // the page's key is `<connection>:<dashboard>`, or `shared:<owner>:<dashboard>` for one another person published
+    const key = dashboardId ?? "";
+    const opened = key.startsWith("shared:") ? key.replace(/:([^:]+)$/, "/$1") : key.slice(key.indexOf(":") + 1);
+    const link = filterLink(focused, window.location.href, opened);
     if (!link) { toast.info("Too many filters for one link", { description: "Take a few off and copy it again." }); return; }
     navigator.clipboard.writeText(link).then(() => toast.success("Link copied"), () => toast.error("The link could not be copied"));
   };

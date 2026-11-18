@@ -101,7 +101,7 @@ import { hostStateOf } from "@/lib/dashboards/hostStatus";
 import { SHAPES } from "@/lib/dashboards/shapes";
 import { emptyDashboardSpec, overdueSegmentOf, processDashboardHolds, processDashboardSpec, startDashboard } from "@/lib/dashboards/start";
 import { valuesRead } from "@/lib/dashboards/values";
-import { focusOfCard, useDashboardFocus } from "@/lib/dashboards/focus";
+import { dashboardInAddress, focusOfCard, useDashboardFocus } from "@/lib/dashboards/focus";
 import { isOtherKind, tileShape } from "@/components/dashboards/DashboardTile";
 import { CardSql, ChartDock, QueryKindPick } from "@/components/dashboards/CardInspector";
 import { formatDateTime, utcDayWords } from "@/lib/format";
@@ -962,7 +962,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
       setList(l);
       const live = l.cockpits.filter(c => !c.retired);
       // Dashboards opens on its home (the user, 2026-11-18), unless another page asked for one or this tab has one open.
-      const asked = askedToOpen(connectionId);
+      const asked = askedToOpen(connectionId) || dashboardInAddress();
       setChosen(prev => {
         const want = asked || prev || openInThisTab(connectionId);
         return want === METRICS_DASHBOARD || live.some(c => c.cockpit_id === want) || want.startsWith("shared:") ? want : "";
