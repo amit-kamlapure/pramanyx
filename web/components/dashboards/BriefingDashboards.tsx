@@ -101,7 +101,7 @@ import { hostStateOf } from "@/lib/dashboards/hostStatus";
 import { SHAPES } from "@/lib/dashboards/shapes";
 import { emptyDashboardSpec, overdueSegmentOf, processDashboardHolds, processDashboardSpec, startDashboard } from "@/lib/dashboards/start";
 import { valuesRead } from "@/lib/dashboards/values";
-import { focusFor, notFiltered, useDashboardFocus } from "@/lib/dashboards/focus";
+import { focusOfCard, useDashboardFocus } from "@/lib/dashboards/focus";
 import { isOtherKind, tileShape } from "@/components/dashboards/DashboardTile";
 import { CardSql, ChartDock, QueryKindPick } from "@/components/dashboards/CardInspector";
 import { formatDateTime, utcDayWords } from "@/lib/format";
@@ -770,7 +770,7 @@ function SharedDashboardView({ connectionId, schema, owner, dashboardId, range, 
         const runs = await Promise.all(read.cards.filter(c => placed.has(c.id)).map(async (card): Promise<CardState> => {
           // Arc AP-8 — a query reading the dashboard's values is run by its own cell, with them
           if (valuesRead(card.sql).length) return { card };
-          try { return { card, run: await runCard(card.id, range, { compare: true, focus: notFiltered(read.cockpit.spec, card.id) ? [] : focusFor(fx.focus, card.id) }) }; }
+          try { return { card, run: await runCard(card.id, range, { compare: true, focus: focusOfCard(read.cockpit.spec, fx.focus, card.id) }) }; }
           catch { return { card, failed: true }; }
         }));
         if (cancelled) return;
@@ -784,7 +784,7 @@ function SharedDashboardView({ connectionId, schema, owner, dashboardId, range, 
   }, [connectionId, owner, dashboardId, rangeKey, fx.key]);
   const doors = useMemo<DashboardDoors>(() => ({
     onRefresh: async (id: string) => {
-      try { const run = await runCard(id, range, { compare: true, focus: notFiltered(data?.cockpit.spec, id) ? [] : focusFor(fx.focus, id) }); setCards(cs => cs.map(c => (c.card.id === id ? { ...c, run, failed: false } : c))); }
+      try { const run = await runCard(id, range, { compare: true, focus: focusOfCard(data?.cockpit.spec, fx.focus, id) }); setCards(cs => cs.map(c => (c.card.id === id ? { ...c, run, failed: false } : c))); }
       catch { setCards(cs => cs.map(c => (c.card.id === id ? { ...c, failed: true } : c))); }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the range and the focus are read through their keys
@@ -991,7 +991,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
         const runs = await Promise.all(read.cards.filter(c => placed.has(c.id)).map(async (card): Promise<CardState> => {
           // Arc AP-8 — a query reading the dashboard's values is run by its own cell, with them
           if (valuesRead(card.sql).length) return { card };
-          try { return { card, run: await runCard(card.id, range, { compare: true, focus: notFiltered(read.cockpit.spec, card.id) ? [] : focusFor(fx.focus, card.id) }) }; }
+          try { return { card, run: await runCard(card.id, range, { compare: true, focus: focusOfCard(read.cockpit.spec, fx.focus, card.id) }) }; }
           catch { return { card, failed: true }; }
         }));
         if (cancelled) return;
@@ -1046,7 +1046,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
 
   const refreshOne = useCallback(async (id: string) => {
     try {
-      const run = await runCard(id, range, { compare: true, focus: notFiltered(data?.cockpit.spec, id) ? [] : focusFor(fx.focus, id) });
+      const run = await runCard(id, range, { compare: true, focus: focusOfCard(data?.cockpit.spec, fx.focus, id) });
       setCards(cs => cs.map(c => (c.card.id === id ? { ...c, run, failed: false } : c)));
     } catch {
       setCards(cs => cs.map(c => (c.card.id === id ? { ...c, failed: true } : c)));

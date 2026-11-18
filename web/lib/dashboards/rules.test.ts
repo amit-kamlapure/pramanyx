@@ -47,7 +47,7 @@ describe("the catalog", () => {
       card_statuses: ["within", "over", "unmeasured", "withheld"],
       limits: { elements: MAX_ELEMENTS, tabs: MAX_TABS, cards: MAX_CARDS },
     });
-    expect(DASHBOARD_VOCABULARY_VERSION).toBe(19);        // 17: column looks and kept colours; 16: a placed card's own look; 15: the period as a piece; 14: free placement (x, y); 13: a dashboard made from a file; 5: sizes one grade at a time (Arc AP-1); 6: the wiring (AP-2, AP-3); 7: the structure (AP-4); 8: variables (AP-8); 9: sets read whole (AP-8b); 10: yes-no, lists, sums, queries (AP-8c); 11: a Question (PENDING 54); 12: a breakdown (the Grist study §10)
+    expect(DASHBOARD_VOCABULARY_VERSION).toBe(20);        // 17: column looks and kept colours; 16: a placed card's own look; 15: the period as a piece; 14: free placement (x, y); 13: a dashboard made from a file; 5: sizes one grade at a time (Arc AP-1); 6: the wiring (AP-2, AP-3); 7: the structure (AP-4); 8: variables (AP-8); 9: sets read whole (AP-8b); 10: yes-no, lists, sums, queries (AP-8c); 11: a Question (PENDING 54); 12: a breakdown (the Grist study §10)
   });
 });
 

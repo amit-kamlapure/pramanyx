@@ -106,3 +106,30 @@ def test_a_column_the_connection_does_not_hold_is_refused_by_name(door):
     with pytest.raises(HTTPException) as got:
         R.filter_values("c", R.FilterValuesRequest(table="titles", column="secret"))
     assert got.value.status_code == 422 and "no column secret on titles" in got.value.detail["refused"][0]
+
+
+@pytest.mark.parametrize("kw, want", [
+    ({"value": "love"}, [1, 3]),
+    ({"value": "love", "case_sensitive": True}, [3]),
+    ({"value": "love story", "match": "exact"}, [1]),
+    ({"value": "Love Story", "match": "exact", "case_sensitive": True}, [1]),
+    ({"value": "ove", "match": "starts_with"}, []),
+    ({"value": "lo", "match": "starts_with"}, [1]),
+])
+def test_words_are_matched_the_way_the_filter_says(con, kw, want):
+    assert _ids(con, column="name", op="contains", **kw) == want
+
+
+def test_a_linked_filter_offers_only_what_the_other_filters_leave(door):
+    got = R.filter_values("c", R.FilterValuesRequest(table="titles", column="kind", focus=[
+        {"table": "titles", "column": "id", "value": "", "op": "between", "low": 2, "high": 2}]))
+    assert [(v["value"], v["n"]) for v in got["values"]] == [("Movie", 1)]
+    bounds = R.filter_values("c", R.FilterValuesRequest(table="titles", column="id", read="range", focus=[
+        {"table": "titles", "column": "kind", "value": "Movie"}]))
+    assert (bounds["low"], bounds["high"]) == (1, 2)
+
+
+def test_a_linked_filter_is_held_to_what_a_filter_may_hold(door):
+    with pytest.raises(HTTPException) as refused:
+        R.filter_values("c", R.FilterValuesRequest(table="titles", column="kind", focus=[{"table": "titles", "column": "bad name", "value": 1}]))
+    assert refused.value.status_code == 422

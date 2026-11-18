@@ -665,6 +665,9 @@ function QueryTile({ cs, doors, place, focus }: { cs: CardState & { card: Dashbo
               if (d && "xr" in d && d.xr !== null && d.xr !== undefined) {
                 focus.onPick?.({ field: shaped.x.name, value: d.xr as string | number });
               }
+            } : undefined}
+            onContext={focus?.onDrill ? (d, at) => {
+              if ("xr" in d && d.xr !== null && d.xr !== undefined) focus.onDrill?.({ field: shaped.x.name, value: d.xr as string | number }, at);
             } : undefined} />}
           {grid && (
             <ResultChartCard editorKey={card.id} columns={grid.columns} rows={grid.rows} chartType={viz?.type ?? null} config={viz ?? null}
@@ -685,6 +688,8 @@ function QueryTile({ cs, doors, place, focus }: { cs: CardState & { card: Dashbo
 export interface TileFocus {
   chosen?: (field: string) => string[] | null;
   onPick?: (pick: ChartPick) => void;
+  /** A right click on a mark, offering the dashboard's other pages already filtered to it. */
+  onDrill?: (pick: ChartPick, at: { x: number; y: number }) => void;
 }
 
 /** A card's own exhibit with the dashboard's chosen values laid over it — undefined when nothing is chosen, so the card's

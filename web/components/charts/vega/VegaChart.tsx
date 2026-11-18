@@ -49,6 +49,8 @@ interface Props {
   onCompiled?: (vegaSpec: unknown) => void;
   /** Click a mark to drill in — receives the datum behind it, same contract as EChart. */
   onSelect?: (datum: Record<string, unknown>) => void;
+  /** A right click on a mark, with where the pointer is. */
+  onContext?: (datum: Record<string, unknown>, at: { x: number; y: number }) => void;
   /** Hand an export handle back to the parent, same contract as EChart's onReady. */
   onReady?: (instance: ChartInstance) => void;
   /** Band fit (`bandFit.ts`): the distinct categories on a VERTICAL band axis and the bars in each,
@@ -57,13 +59,15 @@ interface Props {
   barsPerBand?: number;
 }
 
-export function VegaChart({ spec, tier = 1, height = 300, className, onCompiled, onSelect, onReady, bands, barsPerBand }: Props) {
+export function VegaChart({ spec, tier = 1, height = 300, className, onCompiled, onSelect, onContext, onReady, bands, barsPerBand }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<{ finalize: () => void } | null>(null);
   const onCompiledRef = useRef(onCompiled);
   onCompiledRef.current = onCompiled;
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
+  const onContextRef = useRef(onContext);
+  onContextRef.current = onContext;
   const onReadyRef = useRef(onReady);
   onReadyRef.current = onReady;
   const [themeTick, setThemeTick] = useState(0);
@@ -145,6 +149,13 @@ export function VegaChart({ spec, tier = 1, height = 300, className, onCompiled,
               // only a mark answers a click (the board study §6.2: a click filters a dashboard)
               const datum = clickedDatum(item);
               if (datum) onSelectRef.current?.(datum);
+            });
+            view.addEventListener("contextmenu", (e: unknown, item: unknown) => {
+              const datum = clickedDatum(item);
+              if (!datum || !onContextRef.current) return;
+              const pointer = e as MouseEvent;
+              pointer.preventDefault();
+              onContextRef.current(datum, { x: pointer.clientX, y: pointer.clientY });
             });
 
             /**

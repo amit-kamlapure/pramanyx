@@ -3028,9 +3028,9 @@ export async function dashboardFilterFields(connectionId: string): Promise<Filte
 export type FilterValues = { values: { value: string | number | boolean; n: number }[]; more: boolean };
 
 /** What a global filter offers a reader: a column's commonest values, or the numbers it runs between. */
-export async function dashboardFilterValues(connectionId: string, asked: { table: string; column: string; read: "values" }): Promise<FilterValues>;
-export async function dashboardFilterValues(connectionId: string, asked: { table: string; column: string; read: "range" }): Promise<{ low: number | null; high: number | null }>;
-export async function dashboardFilterValues(connectionId: string, asked: { table: string; column: string; read: "values" | "range" }): Promise<unknown> {
+export async function dashboardFilterValues(connectionId: string, asked: { table: string; column: string; read: "values"; focus?: unknown[] }): Promise<FilterValues>;
+export async function dashboardFilterValues(connectionId: string, asked: { table: string; column: string; read: "range"; focus?: unknown[] }): Promise<{ low: number | null; high: number | null }>;
+export async function dashboardFilterValues(connectionId: string, asked: { table: string; column: string; read: "values" | "range"; focus?: unknown[] }): Promise<unknown> {
   const res = await fetch(`${getApiBase()}/dashboards/filters/values?connection_id=${encodeURIComponent(connectionId)}`, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(asked),
   });

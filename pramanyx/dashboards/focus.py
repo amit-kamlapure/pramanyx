@@ -50,6 +50,9 @@ class Focus(BaseModel):
     values: list[Union[str, int, float, bool]] = Field(default_factory=list, max_length=MAX_FOCUS_VALUES)
     low: Optional[Union[str, int, float]] = None
     high: Optional[Union[str, int, float]] = None
+    #: How words are matched (v20): anywhere in the column, the whole of it, or its start; capitals ignored unless asked.
+    match: Literal["contains", "exact", "starts_with"] = "contains"
+    case_sensitive: bool = False
 
     @model_validator(mode="after")
     def holds_what_its_op_reads(self) -> "Focus":
@@ -148,8 +151,13 @@ def condition_of(f: Focus) -> Any:
     if f.op == "in":
         return col.isin(*[_literal(v) for v in f.values])
     if f.op == "contains":
-        return exp.GT(this=exp.StrPosition(this=exp.Lower(this=exp.cast(col, "TEXT")), substr=_literal(str(f.value).strip().lower())),
-                      expression=exp.Literal.number(0))
+        said = str(f.value).strip()
+        side = exp.cast(col, "TEXT") if f.case_sensitive else exp.Lower(this=exp.cast(col, "TEXT"))
+        word = _literal(said if f.case_sensitive else said.lower())
+        if f.match == "exact":
+            return exp.EQ(this=side, expression=word)
+        found = exp.StrPosition(this=side, substr=word)
+        return exp.EQ(this=found, expression=exp.Literal.number(1)) if f.match == "starts_with" else exp.GT(this=found, expression=exp.Literal.number(0))
     if f.op in ("between", "dates"):
         side = exp.cast(col, "DATE") if f.op == "dates" else col
         bound = (lambda v: exp.cast(_literal(str(v)), "DATE")) if f.op == "dates" else _literal
@@ -169,7 +177,8 @@ def words(f: Focus) -> str:
     if f.op == "in":
         return f"{f.column} in {', '.join(str(v) for v in f.values[:5])}" + (f" and {len(f.values) - 5} more" if len(f.values) > 5 else "")
     if f.op == "contains":
-        return f"{f.column} contains {f.value}"
+        how = {"exact": "is exactly", "starts_with": "starts with"}.get(f.match, "contains")
+        return f"{f.column} {how} {f.value}"
     if f.op in ("between", "dates"):
         if f.low is not None and f.high is not None:
             return f"{f.column} {f.low} to {f.high}" if f.low != f.high else f"{f.column} = {f.low}"

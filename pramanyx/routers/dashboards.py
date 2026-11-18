@@ -345,6 +345,8 @@ class FilterValuesRequest(BaseModel):
     table: str = Field(min_length=1, max_length=200)
     column: str = Field(min_length=1, max_length=200)
     read: Literal["values", "range"] = "values"
+    #: What the dashboard's other filters hold (v20): a linked filter offers only what they leave.
+    focus: list[dict[str, Any]] = Field(default_factory=list)
 
 
 #: The most values a global filter lists; past them it says there are more.
@@ -423,6 +425,14 @@ def filter_values(connection_id: str, req: FilterValuesRequest) -> dict:
     else:
         sql = (exp.select(col.as_("value"), exp.Count(this=exp.Star()).as_("n")).from_(source).where(col.copy().is_(exp.null()).not_())
                .group_by(exp.Literal.number(1)).order_by("n DESC").limit(FILTER_VALUES + 1).sql(dialect=dialect or None))
+    if req.focus:
+        from pramanyx.dashboards.focus import cut_statement, links_of, parsed
+        try:
+            held = parsed(req.focus)
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail={"refused": [str(e)[:300]]}) from e
+        # a filter this column cannot be reached from narrows nothing here, as it cuts nothing on a card
+        sql, _ = cut_statement(sql, held, dialect or None, links=lambda: links_of(connection_id))
     rows = _filter_rows(connection_id, sql)
     if req.read == "range":
         low, high = (rows[0] if rows else [None, None])[:2]

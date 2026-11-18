@@ -64,8 +64,10 @@ describe("each way of choosing", () => {
   });
 
   it("a date range may be open at one end", () => {
-    const onRange = draw(P({ kind: "date_range", title: "Added", column: "added" }));
-    fireEvent.change(screen.getByLabelText("Added: from"), { target: { value: "2021-01-01" } });
+    const onRange = vi.fn();
+    const held = focusOfChoice("f1", P({ kind: "date_range", title: "Added", column: "added" }), { kind: "date_range", low: "2021-01-01", high: "2021-12-31" }) as DashboardFocus;
+    render(<GlobalFiltersColumn filters={[{ key: "f1", props: P({ kind: "date_range", title: "Added", column: "added" }) }]} connectionId="c" focus={[held]} onFocus={onRange} building={false} selected={null} />);
+    fireEvent.change(screen.getByLabelText("Added: to"), { target: { value: "" } });
     expect(asked(onRange)[0]).toMatchObject({ op: "dates", low: "2021-01-01" });
     expect(asked(onRange)[0].high).toBeUndefined();
   });
@@ -142,5 +144,52 @@ describe("the dashboard's spec", () => {
   it("refuses a kind of filter it does not know", () => {
     const made = addGlobalFilter(premise());
     expect(checkDashboardSpec(setProps(made.spec, made.key as string, { kind: "slider" })).valid).toBe(false);
+  });
+});
+
+describe("filters that wait, link and list (format v20)", () => {
+  const two = [{ key: "kind", props: P({}) }, { key: "score", props: P({ title: "Score", column: "score" }) }];
+
+  it("holds choices until Apply, and runs the cards once", async () => {
+    const onFocus = vi.fn();
+    render(<GlobalFiltersColumn filters={two.slice(0, 1)} connectionId="c" focus={[]} onFocus={onFocus} building={false} selected={null} applyButton />);
+    fireEvent.click((await screen.findAllByRole("checkbox", { name: "Movie" }))[0]);
+    fireEvent.click(screen.getByRole("checkbox", { name: "TV Show" }));
+    expect(onFocus).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId("global-filters-apply"));
+    expect(onFocus).toHaveBeenCalledTimes(1);
+    expect(onFocus.mock.calls[0][0][0]).toMatchObject({ op: "in", values: ["Movie", "TV Show"] });
+  });
+
+  it("lets a waiting choice be discarded", async () => {
+    const onFocus = vi.fn();
+    render(<GlobalFiltersColumn filters={two.slice(0, 1)} connectionId="c" focus={[]} onFocus={onFocus} building={false} selected={null} applyButton />);
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Movie" }));
+    fireEvent.click(screen.getByTestId("global-filters-discard"));
+    expect(screen.queryByTestId("global-filters-apply")).toBeNull();
+    expect(onFocus).not.toHaveBeenCalled();
+  });
+
+  it("asks a linked filter's list for what the other filters leave", async () => {
+    const held: DashboardFocus[] = [{ table: "titles", column: "score", value: "", op: "in", values: [1], source: { card: "filter:score", field: "score" } }];
+    render(<GlobalFiltersColumn filters={two} connectionId="c" focus={held} onFocus={vi.fn()} building={false} selected={null} />);
+    await waitFor(() => expect(dashboardFilterValues).toHaveBeenCalledWith("c", expect.objectContaining({ column: "type", focus: [expect.objectContaining({ column: "score" })] })));
+  });
+
+  it("selects every value that matches what was typed", async () => {
+    const onFocus = vi.fn();
+    dashboardFilterValues.mockImplementation(async () => ({ more: false, values: Array.from({ length: 10 }, (_, i) => ({ value: i % 2 ? `Movie ${i}` : `Show ${i}`, n: 1 })) }));
+    render(<GlobalFiltersColumn filters={two.slice(0, 1)} connectionId="c" focus={[]} onFocus={onFocus} building={false} selected={null} />);
+    fireEvent.change(await screen.findByPlaceholderText("Find a value"), { target: { value: "movie" } });
+    fireEvent.click(screen.getByTestId("global-filter-select-all"));
+    expect(onFocus.mock.calls[0][0][0].values).toEqual(["Movie 1", "Movie 3", "Movie 5", "Movie 7", "Movie 9"]);
+  });
+
+  it("draws a filter held to a page only on that page", () => {
+    const paged = [{ key: "kind", props: P({ page: "two" }) }];
+    const { rerender } = render(<GlobalFiltersColumn filters={paged} connectionId="c" focus={[]} onFocus={vi.fn()} building={false} selected={null} page="one" />);
+    expect(screen.queryByTestId("global-filter")).toBeNull();
+    rerender(<GlobalFiltersColumn filters={paged} connectionId="c" focus={[]} onFocus={vi.fn()} building={false} selected={null} page="two" />);
+    expect(screen.getByTestId("global-filter")).toBeInTheDocument();
   });
 });

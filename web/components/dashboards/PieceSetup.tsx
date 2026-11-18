@@ -24,9 +24,10 @@ import {
   BREAKDOWN_TOPS, CHART_DAYS, CHART_TOPS, CHOOSERS, FIGURE_AGGS, MAX_BREAKDOWN_MEASURES, MAX_CAPTION, MAX_CARD_DESCRIPTION, MAX_COLOR_VALUES,
   MAX_COLUMN_LOOKS, MAX_FILTERS, MAX_LABEL, SERIES_SLOTS, type ColumnLook,
   MAX_NOTE, MAX_TABLE_COLUMNS, MAX_TICKED_RUNS, MAX_TITLE, PERIOD_OPENS, SET_READERS, SPLIT_AGGS, TICKERS, TONES, type PieceName,
-  MAX_FILTER_DESCRIPTION, type GlobalFilterKind,
+  MAX_FILTER_DESCRIPTION, MAX_FIXED_FILTERS, type GlobalFilterKind,
 } from "@/lib/dashboards/catalog";
-import { FILTER_KINDS, fits } from "@/lib/dashboards/globalFilters";
+import { DATE_PRESETS, DAY_PRESETS, PRESET_WORDS, type DatePreset } from "@/lib/dashboards/datePresets";
+import { FILTER_KINDS, TEXT_MATCHES, fits, type FilterOpening } from "@/lib/dashboards/globalFilters";
 import { dashboardFilterFields, type FilterField } from "@/lib/api";
 import {
   editNote, freshWireName, moveCardTo, moveCardToNewSection, moveSectionTo, recaption, rename, sectionsOf, setProps, tabsOf,
@@ -322,7 +323,100 @@ function CardLook({ p, own, set }: { p: Props; own: string; set: (patch: Props, 
 }
 
 /** A global filter's setup (v19): its words, how it is chosen from, and the column it filters. */
-function GlobalFilterSetup({ p, connectionId, set }: { p: Props; connectionId?: string; set: (patch: Props, note: string) => void }) {
+const FIXED_HOW: { value: string; label: string }[] = [
+  { value: "eq", label: "Is" }, { value: "in", label: "Is one of" }, { value: "contains", label: "Contains" },
+  { value: "between", label: "Between numbers" }, { value: "dates", label: "Between dates" },
+];
+interface FixedFilter { table: string; column: string; op: string; value?: string | number | boolean | null; values?: (string | number | boolean)[] | null; low?: string | number | null; high?: string | number | null }
+
+const fixedWords = (f: FixedFilter) => `${f.column} ${FIXED_HOW.find(h => h.value === f.op)?.label.toLowerCase() ?? f.op} ${
+  f.op === "in" ? (f.values ?? []).join(", ") : f.op === "between" || f.op === "dates" ? `${f.low ?? "…"} to ${f.high ?? "…"}` : String(f.value ?? "")}`;
+
+/** v20 — what this placement of a card keeps out of a reader's hands: filters fixed on it, and the dashboard's filters it does not follow. */
+function CardFilters({ p, set, spec, connectionId }: { p: Props; set: (patch: Props, note: string) => void; spec: DashboardSpec; connectionId?: string }) {
+  const [fields, setFields] = useState<FilterField[] | null>(null);
+  const [adding, setAdding] = useState({ table: "", column: "", op: "eq", first: "", second: "" });
+  useEffect(() => {
+    let live = true;
+    if (connectionId) dashboardFilterFields(connectionId).then(f => { if (live) setFields(f); }).catch(() => { if (live) setFields([]); });
+    return () => { live = false; };
+  }, [connectionId]);
+  const fixed = (p.fixed_filters ?? []) as FixedFilter[];
+  const ignores = (p.ignores_filters ?? []) as string[];
+  const filters = Object.entries(spec.elements).filter(([, e]) => e?.type === "GlobalFilter");
+  const columns = fields?.find(t => t.table === adding.table)?.columns ?? [];
+  const typed = (v: string) => (v.trim() !== "" && Number.isFinite(Number(v)) ? Number(v) : v.trim());
+  const ready = adding.table && adding.column && adding.first.trim() && (adding.op === "eq" || adding.op === "in" || adding.op === "contains" || adding.second.trim());
+  const add = () => {
+    const base = { table: adding.table, column: adding.column, op: adding.op };
+    const made: FixedFilter = adding.op === "in" ? { ...base, values: adding.first.split(",").map(typed).filter(v => v !== "") }
+      : adding.op === "between" ? { ...base, low: Number(adding.first), high: Number(adding.second) }
+        : adding.op === "dates" ? { ...base, low: adding.first.trim(), high: adding.second.trim() }
+          : { ...base, value: adding.op === "contains" ? adding.first.trim() : typed(adding.first) };
+    set({ fixed_filters: [...fixed, made] }, "a filter fixed on a card by hand");
+    setAdding({ table: adding.table, column: "", op: "eq", first: "", second: "" });
+  };
+  return (
+    <>
+      {filters.length > 0 && p.not_filtered !== true && (
+        <Row label="Follows" testid="card-follows-filters" hint="Untick a filter and this card keeps its rows while a reader uses it.">
+          {filters.map(([key, e]) => (
+            <label key={key} className="aug-fs-sm" style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--t1)" }}>
+              <Tick checked={!ignores.includes(key)} aria-label={`Follows ${String(e.props.title ?? "the filter")}`}
+                onChange={ev => { const next = ev.target.checked ? ignores.filter(k => k !== key) : [...ignores, key]; set({ ignores_filters: next.length ? next : null }, "the filters a card follows chosen by hand"); }} />
+              {String(e.props.title ?? "Filter")}
+            </label>
+          ))}
+        </Row>
+      )}
+      <Row label="Fixed filters" testid="card-fixed-filters" hint="Always on for this card. A reader cannot change them.">
+        {fixed.map((f, i) => (
+          <div key={`${f.column}-${i}`} className="aug-fs-sm" data-testid="card-fixed-filter" style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--t1)" }}>
+            <span style={{ flex: 1, minWidth: 0, overflowWrap: "anywhere" }}>{fixedWords(f)}</span>
+            <Button size="icon-xs" variant="ghost" aria-label={`Take off ${fixedWords(f)}`} onClick={() => { const next = fixed.filter((_, at) => at !== i); set({ fixed_filters: next.length ? next : null }, "a card's fixed filter taken off by hand"); }}><Icon name="close" size={13} /></Button>
+          </div>
+        ))}
+        {fixed.length < MAX_FIXED_FILTERS && fields && fields.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            <Pick label="The table to fix" none="Choose a table" value={adding.table} options={fields.map(t => ({ value: t.table, label: t.table }))} onPick={v => setAdding({ ...adding, table: v, column: "" })} />
+            <Pick label="The column to fix" none="Choose a column" disabled={!adding.table} value={adding.column} options={columns.map(c => ({ value: c.name, label: c.name }))} onPick={v => setAdding({ ...adding, column: v })} />
+            <Pick label="How it is fixed" value={adding.op} options={FIXED_HOW} onPick={v => setAdding({ ...adding, op: v })} />
+            <Input aria-label="The value to fix" placeholder={adding.op === "in" ? "Values with a comma between" : adding.op === "between" || adding.op === "dates" ? "From" : "Value"} value={adding.first} onChange={e => setAdding({ ...adding, first: e.target.value })} />
+            {(adding.op === "between" || adding.op === "dates") && <Input aria-label="The value it runs to" placeholder="To" value={adding.second} onChange={e => setAdding({ ...adding, second: e.target.value })} />}
+            <Button size="xs" variant="secondary" data-testid="card-fixed-filter-add" disabled={!ready} onClick={add}>Add fixed filter</Button>
+          </div>
+        )}
+      </Row>
+    </>
+  );
+}
+
+/** What a filter opens on, set the way the filter is chosen from: words, a list, or a date that moves. */
+function FilterOpensOn({ p, set }: { p: Props; set: (patch: Props, note: string) => void }) {
+  const kind = String(p.kind ?? "multi") as GlobalFilterKind;
+  const o = (p.opens_with ?? {}) as FilterOpening;
+  const keep = (next: FilterOpening | null) => set({ opens_with: next }, "what a filter opens on chosen by hand");
+  const typed = (v: string) => (v !== "" && Number.isFinite(Number(v)) ? Number(v) : v);
+  if (kind === "date" || kind === "date_range") {
+    const offered = kind === "date" ? DAY_PRESETS : DATE_PRESETS.filter(v => !DAY_PRESETS.includes(v));
+    return <Pick label="What it opens on" none={kind === "date" ? "No day" : "All dates"} value={String(o.preset ?? "")} options={offered.map(v => ({ value: v, label: PRESET_WORDS[v] }))}
+      onPick={v => keep(v ? { preset: v as DatePreset } : null)} />;
+  }
+  if (kind === "range") {
+    return (
+      <div style={{ display: "flex", gap: 6 }}>
+        <Words clearable label="It opens from" placeholder="From" value={o.low == null ? "" : String(o.low)} max={30} onSave={v => keep(v && Number.isFinite(Number(v)) ? { ...o, low: Number(v) } : null)} />
+        <Words clearable label="It opens to" placeholder="To" value={o.high == null ? "" : String(o.high)} max={30} onSave={v => keep(v && Number.isFinite(Number(v)) ? { ...o, high: Number(v) } : null)} />
+      </div>
+    );
+  }
+  if (kind === "text") return <Words clearable label="What it opens on" placeholder="No words" value={String(o.words ?? "")} max={200} onSave={v => keep(v ? { words: v } : null)} />;
+  if (kind === "single") return <Words clearable label="What it opens on" placeholder="All" value={o.value == null ? "" : String(o.value)} max={200} onSave={v => keep(v ? { value: typed(v) } : null)} />;
+  return <Words clearable label="What it opens on" placeholder="All, or values with a comma between" value={(o.values ?? []).join(", ")} max={1000}
+    onSave={v => { const values = v.split(",").map(x => x.trim()).filter(Boolean).map(typed); keep(values.length ? { values } : null); }} />;
+}
+
+function GlobalFilterSetup({ p, connectionId, set, spec, onChange }: { p: Props; connectionId?: string; set: (patch: Props, note: string) => void; spec: DashboardSpec; onChange: Change }) {
   const [fields, setFields] = useState<FilterField[] | null>(null);
   const [problem, setProblem] = useState("");
   useEffect(() => {
@@ -335,6 +429,10 @@ function GlobalFilterSetup({ p, connectionId, set }: { p: Props; connectionId?: 
   const columns = (table?.columns ?? []).filter(c => fits(kind, c.kind));
   const [wantsWords, setWantsWords] = useState(p.description != null && p.description !== "");
   const described = wantsWords || !!p.description;
+  const holder = Object.entries(spec.elements).find(([, e]) => e?.type === "GlobalFilters")?.[0];
+  const pages = tabsOf(spec);
+  const parameters = Object.entries((spec as { values?: Record<string, { label?: string; from?: { by?: string } }> }).values ?? {})
+    .filter(([, v]) => v.from?.by === "reader").map(([name, v]) => ({ value: name, label: v.label ?? name }));
   return (
     <div data-testid="global-filter-setup">
       <Row label="Widget">
@@ -360,6 +458,41 @@ function GlobalFilterSetup({ p, connectionId, set }: { p: Props; connectionId?: 
           </label>
         )}
       </Row>
+      <Row label="Opens on" testid="global-filter-opens" hint="What a reader first sees. They can choose another, and their choice is kept.">
+        <FilterOpensOn p={p} set={set} />
+      </Row>
+      {kind === "text" && (
+        <Row label="Matching" testid="global-filter-match">
+          <Pick label="How words match" value={String(p.match ?? "contains")} options={TEXT_MATCHES} onPick={v => set({ match: v === "contains" ? null : v }, "how a filter matches words chosen by hand")} />
+          <label className="aug-fs-sm" style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--t1)" }}>
+            <Tick checked={p.case_sensitive === true} aria-label="Case sensitive" onChange={e => set({ case_sensitive: e.target.checked ? true : null }, "a filter's capitals chosen by hand")} /> Case sensitive
+          </label>
+        </Row>
+      )}
+      <Row label="Behaviour" testid="global-filter-behaviour" hint="Linked filters offer only what the others leave. Apply lets a reader make several choices and run the cards once.">
+        {(kind === "multi" || kind === "single" || kind === "range") && (
+          <label className="aug-fs-sm" style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--t1)" }}>
+            <Tick checked={p.linked !== false} aria-label="Linked to the other filters" onChange={e => set({ linked: e.target.checked ? null : false }, "a filter linked by hand")} /> Linked to the other filters
+          </label>
+        )}
+        {holder && (
+          <label className="aug-fs-sm" style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--t1)" }}>
+            <Tick checked={spec.elements[holder].props.apply_button === true} aria-label="Wait for Apply"
+              onChange={e => onChange(setProps(spec, holder, { apply_button: e.target.checked ? true : null }), "the filters' Apply button chosen by hand")} /> Wait for Apply
+          </label>
+        )}
+      </Row>
+      {pages.length > 1 && (
+        <Row label="Applies to" testid="global-filter-page" hint="A filter held to one page is drawn there and cuts only that page's cards.">
+          <Pick label="The page it applies to" none="Every page" value={String(p.page ?? "")} options={pages.map(t => ({ value: t.key, label: t.label }))}
+            onPick={v => set({ page: v || null }, "the page a filter applies to chosen by hand")} />
+        </Row>
+      )}
+      {parameters.length > 0 && (
+        <Row label="Query value" testid="global-filter-parameter" hint="A query that reads this value as {{name}} is run with what the filter holds.">
+          <Pick label="The value it feeds" none="None" value={String(p.parameter ?? "")} options={parameters} onPick={v => set({ parameter: v || null }, "the value a filter feeds chosen by hand")} />
+        </Row>
+      )}
       <Row label="Field" testid="global-filter-field" hint={table?.left_out ? `${formatCount(table.left_out)} of its columns cannot be filtered: their names hold spaces or symbols.` : "Every card that reads this table, or links to it, is cut by the filter."}>
         {problem ? <div className="aug-fs-sm" style={{ color: "var(--t2)" }}>{problem}</div> : !fields ? <div className="aug-fs-sm" style={{ color: "var(--t3)" }}>Reading the tables…</div> : (
           <>
@@ -1098,6 +1231,7 @@ export function PieceSetup({ spec, selected, onChange, connectionId, schema, car
             A click here chooses the card. Alt and a click on a mark tries the filter it makes for readers.
           </div>
           <CardLook p={p} own={cardTitle?.(String(p.card ?? "")) ?? "the card's title"} set={set} />
+          <CardFilters p={p} set={set} spec={spec} connectionId={connectionId} />
           <ColumnLooks numbers={cardHolds?.(String(p.card ?? "")).numbers ?? []} p={p} set={set}
             hint="Each against every row the card holds. A bar runs the length of its value; a scale washes a cell from its column's lowest to its highest." />
           <KeptColors fields={cardHolds?.(String(p.card ?? "")).fields ?? []} spec={spec} onChange={onChange} />
@@ -1111,7 +1245,7 @@ export function PieceSetup({ spec, selected, onChange, connectionId, schema, car
           {cardSql && <Fold label="The SQL, as it ran" testid="card-fold-sql">{cardSql(String(p.card ?? ""))}</Fold>}
         </div>
       )}
-      {el.type === "GlobalFilter" && <GlobalFilterSetup p={p} connectionId={connectionId} set={set} />}
+      {el.type === "GlobalFilter" && <GlobalFilterSetup p={p} connectionId={connectionId} set={set} spec={spec} onChange={onChange} />}
       {el.type === "Period" && (
         <>
           <Row label="Label"><Words label="Label" value={String(p.label ?? "Period")} max={MAX_LABEL}

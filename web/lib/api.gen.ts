@@ -22493,6 +22493,10 @@ export interface components {
         FilterValuesRequest: {
             /** Column */
             column: string;
+            /** Focus */
+            focus?: {
+                [key: string]: unknown;
+            }[];
             /**
              * Read
              * @default values

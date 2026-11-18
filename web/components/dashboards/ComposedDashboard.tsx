@@ -56,7 +56,7 @@ import {
   type BarChip, type FilterProperty, type ObjectBarWords,
 } from "@/components/dashboards/OntologyPieces";
 import { GlobalFiltersColumn } from "@/components/dashboards/GlobalFilters";
-import { stillHeld, type GlobalFilterProps } from "@/lib/dashboards/globalFilters";
+import { openedWith, stillHeld, type GlobalFilterProps } from "@/lib/dashboards/globalFilters";
 import { ImageTile, NoteTile, type ImageStamp, type StaticDoors } from "@/components/dashboards/StaticTile";
 import { DropdownMenu } from "@radix-ui/themes";
 import { Button } from "@/components/ui/button";
@@ -74,7 +74,7 @@ import { stateModel, type DashboardHostState } from "@/lib/dashboards/hostState"
 import { checkDashboardSpec, openingTab, tabStillThere } from "@/lib/dashboards/rules";
 import type { WireSpec } from "@/lib/dashboards/sets";
 import { valuesFor, valuesRead, type ValuesSent } from "@/lib/dashboards/values";
-import { chosenOn, focusFor, focusWords, fromFilter, notFiltered, traceAndChoose, type DashboardFocus } from "@/lib/dashboards/focus";
+import { chooseIn, chosenOn, filterLink, focusOfCard, focusWords, fromFilter, notFiltered, traceAndChoose, type DashboardFocus } from "@/lib/dashboards/focus";
 import { toast } from "@/components/ui/toast";
 import { askAbout, dashboardSubject } from "@/lib/askSubject";
 import type { Pick as ChartPick } from "@/components/charts/selection";
@@ -149,6 +149,9 @@ interface DashboardContextValue {
   /** The board study — the reader's focus, and where a click on a card's mark goes. */
   focus: DashboardFocus[];
   pick: ((cardId: string, p: ChartPick) => void) | null;
+  /** v20 — a right click on a mark, and the pages it offers to open already filtered to it. */
+  drilling: Drilling | null;
+  drill: ((next: Drilling | null) => void) | null;
   /** The study's R14 — the door that changes the reader's focus; null where the page keeps none. */
   setFocus: ((next: DashboardFocus[]) => void) | null;
   /** The spec drawn, for what a placement says of itself (v18: a card the filters do not cut). */
@@ -207,8 +210,50 @@ const TONE_RULE: Record<Tone, string> = {
 /** The filter column's width beside the pieces it narrows, when a person has set none (the approved mockup's). */
 const FILTER_COLUMN = FILTER_DEFAULT_PX;
 
+interface Drilling { cardId: string; pick: ChartPick; x: number; y: number }
+
+/** v20 — a right click on a mark: the dashboard's other pages, each opened filtered to what was clicked. Gone at the next action. */
+function DrillMenu() {
+  const { drilling, drill, elements, focus, setFocus } = useDashboard();
+  const { get, set } = useStateStore();
+  useEffect(() => {
+    if (!drilling) return;
+    const away = () => drill?.(null);
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") away(); };
+    window.addEventListener("pointerdown", away);
+    window.addEventListener("scroll", away, true);
+    window.addEventListener("keydown", key);
+    return () => { window.removeEventListener("pointerdown", away); window.removeEventListener("scroll", away, true); window.removeEventListener("keydown", key); };
+  }, [drilling, drill]);
+  if (!drilling || !setFocus) return null;
+  const open = get("/tab");
+  const pages = pagesOf(elements, false).filter(t => t.name !== open);
+  if (!pages.length) return null;
+  const go = async (page: { key: string; name: string }) => {
+    drill?.(null);
+    try {
+      const t = await traceField(drilling.cardId, drilling.pick.field);
+      if ("refused" in t) { toast.info("This click filters nothing", { description: t.refused }); return; }
+      setFocus(chooseIn(focus, { table: t.table, column: t.column, value: drilling.pick.value, page: page.key, source: { card: drilling.cardId, field: drilling.pick.field } }));
+      set("/tab", page.name);
+    } catch (e) { toast.error("The click could not be read", { description: (e as Error).message }); }
+  };
+  return (
+    <div role="menu" aria-label="Drill to a page" data-testid="drill-menu" onPointerDown={e => e.stopPropagation()}
+      style={{ position: "fixed", left: drilling.x, top: drilling.y, zIndex: 60, display: "flex", flexDirection: "column", minWidth: 180, padding: 4, background: "var(--bg-2)", border: "1px solid var(--card-edge)", borderRadius: "var(--r3)", boxShadow: "var(--shadow-lg)" }}>
+      {pages.map(t => (
+        <Button key={t.key} role="menuitem" size="xs" variant="ghost" data-testid="drill-to-page" style={{ justifyContent: "flex-start" }} onClick={() => void go(t)}>Drill to {t.label}</Button>
+      ))}
+    </div>
+  );
+}
+
 /** v19 — the dashboard's global filters beside everything else it draws. */
 function DashboardRoot(props: ComponentRenderProps<{ title: string }>) {
+  return <><DrillMenu /><DashboardRootBody {...props} /></>;
+}
+
+function DashboardRootBody(props: ComponentRenderProps<{ title: string }>) {
   const { elements } = useDashboard();
   const keys = props.element.children ?? [];
   const at = keys.findIndex(k => elements[k]?.type === "GlobalFilters");
@@ -223,11 +268,17 @@ function DashboardRoot(props: ComponentRenderProps<{ title: string }>) {
   );
 }
 
-function DashboardGlobalFilters({ element }: ComponentRenderProps<Record<string, never>>) {
+function DashboardGlobalFilters({ element }: ComponentRenderProps<{ apply_button?: boolean | null }>) {
   const { elements, focus, setFocus, connectionId, doors, selected } = useDashboard();
-  const filters = (element.children ?? []).map(key => ({ key, props: elements[key]?.props as unknown as GlobalFilterProps }));
+  const { get } = useStateStore();
+  const { setValue } = usePieces();
+  const filters = useMemo(() => (element.children ?? []).map(key => ({ key, props: elements[key]?.props as unknown as GlobalFilterProps })), [element.children, elements]);
+  const pages = pagesOf(elements, true);
+  const open = get("/tab");
+  const page = (pages.find(t => t.name === open) ?? pages[0])?.key ?? null;
   return (
     <GlobalFiltersColumn filters={filters} connectionId={connectionId} focus={focus} onFocus={setFocus} building={!!doors.onSelect} selected={selected}
+      applyButton={element.props.apply_button === true} page={page} onParameter={setValue}
       onChoose={doors.onSelect} onAdd={doors.onAddGlobalFilter ? () => { const key = doors.onAddGlobalFilter?.(); if (key) doors.onSelect?.(key); } : undefined} />
   );
 }
@@ -1092,7 +1143,7 @@ function useValuedRun(cs: CardState | undefined, range: BriefingRange | null | u
   const { valueOf, wire } = usePieces();
   const { focus, spec } = useDashboard();
   const uncut = !!cs && notFiltered(spec, cs.card.id);
-  const focusSent = cs && !uncut ? JSON.stringify(focusFor(focus, cs.card.id)) : "[]";
+  const focusSent = cs ? JSON.stringify(focusOfCard(spec, focus, cs.card.id)) : "[]";
   // a dashboard made from a file: a reader's filters narrow a query that reads its table, and a row added here is read again
   const { narrowing, table, changes } = useQueryNarrowing();
   const isQuery = !!(cs?.card.render as { shown?: unknown } | undefined)?.shown;
@@ -1165,15 +1216,17 @@ function DashboardCard({ element }: ComponentRenderProps<{ card: string; tone?: 
   // a saved card is a fixed query: the reader's filters cannot narrow it, and it says so while one is on
   const filtering = useFiltering();
   // the board study — a click on its chart chooses a value for the whole dashboard; what it chose stays lit on it
-  const { focus, pick } = useDashboard();
+  const { focus, pick, drill, spec, elements: placedOn } = useDashboard();
   const { narrowing } = useQueryNarrowing();
   // v18 — placed so the dashboard's filters do not cut it, and it says so while one is on
   const optedOut = (element.props as { not_filtered?: boolean | null }).not_filtered === true;
   const cutBySomething = focus.length > 0 || narrowing.length > 0 || filtering.on;
   const tileFocus = useMemo<TileFocus | undefined>(() => (pick
-    ? { chosen: (field: string) => chosenOn(focus, id, field), onPick: (p: ChartPick) => pick(id, p) } : undefined), [focus, pick, id]);
+    ? { chosen: (field: string) => chosenOn(focus, id, field), onPick: (p: ChartPick) => pick(id, p),
+        ...(drill && !pageDoors.onSelect && pagesOf(placedOn, false).length > 1 ? { onDrill: (p: ChartPick, at: { x: number; y: number }) => drill({ cardId: id, pick: p, ...at }) } : {}) }
+    : undefined), [focus, pick, id, drill, pageDoors.onSelect, placedOn]);
   const cut = cs?.run?.cut ?? null;
-  const notCut = !!cut && !cut.applied && focusFor(focus, id).length > 0;
+  const notCut = !!cut && !cut.applied && focusOfCard(spec, focus, id).length > 0;
   // v16 — this placement's own title, description and number look, read by the tile it draws
   const placed = element.props as Record<string, unknown>;
   const lookKey = JSON.stringify([placed.title, placed.show_title, placed.description, placed.number, placed.columns_look]);
@@ -1590,6 +1643,12 @@ function FilteredBy({ objects = null, spaced = true }: { objects?: ObjectBarWord
     values.forEach(v => v.clear());
     if (focused.length) setFocus?.([]);
   };
+  // v20 — this view of the dashboard, as an address another reader opens on the same filters
+  const copyLink = () => {
+    const link = filterLink(focused, window.location.href);
+    if (!link) { toast.info("Too many filters for one link", { description: "Take a few off and copy it again." }); return; }
+    navigator.clipboard.writeText(link).then(() => toast.success("Link copied"), () => toast.error("The link could not be copied"));
+  };
   // the study's R17 — with a mark chosen, the other pages it can be read on (the focus holds across a dashboard's pages)
   const openPage = get("/tab");
   const others = focused.some(f => !fromFilter(f)) ? pagesOf(elements, !!doors.onSelect).filter(t => t.name !== openPage).slice(0, 3) : [];
@@ -1604,6 +1663,7 @@ function FilteredBy({ objects = null, spaced = true }: { objects?: ObjectBarWord
         </Button>
       ))}
       {chips.length > 0 && <Button size="xs" variant="ghost" data-testid="filters-clear" onClick={clearAll}>Clear all</Button>}
+      {focused.length > 0 && <Button size="xs" variant="ghost" data-testid="filters-copy-link" onClick={copyLink}><Icon name="copy" size={12} /> Copy link</Button>}
       {others.map(t => (
         <Button key={t.key} size="xs" variant="ghost" data-testid="focus-open-page" onClick={() => set("/tab", t.name)}>Open on {t.label}</Button>
       ))}
@@ -1661,6 +1721,13 @@ export function ComposedDashboard({ spec, cards, host, doors, sym = "$", images 
     const left = stillHeld(focus, filterProps);
     if (left.length !== focus.length) onFocus(left);
   }, [focus, filterProps, onFocus]);
+  // v20 — what the filters open on, the first time a reader meets them
+  useEffect(() => {
+    if (!onFocus || doors.onSelect || !dashboardId) return;
+    const opened = openedWith(dashboardId, filterProps, focus);
+    if (opened) onFocus(opened);
+  }, [dashboardId, filterProps]); // eslint-disable-line react-hooks/exhaustive-deps -- once for each set of openings
+  const [drilling, setDrilling] = useState<Drilling | null>(null);
   // A spec is known by what it says, not by which object says it: a caller that parses the
   // same JSON again on every render hands over a new object each time, and that must not
   // close the tab a reader opened.
@@ -1714,6 +1781,8 @@ export function ComposedDashboard({ spec, cards, host, doors, sym = "$", images 
     setFocus: onFocus ?? null,
     spec,
     period,
+    drilling,
+    drill: onFocus ? setDrilling : null,
     pick: onFocus ? (cardId: string, p: ChartPick) => {
       // in the builder a click chooses the piece and reshapes nothing; Alt and a click tries the filter (the study's R4)
       if (doors.onSelect && !altClick.current) return;
@@ -1722,7 +1791,7 @@ export function ComposedDashboard({ spec, cards, host, doors, sym = "$", images 
         .catch(e => toast.error("The click could not be read", { description: (e as Error).message }));
     } : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on what the spec and the range say
-  }), [check.valid, written, cards, host, doors, sym, images, rangeKey, schema, connectionId, dashboardId, selected, steppers, readsKey, focus, onFocus, period]);
+  }), [check.valid, written, cards, host, doors, sym, images, rangeKey, schema, connectionId, dashboardId, selected, steppers, readsKey, focus, onFocus, period, drilling]);
 
   if (!check.valid) {
     return (

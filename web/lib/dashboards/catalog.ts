@@ -30,6 +30,7 @@
  * The server reads this vocabulary through the validator bundle (`pramanyx/dashboards/validate.py`)
  * rather than holding a second copy.
  */
+import { DATE_PRESETS } from "@/lib/dashboards/datePresets";
 import { defineCatalog } from "@json-render/core";
 import { schema } from "@json-render/react/schema";
 import { z } from "zod";
@@ -59,8 +60,9 @@ import { z } from "zod";
  *  or a colour scale on a table's number column (`columns_look`, on a placed card and an objects table), and one colour
  *  for a value on every card of the dashboard (`colors` on the root: a field's value to one of the six series colours;
  *  2026-11-18). 18: a placed card the dashboard's filters do not cut (`not_filtered`), and a page kept from its readers
- *  (`hidden` on a tab; 2026-11-18). */
-export const DASHBOARD_VOCABULARY_VERSION = 19;
+ *  (`hidden` on a tab; 2026-11-18). 19: global filters. 20: filters that link, open on a value, name a date that moves, wait for
+ *  Apply, hold to one page, match words exactly and feed a value; a card's fixed filters and the filters it ignores (2026-11-19). */
+export const DASHBOARD_VOCABULARY_VERSION = 20;
 /** v19 — how a global filter is chosen from (the user, 2026-11-18). */
 export const GLOBAL_FILTER_KINDS = ["multi", "single", "date", "date_range", "text", "range"] as const;
 export type GlobalFilterKind = (typeof GLOBAL_FILTER_KINDS)[number];
@@ -293,6 +295,19 @@ export type PeriodOpens = (typeof PERIOD_OPENS)[number];
 /** A breakdown's measures per group: one to three. */
 export const MAX_BREAKDOWN_MEASURES = 3;
 
+/** v20 — one filter an author fixes on a placed card. */
+const filterValue = z.union([z.string().max(200), z.number(), z.boolean()]);
+export const MAX_FIXED_FILTERS = 5;
+const fixedFilter = z.object({
+  table: z.string().min(1).max(200),
+  column: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/).max(200),
+  op: z.enum(["eq", "in", "between", "dates", "contains"]),
+  value: filterValue.nullable().optional(),
+  values: z.array(filterValue).max(200).nullable().optional(),
+  low: z.union([z.string().max(40), z.number()]).nullable().optional(),
+  high: z.union([z.string().max(40), z.number()]).nullable().optional(),
+}).strict();
+
 const size = z.enum(SIZES).nullable().optional();
 /** An element's room on a section's grid: columns across and rows down (Arc AP-1). */
 const w = z.number().int().min(1).max(GRID.columns).nullable().optional();
@@ -384,6 +399,9 @@ export const dashboardCatalog = defineCatalog(schema, {
         columns_look: columnsLook,
         // v18 — this placement keeps its own rows whatever a reader clicks or ticks, and says so
         not_filtered: z.boolean().nullable().optional(),
+        // v20 — filters the author sets on this placement, which no reader changes, and the dashboard's filters it does not follow
+        fixed_filters: z.array(fixedFilter).max(MAX_FIXED_FILTERS).nullable().optional(),
+        ignores_filters: z.array(z.string().min(1).max(80)).max(MAX_GLOBAL_FILTERS).nullable().optional(),
         size, w, h, x, y,
       }),
       description: "One card from the card store, by its id. Never a figure, never SQL. May be shown by a condition. "
@@ -632,7 +650,10 @@ export const dashboardCatalog = defineCatalog(schema, {
       description: "The dashboard's period, on the dashboard: every card is cut to it by its own date, and a reader chooses another. One per dashboard.",
     },
     GlobalFilters: {
-      props: z.object({}),
+      props: z.object({
+        /** v20 — what a reader chooses waits for Apply, so several choices run the cards once. */
+        apply_button: z.boolean().nullable().optional(),
+      }),
       description: "The dashboard's global filters, drawn beside its pages: each filter cuts every card it can reach.",
     },
     GlobalFilter: {
@@ -648,6 +669,24 @@ export const dashboardCatalog = defineCatalog(schema, {
         column: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/).max(200).nullable().optional(),
         /** A single value offers All unless this is false. */
         allow_all: z.boolean().nullable().optional(),
+        /** v20 — offers only what the other filters leave, unless this is false. */
+        linked: z.boolean().nullable().optional(),
+        /** v20 — what it holds when the dashboard first opens. */
+        opens_with: z.object({
+          values: z.array(filterValue).max(200).nullable().optional(),
+          value: filterValue.nullable().optional(),
+          low: z.union([z.string().max(40), z.number()]).nullable().optional(),
+          high: z.union([z.string().max(40), z.number()]).nullable().optional(),
+          words: z.string().max(200).nullable().optional(),
+          preset: z.enum(DATE_PRESETS).nullable().optional(),
+        }).strict().nullable().optional(),
+        /** v20 — how text entry matches. */
+        match: z.enum(["contains", "exact", "starts_with"]).nullable().optional(),
+        case_sensitive: z.boolean().nullable().optional(),
+        /** v20 — the page it holds to, by the page's element; none, every page. */
+        page: z.string().min(1).max(80).nullable().optional(),
+        /** v20 — the dashboard value a query reads as {{name}} that takes what this filter holds. */
+        parameter: z.string().regex(WIRE_NAME).nullable().optional(),
       }),
       description: "One global filter: multiple values, a single value, a date, a date range, text or a range of numbers, on one column.",
     },
