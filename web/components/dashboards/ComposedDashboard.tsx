@@ -266,6 +266,15 @@ const MAX_AUTO_COLUMNS = 4;
 const TALL_MIN = 320;
 /** A section on the grid narrower than this draws its elements one under another, each across its whole width. */
 const NARROW_GRID = 560;
+/** The builder's guides on a section's grid: dots along each column's start (one column and its gap apart) and each row's
+ *  start (one row and its gap, 40 px, apart). */
+const GUIDE_DOT = "color-mix(in srgb, var(--b1) 75%, transparent)";
+const GUIDES = {
+  backgroundImage: `radial-gradient(circle at 1px 1px, ${GUIDE_DOT} 0.9px, transparent 1.3px), `
+    + `radial-gradient(circle at 1px 1px, ${GUIDE_DOT} 0.9px, transparent 1.3px)`,
+  backgroundSize: `calc((100% + ${GRID.gap}px) / ${GRID.columns}) 8px, 8px ${GRID.row + GRID.gap}px`,
+  backgroundRepeat: "repeat",
+};
 
 /** How many columns a section draws: the spec's, when it says, never more than fit — and how wide it is. Width 0 is
  *  a section not yet measured (or a test's DOM), and draws as asked. */
@@ -428,6 +437,10 @@ function PiecesSection({ element, children }: ComponentRenderProps<SectionProps>
           gridTemplateColumns: `repeat(${stacked ? 1 : GRID.columns}, minmax(0, 1fr))`,
           // the board study: a piece moved or resized leaves no hole — a later one that fits fills it
           gridAutoFlow: "row dense",
+          // in the builder, the grid itself (the user, 2026-11-18, of Databricks' canvas: "See the grid and its logic.. its
+          // nice"): a dotted line where each of the twelve columns and each 40 px row begins, so a person sees where a
+          // drag will land. A tint behind the pieces, not a frame; a reader never sees it.
+          ...(doors.onRegrid && !stacked ? GUIDES : {}),
         } : {
           display: "grid", gap: GAP, alignItems: "stretch", gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
           gridAutoFlow: "row dense",

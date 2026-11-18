@@ -57,8 +57,7 @@ function build(spec: DashboardSpec, room: Record<string, { w: number; h: number 
   const handle: DashboardHandle = { room: key => room[key] ?? null, step };
   const view = render(
     <DashboardBuilder spec={spec} onChange={onChange} connectionId="thelook" schema="thelook" onUndo={onUndo} onRedo={onRedo}
-      bar={<EditBar picker={<span>Orders</span>} saved="saved 21:42 · version 7" canUndo canRedo={false}
-        onUndo={vi.fn()} onRedo={vi.fn()} onDone={vi.fn()} actions={null} />}>
+      bar={<EditBar picker={<span>Orders</span>} saved="saved 21:42 · version 7" onDone={vi.fn()} actions={null} />}>
       {({ selected, handle: h }) => {
         h.current = handle;
         seen.push({ selected });
@@ -66,6 +65,8 @@ function build(spec: DashboardSpec, room: Record<string, { w: number; h: number 
       }}
     </DashboardBuilder>,
   );
+  // the layout pane starts folded to a strip (2026-11-18); a person opens it to reach its lines
+  fireEvent.click(screen.getByTestId("builder-open-layout"));
   const line = (key: string) => screen.getAllByTestId("builder-line").find(b => b.dataset.key === key)!;
   return { onChange, step, seen, line, view, onUndo, onRedo };
 }
@@ -166,6 +167,80 @@ describe("the bar above the dashboard", () => {
     expect(seen.at(-1)?.selected).toBe("sec-2");
     fireEvent.keyDown(window, { key: "Escape" });
     expect(seen.at(-1)?.selected).toBeNull();
+  });
+
+  it("floats one toolbar over the canvas: each door says its name, Chart and Filter open their pieces for the section chosen (2026-11-18)", () => {
+    const onAddPiece = vi.fn();
+    const tools = { onAsk: vi.fn(), onText: vi.fn(), onImage: vi.fn(), onButtons: vi.fn(), onChoose: vi.fn(), active: null };
+    const onUndo = vi.fn(), onRedo = vi.fn();
+    render(
+      <DashboardBuilder spec={objectDashboard()} onChange={vi.fn()} connectionId="thelook" bar={null} onAddPiece={onAddPiece}
+        tools={tools} onUndo={onUndo} onRedo={onRedo}>
+        {() => <div data-testid="dashboard-stub" />}
+      </DashboardBuilder>,
+    );
+    const bar = screen.getByRole("toolbar", { name: "Add to the dashboard" });
+    expect(within(bar).getAllByRole("button").map(b => b.getAttribute("aria-label"))).toEqual([
+      "Change it in words", "Choose", "Add a chart, a figure, a card or a table", "Add words: a note of your own", "Add a filter",
+      "Add a picture of your own", "Add buttons that run declared actions", "Undo", "Redo"]);
+    expect(within(bar).getByRole("button", { name: "Choose" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(within(bar).getByRole("button", { name: "Add a chart, a figure, a card or a table" }));
+    expect(onAddPiece).toHaveBeenLastCalledWith(null, "chart");
+    fireEvent.click(within(bar).getByRole("button", { name: "Add a filter" }));
+    expect(onAddPiece).toHaveBeenLastCalledWith(null, "filter");
+    for (const [name, fn] of [["Change it in words", tools.onAsk], ["Add words: a note of your own", tools.onText],
+      ["Add a picture of your own", tools.onImage], ["Add buttons that run declared actions", tools.onButtons],
+      ["Undo", onUndo], ["Redo", onRedo]] as const) {
+      fireEvent.click(within(bar).getByRole("button", { name }));
+      expect(fn).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("marks the door that is open, and Esc puts it away before it lets go of the chosen piece", () => {
+    const onChoose = vi.fn();
+    render(
+      <DashboardBuilder spec={objectDashboard()} onChange={vi.fn()} connectionId="thelook" bar={null} tools={{ active: "chart", onChoose }}>
+        {() => <div data-testid="dashboard-stub" />}
+      </DashboardBuilder>,
+    );
+    expect(screen.getByTestId("builder-add-piece")).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTestId("builder-tool-choose")).toHaveAttribute("aria-pressed", "false");
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(onChoose).toHaveBeenCalledTimes(1);
+  });
+
+  it("folds the layout to a strip, opens it on the layout or the variables, and folds it again", () => {
+    render(
+      <DashboardBuilder spec={objectDashboard()} onChange={vi.fn()} connectionId="thelook" bar={null}>
+        {() => <div data-testid="dashboard-stub" />}
+      </DashboardBuilder>,
+    );
+    expect(screen.getByTestId("builder-pane-folded")).toBeInTheDocument();
+    expect(screen.queryAllByTestId("builder-line")).toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: "Open the layout" }));
+    expect(screen.getAllByTestId("builder-line").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Fold the layout" }));
+    expect(screen.getByTestId("builder-pane-folded")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open the variables" }));
+    expect(screen.getByRole("radio", { name: "Variables" })).toBeChecked();
+  });
+
+  it("chooses the one element a change brings — a piece just placed is set up in the panel", () => {
+    const seen: (string | null)[] = [];
+    const draw = (spec: DashboardSpec) => (
+      <DashboardBuilder spec={spec} onChange={vi.fn()} connectionId="thelook" bar={null}>
+        {({ selected }) => { seen.push(selected); return <div data-testid="dashboard-stub" />; }}
+      </DashboardBuilder>
+    );
+    const before = objectDashboard();
+    const { rerender } = render(draw(before));
+    const after: DashboardSpec = JSON.parse(JSON.stringify(before));
+    const section = Object.entries(after.elements).find(([, e]) => e.type === "Section")![0];
+    after.elements["note-new"] = { type: "Note", props: { text: "Placed just now" }, children: [] };
+    after.elements[section].children.push("note-new");
+    rerender(draw(after));
+    expect(seen.at(-1)).toBe("note-new");
+    expect(screen.getByTestId("piece-setup")).toHaveAttribute("data-kind", "Note");
   });
 
   it("leaves the keys to a field a person is typing in", () => {
@@ -276,6 +351,7 @@ describe("with the dashboard itself drawn", () => {
   it("says the room a step has just given, never the one before it", () => {
     globalThis.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver;
     render(<Page start={notes} />);
+    fireEvent.click(screen.getByTestId("builder-open-layout"));
     fireEvent.click(screen.getAllByTestId("builder-line").find(b => b.dataset.key === "n")!);
     expect(screen.getByTestId("builder-height")).toHaveTextContent("4");
     fireEvent.click(screen.getByRole("button", { name: "Height: one grade more" }));
@@ -315,7 +391,7 @@ describe("the Data tab (Arc AP-2)", () => {
 
   it("lists the sets; choosing one opens its setup and dashes the pieces that read it — and the layout lets it go", async () => {
     const reads = wire(wired());
-    fireEvent.click(screen.getByRole("radio", { name: "Variables" }));
+    fireEvent.click(screen.getByTestId("builder-open-variables"));
     expect(screen.queryByTestId("builder-layout")).toBeNull();
     const sets = within(screen.getByTestId("builder-data")).getAllByTestId("data-set");
     expect(sets.map(s => s.dataset.name)).toEqual(["placed", "waiting"]);
@@ -374,7 +450,7 @@ describe("building safely (Arc AP-6)", () => {
         {() => <div data-testid="dashboard-stub" />}
       </DashboardBuilder>,
     );
-    fireEvent.click(screen.getByRole("radio", { name: "Variables" }));
+    fireEvent.click(screen.getByTestId("builder-open-variables"));
     await waitFor(() => expect(screen.getByTestId("data-set-read-time")).toHaveTextContent(/^· \d+\.\d{2} s$/));
     fireEvent.click(screen.getByTestId("data-set"));
     await waitFor(() => expect(screen.getByTestId("set-read-time")).toHaveTextContent(/^· counted in \d+\.\d{2} s$/));
@@ -390,7 +466,7 @@ describe("building safely (Arc AP-6)", () => {
         {() => <div data-testid="dashboard-stub" />}
       </DashboardBuilder>,
     );
-    fireEvent.click(screen.getByRole("radio", { name: "Variables" }));
+    fireEvent.click(screen.getByTestId("builder-open-variables"));
     await waitFor(() => expect(screen.getByTestId("data-set")).toHaveTextContent("cannot be read"));
     expect(screen.queryByTestId("data-set-read-time")).toBeNull();
     fireEvent.click(screen.getByTestId("data-set"));

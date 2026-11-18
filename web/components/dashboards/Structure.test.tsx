@@ -110,6 +110,7 @@ describe("a structure, built", () => {
         {() => <div data-testid="dashboard-stub" />}
       </DashboardBuilder>,
     );
+    fireEvent.click(screen.getByTestId("builder-open-layout"));
     const line = (key: string) => screen.getAllByTestId("builder-line").find(b => b.dataset.key === key)!;
     return { onChange, onAddPiece, line, view };
   }
@@ -140,10 +141,10 @@ describe("a structure, built", () => {
     const { onAddPiece, line } = build(split());
     fireEvent.click(line("note"));
     fireEvent.click(screen.getByTestId("builder-add-piece"));
-    expect(onAddPiece).toHaveBeenLastCalledWith("left");
+    expect(onAddPiece).toHaveBeenLastCalledWith("left", "chart");
     fireEvent.click(line("right"));
     fireEvent.click(screen.getByTestId("builder-add-piece"));
-    expect(onAddPiece).toHaveBeenLastCalledWith("right");
+    expect(onAddPiece).toHaveBeenLastCalledWith("right", "chart");
   });
 });
 
@@ -152,9 +153,9 @@ describe("the piece picker", () => {
     ...split(),
     sets: { late: { label: "Shipped late", entity: "order", segment: "late_dispatch" } },
   });
-  function pick(spec: DashboardSpec, section: string | null = "right") {
+  function pick(spec: DashboardSpec, section: string | null = "right", only?: "chart" | "filter") {
     const onPlace = vi.fn(), onHandOff = vi.fn(), onClose = vi.fn();
-    render(<PiecePicker spec={spec} section={section} connectionId="thelook" onPlace={onPlace} onHandOff={onHandOff} onClose={onClose} />);
+    render(<PiecePicker spec={spec} section={section} connectionId="thelook" onPlace={onPlace} onHandOff={onHandOff} onClose={onClose} only={only} />);
     const entry = (kind: string) => screen.getAllByTestId("piece-picker-entry").find(e => e.dataset.kind === kind)!;
     return { onPlace, onHandOff, onClose, entry };
   }
@@ -373,6 +374,29 @@ describe("the piece picker", () => {
     s.elements.drawer = { type: "Drawer", props: { title: "The order", opens_on: "chosen-order" }, children: [] };
     const { entry } = pick(s);
     expect(entry("Drawer")).toHaveTextContent("Each chosen object opens its drawer already.");
+  });
+
+  it("drawn in the panel, lists only what the toolbar asked for — a chart's pieces, or a filter's — and every piece on asking (2026-11-18)", async () => {
+    const kinds = () => screen.getAllByTestId("piece-picker-entry").map(e => e.dataset.kind);
+    const { onHandOff, onClose } = pick(desk(), "right", "chart");
+    expect(screen.getByRole("region", { name: "Add a chart" })).toBeInTheDocument();
+    expect(kinds()).toEqual(expect.arrayContaining(["ObjectChart", "ObjectFigure", "card", "query", "finding", "question", "ObjectTable", "ontology"]));
+    expect(kinds()).not.toContain("ObjectFilters");
+    expect(kinds()).not.toContain("note");
+    fireEvent.click(screen.getAllByTestId("piece-picker-entry").find(e => e.dataset.kind === "question")!);
+    expect(onHandOff).toHaveBeenCalledWith("question", "right");
+    fireEvent.click(screen.getByTestId("piece-picker-every"));
+    expect(kinds()).toEqual(expect.arrayContaining(["ObjectFilters", "note", "image", "ActionButtons"]));
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(onClose).toHaveBeenCalled();
+    await act(async () => {});
+  });
+
+  it("for a filter, lists the filters", async () => {
+    pick(desk(), "right", "filter");
+    expect(screen.getByRole("region", { name: "Add a filter" })).toBeInTheDocument();
+    expect(screen.getAllByTestId("piece-picker-entry").map(e => e.dataset.kind)).toEqual(["ObjectFilters", "ObjectSearch", "ChooseOne"]);
+    await act(async () => {});
   });
 
   it("offers a query of your own, and hands it to the page for the same section (Arc AP-7)", async () => {

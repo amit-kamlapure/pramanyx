@@ -76,6 +76,16 @@ describe("a section on the grid", () => {
     expect(net.style.gridRow).toBe("span 6");
   });
 
+  it("draws the grid's guides in the builder — a dot along each column's and each row's start — and never for a reader (2026-11-18)", () => {
+    const { unmount } = render(<ComposedDashboard spec={gridded()} cards={CARDS} host={HOST} doors={owner()} />);
+    const grid = document.querySelector('[data-grid="12"]') as HTMLElement;
+    expect(grid.style.backgroundImage).toContain("radial-gradient");
+    expect(grid.style.backgroundSize).toBe("calc((100% + 12px) / 12) 8px, 8px 40px");
+    unmount();
+    render(<ComposedDashboard spec={gridded()} cards={CARDS} host={HOST} doors={READER} />);
+    expect((document.querySelector('[data-grid="12"]') as HTMLElement).style.backgroundImage).toBe("");
+  });
+
   it("offers a reader who may not change it no handle and no key", () => {
     render(<ComposedDashboard spec={gridded()} cards={CARDS} host={HOST} doors={READER} />);
     expect(screen.queryAllByTestId(/grid-handle/)).toEqual([]);

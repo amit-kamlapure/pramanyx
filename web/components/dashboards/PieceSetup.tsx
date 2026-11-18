@@ -712,10 +712,76 @@ function FigureWiring({ spec, p, set }: { spec: DashboardSpec; p: Props; set: (p
   );
 }
 
+/** A part of the panel folded under its name: a row that opens it, the way it opens said by its arrow. */
+function Fold({ label, testid, children }: { label: string; testid?: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ borderTop: "1px solid var(--b1)" }}>
+      <Button size="sm" variant="plain" data-testid={testid} aria-expanded={open} onClick={() => setOpen(o => !o)}
+        style={{ width: "100%", justifyContent: "space-between", padding: "8px 14px", height: "auto", borderRadius: 0 }}>
+        <span className="aug-fs-sm" style={{ color: "var(--t1)" }}>{label}</span>
+        <Icon name={open ? "chevu" : "chevd"} size={14} />
+      </Button>
+      {open && <div>{children}</div>}
+    </div>
+  );
+}
+
+/** With nothing chosen, the dashboard's own setup (the dashboards study, R6, 2026-11-18): its name, what it holds, the
+ *  way to its layout, and the keys. */
+function DashboardSetup({ spec, onChange, onOpenLayout }: { spec: DashboardSpec; onChange: Change; onOpenLayout?: () => void }) {
+  const root = spec.root;
+  const top = spec.elements[root];
+  const count = (types: string[]) => Object.values(spec.elements).filter(e => types.includes(e.type)).length;
+  const holds: [string, number][] = [
+    ["Sections", count(["Section"])],
+    ["Cards", count(["Card"])],
+    ["Pieces from the ontology", Object.values(spec.elements).filter(e => e.type.startsWith("Object") || e.type === "ProcessBoard").length],
+    ["Notes and pictures", count(["Note", "Image"])],
+    ["Variables", Object.keys(spec.sets ?? {}).length + Object.keys(spec.values ?? {}).length],
+  ];
+  const lines = Object.keys(spec.elements).length;
+  return (
+    <div data-testid="setup-empty">
+      <div style={{ padding: "12px 14px 8px", borderBottom: "1px solid var(--b1)" }}>
+        <div className="aug-fs-xs" style={{ color: "var(--accent-11)", textTransform: "uppercase", letterSpacing: ".06em" }}>Dashboard</div>
+        <div className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: 600, marginTop: 2 }}>{String(top?.props.title ?? "") || "This dashboard"}</div>
+        <div className="aug-fs-xs" style={{ color: "var(--t3)", marginTop: 4, lineHeight: 1.45 }}>
+          Nothing is chosen: this is the dashboard's own setup. Choose a piece on the dashboard to set it up; its size moves
+          one grade at a time — drag an edge or a corner, or Alt and the arrow keys.
+        </div>
+      </div>
+      {top?.type === "Cockpit" && (
+        <Row label="Name"><Words label="Name" value={String(top.props.title ?? "")} max={MAX_TITLE} onSave={v => onChange(rename(spec, root, v), "renamed by hand")} /></Row>
+      )}
+      <Row label="What it holds">
+        <div style={{ display: "flex", flexDirection: "column", border: "1px solid var(--b1)", borderRadius: "var(--r2)" }}>
+          {holds.map(([what, n], i) => (
+            <div key={what} className="aug-fs-sm" style={{ display: "flex", justifyContent: "space-between", padding: "6px 10px",
+              borderTop: i ? "1px solid var(--b1)" : undefined }}>
+              <span style={{ color: "var(--t2)" }}>{what}</span><span style={{ fontVariantNumeric: "tabular-nums" }}>{n}</span>
+            </div>
+          ))}
+        </div>
+        {onOpenLayout && (
+          <Button size="xs" variant="ghost" data-testid="setup-open-layout" onClick={onOpenLayout} style={{ alignSelf: "flex-start" }}>
+            Open the layout · {lines} {lines === 1 ? "line" : "lines"}
+          </Button>
+        )}
+      </Row>
+      <div className="aug-fs-xs" style={{ padding: "10px 14px", color: "var(--t3)", borderTop: "1px solid var(--b1)", lineHeight: 1.5 }}>
+        Keys: ⌘Z undo · ⇧⌘Z redo · Delete takes off · ⌘D duplicates · Esc lets go
+      </div>
+    </div>
+  );
+}
+
 // ── the panel ────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-export function PieceSetup({ spec, selected, onChange, connectionId, schema, cardTitle, entityTitle, cardSetup, cardChart, cardSql }: {
+export function PieceSetup({ spec, selected, onChange, connectionId, schema, cardTitle, entityTitle, cardSetup, cardChart, cardSql, onOpenLayout }: {
   spec: DashboardSpec;
+  /** Open the layout pane, folded away by default (the dashboards study, R7, 2026-11-18). */
+  onOpenLayout?: () => void;
   selected: string | null;
   onChange: Change;
   connectionId: string;
@@ -730,7 +796,6 @@ export function PieceSetup({ spec, selected, onChange, connectionId, schema, car
   /** The board study — the statement the card ran. */
   cardSql?: (cardId: string) => ReactNode | null;
 }) {
-  const [cardTab, setCardTab] = useState<"shows" | "chart" | "sql">("shows");
   const el = selected ? spec.elements[selected] : undefined;
   // the entity a piece reads: its set's (Arc AP-2), or the one it names
   const read = el ? pieceSet(spec, el.props) : null;
@@ -738,14 +803,7 @@ export function PieceSetup({ spec, selected, onChange, connectionId, schema, car
   const entity = el && (own || SET_READERS.includes(el.type as PieceName))
     ? (!own && read && !isRefused(read) ? read.entity : String(el.props.entity ?? "")) : undefined;
   const ef = useEntityFields(entity, connectionId, schema);
-  if (!selected || !el) {
-    return (
-      <div className="aug-fs-sm" data-testid="setup-empty" style={{ padding: "16px 14px", color: "var(--t3)", lineHeight: 1.5 }}>
-        Choose a piece on the dashboard, or a line in its layout, to set it up. Its size moves one grade at a time — drag an
-        edge, use − and + above the dashboard, or Alt and the arrow keys.
-      </div>
-    );
-  }
+  if (!selected || !el) return <DashboardSetup spec={spec} onChange={onChange} onOpenLayout={onOpenLayout} />;
   const k = selected;
   const p = el.props as Props;
   const set = (patch: Props, note: string) => onChange(setProps(spec, k, patch), note);
@@ -788,27 +846,19 @@ export function PieceSetup({ spec, selected, onChange, connectionId, schema, car
         </>
       )}
       {el.type === "Card" && (
-        <>
-          {/* the board study: one panel for a card — what it shows, how it is drawn, and the statement it ran */}
-          {(cardChart || cardSql) && (
-            <div data-testid="card-tabs" style={{ padding: "10px 14px 2px" }}>
-              <Segmented label="Card" value={cardTab} size="1"
-                options={[{ value: "shows", label: "What it shows" }, ...(cardChart ? [{ value: "chart" as const, label: "Chart" }] : []),
-                  ...(cardSql ? [{ value: "sql" as const, label: "SQL" }] : [])]}
-                onChange={v => setCardTab(v as "shows" | "chart" | "sql")} />
-            </div>
-          )}
-          {cardTab === "chart" && cardChart ? cardChart(String(p.card ?? ""))
-            : cardTab === "sql" && cardSql ? cardSql(String(p.card ?? "")) : (
-            <>
-              <Row label="Edge" hint="A coloured edge is emphasis. What the card measures is the card's own.">
-                <Pick label="Edge" value={String(p.tone ?? "")} none="None" options={TONES.map(t => ({ value: t, label: TONE_WORDS[t] }))}
-                  onPick={v => set({ tone: v || null }, "a card's edge chosen by hand")} />
-              </Row>
-              {cardSetup?.(String(p.card ?? ""))}
-            </>
-          )}
-        </>
+        <div data-testid="card-panel">
+          {/* one panel for a card that opens on its look (the dashboards study, R6, 2026-11-18): how it is drawn first,
+              then what it reads and the statement it ran, each a fold below — they were tabs a click away */}
+          {cardChart?.(String(p.card ?? ""))}
+          <Row label="Edge" hint="A coloured edge is emphasis. What the card measures is the card's own.">
+            <Pick label="Edge" value={String(p.tone ?? "")} none="None" options={TONES.map(t => ({ value: t, label: TONE_WORDS[t] }))}
+              onPick={v => set({ tone: v || null }, "a card's edge chosen by hand")} />
+          </Row>
+          {cardSetup && <Fold label="What it reads" testid="card-fold-reads">{cardSetup(String(p.card ?? "")) ?? (
+            <div className="aug-fs-sm" style={{ padding: "4px 14px 10px", color: "var(--t3)" }}>A card from the card store: what it reads is the card's own.</div>
+          )}</Fold>}
+          {cardSql && <Fold label="The SQL, as it ran" testid="card-fold-sql">{cardSql(String(p.card ?? ""))}</Fold>}
+        </div>
       )}
       {el.type === "Note" && (
         <Row label="Words" hint="Yours, stamped with your name and today when kept. A model never writes one.">
@@ -854,7 +904,7 @@ export function PieceSetup({ spec, selected, onChange, connectionId, schema, car
       {needsFields && el.type === "ObjectTimeline" && fieldsBody(f => <TimelineSetup p={p} ef={f} set={set} />)}
       {needsFields && el.type === "ChooseOne" && fieldsBody(f => <ChooseOneSetup p={p} ef={f} set={set} />)}
       {needsFields && el.type === "ObjectSearch" && fieldsBody(f => <SearchSetup p={p} ef={f} set={set} />)}
-      {placed && (el.type !== "Card" || cardTab === "shows") && <SectionPick spec={spec} k={k} onChange={onChange} />}
+      {placed && <SectionPick spec={spec} k={k} onChange={onChange} />}
     </div>
   );
 }

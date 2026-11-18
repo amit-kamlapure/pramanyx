@@ -95,6 +95,16 @@ const openBuilder = async () => {
   fireEvent.click(await screen.findByTestId("dashboard-edit"));
   await screen.findByTestId("dashboard-builder");
 };
+/** A door that moved into the canvas toolbar's Chart list (2026-11-18): a card, a finding, a question, the ontology. */
+const chartDoor = async (kind: string) => {
+  // the list reads the declared actions and processes to say which pieces can be placed
+  api.getDeclaredActions.mockResolvedValue({});
+  ontology.getProcesses.mockResolvedValue({ processes: [] });
+  fireEvent.click(screen.getByTestId("builder-add-piece"));
+  fireEvent.click((await screen.findAllByTestId("piece-picker-entry")).find(e => e.dataset.kind === kind)!);
+};
+/** The layout pane, folded to a strip until a person opens it (2026-11-18). */
+const openLayout = () => fireEvent.click(screen.getByTestId("builder-open-layout"));
 /** The strip's tabs by name — a Themes tab carries its label twice (one copy hidden), so read the visible one. */
 const stripTabs = () => screen.getAllByRole("tab").map(t => t.querySelector(".rt-TabsTriggerInner")?.textContent);
 
@@ -169,7 +179,7 @@ describe("a person's dashboards", () => {
   it("a card pinned from here lands on the dashboard in view", async () => {
     await openBuilder();
     expect(screen.queryByTestId("composer-stub")).toBeNull();
-    fireEvent.click(screen.getByTestId("dashboard-card-new"));
+    await chartDoor("card");
     await waitFor(() => expect(composer.onCreated).not.toBeNull());
     api.getDashboard.mockResolvedValue({ ...READ, cards: [...READ.cards, card("fresh0001", "Just pinned", false)] });
     composer.onCreated!();
@@ -542,7 +552,7 @@ describe("the canvas: a finding from the ledger, a change in words, publishing (
     ]);
     api.pinFinding.mockResolvedValue({ card: { id: "newcard" }, preview: { columns: [], rows: [], row_count: 0 }, caveats: [] });
     await openBuilder();
-    fireEvent.click(screen.getByTestId("dashboard-finding-new"));
+    await chartDoor("finding");
     const rows = await screen.findAllByTestId("finding-row");
     expect(rows).toHaveLength(2);
     expect(rows[1]).toHaveTextContent("no query — nothing to measure");
@@ -561,6 +571,7 @@ describe("the canvas: a finding from the ledger, a change in words, publishing (
       detail: { mode: "edit", title: "Returns", replaces_version: 3, outline: [], taken_off: [], changes: { added: [], removed: [], changed: ["card-net"] } } });
     api.acceptProposal.mockResolvedValue({});
     await openBuilder();
+    fireEvent.click(screen.getByTestId("builder-tool-ask"));
     fireEvent.change(screen.getByRole("textbox", { name: "Ask for a change in words" }), { target: { value: "make the net sales card bigger" } });
     fireEvent.click(screen.getByRole("button", { name: "Propose" }));
     await waitFor(() => expect(api.askDashboard).toHaveBeenCalledWith("thelook", "returns-1", "make the net sales card bigger", "thelook"));
@@ -576,6 +587,7 @@ describe("the canvas: a finding from the ledger, a change in words, publishing (
     api.askDashboard.mockResolvedValue({ staged: false, proposal_id: "", cockpit_id: "", summary: "", rounds: 1, stop_reason: "stop",
       sentences: ["The edit adds the note \"note-2\". A note is the person's words and an image is the person's choice: you may move one they placed, resize it or take it off, never add one."] });
     await openBuilder();
+    fireEvent.click(screen.getByTestId("builder-tool-ask"));
     fireEvent.change(screen.getByRole("textbox", { name: "Ask for a change in words" }), { target: { value: "write me a note saying returns are too high" } });
     fireEvent.click(screen.getByRole("button", { name: "Propose" }));
     expect(await screen.findByTestId("dashboard-not-proposed")).toHaveTextContent("never add one");
@@ -648,9 +660,11 @@ describe("building a dashboard in place (Arc AP-1)", () => {
     expect(document.documentElement.getAttribute("data-nav")).toBe("collapsed");
     expect(localStorage.getItem("pramanyx_nav_collapsed")).toBeNull();
     expect(screen.getByTestId("builder-saved")).toHaveTextContent("version 3");
-    for (const id of ["dashboard-card-new", "dashboard-note-new", "dashboard-publish-open", "dashboard-retire-open", "dashboard-ask"]) {
+    for (const id of ["builder-add-piece", "dashboard-note-new", "dashboard-image-new", "dashboard-buttons-new", "builder-tool-ask",
+      "builder-undo", "builder-redo", "dashboard-publish-open", "dashboard-retire-open"]) {
       expect(screen.getByTestId(id)).toBeInTheDocument();
     }
+    expect(screen.queryByTestId("dashboard-ask")).toBeNull();                  // asked in words from the toolbar's Ask
     expect(doors().onSelect).toBeTypeOf("function");
     fireEvent.click(screen.getByTestId("builder-done"));
     await waitFor(() => expect(screen.queryByTestId("dashboard-builder")).toBeNull());
@@ -985,7 +999,9 @@ describe("your own query on the dashboard (Arc AP-7)", () => {
     show();
     fireEvent.click(await screen.findByTestId("dashboard-edit"));
     await screen.findByTestId("dashboard-builder");
+    openLayout();
     fireEvent.click((await screen.findAllByTestId("builder-line")).find(l => l.dataset.key === "card-net")!);
+    fireEvent.click(screen.getByTestId("card-fold-reads"));
     const setup = await screen.findByTestId("query-setup");
     fireEvent.click(within(setup).getByRole("radio", { name: /Line/ }));
     fireEvent.click(within(setup).getByTestId("query-keep"));
@@ -1011,7 +1027,9 @@ describe("your own query on the dashboard (Arc AP-7)", () => {
     const valued = { ...SPEC, values: { country: { label: "Country", kind: "text", value: "China", from: { by: "reader" } } } };
     api.getDashboard.mockResolvedValue({ ...READ, cockpit: { ...READ.cockpit, spec: valued }, cards: [READ.cards[0], queryCard("c91b2002"), READ.cards[2]] });
     await openBuilder();
+    openLayout();
     fireEvent.click((await screen.findAllByTestId("builder-line")).find(l => l.dataset.key === "card-net")!);
+    fireEvent.click(screen.getByTestId("card-fold-reads"));
     const setup = await screen.findByTestId("query-setup");
     expect(within(setup).getByTestId("query-values-open")).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "Variables" })).toBeInTheDocument();
