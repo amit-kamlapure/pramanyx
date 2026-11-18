@@ -179,7 +179,7 @@ def test_a_spec_that_is_not_json_is_refused_before_anything_runs(premise):
 @needs_rules
 def test_the_server_reads_the_vocabulary_the_web_declares():
     vocab = V.vocabulary()
-    assert vocab["version"] == 15                # 15: the period as a piece; 14: free placement (x, y); 3: the ontology's pieces (Arc OC-4); 4: a dashboard from an object; 5: sizes one grade at a time (Arc AP-1); 6: the wiring (AP-2, AP-3); 7: the structure and the picker's pieces (AP-4); 8: variables (AP-8); 9: sets read whole (AP-8b); 10: yes-no, lists, sums, queries (AP-8c); 11: a Question (PENDING 54); 12: a breakdown
+    assert vocab["version"] == 16                # 16: a placed card's own look; 15: the period as a piece; 14: free placement (x, y); 3: the ontology's pieces (Arc OC-4); 4: a dashboard from an object; 5: sizes one grade at a time (Arc AP-1); 6: the wiring (AP-2, AP-3); 7: the structure and the picker's pieces (AP-4); 8: variables (AP-8); 9: sets read whole (AP-8b); 10: yes-no, lists, sums, queries (AP-8c); 11: a Question (PENDING 54); 12: a breakdown
     assert vocab["components"] == ["Cockpit", "Tabs", "Tab", "Section", "Card", "Note", "Image",
                                    "ProcessBoard", "ObjectTable", "ObjectDetail", "ActionButton",
                                    "ObjectFilters", "ObjectFigure", "ObjectChart", "ObjectBreakdown", "ActionButtons",
@@ -301,3 +301,30 @@ def test_the_card_store_is_asked_for_the_persons_cards_and_the_connections(premi
     # A card the same proposal is about to create counts as held.
     verdict = V.check_spec_for_home(premise, home, also_known=["c91b2002"])
     assert verdict.status == V.ACCEPTED, said(verdict)
+
+
+# ── a placed card's own look (v16) ────────────────────────────────────────────
+
+@needs_rules
+def test_a_placed_card_may_carry_its_own_title_description_and_number_look(premise):
+    props = premise["elements"]["card-net"]["props"]
+    props.update(title="Net revenue, this quarter", show_title=True, description="After returns.",
+                 number={"decimals": 1, "compact": True, "negatives": "parens"})
+    verdict = V.check_spec(premise, known_cards=CARDS, model_written=False)
+    assert verdict.status == V.ACCEPTED, said(verdict)
+
+
+@needs_rules
+@pytest.mark.parametrize("number", [{"decimals": 3}, {"compact": "yes"}, {"negatives": "red"}, {"currency": "EUR"}])
+def test_a_number_look_outside_its_words_is_refused(premise, number):
+    premise["elements"]["card-net"]["props"]["number"] = number
+    assert V.check_spec(premise, known_cards=CARDS, model_written=False).status == V.REFUSED
+
+
+@needs_rules
+def test_a_models_title_or_description_on_a_card_is_held_to_the_numerals_law(premise):
+    props = premise["elements"]["card-net"]["props"]
+    props["description"] = "Up 12% on last month"
+    assert V.check_spec(premise, known_cards=CARDS, model_written=False).status == V.ACCEPTED   # a person's own words
+    refused = V.check_spec(premise, known_cards=CARDS, model_written=True)
+    assert refused.status == V.REFUSED and "states a figure" in said(refused)

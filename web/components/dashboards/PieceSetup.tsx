@@ -21,7 +21,7 @@ import { Segmented } from "@/components/ui/segmented";
 import { SelectField } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  BREAKDOWN_TOPS, CHART_DAYS, CHART_TOPS, CHOOSERS, FIGURE_AGGS, MAX_BREAKDOWN_MEASURES, MAX_CAPTION, MAX_FILTERS, MAX_LABEL,
+  BREAKDOWN_TOPS, CHART_DAYS, CHART_TOPS, CHOOSERS, FIGURE_AGGS, MAX_BREAKDOWN_MEASURES, MAX_CAPTION, MAX_CARD_DESCRIPTION, MAX_FILTERS, MAX_LABEL,
   MAX_NOTE, MAX_TABLE_COLUMNS, MAX_TICKED_RUNS, MAX_TITLE, PERIOD_OPENS, SET_READERS, SPLIT_AGGS, TICKERS, TONES, type PieceName,
 } from "@/lib/dashboards/catalog";
 import {
@@ -29,6 +29,7 @@ import {
   type DashboardSpec,
 } from "@/lib/dashboards/edit";
 import { lineOf, nameOf, setTitles, wireWords } from "@/lib/dashboards/names";
+import { LOOK_DECIMALS } from "@/lib/dashboards/numberLook";
 import { propertyLabel } from "@/lib/dashboards/objectView";
 import { choicesOf, isRefused, pieceSet, readSet } from "@/lib/dashboards/sets";
 import { ButtonsSetup } from "@/components/dashboards/ButtonsSetup";
@@ -171,21 +172,69 @@ function Row({ label, right, hint, children, testid }: { label: string; right?: 
 }
 
 /** A person's words, kept when they leave the field or press Enter — and only when there are some. */
-function Words({ label, value, max, onSave, many }: { label: string; value: string; max: number; onSave: (v: string) => void; many?: boolean }) {
+function Words({ label, value, max, onSave, many, clearable, placeholder, rows = 5 }: {
+  label: string; value: string; max: number; onSave: (v: string) => void; many?: boolean;
+  /** Emptied, it saves "" (the prop goes back to unset) where a name may not be emptied. */
+  clearable?: boolean; placeholder?: string; rows?: number;
+}) {
   const [text, setText] = useState(value);
   // a value changed from elsewhere — an undo, another dashboard — replaces what the field shows
   const [shown, setShown] = useState(value);
   if (shown !== value) { setShown(value); setText(value); }
   const save = () => {
     const t = text.trim().slice(0, max);
-    if (t && t !== value) onSave(t);
+    if ((t || clearable) && t !== value) onSave(t);
     else setText(value);
   };
   return many ? (
-    <Textarea aria-label={label} value={text} rows={5} onChange={e => setText(e.target.value)} onBlur={save} />
+    <Textarea aria-label={label} value={text} rows={rows} placeholder={placeholder} onChange={e => setText(e.target.value)} onBlur={save} />
   ) : (
-    <Input aria-label={label} value={text} maxLength={max} onChange={e => setText(e.target.value)} onBlur={save}
+    <Input aria-label={label} value={text} maxLength={max} placeholder={placeholder} onChange={e => setText(e.target.value)} onBlur={save}
       onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
+  );
+}
+
+type Look = { decimals?: 0 | 1 | 2 | null; compact?: boolean | null; negatives?: "minus" | "parens" | null };
+
+/** A placed card's own title, description and number look (dashboards v16; study R8, R9). Display only: what the card
+ *  measures and its unit stay the card's. */
+function CardLook({ p, own, set }: { p: Props; own: string; set: (patch: Props, note: string) => void }) {
+  const look = (p.number ?? {}) as Look;
+  const setLook = (patch: Look, note: string) => {
+    const next = { ...look, ...patch };
+    const kept = Object.fromEntries(Object.entries(next).filter(([, v]) => v !== null && v !== undefined));
+    set({ number: Object.keys(kept).length ? kept : null }, note);
+  };
+  return (
+    <div data-testid="card-look">
+      <Row label="Title" testid="card-look-title" right={
+        <label className="aug-fs-xs" style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--t2)" }}>
+          <Tick checked={p.show_title !== false} aria-label="Show the title"
+            onChange={e => set({ show_title: e.target.checked ? null : false }, e.target.checked ? "a card's title shown by hand" : "a card's title hidden by hand")} />
+          Shown
+        </label>}
+        hint={p.title ? `For this dashboard alone; the card's own is "${own}". Empty it to use that again.` : "The card's own. Write one for this dashboard alone."}>
+        <Words clearable label="Title" value={String(p.title ?? "")} placeholder={own} max={MAX_TITLE}
+          onSave={v => set({ title: v || null }, v ? "a card retitled on this dashboard by hand" : "a card's own title used again")} />
+      </Row>
+      <Row label="Description" testid="card-look-description">
+        <Words many clearable rows={2} label="Description" value={String(p.description ?? "")} placeholder="A line under the title" max={MAX_CARD_DESCRIPTION}
+          onSave={v => set({ description: v || null }, v ? "a card's description written by hand" : "a card's description taken off")} />
+      </Row>
+      <Row label="Numbers" testid="card-look-number" hint="How this card writes its figures here. A percent stays a percent, and money keeps its symbol.">
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+          <Pick label="Decimals" none="Auto decimals" value={look.decimals == null ? "" : String(look.decimals)}
+            options={LOOK_DECIMALS.map(d => ({ value: String(d), label: d === 0 ? "No decimals" : `${d} decimal${d === 1 ? "" : "s"}` }))}
+            onPick={v => setLook({ decimals: v === "" ? null : Number(v) as 0 | 1 | 2 }, "a card's decimals chosen by hand")} />
+          <Segmented label="Compact or whole" value={look.compact == null ? "" : look.compact ? "compact" : "whole"}
+            options={[{ value: "", label: "Auto" }, { value: "compact", label: "1.2M" }, { value: "whole", label: "1,234,567" }]}
+            onChange={v => setLook({ compact: v === "" ? null : v === "compact" }, "how a card's numbers are written chosen by hand")} />
+          <Segmented label="Negatives" value={look.negatives ?? "minus"}
+            options={[{ value: "minus", label: "-1,234" }, { value: "parens", label: "(1,234)" }]}
+            onChange={v => setLook({ negatives: v === "parens" ? "parens" : null }, "how a card writes a negative chosen by hand")} />
+        </div>
+      </Row>
+    </div>
   );
 }
 
@@ -879,6 +928,7 @@ export function PieceSetup({ spec, selected, onChange, connectionId, schema, car
           {/* one panel for a card that opens on its look (the dashboards study, R6, 2026-11-18): how it is drawn first,
               then what it reads and the statement it ran, each a fold below — they were tabs a click away */}
           {cardChart?.(String(p.card ?? ""))}
+          <CardLook p={p} own={cardTitle?.(String(p.card ?? "")) ?? "the card's title"} set={set} />
           <Row label="Edge" hint="A coloured edge is emphasis. What the card measures is the card's own.">
             <Pick label="Edge" value={String(p.tone ?? "")} none="None" options={TONES.map(t => ({ value: t, label: TONE_WORDS[t] }))}
               onPick={v => set({ tone: v || null }, "a card's edge chosen by hand")} />

@@ -48,6 +48,8 @@ import { cardValue } from "@/lib/dashboards/hostStatus";
 import type { CardStatus } from "@/lib/dashboards/hostState";
 import { fmtDate, formatCount, formatMetricValue, formatSeconds } from "@/lib/format";
 import { NumberedPager } from "@/components/dashboards/NumberedPager";
+import { usePlacementLook } from "@/components/dashboards/placementLook";
+import type { NumberLook } from "@/lib/dashboards/numberLook";
 import { draftedFigure } from "@/lib/dashboards/figureText";
 
 export type TileShape = "figure" | "trend" | "rows";
@@ -117,9 +119,9 @@ function limitsOf(card: DashboardCard): { values: number[]; below: boolean; watc
 
 /** One figure, at the scale its unit states. A figure its unit says cannot be is still shown —
  *  a dashboard hides nothing — plainly, and said to be outside its range. */
-export function figureText(v: number, card: DashboardCard, sym: string): { text: string; outside: boolean } {
+export function figureText(v: number, card: DashboardCard, sym: string, look: NumberLook | null = null): { text: string; outside: boolean } {
   const range = card.stated_range ?? undefined;
-  const f = formatMetric(v, card.unit ?? "", sym, card.title, range);
+  const f = formatMetric(v, card.unit ?? "", sym, card.title, range, look);
   if (f.ok) return { text: f.display, outside: false };
   const bounded = !!range && ["ratio01", "pct100", "band"].includes(range.kind);
   return { text: formatMetricValue(v), outside: bounded && v !== 0 };
@@ -171,14 +173,27 @@ export function Frame({ testid, shape, over, dashed, children, doors }: {
 /** A piece's name: the card says what it shows at full strength (14/600); a figure's name is its muted label, the
  *  figure being the point (CLARITY.md, "a row of figures": label muted · value 22–30px). */
 export function Title({ title, right, muted = false }: { title: string; right?: ReactNode; muted?: boolean }) {
+  // a placed card's own look (v16): its title hidden, or a description under it
+  const look = usePlacementLook();
   return (
-    <div style={{ display: "flex", alignItems: "baseline", gap: 10, minWidth: 0, paddingRight: 64 }}>
-      <div className={muted ? "aug-fs-chrome" : "aug-fs-ui"} title={title} style={{
-        flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-        ...(muted ? { fontWeight: 500, color: "var(--t2)" } : { fontWeight: 600, color: "var(--t1)" }),
-      }}>{title}</div>
-      {right}
-    </div>
+    <>
+      {(look.showTitle || right) && (
+        <div style={{ display: "flex", alignItems: "baseline", gap: 10, minWidth: 0, paddingRight: 64 }}>
+          {look.showTitle ? (
+            <div className={muted ? "aug-fs-chrome" : "aug-fs-ui"} title={title} data-testid="tile-title" style={{
+              flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+              ...(muted ? { fontWeight: 500, color: "var(--t2)" } : { fontWeight: 600, color: "var(--t1)" }),
+            }}>{title}</div>
+          ) : <div style={{ flex: 1 }} />}
+          {right}
+        </div>
+      )}
+      {look.description && (
+        <div className="aug-fs-xs" data-testid="tile-description" style={{ color: "var(--t3)", lineHeight: 1.45, paddingRight: look.showTitle ? 0 : 64 }}>
+          {look.description}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -291,6 +306,7 @@ function MetricTrendStrip({ card, place, sym }: { card: DashboardCard; place: Ti
 }
 
 function FigureTile({ cs, status, sym, doors, place }: { cs: CardState & { card: DashboardCard }; status: CardStatus; sym: string; doors: TileDoors; place: TilePlace }) {
+  const numberLook = usePlacementLook().number;
   const { card, run, failed } = cs;
   const errored = failed || !!run?.error;
   const value = cardValue(cs);
@@ -300,7 +316,7 @@ function FigureTile({ cs, status, sym, doors, place }: { cs: CardState & { card:
   const [alerting, setAlerting] = useState(watched);
   const source = sourceOf(card);
   const over = status === "over";
-  const shown = value !== null ? figureText(value, card, sym) : null;
+  const shown = value !== null ? figureText(value, card, sym, numberLook) : null;
   // Standing: what it moved by since the card last ran, if it did.
   const standingPrev = !ranged ? (run?.refresh?.prev_value ?? null) : null;
   const caveats = run?.caveats ?? [];
@@ -352,7 +368,7 @@ function FigureTile({ cs, status, sym, doors, place }: { cs: CardState & { card:
       {limits.length > 0 && (
         <div className="aug-fs-sm" data-testid="card-limit" style={{ color: over ? "var(--red4)" : "var(--t3)" }}
           title={alerting ? "A monitor watches this limit" : "This card carries a limit. Nothing is scheduled to watch it."}>
-          {over ? "Past its limit" : "Limit"}: {below ? "at or below" : "at or above"} {limits.map(v => figureText(v, card, sym).text).join(", ")}
+          {over ? "Past its limit" : "Limit"}: {below ? "at or below" : "at or above"} {limits.map(v => figureText(v, card, sym, numberLook).text).join(", ")}
           {alerting ? " · alerting" : ""}
         </div>
       )}
@@ -410,11 +426,12 @@ export function trendSpec(trend: SeriesTrend, card: DashboardCard, sym: string, 
 }
 
 function TrendTile({ cs, trend, status, sym, doors, place }: { cs: CardState & { card: DashboardCard }; trend: SeriesTrend; status: CardStatus; sym: string; doors: TileDoors; place: TilePlace }) {
+  const numberLook = usePlacementLook().number;
   const { card } = cs;
   const source = sourceOf(card);
   const spec = useMemo(() => trendSpec(trend, card, sym), [trend, card, sym]);
   const n = trend.values.length;
-  const newest = `${fmtDate(trend.dates[n - 1], trend.gran)} · ${figureText(trend.values[n - 1], card, sym).text}`;
+  const newest = `${fmtDate(trend.dates[n - 1], trend.gran)} · ${figureText(trend.values[n - 1], card, sym, numberLook).text}`;
   const [room, height] = useChartHeight(SPAN[place.size].h === 2 ? 340 : 170);
   return (
     <Frame testid="dashboard-tile" shape="trend" over={status === "over"} doors={<Doors card={card} doors={doors} place={place} />}>
@@ -467,6 +484,9 @@ export function DashboardTile({ cs, status, sym, doors, place = STANDING, waits 
   place?: TilePlace;
   waits?: QueryWaiting | null;
 }) {
+  // a placed card's own title (v16) stands for the card's wherever a tile names it
+  const look = usePlacementLook();
+  if (look.title && look.title !== cs.card.title) cs = { ...cs, card: { ...cs.card, title: look.title } };
   if (waits) {
     const chrome = <Doors card={cs.card} doors={doors} place={place} />;
     return "reading" in waits ? <QueryReading title={cs.card.title} doors={chrome} />
@@ -531,6 +551,7 @@ export function QueryRows({ shaped, height }: { shaped: Extract<QueryShaped, { a
 /** Arc AP-7 — a card of a person's own query, as they set it up: its figure, its table or its chart, and what the run
  *  left out said beneath it. A query that cannot be read says why, in its place. */
 function QueryTile({ cs, doors, place, focus }: { cs: CardState & { card: DashboardCard }; doors: TileDoors; place: TilePlace; focus?: TileFocus }) {
+  const numberLook = usePlacementLook().number;
   const { card, run } = cs;
   const shaped = run?.shown ?? null;
   const setup = (card.render as { shown?: QueryShown }).shown;
@@ -578,10 +599,10 @@ function QueryTile({ cs, doors, place, focus }: { cs: CardState & { card: Dashbo
       {shaped.as === "figure" ? (
         <div data-testid="query-tile-figure" style={{ display: "flex", flexDirection: "column", gap: 2 }}>
           <span style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
-            <span data-testid="query-tile-value" className="aug-fs-display" style={{ lineHeight: 1.1, letterSpacing: "-0.02em", fontWeight: 600, color: "var(--t1)", fontVariantNumeric: "tabular-nums" }}>{shaped.format ? draftedFigure(shaped.value, shaped.format) : formatMetricValue(shaped.value)}</span>
+            <span data-testid="query-tile-value" className="aug-fs-display" style={{ lineHeight: 1.1, letterSpacing: "-0.02em", fontWeight: 600, color: "var(--t1)", fontVariantNumeric: "tabular-nums" }}>{shaped.format || numberLook ? draftedFigure(shaped.value, shaped.format, numberLook) : formatMetricValue(shaped.value)}</span>
             {beside && (
               <span data-testid="query-tile-beside" className="aug-fs-sm" style={{ padding: "0 6px", borderRadius: "var(--r2)", background: "var(--bg-3)", color: "var(--t2)", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
-                {besideText(beside)}
+                {besideText(beside, numberLook)}
               </span>
             )}
           </span>
@@ -648,8 +669,8 @@ export function queryGrid(c: Extract<QueryShaped, { as: "bar" | "line" | "area" 
 }
 
 /** A value said beside a figure, in the form its statement asked for. */
-function besideText(b: { value: number | null; words: string; format: string }): string {
-  const text = draftedFigure(b.value, b.format);
+function besideText(b: { value: number | null; words: string; format: string }, look: NumberLook | null = null): string {
+  const text = draftedFigure(b.value, b.format, look);
   return b.words ? `${text} ${b.words}` : text;
 }
 

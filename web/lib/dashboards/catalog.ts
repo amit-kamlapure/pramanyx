@@ -53,8 +53,10 @@ import { z } from "zod";
  *  admits, marked in a tone (`marked`, 2026-10-28). 13: a dashboard made from a file: a filter column over
  *  a table, the sliders of a scenario, and adding a row to its sheet (2026-11-03). 14: free placement on a section's grid —
  *  an element's column and row (`x`, `y`), gaps allowed, never two on one cell (2026-11-18). 15: the period as a piece on
- *  the dashboard (`Period`), one per dashboard, saying what it opens on (2026-11-18). */
-export const DASHBOARD_VOCABULARY_VERSION = 15;
+ *  the dashboard (`Period`), one per dashboard, saying what it opens on (2026-11-18). 16: a placed card's own look —
+ *  its title (the card's when unset) and whether it shows, a description, and how its numbers are written: decimals,
+ *  compact or whole, negatives in parentheses (`title`, `show_title`, `description`, `number`; 2026-11-18). */
+export const DASHBOARD_VOCABULARY_VERSION = 16;
 
 /** The five tones an answer part may carry (`pramanyx/agent/present_tool.py`); parity is tested. */
 export const TONES = ["good", "warn", "bad", "info", "neutral"] as const;
@@ -67,6 +69,8 @@ export const MAX_COLUMNS = 4;
 export const MAX_NOTE = 2000;
 /** An image's caption, which also stands for it when the reader may not see it. */
 export const MAX_CAPTION = 120;
+/** A placed card's own description (v16): a line or two under its title. */
+export const MAX_CARD_DESCRIPTION = 400;
 
 /** The sizes an element may take: columns across × rows down. A section never draws more
  *  columns than it has, so a span is cut to the section's columns when it is drawn. */
@@ -339,9 +343,20 @@ export const dashboardCatalog = defineCatalog(schema, {
       props: z.object({
         card: z.string().regex(CARD_ID),
         tone: z.enum(TONES).nullable().optional(),
+        // v16 — this placement's own look: a title in place of the card's, hidden or shown, a description under it, and
+        // how its numbers are written. Display only: what the card measures, and its unit, stay the card's.
+        title: z.string().min(1).max(MAX_TITLE).nullable().optional(),
+        show_title: z.boolean().nullable().optional(),
+        description: z.string().min(1).max(MAX_CARD_DESCRIPTION).nullable().optional(),
+        number: z.object({
+          decimals: z.union([z.literal(0), z.literal(1), z.literal(2)]).nullable().optional(),
+          compact: z.boolean().nullable().optional(),
+          negatives: z.enum(["minus", "parens"]).nullable().optional(),
+        }).strict().nullable().optional(),
         size, w, h, x, y,
       }),
-      description: "One card from the card store, by its id. Never a figure, never SQL. May be shown by a condition.",
+      description: "One card from the card store, by its id. Never a figure, never SQL. May be shown by a condition. "
+        + "May carry its own title, a description, and how its numbers are written.",
     },
     Note: {
       props: z.object({
@@ -669,4 +684,5 @@ export const READER_TEXT: Partial<Record<ComponentName, readonly string[]>> = {
   Cockpit: ["title"],
   Tab: ["label"],
   Section: ["title"],
+  Card: ["title", "description"],
 };

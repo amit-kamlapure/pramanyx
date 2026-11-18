@@ -43,6 +43,7 @@ import type { CardState } from "@/components/brief/PinnedCardBody";
 import { CanvasScale, CellBoxContext, OFF_GRID, useMeasured, type CellBox } from "@/components/dashboards/cellBox";
 import { QuestionPiece } from "@/components/dashboards/QuestionPiece";
 import { DashboardTile, Frame, SaidTile, WIDE, WithheldTile, tileShape, type QueryWaiting, type TileDoors, type TileFocus } from "@/components/dashboards/DashboardTile";
+import { PlacementLookProvider, placementLookOf } from "@/components/dashboards/placementLook";
 import { PeriodPicker } from "@/components/dashboards/PeriodPicker";
 import type { RangeChoice } from "@/components/brief/BriefRange";
 import { ActionButtonsPiece } from "@/components/dashboards/ActionButtonsPiece";
@@ -1022,6 +1023,11 @@ function DashboardCard({ element }: ComponentRenderProps<{ card: string; tone?: 
     ? { chosen: (field: string) => chosenOn(focus, id, field), onPick: (p: ChartPick) => pick(id, p) } : undefined), [focus, pick, id]);
   const cut = cs?.run?.cut ?? null;
   const notCut = !!cut && !cut.applied && focusFor(focus, id).length > 0;
+  // v16 — this placement's own title, description and number look, read by the tile it draws
+  const placed = element.props as Record<string, unknown>;
+  const lookKey = JSON.stringify([placed.title, placed.show_title, placed.description, placed.number]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the four props it reads
+  const look = useMemo(() => placementLookOf(placed), [lookKey]);
   return (
     <Cell type="Card" props={element.props as Record<string, unknown>} size={size} testid="dashboard-card"
       extra={{ attrs: { "data-card": id, "data-tone": tone ?? undefined },
@@ -1032,8 +1038,10 @@ function DashboardCard({ element }: ComponentRenderProps<{ card: string; tone?: 
           ? <SaidTile what="Not one of your cards">The dashboard places a card you do not have.</SaidTile>
           : (
             <CardBoundary key={`${id}:${cs.run ? JSON.stringify(cs.run.rows).length : 0}:${cs.failed ? 1 : 0}`}>
-              <DashboardTile cs={cs as CardState & { card: DashboardCard }} status={status} sym={sym} doors={doors}
-                place={{ elementKey: key, size, range, schema }} waits={valued.waits} focus={tileFocus} />
+              <PlacementLookProvider value={look}>
+                <DashboardTile cs={cs as CardState & { card: DashboardCard }} status={status} sym={sym} doors={doors}
+                  place={{ elementKey: key, size, range, schema }} waits={valued.waits} focus={tileFocus} />
+              </PlacementLookProvider>
             </CardBoundary>
           )}</>}
     </Cell>

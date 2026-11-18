@@ -699,7 +699,8 @@ export function checkDashboardSpec(spec: unknown): DashboardCheck {
       }
     }
     for (const prop of clean.has(key) ? READER_TEXT[el.type] ?? [] : []) {
-      texts.push({ elementKey: key, prop, text: el.props[prop] as string });
+      // a prop left out says nothing (a placed card's own title, v16, is most often left out)
+      if (typeof el.props[prop] === "string") texts.push({ elementKey: key, prop, text: el.props[prop] as string });
     }
   }
 
