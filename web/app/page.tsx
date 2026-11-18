@@ -1,6 +1,6 @@
 "use client";
 import { CONNECTORS } from "@/lib/connectors.gen";
-import { PramanyxMark, PramanyxName } from "@/components/ui/brand";
+import { BrandBar, PramanyxMark, PramanyxName } from "@/components/ui/brand";
 import { ErrorState } from "@/components/ui/states";
 import { toast } from "@/components/ui/toast";
 
@@ -369,6 +369,7 @@ function Sidebar({
         aria-current={row.active ? "page" : undefined}
         aria-expanded={row.expanded}
       >
+        {row.active && <BrandBar />}
         {/* A section's glyph is drawn only on the collapsed rail; open, it is its words under its destination's icon. */}
         {row.icon && (collapsed || !row.className?.includes("aug-nav-sub")) && <NavIcon name={row.icon} size={14.7} className="aug-nav-glyph" />}
         <span className="aug-nav-label">{row.label}</span>

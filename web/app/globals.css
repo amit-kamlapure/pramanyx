@@ -280,8 +280,7 @@ a:hover { color: var(--blue4); }
   top: 0;
   bottom: 0;
   width: 2px;
-  /* the bar over the logo's ā, stood on end */
-  background: linear-gradient(180deg, #FF2E8B 0%, #D926F5 38%, #3A86FF 72%, #00DCFF 100%);
+  background: var(--accent);
 }
 /* A full-bleed row clips an outset ring against the rail's edge. */
 .aug-nav-item:focus-visible { outline-offset: -2px; }

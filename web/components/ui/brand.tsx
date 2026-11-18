@@ -12,6 +12,11 @@ export const BRAND = { pink: "#FF2E8B", magenta: "#D926F5", blue: "#3A86FF", cya
 const STOPS = `${BRAND.pink} 0%, ${BRAND.magenta} 38%, ${BRAND.blue} 72%, ${BRAND.cyan} 100%`;
 export const BRAND_GRADIENT = `linear-gradient(115deg, ${STOPS})`;
 
+/** The bar over the logo's ā, stood on end: what marks the page open in the rail. */
+export function BrandBar() {
+  return <span aria-hidden="true" data-testid="brand-bar" style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 2, zIndex: 1, background: `linear-gradient(180deg, ${STOPS})` }} />;
+}
+
 /** A thin edge in the brand's colours around a surface of the given ground. */
 export function brandEdge(ground: string, width = 1.5): CSSProperties {
   return { border: `${width}px solid transparent`, background: `linear-gradient(${ground}, ${ground}) padding-box, ${BRAND_GRADIENT} border-box` };
