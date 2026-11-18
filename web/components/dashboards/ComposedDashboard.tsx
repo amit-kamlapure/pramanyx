@@ -74,7 +74,7 @@ import { stateModel, type DashboardHostState } from "@/lib/dashboards/hostState"
 import { checkDashboardSpec, openingTab, tabStillThere } from "@/lib/dashboards/rules";
 import type { WireSpec } from "@/lib/dashboards/sets";
 import { valuesFor, valuesRead, type ValuesSent } from "@/lib/dashboards/values";
-import { chooseIn, chosenOn, filterLink, focusOfCard, focusWords, fromFilter, notFiltered, traceAndChoose, type DashboardFocus } from "@/lib/dashboards/focus";
+import { chooseIn, chosenOn, filterLink, filterSource, focusOfCard, focusWords, fromFilter, notFiltered, traceAndChoose, type DashboardFocus } from "@/lib/dashboards/focus";
 import { toast } from "@/components/ui/toast";
 import { askAbout, dashboardSubject } from "@/lib/askSubject";
 import type { Pick as ChartPick } from "@/components/charts/selection";
@@ -1220,6 +1220,8 @@ function DashboardCard({ element }: ComponentRenderProps<{ card: string; tone?: 
   const { narrowing } = useQueryNarrowing();
   // v18 — placed so the dashboard's filters do not cut it, and it says so while one is on
   const optedOut = (element.props as { not_filtered?: boolean | null }).not_filtered === true;
+  // v20 — a filter this card is set not to follow, while a reader is using it
+  const ignoring = ((element.props as { ignores_filters?: string[] | null }).ignores_filters ?? []).some(k => focus.some(f => f.source.card === filterSource(k)));
   const cutBySomething = focus.length > 0 || narrowing.length > 0 || filtering.on;
   const tileFocus = useMemo<TileFocus | undefined>(() => (pick
     ? { chosen: (field: string) => chosenOn(focus, id, field), onPick: (p: ChartPick) => pick(id, p),
@@ -1236,7 +1238,7 @@ function DashboardCard({ element }: ComponentRenderProps<{ card: string; tone?: 
     <Cell type="Card" props={element.props as Record<string, unknown>} size={size} testid="dashboard-card"
       extra={{ attrs: { "data-card": id, "data-tone": tone ?? undefined },
         style: { boxShadow: tone ? `inset 3px 0 0 ${TONE_RULE[tone]}` : undefined, paddingLeft: tone ? 3 : 0 } }}>
-      {key => <>{optedOut ? cutBySomething && <NotFiltered why="Its author set this card not to be cut by the dashboard's filters." />
+      {key => <>{ignoring && !optedOut && <NotFiltered why="Its author set this card not to follow one of the filters in use." />}{optedOut ? cutBySomething && <NotFiltered why="Its author set this card not to be cut by the dashboard's filters." />
         : notCut ? <NotFiltered why={cut?.why || undefined} /> : cut?.through?.length ? <CutThrough ways={cut.through} /> : filtering.on && <NotFiltered />}{status === "withheld"
         ? <WithheldTile />
         : !cs
