@@ -134,6 +134,8 @@ def _run(home: Home, system: str, ask: str, *, said: str, schema: Optional[str],
                          emit=lambda kind, payload: staged.append(payload) if kind == "proposal_staged" else None)
 
     def run(args: dict) -> dict:
+        if stop is not None and stop.is_set():        # what the model wrote after the person left is not drafted
+            return {"staged": False, "summary": "The person stopped this draft."}
         op = (args or {}).get("op")
         if hear and op in ("new", "edit"):
             hear({"type": "checking", "round": len(results) + 1, "cards": len((args or {}).get("cards") or []),

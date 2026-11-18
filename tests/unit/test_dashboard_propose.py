@@ -1370,6 +1370,38 @@ def test_leaving_a_draft_asks_the_model_nothing_more(desk, faux):
     assert _mine(desk) == []
 
 
+def test_a_draft_stopped_while_the_model_writes_it_is_never_staged(desk, faux):
+    """The person presses Stop while the model is writing: what it then hands back is not drafted into their Inbox."""
+    import threading
+
+    import pytest
+
+    from pramanyx.dashboards.ask import _Left, draft_for_area
+    from pramanyx.llm.faux import set_responses
+    set_responses([_call(op="options"), _call(op="new", spec=desk.spec(), cards=desk.cards()), "Drafted."])
+    stop = threading.Event()
+
+    class StoppedWhileWriting:
+        calls = 0
+
+        def __getattr__(self, name):
+            return getattr(faux, name)
+
+        def complete_with_tools(self, *args, **kwargs):
+            turn = faux.complete_with_tools(*args, **kwargs)
+            StoppedWhileWriting.calls += 1
+            if StoppedWhileWriting.calls == 2:
+                stop.set()
+            return turn
+
+    heard: list[dict] = []
+    with pytest.raises(_Left):
+        draft_for_area(CONN, desk.home.owner, "returns", provider=StoppedWhileWriting(), hear=heard.append, stop=stop)
+
+    assert StoppedWhileWriting.calls == 2 and _mine(desk) == []
+    assert [f["type"] for f in heard] == ["read"]
+
+
 def test_a_refused_draft_is_repaired_in_the_same_run(desk, faux):
     """The area names no limit, so the draft's limit of 12 is refused; the model repairs it."""
     from pramanyx.dashboards.ask import draft_for_area
