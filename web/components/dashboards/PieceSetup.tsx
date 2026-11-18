@@ -24,7 +24,10 @@ import {
   BREAKDOWN_TOPS, CHART_DAYS, CHART_TOPS, CHOOSERS, FIGURE_AGGS, MAX_BREAKDOWN_MEASURES, MAX_CAPTION, MAX_CARD_DESCRIPTION, MAX_COLOR_VALUES,
   MAX_COLUMN_LOOKS, MAX_FILTERS, MAX_LABEL, SERIES_SLOTS, type ColumnLook,
   MAX_NOTE, MAX_TABLE_COLUMNS, MAX_TICKED_RUNS, MAX_TITLE, PERIOD_OPENS, SET_READERS, SPLIT_AGGS, TICKERS, TONES, type PieceName,
+  MAX_FILTER_DESCRIPTION, type GlobalFilterKind,
 } from "@/lib/dashboards/catalog";
+import { FILTER_KINDS, fits } from "@/lib/dashboards/globalFilters";
+import { dashboardFilterFields, type FilterField } from "@/lib/api";
 import {
   editNote, freshWireName, moveCardTo, moveCardToNewSection, moveSectionTo, recaption, rename, sectionsOf, setProps, tabsOf,
   type DashboardSpec,
@@ -32,7 +35,7 @@ import {
 import { lineOf, nameOf, setTitles, wireWords } from "@/lib/dashboards/names";
 import { LOOK_DECIMALS } from "@/lib/dashboards/numberLook";
 import type { CardHolds } from "@/lib/dashboards/cardHolds";
-import { isNumericType } from "@/lib/format";
+import { formatCount, isNumericType } from "@/lib/format";
 import { propertyLabel } from "@/lib/dashboards/objectView";
 import { choicesOf, isRefused, pieceSet, readSet } from "@/lib/dashboards/sets";
 import { ButtonsSetup } from "@/components/dashboards/ButtonsSetup";
@@ -313,6 +316,59 @@ function CardLook({ p, own, set }: { p: Props; own: string; set: (patch: Props, 
             options={[{ value: "minus", label: "-1,234" }, { value: "parens", label: "(1,234)" }]}
             onChange={v => setLook({ negatives: v === "parens" ? "parens" : null }, "how a card writes a negative chosen by hand")} />
         </div>
+      </Row>
+    </div>
+  );
+}
+
+/** A global filter's setup (v19): its words, how it is chosen from, and the column it filters. */
+function GlobalFilterSetup({ p, connectionId, set }: { p: Props; connectionId?: string; set: (patch: Props, note: string) => void }) {
+  const [fields, setFields] = useState<FilterField[] | null>(null);
+  const [problem, setProblem] = useState("");
+  useEffect(() => {
+    let live = true;
+    if (connectionId) dashboardFilterFields(connectionId).then(f => { if (live) setFields(f); }).catch(e => { if (live) setProblem((e as Error).message); });
+    return () => { live = false; };
+  }, [connectionId]);
+  const kind = String(p.kind ?? "multi") as GlobalFilterKind;
+  const table = fields?.find(t => t.table === p.table);
+  const columns = (table?.columns ?? []).filter(c => fits(kind, c.kind));
+  const [wantsWords, setWantsWords] = useState(p.description != null && p.description !== "");
+  const described = wantsWords || !!p.description;
+  return (
+    <div data-testid="global-filter-setup">
+      <Row label="Widget">
+        <label className="aug-fs-sm" style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--t1)" }}>
+          <Tick checked={p.show_title !== false} aria-label="Show the title" onChange={e => set({ show_title: e.target.checked ? null : false }, e.target.checked ? "a filter's title shown by hand" : "a filter's title hidden by hand")} /> Title
+        </label>
+        {p.show_title !== false && <Words label="The filter's title" value={String(p.title ?? "")} max={MAX_LABEL} onSave={v => set({ title: v }, "a filter renamed by hand")} />}
+        <label className="aug-fs-sm" style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--t1)" }}>
+          <Tick checked={described} aria-label="Show a description" onChange={e => { setWantsWords(e.target.checked); if (!e.target.checked && p.description) set({ description: null }, "a filter's description taken off"); }} /> Description
+        </label>
+        {described && <Words clearable many rows={2} label="The filter's description" value={String(p.description ?? "")} max={MAX_FILTER_DESCRIPTION} placeholder="A line under the title"
+          onSave={v => set({ description: v || null }, "a filter's description written by hand")} />}
+      </Row>
+      <Row label="Filter">
+        <Pick label="How it is chosen from" value={kind} options={FILTER_KINDS} onPick={v => {
+          const next = v as GlobalFilterKind;
+          const held = table?.columns.find(c => c.name === p.column);
+          set({ kind: next, ...(held && !fits(next, held.kind) ? { column: null } : {}) }, "a filter's kind chosen by hand");
+        }} />
+        {kind === "single" && (
+          <label className="aug-fs-sm" style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--t1)" }}>
+            <Tick checked={p.allow_all !== false} aria-label="Allow All" onChange={e => set({ allow_all: e.target.checked ? null : false }, "a filter's All chosen by hand")} /> Allow <i>All</i>
+          </label>
+        )}
+      </Row>
+      <Row label="Field" testid="global-filter-field" hint={table?.left_out ? `${formatCount(table.left_out)} of its columns cannot be filtered: their names hold spaces or symbols.` : "Every card that reads this table, or links to it, is cut by the filter."}>
+        {problem ? <div className="aug-fs-sm" style={{ color: "var(--t2)" }}>{problem}</div> : !fields ? <div className="aug-fs-sm" style={{ color: "var(--t3)" }}>Reading the tables…</div> : (
+          <>
+            <Pick label="The table" none="Choose a table" value={String(p.table ?? "")} options={fields.map(t => ({ value: t.table, label: t.table }))}
+              onPick={v => set({ table: v || null, column: null }, "a filter's table chosen by hand")} />
+            <Pick label="The column" none={columns.length || !table ? "Choose a column" : "No column fits this filter"} disabled={!table} value={String(p.column ?? "")}
+              options={columns.map(c => ({ value: c.name, label: c.name }))} onPick={v => set({ column: v || null }, "a filter's column chosen by hand")} />
+          </>
+        )}
       </Row>
     </div>
   );
@@ -1055,6 +1111,7 @@ export function PieceSetup({ spec, selected, onChange, connectionId, schema, car
           {cardSql && <Fold label="The SQL, as it ran" testid="card-fold-sql">{cardSql(String(p.card ?? ""))}</Fold>}
         </div>
       )}
+      {el.type === "GlobalFilter" && <GlobalFilterSetup p={p} connectionId={connectionId} set={set} />}
       {el.type === "Period" && (
         <>
           <Row label="Label"><Words label="Label" value={String(p.label ?? "Period")} max={MAX_LABEL}

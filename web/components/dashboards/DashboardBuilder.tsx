@@ -63,7 +63,7 @@ const PAD = 16;
 
 const ICON: Record<string, IconName> = {
   Cockpit: "gauge", Tab: "panel", Section: "layers", Card: "metric", Note: "text", Image: "attach", ProcessBoard: "process",
-  ObjectTable: "table", ObjectDetail: "list", ActionButton: "bolt", ObjectFilters: "filter", ObjectFigure: "num", ObjectChart: "chart", ObjectBreakdown: "column",
+  ObjectTable: "table", ObjectDetail: "list", ActionButton: "bolt", ObjectFilters: "filter", GlobalFilters: "filter", GlobalFilter: "filter", ObjectFigure: "num", ObjectChart: "chart", ObjectBreakdown: "column",
 };
 
 /** The pane's small uppercase heading. */
@@ -194,7 +194,7 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
     const before = seen.current;
     seen.current = now;
     if (!before) return;
-    const fresh = [...now].filter(k => !before.has(k));
+    const fresh = [...now].filter(k => !before.has(k) && spec.elements[k]?.type !== "GlobalFilters");
     if (fresh.length === 1) { setWire(null); setSelected(fresh[0]); }
   }, [spec]);
 

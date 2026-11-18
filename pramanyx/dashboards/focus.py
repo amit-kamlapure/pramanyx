@@ -18,12 +18,15 @@ to the table are refused by name, as is a card no link reaches, and a card cut t
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
-from typing import Any, NamedTuple, Optional, Union
+from datetime import date
+from typing import Any, Literal, NamedTuple, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 #: The most a focus holds at once — beyond it a dashboard is a query, not a view.
-MAX_FOCUS = 6
+MAX_FOCUS = 12
+#: The most values one filter holds.
+MAX_FOCUS_VALUES = 200
 #: The most links a cut follows. Further than this a value says little about the row it reaches.
 MAX_HOPS = 3
 
@@ -37,11 +40,32 @@ class Link(NamedTuple):
 
 
 class Focus(BaseModel):
-    """One chosen value: the table and column it is read from, and the value."""
+    """What a reader chose on a column: one value clicked on a mark (``eq``), or what a global filter holds — several values
+    (``in``), a range of numbers (``between``), a range of days (``dates``) or words the column contains (``contains``)."""
     model_config = ConfigDict(extra="forbid")
     table: str = Field(min_length=1, max_length=200)
     column: str = Field(min_length=1, max_length=200, pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
-    value: Union[str, int, float, bool]
+    value: Union[str, int, float, bool] = ""
+    op: Literal["eq", "in", "between", "dates", "contains"] = "eq"
+    values: list[Union[str, int, float, bool]] = Field(default_factory=list, max_length=MAX_FOCUS_VALUES)
+    low: Optional[Union[str, int, float]] = None
+    high: Optional[Union[str, int, float]] = None
+
+    @model_validator(mode="after")
+    def holds_what_its_op_reads(self) -> "Focus":
+        if self.op == "in" and not self.values:
+            raise ValueError("a filter of several values holds at least one")
+        if self.op in ("between", "dates") and self.low is None and self.high is None:
+            raise ValueError("a range says where it starts or where it ends")
+        if self.op == "between" and any(isinstance(v, str) for v in (self.low, self.high)):
+            raise ValueError("a range of numbers is held by numbers")
+        if self.op == "dates":
+            for day in (self.low, self.high):
+                if day is not None:
+                    date.fromisoformat(str(day))
+        if self.op == "contains" and not str(self.value).strip():
+            raise ValueError("a filter of words holds some words")
+        return self
 
 
 def bare(name: str) -> str:
@@ -110,6 +134,31 @@ def condition(column: str, value: Any) -> Any:
     return exp.EQ(this=exp.column(column), expression=lit)
 
 
+def _literal(value: Any) -> Any:
+    from sqlglot import exp
+    if isinstance(value, bool):
+        return exp.Boolean(this=value)
+    return exp.Literal.number(value) if isinstance(value, (int, float)) else exp.Literal.string(str(value))
+
+
+def condition_of(f: Focus) -> Any:
+    """What a focus keeps, as the parser holds it: every value a literal the parser quotes and escapes for the dialect."""
+    from sqlglot import exp
+    col = exp.column(f.column)
+    if f.op == "in":
+        return col.isin(*[_literal(v) for v in f.values])
+    if f.op == "contains":
+        return exp.GT(this=exp.StrPosition(this=exp.Lower(this=exp.cast(col, "TEXT")), substr=_literal(str(f.value).strip().lower())),
+                      expression=exp.Literal.number(0))
+    if f.op in ("between", "dates"):
+        side = exp.cast(col, "DATE") if f.op == "dates" else col
+        bound = (lambda v: exp.cast(_literal(str(v)), "DATE")) if f.op == "dates" else _literal
+        parts = [*([exp.GTE(this=side.copy(), expression=bound(f.low))] if f.low is not None else []),
+                 *([exp.LTE(this=side.copy(), expression=bound(f.high))] if f.high is not None else [])]
+        return exp.and_(*parts) if len(parts) > 1 else parts[0]
+    return condition(f.column, f.value)
+
+
 def predicate(column: str, value: Any, dialect: Optional[str]) -> str:
     """``column = value`` as written in ``dialect`` — what a cut statement says."""
     from pramanyx.sql.lineage import sqlglot_dialect
@@ -117,6 +166,14 @@ def predicate(column: str, value: Any, dialect: Optional[str]) -> str:
 
 
 def words(f: Focus) -> str:
+    if f.op == "in":
+        return f"{f.column} in {', '.join(str(v) for v in f.values[:5])}" + (f" and {len(f.values) - 5} more" if len(f.values) > 5 else "")
+    if f.op == "contains":
+        return f"{f.column} contains {f.value}"
+    if f.op in ("between", "dates"):
+        if f.low is not None and f.high is not None:
+            return f"{f.column} {f.low} to {f.high}" if f.low != f.high else f"{f.column} = {f.low}"
+        return f"{f.column} from {f.low}" if f.low is not None else f"{f.column} up to {f.high}"
     return f"{f.column} = {f.value}"
 
 
@@ -164,7 +221,7 @@ def _in_table(name: str, like: Any) -> Any:
 def through(way: list[Link], f: Focus, like: Any) -> Any:
     """``column IN (SELECT key FROM next WHERE …)`` along a way, over the columns of the table it starts from."""
     from sqlglot import exp
-    where = condition(f.column, f.value)
+    where = condition_of(f)
     for link in reversed(way):
         inner = exp.select(exp.column(link.to_column)).from_(_in_table(link.to_table, like)).where(where)
         where = exp.column(link.column).isin(query=inner)
@@ -253,7 +310,7 @@ def cut_statement(sql: str, focus: list[Focus], dialect: Optional[str],
             applied.append(words(f))
             used.extend(f"{words(f)}, through {w}" for w in ways)
             continue
-        cut, why, _ = scoped_statement(sql, bare(f.table), condition(f.column, f.value), dialect=said)
+        cut, why, _ = scoped_statement(sql, bare(f.table), condition_of(f), dialect=said)
         if cut is None:
             not_cut.append(f"Not cut by {words(f)}: {why}.")
             continue

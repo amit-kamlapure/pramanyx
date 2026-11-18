@@ -55,6 +55,8 @@ import {
   ObjectFiltersPiece, ObjectTablePiece, PiecesProvider, ProcessBoardPiece, ValuesBar, chooseWords, useFiltering, usePieceFiltering, usePieces, useValueChips,
   type BarChip, type FilterProperty, type ObjectBarWords,
 } from "@/components/dashboards/OntologyPieces";
+import { GlobalFiltersColumn } from "@/components/dashboards/GlobalFilters";
+import { stillHeld, type GlobalFilterProps } from "@/lib/dashboards/globalFilters";
 import { ImageTile, NoteTile, type ImageStamp, type StaticDoors } from "@/components/dashboards/StaticTile";
 import { DropdownMenu } from "@radix-ui/themes";
 import { Button } from "@/components/ui/button";
@@ -72,7 +74,7 @@ import { stateModel, type DashboardHostState } from "@/lib/dashboards/hostState"
 import { checkDashboardSpec, openingTab, tabStillThere } from "@/lib/dashboards/rules";
 import type { WireSpec } from "@/lib/dashboards/sets";
 import { valuesFor, valuesRead, type ValuesSent } from "@/lib/dashboards/values";
-import { chosenOn, focusFor, focusWords, notFiltered, traceAndChoose, type DashboardFocus } from "@/lib/dashboards/focus";
+import { chosenOn, focusFor, focusWords, fromFilter, notFiltered, traceAndChoose, type DashboardFocus } from "@/lib/dashboards/focus";
 import { toast } from "@/components/ui/toast";
 import { askAbout, dashboardSubject } from "@/lib/askSubject";
 import type { Pick as ChartPick } from "@/components/charts/selection";
@@ -99,6 +101,8 @@ export interface DashboardDoors extends TileDoors, StaticDoors {
   onLayOut?: (sectionKey: string, layout: Layout) => void;
   /** Arc AP-6 — what each placed element read: refused (with why), still reading, or read cleanly; null once it goes. */
   onReadState?: (key: string, state: ReadState | null) => void;
+  /** v19 — a new global filter; returns its key, for the builder to choose it. */
+  onAddGlobalFilter?: () => string | null;
   /** The study's R18 — the builder's pages: each returns the new page's name, for the page to open on. */
   pages?: PageDoors;
 }
@@ -203,7 +207,32 @@ const TONE_RULE: Record<Tone, string> = {
 /** The filter column's width beside the pieces it narrows, when a person has set none (the approved mockup's). */
 const FILTER_COLUMN = FILTER_DEFAULT_PX;
 
-function DashboardRoot({ element, children }: ComponentRenderProps<{ title: string }>) {
+/** v19 — the dashboard's global filters beside everything else it draws. */
+function DashboardRoot(props: ComponentRenderProps<{ title: string }>) {
+  const { elements } = useDashboard();
+  const keys = props.element.children ?? [];
+  const at = keys.findIndex(k => elements[k]?.type === "GlobalFilters");
+  if (at < 0) return <RootLayout {...props} />;
+  const kids = Children.toArray(props.children);
+  const rest = { ...props, element: { ...props.element, children: keys.filter((_, i) => i !== at) }, children: kids.filter((_, i) => i !== at) };
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: `${FILTER_COLUMN}px minmax(0, 1fr)`, gap: 14, alignItems: "start" }}>
+      {kids[at]}
+      <div style={{ minWidth: 0 }}><RootLayout {...rest} /></div>
+    </div>
+  );
+}
+
+function DashboardGlobalFilters({ element }: ComponentRenderProps<Record<string, never>>) {
+  const { elements, focus, setFocus, connectionId, doors, selected } = useDashboard();
+  const filters = (element.children ?? []).map(key => ({ key, props: elements[key]?.props as unknown as GlobalFilterProps }));
+  return (
+    <GlobalFiltersColumn filters={filters} connectionId={connectionId} focus={focus} onFocus={setFocus} building={!!doors.onSelect} selected={selected}
+      onChoose={doors.onSelect} onAdd={doors.onAddGlobalFilter ? () => { const key = doors.onAddGlobalFilter?.(); if (key) doors.onSelect?.(key); } : undefined} />
+  );
+}
+
+function RootLayout({ element, children }: ComponentRenderProps<{ title: string }>) {
   // The title names the dashboard for a screen reader and for the history. It is not drawn as a
   // header: the strip of dashboards above it already carries the name, and a panel does not
   // repeat its own title.
@@ -1526,6 +1555,8 @@ const REGISTRY = {
   ScenarioInputs: DashboardScenarioInputs,
   AddRow: DashboardAddRow,
   Period: DashboardPeriod,
+  GlobalFilters: DashboardGlobalFilters,
+  GlobalFilter: () => null,
 } satisfies Record<ComponentName, unknown>;
 
 const NO_IMAGES: Record<string, ImageStamp> = {};
@@ -1561,7 +1592,7 @@ function FilteredBy({ objects = null, spaced = true }: { objects?: ObjectBarWord
   };
   // the study's R17 — with a mark chosen, the other pages it can be read on (the focus holds across a dashboard's pages)
   const openPage = get("/tab");
-  const others = focused.length ? pagesOf(elements, !!doors.onSelect).filter(t => t.name !== openPage).slice(0, 3) : [];
+  const others = focused.some(f => !fromFilter(f)) ? pagesOf(elements, !!doors.onSelect).filter(t => t.name !== openPage).slice(0, 3) : [];
   return (
     <div role="group" aria-label="What this dashboard is filtered by" data-testid="dashboard-filtered-by" className="aug-fs-sm"
       style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, minHeight: 26, margin: spaced ? "0 0 14px" : 0, color: "var(--t3)" }}>
@@ -1622,6 +1653,14 @@ export function ComposedDashboard({ spec, cards, host, doors, sym = "$", images 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the colours it reads
   const keptColors = useMemo(() => valueColorsOf(rootProps), [colorsKey]);
   const altClick = useRef(false);
+  // what a reader chose on a filter the dashboard no longer holds as it was is not kept cutting its cards
+  const filterProps = useMemo(() => Object.fromEntries(Object.entries((spec as { elements?: Record<string, { type?: string; props?: unknown }> } | null)?.elements ?? {})
+    .filter(([, el]) => el?.type === "GlobalFilter").map(([k, el]) => [k, el.props as GlobalFilterProps])), [spec]);
+  useEffect(() => {
+    if (!onFocus) return;
+    const left = stillHeld(focus, filterProps);
+    if (left.length !== focus.length) onFocus(left);
+  }, [focus, filterProps, onFocus]);
   // A spec is known by what it says, not by which object says it: a caller that parses the
   // same JSON again on every render hands over a new object each time, and that must not
   // close the tab a reader opened.

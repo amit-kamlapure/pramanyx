@@ -15,8 +15,9 @@ sentences; it is never a 200 with nothing kept.
 """
 from __future__ import annotations
 
+import re
 from datetime import date
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
 from fastapi.responses import Response
@@ -337,6 +338,94 @@ def _read_query(connection_id: str, req: QueryRequest) -> dict:
         except Exception as exc:
             from pramanyx.kernel.errors import tolerate
             tolerate(exc, "dashboard query: connection close failed after a preview", counter="cockpit.query_close")
+
+
+class FilterValuesRequest(BaseModel):
+    """What a global filter offers: the values of a column, or the numbers it runs between."""
+    table: str = Field(min_length=1, max_length=200)
+    column: str = Field(min_length=1, max_length=200)
+    read: Literal["values", "range"] = "values"
+
+
+#: The most values a global filter lists; past them it says there are more.
+FILTER_VALUES = 200
+
+
+def _filter_tables(connection_id: str) -> tuple[dict[str, list[tuple[str, str]]], str]:
+    """The connection's tables and their typed columns, as the query page reads them, and the dialect it speaks."""
+    from pramanyx.dashboards import queries
+    from pramanyx.db.connection import open_connection_for
+    from pramanyx.db.schema_render import typed_tables
+    from pramanyx.routers._shared import get_schema_cached
+    try:
+        db = open_connection_for(connection_id)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Connection not found: {e}")
+    try:
+        return typed_tables(get_schema_cached(connection_id, db)), queries.dialect_of(db)
+    finally:
+        db.close()
+
+
+def _filter_rows(connection_id: str, sql: str) -> list:
+    """A filter's own statement, through the door a person's query goes through: read-only, under the connection's time limit
+    and the ontology's policies. What stops it is said."""
+    from pramanyx.dashboards import pieces, queries
+    from pramanyx.db.connection import open_connection_for
+    db = open_connection_for(connection_id)
+    try:
+        try:
+            graph = pieces.served_graph(connection_id)
+        except Exception:  # noqa: BLE001 — no ontology is no policy, as a person's own query reads it
+            graph = None
+        refusal = queries.policy_refusal(graph, queries.tables_of(sql, queries.dialect_of(db)))
+        if refusal:
+            raise HTTPException(status_code=422, detail={"refused": [refusal]})
+        probe = queries.probe(db, sql, seconds=queries.time_limit(connection_id), rows=FILTER_VALUES + 1)
+        if probe["error"]:
+            raise HTTPException(status_code=422, detail={"refused": [probe["error"]]})
+        return probe["rows"]
+    finally:
+        db.close()
+
+
+@router.get("/dashboards/filters/fields")
+def filter_fields(connection_id: str) -> dict:
+    """The tables a global filter may read and the columns it may filter, each with its kind. A column whose name a filter
+    cannot hold is counted, never silently dropped."""
+    from pramanyx.dashboards.queries import kind_of
+    tables, _ = _filter_tables(connection_id)
+    simple = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")               # what a focus may name (`focus.Focus.column`)
+    out = []
+    for table, columns in tables.items():
+        held = [c for c in columns if simple.match(c[0])]
+        out.append({"table": table, "columns": [{"name": n, "type": t, "kind": kind_of(t)} for n, t in held],
+                    "left_out": len(columns) - len(held)})
+    return {"tables": sorted(out, key=lambda t: t["table"].lower())}
+
+
+@router.post("/dashboards/filters/values")
+def filter_values(connection_id: str, req: FilterValuesRequest) -> dict:
+    """What a global filter offers a reader, read through the connection's own door: the commonest values of a column with how
+    many rows hold each, or the least and the most of a column of numbers."""
+    from sqlglot import exp
+
+    tables, dialect = _filter_tables(connection_id)
+    columns = tables.get(req.table)
+    if columns is None or req.column not in {c[0] for c in columns}:
+        raise HTTPException(status_code=422, detail={"refused": [f"This connection has no column {req.column} on {req.table}."]})
+    source = exp.to_table(req.table, dialect=dialect or None)
+    col = exp.column(req.column, quoted=True)
+    if req.read == "range":
+        sql = exp.select(exp.Min(this=col).as_("low"), exp.Max(this=col.copy()).as_("high")).from_(source).sql(dialect=dialect or None)
+    else:
+        sql = (exp.select(col.as_("value"), exp.Count(this=exp.Star()).as_("n")).from_(source).where(col.copy().is_(exp.null()).not_())
+               .group_by(exp.Literal.number(1)).order_by("n DESC").limit(FILTER_VALUES + 1).sql(dialect=dialect or None))
+    rows = _filter_rows(connection_id, sql)
+    if req.read == "range":
+        low, high = (rows[0] if rows else [None, None])[:2]
+        return {"low": low, "high": high}
+    return {"values": [{"value": r[0], "n": r[1]} for r in rows[:FILTER_VALUES]], "more": len(rows) > FILTER_VALUES}
 
 
 @router.post("/dashboards/queries/preview")

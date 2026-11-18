@@ -4861,6 +4861,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/dashboards/filters/fields": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Filter Fields
+         * @description The tables a global filter may read and the columns it may filter, each with its kind. A column whose name a filter
+         *     cannot hold is counted, never silently dropped.
+         */
+        get: operations["filter_fields_dashboards_filters_fields_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dashboards/filters/values": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Filter Values
+         * @description What a global filter offers a reader, read through the connection's own door: the commonest values of a column with how
+         *     many rows hold each, or the least and the most of a column of numbers.
+         */
+        post: operations["filter_values_dashboards_filters_values_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/dashboards/from-object": {
         parameters: {
             query?: never;
@@ -22403,6 +22445,22 @@ export interface components {
             view: string;
         };
         /**
+         * FilterValuesRequest
+         * @description What a global filter offers: the values of a column, or the numbers it runs between.
+         */
+        FilterValuesRequest: {
+            /** Column */
+            column: string;
+            /**
+             * Read
+             * @default values
+             * @enum {string}
+             */
+            read: "values" | "range";
+            /** Table */
+            table: string;
+        };
+        /**
          * FixAllRequest
          * @description A batch of errored episodes to repair — the client passes exactly the episodes
          *     currently VISIBLE under its filter, so the server only fixes those and stops. It
@@ -36315,6 +36373,76 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["DraftRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    filter_fields_dashboards_filters_fields_get: {
+        parameters: {
+            query: {
+                connection_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    filter_values_dashboards_filters_values_post: {
+        parameters: {
+            query: {
+                connection_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FilterValuesRequest"];
             };
         };
         responses: {

@@ -21,7 +21,7 @@ import { Input } from "@/components/ui/input";
 import { SelectField } from "@/components/ui/select";
 import { CHART_DAYS, MAX_FILTERS, MAX_LABEL, MAX_TABLE_COLUMNS } from "@/lib/dashboards/catalog";
 import {
-  addDrawer, freshWireName, nameByPiece, placeFilterColumn, placePiece, putSet, sectionsOf, type DashboardSpec,
+  addDrawer, addGlobalFilter, freshWireName, nameByPiece, placeFilterColumn, placePiece, putSet, sectionsOf, type DashboardSpec,
 } from "@/lib/dashboards/edit";
 import { choicesOf, isRefused, readSet } from "@/lib/dashboards/sets";
 import { withUniqueKeys } from "@/lib/listKeys";
@@ -37,7 +37,7 @@ type Placed = "ObjectTable" | "ObjectDetail" | "ObjectFigure" | "ObjectChart" | 
   | "ActionButtons" | "ObjectList" | "ObjectMap" | "ObjectTimeline" | "ChooseOne" | "ObjectSearch" | "Period";
 /** "Linked" places two things: a set of what the chosen object links to, and a table of it; a drawer is the dashboard's own,
  *  holding a detail of the object it opens on. */
-type Kind = Placed | "ObjectFilters" | "Linked" | "Drawer" | HandOff;
+type Kind = Placed | "ObjectFilters" | "GlobalFilter" | "Linked" | "Drawer" | HandOff;
 interface Entry { kind: Kind; label: string; says: string }
 const GROUPS: { group: string; pieces: Entry[] }[] = [
   { group: "Show objects", pieces: [
@@ -61,6 +61,7 @@ const GROUPS: { group: string; pieces: Entry[] }[] = [
     { kind: "question", label: "Question", says: "Asked in words, answered by the agent on a rhythm." },
   ] },
   { group: "Filter", pieces: [
+    { kind: "GlobalFilter", label: "Global filter", says: "Values, a date, a date range, text or a range of numbers, for every card." },
     { kind: "Period", label: "Period · a date range", says: "The period every card is cut to, on the dashboard; a reader chooses another." },
     { kind: "ObjectFilters", label: "Filter column", says: "Values with how many hold each; a reader ticks." },
     { kind: "ObjectSearch", label: "Search", says: "Words that narrow every piece over the same objects." },
@@ -154,6 +155,7 @@ export function PiecePicker({ spec, section, connectionId, schema, onPlace, onHa
 
   /** Why a piece cannot be placed here, or "" — and the props it is placed with when it can. */
   const plan = (kind: Kind): { why: string; props?: Record<string, unknown> } => {
+    if (kind === "GlobalFilter") return { why: "", props: {} };
     if (!target && kind !== "ObjectFilters" && kind !== "Drawer") return { why: "There is no section to place it in. Add a section first." };
     const scope = reads ? { set: reads } : { entity: of };
     switch (kind) {
@@ -278,7 +280,8 @@ export function PiecePicker({ spec, section, connectionId, schema, onPlace, onHa
     const p = plan(e.kind);
     if (p.why || !p.props) return;
     let next: DashboardSpec | null = null;
-    if (e.kind === "ObjectFilters") next = placeFilterColumn(spec, p.props).spec;
+    if (e.kind === "GlobalFilter") next = addGlobalFilter(spec).spec;
+    else if (e.kind === "ObjectFilters") next = placeFilterColumn(spec, p.props).spec;
     else if (e.kind === "Drawer") {
       const on = String(p.props.opens_on);
       next = addDrawer(spec, upTo(`The ${words(on).replace(/^chosen /, "")}`, MAX_LABEL), on).spec;
@@ -348,7 +351,7 @@ export function PiecePicker({ spec, section, connectionId, schema, onPlace, onHa
               <div className="aug-fs-xs" style={{ color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em", margin: "2px 0 4px" }}>{g.group}</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 6 }}>
                 {withUniqueKeys(g.pieces, e => e.kind).map(([ek, e]) => {
-                  const p = HANDED.includes(e.kind) ? { why: target ? "" : "There is no section to place it in." } : plan(e.kind as Placed | "ObjectFilters" | "Linked" | "Drawer");
+                  const p = HANDED.includes(e.kind) ? { why: target ? "" : "There is no section to place it in." } : plan(e.kind as Placed | "ObjectFilters" | "GlobalFilter" | "Linked" | "Drawer");
                   return (
                     <Button key={ek} variant="outline" data-testid="piece-picker-entry" data-kind={e.kind} disabled={!!p.why}
                       title={p.why || e.says} onClick={() => place(e)}

@@ -3014,6 +3014,29 @@ export class QueryRefused extends Error {
   constructor(public reasons: string[]) { super(reasons.join(" ")); }
 }
 
+export interface FilterField { table: string; columns: { name: string; type: string; kind: "number" | "date" | "time" | "text" }[]; left_out: number }
+
+/** The tables and columns a global filter may read. */
+export async function dashboardFilterFields(connectionId: string): Promise<FilterField[]> {
+  const res = await fetch(`${getApiBase()}/dashboards/filters/fields?connection_id=${encodeURIComponent(connectionId)}`);
+  if (!res.ok) throw new Error(fastApiError(await res.json().catch(() => ({})), "The tables could not be read"));
+  return ((await res.json()) as { tables: FilterField[] }).tables;
+}
+
+export type FilterValues = { values: { value: string | number | boolean; n: number }[]; more: boolean };
+
+/** What a global filter offers a reader: a column's commonest values, or the numbers it runs between. */
+export async function dashboardFilterValues(connectionId: string, asked: { table: string; column: string; read: "values" }): Promise<FilterValues>;
+export async function dashboardFilterValues(connectionId: string, asked: { table: string; column: string; read: "range" }): Promise<{ low: number | null; high: number | null }>;
+export async function dashboardFilterValues(connectionId: string, asked: { table: string; column: string; read: "values" | "range" }): Promise<unknown> {
+  const res = await fetch(`${getApiBase()}/dashboards/filters/values?connection_id=${encodeURIComponent(connectionId)}`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(asked),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((body as { detail?: { refused?: string[] } }).detail?.refused?.join(" ") || fastApiError(body, "The filter's values could not be read"));
+  return body;
+}
+
 export async function previewDashboardQuery(connectionId: string, asked: QueryAsked): Promise<QueryPreview> {
   const res = await fetch(`${getApiBase()}/dashboards/queries/preview?connection_id=${encodeURIComponent(connectionId)}`, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(asked),
@@ -3251,7 +3274,8 @@ export async function saveVizConfig(
 export async function runCard(cardId: string, range?: BriefingRange | null,
   opts: { compare?: boolean; values?: Record<string, { kind: string; value: unknown }>; filters?: QueryNarrowing[];
     /** The board study — the dashboard's focus this card is asked with: each cuts it, or `cut` says why not. */
-    focus?: { table: string; column: string; value: string | number | boolean }[] } = {}): Promise<CardRunResult> {
+    focus?: { table: string; column: string; value: string | number | boolean; op?: string; values?: (string | number | boolean)[];
+      low?: string | number | null; high?: string | number | null }[] } = {}): Promise<CardRunResult> {
   const q = new URLSearchParams();
   if (range) {
     if (range.preset === "custom") { if (range.start) q.set("start", range.start); if (range.end) q.set("end", range.end); }

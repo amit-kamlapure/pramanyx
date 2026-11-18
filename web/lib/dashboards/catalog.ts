@@ -60,7 +60,12 @@ import { z } from "zod";
  *  for a value on every card of the dashboard (`colors` on the root: a field's value to one of the six series colours;
  *  2026-11-18). 18: a placed card the dashboard's filters do not cut (`not_filtered`), and a page kept from its readers
  *  (`hidden` on a tab; 2026-11-18). */
-export const DASHBOARD_VOCABULARY_VERSION = 18;
+export const DASHBOARD_VOCABULARY_VERSION = 19;
+/** v19 — how a global filter is chosen from (the user, 2026-11-18). */
+export const GLOBAL_FILTER_KINDS = ["multi", "single", "date", "date_range", "text", "range"] as const;
+export type GlobalFilterKind = (typeof GLOBAL_FILTER_KINDS)[number];
+export const MAX_GLOBAL_FILTERS = 12;
+export const MAX_FILTER_DESCRIPTION = 200;
 
 /** The five tones an answer part may carry (`pramanyx/agent/present_tool.py`); parity is tested. */
 export const TONES = ["good", "warn", "bad", "info", "neutral"] as const;
@@ -626,6 +631,26 @@ export const dashboardCatalog = defineCatalog(schema, {
       }),
       description: "The dashboard's period, on the dashboard: every card is cut to it by its own date, and a reader chooses another. One per dashboard.",
     },
+    GlobalFilters: {
+      props: z.object({}),
+      description: "The dashboard's global filters, drawn beside its pages: each filter cuts every card it can reach.",
+    },
+    GlobalFilter: {
+      props: z.object({
+        /** What it is called; shown unless `show_title` is false. */
+        title: z.string().max(MAX_LABEL).nullable().optional(),
+        show_title: z.boolean().nullable().optional(),
+        /** A line under its title; none, none is drawn. */
+        description: z.string().max(MAX_FILTER_DESCRIPTION).nullable().optional(),
+        kind: z.enum(GLOBAL_FILTER_KINDS),
+        /** The table and column it filters; until they are chosen a reader is not shown it. */
+        table: z.string().min(1).max(200).nullable().optional(),
+        column: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/).max(200).nullable().optional(),
+        /** A single value offers All unless this is false. */
+        allow_all: z.boolean().nullable().optional(),
+      }),
+      description: "One global filter: multiple values, a single value, a date, a date range, text or a range of numbers, on one column.",
+    },
   },
   actions: {},
 });
@@ -634,11 +659,11 @@ export const dashboardCatalog = defineCatalog(schema, {
  *  told how to write one (`grammar.ts` teaches `WRITTEN`). */
 export type PieceName = "ProcessBoard" | "ObjectTable" | "ObjectDetail" | "ActionButton" | "ObjectFilters" | "ObjectFigure"
   | "ObjectChart" | "ObjectBreakdown" | "ActionButtons" | "ObjectList" | "ObjectMap" | "ObjectTimeline" | "ChooseOne"
-  | "ObjectSearch" | "Drawer" | "Question" | "QueryFilters" | "ScenarioInputs" | "AddRow" | "Period";
+  | "ObjectSearch" | "Drawer" | "Question" | "QueryFilters" | "ScenarioInputs" | "AddRow" | "Period" | "GlobalFilters" | "GlobalFilter";
 export const PIECE_NAMES: readonly PieceName[] = [
   "ProcessBoard", "ObjectTable", "ObjectDetail", "ActionButton", "ObjectFilters", "ObjectFigure", "ObjectChart",
   "ObjectBreakdown", "ActionButtons", "ObjectList", "ObjectMap", "ObjectTimeline", "ChooseOne", "ObjectSearch", "Drawer",
-  "Question", "QueryFilters", "ScenarioInputs", "AddRow", "Period",
+  "Question", "QueryFilters", "ScenarioInputs", "AddRow", "Period", "GlobalFilters", "GlobalFilter",
 ];
 /** Arc AP-4 — what the picker adds — its pieces and the drawer — each placed by hand and held to the structure's flag on
  *  the server. */
@@ -670,7 +695,7 @@ export const STATIC: readonly ComponentName[] = ["Note", "Image"];
 
 /** What each component may hold. A dashboard's shape is fixed so that a reader can predict it. */
 export const MAY_HOLD: Record<ComponentName, readonly ComponentName[]> = {
-  Cockpit: ["Tabs", "Section", "ObjectFilters", "QueryFilters", "Drawer"],
+  Cockpit: ["Tabs", "Section", "ObjectFilters", "QueryFilters", "GlobalFilters", "Drawer"],
   Tabs: ["Tab"],
   Tab: ["Section"],
   // Arc AP-4 — or sections of its own, when it is laid out (the rules hold a section to one or the other)
@@ -694,6 +719,8 @@ export const MAY_HOLD: Record<ComponentName, readonly ComponentName[]> = {
   ObjectSearch: [],
   Question: [],
   QueryFilters: [],
+  GlobalFilters: ["GlobalFilter"],
+  GlobalFilter: [],
   ScenarioInputs: [],
   AddRow: [],
   Period: [],
@@ -712,4 +739,5 @@ export const READER_TEXT: Partial<Record<ComponentName, readonly string[]>> = {
   Tab: ["label"],
   Section: ["title"],
   Card: ["title", "description"],
+  GlobalFilter: ["title", "description"],
 };

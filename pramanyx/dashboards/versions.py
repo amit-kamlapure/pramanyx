@@ -253,7 +253,7 @@ def version(home: Home, number: int) -> Optional[dict]:
 #: The most pieces a dashboard's miniature on the dashboards home draws.
 MAX_OUTLINE = 32
 #: What a miniature leaves out: a filter column and a drawer sit beside the page, not on it.
-_NOT_ON_THE_PAGE = {"ObjectFilters", "QueryFilters", "Drawer"}
+_NOT_ON_THE_PAGE = {"ObjectFilters", "QueryFilters", "GlobalFilters", "GlobalFilter", "Drawer"}
 
 
 def outline_of(spec: Any) -> list[dict]:

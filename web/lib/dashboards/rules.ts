@@ -18,7 +18,7 @@
 import { validateSpec, type Spec } from "@json-render/core";
 import type { z } from "zod";
 
-import {
+import { MAX_GLOBAL_FILTERS,
   CHOOSERS, DASHBOARD_VOCABULARY_VERSION, COMPONENT_NAMES, GRADE, GRID, LIMITS, MAX_DEPTH, MAX_SETS, MAX_VALUES, MAY_BE_CONDITIONAL, MAY_HOLD,
   ISO_DAY, MAX_LIST, PLACED, READER_TEXT, SET_READERS, SPLIT_AGGS, SIZES, SWITCHED, TONES, VALUE_OPS, dashboardCatalog, dashboardSet, dashboardValue,
   type ActionButtonDef,
@@ -661,9 +661,13 @@ export function checkDashboardSpec(spec: unknown): DashboardCheck {
       issues.push({ code: "bad_child", elementKey: key,
         message: `The ${el.type.toLowerCase()} ${q(key)} holds ${list(stray.map(q))}. `
           + (may.length ? `A ${el.type} holds: ${list(may)}.` : `A ${el.type} holds nothing.`) });
-    } else if (el.type === "Cockpit" && new Set(kinds.filter(k => k !== "ObjectFilters" && k !== "QueryFilters" && k !== "Drawer")).size > 1) {
+    } else if (el.type === "Cockpit" && new Set(kinds.filter(k => k !== "ObjectFilters" && k !== "QueryFilters" && k !== "GlobalFilters" && k !== "Drawer")).size > 1) {
       issues.push({ code: "bad_child", elementKey: key,
         message: `The dashboard ${q(key)} holds tabs and sections side by side. It holds one Tabs, or sections, not both.` });
+    } else if (kinds.filter(k => k === "GlobalFilters").length > 1) {
+      issues.push({ code: "bad_child", elementKey: key, message: `The dashboard ${q(key)} holds global filters twice. It holds them once.` });
+    } else if (el.type === "GlobalFilters" && el.children.length > MAX_GLOBAL_FILTERS) {
+      issues.push({ code: "bad_child", elementKey: key, message: `A dashboard holds at most ${MAX_GLOBAL_FILTERS} global filters.` });
     } else if (el.type === "Cockpit" && kinds.filter(k => k === "Tabs").length > 1) {
       issues.push({ code: "bad_child", elementKey: key,
         message: `The dashboard ${q(key)} holds more than one Tabs. It holds one.` });
@@ -673,9 +677,9 @@ export function checkDashboardSpec(spec: unknown): DashboardCheck {
     } else if (el.type === "Cockpit" && kinds.some(k => k === "ObjectFilters" || k === "QueryFilters") && kinds[0] !== "ObjectFilters" && kinds[0] !== "QueryFilters") {
       issues.push({ code: "bad_child", elementKey: key,
         message: `The dashboard ${q(key)} holds its filter column after its tabs or sections. A filter column is the dashboard's first child, drawn beside the rest.` });
-    } else if (el.type === "Cockpit" && kinds.length > 0 && kinds.every(k => k === "ObjectFilters" || k === "QueryFilters" || k === "Drawer")) {
+    } else if (el.type === "Cockpit" && kinds.length > 0 && kinds.every(k => k === "ObjectFilters" || k === "QueryFilters" || k === "GlobalFilters" || k === "Drawer")) {
       issues.push({ code: "bad_child", elementKey: key,
-        message: kinds.includes("ObjectFilters")
+        message: kinds.includes("ObjectFilters") || kinds.includes("GlobalFilters")
           ? `The dashboard ${q(key)} holds a filter column and nothing it narrows. It holds one Tabs, or sections, beside it.`
           : `The dashboard ${q(key)} holds only drawers. It holds one Tabs, or sections, for a drawer to open beside.` });
     } else if (MAY_HOLD[el.type].length && !PLACED.includes(el.type) && el.type !== "Section" && el.type !== "Drawer" && !el.children.length) {

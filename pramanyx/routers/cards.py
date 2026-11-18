@@ -661,13 +661,14 @@ def _metric_card_for_range(card, metric, spec, compare: bool, focus: Optional[li
     cut = None
     if focus:
         grain = F.bare(split_grain(getattr(metric, "time_column", "") or "")[0] or ((getattr(metric, "tables", None) or [""])[0]))
-        usable = [f for f in focus if F.bare(f.table) == grain]
+        usable = [f for f in focus if F.bare(f.table) == grain and f.op == "eq"]
         first = usable[0] if usable else None
         if first is not None:
             by, part = first.column, str(first.value)
         cut = F.verdict([F.words(first)] if first else [],
                         [f"Not cut by {F.words(f)}: a metric is cut by one value at a time." for f in usable[1:]])
-    elsewhere = [f for f in focus or [] if F.bare(f.table) != grain] if focus else []
+    # a filter of several values, a range or words is cut into the measurement as any other table's value is
+    elsewhere = [f for f in focus or [] if F.bare(f.table) != grain or f.op != "eq"] if focus else []
     statement = None
     try:
         with period_brief.connection_runner(card.connection_id) as (run_sql, dialect):

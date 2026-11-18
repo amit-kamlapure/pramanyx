@@ -6,20 +6,33 @@
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-export interface FocusOn { table: string; column: string; value: string | number | boolean }
+export type FocusValue = string | number | boolean;
+/** One value clicked on a mark; or, from a global filter (v19), several values, a range of numbers or days, or words. */
+export interface FocusOn {
+  table: string; column: string; value: FocusValue;
+  op?: "eq" | "in" | "between" | "dates" | "contains";
+  values?: FocusValue[];
+  low?: string | number | null;
+  high?: string | number | null;
+}
 export interface DashboardFocus extends FocusOn {
   /** The card a value was chosen on, and the field of its chart the click stood for. */
   source: { card: string; field: string };
+  /** What a global filter is called, for the bar that says what the dashboard is filtered by. */
+  label?: string;
 }
 
 /** As many as the server takes (`dashboards.focus.MAX_FOCUS`). */
-export const MAX_FOCUS = 6;
+export const MAX_FOCUS = 12;
 
 const same = (a: FocusOn, b: FocusOn) => a.table === b.table && a.column === b.column;
+/** Where a global filter's value is held among a reader's choices. */
+export const filterSource = (key: string) => `filter:${key}`;
+export const fromFilter = (f: DashboardFocus) => f.source.card.startsWith("filter:");
 
 /** Choosing a value: the same again takes it off; another value of the same column replaces it; a new column is added. */
 export function chooseIn(focus: DashboardFocus[], next: DashboardFocus): DashboardFocus[] {
-  const at = focus.findIndex(f => same(f, next));
+  const at = focus.findIndex(f => !fromFilter(f) && same(f, next));
   if (at >= 0) {
     return String(focus[at].value) === String(next.value) ? focus.filter((_, i) => i !== at) : focus.map((f, i) => (i === at ? next : f));
   }
@@ -34,7 +47,8 @@ export function notFiltered(spec: unknown, cardId: string): boolean {
 
 /** What a card is asked with: every chosen value but those chosen on itself. */
 export function focusFor(focus: DashboardFocus[], cardId: string): FocusOn[] {
-  return focus.filter(f => f.source.card !== cardId).map(({ table, column, value }) => ({ table, column, value }));
+  return focus.filter(f => f.source.card !== cardId).map(({ table, column, value, op, values, low, high }) => ({
+    table, column, value, ...(op ? { op } : {}), ...(values ? { values } : {}), ...(low != null ? { low } : {}), ...(high != null ? { high } : {}) }));
 }
 
 /** The values chosen on a card's own chart for a field — what it lights. */
@@ -55,7 +69,16 @@ export async function traceAndChoose(
   onFocus(chooseIn(focus, { table: t.table, column: t.column, value: pick.value, source: { card: cardId, field: pick.field } }));
 }
 
-export const focusWords = (f: FocusOn) => `${f.column.replace(/_/g, " ")} = ${String(f.value)}`;
+export function focusWords(f: FocusOn & { label?: string }): string {
+  const name = f.label || f.column.replace(/_/g, " ");
+  if (f.op === "in") return `${name}: ${(f.values ?? []).slice(0, 3).map(String).join(", ")}${(f.values?.length ?? 0) > 3 ? ` +${(f.values?.length ?? 0) - 3}` : ""}`;
+  if (f.op === "contains") return `${name}: “${String(f.value)}”`;
+  if (f.op === "between" || f.op === "dates") {
+    if (f.low != null && f.high != null) return f.low === f.high ? `${name}: ${f.low}` : `${name}: ${f.low} to ${f.high}`;
+    return f.low != null ? `${name}: from ${f.low}` : `${name}: up to ${f.high}`;
+  }
+  return f.label ? `${name}: ${String(f.value)}` : `${name} = ${String(f.value)}`;
+}
 
 const KEY = (scope: string) => `pramanyx.dashboard.focus:${scope}`;
 
@@ -83,6 +106,6 @@ export function useDashboardFocus(scope: string | null) {
       else window.localStorage.removeItem(KEY(scope));
     } catch { /* a browser that keeps nothing still filters this visit */ }
   }, [scope]);
-  const key = useMemo(() => JSON.stringify(focus.map(f => [f.table, f.column, f.value, f.source.card])), [focus]);
+  const key = useMemo(() => JSON.stringify(focus.map(f => [f.table, f.column, f.value, f.op, f.values, f.low, f.high, f.source.card])), [focus]);
   return { focus, setFocus, key };
 }

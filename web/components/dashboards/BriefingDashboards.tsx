@@ -87,7 +87,7 @@ import { dashboardRef, readCertifications, type Certification } from "@/lib/cert
 import { appWords } from "@/lib/dashboards/appVersion";
 import { MAX_CAPTION, MAX_NOTE, type Layout } from "@/lib/dashboards/catalog";
 import {
-  addPage, duplicatePage, removePage, rename, setProps,
+  addGlobalFilter, addPage, duplicatePage, removePage, rename, setProps,
   cardsPlaced, editNote, layOut, moveTo, placeCard, placeImage, placeNote, placePiece, placeQuestion, recaption, regrid, sectionsOf, setFilterWidth, swapCard, takeOff, takeOffCard,
   type DashboardSpec,
   type Box,
@@ -1099,6 +1099,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
       // the board study — a piece dragged by its header, or Alt+Shift+arrows, lands beside another
       onMove: (key: string, target: string, place: "before" | "after") => on(s => moveTo(s, key, target, place), "moved by hand"),
       onFilterWidth: (grades: number) => on(s => setFilterWidth(s, grades), "the filter column resized by hand"),
+      onAddGlobalFilter: () => { if (!current) return null; const made = addGlobalFilter(current); if (made.key) change(made.spec, "a global filter added by hand"); return made.key; },
       // Arc AP-4 — an empty section's offer: the piece picker for it, or sections of its own
       onAddPiece: (section: string) => setAdding({ section }),
       onLayOut: (section: string, layout: Layout) => on(s => layOut(s, section, layout), `laid out in ${layout} by hand`),

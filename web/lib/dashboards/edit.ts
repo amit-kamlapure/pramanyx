@@ -13,7 +13,7 @@
  *
  * No model, no figure. A title a person types is theirs; the server keeps it as theirs.
  */
-import {
+import { MAX_GLOBAL_FILTERS,
   FILTER_WIDTH, GRID, LIMITS, MAX_CAPTION, MAX_GRID_ROW, MAX_LABEL, MAX_NOTE, MAX_TITLE, PLACED, SPAN, type DashboardSetDef, type DashboardValueDef,
   type GridKind, type Layout, type Size,
 } from "@/lib/dashboards/catalog";
@@ -605,7 +605,7 @@ function ensureTabs(s: DashboardSpec): string {
   if (held) return held;
   const root = s.elements[s.root];
   // the filter column stays the dashboard's own first child, beside the tabs: a tab holds sections only
-  const column = root.children.filter(k => ["ObjectFilters", "QueryFilters"].includes(s.elements[k]?.type));
+  const column = root.children.filter(k => ["ObjectFilters", "QueryFilters", "GlobalFilters"].includes(s.elements[k]?.type));
   const first = freshKey(s, "tab-overview");
   s.elements[first] = { type: "Tab", props: { name: "overview", label: "Overview" },
     children: root.children.filter(k => !column.includes(k)) };
@@ -703,7 +703,7 @@ export function takeOffAll(spec: unknown, key: string): DashboardSpec {
   const s = spec as DashboardSpec;
   const el = s.elements[key];
   if (!el || key === s.root) return copy(spec);
-  if (PLACED.includes(el.type as never) || el.type === "ObjectFilters" || el.type === "ActionButton") return takeOff(spec, key);
+  if (PLACED.includes(el.type as never) || el.type === "ObjectFilters" || el.type === "GlobalFilter" || el.type === "ActionButton") return takeOff(spec, key);
   let out = copy(spec);
   for (const child of [...el.children]) out = takeOffAll(out, child);
   return key in out.elements ? takeOff(out, key) : out;
@@ -904,6 +904,24 @@ export function nameByPiece(spec: unknown, sectionKey: string, name: string): Da
 }
 
 /** Arc AP-4 — the dashboard's filter column, placed by hand: its first child, beside what it narrows. A dashboard holds one. */
+/** A new global filter, beside the dashboard's pages (v19): its column made if the dashboard has none. */
+export function addGlobalFilter(spec: unknown): { spec: DashboardSpec; key: string | null } {
+  const s = copy(spec);
+  const root = s.elements[s.root];
+  let holder = root.children.find(k => s.elements[k]?.type === "GlobalFilters");
+  if (holder && s.elements[holder].children.length >= MAX_GLOBAL_FILTERS) return { spec: s, key: null };
+  if (!holder) {
+    holder = freshKey(s, "global-filters");
+    s.elements[holder] = { type: "GlobalFilters", props: {}, children: [] };
+    // a filter column stays the dashboard's first child
+    root.children.splice(root.children.filter(k => ["ObjectFilters", "QueryFilters"].includes(s.elements[k]?.type)).length, 0, holder);
+  }
+  const key = freshKey(s, "filter");
+  s.elements[key] = { type: "GlobalFilter", props: { title: "Filter", kind: "multi" }, children: [] };
+  s.elements[holder].children.push(key);
+  return { spec: s, key };
+}
+
 export function placeFilterColumn(spec: unknown, props: Record<string, unknown>): { spec: DashboardSpec; key: string | null } {
   const s = copy(spec);
   const root = s.elements[s.root];
