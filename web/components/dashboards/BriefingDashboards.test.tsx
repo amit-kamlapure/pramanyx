@@ -284,7 +284,7 @@ describe("a new dashboard started without a model", () => {
   });
 
   it("drafts on Enter, and keeps a new line on Shift and Enter", async () => {
-    api.draftDashboard.mockResolvedValue({ staged: false, proposal_id: "", cockpit_id: "", summary: "", rounds: 0, stop_reason: "", sentences: ["Nothing measures this."] });
+    api.draftDashboard.mockResolvedValue({ staged: false, proposal_id: "", summary: "", rounds: 0, stop_reason: "", sentences: ["Nothing measures this."] });
     show();
     fireEvent.click(await screen.findByTestId("dashboard-new-open"));
     const box = screen.getByLabelText("What this dashboard is for");
