@@ -719,7 +719,7 @@ function MoveGrip({ cell, elementKey, onMove, place }: {
     e.preventDefault();
     e.stopPropagation();
     const grip = e.currentTarget;
-    grip.setPointerCapture(e.pointerId);
+    try { grip.setPointerCapture(e.pointerId); } catch { /* an engine without capture still sends the moves over the grip */ }
     const own = cell.current;
     const grid = own?.parentElement ?? null;
     if (own) own.style.opacity = "0.5";
