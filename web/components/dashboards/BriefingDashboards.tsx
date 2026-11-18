@@ -60,6 +60,7 @@ import { FormDialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { DropdownMenu } from "@radix-ui/themes";
 import { ASKS_OF_A_PIECE, AskPiece } from "@/components/dashboards/AskPiece";
+import { askAbout, dashboardSubject } from "@/lib/askSubject";
 import { Chip } from "@/components/clarity/kit";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
@@ -103,6 +104,12 @@ import { getProcesses, type ProcessDetail } from "@/lib/objectTypes";
 /** The name the Briefing gives when it keeps something for a person. The server writes the
  *  signed-in person's own name where there is one. */
 const ACTOR = "briefing";
+
+/** A dashboard's title, as its spec says it. */
+const titleOfSpec = (spec: unknown): string => {
+  const s = spec as { root?: string; elements?: Record<string, { props?: { title?: unknown } }> } | null;
+  return String(s?.elements?.[String(s?.root ?? "")]?.props?.title ?? "");
+};
 
 function person(name: string): string {
   return name.replace(/^user:/, "") || "someone";
@@ -733,7 +740,11 @@ function SharedDashboardView({ connectionId, schema, owner, dashboardId, range, 
           {data.ontology?.current ? ` · ontology release ${numberOf(data.ontology.current)}` : ""} · read-only
         </span>
         <CertificationMark compact target={{ kind: "dashboard", ref: dashboardRef(connectionId, owner, dashboardId), connectionId }} />
-        <Button size="xs" variant="secondary" disabled={busy} style={{ marginLeft: "auto" }} onClick={() => void start()}>
+        <Button size="xs" variant="ghost" data-testid="ask-about-dashboard" style={{ marginLeft: "auto" }} onClick={() => {
+          const subject = dashboardSubject(connectionId, `shared:${owner}:${dashboardId}`, titleOfSpec(sharedSpec) || dashboardId, data.range);
+          if (subject) askAbout(subject);
+        }}>Ask about this dashboard</Button>
+        <Button size="xs" variant="secondary" disabled={busy} onClick={() => void start()}>
           Start my dashboard from this
         </Button>
       </div>
@@ -1450,6 +1461,13 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
           <Icon name="edit" /> Edit
         </Button>
       </span>
+      <Button size="xs" variant="ghost" data-testid="ask-about-dashboard" title="Ask about this dashboard, for the period on screen" onClick={() => {
+        const subject = data ? dashboardSubject(connectionId, `${connectionId}:${data.cockpit_id}`, titleOfSpec(data.cockpit.spec) || data.cockpit_id,
+          data.range.status === "standing" ? null : data.range) : null;
+        if (subject) askAbout(subject);
+      }}>
+        <Icon name="chat" /> Ask
+      </Button>
       <Button size="xs" variant="ghost" aria-expanded={showHistory} onClick={() => {
         // a resize kept since the page was read is not in its history yet: read it again once
         if (!showHistory && burst.current.since) { burst.current.since = false; reload(); }

@@ -29,7 +29,10 @@ export type AskSubject =
       values: Record<string, unknown>; chosen: Record<string, string>; filters: Record<string, unknown>[]; narrowed: boolean }
   // a segment the ontology names, read by a piece directly — sent with the conditions the piece reads it under
   | Common & { kind: "segment"; entity: string; segment: string; label: string; total?: number | null;
-      filters: Record<string, unknown>[]; narrowed: boolean };
+      filters: Record<string, unknown>[]; narrowed: boolean }
+  // a dashboard, or one card of it, held to the period on screen (the dashboards study's R20)
+  | Common & { kind: "dashboard"; dashboard: string; owner?: string; title: string; card?: { id: string; title: string };
+      period: { start: string; last_day: string; covers: string } | null };
 
 let current: AskSubject | null = null;
 const listeners = new Set<() => void>();
@@ -66,6 +69,9 @@ export function nounOf(typeId: string | null | undefined): [string, string] {
 
 /** The subject in a line, as the canvas shows it: "Asking about 12 orders · from Late dispatch". */
 export function subjectWords(s: AskSubject): string {
+  if (s.kind === "dashboard") {
+    return `Asking about ${s.card ? `“${s.card.title}” on ` : ""}${s.title} · ${s.period?.covers ?? "as written"}`;
+  }
   if (s.kind === "objects") {
     const n = s.refs.length;
     return `Asking about ${formatCount(n)} ${n === 1 ? s.noun[0] : s.noun[1]}${s.label ? ` · from ${s.label}` : ""}`;
@@ -77,11 +83,23 @@ export function subjectWords(s: AskSubject): string {
 /** The subject as the ask door takes it (`AskFocus`): references, or a dashboard's set by name with the values and the
  *  objects chosen on the page and the reader's own filters — never what the set reads. */
 export function focusOf(s: AskSubject): Record<string, unknown> {
+  if (s.kind === "dashboard") return { kind: "dashboard", dashboard: s.dashboard, ...(s.owner ? { owner: s.owner } : {}),
+    ...(s.card ? { id: s.card.id } : {}), label: s.title.slice(0, 80), period: s.period ? `${s.period.start}..${s.period.last_day}` : "" };
   if (s.kind === "objects") return { kind: "objects", objects: s.refs.slice(0, MAX_SUBJECT), ...(s.label ? { label: s.label.slice(0, 80) } : {}) };
   if (s.kind === "segment") return { kind: "set", entity: s.entity, segment: s.segment, label: s.label.slice(0, 80),
     filters: s.filters.slice(0, 20), narrowed: s.narrowed };
   return { kind: "set", dashboard: s.dashboard, ...(s.owner ? { owner: s.owner } : {}), set: s.set, values: s.values,
     chosen: s.chosen, filters: s.filters.slice(0, 20) };
+}
+
+/** What a dashboard or one of its cards is asked about with, from the page's key and the period it reads; null where the key
+ *  names no dashboard a server could read. */
+export function dashboardSubject(connectionId: string, key: string | undefined, title: string,
+  range: { start?: string | null; last_day?: string | null; covers?: string | null } | null | undefined, card?: { id: string; title: string }): AskSubject | null {
+  const where = dashboardOf(key, connectionId);
+  if (!where) return null;
+  const period = range?.start && range.last_day ? { start: range.start, last_day: range.last_day, covers: range.covers || `${range.start} to ${range.last_day}` } : null;
+  return { kind: "dashboard", connectionId, noun: ["card", "cards"], ...where, title, period, ...(card ? { card } : {}) };
 }
 
 /** The dashboard a page's key names — `<connection>:<id>`, its builder preview `…:preview`, or another person's

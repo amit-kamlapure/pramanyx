@@ -4,7 +4,7 @@
  */
 import { afterEach, describe, expect, it } from "vitest";
 
-import { askSubject, dashboardOf, focusOf, nounOf, setAskSubject, subjectWords, type AskSubject } from "@/lib/askSubject";
+import { askSubject, dashboardOf, dashboardSubject, focusOf, nounOf, setAskSubject, subjectWords, type AskSubject } from "@/lib/askSubject";
 
 const TICKED: AskSubject = { kind: "objects", connectionId: "thelook", noun: nounOf("Order"), label: "Late dispatch",
   refs: Array.from({ length: 12 }, (_, i) => `order:${48200 + i}`) };
@@ -48,5 +48,25 @@ describe("the subject a question carries", () => {
     expect(dashboardOf(undefined, "thelook")).toBeNull();
     expect(dashboardOf("other:desk", "thelook")).toBeNull();
     expect(dashboardOf("thelook:Not An Id", "thelook")).toBeNull();
+  });
+});
+
+describe("a dashboard asked about (the study's R20)", () => {
+  const range = { start: "2026-10-01", last_day: "2026-10-31", covers: "October 2026" };
+
+  it("carries the period on screen, and the card when one is asked about", () => {
+    const whole = dashboardSubject("c", "c:sales", "Sales", range);
+    expect(whole && subjectWords(whole)).toBe("Asking about Sales · October 2026");
+    expect(whole && focusOf(whole)).toEqual({ kind: "dashboard", dashboard: "sales", label: "Sales", period: "2026-10-01..2026-10-31" });
+    const one = dashboardSubject("c", "shared:ana:sales", "Sales", range, { id: "rev", title: "Revenue" });
+    expect(one && subjectWords(one)).toBe("Asking about “Revenue” on Sales · October 2026");
+    expect(one && focusOf(one)).toMatchObject({ dashboard: "sales", owner: "ana", id: "rev" });
+  });
+
+  it("says a dashboard with no period is read as written, and asks nothing of a page that names no dashboard", () => {
+    const standing = dashboardSubject("c", "c:sales", "Sales", null);
+    expect(standing && subjectWords(standing)).toBe("Asking about Sales · as written");
+    expect(standing && focusOf(standing)).toMatchObject({ period: "" });
+    expect(dashboardSubject("c", undefined, "Sales", range)).toBeNull();
   });
 });

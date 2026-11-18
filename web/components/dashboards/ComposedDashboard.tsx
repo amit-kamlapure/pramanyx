@@ -74,6 +74,7 @@ import type { WireSpec } from "@/lib/dashboards/sets";
 import { valuesFor, valuesRead, type ValuesSent } from "@/lib/dashboards/values";
 import { chosenOn, focusFor, focusWords, notFiltered, traceAndChoose, type DashboardFocus } from "@/lib/dashboards/focus";
 import { toast } from "@/components/ui/toast";
+import { askAbout, dashboardSubject } from "@/lib/askSubject";
 import type { Pick as ChartPick } from "@/components/charts/selection";
 import { AddRowPiece } from "@/components/dashboards/AddRowPiece";
 import { QueryFiltersPiece, QueryNarrowingProvider, readsTable, useQueryNarrowing, type FilterColumn } from "@/components/dashboards/QueryFilters";
@@ -133,6 +134,8 @@ interface DashboardContextValue {
   schema?: string;
   /** The connection the dashboard reads — what a Question asks of. */
   connectionId?: string;
+  /** The page's key for this dashboard, for a question asked about it. */
+  dashboardId?: string;
   /** The element chosen in the builder, outlined where it is drawn. */
   selected: string | null;
   /** Arc AP-2 — the elements that read the set, value or choice chosen in the builder, dashed where they are drawn. */
@@ -1106,13 +1109,23 @@ function CutThrough({ ways }: { ways: string[] }) {
 }
 
 function DashboardCard({ element }: ComponentRenderProps<{ card: string; tone?: Tone | null; size?: Size | null }>) {
-  const { cards, host, tileDoors, sym, range, schema } = useDashboard();
+  const { cards, host, tileDoors, sym, range, schema, connectionId, dashboardId, period, elements, doors: pageDoors } = useDashboard();
   const id = element.props.card;
   const tone = element.props.tone ?? null;
   const valued = useValuedRun(cards.get(id), range);
   const cs = valued.cs;
   const own = valued.onRefresh;
-  const doors = useMemo(() => (own ? { ...tileDoors, onRefresh: own } : tileDoors), [tileDoors, own]);
+  const boardTitle = String(Object.values(elements).find(el => el?.type === "Cockpit")?.props?.title ?? "");
+  const shownRange = period?.showing ?? null;
+  const reading = !pageDoors.onSelect;
+  const doors = useMemo(() => {
+    const placed = (element.props as { title?: string | null }).title;
+    const ask = reading && connectionId ? (cardId: string, title: string) => {
+      const subject = dashboardSubject(connectionId, dashboardId, boardTitle, shownRange, { id: cardId, title: placed || title });
+      if (subject) askAbout(subject);
+    } : undefined;
+    return { ...tileDoors, ...(own ? { onRefresh: own } : {}), ...(ask ? { onAskAbout: ask } : {}) };
+  }, [tileDoors, own, reading, connectionId, dashboardId, boardTitle, shownRange, element.props]);
   const status = host.cards[id]?.status ?? "unmeasured";
   // A card that says no size takes what its shape asks, as it did before sizes: a chart or a
   // table two columns, a figure one.
@@ -1649,6 +1662,7 @@ export function ComposedDashboard({ spec, cards, host, doors, sym = "$", images 
     range,
     schema,
     connectionId,
+    dashboardId,
     selected,
     steppers,
     reads: new Set(readsKey ? readsKey.split("\n") : []),
@@ -1664,7 +1678,7 @@ export function ComposedDashboard({ spec, cards, host, doors, sym = "$", images 
         .catch(e => toast.error("The click could not be read", { description: (e as Error).message }));
     } : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on what the spec and the range say
-  }), [check.valid, written, cards, host, doors, sym, images, rangeKey, schema, connectionId, selected, steppers, readsKey, focus, onFocus, period]);
+  }), [check.valid, written, cards, host, doors, sym, images, rangeKey, schema, connectionId, dashboardId, selected, steppers, readsKey, focus, onFocus, period]);
 
   if (!check.valid) {
     return (

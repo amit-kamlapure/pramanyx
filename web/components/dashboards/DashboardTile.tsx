@@ -80,6 +80,8 @@ export function tileShape(cs: CardState): TileShape {
 export const WIDE: Record<TileShape, boolean> = { figure: false, trend: true, rows: true };
 
 export interface TileDoors {
+  /** The study's R20 — open the Data Canvas with this card as the question's subject. */
+  onAskAbout?: (id: string, title: string) => void;
   /** Take the card off this dashboard. Absent where the reader may not change it — a strip, a published one. */
   onRemove?: (id: string) => void;
   onRefresh: (id: string) => void;
@@ -245,6 +247,10 @@ function Doors({ card, doors, onAlert, place, files }: { card: DashboardCard; do
       style={{ position: "absolute", top: 8, right: 8, display: "flex", gap: 2, alignItems: "center", background: "var(--bg-2)", borderRadius: "var(--r2)" }}>
       {doors.onResize && place.elementKey && (
         <SizePick value={place.size} label={`Size of ${card.title}`} onPick={s => doors.onResize?.(place.elementKey as string, s)} />
+      )}
+      {doors.onAskAbout && (
+        <Button variant="ghost" size="icon-xs" aria-label="Ask about this card" title="Ask about this card, for the period on screen" data-testid="card-ask-about"
+          onClick={() => doors.onAskAbout?.(card.id, card.title)}><Icon name="chat" /></Button>
       )}
       {iid && doors.onEvidence && (
         <Button variant="ghost" size="icon-xs" aria-label="Evidence" title="See the evidence behind this finding"

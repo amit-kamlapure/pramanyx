@@ -964,8 +964,11 @@ class AskFocus(BaseModel):
     ROADMAP §6 item 46 — or one part of a Briefing (``briefing``): ``id`` is its block's, ``period`` the edition's
     period key with its reader (``range:<preset>:<start>..<last day>@<reader>``), and ``source`` the source it draws
     now when a reader drilled it. What the part reads — each source's SQL, the metric a check measures, the period — is
-    read from the kept edition (`knowledge.brief_context.edition_part`), never from the page."""
-    kind: Literal["departure", "automation", "metric", "objects", "set", "sheet", "briefing"]
+    read from the kept edition (`knowledge.brief_context.edition_part`), never from the page.
+
+    The dashboards study's R20 — or a dashboard a reader asks about (``dashboard``), or one card of it (``id``), with the
+    period it is read for as ``<first day>..<last day>``; its cards are read here, as the asker may read the dashboard."""
+    kind: Literal["departure", "automation", "metric", "objects", "set", "sheet", "briefing", "dashboard"]
     id: str = Field(default="", max_length=200)
     objects: list[str] = Field(default_factory=list, max_length=50)
     label: str = Field(default="", max_length=80)
@@ -993,6 +996,8 @@ class AskFocus(BaseModel):
             raise ValueError(f"a {self.kind} on screen is named by its id")
         if self.kind == "briefing" and not (self.id and self.period):
             raise ValueError("a part of a Briefing is named by its block's id and the period of the edition it is on")
+        if self.kind == "dashboard" and not self.dashboard:
+            raise ValueError("a dashboard asked about is named by its id")
         if self.kind == "objects" and not self.objects:
             raise ValueError("a subject of objects names at least one, as <type>:<key>")
         if self.kind == "set" and not ((self.dashboard and self.set) or (self.entity and self.segment)):
