@@ -179,7 +179,7 @@ def test_a_spec_that_is_not_json_is_refused_before_anything_runs(premise):
 @needs_rules
 def test_the_server_reads_the_vocabulary_the_web_declares():
     vocab = V.vocabulary()
-    assert vocab["version"] == 16                # 16: a placed card's own look; 15: the period as a piece; 14: free placement (x, y); 3: the ontology's pieces (Arc OC-4); 4: a dashboard from an object; 5: sizes one grade at a time (Arc AP-1); 6: the wiring (AP-2, AP-3); 7: the structure and the picker's pieces (AP-4); 8: variables (AP-8); 9: sets read whole (AP-8b); 10: yes-no, lists, sums, queries (AP-8c); 11: a Question (PENDING 54); 12: a breakdown
+    assert vocab["version"] == 17                # 17: column looks and kept colours; 16: a placed card's own look; 15: the period as a piece; 14: free placement (x, y); 3: the ontology's pieces (Arc OC-4); 4: a dashboard from an object; 5: sizes one grade at a time (Arc AP-1); 6: the wiring (AP-2, AP-3); 7: the structure and the picker's pieces (AP-4); 8: variables (AP-8); 9: sets read whole (AP-8b); 10: yes-no, lists, sums, queries (AP-8c); 11: a Question (PENDING 54); 12: a breakdown
     assert vocab["components"] == ["Cockpit", "Tabs", "Tab", "Section", "Card", "Note", "Image",
                                    "ProcessBoard", "ObjectTable", "ObjectDetail", "ActionButton",
                                    "ObjectFilters", "ObjectFigure", "ObjectChart", "ObjectBreakdown", "ActionButtons",
@@ -328,3 +328,25 @@ def test_a_models_title_or_description_on_a_card_is_held_to_the_numerals_law(pre
     assert V.check_spec(premise, known_cards=CARDS, model_written=False).status == V.ACCEPTED   # a person's own words
     refused = V.check_spec(premise, known_cards=CARDS, model_written=True)
     assert refused.status == V.REFUSED and "states a figure" in said(refused)
+
+
+# ── a table's number columns and a value's colour on every card (v17) ─────────
+
+@needs_rules
+def test_a_card_may_draw_its_number_columns_and_the_dashboard_keep_a_values_colour(premise):
+    premise["elements"]["card-net"]["props"]["columns_look"] = {"revenue": "bar", "margin": "scale"}
+    premise["elements"][premise["root"]]["props"]["colors"] = {"channel": {"Email": 2, "Search": 5}}
+    verdict = V.check_spec(premise, known_cards=CARDS, model_written=False)
+    assert verdict.status == V.ACCEPTED, said(verdict)
+
+
+@needs_rules
+@pytest.mark.parametrize("where,value", [
+    ("columns_look", {"revenue": "sparkline"}),
+    ("colors", {"channel": {"Email": 7}}),
+    ("colors", {"channel": {"Email": "#ff0000"}}),
+])
+def test_a_column_look_or_kept_colour_outside_its_words_is_refused(premise, where, value):
+    key = "card-net" if where == "columns_look" else premise["root"]
+    premise["elements"][key]["props"][where] = value
+    assert V.check_spec(premise, known_cards=CARDS, model_written=False).status == V.REFUSED

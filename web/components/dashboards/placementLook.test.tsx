@@ -40,7 +40,7 @@ describe("writing a number by a look", () => {
     expect(lookOf({ number: { decimals: 1 } })).toEqual({ decimals: 1 });
     expect(lookOf({ number: {} })).toBeNull();
     expect(placementLookOf({ show_title: false, title: "  ", description: "After returns." }))
-      .toEqual({ title: null, showTitle: false, description: "After returns.", number: null });
+      .toEqual({ title: null, showTitle: false, description: "After returns.", number: null, columns: null });
   });
 
   it("keeps the unit the metric's: a rate stays a percent, money keeps its symbol, a bound still holds", () => {

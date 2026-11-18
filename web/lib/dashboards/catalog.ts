@@ -55,8 +55,11 @@ import { z } from "zod";
  *  an element's column and row (`x`, `y`), gaps allowed, never two on one cell (2026-11-18). 15: the period as a piece on
  *  the dashboard (`Period`), one per dashboard, saying what it opens on (2026-11-18). 16: a placed card's own look —
  *  its title (the card's when unset) and whether it shows, a description, and how its numbers are written: decimals,
- *  compact or whole, negatives in parentheses (`title`, `show_title`, `description`, `number`; 2026-11-18). */
-export const DASHBOARD_VOCABULARY_VERSION = 16;
+ *  compact or whole, negatives in parentheses (`title`, `show_title`, `description`, `number`; 2026-11-18). 17: a bar
+ *  or a colour scale on a table's number column (`columns_look`, on a placed card and an objects table), and one colour
+ *  for a value on every card of the dashboard (`colors` on the root: a field's value to one of the six series colours;
+ *  2026-11-18). */
+export const DASHBOARD_VOCABULARY_VERSION = 17;
 
 /** The five tones an answer part may carry (`pramanyx/agent/present_tool.py`); parity is tested. */
 export const TONES = ["good", "warn", "bad", "info", "neutral"] as const;
@@ -304,10 +307,28 @@ const marked = z.object({
   label: z.string().min(1).max(MAX_LABEL).nullable().optional(),
 }).strict().nullable().optional();
 
+/** v17 — how a table draws a number column: a bar the length of its value, or a colour scale from its lowest to its
+ *  highest. Colours are the series' and the tones', never a hex a person types. */
+export const COLUMN_LOOKS = ["bar", "scale"] as const;
+export type ColumnLook = (typeof COLUMN_LOOKS)[number];
+export const MAX_COLUMN_LOOKS = 12;
+const columnsLook = z.record(z.string().min(1).max(200), z.enum(COLUMN_LOOKS))
+  .refine(r => Object.keys(r).length <= MAX_COLUMN_LOOKS, `At most ${MAX_COLUMN_LOOKS} columns may be drawn so.`)
+  .nullable().optional();
+/** v17 — a value's colour on every card of the dashboard: a field's value to one of the six series colours. */
+export const SERIES_SLOTS = 6;
+export const MAX_COLOR_FIELDS = 8;
+export const MAX_COLOR_VALUES = 24;
+const valueColors = z.record(z.string().min(1).max(200),
+  z.record(z.string().max(200), z.number().int().min(1).max(SERIES_SLOTS))
+    .refine(r => Object.keys(r).length <= MAX_COLOR_VALUES, `At most ${MAX_COLOR_VALUES} values of one field keep a colour.`))
+  .refine(r => Object.keys(r).length <= MAX_COLOR_FIELDS, `At most ${MAX_COLOR_FIELDS} fields keep colours.`)
+  .nullable().optional();
+
 export const dashboardCatalog = defineCatalog(schema, {
   components: {
     Cockpit: {
-      props: z.object({ title: z.string().min(1).max(MAX_TITLE) }),
+      props: z.object({ title: z.string().min(1).max(MAX_TITLE), colors: valueColors }),
       slots: ["default"],
       description: "The root. Holds one Tabs, or one or more Section. Its title names the dashboard; it is not drawn as a header.",
     },
@@ -353,6 +374,7 @@ export const dashboardCatalog = defineCatalog(schema, {
           compact: z.boolean().nullable().optional(),
           negatives: z.enum(["minus", "parens"]).nullable().optional(),
         }).strict().nullable().optional(),
+        columns_look: columnsLook,
         size, w, h, x, y,
       }),
       description: "One card from the card store, by its id. Never a figure, never SQL. May be shown by a condition. "
@@ -393,6 +415,7 @@ export const dashboardCatalog = defineCatalog(schema, {
         sort: z.string().regex(PROPERTY_PATH).nullable().optional(),
         descending: z.boolean().nullable().optional(),
         marked,
+        columns_look: columnsLook,
         size, w, h, x, y,
       }),
       description: "The objects of an entity, or of a segment of it, a page at a time: each object's key and the columns named, read through the object door.",

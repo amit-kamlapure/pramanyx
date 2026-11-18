@@ -21,7 +21,8 @@ import { Segmented } from "@/components/ui/segmented";
 import { SelectField } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  BREAKDOWN_TOPS, CHART_DAYS, CHART_TOPS, CHOOSERS, FIGURE_AGGS, MAX_BREAKDOWN_MEASURES, MAX_CAPTION, MAX_CARD_DESCRIPTION, MAX_FILTERS, MAX_LABEL,
+  BREAKDOWN_TOPS, CHART_DAYS, CHART_TOPS, CHOOSERS, FIGURE_AGGS, MAX_BREAKDOWN_MEASURES, MAX_CAPTION, MAX_CARD_DESCRIPTION, MAX_COLOR_VALUES,
+  MAX_COLUMN_LOOKS, MAX_FILTERS, MAX_LABEL, SERIES_SLOTS, type ColumnLook,
   MAX_NOTE, MAX_TABLE_COLUMNS, MAX_TICKED_RUNS, MAX_TITLE, PERIOD_OPENS, SET_READERS, SPLIT_AGGS, TICKERS, TONES, type PieceName,
 } from "@/lib/dashboards/catalog";
 import {
@@ -30,6 +31,8 @@ import {
 } from "@/lib/dashboards/edit";
 import { lineOf, nameOf, setTitles, wireWords } from "@/lib/dashboards/names";
 import { LOOK_DECIMALS } from "@/lib/dashboards/numberLook";
+import type { CardHolds } from "@/lib/dashboards/cardHolds";
+import { isNumericType } from "@/lib/format";
 import { propertyLabel } from "@/lib/dashboards/objectView";
 import { choicesOf, isRefused, pieceSet, readSet } from "@/lib/dashboards/sets";
 import { ButtonsSetup } from "@/components/dashboards/ButtonsSetup";
@@ -191,6 +194,76 @@ function Words({ label, value, max, onSave, many, clearable, placeholder, rows =
   ) : (
     <Input aria-label={label} value={text} maxLength={max} placeholder={placeholder} onChange={e => setText(e.target.value)} onBlur={save}
       onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
+  );
+}
+
+/** v17 — a table's number columns, each drawn plain, as a bar or as a colour scale (study R10). */
+function ColumnLooks({ numbers, p, set, hint, labelOf = (n: string) => n }: {
+  numbers: string[]; p: Props; set: (patch: Props, note: string) => void; hint: string; labelOf?: (name: string) => string;
+}) {
+  if (!numbers.length) return null;
+  const looks = (p.columns_look ?? {}) as Record<string, ColumnLook>;
+  const choose = (name: string, look: "" | ColumnLook) => {
+    const next = { ...looks };
+    if (look) next[name] = look; else delete next[name];
+    set({ columns_look: Object.keys(next).length ? next : null }, look ? `a column drawn as a ${look} by hand` : "a column drawn plain by hand");
+  };
+  return (
+    <Row label="Number columns" testid="card-look-columns" hint={hint}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {numbers.slice(0, MAX_COLUMN_LOOKS).map(name => (
+          <div key={name} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span className="aug-fs-sm" style={{ flex: 1, minWidth: 0, color: "var(--t2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{labelOf(name)}</span>
+            <Segmented label={`How ${labelOf(name)} is drawn`} value={looks[name] ?? ""}
+              options={[{ value: "", label: "Plain" }, { value: "bar", label: "Bar" }, { value: "scale", label: "Scale" }]}
+              onChange={v => choose(name, v as "" | ColumnLook)} />
+          </div>
+        ))}
+      </div>
+    </Row>
+  );
+}
+
+/** v17 — a value's colour on every card of the dashboard (study R11): one of the six series colours, kept on the
+ *  dashboard's root and honoured by every card colouring by the field. "Auto" lets the value take the next free one. */
+function KeptColors({ fields, spec, onChange }: { fields: { field: string; values: string[] }[]; spec: DashboardSpec; onChange: Change }) {
+  if (!fields.length) return null;
+  const root = spec.root;
+  const kept = (spec.elements[root]?.props.colors ?? {}) as Record<string, Record<string, number>>;
+  const choose = (field: string, value: string, slot: number | null) => {
+    const forField = { ...(kept[field] ?? {}) };
+    if (slot) forField[value] = slot; else delete forField[value];
+    const next = { ...kept };
+    if (Object.keys(forField).length) next[field] = forField; else delete next[field];
+    onChange(setProps(spec, root, { colors: Object.keys(next).length ? next : null }),
+      slot ? "a value's colour kept on the dashboard by hand" : "a value's colour let go by hand");
+  };
+  return (
+    <>
+      {fields.map(({ field, values }) => (
+        <Row key={field} label={`Colours · ${words(field)}`} testid="card-look-colors"
+          hint="Kept on the dashboard: every card colouring by this field shows each value in its colour.">
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {values.slice(0, MAX_COLOR_VALUES).map(value => {
+              const slot = kept[field]?.[value] ?? null;
+              return (
+                <div key={value} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <span className="aug-fs-sm" title={value} style={{ flex: 1, minWidth: 0, color: "var(--t2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</span>
+                  {Array.from({ length: SERIES_SLOTS }, (_, i) => i + 1).map(n => (
+                    <Button key={n} size="icon-xs" variant="ghost" aria-label={`${value}: colour ${n}`} aria-pressed={slot === n}
+                      data-testid={`kept-color-${n}`} onClick={() => choose(field, value, slot === n ? null : n)}
+                      style={{ outline: slot === n ? "2px solid var(--t1)" : undefined, outlineOffset: 1 }}>
+                      <span aria-hidden style={{ width: 12, height: 12, borderRadius: 3, background: `var(--chart-${n})` }} />
+                    </Button>
+                  ))}
+                  <Button size="xs" variant="ghost" disabled={!slot} onClick={() => choose(field, value, null)}>Auto</Button>
+                </div>
+              );
+            })}
+          </div>
+        </Row>
+      ))}
+    </>
   );
 }
 
@@ -830,6 +903,27 @@ function DashboardSetup({ spec, onChange, onOpenLayout }: { spec: DashboardSpec;
       {top && (
         <Row label="Name"><Words label="Name" value={String(top.props.title ?? "")} max={MAX_TITLE} onSave={v => onChange(rename(spec, root, v), "renamed by hand")} /></Row>
       )}
+      {top && Object.keys((top.props.colors ?? {}) as object).length > 0 && (
+        <Row label="Colours kept" testid="setup-kept-colors" hint="Every card colouring by one of these fields shows each value in its colour. Choose a card to change them.">
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {Object.entries(top.props.colors as Record<string, Record<string, number>>).map(([field, values]) => (
+              <div key={field} className="aug-fs-sm" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+                <span style={{ color: "var(--t2)" }}>{words(field)}</span>
+                {Object.entries(values).map(([value, n]) => (
+                  <span key={value} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                    <span aria-hidden style={{ width: 10, height: 10, borderRadius: 2, background: `var(--chart-${n})` }} />{value}
+                  </span>
+                ))}
+                <Button size="xs" variant="ghost" style={{ marginLeft: "auto" }} onClick={() => {
+                  const next = { ...(top.props.colors as Record<string, unknown>) };
+                  delete next[field];
+                  onChange(setProps(spec, root, { colors: Object.keys(next).length ? next : null }), "a field's colours let go by hand");
+                }}>Let go</Button>
+              </div>
+            ))}
+          </div>
+        </Row>
+      )}
       <Row label="What it holds">
         <div style={{ display: "flex", flexDirection: "column", border: "1px solid var(--b1)", borderRadius: "var(--r2)" }}>
           {holds.map(([what, n], i) => (
@@ -854,8 +948,10 @@ function DashboardSetup({ spec, onChange, onOpenLayout }: { spec: DashboardSpec;
 
 // ── the panel ────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-export function PieceSetup({ spec, selected, onChange, connectionId, schema, cardTitle, entityTitle, cardSetup, cardChart, cardSql, onOpenLayout, cardDates }: {
+export function PieceSetup({ spec, selected, onChange, connectionId, schema, cardTitle, entityTitle, cardSetup, cardChart, cardSql, onOpenLayout, cardDates, cardHolds }: {
   spec: DashboardSpec;
+  /** v17 — what a placed card holds that its panel offers to draw: number columns, and fields whose values it colours. */
+  cardHolds?: (cardId: string) => CardHolds;
   /** v15 — each placed card and the date the period cuts it by, for the Period piece's setup. */
   cardDates?: () => CardDate[];
   /** Open the layout pane, folded away by default (the dashboards study, R7, 2026-11-18). */
@@ -929,6 +1025,9 @@ export function PieceSetup({ spec, selected, onChange, connectionId, schema, car
               then what it reads and the statement it ran, each a fold below — they were tabs a click away */}
           {cardChart?.(String(p.card ?? ""))}
           <CardLook p={p} own={cardTitle?.(String(p.card ?? "")) ?? "the card's title"} set={set} />
+          <ColumnLooks numbers={cardHolds?.(String(p.card ?? "")).numbers ?? []} p={p} set={set}
+            hint="Each against every row the card holds. A bar runs the length of its value; a scale washes a cell from its column's lowest to its highest." />
+          <KeptColors fields={cardHolds?.(String(p.card ?? "")).fields ?? []} spec={spec} onChange={onChange} />
           <Row label="Edge" hint="A coloured edge is emphasis. What the card measures is the card's own.">
             <Pick label="Edge" value={String(p.tone ?? "")} none="None" options={TONES.map(t => ({ value: t, label: TONE_WORDS[t] }))}
               onPick={v => set({ tone: v || null }, "a card's edge chosen by hand")} />
@@ -987,6 +1086,11 @@ export function PieceSetup({ spec, selected, onChange, connectionId, schema, car
       {el.type === "ObjectFilters" && <CountsWithinRow spec={spec} k={k} p={p} onChange={onChange} />}
       {el.type === "ActionButtons" && <ButtonsSetup spec={spec} k={k} onChange={onChange} connectionId={connectionId} schema={schema} />}
       {needsFields && el.type === "ObjectTable" && fieldsBody(f => <TableSetup p={p} ef={f} set={set} noun={noun} />)}
+      {needsFields && el.type === "ObjectTable" && fieldsBody(f => (
+        <ColumnLooks p={p} set={set} labelOf={path => fieldLabel(f.fields.find(x => x.path === path) ?? { path, label: words(path), role: "", type: "", unit: "" })}
+          numbers={((p.columns as string[] | null | undefined) ?? []).filter(path => isNumericType(f.fields.find(x => x.path === path)?.type ?? ""))}
+          hint="Each against the page shown. A bar runs the length of its value; a scale washes a cell from its column's lowest to its highest." />
+      ))}
       {needsFields && (el.type === "ObjectTable" || el.type === "ObjectList")
         && fieldsBody(f => <MarkRow p={p} ef={f} set={set} />)}
       {needsFields && el.type === "ObjectFigure" && fieldsBody(f => <FigureSetup p={p} ef={f} set={set} />)}

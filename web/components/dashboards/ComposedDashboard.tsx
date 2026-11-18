@@ -43,7 +43,8 @@ import type { CardState } from "@/components/brief/PinnedCardBody";
 import { CanvasScale, CellBoxContext, OFF_GRID, useMeasured, type CellBox } from "@/components/dashboards/cellBox";
 import { QuestionPiece } from "@/components/dashboards/QuestionPiece";
 import { DashboardTile, Frame, SaidTile, WIDE, WithheldTile, tileShape, type QueryWaiting, type TileDoors, type TileFocus } from "@/components/dashboards/DashboardTile";
-import { PlacementLookProvider, placementLookOf } from "@/components/dashboards/placementLook";
+import { PlacementLookProvider, ValueColorsProvider, placementLookOf } from "@/components/dashboards/placementLook";
+import { valueColorsOf } from "@/lib/dashboards/valueColors";
 import { PeriodPicker } from "@/components/dashboards/PeriodPicker";
 import type { RangeChoice } from "@/components/brief/BriefRange";
 import { ActionButtonsPiece } from "@/components/dashboards/ActionButtonsPiece";
@@ -1025,8 +1026,8 @@ function DashboardCard({ element }: ComponentRenderProps<{ card: string; tone?: 
   const notCut = !!cut && !cut.applied && focusFor(focus, id).length > 0;
   // v16 — this placement's own title, description and number look, read by the tile it draws
   const placed = element.props as Record<string, unknown>;
-  const lookKey = JSON.stringify([placed.title, placed.show_title, placed.description, placed.number]);
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the four props it reads
+  const lookKey = JSON.stringify([placed.title, placed.show_title, placed.description, placed.number, placed.columns_look]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the props it reads
   const look = useMemo(() => placementLookOf(placed), [lookKey]);
   return (
     <Cell type="Card" props={element.props as Record<string, unknown>} size={size} testid="dashboard-card"
@@ -1165,6 +1166,7 @@ function DashboardObjectTable({ element }: ComponentRenderProps<{
         {filtering.on && !filtering.narrows && <NotFiltered />}
         <ObjectTablePiece elementKey={key} entity={p.entity} segment={p.segment} set={p.set} setFrom={p.set_from}
           chooses={p.chooses} ticks={p.ticks} columns={p.columns} sort={p.sort} descending={p.descending}
+          columnsLook={(p as { columns_look?: Record<string, unknown> | null }).columns_look ?? null}
           tall={SPAN[size].h === 2} marked={p.marked} />
       </>)}
     </Cell>
@@ -1458,6 +1460,12 @@ export function ComposedDashboard({ spec, cards, host, doors, sym = "$", images 
   focus?: DashboardFocus[];
   onFocus?: (next: DashboardFocus[]) => void;
 }) {
+  // v17 — the colours the dashboard keeps for values, honoured by every card on it (study R11); one object while they hold
+  const rootProps = (spec as { root?: string; elements?: Record<string, { props?: Record<string, unknown> }> } | null)
+    ?.elements?.[String((spec as { root?: string } | null)?.root ?? "")]?.props;
+  const colorsKey = JSON.stringify(rootProps?.colors ?? null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the colours it reads
+  const keptColors = useMemo(() => valueColorsOf(rootProps), [colorsKey]);
   // A spec is known by what it says, not by which object says it: a caller that parses the
   // same JSON again on every render hands over a new object each time, and that must not
   // close the tab a reader opened.
@@ -1534,9 +1542,11 @@ export function ComposedDashboard({ spec, cards, host, doors, sym = "$", images 
         sets={check.valid ? (spec as WireSpec).sets : undefined} values={check.valid ? (spec as WireSpec).values : undefined}
         dashboardId={dashboardId} cardSql={cardSql}>
         {focus.length > 0 && onFocus && <FocusBar focus={focus} onFocus={onFocus} />}
-        <JSONUIProvider registry={REGISTRY as ComponentRegistry} store={store}>
-          <Renderer spec={spec as Spec} registry={REGISTRY as ComponentRegistry} />
-        </JSONUIProvider>
+        <ValueColorsProvider value={keptColors}>
+          <JSONUIProvider registry={REGISTRY as ComponentRegistry} store={store}>
+            <Renderer spec={spec as Spec} registry={REGISTRY as ComponentRegistry} />
+          </JSONUIProvider>
+        </ValueColorsProvider>
       </PiecesProvider>
     </DashboardContext.Provider>
   );

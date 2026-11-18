@@ -48,8 +48,9 @@ import { cardValue } from "@/lib/dashboards/hostStatus";
 import type { CardStatus } from "@/lib/dashboards/hostState";
 import { fmtDate, formatCount, formatMetricValue, formatSeconds } from "@/lib/format";
 import { NumberedPager } from "@/components/dashboards/NumberedPager";
-import { usePlacementLook } from "@/components/dashboards/placementLook";
+import { usePlacementLook, useValueColors } from "@/components/dashboards/placementLook";
 import type { NumberLook } from "@/lib/dashboards/numberLook";
+import { cellLook, columnRanges } from "@/lib/dashboards/columnLook";
 import { draftedFigure } from "@/lib/dashboards/figureText";
 
 export type TileShape = "figure" | "trend" | "rows";
@@ -512,6 +513,12 @@ const NUMERIC_TYPE = /INT|DOUBLE|FLOAT|DECIMAL|NUMERIC|REAL/i;
 /** A query card's table, a page at a time (study R26): as many rows as its box holds, numbered pages beneath. The count is
  *  the rows the card holds, said as the first of more when the query returned more than a card keeps. */
 export function QueryRows({ shaped, height }: { shaped: Extract<QueryShaped, { as: "table" }>; height: number }) {
+  // v17 — a number column drawn as a bar or a colour scale, against every row the card holds (not the page alone)
+  const looks = usePlacementLook().columns;
+  const names = shaped.columns.map(c => c.name);
+  const ranges = useMemo(() => columnRanges(names, shaped.rows as unknown[][], looks),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the rows and the looks are what it reads
+    [shaped.rows, looks]);
   const per = Math.max(3, Math.floor((height - ROWS_HEAD_PX - ROWS_PAGER_PX) / ROWS_ROW_PX));
   const pages = Math.max(1, Math.ceil(shaped.rows.length / per));
   const [page, setPage] = useState(1);
@@ -530,7 +537,8 @@ export function QueryRows({ shaped, height }: { shaped: Extract<QueryShaped, { a
           ))}</tr></thead>
           <tbody>{shown.map((r, i) => (
             <tr key={from + i}>{r.map((v, j) => (
-              <td key={j} style={{ padding: "4px 6px", borderBottom: "1px solid var(--b1)", whiteSpace: "nowrap", textAlign: right(j) ? "right" : "left" }}>
+              <td key={j} style={{ padding: "4px 6px", borderBottom: "1px solid var(--b1)", whiteSpace: "nowrap", textAlign: right(j) ? "right" : "left",
+                ...cellLook(v, looks?.[names[j]], ranges[names[j]]) }}>
                 {cellText(v, shaped.columns[j]?.type)}
               </td>
             ))}</tr>
@@ -552,6 +560,8 @@ export function QueryRows({ shaped, height }: { shaped: Extract<QueryShaped, { a
  *  left out said beneath it. A query that cannot be read says why, in its place. */
 function QueryTile({ cs, doors, place, focus }: { cs: CardState & { card: DashboardCard }; doors: TileDoors; place: TilePlace; focus?: TileFocus }) {
   const numberLook = usePlacementLook().number;
+  // v17 — the colours the dashboard keeps for the split's values
+  const keptColors = useValueColors();
   const { card, run } = cs;
   const shaped = run?.shown ?? null;
   const setup = (card.render as { shown?: QueryShown }).shown;
@@ -564,8 +574,8 @@ function QueryTile({ cs, doors, place, focus }: { cs: CardState & { card: Dashbo
   const spec = useMemo(() => {
     if (!shaped || !setup || shaped.as === "figure" || shaped.as === "table" || anyKind) return null;
     const t = readVegaTokens();
-    return queryChartSpec(shaped, setup, { palette: t.palette, other: t.deemph }, chosen);
-  }, [shaped, setup, anyKind, chosen]);
+    return queryChartSpec(shaped, setup, { palette: t.palette, other: t.deemph }, chosen, keptColors?.[setup.split]);
+  }, [shaped, setup, anyKind, chosen, keptColors]);
   const grid = useMemo(() => (anyKind && shaped && setup ? queryGrid(shaped as Parameters<typeof queryGrid>[0], setup) : null),
     [anyKind, shaped, setup]);
   // A card drafted from a file says what it means, read off its statement: under a figure always, under a chart behind Details.

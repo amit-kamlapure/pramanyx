@@ -34,6 +34,8 @@ import type { RangeChoice } from "@/components/brief/BriefRange";
 import type { CardState } from "@/components/brief/PinnedCardBody";
 import { DashboardArrange, type CardLine } from "@/components/dashboards/DashboardArrange";
 import { DashboardBuilder, EditBar, type AddWhat, type CanvasTools } from "@/components/dashboards/DashboardBuilder";
+import { cardHolds as holdsOf } from "@/lib/dashboards/cardHolds";
+import type { QueryShown } from "@/lib/api";
 import { ComposedDashboard, type DashboardDoors, type PeriodDoor, type ReadState } from "@/components/dashboards/ComposedDashboard";
 import { FindingPicker } from "@/components/dashboards/FindingPicker";
 import { ObjectDashboardStarter } from "@/components/dashboards/ObjectDashboardStarter";
@@ -1255,6 +1257,11 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
             return cards.filter(c => placed.has(c.card.id)).map(c => ({
               id: c.card.id, title: c.card.title, date: c.run?.scoped?.grain ?? null, standing: !!c.run?.scoped?.standing,
             }));
+          }}
+          cardHolds={cardId => {
+            // v17 — what the card's last run offers to draw: number columns of its table, fields whose values it colours
+            const cs = cards.find(c => c.card.id === cardId);
+            return holdsOf(cs?.run as Parameters<typeof holdsOf>[0], (cs?.card.render as { shown?: Partial<QueryShown> } | undefined)?.shown);
           }}
           onUndo={stacks.past.length > 0 ? undo : undefined} onRedo={stacks.future.length > 0 ? redo : undefined}
           bar={(

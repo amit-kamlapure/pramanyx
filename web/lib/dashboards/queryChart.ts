@@ -12,6 +12,7 @@ import { dayLabel } from "@/lib/dashboards/objectView";
 import { fmtDate, type Gran } from "@/lib/format";
 import { emphasisOpacity } from "@/components/charts/vega/emphasis";
 import { HOVER_MARK, type HoverMeta } from "@/components/charts/vega/hoverTooltip";
+import { colorsFor } from "@/lib/dashboards/valueColors";
 
 type QueryChart = Extract<QueryShaped, { as: "bar" | "line" | "area" | "scatter" }>;
 
@@ -36,19 +37,17 @@ const ADVERSE_AT = 5;
 
 /** The colour of each series, in order — Other the theme's grey, a series the query says went wrong the palette's red, one not
  *  known yet the same grey. Every other series takes the next colour, so none is skipped. */
-export function seriesColours(series: string[], colours: ChartColours, tones: Record<string, string> = {}): string[] {
-  let k = 0;
-  return series.map(s => {
-    if (s === "Other" || tones[s] === "open") return colours.other;
-    if (tones[s] === "adverse") return colours.palette[ADVERSE_AT % colours.palette.length];
-    return colours.palette[k++ % colours.palette.length];
-  });
+export function seriesColours(series: string[], colours: ChartColours, tones: Record<string, string> = {},
+  kept?: Record<string, number>): string[] {
+  // a colour the dashboard keeps for a value (v17, study R11) after Other's grey and a tone's red, which say something
+  return colorsFor(series, kept, colours.palette, s => (s === "Other" || tones[s] === "open" ? colours.other
+    : tones[s] === "adverse" ? colours.palette[ADVERSE_AT % colours.palette.length] : null));
 }
 
 const DATE_AS_TEXT = /^\d{4}(-(\d{2}|Q[1-4]))?(-\d{2})?$/;
 
 export function queryChartSpec(c: QueryChart, setup: Pick<QueryShown, "segments" | "labels" | "running"> & Partial<Pick<QueryShown, "across">>,
-  colours: ChartColours, emphasis?: readonly unknown[] | null): Record<string, unknown> {
+  colours: ChartColours, emphasis?: readonly unknown[] | null, kept?: Record<string, number>): Record<string, unknown> {
   const temporal = c.x.kind === "date" || c.x.kind === "time";
   const manyYears = temporal && new Set(c.points.map(p => String(p.x ?? "").slice(0, 4))).size > 1;
   // a statement's own `date_trunc('month', …)` names no bucket: months read as months, not as "1 Sept 2016"
@@ -61,7 +60,7 @@ export function queryChartSpec(c: QueryChart, setup: Pick<QueryShown, "segments"
   const named = c.series.filter(s => s !== "");
   const color = split
     ? { color: { field: "s", type: "nominal", sort: named, title: null,
-        scale: { domain: named, range: seriesColours(named, colours, c.tones ?? {}) },
+        scale: { domain: named, range: seriesColours(named, colours, c.tones ?? {}, kept) },
         legend: { orient: "top", direction: "horizontal", title: null, symbolType: "square", labelLimit: 140 } } }
     : {};
   const numericX = c.x.kind === "number";

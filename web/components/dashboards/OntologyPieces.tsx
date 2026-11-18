@@ -29,6 +29,7 @@ import { AskAboutPiece } from "@/components/dashboards/AskAbout";
 import { useCellBox, useMeasured, useSettled } from "@/components/dashboards/cellBox";
 import { Foot, Frame, Title } from "@/components/dashboards/DashboardTile";
 import { NumberedPager } from "@/components/dashboards/NumberedPager";
+import { cellLook, columnRanges, looksOf } from "@/lib/dashboards/columnLook";
 import { Masked } from "@/components/objects/Masked";
 import { Button } from "@/components/ui/button";
 import { Freshness } from "@/components/ui/freshness";
@@ -681,7 +682,7 @@ export function ProcessBoardPiece({ process }: { process: string }) {
 const TABLE_ROW_PX = 29;
 const TABLE_CHROME_PX = 110;
 
-export function ObjectTablePiece({ elementKey, entity, segment, set, setFrom, chooses, ticks, columns, sort, descending, tall, marked }: {
+export function ObjectTablePiece({ elementKey, entity, segment, set, setFrom, chooses, ticks, columns, sort, descending, tall, marked, columnsLook }: {
   elementKey: string | null;
   entity?: string | null;
   segment?: string | null;
@@ -696,8 +697,11 @@ export function ObjectTablePiece({ elementKey, entity, segment, set, setFrom, ch
   tall: boolean;
   /** the rows a declared rule or segment admits, marked in its tone */
   marked?: Marked | null;
+  /** v17 — number columns drawn as a bar or a colour scale, against the page shown */
+  columnsLook?: Record<string, unknown> | null;
 }) {
   const { connectionId, schema, tick, picked, pick, ticked, tickOne, tickNone, asGroup, say } = usePieces();
+  const looks = looksOf({ columns_look: columnsLook });
   const query = useSetQuery({ entity, segment, set, set_from: setFrom });
   const target = "entity" in query ? query : null;
   const [offset, setOffset] = useState(0);
@@ -750,6 +754,9 @@ export function ObjectTablePiece({ elementKey, entity, segment, set, setFrom, ch
   // the type as a person reads it — "Distribution center", never "DistributionCenter"
   const heading = query.label || `${typeWord(page.type_id)}${target?.segment ? ` · ${words(target.segment)}` : ""}`;
   const shown = page.rows.length;
+  // the looks are kept by property path, as the panel lists the columns; the key leads each row
+  const paths = [page.key, ...page.columns.map(c => c.path)];
+  const ranges = columnRanges(paths, page.rows as unknown[][], looks);
   return (
     <Frame testid="object-table">
       <Title title={heading} right={<>
@@ -801,7 +808,8 @@ export function ObjectTablePiece({ elementKey, entity, segment, set, setFrom, ch
                       <td key={page.names[i] ?? i} className={i === 0 ? "aug-mono" : undefined} style={{
                         padding: i === 0 && marked ? "5px 8px 5px 8px" : "5px 8px 5px 0", borderBottom: "1px solid var(--b1)", whiteSpace: "nowrap",
                         boxShadow: i === 0 && isMarked && marked ? `inset 3px 0 0 ${MARK_TONE[marked.tone]}` : undefined,
-                        textAlign: num ? "right" : undefined, color: text === "—" ? "var(--t3)" : "var(--t1)", fontVariantNumeric: "tabular-nums" }}>
+                        textAlign: num ? "right" : undefined, color: text === "—" ? "var(--t3)" : "var(--t1)", fontVariantNumeric: "tabular-nums",
+                        ...(i > 0 ? cellLook(v, looks?.[paths[i]], ranges[paths[i]]) : null) }}>
                         {i > 0 && page.columns[i - 1]?.edited && text !== "—" && <Icon name="edit" size={11} label="Edited" />} {text}
                       </td>
                     );
