@@ -189,7 +189,7 @@ def test_the_server_reads_the_vocabulary_the_web_declares():
     # every piece is the ontology's (or the picker's) or a person's Question (PENDING 54), each held to its own rules
     # ... and the period, the dashboard's own (v15): it reads nothing of the ontology, a file or a question
     assert list(pieces.PIECES) + [questions.KIND] + list(pieces.FILE_PIECES) + ["Period", "GlobalFilters", "GlobalFilter"] == vocab["components"][7:]
-    assert list(app_pieces.PIECES) == vocab["components"][-11:-5]
+    assert list(app_pieces.PIECES) == vocab["components"][-13:-7]
     assert vocab["sizes"] == ["small", "wide", "tall", "large", "full", "hero"]
     assert vocab["range_statuses"] == ["standing", "final", "provisional", "to_date"]
     assert vocab["card_statuses"] == ["within", "over", "unmeasured", "withheld"]
