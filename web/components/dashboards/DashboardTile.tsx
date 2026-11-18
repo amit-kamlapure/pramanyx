@@ -23,7 +23,10 @@
  * Every tile's foot says where its figure comes from. Its doors — refresh, an alert, the
  * evidence, taking it off — show when the tile is pointed at or focused.
  */
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { DropdownMenu } from "@radix-ui/themes";
+import { downloadChartPng, type ChartInstance } from "@/lib/chartExport";
+import { csvFilename, downloadCsv, toCsv, type CsvCell } from "@/lib/query/csv";
 
 import { useMarkRead } from "@/components/dashboards/readSlot";
 import { CardAlertForm, usePersistViz, type CardState } from "@/components/brief/PinnedCardBody";
@@ -88,6 +91,9 @@ export interface TileDoors {
 
 /** Where a tile stands: the element it draws, and its size. A tile drawn outside a dashboard's spec
  *  (a test, a strip) has no element, and offers no size. */
+/** Rows a card offers to take away. */
+export interface CardTable { columns: string[]; rows: CsvCell[][] }
+
 export interface TilePlace {
   elementKey: string | null;
   size: Size;
@@ -212,7 +218,26 @@ export function Foot({ icon, children, aside }: { icon: IconName; children: Reac
 }
 
 /** The card's doors, shown when the tile is pointed at or focused. */
-function Doors({ card, doors, onAlert, place }: { card: DashboardCard; doors: TileDoors; onAlert?: () => void; place: TilePlace }) {
+/** What a card offers to take away (the study's R23): the rows it read as they are drawn here, and its chart as a picture. */
+function CardFiles({ title, table, chart }: { title: string; table: CardTable | null; chart?: RefObject<ChartInstance | null> }) {
+  if (!table?.columns.length && !chart) return null;
+  const name = title.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "card";
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger>
+        <Button variant="ghost" size="icon-xs" aria-label="Download" title="Download this card's rows or its chart" data-testid="card-download"><Icon name="download" /></Button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content size="1" align="end">
+        {!!table?.columns.length && (
+          <DropdownMenu.Item data-testid="card-download-csv" onSelect={() => downloadCsv(csvFilename(name), toCsv(table.columns, table.rows))}>Rows as CSV</DropdownMenu.Item>
+        )}
+        {chart && <DropdownMenu.Item data-testid="card-download-png" onSelect={() => void downloadChartPng(chart.current, title)}>Chart as PNG</DropdownMenu.Item>}
+      </DropdownMenu.Content>
+    </DropdownMenu.Root>
+  );
+}
+
+function Doors({ card, doors, onAlert, place, files }: { card: DashboardCard; doors: TileDoors; onAlert?: () => void; place: TilePlace; files?: ReactNode }) {
   const iid = card.provenance.insight_id;
   return (
     <div className="opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
@@ -233,6 +258,7 @@ function Doors({ card, doors, onAlert, place }: { card: DashboardCard; doors: Ti
         <Button variant="ghost" size="icon-xs" aria-label="Set an alert" title="Alert me when this figure crosses a threshold (schedules a monitor)"
           onClick={onAlert}><Icon name="bell" /></Button>
       )}
+      {files}
       <Button variant="ghost" size="icon-xs" aria-label="Refresh" title="Run this card again"
         onClick={() => doors.onRefresh(card.id)}><Icon name="refresh" /></Button>
       {doors.onRemove && (
@@ -334,7 +360,8 @@ function FigureTile({ cs, status, sym, doors, place }: { cs: CardState & { card:
 
   return (
     <Frame testid="dashboard-tile" shape="figure" over={over}
-      doors={<Doors card={card} doors={doors} place={place} onAlert={value !== null && !alerting ? () => setAlertOpen(o => !o) : undefined} />}>
+      doors={<Doors card={card} doors={doors} place={place} onAlert={value !== null && !alerting ? () => setAlertOpen(o => !o) : undefined}
+        files={<CardFiles title={card.title} table={runTable(cs.run)} />} />}>
       <Title title={card.title} muted />
       {errored ? (
         <>
@@ -437,13 +464,16 @@ function TrendTile({ cs, trend, status, sym, doors, place }: { cs: CardState & {
   const n = trend.values.length;
   const newest = `${fmtDate(trend.dates[n - 1], trend.gran)} · ${figureText(trend.values[n - 1], card, sym, numberLook).text}`;
   const [room, height] = useChartHeight(SPAN[place.size].h === 2 ? 340 : 170);
+  const chart = useRef<ChartInstance | null>(null);
+  const table: CardTable = { columns: ["date", card.title], rows: trend.dates.map((d, i) => [d, trend.values[i]]) };
   return (
-    <Frame testid="dashboard-tile" shape="trend" over={status === "over"} doors={<Doors card={card} doors={doors} place={place} />}>
+    <Frame testid="dashboard-tile" shape="trend" over={status === "over"}
+      doors={<Doors card={card} doors={doors} place={place} files={<CardFiles title={card.title} table={table} chart={chart} />} />}>
       <Title title={card.title} right={
         <span className="aug-fs-sm" data-testid="tile-newest" style={{ color: "var(--t1)", fontWeight: 500, whiteSpace: "nowrap" }}>{newest}</span>
       } />
       <div ref={room} style={{ flex: 1, minHeight: 0 }}>
-        <VegaChart spec={spec} tier={2} height={height} />
+        <VegaChart spec={spec} tier={2} height={height} onReady={i => { chart.current = i; }} />
       </div>
       <Foot icon={source.icon}>{source.words}, by {trend.gran}</Foot>
     </Frame>
@@ -458,8 +488,10 @@ function RowsTile({ cs, doors, place, focus }: { cs: CardState & { card: Dashboa
     chartType?: string; chartConfig?: Record<string, unknown>; custom?: ChartCustom; showDataLabels?: boolean; viz?: VizConfig;
   };
   const [room, height] = useChartHeight(SPAN[place.size].h === 2 ? 400 : 200);
+  const chart = useRef<ChartInstance | null>(null);
   return (
-    <Frame testid="dashboard-tile" shape="rows" doors={<Doors card={card} doors={doors} place={place} />}>
+    <Frame testid="dashboard-tile" shape="rows"
+      doors={<Doors card={card} doors={doors} place={place} files={<CardFiles title={card.title} table={runTable(run)} chart={chart} />} />}>
       <Title title={card.title} />
       <div ref={room} style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
         {run && (
@@ -468,7 +500,8 @@ function RowsTile({ cs, doors, place, focus }: { cs: CardState & { card: Dashboa
             onPick={focus?.onPick ? (p) => focus.onPick?.(p) : undefined}
             exhibit={focusExhibit(render.chartConfig, run.columns, focus)}
             chartType={render.chartType ?? null} chartConfig={render.chartConfig ?? null} custom={render.custom ?? null}
-            defaultShowLabels={render.showDataLabels} fillHeight={height} config={render.viz ?? null} onConfigChange={persistViz} />
+            defaultShowLabels={render.showDataLabels} fillHeight={height} config={render.viz ?? null} onConfigChange={persistViz}
+            onChartReady={i => { chart.current = i; }} />
         )}
       </div>
       <Foot icon={source.icon}>{source.words}{run?.scoped && !run.scoped.standing ? `, for ${run.scoped.covers}` : ""}</Foot>
@@ -565,6 +598,7 @@ function QueryTile({ cs, doors, place, focus }: { cs: CardState & { card: Dashbo
   const numberLook = usePlacementLook().number;
   // v17 — the colours the dashboard keeps for the split's values
   const keptColors = useValueColors();
+  const chart = useRef<ChartInstance | null>(null);
   const { card, run } = cs;
   const shaped = run?.shown ?? null;
   const setup = (card.render as { shown?: QueryShown }).shown;
@@ -607,7 +641,9 @@ function QueryTile({ cs, doors, place, focus }: { cs: CardState & { card: Dashbo
     <div className="aug-fs-xs" data-testid="query-tile-said" style={{ color: "var(--t3)" }}>{shaped.said.join(" ")}</div>
   );
   return (
-    <Frame testid="dashboard-tile" shape={shaped.as === "figure" ? "figure" : "rows"} doors={<Doors card={card} doors={doors} place={place} />}>
+    <Frame testid="dashboard-tile" shape={shaped.as === "figure" ? "figure" : "rows"}
+      doors={<Doors card={card} doors={doors} place={place} files={<CardFiles title={card.title} table={shapedTable(shaped, setup)}
+        chart={shaped.as === "figure" || shaped.as === "table" ? undefined : chart} />} />}>
       <Title title={card.title} muted={shaped.as === "figure"} />
       {shaped.as === "figure" ? (
         <div data-testid="query-tile-figure" style={{ display: "flex", flexDirection: "column", gap: 2 }}>
@@ -627,7 +663,7 @@ function QueryTile({ cs, doors, place, focus }: { cs: CardState & { card: Dashbo
         </div>
       ) : (
         <div ref={room} data-testid="query-tile-chart" style={{ flex: 1, minHeight: 0 }}>
-          {spec && <VegaChart spec={spec} tier={2} height={height}
+          {spec && <VegaChart spec={spec} tier={2} height={height} onReady={i => { chart.current = i; }}
             onSelect={focus?.onPick ? (d) => {
               // the place a click stands for, as the query returned it — never the words it was drawn with
               if (d && "xr" in d && d.xr !== null && d.xr !== undefined) {
@@ -636,7 +672,7 @@ function QueryTile({ cs, doors, place, focus }: { cs: CardState & { card: Dashbo
             } : undefined} />}
           {grid && (
             <ResultChartCard editorKey={card.id} columns={grid.columns} rows={grid.rows} chartType={viz?.type ?? null} config={viz ?? null}
-              onConfigChange={persistViz} fillHeight={height} exhibit={chosen ? { emphasis: chosen } : undefined}
+              onConfigChange={persistViz} fillHeight={height} exhibit={chosen ? { emphasis: chosen } : undefined} onChartReady={i => { chart.current = i; }}
               onPick={focus?.onPick ? (p) => focus.onPick?.(p) : undefined} />
           )}
         </div>
@@ -679,6 +715,18 @@ export function queryGrid(c: Extract<QueryShaped, { as: "bar" | "line" | "area" 
   return split
     ? { columns: [c.x.name, setup.split || "series", measure], rows: c.points.map(p => [p.x, p.s || "", p.v]) }
     : { columns: [c.x.name, measure], rows: c.points.map(p => [p.x, p.v]) };
+}
+
+/** A card's run as rows to take away. */
+function runTable(run: CardState["run"]): CardTable | null {
+  return run?.columns?.length ? { columns: run.columns, rows: (run.rows ?? []) as CsvCell[][] } : null;
+}
+
+/** A query card's result as rows to take away: its table, its chart's points, or its figure. */
+export function shapedTable(shaped: QueryShaped, setup?: QueryShown): CardTable | null {
+  if (shaped.as === "table") return { columns: shaped.columns.map(c => c.name), rows: shaped.rows as CsvCell[][] };
+  if (shaped.as === "figure") return { columns: [shaped.label || "value"], rows: [[shaped.value]] };
+  return setup ? (queryGrid(shaped, setup) as CardTable) : null;
 }
 
 /** A value said beside a figure, in the form its statement asked for. */

@@ -174,6 +174,8 @@ interface Props {
    *  goes (a pinned card's `render`, or `viz_configs` for a card-less chart) and is expected to
    *  debounce — this fires per interaction. Absent → the chart is ephemeral, exactly as before. */
   onConfigChange?: (config: VizConfig) => void;
+  /** The chart as it is drawn, for whoever offers to save it as a picture. */
+  onChartReady?: (chart: ChartInstance) => void;
   /** Fired with what the card is showing — on mount and on every switch — so a caller that offers its
    *  own "Table" disclosure can withhold it while the card already IS a table (2026-11-06). */
   onViewChange?: (view: "chart" | "table" | "pivot") => void;
@@ -182,7 +184,7 @@ interface Props {
 export function ResultChartCard({
   columns, rows, title, chartType, chartConfig, custom, exhibit: exhibitProp,
   columnUnits, defaultShowLabels, heightScale, fillHeight, onSelect, onPick, editorKey,
-  config, onConfigChange, onViewChange,
+  config, onConfigChange, onViewChange, onChartReady,
 }: Props) {
   // Saved display choices seed the controls ONCE. A lazy useState (not a ref) because this is
   // read during render: it captures the first value and never changes, so a parent re-render —
@@ -570,7 +572,7 @@ export function ResultChartCard({
             const pick = onPick ? pickOf(datum, effData.columns, effData.rows, hint, dim || null) : null;
             if (pick) onPick?.(pick, datum);
           } : undefined}
-          onInstanceReady={(inst) => { instRef.current = inst; }}
+          onInstanceReady={(inst) => { instRef.current = inst; onChartReady?.(inst); }}
         />
       )}
 
