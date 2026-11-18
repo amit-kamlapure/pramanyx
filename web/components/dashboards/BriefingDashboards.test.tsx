@@ -26,7 +26,7 @@ const api = vi.hoisted(() => ({
   readMetricTrend: vi.fn(async () => ({ series: [], why: "" })), readBriefingEdition: vi.fn(async () => ({ built: false })),
   getMetricCoverage: vi.fn(async () => ({ areas: [] })),
   getSuggestedShapes: vi.fn(), getDashboardFromObject: vi.fn(), getGroups: vi.fn(),
-  keepDashboardQuery: vi.fn(), previewDashboardQuery: vi.fn(), getCatalogTree: vi.fn(),
+  keepDashboardQuery: vi.fn(), previewDashboardQuery: vi.fn(), getCatalogTree: vi.fn(async () => ({ sections: [] })),
   listPackTemplates: vi.fn(), draftFromPackTemplate: vi.fn(),
 }));
 const drawn = vi.hoisted(() => ({ props: [] as Record<string, unknown>[] }));
@@ -273,6 +273,7 @@ describe("a new dashboard started without a model", () => {
     api.keepDashboard.mockReturnValue(new Promise(() => {}));                 // a start that never answers
     fireEvent.click(screen.getByTestId("dashboard-new-open"));
     dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByTestId("dashboard-new-empty"));
     fireEvent.change(within(dialog).getByLabelText("The dashboard's name"), { target: { value: "Carrier performance" } });
     fireEvent.change(within(dialog).getByLabelText("What this dashboard is for — its first note"), { target: { value: "Pickups." } });
     fireEvent.click(within(dialog).getByTestId("dashboard-start-empty"));
@@ -285,6 +286,7 @@ describe("a new dashboard started without a model", () => {
   it("starts empty — its name and a first note in the person's words — and opens on it", async () => {
     show();
     fireEvent.click(await screen.findByTestId("dashboard-new-open"));
+    fireEvent.click(screen.getByTestId("dashboard-new-empty"));
     const startIt = screen.getByTestId("dashboard-start-empty");
     expect(startIt).toBeDisabled();
     expect(screen.getByTestId("dashboard-new")).toHaveTextContent("Name it.");                 // never a silent dead end

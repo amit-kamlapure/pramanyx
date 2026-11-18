@@ -63,6 +63,7 @@ import { ASKS_OF_A_PIECE, AskPiece } from "@/components/dashboards/AskPiece";
 import { askAbout, dashboardSubject } from "@/lib/askSubject";
 import { ImportDashboard } from "@/components/dashboards/ImportDashboard";
 import { SubscribeDashboard } from "@/components/dashboards/SubscribeDashboard";
+import { FromSql, FromTables } from "@/components/dashboards/StartFromData";
 import { downloadText } from "@/lib/query/csv";
 import { Chip } from "@/components/clarity/kit";
 import { Icon } from "@/components/ui/icon";
@@ -344,7 +345,7 @@ function NewDashboard({ connectionId, schema, sym, onKept, onClose, onBusy }: {
   /** Told while a draft or a start is in flight, so the dialog around it is held open with its Close disabled. */
   onBusy?: (busy: boolean) => void;
 }) {
-  const [way, setWay] = useState<"empty" | "file" | "object" | "pack" | "process" | "draft">("empty");
+  const [way, setWay] = useState<"tables" | "sql" | "empty" | "file" | "object" | "pack" | "process" | "draft">("tables");
   const [types, setTypes] = useState<{ object_type: string; display_name: string }[] | null>(null);
   const [entity, setEntity] = useState("");
   // Arc AP-5 — what each object suggests a dashboard be
@@ -405,13 +406,15 @@ function NewDashboard({ connectionId, schema, sym, onKept, onClose, onBusy }: {
   return (
     <div data-testid="dashboard-new">
       <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
-        {([["empty", "Start empty"], ["file", "From a file"], ["object", "From an object"], ["pack", "From a pack template"], ["process", "For a process"],
+        {([["tables", "From tables"], ["sql", "From SQL"], ["empty", "Start empty"], ["file", "From a file"], ["object", "From an object"], ["pack", "From a pack template"], ["process", "For a process"],
            ["draft", "Draft it with a model"]] as const).map(([w, label]) => (
           <Button key={w} size="xs" variant={way === w ? "secondary" : "ghost"} aria-pressed={way === w}
             data-testid={`dashboard-new-${w}`} disabled={drafting || starting || !!proposal} onClick={() => setWay(w)}>{label}</Button>
         ))}
       </div>
 
+      {way === "tables" && <FromTables connectionId={connectionId} onKept={onKept} onBusy={onBusy} />}
+      {way === "sql" && <FromSql connectionId={connectionId} onKept={onKept} />}
       {way === "file" && (
         <FromFile onKept={(id, connection) => {
           // a file's dashboard lives on the Sheets connection: opened there, whichever connection this page was on
