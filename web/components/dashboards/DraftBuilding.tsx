@@ -83,7 +83,7 @@ export function DraftBuilding({ asked, watch, onStop, children }: { asked: strin
           <span className="aug-fs-ui" style={{ flex: 1, minWidth: 0, color: "var(--t1)", fontWeight: 600 }}>{heading}</span>
           <span className="aug-fs-sm" data-testid="dashboard-draft-elapsed" style={{ color: "var(--t3)", fontVariantNumeric: "tabular-nums" }}>{elapsedWords(seconds)}</span>
         </div>
-        <div className="aug-fs-ui" data-testid="dashboard-draft-asked" style={{ alignSelf: "flex-end", maxWidth: "92%", maxHeight: 160, overflow: "auto", padding: "8px 12px", borderRadius: 10, background: "var(--bg-3)", color: "var(--t1)", overflowWrap: "anywhere" }}>{asked}</div>
+        <div className="aug-fs-ui" data-testid="dashboard-draft-asked" style={{ alignSelf: "flex-end", maxWidth: "92%", maxHeight: 160, overflow: "auto", padding: "8px 12px", borderRadius: 10, background: "var(--bg-2)", border: "1px solid var(--card-edge)", color: "var(--t1)", overflowWrap: "anywhere" }}>{asked}</div>
         <ol role="status" aria-live="polite" style={{ flex: 1, listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 10 }}>
           {watch.steps.map(step => <StepLine key={step.id} step={step} />)}
         </ol>
