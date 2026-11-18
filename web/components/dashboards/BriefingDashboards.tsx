@@ -59,6 +59,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { FormDialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { DropdownMenu } from "@radix-ui/themes";
+import { ASKS_OF_A_PIECE, AskPiece } from "@/components/dashboards/AskPiece";
 import { Chip } from "@/components/clarity/kit";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
@@ -1285,6 +1286,11 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
               measure: render.viz?.metric ?? null, colorField: render.viz?.colorField ?? null, colorScale: render.viz?.colorScale ?? null });
           }}
           onUndo={stacks.past.length > 0 ? undo : undefined} onRedo={stacks.future.length > 0 ? redo : undefined}
+          askPiece={(key, type) => (ASKS_OF_A_PIECE(type) ? (
+            <AskPiece key={key} connectionId={connectionId} dashboardId={data.cockpit_id} schema={schema} pieceKey={key} actor={ACTOR}
+              beforeAsk={async () => { sendBurst(); await burst.current.chain; }}
+              onKept={() => { setStacks(st => ({ past: [...st.past.slice(-49), current], future: [] })); reload(); }} />
+          ) : null)}
           bar={(
             <EditBar saved={saved} onDone={done}
               picker={(

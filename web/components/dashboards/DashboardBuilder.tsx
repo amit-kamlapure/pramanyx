@@ -126,7 +126,7 @@ function Steps({ label, value, least, most, onStep }: { label: string; value: nu
 const Rule = () => <span aria-hidden="true" style={{ width: 1, height: 16, background: "var(--b2)", margin: "0 6px" }} />;
 
 export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words, aside, above, connectionId, schema,
-  onAddPiece, checks, cardSetup, cardChart, cardSql, cardReads, queryCards, onUndo, onRedo, cardDates, cardHolds, release, children }: {
+  onAddPiece, checks, cardSetup, cardChart, cardSql, cardReads, queryCards, onUndo, onRedo, cardDates, cardHolds, release, askPiece, children }: {
   spec: DashboardSpec;
   /** The ontology release its pieces read, when it is the one the dashboard was composed against: said on its own setup. */
   release?: string | null;
@@ -135,6 +135,8 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
   /** v17 — what a placed card holds that its panel offers to draw: number columns, and fields whose values it colours. */
   cardHolds?: (cardId: string) => CardHolds;
   /** Undo and Redo, on the canvas toolbar and the editing keys (the dashboards study, R2 and R3, 2026-11-18). */
+  /** The study's R19 — the door to change the piece chosen in words, drawn above its setup. */
+  askPiece?: (key: string, type: string | undefined) => ReactNode;
   onUndo?: () => void;
   onRedo?: () => void;
   /** The canvas toolbar's doors the page keeps — words, a picture, buttons, asking in words — and which one is open. */
@@ -444,9 +446,9 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
               connectionId={connectionId} schema={schema} cardReads={cardReads} cardTitle={cardTitle}
               onRenamed={n => setWire(`value:${n}`)} queryCards={queryCards} />
               : wireKind === "choice" ? <ChoiceSetup spec={spec} name={wireName} />
-                : <PieceSetup spec={spec} selected={selected} onChange={apply} connectionId={connectionId} schema={schema} cardTitle={cardTitle}
+                : <>{selected && askPiece?.(selected, el?.type)}<PieceSetup spec={spec} selected={selected} onChange={apply} connectionId={connectionId} schema={schema} cardTitle={cardTitle}
                   entityTitle={entityTitle} cardSetup={cardSetup} cardChart={cardChart} cardSql={cardSql}
-                  onOpenLayout={() => openPane("layout")} cardDates={cardDates} cardHolds={cardHolds} release={release} />)}
+                  onOpenLayout={() => openPane("layout")} cardDates={cardDates} cardHolds={cardHolds} release={release} /></>)}
         </aside>
       </div>
     </div>

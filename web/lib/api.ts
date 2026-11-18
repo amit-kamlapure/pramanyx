@@ -3638,10 +3638,10 @@ export async function restoreDashboard(connectionId: string, dashboardId: string
 
 /** ⚑ Spends model calls. A change to one of the asker's dashboards, asked for in words: a proposal
  *  to keep or not — an edit against the version on screen, or a publish. */
-export async function askDashboard(connectionId: string, dashboardId: string, words: string, schema?: string): Promise<DashboardDrafted> {
+export async function askDashboard(connectionId: string, dashboardId: string, words: string, schema?: string, target?: string): Promise<DashboardDrafted> {
   const res = await fetch(dashboardUrl(`/dashboards/${encodeURIComponent(dashboardId)}/ask`, connectionId), {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ words, schema_name: schema ?? null }),
+    body: JSON.stringify({ words, schema_name: schema ?? null, ...(target ? { target } : {}) }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));

@@ -20,7 +20,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
 from fastapi.responses import Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from pramanyx.ontology.security import acting_agent_from_request
 from pramanyx.security.authz import connection_owner_guard
@@ -71,6 +71,8 @@ class QueryRequest(BaseModel):
 class AskRequest(BaseModel):
     words: str
     schema_name: Optional[str] = None
+    #: The one element a change is held to, when a person asks about the piece they chose.
+    target: Optional[str] = Field(default=None, max_length=120)
 
 
 class PublishRequest(BaseModel):
@@ -560,7 +562,7 @@ def ask_dashboard(request: Request, cockpit_id: str, connection_id: str, req: As
     from pramanyx.dashboards.ask import edit_in_words
     from pramanyx.dashboards.home import person_of
     home = _home(request, connection_id, cockpit_id)
-    return edit_in_words(connection_id, person_of(request), home.cockpit_id, req.words, schema=req.schema_name)
+    return edit_in_words(connection_id, person_of(request), home.cockpit_id, req.words, schema=req.schema_name, target=req.target)
 
 
 @router.post("/dashboards/{cockpit_id}/publish")

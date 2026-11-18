@@ -54,8 +54,29 @@ SYSTEM_EDIT = (
 )
 
 
+#: Asked of one piece (the study's R19): the same law, held to the element chosen.
+SYSTEM_PIECE = SYSTEM_EDIT + (
+    " The person chose one element of the dashboard and asks about it alone: change that element and nothing else. "
+    "Every patch's path begins /elements/<its key>/. Do not publish."
+)
+
+
+def outside_piece(args: dict, target: str) -> list[str]:
+    """Why a draft reaches past the one piece it was asked about, in sentences for the model to repair; none when it stays."""
+    if (args or {}).get("op") not in ("new", "edit", "publish"):
+        return []
+    if args.get("op") != "edit":
+        return [f"Only the element {target} may be changed, so draft op edit alone."]
+    home = f"/elements/{target}"
+    reach = [str(p.get(side)) for p in args.get("patches") or [] if isinstance(p, dict) for side in ("path", "from") if p.get(side)]
+    past = sorted({r for r in reach if r != home and not r.startswith(f"{home}/")})
+    if past:
+        return [f"Only the element {target} may be changed; these reach past it: {', '.join(past)}."]
+    return [] if reach else [f"The draft changes nothing of the element {target}."]
+
+
 def _run(home: Home, system: str, ask: str, *, said: str, schema: Optional[str], provider: Any,
-         site: str, nothing: str) -> dict:
+         site: str, nothing: str, target: Optional[str] = None) -> dict:
     """Run the model once with the drafting tool bound to ``home``. Returns what became of it —
     ``staged`` with the proposal, or not, with the reasons as sentences."""
     from pramanyx.agent.dashboard_tool import drafting_tool
@@ -75,6 +96,12 @@ def _run(home: Home, system: str, ask: str, *, said: str, schema: Optional[str],
                          emit=lambda kind, payload: staged.append(payload) if kind == "proposal_staged" else None)
 
     def run(args: dict) -> dict:
+        past = outside_piece(args, target) if target else []
+        if past:
+            out = {"staged": False, "refused": past, "error": " ".join(past),
+                   "summary": "Nothing staged. Repair every point in `refused`, then draft it again."}
+            results.append(out)
+            return out
         out = tool.run(args)
         if (args or {}).get("op") in ("new", "edit", "publish"):
             results.append(out if isinstance(out, dict) else {})
@@ -117,9 +144,10 @@ def draft_for_area(connection_id: str, owner: str, area: str, *, schema: Optiona
 
 
 def edit_in_words(connection_id: str, owner: str, cockpit_id: str, words: str, *, schema: Optional[str] = None,
-                  provider: Any = None) -> dict:
+                  provider: Any = None, target: Optional[str] = None) -> dict:
     """Run the model once for a change to the dashboard ``cockpit_id`` the person keeps, as they ask
-    for it in words. What comes back is a staged edit or publish, or the reasons none was."""
+    for it in words. What comes back is a staged edit or publish, or the reasons none was. With ``target``, the
+    element the person chose, the change is held to that element alone."""
     from pramanyx.dashboards import versions
     words = " ".join((words or "").split())[:MAX_WORDS]
     if not words:
@@ -129,6 +157,15 @@ def edit_in_words(connection_id: str, owner: str, cockpit_id: str, words: str, *
     if live is None or live["retired"] or not live.get("spec"):
         return _not("There is no dashboard here to change.")
     title = versions.title_of(live["spec"]) or cockpit_id
+    if target:
+        element = (live["spec"].get("elements") or {}).get(target)
+        if not isinstance(element, dict):
+            return _not("That piece is no longer on the dashboard.")
+        if element.get("type") in ("Note", "Image"):
+            return _not("A note or an image is yours to change by hand.")
+        return _run(home, SYSTEM_PIECE, f'Of their dashboard "{title}", about the element "{target}" alone '
+                    f'(a {element.get("type")}), the person asks: {words}', said=words, schema=schema, provider=provider,
+                    site="cockpit.edit", nothing="The model drafted no change for this, and gave no reason.", target=target)
     return _run(home, SYSTEM_EDIT, f'Of their dashboard "{title}", the person asks: {words}', said=words,
                 schema=schema, provider=provider, site="cockpit.edit",
                 nothing="The model drafted no change for this, and gave no reason.")
