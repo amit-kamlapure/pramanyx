@@ -202,7 +202,8 @@ describe("Vega tier-1 resolver", () => {
   it("gives a multi-series trend one line per series, not one line through every point", () => {
     const f = FIXTURES.find((x) => x.name === "trend by series")!;
     const v = resolveVegaSpec({ columns: f.columns, rows: f.rows, chartType: f.hint });
-    const enc = (v!.spec as { encoding: { color?: { field?: string; sort?: unknown } } }).encoding;
+    // The series' colour is the lines' own (the hover rule reads one row per x, every series in it).
+    const enc = (v!.spec as { layer: { encoding: { color?: { field?: string; sort?: unknown } } }[] }).layer[0].encoding;
     expect(enc.color?.field).toBe("region");
     // Data order, not alphabetical: otherwise a series changes hue between engines.
     expect(enc.color?.sort).toBeNull();

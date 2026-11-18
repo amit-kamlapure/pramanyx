@@ -26,6 +26,7 @@ import { applyNames, type SeriesNames } from "@/components/charts/vega/names";
 import { periodsSpanned, timeBarFit } from "@/components/charts/vega/bandFit";
 import { dateAxis, utcScale } from "@/components/charts/vega/timeAxis";
 import { emphasisOpacity as emphasisOn } from "@/components/charts/vega/emphasis";
+import { HOVER_MARK, type HoverMeta } from "@/components/charts/vega/hoverTooltip";
 
 /** The four post-processing ops the edit panel offers, mirroring pramanyx/tools/postproc.py. */
 export type TransformOp = "pop" | "contribution" | "rolling" | "cumulative";
@@ -179,6 +180,13 @@ export interface ResolvedSpec {
 const SELECT_PARAM = (field: string) => ({
   name: "picked",
   select: { type: "point", on: "click", fields: [field], clear: "dblclick" },
+});
+
+/** The x nearest the pointer, on a line chart (study R25): the hover rule's and the rings' param. `nearest` makes Vega
+ *  draw a voronoi over the rule, so the pointer anywhere in the plot finds its x. Cleared when the pointer leaves. */
+const HOVER_PARAM = (field: string) => ({
+  name: "hover",
+  select: { type: "point", fields: [field], nearest: true, on: "pointermove", clear: "pointerout" },
 });
 
 /** Opacity, conditioned on the selection. No colour literal: the de-emphasis is a wash, not
@@ -597,23 +605,54 @@ function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
     // alphabetically by default, which hands the same series a different hue than the
     // ECharts path gives it — every screenshot in the Phase 2 diff would flag.
     if (seriesCol) enc.color = { field: seriesCol, type: "nominal", sort: null };
+    const { x: xEnc, ...lineEnc } = enc;
+    // The series as the rule's pivot names them, in data order (the colour's own order).
+    const seriesNames = seriesCol
+      ? [...new Set(rows.map((r) => r[columns.indexOf(seriesCol)]).filter((v) => v !== null && v !== undefined)
+                       .map(String))]
+      : [lineField];
+    const hover: HoverMeta = {
+      x, gran: xIsDate ? detectGranularity(x, xValues) : null, series: seriesNames,
+      label: seriesCol ? null : axisTitle(yTitle, measure),
+      format: linePct ? null : (format && format.trim() ? format : null), pct: linePct,
+      prefix: linePct ? "" : moneyPrefix(measure),
+    };
     return {
       tier: 1, resolved: seriesCol ? "multi-line" : "line", defaultH: 300, xCategories: 0,
       spec: {
         ...base,
         ...(lineScaled ? { transform: [...((base.transform as Record<string, unknown>[]) ?? []),
                                        { calculate: `datum['${measure}'] / 100`, as: lineField }] } : {}),
-
-        // A line plus its points: the point layer is the hover target and the ≥8px marker
-        // the mark spec asks for, and it keeps a single-observation series visible. Only the
-        // POINTS respond to a selection — dimming the line itself would break its continuity,
-        // which is the one thing a trend line exists to show.
+        usermeta: { hover },
+        /**
+         * The line, its points, and the hover rule (study R25). The x is shared; the value and the series are the
+         * lines' own, since the rule reads one row per x with every series in it (`pivot`).
+         *
+         * - The points are the ≥8px marker the mark spec asks for, and keep a single-observation series visible.
+         *   Only they dim on a selection: dimming the line itself would break its continuity, which is the one thing
+         *   a trend line exists to show.
+         * - A ring on each line at the x nearest the pointer.
+         * - The rule: dashed, drawn only at that x, the whole height. It owns the hover (`nearest`, so the pointer
+         *   need not touch a point) and the click that chooses an x, and its row is the tooltip: the date and every
+         *   series there (`hoverTooltip.ts`). Two params on one unit, each declared once (see SELECT_PARAM).
+         */
         layer: [
-          { mark: { type: "line" } },
-          { mark: { type: "point", tooltip: true }, params: [SELECT_PARAM(x)],
-            encoding: { opacity: emphasisOn(exhibit?.emphasis, x, xIsDate) ?? SELECT_OPACITY } },
+          { encoding: lineEnc,
+            layer: [
+              { mark: { type: "line" } },
+              { mark: { type: "point" },
+                encoding: { opacity: emphasisOn(exhibit?.emphasis, x, xIsDate) ?? SELECT_OPACITY } },
+              { transform: [{ filter: { param: "hover", empty: false } }],
+                mark: { type: "point", filled: false, size: 90, strokeWidth: 2 } },
+            ] },
+          { transform: [...(seriesCol ? [{ pivot: seriesCol, value: lineField, groupby: [x] }] : []),
+                        { calculate: "true", as: HOVER_MARK }],
+            mark: { type: "rule", strokeDash: [3, 3], tooltip: { content: "data" } },
+            params: [HOVER_PARAM(x), SELECT_PARAM(x)],
+            encoding: { y: { value: 0 }, y2: { value: { expr: "height" } },
+                        opacity: { condition: { param: "hover", empty: false, value: 0.7 }, value: 0 } } },
         ],
-        encoding: enc,
+        encoding: { x: xEnc },
       },
     };
   }

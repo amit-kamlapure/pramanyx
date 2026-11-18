@@ -18,6 +18,7 @@ import { useEffect, useRef, useState } from "react";
 import { bandPaddingFor, withBandPadding } from "@/components/charts/vega/bandFit";
 import { buildVegaConfig, buildVegaRuntimeConfig, readVegaTokens } from "@/components/charts/vega/config";
 import { clickedDatum } from "@/components/charts/selection";
+import { HOVER_MARK, hoverHtml, hoverMetaOf } from "@/components/charts/vega/hoverTooltip";
 import type { ChartInstance, PngOptions } from "@/lib/chartExport";
 
 type VegaModules = {
@@ -119,7 +120,25 @@ export function VegaChart({ spec, tier = 1, height = 300, className, onCompiled,
             onCompiledRef.current?.(sized);
             viewRef.current?.finalize();
             const view = new vega.View(runtime, { renderer: "svg", container: el, hover: true });
-            view.tooltip(new tooltip.Handler().call);
+            // A line's hover rule writes its own tooltip: the date and every series there, largest first, each beside
+            // its line's colour (`hoverTooltip.ts`). Every other mark's tooltip is vega-tooltip's own table. Both wear
+            // the app's surface (`.aug-theme`, globals.css), not vega-tooltip's white box.
+            const hover = tier === 3 ? null : hoverMetaOf(spec);
+            const colorOf = (series: string): string | null => {
+              try {
+                const scale = view.scale("color") as ((v: string) => unknown) | undefined;
+                const c = scale ? scale(series) : config.line && typeof config.line === "object"
+                  ? (config.line as { color?: unknown }).color : null;
+                return typeof c === "string" ? c : tokens.palette[0] ?? null;
+              } catch { return tokens.palette[0] ?? null; }
+            };
+            view.tooltip(new tooltip.Handler({
+              theme: "aug",
+              formatTooltip: (value, valueToHtml, maxDepth, baseURL) =>
+                hover && value && typeof value === "object" && (value as Record<string, unknown>)[HOVER_MARK]
+                  ? hoverHtml(value as Record<string, unknown>, hover, colorOf, valueToHtml)
+                  : tooltip.formatValue(value, valueToHtml, maxDepth, baseURL),
+            }).call);
             viewRef.current = view;
 
             view.addEventListener("click", (_e: unknown, item: unknown) => {

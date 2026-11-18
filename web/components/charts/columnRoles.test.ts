@@ -95,7 +95,7 @@ describe("a rate beside its own numerator and denominator is what the chart plot
   });
   it("reads as a percentage on the line and the bar, labels included", () => {
     const line = resolveVegaSpec({ columns: COHORTS.columns, rows: COHORTS.rows, chartType: "auto" });
-    const enc = (line?.spec as { encoding: { y: { field: string; axis: { format: string } } } }).encoding;
+    const enc = (line?.spec as { layer: { encoding: { y: { field: string; axis: { format: string } } } }[] }).layer[0].encoding;
     expect([enc.y.field, enc.y.axis.format]).toEqual(["repeat_rate", ".1%"]);
     const bar = resolveVegaSpec({ columns: SOURCES.columns, rows: SOURCES.rows, chartType: "auto", showLabels: true });
     expect(JSON.stringify(bar?.spec)).toContain("format(datum['repeat_rate'], '.1%')");
@@ -105,7 +105,7 @@ describe("a rate beside its own numerator and denominator is what the chart plot
     const spec = resolveVegaSpec({ columns: g.columns, rows: g.rows, chartType: "auto",
                                    columnUnits: { return_pct: "percent" } })?.spec as Record<string, unknown>;
     expect(spec.transform).toEqual([{ calculate: "datum['return_pct'] / 100", as: "return_pct__frac" }]);
-    expect((spec.encoding as { y: { field: string } }).y.field).toBe("return_pct__frac");
+    expect((spec.layer as { encoding: { y: { field: string } } }[])[0].encoding.y.field).toBe("return_pct__frac");
   });
 });
 
