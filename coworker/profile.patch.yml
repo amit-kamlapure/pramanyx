@@ -378,6 +378,20 @@
 - id: command-feedback
   disabled: true
 
+# ── one way of working, and no mode to pick (2026-11-18). The shell's picker bundles a sandbox for bash and files, which
+#    are off here, with whether a person is asked: its first two modes did the same thing and its third, Full access,
+#    refused everything that asks. What the coworker does on its own and what it asks first is decided call by call
+#    (`plugins/home`, `askBeforeActing`), and every ask goes to the person, once, in the conversation.
+- id: permission
+  config:
+    presets:
+      coworker:
+        sandbox: read-only
+        approval: ask
+    defaultPreset: coworker
+- id: ui-permission
+  disabled: true
+
 # ── off: the shell's own account. A person here is who Pramanyx says they are; signing in to the shell's maker is
 #    a second identity, and its "Sign in" and "Feedback" entries lead away from the app this page belongs to.
 - id: deepseek-account

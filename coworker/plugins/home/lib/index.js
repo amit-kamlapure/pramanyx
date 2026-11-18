@@ -444,30 +444,100 @@ export function refusalFor(name, args, held, also = []) {
 }
 
 /**
- * ASKED FIRST (2026-11-17). A call that changes what the platform does unattended, or what the organisation's
- * knowledge holds, waits for the person's own Allow in the conversation — the shell's approval prompt — whatever the
- * organisation's agent policy allows: setting something on a schedule, and drafting what a word means. The prompt
- * says what will happen in the person's own words. Reading, asking a question and bringing in a file they attached
- * are not asked about.
+ * WHAT THE COWORKER DOES ON ITS OWN, AND WHAT IT ASKS FIRST (2026-11-18; the user: "be more autonomous.. it must ask
+ * permission explicitly for tasks that may be risky or critical"). There is one way of working and no mode to pick.
+ *
+ * On its own: whatever reads, or works a question through, and leaves nothing behind: reading what the platform holds,
+ * asking the governed path, a deep analysis, a draft that only the person can send. Everything else waits for the
+ * person's own Allow, once, in the conversation: whatever changes what the platform holds or does unattended, stops
+ * work, runs an automation, or starts a long crawl of the warehouse. The list below is of what may go ahead, so a tool
+ * nobody has thought about is asked about. What is asked is written here from the call, in the platform's words.
  */
-const ASKED_FIRST = {
-  "mcp__pramanyx__schedule": (args) => `Set this up on a schedule: “${clipped(args.request)}”?`,
-  "mcp__pramanyx__draft_definition": (args) =>
-    `Draft what “${clipped(args.term, 80)}” means${args.area ? ` in ${args.area}` : ""}: “${clipped(args.text)}”? It is not used until its owner publishes it.`,
-  // punch list 90 — a person's own memory, read into their own questions: theirs to allow.
-  "mcp__pramanyx__remember_for_me": (args) => `Remember this for you, in your own questions only: “${clipped(args.text)}”?`,
-};
+const OWN_WORK = new Set([
+  // what the platform holds
+  "list_connections", "get_metric", "get_definitions", "read_learned", "my_memories", "list_findings", "get_investigation",
+  "search_graph", "describe_entity", "list_objects", "get_table_health", "list_trusted_queries", "list_jobs", "get_job",
+  "list_runs", "inspect_run", "read_run_span", "read_contract", "read_claims", "read_restatements", "ground_agent",
+  // the platform's own account of itself
+  "list_platform_connections", "platform_usage", "platform_limits", "review_missed_move", "platform_runs",
+  "investigation_cadence", "answer_accuracy", "table_popularity", "platform_traces", "platform_premortem", "platform_audit",
+  "get_object", "explain", "platform_guide",
+  // working a question through
+  "ask", "deep_analysis", "get_briefing",
+  // what stays the person's: their own Drive by file name, a deck of their answers, a draft only they can send, a file they attached
+  "search_my_drive", "search_the_web", "deck_of_answers", "draft_email", "bring_in_file",
+]);
+/** A person's custom agent is asked a question as the governed path is. An automation may be called the same: see `automations`. */
+const AGENT = /^ask_[a-z0-9_]+$/;
+const bareName = (name) => (String(name).startsWith(OURS) ? String(name).slice(OURS.length) : "");
+
+/** Whether a call goes ahead without asking. `automations` is the automations offered as tools, or null when not known. */
+export function mayGoAhead(name, automations = null) {
+  const bare = bareName(name);
+  if (!bare) return true;                                     // the shell's own tools: the profile mounts only harmless ones
+  if (automations?.has(bare)) return false;
+  return OWN_WORK.has(bare) || (AGENT.test(bare) && automations !== null);
+}
+
 const clipped = (value, most = 240) => {
   const text = String(value ?? "").trim();
   return text.length > most ? `${text.slice(0, most)}…` : text;
 };
+/** What a call was given, as a reader would say it. */
+const given = (args) => {
+  const said = Object.entries(args).filter(([, v]) => ["string", "number", "boolean"].includes(typeof v) && String(v).trim() !== "")
+    .slice(0, 4).map(([k, v]) => `${k.replace(/_/g, " ")}: ${clipped(v, 80)}`).join(", ");
+  return said ? ` (${said})` : "";
+};
+const ASKED_FIRST = {
+  schedule: (args) => `Set this up on a schedule: “${clipped(args.request)}”?`,
+  draft_definition: (args) =>
+    `Draft what “${clipped(args.term, 80)}” means${args.area ? ` in ${args.area}` : ""}: “${clipped(args.text)}”? It is not used until its owner publishes it.`,
+  // punch list 90 — a person's own memory, read into their own questions: theirs to allow.
+  remember_for_me: (args) => `Remember this for you, in your own questions only: “${clipped(args.text)}”?`,
+  forget_for_me: (args) => `Forget this from what I remember for you${given(args)}?`,
+  cancel_job: (args) => `Stop the work in progress${given(args)}?`,
+  explore: (args) => `Start a full exploration of ${clipped(args.connection, 80)}? It runs many queries in the background and can take a while.`,
+  post_claim: (args) => `Record this in the ledger: “${clipped(args.text)}”?`,
+  set_preference: (args) => `Change a preference${given(args)}?`,
+  draft_agent: (args) => `Draft a new agent${given(args)}?`,
+  draft_automation: (args) => `Draft a new automation${given(args)}?`,
+  edit_automation: (args) => `Change an automation${given(args)}?`,
+  draft_monitor: (args) => `Draft a new monitor${given(args)}?`,
+  draft_brief: (args) => `Draft a new scheduled brief${given(args)}?`,
+  pause_or_resume_automation: (args) => `Pause or resume an automation${given(args)}?`,
+  set_agent_limit: (args) => `Change an agent's limit${given(args)}?`,
+  propose_agent_grant: (args) => `Propose giving an agent more access${given(args)}?`,
+};
 
-/** The approval to ask for before a call, or undefined when it is not asked about. */
-export function askFor(name, args) {
-  const say = ASKED_FIRST[String(name)];
-  if (!say) return undefined;
-  const words = say(args && typeof args === "object" ? args : {});
+/** The approval to ask for before a call, or undefined when it goes ahead. */
+export function askFor(name, args, automations = null) {
+  if (mayGoAhead(name, automations)) return undefined;
+  const bare = bareName(name);
+  const held = args && typeof args === "object" ? args : {};
+  const words = automations?.has(bare)
+    ? `Run the automation “${bare.replace(/_/g, " ")}” now? It does everything its steps do, including anything it sends.`
+    : ASKED_FIRST[bare]?.(held) ?? `Allow this: ${bare.replace(/_/g, " ")}${given(held)}?`;
   return { kind: "ask", reason: words, displayReason: { en: words } };
+}
+
+/** The automations offered as tools, read at most every half minute; null when they cannot be read, which asks about more. */
+const AUTOMATIONS_FOR = 30_000;
+function automationsReader(api) {
+  let known = { at: -AUTOMATIONS_FOR, names: null };
+  return async (now = Date.now()) => {
+    if (now - known.at < AUTOMATIONS_FOR) return known.names;
+    let names = null;
+    try {
+      const answer = await fetch(`${api}/automations/tools`, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(3000) });
+      if (answer.ok) {
+        const body = await answer.json();
+        names = new Set((Array.isArray(body) ? body : body?.tools ?? []).map((row) => String(row?.tool_name ?? "")).filter(Boolean));
+      }
+    } catch { /* not known: an agent's question is asked about until it is */ }
+    known = { at: now, names };
+    return names;
+  };
 }
 
 /**
@@ -477,7 +547,8 @@ export function askFor(name, args) {
  * tool, and for a draft the word: a draft of another word is still asked about.
  */
 export function declinedKey(name, args) {
-  if (!ASKED_FIRST[String(name)]) return "";
+  const bare = bareName(name);
+  if (!bare || OWN_WORK.has(bare)) return "";
   if (String(name) === "mcp__pramanyx__draft_definition") {
     return `${name}:${String(argsOf(args).term ?? "").trim().toLowerCase()}`;
   }
@@ -524,7 +595,10 @@ export function timingRefusal(personSaid, request) {
     `“${said}”. Call schedule again with that sentence as \`request\`, copied exactly — not reworded or shortened.`;
 }
 
-export function askBeforeActing(ctx) {
+export function askBeforeActing(ctx, readAutomations = automationsReader((process.env.PRAMANYX_API_URL || "http://127.0.0.1:8000").replace(/\/$/, ""))) {
+  // A conversation kept from before there was one way of working may still say "never ask": what is asked would be refused unseen.
+  let approval = null;
+  ctx.inject?.(["approval"], (at) => { approval = at.approval; at.effect?.(() => () => { approval = null; }); });
   const declined = new Map();        // conversation → what the person declined since they last wrote
   const asked = new Map();           // call → what it would be declined as
   const lastSaid = new Map();        // conversation → the person's own last message
@@ -563,7 +637,10 @@ export function askBeforeActing(ctx) {
       const refused = timingRefusal(lastSaid.get(id) ?? lastSaid.get(parent) ?? "", argsOf(call?.arguments).request);
       if (refused) return { kind: "deny", reason: refused };
     }
-    return askFor(call?.name, call?.arguments) ?? decided;
+    const asked = askFor(call?.name, argsOf(call?.arguments), bareName(call?.name) ? await readAutomations() : null);
+    if (!asked) return decided;
+    try { if (call?.agent) approval?.setPolicy?.(call.agent, "ask"); } catch { /* it is refused unseen, and nothing is done */ }
+    return asked;
   });
 }
 

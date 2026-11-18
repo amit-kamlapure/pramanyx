@@ -130,8 +130,11 @@ turned back on from the interface.
   agent searches and reads the person's own past conversations (the shell's session tools, over the sidebar's search
   index). A person's own coworker holds only theirs; the install's first coworker searches only while one person has
   used it, and refuses once a second has (`plugins/home`, `recallRefusal`).
-- **Asked in the conversation** (2026-11-18). What the coworker asks before doing — setting up a schedule, drafting
-  what a word means — is asked under the step that waits on it, with Reject and Allow once, and the box at the foot of
+- **One way of working** (2026-11-18). There is no mode to pick. The coworker reads, asks the governed path, runs a deep
+  analysis and drafts on its own. Anything that changes what the platform holds or does unattended, stops work, runs an
+  automation or starts a long exploration waits for the person's Allow, once. The list in `plugins/home` is of what may
+  go ahead, so a tool nobody has classified is asked about.
+- **Asked in the conversation** (2026-11-18). What the coworker asks before doing is asked under the step that waits on it, with Reject and Allow once, and the box at the foot of
   the page says where the question is (it asks there only if the step is not drawn). The shell's own card for it,
   which took the question box's place under a strip of its own, is not drawn for Pramanyx's steps; the answer goes to
   the same request, so what is recorded is the person's own click, as before.

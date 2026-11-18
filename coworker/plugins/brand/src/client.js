@@ -68,6 +68,8 @@ body[data-ds-dark-theme] [data-composer-card][data-composer-card] { --pramanyx-g
 [data-composer-card] [class*="_primary"] { background: #46a0c4 !important; color: #ffffff !important; }
 [data-composer-card] [class*="_primary"]:disabled { background: #2e3135 !important; color: #8b9099 !important; opacity: 1 !important; }
 body:not([data-ds-dark-theme]) [data-composer-card] [class*="_primary"]:disabled { background: #e8e9eb !important; color: #8b9099 !important; }
+/* The shell's strip of turns, tokens and cache under the box: its own accounting, of no use to a person asking about a business. */
+[class*="_dock"]:has(> [data-slot="conversation.composer.dock"]) { display: none !important; }
 [class*="_sessionRow"][class*="_selected"] { position: relative; }
 [class*="_sessionRow"][class*="_selected"]::before {
   content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; z-index: 1;
