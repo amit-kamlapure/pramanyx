@@ -21,7 +21,7 @@ vi.mock("@/lib/api", async (original) => ({
 vi.mock("@/components/dashboards/DashboardTile", async (original) => ({
   ...(await original<typeof import("@/components/dashboards/DashboardTile")>()),
   DashboardTile: ({ focus }: { focus?: { onPick?: (p: { field: string; value: string }) => void } }) => (
-    <button data-testid="a-mark" onClick={() => focus?.onPick?.({ field: "channel", value: "Search" })}>A mark</button>
+    <span role="button" data-testid="a-mark" onClick={() => focus?.onPick?.({ field: "channel", value: "Search" })}>A mark</span>
   ),
 }));
 beforeAll(() => {

@@ -26,6 +26,12 @@ export function chooseIn(focus: DashboardFocus[], next: DashboardFocus): Dashboa
   return [...focus, next].slice(-MAX_FOCUS);
 }
 
+/** Whether a dashboard places this card so that its filters do not cut it (v18, the study's R15). */
+export function notFiltered(spec: unknown, cardId: string): boolean {
+  const elements = (spec as { elements?: Record<string, { type?: string; props?: Record<string, unknown> }> } | null)?.elements ?? {};
+  return Object.values(elements).some(e => e?.type === "Card" && e.props?.card === cardId && e.props?.not_filtered === true);
+}
+
 /** What a card is asked with: every chosen value but those chosen on itself. */
 export function focusFor(focus: DashboardFocus[], cardId: string): FocusOn[] {
   return focus.filter(f => f.source.card !== cardId).map(({ table, column, value }) => ({ table, column, value }));

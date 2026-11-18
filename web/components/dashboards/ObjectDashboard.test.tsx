@@ -83,7 +83,7 @@ describe("a dashboard started from an object", () => {
     expect(screen.getByText("via Customer")).toBeTruthy();
     expect(figure("Revenue").textContent).toContain("$10.80M");
     expect(screen.queryByTestId("not-filtered")).toBeNull();
-    expect(screen.queryByTestId("object-filter-bar")).toBeNull();
+    expect(screen.queryByTestId("dashboard-filtered-by")).toBeNull();
   });
 
   it("narrows every piece over the entity on a click, and says the whole beside each figure", async () => {
@@ -124,8 +124,8 @@ describe("a dashboard started from an object", () => {
     first.unmount();
     draw();
     await waitFor(() => expect(screen.getByTestId("object-filter-count").textContent).toBe("37,838 of 125,080 orders"));
-    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
-    await waitFor(() => expect(screen.queryByTestId("object-filter-bar")).toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
+    await waitFor(() => expect(screen.queryByTestId("dashboard-filtered-by")).toBeNull());
     expect(localStorage.getItem("pramanyx:cockpit-filters:thelook:orders-1a2b")).toBe("{}");
   });
 

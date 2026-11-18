@@ -37,8 +37,8 @@ export function noteHref(href: string | undefined): string | undefined {
 }
 
 const COMPONENTS = {
-  h1: ({ children }: ElProps) => <h2 data-testid="note-heading" style={{ margin: 0, fontSize: 22, lineHeight: 1.25, fontWeight: 600 }}>{children}</h2>,
-  h2: ({ children }: ElProps) => <h3 data-testid="note-heading" style={{ margin: 0, fontSize: 15, lineHeight: 1.35, fontWeight: 600 }}>{children}</h3>,
+  h1: ({ children }: ElProps) => <h2 className="aug-fs-h1" data-testid="note-heading" style={{ margin: 0, lineHeight: 1.25, fontWeight: 600 }}>{children}</h2>,
+  h2: ({ children }: ElProps) => <h3 className="aug-fs-h2" data-testid="note-heading" style={{ margin: 0, lineHeight: 1.35, fontWeight: 600 }}>{children}</h3>,
   p: ({ children }: ElProps) => <p style={{ margin: 0 }}>{children}</p>,
   ul: ({ children }: ElProps) => <ul style={{ margin: 0, paddingLeft: 18, listStyle: "disc" }}>{children}</ul>,
   ol: ({ children }: ElProps) => <ol style={{ margin: 0, paddingLeft: 18, listStyle: "decimal" }}>{children}</ol>,

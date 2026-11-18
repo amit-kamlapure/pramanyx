@@ -71,12 +71,12 @@ describe("the dashboard with a focus", () => {
     const onFocus = vi.fn();
     const cards = [card("c7f3a001", "Return rate", 0.1), card("c91b2002", "Net revenue", 341000)];
     render(<ComposedDashboard spec={premise()} cards={cards} host={HOST} doors={{ onRefresh: vi.fn() }} focus={[SEARCH, JEANS]} onFocus={onFocus} />);
-    expect(screen.getByTestId("dashboard-focus")).toHaveTextContent("Filtered by");
+    expect(screen.getByTestId("dashboard-filtered-by")).toHaveTextContent("Filtered by");
     const chips = screen.getAllByTestId("focus-chip");
     expect(chips.map(c => c.textContent?.trim())).toEqual(["traffic source = Search", "category = Jeans"]);
     fireEvent.click(chips[0]);
     expect(onFocus).toHaveBeenLastCalledWith([JEANS]);
-    fireEvent.click(screen.getByTestId("focus-clear"));
+    fireEvent.click(screen.getByTestId("filters-clear"));
     expect(onFocus).toHaveBeenLastCalledWith([]);
   });
 
@@ -91,7 +91,7 @@ describe("the dashboard with a focus", () => {
 
   it("draws no bar, and marks nothing, without a focus", () => {
     render(<ComposedDashboard spec={premise()} cards={[card("c7f3a001", "Return rate", 0.1)]} host={HOST} doors={{ onRefresh: vi.fn() }} />);
-    expect(screen.queryByTestId("dashboard-focus")).toBeNull();
+    expect(screen.queryByTestId("dashboard-filtered-by")).toBeNull();
     expect(screen.queryByTestId("not-filtered")).toBeNull();
   });
 });

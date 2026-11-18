@@ -294,6 +294,13 @@ function CardLook({ p, own, set }: { p: Props; own: string; set: (patch: Props, 
         <Words many clearable rows={2} label="Description" value={String(p.description ?? "")} placeholder="A line under the title" max={MAX_CARD_DESCRIPTION}
           onSave={v => set({ description: v || null }, v ? "a card's description written by hand" : "a card's description taken off")} />
       </Row>
+      <Row label="Filters" testid="card-look-filters" hint="A card set apart keeps its whole figure while a reader filters the rest, and says so.">
+        <label className="aug-fs-sm" style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--t1)" }}>
+          <Tick checked={p.not_filtered === true} aria-label="Not cut by the dashboard's filters"
+            onChange={e => set({ not_filtered: e.target.checked ? true : null }, e.target.checked ? "a card set apart from the dashboard's filters by hand" : "a card cut by the dashboard's filters again")} />
+          Not cut by the dashboard's filters
+        </label>
+      </Row>
       <Row label="Numbers" testid="card-look-number" hint="How this card writes its figures here. A percent stays a percent, and money keeps its symbol.">
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
           <Pick label="Decimals" none="Auto decimals" value={look.decimals == null ? "" : String(look.decimals)}

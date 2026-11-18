@@ -1186,7 +1186,6 @@ function Facet({ entity, prop, set }: { entity: string; prop: FilterProperty; se
   );
 }
 
-/** Above the pieces a filter column narrows: what is chosen, a way out, and how many objects that leaves. */
 // ── Arc AP-8 — the values a reader sets ─────────────────────────────────────────────────────
 
 /** The most choices drawn side by side; more are a list to pick from. */
@@ -1285,7 +1284,15 @@ function ReaderValue({ name, label, kind, value, options, changed, start, onSet,
   );
 }
 
-export function FilterBar({ entity, properties, set }: { entity: string; properties: FilterProperty[]; set?: string | null }) {
+/** One thing a dashboard is cut by, as the "Filtered by" bar says it (the study's R14). */
+export interface BarChip { key: string; words: string; testid: string; clear: () => void }
+/** What a filter column gives that bar: its ticks, the way to clear them, and how many objects they leave. */
+export interface ObjectBarWords { chips: BarChip[]; clearAll: (() => void) | null; count: string | null }
+
+/** Reads a filter column for the "Filtered by" bar and hands the bar what it says. */
+export function ObjectFilterWords({ entity, properties, set, children }: {
+  entity: string; properties: FilterProperty[]; set?: string | null; children: (said: ObjectBarWords) => ReactNode;
+}) {
   const { filters, toggle, clear } = usePieces();
   const noun = useNoun(entity);
   const narrowed = conditionsFor(filters, entity);
@@ -1305,28 +1312,30 @@ export function FilterBar({ entity, properties, set }: { entity: string; propert
   // a search box's words are held under the property marked (Arc AP-4): named by the property, said in quotes
   const label = (path: string) => { const bare = path.startsWith(WORDS) ? path.slice(WORDS.length) : path;
     return properties.find(p => p.path === bare)?.label ?? words(bare); };
-  // Nothing chosen and no set to name: nothing to say above the pieces, so they take the room (the user, 2026-11-18)
-  if (!chosen.length && !narrowed.length && !within) return null;
-  return (
-    <div data-testid="object-filter-bar" className="aug-fs-sm" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", minHeight: 26 }}>
-      {chosen.map(([path, values]) => (
-        <span key={path} data-testid="object-filter-chip" style={{ display: "inline-flex", alignItems: "center", gap: 4,
-          background: "var(--bg-sel)", color: "var(--accent-text)", padding: "2px 4px 2px 9px", borderRadius: "var(--r-pill)" }}>
-          {label(path)}: {path.startsWith(WORDS) ? `“${values[0]}”` : values.join(", ")}
-          <Button size="icon-xs" variant="ghost" aria-label={`Clear ${label(path)}`}
-            onClick={() => values.forEach(v => toggle(entity, path, v))}><Icon name="close" size={11} /></Button>
-        </span>
-      ))}
-      {chosen.length > 0 && <Button size="xs" variant="ghost" onClick={() => clear(entity)}>Clear</Button>}
-      <span data-testid="object-filter-count" style={{ marginLeft: "auto", color: "var(--t2)", fontVariantNumeric: "tabular-nums" }}>
-        {within && "refused" in within ? within.refused
-          : scoped ? (narrowed.length
-            ? `${left == null ? "…" : formatCount(left)} of ${total == null ? "…" : formatCount(total)} in “${scoped.label}”`
-            : `${total == null ? "…" : formatCount(total)} in “${scoped.label}”`)
-          : `${left == null ? "…" : formatCount(left)} of ${total == null ? "…" : formatCount(total)} ${noun}`}
-      </span>
-    </div>
-  );
+  const chips = chosen.map(([path, values]): BarChip => ({ key: `object:${path}`, testid: "object-filter-chip",
+    words: `${label(path)}: ${path.startsWith(WORDS) ? `“${values[0]}”` : values.join(", ")}`,
+    clear: () => values.forEach(v => toggle(entity, path, v)) }));
+  // nothing chosen and no set to name: no count to say
+  const count = !chosen.length && !narrowed.length && !within ? null
+    : within && "refused" in within ? within.refused
+      : scoped ? (narrowed.length
+        ? `${left == null ? "…" : formatCount(left)} of ${total == null ? "…" : formatCount(total)} in “${scoped.label}”`
+        : `${total == null ? "…" : formatCount(total)} in “${scoped.label}”`)
+        : `${left == null ? "…" : formatCount(left)} of ${total == null ? "…" : formatCount(total)} ${noun}`;
+  return <>{children({ chips, clearAll: chosen.length ? () => clear(entity) : null, count })}</>;
+}
+
+/** The values a reader has moved off where the dashboard was made, each a chip that puts it back. */
+export function useValueChips(): BarChip[] {
+  const { wire, valueOf, readerValues, setValue } = usePieces();
+  return Object.entries(wire.values ?? {}).flatMap(([name, def]): BarChip[] => {
+    if (def.from?.by !== "reader" || def.from.slider || !(name in readerValues)) return [];
+    const now = valueOf(name);
+    const value = "value" in now ? now.value : def.value ?? null;
+    if (JSON.stringify(value) === JSON.stringify(def.value ?? null)) return [];
+    return [{ key: `value:${name}`, testid: "value-chip", clear: () => setValue(name, undefined),
+      words: `${def.label}: ${Array.isArray(value) ? value.join(", ") : valueText(def.kind, value)}` }];
+  });
 }
 
 /** One figure over an entity's objects, narrowed by the reader's filters, and said beside the whole. */

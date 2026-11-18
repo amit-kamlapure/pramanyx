@@ -704,6 +704,13 @@ export function checkDashboardSpec(spec: unknown): DashboardCheck {
     }
   }
 
+  // v18 — a dashboard keeps at least one page its readers can open
+  for (const [key, el] of sound) {
+    if (el.type === "Tabs" && el.children.length > 0 && el.children.every(k => sound.get(k)?.props.hidden === true)) {
+      issues.push({ code: "bad_prop", elementKey: key, message: "Every page of this dashboard is hidden from its readers. Keep one for them to open." });
+    }
+  }
+
   // Arc OC-4 — an object detail follows an objects table in the same dashboard, by its key — or, since Arc AP-2, the
   // object a click chooses, by the choice's name: in a table, or since Arc AP-4 a list, a map, a timeline or a choose-one.
   const wire = spec as unknown as WireSpec;
@@ -863,10 +870,13 @@ export function tabStillThere(spec: unknown, open: unknown): string | null {
 
 export function openingTab(spec: unknown): string | null {
   if (!isObj(spec) || !isObj(spec.elements)) return null;
-  const seeded = isObj(spec.state) ? spec.state.tab : undefined;
-  if (typeof seeded === "string") return seeded;
   const elements = spec.elements;
-  const tabs = Object.values(elements).find(el => isObj(el) && el.type === "Tabs");
-  const first = isObj(tabs) && Array.isArray(tabs.children) ? elements[String(tabs.children[0])] : null;
-  return isObj(first) && isObj(first.props) && typeof first.props.name === "string" ? first.props.name : null;
+  const holder = Object.values(elements).find(el => isObj(el) && el.type === "Tabs");
+  const tabs = (isObj(holder) && Array.isArray(holder.children) ? holder.children : []).map(k => elements[String(k)])
+    .filter((t): t is Record<string, unknown> & { props: Record<string, unknown> } => isObj(t) && isObj(t.props));
+  const seeded = isObj(spec.state) ? spec.state.tab : undefined;
+  // a page kept from readers is never where a dashboard opens
+  if (typeof seeded === "string" && !tabs.some(t => t.props.name === seeded && t.props.hidden === true)) return seeded;
+  const first = tabs.find(t => t.props.hidden !== true) ?? tabs[0];
+  return first && typeof first.props.name === "string" ? first.props.name : null;
 }

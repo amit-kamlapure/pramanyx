@@ -139,6 +139,40 @@ def shared_with(connection_id: str, user_id: str) -> list[dict]:
     return sorted(out, key=lambda c: (c["title"].lower(), c["owner"]))
 
 
+def without_hidden_pages(spec: dict) -> dict:
+    """A published dashboard as its readers are given it (v18): a page its author keeps from readers is not in what
+    they receive, so nothing on it is drawn, run or copied. The spec given is not changed."""
+    elements = spec.get("elements") or {}
+    holders = [el for el in elements.values() if isinstance(el, dict) and el.get("type") == "Tabs"]
+    hidden = {k for h in holders for k in h.get("children") or []
+              if ((elements.get(k) or {}).get("props") or {}).get("hidden") is True}
+    if not hidden:
+        return spec
+    out = copy.deepcopy(spec)
+    gone: set[str] = set()
+
+    def drop(key: str) -> None:
+        if key in gone:
+            return
+        gone.add(key)
+        for child in (out["elements"].get(key) or {}).get("children") or []:
+            drop(child)
+    for key in hidden:
+        drop(key)
+    out["elements"] = {k: v for k, v in out["elements"].items() if k not in gone}
+    for el in out["elements"].values():
+        if isinstance(el, dict) and el.get("type") == "Tabs":
+            el["children"] = [k for k in el.get("children") or [] if k not in gone]
+    # a dashboard seeded to open on a hidden page opens on the first one left
+    names = {(elements.get(k) or {}).get("props", {}).get("name") for k in hidden}
+    if isinstance(out.get("state"), dict) and out["state"].get("tab") in names:
+        first = next((el["children"][0] for el in out["elements"].values()
+                      if isinstance(el, dict) and el.get("type") == "Tabs" and el.get("children")), None)
+        if first:
+            out["state"] = {**out["state"], "tab": out["elements"][first]["props"]["name"]}
+    return out
+
+
 def read_shared(connection_id: str, owner: str, cockpit_id: str, *, reader: str) -> dict:
     """A published dashboard as its readers read it, for a reader it reaches: ``{"home", "cockpit"}``. The
     owner reads their own through here too, as a reader would — the version last published, never their draft."""
@@ -152,7 +186,7 @@ def read_shared(connection_id: str, owner: str, cockpit_id: str, *, reader: str)
     read = versions.published(home.key)
     if read is None or not read.get("spec"):
         raise Refused("This App has no published version to read.")
-    return {"home": home, "cockpit": read}
+    return {"home": home, "cockpit": {**read, "spec": without_hidden_pages(read["spec"])}}
 
 
 def copy_for(connection_id: str, owner: str, cockpit_id: str, *, reader: str, approved_by: str) -> dict:

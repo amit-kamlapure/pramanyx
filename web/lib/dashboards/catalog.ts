@@ -58,8 +58,9 @@ import { z } from "zod";
  *  compact or whole, negatives in parentheses (`title`, `show_title`, `description`, `number`; 2026-11-18). 17: a bar
  *  or a colour scale on a table's number column (`columns_look`, on a placed card and an objects table), and one colour
  *  for a value on every card of the dashboard (`colors` on the root: a field's value to one of the six series colours;
- *  2026-11-18). */
-export const DASHBOARD_VOCABULARY_VERSION = 17;
+ *  2026-11-18). 18: a placed card the dashboard's filters do not cut (`not_filtered`), and a page kept from its readers
+ *  (`hidden` on a tab; 2026-11-18). */
+export const DASHBOARD_VOCABULARY_VERSION = 18;
 
 /** The five tones an answer part may carry (`pramanyx/agent/present_tool.py`); parity is tested. */
 export const TONES = ["good", "warn", "bad", "info", "neutral"] as const;
@@ -341,9 +342,10 @@ export const dashboardCatalog = defineCatalog(schema, {
       props: z.object({
         name: z.string().regex(TAB_NAME),
         label: z.string().min(1).max(MAX_LABEL),
+        hidden: z.boolean().nullable().optional(),
       }),
       slots: ["default"],
-      description: "One tab. Holds Section elements. `name` is its identifier; `label` is what a reader sees.",
+      description: "One tab. Holds Section elements. `name` is its identifier; `label` is what a reader sees. A hidden tab is the builder's alone.",
     },
     Section: {
       props: z.object({
@@ -375,6 +377,8 @@ export const dashboardCatalog = defineCatalog(schema, {
           negatives: z.enum(["minus", "parens"]).nullable().optional(),
         }).strict().nullable().optional(),
         columns_look: columnsLook,
+        // v18 — this placement keeps its own rows whatever a reader clicks or ticks, and says so
+        not_filtered: z.boolean().nullable().optional(),
         size, w, h, x, y,
       }),
       description: "One card from the card store, by its id. Never a figure, never SQL. May be shown by a condition. "
