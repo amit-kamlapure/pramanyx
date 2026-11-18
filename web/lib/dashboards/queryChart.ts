@@ -11,6 +11,7 @@ import type { QueryShaped, QueryShown } from "@/lib/api";
 import { dayLabel } from "@/lib/dashboards/objectView";
 import { fmtDate, type Gran } from "@/lib/format";
 import { emphasisOpacity } from "@/components/charts/vega/emphasis";
+import { HOVER_MARK, type HoverMeta } from "@/components/charts/vega/hoverTooltip";
 
 type QueryChart = Extract<QueryShaped, { as: "bar" | "line" | "area" | "scatter" }>;
 
@@ -96,7 +97,7 @@ export function queryChartSpec(c: QueryChart, setup: Pick<QueryShown, "segments"
   const tone = !split ? Object.values(c.tones ?? {})[0] : undefined;
   const lone = tone === "adverse" ? { color: colours.palette[ADVERSE_AT % colours.palette.length] } : tone === "open" ? { color: colours.other } : {};
   const mark = bars ? { type: "bar", tooltip: true, cornerRadiusEnd: 2, ...lone }
-    : c.as === "line" ? { type: "line", tooltip: true, strokeWidth: 2 }
+    : c.as === "line" ? { type: "line", strokeWidth: 2 }
       : c.as === "area" ? { type: "area", tooltip: true, ...(stack === null && split ? { opacity: 0.45 } : {}) }
         : { type: "point", tooltip: true, filled: true, size: 36 };
   const across = bars && !!setup.across;
@@ -125,5 +126,34 @@ export function queryChartSpec(c: QueryChart, setup: Pick<QueryShown, "segments"
         encoding: { x, y: { field: "v", type: "quantitative", stack }, text: { field: "v", type: "quantitative", format: ".3~s" },
           ...(bars && split && setup.segments === "side_by_side" ? { xOffset: { field: "s", sort: named } } : {}) } });
   }
-  return { $schema: "https://vega.github.io/schema/vega-lite/v5.json", background: null, data: { values }, layer };
+  // the hover rule last, so its voronoi is over every mark it reads for
+  const hover = c.as === "line" ? hoverRule(x, y, color, split, named, c.format) : null;
+  if (hover) layer.push(...hover.layers);
+  return { $schema: "https://vega.github.io/schema/vega-lite/v5.json", background: null, data: { values }, layer,
+           ...(hover ? { usermeta: { hover: hover.meta } } : {}) };
+}
+
+/**
+ * A line's hover rule (study R25), as an answer's line has it (`resolveSpec.ts`): a ring on each line at the place
+ * nearest the pointer, and a dashed rule there whose row — every series at that place, `pivot`ed — is the tooltip,
+ * written by `hoverTooltip.ts`. A click through it reports the place as the query returned it (`xr`), as a point did.
+ */
+function hoverRule(x: Record<string, unknown>, y: Record<string, unknown>, color: Record<string, unknown>,
+  split: boolean, named: string[], format: QueryChart["format"]): { layers: Record<string, unknown>[]; meta: HoverMeta } {
+  const meta: HoverMeta = {
+    x: "x", gran: null, series: split ? named : ["v"], label: split ? null : "Value",
+    format: format === "money" ? "$,.0f" : format === "percent" ? null : ",.2~f", pct: format === "percent", prefix: "",
+  };
+  return {
+    meta,
+    layers: [
+      { transform: [{ filter: { param: "hover", empty: false } }],
+        mark: { type: "point", filled: false, size: 90, strokeWidth: 2 }, encoding: { x, y, ...color } },
+      { transform: [...(split ? [{ pivot: "s", value: "v", groupby: ["x", "xr"] }] : []), { calculate: "true", as: HOVER_MARK }],
+        mark: { type: "rule", strokeDash: [3, 3], tooltip: { content: "data" } },
+        params: [{ name: "hover", select: { type: "point", fields: ["x"], nearest: true, on: "pointermove", clear: "pointerout" } }],
+        encoding: { x, y: { value: 0 }, y2: { value: { expr: "height" } },
+                    opacity: { condition: { param: "hover", empty: false, value: 0.7 }, value: 0 } } },
+    ],
+  };
 }

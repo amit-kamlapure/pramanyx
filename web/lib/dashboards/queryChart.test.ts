@@ -155,3 +155,35 @@ describe("a chart drafted from a file", () => {
   });
 });
 
+
+describe("a query card's line: the hover rule (study R25)", () => {
+  it("draws a ring and a dashed rule at the nearest place, the series pivoted into one row there", async () => {
+    const { View, parse } = await import("vega");
+    const vl = await import("vega-lite");
+    const { clickedDatum } = await import("@/components/charts/selection");
+    const { HOVER_MARK, hoverMetaOf } = await import("@/components/charts/vega/hoverTooltip");
+    const spec = queryChartSpec(chart("line"), setup(), { palette: ["#3b82f6", "#22c55e", "#f59e0b"], other: "#888888" });
+    expect(hoverMetaOf(spec)).toMatchObject({ x: "x", series: ["China", "United States", "Other"], label: null });
+    const rule = layers(spec).find((l) => l.mark.type === "rule")!;
+    expect(rule.mark.strokeDash).toEqual([3, 3]);
+    const view = new View(parse(vl.compile({ ...spec, width: 300, height: 200 } as never).spec), { renderer: "none" });
+    await view.runAsync();
+    type Item = { datum?: Record<string, unknown>; items?: Item[]; isVoronoi?: boolean };
+    const cells: Item[] = [];
+    const walk = (n: Item) => { for (const it of n.items ?? []) { if (it.isVoronoi) cells.push(it); walk(it); } };
+    walk((view.scenegraph() as unknown as { root: Item }).root);
+    view.finalize();
+    expect(cells).toHaveLength(3);
+    const row = clickedDatum(cells[0]) as Record<string, unknown>;
+    // the place as the query returned it, which is what a click reports to the dashboard
+    expect(row.xr).toBe("2026-10-08");
+    expect(row[HOVER_MARK]).toBe(true);
+    expect([row.China, row["United States"], row.Other]).toEqual([10, 11, 12]);
+  });
+
+  it("leaves bars, areas and scatters as they were", () => {
+    for (const kind of ["bar", "area", "scatter"] as const) {
+      expect(queryChartSpec(chart(kind), setup(), COLOURS).usermeta).toBeUndefined();
+    }
+  });
+});
