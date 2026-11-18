@@ -28,6 +28,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { AskAboutPiece } from "@/components/dashboards/AskAbout";
 import { useCellBox, useMeasured, useSettled } from "@/components/dashboards/cellBox";
 import { Foot, Frame, Title } from "@/components/dashboards/DashboardTile";
+import { NumberedPager } from "@/components/dashboards/NumberedPager";
 import { Masked } from "@/components/objects/Masked";
 import { Button } from "@/components/ui/button";
 import { Freshness } from "@/components/ui/freshness";
@@ -821,11 +822,10 @@ export function ObjectTablePiece({ elementKey, entity, segment, set, setFrom, ch
       <Foot icon="table" aside={
         <span style={{ display: "inline-flex", gap: 4 }}>
           <AskAboutPiece query={query} ticked={ticks_} total={page.total} typeId={page.type_id} />
-          <Button size="icon-xs" variant="ghost" aria-label="Previous page" disabled={offset === 0}
-            onClick={() => setOffset(o => Math.max(0, o - limit))}><Icon name="chevl" /></Button>
-          <Button size="icon-xs" variant="ghost" aria-label="Next page"
-            disabled={page.total != null ? offset + shown >= page.total : shown < limit}
-            onClick={() => setOffset(o => o + limit)}><Icon name="chevr" /></Button>
+          {/* numbered pages (study R26), counted from the total the door read; with none, forward one at a time */}
+          <NumberedPager testid="object-table-pager" page={Math.floor(offset / limit) + 1}
+            pages={page.total != null ? Math.max(1, Math.ceil(page.total / limit)) : null} more={shown >= limit}
+            onPage={(p) => setOffset(Math.max(0, (p - 1) * limit))} />
         </span>}>
         {shown ? `${formatCount(offset + 1)}–${formatCount(offset + shown)}` : "0"}{page.total != null ? ` of ${formatCount(page.total)}` : ""}
         {sort ? ` · by ${words(sort)}${descending ? ", highest first" : ""}` : ""}

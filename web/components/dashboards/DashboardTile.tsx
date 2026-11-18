@@ -46,7 +46,8 @@ import { cellText } from "@/lib/dashboards/objectView";
 import { SPAN, type Size } from "@/lib/dashboards/catalog";
 import { cardValue } from "@/lib/dashboards/hostStatus";
 import type { CardStatus } from "@/lib/dashboards/hostState";
-import { fmtDate, formatMetricValue, formatSeconds } from "@/lib/format";
+import { fmtDate, formatCount, formatMetricValue, formatSeconds } from "@/lib/format";
+import { NumberedPager } from "@/components/dashboards/NumberedPager";
 import { draftedFigure } from "@/lib/dashboards/figureText";
 
 export type TileShape = "figure" | "trend" | "rows";
@@ -483,6 +484,50 @@ export function DashboardTile({ cs, status, sym, doors, place = STANDING, waits 
   return <FigureTile cs={cs} status={status} sym={sym} doors={doors} place={place} />;
 }
 
+const ROWS_HEAD_PX = 28;
+const ROWS_ROW_PX = 27;
+const ROWS_PAGER_PX = 32;
+const NUMERIC_TYPE = /INT|DOUBLE|FLOAT|DECIMAL|NUMERIC|REAL/i;
+
+/** A query card's table, a page at a time (study R26): as many rows as its box holds, numbered pages beneath. The count is
+ *  the rows the card holds, said as the first of more when the query returned more than a card keeps. */
+export function QueryRows({ shaped, height }: { shaped: Extract<QueryShaped, { as: "table" }>; height: number }) {
+  const per = Math.max(3, Math.floor((height - ROWS_HEAD_PX - ROWS_PAGER_PX) / ROWS_ROW_PX));
+  const pages = Math.max(1, Math.ceil(shaped.rows.length / per));
+  const [page, setPage] = useState(1);
+  // a new run starts on its first page
+  useEffect(() => { setPage(1); }, [shaped.rows]);
+  const at = Math.min(page, pages);
+  const from = (at - 1) * per;
+  const shown = shaped.rows.slice(from, from + per);
+  const right = (j: number) => NUMERIC_TYPE.test(shaped.columns[j]?.type ?? "");
+  return (
+    <>
+      <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+        <table className="aug-fs-sm" style={{ width: "100%", borderCollapse: "collapse", fontVariantNumeric: "tabular-nums" }}>
+          <thead><tr>{shaped.columns.map((c, j) => (
+            <th key={`${c.name}-${j}`} style={{ textAlign: right(j) ? "right" : "left", color: "var(--t3)", fontWeight: 500, padding: "4px 6px", borderBottom: "1px solid var(--b1)", whiteSpace: "nowrap" }}>{c.name}</th>
+          ))}</tr></thead>
+          <tbody>{shown.map((r, i) => (
+            <tr key={from + i}>{r.map((v, j) => (
+              <td key={j} style={{ padding: "4px 6px", borderBottom: "1px solid var(--b1)", whiteSpace: "nowrap", textAlign: right(j) ? "right" : "left" }}>
+                {cellText(v, shaped.columns[j]?.type)}
+              </td>
+            ))}</tr>
+          ))}</tbody>
+        </table>
+      </div>
+      {pages > 1 && (
+        <div data-testid="query-tile-pages" className="aug-fs-xs"
+          style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, paddingTop: 6, color: "var(--t3)", fontVariantNumeric: "tabular-nums" }}>
+          <span>{formatCount(from + 1)}–{formatCount(from + shown.length)} of {shaped.more ? `the first ${formatCount(shaped.rows.length)}` : formatCount(shaped.rows.length)}</span>
+          <NumberedPager testid="query-tile-pager" page={at} pages={pages} onPage={setPage} />
+        </div>
+      )}
+    </>
+  );
+}
+
 /** Arc AP-7 — a card of a person's own query, as they set it up: its figure, its table or its chart, and what the run
  *  left out said beneath it. A query that cannot be read says why, in its place. */
 function QueryTile({ cs, doors, place, focus }: { cs: CardState & { card: DashboardCard }; doors: TileDoors; place: TilePlace; focus?: TileFocus }) {
@@ -543,19 +588,8 @@ function QueryTile({ cs, doors, place, focus }: { cs: CardState & { card: Dashbo
           <span className="aug-fs-sm" data-testid="query-tile-definition" style={{ color: "var(--t3)" }}>{drafted && definition ? definition : shaped.label}</span>
         </div>
       ) : shaped.as === "table" ? (
-        <div ref={room} data-testid="query-tile-table" style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
-          <table className="aug-fs-sm" style={{ width: "100%", borderCollapse: "collapse", fontVariantNumeric: "tabular-nums" }}>
-            <thead><tr>{shaped.columns.map((c, j) => (
-              <th key={`${c.name}-${j}`} style={{ textAlign: /INT|DOUBLE|FLOAT|DECIMAL|NUMERIC|REAL/i.test(c.type) ? "right" : "left", color: "var(--t3)", fontWeight: 500, padding: "4px 6px", borderBottom: "1px solid var(--b1)", whiteSpace: "nowrap" }}>{c.name}</th>
-            ))}</tr></thead>
-            <tbody>{shaped.rows.map((r, i) => (
-              <tr key={i}>{r.map((v, j) => (
-                <td key={j} style={{ padding: "4px 6px", borderBottom: "1px solid var(--b1)", whiteSpace: "nowrap", textAlign: /INT|DOUBLE|FLOAT|DECIMAL|NUMERIC|REAL/i.test(shaped.columns[j]?.type ?? "") ? "right" : "left" }}>
-                  {cellText(v, shaped.columns[j]?.type)}
-                </td>
-              ))}</tr>
-            ))}</tbody>
-          </table>
+        <div ref={room} data-testid="query-tile-table" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+          <QueryRows shaped={shaped} height={height} />
         </div>
       ) : (
         <div ref={room} data-testid="query-tile-chart" style={{ flex: 1, minHeight: 0 }}>
