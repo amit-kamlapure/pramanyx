@@ -112,7 +112,7 @@ describe("the home", () => {
     prefs.getMyPreferences.mockResolvedValue({ user: "local", preferences: { dashboards_view: "grid" } });
     draw();
     expect(await screen.findByTestId("dashboards-grid")).toBeInTheDocument();
-    expect(screen.getAllByTestId("dashboard-miniature").length).toBe(2);             // Metrics has no layout of pieces, nor this App in the fixture
+    expect(screen.getAllByTestId("dashboard-miniature").length).toBe(3);             // this App's fixture says no layout
   });
 
   it("draws the detail with what last changed and the facts", async () => {

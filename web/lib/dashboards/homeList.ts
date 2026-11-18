@@ -41,6 +41,9 @@ export interface HomeItem {
 export interface HomeFilters { words: string; mine: boolean; week: boolean; starred: boolean; certified: boolean }
 export const NO_FILTERS: HomeFilters = { words: "", mine: false, week: false, starred: false, certified: false };
 
+/** Metrics is a ledger: a row for each metric, the width of the page. */
+const METRICS_OUTLINE: OutlineBox[] = Array.from({ length: 7 }, () => ({ kind: "Metric", w: 12, h: 2 }));
+
 const person = (name: string) => name.replace(/^user:/, "") || "someone";
 const sentence = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : "");
 
@@ -55,7 +58,7 @@ export function homeItems(connectionId: string, person_: string, own: DashboardL
   marks: Record<string, Certification>, metricsId: string): HomeItem[] {
   return [
     { id: metricsId, title: "Metrics", kind: "metrics", pinned: true, modifiedAt: "", owner: "This connection", mine: false,
-      state: "Pinned", mark: null, cards: null, version: null, change: "The connection's approved metrics", audience: [], outline: [] },
+      state: "Pinned", mark: null, cards: null, version: null, change: "The connection's approved metrics", audience: [], outline: METRICS_OUTLINE },
     ...own.filter(c => !c.retired).map((c): HomeItem => ({
       id: c.cockpit_id, title: c.title || c.cockpit_id, kind: "own", pinned: false, modifiedAt: c.kept_at, owner: "You", mine: true,
       state: ownState(c), mark: marks[dashboardRef(connectionId, person_, c.cockpit_id)] ?? null, cards: c.cards?.length ?? 0,

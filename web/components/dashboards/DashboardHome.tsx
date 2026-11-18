@@ -100,7 +100,7 @@ function Marks({ item }: { item: HomeItem }) {
 
 /** A dashboard's layout in small: the room each piece takes on the tab it opens on. */
 function Miniature({ item, height }: { item: HomeItem; height: number }) {
-  const frame: CSSProperties = { height, overflow: "hidden", borderRadius: "var(--r2)", background: "var(--bg-1)" };
+  const frame: CSSProperties = { height, overflow: "hidden", borderRadius: "var(--r2)", background: "color-mix(in srgb, var(--t3) 9%, transparent)" };
   if (!item.outline.length) {
     return <div aria-hidden style={{ ...frame, display: "grid", placeItems: "center", color: "var(--t3)" }}><Icon name="gauge" size={22} /></div>;
   }
@@ -109,7 +109,7 @@ function Miniature({ item, height }: { item: HomeItem; height: number }) {
       gridAutoRows: 5, gap: 3, padding: 8, alignContent: "start" }}>
       {item.outline.map((box, i) => {
         const { columns, rows } = miniatureCell(box);
-        return <span key={i} style={{ gridColumn: `span ${columns}`, gridRow: `span ${rows}`, background: "var(--bg-3)", borderRadius: 2 }} />;
+        return <span key={i} style={{ gridColumn: `span ${columns}`, gridRow: `span ${rows}`, background: "color-mix(in srgb, var(--t3) 34%, transparent)", borderRadius: 2 }} />;
       })}
     </div>
   );
