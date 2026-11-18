@@ -518,18 +518,29 @@ function measureSection(grid: HTMLElement): Record<string, Box> {
   return out;
 }
 
-type Edge = "w" | "h" | "both";
+/** The edge or corner a handle moves: `w` the right edge (columns), `h` the bottom (rows), `both` the bottom-right
+ *  corner — and, since 2026-11-18, their twins on the left, the top and the other three corners. */
+type Edge = "w" | "h" | "both" | "left" | "top" | "nw" | "ne" | "sw";
 
-/** A handle's look: a short bar on the edge it moves, in the accent, shown while the element is pointed at or focused. */
+/** Which way a pointer's move grows the element along each axis, per handle: the left and top handles grow it as the
+ *  right and bottom ones do, the other way. The grid is kept (the user, 2026-11-18: "Keep the grid"): an element's
+ *  place is its order among its siblings, so a left or top handle changes its size and never where it starts. */
+const GROW: Record<Edge, [number, number]> = {
+  w: [1, 0], h: [0, 1], both: [1, 1], left: [-1, 0], top: [0, -1], nw: [-1, -1], ne: [1, -1], sw: [-1, 1],
+};
+
+/** A handle shown only while its element is pointed at or focused; the chosen element's are shown at rest. */
 const HANDLE = "opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 group-focus:opacity-100";
 
 /** The handles a person drags to resize an element one grade at a time (Arc AP-1; the user, 2026-10-10: "adjusted one
  *  grade point at a time"): the right edge for its columns, the bottom edge for its rows, the corner for both. Each
  *  snaps grade by grade, says the size it would land on, and lands once, on release. On a section not yet on the grid
  *  every element is measured first, so moving the section onto the grid keeps what the reader saw. */
-function GridHandles({ cell, kind, from, gridded, onPreview, onDone }: {
+function GridHandles({ cell, kind, from, gridded, chosen = false, onPreview, onDone }: {
   cell: RefObject<HTMLDivElement | null>;
   kind: GridKind;
+  /** The element the builder has chosen: its eight handles are drawn at rest (the Databricks study, R1, 2026-11-18). */
+  chosen?: boolean;
   /** The element's room now: its own on the grid; null off it, where it is measured when a drag begins. */
   from: Box | null;
   gridded: boolean;
@@ -553,9 +564,10 @@ function GridHandles({ cell, kind, from, gridded, onPreview, onDone }: {
     const x0 = ev.clientX, y0 = ev.clientY;
     let w = start.w, h = start.h;
     try { target.setPointerCapture(ev.pointerId); } catch { /* an engine without capture still sends the moves over the handle */ }
+    const [gx, gy] = GROW[edge];
     const move = (mv: PointerEvent) => {
-      const nw = edge === "h" ? start.w : clamp(lim.w[0], lim.w[1], start.w + Math.round((mv.clientX - x0) / scale / (colW + GRID.gap)));
-      const nh = edge === "w" ? start.h : clamp(lim.h[0], lim.h[1], start.h + Math.round((mv.clientY - y0) / scale / GRADE));
+      const nw = gx === 0 ? start.w : clamp(lim.w[0], lim.w[1], start.w + gx * Math.round((mv.clientX - x0) / scale / (colW + GRID.gap)));
+      const nh = gy === 0 ? start.h : clamp(lim.h[0], lim.h[1], start.h + gy * Math.round((mv.clientY - y0) / scale / GRADE));
       if (nw !== w || nh !== h) { w = nw; h = nh; onPreview({ w, h }, colW); setSaid({ w, h }); }
     };
     const up = () => {
@@ -570,15 +582,27 @@ function GridHandles({ cell, kind, from, gridded, onPreview, onDone }: {
     target.addEventListener("pointerup", up);
     target.addEventListener("pointercancel", up);
   };
-  const bar = (edge: Edge, place: Record<string, string | number>, cursor: string, title: string) => (
-    <span key={edge} data-testid={`grid-handle-${edge}`} title={title} aria-hidden="true" onPointerDown={down(edge)} className={HANDLE}
-      style={{ position: "absolute", zIndex: 3, background: "var(--accent)", borderRadius: 3, cursor, touchAction: "none", ...place }} />
+  // On the outline the chosen element wears: a pill on each edge, a dot on each corner, in the page's own ground with an
+  // accent edge, so a handle reads as something to hold before it is pointed at.
+  const bar = (edge: Edge, place: Record<string, string | number>, cursor: string, title: string, round = false) => (
+    <span key={edge} data-testid={`grid-handle-${edge}`} data-at-rest={chosen || undefined} title={title} aria-hidden="true"
+      onPointerDown={down(edge)} className={chosen ? undefined : HANDLE}
+      style={{ position: "absolute", zIndex: 3, background: "var(--bg-1)", border: "1.5px solid var(--accent)",
+        borderRadius: round ? "50%" : 999, cursor, touchAction: "none", boxSizing: "border-box", ...place }} />
   );
+  const columns = "Drag: one column at a time";
+  const rows = "Drag: one row at a time";
+  const both = "Drag: columns and rows · Alt+arrows: one grade";
   return (
     <>
-      {bar("w", { right: -4, top: "50%", width: 5, height: 30, transform: "translateY(-50%)" }, "ew-resize", "Drag: one column at a time")}
-      {bar("h", { bottom: -4, left: "50%", height: 5, width: 30, transform: "translateX(-50%)" }, "ns-resize", "Drag: one row at a time")}
-      {bar("both", { right: -5, bottom: -5, width: 11, height: 11 }, "nwse-resize", "Drag: columns and rows · Alt+arrows: one grade")}
+      {bar("w", { right: -6, top: "50%", width: 7, height: 26, transform: "translateY(-50%)" }, "ew-resize", columns)}
+      {bar("left", { left: -6, top: "50%", width: 7, height: 26, transform: "translateY(-50%)" }, "ew-resize", columns)}
+      {bar("h", { bottom: -6, left: "50%", height: 7, width: 26, transform: "translateX(-50%)" }, "ns-resize", rows)}
+      {bar("top", { top: -6, left: "50%", height: 7, width: 26, transform: "translateX(-50%)" }, "ns-resize", rows)}
+      {bar("both", { right: -6, bottom: -6, width: 10, height: 10 }, "nwse-resize", both, true)}
+      {bar("nw", { left: -6, top: -6, width: 10, height: 10 }, "nwse-resize", both, true)}
+      {bar("ne", { right: -6, top: -6, width: 10, height: 10 }, "nesw-resize", both, true)}
+      {bar("sw", { left: -6, bottom: -6, width: 10, height: 10 }, "nesw-resize", both, true)}
       {said && (
         <span data-testid="grid-size-said" className="aug-fs-sm" style={{ position: "absolute", right: 12, bottom: 10, zIndex: 4,
           background: "var(--bg-3)", border: "1px solid var(--b2)", color: "var(--t1)", borderRadius: "var(--r2)", padding: "1px 8px",
@@ -815,7 +839,7 @@ function Cell({ type, props, size, testid, extra, children }: {
       )}
       {movable && key && <MoveGrip cell={ref} elementKey={key} onMove={doors.onMove!} />}
       {regrid && kind && (
-        <GridHandles cell={ref} kind={kind} from={own} gridded={gridded}
+        <GridHandles cell={ref} kind={kind} from={own} gridded={gridded} chosen={!!chosen}
           onPreview={(b, col) => { setPreview(b); setGhostColumn(col); }} onDone={done} />
       )}
       {resizable && (

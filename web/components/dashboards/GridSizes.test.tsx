@@ -152,6 +152,41 @@ describe("resizing one grade at a time", () => {
     expect(doors.onRegrid).toHaveBeenLastCalledWith("card-net", { w: 7, h: 5 }, {});
   });
 
+  it("the chosen element shows eight handles at rest; any other shows them only when pointed at (2026-11-18)", () => {
+    render(<ComposedDashboard spec={gridded()} cards={CARDS} host={HOST} doors={owner()} selected="card-net" />);
+    const handles = within(cellOf("card-net")).getAllByTestId(/^grid-handle-/);
+    expect(handles.map(h => h.dataset.testid?.replace("grid-handle-", "")).sort())
+      .toEqual(["both", "h", "left", "ne", "nw", "sw", "top", "w"]);
+    for (const h of handles) { expect(h.dataset.atRest).toBe("true"); expect(h.className).not.toContain("opacity-0"); }
+    for (const h of within(cellOf("card-rate")).getAllByTestId(/^grid-handle-/)) {
+      expect(h.dataset.atRest).toBeUndefined();
+      expect(h.className).toContain("opacity-0");
+    }
+  });
+
+  it("the left and top handles grow the element as the right and bottom do, and the other corners move both", () => {
+    const doors = owner();
+    render(<ComposedDashboard spec={gridded()} cards={CARDS} host={HOST} doors={doors} selected="card-net" />);
+    const grid = document.querySelector('[data-grid="12"]') as HTMLElement;
+    Object.defineProperty(grid, "clientWidth", { value: 1200, configurable: true });
+    const drag = (edge: string, dx: number, dy: number) => {
+      const handle = within(cellOf("card-net")).getByTestId(`grid-handle-${edge}`);
+      fireEvent.pointerDown(handle, { clientX: 500, clientY: 300, pointerId: 1 });
+      fireEvent.pointerMove(handle, { clientX: 500 + dx, clientY: 300 + dy });
+      fireEvent.pointerUp(handle, {});
+    };
+    drag("left", -101 * 2 - 20, 80);            // two columns out to the left; the left edge reads no rows
+    expect(doors.onRegrid).toHaveBeenLastCalledWith("card-net", { w: 10, h: 6 }, {});
+    drag("top", 300, -2 * 40 - 5);               // two rows up
+    expect(doors.onRegrid).toHaveBeenLastCalledWith("card-net", { w: 8, h: 8 }, {});
+    drag("nw", 101, 40);                         // in from the top-left: one column and one row fewer
+    expect(doors.onRegrid).toHaveBeenLastCalledWith("card-net", { w: 7, h: 5 }, {});
+    drag("ne", 101, -40);
+    expect(doors.onRegrid).toHaveBeenLastCalledWith("card-net", { w: 9, h: 7 }, {});
+    drag("sw", 101, 40);
+    expect(doors.onRegrid).toHaveBeenLastCalledWith("card-net", { w: 7, h: 7 }, {});
+  });
+
   it("where the grid resizes, the size picked by name is not offered beside it", () => {
     render(<ComposedDashboard spec={gridded()} cards={CARDS} host={HOST} doors={owner()} />);
     expect(screen.queryAllByTestId("size-pick")).toEqual([]);
