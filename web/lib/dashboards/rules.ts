@@ -768,6 +768,42 @@ export function checkDashboardSpec(spec: unknown): DashboardCheck {
             + `columns and ${lim.h[0]} to ${lim.h[1]} rows, so it is never too small to read or too large for what it holds.` });
       }
     }
+    // v14 — free placement: an element placed by its column and row stays inside the twelve columns, and no two share a
+    // cell. Said, never drawn on top of each other.
+    const placed: { key: string; x: number; y: number; w: number; h: number }[] = [];
+    for (const child of el.children) {
+      const c = sound.get(child);
+      if (!c || !clean.has(child)) continue;
+      const { x, y, w, h } = c.props as { x?: unknown; y?: unknown; w?: unknown; h?: unknown };
+      if (x == null && y == null) continue;
+      const what = `The ${KIND[c.type] ?? c.type.toLowerCase()} ${q(child)}`;
+      if (!gridded) {
+        issues.push({ code: "bad_prop", elementKey: child,
+          message: `${what} says where it sits (x, y), and its section ${q(key)} is not on the grid. A place is said only on a section's grid.` });
+        continue;
+      }
+      if (typeof x !== "number" || typeof y !== "number") {
+        issues.push({ code: "bad_prop", elementKey: child,
+          message: `${what} says ${x == null ? "its row (y) and not its column (x)" : "its column (x) and not its row (y)"}. A place is said by both, or by neither.` });
+        continue;
+      }
+      if (typeof w !== "number" || typeof h !== "number") continue;
+      if (x + w - 1 > GRID.columns) {
+        issues.push({ code: "bad_prop", elementKey: child,
+          message: `${what} starts in column ${x} and takes ${w}, which runs past column ${GRID.columns}. It starts in column ${GRID.columns - w + 1} at the furthest.` });
+        continue;
+      }
+      placed.push({ key: child, x, y, w, h });
+    }
+    for (let i = 0; i < placed.length; i++) {
+      for (let j = i + 1; j < placed.length; j++) {
+        const a = placed[i], b = placed[j];
+        if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h) {
+          issues.push({ code: "bad_prop", elementKey: b.key,
+            message: `${q(a.key)} and ${q(b.key)} share a cell of section ${q(key)}'s grid. Each element has its own room; one is moved down or aside.` });
+        }
+      }
+    }
   }
 
   if (tabCount > MAX_TABS) {

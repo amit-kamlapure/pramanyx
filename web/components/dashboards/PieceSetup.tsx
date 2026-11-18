@@ -751,7 +751,7 @@ function DashboardSetup({ spec, onChange, onOpenLayout }: { spec: DashboardSpec;
           one grade at a time — drag an edge or a corner, or Alt and the arrow keys.
         </div>
       </div>
-      {top?.type === "Cockpit" && (
+      {top && (
         <Row label="Name"><Words label="Name" value={String(top.props.title ?? "")} max={MAX_TITLE} onSave={v => onChange(rename(spec, root, v), "renamed by hand")} /></Row>
       )}
       <Row label="What it holds">

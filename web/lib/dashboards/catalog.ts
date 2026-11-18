@@ -51,8 +51,9 @@ import { z } from "zod";
  *  an entity's objects grouped by one property, a measure or three per group, always adding up to the whole, a click on
  *  a group the filter column's click (ObjectBreakdown), and the rows of a table or a list a declared rule or segment
  *  admits, marked in a tone (`marked`, 2026-10-28). 13: a dashboard made from a file: a filter column over
- *  a table, the sliders of a scenario, and adding a row to its sheet (2026-11-03). */
-export const DASHBOARD_VOCABULARY_VERSION = 13;
+ *  a table, the sliders of a scenario, and adding a row to its sheet (2026-11-03). 14: free placement on a section's grid —
+ *  an element's column and row (`x`, `y`), gaps allowed, never two on one cell (2026-11-18). */
+export const DASHBOARD_VOCABULARY_VERSION = 14;
 
 /** The five tones an answer part may carry (`pramanyx/agent/present_tool.py`); parity is tested. */
 export const TONES = ["good", "warn", "bad", "info", "neutral"] as const;
@@ -94,6 +95,8 @@ export const GRADE = GRID.row + GRID.gap;
 export const rowsTall = (h: number): number => h * GRID.row + Math.max(0, h - 1) * GRID.gap;
 /** The most rows anything may take. */
 export const MAX_ROWS = 30;
+/** The furthest row an element may start on in a section: room for gaps a person leaves, and never a runaway. */
+export const MAX_GRID_ROW = 400;
 
 /** What each kind may take on the grid — columns and rows, least and most — so nothing becomes too small to read or
  *  too large for what it holds (the user, 2026-10-10). A card may be a figure or a chart, so it takes either's room. */
@@ -274,6 +277,10 @@ const size = z.enum(SIZES).nullable().optional();
 /** An element's room on a section's grid: columns across and rows down (Arc AP-1). */
 const w = z.number().int().min(1).max(GRID.columns).nullable().optional();
 const h = z.number().int().min(1).max(MAX_ROWS).nullable().optional();
+/** Where an element sits on its section's grid (v14, 2026-11-18, the user: "Allow free placement"): the column its left
+ *  edge is in and the row its top is in, each from 1. An element without them flows into the first room that fits. */
+const x = z.number().int().min(1).max(GRID.columns).nullable().optional();
+const y = z.number().int().min(1).max(MAX_GRID_ROW).nullable().optional();
 // Arc AP-4 — what the pieces the picker adds name: an entity or a set, a choice, a property
 const entityRef = z.string().regex(ONTOLOGY_ID).nullable().optional();
 const wireRef = z.string().regex(WIRE_NAME).nullable().optional();
@@ -325,14 +332,14 @@ export const dashboardCatalog = defineCatalog(schema, {
       props: z.object({
         card: z.string().regex(CARD_ID),
         tone: z.enum(TONES).nullable().optional(),
-        size, w, h,
+        size, w, h, x, y,
       }),
       description: "One card from the card store, by its id. Never a figure, never SQL. May be shown by a condition.",
     },
     Note: {
       props: z.object({
         text: z.string().min(1).max(MAX_NOTE),
-        size, w, h,
+        size, w, h, x, y,
         // Stamped by the server when the note is kept; whatever a client sends here is replaced.
         author: z.string().max(120).optional(),
         written_at: z.string().max(40).optional(),
@@ -343,12 +350,12 @@ export const dashboardCatalog = defineCatalog(schema, {
       props: z.object({
         object: z.string().regex(OBJECT_ID),
         caption: z.string().min(1).max(MAX_CAPTION),
-        size, w, h,
+        size, w, h, x, y,
       }),
       description: "An image a person uploaded, by its object id, with a caption. Never chosen by a model, never measured.",
     },
     ProcessBoard: {
-      props: z.object({ process: z.string().regex(ONTOLOGY_ID), size, w, h }),
+      props: z.object({ process: z.string().regex(ONTOLOGY_ID), size, w, h, x, y }),
       description: "A declared process, by its id: each stage and how many objects reach it, each promise with how often it is broken and how many objects are open and already past it.",
     },
     ObjectTable: {
@@ -364,12 +371,12 @@ export const dashboardCatalog = defineCatalog(schema, {
         sort: z.string().regex(PROPERTY_PATH).nullable().optional(),
         descending: z.boolean().nullable().optional(),
         marked,
-        size, w, h,
+        size, w, h, x, y,
       }),
       description: "The objects of an entity, or of a segment of it, a page at a time: each object's key and the columns named, read through the object door.",
     },
     ObjectDetail: {
-      props: z.object({ follows: z.string().regex(ELEMENT_KEY), size, w, h }),
+      props: z.object({ follows: z.string().regex(ELEMENT_KEY), size, w, h, x, y }),
       description: "The object chosen in the objects table it follows, by that table's element key: its properties, edits marked, and the declared actions it holds.",
     },
     ActionButton: {
@@ -404,7 +411,7 @@ export const dashboardCatalog = defineCatalog(schema, {
         agg: z.enum(FIGURE_AGGS),
         path: z.string().regex(PROPERTY_PATH).nullable().optional(),
         format: z.enum(FIGURE_FORMATS).nullable().optional(),
-        size, w, h,
+        size, w, h, x, y,
       }),
       description: "One figure over an entity's objects — a count, or an aggregate of a property — read through the object door, narrowed by the reader's filters and said beside the whole.",
     },
@@ -423,7 +430,7 @@ export const dashboardCatalog = defineCatalog(schema, {
         /** A property each bar is split by: its `top` most common values, the rest folded into Other. */
         split: z.string().regex(PROPERTY_PATH).nullable().optional(),
         top: z.union([z.literal(3), z.literal(4), z.literal(5), z.literal(6)]).nullable().optional(),
-        size, w, h,
+        size, w, h, x, y,
       }),
       description: "An entity's objects per day over its last days — the reader's filtered objects as bars, all of them as a line behind. A bar may measure a property's aggregate, and be split by a property's most common values.",
     },
@@ -444,12 +451,12 @@ export const dashboardCatalog = defineCatalog(schema, {
         }).strict()).min(1).max(MAX_BREAKDOWN_MEASURES),
         top: z.union([z.literal(5), z.literal(8), z.literal(10), z.literal(12)]).nullable().optional(),
         show: z.enum(BREAKDOWN_SHOWS).nullable().optional(),
-        size, w, h,
+        size, w, h, x, y,
       }),
       description: "An entity's objects grouped by one property, the largest groups first and the rest as one Other row, those with no value as their own row — so the groups always add up to the whole, said beneath. A click on a group narrows the dashboard as the filter column's does.",
     },
     ActionButtons: {
-      props: z.object({ buttons: z.array(actionButton).min(1).max(MAX_BUTTONS), size, w, h }),
+      props: z.object({ buttons: z.array(actionButton).min(1).max(MAX_BUTTONS), size, w, h, x, y }),
       description: "A row of buttons, each a declared action run on what a reader chose or ticked, on a set, or with what they fill in — the declaration's own criteria, risk and approval holding every run.",
     },
     // ── Arc AP-4 — the pieces the picker adds: each reads an entity or a set, as a table does ──
@@ -461,7 +468,7 @@ export const dashboardCatalog = defineCatalog(schema, {
         title: pathRef.nullable().optional(), figure: pathRef.nullable().optional(), mark: pathRef.nullable().optional(),
         sort: pathRef.nullable().optional(), descending: z.boolean().nullable().optional(),
         marked,
-        size, w, h,
+        size, w, h, x, y,
       }),
       description: "A queue of objects as cards: each called by a property, with a number and a mark beside it. A click chooses, a tick collects.",
     },
@@ -470,7 +477,7 @@ export const dashboardCatalog = defineCatalog(schema, {
         entity: entityRef, set: wireRef, set_from: wireRef, chooses: wireRef,
         /** Where each object is: its latitude and longitude — its own, or one link away. */
         lat: pathRef, lng: pathRef, label: pathRef.nullable().optional(),
-        size, w, h,
+        size, w, h, x, y,
       }),
       description: "A set placed by its coordinates. A click on a place chooses it.",
     },
@@ -479,7 +486,7 @@ export const dashboardCatalog = defineCatalog(schema, {
         entity: entityRef, set: wireRef, set_from: wireRef, chooses: wireRef,
         /** Each object a bar from one moment to the next — placed to shipped — called by a property, or its key. */
         start: pathRef, end: pathRef, label: pathRef.nullable().optional(),
-        size, w, h,
+        size, w, h, x, y,
       }),
       description: "Objects between two moments, each a bar on one line of days. A click chooses.",
     },
@@ -488,7 +495,7 @@ export const dashboardCatalog = defineCatalog(schema, {
         entity: entityRef, set: wireRef,
         /** The choice it makes — what the pieces that follow it read — and what each object is called in the list. */
         chooses: z.string().regex(WIRE_NAME), label: pathRef,
-        size, w, h,
+        size, w, h, x, y,
       }),
       description: "One object picked from a set by its name: the object the pieces that follow the choice read.",
     },
@@ -497,7 +504,7 @@ export const dashboardCatalog = defineCatalog(schema, {
         entity: z.string().regex(ONTOLOGY_ID),
         /** The property a reader's words are looked for in, and what the box is called. */
         path: pathRef, label: z.string().min(1).max(MAX_LABEL),
-        size, w, h,
+        size, w, h, x, y,
       }),
       description: "Words a reader types, narrowing every set of an entity to the objects whose property holds them — for that reader only.",
     },
@@ -518,7 +525,7 @@ export const dashboardCatalog = defineCatalog(schema, {
         automation: z.string().regex(/^[A-Za-z0-9-]{8,64}$/),
         /** The Data Canvas answer it was kept from, when it was: its first answer. */
         first: z.string().regex(/^[A-Za-z0-9]{6,64}$/).optional(),
-        size, w, h,
+        size, w, h, x, y,
       }),
       description: "A question the agent answers on its rhythm, and every answer it gave. A person keeps one; reading it asks nothing.",
     },
@@ -546,7 +553,7 @@ export const dashboardCatalog = defineCatalog(schema, {
           label: z.string().min(1).max(MAX_LABEL),
           values: z.record(z.string(), z.number().finite()),
         }).strict()).max(6).nullable().optional(),
-        size, w, h,
+        size, w, h, x, y,
       }),
       description: "The sliders of a what-if: what the reader changes, and what each is in the file. It is a scenario, and says so.",
     },
@@ -554,7 +561,7 @@ export const dashboardCatalog = defineCatalog(schema, {
       props: z.object({
         /** The sheet the row goes in. What a reader may do to it is the sheet's own sharing. */
         sheet: z.string().min(1).max(64),
-        size, w, h,
+        size, w, h, x, y,
       }),
       description: "Add a row to the sheet the dashboard's cards read, and every card reads it straight away.",
     },

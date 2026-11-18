@@ -508,7 +508,7 @@ export interface CanvasTools {
 }
 
 /**
- * The canvas toolbar (the dashboards study, R2, 2026-11-18; the user, of Databricks' editor: "Also the floating menu"): a
+ * The canvas toolbar (the dashboards study, R2, 2026-11-18; the user, of a peer product's editor: "Also the floating menu"): a
  * pill floating at the canvas's foot, a card's tone on the dashboard's ground — ask in words · choose · a chart · words ·
  * a filter · a picture · buttons · undo · redo. Each is a door the builder already had, moved here from the layout pane's
  * Add list and the edit bar (nothing is gone): a chart and a filter open their pieces in the setup panel, placed in the

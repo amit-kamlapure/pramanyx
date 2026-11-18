@@ -174,7 +174,7 @@ describe("resizing one grade at a time", () => {
     }
   });
 
-  it("the left and top handles grow the element as the right and bottom do, and the other corners move both", () => {
+  it("an element with no place yet, where nothing is measured: the left and top handles grow it as the right and bottom do", () => {
     const doors = owner();
     render(<ComposedDashboard spec={gridded()} cards={CARDS} host={HOST} doors={doors} selected="card-net" />);
     const grid = document.querySelector('[data-grid="12"]') as HTMLElement;
@@ -290,4 +290,74 @@ describe("in the builder (Arc AP-1)", () => {
     render(<ComposedDashboard spec={gridded()} cards={CARDS} host={HOST} doors={doors} />);
     expect(screen.queryAllByTestId("resize-corner")).toEqual([]);
   });
+});
+
+
+// ── free placement (v14; the user, 2026-11-18: "Allow free placement") ────────────────────────────────────────────────
+
+/** The headline section with each element placed: the two small ones side by side, the net revenue card below them. */
+function placed(): DashboardSpec {
+  const s = gridded();
+  const at: Record<string, { x: number; y: number }> = { "alert-rate": { x: 1, y: 1 }, "card-rate": { x: 4, y: 1 }, "card-net": { x: 3, y: 6 } };
+  for (const [k, p] of Object.entries(at)) s.elements[k].props = { ...s.elements[k].props, ...p };
+  return s;
+}
+
+describe("placed freely on the grid", () => {
+  it("draws an element from its column and row, gaps and all", () => {
+    render(<ComposedDashboard spec={placed()} cards={CARDS} host={HOST} doors={READER} />);
+    expect(cellOf("card-net").style.gridColumn).toBe("3 / span 8");
+    expect(cellOf("card-net").style.gridRow).toBe("6 / span 6");
+    expect(cellOf("card-rate").style.gridColumn).toBe("4 / span 3");
+  });
+
+  it("a left or top handle moves that edge: the element's place moves with it and its right and bottom edges stay", () => {
+    const doors = owner();
+    render(<ComposedDashboard spec={placed()} cards={CARDS} host={HOST} doors={doors} selected="card-net" />);
+    const grid = document.querySelector('[data-grid="12"]') as HTMLElement;
+    Object.defineProperty(grid, "clientWidth", { value: 1200, configurable: true });
+    const drag = (edge: string, dx: number, dy: number) => {
+      const handle = within(cellOf("card-net")).getByTestId(`grid-handle-${edge}`);
+      fireEvent.pointerDown(handle, { clientX: 500, clientY: 300, pointerId: 1 });
+      fireEvent.pointerMove(handle, { clientX: 500 + dx, clientY: 300 + dy });
+      fireEvent.pointerUp(handle, {});
+    };
+    drag("left", -101 * 2 - 20, 0);                      // two columns out to the left: from column 3 to column 1
+    expect(doors.onRegrid).toHaveBeenLastCalledWith("card-net", { w: 10, h: 6, x: 1, y: 6 }, {});
+    drag("left", -101 * 4, 0);                           // no further than the first column
+    expect(doors.onRegrid).toHaveBeenLastCalledWith("card-net", { w: 10, h: 6, x: 1, y: 6 }, {});
+    drag("top", 0, 40 * 2);                              // in from the top: two rows fewer, starting two rows lower
+    expect(doors.onRegrid).toHaveBeenLastCalledWith("card-net", { w: 8, h: 4, x: 3, y: 8 }, {});
+    drag("w", 101 * 5, 0);                               // the right edge stops at the twelfth column
+    expect(doors.onRegrid).toHaveBeenLastCalledWith("card-net", { w: 10, h: 6, x: 3, y: 6 }, {});
+  });
+
+  it("Alt, Shift and an arrow move a placed element one column or one row", () => {
+    const doors = owner();
+    render(<ComposedDashboard spec={placed()} cards={CARDS} host={HOST} doors={{ ...doors, onMove: vi.fn() }} />);
+    fireEvent.keyDown(cellOf("card-net"), { key: "ArrowRight", altKey: true, shiftKey: true });
+    expect(doors.onRegrid).toHaveBeenLastCalledWith("card-net", { w: 8, h: 6, x: 4, y: 6 }, {});
+    fireEvent.keyDown(cellOf("card-net"), { key: "ArrowUp", altKey: true, shiftKey: true });
+    expect(doors.onRegrid).toHaveBeenLastCalledWith("card-net", { w: 8, h: 6, x: 3, y: 5 }, {});
+  });
+
+  it("dragged by its grip inside its section, lands on the cell under the pointer — a dashed box saying where", () => {
+    const doors = { ...owner(), onMove: vi.fn() };
+    render(<ComposedDashboard spec={placed()} cards={CARDS} host={HOST} doors={doors} />);
+    const grid = document.querySelector('[data-grid="12"]') as HTMLElement;
+    Object.defineProperty(grid, "clientWidth", { value: 1200, configurable: true });
+    Object.defineProperty(grid, "offsetWidth", { value: 1200, configurable: true });
+    grid.getBoundingClientRect = () => ({ left: 0, top: 0, right: 1200, bottom: 600, width: 1200, height: 600, x: 0, y: 0, toJSON: () => ({}) });
+    // the net revenue card is drawn at column 3, row 6: held one column and one row in from its top-left
+    cellOf("card-net").getBoundingClientRect = () => ({ left: 202, top: 200, right: 1000, bottom: 440, width: 798, height: 240, x: 202, y: 200, toJSON: () => ({}) });
+    const grip = within(cellOf("card-net")).getByTestId("move-grip");
+    grip.setPointerCapture = () => {};
+    fireEvent.pointerDown(grip, { clientX: 202 + 120, clientY: 200 + 50, pointerId: 1, button: 0 });
+    fireEvent.pointerMove(grip, { clientX: 101 * 4 + 120, clientY: 40 * 9 + 50 });
+    expect(screen.getByTestId("move-ghost")).toBeInTheDocument();
+    fireEvent.pointerUp(grip, {});
+    expect(doors.onRegrid).toHaveBeenLastCalledWith("card-net", { w: 8, h: 6, x: 5, y: 10 }, {});
+    expect(doors.onMove).not.toHaveBeenCalled();
+  });
+
 });

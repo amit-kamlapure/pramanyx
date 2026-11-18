@@ -1006,7 +1006,12 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
       onRecaption: (key: string, caption: string) => on(s => recaption(s, key, caption), "an image's caption changed by hand"),
       onPlaceTable: (entity: string, segment: string) => on(s => placePiece(s, "ObjectTable", { entity, segment, size: "wide" }).spec,
         "an objects table placed from a process board"),
-      onRegrid: (key: string, box: Box, measured: Record<string, Box>) => on(s => regrid(s, key, box, measured), "resized by hand"),
+      // a size, a place on the grid, or both (free placement, v14): the version says which
+      onRegrid: (key: string, box: Box, measured: Record<string, Box>) => {
+        const was = current?.elements[key]?.props ?? {};
+        const sized = box.w !== was.w || box.h !== was.h;
+        on(s => regrid(s, key, box, measured), sized ? "resized by hand" : "placed on the grid by hand");
+      },
       // the board study — a piece dragged by its header, or Alt+Shift+arrows, lands beside another
       onMove: (key: string, target: string, place: "before" | "after") => on(s => moveTo(s, key, target, place), "moved by hand"),
       onFilterWidth: (grades: number) => on(s => setFilterWidth(s, grades), "the filter column resized by hand"),
