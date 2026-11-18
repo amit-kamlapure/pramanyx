@@ -57,6 +57,7 @@ import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FormDialog } from "@/components/ui/dialog";
+import type { IconName } from "@/components/ui/icon";
 import { EmptyState } from "@/components/ui/empty-state";
 import { DropdownMenu } from "@radix-ui/themes";
 import { ASKS_OF_A_PIECE, AskPiece } from "@/components/dashboards/AskPiece";
@@ -339,13 +340,22 @@ function DraftReview({ connectionId, dashboardId, result, proposal, held, onKept
 /** A new dashboard, three ways (2026-10-09): empty — its name and a first note in the person's words, since a dashboard
  *  holding nothing is refused; for a declared process — its board, its open-and-overdue objects and one beside them;
  *  or drafted by a model for an area, the one way here that asks one. The walk-through found only the last. */
+type NewWay = "draft" | "tables" | "sql" | "file" | "object" | "pack" | "process" | "empty";
+/** The ways to start other than describing it, along the foot of the new dashboard's page. */
+const WAYS: { way: Exclude<NewWay, "draft">; label: string; icon: IconName }[] = [
+  { way: "tables", label: "From tables", icon: "table" }, { way: "sql", label: "From SQL", icon: "sql" }, { way: "file", label: "From a file", icon: "upload" },
+  { way: "object", label: "From an object", icon: "graph" }, { way: "pack", label: "From a pack template", icon: "layers" },
+  { way: "process", label: "For a process", icon: "process" }, { way: "empty", label: "Start empty", icon: "plus" },
+];
+
+/** A new dashboard opens as a blank page of its own (the user, 2026-11-18): describe it, or start another way. */
 function NewDashboard({ connectionId, schema, sym, onKept, onClose, onBusy }: {
   connectionId: string; schema?: string; onKept: (dashboardId: string) => void; onClose: () => void;
   sym: string;
   /** Told while a draft or a start is in flight, so the dialog around it is held open with its Close disabled. */
   onBusy?: (busy: boolean) => void;
 }) {
-  const [way, setWay] = useState<"tables" | "sql" | "empty" | "file" | "object" | "pack" | "process" | "draft">("tables");
+  const [way, setWay] = useState<NewWay>("draft");
   const [types, setTypes] = useState<{ object_type: string; display_name: string }[] | null>(null);
   const [entity, setEntity] = useState("");
   // Arc AP-5 — what each object suggests a dashboard be
@@ -404,15 +414,34 @@ function NewDashboard({ connectionId, schema, sym, onKept, onClose, onBusy }: {
   };
 
   return (
-    <div data-testid="dashboard-new">
-      <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
-        {([["tables", "From tables"], ["sql", "From SQL"], ["empty", "Start empty"], ["file", "From a file"], ["object", "From an object"], ["pack", "From a pack template"], ["process", "For a process"],
-           ["draft", "Draft it with a model"]] as const).map(([w, label]) => (
-          <Button key={w} size="xs" variant={way === w ? "secondary" : "ghost"} aria-pressed={way === w}
-            data-testid={`dashboard-new-${w}`} disabled={drafting || starting || !!proposal} onClick={() => setWay(w)}>{label}</Button>
-        ))}
-      </div>
-
+    <div data-testid="dashboard-new" style={{ flex: 1, minHeight: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 20, padding: "32px 24px 20px",
+      backgroundImage: "radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--b1) 75%, transparent) 1px, transparent 1.4px)", backgroundSize: "40px 40px" }}>
+      <div style={{ flex: 1, width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 14, justifyContent: way === "draft" && !result ? "center" : "flex-start" }}>
+      {way === "draft" ? (
+        <div data-testid="dashboard-new-ask" style={{ width: "min(720px, 100%)", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, textAlign: "center" }}>
+          <div className="aug-fs-display" style={{ color: "var(--t1)", fontWeight: 600 }}>Create a dashboard</div>
+          <div className="aug-fs-ui" style={{ color: "var(--t2)", marginBottom: 12 }}>Describe what you want to see, and a model drafts it for you to review.</div>
+          <div style={{ position: "relative", width: "100%", background: "var(--bg-2)", border: "1.5px solid var(--accent)", borderRadius: "var(--r3)", padding: "8px 48px 8px 8px" }}>
+            <Textarea bespoke autoFocus variant="soft" color="gray" resize="none" rows={3} aria-label="What this dashboard is for" placeholder="Returns by category, what they cost, and which products drive them"
+              value={area} onChange={e => setArea(e.target.value)} disabled={drafting || !!proposal} style={{ width: "100%", background: "transparent", textAlign: "left" }}
+              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (area.trim() && !drafting && !proposal) void draft(); } }} />
+            <Button size="icon-sm" aria-label="Draft it" title="Draft it" disabled={!area.trim() || drafting || !!proposal} onClick={() => void draft()}
+              style={{ position: "absolute", right: 10, bottom: 10 }}><Icon name="send" size={15} /></Button>
+          </div>
+          <div className="aug-fs-sm" data-testid="dashboard-new-ask-says" style={{ color: "var(--t3)", marginTop: 4 }}>
+            {drafting ? "A model is drafting it from the connection's approved metrics, trusted queries and findings. This can take a minute."
+              : "Asks a model once. Nothing is kept until you keep it."}
+          </div>
+        </div>
+      ) : (
+        <section aria-label={WAYS.find(w => w.way === way)?.label} data-testid="dashboard-new-way"
+          style={{ width: "min(960px, 100%)", background: "var(--bg-2)", border: "1px solid var(--card-edge)", borderRadius: "var(--r3)", padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <Button size="xs" variant="ghost" data-testid="dashboard-new-draft" disabled={drafting || starting || !!proposal} onClick={() => setWay("draft")}>
+              <Icon name="chevl" size={13} /> Describe it instead
+            </Button>
+            <span className="aug-fs-ui" style={{ color: "var(--t1)", fontWeight: 600 }}>{WAYS.find(w => w.way === way)?.label}</span>
+          </div>
       {way === "tables" && <FromTables connectionId={connectionId} onKept={onKept} onBusy={onBusy} />}
       {way === "sql" && <FromSql connectionId={connectionId} onKept={onKept} />}
       {way === "file" && (
@@ -517,22 +546,8 @@ function NewDashboard({ connectionId, schema, sym, onKept, onClose, onBusy }: {
         </div>
       )}
 
-      {way === "draft" && (<>
-      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-        <Input aria-label="What this dashboard is for" placeholder="What is it for? Returns, pricing, marketing…"
-          value={area} onChange={e => setArea(e.target.value)} disabled={drafting || !!proposal}
-          onKeyDown={e => { if (e.key === "Enter" && area.trim() && !drafting) void draft(); }}
-          style={{ maxWidth: 420, flex: 1 }} />
-        <Button size="sm" disabled={!area.trim() || drafting || !!proposal} onClick={() => void draft()}>
-          {drafting ? "Drafting…" : "Draft it"}
-        </Button>
-      </div>
-      <div className="aug-fs-sm" style={{ color: "var(--t3)", marginTop: 6 }}>
-        {drafting
-          ? "A model is drafting it from the connection's approved metrics, trusted queries and findings. This can take a minute."
-          : "Drafting asks a model once. Nothing is kept until you keep it."}
-      </div>
-      </>)}
+        </section>
+      )}
 
       {result && !result.staged && (
         <div style={{ marginTop: 12 }}>
@@ -544,9 +559,25 @@ function NewDashboard({ connectionId, schema, sym, onKept, onClose, onBusy }: {
       )}
 
       {result?.staged && proposal && (
-        <DraftReview connectionId={connectionId} dashboardId={result.cockpit_id} result={result} proposal={proposal}
-          onKept={onKept} onDiscarded={() => { setResult(null); setProposal(null); }} />
+        <div style={{ width: "min(1100px, 100%)" }}>
+          <DraftReview connectionId={connectionId} dashboardId={result.cockpit_id} result={result} proposal={proposal}
+            onKept={onKept} onDiscarded={() => { setResult(null); setProposal(null); }} />
+        </div>
       )}
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, maxWidth: "100%" }}>
+        <span className="aug-fs-xs" style={{ color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em" }}>Or start another way</span>
+        <div role="group" aria-label="Other ways to start" data-testid="dashboard-new-ways"
+          style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 2, padding: 6, background: "var(--bg-2)", border: "1px solid var(--card-edge)", borderRadius: "var(--r3)", boxShadow: "var(--shadow-lg)" }}>
+          {WAYS.map(w => (
+            <Button key={w.way} size="sm" variant={way === w.way ? "secondary" : "ghost"} aria-pressed={way === w.way} data-testid={`dashboard-new-${w.way}`}
+              disabled={drafting || starting || !!proposal} onClick={() => setWay(w.way)}>
+              <Icon name={w.icon} size={14} /> {w.label}
+            </Button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -1133,9 +1164,9 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
     : sharedNow ? (sharedNow.title || sharedNow.cockpit_id)
     : (list?.cockpits.find(c => c.cockpit_id === chosen)?.title || undefined);
   // An open dashboard's way back to the home, named by where it goes: "‹ Dashboards" before its title.
-  useChromeBack(chosen && !editing ? () => choose("") : null);
+  useChromeBack(newOpen ? () => { if (!newBusy) setNewOpen(false); } : chosen && !editing ? () => choose("") : null);
   usePageChrome(editing && inShell ? { bare: true } : {
-    title: chosen ? openTitle : "Dashboards",
+    title: newOpen ? "New dashboard" : chosen ? openTitle : "Dashboards",
     ...(chosen ? { trail: [openTitle ?? chosen] } : {}),
     status: editing ? { label: "Editing", tone: "info" }
       : sharedNow ? { label: `Shared by ${person(sharedNow.published_by || sharedNow.owner)}` }
@@ -1528,6 +1559,21 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
     </>
   );
 
+  if (newOpen) {
+    return (
+      <div data-testid="briefing-dashboards" data-dashboard-ground="" style={{ flex: 1, minHeight: 0, overflow: "auto", display: "flex", flexDirection: "column", background: "var(--bg-0)" }}>
+        {!inShell && (
+          <Button size="xs" variant="ghost" data-testid="dashboard-new-back" disabled={newBusy} style={{ alignSelf: "flex-start", margin: "10px 0 0 12px" }} onClick={() => setNewOpen(false)}>
+            <Icon name="chevl" size={13} /> Dashboards
+          </Button>
+        )}
+        <NewDashboard connectionId={connectionId} schema={schema} onClose={() => setNewOpen(false)} onBusy={setNewBusy}
+          sym={data?.currency_symbol || "$"}
+          onKept={id => { setNewOpen(false); choose(id); reload(); }} />
+      </div>
+    );
+  }
+
   return (
     <div data-testid="briefing-dashboards" data-dashboard-ground="" style={{ flex: 1, overflow: "auto", padding: "14px 32px 32px", background: "var(--bg-0)" }}>
       {/* On the home, the page's one action. Inside the app it sits in the title row; outside it, above the list. */}
@@ -1541,13 +1587,6 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
           <Icon name="chevl" size={13} /> Dashboards
         </Button>
       )}
-
-      <FormDialog open={newOpen} onOpenChange={o => { if (!o) setNewOpen(false); }} busy={newBusy} title="New dashboard"
-        testId="dashboard-new-dialog" width={900}>
-        <NewDashboard connectionId={connectionId} schema={schema} onClose={() => setNewOpen(false)} onBusy={setNewBusy}
-          sym={data?.currency_symbol || "$"}
-          onKept={id => { setNewOpen(false); choose(id); reload(); }} />
-      </FormDialog>
 
       {/* Dashboards that lived in a Data Canvas, offered here once (CT-10). */}
       {!chosen && list.from_canvases.map(c => (

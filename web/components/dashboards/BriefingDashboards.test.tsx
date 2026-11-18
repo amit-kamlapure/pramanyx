@@ -254,33 +254,45 @@ describe("a new dashboard started without a model", () => {
   // the designer's own session.
   const kept = () => api.keepDashboard.mock.calls.at(-1) as [string, string, { elements: Record<string, { type: string; props: Record<string, unknown>; children: string[] }> }, string];
 
-  // The user, 2026-11-07: a new dashboard is made in a dialog over the page, not on the same plane as it.
-  it("opens in a dialog; its Close and Escape close it, but not while a start is in flight", async () => {
+  // The user, 2026-11-18: a new dashboard opens as a blank page, on a text input, with the other ways beneath it.
+  it("opens as a page of its own on the words to describe it, the other ways at its foot", async () => {
     show();
     fireEvent.click(await screen.findByTestId("dashboard-new-open"));
-    let dialog = await screen.findByRole("dialog");
-    expect(dialog).toHaveAttribute("data-testid", "dashboard-new-dialog");
-    expect(within(dialog).getByTestId("dashboard-new")).toBeInTheDocument();
-    // one Close: the dialog's own — the form draws no second one under it
-    fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByTestId("dashboards-home")).toBeNull();
+    expect(screen.getByLabelText("What this dashboard is for")).toBeInTheDocument();
+    expect(within(screen.getByTestId("dashboard-new-ways")).getAllByRole("button").map(b => b.textContent?.trim()))
+      .toEqual(["From tables", "From SQL", "From a file", "From an object", "From a pack template", "For a process", "Start empty"]);
+    fireEvent.click(screen.getByTestId("dashboard-new-back"));
+    expect(await screen.findByTestId("dashboards-home")).toBeInTheDocument();
+  });
 
-    fireEvent.click(screen.getByTestId("dashboard-new-open"));
-    dialog = await screen.findByRole("dialog");
-    fireEvent.keyDown(dialog, { key: "Escape" });
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-
+  it("goes to another way and back to describing it, and holds the page while a start is in flight", async () => {
     api.keepDashboard.mockReturnValue(new Promise(() => {}));                 // a start that never answers
-    fireEvent.click(screen.getByTestId("dashboard-new-open"));
-    dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByTestId("dashboard-new-empty"));
-    fireEvent.change(within(dialog).getByLabelText("The dashboard's name"), { target: { value: "Carrier performance" } });
-    fireEvent.change(within(dialog).getByLabelText("What this dashboard is for — its first note"), { target: { value: "Pickups." } });
-    fireEvent.click(within(dialog).getByTestId("dashboard-start-empty"));
-    await waitFor(() => expect(within(dialog).getByTestId("dashboard-start-empty")).toHaveTextContent("Starting…"));
-    fireEvent.keyDown(dialog, { key: "Escape" });
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
-    expect(within(dialog).getByRole("button", { name: "Close" })).toBeDisabled();
+    show();
+    fireEvent.click(await screen.findByTestId("dashboard-new-open"));
+    fireEvent.click(screen.getByTestId("dashboard-new-empty"));
+    expect(screen.queryByLabelText("What this dashboard is for")).toBeNull();
+    fireEvent.click(screen.getByTestId("dashboard-new-draft"));
+    expect(screen.getByLabelText("What this dashboard is for")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("dashboard-new-empty"));
+    fireEvent.change(screen.getByLabelText("The dashboard's name"), { target: { value: "Carrier performance" } });
+    fireEvent.change(screen.getByLabelText("What this dashboard is for — its first note"), { target: { value: "Pickups." } });
+    fireEvent.click(screen.getByTestId("dashboard-start-empty"));
+    await waitFor(() => expect(screen.getByTestId("dashboard-start-empty")).toHaveTextContent("Starting…"));
+    expect(screen.getByTestId("dashboard-new-back")).toBeDisabled();
+  });
+
+  it("drafts on Enter, and keeps a new line on Shift and Enter", async () => {
+    api.draftDashboard.mockResolvedValue({ staged: false, proposal_id: "", cockpit_id: "", summary: "", rounds: 0, stop_reason: "", sentences: ["Nothing measures this."] });
+    show();
+    fireEvent.click(await screen.findByTestId("dashboard-new-open"));
+    const box = screen.getByLabelText("What this dashboard is for");
+    fireEvent.change(box, { target: { value: "Returns" } });
+    fireEvent.keyDown(box, { key: "Enter", shiftKey: true });
+    expect(api.draftDashboard).not.toHaveBeenCalled();
+    fireEvent.keyDown(box, { key: "Enter" });
+    await waitFor(() => expect(api.draftDashboard).toHaveBeenCalledWith("thelook", "Returns", "thelook"));
   });
 
   it("starts empty — its name and a first note in the person's words — and opens on it", async () => {
@@ -346,7 +358,6 @@ describe("a new dashboard from an area", () => {
   async function draftReturns() {
     show();
     fireEvent.click(await screen.findByTestId("dashboard-new-open"));
-    fireEvent.click(screen.getByTestId("dashboard-new-draft"));                 // the one way here that asks a model
     fireEvent.change(screen.getByLabelText("What this dashboard is for"), { target: { value: "Returns" } });
     fireEvent.click(screen.getByRole("button", { name: "Draft it" }));
   }
