@@ -85,7 +85,7 @@ export function QueryKindPick({ cs, onKept }: { cs: CardState; onKept: () => voi
   if (!kinds.length) {
     return (
       <div className="aug-fs-sm" data-testid="query-kind-none" style={NOTE}>
-        It is drawn as its query says — set that up under What it shows. Its result carries no other kind of chart.
+        It is drawn as its query says — set that up under What it reads, below. Its result carries no other kind of chart.
       </div>
     );
   }
@@ -104,7 +104,7 @@ export function QueryKindPick({ cs, onKept }: { cs: CardState; onKept: () => voi
   };
   return (
     <div data-testid="query-kind-pick" style={{ ...NOTE, display: "flex", flexDirection: "column", gap: 8 }}>
-      <div className="aug-fs-sm">Drawn as its query says (bar, line, area or scatter, under What it shows). It can also be drawn as:</div>
+      <div className="aug-fs-sm">Drawn as its query says (bar, line, area or scatter, under What it reads, below). It can also be drawn as:</div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
         {kinds.map(t => (
           <Button key={t} size="xs" variant="ghost" disabled={saving} onClick={() => void pick(t)} data-kind={t}>

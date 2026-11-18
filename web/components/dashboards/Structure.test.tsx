@@ -381,6 +381,7 @@ describe("the piece picker", () => {
     const { onHandOff, onClose } = pick(desk(), "right", "chart");
     expect(screen.getByRole("region", { name: "Add a chart" })).toBeInTheDocument();
     expect(kinds()).toEqual(expect.arrayContaining(["ObjectChart", "ObjectFigure", "card", "query", "finding", "question", "ObjectTable", "ontology"]));
+    expect(kinds()[0]).toBe("ObjectFigure");                                  // what measures comes first
     expect(kinds()).not.toContain("ObjectFilters");
     expect(kinds()).not.toContain("note");
     fireEvent.click(screen.getAllByTestId("piece-picker-entry").find(e => e.dataset.kind === "question")!);

@@ -302,7 +302,8 @@ export function PiecePicker({ spec, section, connectionId, schema, onPlace, onHa
 
   const shown = useMemo(() => {
     const q = find.trim().toLowerCase();
-    return GROUPS.filter(g => !groups || groups.includes(g.group))
+    // in the order asked: a chart's list opens on what measures, then what shows objects
+    return (groups ? groups.flatMap(name => GROUPS.filter(g => g.group === name)) : GROUPS)
       .map(g => ({ ...g, pieces: g.pieces.filter(p => !q || `${p.label} ${p.says}`.toLowerCase().includes(q)) }))
       .filter(g => g.pieces.length);
   }, [find, groups]);
