@@ -6,6 +6,7 @@ import type { BriefingRangeBlock } from "@/lib/api";
 
 import { RangeControl, RangeMeasures, RangeMeasuresExpected, RangeSections, rangeStats, rangeTop } from "./BriefRange";
 import { MetricDetailHost, whyQuestion } from "./MetricDetail";
+import { COMPARE_CAVEAT } from "@/lib/dashboards/ledger";
 
 const api = vi.hoisted(() => ({ readMetricTrend: vi.fn(), readExpectedNext: vi.fn() }));
 vi.mock("@/lib/api", async (original) => ({ ...(await original<typeof import("@/lib/api")>()), ...api }));
@@ -73,12 +74,12 @@ describe("RangeMeasures", () => {
     expect(screen.queryByTestId("range-live")).toBeNull();
   });
 
-  it("says beside a change when it is not at equal age, and where the data ends", () => {
+  it("keeps the comparison's caveat off the row, in plain words on its hover, and says where the data ends", () => {
     const why = "Revenue is still provisional, and what it is compared with has settled";
     render(<RangeMeasures block={{ ...BLOCK, edge_note: "Data runs to 2026-10-07: today (2026-10-08) has no rows yet.",
       measured: [{ ...BLOCK.measured[0], equal_age: { equal: false, why } }] }} />);
-    expect(screen.getByTestId("change-not-equal-age").textContent).toBe(" · not at equal age");
-    expect(screen.getByTestId("change-not-equal-age").parentElement?.getAttribute("title")).toBe(why);
+    expect(document.body.textContent).not.toMatch(/equal age/i);
+    expect(screen.getByTitle(COMPARE_CAVEAT)).toBeTruthy();
     expect(screen.getByTestId("range-edge-note").textContent).toContain("today (2026-10-08) has no rows yet");
   });
 
@@ -86,7 +87,6 @@ describe("RangeMeasures", () => {
     const why = "Revenue is still provisional; the range before is compared as it stood on 2026-10-01, at the same age.";
     const previous = { value: 90, as_of: "2026-10-01", as_of_text: "2026-10-01", start: "2026-09-24", end: "2026-10-01" };
     render(<RangeMeasures block={{ ...BLOCK, measured: [{ ...BLOCK.measured[0], equal_age: { equal: false, why, previous } }] }} />);
-    expect(screen.queryByTestId("change-not-equal-age")).toBeNull();
     expect(screen.getByTitle(why)).toBeTruthy();
   });
 

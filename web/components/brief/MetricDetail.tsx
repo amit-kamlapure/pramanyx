@@ -22,6 +22,7 @@ import {
   type BriefingRange, type BriefingRangeBlock, type BriefingRangeMeasure, type ExpectedNext, type MetricTrend,
   type MetricTrendPoint,
 } from "@/lib/api";
+import { COMPARE_CAVEAT } from "@/lib/dashboards/ledger";
 import { countNoun, formatPoints, formatVariance } from "@/lib/format";
 
 export interface MetricOpened {
@@ -161,7 +162,7 @@ function MetricDetail({ what, connectionId, schema, workspaceId, top, onClose, o
           ? `No change stated: its data covers only ${partial}.`
           : change
             ? `${change} against ${block.compared_with}${m.equal_age?.previous ? ` as it stood on ${m.equal_age.previous.as_of_text}, at the same age`
-              : m.equal_age && !m.equal_age.equal ? ` — not at equal age: ${m.equal_age.why}` : ""}`
+              : m.equal_age && !m.equal_age.equal ? `. ${COMPARE_CAVEAT}` : ""}`
             : `No comparison rows for ${block.compared_with}.`}>
           {m.current_text ?? "no figure"}
         </Box>

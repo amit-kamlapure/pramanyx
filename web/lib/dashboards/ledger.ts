@@ -118,38 +118,22 @@ export function changeWords(m: BriefingRangeMeasure, against: "previous" | "last
  *  theLook, whose recent rows are still being written, reading these as movements flagged every metric it has. */
 export const unequal = (m: BriefingRangeMeasure) => !!m.equal_age && !m.equal_age.equal;
 
+/** What a reader is told of such a figure, once, where they open it (the user, 2026-11-18: "what the hell is not equal age??"). */
+export const COMPARE_CAVEAT = "This data can still change, and so can the periods it is compared with, so read these comparisons as approximate.";
+
 /** What a range read from a LIVE source says of it — a sheet people edit (Arc SH, SH-6): none of its days settles, so
  *  none of its figures is final, and its figures say that instead of "still settling" — or "" for any other source. */
 export function liveWords(block: { settling?: { kind: string; says: string } | null }): string {
   return block.settling?.kind === "live" ? block.settling.says : "";
 }
 
-/** What the ledger says of the figures it did not read against their usual range, a line per reason, in the server's own
- *  words without the figure's name: on theLook, where no age settles, ten figures gave one sentence ten times. */
-export function notReadWords(measured: BriefingRangeMeasure[]): string[] {
-  const byReason = new Map<string, string[]>();
-  for (const m of measured) {
-    if (!unequal(m)) continue;
-    const why = m.equal_age?.why ?? "";
-    const said = why.startsWith(m.name) ? why.slice(m.name.length) : why;
-    byReason.set(said, [...(byReason.get(said) ?? []), m.name]);
-  }
-  return [...byReason].map(([said, names]) => {
-    const one = names.length === 1;
-    const who = one ? names[0] : byReason.size > 1 ? names.join(", ") : `${formatCount(names.length)} metrics`;
-    const reason = said.startsWith(" ") ? `${one ? "it" : "each"}${said}` : said;
-    return `${who} ${one ? "is" : "are"} not read against ${one ? "its" : "their"} usual range${reason ? `: ${reason}` : "."}`;
-  });
-}
-
 /** Why Key movements is empty. "Nothing left its usual range" is said only of figures that were read against it: of
  *  anything else it would pass off a judgement not made as a quiet period. */
 export function noKeyMoveWords(read: number, unread: number): string {
   if (unread === 0) return "Nothing left its usual range.";
-  if (read > 1) return `None of the ${formatCount(read)} read against their usual range left it.`;
-  if (read === 1) return "The one read against its usual range did not leave it.";
-  return unread === 1 ? "The one metric here was not read against its usual range, so it is not called a key movement."
-    : `None of the ${formatCount(unread)} metrics here was read against its usual range, so none is called a key movement.`;
+  if (read > 1) return `None of the ${formatCount(read)} metrics that can be judged left its usual range.`;
+  if (read === 1) return "The one metric that can be judged did not leave its usual range.";
+  return "This data can still change, so no metric here is called a key movement.";
 }
 
 /** Whether a row is a key movement, and which way: outside its usual range. A range still under way is not, because
@@ -221,9 +205,9 @@ export interface Readout { words: string; plain: boolean }
  *  quietly; there is no sentence to pad it with. */
 export function readoutOf(m: BriefingRangeMeasure, trend: MetricTrend | undefined, period: string, twin?: string): Readout {
   if (twin) return { words: `Reads the same as ${twin}`, plain: false };
-  if (m.status === "to_date") return { words: "Under way, so not read against its usual range", plain: true };
+  if (m.status === "to_date") return { words: "Still under way", plain: true };
   if (m.current_partial) return { words: `Covers only ${m.current_partial}`, plain: true };
-  if (unequal(m)) return { words: "Not read against its usual range", plain: true };
+  if (unequal(m)) return { words: "", plain: true };
   if (!trend) return { words: "", plain: true };
   if (trend.why) return { words: "Its earlier ranges could not be read", plain: true };
   if (!trend.usual) return { words: "Too few earlier readings to say what is usual", plain: true };

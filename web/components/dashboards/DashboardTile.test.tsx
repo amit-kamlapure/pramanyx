@@ -71,9 +71,10 @@ describe("a figure", () => {
     expect(screen.getByTestId("tile-change")).toHaveTextContent("3.2% higher than June");
   });
 
-  it("says a comparison is not at equal age before the range settles", () => {
+  it("keeps a comparison's caveat on its hover, in plain words, before the range settles", () => {
     tile(card(), ranged(0.1003, { ...JUNE, equal_age: false }));
-    expect(screen.getByTestId("tile-not-equal-age")).toBeInTheDocument();
+    expect(screen.getByTestId("tile-change").textContent).not.toMatch(/equal age/i);
+    expect(screen.getByTestId("tile-change").getAttribute("title")).toContain("read these comparisons as approximate");
   });
 
   it("does not colour a difference it does not read as a move, even past its limit's good side", () => {

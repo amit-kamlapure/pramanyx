@@ -2,12 +2,11 @@
 
 /**
  * The Metrics dashboard as a ledger (`design-mockups/metric-ledger-lux.html`; the user, 2026-11-04: "Lets move our Metrics
- * Dashboards in this manner"). One row per metric, each in its area, the industry's areas in the order its business
- * reads them: the figure, its trend against its usual range, the two comparisons, what is expected next, and one line of
+ * Dashboards in this manner"). One row per metric in one list with no groupings (the user, 2026-11-18), in the order the
+ * industry's areas read: the figure, its trend against its usual range, the two comparisons, what is expected next, and one line of
  * what it means. Key movements are the same rows, most concerning first. A metric opens in its own row, never over it.
  *
- * Nothing true the figures view said is lost: each caveat stays a chip, what was not measured stays in its area with why,
- * and the expected-next bands are still booked as predictions the first time a period is read, because this table reads them.
+ * Nothing true the figures view said is lost: what was not measured stays at the foot of the list with why, and the expected-next bands are still booked as predictions the first time a period is read, because this table reads them.
  */
 import { Fragment, useEffect, useMemo, useState, type CSSProperties } from "react";
 
@@ -25,8 +24,8 @@ import {
   type BriefingRangeBlock, type BriefingRangeMeasure, type ExpectedNext, type MetricTrend,
 } from "@/lib/api";
 import {
-  bandBasisWords, bandDoubt, bandWords, briefingRangeOf, changeWords, areasOf, editionFor, expectedWords, figureWords, keyMove, meaningOf,
-  liveWords, noKeyMoveWords, notReadWords, readAgainstUsual, readoutOf, shortOf, targetWords, toneOfMove, twinsOf, unequal, workFor,
+  COMPARE_CAVEAT, bandBasisWords, bandDoubt, bandWords, briefingRangeOf, changeWords, areasOf, editionFor, expectedWords, figureWords, keyMove, meaningOf,
+  liveWords, noKeyMoveWords, readAgainstUsual, readoutOf, shortOf, targetWords, toneOfMove, twinsOf, unequal, workFor,
   type Work,
 } from "@/lib/dashboards/ledger";
 import { figurePeriods, ownFigures } from "@/lib/dashboards/figures";
@@ -158,13 +157,13 @@ function Reasons({ m, trend, work, meaning, expected, block, briefing }: {
         <p className="aug-fs-sm" style={para}>
           {!trend ? "Reading its earlier ranges…"
             : trend.why ? `Its earlier ranges could not be read: ${trend.why}.`
-            : u && m.equal_age && !m.equal_age.equal ? <>Its usual range is <b style={{ color: "var(--t1)", fontWeight: 500 }}>{bandWords(u.low, u.high, m.unit)}</b>, from the {u.n} ranges before. This figure is not held against it.</>
+            : u && unequal(m) ? <>Its usual range is <b style={{ color: "var(--t1)", fontWeight: 500 }}>{bandWords(u.low, u.high, m.unit)}</b>, from the {u.n} ranges before.</>
             : u ? <>{u.outside === "above" ? "Above" : u.outside === "below" ? "Below" : "Inside"} its usual range of{" "}
                 <b style={{ color: "var(--t1)", fontWeight: 500 }}>{bandWords(u.low, u.high, m.unit)}</b>, from the {u.n} ranges before.</>
               : "Too few earlier readings to say what is usual."}
         </p>
         {trend?.same_age && <p className="aug-fs-sm" style={para}>Every range here is read at the same age, so these comparisons are fair.</p>}
-        {m.equal_age && !m.equal_age.equal && <p className="aug-fs-sm" style={para}>{`Not at equal age: ${m.equal_age.why.replace(/\.+$/, "")}.`}</p>}
+        {unequal(m) && <p className="aug-fs-sm" data-testid="ledger-compare-caveat" style={para}>{COMPARE_CAVEAT}</p>}
       </div>
       <div>
         <div className="aug-fs-xs" style={label}>What the platform knows</div>
@@ -259,7 +258,7 @@ export function MetricsLedger({ connectionId, schema, block: measuredBlock }: {
   const hit = (name: string) => name.toLowerCase().includes(q);
   const works = (m: BriefingRangeMeasure) => workFor(m, edition);
 
-  const row = (m: BriefingRangeMeasure, withArea: boolean) => {
+  const row = (m: BriefingRangeMeasure) => {
     const trend = trends[m.metric];
     const isOpen = open === m.metric;
     const move = moveOf(m);
@@ -284,11 +283,10 @@ export function MetricsLedger({ connectionId, schema, block: measuredBlock }: {
                 <span className="aug-fs-chrome" style={ONE_LINE}>{m.name}</span>
               </Button>
               <span style={{ display: "inline-flex", flexShrink: 0 }}>
-                {m.equal_age && !m.equal_age.equal ? <Chip tone="amber" title={m.equal_age.why}>not at equal age</Chip>
+                {unequal(m) ? null
                   : live && m.status !== "to_date" ? <Chip testId={`ledger-live-${m.metric}`} title={live}>live</Chip>
                   : m.status !== "final" && <Chip title="Its newest days are still settling, so this figure can still move">{m.status === "to_date" ? "to date" : "still settling"}</Chip>}
               </span>
-              {withArea && m.area && <span className="aug-fs-xs" style={{ ...MUTED, ...ONE_LINE, flex: "1 1 0" }}>{m.area.name}</span>}
             </div>
           </td>
           <td style={NUMBER}><span className="aug-fs-ui" style={{ fontWeight: 600, color: "var(--t1)" }}>{figureWords(m.current, m.unit, m.current_text)}</span></td>
@@ -323,46 +321,33 @@ export function MetricsLedger({ connectionId, schema, block: measuredBlock }: {
     );
   };
 
-  const groupHead = (name: string, words: string) => (
-    <tr><td colSpan={columns} className="aug-fs-xs" style={{ ...CELL, background: "var(--bg-1)", padding: "9px 12px 5px", ...MUTED }}>
-      <span style={{ textTransform: "uppercase", letterSpacing: ".06em" }}>{name}</span>
-      {words && <span style={{ marginLeft: 8, ...NUM }}>{words}</span>}
-    </td></tr>
+  // one list, in the order the areas read; what was not measured at its foot, one row per reason
+  const listed = filter === "key" ? key : filter === "unmeasured" ? [] : areas.flatMap(d => d.rows);
+  const rows = listed.filter(m => hit(m.name));
+  const held = filter === "key" ? [] : [...areas.flatMap(d => d.notMeasured).reduce((by, n) => {
+    const names = n.names.filter(hit);
+    if (names.length) by.set(n.why, { ...n, names: [...(by.get(n.why)?.names ?? []), ...names] });
+    return by;
+  }, new Map<string, (typeof areas)[number]["notMeasured"][number]>()).values()];
+  const found = rows.length + held.reduce((t, n) => t + n.names.length, 0);
+  const bodies = (
+    <>
+      {rows.map(m => row(m))}
+      {held.map(n => (
+        <tr key={n.why} data-testid="ledger-not-measured" style={{ background: HATCH }}>
+          <td colSpan={2} className="aug-fs-sm" style={{ ...CELL, paddingLeft: 27, color: "var(--t2)" }}>{n.names.join(", ")}</td>
+          <td colSpan={columns - 2} className="aug-fs-sm" style={{ ...CELL, color: "var(--t2)" }}>
+            <span style={{ ...ROW, gap: 8 }}>
+              {n.why}
+              {!n.ended && !n.deprecated && (
+                <Button size="xs" variant="ghost" onClick={() => requestTab("semantic", { conn: connectionId })}>Open in the Semantic Layer</Button>
+              )}
+            </span>
+          </td>
+        </tr>
+      ))}
+    </>
   );
-
-  let found = 0;
-  const bodies = filter === "key" ? (() => {
-    const rows = key.filter(m => hit(m.name));
-    found = rows.length;
-    return rows.map(m => row(m, true));
-  })() : areas.map(d => {
-    const rows = filter === "unmeasured" ? [] : d.rows.filter(m => hit(m.name));
-    const held = d.notMeasured.map(n => ({ ...n, names: n.names.filter(hit) })).filter(n => n.names.length);
-    if (!rows.length && !held.length) return null;
-    const heldCount = held.reduce((t, n) => t + n.names.length, 0);
-    const keys = rows.filter(m => moveOf(m)).length;
-    found += rows.length + heldCount;
-    return (
-      <Fragment key={d.id || d.name}>
-        {groupHead(d.name, [rows.length ? formatCount(rows.length) : "", keys ? countNoun(keys, "key movement") : "",
-          heldCount ? `${formatCount(heldCount)} not measured` : ""].filter(Boolean).join(" · "))}
-        {rows.map(m => row(m, false))}
-        {held.map(n => (
-          <tr key={n.why} data-testid="ledger-not-measured" style={{ background: HATCH }}>
-            <td colSpan={2} className="aug-fs-sm" style={{ ...CELL, paddingLeft: 27, color: "var(--t2)" }}>{n.names.join(", ")}</td>
-            <td colSpan={columns - 2} className="aug-fs-sm" style={{ ...CELL, color: "var(--t2)" }}>
-              <span style={{ ...ROW, gap: 8 }}>
-                {n.why}
-                {!n.ended && !n.deprecated && (
-                  <Button size="xs" variant="ghost" onClick={() => requestTab("semantic", { conn: connectionId })}>Open in the Semantic Layer</Button>
-                )}
-              </span>
-            </td>
-          </tr>
-        ))}
-      </Fragment>
-    );
-  });
   const total = filter === "key" ? key.length : block.measured.length + block.unmeasured.length;
 
   const flat = () => ({
@@ -380,7 +365,6 @@ export function MetricsLedger({ connectionId, schema, block: measuredBlock }: {
       <div data-testid="ledger-tally" className="aug-fs-sm" style={{ color: "var(--t2)", ...NUM }}>
         {`${formatCount(block.measured.length)} measured`}
         {done && judged > 0 && ` · ${countNoun(key.length, "key movement")}`}
-        {done && unread > 0 && ` · ${formatCount(unread)} not read against usual`}
         {settling > 0 && ` · ${formatCount(settling)} still settling`}
         {live && block.measured.length > 0 && " · read live"}
         {block.unmeasured.length > 0 && ` · ${formatCount(block.unmeasured.length)} not measured`}
@@ -434,11 +418,6 @@ export function MetricsLedger({ connectionId, schema, block: measuredBlock }: {
                 {q ? `No ${filter === "key" ? "key movement" : "metric"} matches “${term.trim()}”.` : filter === "key" && !done ? "Reading each metric's past…" : filter === "key" ? noKeyMoveWords(judged, unread) : "Nothing here."}
               </td></tr>
             ) : bodies}
-            {filter === "key" && !q && notReadWords(block.measured).map((words, i) => (
-              <tr key={`not-read-${i}`}><td colSpan={columns} data-testid="ledger-not-read" className="aug-fs-xs" style={{ ...CELL, borderBottom: 0, padding: "10px 12px", ...MUTED }}>
-                {words}
-              </td></tr>
-            ))}
             {filter === "all" && !q && untouched.length > 0 && (
               <tr><td colSpan={columns} data-testid="ledger-untouched" className="aug-fs-xs" style={{ ...CELL, borderBottom: 0, padding: "10px 12px", ...MUTED }}>
                 {`The data also holds ${untouched.join(" and ")}, with no metric reading ${untouched.length === 1 ? "it" : "them"} yet.`}

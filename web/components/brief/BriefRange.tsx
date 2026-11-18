@@ -20,7 +20,7 @@ import {
   type BriefingRange, type BriefingRangeBlock, type BriefingRangeMeasure, type ExpectedNext, type RangePreset,
 } from "@/lib/api";
 import { Segmented } from "@/components/ui/segmented";
-import { liveWords } from "@/lib/dashboards/ledger";
+import { COMPARE_CAVEAT, liveWords } from "@/lib/dashboards/ledger";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 
@@ -178,13 +178,7 @@ export function RangeMeasures({ block, expected }: { block: BriefingRangeBlock; 
         if (!change) return "no comparison rows";
         if (!m.equal_age || m.equal_age.equal) return change;
         // BR-8: the range before as it stood at this figure's age — a move, read against that.
-        if (m.equal_age.previous) return <span title={m.equal_age.why}>{change}</span>;
-        // Said beside the number, as the dashboard's cards say it: part of this difference is age.
-        return (
-          <span title={m.equal_age.why}>
-            {change}<span data-testid="change-not-equal-age" style={{ color: "var(--amb4)" }}> · not at equal age</span>
-          </span>
-        );
+        return <span title={m.equal_age.previous ? m.equal_age.why : COMPARE_CAVEAT}>{change}</span>;
       } },
     ...(hasYear ? [{
       head: "A year earlier", width: 190,

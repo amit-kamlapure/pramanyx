@@ -25,6 +25,7 @@
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { DropdownMenu } from "@radix-ui/themes";
+import { COMPARE_CAVEAT } from "@/lib/dashboards/ledger";
 import { downloadChartPng, type ChartInstance } from "@/lib/chartExport";
 import { csvFilename, downloadCsv, toCsv, type CsvCell } from "@/lib/query/csv";
 
@@ -286,16 +287,10 @@ function Moved({ value, previous, card }: { value: number; previous: CardRunPrev
   const moved = changeWords(value, previous.value, card, previous.word);
   if (!moved) return null;
   return (
-    <div className="aug-fs-sm" data-testid="tile-change" title={`Against ${previous.covers}`}
+    <div className="aug-fs-sm" data-testid="tile-change" title={`Against ${previous.covers}${previous.equal_age ? "" : `. ${COMPARE_CAVEAT}`}`}
       style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap", color: previous.equal_age ? moveColour(moved.sign, card) : "var(--t2)" }}>
       {moved.sign !== 0 && <Icon name={moved.sign > 0 ? "rises" : "falls"} size={13} />}
       <span>{moved.text}</span>
-      {!previous.equal_age && (
-        <span data-testid="tile-not-equal-age" style={{ color: "var(--amb4)" }}
-          title="This range's days may still change, so part of the difference may not be a move.">
-          · not at equal age
-        </span>
-      )}
     </div>
   );
 }

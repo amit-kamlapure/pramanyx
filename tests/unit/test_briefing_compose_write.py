@@ -177,9 +177,9 @@ def test_a_sentence_reading_such_a_figure_against_usual_goes_back_then_is_left_o
     monkeypatch.setattr("pramanyx.agent.tool_loop.run_tool_loop", loop)
     entry = W.compose("compose_c1", _settling_week(), scope_key="compose_c1", llm=object(), runner=setup["runner"],
                       run_query=_top_orders)
-    assert "not at equal age" in " ".join(seen[1]["compose"]["refused"])        # back to the model first, with why
+    assert "not a fair one" in " ".join(seen[1]["compose"]["refused"])        # back to the model first, with why
     assert [w["sentence"] for w in entry["withheld"]] == ["Sales reached €42.1k, above its usual range."]
-    assert "not at equal age" in entry["withheld"][0]["why"]
+    assert "not a fair one" in entry["withheld"][0]["why"]
     assert entry["blocks"][0]["text"] == "A week to read with care."
 
 
