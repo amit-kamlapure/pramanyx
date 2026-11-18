@@ -7,7 +7,7 @@
  * (`/me/preferences`); a dashboard's miniature is its real layout and nothing it read.
  */
 import { DropdownMenu } from "@radix-ui/themes";
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 
 import { Chip } from "@/components/clarity/kit";
 import { Button } from "@/components/ui/button";
@@ -34,6 +34,12 @@ const CHIPS: { key: Exclude<keyof HomeFilters, "words">; label: string; icon: Ic
 const VIEW_CACHE = "pramanyx:dashboards-view";
 
 const isView = (v: unknown): v is HomeView => (HOME_VIEWS as readonly unknown[]).includes(v);
+
+/** The ground under the row or card the pointer is on, and the one it goes back to. */
+const lit = (rest = "") => ({
+  onMouseEnter: (e: MouseEvent<HTMLElement>) => { e.currentTarget.style.backgroundColor = "var(--bg-hover)"; },
+  onMouseLeave: (e: MouseEvent<HTMLElement>) => { e.currentTarget.style.backgroundColor = rest; },
+});
 
 function useHomePrefs(connectionId: string) {
   const [view, setView] = useState<HomeView>(() => {
@@ -127,7 +133,7 @@ function ListView({ items, stars, onStar, onOpen }: ViewProps) {
       <thead><tr><th style={HEAD}>Name</th><th style={HEAD}>Modified</th><th style={HEAD}>Owner</th><th style={HEAD}>Status</th></tr></thead>
       <tbody>
         {items.map(item => (
-          <tr key={item.id} data-testid="dashboard-row" data-id={item.id} className="aug-row-hover" onClick={() => onOpen(item.id)} style={{ cursor: "pointer" }}>
+          <tr key={item.id} data-testid="dashboard-row" data-id={item.id} {...lit()} onClick={() => onOpen(item.id)} style={{ cursor: "pointer" }}>
             <td style={{ ...CELL, width: "50%", maxWidth: 0 }}>
               <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
                 <Star item={item} on={stars.includes(item.id)} onToggle={() => onStar(item.id)} />
@@ -159,7 +165,7 @@ function DetailView({ items, stars, onStar, onOpen }: ViewProps) {
   return (
     <div data-testid="dashboards-detail" style={{ display: "flex", flexDirection: "column" }}>
       {items.map(item => (
-        <div key={item.id} data-testid="dashboard-row" data-id={item.id} className="aug-row-hover" onClick={() => onOpen(item.id)}
+        <div key={item.id} data-testid="dashboard-row" data-id={item.id} {...lit()} onClick={() => onOpen(item.id)}
           style={{ display: "grid", gridTemplateColumns: "148px minmax(0, 1fr) auto", gap: 16, alignItems: "center", padding: "12px", borderBottom: "1px solid var(--b1)", cursor: "pointer" }}>
           <Miniature item={item} height={84} />
           <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
@@ -181,8 +187,8 @@ function GridView({ items, stars, onStar, onOpen }: ViewProps) {
   return (
     <div data-testid="dashboards-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 12 }}>
       {items.map(item => (
-        <div key={item.id} data-testid="dashboard-row" data-id={item.id} className="aug-home-card" onClick={() => onOpen(item.id)}
-          style={{ display: "flex", flexDirection: "column", gap: 8, padding: 10, borderRadius: "var(--r3)", cursor: "pointer", minWidth: 0 }}>
+        <div key={item.id} data-testid="dashboard-row" data-id={item.id} {...lit("var(--bg-2)")} onClick={() => onOpen(item.id)}
+          style={{ display: "flex", flexDirection: "column", gap: 8, padding: 10, borderRadius: "var(--r3)", backgroundColor: "var(--bg-2)", cursor: "pointer", minWidth: 0 }}>
           <Miniature item={item} height={132} />
           <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
             <span style={{ flex: 1, minWidth: 0, display: "flex" }}><Name item={item} onOpen={() => onOpen(item.id)} /></span>
