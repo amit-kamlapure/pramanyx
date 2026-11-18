@@ -292,7 +292,55 @@ describe("a new dashboard started without a model", () => {
     fireEvent.keyDown(box, { key: "Enter", shiftKey: true });
     expect(api.draftDashboard).not.toHaveBeenCalled();
     fireEvent.keyDown(box, { key: "Enter" });
-    await waitFor(() => expect(api.draftDashboard).toHaveBeenCalledWith("thelook", "Returns", "thelook"));
+    await waitFor(() => expect(api.draftDashboard).toHaveBeenCalledWith("thelook", "Returns", "thelook", expect.objectContaining({ hear: expect.any(Function) })));
+  });
+
+  it("turns into the dashboard being made the moment it is asked for, with what is happening beside it", async () => {
+    let hear: (frame: unknown) => void = () => {};
+    let finish: (out: unknown) => void = () => {};
+    api.draftDashboard.mockImplementation((_c: string, _a: string, _s: string, live: { hear: (frame: unknown) => void }) => {
+      hear = live.hear;
+      return new Promise(resolve => { finish = resolve; });
+    });
+    show();
+    fireEvent.click(await screen.findByTestId("dashboard-new-open"));
+    fireEvent.change(screen.getByLabelText("What this dashboard is for"), { target: { value: "Returns by category" } });
+    fireEvent.click(screen.getByRole("button", { name: "Draft it" }));
+
+    expect(await screen.findByTestId("dashboard-draft-asked")).toHaveTextContent("Returns by category");
+    expect(screen.queryByLabelText("What this dashboard is for")).toBeNull();
+    expect(screen.getByTestId("dashboard-draft-panel")).toHaveTextContent("Reading what this connection can show");
+    expect(screen.getByTestId("dashboard-new-back")).toBeDisabled();
+
+    act(() => {
+      hear({ type: "read", metrics: 2, trusted_queries: 1, findings: 0 });
+      hear({ type: "checking", round: 1, cards: 2, outline: [{ kind: "Card", size: "small", card: "rate" }, { kind: "Card", size: "wide", card: "cost" }] });
+      hear({ type: "card", key: "rate", title: "Return rate", shows: "figure", state: "ok" });
+    });
+    expect(screen.getByTestId("dashboard-draft-panel")).toHaveTextContent("Read 2 approved metrics and 1 trusted query");
+    expect(screen.getByTestId("dashboard-draft-panel")).toHaveTextContent("1 of 2");
+    const tiles = screen.getAllByTestId("dashboard-draft-tile");
+    expect(tiles.map(t => t.getAttribute("data-state"))).toEqual(["ok", "waiting"]);
+    expect(tiles[0]).toHaveTextContent("Return rate");
+
+    await act(async () => { finish({ staged: false, proposal_id: "", cockpit_id: "", summary: "", rounds: 1, stop_reason: "", sentences: ["Nothing measures this."] }); });
+    expect(screen.getByTestId("dashboard-not-drafted")).toHaveTextContent("Nothing measures this.");
+    expect(screen.queryByTestId("dashboard-draft-stop")).toBeNull();
+    fireEvent.click(screen.getByTestId("dashboard-draft-change"));
+    expect(screen.getByLabelText("What this dashboard is for")).toHaveValue("Returns by category");
+  });
+
+  it("stops when asked, and goes back to the request with its words kept", async () => {
+    api.draftDashboard.mockImplementation((_c: string, _a: string, _s: string, live: { signal: AbortSignal }) => new Promise((_resolve, reject) => {
+      live.signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
+    }));
+    show();
+    fireEvent.click(await screen.findByTestId("dashboard-new-open"));
+    fireEvent.change(screen.getByLabelText("What this dashboard is for"), { target: { value: "Returns" } });
+    fireEvent.click(screen.getByRole("button", { name: "Draft it" }));
+    fireEvent.click(await screen.findByTestId("dashboard-draft-stop"));
+    expect(await screen.findByTestId("dashboard-new-ask-says")).toHaveTextContent("Stopped. Nothing was kept.");
+    expect(screen.getByLabelText("What this dashboard is for")).toHaveValue("Returns");
   });
 
   it("starts empty — its name and a first note in the person's words — and opens on it", async () => {
@@ -369,7 +417,7 @@ describe("a new dashboard from an area", () => {
     await draftReturns();
 
     const draft = await screen.findByTestId("dashboard-draft");
-    expect(api.draftDashboard).toHaveBeenCalledWith("thelook", "Returns", "thelook");
+    expect(api.draftDashboard).toHaveBeenCalledWith("thelook", "Returns", "thelook", expect.objectContaining({ hear: expect.any(Function) }));
     expect(draft).toHaveTextContent("Drafted the dashboard \"Returns\".");
     expect(draft).toHaveTextContent("Why it is arranged this way: Returns first, then what they cost.");
     const lines = within(draft).getAllByTestId("arrange-card");

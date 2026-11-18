@@ -5,6 +5,8 @@ import { getApiBase } from "./config";
 import { installUpsellInterceptor } from "./upsell";
 import { installApprovalInterceptor } from "./approval";
 import { normalizeDeparture } from "./departures";
+import { readFrames } from "./sseFrames";
+import type { DraftFrame } from "./dashboards/draftProgress";
 
 // Screen every API response for HTTP 402 (capability_locked) → app-wide upsell modal,
 // and HTTP 428 (approval_required) → app-wide approval modal. Idempotent, client-only;
@@ -3623,17 +3625,29 @@ export async function getDashboardFromObject(connectionId: string, entity: strin
 }
 
 /** ⚑ Spends model calls. Draft a new dashboard for an area the person names. */
-export async function draftDashboard(connectionId: string, area: string, schema?: string): Promise<DashboardDrafted> {
-  const res = await fetch(dashboardUrl("/dashboards/draft", connectionId), {
+/** Draft a dashboard, hearing each thing the platform does as it does it. Aborting stops the model at its next step. */
+export async function draftDashboard(connectionId: string, area: string, schema?: string,
+  live?: { hear?: (frame: DraftFrame) => void; signal?: AbortSignal }): Promise<DashboardDrafted> {
+  const res = await fetch(dashboardUrl("/dashboards/draft/stream", connectionId), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ area, schema_name: schema || null }),
+    signal: live?.signal,
   });
-  if (!res.ok) {
+  if (!res.ok || !res.body) {
     const err = await res.json().catch(() => ({}));
     throw new Error(fastApiError(err, "Failed to draft the dashboard"));
   }
-  return res.json();
+  let drafted: DashboardDrafted | null = null;
+  let failed = "";
+  for await (const { data } of readFrames(res.body, live?.signal)) {
+    const frame = data as unknown as DraftFrame;
+    live?.hear?.(frame);
+    if (frame.type === "done") drafted = frame.result;
+    if (frame.type === "failed") failed = frame.sentences.join(" ");
+  }
+  if (!drafted) throw new Error(failed || "The draft was cut short. Nothing was kept.");
+  return drafted;
 }
 
 /** Move a canvas's dashboard to the asker's Briefing. */

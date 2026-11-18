@@ -101,8 +101,9 @@ def _shows(card: dict) -> str:
 
 
 def draft_dashboard(home: Home, args: dict, *, emit: Optional[Emit] = None, said: Optional[str] = None,
-                  schema: Optional[str] = None) -> dict:
-    """``said`` is what the person asked for; a limit is set only where they named it."""
+                  schema: Optional[str] = None, told: Optional[Callable[[dict], None]] = None) -> dict:
+    """``said`` is what the person asked for; a limit is set only where they named it. ``told`` hears each new card as it
+    is run."""
     from pramanyx.dashboards import propose
 
     op = str((args or {}).get("op") or "options")
@@ -126,7 +127,7 @@ def draft_dashboard(home: Home, args: dict, *, emit: Optional[Emit] = None, said
 
     drafted = propose.draft(
         home, mode=op, spec=args.get("spec"), patches=args.get("patches"),
-        cards=args.get("cards"), reasoning=str(args.get("reasoning") or ""), said=said, schema=schema)
+        cards=args.get("cards"), reasoning=str(args.get("reasoning") or ""), said=said, schema=schema, told=told)
     if not drafted.staged:
         # `error` is what the platform keeps of a step's result, always (the tool loop's step
         # record). Without it a refused draft's reasons went to the model and nowhere else,
@@ -174,7 +175,8 @@ def draft_dashboard(home: Home, args: dict, *, emit: Optional[Emit] = None, said
 
 
 def drafting_tool(home: Home, *, emit: Optional[Emit] = None, said: Optional[str] = None,
-                  schema: Optional[str] = None) -> ToolSpec:
+                  schema: Optional[str] = None,
+                  told: Optional[Callable[[dict], None]] = None) -> ToolSpec:
     """``draft_dashboard``, bound to one person's dashboard. The dashboard, the person and what they
     asked for bind by closure: none of them is the model's to state."""
     return ToolSpec(
@@ -191,5 +193,5 @@ def drafting_tool(home: Home, *, emit: Optional[Emit] = None, said: Optional[str
             "every fault: repair them all, then call again."
         ),
         parameters=_PARAMS,
-        run=lambda a: draft_dashboard(home, a, emit=emit, said=said, schema=schema),
+        run=lambda a: draft_dashboard(home, a, emit=emit, said=said, schema=schema, told=told),
     )

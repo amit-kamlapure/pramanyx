@@ -62,6 +62,8 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { DropdownMenu } from "@radix-ui/themes";
 import { ASKS_OF_A_PIECE, AskPiece } from "@/components/dashboards/AskPiece";
 import { BrandSpark, brandEdge } from "@/components/ui/brand";
+import { DraftBuilding } from "@/components/dashboards/DraftBuilding";
+import { finishedWatch, heardFrame, startWatch, type DraftWatch } from "@/lib/dashboards/draftProgress";
 import { askAbout, dashboardSubject } from "@/lib/askSubject";
 import { ImportDashboard } from "@/components/dashboards/ImportDashboard";
 import { SubscribeDashboard } from "@/components/dashboards/SubscribeDashboard";
@@ -406,46 +408,78 @@ function NewDashboard({ connectionId, schema, sym, onKept, onClose, onBusy }: {
   const [drafting, setDrafting] = useState(false);
   const [result, setResult] = useState<DashboardDrafted | null>(null);
   const [proposal, setProposal] = useState<StagedProposal | null>(null);
+  // The draft being watched, from the moment it is asked for; none while the request is still being written.
+  const [watch, setWatch] = useState<DraftWatch | null>(null);
+  const [stopped, setStopped] = useState(false);
+  const running = useRef<AbortController | null>(null);
+  useEffect(() => () => running.current?.abort(), []);
 
   useEffect(() => { onBusy?.(drafting || starting); }, [drafting, starting, onBusy]);
 
   const draft = async () => {
-    setDrafting(true); setResult(null); setProposal(null);
+    const run = new AbortController();
+    running.current = run;
+    setDrafting(true); setResult(null); setProposal(null); setStopped(false); setWatch(startWatch());
     try {
-      const out = await draftDashboard(connectionId, area, schema);
-      setResult(out);
+      const out = await draftDashboard(connectionId, area, schema, { signal: run.signal, hear: frame => setWatch(w => w && heardFrame(w, frame)) });
       if (out.staged) setProposal(await getProposalById(out.proposal_id));
+      setResult(out);
+      setWatch(w => w && finishedWatch(w, out));
     } catch (e) {
-      toast.error("The draft did not go through", { description: (e as Error).message.slice(0, 160) });
+      setWatch(null);
+      if (run.signal.aborted) setStopped(true);
+      else toast.error("The draft did not go through", { description: (e as Error).message.slice(0, 160) });
     } finally { setDrafting(false); }
   };
+  const backToTheRequest = () => { setWatch(null); setResult(null); setProposal(null); };
+
+  // What came back, from a description or a pack's template: the draft to review, or why there is none.
+  const cameBack = result && !result.staged ? (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 12 }}>
+      <Refusal kind="Not drafted" claim="No dashboard was drafted for this."
+        detail={<ul data-testid="dashboard-not-drafted" style={{ margin: 0, paddingLeft: 18 }}>
+          {result.sentences.map((s, i) => <li key={`${i}-${s.slice(0, 24)}`}>{s}</li>)}
+        </ul>} />
+      <Button size="sm" variant="secondary" data-testid="dashboard-draft-change" onClick={backToTheRequest}>Change the request</Button>
+    </div>
+  ) : result?.staged && proposal ? (
+    <DraftReview connectionId={connectionId} dashboardId={result.cockpit_id} result={result} proposal={proposal}
+      onKept={onKept} onDiscarded={backToTheRequest} />
+  ) : undefined;
+
+  if (watch) {
+    return (
+      <div data-testid="dashboard-new" style={{ flex: 1, minHeight: "100%", display: "flex" }}>
+        <DraftBuilding asked={area} watch={watch} onStop={() => running.current?.abort()}>{cameBack}</DraftBuilding>
+      </div>
+    );
+  }
 
   return (
     <div data-testid="dashboard-new" style={{ flex: 1, minHeight: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 20, padding: "32px 24px 20px",
       backgroundImage: "radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--b1) 75%, transparent) 1px, transparent 1.4px)", backgroundSize: "40px 40px" }}>
-      <div style={{ flex: 1, width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 14, justifyContent: way === "draft" && !result ? "center" : "flex-start" }}>
+      <div style={{ flex: 1, width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 14, justifyContent: way === "draft" ? "center" : "flex-start" }}>
       {way === "draft" ? (
         <div data-testid="dashboard-new-ask" style={{ width: "min(720px, 100%)", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, textAlign: "center" }}>
           <div className="aug-fs-display" style={{ color: "var(--t1)", fontWeight: 600 }}>Create a dashboard</div>
           <div className="aug-fs-ui" style={{ color: "var(--t2)", marginBottom: 12 }}>Describe what you want to see, and a model drafts it for you to review.</div>
           <div style={ASK_BOX}>
             <textarea autoFocus rows={3} maxLength={MAX_DESCRIBED} aria-label="What this dashboard is for" placeholder="Returns by category, what they cost, and which products drive them" className="aug-focus-frame aug-fs-ui"
-              value={area} onChange={e => setArea(e.target.value)} disabled={drafting || !!proposal}
+              value={area} onChange={e => setArea(e.target.value)}
               style={{ display: "block", width: "100%", background: "transparent", border: "none", outline: "none", resize: "none", color: "var(--t1)", fontFamily: "inherit", textAlign: "left" }}
-              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (area.trim() && !drafting && !proposal) void draft(); } }} />
-            <Button size="icon-sm" aria-label="Draft it" title="Draft it" disabled={!area.trim() || drafting || !!proposal} onClick={() => void draft()}
+              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (area.trim()) void draft(); } }} />
+            <Button size="icon-sm" aria-label="Draft it" title="Draft it" disabled={!area.trim()} onClick={() => void draft()}
               style={{ position: "absolute", right: 10, bottom: 10 }}><Icon name="send" size={15} /></Button>
           </div>
           <div className="aug-fs-sm" data-testid="dashboard-new-ask-says" style={{ color: "var(--t3)", marginTop: 4 }}>
-            {drafting ? "A model is drafting it from the connection's approved metrics, trusted queries and findings. This can take a minute."
-              : "Asks a model once. Nothing is kept until you keep it."}
+            {stopped ? "Stopped. Nothing was kept." : "Asks a model once. Nothing is kept until you keep it."}
           </div>
         </div>
       ) : (
         <section aria-label={WAYS.find(w => w.way === way)?.label} data-testid="dashboard-new-way"
           style={{ width: "min(960px, 100%)", background: "var(--bg-2)", border: "1px solid var(--card-edge)", borderRadius: "var(--r3)", padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <Button size="xs" variant="ghost" data-testid="dashboard-new-draft" disabled={drafting || starting || !!proposal} onClick={() => setWay("draft")}>
+            <Button size="xs" variant="ghost" data-testid="dashboard-new-draft" disabled={starting || !!proposal} onClick={() => setWay("draft")}>
               <Icon name="chevl" size={13} /> Describe it instead
             </Button>
             <span className="aug-fs-ui" style={{ color: "var(--t1)", fontWeight: 600 }}>{WAYS.find(w => w.way === way)?.label}</span>
@@ -557,21 +591,7 @@ function NewDashboard({ connectionId, schema, sym, onKept, onClose, onBusy }: {
         </section>
       )}
 
-      {result && !result.staged && (
-        <div style={{ marginTop: 12 }}>
-          <Refusal kind="Not drafted" claim="No dashboard was drafted for this."
-            detail={<ul data-testid="dashboard-not-drafted" style={{ margin: 0, paddingLeft: 18 }}>
-              {result.sentences.map((s, i) => <li key={`${i}-${s.slice(0, 24)}`}>{s}</li>)}
-            </ul>} />
-        </div>
-      )}
-
-      {result?.staged && proposal && (
-        <div style={{ width: "min(1100px, 100%)" }}>
-          <DraftReview connectionId={connectionId} dashboardId={result.cockpit_id} result={result} proposal={proposal}
-            onKept={onKept} onDiscarded={() => { setResult(null); setProposal(null); }} />
-        </div>
-      )}
+      {cameBack && <div style={{ width: "min(1100px, 100%)" }}>{cameBack}</div>}
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, maxWidth: "100%" }}>
@@ -580,7 +600,7 @@ function NewDashboard({ connectionId, schema, sym, onKept, onClose, onBusy }: {
           style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 2, padding: 6, background: "var(--bg-2)", border: "1px solid var(--card-edge)", borderRadius: "var(--r3)", boxShadow: "var(--shadow-lg)" }}>
           {WAYS.map(w => (
             <Button key={w.way} size="sm" variant={way === w.way ? "secondary" : "ghost"} aria-pressed={way === w.way} data-testid={`dashboard-new-${w.way}`}
-              disabled={drafting || starting || !!proposal} onClick={() => setWay(w.way)}>
+              disabled={starting || !!proposal} onClick={() => setWay(w.way)}>
               <Icon name={w.icon} size={14} /> {w.label}
             </Button>
           ))}

@@ -36,7 +36,7 @@ import json
 import re
 import uuid
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from pramanyx.dashboards import cards as _cards
 from pramanyx.dashboards import validate as _validate
@@ -214,7 +214,7 @@ def _query_key(sql: str) -> str:
 
 
 def _draft_cards(home: Home, schema: Optional[str], asked: Any,
-                 said: Optional[str] = None) -> tuple[list[dict], list[str], set[str]]:
+                 said: Optional[str] = None, told: Optional[Callable[[dict], None]] = None) -> tuple[list[dict], list[str], set[str]]:
     """The cards a draft creates, each resolved and run; every refusal met on the way; and
     every name the draft gave a card, made or refused.
 
@@ -314,6 +314,9 @@ def _draft_cards(home: Home, schema: Optional[str], asked: Any,
                             "belongs in.")
             continue
         drafted_from.setdefault((source.kind, source.name), (key, set()))[1].add(mine)
+        shown = doors.clip_title(title or source.label, source.name)
+        if told:
+            told({"type": "card", "key": key, "title": shown, "state": "running"})
         try:
             result = doors.run_guarded(conn_id, source.sql, query_id=f"cockpit-draft:{key}", schema=schema)
         except doors.GuardRefused as refused:
@@ -329,9 +332,11 @@ def _draft_cards(home: Home, schema: Optional[str], asked: Any,
             "id": uuid.uuid4().hex[:8], "key": key,
             "from": source.kind, "name": source.name, "version": source.version,
             "label": source.label[:160],
-            "kind": kind, "title": doors.clip_title(title or source.label, source.name),
+            "kind": kind, "title": shown,
             "sql": source.sql, "limit": limit,
         })
+        if told:
+            told({"type": "card", "key": key, "title": shown, "shows": "figure" if kind == "kpi" else "chart", "state": "ok"})
     return out, refusals, named_all
 
 
@@ -626,7 +631,7 @@ def _retire_pending(home: Home, by: str) -> tuple[str, ...]:
 
 def draft(home: Home, *, mode: str, spec: Any = None, patches: Any = None, cards: Any = None,
           reasoning: str = "", said: Optional[str] = None, schema: Optional[str] = None,
-          template: Optional[dict] = None) -> Drafted:
+          template: Optional[dict] = None, told: Optional[Callable[[dict], None]] = None) -> Drafted:
     """Stage ONE proposal for this person's dashboard, or refuse with every reason found.
 
     ``said`` is what the person asked for, when the caller knows it: a limit is then set only
@@ -635,7 +640,9 @@ def draft(home: Home, *, mode: str, spec: Any = None, patches: Any = None, cards
 
     ``template`` (Arc FA, FA-6) is ``{"pack", "version", "id"}`` when the draft is a pack's dashboard template
     (`pramanyx/packs/templates.py`): the proposal carries it, its source is the pack, and a dashboard kept from it is
-    kept with the source :func:`template_source` names. Without it the proposal is staged as it always was."""
+    kept with the source :func:`template_source` names. Without it the proposal is staged as it always was.
+
+    ``told`` hears each new card as it is run, for a screen showing the draft being made."""
     from pramanyx.actions.inbox import StagedProposal, stage_proposal
     from pramanyx.org.context import current_org_id
 
@@ -681,7 +688,7 @@ def draft(home: Home, *, mode: str, spec: Any = None, patches: Any = None, cards
 
     # Every card is resolved and run even when the spec is already refused, and the spec is
     # checked even when a card was: the writer is told of everything in one round.
-    made, card_refusals, named = _draft_cards(home, schema, cards, said)
+    made, card_refusals, named = _draft_cards(home, schema, cards, said, told)
     refusals.extend(card_refusals)
 
     ids = {c["key"]: c["id"] for c in made}

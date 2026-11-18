@@ -20,7 +20,7 @@ from datetime import date
 from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from pramanyx.ontology.security import acting_agent_from_request
@@ -631,6 +631,16 @@ def draft_dashboard(request: Request, connection_id: str, req: DraftRequest) -> 
     from pramanyx.dashboards.ask import draft_for_area
     from pramanyx.dashboards.home import person_of
     return draft_for_area(connection_id, person_of(request), req.area, schema=req.schema_name)
+
+
+@router.post("/dashboards/draft/stream")
+def draft_dashboard_stream(request: Request, connection_id: str, req: DraftRequest) -> StreamingResponse:
+    """⚑ Spends model calls. The same draft, told as it is made, so a person can see the work happening. Leaving stops the
+    spending at the next step, and nothing is kept until the person keeps it."""
+    from pramanyx.dashboards.ask import draft_frames
+    from pramanyx.dashboards.home import person_of
+    return StreamingResponse(draft_frames(connection_id, person_of(request), req.area, schema=req.schema_name),
+                             media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 @router.post("/dashboards/move")

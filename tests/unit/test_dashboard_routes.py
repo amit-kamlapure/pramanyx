@@ -332,6 +332,37 @@ def test_the_draft_route_hands_the_area_and_the_person_to_the_drafter(client, de
     assert asked == [(desk.connection, ME, "Returns and refunds", "thelook")]
 
 
+def test_the_draft_is_told_as_it_is_made_and_ends_with_what_became_of_it(client, desk, monkeypatch):
+    import json
+    asked = []
+
+    def drafter(connection_id, owner, area, *, schema=None, provider=None, hear=None, stop=None):
+        asked.append((connection_id, owner, area, schema))
+        hear({"type": "read", "metrics": 2, "trusted_queries": 0, "findings": 1})
+        return {"staged": False, "sentences": ["stub"]}
+
+    monkeypatch.setattr("pramanyx.dashboards.ask.draft_for_area", drafter)
+    r = client.post("/dashboards/draft/stream", params=desk.q, json={"area": "Returns and refunds", "schema_name": "thelook"})
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/event-stream")
+    frames = [json.loads(line[6:]) for line in r.text.splitlines() if line.startswith("data: ")]
+    assert [f["type"] for f in frames] == ["read", "done", "end"]
+    assert frames[1]["result"] == {"staged": False, "sentences": ["stub"]}
+    assert asked == [(desk.connection, ME, "Returns and refunds", "thelook")]
+
+
+def test_a_draft_that_breaks_says_so_without_its_insides(client, desk, monkeypatch):
+    import json
+
+    def drafter(*_a, **_k):
+        raise RuntimeError("secret-host:5432 refused")
+
+    monkeypatch.setattr("pramanyx.dashboards.ask.draft_for_area", drafter)
+    r = client.post("/dashboards/draft/stream", params=desk.q, json={"area": "Returns"})
+    frames = [json.loads(line[6:]) for line in r.text.splitlines() if line.startswith("data: ")]
+    assert [f["type"] for f in frames] == ["failed", "end"]
+    assert "secret-host" not in r.text and frames[0]["sentences"] == ["The draft stopped before it finished. Nothing was kept."]
+
+
 # ── moving a canvas's dashboard here ────────────────────────────────────────────
 
 class Canvas:

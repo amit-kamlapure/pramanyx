@@ -4861,6 +4861,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/dashboards/draft/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Draft Dashboard Stream
+         * @description ⚑ Spends model calls. The same draft, told as it is made, so a person can see the work happening. Leaving stops the
+         *     spending at the next step, and nothing is kept until the person keeps it.
+         */
+        post: operations["draft_dashboard_stream_dashboards_draft_stream_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/dashboards/filters/fields": {
         parameters: {
             query?: never;
@@ -36385,6 +36406,41 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    draft_dashboard_stream_dashboards_draft_stream_post: {
+        parameters: {
+            query: {
+                connection_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

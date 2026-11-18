@@ -256,9 +256,10 @@ MAX_OUTLINE = 32
 _NOT_ON_THE_PAGE = {"ObjectFilters", "QueryFilters", "GlobalFilters", "GlobalFilter", "Drawer"}
 
 
-def outline_of(spec: Any) -> list[dict]:
+def outline_of(spec: Any, *, cards: bool = False) -> list[dict]:
     """What a dashboard opens on, piece by piece in reading order: each piece's kind and the room it says it takes.
-    The dashboards home draws its miniature from this. Layout only: no title, no figure, nothing a card read."""
+    The dashboards home draws its miniature from this. Layout only: no title, no figure, nothing a card read. With
+    ``cards``, every tab is walked and each card's piece names the card it places, for the person a draft is being made for."""
     elements = spec.get("elements") if isinstance(spec, dict) else None
     if not isinstance(elements, dict):
         return []
@@ -269,17 +270,18 @@ def outline_of(spec: Any) -> list[dict]:
         if not isinstance(element, dict) or depth > 8 or len(out) >= MAX_OUTLINE:
             return
         kind, children = element.get("type"), element.get("children") or []
-        if kind == "Tabs":                                  # the tab it opens on
+        if kind == "Tabs" and not cards:                    # the tab it opens on
             seeded = (spec.get("state") or {}).get("tab") if isinstance(spec.get("state"), dict) else None
             named = [c for c in children if ((elements.get(c) or {}).get("props") or {}).get("name") == seeded]
             for child in (named or children)[:1]:
                 walk(child, depth + 1)
-        elif kind in ("Cockpit", "Tab", "Section"):
+        elif kind in ("Cockpit", "Tabs", "Tab", "Section"):
             for child in children:
                 walk(child, depth + 1)
         elif kind not in _NOT_ON_THE_PAGE:
             props = element.get("props") or {}
-            out.append({"kind": kind, **{k: props[k] for k in ("size", "w", "h") if props.get(k) is not None}})
+            out.append({"kind": kind, **{k: props[k] for k in ("size", "w", "h") if props.get(k) is not None},
+                        **({"card": props.get("card")} if cards and kind == "Card" else {})})
 
     walk(spec.get("root"), 0)
     return out
