@@ -102,3 +102,25 @@ describe("the Chart tab", () => {
     expect(screen.getByTestId("card-chart-none")).toHaveTextContent("draws a figure");
   });
 });
+
+
+describe("the period's setup (v15)", () => {
+  const spec = (): DashboardSpec => {
+    const s: DashboardSpec = JSON.parse(JSON.stringify(SPEC));
+    const section = Object.entries(s.elements).find(([, e]) => e.type === "Section")![0];
+    s.elements.period = { type: "Period", props: {}, children: [] };
+    s.elements[section].children.unshift("period");
+    return s;
+  };
+
+  it("names it, says what it opens on, and which date each card is cut by", () => {
+    let next: DashboardSpec | null = null;
+    render(<PieceSetup spec={spec()} selected="period" onChange={s => { next = s; }} connectionId="thelook"
+      cardDates={() => [{ id: "card1", title: "Revenue by channel", date: "order_items.created_at", standing: false },
+        { id: "card2", title: "Every order ever", date: null, standing: true }]} />);
+    expect(screen.getByTestId("period-cuts")).toHaveTextContent("Revenue by channelorder_items.created_at");
+    expect(screen.getByTestId("period-cuts")).toHaveTextContent("Every order everno date: read as written");
+    expect(screen.getByTestId("setup-period-opens")).toHaveTextContent("Last month");
+    void next;
+  });
+});

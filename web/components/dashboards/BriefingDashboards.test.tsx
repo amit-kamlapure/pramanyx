@@ -1069,3 +1069,33 @@ describe("inside the app's shell (2026-11-10, the dashboard mockup)", () => {
     expect(screen.getByTestId("builder-saved")).toHaveTextContent("version 3");
   });
 });
+
+describe("the period as a piece (v15; the user, 2026-11-18: 'remove period bar')", () => {
+  /** The premise (the dashboard the fixture reads) with its period placed in its first section, opening on the current
+   *  month — placed on the shared fixture for one test, and taken off after it. */
+  const placePeriod = () => {
+    const section = Object.entries(SPEC.elements as Record<string, { type: string }>).find(([, e]) => e.type === "Section")![0];
+    SPEC.elements.period = { type: "Period", props: { opens_on: "current_month" }, children: [] };
+    SPEC.elements[section].children.unshift("period");
+    return () => { delete SPEC.elements.period; SPEC.elements[section].children.shift(); };
+  };
+
+  it("opens on the period its piece says, hands the piece the period and the door to change it, and draws no period above it", async () => {
+    const takeOff = placePeriod();
+    try {
+    show();
+    await waitFor(() => expect(api.getDashboard).toHaveBeenCalledWith("thelook", "returns-1", { preset: "current_month" }));
+    await waitFor(() => expect((drawn.props.at(-1)?.period as { value?: unknown } | undefined)?.value).toEqual({ preset: "current_month" }));
+    expect(screen.queryByTestId("dashboard-period")).toBeNull();
+    const door = drawn.props.at(-1)!.period as { onChange: (c: unknown) => void };
+    act(() => door.onChange({ preset: "previous_year" }));
+    await waitFor(() => expect(api.getDashboard).toHaveBeenLastCalledWith("thelook", "returns-1", { preset: "previous_year" }));
+    } finally { takeOff(); }
+  });
+
+  it("a dashboard without the piece keeps its period above it", async () => {
+    show();
+    await waitFor(() => expect(drawn.props.length).toBeGreaterThan(0));
+    expect((drawn.props.at(-1)?.period as { value?: unknown } | undefined)?.value).toEqual({ preset: "previous_month" });
+  });
+});

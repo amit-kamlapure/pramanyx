@@ -22,7 +22,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode }
 
 import { CanvasScale } from "@/components/dashboards/cellBox";
 import type { DashboardHandle, ReadState } from "@/components/dashboards/ComposedDashboard";
-import { PieceSetup } from "@/components/dashboards/PieceSetup";
+import { PieceSetup, type CardDate } from "@/components/dashboards/PieceSetup";
 import { ChoiceSetup, DataPane, SetSetup, ValueSetup, readingElements } from "@/components/dashboards/WiringSetup";
 import { Segmented } from "@/components/ui/segmented";
 import { Button } from "@/components/ui/button";
@@ -125,8 +125,10 @@ function Steps({ label, value, least, most, onStep }: { label: string; value: nu
 const Rule = () => <span aria-hidden="true" style={{ width: 1, height: 16, background: "var(--b2)", margin: "0 6px" }} />;
 
 export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words, aside, above, connectionId, schema,
-  onAddPiece, checks, cardSetup, cardChart, cardSql, cardReads, queryCards, onUndo, onRedo, children }: {
+  onAddPiece, checks, cardSetup, cardChart, cardSql, cardReads, queryCards, onUndo, onRedo, cardDates, children }: {
   spec: DashboardSpec;
+  /** v15 — each placed card and the date the period cuts it by, for the Period piece's setup. */
+  cardDates?: () => CardDate[];
   /** Undo and Redo, on the canvas toolbar and the editing keys (the dashboards study, R2 and R3, 2026-11-18). */
   onUndo?: () => void;
   onRedo?: () => void;
@@ -439,7 +441,7 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
               : wireKind === "choice" ? <ChoiceSetup spec={spec} name={wireName} />
                 : <PieceSetup spec={spec} selected={selected} onChange={apply} connectionId={connectionId} schema={schema} cardTitle={cardTitle}
                   entityTitle={entityTitle} cardSetup={cardSetup} cardChart={cardChart} cardSql={cardSql}
-                  onOpenLayout={() => openPane("layout")} />)}
+                  onOpenLayout={() => openPane("layout")} cardDates={cardDates} />)}
         </aside>
       </div>
     </div>

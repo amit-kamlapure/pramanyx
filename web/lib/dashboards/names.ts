@@ -37,6 +37,7 @@ export const KIND_WORDS: Record<ComponentName, string> = {
   ScenarioInputs: "scenario",
   AddRow: "add a row",
   Drawer: "drawer",
+  Period: "period",
 };
 
 /** A component's word, or the type itself when it is none of the catalog's. */

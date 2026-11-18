@@ -34,7 +34,7 @@ export type HandOff = "card" | "note" | "image" | "finding" | "query" | "questio
 const HANDED: readonly string[] = ["card", "note", "image", "finding", "query", "question", "ontology"];
 
 type Placed = "ObjectTable" | "ObjectDetail" | "ObjectFigure" | "ObjectChart" | "ObjectBreakdown" | "ProcessBoard"
-  | "ActionButtons" | "ObjectList" | "ObjectMap" | "ObjectTimeline" | "ChooseOne" | "ObjectSearch";
+  | "ActionButtons" | "ObjectList" | "ObjectMap" | "ObjectTimeline" | "ChooseOne" | "ObjectSearch" | "Period";
 /** "Linked" places two things: a set of what the chosen object links to, and a table of it; a drawer is the dashboard's own,
  *  holding a detail of the object it opens on. */
 type Kind = Placed | "ObjectFilters" | "Linked" | "Drawer" | HandOff;
@@ -61,6 +61,7 @@ const GROUPS: { group: string; pieces: Entry[] }[] = [
     { kind: "question", label: "Question", says: "Asked in words, answered by the agent on a rhythm." },
   ] },
   { group: "Filter", pieces: [
+    { kind: "Period", label: "Period · a date range", says: "The period every card is cut to, on the dashboard; a reader chooses another." },
     { kind: "ObjectFilters", label: "Filter column", says: "Values with how many hold each; a reader ticks." },
     { kind: "ObjectSearch", label: "Search", says: "Words that narrow every piece over the same objects." },
     { kind: "ChooseOne", label: "Choose one", says: "One object found by name, for the pieces that follow it." },
@@ -198,6 +199,10 @@ export function PiecePicker({ spec, section, connectionId, schema, onPlace, onHa
         if (!name) return { why: `${noun} holds no name to find one by. A click in a table or a list chooses one.` };
         return { why: "", props: { ...scope, chooses: freshWireName(spec, `chosen ${noun}`), label: name.path } };
       }
+      case "Period":
+        // v15 — the dashboard's one period, placed as a piece; it reads no entity
+        if (Object.values(spec.elements).some(el => el.type === "Period")) return { why: "The dashboard holds its period already." };
+        return { why: "", props: {} };
       case "ObjectSearch": {
         if (!of) return { why: "Choose what it searches above." };
         if (!ef) return { why: "Reading what the ontology offers…" };
@@ -293,7 +298,7 @@ export function PiecePicker({ spec, section, connectionId, schema, onPlace, onHa
       // what it shows ("The chosen order"), a row of buttons by what they do
       const name = e.kind === "ObjectDetail" ? (chosen.length ? `The ${words(String(p.props.follows))}` : "The chosen one")
         : e.kind === "ActionButtons" ? "Actions" : e.kind === "ProcessBoard" ? words(String(p.props.process)).replace(/^./, c => c.toUpperCase())
-          : e.kind === "ObjectSearch" ? "Search" : e.kind === "ChooseOne" ? `Choose ${/^[aeiou]/i.test(noun) ? "an" : "a"} ${noun.toLowerCase()}` : label;
+          : e.kind === "ObjectSearch" ? "Search" : e.kind === "Period" ? "Period" : e.kind === "ChooseOne" ? `Choose ${/^[aeiou]/i.test(noun) ? "an" : "a"} ${noun.toLowerCase()}` : label;
       next = target ? nameByPiece(placed.spec, target, name) : placed.spec;
     }
     onPlace(next, `${e.label.toLowerCase()} placed by hand`);

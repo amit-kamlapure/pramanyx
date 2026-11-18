@@ -49,8 +49,10 @@ export function periodWords(value: RangeChoice, showing: DashboardRange | null, 
   return name;
 }
 
-export function PeriodPicker({ value, onChange, showing, disabled, reading = false }: {
+export function PeriodPicker({ value, onChange, showing, disabled, reading = false, label = "Period" }: {
   value: RangeChoice;
+  /** What it is called beside its menu — the Period piece's own label (v15); "Period" left out. */
+  label?: string;
   onChange: (c: RangeChoice) => void;
   /** The range the cards on screen were read for; null while none is read. */
   showing: DashboardRange | null;
@@ -65,7 +67,7 @@ export function PeriodPicker({ value, onChange, showing, disabled, reading = fal
   const items = Object.fromEntries(CHOICES.map(c => [c.v, c.t]));
   return (
     <span data-testid="dashboard-period" style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-      <span className="aug-fs-sm" style={{ color: "var(--t2)" }}>Period</span>
+      <span className="aug-fs-sm" style={{ color: "var(--t2)" }}>{label}</span>
       <Select value={custom ? "custom" : value.preset} items={items} disabled={disabled}
         onValueChange={v => {
           const next = String(v ?? "");

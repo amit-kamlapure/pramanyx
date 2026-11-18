@@ -44,9 +44,9 @@ describe("the grid's measure", () => {
     for (const h of [1, 2, 6, 14]) expect(rowsTall(h)).toBe(h * GRADE - GRID.gap);
   });
 
-  it("is said by the vocabulary, at version 14 — the grid came in at 5, the wiring at 6, the structure at 7, variables at 8, sets read whole at 9, yes-no, lists, sums and queries at 10, a Question at 11, a breakdown at 12, free placement at 14", () => {
-    expect(DASHBOARD_VOCABULARY_VERSION).toBe(14);
-    expect(vocabulary()).toMatchObject({ version: 14, grid: { columns: 12, grade: 40 } });
+  it("is said by the vocabulary, at version 15 — the grid came in at 5, the wiring at 6, the structure at 7, variables at 8, sets read whole at 9, yes-no, lists, sums and queries at 10, a Question at 11, a breakdown at 12, free placement at 14, the period as a piece at 15", () => {
+    expect(DASHBOARD_VOCABULARY_VERSION).toBe(15);
+    expect(vocabulary()).toMatchObject({ version: 15, grid: { columns: 12, grade: 40 } });
   });
 });
 
@@ -259,5 +259,22 @@ describe("free placement on a section's grid", () => {
     const off = objectDashboard();
     off.elements["figure-0"].props = { ...off.elements["figure-0"].props, x: 1, y: 1 };
     expect(issues(off).join(" ")).toContain("not on the grid");
+  });
+});
+
+
+describe("the period as a piece (v15)", () => {
+  it("a section holds one period, saying what it opens on; two are refused", () => {
+    const s = objectDashboard();
+    s.elements.period = { type: "Period", props: { opens_on: "current_month", label: "Date range" }, children: [] };
+    s.elements.sec.children.unshift("period");
+    expect(issues(s)).toEqual([]);
+    const two: Spec = JSON.parse(JSON.stringify(s));
+    two.elements.period2 = { type: "Period", props: {}, children: [] };
+    two.elements.sec.children.push("period2");
+    expect(issues(two).join(" ")).toContain("A dashboard holds one");
+    const odd: Spec = JSON.parse(JSON.stringify(s));
+    odd.elements.period.props.opens_on = "next_month";
+    expect(issues(odd).length).toBeGreaterThan(0);
   });
 });

@@ -42,7 +42,9 @@ import {
 import type { CardState } from "@/components/brief/PinnedCardBody";
 import { CanvasScale, CellBoxContext, OFF_GRID, useMeasured, type CellBox } from "@/components/dashboards/cellBox";
 import { QuestionPiece } from "@/components/dashboards/QuestionPiece";
-import { DashboardTile, SaidTile, WIDE, WithheldTile, tileShape, type QueryWaiting, type TileDoors, type TileFocus } from "@/components/dashboards/DashboardTile";
+import { DashboardTile, Frame, SaidTile, WIDE, WithheldTile, tileShape, type QueryWaiting, type TileDoors, type TileFocus } from "@/components/dashboards/DashboardTile";
+import { PeriodPicker } from "@/components/dashboards/PeriodPicker";
+import type { RangeChoice } from "@/components/brief/BriefRange";
 import { ActionButtonsPiece } from "@/components/dashboards/ActionButtonsPiece";
 import { ReadSlotContext, type ReadSlot, type ReadStatus } from "@/components/dashboards/readSlot";
 import { ChooseOnePiece, ObjectListPiece, ObjectMapPiece, ObjectSearchPiece, ObjectTimelinePiece } from "@/components/dashboards/AppPieces";
@@ -56,7 +58,7 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Refusal } from "@/components/ui/states";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { runCard, traceField, type BriefingRange, type CardRunResult, type DashboardCard, type QueryNarrowing } from "@/lib/api";
+import { runCard, traceField, type BriefingRange, type CardRunResult, type DashboardCard, type DashboardRange, type QueryNarrowing } from "@/lib/api";
 import {
   FILTER_DEFAULT_PX, FILTER_WIDTH, GRADE, GRID, LIMITS, SPAN, rowsTall, sizeOf, type ActionButtonDef, type ComponentName,
   type GridKind, type Layout, type Size, type Tone,
@@ -125,6 +127,19 @@ interface DashboardContextValue {
   /** The board study — the reader's focus, and where a click on a card's mark goes. */
   focus: DashboardFocus[];
   pick: ((cardId: string, p: ChartPick) => void) | null;
+  /** v15 — the dashboard's period and the door that changes it, read by the Period piece; null where the page offers
+   *  no choice of period (it then says the period it was read for). */
+  period: PeriodDoor | null;
+}
+
+/** The period a dashboard is read for, and the reader's choice of another (v15). */
+export interface PeriodDoor {
+  value: RangeChoice;
+  onChange: (next: RangeChoice) => void;
+  /** The range the cards on screen were read for; null while none is read. */
+  showing: DashboardRange | null;
+  reading?: boolean;
+  disabled?: boolean;
 }
 
 const DashboardContext = createContext<DashboardContextValue | null>(null);
@@ -1038,6 +1053,35 @@ function DashboardNote({ element }: ComponentRenderProps<{ text: string; size?: 
   );
 }
 
+/** v15 — the period on the dashboard (the user, 2026-11-18: "Lets have date/range picker this way.. so that we can remove
+ *  period bar"): what every card is cut to, each by its own date, and the reader's choice of another — a piece placed,
+ *  sized and set up like any other. Where the page offers no choice it says the period the cards were read for. */
+function DashboardPeriod({ element }: ComponentRenderProps<{ label?: string | null; size?: Size | null }>) {
+  const { period, host } = useDashboard();
+  const label = element.props.label || "Period";
+  return (
+    <Cell type="Period" props={element.props as Record<string, unknown>} size={element.props.size ?? "small"} testid="dashboard-period-piece">
+      {() => (
+        <Frame testid="dashboard-period-tile">
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", minWidth: 0 }}>
+            {period ? (
+              <PeriodPicker label={label} value={period.value} onChange={period.onChange} showing={period.showing}
+                reading={period.reading} disabled={period.disabled} />
+            ) : (
+              <>
+                <span className="aug-fs-sm" style={{ color: "var(--t2)" }}>{label}</span>
+                <span className="aug-fs-sm" data-testid="dashboard-period-said" style={{ color: "var(--t1)" }}>
+                  {host.range.status === "standing" ? "As written" : (host.range as { covers?: string }).covers || "The period it was read for"}
+                </span>
+              </>
+            )}
+          </div>
+        </Frame>
+      )}
+    </Cell>
+  );
+}
+
 function DashboardQueryFilters({ element }: ComponentRenderProps<{ table: string; columns: FilterColumn[] }>) {
   const { connectionId } = useDashboard();
   return <QueryFiltersPiece connectionId={connectionId ?? ""} table={element.props.table} columns={element.props.columns} />;
@@ -1349,6 +1393,7 @@ const REGISTRY = {
   QueryFilters: DashboardQueryFilters,
   ScenarioInputs: DashboardScenarioInputs,
   AddRow: DashboardAddRow,
+  Period: DashboardPeriod,
 } satisfies Record<ComponentName, unknown>;
 
 const NO_IMAGES: Record<string, ImageStamp> = {};
@@ -1373,7 +1418,9 @@ function FocusBar({ focus, onFocus }: { focus: DashboardFocus[]; onFocus: (next:
 const NO_READS: readonly string[] = [];
 
 export function ComposedDashboard({ spec, cards, host, doors, sym = "$", images = NO_IMAGES, range = null, schema, connectionId, dashboardId,
-  selected = null, handle, reads = NO_READS, asGroup, onSaid, focus = NO_FOCUS, onFocus }: {
+  selected = null, handle, reads = NO_READS, asGroup, onSaid, focus = NO_FOCUS, onFocus, period = null }: {
+  /** v15 — the period the cards are read for and the door that chooses another, for the Period piece. */
+  period?: PeriodDoor | null;
   spec: unknown;
   cards: CardState[];
   host: DashboardHostState;
@@ -1449,13 +1496,14 @@ export function ComposedDashboard({ spec, cards, host, doors, sym = "$", images 
     steppers,
     reads: new Set(readsKey ? readsKey.split("\n") : []),
     focus,
+    period,
     pick: onFocus ? (cardId: string, p: ChartPick) => {
       // what the click stands for, traced off the card's own statement — or said, when a click on it filters nothing
       traceAndChoose(traceField, cardId, p, focus, onFocus, why => toast.info("This click filters nothing", { description: why }))
         .catch(e => toast.error("The click could not be read", { description: (e as Error).message }));
     } : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on what the spec and the range say
-  }), [check.valid, written, cards, host, doors, sym, images, rangeKey, schema, connectionId, selected, steppers, readsKey, focus, onFocus]);
+  }), [check.valid, written, cards, host, doors, sym, images, rangeKey, schema, connectionId, selected, steppers, readsKey, focus, onFocus, period]);
 
   if (!check.valid) {
     return (

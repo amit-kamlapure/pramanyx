@@ -52,8 +52,9 @@ import { z } from "zod";
  *  a group the filter column's click (ObjectBreakdown), and the rows of a table or a list a declared rule or segment
  *  admits, marked in a tone (`marked`, 2026-10-28). 13: a dashboard made from a file: a filter column over
  *  a table, the sliders of a scenario, and adding a row to its sheet (2026-11-03). 14: free placement on a section's grid —
- *  an element's column and row (`x`, `y`), gaps allowed, never two on one cell (2026-11-18). */
-export const DASHBOARD_VOCABULARY_VERSION = 14;
+ *  an element's column and row (`x`, `y`), gaps allowed, never two on one cell (2026-11-18). 15: the period as a piece on
+ *  the dashboard (`Period`), one per dashboard, saying what it opens on (2026-11-18). */
+export const DASHBOARD_VOCABULARY_VERSION = 15;
 
 /** The five tones an answer part may carry (`pramanyx/agent/present_tool.py`); parity is tested. */
 export const TONES = ["good", "warn", "bad", "info", "neutral"] as const;
@@ -119,6 +120,7 @@ export const LIMITS = {
   Question: { w: [4, 12], h: [6, 30] },
   ScenarioInputs: { w: [4, 12], h: [3, 10] },
   AddRow: { w: [3, 12], h: [2, 10] },
+  Period: { w: [3, 12], h: [2, 3] },
 } as const satisfies Record<string, { w: readonly [number, number]; h: readonly [number, number] }>;
 export type GridKind = keyof typeof LIMITS;
 
@@ -270,6 +272,11 @@ export const SPLIT_AGGS = ["count", "sum"] as const;
 export const BREAKDOWN_TOPS = [5, 8, 10, 12] as const;
 /** How a breakdown is shown: a table with share bars, or bars alone. */
 export const BREAKDOWN_SHOWS = ["table", "bars"] as const;
+/** The periods a dashboard may open on (v15): as written, the current or the last day, week, month or year — the
+ *  PeriodPicker's choices less a custom range, which a reader chooses on the page. */
+export const PERIOD_OPENS = ["standing", "current_day", "current_week", "current_month", "current_year",
+  "previous_week", "previous_month", "previous_year"] as const;
+export type PeriodOpens = (typeof PERIOD_OPENS)[number];
 /** A breakdown's measures per group: one to three. */
 export const MAX_BREAKDOWN_MEASURES = 3;
 
@@ -565,6 +572,18 @@ export const dashboardCatalog = defineCatalog(schema, {
       }),
       description: "Add a row to the sheet the dashboard's cards read, and every card reads it straight away.",
     },
+    // v15 (the user, 2026-11-18: "Lets have date/range picker this way.. so that we can remove period bar"): the period
+    // every card is cut to, placed on the dashboard as a piece of its own rather than held in a bar above it.
+    Period: {
+      props: z.object({
+        /** What it is called on the dashboard; left out, "Period". */
+        label: z.string().min(1).max(MAX_LABEL).nullable().optional(),
+        /** The period the dashboard opens on; left out, last month. A reader chooses another, a custom range too. */
+        opens_on: z.enum(PERIOD_OPENS).nullable().optional(),
+        size, w, h, x, y,
+      }),
+      description: "The dashboard's period, on the dashboard: every card is cut to it by its own date, and a reader chooses another. One per dashboard.",
+    },
   },
   actions: {},
 });
@@ -573,11 +592,11 @@ export const dashboardCatalog = defineCatalog(schema, {
  *  told how to write one (`grammar.ts` teaches `WRITTEN`). */
 export type PieceName = "ProcessBoard" | "ObjectTable" | "ObjectDetail" | "ActionButton" | "ObjectFilters" | "ObjectFigure"
   | "ObjectChart" | "ObjectBreakdown" | "ActionButtons" | "ObjectList" | "ObjectMap" | "ObjectTimeline" | "ChooseOne"
-  | "ObjectSearch" | "Drawer" | "Question" | "QueryFilters" | "ScenarioInputs" | "AddRow";
+  | "ObjectSearch" | "Drawer" | "Question" | "QueryFilters" | "ScenarioInputs" | "AddRow" | "Period";
 export const PIECE_NAMES: readonly PieceName[] = [
   "ProcessBoard", "ObjectTable", "ObjectDetail", "ActionButton", "ObjectFilters", "ObjectFigure", "ObjectChart",
   "ObjectBreakdown", "ActionButtons", "ObjectList", "ObjectMap", "ObjectTimeline", "ChooseOne", "ObjectSearch", "Drawer",
-  "Question", "QueryFilters", "ScenarioInputs", "AddRow",
+  "Question", "QueryFilters", "ScenarioInputs", "AddRow", "Period",
 ];
 /** Arc AP-4 — what the picker adds — its pieces and the drawer — each placed by hand and held to the structure's flag on
  *  the server. */
@@ -602,6 +621,7 @@ export const COMPONENT_NAMES: readonly ComponentName[] = [...WRITTEN, ...PIECE_N
 export const PLACED: readonly ComponentName[] = [
   "Card", "Note", "Image", "ProcessBoard", "ObjectTable", "ObjectDetail", "ObjectFigure", "ObjectChart", "ObjectBreakdown",
   "ActionButtons", "ObjectList", "ObjectMap", "ObjectTimeline", "ChooseOne", "ObjectSearch", "Question", "ScenarioInputs", "AddRow",
+  "Period",
 ];
 /** The two that are a person's own: a model arranges them and never makes one. */
 export const STATIC: readonly ComponentName[] = ["Note", "Image"];
@@ -634,6 +654,7 @@ export const MAY_HOLD: Record<ComponentName, readonly ComponentName[]> = {
   QueryFilters: [],
   ScenarioInputs: [],
   AddRow: [],
+  Period: [],
   // the pieces a section holds, stacked one under another beside the page
   Drawer: PLACED,
 };

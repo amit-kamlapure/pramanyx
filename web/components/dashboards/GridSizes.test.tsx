@@ -361,3 +361,27 @@ describe("placed freely on the grid", () => {
   });
 
 });
+
+
+describe("the period on the dashboard (v15)", () => {
+  const withPeriod = (): DashboardSpec => {
+    const s = gridded();
+    s.elements.period = { type: "Period", props: { label: "Date range", w: 4, h: 2 }, children: [] };
+    s.elements["sec-headline"].children.unshift("period");
+    return s;
+  };
+
+  it("draws the period's menu under its own label, and a choice is the reader's period", async () => {
+    const onChange = vi.fn();
+    render(<ComposedDashboard spec={withPeriod()} cards={CARDS} host={HOST} doors={READER}
+      period={{ value: { preset: "previous_month" }, onChange, showing: null }} />);
+    const piece = screen.getByTestId("dashboard-period-piece");
+    expect(within(piece).getByText("Date range")).toBeInTheDocument();
+    expect(within(piece).getByLabelText("Dashboard period")).toHaveTextContent("Last month");
+  });
+
+  it("where the page offers no choice, says the period the cards were read for", () => {
+    render(<ComposedDashboard spec={withPeriod()} cards={CARDS} host={{ ...HOST, range: { status: "final", covers: "October 2026" } as never }} doors={READER} />);
+    expect(screen.getByTestId("dashboard-period-said")).toHaveTextContent("October 2026");
+  });
+});

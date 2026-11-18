@@ -22,7 +22,7 @@ import { SelectField } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
   BREAKDOWN_TOPS, CHART_DAYS, CHART_TOPS, CHOOSERS, FIGURE_AGGS, MAX_BREAKDOWN_MEASURES, MAX_CAPTION, MAX_FILTERS, MAX_LABEL,
-  MAX_NOTE, MAX_TABLE_COLUMNS, MAX_TICKED_RUNS, MAX_TITLE, SET_READERS, SPLIT_AGGS, TICKERS, TONES, type PieceName,
+  MAX_NOTE, MAX_TABLE_COLUMNS, MAX_TICKED_RUNS, MAX_TITLE, PERIOD_OPENS, SET_READERS, SPLIT_AGGS, TICKERS, TONES, type PieceName,
 } from "@/lib/dashboards/catalog";
 import {
   editNote, freshWireName, moveCardTo, moveCardToNewSection, moveSectionTo, recaption, rename, sectionsOf, setProps, tabsOf,
@@ -712,6 +712,33 @@ function FigureWiring({ spec, p, set }: { spec: DashboardSpec; p: Props; set: (p
   );
 }
 
+/** v15 — a placed card and the date the period cuts it by. */
+export interface CardDate { id: string; title: string; date: string | null; standing: boolean }
+
+/** The period's choices as a person reads them (the PeriodPicker's words). */
+const OPENS_WORDS: Record<(typeof PERIOD_OPENS)[number], string> = {
+  standing: "As written", current_day: "Current day", current_week: "Current week", current_month: "Current month",
+  current_year: "Current year", previous_week: "Last week", previous_month: "Last month", previous_year: "Last year",
+};
+
+/** Each card and the date the period cuts it by — or that it has none and is read as written. */
+function PeriodCuts({ dates }: { dates: CardDate[] }) {
+  if (!dates.length) return <span className="aug-fs-sm" style={{ color: "var(--t3)" }}>No card on the dashboard yet.</span>;
+  return (
+    <div data-testid="period-cuts" style={{ display: "flex", flexDirection: "column", border: "1px solid var(--b1)", borderRadius: "var(--r2)" }}>
+      {dates.map((d, i) => (
+        <div key={d.id} className="aug-fs-sm" style={{ display: "flex", flexDirection: "column", gap: 1, padding: "6px 10px",
+          borderTop: i ? "1px solid var(--b1)" : undefined }}>
+          <span style={{ color: "var(--t1)" }}>{d.title}</span>
+          <span className="aug-fs-xs" style={{ color: "var(--t3)", fontFamily: d.date ? "var(--font-mono)" : undefined }}>
+            {d.standing || !d.date ? "no date: read as written" : d.date}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** A part of the panel folded under its name: a row that opens it, the way it opens said by its arrow. */
 function Fold({ label, testid, children }: { label: string; testid?: string; children: ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -778,8 +805,10 @@ function DashboardSetup({ spec, onChange, onOpenLayout }: { spec: DashboardSpec;
 
 // ── the panel ────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-export function PieceSetup({ spec, selected, onChange, connectionId, schema, cardTitle, entityTitle, cardSetup, cardChart, cardSql, onOpenLayout }: {
+export function PieceSetup({ spec, selected, onChange, connectionId, schema, cardTitle, entityTitle, cardSetup, cardChart, cardSql, onOpenLayout, cardDates }: {
   spec: DashboardSpec;
+  /** v15 — each placed card and the date the period cuts it by, for the Period piece's setup. */
+  cardDates?: () => CardDate[];
   /** Open the layout pane, folded away by default (the dashboards study, R7, 2026-11-18). */
   onOpenLayout?: () => void;
   selected: string | null;
@@ -859,6 +888,21 @@ export function PieceSetup({ spec, selected, onChange, connectionId, schema, car
           )}</Fold>}
           {cardSql && <Fold label="The SQL, as it ran" testid="card-fold-sql">{cardSql(String(p.card ?? ""))}</Fold>}
         </div>
+      )}
+      {el.type === "Period" && (
+        <>
+          <Row label="Label"><Words label="Label" value={String(p.label ?? "Period")} max={MAX_LABEL}
+            onSave={v => set({ label: v === "Period" ? null : v }, "the period's label changed by hand")} /></Row>
+          <Row label="Opens on" testid="setup-period-opens" hint="What the dashboard is read for when it opens. A reader chooses another, a custom range too.">
+            <Pick label="Opens on" value={String(p.opens_on ?? "previous_month")}
+              options={PERIOD_OPENS.map(o => ({ value: o, label: OPENS_WORDS[o] }))}
+              onPick={v => set({ opens_on: v === "previous_month" ? null : v }, "what the period opens on chosen by hand")} />
+          </Row>
+          <Row label="What it cuts" testid="setup-period-cuts"
+            hint="Every card is cut to the period by its own date. A card with none is read as written, and says so.">
+            <PeriodCuts dates={cardDates?.() ?? []} />
+          </Row>
+        </>
       )}
       {el.type === "Note" && (
         <Row label="Words" hint="Yours, stamped with your name and today when kept. A model never writes one.">

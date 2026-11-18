@@ -34,7 +34,7 @@ import type { RangeChoice } from "@/components/brief/BriefRange";
 import type { CardState } from "@/components/brief/PinnedCardBody";
 import { DashboardArrange, type CardLine } from "@/components/dashboards/DashboardArrange";
 import { DashboardBuilder, EditBar, type AddWhat, type CanvasTools } from "@/components/dashboards/DashboardBuilder";
-import { ComposedDashboard, type DashboardDoors, type ReadState } from "@/components/dashboards/ComposedDashboard";
+import { ComposedDashboard, type DashboardDoors, type PeriodDoor, type ReadState } from "@/components/dashboards/ComposedDashboard";
 import { FindingPicker } from "@/components/dashboards/FindingPicker";
 import { ObjectDashboardStarter } from "@/components/dashboards/ObjectDashboardStarter";
 import { PackTemplatePicker } from "@/components/dashboards/PackTemplatePicker";
@@ -631,6 +631,20 @@ function PublishPanel({ connectionId, dashboardId, publishedTo, draft = false, r
 /** A dashboard someone else published to a group the person is in or a role they hold: read as it
  *  stands, for the reader's own period, with no door that changes it — and a door to start a
  *  dashboard of their own from it. */
+/** v15 — whether a dashboard holds its period as a piece (`Period`): then it is chosen there, not above the dashboard. */
+function holdsPeriod(spec: unknown): boolean {
+  const els = (spec as DashboardSpec | null | undefined)?.elements;
+  return !!els && Object.values(els).some(e => e?.type === "Period");
+}
+
+/** The period a dashboard's Period piece says it opens on, or null. */
+function periodOpensOn(spec: unknown): string | null {
+  const els = (spec as DashboardSpec | null | undefined)?.elements;
+  const piece = els ? Object.values(els).find(e => e?.type === "Period") : undefined;
+  const o = piece?.props?.opens_on;
+  return typeof o === "string" && o ? o : null;
+}
+
 function SharedDashboardView({ connectionId, schema, owner, dashboardId, range, chosenRange, onRange, onStarted }: {
   connectionId: string; schema?: string; owner: string; dashboardId: string;
   range: BriefingRange | null; chosenRange: RangeChoice; onRange: (c: RangeChoice) => void;
@@ -688,10 +702,13 @@ function SharedDashboardView({ connectionId, schema, owner, dashboardId, range, 
   };
   if (problem) return <ErrorState kind="Not read" what="This shared dashboard could not be read." means={problem} />;
   if (!data) return <div className="aug-fs-sm" data-testid="dashboard-loading" style={{ color: "var(--t3)" }}>Reading the shared dashboard…</div>;
+  const sharedSpec = data.cockpit.spec as DashboardSpec;
   return (
     <div data-testid="dashboard-shared" data-owner={owner} data-dashboard={dashboardId}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
-        <PeriodPicker value={chosenRange} onChange={onRange} showing={data.range.status === "standing" ? null : data.range} />
+        {!holdsPeriod(sharedSpec) && (
+          <PeriodPicker value={chosenRange} onChange={onRange} showing={data.range.status === "standing" ? null : data.range} />
+        )}
         <span className="aug-fs-sm" data-testid="dashboard-shared-by" style={{ color: "var(--t2)" }}>
           An App by {personName(data.published_by)}, for {data.published_to.map(t => t.name).join(", ")} · version {data.cockpit.version} · read-only
         </span>
@@ -701,7 +718,8 @@ function SharedDashboardView({ connectionId, schema, owner, dashboardId, range, 
         </Button>
       </div>
       {data.ontology && <PinStrip pin={data.ontology} spec={data.cockpit.spec} />}
-      <ComposedDashboard spec={data.cockpit.spec} cards={cards} host={host} doors={doors} sym={data.currency_symbol || "$"}
+      <ComposedDashboard spec={sharedSpec} cards={cards} host={host} doors={doors} sym={data.currency_symbol || "$"}
+        period={{ value: chosenRange, onChange: onRange, showing: data.range.status === "standing" ? null : data.range }}
         images={images} range={range} schema={schema} connectionId={connectionId} dashboardId={`shared:${owner}:${dashboardId}`}
         focus={fx.focus} onFocus={fx.setFocus} />
     </div>
@@ -734,8 +752,6 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
   // The period the cards are read for: the person's pick, else the latest complete month — a
   // dashboard is watched month by month, as the mock showed it.
   const [picked, setChosenRange] = useState<RangeChoice | null>(null);
-  const chosenRange: RangeChoice = picked ?? { preset: "previous_month" };
-  const range: BriefingRange | null = chosenRange.preset === "standing" ? null : chosenRange;
   const [list, setList] = useState<DashboardList | null>(null);
   const [chosen, setChosen] = useState("");
   const [data, setData] = useState<PersonDashboard | null>(null);
@@ -804,6 +820,11 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
   const adoptNote = useRef("");
   // Arc AP-1 — a change in the builder, or a resize, drawn at once (`draft`) and kept as one version per burst (`burst`)
   const [draft, setDraft] = useState<DashboardSpec | null>(null);
+  const current = (draft ?? data?.cockpit.spec ?? null) as DashboardSpec | null;
+  // v15 — a dashboard that holds its period as a piece opens on the period that piece says
+  const opensOn = periodOpensOn(current);
+  const chosenRange: RangeChoice = picked ?? (opensOn ? { preset: opensOn } as RangeChoice : { preset: "previous_month" });
+  const range: BriefingRange | null = chosenRange.preset === "standing" ? null : chosenRange;
   // when this browser last saw a burst kept, and whether one is waiting or on its way — the builder's "saved" says them
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [pending, setPending] = useState(false);
@@ -967,7 +988,13 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
   useEffect(() => () => { if (burst.current.timer) sendBurst(); }, [sendBurst]);
 
   // Arc AP-1 — in the builder every change goes through here: drawn at once, kept with the burst, and undoable.
-  const current = (draft ?? data?.cockpit.spec ?? null) as DashboardSpec | null;
+  // v15 — the period, for the Period piece: what the cards are read for, and the reader's choice of another
+  const periodDoor: PeriodDoor | null = data ? {
+    value: chosenRange, onChange: setChosenRange, reading, disabled: busy,
+    showing: data.range.status === "standing" || reading ? null : data.range,
+  } : null;
+  // where the dashboard holds its period as a piece, the period above it goes: it is chosen on the dashboard itself
+  const periodPlaced = holdsPeriod(current);
   const change = useCallback((next: DashboardSpec, note: string) => {
     if (!current) return;
     setStacks(st => ({ past: [...st.past.slice(-49), current], future: [] }));
@@ -1223,6 +1250,12 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
           onAddPiece={(section, what) => { shut(); setAsking(false); setAdding({ section, only: what }); }} checks={checks} tools={tools}
           cardReads={id => valuesRead(data.cards.find(c => c.id === id)?.sql)}
           queryCards={placedQueries(current, data.cards)}
+          cardDates={() => {
+            const placed = new Set(Object.values(current.elements).filter(e => e.type === "Card").map(e => String(e.props.card ?? "")));
+            return cards.filter(c => placed.has(c.card.id)).map(c => ({
+              id: c.card.id, title: c.card.title, date: c.run?.scoped?.grain ?? null, standing: !!c.run?.scoped?.standing,
+            }));
+          }}
           onUndo={stacks.past.length > 0 ? undo : undefined} onRedo={stacks.future.length > 0 ? redo : undefined}
           bar={(
             <EditBar saved={saved} onDone={done}
@@ -1340,11 +1373,11 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
           )}>
           {({ selected, onSelect, handle, reads }) => (previewing ? (
             // Arc AP-6 — read as the person and a member of the group, with no door that changes the dashboard
-            <ComposedDashboard key={`preview:${previewing}`} spec={current} cards={cards} host={host}
+            <ComposedDashboard key={`preview:${previewing}`} spec={current} cards={cards} host={host} period={periodDoor}
               doors={{ onRefresh: editDoors.onRefresh, onReadState }} sym={data.currency_symbol || "$"} images={images} range={range}
               schema={schema} connectionId={connectionId} dashboardId={`${connectionId}:${chosen}:preview`} asGroup={previewing} onSaid={onSaid} />
           ) : (
-            <ComposedDashboard spec={current} cards={cards} host={host} doors={{ ...editDoors, onSelect, onReadState }} sym={data.currency_symbol || "$"}
+            <ComposedDashboard spec={current} cards={cards} host={host} doors={{ ...editDoors, onSelect, onReadState }} sym={data.currency_symbol || "$"} period={periodDoor}
               images={images} range={range} schema={schema} connectionId={connectionId} dashboardId={`${connectionId}:${chosen}`}
               selected={selected} handle={handle} reads={reads} focus={fx.focus} onFocus={fx.setFocus} />
           ))}
@@ -1362,7 +1395,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
     ...shared.map(s => ({ id: `shared:${s.owner}/${s.cockpit_id}`, label: `${s.title || s.cockpit_id} · ${person(s.published_by || s.owner)}` })),
   ];
   const newDoor = <Button size="xs" variant="ghost" data-testid="dashboard-new-open" onClick={openNew}>+ New dashboard</Button>;
-  const periodPicker = data && !cards.every(c => (c.card.render as { standing?: boolean } | undefined)?.standing === true) ? (
+  const periodPicker = data && !periodPlaced && !cards.every(c => (c.card.render as { standing?: boolean } | undefined)?.standing === true) ? (
     <PeriodPicker value={chosenRange} onChange={setChosenRange} disabled={busy} reading={reading}
       showing={data.range.status === "standing" || reading ? null : data.range} />
   ) : null;
@@ -1529,7 +1562,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
           )}
           <div aria-busy={reading || undefined}
             style={{ opacity: reading ? 0.45 : 1, transition: "opacity 120ms ease-out", pointerEvents: reading ? "none" : undefined }}>
-            <ComposedDashboard spec={draft ?? kept.spec} cards={cards} host={host} doors={readDoors} sym={data.currency_symbol || "$"}
+            <ComposedDashboard spec={draft ?? kept.spec} cards={cards} host={host} doors={readDoors} sym={data.currency_symbol || "$"} period={periodDoor}
               images={images} range={range} schema={schema} connectionId={connectionId} dashboardId={`${connectionId}:${chosen}`}
               focus={fx.focus} onFocus={fx.setFocus} />
           </div>

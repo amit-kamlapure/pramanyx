@@ -806,6 +806,12 @@ export function checkDashboardSpec(spec: unknown): DashboardCheck {
     }
   }
 
+  // v15 — the period is the dashboard's one: two pieces could each say another, and the cards are cut to one period
+  const periods = [...sound].filter(([, e]) => e.type === "Period").map(([k]) => k);
+  if (periods.length > 1) {
+    issues.push({ code: "bad_prop", elementKey: periods[1],
+      message: `The spec places ${periods.length} periods (${list(periods.map(q))}). A dashboard holds one: every card is cut to it.` });
+  }
   if (tabCount > MAX_TABS) {
     issues.push({ code: "too_large", message: `The spec holds ${tabCount} tabs. A dashboard holds at most ${MAX_TABS}.` });
   }
