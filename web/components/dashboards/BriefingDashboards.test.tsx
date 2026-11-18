@@ -323,7 +323,7 @@ describe("a new dashboard started without a model", () => {
     expect(tiles.map(t => t.getAttribute("data-state"))).toEqual(["ok", "waiting"]);
     expect(tiles[0]).toHaveTextContent("Return rate");
 
-    await act(async () => { finish({ staged: false, proposal_id: "", cockpit_id: "", summary: "", rounds: 1, stop_reason: "", sentences: ["Nothing measures this."] }); });
+    await act(async () => { finish({ staged: false, proposal_id: "", summary: "", rounds: 1, stop_reason: "", sentences: ["Nothing measures this."] }); });
     expect(screen.getByTestId("dashboard-not-drafted")).toHaveTextContent("Nothing measures this.");
     expect(screen.queryByTestId("dashboard-draft-stop")).toBeNull();
     fireEvent.click(screen.getByTestId("dashboard-draft-change"));

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { DashboardDrafted } from "@/lib/api";
 import { finishedWatch, foundWords, heardFrame, isWorking, startWatch, type DraftFrame } from "./draftProgress";
 
-const STAGED: DashboardDrafted = { staged: true, proposal_id: "p1", cockpit_id: "returns-1", summary: "", rounds: 1, stop_reason: "answered", sentences: [] };
+const STAGED = { staged: true, proposal_id: "p1", summary: "", rounds: 1, stop_reason: "answered", sentences: [] } as unknown as DashboardDrafted;
 const heard = (...frames: DraftFrame[]) => frames.reduce(heardFrame, startWatch());
 const words = (w: ReturnType<typeof startWatch>) => w.steps.map(s => s.words);
 
