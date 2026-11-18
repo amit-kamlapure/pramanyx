@@ -1,13 +1,14 @@
 "use client";
 
 /**
- * PinStrip — the ontology release a dashboard holding pieces was composed against, said above it (Arc OC-4; the study's
- * §8.7: a dashboard is checked against the release it is pinned to).
+ * PinStrip — what a reader is owed about the ontology release a dashboard holding pieces was composed against (Arc OC-4;
+ * the study's §8.7: a dashboard is checked against the release it is pinned to).
  *
- * The pieces always read what is published now. What a reader is owed is whether that is still what the dashboard was
- * built on: when a release since has changed something a piece reads — a process's promise, a rule, an action — the
- * strip names it, with the class it was published as, and the person who keeps the dashboard re-pins it once they have
- * looked. A dashboard with no piece draws no strip.
+ * The pieces always read what is published now. When a release since has changed something a piece reads — a process's
+ * promise, a rule, an action — the strip names it, with the class it was published as, and the person who keeps the
+ * dashboard re-pins it once they have looked. While the release in force is the one it was composed against there is
+ * nothing to warn of, and the strip draws nothing, so the pieces take the room (the user, 2026-11-18); the release is
+ * said on the toolbar's chip, and in the builder on the dashboard's own setup. A dashboard with no piece draws no strip.
  */
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
@@ -36,13 +37,7 @@ export function PinStrip({ pin, spec, busy, onRepin }: {
       {pin.pinned ? `Re-pin to ${now}` : `Pin to ${now}`}
     </Button>
   );
-  if (pin.pinned && pin.pinned === pin.current) {
-    return (
-      <div className="aug-fs-xs" data-testid="dashboard-pin" style={{ color: "var(--t3)", margin: "2px 0 6px", display: "flex", alignItems: "center", gap: 6 }}>
-        <Icon name="layers" size={12} /> Its pieces read {now} of the ontology, the one it was composed against.
-      </div>
-    );
-  }
+  if (pin.pinned && pin.pinned === pin.current) return null;
   return (
     // An alert, as the mockup draws it (2026-11-10): what it was composed against is not what its pieces read now.
     <div data-testid="dashboard-pin" className="aug-fs-sm" role="status"

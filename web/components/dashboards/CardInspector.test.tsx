@@ -62,6 +62,15 @@ describe("the card's panel", () => {
   });
 });
 
+describe("the dashboard's own setup", () => {
+  it("says the ontology release its pieces read, where the canvas no longer does", () => {
+    const { rerender } = render(<PieceSetup spec={SPEC} selected={null} onChange={() => {}} connectionId="thelook" release="6" />);
+    expect(screen.getByTestId("setup-release")).toHaveTextContent("Its pieces read release 6, the one it was composed against.");
+    rerender(<PieceSetup spec={SPEC} selected={null} onChange={() => {}} connectionId="thelook" />);
+    expect(screen.queryByTestId("setup-release")).toBeNull();
+  });
+});
+
 describe("the SQL tab", () => {
   it("shows the statement as it ran, what it covered, and its values beside it", () => {
     render(<CardSql cs={cs({ sql: "SELECT SUM(x) FROM (SELECT 1) WHERE c = $1", params: { flt_0_0: "Search" } })} />);

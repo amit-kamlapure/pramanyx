@@ -1296,7 +1296,8 @@ export function FilterBar({ entity, properties, set }: { entity: string; propert
   const setConditions = scoped ? scoped.conditions : [];
   const some = useObjectQuery(narrowed.length && !(within && "refused" in within)
     ? { ...base, measures: [COUNT], filters: [...setConditions, ...narrowed] } : null);
-  const every = useObjectQuery(within && "refused" in within ? null
+  // the whole is read only where it is said: beside a filter that is on, or as the set the column counts within
+  const every = useObjectQuery((within && "refused" in within) || !(narrowed.length || scoped) ? null
     : scoped ? { ...base, measures: [COUNT], ...(setConditions.length ? { filters: setConditions } : {}) } : { object_type: entity, measures: [COUNT] });
   const total = every && "rows" in every ? num(every.rows[0]?.[0]) : null;
   const left = some && "rows" in some ? num(some.rows[0]?.[0]) : null;
@@ -1304,6 +1305,8 @@ export function FilterBar({ entity, properties, set }: { entity: string; propert
   // a search box's words are held under the property marked (Arc AP-4): named by the property, said in quotes
   const label = (path: string) => { const bare = path.startsWith(WORDS) ? path.slice(WORDS.length) : path;
     return properties.find(p => p.path === bare)?.label ?? words(bare); };
+  // Nothing chosen and no set to name: nothing to say above the pieces, so they take the room (the user, 2026-11-18)
+  if (!chosen.length && !narrowed.length && !within) return null;
   return (
     <div data-testid="object-filter-bar" className="aug-fs-sm" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", minHeight: 26 }}>
       {chosen.map(([path, values]) => (
@@ -1320,9 +1323,7 @@ export function FilterBar({ entity, properties, set }: { entity: string; propert
           : scoped ? (narrowed.length
             ? `${left == null ? "…" : formatCount(left)} of ${total == null ? "…" : formatCount(total)} in “${scoped.label}”`
             : `${total == null ? "…" : formatCount(total)} in “${scoped.label}”`)
-          : narrowed.length
-            ? `${left == null ? "…" : formatCount(left)} of ${total == null ? "…" : formatCount(total)} ${noun}`
-            : `${total == null ? "…" : formatCount(total)} ${noun}`}
+          : `${left == null ? "…" : formatCount(left)} of ${total == null ? "…" : formatCount(total)} ${noun}`}
       </span>
     </div>
   );

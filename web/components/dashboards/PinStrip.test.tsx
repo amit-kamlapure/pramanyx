@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 /**
- * Arc OC-4 — the release a dashboard holding pieces was composed against, said above it. In force: one quiet line.
+ * Arc OC-4 — the release a dashboard holding pieces was composed against. In force: nothing above the pieces.
  * Changed since: each change that touches what a piece reads, with the class it was published as and the piece that
  * reads it, and a re-pin for the person who keeps the dashboard — none for a reader of a published one.
  */
@@ -16,9 +16,10 @@ const pin = (over: Partial<DashboardPin> = {}): DashboardPin =>
   ({ pinned: "c/thelook@2", current: "c/thelook@2", changes: [], ...over });
 
 describe("the pin strip", () => {
-  it("says the release in force quietly when it is the one the dashboard was composed against", () => {
-    render(<PinStrip pin={pin()} spec={SPEC} onRepin={vi.fn()} />);
-    expect(screen.getByTestId("dashboard-pin").textContent).toContain("read release 2 of the ontology, the one it was composed against");
+  it("draws nothing above the pieces while the release in force is the one the dashboard was composed against", () => {
+    const { container } = render(<PinStrip pin={pin()} spec={SPEC} onRepin={vi.fn()} />);
+    expect(container.textContent).toBe("");
+    expect(screen.queryByTestId("dashboard-pin")).toBeNull();
     expect(screen.queryByTestId("dashboard-repin")).toBeNull();
   });
 

@@ -712,7 +712,8 @@ function SharedDashboardView({ connectionId, schema, owner, dashboardId, range, 
           <PeriodPicker value={chosenRange} onChange={onRange} showing={data.range.status === "standing" ? null : data.range} />
         )}
         <span className="aug-fs-sm" data-testid="dashboard-shared-by" style={{ color: "var(--t2)" }}>
-          An App by {personName(data.published_by)}, for {data.published_to.map(t => t.name).join(", ")} · version {data.cockpit.version} · read-only
+          An App by {personName(data.published_by)}, for {data.published_to.map(t => t.name).join(", ")} · version {data.cockpit.version}
+          {data.ontology?.current ? ` · ontology release ${numberOf(data.ontology.current)}` : ""} · read-only
         </span>
         <CertificationMark compact target={{ kind: "dashboard", ref: dashboardRef(connectionId, owner, dashboardId), connectionId }} />
         <Button size="xs" variant="secondary" disabled={busy} style={{ marginLeft: "auto" }} onClick={() => void start()}>
@@ -1249,6 +1250,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
     return (
       <div data-testid="briefing-dashboards" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
         <DashboardBuilder spec={current} onChange={change} cardTitle={id => lines.get(id)?.title} connectionId={connectionId} schema={schema}
+          release={data.ontology?.current && data.ontology.pinned === data.ontology.current ? numberOf(data.ontology.current) : null}
           onAddPiece={(section, what) => { shut(); setAsking(false); setAdding({ section, only: what }); }} checks={checks} tools={tools}
           cardReads={id => valuesRead(data.cards.find(c => c.id === id)?.sql)}
           queryCards={placedQueries(current, data.cards)}
@@ -1412,6 +1414,15 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
   ) : null;
   // The organisation's word on this dashboard — Certified or Deprecated — set by a curator (the ontology plan, Phase 1;
   // punch list 81). Named by connection, owner and id: two people's dashboards may share an id's words.
+  // The ontology release the pieces read, said once beside the period (a dashboard's own strip speaks only to warn).
+  const releaseChip = data?.ontology?.current ? (
+    <Chip title={data.ontology.pinned && data.ontology.pinned !== data.ontology.current
+      ? `Its pieces read release ${numberOf(data.ontology.current)}; it was composed against ${numberOf(data.ontology.pinned)}`
+      : "The ontology release its pieces read, the one it was composed against"}>
+      Ontology release {numberOf(data.ontology.current)}
+      {data.ontology.pinned && data.ontology.pinned !== data.ontology.current ? ` · pinned ${numberOf(data.ontology.pinned)}` : ""}
+    </Chip>
+  ) : null;
   const certMark = ownOpen && data ? (
     <CertificationMark compact target={{ kind: "dashboard", ref: dashboardRef(connectionId, data.owner, chosen), connectionId }} />
   ) : null;
@@ -1520,14 +1531,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
               <ChromeToolbar>
                 <div className="aug-toolbar-tools">
                   {periodPicker}
-                  {data.ontology?.current && (
-                    <Chip title={data.ontology.pinned && data.ontology.pinned !== data.ontology.current
-                      ? `Its pieces read release ${numberOf(data.ontology.current)}; it was composed against ${numberOf(data.ontology.pinned)}`
-                      : "The ontology release its pieces read"}>
-                      Ontology release {numberOf(data.ontology.current)}
-                      {data.ontology.pinned && data.ontology.pinned !== data.ontology.current ? ` · pinned ${numberOf(data.ontology.pinned)}` : ""}
-                    </Chip>
-                  )}
+                  {releaseChip}
                   <Button size="xs" variant="ghost" disabled={busy || reading} data-testid="dashboard-read-again"
                     title="Read every card and piece again" onClick={reload}>
                     <Icon name="refresh" size={12} /> Read again
@@ -1552,6 +1556,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
           ) : (
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
               {periodPicker}
+              {releaseChip}
               {certMark}
               <span style={{ marginLeft: "auto", display: "flex", gap: 4 }}>{viewDoors}</span>
             </div>

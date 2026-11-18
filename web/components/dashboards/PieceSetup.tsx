@@ -878,7 +878,7 @@ function Fold({ label, testid, children }: { label: string; testid?: string; chi
 
 /** With nothing chosen, the dashboard's own setup (the dashboards study, R6, 2026-11-18): its name, what it holds, the
  *  way to its layout, and the keys. */
-function DashboardSetup({ spec, onChange, onOpenLayout }: { spec: DashboardSpec; onChange: Change; onOpenLayout?: () => void }) {
+function DashboardSetup({ spec, onChange, onOpenLayout, release }: { spec: DashboardSpec; onChange: Change; onOpenLayout?: () => void; release?: string | null }) {
   const root = spec.root;
   const top = spec.elements[root];
   const count = (types: string[]) => Object.values(spec.elements).filter(e => types.includes(e.type)).length;
@@ -924,6 +924,11 @@ function DashboardSetup({ spec, onChange, onOpenLayout }: { spec: DashboardSpec;
           </div>
         </Row>
       )}
+      {release && (
+        <Row label="Ontology release" testid="setup-release">
+          <span className="aug-fs-sm" style={{ color: "var(--t2)" }}>Its pieces read release {release}, the one it was composed against.</span>
+        </Row>
+      )}
       <Row label="What it holds">
         <div style={{ display: "flex", flexDirection: "column", border: "1px solid var(--b1)", borderRadius: "var(--r2)" }}>
           {holds.map(([what, n], i) => (
@@ -948,8 +953,10 @@ function DashboardSetup({ spec, onChange, onOpenLayout }: { spec: DashboardSpec;
 
 // ── the panel ────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-export function PieceSetup({ spec, selected, onChange, connectionId, schema, cardTitle, entityTitle, cardSetup, cardChart, cardSql, onOpenLayout, cardDates, cardHolds }: {
+export function PieceSetup({ spec, selected, onChange, connectionId, schema, cardTitle, entityTitle, cardSetup, cardChart, cardSql, onOpenLayout, cardDates, cardHolds, release }: {
   spec: DashboardSpec;
+  /** The ontology release its pieces read, when it is the one the dashboard was composed against. */
+  release?: string | null;
   /** v17 — what a placed card holds that its panel offers to draw: number columns, and fields whose values it colours. */
   cardHolds?: (cardId: string) => CardHolds;
   /** v15 — each placed card and the date the period cuts it by, for the Period piece's setup. */
@@ -977,7 +984,7 @@ export function PieceSetup({ spec, selected, onChange, connectionId, schema, car
   const entity = el && (own || SET_READERS.includes(el.type as PieceName))
     ? (!own && read && !isRefused(read) ? read.entity : String(el.props.entity ?? "")) : undefined;
   const ef = useEntityFields(entity, connectionId, schema);
-  if (!selected || !el) return <DashboardSetup spec={spec} onChange={onChange} onOpenLayout={onOpenLayout} />;
+  if (!selected || !el) return <DashboardSetup spec={spec} onChange={onChange} onOpenLayout={onOpenLayout} release={release} />;
   const k = selected;
   const p = el.props as Props;
   const set = (patch: Props, note: string) => onChange(setProps(spec, k, patch), note);
