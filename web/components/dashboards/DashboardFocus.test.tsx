@@ -94,7 +94,8 @@ describe("the dashboard with a focus", () => {
     const cards = [card("c7f3a001", "Return rate", 0.1, { applied: true, by: ["traffic_source = Search"], why: "", through: [by] }), card("c91b2002", "Net revenue", 341000)];
     render(<ComposedDashboard spec={premise()} cards={cards} host={HOST} doors={{ onRefresh: vi.fn() }} focus={[SEARCH]} onFocus={vi.fn()} />);
     const said = screen.getAllByTestId("cut-through")[0];
-    expect(said).toHaveTextContent("Through order_items.user_id");
+    expect(said).toHaveAttribute("aria-label", "Through order_items.user_id");
+    expect(said).toHaveTextContent("");
     expect(said).toHaveAttribute("title", by);
   });
 

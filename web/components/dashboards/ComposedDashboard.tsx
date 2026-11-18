@@ -1179,14 +1179,15 @@ function useValuedRun(cs: CardState | undefined, range: BriefingRange | null | u
   return { cs: { card, run: got.run, failed: got.failed }, waits: null, onRefresh };
 }
 
-/** A card a chosen value reached through a link: which column it used (the study's R16). */
+/** A card a chosen value reached through a link: a small mark that says which columns it used when pointed at (the study's R16),
+ *  so the words never sit over the card's own title. */
 function CutThrough({ ways }: { ways: string[] }) {
   const columns = [...new Set(ways.map(w => w.split(", through ").pop() ?? w))];
+  const said = `Through ${columns.join(", ")}`;
   return (
-    <span className="aug-fs-xs" data-testid="cut-through" title={ways.join(". ")}
-      style={{ position: "absolute", top: 10, right: 12, zIndex: 1, color: "var(--t3)", background: "var(--bg-3)",
-        border: "1px solid var(--b1)", borderRadius: "var(--r-chip)", padding: "1px 7px" }}>
-      Through {columns.join(", ")}
+    <span data-testid="cut-through" role="img" aria-label={said} title={ways.join(". ")}
+      style={{ position: "absolute", top: 10, right: 12, zIndex: 1, display: "inline-flex", color: "var(--t3)" }}>
+      <Icon name="link" size={13} />
     </span>
   );
 }
