@@ -50,7 +50,7 @@ import { cellText } from "@/lib/dashboards/objectView";
 import { SPAN, type Size } from "@/lib/dashboards/catalog";
 import { cardValue } from "@/lib/dashboards/hostStatus";
 import type { CardStatus } from "@/lib/dashboards/hostState";
-import { fmtDate, formatCount, formatMetricValue, formatSeconds } from "@/lib/format";
+import { fmtDate, formatCount, formatMetricValue } from "@/lib/format";
 import { NumberedPager } from "@/components/dashboards/NumberedPager";
 import { usePlacementLook, useValueColors } from "@/components/dashboards/placementLook";
 import type { NumberLook } from "@/lib/dashboards/numberLook";
@@ -624,12 +624,7 @@ function QueryTile({ cs, doors, place, focus }: { cs: CardState & { card: Dashbo
     <Foot icon="sql" aside={<Button size="xs" variant="ghost" aria-expanded={details} data-testid="query-tile-details" onClick={() => setDetails(d => !d)}>Details</Button>}>
       Reads the sheet
     </Foot>
-  ) : (
-    <Foot icon="sql">
-      Your query{run?.duration_ms != null ? ` · ${formatSeconds(run.duration_ms)}` : ""}
-      {run?.scoped && !run.scoped.standing ? `, for ${run.scoped.covers}` : ""} · read straight from the tables
-    </Foot>
-  );
+  ) : null;
   const explained = details && (
     <div data-testid="query-tile-explained" className="aug-fs-xs" style={{ display: "flex", flexDirection: "column", gap: 4, color: "var(--t2)" }}>
       <div>{definition || "This query is too involved to say in words. Read it below."}</div>

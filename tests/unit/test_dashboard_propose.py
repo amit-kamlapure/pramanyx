@@ -1402,6 +1402,32 @@ def test_a_draft_stopped_while_the_model_writes_it_is_never_staged(desk, faux):
     assert [f["type"] for f in heard] == ["read"]
 
 
+def test_a_dashboard_that_places_its_period_can_still_be_outlined():
+    """The Period sits in a section beside the cards and names no card: reading it as one stopped every edit."""
+    spec = {"root": "top", "elements": {
+        "top": {"type": "Page", "props": {"title": "Sales"}, "children": ["sec"]},
+        "sec": {"type": "Section", "props": {"title": "Sales"}, "children": ["when", "rev"]},
+        "when": {"type": "Period", "props": {"opens_on": "standing"}, "children": []},
+        "rev": {"type": "Card", "props": {"card": "c1", "size": "wide"}, "children": []},
+    }}
+    moves = {"added": [], "removed": [], "changed": ["rev"]}
+    [tab] = propose.outline(spec, {"c1": "Revenue"}, set(), moves)
+    [period, card] = tab["sections"][0]["cards"]
+    assert period["static"] == "piece" and period["change"] == ""
+    assert (card["title"], card["change"]) == ("Revenue", "changed")
+
+
+def test_a_tool_call_the_model_wrote_out_is_never_shown_to_the_person(desk, faux):
+    from pramanyx.dashboards.ask import draft_for_area
+    from pramanyx.llm.faux import set_responses
+    set_responses([_call(op="options"), '<tool_call> <function=draft_dashboard> <parameter=op> edit </parameter> </function> </tool_call>'])
+
+    out = draft_for_area(CONN, desk.home.owner, "returns", provider=faux)
+
+    assert out["staged"] is False
+    assert out["sentences"] == ["The model drafted no dashboard for this area, and gave no reason."]
+
+
 def test_a_refused_draft_is_repaired_in_the_same_run(desk, faux):
     """The area names no limit, so the draft's limit of 12 is refused; the model repairs it."""
     from pramanyx.dashboards.ask import draft_for_area

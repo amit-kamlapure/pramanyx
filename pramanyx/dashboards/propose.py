@@ -425,7 +425,9 @@ def outline(spec: dict, titles: dict[str, str], new_ids: set[str],
             return {**line, "title": static_title(els[c]), "new": False, "tone": "", "static": "image"}
         # A piece bound to the ontology names no card. Read as one, every edit to Late dispatch raised
         # KeyError('card') here, after it had passed every check (2026-10-09).
-        if kind in PIECES:
+        # So is anything else a section can hold that is not a card: the Period, read as one, stopped every edit of a
+        # dashboard that places it (2026-11-19).
+        if kind in PIECES or "card" not in props:
             return {**line, "title": piece_title(kind, props), "new": False, "tone": "", "static": "piece"}
         return {**line, "title": titles.get(props["card"]) or props["card"], "new": props["card"] in new_ids,
                 "tone": props.get("tone") or ""}
