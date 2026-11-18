@@ -125,8 +125,11 @@ function Steps({ label, value, least, most, onStep }: { label: string; value: nu
 const Rule = () => <span aria-hidden="true" style={{ width: 1, height: 16, background: "var(--b2)", margin: "0 6px" }} />;
 
 export function DashboardBuilder({ spec, onChange, cardTitle, bar, add, words, aside, above, connectionId, schema,
-  onAddPiece, checks, cardSetup, cardChart, cardSql, cardReads, queryCards, children }: {
+  onAddPiece, checks, cardSetup, cardChart, cardSql, cardReads, queryCards, onUndo, onRedo, children }: {
   spec: DashboardSpec;
+  /** The edit bar's Undo and Redo, which the editing keys reach too (the Databricks study, R3, 2026-11-18). */
+  onUndo?: () => void;
+  onRedo?: () => void;
   /** Every change, as the next spec and the version's note. */
   onChange: (next: DashboardSpec, note: string) => void;
   cardTitle?: (id: string) => string | undefined;
@@ -235,6 +238,39 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, add, words, a
   const holds = (k: string) => (spec.elements[k]?.type === "Section" && !spec.elements[k].props.layout) || spec.elements[k]?.type === "Drawer";
   const target = selected && holds(selected) ? selected
     : selected ? Object.keys(spec.elements).find(k => holds(k) && spec.elements[k].children.includes(selected)) ?? null : null;
+
+  // The editing keys (the Databricks study, R3, 2026-11-18), each a door the builder already has: Cmd/Ctrl-Z and
+  // Shift-Cmd/Ctrl-Z (or Ctrl-Y) undo and redo; Delete or Backspace takes the chosen element off, as Take off does, and
+  // an undo puts it back; Cmd/Ctrl-D duplicates it; Escape lets it go. Never while a person types in a field.
+  const keys = useRef({ spec, selected, el, onUndo, onRedo, apply, setSelected, setWire });
+  keys.current = { spec, selected, el, onUndo, onRedo, apply, setSelected, setWire };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const at = e.target as HTMLElement | null;
+      if (e.defaultPrevented || (at && (at.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(at.tagName)))) return;
+      const k = keys.current;
+      const mod = e.metaKey || e.ctrlKey;
+      const key = e.key.toLowerCase();
+      if (mod && !e.altKey && ((key === "z" && e.shiftKey) || (key === "y" && e.ctrlKey && !e.metaKey))) {
+        if (k.onRedo) { e.preventDefault(); k.onRedo(); }
+      } else if (mod && !e.altKey && key === "z") {
+        if (k.onUndo) { e.preventDefault(); k.onUndo(); }
+      } else if (mod && !e.altKey && !e.shiftKey && key === "d") {
+        if (!k.selected || k.el?.type === "ObjectFilters" || k.el?.type === "Drawer") return;
+        e.preventDefault();
+        const d = duplicate(k.spec, k.selected);
+        if (d.key) { k.apply(d.spec, "duplicated by hand"); k.setSelected(d.key); }
+      } else if (!mod && !e.altKey && (e.key === "Delete" || e.key === "Backspace")) {
+        if (!k.selected) return;
+        e.preventDefault();
+        k.apply(takeOffAll(k.spec, k.selected), "taken off by hand");
+      } else if (e.key === "Escape" && !mod) {
+        if (k.selected) { k.setSelected(null); k.setWire(null); }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   return (
     <div data-testid="dashboard-builder" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>

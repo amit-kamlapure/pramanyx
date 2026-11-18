@@ -51,10 +51,12 @@ function objectDashboard(): DashboardSpec {
 function build(spec: DashboardSpec, room: Record<string, { w: number; h: number }> = {}) {
   const onChange = vi.fn();
   const step = vi.fn();
+  const onUndo = vi.fn();
+  const onRedo = vi.fn();
   const seen: { selected: string | null }[] = [];
   const handle: DashboardHandle = { room: key => room[key] ?? null, step };
   const view = render(
-    <DashboardBuilder spec={spec} onChange={onChange} connectionId="thelook" schema="thelook"
+    <DashboardBuilder spec={spec} onChange={onChange} connectionId="thelook" schema="thelook" onUndo={onUndo} onRedo={onRedo}
       bar={<EditBar picker={<span>Orders</span>} saved="saved 21:42 · version 7" canUndo canRedo={false}
         onUndo={vi.fn()} onRedo={vi.fn()} onDone={vi.fn()} actions={null} />}>
       {({ selected, handle: h }) => {
@@ -65,7 +67,7 @@ function build(spec: DashboardSpec, room: Record<string, { w: number; h: number 
     </DashboardBuilder>,
   );
   const line = (key: string) => screen.getAllByTestId("builder-line").find(b => b.dataset.key === key)!;
-  return { onChange, step, seen, line, view };
+  return { onChange, step, seen, line, view, onUndo, onRedo };
 }
 
 beforeEach(() => { toasts.error.mockReset(); toasts.success.mockReset(); });
@@ -141,6 +143,41 @@ describe("the bar above the dashboard", () => {
     expect(next.elements["sec-2"]).toBeUndefined();
     expect(next.elements.note).toBeUndefined();
     expect(note).toBe("taken off by hand");
+  });
+
+  it("answers the editing keys: undo, redo, Delete takes off, Cmd-D duplicates, Escape lets go (2026-11-18)", () => {
+    const { line, onChange, onUndo, onRedo, seen } = build(objectDashboard());
+    fireEvent.keyDown(window, { key: "z", metaKey: true });
+    expect(onUndo).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(window, { key: "Z", metaKey: true, shiftKey: true });
+    fireEvent.keyDown(window, { key: "y", ctrlKey: true });
+    expect(onRedo).toHaveBeenCalledTimes(2);
+    fireEvent.keyDown(window, { key: "Delete" });
+    expect(onChange).not.toHaveBeenCalled();                 // nothing chosen, nothing taken off
+    fireEvent.click(line("sec-2"));
+    fireEvent.keyDown(window, { key: "d", ctrlKey: true });
+    expect(onChange).toHaveBeenLastCalledWith(expect.any(Object), "duplicated by hand");
+    // the copy is chosen once the dashboard holds it; here the spec is not handed back, so choose the line again
+    fireEvent.click(line("sec-2"));
+    fireEvent.keyDown(window, { key: "Backspace" });
+    expect(onChange).toHaveBeenLastCalledWith(expect.any(Object), "taken off by hand");
+    expect(onChange.mock.calls.at(-1)?.[0].elements["sec-2"]).toBeUndefined();
+    fireEvent.click(line("sec-2"));
+    expect(seen.at(-1)?.selected).toBe("sec-2");
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(seen.at(-1)?.selected).toBeNull();
+  });
+
+  it("leaves the keys to a field a person is typing in", () => {
+    const { line, onChange, onUndo } = build(objectDashboard());
+    fireEvent.click(line("sec-2"));
+    const field = document.createElement("input");
+    document.body.appendChild(field);
+    fireEvent.keyDown(field, { key: "Backspace" });
+    fireEvent.keyDown(field, { key: "z", metaKey: true });
+    expect(onChange).not.toHaveBeenCalled();
+    expect(onUndo).not.toHaveBeenCalled();
+    field.remove();
   });
 
   it("says a change the rules refuse, and hands nothing on", () => {

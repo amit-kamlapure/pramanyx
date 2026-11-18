@@ -1194,6 +1194,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
           onAddPiece={section => setAdding({ section })} checks={checks}
           cardReads={id => valuesRead(data.cards.find(c => c.id === id)?.sql)}
           queryCards={placedQueries(current, data.cards)}
+          onUndo={stacks.past.length > 0 ? undo : undefined} onRedo={stacks.future.length > 0 ? redo : undefined}
           bar={(
             <EditBar saved={saved} canUndo={stacks.past.length > 0} canRedo={stacks.future.length > 0} onUndo={undo} onRedo={redo} onDone={done}
               picker={(
