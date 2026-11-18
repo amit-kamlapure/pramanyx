@@ -855,6 +855,12 @@ export function checkDashboardSpec(spec: unknown): DashboardCheck {
 }
 
 /** The tab a spec opens on: the one it seeds, else the first its Tabs holds, else none. */
+/** The tab to keep open when a dashboard's spec changes: the one open, while the spec still holds a tab of that name. */
+export function tabStillThere(spec: unknown, open: unknown): string | null {
+  if (typeof open !== "string" || !isObj(spec) || !isObj(spec.elements)) return null;
+  return Object.values(spec.elements).some(el => isObj(el) && el.type === "Tab" && isObj(el.props) && el.props.name === open) ? open : null;
+}
+
 export function openingTab(spec: unknown): string | null {
   if (!isObj(spec) || !isObj(spec.elements)) return null;
   const seeded = isObj(spec.state) ? spec.state.tab : undefined;

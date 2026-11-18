@@ -118,15 +118,31 @@ describe("the premise spec, drawn", () => {
     expect(screen.getByRole("tab", { name: "Watches" })).toHaveAttribute("aria-selected", "true");
   });
 
-  it("opens on its own first tab again when the spec itself changes", () => {
-    const { rerender } = render(<ComposedDashboard spec={premise()} cards={CARDS} host={host("final", "within")} doors={DOORS} />);
+  it("keeps the tab being worked on when an edit changes the spec", () => {
+    const { rerender } = render(<ComposedDashboard spec={premise()} cards={CARDS} host={host("final", "within")} doors={DOORS} dashboardId="d1" />);
     openTab(screen.getByRole("tab", { name: "Watches" }));
 
     const edited = premise();
     edited.elements["sec-headline"].props.title = "At a glance";
-    rerender(<ComposedDashboard spec={edited} cards={CARDS} host={host("final", "within")} doors={DOORS} />);
-    expect(screen.getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true");
+    rerender(<ComposedDashboard spec={edited} cards={CARDS} host={host("final", "within")} doors={DOORS} dashboardId="d1" />);
+    expect(screen.getByRole("tab", { name: "Watches" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("Limits")).toBeInTheDocument();
+    openTab(screen.getByRole("tab", { name: "Overview" }));
     expect(screen.getByText("At a glance")).toBeInTheDocument();
+  });
+
+  it("opens on the first tab when the tab open is gone, and another dashboard on its own", () => {
+    const { rerender } = render(<ComposedDashboard spec={premise()} cards={CARDS} host={host("final", "within")} doors={DOORS} dashboardId="d1" />);
+    openTab(screen.getByRole("tab", { name: "Watches" }));
+    rerender(<ComposedDashboard spec={premise()} cards={CARDS} host={host("final", "within")} doors={DOORS} dashboardId="d2" />);
+    expect(screen.getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true");
+
+    openTab(screen.getByRole("tab", { name: "Watches" }));
+    const renamed = premise();
+    const tabs = Object.values(renamed.elements) as { type: string; props: { label?: string; name?: string } }[];
+    tabs.find(e => e.type === "Tab" && e.props.label === "Watches")!.props.name = "limits";
+    rerender(<ComposedDashboard spec={renamed} cards={CARDS} host={host("final", "within")} doors={DOORS} dashboardId="d2" />);
+    expect(screen.getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true");
   });
 
   it("says a section is waiting, rather than showing an empty tab", () => {

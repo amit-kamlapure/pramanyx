@@ -802,7 +802,7 @@ export function ObjectTablePiece({ elementKey, entity, segment, set, setFrom, ch
                     // the key in mono; every other cell written as its column's type reads (a moment, a number)
                     const type = i > 0 ? page.columns[i - 1]?.type : "";
                     const col = i > 0 ? page.columns[i - 1] : undefined;
-                    const text = cellText(v, type, undefined, col?.unit ?? "", col?.role ?? "");
+                    const text = cellText(v, type, undefined, col?.unit ?? "", col?.role ?? "", col?.name ?? "");
                     const num = i > 0 && isNumericType(type);
                     return (
                       <td key={page.names[i] ?? i} className={i === 0 ? "aug-mono" : undefined} style={{
@@ -905,7 +905,7 @@ export function ObjectDetailPiece({ follows, children }: { follows: string; chil
             <dd className="aug-fs-sm" data-testid={p.overlay ? "object-detail-edit" : undefined}
               style={{ margin: 0, overflowWrap: "anywhere", color: p.value == null ? "var(--t3)" : "var(--t1)" }}>
               {/* a value written as the table writes it: a moment as "Sep 28, 00:24", money as $25.00 */}
-              {p.withheld ? <Masked why={p.withheld} /> : cellText(p.value, p.data_type || p.semantic_type, undefined, p.unit ?? "", p.semantic_type)}
+              {p.withheld ? <Masked why={p.withheld} /> : cellText(p.value, p.data_type || p.semantic_type, undefined, p.unit ?? "", p.semantic_type, p.name)}
               {p.overlay && (
                 <span className="aug-fs-xs" style={{ display: "block", color: "var(--t3)" }}>
                   {p.overlay.provenance}{p.overlay.note ? ` — ${p.overlay.note}` : ""}

@@ -70,6 +70,12 @@ describe("a table cell", () => {
   it("writes a number with separators and at most two decimals, and nothing as a dash", () => {
     expect(cellText("32.990001678466", "FLOAT64", now)).toBe("32.99");
     expect(cellText("125080", "INT64", now)).toBe("125,080");
+    // a period is a label, written as it is; an amount named for a year is still an amount
+    expect(cellText(2020, "BIGINT", now, "", "", "release_year")).toBe("2020");
+    expect(cellText("2026", "INT64", now, "", "", "fiscal_year")).toBe("2026");
+    expect(cellText(2020, "BIGINT", now, "", "", "year")).toBe("2020");
+    expect(cellText(12345, "BIGINT", now, "", "", "last_year")).toBe("12,345");
+    expect(cellText(12345, "BIGINT", now, "", "", "orders")).toBe("12,345");
     expect(cellText(null, "FLOAT64", now)).toBe("—");
     expect(cellText("Shipped", "STRING", now)).toBe("Shipped");
   });

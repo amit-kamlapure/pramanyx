@@ -24,6 +24,10 @@ describe("how a sheet's values are shown", () => {
   it("shows money in the column's currency, and empty as empty — never as zero", () => {
     expect(showValue("118.70", col({ kind: "money", currency: "BRL" }))).toBe("R$118.70");
     expect(showValue("118.70", col({ kind: "money", currency: "" }))).toBe("118.70");
+    // a period's whole number is a label; every other number keeps its separators
+    expect(showValue(2020, col({ kind: "number", name: "release_year" }))).toBe("2020");
+    expect(showValue(2020, col({ kind: "number", name: "titles" }))).toBe("2,020");
+    expect(showValue(2020, col({ kind: "number", name: "last_year" }))).toBe("2,020");
     expect(showValue(null, col({ kind: "money", currency: "BRL" }))).toBe("");
     expect(showValue(99441, col({ kind: "number", integer: true }))).toBe("99,441");
     expect(showValue(true, col({ kind: "yesno" }))).toBe("Yes");

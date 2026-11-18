@@ -5,6 +5,7 @@
  *
  * A reader's filters are their own (the user, 2026-10-10): held per dashboard in their browser, never in the spec.
  */
+import { isPeriodColumn } from "@/components/charts/columnRoles";
 import { columnTypeKind, compactNumber, formatCount, formatMetricValue, formatMoney } from "@/lib/format";
 import { currencySymbol } from "@/lib/orgSettings";
 
@@ -161,9 +162,10 @@ export function figureText(value: number | null | undefined, agg: string, format
 }
 
 /** A table cell as a reader reads it, by its column's SQL type: a moment as "Oct 10, 00:32" (with its year when it is
- *  not this year's — "May 16, 2024"), a number with separators and at most two decimals, a flag as yes or no, nothing
- *  as "—". Moments are read and written in UTC, as the warehouse holds them. */
-export function cellText(v: unknown, type: string | null | undefined, now: Date = new Date(), unit = "", role = ""): string {
+ *  not this year's — "May 16, 2024"), a number with separators and at most two decimals, a period's whole number as it
+ *  is (`name`: a `release_year` of 2020, never "2,020"), a flag as yes or no, nothing as "—". Moments are read and
+ *  written in UTC, as the warehouse holds them. */
+export function cellText(v: unknown, type: string | null | undefined, now: Date = new Date(), unit = "", role = "", name = ""): string {
   if (v === null || v === undefined || v === "" || v === "NULL") return "—";
   if (v === true || v === "true" || v === "True") return "yes";
   if (v === false || v === "false" || v === "False") return "no";
@@ -175,6 +177,7 @@ export function cellText(v: unknown, type: string | null | undefined, now: Date 
     if (Number.isNaN(n)) return String(v);
     // a currency the ontology declares (ISO 4217): $25.00, never 25
     if (/^[A-Z]{3}$/.test(unit)) return formatMoney(n, currencySymbol(unit));
+    if (Number.isInteger(n) && isPeriodColumn(name)) return String(n);
     return n.toLocaleString("en-US", { maximumFractionDigits: Number.isInteger(n) ? 0 : 2 });
   }
   if (kind === "date" || kind === "time") {

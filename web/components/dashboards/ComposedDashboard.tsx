@@ -67,7 +67,7 @@ import {
 } from "@/lib/dashboards/catalog";
 import { boxOf, clampBox, type Box } from "@/lib/dashboards/edit";
 import { stateModel, type DashboardHostState } from "@/lib/dashboards/hostState";
-import { checkDashboardSpec, openingTab } from "@/lib/dashboards/rules";
+import { checkDashboardSpec, openingTab, tabStillThere } from "@/lib/dashboards/rules";
 import type { WireSpec } from "@/lib/dashboards/sets";
 import { valuesFor, valuesRead, type ValuesSent } from "@/lib/dashboards/values";
 import { chosenOn, focusFor, focusWords, traceAndChoose, type DashboardFocus } from "@/lib/dashboards/focus";
@@ -1474,12 +1474,15 @@ export function ComposedDashboard({ spec, cards, host, doors, sym = "$", images 
   const check = useMemo(() => checkDashboardSpec(spec), [written]);
 
   // One store per spec. The host's tree is laid over it on every change, so a spec can seed
-  // the open tab and nothing else, and a reader's choice of tab survives a refresh of the cards.
-  const store = useMemo(
-    () => createStateStore(stateModel(openingTab(spec), host)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- the host is laid over below, not at creation
-    [written],
-  );
+  // the open tab and nothing else, and a reader's choice of tab survives a refresh of the cards. An edit to the same
+  // dashboard keeps the tab being worked on, while it is still there; another dashboard opens on its own.
+  const [held, setHeld] = useState(() => ({ written, dashboardId, store: createStateStore(stateModel(openingTab(spec), host)) }));
+  let store = held.store;
+  if (held.written !== written || held.dashboardId !== dashboardId) {
+    const open = held.dashboardId === dashboardId ? tabStillThere(spec, held.store.get("/tab")) : null;
+    store = createStateStore(stateModel(open ?? openingTab(spec), host));
+    setHeld({ written, dashboardId, store });
+  }
   useEffect(() => {
     store.update({ "/range": { status: host.range.status }, "/cards": host.cards });
   }, [store, host]);

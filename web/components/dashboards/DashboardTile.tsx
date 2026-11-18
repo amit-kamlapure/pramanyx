@@ -539,7 +539,7 @@ export function QueryRows({ shaped, height }: { shaped: Extract<QueryShaped, { a
             <tr key={from + i}>{r.map((v, j) => (
               <td key={j} style={{ padding: "4px 6px", borderBottom: "1px solid var(--b1)", whiteSpace: "nowrap", textAlign: right(j) ? "right" : "left",
                 ...cellLook(v, looks?.[names[j]], ranges[names[j]]) }}>
-                {cellText(v, shaped.columns[j]?.type)}
+                {cellText(v, shaped.columns[j]?.type, undefined, "", "", names[j])}
               </td>
             ))}</tr>
           ))}</tbody>
