@@ -2862,6 +2862,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/canvases/suggest-tables": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Suggest Canvas Tables
+         * @description ⚑ Spends one model call, when a person asks. The tables that fit what they say a canvas should do, for them to check
+         *     before anything is made. A name the page does not offer is never proposed.
+         */
+        post: operations["suggest_canvas_tables_canvases_suggest_tables_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/canvases/{canvas_id}": {
         parameters: {
             query?: never;
@@ -16521,6 +16542,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/receipt/{receipt_id}/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Receipt Sources
+         * @description What one answer stood on, for a person to open beside it: its metrics, Definitions and the objects it read. The same
+         *     fail-closed org check as the receipt: an id outside the caller's org is 404, as one that does not exist.
+         */
+        get: operations["get_receipt_sources_receipt__receipt_id__sources_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/receipt/{receipt_id}/trace": {
         parameters: {
             query?: never;
@@ -25523,6 +25565,15 @@ export interface components {
              */
             tables: string[];
         };
+        /** SuggestTablesRequest */
+        SuggestTablesRequest: {
+            /** Connection Id */
+            connection_id: string;
+            /** Description */
+            description: string;
+            /** Tables */
+            tables?: string[];
+        };
         /** SuggestionDecision */
         SuggestionDecision: {
             /** Accept */
@@ -32983,6 +33034,39 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["SuggestNameRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    suggest_canvas_tables_canvases_suggest_tables_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SuggestTablesRequest"];
             };
         };
         responses: {
@@ -55818,6 +55902,39 @@ export interface operations {
         };
     };
     get_receipt_receipt__receipt_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                receipt_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_receipt_sources_receipt__receipt_id__sources_get: {
         parameters: {
             query?: never;
             header?: never;

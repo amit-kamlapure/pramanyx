@@ -434,6 +434,20 @@ export async function cancelInvestigation(invId: string): Promise<void> {
   await fetch(`${getApiBase()}/investigations/${encodeURIComponent(invId)}/cancel`, { method: "POST" });
 }
 
+/** The deep analysis a turn can be asked to answer early: one still running, and not waiting on the person's own choice. */
+export function answerableRun(turn: {
+  status: string; mode: string; investigationId?: string | null; runHandle?: string | null; planPending?: unknown; clarifyPending?: unknown;
+}): string | null {
+  if (turn.status !== "loading" || turn.mode !== "investigate" || turn.planPending || turn.clarifyPending) return null;
+  return turn.investigationId ?? turn.runHandle ?? null;
+}
+
+/** Answer now: a running deep analysis stops where it is and answers from what it has found. Says why when it cannot. */
+export async function answerRunNow(runId: string): Promise<void> {
+  const res = await fetch(`${getApiBase()}/investigations/${encodeURIComponent(runId)}/answer-now`, { method: "POST" });
+  if (!res.ok) throw new Error(fastApiError(await res.json().catch(() => ({})), "It could not be asked to answer now."));
+}
+
 /** FL-1b — cancel the deep run behind a still-loading turn, if it has one.
  *  A deep run executes as a KERNEL JOB (K1): aborting the HTTP stream stops the
  *  watching, not the work, so stop/interrupt must also cancel the job. Lives
@@ -441,9 +455,9 @@ export async function cancelInvestigation(invId: string): Promise<void> {
  *  frozen `investigation` spelling (the vocabulary ratchet's rule); best-effort,
  *  like the reject path above. */
 export function cancelActiveDeepRun(
-  turn: { investigationId?: string | null } | null | undefined,
+  turn: { investigationId?: string | null; runHandle?: string | null } | null | undefined,
 ): void {
-  const id = turn?.investigationId;
+  const id = turn?.investigationId ?? turn?.runHandle;
   if (id) void cancelInvestigation(id).catch(() => { /* best-effort */ });
 }
 
@@ -4942,6 +4956,21 @@ export async function getColumnDistinct(
 }
 
 /** LLM-inferred Canvas name + description from the scoped tables' schema. */
+/** The tables that fit what a person says a canvas should do, for them to check. `said` says why when there are none. */
+export async function suggestCanvasTables(
+  connectionId: string,
+  description: string,
+  tables: string[],
+): Promise<{ tables: string[]; why: string; said: string }> {
+  const res = await fetch(`${getApiBase()}/canvases/suggest-tables`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ connection_id: connectionId, description, tables }),
+  });
+  if (!res.ok) throw new Error(fastApiError(await res.json().catch(() => ({})), "The tables could not be proposed"));
+  return res.json();
+}
+
 export async function suggestCanvasName(
   connectionId: string,
   tables: string[],
@@ -9813,6 +9842,21 @@ export interface AnswerTrace {
   edges: TracedEdge[];
   counts?: { nodes: number; edges: number; unresolved: number };
   has_unresolved?: boolean;
+}
+
+/** What one answer stood on, for a person to open beside it. */
+export interface ReceiptSources {
+  receipt_id: string;
+  connection_id: string | null;
+  metrics: { name: string; departed: boolean }[];
+  definitions: string[];
+  objects: string[];
+}
+
+export async function getReceiptSources(receiptId: string): Promise<ReceiptSources> {
+  const res = await fetch(`${getApiBase()}/receipt/${encodeURIComponent(receiptId)}/sources`);
+  if (!res.ok) throw new Error(fastApiError(await res.json().catch(() => ({})), "What this answer stood on could not be read"));
+  return res.json();
 }
 
 /** The knowledge-graph subgraph one answer stands on. A separate call from the receipt:

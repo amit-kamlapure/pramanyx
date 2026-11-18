@@ -6,27 +6,19 @@
  * covers it, except on a screen too narrow for both.
  */
 import dynamic from "next/dynamic";
-import { useEffect, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 
 import { ChangeThread, type ChangeDoor } from "@/components/dashboards/ChangeThread";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Segmented } from "@/components/ui/segmented";
 import { Loading } from "@/components/ui/states";
+import { useNarrowScreen } from "@/lib/useNarrowScreen";
 import { endAskBeside, freshAskBeside, hideAskBeside, holdAskBeside, showAskBeside, useAskBeside, type BesideView } from "@/lib/askSubject";
 
 const ChatPanel = dynamic(() => import("@/components/ChatPanel").then(m => ({ default: m.ChatPanel })), {
   ssr: false, loading: () => <Loading what="the conversation" style={{ padding: 16 }} />,
 });
-
-const NARROW = "(max-width: 900px)";
-function subscribeNarrow(listener: () => void) {
-  if (typeof window === "undefined" || !window.matchMedia) return () => {};
-  const query = window.matchMedia(NARROW);
-  query.addEventListener("change", listener);
-  return () => query.removeEventListener("change", listener);
-}
-const isNarrow = () => (typeof window !== "undefined" && !!window.matchMedia && window.matchMedia(NARROW).matches);
 
 const VIEWS: { value: BesideView; label: string }[] = [{ value: "ask", label: "Ask" }, { value: "change", label: "Change" }];
 
@@ -40,7 +32,7 @@ export function AskBeside({ connectionId, dashboardKey, title, change, children 
   children: ReactNode;
 }) {
   const { open, started, round, view } = useAskBeside();
-  const narrow = useSyncExternalStore(subscribeNarrow, isNarrow, () => false);
+  const narrow = useNarrowScreen();
   useEffect(() => holdAskBeside(), []);
   useEffect(() => { endAskBeside(); }, [dashboardKey]);
   const showing: BesideView = view === "change" && change ? "change" : "ask";

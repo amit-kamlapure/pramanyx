@@ -565,3 +565,19 @@ describe("the thinking row names a step, never its id", () => {
     expect(text).toBe("Analyzing…");
   });
 });
+
+describe("a deep analysis still running", () => {
+  it("knows its own run from the stream's first frame, so it can be answered early", () => {
+    const message = { id: "m1", role: "assistant", parts: [], metadata: { run: "run7" } } as unknown as PramanyxUIMessage;
+    expect(projectTurn("Why did returns rise?", message, { streaming: true }).runHandle).toBe("run7");
+  });
+
+  it("carries what a report answered early says of itself", async () => {
+    const message = await messageFrom([
+      { event: "start", data: {} },
+      { event: "answer_report", data: { answer_report: { headline: "Returns rose" }, answered_early: "Answered now." } },
+      { event: "done", data: {} },
+    ]);
+    expect(projectTurn("q", message).answeredEarly).toBe("Answered now.");
+  });
+});

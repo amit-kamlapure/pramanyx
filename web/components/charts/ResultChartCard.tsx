@@ -29,6 +29,7 @@ import { Chart, type ChartCustom } from "@/components/Chart";
 import type { ChartOptions } from "@/components/charts/chartCustom";
 import { SqlResultTable } from "@/components/AugTable";
 import { PivotTable } from "@/components/PivotTable";
+import { AnswerMap } from "@/components/charts/geo/AnswerMap";
 import { classifyColumns, availableChartTypes, inferChartType, ALL_CHART_TYPES, CHART_TYPE_LABEL, TYPE_TO_HINT, HINT_TO_TYPE, type ChartType } from "@/components/charts/chartTypeInference";
 import { isUngraphableGrid, offeredMeasures } from "@/components/charts/columnRoles";
 import type { ExhibitSpec, ExhibitRefLine, ExhibitColor } from "@/components/charts/exhibit";
@@ -176,6 +177,8 @@ interface Props {
   onConfigChange?: (config: VizConfig) => void;
   /** The chart as it is drawn, for whoever offers to save it as a picture. */
   onChartReady?: (chart: ChartInstance) => void;
+  /** A map answer is drawn as a map a person can pan and zoom, on the organisation's base map. Left out, as a still picture. */
+  liveMap?: boolean;
   /** Fired with what the card is showing — on mount and on every switch — so a caller that offers its
    *  own "Table" disclosure can withhold it while the card already IS a table (2026-11-06). */
   onViewChange?: (view: "chart" | "table" | "pivot") => void;
@@ -185,6 +188,7 @@ export function ResultChartCard({
   columns, rows, title, chartType, chartConfig, custom, exhibit: exhibitProp,
   columnUnits, defaultShowLabels, heightScale, fillHeight, onSelect, onPick, editorKey,
   config, onConfigChange, onViewChange, onChartReady,
+  liveMap = false,
 }: Props) {
   // Saved display choices seed the controls ONCE. A lazy useState (not a ref) because this is
   // read during render: it captures the first value and never changes, so a parent re-render —
@@ -462,6 +466,9 @@ export function ResultChartCard({
     : (HINT_TO_TYPE[(chartType ?? "").toLowerCase()] ?? inferChartType(columns, rows)?.type ?? "");
   const shownType = resolvedType && offeredTypes.includes(resolvedType as ChartType) ? (resolvedType as ChartType) : (offeredTypes[0] ?? "");
 
+  // A map is moved and read in place: its picture cannot be saved the way a chart's is.
+  const isMapAnswer = liveMap && (resolvedType === "choropleth" || resolvedType === "point-map");
+
   // The control model handed to the side panel. Dropdowns show the RESOLVED field/type/agg the
   // chart uses (not the "Auto" sentinel); the *Sel state stays null until the user actually picks,
   // so an untouched chart keeps the engine's own inference.
@@ -527,29 +534,12 @@ export function ResultChartCard({
     // Annotation (reference lines)
     refLines: userRefLines.map(l => ({ label: l.label, value: l.value })),
     addRefLine, addAverageLine, removeRefLine, measureLabel: cleanLabel(metric),
-    onDownload: view === "chart" ? handleDownload : null,
+    onDownload: view === "chart" && !isMapAnswer ? handleDownload : null,
   };
 
-  return (
-    <div className="group/viz relative">
-      {/* Edit visualization — the single hover affordance; every control lives in the panel. */}
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        onClick={() => openVizEditor(cardId)}
-        title="Edit visualization"
-        className="absolute -top-1 right-0 z-10 opacity-0 group-hover/viz:opacity-100 transition-opacity"
-        style={editorOpen ? { color: "var(--accent)", opacity: 1 } : { color: "var(--t3)" }}
-      >
-        <Icon name="edit" size={13} />
-      </Button>
-
-      {/* Body — clean chart / table / pivot */}
-      {view === "pivot" ? (
-        <PivotTable columns={columns} rows={rows} />
-      ) : view === "table" ? (
-        <SqlResultTable columns={effData.columns} rows={effData.rows} maxHeight={fillHeight && fillHeight > 0 ? fillHeight : 340} />
-      ) : (
+  // A map the person can move, drawn from the answer's own rows; the still chart stands in where the rows have no honest map.
+  const mapKind = liveMap && view === "chart" ? (resolvedType === "choropleth" ? "shapes" : resolvedType === "point-map" ? "points" : null) : null;
+  const drawn = (
         <Chart
           columns={effData.columns}
           rows={effData.rows}
@@ -574,7 +564,30 @@ export function ResultChartCard({
           } : undefined}
           onInstanceReady={(inst) => { instRef.current = inst; onChartReady?.(inst); }}
         />
-      )}
+  );
+
+  return (
+    <div className="group/viz relative">
+      {/* Edit visualization — the single hover affordance; every control lives in the panel. */}
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        onClick={() => openVizEditor(cardId)}
+        title="Edit visualization"
+        className="absolute -top-1 right-0 z-10 opacity-0 group-hover/viz:opacity-100 transition-opacity"
+        style={editorOpen ? { color: "var(--accent)", opacity: 1 } : { color: "var(--t3)" }}
+      >
+        <Icon name="edit" size={13} />
+      </Button>
+
+      {/* Body — clean chart / table / pivot */}
+      {view === "pivot" ? (
+        <PivotTable columns={columns} rows={rows} />
+      ) : view === "table" ? (
+        <SqlResultTable columns={effData.columns} rows={effData.rows} maxHeight={fillHeight && fillHeight > 0 ? fillHeight : 340} />
+      ) : mapKind ? (
+        <AnswerMap columns={columns} rows={rows} kind={mapKind} columnUnits={columnUnits} fallback={drawn} />
+      ) : drawn}
 
       {editorOpen && typeof document !== "undefined" &&
         createPortal(<VizEditorPanel model={model} docked={!!dock} onClose={() => closeVizEditor(cardId)} />, dock ?? document.body)}

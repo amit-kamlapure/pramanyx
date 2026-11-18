@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { getConnections, listUserAgents, recordOverviewDrill, cancelInvestigation, cancelActiveDeepRun, type UserAgent } from "@/lib/api";
+import { answerableRun, getConnections, listUserAgents, recordOverviewDrill, cancelInvestigation, cancelActiveDeepRun, type UserAgent } from "@/lib/api";
 import { doorFor, isPlainSend } from "@/lib/chatDoors";
 import { uploadAttachment, type AttachmentResult } from "@/lib/attachments";
 import { projectThread, newSessionId, type PramanyxUIMessage, type ChatTurn } from "@/lib/chatTurn";
@@ -23,6 +23,9 @@ function askedByWords(askedBy: string | undefined, people: People | null): strin
 }
 import { ErrorBoundary } from "./ErrorBoundary";
 import { WhyThisNumber } from "./WhyThisNumber";
+import { AnswerNow } from "@/components/chat/AnswerNow";
+import { AnswerSources, SourceBeside } from "@/components/chat/AnswerSources";
+import type { AnswerSource } from "@/lib/answerSources";
 
 import { getApiBase } from "@/lib/config";
 import { FeedbackPrompt } from "@/components/FeedbackPrompt";
@@ -722,6 +725,8 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
   const [showDebug, setShowDebug]   = useState(false);
   const [feedbackDone, setFeedbackDone] = useState<Set<string>>(new Set());
   const [sourcePanel, setSourcePanel] = useState<SourcePanelData | null>(null);
+  // A Data Canvas: the page of what an answer stood on, beside the conversation. One panel at a time on that side.
+  const [sourcePage, setSourcePage] = useState<AnswerSource | null>(null);
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   // CA-5 — attachments land NOW, not at send: a file whose upload is deferred to the
   // next question can fail silently after the question has already gone. `pending` is
@@ -1280,7 +1285,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                         // so this needs no new store.
                         onFollowUp={(q) => handleSend(q, undefined, { purpose: "followup" })}
                         onRunFresh={(q) => handleSend(q, "investigate", { skipCache: true })}
-                        onShowSource={setSourcePanel}
+                        onShowSource={data => { setSourcePage(null); setSourcePanel(data); }}
                         onDeeper={(q, insightId) => sendQuestion(q, "investigate", { insightId: insightId ?? undefined, deep: true })}
                         onExploreFact={(q, o) => { recordOverviewDrill(connectionId, { canvasId: canvasId ?? undefined, lens: o.lens, table: o.table }); sendQuestion(q, "investigate", { seedSql: o.seedSql, seedContext: o.seedContext, deep: true }); }}
                         onApprovePlan={(invId, keep) => resumePlan(invId, keep)}
@@ -1300,6 +1305,10 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                         )}
                       />
                     </ErrorBoundary>
+                    {answerableRun(turn) && <AnswerNow key={answerableRun(turn)} runId={answerableRun(turn) as string} />}
+                    {turn.answeredEarly && (
+                      <p data-testid="answered-early" className="aug-fs-sm" style={{ margin: "6px 0 0", color: "var(--t2)" }}>{turn.answeredEarly}</p>
+                    )}
                     {turn.clarify && (
                       <ClarifyCard
                         turn={turn}
@@ -1323,6 +1332,10 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                     {/* The ONE feedback control on an answer (2026-10-22): a second thumbs pair
                         used to sit inside the answer's "Methodology & details" and post the same
                         verdict for the same receipt. It lives here, at the foot, once. */}
+                    {canvasId && turn.status === "done" && turn.publicReceiptId && (
+                      <AnswerSources receiptId={turn.publicReceiptId} connectionId={connectionId}
+                        onOpen={source => { setSourcePanel(null); setSourcePage(source); }} />
+                    )}
                     {turn.status === "done" && turn.receiptId && (
                       <AnswerFeedback turn={turn} connectionId={connectionId} />
                     )}
@@ -1416,6 +1429,8 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
           </div>
 
           {/* Agent trace now renders inline within each assistant turn (ChatMessage). */}
+
+          {sourcePage && <SourceBeside source={sourcePage} onClose={() => setSourcePage(null)} />}
 
           {/* ── Source panel drawer (right side, pushes chat left) ── */}
           {sourcePanel && (

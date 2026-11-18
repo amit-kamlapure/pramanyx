@@ -324,6 +324,10 @@ export interface ChatTurn {
   investigationId: string | null;
   receiptId: string | null;
   publicReceiptId: string | null;
+  /** The run behind this turn, known from the stream's first frame, while its report has not come yet. */
+  runHandle: string | null;
+  /** What a report the person had answered early says of itself; null for one that ran its whole plan. */
+  answeredEarly: string | null;
 
   // Shared
   tablesUsed: string[];
@@ -387,7 +391,7 @@ export const EMPTY_TURN: Omit<ChatTurn, "id" | "question" | "mode"> = {
   overviewReport: null,
   recheck: null,
   queriesExecuted: [], latestScore: null,
-  hypotheses: [], investigationId: null, receiptId: null, publicReceiptId: null,
+  hypotheses: [], investigationId: null, receiptId: null, publicReceiptId: null, runHandle: null, answeredEarly: null,
   tablesUsed: [], contextManifest: null, planPending: null, clarifyPending: null, followups: [], analysis: null, error: null, errorDetail: null,
   startedAt: 0, elapsedMs: null,
   fromCache: false, cachedQuestion: null,
@@ -713,6 +717,7 @@ function projectDeepReport(t: ChatTurn, d: Payload) {
 }
 
 function projectCacheMeta(t: ChatTurn, d: Payload) {
+  if (typeof d.answered_early === "string") t.answeredEarly = d.answered_early;
   if (d.from_cache) {
     t.fromCache = true;
     t.cachedQuestion = (d.cached_question as string) ?? null;
@@ -909,6 +914,10 @@ export function projectTurn(
   }
 
   t.delegations = [...hops.values()];
+
+  // The run's handle from the stream's first frame: a report names it again, but a running turn has only this.
+  const handle = (message?.metadata as { run?: unknown } | undefined)?.run;
+  if (typeof handle === "string" && handle) t.runHandle = handle;
 
   const headlineText = channelText.get("headline") ?? "";
   const narrativeText = channelText.get("narrative") ?? "";
