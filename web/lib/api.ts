@@ -3625,18 +3625,19 @@ export async function getDashboardFromObject(connectionId: string, entity: strin
 }
 
 /** ⚑ Spends model calls. Draft a new dashboard for an area the person names. */
-/** Draft a dashboard, hearing each thing the platform does as it does it. Aborting stops the model at its next step. */
-export async function draftDashboard(connectionId: string, area: string, schema?: string,
-  live?: { hear?: (frame: DraftFrame) => void; signal?: AbortSignal }): Promise<DashboardDrafted> {
-  const res = await fetch(dashboardUrl("/dashboards/draft/stream", connectionId), {
+/** What a draft or a change is told as it runs. Aborting stops the model at its next step. */
+export interface DraftLive { hear?: (frame: DraftFrame) => void; signal?: AbortSignal }
+
+async function draftTold(url: string, body: unknown, refused: string, live?: DraftLive): Promise<DashboardDrafted> {
+  const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ area, schema_name: schema || null }),
+    body: JSON.stringify(body),
     signal: live?.signal,
   });
   if (!res.ok || !res.body) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(fastApiError(err, "Failed to draft the dashboard"));
+    throw new Error(fastApiError(err, refused));
   }
   let drafted: DashboardDrafted | null = null;
   let failed = "";
@@ -3648,6 +3649,18 @@ export async function draftDashboard(connectionId: string, area: string, schema?
   }
   if (!drafted) throw new Error(failed || "The draft was cut short. Nothing was kept.");
   return drafted;
+}
+
+/** Draft a dashboard, hearing each thing the platform does as it does it. */
+export function draftDashboard(connectionId: string, area: string, schema?: string, live?: DraftLive): Promise<DashboardDrafted> {
+  return draftTold(dashboardUrl("/dashboards/draft/stream", connectionId), { area, schema_name: schema || null },
+    "Failed to draft the dashboard", live);
+}
+
+/** Draft a change to a dashboard, hearing each thing the platform does. Nothing changes until the person allows it. */
+export function changeDashboardLive(connectionId: string, dashboardId: string, words: string, schema?: string, live?: DraftLive): Promise<DashboardDrafted> {
+  return draftTold(dashboardUrl(`/dashboards/${encodeURIComponent(dashboardId)}/ask/stream`, connectionId),
+    { words, schema_name: schema ?? null }, "The change could not be drafted", live);
 }
 
 /** Move a canvas's dashboard to the asker's Briefing. */

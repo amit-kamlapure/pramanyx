@@ -66,6 +66,8 @@ interface Props {
   /** PX-5 — arrive already talking to one agent (the agent surface's Chat door).
    *  Seeds the composer's agent picker; the person can still switch or clear it. */
   initialAgentId?: string;
+  /** Beside another page: the address stays that page's, and the connection's general suggestions are left out. */
+  beside?: boolean;
 }
 
 /** The modes a person can PICK in the composer. `auto` is deliberately absent: the
@@ -582,7 +584,7 @@ function AgentLandingBlock({ agent, connectionName }: { agent: UserAgent; connec
   );
 }
 
-export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQuestion, initialMode, initialInsightId, capabilities, initialAgentId }: Props) {
+export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQuestion, initialMode, initialInsightId, capabilities, initialAgentId, beside = false }: Props) {
   // Read during the first render, into a ref, because both this component and page.tsx's
   // URL-sync effect rewrite the query string — whichever ran first would erase the id
   // before the restore below could read it. A ref initializer is safe here specifically
@@ -591,10 +593,10 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
   // rendering to disagree with.
   const resumeIdRef = useRef<string | null>(null);
   if (resumeIdRef.current === null && typeof window !== "undefined") {
-    const fromUrl = _urlSessionUnclaimed
+    const fromUrl = _urlSessionUnclaimed && !beside
       ? new URLSearchParams(window.location.search).get("chat")
       : null;
-    _urlSessionUnclaimed = false;
+    if (!beside) _urlSessionUnclaimed = false;
     resumeIdRef.current = restoreSessionId || fromUrl || "";
   }
   const resumeId = resumeIdRef.current || null;
@@ -951,13 +953,13 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
   // each time, so this and page.tsx's tab/conn/layer sync can both write without either
   // erasing the other's keys.
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || beside) return;
     if (!messages.length) return;   // see below: emptiness is not a reason to forget
     const params = new URLSearchParams(window.location.search);
     if (params.get("chat") === sessionId) return;
     params.set("chat", sessionId);
     window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
-  }, [messages.length, sessionId]);
+  }, [messages.length, sessionId, beside]);
 
   // ── Scroll: follow the newest content while pinned to the bottom, release
   //    the moment the user scrolls up to read, snap back on completion. ───────
@@ -1187,7 +1189,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                 border per item, an icon per item and three colour treatments (blue for the
                 overview starter, green for investigate, grey otherwise), which made a list
                 of questions read as a control panel. A question is a line of text. */}
-            <div className="pt-1">
+            {!beside && <div className="pt-1">
               <p className="text-[11px] uppercase tracking-[0.08em] mb-2" style={{ color: "var(--b3)" }}>Suggested questions</p>
               {suggestionsMissing && !loadingStarters && (
                 <p className="aug-fs-xs mb-1" style={{ color: "var(--t3)" }}>{suggestionsMissing}</p>
@@ -1227,7 +1229,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                   })}
                 </div>
               )}
-            </div>
+            </div>}
           </div>
         </div>
       ) : (

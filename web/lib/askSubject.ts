@@ -55,10 +55,72 @@ export function useAskSubject(): AskSubject | null {
   return useSyncExternalStore(subscribe, askSubject, () => null);
 }
 
-/** Keep the subject and open the Data Canvas on its connection. */
+/**
+ * The panel a dashboard keeps beside itself (the user, 2026-11-19: "Beside the dashboard"). While a page holds one, a question
+ * asked from that page opens there and the dashboard stays in view; anywhere else it opens the Data Canvas as it always has.
+ */
+export type BesideView = "ask" | "change";
+export interface BesideState {
+  open: boolean;
+  /** Mounted since it was first opened, so closing it does not cut off an answer still arriving. */
+  started: boolean;
+  /** A new number is a new conversation. */
+  round: number;
+  view: BesideView;
+}
+const NOT_BESIDE: BesideState = { open: false, started: false, round: 0, view: "ask" };
+let beside = NOT_BESIDE;
+let besideHosts = 0;
+const besideListeners = new Set<() => void>();
+
+function setBeside(next: Partial<BesideState>): void {
+  beside = { ...beside, ...next };
+  for (const l of besideListeners) l();
+}
+
+function subscribeBeside(listener: () => void): () => void {
+  besideListeners.add(listener);
+  return () => { besideListeners.delete(listener); };
+}
+
+export function useAskBeside(): BesideState {
+  return useSyncExternalStore(subscribeBeside, () => beside, () => NOT_BESIDE);
+}
+
+export function showAskBeside(view: BesideView): void {
+  setBeside({ open: true, started: true, view });
+}
+
+/** Closed for now: the conversation is kept, and what it was asked about is let go. */
+export function hideAskBeside(): void {
+  setBeside({ open: false });
+  setAskSubject(null);
+}
+
+export function freshAskBeside(): void {
+  setBeside({ round: beside.round + 1 });
+}
+
+/** The page moved on to something else: its conversation goes with it. */
+export function endAskBeside(): void {
+  setBeside({ open: false, started: false, round: beside.round + 1, view: "ask" });
+  setAskSubject(null);
+}
+
+/** A page keeps the panel for as long as this is held. */
+export function holdAskBeside(): () => void {
+  besideHosts += 1;
+  return () => {
+    besideHosts -= 1;
+    if (besideHosts === 0) endAskBeside();
+  };
+}
+
+/** Keep the subject and open where it can be asked: beside the page that holds a panel, or the Data Canvas on its connection. */
 export function askAbout(subject: AskSubject): void {
   setAskSubject(subject);
-  requestTab("chat", { conn: subject.connectionId });
+  if (besideHosts > 0) showAskBeside("ask");
+  else requestTab("chat", { conn: subject.connectionId });
 }
 
 /** How a type's objects are called, from the type the object door names: ["order", "orders"]. */

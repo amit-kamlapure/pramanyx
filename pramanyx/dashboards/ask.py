@@ -199,11 +199,10 @@ def draft_for_area(connection_id: str, owner: str, area: str, *, schema: Optiona
                 nothing="The model drafted no dashboard for this area, and gave no reason.")
 
 
-async def draft_frames(connection_id: str, owner: str, area: str, *, schema: Optional[str] = None,
-                       provider: Any = None) -> AsyncIterator[str]:
-    """A draft as a stream of `data:` records, so a person can see it being made (the user, 2026-11-18: "user needs to have
-    a clear visual that the dashboard request is actually happening"). The run has a thread of its own, reading as the
-    person who asked. When they leave or press Stop, this is cancelled and the model is asked nothing more. Every stream
+async def _told(run: Callable[[Hear, threading.Event], dict]) -> AsyncIterator[str]:
+    """A model run as a stream of `data:` records, so a person can see the work happening (the user, 2026-11-18: "user needs
+    to have a clear visual that the dashboard request is actually happening"). The run has a thread of its own, reading as
+    the person who asked. When they leave or press Stop, this is cancelled and the model is asked nothing more. Every stream
     ends with an ``end`` record, so one cut short can be told from a whole one."""
     loop = asyncio.get_running_loop()
     heard: asyncio.Queue[Optional[dict]] = asyncio.Queue()
@@ -215,8 +214,7 @@ async def draft_frames(connection_id: str, owner: str, area: str, *, schema: Opt
 
     def work() -> None:
         try:
-            push({"type": "done", "result": draft_for_area(connection_id, owner, area, schema=schema, provider=provider,
-                                                           hear=push, stop=stop)})
+            push({"type": "done", "result": run(push, stop)})
         except _Left:
             logger.info("a dashboard draft was left before it finished")
         except Exception:
@@ -238,8 +236,23 @@ async def draft_frames(connection_id: str, owner: str, area: str, *, schema: Opt
         stop.set()
 
 
+def draft_frames(connection_id: str, owner: str, area: str, *, schema: Optional[str] = None,
+                 provider: Any = None) -> AsyncIterator[str]:
+    """A new dashboard's draft, told as it is made."""
+    return _told(lambda hear, stop: draft_for_area(connection_id, owner, area, schema=schema, provider=provider,
+                                                   hear=hear, stop=stop))
+
+
+def change_frames(connection_id: str, owner: str, dashboard_id: str, words: str, *, schema: Optional[str] = None,
+                  target: Optional[str] = None, provider: Any = None) -> AsyncIterator[str]:
+    """A change to a dashboard that stands, told as it is drafted. What comes back still waits for the person's own Allow."""
+    return _told(lambda hear, stop: edit_in_words(connection_id, owner, dashboard_id, words, schema=schema, provider=provider,
+                                                  target=target, hear=hear, stop=stop))
+
+
 def edit_in_words(connection_id: str, owner: str, cockpit_id: str, words: str, *, schema: Optional[str] = None,
-                  provider: Any = None, target: Optional[str] = None) -> dict:
+                  provider: Any = None, target: Optional[str] = None, hear: Optional[Hear] = None,
+                  stop: Optional[threading.Event] = None) -> dict:
     """Run the model once for a change to the dashboard ``cockpit_id`` the person keeps, as they ask
     for it in words. What comes back is a staged edit or publish, or the reasons none was. With ``target``, the
     element the person chose, the change is held to that element alone."""
@@ -260,9 +273,10 @@ def edit_in_words(connection_id: str, owner: str, cockpit_id: str, words: str, *
             return _not("A note or an image is yours to change by hand.")
         return _run(home, SYSTEM_PIECE, f'Of their dashboard "{title}", about the element "{target}" alone '
                     f'(a {element.get("type")}), the person asks: {words}', said=words, schema=schema, provider=provider,
-                    site=EDIT_SITE, nothing="The model drafted no change for this, and gave no reason.", target=target)
+                    site=EDIT_SITE, nothing="The model drafted no change for this, and gave no reason.", target=target,
+                    hear=hear, stop=stop)
     return _run(home, SYSTEM_EDIT, f'Of their dashboard "{title}", the person asks: {words}', said=words,
-                schema=schema, provider=provider, site=EDIT_SITE,
+                schema=schema, provider=provider, site=EDIT_SITE, hear=hear, stop=stop,
                 nothing="The model drafted no change for this, and gave no reason.")
 
 

@@ -350,6 +350,26 @@ def test_the_draft_is_told_as_it_is_made_and_ends_with_what_became_of_it(client,
     assert asked == [(desk.connection, ME, "Returns and refunds", "thelook")]
 
 
+def test_a_change_is_told_as_it_is_drafted_and_held_to_the_persons_dashboard(client, desk, monkeypatch):
+    import json
+    asked = []
+
+    def changer(connection_id, owner, dashboard_id, words, *, schema=None, provider=None, target=None, hear=None, stop=None):
+        asked.append((connection_id, owner, dashboard_id, words, schema, target))
+        hear({"type": "checking", "round": 1, "cards": 0, "outline": []})
+        return {"staged": True, "proposal_id": "p1", "sentences": []}
+
+    monkeypatch.setattr("pramanyx.dashboards.ask.edit_in_words", changer)
+    kept = "sales-board"
+    r = client.post(f"/dashboards/{kept}/ask/stream", params=desk.q,
+                    json={"words": "Make the first card bigger", "schema_name": "thelook"})
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/event-stream")
+    frames = [json.loads(line[6:]) for line in r.text.splitlines() if line.startswith("data: ")]
+    assert [f["type"] for f in frames] == ["checking", "done", "end"]
+    assert frames[1]["result"]["proposal_id"] == "p1"
+    assert asked == [(desk.connection, ME, kept, "Make the first card bigger", "thelook", None)]
+
+
 def test_a_draft_that_breaks_says_so_without_its_insides(client, desk, monkeypatch):
     import json
 

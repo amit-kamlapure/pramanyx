@@ -62,6 +62,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { DropdownMenu } from "@radix-ui/themes";
 import { ASKS_OF_A_PIECE, AskPiece } from "@/components/dashboards/AskPiece";
 import { BrandSpark, brandEdge } from "@/components/ui/brand";
+import { AskBeside } from "@/components/dashboards/AskBeside";
 import { DraftBuilding } from "@/components/dashboards/DraftBuilding";
 import { finishedWatch, heardFrame, startWatch, type DraftWatch } from "@/lib/dashboards/draftProgress";
 import { askAbout, dashboardSubject } from "@/lib/askSubject";
@@ -1603,7 +1604,11 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
   }
 
   return (
-    <div data-testid="briefing-dashboards" data-dashboard-ground="" style={{ flex: 1, overflow: "auto", padding: "14px 32px 32px", background: "var(--bg-0)" }}>
+    <AskBeside connectionId={connectionId} dashboardKey={chosen} title={chosen ? heldTitle : ""}
+      change={data && kept && chosen && chosen !== METRICS_DASHBOARD && !chosen.startsWith("shared:")
+        ? { dashboardId: openId, schema, unpublished: (kept.published_to?.length ?? 0) === 0, onChanged: reload, onPublish: () => setPublishing(true) }
+        : null}>
+    <div data-testid="briefing-dashboards" data-dashboard-ground="" style={{ flex: 1, minHeight: 0, overflow: "auto", padding: "14px 32px 32px", background: "var(--bg-0)" }}>
       {/* On the home, the page's one action. Inside the app it sits in the title row; outside it, above the list. */}
       {data && subscribing && (
         <SubscribeDashboard open onClose={() => setSubscribing(false)} connectionId={connectionId} dashboardId={openId} title={heldTitle} />
@@ -1726,5 +1731,6 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
         <div className="aug-fs-sm" data-testid="dashboard-loading" style={{ color: "var(--t3)" }}>Reading the dashboard…</div>
       ) : null}
     </div>
+    </AskBeside>
   );
 }

@@ -21,6 +21,8 @@ export interface DraftStep { id: string; words: string; state: "doing" | "done" 
 export interface DraftCardSeen { title: string; shows?: "figure" | "chart"; state: "running" | "ok" }
 
 export interface DraftWatch {
+  /** What is being made: a whole new dashboard, or a change to one that stands. */
+  what: "dashboard" | "change";
   steps: DraftStep[];
   /** Where the latest draft places its pieces; empty until one is written. */
   outline: DraftPiece[];
@@ -53,8 +55,8 @@ function settled(steps: DraftStep[], words?: string): DraftStep[] {
   return steps.map(s => (s.state === "doing" ? { id: s.id, state: "done" as const, words: words ?? s.words } : s));
 }
 
-export function startWatch(): DraftWatch {
-  return { steps: [doing("reading", "Reading what this connection can show")], outline: [], asked: 0, cards: {} };
+export function startWatch(what: DraftWatch["what"] = "dashboard"): DraftWatch {
+  return { what, steps: [doing("reading", "Reading what this connection can show")], outline: [], asked: 0, cards: {} };
 }
 
 export const isWorking = (watch: DraftWatch) => watch.steps.some(s => s.state === "doing");
@@ -65,15 +67,15 @@ export function heardFrame(watch: DraftWatch, frame: DraftFrame): DraftWatch {
   switch (frame.type) {
     case "read":
       if (current?.id !== "reading") return watch;
-      return { ...watch, steps: [...settled(watch.steps, foundWords(frame)), doing("writing", "Writing the dashboard")] };
+      return { ...watch, steps: [...settled(watch.steps, foundWords(frame)), doing("writing", `Writing the ${watch.what}`)] };
     case "checking": {
-      const wrote = frame.round > 1 ? "Rewrote the dashboard" : frame.cards ? `Wrote ${plural(frame.cards, "card")}` : "Wrote the dashboard";
+      const wrote = frame.round > 1 ? `Rewrote the ${watch.what}` : frame.cards ? `Wrote ${plural(frame.cards, "card")}` : `Wrote the ${watch.what}`;
       const before = current?.id === "reading"
         ? [...settled(watch.steps, "Read what this connection can show"), { id: "writing", words: wrote, state: "done" as const }]
         : settled(watch.steps, wrote);
       const run = frame.cards ? doing(`run-${frame.round}`, "Running each card on the data", `0 of ${frame.cards}`)
-        : doing(`run-${frame.round}`, "Checking the dashboard");
-      return { steps: [...before, run], outline: frame.outline ?? [], asked: frame.cards, cards: {} };
+        : doing(`run-${frame.round}`, `Checking the ${watch.what}`);
+      return { what: watch.what, steps: [...before, run], outline: frame.outline ?? [], asked: frame.cards, cards: {} };
     }
     case "card": {
       const cards = { ...watch.cards, [frame.key]: { title: frame.title, shows: frame.shows, state: frame.state } };
@@ -92,8 +94,14 @@ export function heardFrame(watch: DraftWatch, frame: DraftFrame): DraftWatch {
 /** The watch once the draft has come back: ready to review, or not drafted. */
 export function finishedWatch(watch: DraftWatch, result: DashboardDrafted): DraftWatch {
   if (!result.staged) {
-    return { ...watch, steps: [...watch.steps.filter(s => s.state !== "doing"), { id: "ended", words: "No dashboard was drafted", state: "failed" }] };
+    return endedWatch(watch, watch.what === "change" ? "No change was drafted" : "No dashboard was drafted");
   }
-  const ran = watch.asked ? `Ran ${plural(watch.asked, "card")} on the data` : "Checked the dashboard";
-  return { ...watch, steps: [...settled(watch.steps, ran), { id: "ended", words: "Ready for you to review", state: "done" }] };
+  const ran = watch.asked ? `Ran ${plural(watch.asked, "card")} on the data` : `Checked the ${watch.what}`;
+  const ready = watch.what === "change" ? "Ready for your approval" : "Ready for you to review";
+  return { ...watch, steps: [...settled(watch.steps, ran), { id: "ended", words: ready, state: "done" }] };
+}
+
+/** The watch when the work ended without a result, saying why. */
+export function endedWatch(watch: DraftWatch, words: string): DraftWatch {
+  return { ...watch, steps: [...watch.steps.filter(s => s.state !== "doing"), { id: "ended", words, state: "failed" }] };
 }

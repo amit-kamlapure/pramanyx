@@ -54,6 +54,14 @@ describe("a dashboard being drafted, as a person watches it", () => {
     expect(none.steps[none.steps.length - 1]).toMatchObject({ words: "No dashboard was drafted", state: "failed" });
   });
 
+  it("speaks of a change when a change is what is being drafted", () => {
+    const w = [{ type: "read", metrics: 1, trusted_queries: 0, findings: 0 }, { type: "checking", round: 1, cards: 0, outline: [] }]
+      .reduce((at, frame) => heardFrame(at, frame as DraftFrame), startWatch("change"));
+    expect(words(w)).toEqual(["Read 1 approved metric", "Wrote the change", "Checking the change"]);
+    expect(words(finishedWatch(w, STAGED)).slice(-2)).toEqual(["Checked the change", "Ready for your approval"]);
+    expect(words(finishedWatch(w, { ...STAGED, staged: false })).slice(-1)).toEqual(["No change was drafted"]);
+  });
+
   it("follows a draft that skipped reading what is on offer", () => {
     const w = heard({ type: "checking", round: 1, cards: 1, outline: [] });
     expect(words(w)).toEqual(["Read what this connection can show", "Wrote 1 card", "Running each card on the data"]);

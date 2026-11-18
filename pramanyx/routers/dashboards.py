@@ -666,6 +666,18 @@ def ask_dashboard(request: Request, cockpit_id: str, connection_id: str, req: As
     return edit_in_words(connection_id, person_of(request), home.cockpit_id, req.words, schema=req.schema_name, target=req.target)
 
 
+@router.post("/dashboards/{dashboard_id}/ask/stream")
+def ask_dashboard_stream(request: Request, dashboard_id: str, connection_id: str, req: AskRequest) -> StreamingResponse:
+    """⚑ Spends model calls. The same change, told as it is drafted, so a person beside the dashboard can see the work. Leaving
+    stops the spending at the next step, and nothing changes until the person allows it."""
+    from pramanyx.dashboards.ask import change_frames
+    from pramanyx.dashboards.home import person_of
+    _home(request, connection_id, dashboard_id)       # refuses a dashboard id that is not a dashboard's
+    return StreamingResponse(change_frames(connection_id, person_of(request), dashboard_id, req.words, schema=req.schema_name,
+                                           target=req.target),
+                             media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
 @router.get("/dashboards/{dashboard_id}/export")
 def export_dashboard(request: Request, dashboard_id: str, connection_id: str) -> dict:
     """The dashboard as it stands, as a JSON file's contents: its spec and the cards it places, each with its source."""
