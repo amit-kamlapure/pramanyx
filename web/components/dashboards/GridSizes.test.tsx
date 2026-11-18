@@ -221,7 +221,7 @@ describe("the filter column's width", () => {
 
   it("is drawn as it was until a person sets it, then at whole grades of 40 px", () => {
     const { unmount } = render(<ComposedDashboard spec={objectDashboard()} cards={CARDS} host={HOST} doors={READER} />);
-    expect(screen.getByTestId("dashboard-filter-column").dataset.width).toBe("272");
+    expect(screen.getByTestId("dashboard-filter-column").dataset.width).toBe("218");
     unmount();
     render(<ComposedDashboard spec={objectDashboard(7)} cards={CARDS} host={HOST} doors={READER} />);
     expect(screen.getByTestId("dashboard-filter-column").dataset.width).toBe("280");

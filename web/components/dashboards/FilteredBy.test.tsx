@@ -53,10 +53,12 @@ describe("the one bar", () => {
   it("offers the other pages while a value is chosen, and opens one with the value still on", () => {
     const onFocus = vi.fn();
     render(<ComposedDashboard spec={premise()} cards={CARDS} host={HOST} doors={{ onRefresh: vi.fn() }} focus={[SEARCH]} onFocus={onFocus} />);
-    const open = screen.getByRole("button", { name: "Open on Watches" });
-    fireEvent.click(open);
+    const menu = () => fireEvent.keyDown(screen.getByTestId("filters-menu"), { key: "Enter" });
+    menu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Open on Watches" }));
     expect(screen.getByRole("tab", { name: "Watches" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("button", { name: "Open on Overview" })).toBeTruthy();
+    menu();
+    expect(screen.getByRole("menuitem", { name: "Open on Overview" })).toBeTruthy();
     expect(onFocus).not.toHaveBeenCalled();
     expect(screen.getAllByTestId("focus-chip")).toHaveLength(1);
   });
@@ -65,14 +67,19 @@ describe("the one bar", () => {
     const period = { value: { preset: "previous_month" }, onChange: vi.fn(), showing: { covers: "October 2026" } } as unknown as PeriodDoor;
     const read = (standing: boolean): CardState[] => CARDS.map(c => ({ ...c, run: { ...c.run, scoped: { covers: "October 2026", standing, why: "", grain: null } } } as CardState));
     const { rerender } = render(<ComposedDashboard spec={premise()} cards={read(true)} host={HOST} doors={{ onRefresh: vi.fn() }} focus={[SEARCH]} onFocus={vi.fn()} period={period} />);
+    fireEvent.keyDown(screen.getByTestId("filters-menu"), { key: "Enter" });
     expect(screen.queryByTestId("filtered-by-period")).toBeNull();
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
     rerender(<ComposedDashboard spec={premise()} cards={read(false)} host={HOST} doors={{ onRefresh: vi.fn() }} focus={[SEARCH]} onFocus={vi.fn()} period={period} />);
+    fireEvent.keyDown(screen.getByTestId("filters-menu"), { key: "Enter" });
     expect(screen.getByTestId("filtered-by-period")).toHaveTextContent("October 2026");
   });
 
   it("offers no page a reader may not open", () => {
     const spec = setProps(premise(), tabKey(premise(), "Watches"), { hidden: true });
     render(<ComposedDashboard spec={spec} cards={CARDS} host={HOST} doors={{ onRefresh: vi.fn() }} focus={[SEARCH]} onFocus={vi.fn()} />);
+    fireEvent.keyDown(screen.getByTestId("filters-menu"), { key: "Enter" });
+    expect(screen.getByTestId("filters-clear")).toBeTruthy();
     expect(screen.queryByTestId("focus-open-page")).toBeNull();
   });
 });

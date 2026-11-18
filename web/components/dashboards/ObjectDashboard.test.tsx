@@ -124,7 +124,8 @@ describe("a dashboard started from an object", () => {
     first.unmount();
     draw();
     await waitFor(() => expect(screen.getByTestId("object-filter-count").textContent).toBe("37,838 of 125,080 orders"));
-    fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
+    fireEvent.keyDown(screen.getByTestId("filters-menu"), { key: "Enter" });
+    fireEvent.click(screen.getByRole("menuitem", { name: "Clear all" }));
     await waitFor(() => expect(screen.queryByTestId("dashboard-filtered-by")).toBeNull());
     expect(localStorage.getItem("pramanyx:cockpit-filters:thelook:orders-1a2b")).toBe("{}");
   });

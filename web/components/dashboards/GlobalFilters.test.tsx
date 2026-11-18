@@ -100,7 +100,7 @@ describe("the column", () => {
     expect(onAdd).toHaveBeenCalled();
   });
 
-  it("says what each holds in the Filtered by bar, in the filter's own name", () => {
+  it("says what each holds in the Filters menu, in the filter's own name", () => {
     const f = focusOfChoice("f1", P({}), { kind: "multi", values: ["Movie", "TV Show"] }) as DashboardFocus;
     expect(focusWords(f)).toBe("Type: Movie, TV Show");
     expect(focusWords(focusOfChoice("f1", P({ title: "Year" }), { kind: "range", low: 2000, high: 2010 }) as DashboardFocus)).toBe("Year: 2000 to 2010");

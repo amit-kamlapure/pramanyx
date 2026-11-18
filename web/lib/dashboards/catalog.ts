@@ -139,9 +139,9 @@ export const LIMITS = {
 } as const satisfies Record<string, { w: readonly [number, number]; h: readonly [number, number] }>;
 export type GridKind = keyof typeof LIMITS;
 
-/** The filter column's width, in grades of 40 px: 200 to 400 px. Left out, it is 272 px, as it was drawn before. */
+/** The filter column's width, in grades of 40 px: 200 to 400 px. Left out, it is 218 px (the user, 2026-11-19: a fifth narrower, the room to the dashboard). */
 export const FILTER_WIDTH = { least: 5, most: 10 } as const;
-export const FILTER_DEFAULT_PX = 272;
+export const FILTER_DEFAULT_PX = 218;
 
 /** A card id as the card store writes it: eight hex characters, or an id its caller chose. */
 const CARD_ID = /^[A-Za-z0-9_-]{1,64}$/;
@@ -464,7 +464,7 @@ export const dashboardCatalog = defineCatalog(schema, {
           /** The object a property is read through, when it is not the entity's own ("via Customer"). */
           via: z.string().max(MAX_LABEL).nullable().optional(),
         }).strict()).min(1).max(MAX_FILTERS),
-        /** Its width in grades of 40 px (Arc AP-1); left out, 272 px. */
+        /** Its width in grades of 40 px (Arc AP-1); left out, `FILTER_DEFAULT_PX`. */
         w: z.number().int().min(FILTER_WIDTH.least).max(FILTER_WIDTH.most).nullable().optional(),
         /** Arc AP-2 — the named set its counts are taken within ("China 480" of the orders waiting, not of every order
          *  ever); left out, every object of its entity. A reader's ticks still narrow every set of its entity. */

@@ -74,7 +74,7 @@ import { Chip } from "@/components/clarity/kit";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
 import { SelectField } from "@/components/ui/select";
-import { ChromeActions, ChromeFacts, ChromeStatus, ChromeToolbar, useChromeBack, useInShell, usePageChrome } from "@/components/shell/PageChrome";
+import { ChromeActions, ChromeFacts, ChromeStatus, useChromeBack, useInShell, usePageChrome } from "@/components/shell/PageChrome";
 import { CertificationMark } from "@/components/govern/CertificationMark";
 import { ErrorState, Loading, Refusal } from "@/components/ui/states";
 import { Textarea } from "@/components/ui/textarea";
@@ -1196,6 +1196,8 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
   useChromeBack(newOpen ? () => { if (!newBusy) setNewOpen(false); } : chosen && !editing ? () => choose("") : null);
   usePageChrome(editing && inShell ? { bare: true } : {
     title: newOpen ? "New dashboard" : chosen ? openTitle : "Dashboards",
+    // an open dashboard takes the row under its title; the Metrics page keeps its period there
+    ...(chosen && chosen !== METRICS_DASHBOARD ? { noScope: true } : {}),
     ...(chosen ? { trail: [openTitle ?? chosen] } : {}),
     status: editing ? { label: "Editing", tone: "info" }
       : sharedNow ? { label: `Shared by ${person(sharedNow.published_by || sharedNow.owner)}` }
@@ -1577,6 +1579,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
           </Button>
         </DropdownMenu.Trigger>
         <DropdownMenu.Content size="1" align="end">
+          <DropdownMenu.Item data-testid="dashboard-read-again" disabled={busy || reading} onSelect={reload}>Read again</DropdownMenu.Item>
           <DropdownMenu.Item data-testid="dashboard-subscribe-open" disabled={!(kept?.published_to?.length)} onSelect={() => setSubscribing(true)}>
             {(kept?.published_to?.length ?? 0) > 0 ? "Subscribe…" : "Subscribe… (publish it first)"}
           </DropdownMenu.Item>
@@ -1668,27 +1671,17 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
           onStarted={id => { choose(id); reload(); }} />
       ) : drawn && data ? (
         <>
-          {/* The dashboard's own bar: its period, then History and Edit. Inside the app the period goes to the toolbar row
-              and the two doors to the page's actions (2026-11-10, ROADMAP §6 item 64); outside it, one row. */}
+          {/* The dashboard's own bar: its period, then History and Edit. Inside the app they all go to the title row, so the
+              dashboard starts right under it (the user, 2026-11-19); outside it, one row. */}
           {inShell ? (
             <>
-              <ChromeToolbar>
-                <div className="aug-toolbar-tools">
-                  {periodPicker}
-                  {releaseChip}
-                  <Button size="xs" variant="ghost" disabled={busy || reading} data-testid="dashboard-read-again"
-                    title="Read every card and piece again" onClick={reload}>
-                    <Icon name="refresh" size={12} /> Read again
-                  </Button>
-                </div>
-              </ChromeToolbar>
               <ChromeFacts>
                 <span data-testid="dashboard-facts">
                   Owner {data.owner === "default" || data.owner === "local" ? "you" : person(data.owner)} · version {kept.version}{readAt ? ` · last read ${utcDayWords(readAt, true)}` : ""}
                 </span>
                 {certMark}
               </ChromeFacts>
-              <ChromeActions>{viewDoors}</ChromeActions>
+              <ChromeActions>{periodPicker && <span style={{ order: -2, display: "inline-flex" }}>{periodPicker}</span>}{viewDoors}</ChromeActions>
               <ChromeStatus>
                 <span>Dashboard {(kept.published_to?.length ?? 0) > 0 ? (app.draft ? "draft" : "published") : "draft"} · version {kept.version} · saved</span>
                 {data.ontology?.current && (

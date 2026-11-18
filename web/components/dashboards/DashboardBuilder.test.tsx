@@ -120,11 +120,11 @@ describe("the bar above the dashboard", () => {
   it("widens the filter column 40 px at a time, said in pixels", () => {
     const { line, onChange } = build(objectDashboard());
     fireEvent.click(line("filters"));
-    expect(screen.getByTestId("builder-width")).toHaveTextContent("7");
-    expect(screen.getByTestId("builder-selection")).toHaveTextContent("280 px");
+    expect(screen.getByTestId("builder-width")).toHaveTextContent("5");
+    expect(screen.getByTestId("builder-selection")).toHaveTextContent("200 px");
     fireEvent.click(screen.getByRole("button", { name: "Width: one grade more" }));
     const [next, note] = onChange.mock.calls[0];
-    expect(next.elements.filters.props.w).toBe(8);
+    expect(next.elements.filters.props.w).toBe(6);
     expect(note).toBe("the filter column resized by hand");
   });
 

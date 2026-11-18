@@ -42,6 +42,9 @@ export interface PageChromeSpec {
    *  can actually run queries freely"): the shell draws no breadcrumb row and no title row — the page's own rows say
    *  what is open. The toolbar row stays when something is in it, with any page action at its right end. */
   bare?: boolean;
+  /** A page whose room is its own (an open dashboard, the user, 2026-11-19): what scopes the section is chosen where the section
+   *  starts, and the status strip still names it. */
+  noScope?: boolean;
 }
 
 type SlotName = "title" | "actions" | "facts" | "toolbar" | "status";

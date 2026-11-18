@@ -59,6 +59,7 @@ import { GlobalFiltersColumn } from "@/components/dashboards/GlobalFilters";
 import { followsByValue, openedWith, stillHeld, type GlobalFilterProps } from "@/lib/dashboards/globalFilters";
 import { ImageTile, NoteTile, type ImageStamp, type StaticDoors } from "@/components/dashboards/StaticTile";
 import { DropdownMenu } from "@radix-ui/themes";
+import { ChromeActions } from "@/components/shell/PageChrome";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
@@ -302,7 +303,7 @@ function RootLayout({ element, children }: ComponentRenderProps<{ title: string 
         <div role="region" aria-label={element.props.title} data-testid="dashboard"
           style={{ display: "grid", gridTemplateColumns: `${(held.w ?? null) ? (held.w as number) * GRADE : FILTER_COLUMN}px minmax(0, 1fr)`, gap: 14, alignItems: "start" }}>
           <div data-testid="dashboard-filter-column" style={{ alignSelf: "stretch", minWidth: 0 }}>{queryColumn}</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}><ValuesBar spaced={false} /><FilteredBy spaced={false} /><FirstPageDoor />{others}</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}><ValuesBar spaced={false} /><FilteredBy /><FirstPageDoor />{others}</div>
         </div>
       </QueryNarrowingProvider>
     );
@@ -333,7 +334,7 @@ function RootLayout({ element, children }: ComponentRenderProps<{ title: string 
       <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
         <ValuesBar spaced={false} />
         <ObjectFilterWords entity={props.entity} properties={props.properties} set={props.set}>
-          {said => <FilteredBy objects={said} spaced={false} />}
+          {said => <FilteredBy objects={said} />}
         </ObjectFilterWords>
         <FirstPageDoor />
         {rest}
@@ -1621,10 +1622,10 @@ const REGISTRY = {
 const NO_IMAGES: Record<string, ImageStamp> = {};
 const NO_FOCUS: DashboardFocus[] = [];
 
-/** Everything a dashboard is cut by, in one place (the study's R14): the filter column's ticks, the query filters, the values a
- *  reader moved and the marks they clicked, each a chip that takes it off, and one Clear all. The period is said beside them
- *  when a card was cut to it; it is changed where it is chosen. With nothing cutting the dashboard the bar is not drawn, so the pieces keep the room. */
-function FilteredBy({ objects = null, spaced = true }: { objects?: ObjectBarWords | null; spaced?: boolean }) {
+/** Everything a dashboard is cut by, in one control in the title row (the user, 2026-11-19: no strip above the dashboard, its room
+ *  is the dashboard's): the filter column's ticks, the query filters, the values a reader moved and the marks they clicked, each
+ *  taken off from its menu, with Clear all and Copy link. With nothing cutting the dashboard it is not drawn. */
+function FilteredBy({ objects = null }: { objects?: ObjectBarWords | null }) {
   const { focus, setFocus, period, host, elements, doors, cards, dashboardId } = useDashboard();
   const values = useValueChips();
   const { narrowing, toggle, clear: clearNarrowing } = useQueryNarrowing();
@@ -1662,22 +1663,36 @@ function FilteredBy({ objects = null, spaced = true }: { objects?: ObjectBarWord
   const openPage = get("/tab");
   const others = focused.some(f => !fromFilter(f)) ? pagesOf(elements, !!doors.onSelect).filter(t => t.name !== openPage).slice(0, 3) : [];
   return (
-    <div role="group" aria-label="What this dashboard is filtered by" data-testid="dashboard-filtered-by" className="aug-fs-sm"
-      style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, minHeight: 26, margin: spaced ? "0 0 14px" : 0, color: "var(--t3)" }}>
-      {chips.length > 0 && <span>Filtered by</span>}
-      {chips.length > 0 && covers && <span data-testid="filtered-by-period" style={{ color: "var(--t2)" }}>{covers}</span>}
-      {chips.map(c => (
-        <Button key={c.key} size="xs" variant="outline" data-testid={c.testid} title="Take this off" onClick={c.clear}>
-          {c.words} <Icon name="close" size={12} />
-        </Button>
-      ))}
-      {chips.length > 0 && <Button size="xs" variant="ghost" data-testid="filters-clear" onClick={clearAll}>Clear all</Button>}
-      {focused.length > 0 && <Button size="xs" variant="ghost" data-testid="filters-copy-link" onClick={copyLink}><Icon name="copy" size={12} /> Copy link</Button>}
-      {others.map(t => (
-        <Button key={t.key} size="xs" variant="ghost" data-testid="focus-open-page" onClick={() => set("/tab", t.name)}>Open on {t.label}</Button>
-      ))}
-      {count && <span data-testid="object-filter-count" style={{ marginLeft: "auto", color: "var(--t2)", fontVariantNumeric: "tabular-nums" }}>{count}</span>}
-    </div>
+    <ChromeActions>
+      <span role="group" aria-label="What this dashboard is filtered by" data-testid="dashboard-filtered-by" className="aug-fs-sm"
+        style={{ order: -1, display: "inline-flex", alignItems: "center", gap: 8, color: "var(--t2)" }}>
+        {count && <span data-testid="object-filter-count" style={{ fontVariantNumeric: "tabular-nums" }}>{count}</span>}
+        {chips.length > 0 && (
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger>
+              <Button size="xs" variant="outline" data-testid="filters-menu" title={chips.map(c => c.words).join(" · ")}>
+                <Icon name="filter" size={12} /> Filters · {chips.length}
+              </Button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content size="1" align="end" style={{ maxWidth: 340 }}>
+              {covers && <DropdownMenu.Label data-testid="filtered-by-period">{covers}</DropdownMenu.Label>}
+              {chips.map(c => (
+                <DropdownMenu.Item key={c.key} data-testid={c.testid} title={`Take off ${c.words}`} onSelect={c.clear}>
+                  <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.words}</span>
+                  <Icon name="close" size={12} />
+                </DropdownMenu.Item>
+              ))}
+              <DropdownMenu.Separator />
+              <DropdownMenu.Item data-testid="filters-clear" onSelect={clearAll}>Clear all</DropdownMenu.Item>
+              {focused.length > 0 && <DropdownMenu.Item data-testid="filters-copy-link" onSelect={copyLink}>Copy link</DropdownMenu.Item>}
+              {others.map(t => (
+                <DropdownMenu.Item key={t.key} data-testid="focus-open-page" onSelect={() => set("/tab", t.name)}>Open on {t.label}</DropdownMenu.Item>
+              ))}
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
+        )}
+      </span>
+    </ChromeActions>
   );
 }
 const NO_READS: readonly string[] = [];

@@ -1154,7 +1154,11 @@ describe("inside the app's shell (2026-11-10, the dashboard mockup)", () => {
     expect(screen.getByTestId("dashboard-publish-view")).toHaveTextContent("Publish…");
     expect(screen.getByTestId("dashboard-more").closest(".aug-title-actions")).toBeTruthy();
     expect(screen.getByTestId("dashboard-facts")).toHaveTextContent("version 3");
-    expect(screen.getByTestId("dashboard-read-again").closest(".aug-page-toolbar")).toBeTruthy();
+    // the dashboard starts right under its title (the user, 2026-11-19): Read again waits in the ⋯ menu
+    expect(screen.queryByTestId("dashboard-read-again")).toBeNull();
+    fireEvent.keyDown(screen.getByTestId("dashboard-more"), { key: "Enter" });
+    expect(screen.getByTestId("dashboard-read-again")).toBeTruthy();
+    fireEvent.keyDown(screen.getByTestId("dashboard-read-again"), { key: "Escape" });
     // the builder is a work surface (the user, 2026-11-10): no breadcrumb or title row — its own bar holds Editing,
     // the saved readout and its doors, Done last
     fireEvent.click(screen.getByTestId("dashboard-edit"));
