@@ -62,6 +62,7 @@ import { DropdownMenu } from "@radix-ui/themes";
 import { ASKS_OF_A_PIECE, AskPiece } from "@/components/dashboards/AskPiece";
 import { askAbout, dashboardSubject } from "@/lib/askSubject";
 import { ImportDashboard } from "@/components/dashboards/ImportDashboard";
+import { SubscribeDashboard } from "@/components/dashboards/SubscribeDashboard";
 import { downloadText } from "@/lib/query/csv";
 import { Chip } from "@/components/clarity/kit";
 import { Icon } from "@/components/ui/icon";
@@ -832,6 +833,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
   const openNew = () => { setNewBusy(false); setNewOpen(true); };
   // what a dashboard file was refused for, said above the home's list until the next one is read in
   const [importSaid, setImportSaid] = useState<string[]>([]);
+  const [subscribing, setSubscribing] = useState(false);
   const [composing, setComposing] = useState(false);
   // The two doors by hand only: a note's words and an image are the person's, never a model's.
   const [noting, setNoting] = useState(false);
@@ -1508,6 +1510,9 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
           </Button>
         </DropdownMenu.Trigger>
         <DropdownMenu.Content size="1" align="end">
+          <DropdownMenu.Item data-testid="dashboard-subscribe-open" disabled={!(kept?.published_to?.length)} onSelect={() => setSubscribing(true)}>
+            {(kept?.published_to?.length ?? 0) > 0 ? "Subscribe…" : "Subscribe… (publish it first)"}
+          </DropdownMenu.Item>
           <DropdownMenu.Item data-testid="dashboard-export" onSelect={() => { if (data) void exportToFile(connectionId, data.cockpit_id); }}>Export as JSON</DropdownMenu.Item>
           <DropdownMenu.Separator />
           <DropdownMenu.Item onSelect={() => setRetiring(true)} data-testid="dashboard-retire-open-view">Retire this dashboard…</DropdownMenu.Item>
@@ -1519,6 +1524,10 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
   return (
     <div data-testid="briefing-dashboards" data-dashboard-ground="" style={{ flex: 1, overflow: "auto", padding: "14px 32px 32px", background: "var(--bg-0)" }}>
       {/* On the home, the page's one action. Inside the app it sits in the title row; outside it, above the list. */}
+      {data && subscribing && (
+        <SubscribeDashboard open onClose={() => setSubscribing(false)} connectionId={connectionId} dashboardId={data.cockpit_id}
+          title={titleOfSpec(data.cockpit.spec) || data.cockpit_id} />
+      )}
       {!chosen && (inShell ? <ChromeActions>{newDoor}</ChromeActions> : <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>{newDoor}</div>)}
       {/* Outside the app there is no title row to carry the way back. */}
       {chosen && !inShell && (

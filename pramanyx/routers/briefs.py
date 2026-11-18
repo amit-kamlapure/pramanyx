@@ -44,13 +44,25 @@ class _SubscriptionBody(BaseModel):
     period:     str = "week"        # "week" | "day" | "month" | "year"
     send_cron:  str = ""            # optional explicit cron; derived from period if blank
     enabled:    bool = True
-    content:    str = "alert_summary"      # "alert_summary" | "briefing"
+    content:    str = "alert_summary"      # "alert_summary" | "briefing" | "dashboard"
+    # The dashboards study's R21 — the published dashboard a subscription sends, whose it is, its file, and an address to email.
+    dashboard:  str = ""
+    dashboard_owner: str = ""
+    file_format: str = ""
+    email_to:   str = ""
 
 
 def _validate_destination(body: "_SubscriptionBody") -> None:
     """A subscription delivers through an Action Hub trigger or a Slack bot and channel, and
     replaces only an automation of its own connection. Refused with the reason."""
     from pramanyx.notifications.store import get_trigger
+    if body.email_to:
+        from pramanyx.automations.email import _ADDRESS
+        if body.content != "dashboard":
+            raise HTTPException(status_code=422, detail="only a dashboard subscription goes by email")
+        if not _ADDRESS.match(body.email_to.strip()):
+            raise HTTPException(status_code=422, detail="that is not an email address")
+        return
     if body.bot_id:
         from pramanyx.slackbots.store import get_bot
         if get_bot(body.bot_id) is None:
@@ -66,6 +78,22 @@ def _validate_destination(body: "_SubscriptionBody") -> None:
             raise HTTPException(status_code=422, detail="the automation it replaces is not one of this connection's")
 
 
+def _dashboard_reader(body: "_SubscriptionBody", request: Request) -> tuple[str, str]:
+    """Whose dashboard a subscription sends and who reads it: a person subscribes only to a published version they may read."""
+    from pramanyx.dashboards import sharing
+    from pramanyx.dashboards.home import person_of
+    from pramanyx.dashboards.subscribe import FORMATS
+    if body.file_format not in FORMATS:
+        raise HTTPException(status_code=422, detail="a dashboard is sent as a PDF or a PNG")
+    person = person_of(request)
+    owner = body.dashboard_owner or person
+    try:
+        sharing.read_shared(body.conn_id, owner, body.dashboard, reader=person)
+    except sharing.Refused as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return owner, person
+
+
 def _validate_period(period: str, content: str = "alert_summary") -> None:
     if content == "alert_summary" and period in ("week", "day"):
         return
@@ -74,7 +102,7 @@ def _validate_period(period: str, content: str = "alert_summary") -> None:
     if period not in period_brief.PERIODS:
         raise HTTPException(status_code=422, detail=period_brief.refusal(period))
     if content not in CONTENTS:
-        raise HTTPException(status_code=422, detail="content must be 'alert_summary' or 'briefing'")
+        raise HTTPException(status_code=422, detail="content must be 'alert_summary', 'briefing' or 'dashboard'")
     if content == "alert_summary":
         raise HTTPException(status_code=422, detail=(
             f"there is no {period}ly alert summary — only daily and weekly ones; a {period} "
@@ -149,11 +177,14 @@ def create_briefing_subscription(body: _SubscriptionBody, request: Request):
     check_owner("connection", body.conn_id, get_principal(request))  # DATA-06: no cross-org subscribe
     _validate_period(body.period, body.content)
     _validate_destination(body)
+    owner, reader = _dashboard_reader(body, request) if body.content == "dashboard" else ("", "")
     sub = BriefSubscription(
         conn_id=body.conn_id, name=body.name, trigger_id=body.trigger_id,
         period=body.period, send_cron=body.send_cron, enabled=body.enabled,
         content=body.content, bot_id=body.bot_id, channel=body.channel.strip(),
         schema_name=body.schema_name, supersedes=body.supersedes,
+        **({"dashboard": body.dashboard, "dashboard_owner": owner, "file_format": body.file_format,
+            "email_to": body.email_to.strip(), "reader": f"user:{reader}"} if body.content == "dashboard" else {}),
     )
     saved = save_subscription(sub)
     # No scheduler sync: the automation heartbeat reads the subscription store live
@@ -196,10 +227,10 @@ def update_briefing_subscription(sub_id: str, body: _SubscriptionBody):
     existing.enabled    = body.enabled
     existing.content    = body.content
     # Arc BR-5 fields change only when SENT: an editor that does not know them keeps them
-    for k in ("bot_id", "channel", "schema_name", "supersedes"):
+    for k in ("bot_id", "channel", "schema_name", "supersedes", "file_format", "email_to"):
         if k in body.model_fields_set:
             setattr(existing, k, getattr(body, k))
-    if {"bot_id", "channel", "trigger_id", "supersedes"} & body.model_fields_set:
+    if {"bot_id", "channel", "trigger_id", "supersedes", "email_to"} & body.model_fields_set:
         _validate_destination(_SubscriptionBody(**existing.model_dump(include=set(_SubscriptionBody.model_fields))))
     saved = save_subscription(existing)
     return saved.to_dict()

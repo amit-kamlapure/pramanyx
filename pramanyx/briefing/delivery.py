@@ -220,6 +220,14 @@ def _turned_off(sub: BriefSubscription) -> str:
 def preview_subscription(sub: BriefSubscription) -> dict:
     """Arc BR-5 — what a send WOULD post, built and judged line by line exactly as a send is, and
     not sent. The whole-message gate records a departure, so it runs at the real send only."""
+    if sub.content == "dashboard":
+        from pramanyx.dashboards.subscribe import build_departure
+        try:
+            built = build_departure(sub)
+        except Exception as exc:  # noqa: BLE001 — a preview that fails says why
+            return {"status": "failed", "error": str(exc), "sent": False}
+        return {"status": "preview", "sent": False, "summary": built["summary"], "markdown": built["markdown"],
+                "held_lines": built["held_lines"], "note": "not sent: built and judged line by line; the whole-message gate runs at the send"}
     off = _turned_off(sub)
     if off:
         return {"status": "failed", "error": off, "sent": False}
@@ -294,7 +302,9 @@ def deliver_subscription(sub: BriefSubscription, *, persist: bool = True, delive
               "summary": None, "markdown": None}
 
     trigger = None if sub.bot_id else get_trigger(sub.trigger_id)
-    if sub.bot_id and sub.content != "briefing":
+    if sub.content == "dashboard":
+        _deliver_dashboard(sub, trigger, result, delivery_key=delivery_key)
+    elif sub.bot_id and sub.content != "briefing":
         result["error"] = "a Slack-bot subscription sends the Briefing (content 'briefing')"
     elif trigger is None and not sub.bot_id:
         result["error"] = "Delivery trigger not found"
@@ -415,6 +425,69 @@ def _paused_on_ended_data(sub: BriefSubscription) -> str:
     return (f"paused: the data ended on {ranges._d(spec.data_through)}, so there is no data for "
             f"{ranges.phrases(spec)['covers']}; the Briefing sent on {sent[:10]} said the data had ended, and sending "
             "resumes when new rows arrive")
+
+
+def _deliver_dashboard(sub: BriefSubscription, trigger, result: dict, *, delivery_key: str = "") -> None:
+    """Send a published dashboard (the dashboards study's R21) through the same departure gate as the Briefing: as a file by
+    email or to a Slack channel, or as its words through a trigger, which carries no file. Fills *result* in place."""
+    import datetime as _dt
+    from pramanyx.dashboards.subscribe import build_departure
+    from pramanyx.govern.departure import gate_departure
+    from pramanyx.notifications.executor import fire_action
+    from pramanyx.notifications.models import ActionPayload
+    from pramanyx.org.context import current_org_id
+
+    try:
+        built = build_departure(sub)
+        result["summary"], result["markdown"] = built["summary"], built["markdown"]
+        target = f"email:{sub.email_to}" if sub.email_to else sub.channel or sub.trigger_id
+        verdict = gate_departure(
+            kind="briefing", org_id=current_org_id(), conn_id=sub.conn_id, text=built["markdown"], target=target,
+            actor=f"briefing:{sub.id}", source_kind="dashboard", source_id=sub.dashboard, source_name=sub.name,
+            measurement=built["measurement"], declared_definition="each card's own statement, read for the period it says",
+            held_lines=built["held_lines"])
+        result["departure_id"] = verdict.record_id
+        if verdict.held:
+            result["status"] = "held"
+            result["error"] = f"held at departure — {verdict.reason_sentence()}"
+            return
+        receipt = verdict.receipt_line()
+        text = f"{built['markdown']}\n\n{receipt}" if receipt else built["markdown"]
+        data, filename, media = built["file"]
+        if sub.email_to:
+            from pramanyx.automations.email import send_email
+            ok, said = send_email(sub.email_to, built["summary"][:200], text, attachment=(data, filename, media))
+            result["status"], result["error"] = "ok" if ok else "failed", None if ok else said
+            return
+        if sub.bot_id:
+            from pramanyx.slackbots.post import post_as_bot, upload_file
+            from pramanyx.slackbots.store import get_bot_decrypted
+            bot = get_bot_decrypted(sub.bot_id)
+            if bot is None or not bot.enabled:
+                result["error"] = (f"unknown Slack bot: {sub.bot_id}" if bot is None else f"Slack bot '{bot.name}' is disabled")
+                return
+            ok, info = post_as_bot(bot.bot_token, sub.channel, text, delivery_key=delivery_key, departure_id=verdict.record_id)
+            result["status"], result["http_status"], result["error"] = _bot_outcome(ok, info)
+            if ok:
+                sent, told = upload_file(bot.bot_token, str(info.get("channel") or sub.channel), data=data, filename=filename,
+                                         title=built["summary"], thread_ts=info.get("ts"))
+                if not sent:
+                    result["status"], result["error"] = "failed", f"the words were posted and the file was not: {told.get('error')}"
+            return
+        if trigger is None:
+            result["error"] = "Delivery trigger not found"
+            return
+        log = fire_action(trigger, ActionPayload(
+            investigation_id=f"brief:{sub.id}", rec_index=0, recommendation=built["summary"], metric_name=sub.conn_id,
+            headline=built["markdown"][:_HEADLINE_CAP], trigger_id=sub.trigger_id,
+            triggered_at=_dt.datetime.now(_dt.timezone.utc).isoformat().replace("+00:00", "Z"), delivery_key=delivery_key,
+            context={"receipt": verdict.receipt, "receipt_line": receipt}))
+        result["status"], result["http_status"], result["error"] = log.status, log.http_status, log.error
+    except ValueError as exc:
+        result["error"] = f"not sent — {exc}"
+    except Exception as exc:  # the build or the send crashed: said on the subscription, as the Briefing's is
+        logger.error("Dashboard delivery for sub %s crashed: %s", sub.id, exc)
+        result["error"] = str(exc)
 
 
 def _deliver_period(sub: BriefSubscription, trigger, result: dict, *, delivery_key: str = "") -> None:

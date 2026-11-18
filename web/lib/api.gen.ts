@@ -4928,6 +4928,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/dashboards/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Dashboard
+         * @description A dashboard file read into the asker's dashboards on this connection. All of it or none: whatever does not resolve here
+         *     is refused by name, with a 422 and nothing made.
+         */
+        post: operations["import_dashboard_dashboards_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/dashboards/move": {
         parameters: {
             query?: never;
@@ -5238,6 +5259,26 @@ export interface paths {
          *     run with the drafting tool alone; what comes back is a proposal to keep or not.
          */
         post: operations["ask_dashboard_dashboards__cockpit_id__ask_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dashboards/{cockpit_id}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Dashboard
+         * @description The dashboard as it stands, as a JSON file's contents: its spec and the cards it places, each with its source.
+         */
+        get: operations["export_dashboard_dashboards__cockpit_id__export_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -20165,6 +20206,9 @@ export interface components {
          *     period key with its reader (``range:<preset>:<start>..<last day>@<reader>``), and ``source`` the source it draws
          *     now when a reader drilled it. What the part reads — each source's SQL, the metric a check measures, the period — is
          *     read from the kept edition (`knowledge.brief_context.edition_part`), never from the page.
+         *
+         *     The dashboards study's R20 — or a dashboard a reader asks about (``dashboard``), or one card of it (``id``), with the
+         *     period it is read for as ``<first day>..<last day>``; its cards are read here, as the asker may read the dashboard.
          */
         AskFocus: {
             /** Chosen */
@@ -20194,7 +20238,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "departure" | "automation" | "metric" | "objects" | "set" | "sheet" | "briefing";
+            kind: "departure" | "automation" | "metric" | "objects" | "set" | "sheet" | "briefing" | "dashboard";
             /**
              * Label
              * @default
@@ -27528,10 +27572,30 @@ export interface components {
              */
             content: string;
             /**
+             * Dashboard
+             * @default
+             */
+            dashboard: string;
+            /**
+             * Dashboard Owner
+             * @default
+             */
+            dashboard_owner: string;
+            /**
+             * Email To
+             * @default
+             */
+            email_to: string;
+            /**
              * Enabled
              * @default true
              */
             enabled: boolean;
+            /**
+             * File Format
+             * @default
+             */
+            file_format: string;
             /** Name */
             name: string;
             /**
@@ -27761,6 +27825,8 @@ export interface components {
         pramanyx__routers__dashboards__AskRequest: {
             /** Schema Name */
             schema_name?: string | null;
+            /** Target */
+            target?: string | null;
             /** Words */
             words: string;
         };
@@ -36379,6 +36445,45 @@ export interface operations {
             };
         };
     };
+    import_dashboard_dashboards_import_post: {
+        parameters: {
+            query: {
+                connection_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     move_dashboard_dashboards_move_post: {
         parameters: {
             query: {
@@ -36935,6 +37040,41 @@ export interface operations {
                 "application/json": components["schemas"]["pramanyx__routers__dashboards__AskRequest"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_dashboard_dashboards__cockpit_id__export_get: {
+        parameters: {
+            query: {
+                connection_id: string;
+            };
+            header?: never;
+            path: {
+                cockpit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

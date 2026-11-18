@@ -71,7 +71,8 @@ export function BriefSchedule({ connId }: { connId: string }) {
       const [s, t] = await Promise.all([
         getBriefSubscriptions(connId), getActionTriggers().catch(() => []),
       ]);
-      setSubs(s);
+      // a dashboard's subscription is kept on its dashboard; this page schedules the Briefing
+      setSubs(s.filter(x => x.content !== "dashboard"));
       setTriggers(t.filter(x => x.enabled));
       setForm(f => ({ ...f, trigger_id: f.trigger_id || t.find(x => x.enabled)?.id || "" }));
       setErr("");

@@ -7698,7 +7698,12 @@ export interface BriefSubscription {
   send_cron: string;
   /** What it sends: the alert summary (absent = "alert_summary", every row saved before idea 3) or
    *  the Briefing written for its period. */
-  content?: "alert_summary" | "briefing";
+  content?: "alert_summary" | "briefing" | "dashboard";
+  /** The dashboards study's R21: the published dashboard it sends, the file it leaves as, and an address to email. */
+  dashboard?: string;
+  dashboard_owner?: string;
+  file_format?: "pdf" | "png";
+  email_to?: string;
   trigger_id: string;
   /** Arc BR-5 — a Slack bot and channel instead of a trigger; the scope; the automation it
    *  replaces (paused after seven delivered mornings) and the mornings delivered so far. */
@@ -7724,7 +7729,9 @@ export async function getBriefSubscriptions(connId?: string): Promise<BriefSubsc
 }
 
 export async function createBriefSubscription(
-  body: { conn_id: string; name: string; trigger_id: string; period?: BriefSubscription["period"]; send_cron?: string; enabled?: boolean; content?: "alert_summary" | "briefing" },
+  body: { conn_id: string; name: string; trigger_id: string; period?: BriefSubscription["period"]; send_cron?: string; enabled?: boolean;
+    content?: "alert_summary" | "briefing" | "dashboard"; dashboard?: string; dashboard_owner?: string; file_format?: "pdf" | "png"; email_to?: string;
+    bot_id?: string; channel?: string },
 ): Promise<BriefSubscription> {
   const res = await fetch(`${getApiBase()}/briefing/subscriptions`, {
     method: "POST",
@@ -7737,7 +7744,7 @@ export async function createBriefSubscription(
 
 export async function updateBriefSubscription(
   id: string,
-  body: { conn_id: string; name: string; trigger_id: string; period?: BriefSubscription["period"]; send_cron?: string; enabled?: boolean; content?: "alert_summary" | "briefing" },
+  body: { conn_id: string; name: string; trigger_id: string; period?: BriefSubscription["period"]; send_cron?: string; enabled?: boolean; content?: "alert_summary" | "briefing" | "dashboard" },
 ): Promise<BriefSubscription> {
   const res = await fetch(`${getApiBase()}/briefing/subscriptions/${encodeURIComponent(id)}`, {
     method: "PUT",
@@ -7759,6 +7766,13 @@ export interface BriefDeliveryResult {
   error: string | null;
   summary: string | null;
   markdown: string | null;
+}
+
+/** What a subscription would send, built and judged as a send is, and not sent. */
+export async function previewBriefSubscription(id: string): Promise<{ status: string; markdown?: string; held_lines?: string[]; error?: string }> {
+  const res = await fetch(`${getApiBase()}/briefing/subscriptions/${encodeURIComponent(id)}/test?dry_run=true`, { method: "POST" });
+  if (!res.ok) throw new Error("The subscription could not be previewed");
+  return res.json();
 }
 
 export async function testBriefSubscription(id: string): Promise<BriefDeliveryResult> {
