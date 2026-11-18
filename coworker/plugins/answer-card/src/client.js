@@ -462,8 +462,11 @@ function tailAfter(node) {
   return null;
 }
 
-/** A tool's row in the steps, and its card at the end of the turn: the place every answer and every draft is read. */
-const inTail = (Step, Whole) => function TailCard(props) {
+/** A tool's row in the steps, and its card at the end of the turn: the place every answer and every draft is read.
+ *  A function declaration, hoisted: cards built from it at the module's top (`DeepAnalysisCard`) may stand above it
+ *  (2026-11-18: as a `const` it was undefined where that card was built, and the plugin failed to load). */
+function inTail(Step, Whole) {
+  return function TailCard(props) {
   const here = useRef(null);
   const [tail, setTail] = useState(null);
   useEffect(() => {
@@ -487,7 +490,8 @@ const inTail = (Step, Whole) => function TailCard(props) {
   return h("div", { ref: here },
     h(Step, props),
     tail ? createPortal(h(Whole, props), tail) : null);
-};
+  };
+}
 
 const AnswerCard = inTail((props) => h(AnswerStep, props), (props) => h(Card, props));
 
