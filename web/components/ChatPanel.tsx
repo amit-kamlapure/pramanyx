@@ -30,7 +30,6 @@ import { AnswerFeedback } from "@/components/AnswerFeedback";
 import { Icon } from "@/components/ui/icon";
 import { SelectField } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Segmented } from "@/components/ui/segmented";
 
 const FALLBACK_STARTERS = [
@@ -165,7 +164,7 @@ function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, se
       )}
 
       {/* Textarea row */}
-      <Textarea bespoke
+      <textarea
         ref={textareaRef}
         rows={multiline ? 2 : 1}
         value={input}
@@ -182,6 +181,8 @@ function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, se
            about whose turn it was. */
         placeholder={multiline ? "Ask anything about your data…" : "Ask your question…"}
         className="aug-focus-frame w-full bg-transparent aug-fs-sm text-zinc-100 placeholder:text-[var(--t3)] px-4 pt-3 pb-2 resize-none focus:outline-none disabled:opacity-50"
+        // the frame around it says it is being written in: the field draws no second one inside
+        style={{ display: "block", border: "none", outline: "none", boxShadow: "none", fontFamily: "inherit" }}
       />
 
       {/* Toggle row — mode buttons left, actions right */}
