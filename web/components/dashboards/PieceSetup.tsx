@@ -1031,6 +1031,9 @@ export function PieceSetup({ spec, selected, onChange, connectionId, schema, car
           {/* one panel for a card that opens on its look (the dashboards study, R6, 2026-11-18): how it is drawn first,
               then what it reads and the statement it ran, each a fold below — they were tabs a click away */}
           {cardChart?.(String(p.card ?? ""))}
+          <div className="aug-fs-xs" data-testid="card-alt-click" style={{ padding: "8px 14px 0", color: "var(--t3)" }}>
+            A click here chooses the card. Alt and a click on a mark tries the filter it makes for readers.
+          </div>
           <CardLook p={p} own={cardTitle?.(String(p.card ?? "")) ?? "the card's title"} set={set} />
           <ColumnLooks numbers={cardHolds?.(String(p.card ?? "")).numbers ?? []} p={p} set={set}
             hint="Each against every row the card holds. A bar runs the length of its value; a scale washes a cell from its column's lowest to its highest." />
@@ -1061,7 +1064,7 @@ export function PieceSetup({ spec, selected, onChange, connectionId, schema, car
         </>
       )}
       {el.type === "Note" && (
-        <Row label="Words" hint="Yours, stamped with your name and today when kept. A model never writes one.">
+        <Row label="Words" hint="Yours, stamped with your name and today when kept. A model never writes one. Start a line with # or ## for a heading; a note of headings alone stands on the page with no card.">
           <Words many label="Words" value={String(p.text ?? "")} max={MAX_NOTE} onSave={v => onChange(editNote(spec, k, v), "a note's words changed by hand")} />
         </Row>
       )}

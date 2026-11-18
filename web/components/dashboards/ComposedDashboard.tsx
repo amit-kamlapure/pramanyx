@@ -1466,6 +1466,7 @@ export function ComposedDashboard({ spec, cards, host, doors, sym = "$", images 
   const colorsKey = JSON.stringify(rootProps?.colors ?? null);
   // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the colours it reads
   const keptColors = useMemo(() => valueColorsOf(rootProps), [colorsKey]);
+  const altClick = useRef(false);
   // A spec is known by what it says, not by which object says it: a caller that parses the
   // same JSON again on every render hands over a new object each time, and that must not
   // close the tab a reader opened.
@@ -1517,6 +1518,8 @@ export function ComposedDashboard({ spec, cards, host, doors, sym = "$", images 
     focus,
     period,
     pick: onFocus ? (cardId: string, p: ChartPick) => {
+      // in the builder a click chooses the piece and reshapes nothing; Alt and a click tries the filter (the study's R4)
+      if (doors.onSelect && !altClick.current) return;
       // what the click stands for, traced off the card's own statement — or said, when a click on it filters nothing
       traceAndChoose(traceField, cardId, p, focus, onFocus, why => toast.info("This click filters nothing", { description: why }))
         .catch(e => toast.error("The click could not be read", { description: (e as Error).message }));
@@ -1539,6 +1542,7 @@ export function ComposedDashboard({ spec, cards, host, doors, sym = "$", images 
   }
 
   return (
+    <div style={{ display: "contents" }} onPointerDownCapture={e => { altClick.current = e.altKey; }}>
     <DashboardContext.Provider value={context}>
       <PiecesProvider connectionId={connectionId} schema={schema} elements={context.elements} onPlaceTable={doors.onPlaceTable}
         asGroup={asGroup} onSaid={onSaid}
@@ -1552,5 +1556,6 @@ export function ComposedDashboard({ spec, cards, host, doors, sym = "$", images 
         </ValueColorsProvider>
       </PiecesProvider>
     </DashboardContext.Provider>
+    </div>
   );
 }
