@@ -489,13 +489,13 @@ const given = (args) => {
     .slice(0, 4).map(([k, v]) => `${k.replace(/_/g, " ")}: ${clipped(v, 80)}`).join(", ");
   return said ? ` (${said})` : "";
 };
-const ASKED_FIRST = {
+export const ASKED_FIRST = {
   schedule: (args) => `Set this up on a schedule: “${clipped(args.request)}”?`,
   draft_definition: (args) =>
     `Draft what “${clipped(args.term, 80)}” means${args.area ? ` in ${args.area}` : ""}: “${clipped(args.text)}”? It is not used until its owner publishes it.`,
   // punch list 90 — a person's own memory, read into their own questions: theirs to allow.
   remember_for_me: (args) => `Remember this for you, in your own questions only: “${clipped(args.text)}”?`,
-  forget_for_me: (args) => `Forget this from what I remember for you${given(args)}?`,
+  forget_for_me: (args) => (args.words ? `Forget this from what I remember for you: “${clipped(args.words)}”?` : `Forget this from what I remember for you${given(args)}?`),
   cancel_job: (args) => `Stop the work in progress${given(args)}?`,
   explore: (args) => `Start a full exploration of ${clipped(args.connection, 80)}? It runs many queries in the background and can take a while.`,
   post_claim: (args) => `Record this in the ledger: “${clipped(args.text)}”?`,
@@ -509,6 +509,14 @@ const ASKED_FIRST = {
   set_agent_limit: (args) => `Change an agent's limit${given(args)}?`,
   propose_agent_grant: (args) => `Propose giving an agent more access${given(args)}?`,
 };
+
+/** Each memory in a list of a person's memories, as its id and its words, so that forgetting one can say which. */
+export function memoriesRead(text) {
+  try {
+    const rows = JSON.parse(String(text ?? "")).memories;
+    return Array.isArray(rows) ? rows.filter((row) => row?.id && row?.text).map((row) => [String(row.id), String(row.text)]) : [];
+  } catch { return []; }
+}
 
 /** The approval to ask for before a call, or undefined when it goes ahead. */
 export function askFor(name, args, automations = null) {
@@ -602,6 +610,8 @@ export function askBeforeActing(ctx, readAutomations = automationsReader((proces
   const declined = new Map();        // conversation → what the person declined since they last wrote
   const asked = new Map();           // call → what it would be declined as
   const lastSaid = new Map();        // conversation → the person's own last message
+  const listing = new Set();         // calls reading the person's memories
+  const memories = new Map();        // memory → its words, as last read
   ctx.on("session/event", (session, event) => {
     try {
       const id = String(session?.id ?? "");
@@ -612,11 +622,13 @@ export function askBeforeActing(ctx, readAutomations = automationsReader((proces
         return;
       }
       if (event?.type === "tool/call" && data.callId) {
+        if (String(data.name) === "mcp__pramanyx__my_memories") listing.add(data.callId);
         const key = declinedKey(data.name, data.arguments);
         if (key) asked.set(data.callId, key);
       }
       if (event?.type === "tool/result") {
         const message = data.message ?? {};
+        if (listing.delete(message.toolCallId)) for (const [memory, words] of memoriesRead(textOf(message.content))) memories.set(memory, words);
         const key = asked.get(message.toolCallId);
         if (!key) return;
         asked.delete(message.toolCallId);
@@ -637,7 +649,9 @@ export function askBeforeActing(ctx, readAutomations = automationsReader((proces
       const refused = timingRefusal(lastSaid.get(id) ?? lastSaid.get(parent) ?? "", argsOf(call?.arguments).request);
       if (refused) return { kind: "deny", reason: refused };
     }
-    const asked = askFor(call?.name, argsOf(call?.arguments), bareName(call?.name) ? await readAutomations() : null);
+    const args = argsOf(call?.arguments);
+    const words = memories.get(String(args.memory_id ?? ""));
+    const asked = askFor(call?.name, words ? { ...args, words } : args, bareName(call?.name) ? await readAutomations() : null);
     if (!asked) return decided;
     try { if (call?.agent) approval?.setPolicy?.(call.agent, "ask"); } catch { /* it is refused unseen, and nothing is done */ }
     return asked;

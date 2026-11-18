@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { askFor, mayGoAhead } from "../lib/index.js";
+import { askFor, mayGoAhead, memoriesRead } from "../lib/index.js";
 
 test("a schedule and a drafted definition are asked about, in the person's own words", () => {
   const s = askFor("mcp__pramanyx__schedule", { request: "every Monday, top categories last week, to #sales" });
@@ -86,4 +86,22 @@ test("an allowed draft, or one that failed for another reason, is asked about ag
   event("tool/call", { callId: "c1", name: "mcp__pramanyx__draft_definition", arguments: draft });
   event("tool/result", { message: { toolCallId: "c1", isError: true, content: [{ type: "text", text: "the platform is not answering" }] } });
   assert.equal((await decide("mcp__pramanyx__draft_definition", draft)).kind, "ask");
+});
+
+test("forgetting a memory is asked about in the memory's own words, once the conversation has read them", async () => {
+  assert.deepEqual(memoriesRead(JSON.stringify({ memories: [{ id: "m1", text: "Bars largest first.", at: "x" }, { id: "m2" }] })), [["m1", "Bars largest first."]]);
+  assert.deepEqual(memoriesRead("not json"), []);
+
+  const heard = {};
+  askBeforeActing({ on: (name, fn) => { heard[name] = fn; } }, async () => new Set());
+  const session = { id: "s1" };
+  const forget = { name: "mcp__pramanyx__forget_for_me", arguments: { memory_id: "m1" }, agent: { session } };
+  const allow = async () => ({ kind: "allow" });
+
+  assert.equal((await heard["tools/pre-execute"](forget, allow)).displayReason.en, "Forget this from what I remember for you (memory id: m1)?");
+
+  heard["session/event"](session, { type: "tool/call", data: { callId: "c1", name: "mcp__pramanyx__my_memories", arguments: {} } });
+  heard["session/event"](session, { type: "tool/result", data: { message: { toolCallId: "c1", content: [{ text: JSON.stringify({ memories: [{ id: "m1", text: "Bars largest first." }] }) }] } } });
+
+  assert.equal((await heard["tools/pre-execute"](forget, allow)).displayReason.en, "Forget this from what I remember for you: “Bars largest first.”?");
 });

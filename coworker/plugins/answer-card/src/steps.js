@@ -59,6 +59,16 @@ export const DOES = {
   forget_for_me: ["Forgot one thing you asked me to remember", []],
   deck_of_answers: ["Made a deck of answers", ["title"]],
   search_my_drive: ["Searched your Drive", ["words"]],
+  cancel_job: ["Stopped the work in progress", ["job_id", "id"]],
+  set_preference: ["Changed a preference", ["key", "name"]],
+  draft_agent: ["Drafted a new agent", ["name"]],
+  draft_automation: ["Drafted a new automation", ["name", "outcome"]],
+  edit_automation: ["Changed an automation", ["name", "automation_id"]],
+  draft_monitor: ["Drafted a new monitor", ["name", "metric"]],
+  draft_brief: ["Drafted a new scheduled brief", ["name", "title"]],
+  pause_or_resume_automation: ["Paused or resumed an automation", ["name", "automation_id"]],
+  set_agent_limit: ["Changed an agent's limit", ["agent", "agent_id"]],
+  propose_agent_grant: ["Proposed giving an agent more access", ["agent", "agent_id"]],
 };
 
 /** What a tool that changes something is about to do: its words until it has done it. */
@@ -71,6 +81,16 @@ export const ABOUT_TO = {
   draft_definition: "Draft what a word means",
   remember_for_me: "Remember for you",
   forget_for_me: "Forget one thing you asked me to remember",
+  cancel_job: "Stop the work in progress",
+  set_preference: "Change a preference",
+  draft_agent: "Draft a new agent",
+  draft_automation: "Draft a new automation",
+  edit_automation: "Change an automation",
+  draft_monitor: "Draft a new monitor",
+  draft_brief: "Draft a new scheduled brief",
+  pause_or_resume_automation: "Pause or resume an automation",
+  set_agent_limit: "Change an agent's limit",
+  propose_agent_grant: "Propose giving an agent more access",
 };
 
 /** A step in words: what it did once it has, what it is about to do until then. */

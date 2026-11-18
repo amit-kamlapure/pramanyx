@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { mayGoAhead, NO_STANDS } from "../../home/lib/index.js";
+import { ASKED_FIRST, mayGoAhead, NO_STANDS } from "../../home/lib/index.js";
 import { ABOUT_TO, DOES, PREFIX, saidOf, turnedDown } from "../src/steps.js";
 
 test("waiting on a person's answer, a step says what it is about to do; done, what it did", () => {
@@ -17,6 +17,10 @@ test("every named tool the coworker must ask about has words for before it is do
   const asked = Object.keys(DOES).filter((name) => !mayGoAhead(`${PREFIX}${name}`));
   assert.ok(asked.includes("remember_for_me"), "the population is the tools that ask");
   assert.deepEqual(asked.filter((name) => !ABOUT_TO[name]), []);
+});
+
+test("every tool that asks first has its own row, so the question stands under it from the first call", () => {
+  assert.deepEqual(Object.keys(ASKED_FIRST).filter((name) => !DOES[name] || !ABOUT_TO[name]), []);
 });
 
 test("a person's answer is told from a failure, in each of the harness's own sentences", () => {
