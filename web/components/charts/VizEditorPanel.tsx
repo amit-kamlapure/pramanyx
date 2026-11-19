@@ -617,7 +617,7 @@ export function VizEditorPanel({ model, onClose, docked = false }: { model: VizE
             </Button>
           ) : undefined}>
           <Select label="Visualization" value={vizValue} options={vizOptions} onChange={setViz}
-            leading={<span style={{ color: "var(--accent)", flexShrink: 0, display: "inline-flex" }}><Icon name={VIZ_ICON[vizValue] ?? "chart"} size={15} /></span>} />
+            leading={<span style={{ color: "var(--accent)", flexShrink: 0, display: "inline-flex", marginRight: 6 }}><Icon name={VIZ_ICON[vizValue] ?? "chart"} size={15} /></span>} />
         </Section>
 
         {chartMode && model.dimOptions.length > 0 && (
