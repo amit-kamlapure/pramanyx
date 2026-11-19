@@ -1796,6 +1796,13 @@ class _AnswerCoreResult:
 #: return and the raise path; the consumer breaks on it and then awaits the future,
 #: which is where success-vs-raise is actually decided.
 _CORE_DONE = object()
+#: Said by a bridge that has had nothing to send for `KEEP_ALIVE_EVERY` seconds: written as an SSE comment, which every
+#: reader skips (`web/lib/sseFrames.ts` reads `data:` lines only) and every wrapper here passes through (each parses only
+#: a chunk starting `data: `). Seen live 2026-11-20: a deep analysis handed off from the Ask panel spent 320 s in one
+#: phase without a frame, and the web's fetch dropped a body silent for 300 s, cancelling the run at six minutes.
+_KEEP_ALIVE = object()
+KEEP_ALIVE_EVERY = 20.0
+KEEP_ALIVE_SAID = ": keep-alive\n\n"
 
 
 def _answer_core_workers() -> int:
@@ -3829,7 +3836,11 @@ async def _core_frames(
     fut = loop.run_in_executor(_ANSWER_CORE_POOL, _work)
     try:
         while True:
-            item = await frames.get()
+            try:
+                item = await asyncio.wait_for(frames.get(), timeout=KEEP_ALIVE_EVERY)
+            except asyncio.TimeoutError:
+                yield (_KEEP_ALIVE, None)              # nothing to send yet: the stream is kept open
+                continue
             if item is _CORE_DONE:
                 break
             yield item
@@ -3884,7 +3895,7 @@ async def _stream_chat(
     _bridge = _core_frames(_run)
     try:
         async for _frame_type, _frame_payload in _bridge:
-            yield _sse(_frame_type, _frame_payload)
+            yield KEEP_ALIVE_SAID if _frame_type is _KEEP_ALIVE else _sse(_frame_type, _frame_payload)
     except _CoreCancelled:
         return
     except Exception as e:
@@ -4269,7 +4280,7 @@ async def _stream_converse(
     _bridge = _core_frames(_run)
     try:
         async for _frame_type, _frame_payload in _bridge:
-            yield _sse(_frame_type, _frame_payload)
+            yield KEEP_ALIVE_SAID if _frame_type is _KEEP_ALIVE else _sse(_frame_type, _frame_payload)
     except _CoreCancelled:
         pass
     except Exception as e:
@@ -4418,7 +4429,7 @@ async def _stream_analyst(
     _bridge = _core_frames(_run)
     try:
         async for _frame_type, _frame_payload in _bridge:
-            yield _sse(_frame_type, _frame_payload)
+            yield KEEP_ALIVE_SAID if _frame_type is _KEEP_ALIVE else _sse(_frame_type, _frame_payload)
     except _CoreCancelled:
         return
     except Exception as e:
@@ -5622,7 +5633,11 @@ async def _job_streamed_body(
     )
     logger.debug("investigation job %s submitted", job_id)
     while True:
-        item = await queue.get()
+        try:
+            item = await asyncio.wait_for(queue.get(), timeout=KEEP_ALIVE_EVERY)
+        except asyncio.TimeoutError:
+            yield KEEP_ALIVE_SAID                     # a deep run's long phase: the stream is kept open
+            continue
         if item is _STREAM_END:
             break
         yield item
