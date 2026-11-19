@@ -18,8 +18,10 @@ const NOW = new Date("2026-11-18T12:00:00Z");
 const own = (id: string, title: string, kept_at: string, over: Partial<DashboardListed> = {}) =>
   ({ cockpit_id: id, title, kept_at, started_at: kept_at, version: 3, retired: false, cards: ["a", "b"], note: "a card placed by hand",
      published_to: [], state: "draft", outline: [{ kind: "Card", size: "wide" }, { kind: "Note", w: 4, h: 3 }], ...over }) as unknown as DashboardListed;
-const OWN = [own("returns-1", "Returns", "2026-11-18T09:00:00Z"), own("pricing-1", "Pricing", "2026-10-01T09:00:00Z"),
-  own("gone-1", "Gone", "2026-11-18T10:00:00Z", { retired: true })];
+// kept hours ago, whatever day the suite runs: a literal date read "… ago" only on the day it was written (2026-11-19)
+const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
+const OWN = [own("returns-1", "Returns", hoursAgo(3)), own("pricing-1", "Pricing", "2026-10-01T09:00:00Z"),
+  own("gone-1", "Gone", hoursAgo(2), { retired: true })];
 const SHARED = [{ owner: "priya", cockpit_id: "sales-1", title: "Sales weekly", version: 2, kept_at: "2026-11-17T09:00:00Z",
   published_by: "user:priya", published_to: [{ kind: "group", id: "s", name: "Sales" }] }] as unknown as SharedDashboardListed[];
 const MARK = { securable: "x", status: "certified" as const, why: "", by: "user:bo", at: "2026-11-01" };
