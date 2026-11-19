@@ -246,6 +246,19 @@ def list_inbox(connection_id: str = BUILTIN_ID, status: Optional[str] = Query(de
     return {"proposals": [p.model_dump() for p in list_proposals(connection_id, status)]}
 
 
+@router.get("/inbox/{proposal_id}/said")
+def get_inbox_proposal_said(proposal_id: str):
+    """ONE staged change in a person's words (2026-11-20): what its card asks, what Allow would do line by line, and
+    where it stands — the coworker's card in its conversation reads this, as the Ask panel's own card shows the same."""
+    from pramanyx.actions.inbox import get_proposal
+    from pramanyx.actions.said import said_of
+    p = get_proposal(proposal_id)
+    if p is None:
+        raise HTTPException(status_code=404, detail="No such proposal")
+    return {"proposal_id": p.id, "kind": p.kind, "status": p.status, "status_message": p.status_message,
+            "connection_id": p.connection_id, **said_of(p)}
+
+
 @router.get("/inbox/{proposal_id}")
 def get_inbox_proposal(proposal_id: str):
     """ONE staged proposal, by id — the approval card's read (SP-9). Chat learns a

@@ -2,8 +2,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { ASKED_FIRST, mayGoAhead, NO_STANDS } from "../../home/lib/index.js";
-import { ABOUT_TO, DOES, PREFIX, saidOf, turnedDown } from "../src/steps.js";
+import { readFileSync } from "node:fs";
+
+import { abilitiesOf, ASKED_FIRST, mayGoAhead, NO_STANDS } from "../../home/lib/index.js";
+import { ABOUT_TO, DOES, PREFIX, STAGED, saidOf, turnedDown } from "../src/steps.js";
+
+// the platform's rows (`GET /abilities`), as the home plugin's snapshot of them
+const ROWS = abilitiesOf(JSON.parse(readFileSync(new URL("../../home/test/abilities.fixture.json", import.meta.url), "utf8")));
 
 test("waiting on a person's answer, a step says what it is about to do; done, what it did", () => {
   const args = { text: "I like bars sorted largest first." };
@@ -14,9 +19,17 @@ test("waiting on a person's answer, a step says what it is about to do; done, wh
 });
 
 test("every named tool the coworker must ask about has words for before it is done", () => {
-  const asked = Object.keys(DOES).filter((name) => !mayGoAhead(`${PREFIX}${name}`));
+  const asked = Object.keys(DOES).filter((name) => !mayGoAhead(`${PREFIX}${name}`, new Set(), ROWS));
   assert.ok(asked.includes("remember_for_me"), "the population is the tools that ask");
   assert.deepEqual(asked.filter((name) => !ABOUT_TO[name]), []);
+});
+
+test("a change the platform stages is drawn as its card, and says what it is about to do while it is staged", () => {
+  assert.ok(STAGED.has("draft_monitor") && !STAGED.has("remember_for_me"));
+  for (const name of STAGED) {
+    assert.equal(mayGoAhead(`${PREFIX}${name}`, new Set(), ROWS), true, `${name} goes ahead to its card`);
+    assert.ok(ABOUT_TO[name] && DOES[name], name);
+  }
 });
 
 test("every tool that asks first has its own row, so the question stands under it from the first call", () => {

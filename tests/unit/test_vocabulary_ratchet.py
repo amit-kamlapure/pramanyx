@@ -158,6 +158,9 @@ BANNED: dict[str, tuple[str, tuple[str, ...], tuple[str, ...], str]] = {
          # `actions/authority.py` now IMPORTS that executor to fire a declared undo through the same
          # governed pipeline — one identifier from the existing API, no prose. Both say "action".
          "tests/unit/test_action_undo_and_gateway_writes.py",
+         # 2026-11-20 — a staged change in a person's words is read at the inbox's own address: every hit is that
+         # route's path (`/kinetic-actions/inbox/<id>/said`) and the router module serving it, no prose.
+         "tests/unit/test_staged_said.py",
          "pramanyx/actions/authority.py",
          # Arc OC-4 (2026-10-09), the same ground: the dashboard pieces' suite and the listing suite build
          # `KineticAction` fixtures on the graph's `kinetic_actions`, monkeypatch `routers.kinetic`'s graph and

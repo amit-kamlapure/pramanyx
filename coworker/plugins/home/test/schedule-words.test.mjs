@@ -4,7 +4,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { askBeforeActing, timingLost, timingRefusal } from "../lib/index.js";
+import { readFileSync } from "node:fs";
+
+import { abilitiesOf, askBeforeActing, timingLost, timingRefusal } from "../lib/index.js";
+
+// the platform's rows, as a snapshot (`abilities.fixture.json`): the hook reads them, never the live API, in a test
+const ROWS = abilitiesOf(JSON.parse(readFileSync(new URL("./abilities.fixture.json", import.meta.url), "utf8")));
 
 const SAID = "Schedule this to run once, 4 minutes from now, and never again: ask how many titles are in the netflix_titles sheet.";
 
@@ -24,7 +29,7 @@ function aShell() {
   const on = new Map();
   const hooks = [];
   const ctx = { on: (name, fn) => (name === "tools/pre-execute" ? hooks.push(fn) : on.set(name, fn)) };
-  askBeforeActing(ctx);
+  askBeforeActing(ctx, async () => new Set(), async () => ROWS);
   const event = (id, type, data = {}) => on.get("session/event")({ id }, { type, data });
   const call = (session, name, args) => hooks[0]({ name, arguments: args, agent: { session } }, async () => ({ kind: "allow" }));
   return { event, call };
@@ -48,7 +53,7 @@ test("a schedule call that dropped the person's timing goes back to the agent be
 
 test("the coworker asks before it remembers something for the person (punch list 90)", async () => {
   const { askFor } = await import("../lib/index.js");
-  const asked = askFor("mcp__pramanyx__remember_for_me", { text: "I prefer figures in EUR" });
+  const asked = askFor("mcp__pramanyx__remember_for_me", { text: "I prefer figures in EUR" }, new Set(), ROWS);
   assert.equal(asked?.kind, "ask");
   assert.match(JSON.stringify(asked), /Remember this for you, in your own questions only: “I prefer figures in EUR”\?/);
 });

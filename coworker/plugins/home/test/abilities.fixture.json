@@ -1,0 +1,1260 @@
+{
+ "abilities": [
+  {
+   "name": "answer_question",
+   "words": "Answered through the governed pipeline",
+   "about_to": "Answered through the governed pipeline",
+   "which": [
+    "question"
+   ],
+   "needs": "run",
+   "allowed": "goes_ahead",
+   "why": "it answers the question the person asked",
+   "places": [
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": "ask"
+  },
+  {
+   "name": "ask",
+   "words": "Answered through the governed pipeline",
+   "about_to": "Answered through the governed pipeline",
+   "which": [
+    "question"
+   ],
+   "needs": "run",
+   "allowed": "goes_ahead",
+   "why": "it answers the question the person asked",
+   "places": [
+    "coworker"
+   ],
+   "only_when": "",
+   "same_as": "answer_question"
+  },
+  {
+   "name": "deep_analysis",
+   "words": "Ran a deep analysis",
+   "about_to": "Ran a deep analysis",
+   "which": [
+    "question"
+   ],
+   "needs": "run",
+   "allowed": "goes_ahead",
+   "why": "it answers the question the person asked, in depth",
+   "places": [
+    "coworker",
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "run_sql",
+   "words": "Ran a query through the guard battery",
+   "about_to": "Ran a query through the guard battery",
+   "which": [],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "list_tables",
+   "words": "Read the tables there are",
+   "about_to": "Read the tables there are",
+   "which": [],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "describe_table",
+   "words": "Read a table's columns",
+   "about_to": "Read a table's columns",
+   "which": [
+    "table"
+   ],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "explore",
+   "words": "Explored",
+   "about_to": "Explore",
+   "which": [
+    "question",
+    "topic",
+    "focus"
+   ],
+   "needs": "run",
+   "allowed": "asks_once",
+   "why": "",
+   "places": [
+    "coworker"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "delegate_task",
+   "words": "Asked a saved agent",
+   "about_to": "Asked a saved agent",
+   "which": [
+    "agent",
+    "agent_id"
+   ],
+   "needs": "run",
+   "allowed": "goes_ahead",
+   "why": "it asks the person's own saved agent the question they asked",
+   "places": [
+    "panel"
+   ],
+   "only_when": "the connection has saved agents",
+   "same_as": ""
+  },
+  {
+   "name": "list_connections",
+   "words": "Listed the connections",
+   "about_to": "Listed the connections",
+   "which": [],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "coworker"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "search_graph",
+   "words": "Searched what is already known about",
+   "about_to": "Searched what is already known about",
+   "which": [
+    "query",
+    "q",
+    "question"
+   ],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "coworker",
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "describe_entity",
+   "words": "Read the object",
+   "about_to": "Read the object",
+   "which": [
+    "entity",
+    "name",
+    "entity_id"
+   ],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "coworker",
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "list_objects",
+   "words": "Listed the objects",
+   "about_to": "Listed the objects",
+   "which": [
+    "kind",
+    "type"
+   ],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "coworker"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "get_object",
+   "words": "Read the object",
+   "about_to": "Read the object",
+   "which": [
+    "name",
+    "object",
+    "object_id",
+    "id"
+   ],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "coworker",
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "list_findings",
+   "words": "Read earlier findings",
+   "about_to": "Read earlier findings",
+   "which": [
+    "query",
+    "table"
+   ],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "coworker",
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "get_briefing",
+   "words": "Read the Briefing",
+   "about_to": "Read the Briefing",
+   "which": [],
+   "needs": "run",
+   "allowed": "goes_ahead",
+   "why": "it reads the Briefing the person asked about, written once if it is not yet",
+   "places": [
+    "coworker",
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "get_table_health",
+   "words": "Checked the health of the table",
+   "about_to": "Checked the health of the table",
+   "which": [
+    "table",
+    "table_name"
+   ],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "coworker",
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "list_trusted_queries",
+   "words": "Read the trusted queries",
+   "about_to": "Read the trusted queries",
+   "which": [],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "coworker",
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "get_investigation",
+   "words": "Read an earlier analysis",
+   "about_to": "Read an earlier analysis",
+   "which": [
+    "investigation_id",
+    "id"
+   ],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "coworker"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "get_metric",
+   "words": "Read the definition of the metric",
+   "about_to": "Read the definition of the metric",
+   "which": [
+    "name",
+    "metric",
+    "metric_name"
+   ],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "coworker"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "get_definitions",
+   "words": "Read what the words mean",
+   "about_to": "Read what the words mean",
+   "which": [
+    "term"
+   ],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "coworker"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "read_learned",
+   "words": "Read what is already learned",
+   "about_to": "Read what is already learned",
+   "which": [
+    "about"
+   ],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "coworker"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "list_monitors",
+   "words": "Checked the monitors and alerts",
+   "about_to": "Checked the monitors and alerts",
+   "which": [],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "list_packs",
+   "words": "Checked the packs",
+   "about_to": "Checked the packs",
+   "which": [],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "read_pack",
+   "words": "Read a pack",
+   "about_to": "Read a pack",
+   "which": [
+    "pack",
+    "name"
+   ],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "search_documents",
+   "words": "Searched the documents",
+   "about_to": "Searched the documents",
+   "which": [
+    "query"
+   ],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "table_origin",
+   "words": "Read where the table came from",
+   "about_to": "Read where the table came from",
+   "which": [
+    "table"
+   ],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "table_dependents",
+   "words": "Read what depends on the table",
+   "about_to": "Read what depends on the table",
+   "which": [
+    "table"
+   ],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "explain_dashboard",
+   "words": "Read the dashboard",
+   "about_to": "Read the dashboard",
+   "which": [],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "explain_definition",
+   "words": "Read a Definition",
+   "about_to": "Read a Definition",
+   "which": [
+    "term"
+   ],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "platform_help",
+   "words": "Read the platform guide",
+   "about_to": "Read the platform guide",
+   "which": [
+    "topic"
+   ],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": "platform_guide"
+  },
+  {
+   "name": "platform_guide",
+   "words": "Read the platform guide",
+   "about_to": "Read the platform guide",
+   "which": [
+    "topic"
+   ],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "coworker",
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "explain",
+   "words": "Asked how an answer was reached",
+   "about_to": "Asked how an answer was reached",
+   "which": [
+    "investigation_id"
+   ],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "coworker",
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "list_platform_connections",
+   "words": "Listed the connections",
+   "about_to": "Listed the connections",
+   "which": [],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "coworker",
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "platform_usage",
+   "words": "Read usage and spend",
+   "about_to": "Read usage and spend",
+   "which": [],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "coworker",
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "platform_limits",
+   "words": "Read the platform's limits",
+   "about_to": "Read the platform's limits",
+   "which": [],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "coworker",
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "review_missed_move",
+   "words": "Reviewed a missed move",
+   "about_to": "Review a missed move",
+   "which": [
+    "id"
+   ],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "coworker",
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "platform_runs",
+   "words": "Read the platform's runs",
+   "about_to": "Read the platform's runs",
+   "which": [],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "coworker",
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "investigation_cadence",
+   "words": "Read how often analyses run",
+   "about_to": "Read how often analyses run",
+   "which": [],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "coworker",
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "answer_accuracy",
+   "words": "Read how accurate answers have been",
+   "about_to": "Read how accurate answers have been",
+   "which": [],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "coworker",
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "table_popularity",
+   "words": "Read which tables are used most",
+   "about_to": "Read which tables are used most",
+   "which": [],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "coworker",
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "platform_traces",
+   "words": "Read the platform's traces",
+   "about_to": "Read the platform's traces",
+   "which": [],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "coworker",
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "platform_premortem",
+   "words": "Read the platform's pre-mortem",
+   "about_to": "Read the platform's pre-mortem",
+   "which": [],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "coworker",
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "platform_audit",
+   "words": "Read the audit log",
+   "about_to": "Read the audit log",
+   "which": [],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "coworker",
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "list_jobs",
+   "words": "Listed the jobs",
+   "about_to": "Listed the jobs",
+   "which": [],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "coworker"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "get_job",
+   "words": "Checked on a job",
+   "about_to": "Checked on a job",
+   "which": [
+    "job_id",
+    "id"
+   ],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "coworker"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "list_runs",
+   "words": "Listed recent runs",
+   "about_to": "Listed recent runs",
+   "which": [],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "coworker"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "inspect_run",
+   "words": "Looked into a run",
+   "about_to": "Looked into a run",
+   "which": [
+    "trace_id"
+   ],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "coworker"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "read_run_span",
+   "words": "Read one step of a run",
+   "about_to": "Read one step of a run",
+   "which": [
+    "span_id"
+   ],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "coworker"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "ground_agent",
+   "words": "Read what an agent rests on",
+   "about_to": "Read what an agent rests on",
+   "which": [
+    "agent",
+    "agent_id"
+   ],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "coworker"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "read_contract",
+   "words": "Read the agent contract",
+   "about_to": "Read the agent contract",
+   "which": [],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "coworker"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "read_claims",
+   "words": "Read the Record",
+   "about_to": "Read the Record",
+   "which": [
+    "subject",
+    "kind"
+   ],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "coworker"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "read_restatements",
+   "words": "Read what was restated",
+   "about_to": "Read what was restated",
+   "which": [],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "coworker"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "search_the_web",
+   "words": "Searched the web",
+   "about_to": "Searched the web",
+   "which": [
+    "query"
+   ],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "coworker"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "search_my_drive",
+   "words": "Searched your Drive",
+   "about_to": "Searched your Drive",
+   "which": [
+    "words"
+   ],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "coworker"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "deck_of_answers",
+   "words": "Made a deck of answers",
+   "about_to": "Made a deck of answers",
+   "which": [
+    "title"
+   ],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "coworker"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "draft_email",
+   "words": "Drafted an email",
+   "about_to": "Drafted an email",
+   "which": [
+    "subject",
+    "to"
+   ],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "coworker"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "bring_in_file",
+   "words": "Brought in a file",
+   "about_to": "Brought in a file",
+   "which": [
+    "name"
+   ],
+   "needs": "act",
+   "allowed": "goes_ahead",
+   "why": "the person attaching the file was the asking; it becomes theirs alone",
+   "places": [
+    "coworker"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "my_memories",
+   "words": "Read what you asked me to remember",
+   "about_to": "Read what you asked me to remember",
+   "which": [],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "coworker"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "remember_for_me",
+   "words": "Remembered for you",
+   "about_to": "Remember for you",
+   "which": [
+    "text"
+   ],
+   "needs": "act",
+   "allowed": "asks_once",
+   "why": "",
+   "places": [
+    "coworker"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "forget_for_me",
+   "words": "Forgot one thing you asked me to remember",
+   "about_to": "Forget one thing you asked me to remember",
+   "which": [],
+   "needs": "act",
+   "allowed": "asks_once",
+   "why": "",
+   "places": [
+    "coworker"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "set_preference",
+   "words": "Changed a preference",
+   "about_to": "Change a preference",
+   "which": [
+    "key",
+    "name"
+   ],
+   "needs": "act",
+   "allowed": "goes_ahead",
+   "why": "a cosmetic setting of the person's own, applied and undone the same way (ROADMAP §3.11)",
+   "places": [
+    "coworker",
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "show_rows",
+   "words": "Put the rows on the sheet",
+   "about_to": "Put the rows on the sheet",
+   "which": [],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "panel"
+   ],
+   "only_when": "the question is asked beside a sheet",
+   "same_as": ""
+  },
+  {
+   "name": "change_dashboard",
+   "words": "Proposed a change to the dashboard",
+   "about_to": "Propose a change to the dashboard",
+   "which": [],
+   "needs": "act",
+   "allowed": "staged",
+   "why": "",
+   "places": [
+    "panel"
+   ],
+   "only_when": "the question is about a dashboard the person keeps",
+   "same_as": ""
+  },
+  {
+   "name": "change_chart",
+   "words": "Proposed a change to how the chart is drawn",
+   "about_to": "Propose a change to how the chart is drawn",
+   "which": [],
+   "needs": "act",
+   "allowed": "staged",
+   "why": "",
+   "places": [
+    "panel"
+   ],
+   "only_when": "the question is about one chart of a dashboard the person keeps",
+   "same_as": ""
+  },
+  {
+   "name": "propose_action",
+   "words": "Proposed an action",
+   "about_to": "Propose an action",
+   "which": [
+    "action_id"
+   ],
+   "needs": "act",
+   "allowed": "staged",
+   "why": "",
+   "places": [
+    "panel"
+   ],
+   "only_when": "the agent asking was granted named actions",
+   "same_as": ""
+  },
+  {
+   "name": "propose_context_note",
+   "words": "Wrote back what was learned about the data",
+   "about_to": "Write back what was learned about the data",
+   "which": [
+    "table",
+    "column"
+   ],
+   "needs": "act",
+   "allowed": "goes_ahead",
+   "why": "only a high-confidence note on one column, with its evidence, applies; anything else is staged",
+   "places": [
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "draft_agent",
+   "words": "Drafted a new agent",
+   "about_to": "Draft a new agent",
+   "which": [
+    "name"
+   ],
+   "needs": "act",
+   "allowed": "staged",
+   "why": "",
+   "places": [
+    "coworker",
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "draft_automation",
+   "words": "Drafted a new automation",
+   "about_to": "Draft a new automation",
+   "which": [
+    "name",
+    "outcome"
+   ],
+   "needs": "act",
+   "allowed": "staged",
+   "why": "",
+   "places": [
+    "coworker",
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "edit_automation",
+   "words": "Changed an automation",
+   "about_to": "Change an automation",
+   "which": [
+    "name",
+    "automation_id"
+   ],
+   "needs": "act",
+   "allowed": "staged",
+   "why": "",
+   "places": [
+    "coworker",
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "draft_monitor",
+   "words": "Drafted a new monitor",
+   "about_to": "Draft a new monitor",
+   "which": [
+    "name",
+    "metric"
+   ],
+   "needs": "act",
+   "allowed": "staged",
+   "why": "",
+   "places": [
+    "coworker",
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "draft_brief",
+   "words": "Drafted a new scheduled brief",
+   "about_to": "Draft a new scheduled brief",
+   "which": [
+    "name",
+    "title"
+   ],
+   "needs": "act",
+   "allowed": "staged",
+   "why": "",
+   "places": [
+    "coworker",
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "pause_or_resume_automation",
+   "words": "Paused or resumed an automation",
+   "about_to": "Pause or resume an automation",
+   "which": [
+    "name",
+    "automation_id"
+   ],
+   "needs": "act",
+   "allowed": "staged",
+   "why": "",
+   "places": [
+    "coworker",
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "set_agent_limit",
+   "words": "Changed an agent's limit",
+   "about_to": "Change an agent's limit",
+   "which": [
+    "agent",
+    "agent_id"
+   ],
+   "needs": "act",
+   "allowed": "staged",
+   "why": "",
+   "places": [
+    "coworker",
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "propose_agent_grant",
+   "words": "Proposed giving an agent more access",
+   "about_to": "Propose giving an agent more access",
+   "which": [
+    "agent",
+    "agent_id"
+   ],
+   "needs": "act",
+   "allowed": "staged",
+   "why": "",
+   "places": [
+    "coworker",
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "draft_definition",
+   "words": "Drafted what a word means",
+   "about_to": "Draft what a word means",
+   "which": [
+    "term"
+   ],
+   "needs": "act",
+   "allowed": "asks_once",
+   "why": "",
+   "places": [
+    "coworker"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "schedule",
+   "words": "Set up a schedule",
+   "about_to": "Set up a schedule",
+   "which": [
+    "request"
+   ],
+   "needs": "act",
+   "allowed": "asks_once",
+   "why": "",
+   "places": [
+    "coworker"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "cancel_job",
+   "words": "Stopped the work in progress",
+   "about_to": "Stop the work in progress",
+   "which": [
+    "job_id",
+    "id"
+   ],
+   "needs": "act",
+   "allowed": "asks_once",
+   "why": "",
+   "places": [
+    "coworker"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "post_claim",
+   "words": "Wrote a claim to the Record",
+   "about_to": "Write a claim to the Record",
+   "which": [
+    "subject",
+    "kind"
+   ],
+   "needs": "run",
+   "allowed": "asks_once",
+   "why": "",
+   "places": [
+    "coworker"
+   ],
+   "only_when": "",
+   "same_as": ""
+  }
+ ]
+}

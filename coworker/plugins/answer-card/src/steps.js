@@ -71,6 +71,16 @@ export const DOES = {
   propose_agent_grant: ["Proposed giving an agent more access", ["agent", "agent_id"]],
 };
 
+/**
+ * The platform's abilities that STAGE a change for the person's Allow (`GET /abilities`, "staged"; 2026-11-20): each is
+ * drawn as the staged change's card, where the person allows it once. `tests/unit/test_abilities.py` holds this to the
+ * platform's own rows.
+ */
+export const STAGED = new Set([
+  "draft_agent", "draft_automation", "edit_automation", "draft_monitor", "draft_brief", "pause_or_resume_automation",
+  "set_agent_limit", "propose_agent_grant",
+]);
+
 /** What a tool that changes something is about to do: its words until it has done it. */
 export const ABOUT_TO = {
   schedule: "Set up a schedule",
