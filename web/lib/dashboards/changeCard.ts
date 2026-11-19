@@ -8,13 +8,19 @@ export interface ChangeCard { asks: string; did: string; lines: ChangeLine[] }
 interface Placed { title?: string; change?: string }
 interface Section extends Placed { cards?: Placed[] }
 interface Tab { tab?: string; change?: string; sections?: Section[] }
-interface Detail { mode?: string; to?: string[]; outline?: Tab[]; taken_off?: { title?: string; from?: string }[] }
+interface Detail { mode?: string; to?: string[]; outline?: Tab[]; taken_off?: { title?: string; from?: string }[]; title?: string; lines?: unknown[] }
 
 const VERB: Record<string, ChangeLine["verb"]> = { added: "Add", changed: "Change" };
 const count = (n: number) => `${n} ${n === 1 ? "change" : "changes"}`;
 
-export function changeCardOf(detail: Record<string, unknown> | null | undefined): ChangeCard {
+export function changeCardOf(detail: Record<string, unknown> | null | undefined, kind = ""): ChangeCard {
   const d = (detail ?? {}) as Detail;
+  // how ONE chart is drawn (2026-11-19): each setting that changes, as the platform said it — "Line width: 2 → 4"
+  if (kind === "chart_look") {
+    const title = d.title || "the chart";
+    const lines = (d.lines ?? []).filter((l): l is string => typeof l === "string").map(l => ({ verb: "Change" as const, title: l }));
+    return { asks: `Change how “${title}” is drawn?`, did: `“${title}” is drawn as allowed`, lines };
+  }
   if (d.mode === "publish") {
     const to = (d.to ?? []).join(", ");
     return { asks: `Publish to ${to}?`, did: `Published to ${to}`, lines: [] };

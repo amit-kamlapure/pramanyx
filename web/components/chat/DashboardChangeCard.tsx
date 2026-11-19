@@ -73,7 +73,7 @@ export function DashboardChangeCard({ proposalId }: { proposalId: string }) {
   if (decision === "gone" || !proposal) {
     return <p className="aug-fs-sm" data-testid="dashboard-change-gone" style={{ color: "var(--t3)", margin: "6px 0" }}>This change could not be read. Nothing was changed by it.</p>;
   }
-  const card = changeCardOf(proposal.detail);
+  const card = changeCardOf(proposal.detail, proposal.kind);
   const allow = async () => {
     setDecision("allowing");
     setProblem("");

@@ -63,3 +63,14 @@ describe("a dashboard change asked in the conversation", () => {
     expect(screen.getAllByTestId("dashboard-change-allow")).toHaveLength(1);   // only the latest still asks
   });
 });
+
+describe("a change to how one chart is drawn (2026-11-19)", () => {
+  it("names the chart and says each setting that changes, before Allow", async () => {
+    api.getProposalById.mockResolvedValue({ id: "p2", kind: "chart_look", connection_id: "sheets", status: "pending",
+      detail: { title: "Revenue by priority", lines: ["Line width: 2 → 4", "Line shape: none → smooth"] } });
+    render(<DashboardChangeCard proposalId="p2" />);
+    expect(await screen.findByTestId("dashboard-change-card")).toHaveTextContent("Change how “Revenue by priority” is drawn?");
+    expect(screen.getAllByTestId("dashboard-change-line").map(l => l.textContent)).toEqual(["ChangeLine width: 2 → 4", "ChangeLine shape: none → smooth"]);
+    expect(api.acceptProposal).not.toHaveBeenCalled();
+  });
+});

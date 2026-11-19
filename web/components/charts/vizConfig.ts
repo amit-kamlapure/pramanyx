@@ -52,6 +52,8 @@ export interface VizConfig {
   /** The chart options (the dashboards study, R12): a line's shape and its markers, the value axis's range and a
    *  log scale, and a bar's categories by size or by name, and only the largest. Absent means as before. */
   lineShape?:   "smooth" | "step";
+  /** A line's width in pixels, 1 to 6; absent, 2 (2026-11-19: "increase the thickness of lines"). */
+  lineWidth?:   number;
   /** An answer's line shows its points unless this says false; a query card's hides them unless it says true. */
   markers?:     boolean;
   yMin?:        number;
@@ -86,6 +88,7 @@ export function chartOptionsOf(c: VizConfig | null | undefined): ChartOptions | 
   if (!c) return null;
   const o: ChartOptions = {
     ...(c.lineShape ? { lineShape: c.lineShape } : {}),
+    ...(c.lineWidth ? { lineWidth: c.lineWidth } : {}),
     ...(c.markers !== undefined ? { markers: c.markers } : {}),
     ...(c.yMin !== undefined ? { yMin: c.yMin } : {}),
     ...(c.yMax !== undefined ? { yMax: c.yMax } : {}),

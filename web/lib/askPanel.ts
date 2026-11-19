@@ -65,6 +65,7 @@ export function useAskPanel(): AskPanelState {
 export function resetAskPanel(): void {
   state = null;
   width = null;
+  queued = null;
 }
 
 const freshTab = (connectionId: string): AskTab => ({ key: newSessionId(), session: null, title: "", connectionId });
@@ -187,4 +188,33 @@ export function noteAskSession(key: string, session: string, title: string): voi
   const tab = s.tabs.find(t => t.key === key);
   if (!tab || (tab.session === session && tab.title === title)) return;
   write({ ...s, tabs: s.tabs.map(t => (t.key === key ? { ...t, session, title: title || t.title } : t)) });
+}
+
+// ── a question asked from outside the panel (2026-11-19: a chart's own prompt, as a peer product's per-chart assistant) ──
+
+/** A question waiting for the conversation in front to send it: asked on a chart, with that chart as its subject. */
+export interface QueuedAsk { n: number; connectionId: string; text: string; subject: string }
+let queued: QueuedAsk | null = null;
+let asked = 0;
+const queueListeners = new Set<() => void>();
+
+/** Queue `text` for the conversation in front on `connectionId`, to send with the subject `subject` names. */
+export function queueAsk(connectionId: string, text: string, subject: string): void {
+  queued = { n: ++asked, connectionId, text, subject };
+  queueListeners.forEach(l => l());
+}
+
+/** Take the queued question `n`: sent once, by one conversation. */
+export function takeQueuedAsk(n: number): void {
+  if (queued?.n !== n) return;
+  queued = null;
+  queueListeners.forEach(l => l());
+}
+
+export function useQueuedAsk(): QueuedAsk | null {
+  return useSyncExternalStore(
+    l => { queueListeners.add(l); return () => { queueListeners.delete(l); }; },
+    () => queued,
+    () => null,
+  );
 }

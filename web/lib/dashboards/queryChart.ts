@@ -158,7 +158,7 @@ export function queryChartSpec(c: QueryChart, setup: Pick<QueryShown, "segments"
   const lone = tone === "adverse" ? { color: colours.palette[ADVERSE_AT % colours.palette.length] } : tone === "open" ? { color: colours.other } : {};
   const shape = options?.lineShape === "smooth" ? { interpolate: "monotone" } : options?.lineShape === "step" ? { interpolate: "step-after" } : {};
   const mark = bars ? { type: "bar", tooltip: tips, cornerRadiusEnd: 2, ...lone }
-    : c.as === "line" ? { type: "line", strokeWidth: 2, ...shape, ...(options?.markers ? { point: true } : {}) }
+    : c.as === "line" ? { type: "line", strokeWidth: options?.lineWidth ?? 2, ...shape, ...(options?.markers ? { point: true } : {}) }
       : c.as === "area" ? { type: "area", tooltip: tips, ...shape, ...(stack === null && split ? { opacity: 0.45 } : {}) }
         : { type: "point", tooltip: tips, filled: true, size: 36 };
   const across = bars && !!setup.across;

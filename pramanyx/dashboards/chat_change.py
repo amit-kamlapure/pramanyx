@@ -27,6 +27,25 @@ _PARAMS = {
 }
 
 
+_CHART_PARAMS = {
+    "type": "object",
+    "properties": {
+        "shown": {"type": "object", "description": (
+            "Only the setup settings that change: as (table, figure, bar, line, area, scatter), x (a column along the "
+            "bottom), bucket (day, week, month, quarter, year), series ([{column, agg}], agg one of count, count_distinct, "
+            "sum, avg, min, max; column '' counts rows), split (a column that colours it, '' for none), top (1-12 "
+            "colours), segments (stacked, side_by_side, shares), running, labels, across (bars sideways), and for a "
+            "table columns, sort, descending.")},
+        "viz": {"type": "object", "description": (
+            "Only the dressing that changes, null to take one off: lineWidth (1-6, default 2), lineShape (smooth, step; "
+            "null is straight), markers, numberFormat (a d3 format such as ',.0f', '$,.2f', '.1%'), yMin, yMax, yLog, "
+            "sortBy (value, label), top, legend (top, bottom, left, right, none), xTitle, yTitle, tooltipOff, orient "
+            "(vertical, horizontal), refLines ([{value, label}]).")},
+        "summary": {"type": "string", "description": "What changes, in one sentence of the person's own words."},
+    },
+}
+
+
 def heard_words(frame: dict) -> str:
     """A step of the drafting, as a line a person reads while it runs — counts and card titles, never the model's words."""
     kind = frame.get("type")
@@ -44,13 +63,15 @@ def heard_words(frame: dict) -> str:
     return ""
 
 
-def change_tools(connection_id: str, dashboard: Optional[tuple[str, str]], *, emit: Optional[Emit] = None,
+def change_tools(connection_id: str, dashboard: Optional[tuple[str, ...]], *, emit: Optional[Emit] = None,
                  schema: Optional[str] = None, draft: Any = None, record: Any = None) -> list[ToolSpec]:
-    """``dashboard`` is ``(person, dashboard id)`` for a dashboard the person keeps; None gives no tool. ``draft`` stands in
-    for `edit_in_words` and ``record`` for the inbox's `get_proposal` in tests."""
-    if not dashboard or not all(dashboard):
+    """``dashboard`` is ``(person, dashboard id)`` for a dashboard the person keeps — and ``(person, dashboard id, card id)``
+    when the question is about one chart of it, which adds ``change_chart`` (`dashboards.chart_look`); None gives no tool.
+    ``draft`` stands in for `edit_in_words` and ``record`` for the inbox's `get_proposal` in tests."""
+    if not dashboard or len(dashboard) < 2 or not all(dashboard[:2]):
         return []
-    person, dashboard_id = dashboard
+    person, dashboard_id = dashboard[0], dashboard[1]
+    card_id = dashboard[2] if len(dashboard) > 2 else ""
 
     def run(args: dict) -> dict:
         words = " ".join(str((args or {}).get("change") or "").split())
@@ -89,7 +110,30 @@ def change_tools(connection_id: str, dashboard: Optional[tuple[str, str]], *, em
         return {"staged": False, "said": list(out.get("sentences") or ["No change was drafted."]),
                 "next": "Nothing was staged. Tell the person why, in these words."}
 
-    return [ToolSpec(
+    def announced(proposal_id: str) -> None:
+        from pramanyx.agent.dashboard_tool import announce_staged
+        if record is None:
+            from pramanyx.actions.inbox import get_proposal as read
+        else:
+            read = record
+        staged = read(proposal_id)
+        if staged is not None:
+            announce_staged(emit, staged)
+
+    def chart(args: dict) -> dict:
+        from pramanyx.dashboards import chart_look
+        a = args or {}
+        try:
+            staged = chart_look.propose(connection_id, person, dashboard_id, card_id, a.get("shown"), a.get("viz"),
+                                        str(a.get("summary") or ""), schema=schema)
+        except chart_look.Refused as e:
+            return {"staged": False, "said": e.sentences, "next": "Nothing was staged. Tell the person why, in these words."}
+        announced(staged.id)
+        return {"staged": True, "changes": list((staged.detail or {}).get("lines") or []),
+                "next": ("The change to this one chart is staged and shown to the person, line by line, with Allow and "
+                         "Reject. Nothing has changed yet. Say in one sentence what changes and that it waits for their Allow.")}
+
+    tools = [ToolSpec(
         name="change_dashboard",
         description=(
             "Change the dashboard the person is asking from, as they ask: arrange, resize, add or take off cards made from "
@@ -99,3 +143,16 @@ def change_tools(connection_id: str, dashboard: Optional[tuple[str, str]], *, em
         parameters=_PARAMS,
         run=run,
     )]
+    if card_id:
+        tools.append(ToolSpec(
+            name="change_chart",
+            description=(
+                "Change how THE ONE CHART the person is asking about is drawn — its kind, what runs along the bottom, what "
+                "is measured, what colours it, its labels, a line's width or shape, its number format, its axes, its "
+                "legend, its reference lines. Name only the settings that change, from how it is drawn now (`drawn` in "
+                "what is on screen); the rest stay. Use it for any change to this chart's look; use change_dashboard only "
+                "to arrange the dashboard. It stages the change for the person to allow; never say it is done."),
+            parameters=_CHART_PARAMS,
+            run=chart,
+        ))
+    return tools

@@ -80,7 +80,8 @@ import type { WireSpec } from "@/lib/dashboards/sets";
 import { valuesFor, valuesRead, type ValuesSent } from "@/lib/dashboards/values";
 import { chooseIn, chosenOn, filterLink, filterSource, focusOfCard, focusWords, fromFilter, notFiltered, traceAndChoose, type DashboardFocus } from "@/lib/dashboards/focus";
 import { toast } from "@/components/ui/toast";
-import { askAbout, dashboardSubject } from "@/lib/askSubject";
+import { dashboardSubject } from "@/lib/askSubject";
+import { CardPrompt } from "@/components/dashboards/CardPrompt";
 import type { Pick as ChartPick } from "@/components/charts/selection";
 import { AddRowPiece } from "@/components/dashboards/AddRowPiece";
 import { QueryFiltersPiece, QueryNarrowingProvider, readsTable, useQueryNarrowing, type FilterColumn } from "@/components/dashboards/QueryFilters";
@@ -1314,15 +1315,14 @@ function DashboardCard({ element }: ComponentRenderProps<{ card: string; tone?: 
   const own = valued.onRefresh;
   const boardTitle = boardTitleOf(elements) ?? "";
   const shownRange = period?.showing ?? null;
-  const reading = !pageDoors.onSelect;
-  const doors = useMemo(() => {
-    const placed = (element.props as { title?: string | null }).title;
-    const ask = reading && connectionId ? (cardId: string, title: string) => {
-      const subject = dashboardSubject(connectionId, dashboardId, boardTitle, shownRange, { id: cardId, title: placed || title });
-      if (subject) askAbout(subject);
-    } : undefined;
-    return { ...tileDoors, ...(own ? { onRefresh: own } : {}), ...(ask ? { onAskAbout: ask } : {}) };
-  }, [tileDoors, own, reading, connectionId, dashboardId, boardTitle, shownRange, element.props]);
+  // the card's own prompt (2026-11-19): asked in the Ask panel about this card alone, reading or editing
+  const [prompting, setPrompting] = useState(false);
+  const placedTitle = (element.props as { title?: string | null }).title;
+  const subject = useMemo(() => (connectionId && cs
+    ? dashboardSubject(connectionId, dashboardId, boardTitle, shownRange, { id, title: placedTitle || cs.card.title }) : null),
+  [connectionId, cs, dashboardId, boardTitle, shownRange, id, placedTitle]);
+  const doors = useMemo(() => ({ ...tileDoors, ...(own ? { onRefresh: own } : {}), ...(subject ? { onAskChange: () => setPrompting(true) } : {}) }),
+    [tileDoors, own, subject]);
   const status = host.cards[id]?.status ?? "unmeasured";
   // A card that says no size takes what its shape asks, as it did before sizes: a chart or a
   // table two columns, a figure one.
@@ -1367,7 +1367,7 @@ function DashboardCard({ element }: ComponentRenderProps<{ card: string; tone?: 
                   place={{ elementKey: key, size, range, schema }} waits={valued.waits} focus={tileFocus} />
               </PlacementLookProvider>
             </CardBoundary>
-          )}</>}
+          )}{prompting && subject && <CardPrompt subject={subject} onClose={() => setPrompting(false)} />}</>}
     </Cell>
   );
 }

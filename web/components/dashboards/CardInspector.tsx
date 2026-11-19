@@ -262,6 +262,8 @@ export function QueryChartEditor({ cs, onKept, colors = null, dataset }: {
     lineAvailable: lined,
     markersAvailable: other ? true : shown.as === "line",
     lineShapeValue: viz.lineShape ?? "", setLineShape: v => style({ lineShape: v || undefined }),
+    // a query card's line width (2026-11-19): 2 is the default and is kept as nothing
+    ...(!other && shown.as === "line" ? { lineWidthValue: String(viz.lineWidth ?? 2), setLineWidth: (v: string) => style({ lineWidth: v === "2" ? undefined : Number(v) }) } : {}),
     // a query card's line hides its points unless they are asked for; an answer's chart shows them unless they are not
     markersOn: other ? viz.markers !== false : viz.markers === true,
     setMarkersOn: b => style({ markers: other ? (b ? undefined : false) : (b ? true : undefined) }),

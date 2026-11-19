@@ -9,6 +9,7 @@ import { doorFor, isPlainSend } from "@/lib/chatDoors";
 import { uploadAttachment, type AttachmentResult } from "@/lib/attachments";
 import { answersDeep, projectThread, newSessionId, type PramanyxUIMessage, type ChatTurn } from "@/lib/chatTurn";
 import { usePramanyxChat } from "@/lib/usePramanyxChat";
+import { takeQueuedAsk, useQueuedAsk } from "@/lib/askPanel";
 import { changeable, focusOf, setAskSubject, subjectKey, subjectWords, useAskSubject, usePageSubject } from "@/lib/askSubject";
 import { SHEET_FILES, SheetEntryView, SheetGrounding, SheetTurnFoot, useSheetEntries } from "@/components/ask/SheetAssist";
 import { useSheetDoors } from "@/lib/sheetBridge";
@@ -86,6 +87,8 @@ interface Props {
   onSession?: (session: string, title: string) => void;
   /** A new conversation, beside this one: what the composer's /new does. Absent, /new is not offered. */
   onNew?: () => void;
+  /** The Ask panel's conversation in front: it sends a question asked from outside the panel, on a chart (2026-11-19). */
+  takesQueued?: boolean;
 }
 
 /** The modes a person can PICK in the composer. `auto` is deliberately absent: the
@@ -772,7 +775,7 @@ function AgentLandingBlock({ agent, connectionName }: { agent: UserAgent; connec
   );
 }
 
-export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQuestion, initialMode, initialInsightId, capabilities, initialAgentId, beside = false, address, harness = false, onSession, onNew }: Props) {
+export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQuestion, initialMode, initialInsightId, capabilities, initialAgentId, beside = false, address, harness = false, onSession, onNew, takesQueued = false }: Props) {
   // Read during the first render, into a ref, because both this component and page.tsx's
   // URL-sync effect rewrite the query string — whichever ran first would erase the id
   // before the restore below could read it. A ref initializer is safe here specifically
@@ -1205,6 +1208,15 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
     return () => clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialQuestion, connectionId]);
+
+  // A question asked on a chart (2026-11-19): the conversation in front sends it once the chart is its subject — a quick
+  // turn, the conversation itself, which holds the change to that one chart
+  const queued = useQueuedAsk();
+  useEffect(() => {
+    if (!takesQueued || !queued || queued.connectionId !== connectionId || !subject || subjectKey(subject) !== queued.subject) return;
+    takeQueuedAsk(queued.n);
+    sendQuestionRef.current(queued.text, "ask");
+  }, [takesQueued, queued, connectionId, subject]);
 
   /** Upload one attachment through the door its kind names, and SHOW the outcome. */
   const takeFile = useCallback(async (file: File) => {

@@ -23,6 +23,13 @@ const setup = (segments: "stacked" | "side_by_side" | "shares" = "stacked", labe
 type Layer = { mark: Record<string, unknown>; encoding: Record<string, Record<string, unknown>>; transform?: Record<string, unknown>[] };
 const layers = (spec: Record<string, unknown>) => spec.layer as Layer[];
 
+describe("a line's width (2026-11-19: \"increase the thickness of lines\")", () => {
+  it("is 2 unless the chart says otherwise", () => {
+    expect(layers(queryChartSpec(chart("line"), setup(), COLOURS))[0].mark.strokeWidth).toBe(2);
+    expect(layers(queryChartSpec(chart("line"), setup(), COLOURS, undefined, undefined, { lineWidth: 4 }))[0].mark.strokeWidth).toBe(4);
+  });
+});
+
 describe("a query card's chart", () => {
   it("stacks its bars, colours each series in order and Other in the theme's grey, and says each date by its bucket", () => {
     const spec = queryChartSpec(chart("bar"), setup(), COLOURS);

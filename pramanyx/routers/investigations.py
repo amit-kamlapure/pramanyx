@@ -3922,7 +3922,7 @@ async def _stream_converse(
     brief_period: str = "",
     shape: Optional[str] = None,
     sheet: str = "",
-    dashboard: Optional[tuple[str, str]] = None,
+    dashboard: Optional[tuple[str, ...]] = None,
     person: str = "",
 ) -> AsyncGenerator[str, None]:
     """Serve one `/ask` turn as a CONVERSATION (SP-14; unconditional since 2026-10-28).
@@ -5737,14 +5737,16 @@ def _asker(request) -> str:
     return person_of(request)
 
 
-def _own_dashboard(req, request) -> Optional[tuple[str, str]]:
+def _own_dashboard(req, request) -> Optional[tuple[str, ...]]:
     """``(person, dashboard id)`` when a question is asked about a dashboard the asker keeps — one shared with them (named
-    with its owner) is theirs to read, not to change — else None."""
+    with its owner) is theirs to read, not to change — else None; ``(person, dashboard id, card id)`` when it is asked about
+    one chart of it (2026-11-19: the chart's own look can then be changed)."""
     focus = getattr(req, "focus", None)
     if focus is None or getattr(focus, "kind", "") != "dashboard" or getattr(focus, "owner", "") or not focus.dashboard:
         return None
     from pramanyx.dashboards.home import person_of
-    return (person_of(request), focus.dashboard)
+    card = str(getattr(focus, "id", "") or "")
+    return (person_of(request), focus.dashboard, card) if card else (person_of(request), focus.dashboard)
 
 
 #: What the conversation is told when the person chose Agent on a dashboard they keep (`_conversation_decides`).

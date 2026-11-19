@@ -658,7 +658,7 @@ def converse_tools(connection_id: str, *, emit: Optional[Emit] = None,
                    session_id: str = "", canvas_id: Optional[str] = None,
                    user_question: str = "", agent: Any = None,
                    schema_scope: Optional[str] = None, sheet: str = "",
-                   dashboard: Optional[tuple[str, str]] = None, person: str = "") -> list[ToolSpec]:
+                   dashboard: Optional[tuple[str, ...]] = None, person: str = "") -> list[ToolSpec]:
     """The tool set for one connection.
 
     Bound to the connection by closure rather than taking it as a model-supplied
@@ -960,7 +960,7 @@ def converse(connection_id: str, question: str, *, extra_context: Optional[str] 
              on_step=None, tool_emit: Optional[Emit] = None,
              session_id: str = "", canvas_id: Optional[str] = None, agent: Any = None,
              trace_id: str = "", schema_scope: Optional[str] = None,
-             shape: Optional[str] = None, sheet: str = "", dashboard: Optional[tuple[str, str]] = None,
+             shape: Optional[str] = None, sheet: str = "", dashboard: Optional[tuple[str, ...]] = None,
              person: str = ""):
     """Answer one question as a conversation rather than a compiled query spec.
 

@@ -91,6 +91,9 @@ export interface VizEditorModel {
   markersAvailable?: boolean;
   lineShapeValue: "" | "smooth" | "step";
   setLineShape: (v: "" | "smooth" | "step") => void;
+  /** A line's width, "1" to "6"; left out, not offered. */
+  lineWidthValue?: string;
+  setLineWidth?: (v: string) => void;
   markersOn: boolean;
   setMarkersOn: (b: boolean) => void;
   yMinValue: string;
@@ -759,6 +762,13 @@ export function VizEditorPanel({ model, onClose, docked = false }: { model: VizE
             <span className="aug-fs-chrome" style={TITLE}>Line shape</span>
             <SegToggle label="Line shape" value={model.lineShapeValue} onChange={model.setLineShape}
               options={[["", "Straight"], ["smooth", "Smooth"], ["step", "Step"]]} />
+          </div>
+        )}
+        {chartMode && model.lineAvailable && model.setLineWidth && (
+          <div style={{ ...ROW, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+            <span className="aug-fs-chrome" style={TITLE}>Line width</span>
+            <SegToggle label="Line width" value={model.lineWidthValue ?? "2"} onChange={model.setLineWidth}
+              options={[["1", "1"], ["2", "2"], ["3", "3"], ["4", "4"], ["5", "5"], ["6", "6"]]} />
           </div>
         )}
         {chartMode && model.lineAvailable && model.markersAvailable !== false && (

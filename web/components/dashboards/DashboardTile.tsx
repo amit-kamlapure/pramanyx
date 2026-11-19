@@ -41,6 +41,7 @@ import type { Pick as ChartPick } from "@/components/charts/selection";
 import { VegaChart } from "@/components/charts/vega/VegaChart";
 import { useCellBox, useMeasured } from "@/components/dashboards/cellBox";
 import { SizePick } from "@/components/dashboards/SizePick";
+import { BrandSpark } from "@/components/ui/brand";
 import { Button } from "@/components/ui/button";
 import { Icon, type IconName } from "@/components/ui/icon";
 import { readMetricTrend, type BriefingRange, type CardRunPrevious, type DashboardCard, type QueryShaped, type QueryShown, type StatedRange } from "@/lib/api";
@@ -83,6 +84,8 @@ export const WIDE: Record<TileShape, boolean> = { figure: false, trend: true, ro
 export interface TileDoors {
   /** The study's R20 — open the Data Canvas with this card as the question's subject. */
   onAskAbout?: (id: string, title: string) => void;
+  /** The card's own prompt (2026-11-19): asked in the Ask panel about this card alone, a change to its look included. */
+  onAskChange?: () => void;
   /** Take the card off this dashboard. Absent where the reader may not change it — a strip, a published one. */
   onRemove?: (id: string) => void;
   onRefresh: (id: string) => void;
@@ -249,7 +252,10 @@ function Doors({ card, doors, onAlert, place, files }: { card: DashboardCard; do
       {doors.onResize && place.elementKey && (
         <SizePick value={place.size} label={`Size of ${card.title}`} onPick={s => doors.onResize?.(place.elementKey as string, s)} />
       )}
-      {doors.onAskAbout && (
+      {doors.onAskChange ? (
+        <Button variant="ghost" size="icon-xs" aria-label="Ask about this chart" title="Ask about this chart or how it is drawn" data-testid="card-ask"
+          onClick={doors.onAskChange}><BrandSpark size={14} /></Button>
+      ) : doors.onAskAbout && (
         <Button variant="ghost" size="icon-xs" aria-label="Ask about this card" title="Ask about this card, for the period on screen" data-testid="card-ask-about"
           onClick={() => doors.onAskAbout?.(card.id, card.title)}><Icon name="chat" /></Button>
       )}

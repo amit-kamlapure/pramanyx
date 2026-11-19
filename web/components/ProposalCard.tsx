@@ -50,7 +50,7 @@ function openChoicesOf(p: StagedProposal): OpenChoice[] {
 }
 
 /** A change to a dashboard, drafted or to publish: the proposal kinds the inbox stores under the dashboard's old name. */
-export const isDashboardProposal = (kind: string): boolean => kind === "cockpit_draft" || kind === "cockpit_publish";
+export const isDashboardProposal = (kind: string): boolean => kind === "cockpit_draft" || kind === "cockpit_publish" || kind === "chart_look";
 
 const KIND_CHIP: Record<string, { hue: ChipHue; label: string }> = {
   declared_action: { hue: "caution", label: "action" },
@@ -67,6 +67,7 @@ const KIND_CHIP: Record<string, { hue: ChipHue; label: string }> = {
   agent_limit: { hue: "accent", label: "agent limit" },
   cockpit_draft: { hue: "info", label: "dashboard" },
   cockpit_publish: { hue: "info", label: "dashboard · publish" },
+  chart_look: { hue: "info", label: "dashboard · a chart" },
   ontology_candidate: { hue: "info", label: "from query history" },
 };
 
@@ -251,6 +252,16 @@ function keptWords(outcome: Record<string, unknown> | undefined): string {
 
 function DashboardBody({ p }: { p: StagedProposal }) {
   const d = p.detail ?? {};
+  // how one chart is drawn (2026-11-19): the chart, and each setting that changes
+  if (p.kind === "chart_look") {
+    const lines = (Array.isArray(d.lines) ? d.lines : []).filter((l): l is string => typeof l === "string");
+    return (
+      <div className="flex flex-col gap-1" data-testid="chart-look">
+        <Row label="Chart">{String(d.title ?? "")}</Row>
+        {lines.map(l => <Row key={l} label="Changes">{l}</Row>)}
+      </div>
+    );
+  }
   // A publish (the canvas, B5): the dashboard as it stands, shared with the groups and roles named.
   if (d.mode === "publish") {
     const to = (Array.isArray(d.to) ? d.to : []) as string[];

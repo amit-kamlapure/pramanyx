@@ -387,7 +387,13 @@ def _about_dashboard(focus: Any, connection_id: str, *, person: str) -> Subject:
         card = get_card(card_id)
         if card is None:
             continue
-        cards.append({"id": card_id, "title": str(props.get("title") or card.title), "sql": str(card.sql or "")[:1500]})
+        one = {"id": card_id, "title": str(props.get("title") or card.title), "sql": str(card.sql or "")[:1500]}
+        render = card.render if isinstance(card.render, dict) else {}
+        if wanted and isinstance(render.get("shown"), dict):
+            # the one chart asked about, as it is drawn now: what a change to its look starts from (2026-11-19)
+            from pramanyx.dashboards.chart_look import drawn
+            one["drawn"] = drawn(render)
+        cards.append(one)
     period = held_period(str(focus.period or ""))
     covers = f"{period['start']} to {period['last_day']}" if period else "as written"
     return Subject(kind="dashboard", label=title, board={"title": title, "card": wanted, "cards": cards[:MAX_DASHBOARD_CARDS],
