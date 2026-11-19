@@ -259,7 +259,9 @@ function DashboardRoot(props: ComponentRenderProps<{ title: string }>) {
  *  stands as far in from the page's edge as the page moved, over the cards that pass under it, as a frozen column does in
  *  a sheet (the user, 2026-11-19: "the Global filters are not visible" with the panel open). Without the panel, it is
  *  where it always was. */
-const PINNED: CSSProperties = { position: "relative", zIndex: 3, transform: "translateX(var(--ask-pushed, 0px))", background: "var(--bg-0)" };
+const PINNED: CSSProperties = { position: "relative", zIndex: 3, transform: "translateX(var(--ask-pushed, 0px))", background: "var(--bg-0)",
+  // the page's own margin at its left is the column's ground too, so no card shows beside it as it passes under
+  boxShadow: "-40px 0 0 0 var(--bg-0)" };
 
 function DashboardRootBody(props: ComponentRenderProps<{ title: string }>) {
   const { elements, focus } = useDashboard();
