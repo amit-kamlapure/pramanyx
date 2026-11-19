@@ -24,6 +24,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/abilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Abilities
+         * @description Every ability, its words, what it needs and how it is allowed, by the one rule both places follow; the families a
+         *     place adds at start-up; and where the two places differ.
+         */
+        get: operations["list_abilities_abilities_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/access/explain": {
         parameters: {
             query?: never;
@@ -9578,6 +9599,27 @@ export interface paths {
          * @description Reject a staged proposal — resolved with the actor, no side effect. A re-reject is a no-op.
          */
         post: operations["reject_inbox_kinetic_actions_inbox__proposal_id__reject_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/kinetic-actions/inbox/{proposal_id}/said": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Inbox Proposal Said
+         * @description ONE staged change in a person's words (2026-11-20): what its card asks, what Allow would do line by line, and
+         *     where it stands — the coworker's card in its conversation reads this, as the Ask panel's own card shows the same.
+         */
+        get: operations["get_inbox_proposal_said_kinetic_actions_inbox__proposal_id__said_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -28230,6 +28272,28 @@ export interface operations {
             };
         };
     };
+    list_abilities_abilities_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
     explain_access_access_explain_get: {
         parameters: {
             query: {
@@ -44124,6 +44188,37 @@ export interface operations {
                 "application/json": components["schemas"]["RejectRequest"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_inbox_proposal_said_kinetic_actions_inbox__proposal_id__said_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
