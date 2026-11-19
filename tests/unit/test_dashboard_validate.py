@@ -350,3 +350,23 @@ def test_a_column_look_or_kept_colour_outside_its_words_is_refused(premise, wher
     key = "card-net" if where == "columns_look" else premise["root"]
     premise["elements"][key]["props"][where] = value
     assert V.check_spec(premise, known_cards=CARDS, model_written=False).status == V.REFUSED
+
+
+# ── a filter of multiple values offered as a dropdown (the user, 2026-11-19) ──────────────────
+
+def _with_filter(premise: dict, **props) -> dict:
+    spec = copy.deepcopy(premise)
+    root = spec["root"]
+    spec["elements"]["global-filters"] = {"type": "GlobalFilters", "props": {}, "children": ["f-type"]}
+    spec["elements"]["f-type"] = {"type": "GlobalFilter", "children": [],
+                                  "props": {"title": "Type", "kind": "multi", "table": "titles", "column": "type", **props}}
+    spec["elements"][root]["children"] = ["global-filters", *spec["elements"][root]["children"]]
+    return spec
+
+
+@needs_rules
+def test_multiple_values_may_be_offered_as_a_dropdown_and_nothing_else(premise):
+    assert V.check_spec(_with_filter(premise, show="dropdown"), known_cards=CARDS).accepted, "a dropdown filter is accepted"
+    assert V.check_spec(_with_filter(premise, show="list"), known_cards=CARDS).accepted
+    refused = V.check_spec(_with_filter(premise, show="cloud"), known_cards=CARDS)
+    assert refused.accepted is False and "show" in said(refused)

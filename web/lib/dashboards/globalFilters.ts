@@ -19,12 +19,30 @@ export interface GlobalFilterProps {
   table?: string | null; column?: string | null; allow_all?: boolean | null;
   linked?: boolean | null; opens_with?: FilterOpening | null; match?: "contains" | "exact" | "starts_with" | null;
   case_sensitive?: boolean | null; page?: string | null; parameter?: string | null;
+  /** How multiple values are offered: a list unless "dropdown". */
+  show?: "list" | "dropdown" | null;
 }
 
 export const FILTER_KINDS: { value: GlobalFilterKind; label: string }[] = [
   { value: "multi", label: "Multiple values" }, { value: "single", label: "Single value" }, { value: "date", label: "Date picker" },
   { value: "date_range", label: "Date range picker" }, { value: "text", label: "Text entry" }, { value: "range", label: "Range slider" },
 ];
+
+/** The types a filter is chosen as in its setup: the kinds, with multiple values offered two ways (the user, 2026-11-19: a
+ *  dropdown "takes less space and gives a better UX"). The dropdown is the multiple-values kind shown another way, so
+ *  everything a filter of that kind does, it does. */
+export const MULTI_DROPDOWN = "multi_dropdown";
+export const FILTER_TYPES: { value: string; label: string }[] = [
+  FILTER_KINDS[0], { value: MULTI_DROPDOWN, label: "Multi-select dropdown" }, ...FILTER_KINDS.slice(1),
+];
+
+/** A filter's type as its setup shows it. */
+export const filterTypeOf = (p: Pick<GlobalFilterProps, "kind" | "show">): string =>
+  p.kind === "multi" && p.show === "dropdown" ? MULTI_DROPDOWN : p.kind;
+
+/** What choosing a type writes: its kind, and for multiple values how they are offered (a list is said by saying nothing). */
+export const propsOfType = (type: string): Pick<GlobalFilterProps, "kind" | "show"> =>
+  type === MULTI_DROPDOWN ? { kind: "multi", show: "dropdown" } : { kind: type as GlobalFilterKind, show: null };
 
 export const TEXT_MATCHES: { value: "contains" | "exact" | "starts_with"; label: string }[] = [
   { value: "contains", label: "Contains" }, { value: "exact", label: "Exactly matches" }, { value: "starts_with", label: "Starts with" },

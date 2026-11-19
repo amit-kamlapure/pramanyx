@@ -5,13 +5,14 @@
  * is theirs, kept in their browser and said in the "Filtered by" bar. In the builder a filter is chosen like any piece and set up in
  * the right panel.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Slider } from "@radix-ui/themes";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { Popover, Slider } from "@radix-ui/themes";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
+import { Tooltip } from "@/components/ui/tooltip";
 import { SelectField } from "@/components/ui/select";
 import { dashboardFilterValues, type FilterValues } from "@/lib/api";
 import { MAX_GLOBAL_FILTERS } from "@/lib/dashboards/catalog";
@@ -49,7 +50,8 @@ function useValues(connectionId: string, table: string, column: string, narrow: 
 
 const Note = ({ children }: { children: React.ReactNode }) => <div className="aug-fs-sm" style={{ color: "var(--t3)" }}>{children}</div>;
 
-function MultiValues({ p, connectionId, held, choose, narrow }: Control) {
+/** Every value a filter of multiple values can hold, to tick: found by words when there are many, with Select all and Clear. */
+function ValueList({ p, connectionId, held, choose, narrow }: Control) {
   const { got, problem } = useValues(connectionId, String(p.table), String(p.column), narrow);
   const [term, setTerm] = useState("");
   const picked = held?.values ?? [];
@@ -82,6 +84,39 @@ function MultiValues({ p, connectionId, held, choose, narrow }: Control) {
       {got.more && <Note>The commonest {formatCount(got.values.length)} are listed.</Note>}
     </div>
   );
+}
+
+/** What a dropdown says it holds, in one line: All, the values, or the first two and how many more. */
+export function heldWords(picked: FocusValue[]): string {
+  if (!picked.length) return "All";
+  if (picked.length <= 2) return picked.map(String).join(", ");
+  return `${String(picked[0])}, ${String(picked[1])} +${formatCount(picked.length - 2)}`;
+}
+
+/** Multiple values in one line, as a dropdown (the user, 2026-11-19: it "takes less space and gives a better UX"). The
+ *  values are read when it opens, not when the dashboard does. */
+function MultiDropdown(props: Control) {
+  const [open, setOpen] = useState(false);
+  const picked = props.held?.values ?? [];
+  const words = heldWords(picked);
+  return (
+    <Popover.Root open={open} onOpenChange={setOpen}>
+      <Popover.Trigger>
+        <Button variant="secondary" size="sm" data-testid="global-filter-dropdown" aria-label={`${props.p.title || props.p.column}: ${words}`}
+          style={{ width: "100%", justifyContent: "space-between", gap: 6, fontWeight: 400 }}>
+          <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: picked.length ? "var(--t1)" : "var(--t2)" }}>{words}</span>
+          <Icon name="chevd" size={14} />
+        </Button>
+      </Popover.Trigger>
+      <Popover.Content size="1" align="start" data-testid="global-filter-dropdown-list" style={{ width: 260, maxWidth: "calc(100vw - 32px)" }}>
+        <ValueList {...props} />
+      </Popover.Content>
+    </Popover.Root>
+  );
+}
+
+function MultiValues(props: Control) {
+  return props.p.show === "dropdown" ? <MultiDropdown {...props} /> : <ValueList {...props} />;
 }
 
 function SingleValue({ p, connectionId, held, choose, clear, narrow }: Control & { clear: () => void }) {
@@ -199,6 +234,51 @@ function FilterControl(props: Control & { clear: () => void }) {
   }
 }
 
+// ── the column, put away and brought back (the user, 2026-11-19: "our Global filters need to be collapsible") ──
+
+const SHUT_KEY = "pramanyx:dashboard-filters-shut";
+let shut: boolean | null = null;
+const shutListeners = new Set<() => void>();
+const readShut = (): boolean => {
+  if (shut !== null) return shut;
+  try { shut = window.localStorage.getItem(SHUT_KEY) === "1"; } catch { shut = false; }
+  return shut;
+};
+
+/** Whether the reader has put the filters column away: theirs, kept in their browser, for every dashboard. */
+export function useFiltersShut(): boolean {
+  return useSyncExternalStore(
+    l => { shutListeners.add(l); return () => { shutListeners.delete(l); }; },
+    () => (typeof window === "undefined" ? false : readShut()),
+    () => false,
+  );
+}
+
+export function shutFilters(next: boolean): void {
+  shut = next;
+  try { window.localStorage.setItem(SHUT_KEY, next ? "1" : "0"); } catch { /* kept while the page is open */ }
+  shutListeners.forEach(l => l());
+}
+
+/** For tests: forget what this browser kept. */
+export function resetFiltersShut(): void { shut = null; }
+
+/** What stands where the column was: the way back to it, and how many filters still hold a choice, so a reader never
+ *  forgets the cards are narrowed. */
+export function FiltersShutStrip({ held }: { held: number }) {
+  const words = held ? `Show the filters · ${held} holding a choice` : "Show the filters";
+  return (
+    <div data-testid="global-filters-shut" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, position: "sticky", top: 12 }}>
+      <Tooltip content={words} side="right">
+        <Button size="icon-sm" variant="secondary" aria-label={words} data-testid="global-filters-show" onClick={() => shutFilters(false)}>
+          <Icon name="filter" size={15} />
+        </Button>
+      </Tooltip>
+      {held > 0 && <span className="aug-fs-xs" data-testid="global-filters-held" style={{ color: "var(--t2)", fontVariantNumeric: "tabular-nums" }}>{held}</span>}
+    </div>
+  );
+}
+
 export function GlobalFiltersColumn({ filters, connectionId, focus, onFocus, building, selected, onChoose, onAdd, applyButton = false, page = null, onParameter, valueKinds }: {
   filters: { key: string; props: GlobalFilterProps }[];
   connectionId?: string;
@@ -246,10 +326,14 @@ export function GlobalFiltersColumn({ filters, connectionId, focus, onFocus, bui
     <aside aria-label="Global filters" data-testid="global-filters" style={{ display: "flex", flexDirection: "column", gap: 10, alignSelf: "start", position: "sticky", top: 12, minWidth: 0 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", minHeight: 24 }}>
         <span className="aug-fs-ui" style={{ color: "var(--t1)", fontWeight: 600 }}>{building ? "Global filters" : "Filters"}</span>
-        {building && onAdd && (
-          <Button size="icon-xs" variant="ghost" aria-label="Add a global filter" title="Add a global filter" data-testid="global-filter-add"
-            disabled={filters.length >= MAX_GLOBAL_FILTERS} onClick={onAdd}><Icon name="plus" size={14} /></Button>
-        )}
+        <span style={{ display: "inline-flex", gap: 2 }}>
+          {building && onAdd && (
+            <Button size="icon-xs" variant="ghost" aria-label="Add a global filter" title="Add a global filter" data-testid="global-filter-add"
+              disabled={filters.length >= MAX_GLOBAL_FILTERS} onClick={onAdd}><Icon name="plus" size={14} /></Button>
+          )}
+          <Button size="icon-xs" variant="ghost" aria-label="Put the filters away" title="Put the filters away · they keep what they hold"
+            data-testid="global-filters-hide" onClick={() => shutFilters(true)}><Icon name="chevl" size={14} /></Button>
+        </span>
       </div>
       {shown.map(({ key, props: p }) => {
         const ready = !!p.table && !!p.column && !!connectionId;

@@ -66,6 +66,8 @@ export const DASHBOARD_VOCABULARY_VERSION = 20;
 /** v19 — how a global filter is chosen from (the user, 2026-11-18). */
 export const GLOBAL_FILTER_KINDS = ["multi", "single", "date", "date_range", "text", "range"] as const;
 export type GlobalFilterKind = (typeof GLOBAL_FILTER_KINDS)[number];
+/** How a filter of multiple values is offered: a list of every value, or a dropdown. A list unless said. */
+export const MULTI_SHOWS = ["list", "dropdown"] as const;
 export const MAX_GLOBAL_FILTERS = 12;
 export const MAX_FILTER_DESCRIPTION = 200;
 
@@ -687,6 +689,8 @@ export const dashboardCatalog = defineCatalog(schema, {
         page: z.string().min(1).max(80).nullable().optional(),
         /** v20 — the dashboard value a query reads as {{name}} that takes what this filter holds. */
         parameter: z.string().regex(WIRE_NAME).nullable().optional(),
+        /** v20 — how multiple values are offered: a list, or a dropdown that takes one line (the user, 2026-11-19). */
+        show: z.enum(MULTI_SHOWS).nullable().optional(),
       }),
       description: "One global filter: multiple values, a single value, a date, a date range, text or a range of numbers, on one column.",
     },

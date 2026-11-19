@@ -55,8 +55,8 @@ import {
   ObjectFiltersPiece, ObjectTablePiece, PiecesProvider, ProcessBoardPiece, ValuesBar, chooseWords, useFiltering, usePieceFiltering, usePieces, useValueChips,
   type BarChip, type FilterProperty, type ObjectBarWords,
 } from "@/components/dashboards/OntologyPieces";
-import { GlobalFiltersColumn } from "@/components/dashboards/GlobalFilters";
-import { followsByValue, openedWith, stillHeld, type GlobalFilterProps } from "@/lib/dashboards/globalFilters";
+import { FiltersShutStrip, GlobalFiltersColumn, useFiltersShut } from "@/components/dashboards/GlobalFilters";
+import { followsByValue, heldBy, openedWith, stillHeld, type GlobalFilterProps } from "@/lib/dashboards/globalFilters";
 import { ImageTile, NoteTile, type ImageStamp, type StaticDoors } from "@/components/dashboards/StaticTile";
 import { DropdownMenu } from "@radix-ui/themes";
 import { ChromeActions } from "@/components/shell/PageChrome";
@@ -254,16 +254,26 @@ function DashboardRoot(props: ComponentRenderProps<{ title: string }>) {
   return <><DrillMenu /><DashboardRootBody {...props} /></>;
 }
 
+/** The width of the strip that stands where the filters column was, once a reader puts it away. */
+const SHUT_COLUMN = 32;
+
 function DashboardRootBody(props: ComponentRenderProps<{ title: string }>) {
-  const { elements } = useDashboard();
+  const { elements, focus } = useDashboard();
+  const shut = useFiltersShut();
   const keys = props.element.children ?? [];
   const at = keys.findIndex(k => elements[k]?.type === "GlobalFilters");
   if (at < 0) return <RootLayout {...props} />;
   const kids = Children.toArray(props.children);
   const rest = { ...props, element: { ...props.element, children: keys.filter((_, i) => i !== at) }, children: kids.filter((_, i) => i !== at) };
+  const held = (elements[keys[at]]?.children ?? [])
+    .filter(key => heldBy(focus, key, elements[key]?.props as unknown as GlobalFilterProps)).length;
   return (
-    <div style={{ display: "grid", gridTemplateColumns: `${FILTER_COLUMN}px minmax(0, 1fr)`, gap: 14, alignItems: "start" }}>
-      {kids[at]}
+    <div style={{ display: "grid", gridTemplateColumns: `${shut ? SHUT_COLUMN : FILTER_COLUMN}px minmax(0, 1fr)`, gap: 14, alignItems: "start" }}>
+      <div style={{ minWidth: 0 }}>
+        {shut && <FiltersShutStrip held={held} />}
+        {/* put away, the column stays mounted: it is also what feeds the values the cards' queries read */}
+        <div hidden={shut} style={shut ? { display: "none" } : undefined}>{kids[at]}</div>
+      </div>
       <div style={{ minWidth: 0 }}><RootLayout {...rest} /></div>
     </div>
   );

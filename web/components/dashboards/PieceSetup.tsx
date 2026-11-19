@@ -27,7 +27,7 @@ import {
   MAX_FILTER_DESCRIPTION, MAX_FIXED_FILTERS, type GlobalFilterKind,
 } from "@/lib/dashboards/catalog";
 import { DATE_PRESETS, DAY_PRESETS, PRESET_WORDS, type DatePreset } from "@/lib/dashboards/datePresets";
-import { FILTER_KINDS, TEXT_MATCHES, canFeed, fits, type FilterOpening } from "@/lib/dashboards/globalFilters";
+import { FILTER_TYPES, TEXT_MATCHES, canFeed, filterTypeOf, fits, propsOfType, type FilterOpening } from "@/lib/dashboards/globalFilters";
 import { dashboardFilterFields, type FilterField } from "@/lib/api";
 import {
   editNote, freshWireName, moveCardTo, moveCardToNewSection, moveSectionTo, recaption, rename, sectionsOf, setProps, tabsOf,
@@ -447,10 +447,10 @@ function GlobalFilterSetup({ p, connectionId, set, spec, onChange }: { p: Props;
           onSave={v => set({ description: v || null }, "a filter's description written by hand")} />}
       </Row>
       <Row label="Filter">
-        <Pick label="How it is chosen from" value={kind} options={FILTER_KINDS} onPick={v => {
-          const next = v as GlobalFilterKind;
+        <Pick label="How it is chosen from" value={filterTypeOf({ kind, show: p.show as "list" | "dropdown" | null | undefined })} options={FILTER_TYPES} onPick={v => {
+          const next = propsOfType(v);
           const held = table?.columns.find(c => c.name === p.column);
-          set({ kind: next, ...(held && !fits(next, held.kind) ? { column: null } : {}) }, "a filter's kind chosen by hand");
+          set({ ...next, ...(held && !fits(next.kind, held.kind) ? { column: null } : {}) }, "a filter's kind chosen by hand");
         }} />
         {kind === "single" && (
           <label className="aug-fs-sm" style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--t1)" }}>

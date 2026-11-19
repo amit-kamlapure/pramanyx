@@ -7,11 +7,13 @@ import { resolve } from "node:path";
 import { fireEvent, render, screen, waitFor } from "@/lib/testing";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { GlobalFiltersColumn } from "@/components/dashboards/GlobalFilters";
+import { GlobalFiltersColumn, heldWords } from "@/components/dashboards/GlobalFilters";
 import { MAX_GLOBAL_FILTERS } from "@/lib/dashboards/catalog";
 import { addGlobalFilter, setProps, takeOff, type DashboardSpec } from "@/lib/dashboards/edit";
 import { focusFor, focusWords, type DashboardFocus } from "@/lib/dashboards/focus";
-import { fits, focusOfChoice, heldBy, stillHeld, withFilter, type GlobalFilterProps } from "@/lib/dashboards/globalFilters";
+import {
+  filterTypeOf, fits, focusOfChoice, heldBy, propsOfType, stillHeld, withFilter, MULTI_DROPDOWN, type GlobalFilterProps,
+} from "@/lib/dashboards/globalFilters";
 import { checkDashboardSpec } from "@/lib/dashboards/rules";
 
 const dashboardFilterValues = vi.hoisted(() => vi.fn());
@@ -144,6 +146,39 @@ describe("the dashboard's spec", () => {
   it("refuses a kind of filter it does not know", () => {
     const made = addGlobalFilter(premise());
     expect(checkDashboardSpec(setProps(made.spec, made.key as string, { kind: "slider" })).valid).toBe(false);
+  });
+
+  it("keeps multiple values offered as a dropdown, and refuses another way of offering them", () => {
+    const made = addGlobalFilter(premise());
+    const dropdown = setProps(made.spec, made.key as string, { ...propsOfType(MULTI_DROPDOWN), table: "titles", column: "type" });
+    expect(checkDashboardSpec(dropdown).issues).toEqual([]);
+    expect(dropdown.elements[made.key as string].props).toMatchObject({ kind: "multi", show: "dropdown" });
+    expect(checkDashboardSpec(setProps(made.spec, made.key as string, { show: "cloud" })).valid).toBe(false);
+  });
+});
+
+describe("multiple values as a dropdown (the user, 2026-11-19)", () => {
+  it("is a type of its own in the setup, and the multiple-values kind underneath", () => {
+    expect(propsOfType(MULTI_DROPDOWN)).toEqual({ kind: "multi", show: "dropdown" });
+    expect(propsOfType("single")).toEqual({ kind: "single", show: null });
+    expect(filterTypeOf({ kind: "multi", show: "dropdown" })).toBe(MULTI_DROPDOWN);
+    expect(filterTypeOf({ kind: "multi" })).toBe("multi");
+  });
+
+  it("takes one line saying what it holds, and reads the values only when opened", async () => {
+    const onFocus = draw(P({ show: "dropdown" }));
+    const box = screen.getByTestId("global-filter-dropdown");
+    expect(box).toHaveTextContent("All");
+    expect(dashboardFilterValues).not.toHaveBeenCalled();             // no query until a reader opens it
+    fireEvent.click(box);
+    fireEvent.click(await screen.findByRole("checkbox", { name: "TV Show" }));
+    expect(asked(onFocus)).toEqual([{ table: "titles", column: "type", value: "", op: "in", values: ["TV Show"] }]);
+  });
+
+  it("says what it holds in one line", () => {
+    expect(heldWords([])).toBe("All");
+    expect(heldWords(["Brasil", "China"])).toBe("Brasil, China");
+    expect(heldWords(["Brasil", "China", "Japan", "Spain"])).toBe("Brasil, China +2");
   });
 });
 
