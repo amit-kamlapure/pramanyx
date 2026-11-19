@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { answerableRun, DEEP_ANALYSIS_MODE, getConnections, listUserAgents, recordOverviewDrill, cancelInvestigation, cancelActiveDeepRun, type UserAgent } from "@/lib/api";
+import { answerableRun, getConnections, listUserAgents, recordOverviewDrill, cancelInvestigation, cancelActiveDeepRun, type UserAgent } from "@/lib/api";
 import { doorFor, isPlainSend } from "@/lib/chatDoors";
 import { uploadAttachment, type AttachmentResult } from "@/lib/attachments";
-import { projectThread, newSessionId, type PramanyxUIMessage, type ChatTurn } from "@/lib/chatTurn";
+import { answersDeep, projectThread, newSessionId, type PramanyxUIMessage, type ChatTurn } from "@/lib/chatTurn";
 import { usePramanyxChat } from "@/lib/usePramanyxChat";
 import { changeable, focusOf, setAskSubject, subjectKey, subjectWords, useAskSubject, usePageSubject } from "@/lib/askSubject";
 import { useStickToBottom } from "@/lib/useStickToBottom";
@@ -1410,7 +1410,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                     {/* The ONE feedback control on an answer (2026-10-22): a second thumbs pair
                         used to sit inside the answer's "Methodology & details" and post the same
                         verdict for the same receipt. It lives here, at the foot, once. */}
-                    {(harness ? turn.mode === DEEP_ANALYSIS_MODE : !!canvasId) && turn.status === "done" && turn.publicReceiptId && (
+                    {(harness ? answersDeep(turn) : !!canvasId) && turn.status === "done" && turn.publicReceiptId && (
                       <AnswerSources receiptId={turn.publicReceiptId} connectionId={connectionId}
                         onOpen={source => { setSourcePanel(null); setSourcePage(source); }} />
                     )}

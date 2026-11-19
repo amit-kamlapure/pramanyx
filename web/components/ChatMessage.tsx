@@ -25,9 +25,9 @@ import { AnswerProse, readsAsProse } from "@/components/chat/AnswerProse";
 import { safePartial } from "@/lib/useReveal";
 import { Button } from "@/components/ui/button";
 import { ErrorState, Loading } from "@/components/ui/states";
-import type { ChatTurn, CompiledFrame } from "@/lib/chatTurn";
+import { answersDeep, type ChatTurn, type CompiledFrame } from "@/lib/chatTurn";
 import { BACKEND_LABEL } from "@/lib/llmMeta";
-import { DEEP_ANALYSIS_MODE, validateQuery, annotateTable, proposeLearnedSkill, saveLearnedSkill, getGroundingContext, pinQueryToDashboard, type QueryValidation, type GroundingReceipt } from "@/lib/api";
+import { validateQuery, annotateTable, proposeLearnedSkill, saveLearnedSkill, getGroundingContext, pinQueryToDashboard, type QueryValidation, type GroundingReceipt } from "@/lib/api";
 import { KeepOnDashboard } from "@/components/dashboards/KeepOnDashboard";
 import { InvestigationReportView } from "@/components/InvestigationReport";
 import { ExplorationReportView } from "@/components/ExplorationReport";
@@ -1754,7 +1754,7 @@ export function ChatMessage({
   };
   const harness = useHarness();
   const openInQuery = useOpenInQuery();
-  const deep = turn.mode === DEEP_ANALYSIS_MODE;
+  const deep = answersDeep(turn);
   const hasResult = deep
     ? !!(turn.deepReport ?? turn.report ?? turn.exploreReport ?? turn.dossierReport)
     : turn.status === "done";

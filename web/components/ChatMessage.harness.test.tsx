@@ -51,4 +51,13 @@ describe("an answer in the Ask panel", () => {
     expect(screen.queryByTestId("answer-evidence")).not.toBeInTheDocument();
     expect(screen.getByText(/SELECT COUNT/)).toBeInTheDocument();
   });
+
+  it("draws the deep analysis a conversation ran, though the turn was not asked as one (Agent on the person's dashboard)", () => {
+    const REPORT = { headline: "Movies are 69.6% of the catalogue", executive_summary: "Films span 75 years; TV about 25.",
+      confidence: "HIGH", observation_period: "", comparison_basis: "", recommendations: [], data_gaps: [],
+      attribution_waterfall: [], phases: [] };
+    inPanel({ ...TURN, mode: "ask", headline: null, columns: [], rows: [], sql: "", deepReport: REPORT } as unknown as ChatTurn);
+    expect(screen.getByText("Movies are 69.6% of the catalogue")).toBeInTheDocument();
+  });
 });
+

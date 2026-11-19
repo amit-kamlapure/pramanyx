@@ -21,6 +21,7 @@ import { readUIMessageStream } from "ai";
 
 import { DECLARED_DATA_PARTS } from "./pramanyxUIDataTypes";
 import {
+  answersDeep,
   FALLBACK_PARTS,
   PROJECTED_PARTS,
   projectThread,
@@ -136,6 +137,12 @@ describe("quick-path parity (the reducer's ask-mode fields)", () => {
     expect(decided.mode).toBe("ask");                     // rendered as the conversation's answer, not a deep report
     const plain = projectTurn("q", await messageFrom([{ event: "route", data: { depth: "quick", why: "" } }, { event: "done", data: {} }]));
     expect(plain.route).not.toHaveProperty("conversationDecided");
+  });
+
+  it("answers as a deep analysis when asked as one, or when a conversation's report came back in the turn", () => {
+    expect(answersDeep({ mode: "investigate", deepReport: null })).toBe(true);
+    expect(answersDeep({ mode: "ask", deepReport: { headline: "h" } as never })).toBe(true);
+    expect(answersDeep({ mode: "ask", deepReport: null })).toBe(false);
   });
 
   it("renders a resumed run whole — orphan assistant gets a synthesized user side (FL-1b)", async () => {

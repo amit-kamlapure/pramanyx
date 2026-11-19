@@ -33,7 +33,7 @@
 
 import type { UIMessage } from "ai";
 
-import type { AnswerRecheck, PlaybookRef, FindingDossier } from "@/lib/api";
+import { DEEP_ANALYSIS_MODE, type AnswerRecheck, type PlaybookRef, type FindingDossier } from "@/lib/api";
 import type {
   AnswerReport,
   ExplorationReport,
@@ -370,6 +370,12 @@ export interface ChatTurn {
   clarifyingQuestions: string[];
   clarifyingContext: string;
 }
+
+/** Whether a turn answers as a deep analysis: asked as one, or a conversation that ran one, whose report came back in
+ *  the turn. Seen live 2026-11-19: Agent on the person's own dashboard is the conversation's turn, it ran the deep
+ *  analysis, and the report was never drawn because the turn had not been asked as one. */
+export const answersDeep = (t: Pick<ChatTurn, "mode" | "deepReport">): boolean =>
+  t.mode === DEEP_ANALYSIS_MODE || !!t.deepReport;
 
 export const EMPTY_TURN: Omit<ChatTurn, "id" | "question" | "mode"> = {
   status: "loading",
