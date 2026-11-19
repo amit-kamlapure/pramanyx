@@ -1,6 +1,6 @@
 "use client";
 import { CONNECTORS } from "@/lib/connectors.gen";
-import { BrandBar, PramanyxMark, PramanyxName } from "@/components/ui/brand";
+import { BrandBar, PramanyxLogo } from "@/components/ui/brand";
 import { ErrorState } from "@/components/ui/states";
 import { toast } from "@/components/ui/toast";
 
@@ -47,7 +47,7 @@ import { NAVIGATE_EVENT, type NavigateRequest } from "@/lib/navigate";
 import { NAV_DESTINATIONS, NAV_SECTION_IDS, destinationOf } from "@/lib/navDestinations";
 import { ChromeActions, ChromeFacts, ChromeToolbar, PageChromeProvider, PageHeader, StatusStrip, useChromeBackTo } from "@/components/shell/PageChrome";
 import { InspectorHost, InspectorProvider } from "@/components/shell/Inspector";
-import { AskPanelHost, AskPanelToggle } from "@/components/ask/AskPanel";
+import { AskPanelHost, AskPanelToggle, AskPushedPage } from "@/components/ask/AskPanel";
 import { OVERVIEW_LAYER, agentOpsLayerOf, type AgentOpsLayer as AgentsLayer } from "@/lib/agentOpsLayers";
 import type { RecordLayer } from "@/components/record/RecordWorkspace";
 
@@ -272,7 +272,7 @@ function Topbar({
       {/* The wordmark, then the scope it applies to — the workspace switcher sits beside
           the name because everything below the topbar is read through it. */}
       <span className="aug-wordmark" style={{ display: "inline-flex", alignItems: "center", gap: 7, fontFamily: "inherit", textTransform: "none", letterSpacing: 0, fontWeight: 700 }}>
-        <PramanyxMark size={22} /><PramanyxName height={16} />
+        <PramanyxLogo height={18} />
       </span>
       <WorkspaceSwitcher
         workspaces={workspaces}
@@ -1907,8 +1907,9 @@ export default function Home() {
         {/* Sidebar */}
         <Sidebar tab={railTab} onNavigate={handleNavigate} selectedConn={selectedConn} counts={navCounts} />
 
-        {/* Content */}
+        {/* Content — beside the open Ask panel it keeps its width and moves left, scrolling sideways (`AskPushedPage`) */}
         <SchemaProvider connId={selectedConn}>
+          <AskPushedPage hidden={tab === "chat"}>
           <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
             <PageHeader place={chrome.place} fallbackTitle={chrome.title} />
 
@@ -2334,6 +2335,7 @@ export default function Home() {
             )}
 
           </div>
+          </AskPushedPage>
         </SchemaProvider>
         <InspectorHost />
         {/* The Ask panel beside every page; the Ask page itself is the same conversations at full size */}

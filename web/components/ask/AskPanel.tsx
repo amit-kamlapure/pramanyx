@@ -7,7 +7,7 @@
  * pushes it over, never covering it, except on a screen too narrow for both.
  */
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { DropdownMenu } from "@radix-ui/themes";
 
 import { BrandSpark } from "@/components/ui/brand";
@@ -17,8 +17,8 @@ import { Loading } from "@/components/ui/states";
 import { Tooltip } from "@/components/ui/tooltip";
 import type { ChatSessionSummary } from "@/components/ThreadsRail";
 import {
-  closeAskTab, followPageConnection, hideAskPanel, newAskTab, noteAskSession, openAskConversation, selectAskTab, toggleAskPanel, useAskPanel,
-  type AskTab,
+  closeAskTab, followPageConnection, hideAskPanel, newAskTab, noteAskSession, openAskConversation, PANEL_MAX_W, PANEL_MIN_W, selectAskTab,
+  setAskPanelWidth, toggleAskPanel, useAskPanel, useAskPanelWidth, type AskTab,
 } from "@/lib/askPanel";
 import { getApiBase } from "@/lib/config";
 import { requestTab } from "@/lib/navigate";
@@ -27,18 +27,6 @@ import { useNarrowScreen } from "@/lib/useNarrowScreen";
 const ChatPanel = dynamic(() => import("@/components/ChatPanel").then(m => ({ default: m.ChatPanel })), {
   ssr: false, loading: () => <Loading what="the conversation" style={{ padding: 16 }} />,
 });
-
-const WIDTH_KEY = "pramanyx_ask_panel_width";
-const MIN_W = 360, MAX_W = 760, DEFAULT_W = 460;
-
-function readWidth(): number {
-  try {
-    const raw = Number(window.localStorage.getItem(WIDTH_KEY));
-    return raw >= MIN_W && raw <= MAX_W ? raw : DEFAULT_W;
-  } catch {
-    return DEFAULT_W;
-  }
-}
 
 /** The icon in the top bar: the one way to show or hide the panel, on every page. */
 export function AskPanelToggle({ connectionId }: { connectionId: string }) {
@@ -51,6 +39,30 @@ export function AskPanelToggle({ connectionId }: { connectionId: string }) {
         <BrandSpark size={16} />
       </Button>
     </Tooltip>
+  );
+}
+
+/** The page beside the panel. While the panel is open the page keeps the width it had without it and moves left, under the
+ *  rail, scrolling sideways back to what it hid, rather than squeezing every page into what is
+ *  left (the user, 2026-11-19). On a screen too narrow for both the panel covers the page instead, so nothing moves. */
+export function AskPushedPage({ hidden = false, children }: { hidden?: boolean; children: React.ReactNode }) {
+  const { open, tabs } = useAskPanel();
+  const narrow = useNarrowScreen();
+  const width = useAskPanelWidth();
+  const pushed = open && tabs.length > 0 && !hidden && !narrow;
+  const scroller = useRef<HTMLDivElement>(null);
+  // opening the panel moves the page left by the panel's width: what was at its right edge stays beside the panel
+  useEffect(() => {
+    const el = scroller.current;
+    if (pushed && el) el.scrollLeft = el.scrollWidth;
+  }, [pushed]);
+  return (
+    <div ref={scroller} data-testid="ask-pushed-page" data-pushed={pushed || undefined}
+      style={{ flex: 1, minWidth: 0, display: "flex", overflowX: pushed ? "auto" : "hidden", overflowY: "hidden" }}>
+      <div style={{ display: "flex", minWidth: 0, ...(pushed ? { flex: "none", width: `calc(100% + ${width}px)` } : { flex: 1 }) }}>
+        {children}
+      </div>
+    </div>
   );
 }
 
@@ -94,16 +106,11 @@ function History({ connectionId }: { connectionId: string }) {
 export function AskPanelHost({ connectionId, hidden = false }: { connectionId: string; hidden?: boolean }) {
   const { open, tabs, active } = useAskPanel();
   const narrow = useNarrowScreen();
-  const [width, setWidth] = useState(DEFAULT_W);
-  useEffect(() => { setWidth(readWidth()); }, []);
+  const width = useAskPanelWidth();
   // a conversation nothing has been asked in yet is about the page's connection
   useEffect(() => { if (open) followPageConnection(connectionId); }, [open, connectionId, active]);
 
-  const keep = (w: number) => {
-    const next = Math.min(MAX_W, Math.max(MIN_W, Math.round(w)));
-    setWidth(next);
-    try { window.localStorage.setItem(WIDTH_KEY, String(next)); } catch { /* a per-viewer convenience only */ }
-  };
+  const keep = setAskPanelWidth;
   const startDrag = (e: React.PointerEvent) => {
     e.preventDefault();
     const startX = e.clientX, startW = width;
@@ -128,7 +135,7 @@ export function AskPanelHost({ connectionId, hidden = false }: { connectionId: s
         background: "var(--bg-3)", borderLeft: "1px solid var(--b1)" }}>
       {!narrow && (
         <div className="aug-inspector-grip" role="separator" aria-orientation="vertical" aria-label="Resize Ask"
-          aria-valuemin={MIN_W} aria-valuemax={MAX_W} aria-valuenow={width} tabIndex={0} onPointerDown={startDrag}
+          aria-valuemin={PANEL_MIN_W} aria-valuemax={PANEL_MAX_W} aria-valuenow={width} tabIndex={0} onPointerDown={startDrag}
           onKeyDown={e => {
             if (e.key === "ArrowLeft") { e.preventDefault(); keep(width + 16); }
             if (e.key === "ArrowRight") { e.preventDefault(); keep(width - 16); }

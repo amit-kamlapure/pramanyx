@@ -64,6 +64,7 @@ export function useAskPanel(): AskPanelState {
 /** For tests: forget what this browser kept. */
 export function resetAskPanel(): void {
   state = null;
+  width = null;
 }
 
 const freshTab = (connectionId: string): AskTab => ({ key: newSessionId(), session: null, title: "", connectionId });
@@ -141,6 +142,43 @@ export function followPageConnection(connectionId: string): void {
   const front = s.tabs.find(t => t.key === s.active);
   if (!front || front.session || !connectionId || front.connectionId === connectionId) return;
   write({ ...s, tabs: s.tabs.map(t => (t.key === front.key ? { ...t, connectionId } : t)) });
+}
+
+// ── the panel's width: the person's own, kept in their browser ──
+
+const WIDTH_KEY = "pramanyx_ask_panel_width";
+/** The panel opens 368 px wide: a fifth narrower than its first 460, near the old narrowest (the user, 2026-11-19: "taking
+ *  up too much space.. reduce it by 20%"), and can be dragged from 288 to 760. */
+export const PANEL_MIN_W = 288;
+export const PANEL_MAX_W = 760;
+export const PANEL_DEFAULT_W = 368;
+
+let width: number | null = null;
+const widthListeners = new Set<() => void>();
+
+function readWidth(): number {
+  if (width !== null) return width;
+  width = PANEL_DEFAULT_W;
+  try {
+    const kept = Number(window.localStorage.getItem(WIDTH_KEY));
+    if (kept >= PANEL_MIN_W && kept <= PANEL_MAX_W) width = kept;
+  } catch { /* a per-viewer convenience: it opens at the default */ }
+  return width;
+}
+
+/** The panel's width, kept as the person last dragged it. */
+export function useAskPanelWidth(): number {
+  return useSyncExternalStore(
+    l => { widthListeners.add(l); return () => { widthListeners.delete(l); }; },
+    () => (typeof window === "undefined" ? PANEL_DEFAULT_W : readWidth()),
+    () => PANEL_DEFAULT_W,
+  );
+}
+
+export function setAskPanelWidth(next: number): void {
+  width = Math.min(PANEL_MAX_W, Math.max(PANEL_MIN_W, Math.round(next)));
+  try { window.localStorage.setItem(WIDTH_KEY, String(width)); } catch { /* kept while the page is open */ }
+  widthListeners.forEach(l => l());
 }
 
 /** A tab's conversation came to exist, or was named by its first question. */

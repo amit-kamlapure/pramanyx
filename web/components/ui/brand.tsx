@@ -7,7 +7,7 @@
  */
 import { useId, type CSSProperties } from "react";
 
-import { MARK_BOX, MARK_LINE, MARK_RING, MARK_RING_COLORS, NAME_BAR, NAME_BAR_STOPS, NAME_BOX, NAME_LETTERS } from "@/components/ui/brandArt";
+import { MARK_BOX, MARK_LINE, MARK_RING, MARK_RING_COLORS, NAME_BAR, NAME_BAR_STOPS, NAME_BASELINE, NAME_BOX, NAME_LETTERS } from "@/components/ui/brandArt";
 
 const STOPS = NAME_BAR_STOPS.map(([at, colour]) => `${colour} ${at * 100}%`).join(", ");
 export const BRAND_GRADIENT = `linear-gradient(115deg, ${STOPS})`;
@@ -54,6 +54,19 @@ export function PramanyxName({ height = 16 }: { height?: number }) {
       <path d={NAME_LETTERS} fill="currentColor" fillRule="evenodd" />
       <rect x={NAME_BAR.x} y={NAME_BAR.y} width={NAME_BAR.w} height={NAME_BAR.h} fill={`url(#${id})`} />
     </svg>
+  );
+}
+
+/** The mark and the name as one logo, `height` tall from the bar over the ā to the foot of the y. The mark is as tall as the
+ *  name and stands on its baseline, where the letters stand, not centred on a box the y's tail makes deeper (the user,
+ *  2026-11-19: "the logo and the text must have the same base line"). */
+export function PramanyxLogo({ height = 18, gap = 7 }: { height?: number; gap?: number }) {
+  const foot = (height * (NAME_BOX.h - NAME_BASELINE)) / NAME_BOX.h;
+  return (
+    <span data-testid="brand-logo" style={{ display: "inline-flex", alignItems: "flex-end", gap }}>
+      <span data-testid="brand-logo-mark" style={{ display: "inline-flex", marginBottom: Number(foot.toFixed(2)) }}><PramanyxMark size={height} /></span>
+      <PramanyxName height={height} />
+    </span>
   );
 }
 

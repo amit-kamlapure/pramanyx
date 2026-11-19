@@ -2,8 +2,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
-  MAX_TABS, closeAskTab, hideAskPanel, newAskTab, noteAskSession, openAskConversation, openAskPanel, resetAskPanel,
-  selectAskTab, toggleAskPanel, useAskPanel,
+  MAX_TABS, PANEL_DEFAULT_W, PANEL_MAX_W, PANEL_MIN_W, closeAskTab, hideAskPanel, newAskTab, noteAskSession, openAskConversation,
+  openAskPanel, resetAskPanel, selectAskTab, setAskPanelWidth, toggleAskPanel, useAskPanel, useAskPanelWidth,
 } from "@/lib/askPanel";
 import { renderHook } from "@testing-library/react";
 
@@ -61,3 +61,27 @@ describe("the Ask panel", () => {
     hideAskPanel();
   });
 });
+
+describe("the Ask panel's width (the user, 2026-11-19: a fifth narrower)", () => {
+  const width = () => renderHook(() => useAskPanelWidth()).result.current;
+
+  it("opens a fifth narrower than its first 460, and keeps what the person drags it to", () => {
+    expect(PANEL_DEFAULT_W).toBe(Math.round(460 * 0.8));
+    expect(width()).toBe(PANEL_DEFAULT_W);
+    setAskPanelWidth(500);
+    expect(width()).toBe(500);
+    resetAskPanel();
+    expect(width()).toBe(500);                                   // kept in the browser
+  });
+
+  it("is held between its narrowest and widest, and a kept width outside them is not used", () => {
+    setAskPanelWidth(10);
+    expect(width()).toBe(PANEL_MIN_W);
+    setAskPanelWidth(5000);
+    expect(width()).toBe(PANEL_MAX_W);
+    window.localStorage.setItem("pramanyx_ask_panel_width", "9000");
+    resetAskPanel();
+    expect(width()).toBe(PANEL_DEFAULT_W);
+  });
+});
+
