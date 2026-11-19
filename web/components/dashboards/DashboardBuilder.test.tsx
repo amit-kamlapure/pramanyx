@@ -506,4 +506,14 @@ describe("placing a box (the user, 2026-11-19)", () => {
     fireEvent.keyDown(window, { key: "Escape" });
     expect(onCancel).toHaveBeenCalled();
   });
+
+  it("chooses the piece just made in a box, so its own setup opens in the panel", () => {
+    render(
+      <DashboardBuilder spec={objectDashboard()} onChange={vi.fn()} connectionId="thelook" schema="thelook" bar={<span />}
+        placing={{ kind: null, box: null, chosen: "note", onPlaced: vi.fn(), onCancel: vi.fn(), onBox: vi.fn() }}>
+        {() => <div />}
+      </DashboardBuilder>,
+    );
+    expect(screen.getByTestId("piece-setup")).toHaveAttribute("data-kind", "Note");
+  });
 });

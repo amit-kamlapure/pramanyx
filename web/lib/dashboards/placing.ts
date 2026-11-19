@@ -35,12 +35,16 @@ export function cellOf(rect: { left: number; top: number; width: number }, layou
   return { x: Math.min(Math.max(1, col), GRID.columns - Math.min(size.w, GRID.columns) + 1), y: Math.max(1, row) };
 }
 
+/** The newest piece a change put in a section that was not there before, or null. */
+export function madeIn(before: DashboardSpec, after: DashboardSpec, section: string): string | null {
+  const was = new Set(before.elements[section]?.children ?? []);
+  return (after.elements[section]?.children ?? []).filter(k => !was.has(k) && (after.elements[k]?.type ?? "") in LIMITS).at(-1) ?? null;
+}
+
 /** The piece a change made, set in the box: the newest element the change put in the box's section, moved to the box's
  *  place and room. Null when the change made nothing there — it was another change, and the box still waits. */
 export function intoBox(before: DashboardSpec, after: DashboardSpec, box: PlacedBox): DashboardSpec | null {
-  const was = new Set(before.elements[box.section]?.children ?? []);
-  const made = (after.elements[box.section]?.children ?? []).filter(k => !was.has(k) && (after.elements[k]?.type ?? "") in LIMITS);
-  const key = made.at(-1);
+  const key = madeIn(before, after, box.section);
   if (!key) return null;
   return regrid(after, key, { x: box.x, y: box.y, w: box.w, h: box.h }, box.measured);
 }

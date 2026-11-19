@@ -43,7 +43,7 @@ import { ObjectDashboardStarter } from "@/components/dashboards/ObjectDashboardS
 import { PackTemplatePicker } from "@/components/dashboards/PackTemplatePicker";
 import { OntologyPieceComposer } from "@/components/dashboards/OntologyPieceComposer";
 import { PiecePicker, type HandOff } from "@/components/dashboards/PiecePicker";
-import { PLACE_SIZE, PLACE_WORDS, intoBox, type PlaceKind, type PlacedBox } from "@/lib/dashboards/placing";
+import { PLACE_SIZE, PLACE_WORDS, intoBox, madeIn, type PlaceKind, type PlacedBox } from "@/lib/dashboards/placing";
 import { QuerySetup } from "@/components/dashboards/QuerySetup";
 import { PinStrip, numberOf } from "@/components/dashboards/PinStrip";
 import { DashboardHome } from "@/components/dashboards/DashboardHome";
@@ -949,6 +949,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
   // the user, 2026-11-19: the strip's chart, filter, words or picture is placed as a box first, then chosen in the panel
   const [placeKind, setPlaceKind] = useState<PlaceKind | null>(null);
   const [box, setBox] = useState<PlacedBox | null>(null);
+  const [justPlaced, setJustPlaced] = useState<string | null>(null);
   const boxRef = useRef<PlacedBox | null>(null);
   boxRef.current = box;
   /** The piece a change made, set where the box waiting for it was set down — whichever door made it; the box is then done. */
@@ -959,6 +960,8 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
     if (!placed) return after;
     boxRef.current = null;
     setBox(null);
+    // the piece made is chosen, so its own setup — a filter's field, a chart's look — opens in the panel at once
+    setJustPlaced(madeIn(before, after, b.section));
     return placed;
   }, []);
   // the canvas toolbar's Ask (2026-11-18): the change asked in words, drawn above the canvas while it is open
@@ -1431,7 +1434,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
         <DashboardBuilder spec={current} onChange={change} cardTitle={id => lines.get(id)?.title} connectionId={connectionId} schema={schema}
           release={data.ontology?.current && data.ontology.pinned === data.ontology.current ? numberOf(data.ontology.current) : null}
           onAddPiece={(_section, what) => { shut(); setAsking(false); setBox(null); setPlaceKind(what === "filter" ? "filter" : "chart"); }}
-          placing={{ kind: placeKind, box, onPlaced: b => { setPlaceKind(null); setBox(b); }, onCancel: () => setPlaceKind(null), onBox: () => {} }}
+          placing={{ kind: placeKind, box, chosen: justPlaced, onPlaced: b => { setPlaceKind(null); setBox(b); }, onCancel: () => setPlaceKind(null), onBox: () => {} }}
           checks={checks} tools={tools}
           cardReads={id => valuesRead(data.cards.find(c => c.id === id)?.sql)}
           queryCards={placedQueries(current, data.cards)}

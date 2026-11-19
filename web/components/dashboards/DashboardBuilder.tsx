@@ -133,7 +133,9 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
   spec: DashboardSpec;
   /** A box being placed (the user, 2026-11-19): the kind the strip picked up, the box set down and waiting for what it is,
    *  and where a box set down, let go, or clicked goes. */
-  placing?: { kind: PlaceKind | null; box: PlacedBox | null; onPlaced: (box: PlacedBox) => void; onCancel: () => void; onBox: () => void } | null;
+  placing?: { kind: PlaceKind | null; box: PlacedBox | null; onPlaced: (box: PlacedBox) => void; onCancel: () => void; onBox: () => void;
+    /** The piece just made in a box: chosen, so its own setup opens. */
+    chosen?: string | null } | null;
   /** The ontology release its pieces read, when it is the one the dashboard was composed against: said on its own setup. */
   release?: string | null;
   /** v15 — each placed card and the date the period cuts it by, for the Period piece's setup. */
@@ -192,6 +194,8 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
   // an element taken off, by hand or by an undo, is no longer chosen; nor is an element while a set is
   const selected = !wire && chosen && spec.elements[chosen] ? chosen : null;
   const choose = (key: string) => { setWire(null); setSelected(key); };
+  const justPlaced = placing?.chosen ?? null;
+  useEffect(() => { if (justPlaced) { setWire(null); setSelected(justPlaced); } }, [justPlaced]);
   // add, then set up (the dashboards study, R2, 2026-11-18): the one element a change brings is chosen, so the panel
   // turns to its setup — a piece placed from the toolbar, a card pinned, a piece an undo puts back
   const seen = useRef<Set<string> | null>(null);
