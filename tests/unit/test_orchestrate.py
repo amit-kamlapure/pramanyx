@@ -69,3 +69,42 @@ def test_a_new_dashboard_is_handed_to_the_drafter_and_staged_for_the_persons_all
     assert refused.run({"about": "x"}) == {"staged": False, "said": ["No metric here."],
                                            "next": "Nothing was staged. Tell the person why, in these words."}
     assert new_dashboard_tools("sheets", "") == []
+
+
+def test_a_request_of_several_parts_is_said_to_be_one_with_the_ability_for_each_part():
+    from pramanyx.agent.orchestrate import parts_note, parts_of
+    asked = "Our revenue dropped yesterday. Investigate why, create a monitoring dashboard, and notify the team if it happens again."
+    assert [kind for kind, _ in parts_of(asked)] == ["why", "dashboard", "alert"]
+    note = parts_note(asked)
+    assert note.startswith("## This request has several parts") and "Write the plan first (plan)" in note
+    assert "- a new dashboard: make_dashboard" in note and "- an alert for when it happens again: draft_monitor" in note
+    # one question needs no plan
+    assert parts_of("Why did revenue drop yesterday?") == [] and parts_note("How many orders were delivered?") == ""
+    assert [k for k, _ in parts_of("Build me a sales dashboard and alert me if orders fall")] == ["dashboard", "alert"]
+
+
+def test_the_conversation_is_told_a_request_has_parts(monkeypatch):
+    import asyncio
+    import json
+    import types
+
+    import pramanyx.routers.investigations as inv
+    seen: dict = {}
+    monkeypatch.setattr(inv, "build_history_section", lambda h: "")
+    monkeypatch.setattr(inv, "build_prior_answers_section", lambda a: "")
+    monkeypatch.setattr(inv, "resolve_prior_answers", lambda *a, **k: [])
+    monkeypatch.setattr("pramanyx.agent.converse_tools.ground_answer_numbers", lambda answer, rows, question="": (answer, None))
+
+    def converse(*a, **k):
+        seen.update(k)
+        return types.SimpleNamespace(answer="Planned.", steps=[], stop_reason="answered", injected_chars=0, reinjection_ratio=0.0)
+
+    monkeypatch.setattr("pramanyx.agent.converse_tools.converse", converse)
+
+    async def go(q):
+        return [json.loads(c.split("data: ", 1)[1]) async for c in inv._stream_converse(q, "fixture", [], session_id="p-1")
+                if c.startswith("data: ")]
+    asyncio.run(go("Investigate why revenue fell and create a dashboard for it"))
+    assert seen["extra_context"].startswith("## This request has several parts")
+    asyncio.run(go("How many orders?"))
+    assert "several parts" not in (seen["extra_context"] or "")

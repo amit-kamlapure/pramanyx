@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import contextvars
 import logging
+import re
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Optional
 
@@ -143,3 +144,42 @@ def helpers_tool(connection_id: str, *, session_id: str = "", canvas_id: Optiona
         parameters=_HELPER_PARAMS,
         run=run,
     )
+
+
+# ── a request of several parts, recognised (seen live 2026-11-20) ────────────────────────────────────────────────────
+#
+# On the acceptance test ("Our revenue dropped yesterday. Investigate why, create a monitoring dashboard, and notify the
+# team if it happens again") the conversation wrote no plan and handed nothing to a specialist: it worked the "why" by
+# hand, seven queries, and spent every step before the dashboard or the alert. The tools' own descriptions were not
+# enough, so the door says what it can see in the words: which parts were asked for, and which ability each is for.
+
+#: The kinds of part a request can hold, each with the ability made for it. Matched on the person's words.
+PART_KINDS: tuple[tuple[str, "re.Pattern[str]", str], ...] = (
+    ("why", re.compile(r"\b(investigate|find out why|work out why|why (?:did|has|is|was|are)|root cause|what (?:caused|drove))\b", re.I),
+     "deep_analysis, or answer_question and ask_in_parallel for a short look"),
+    ("dashboard", re.compile(r"\b(create|build|make|set up|draft)\b[^.]{0,40}\bdashboard\b", re.I), "make_dashboard"),
+    ("alert", re.compile(r"\b(notify|alert|warn|tell|let)\b[^.]{0,60}\b(team|me|us|someone|channel)\b|\bif it happens again\b|\bmonitor\b", re.I),
+     "draft_monitor"),
+)
+
+
+def parts_of(question: str) -> list[tuple[str, str]]:
+    """The kinds of part a request asks for, with the ability for each — empty unless there are two or more, since a
+    single question needs no plan."""
+    q = str(question or "")
+    found = [(kind, ability) for kind, pattern, ability in PART_KINDS if pattern.search(q)]
+    return found if len(found) >= 2 else []
+
+
+def parts_note(question: str) -> str:
+    """The conversation's note on a request of several parts, or '' for a single question."""
+    found = parts_of(question)
+    if not found:
+        return ""
+    words = {"why": "finding out why", "dashboard": "a new dashboard", "alert": "an alert for when it happens again"}
+    lines = [f"- {words[kind]}: {ability}" for kind, ability in found]
+    return ("## This request has several parts\n"
+            "The person asked for several things at once:\n" + "\n".join(lines) + "\n"
+            "Write the plan first (plan), then work each part in order, handing it to the ability named for it. A part "
+            "staged for the person's Allow is done once it is staged. If the data cannot answer a part — a day it holds "
+            "no rows for — say so plainly and go on with the rest.")

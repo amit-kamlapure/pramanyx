@@ -4034,6 +4034,11 @@ async def _stream_converse(
             resolve_prior_answers(question, connection_id, session_id)))
         if origin_prose:
             _memory = origin_prose + "\n\n" + _memory if _memory else origin_prose
+        # Stage 4 (2026-11-20): a request of several parts is said to be one, with the ability for each part
+        from pramanyx.agent.orchestrate import parts_note
+        _parts = parts_note(question)
+        if _parts:
+            _memory = _parts + "\n\n" + _memory if _memory else _parts
         # Keep going (2026-11-20): the last turn on this question stopped at its step limit; it goes on from there
         if keep_going.strip():
             _kg = ("## Keep going\nThe person asked to keep going: the last turn on this question stopped at its step limit "
