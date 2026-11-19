@@ -879,6 +879,12 @@ function seedHop(hops: Map<string, DelegatedHop>,
   return hop;
 }
 
+/** How long a turn read back from the server took, as the server measured it when it filed the answer. */
+function keptTook(message: PramanyxUIMessage | undefined): number | null {
+  const took = (message?.metadata as { took_ms?: unknown } | undefined)?.took_ms;
+  return typeof took === "number" && took > 0 ? took : null;
+}
+
 export function projectTurn(
   question: string,
   message: PramanyxUIMessage | undefined,
@@ -890,7 +896,8 @@ export function projectTurn(
     question,
     mode: opts.initialMode ?? "ask",
     startedAt: opts.timing?.startedAt ?? 0,
-    elapsedMs: opts.timing?.elapsedMs ?? null,
+    // measured here while the turn ran; a turn read back from the server carries how long it took
+    elapsedMs: opts.timing?.elapsedMs ?? keptTook(message),
   };
 
   // The latest full text per channel. Each adapter channel grows ONE part (a

@@ -461,7 +461,8 @@ def save_chat_turn(
     return inv_id
 
 
-def attach_envelope(inv_id: str, envelope: dict | None, *, said: str = "", asked: str = "") -> bool:
+def attach_envelope(inv_id: str, envelope: dict | None, *, said: str = "", asked: str = "", took_ms: int = 0,
+                    steps: list | None = None) -> bool:
     """CP-4 — merge the folded answer envelope into a turn's ``report_json``, any kind.
 
     Written once, when the ask stream ends — the only moment every field exists (the
@@ -520,6 +521,11 @@ def attach_envelope(inv_id: str, envelope: dict | None, *, said: str = "", asked
         report["said"] = whole
     if (asked or "").strip():
         report["asked"] = asked.strip()
+    # how long the turn took and the tools it called, so a reload reads "Completed in … · N steps" as the live turn did
+    if took_ms and took_ms > 0:
+        report["took_ms"] = int(took_ms)
+    if steps:
+        report["steps"] = list(steps)[:60]
     c.execute(
         "UPDATE investigations SET report_json = ? WHERE id = ?",
         (json.dumps(report), inv_id),
@@ -938,6 +944,14 @@ def get_session_turns(session_id: str) -> list[dict]:
         receipt = ((env.get("provenance") or {}).get("receipt_id") if isinstance(env, dict) else "") or ""
         if str(receipt).strip():
             d["receipt_id"] = str(receipt)
+        if isinstance(report, dict) and report.get("took_ms"):
+            d["took_ms"] = int(report["took_ms"])
+        if isinstance(report, dict) and isinstance(report.get("steps"), list) and report["steps"]:
+            d["steps"] = report["steps"]
+        # a turn filed before its question was kept in the person's words: the question its answer was folded under
+        if isinstance(report, dict) and not str(report.get("asked") or "").strip() and isinstance(env, dict) \
+                and str(env.get("question") or "").strip():
+            d["question"] = str(env["question"])
         if d["kind"] == "chat":
             d["sql"]         = report.get("sql", "")
             d["columns"]     = report.get("columns", [])
@@ -952,6 +966,10 @@ def get_session_turns(session_id: str) -> list[dict]:
             # the conversation's answer whole, as it was read live — the row keeps only its first sentence or a tool's
             if str(report.get("said") or "").strip():
                 d["headline"] = str(report["said"])
+            elif isinstance(env, dict) and str(env.get("body") or "").strip() and not report.get("insight"):
+                # filed before the answer was kept whole: with no narrative of its own, the folded body is the rest of what
+                # the conversation said after its first sentence (its tables were lifted into the grid, which shows them)
+                d["headline"] = f"{str(env.get('headline') or d.get('headline') or '').strip()}\n\n{str(env['body']).strip()}".strip()
             # Idea 5 — the latest re-check that found the answer changed. Absent (not null)
             # when there is none, so a turn nobody re-checked projects exactly as before.
             # the LATEST re-check, and only while it says the answer has changed — a later re-check

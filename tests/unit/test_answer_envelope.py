@@ -616,7 +616,9 @@ def test_the_stream_files_the_answer_as_it_was_said_and_the_question_as_it_was_a
         return [e async for e in stream_with_envelope(body(), question="what leads revenue?", conn_id="c1")]
 
     asyncio.run(run())
-    assert filed == [{"said": PROSE, "asked": "what leads revenue?"}]
+    [kept] = filed
+    assert kept["said"] == PROSE and kept["asked"] == "what leads revenue?"
+    assert kept["took_ms"] >= 0 and kept["steps"] == []                      # these frames ran no tool
 
 
 def test_a_reload_shows_the_conversations_whole_answer_and_the_persons_question():
@@ -675,4 +677,46 @@ def test_a_turn_without_a_receipt_restores_as_before():
     [turn] = get_session_turns(sid)
     assert "receipt_id" not in turn
     assert not any(p["type"] == "data-receipt_id" for p in _turn_to_ui_messages(turn)[1]["parts"])
+
+
+def test_a_reload_says_how_long_the_turn_took_and_lists_its_steps():
+    from pramanyx.answer.envelope import EnvelopeFolder
+    from pramanyx.db.history import attach_envelope, get_session_turns, save_chat_turn
+    from pramanyx.routers.investigations import _turn_to_ui_messages
+
+    folder = EnvelopeFolder(question="q", connection_id="conn-env")
+    folder.feed("converse_step", {"index": 1, "tool": "run_sql", "arguments": {"sql": "SELECT secret"}, "ok": True,
+                                  "detail": "5 rows", "result_chars": 210})
+    assert folder.steps == [{"index": 1, "tool": "run_sql", "ok": True, "detail": "5 rows", "result_chars": 210}]  # no arguments
+    sid = "reload-keeps-the-work"
+    inv_id = save_chat_turn(question="q", connection_id="conn-env", headline="h", sql="SELECT 1", session_id=sid)
+    env = fold_frames(converse_frames(), question="q", connection_id="conn-env").model_dump()
+    assert attach_envelope(inv_id, env, took_ms=12400, steps=folder.steps) is True
+    [turn] = get_session_turns(sid)
+    [_, answer] = _turn_to_ui_messages(turn)
+    assert answer["metadata"] == {"took_ms": 12400}
+    assert [p["data"]["tool"] for p in answer["parts"] if p["type"] == "data-converse_step"] == ["run_sql"]
+
+
+def test_an_answer_filed_before_it_was_kept_whole_comes_back_from_its_envelope():
+    # Filed before 2026-11-19: the row holds the first sentence, the envelope the rest; with no narrative of its own, the
+    # rest is what the conversation said after that sentence.
+    import json
+
+    from pramanyx.db.history import _conn, get_session_turns, save_chat_turn
+
+    sid = "reload-older-answer"
+    inv_id = save_chat_turn(question="describe_table netflix", connection_id="conn-env",
+                            headline="Outerwear & Coats led revenue last month at $41.2K.", sql="SELECT 1", session_id=sid)
+    env = fold_frames(converse_frames(), question="what leads revenue?", connection_id="conn-env").model_dump()
+    c = _conn()
+    report = json.loads(c.execute("SELECT report_json FROM investigations WHERE id = ?", (inv_id,)).fetchone()[0])
+    report["envelope"] = env                                     # as the older filing left it: no said, no asked
+    c.execute("UPDATE investigations SET report_json = ? WHERE id = ?", (json.dumps(report), inv_id))
+    c.commit()
+    c.close()
+    [turn] = get_session_turns(sid)
+    assert turn["headline"].startswith("Outerwear & Coats led revenue last month at $41.2K.\n\n")
+    assert "Jeans and Sweaters follow at some distance." in turn["headline"]
+    assert turn["question"] == "what leads revenue?"
 

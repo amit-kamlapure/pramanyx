@@ -139,6 +139,20 @@ describe("quick-path parity (the reducer's ask-mode fields)", () => {
     expect(plain.route).not.toHaveProperty("conversationDecided");
   });
 
+  it("reads back how long a restored turn took and the steps it ran, so its line says so again", () => {
+    const msg = {
+      id: "a1", role: "assistant", metadata: { took_ms: 12400 },
+      parts: [
+        { type: "data-converse_step", data: { index: 1, tool: "run_sql", ok: true, detail: "", result_chars: 300 } },
+        { type: "text", text: "TV-MA leads.", state: "done", providerMetadata: { pramanyx: { channel: "headline" } } },
+      ],
+    } as unknown as PramanyxUIMessage;
+    const t = projectTurn("q", msg);
+    expect(t.elapsedMs).toBe(12400);
+    expect(t.converseSteps.map(s => s.tool)).toEqual(["run_sql"]);
+    expect(projectTurn("q", msg, { timing: { startedAt: 1, elapsedMs: 900 } }).elapsedMs).toBe(900);   // a live turn's own clock wins
+  });
+
   it("answers as a deep analysis when asked as one, or when a conversation's report came back in the turn", () => {
     expect(answersDeep({ mode: "investigate", deepReport: null })).toBe(true);
     expect(answersDeep({ mode: "ask", deepReport: { headline: "h" } as never })).toBe(true);

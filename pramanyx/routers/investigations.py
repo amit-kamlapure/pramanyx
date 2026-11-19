@@ -6242,7 +6242,10 @@ async def stream_with_envelope(
 
     from pramanyx.answer.envelope import EnvelopeFolder
 
+    import time as _time
+
     folder = EnvelopeFolder(question=question, connection_id=conn_id, session_id=session_id)
+    began = _time.monotonic()
     async for event in stream:
         if event.startswith("data: "):
             try:
@@ -6261,7 +6264,9 @@ async def stream_with_envelope(
     if inv_id:
         try:
             from pramanyx.db.history import attach_envelope
-            if await _asyncio.to_thread(attach_envelope, inv_id, payload, said=folder.said, asked=question):
+            took_ms = int((_time.monotonic() - began) * 1000)
+            if await _asyncio.to_thread(attach_envelope, inv_id, payload, said=folder.said, asked=question,
+                                        took_ms=took_ms, steps=folder.steps):
                 _remember_answer(inv_id)
         except Exception as exc:
             from pramanyx.kernel.errors import tolerate
@@ -7293,6 +7298,9 @@ def _turn_to_ui_messages(t: dict) -> list[dict]:
 
     # the answer's public receipt, as the stream sent it: its sources and "Why this number" are drawn from it
     receipt = [{"type": "data-receipt_id", "data": {"receipt_id": t["receipt_id"]}}] if t.get("receipt_id") else []
+    # the work it did, as the stream sent it, and how long it took: the turn's line reads "Completed in … · N steps" again
+    work = [{"type": "data-converse_step", "data": step} for step in t.get("steps") or []]
+    took = {"took_ms": t["took_ms"]} if t.get("took_ms") else {}
 
     if (t.get("kind") or "chat") == "investigation":
         parts = []
@@ -7303,6 +7311,7 @@ def _turn_to_ui_messages(t: dict) -> list[dict]:
                 "investigation_id": t["id"],
             }})
         parts.extend(receipt)
+        parts.extend(work)
         status = t.get("status") or "complete"
         if status != "complete":
             parts.append({"type": "data-error", "data": {
@@ -7312,10 +7321,10 @@ def _turn_to_ui_messages(t: dict) -> list[dict]:
             {"id": f"{t['id']}-q", "role": "user",
              "parts": [{"type": "text", "text": t.get("question") or ""}],
              "metadata": {"mode": "investigate", "asked_by": t.get("asked_by") or ""}},
-            {"id": t["id"], "role": "assistant", "parts": parts},
+            {"id": t["id"], "role": "assistant", "parts": parts, **({"metadata": took} if took else {})},
         ]
 
-    parts: list[dict] = []
+    parts: list[dict] = [*work]
     if t.get("headline"):
         parts.append({
             "type": "text", "text": t["headline"], "state": "done",
@@ -7365,7 +7374,7 @@ def _turn_to_ui_messages(t: dict) -> list[dict]:
         {"id": f"{t['id']}-q", "role": "user",
          "parts": [{"type": "text", "text": t.get("question") or ""}],
          "metadata": {"asked_by": t.get("asked_by") or ""}},
-        {"id": t["id"], "role": "assistant", "parts": parts},
+        {"id": t["id"], "role": "assistant", "parts": parts, **({"metadata": took} if took else {})},
     ]
 
 
