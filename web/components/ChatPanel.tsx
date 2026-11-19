@@ -259,7 +259,7 @@ function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, se
       {/* Textarea row */}
       <textarea
         ref={textareaRef}
-        rows={multiline ? 2 : 1}
+        rows={multiline || assist ? 2 : 1}
         value={input}
         onChange={(e) => { setInput(e.target.value); setCaret(e.target.selectionStart ?? 0); if (walk.at !== -1) setWalk({ at: -1, draft: "" }); }}
         onSelect={remembered}
