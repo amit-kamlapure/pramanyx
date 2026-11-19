@@ -56,6 +56,7 @@ GOES_AHEAD_BECAUSE: dict[str, str] = {
     "bring_in_file": "the person attaching the file was the asking; it becomes theirs alone",
     "set_preference": "a cosmetic setting of the person's own, applied and undone the same way (ROADMAP §3.11)",
     "propose_context_note": "only a high-confidence note on one column, with its evidence, applies; anything else is staged",
+    "ask_in_parallel": "it answers the questions the person's request asks, side by side, through the governed pipeline",
 }
 
 _ROWS: tuple[Ability, ...] = (
@@ -69,6 +70,9 @@ _ROWS: tuple[Ability, ...] = (
     Ability("explore", "Explored", "run", COWORKER_ONLY, which=("question", "topic", "focus"), about_to="Explore"),
     Ability("delegate_task", "Asked a saved agent", "run", PANEL_ONLY, which=("agent", "agent_id"),
             only_when="the connection has saved agents"),
+    # ── working a request of several parts (Stage 4, 2026-11-20) ──────────────────────────────────────────────────
+    Ability("plan", "Planned the work", "read", PANEL_ONLY),
+    Ability("ask_in_parallel", "Asked helpers side by side", "run", PANEL_ONLY, which=("questions",)),
     # ── what the platform holds ────────────────────────────────────────────────────────────────────────────────────
     Ability("list_connections", "Listed the connections", "read", COWORKER_ONLY),
     Ability("search_graph", "Searched what is already known about", "read", BOTH, which=("query", "q", "question")),
@@ -133,6 +137,8 @@ _ROWS: tuple[Ability, ...] = (
     Ability("change_chart", "Proposed a change to how the chart is drawn", "act", PANEL_ONLY, stages=True,
             about_to="Propose a change to how the chart is drawn",
             only_when="the question is about one chart of a dashboard the person keeps"),
+    Ability("make_dashboard", "Drafted a new dashboard", "act", PANEL_ONLY, stages=True, which=("about",),
+            about_to="Draft a new dashboard", only_when="the person asking is known"),
     Ability("propose_action", "Proposed an action", "act", PANEL_ONLY, stages=True, which=("action_id",),
             about_to="Propose an action", only_when="the agent asking was granted named actions"),
     Ability("propose_context_note", "Wrote back what was learned about the data", "act", PANEL_ONLY,

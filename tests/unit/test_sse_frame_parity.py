@@ -47,6 +47,8 @@ _TOOL_SOURCES = [
     _ROOT / "pramanyx" / "agent" / "dashboard_tool.py",
     # Arc SH, SH-4 — `show_rows` puts the rows a sheet question is about under the answer with `sheet_rows`.
     _ROOT / "pramanyx" / "sheets" / "answer.py",
+    # Stage 4 (2026-11-20) — `plan` shows the plan of a request with several parts with `plan`.
+    _ROOT / "pramanyx" / "agent" / "orchestrate.py",
 ]
 # CA-1 retired the 107-case reducer; the consumer side is now three artifacts.
 # `chatTurn.ts` PROJECTS a frame into the turn, `uiMessageAdapter.ts` routes the

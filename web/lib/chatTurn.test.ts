@@ -153,6 +153,18 @@ describe("quick-path parity (the reducer's ask-mode fields)", () => {
     expect(finished.keepGoing).toBe(false);
   });
 
+  it("keeps the plan of a request with several parts as its last call left it (Stage 4, 2026-11-20)", async () => {
+    const t = projectTurn("investigate, build, alert", await messageFrom([
+      { event: "plan", data: { steps: [{ text: "Find out why revenue dropped" }, { text: "Draft a dashboard" }] } },
+      { event: "plan", data: { steps: [{ text: "Find out why revenue dropped", done: true }, { text: "Draft a dashboard" }, { nope: 1 }] } },
+      { event: "headline", data: { headline: "Revenue fell in São Paulo." } },
+      { event: "done", data: {} },
+    ]));
+    expect(t.plan).toEqual([{ text: "Find out why revenue dropped", done: true }, { text: "Draft a dashboard", done: false }]);
+    const plain = projectTurn("q", await messageFrom([{ event: "headline", data: { headline: "x" } }, { event: "done", data: {} }]));
+    expect(plain.plan).toEqual([]);
+  });
+
   it("reads back how long a restored turn took and the steps it ran, so its line says so again", () => {
     const msg = {
       id: "a1", role: "assistant", metadata: { took_ms: 12400 },

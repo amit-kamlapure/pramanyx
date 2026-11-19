@@ -42,6 +42,7 @@ import { formatSql } from "@/lib/query/format";
 import { csvFilename, downloadCsv, toCsv } from "@/lib/query/csv";
 import { fileSlug, rawCells } from "@/components/TableActions";
 import { figureValue } from "@/components/FindingFigures";
+import { PlanList } from "@/components/chat/PlanList";
 import { ToolTrail } from "@/components/ToolTrail";
 import { isDashboardProposal, ProposalCardById } from "@/components/ProposalCard";
 import { approverName } from "@/lib/auth";
@@ -1859,6 +1860,9 @@ export function ChatMessage({
           )}
         </div>
       </div>
+
+      {/* ── Stage 4 (2026-11-20): the plan of a request with several parts, above the work, kept when it folds ── */}
+      <PlanList steps={turn.plan} />
 
       {/* ── Inline agent trace (agentic modes) — streams live, collapses when done ── */}
       {thinkingRow && <InlineAgentTrace turn={turn} onShowSource={onShowSource} />}

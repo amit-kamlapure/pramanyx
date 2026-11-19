@@ -176,3 +176,66 @@ def change_tools(connection_id: str, dashboard: Optional[tuple[str, ...]], *, em
             run=chart,
         ))
     return tools
+
+
+_NEW_PARAMS = {
+    "type": "object",
+    "properties": {
+        "about": {"type": "string", "description": (
+            "What the dashboard is for, in the person's own words and what they want to watch on it — e.g. revenue day "
+            "by day and what moves it, with orders and payments beside it.")},
+    },
+    "required": ["about"],
+}
+
+
+def new_dashboard_tools(connection_id: str, person: str, *, emit: Optional[Emit] = None, schema: Optional[str] = None,
+                        draft: Any = None, record: Any = None) -> list[ToolSpec]:
+    """``make_dashboard`` (Stage 4 of "one coworker, two places", 2026-11-20): a NEW dashboard for the person, handed off
+    to the dashboard drafter the Briefing's "new dashboard" uses (`dashboards.ask.draft_for_area`), which builds it from the
+    connection's approved metrics, trusted queries and findings and stages it whole for the person's Allow. None when the
+    person asking is not known. ``draft`` stands in for the drafter and ``record`` for the inbox's read in tests."""
+    if not person:
+        return []
+
+    def run(args: dict) -> dict:
+        about = " ".join(str((args or {}).get("about") or "").split())
+        if not about:
+            return {"staged": False, "said": ["Say what the dashboard is for."]}
+        if draft is None:
+            from pramanyx.dashboards.ask import draft_for_area as make
+        else:
+            make = draft
+
+        def hear(frame: dict) -> None:
+            line = heard_words(frame)
+            if line and emit is not None:
+                emit("status", {"text": line})
+
+        out = make(connection_id, person, about, schema=schema, hear=hear)
+        if out.get("staged") and out.get("proposal_id"):
+            from pramanyx.agent.dashboard_tool import announce_staged
+            if record is None:
+                from pramanyx.actions.inbox import get_proposal as read
+            else:
+                read = record
+            staged = read(out["proposal_id"])
+            if staged is not None:
+                announce_staged(emit, staged)
+            return {"staged": True,
+                    "next": ("A new dashboard is drafted and shown to the person with Allow and Reject. Nothing exists yet. "
+                             "Say in one sentence what it would show, naming cards by their titles, and that it waits for "
+                             "their Allow. Never name it by an id.")}
+        return {"staged": False, "said": list(out.get("sentences") or ["No dashboard was drafted."]),
+                "next": "Nothing was staged. Tell the person why, in these words."}
+
+    return [ToolSpec(
+        name="make_dashboard",
+        description=(
+            "Draft a NEW dashboard for the person, for an area they name, to watch day to day — e.g. revenue and what moves "
+            "it. A drafter builds it from the connection's approved metrics, trusted queries and findings and stages it "
+            "whole for the person's Allow; nothing exists until they allow it. Use it only when they ask for a dashboard; "
+            "to change the one they are on, use change_dashboard."),
+        parameters=_NEW_PARAMS,
+        run=run,
+    )]

@@ -71,7 +71,7 @@ def test_one_rule_says_how_each_is_allowed():
     assert all(by[a.name] == "goes_ahead" for a in A.ABILITIES.values() if a.needs == "read")
     # a change that is staged is allowed on its card, once
     assert {n for n, how in by.items() if how == "staged"} == {
-        "change_dashboard", "change_chart", "propose_action", "draft_agent", "draft_automation", "edit_automation",
+        "change_dashboard", "change_chart", "make_dashboard", "propose_action", "draft_agent", "draft_automation", "edit_automation",
         "draft_monitor", "draft_brief", "pause_or_resume_automation", "set_agent_limit", "propose_agent_grant"}
     assert all(A.ABILITIES[n].needs == "act" for n, how in by.items() if how == "staged")
     # what spends or changes otherwise asks once, unless a reason a reader can check says it goes ahead

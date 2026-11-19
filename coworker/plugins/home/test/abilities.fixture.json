@@ -129,6 +129,36 @@
    "same_as": ""
   },
   {
+   "name": "plan",
+   "words": "Planned the work",
+   "about_to": "Planned the work",
+   "which": [],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "ask_in_parallel",
+   "words": "Asked helpers side by side",
+   "about_to": "Asked helpers side by side",
+   "which": [
+    "questions"
+   ],
+   "needs": "run",
+   "allowed": "goes_ahead",
+   "why": "it answers the questions the person's request asks, side by side, through the governed pipeline",
+   "places": [
+    "panel"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
    "name": "list_connections",
    "words": "Listed the connections",
    "about_to": "Listed the connections",
@@ -1012,6 +1042,22 @@
     "panel"
    ],
    "only_when": "the question is about one chart of a dashboard the person keeps",
+   "same_as": ""
+  },
+  {
+   "name": "make_dashboard",
+   "words": "Drafted a new dashboard",
+   "about_to": "Draft a new dashboard",
+   "which": [
+    "about"
+   ],
+   "needs": "act",
+   "allowed": "staged",
+   "why": "",
+   "places": [
+    "panel"
+   ],
+   "only_when": "the person asking is known",
    "same_as": ""
   },
   {

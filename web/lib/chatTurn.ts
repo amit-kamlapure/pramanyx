@@ -148,6 +148,12 @@ export interface DelegatedHop {
 }
 
 /** CI-6a — one converse tool step: the model chose a tool, and this is the record. */
+/** One step of a request's plan, in the person's words, and whether it is done. */
+export interface PlanStep {
+  text: string;
+  done: boolean;
+}
+
 export interface ConverseStep {
   index: number;
   tool: string;
@@ -239,6 +245,8 @@ export interface ChatTurn {
   converseSteps: ConverseStep[];
   /** The turn spent every step before finishing: Keep going is offered (2026-11-20). */
   keepGoing: boolean;
+  /** The plan of a request with several parts, each step marked as it is done (Stage 4, 2026-11-20). Empty for most. */
+  plan: PlanStep[];
   /** SP-9 — proposals this turn staged, in arrival order. Empty for most turns. */
   stagedProposals: StagedProposalRef[];
   /** Arc SH — the rows a sheet question put on the grid, in arrival order. Empty off a sheet. */
@@ -393,6 +401,7 @@ export const EMPTY_TURN: Omit<ChatTurn, "id" | "question" | "mode"> = {
   delegations: [],
   converseSteps: [],
   keepGoing: false,
+  plan: [],
   stagedProposals: [],
   sheetRows: [],
   answerParts: [],
@@ -514,6 +523,12 @@ const PART_PROJECTORS: Record<string, (t: ChatTurn, d: Payload) => void> = {
   },
   // the turn spent every step (2026-11-20): Keep going picks up from where it stopped
   keep_going: (t) => { t.keepGoing = true; },
+  // the plan as it stands: each call says the whole plan again, so the last one is the plan (Stage 4, 2026-11-20)
+  plan: (t, d) => {
+    const steps = Array.isArray(d.steps) ? d.steps : [];
+    t.plan = steps.filter((s): s is { text: string; done?: boolean } => !!s && typeof (s as { text?: unknown }).text === "string")
+      .map(s => ({ text: s.text, done: s.done === true }));
+  },
   answer_parts: (t, d) => {
     const parts = Array.isArray(d.parts) ? (d.parts as AnswerPart[]) : [];
     t.answerParts = parts.filter(p => p && typeof p === "object" && "kind" in p);
