@@ -26,7 +26,7 @@ const api = vi.hoisted(() => ({
   readMetricTrend: vi.fn(async () => ({ series: [], why: "" })), readBriefingEdition: vi.fn(async () => ({ built: false })),
   getMetricCoverage: vi.fn(async () => ({ areas: [] })),
   getSuggestedShapes: vi.fn(), getDashboardFromObject: vi.fn(), getGroups: vi.fn(),
-  keepDashboardQuery: vi.fn(), previewDashboardQuery: vi.fn(), getCatalogTree: vi.fn(),
+  keepDashboardQuery: vi.fn(), previewDashboardQuery: vi.fn(), getCatalogTree: vi.fn(async () => ({ sections: [] })),
   listPackTemplates: vi.fn(), draftFromPackTemplate: vi.fn(),
 }));
 const drawn = vi.hoisted(() => ({ props: [] as Record<string, unknown>[] }));
@@ -105,18 +105,24 @@ const chartDoor = async (kind: string) => {
 };
 /** The layout pane, folded to a strip until a person opens it (2026-11-18). */
 const openLayout = () => fireEvent.click(screen.getByTestId("builder-open-layout"));
-/** The strip's tabs by name — a Themes tab carries its label twice (one copy hidden), so read the visible one. */
-const stripTabs = () => screen.getAllByRole("tab").map(t => t.querySelector(".rt-TabsTriggerInner")?.textContent);
+/** The dashboards the home lists, by name. */
+const homeRows = () => screen.getAllByTestId("dashboard-open").map(b => b.textContent);
+/** Open one from the home. */
+const openFromHome = async (name: string) => {
+  const rows = await screen.findAllByTestId("dashboard-row");
+  fireEvent.click(within(rows.find(r => within(r).getByTestId("dashboard-open").textContent === name)!).getByTestId("dashboard-open"));
+};
+/** Start on the home: nothing asked to be opened on arrival. */
+const startOnHome = () => { localStorage.removeItem("pramanyx:dashboard-to-open:thelook"); };
 
 beforeEach(() => {
   for (const f of Object.values(api)) f.mockReset();
   toasts.error.mockReset();
   drawn.props.length = 0;
   composer.onCreated = null;
-  try { localStorage.clear(); } catch { /* jsdom */ }
-  // A person who left off on a dashboard of their own. Nothing remembered opens the metrics —
-  // the last block below.
-  localStorage.setItem("pramanyx:cockpit:thelook", "returns-1");
+  try { localStorage.clear(); sessionStorage.clear(); } catch { /* jsdom */ }
+  // Most of these read one dashboard, as if another page asked for it. With nothing asked for, Dashboards opens on its home.
+  localStorage.setItem("pramanyx:dashboard-to-open:thelook", "returns-1");
   api.getSystemFlags.mockResolvedValue({});
   api.getGroups.mockResolvedValue({ ladder: [], builtin_groups: [], groups: [] });
   api.listDashboards.mockResolvedValue(LIST);
@@ -129,40 +135,46 @@ beforeEach(() => {
     items: [{ metric: "revenue", name: "Revenue", why: "", expected: { claim_id: "p1", low: 100, mid: 108, high: 116, text: "$100 to $116", state: "open", scored_against: null, must_say: ["6 earlier ranges"], n: 6 } }] });
 });
 
+/** History, from the title row's ⋯ menu (the user, 2026-11-19: Edit, Publish and ⋯ in the title row). */
+async function openHistory() {
+  fireEvent.keyDown(screen.getByTestId("dashboard-more"), { key: "Enter" });
+  fireEvent.click(await screen.findByTestId("dashboard-history-open"));
+}
+
 describe("a person's dashboards", () => {
-  it("lists them in a strip and draws the one the person left off on, each card it places run for the month", async () => {
+  it("draws the one asked for, each card it places run as written", async () => {
     show();
     await waitFor(() => expect(drawn.props.length).toBeGreaterThan(0));
-    expect(stripTabs()).toEqual(["Metrics", "Returns", "Pricing"]);
-    expect(api.getDashboard).toHaveBeenCalledWith("thelook", "returns-1", { preset: "previous_month" });
+    expect(api.getDashboard).toHaveBeenCalledWith("thelook", "returns-1", null);
     // Only the cards the spec places are run — the pinned card it does not place is not.
     expect(api.runCard.mock.calls.map(c => c[0]).sort()).toEqual(["c7f3a001", "c91b2002"]);
-    expect(api.runCard.mock.calls[0][1]).toEqual({ preset: "previous_month" });
+    expect(api.runCard.mock.calls[0][1]).toBeNull();
     const last = drawn.props.at(-1)!;
     expect(last.spec).toEqual(SPEC);
     expect(last.sym).toBe("$");
     // The version is said in the history, not above the cards.
     expect(screen.queryByTestId("dashboard-version")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /History/ }));
+    await openHistory();
     expect(screen.getByTestId("dashboard-version")).toHaveTextContent("Version 3 · kept by person");
+    // beside the cards, closed again (the user, 2026-11-19: "a temporary panel, not covering the entire page")
+    expect(screen.getByTestId("dashboard-history-panel")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("dashboard-history-close"));
+    expect(screen.queryByTestId("dashboard-history-panel")).toBeNull();
   });
 
-  it("opens on last month and asks each card how it moved against the one before", async () => {
-    api.getDashboard.mockResolvedValue({ ...READ, currency_symbol: "€",
-      range: { ...READ.range, status: "final", preset: "last_month", covers: "July 2026" } });
+  it("reads its cards as written, with no period: its filters alone cut them (the user, 2026-11-19)", async () => {
+    api.getDashboard.mockResolvedValue({ ...READ, currency_symbol: "€" });
     show();
-    await waitFor(() => expect(api.getDashboard).toHaveBeenCalledWith("thelook", "returns-1", { preset: "previous_month" }));
-    await waitFor(() => expect(api.runCard).toHaveBeenCalledWith("c7f3a001", { preset: "previous_month" }, { compare: true, focus: [] }));
-    // Never first read as written: that run would roll every card's standing value.
-    expect(api.getDashboard).not.toHaveBeenCalledWith("thelook", "returns-1", null);
-    expect(await screen.findByTestId("dashboard-range")).toHaveTextContent("July 2026 · final");
+    await waitFor(() => expect(api.runCard).toHaveBeenCalledWith("c7f3a001", null, { compare: true, focus: [] }));
+    expect(api.getDashboard).not.toHaveBeenCalledWith("thelook", "returns-1", { preset: "previous_month" });
+    expect(screen.queryByTestId("dashboard-range")).toBeNull();                 // no period said or chosen
     await waitFor(() => expect(drawn.props.at(-1)!.sym).toBe("€"));
   });
 
   it("opens the one the person chose last time", async () => {
-    localStorage.setItem("pramanyx:cockpit:thelook", "pricing-1");
+    localStorage.setItem("pramanyx:dashboard-to-open:thelook", "pricing-1");
     show();
-    await waitFor(() => expect(api.getDashboard).toHaveBeenCalledWith("thelook", "pricing-1", { preset: "previous_month" }));
+    await waitFor(() => expect(api.getDashboard).toHaveBeenCalledWith("thelook", "pricing-1", null));
   });
 
   it("'Remove' on a card takes it off THIS dashboard and keeps the card", async () => {
@@ -203,19 +215,20 @@ describe("a retired dashboard", () => {
     fireEvent.click(screen.getByTestId("dashboard-retire-open"));
     fireEvent.click(screen.getByRole("button", { name: "Retire it" }));
     await waitFor(() => expect(api.retireDashboard).toHaveBeenCalledWith("thelook", "returns-1"));
-    fireEvent.click(screen.getByRole("button", { name: /History/ }));
     expect(screen.queryByRole("button", { name: "Retire this dashboard" })).toBeNull();
   });
 
-  it("leaves the strip for good: nothing offers to bring a retired dashboard back (the user, 2026-10-11 — once it's gone it's gone)", async () => {
+  it("leaves the home for good: nothing offers to bring a retired dashboard back (the user, 2026-10-11 — once it's gone it's gone)", async () => {
+    startOnHome();
     api.listDashboards.mockResolvedValue({ ...LIST, cockpits: [LIST.cockpits[0], { ...LIST.cockpits[1], retired: true, version: 4, title: "Pricing" }] });
     show();
-    await waitFor(() => expect(stripTabs()).toEqual(["Metrics", "Returns"]));
+    await waitFor(() => expect(homeRows()).toEqual(["Metrics", "Returns"]));
     expect(screen.queryByText(/Retired:|Pricing/)).toBeNull();
     expect(screen.queryByRole("button", { name: /Bring back/ })).toBeNull();
+    await openFromHome("Returns");
     fireEvent.click(await screen.findByTestId("dashboard-edit"));
     fireEvent.click(await screen.findByTestId("dashboard-retire-open"));
-    expect(screen.getByTestId("dashboard-retire-confirm")).toHaveTextContent("It leaves your strip for good and cannot be brought back");
+    expect(screen.getByTestId("dashboard-retire-confirm")).toHaveTextContent("It leaves your dashboards for good and cannot be brought back");
     expect(api.restoreDashboard).not.toHaveBeenCalled();
   });
 });
@@ -242,41 +255,104 @@ describe("with no dashboards yet", () => {
 });
 
 describe("a new dashboard started without a model", () => {
+  beforeEach(startOnHome);
   // The walk-through (2026-10-09): + New dashboard offered only a model's draft, and a dashboard for a process only inside
   // the designer's own session.
   const kept = () => api.keepDashboard.mock.calls.at(-1) as [string, string, { elements: Record<string, { type: string; props: Record<string, unknown>; children: string[] }> }, string];
 
-  // The user, 2026-11-07: a new dashboard is made in a dialog over the page, not on the same plane as it.
-  it("opens in a dialog; its Close and Escape close it, but not while a start is in flight", async () => {
+  // The user, 2026-11-18: a new dashboard opens as a blank page, on a text input, with the other ways beneath it.
+  it("opens as a page of its own on the words to describe it, the other ways at its foot", async () => {
     show();
     fireEvent.click(await screen.findByTestId("dashboard-new-open"));
-    let dialog = await screen.findByRole("dialog");
-    expect(dialog).toHaveAttribute("data-testid", "dashboard-new-dialog");
-    expect(within(dialog).getByTestId("dashboard-new")).toBeInTheDocument();
-    // one Close: the dialog's own — the form draws no second one under it
-    fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByTestId("dashboards-home")).toBeNull();
+    expect(screen.getByLabelText("What this dashboard is for")).toBeInTheDocument();
+    expect(within(screen.getByTestId("dashboard-new-ways")).getAllByRole("button").map(b => b.textContent?.trim()))
+      .toEqual(["From tables", "From SQL", "From a file", "From an object", "From a pack template", "For a process", "Start empty"]);
+    fireEvent.click(screen.getByTestId("dashboard-new-back"));
+    expect(await screen.findByTestId("dashboards-home")).toBeInTheDocument();
+  });
 
-    fireEvent.click(screen.getByTestId("dashboard-new-open"));
-    dialog = await screen.findByRole("dialog");
-    fireEvent.keyDown(dialog, { key: "Escape" });
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-
+  it("goes to another way and back to describing it, and holds the page while a start is in flight", async () => {
     api.keepDashboard.mockReturnValue(new Promise(() => {}));                 // a start that never answers
-    fireEvent.click(screen.getByTestId("dashboard-new-open"));
-    dialog = await screen.findByRole("dialog");
-    fireEvent.change(within(dialog).getByLabelText("The dashboard's name"), { target: { value: "Carrier performance" } });
-    fireEvent.change(within(dialog).getByLabelText("What this dashboard is for — its first note"), { target: { value: "Pickups." } });
-    fireEvent.click(within(dialog).getByTestId("dashboard-start-empty"));
-    await waitFor(() => expect(within(dialog).getByTestId("dashboard-start-empty")).toHaveTextContent("Starting…"));
-    fireEvent.keyDown(dialog, { key: "Escape" });
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
-    expect(within(dialog).getByRole("button", { name: "Close" })).toBeDisabled();
+    show();
+    fireEvent.click(await screen.findByTestId("dashboard-new-open"));
+    fireEvent.click(screen.getByTestId("dashboard-new-empty"));
+    expect(screen.queryByLabelText("What this dashboard is for")).toBeNull();
+    fireEvent.click(screen.getByTestId("dashboard-new-draft"));
+    expect(screen.getByLabelText("What this dashboard is for")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("dashboard-new-empty"));
+    fireEvent.change(screen.getByLabelText("The dashboard's name"), { target: { value: "Carrier performance" } });
+    fireEvent.change(screen.getByLabelText("What this dashboard is for — its first note"), { target: { value: "Pickups." } });
+    fireEvent.click(screen.getByTestId("dashboard-start-empty"));
+    await waitFor(() => expect(screen.getByTestId("dashboard-start-empty")).toHaveTextContent("Starting…"));
+    expect(screen.getByTestId("dashboard-new-back")).toBeDisabled();
+  });
+
+  it("drafts on Enter, and keeps a new line on Shift and Enter", async () => {
+    api.draftDashboard.mockResolvedValue({ staged: false, proposal_id: "", summary: "", rounds: 0, stop_reason: "", sentences: ["Nothing measures this."] });
+    show();
+    fireEvent.click(await screen.findByTestId("dashboard-new-open"));
+    const box = screen.getByLabelText("What this dashboard is for");
+    fireEvent.change(box, { target: { value: "Returns" } });
+    fireEvent.keyDown(box, { key: "Enter", shiftKey: true });
+    expect(api.draftDashboard).not.toHaveBeenCalled();
+    fireEvent.keyDown(box, { key: "Enter" });
+    await waitFor(() => expect(api.draftDashboard).toHaveBeenCalledWith("thelook", "Returns", "thelook", expect.objectContaining({ hear: expect.any(Function) })));
+  });
+
+  it("turns into the dashboard being made the moment it is asked for, with what is happening beside it", async () => {
+    let hear: (frame: unknown) => void = () => {};
+    let finish: (out: unknown) => void = () => {};
+    api.draftDashboard.mockImplementation((_c: string, _a: string, _s: string, live: { hear: (frame: unknown) => void }) => {
+      hear = live.hear;
+      return new Promise(resolve => { finish = resolve; });
+    });
+    show();
+    fireEvent.click(await screen.findByTestId("dashboard-new-open"));
+    fireEvent.change(screen.getByLabelText("What this dashboard is for"), { target: { value: "Returns by category" } });
+    fireEvent.click(screen.getByRole("button", { name: "Draft it" }));
+
+    expect(await screen.findByTestId("dashboard-draft-asked")).toHaveTextContent("Returns by category");
+    expect(screen.queryByLabelText("What this dashboard is for")).toBeNull();
+    expect(screen.getByTestId("dashboard-draft-panel")).toHaveTextContent("Reading what this connection can show");
+    expect(screen.getByTestId("dashboard-new-back")).toBeDisabled();
+
+    act(() => {
+      hear({ type: "read", metrics: 2, trusted_queries: 1, findings: 0 });
+      hear({ type: "checking", round: 1, cards: 2, outline: [{ kind: "Card", size: "small", card: "rate" }, { kind: "Card", size: "wide", card: "cost" }] });
+      hear({ type: "card", key: "rate", title: "Return rate", shows: "figure", state: "ok" });
+    });
+    expect(screen.getByTestId("dashboard-draft-panel")).toHaveTextContent("Read 2 approved metrics and 1 trusted query");
+    expect(screen.getByTestId("dashboard-draft-panel")).toHaveTextContent("1 of 2");
+    const tiles = screen.getAllByTestId("dashboard-draft-tile");
+    expect(tiles.map(t => t.getAttribute("data-state"))).toEqual(["ok", "waiting"]);
+    expect(tiles[0]).toHaveTextContent("Return rate");
+
+    await act(async () => { finish({ staged: false, proposal_id: "", summary: "", rounds: 1, stop_reason: "", sentences: ["Nothing measures this."] }); });
+    expect(screen.getByTestId("dashboard-not-drafted")).toHaveTextContent("Nothing measures this.");
+    expect(screen.queryByTestId("dashboard-draft-stop")).toBeNull();
+    fireEvent.click(screen.getByTestId("dashboard-draft-change"));
+    expect(screen.getByLabelText("What this dashboard is for")).toHaveValue("Returns by category");
+  });
+
+  it("stops when asked, and goes back to the request with its words kept", async () => {
+    api.draftDashboard.mockImplementation((_c: string, _a: string, _s: string, live: { signal: AbortSignal }) => new Promise((_resolve, reject) => {
+      live.signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
+    }));
+    show();
+    fireEvent.click(await screen.findByTestId("dashboard-new-open"));
+    fireEvent.change(screen.getByLabelText("What this dashboard is for"), { target: { value: "Returns" } });
+    fireEvent.click(screen.getByRole("button", { name: "Draft it" }));
+    fireEvent.click(await screen.findByTestId("dashboard-draft-stop"));
+    expect(await screen.findByTestId("dashboard-new-ask-says")).toHaveTextContent("Stopped. Nothing was kept.");
+    expect(screen.getByLabelText("What this dashboard is for")).toHaveValue("Returns");
   });
 
   it("starts empty — its name and a first note in the person's words — and opens on it", async () => {
     show();
     fireEvent.click(await screen.findByTestId("dashboard-new-open"));
+    fireEvent.click(screen.getByTestId("dashboard-new-empty"));
     const startIt = screen.getByTestId("dashboard-start-empty");
     expect(startIt).toBeDisabled();
     expect(screen.getByTestId("dashboard-new")).toHaveTextContent("Name it.");                 // never a silent dead end
@@ -322,6 +398,7 @@ describe("a new dashboard started without a model", () => {
 });
 
 describe("a new dashboard from an area", () => {
+  beforeEach(startOnHome);
   const PROPOSAL = {
     id: "p1", kind: "cockpit_draft", status: "pending", reasoning: "Returns first, then what they cost.",
     params: { home: { connection_id: "thelook", owner: "default", cockpit_id: "returns-9" }, spec: SPEC,
@@ -335,7 +412,6 @@ describe("a new dashboard from an area", () => {
   async function draftReturns() {
     show();
     fireEvent.click(await screen.findByTestId("dashboard-new-open"));
-    fireEvent.click(screen.getByTestId("dashboard-new-draft"));                 // the one way here that asks a model
     fireEvent.change(screen.getByLabelText("What this dashboard is for"), { target: { value: "Returns" } });
     fireEvent.click(screen.getByRole("button", { name: "Draft it" }));
   }
@@ -347,7 +423,7 @@ describe("a new dashboard from an area", () => {
     await draftReturns();
 
     const draft = await screen.findByTestId("dashboard-draft");
-    expect(api.draftDashboard).toHaveBeenCalledWith("thelook", "Returns", "thelook");
+    expect(api.draftDashboard).toHaveBeenCalledWith("thelook", "Returns", "thelook", expect.objectContaining({ hear: expect.any(Function) }));
     expect(draft).toHaveTextContent("Drafted the dashboard \"Returns\".");
     expect(draft).toHaveTextContent("Why it is arranged this way: Returns first, then what they cost.");
     const lines = within(draft).getAllByTestId("arrange-card");
@@ -395,39 +471,64 @@ describe("a new dashboard from an area", () => {
   });
 });
 
-describe("the metrics, the dashboard a person opens on", () => {
-  beforeEach(() => { localStorage.clear(); });
+describe("the dashboards home, where Dashboards opens (the user, 2026-11-18)", () => {
+  beforeEach(startOnHome);
 
-  it("is first in the strip and open when nothing was chosen; no dashboard of the person's is read", async () => {
+  it("lists Metrics pinned first and the person's own, reads no dashboard until one is opened, and has no strip of tabs", async () => {
     show();
-    const metrics = await screen.findByRole("tab", { name: "Metrics" });
-    expect(metrics).toHaveAttribute("aria-selected", "true");
-    // measured for the latest month, as a dashboard is read
+    await waitFor(() => expect(homeRows()[0]).toBe("Metrics"));
+    expect(homeRows().slice(1).sort()).toEqual(["Pricing", "Returns"]);
+    expect(screen.getByTestId("dashboard-pinned")).toHaveTextContent("Pinned");
+    expect(screen.queryByRole("tablist")).toBeNull();
+    expect(api.getDashboard).not.toHaveBeenCalled();
+    expect(api.measureRange).not.toHaveBeenCalled();
+  });
+
+  it("opens Metrics from the list, measured for the latest month, and goes back to the home", async () => {
+    show();
+    await openFromHome("Metrics");
     await waitFor(() => expect(api.measureRange).toHaveBeenCalledWith("thelook", { preset: "previous_month" }, "thelook"));
     expect(await screen.findByRole("columnheader", { name: "Aug 2026" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "vs Jul 2026" })).toBeInTheDocument();
-    // the figure in its row
     expect(within(screen.getByTestId("metrics-ledger")).getAllByText("$110").length).toBeGreaterThan(0);
-    // and what the metric's own past expects of the range after it
     expect(await screen.findByText("$100 – $116")).toBeInTheDocument();
     expect(api.readExpectedNext).toHaveBeenCalledWith("thelook", { preset: "previous_month" }, "thelook");
     expect(screen.getByTestId("dashboard-range")).toHaveTextContent("August 2026 · final");
     expect(api.getDashboard).not.toHaveBeenCalled();
-    // the person's own dashboards are still there, one click away, and that choice is remembered
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "Returns" }));   // a Radix tab opens on mouseDown
-    await waitFor(() => expect(api.getDashboard).toHaveBeenCalledWith("thelook", "returns-1", { preset: "previous_month" }));
-    expect(localStorage.getItem("pramanyx:cockpit:thelook")).toBe("returns-1");
+    fireEvent.click(screen.getByTestId("dashboards-back"));
+    expect(await screen.findByTestId("dashboards-home")).toBeInTheDocument();
+  });
+
+  it("opens one of the person's own, keeps it through a reload of this tab, and forgets it on going back", async () => {
+    const first = show();
+    await openFromHome("Returns");
+    await waitFor(() => expect(api.getDashboard).toHaveBeenCalledWith("thelook", "returns-1", null));
+    expect(sessionStorage.getItem("pramanyx:dashboard-open:thelook")).toBe("returns-1");
+    first.unmount();
+    show();
+    await waitFor(() => expect(drawn.props.length).toBeGreaterThan(0));
+    expect(screen.queryByTestId("dashboards-home")).toBeNull();
+    fireEvent.click(await screen.findByTestId("dashboards-back"));
+    expect(await screen.findByTestId("dashboards-home")).toBeInTheDocument();
+    expect(sessionStorage.getItem("pramanyx:dashboard-open:thelook")).toBeNull();
+  });
+
+  it("opens what another page asked for once, and the home after that", async () => {
+    localStorage.setItem("pramanyx:dashboard-to-open:thelook", "pricing-1");
+    const first = show();
+    await waitFor(() => expect(api.getDashboard).toHaveBeenCalledWith("thelook", "pricing-1", null));
+    expect(localStorage.getItem("pramanyx:dashboard-to-open:thelook")).toBeNull();
+    first.unmount();
+    show();
+    expect(await screen.findByTestId("dashboards-home")).toBeInTheDocument();
   });
 
   it("still explains what a dashboard of your own is when you have none", async () => {
     api.listDashboards.mockResolvedValue({ ...LIST, cockpits: [] });
     show();
-    expect(await screen.findByTestId("metrics-dashboard")).toBeInTheDocument();
-    // one muted line and its door, under the metrics; what a dashboard of your own is, on its hover
-    const none = screen.getByTestId("dashboard-none-yet");
-    expect(none).toHaveTextContent("No dashboard of your own yet");
-    expect(none.getAttribute("title")).toMatch(/the set of cards you keep watching for one area/);
-    expect(within(none).getByRole("button", { name: /New dashboard|Start “My dashboard”/ })).toBeInTheDocument();
+    await waitFor(() => expect(homeRows()).toEqual(["Metrics"]));
+    expect(screen.getByText(/You have no dashboards yet.*the set of cards you keep watching for one area/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /New dashboard|Start “My dashboard”/ })).toBeInTheDocument();
   });
 });
 
@@ -604,7 +705,6 @@ describe("the canvas: a finding from the ledger, a change in words, publishing (
     api.copySharedDashboard.mockResolvedValue({ status: "kept", kept: true, version: 1, artifact_id: "b1", sentences: [], cockpit_id: "sales-weekly-9f", title: "Sales weekly" });
     show();
     await waitFor(() => expect(drawn.props.length).toBeGreaterThan(0));
-    expect(stripTabs()).toEqual(["Metrics", "Returns", "Pricing", "Sales weekly · priya@example.com"]);
 
     fireEvent.click(screen.getByTestId("dashboard-edit"));
     fireEvent.click(await screen.findByTestId("dashboard-publish-open"));
@@ -617,7 +717,9 @@ describe("the canvas: a finding from the ledger, a change in words, publishing (
     await waitFor(() => expect(screen.queryByTestId("dashboard-builder")).toBeNull());
 
     // What Priya published reads as hers, read-only, with the door to start one's own from it.
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "Sales weekly · priya@example.com" }));
+    fireEvent.click(screen.getByTestId("dashboards-back"));
+    await waitFor(() => expect(homeRows()).toContain("Sales weekly"));
+    await openFromHome("Sales weekly");
     const sharedView = await screen.findByTestId("dashboard-shared");
     expect(within(sharedView).getByTestId("dashboard-shared-by")).toHaveTextContent("An App by priya@example.com, for Sales team · version 3 · read-only");
     const doors = drawn.props.at(-1)!.doors as Record<string, unknown>;
@@ -648,7 +750,9 @@ describe("building a dashboard in place (Arc AP-1)", () => {
     for (const id of ["dashboard-card-new", "dashboard-note-new", "dashboard-arrange-open", "dashboard-publish-open", "dashboard-retire-open", "dashboard-ask"]) {
       expect(screen.queryByTestId(id)).toBeNull();
     }
-    expect(screen.getByRole("button", { name: /History/ })).toBeInTheDocument();
+    fireEvent.keyDown(screen.getByTestId("dashboard-more"), { key: "Enter" });
+    expect(await screen.findByTestId("dashboard-history-open")).toBeInTheDocument();
+    fireEvent.keyDown(screen.getByTestId("dashboard-history-open"), { key: "Escape" });
     await waitFor(() => expect(Object.entries(doors()).filter(([, v]) => v !== undefined).map(([k]) => k)).toEqual(["onRefresh"]));
   });
 
@@ -670,7 +774,7 @@ describe("building a dashboard in place (Arc AP-1)", () => {
     await waitFor(() => expect(screen.queryByTestId("dashboard-builder")).toBeNull());
     expect(document.documentElement.hasAttribute("data-nav")).toBe(false);
     expect(localStorage.getItem("pramanyx_nav_collapsed")).toBeNull();
-    expect(stripTabs()).toContain("Returns");
+    expect(screen.getByTestId("dashboards-back")).toBeInTheDocument();
   });
 
   it("undo keeps the version before as the next one, and redo the one after", async () => {
@@ -766,6 +870,7 @@ describe("action buttons, placed by hand (Arc AP-3)", () => {
 });
 
 describe("a new dashboard from a pack template (Arc FA, FA-6)", () => {
+  beforeEach(startOnHome);
   const TEMPLATE = {
     pack: "retail", pack_name: "Retail and e-commerce", version: 1, id: "checkout-and-returns", title: "Checkout and returns",
     description: "How many carts become an order.", sections: ["Checkout", "Returns"], ready: 1, source: "pack:retail@1 template",
@@ -803,6 +908,7 @@ describe("a new dashboard from a pack template (Arc FA, FA-6)", () => {
 });
 
 describe("what each object suggests (Arc AP-5)", () => {
+  beforeEach(startOnHome);
   it("lists each object with the shape it fits, and a click opens the starter on it", async () => {
     // answered after the object catalog, as the live API answers: the catalog's arrival must not drop them
     api.getSuggestedShapes.mockImplementation(() => new Promise(resolve => setTimeout(() => resolve([
@@ -830,7 +936,8 @@ describe("History, in words (Arc AP-6)", () => {
       { ...version(1), current: false, changes: { added: ["a", "b"], removed: [], changed: ["c"] } },
     ] });
     show();
-    fireEvent.click(await screen.findByRole("button", { name: /History/ }));
+    await screen.findByTestId("dashboard-more");
+    await openHistory();
     const rows = within(await screen.findByTestId("dashboard-history")).getAllByRole("listitem");
     expect(within(rows[0]).getByTestId("dashboard-history-said")).toHaveTextContent("Added the map · distribution center · Moved a note to the section Waiting");
     expect(within(rows[1]).queryByTestId("dashboard-history-said")).toBeNull();          // published: its source says it
@@ -1001,9 +1108,12 @@ describe("your own query on the dashboard (Arc AP-7)", () => {
     await screen.findByTestId("dashboard-builder");
     openLayout();
     fireEvent.click((await screen.findAllByTestId("builder-line")).find(l => l.dataset.key === "card-net")!);
+    // how it is drawn is its chart editor's, above; what it reads is folded below it, and a change to that is kept as a new card
+    expect(screen.getByTestId("query-chart-editor")).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("card-fold-reads"));
     const setup = await screen.findByTestId("query-setup");
-    fireEvent.click(within(setup).getByRole("radio", { name: /Line/ }));
+    expect(within(setup).queryByTestId("query-shown-as")).toBeNull();
+    fireEvent.change(within(setup).getByLabelText("Name"), { target: { value: "Net sales by day" } });
     fireEvent.click(within(setup).getByTestId("query-keep"));
     await waitFor(() => expect(api.keepDashboard).toHaveBeenCalled(), { timeout: 3000 });
     const [, , spec, note] = api.keepDashboard.mock.calls.at(-1)!;
@@ -1037,7 +1147,7 @@ describe("your own query on the dashboard (Arc AP-7)", () => {
 });
 
 describe("inside the app's shell (2026-11-10, the dashboard mockup)", () => {
-  it("folds the strip into the toolbar row, the doors into the title row, and names the dashboard in the title", async () => {
+  it("names the dashboard in the title, when it was kept beside it, and its doors: Edit, Publish and ⋯ (the user, 2026-11-19)", async () => {
     const { PageChromeProvider, PageHeader } = await import("@/components/shell/PageChrome");
     render(
       <PageChromeProvider pageKey="dashboards">
@@ -1047,16 +1157,23 @@ describe("inside the app's shell (2026-11-10, the dashboard mockup)", () => {
     );
     await waitFor(() => expect(drawn.props.length).toBeGreaterThan(0));
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Returns");
-    expect(screen.getByRole("tablist", { name: "Your dashboards" }).closest(".aug-page-toolbar")).toBeTruthy();
-    // the mockup's places: "+ New dashboard" at the strip's end; View | Edit, History, Publish… and ⋯ in the title row;
-    // owner, version and the last read beside the title; the dashboard's state, release and reader in the status strip
-    expect(screen.getByTestId("dashboard-new-open").closest(".aug-page-toolbar")).toBeTruthy();
+    expect(screen.queryByRole("tablist")).toBeNull();
+    // no way back drawn before the title: the rail's Dashboards row goes back
+    expect(screen.queryByTestId("page-back")).toBeNull();
+    // Edit, Publish… and ⋯ in the title row, and nothing else: no View, no Ask (the top bar's icon asks), no History
     expect(screen.getByTestId("dashboard-edit").closest(".aug-title-actions")).toBeTruthy();
-    expect(screen.getByTestId("dashboard-view")).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByTestId("dashboard-view")).toBeNull();
+    expect(screen.queryByTestId("ask-about-dashboard")).toBeNull();
     expect(screen.getByTestId("dashboard-publish-view")).toHaveTextContent("Publish…");
     expect(screen.getByTestId("dashboard-more").closest(".aug-title-actions")).toBeTruthy();
-    expect(screen.getByTestId("dashboard-facts")).toHaveTextContent("version 3");
-    expect(screen.getByTestId("dashboard-read-again").closest(".aug-page-toolbar")).toBeTruthy();
+    // when it was kept beside the title; owner, version and the last read in its title
+    expect(screen.getByTestId("dashboard-facts")).toHaveTextContent(/^Updated /);
+    expect(screen.getByTestId("dashboard-facts").getAttribute("title")).toContain("version 3");
+    // the dashboard starts right under its title (the user, 2026-11-19): Read again waits in the ⋯ menu
+    expect(screen.queryByTestId("dashboard-read-again")).toBeNull();
+    fireEvent.keyDown(screen.getByTestId("dashboard-more"), { key: "Enter" });
+    expect(screen.getByTestId("dashboard-read-again")).toBeTruthy();
+    fireEvent.keyDown(screen.getByTestId("dashboard-read-again"), { key: "Escape" });
     // the builder is a work surface (the user, 2026-11-10): no breadcrumb or title row — its own bar holds Editing,
     // the saved readout and its doors, Done last
     fireEvent.click(screen.getByTestId("dashboard-edit"));
@@ -1080,22 +1197,28 @@ describe("the period as a piece (v15; the user, 2026-11-18: 'remove period bar')
     return () => { delete SPEC.elements.period; SPEC.elements[section].children.shift(); };
   };
 
-  it("opens on the period its piece says, hands the piece the period and the door to change it, and draws no period above it", async () => {
+  it("a dashboard that still holds the piece is read as written, with no period handed to it (2026-11-19)", async () => {
     const takeOff = placePeriod();
     try {
     show();
-    await waitFor(() => expect(api.getDashboard).toHaveBeenCalledWith("thelook", "returns-1", { preset: "current_month" }));
-    await waitFor(() => expect((drawn.props.at(-1)?.period as { value?: unknown } | undefined)?.value).toEqual({ preset: "current_month" }));
-    expect(screen.queryByTestId("dashboard-period")).toBeNull();
-    const door = drawn.props.at(-1)!.period as { onChange: (c: unknown) => void };
-    act(() => door.onChange({ preset: "previous_year" }));
-    await waitFor(() => expect(api.getDashboard).toHaveBeenLastCalledWith("thelook", "returns-1", { preset: "previous_year" }));
+    await waitFor(() => expect(drawn.props.length).toBeGreaterThan(0));
+    expect(api.getDashboard).toHaveBeenCalledWith("thelook", "returns-1", null);
+    expect(drawn.props.at(-1)?.period).toBeNull();                                 // the piece draws nothing
     } finally { takeOff(); }
   });
 
-  it("a dashboard without the piece keeps its period above it", async () => {
+  it("reads the cards again without moving the page: the note floats, and only the cards wait (2026-11-19)", async () => {
     show();
     await waitFor(() => expect(drawn.props.length).toBeGreaterThan(0));
-    expect((drawn.props.at(-1)?.period as { value?: unknown } | undefined)?.value).toEqual({ preset: "previous_month" });
+    api.getDashboard.mockImplementationOnce(() => new Promise(() => {}));     // the next read is still on its way
+    fireEvent.keyDown(screen.getByTestId("dashboard-more"), { key: "Enter" });
+    fireEvent.click(await screen.findByTestId("dashboard-read-again"));
+    const note = await screen.findByRole("status");
+    expect(note).toHaveTextContent(/the cards/);
+    expect(note.style.position).toBe("absolute");                               // it takes no room: nothing below it moves
+    const busy = note.parentElement as HTMLElement;
+    expect(busy).toHaveAttribute("data-reading");                               // the stylesheet dims the cards inside it alone
+    expect(busy.style.opacity).toBe("");                                        // not the filters beside them
+    expect(busy.style.pointerEvents).toBe("");
   });
 });

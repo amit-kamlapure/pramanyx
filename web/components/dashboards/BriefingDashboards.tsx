@@ -27,13 +27,16 @@
  * what is chosen, the rail folded to its icons until Done. Every change there is drawn at once and kept as one version
  * a moment after a burst of them, with undo and redo. No model; a change asked in words is the one exception, as here.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { DASHBOARD_CHANGED } from "@/components/chat/DashboardChangeCard";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 import { NewCardComposer } from "@/components/brief/NewCardComposer";
 import type { RangeChoice } from "@/components/brief/BriefRange";
 import type { CardState } from "@/components/brief/PinnedCardBody";
 import { DashboardArrange, type CardLine } from "@/components/dashboards/DashboardArrange";
 import { DashboardBuilder, EditBar, type AddWhat, type CanvasTools } from "@/components/dashboards/DashboardBuilder";
+import { cardHolds as holdsOf } from "@/lib/dashboards/cardHolds";
+import type { QueryShown } from "@/lib/api";
 import { ComposedDashboard, type DashboardDoors, type PeriodDoor, type ReadState } from "@/components/dashboards/ComposedDashboard";
 import { FindingPicker } from "@/components/dashboards/FindingPicker";
 import { ObjectDashboardStarter } from "@/components/dashboards/ObjectDashboardStarter";
@@ -42,29 +45,41 @@ import { OntologyPieceComposer } from "@/components/dashboards/OntologyPieceComp
 import { PiecePicker } from "@/components/dashboards/PiecePicker";
 import { QuerySetup } from "@/components/dashboards/QuerySetup";
 import { PinStrip, numberOf } from "@/components/dashboards/PinStrip";
+import { DashboardHome } from "@/components/dashboards/DashboardHome";
+import { homeItems, modifiedWords } from "@/lib/dashboards/homeList";
+import { askToOpenDashboard, dashboardToOpenKey } from "@/lib/dashboards/start";
 import { METRICS_DASHBOARD, MetricsDashboard } from "@/components/dashboards/MetricsDashboard";
 import { QuestionComposer } from "@/components/dashboards/QuestionComposer";
 import { FromFile } from "@/components/dashboards/FromFile";
 import { requestTab } from "@/lib/navigate";
-import { PeriodPicker, choiceName } from "@/components/dashboards/PeriodPicker";
+import { PeriodPicker } from "@/components/dashboards/PeriodPicker";
 import { person as personName, type ImageStamp } from "@/components/dashboards/StaticTile";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FormDialog } from "@/components/ui/dialog";
+import type { IconName } from "@/components/ui/icon";
 import { EmptyState } from "@/components/ui/empty-state";
 import { DropdownMenu } from "@radix-ui/themes";
+import { ASKS_OF_A_PIECE, AskPiece } from "@/components/dashboards/AskPiece";
+import { brandEdge } from "@/components/ui/brand";
+import { DraftBuilding } from "@/components/dashboards/DraftBuilding";
+import { finishedWatch, heardFrame, startWatch, type DraftWatch } from "@/lib/dashboards/draftProgress";
+import { askAbout, dashboardSubject, useOnPage } from "@/lib/askSubject";
+import { ImportDashboard } from "@/components/dashboards/ImportDashboard";
+import { SubscribeDashboard } from "@/components/dashboards/SubscribeDashboard";
+import { FromSql, FromTables } from "@/components/dashboards/StartFromData";
+import { downloadText } from "@/lib/query/csv";
 import { Chip } from "@/components/clarity/kit";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
 import { SelectField } from "@/components/ui/select";
-import { TabStrip } from "@/components/ui/tab-strip";
-import { ChromeActions, ChromeFacts, ChromeStatus, ChromeToolbar, useInShell, usePageChrome } from "@/components/shell/PageChrome";
+import { ChromeActions, ChromeFacts, ChromeStatus, useChromeBack, useInShell, usePageChrome } from "@/components/shell/PageChrome";
 import { CertificationMark } from "@/components/govern/CertificationMark";
 import { ErrorState, Loading, Refusal } from "@/components/ui/states";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
-import {
+import { exportDashboard,
   DashboardRefused, acceptProposal, askDashboard, dashboardAudiences, dashboardImageUrl, copySharedDashboard, draftDashboard, findingOfCard,
   getDeclaredActions,
   getDashboard, getGroups, getProposalById, getSharedDashboard, getSuggestedShapes, keepDashboard, listDashboards, listSharedDashboards, moveCanvasDashboard,
@@ -73,10 +88,11 @@ import {
   type BriefingRange, type DashboardAudience, type DashboardDrafted, type DashboardKept, type DashboardList, type DashboardVersion,
   type PersonDashboard, type ShapeName, type SharedDashboard, type SharedDashboardListed, type StagedProposal,
 } from "@/lib/api";
-import { dashboardRef } from "@/lib/certification";
+import { dashboardRef, readCertifications, type Certification } from "@/lib/certification";
 import { appWords } from "@/lib/dashboards/appVersion";
 import { MAX_CAPTION, MAX_NOTE, type Layout } from "@/lib/dashboards/catalog";
 import {
+  addGlobalFilter, addPage, duplicatePage, removePage, rename, setProps,
   cardsPlaced, editNote, layOut, moveTo, placeCard, placeImage, placeNote, placePiece, placeQuestion, recaption, regrid, sectionsOf, setFilterWidth, swapCard, takeOff, takeOffCard,
   type DashboardSpec,
   type Box,
@@ -85,9 +101,9 @@ import { hostStateOf } from "@/lib/dashboards/hostStatus";
 import { SHAPES } from "@/lib/dashboards/shapes";
 import { emptyDashboardSpec, overdueSegmentOf, processDashboardHolds, processDashboardSpec, startDashboard } from "@/lib/dashboards/start";
 import { valuesRead } from "@/lib/dashboards/values";
-import { focusFor, useDashboardFocus } from "@/lib/dashboards/focus";
+import { dashboardInAddress, focusOfCard, useDashboardFocus } from "@/lib/dashboards/focus";
 import { isOtherKind, tileShape } from "@/components/dashboards/DashboardTile";
-import { CardSql, ChartDock, QueryKindPick } from "@/components/dashboards/CardInspector";
+import { CardSql, ChartDock, QueryChartEditor, type KeptValueColors } from "@/components/dashboards/CardInspector";
 import { formatDateTime, utcDayWords } from "@/lib/format";
 import { withUniqueKeys } from "@/lib/listKeys";
 import { foldNavFor } from "@/lib/navCollapse";
@@ -97,6 +113,23 @@ import { getProcesses, type ProcessDetail } from "@/lib/objectTypes";
 /** The name the Briefing gives when it keeps something for a person. The server writes the
  *  signed-in person's own name where there is one. */
 const ACTOR = "briefing";
+
+/** Write a dashboard out as a JSON file, named for it. */
+async function exportToFile(connectionId: string, dashboardId: string): Promise<void> {
+  try {
+    const doc = await exportDashboard(connectionId, dashboardId);
+    const name = String(doc.title).replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "dashboard";
+    downloadText(`${name}.dashboard.json`, JSON.stringify(doc, null, 2), "application/json");
+  } catch (e) {
+    toast.error("The dashboard could not be exported", { description: (e as Error).message.slice(0, 160) });
+  }
+}
+
+/** A dashboard's title, as its spec says it. */
+const titleOfSpec = (spec: unknown): string => {
+  const s = spec as { root?: string; elements?: Record<string, { props?: { title?: unknown } }> } | null;
+  return String(s?.elements?.[String(s?.root ?? "")]?.props?.title ?? "");
+};
 
 function person(name: string): string {
   return name.replace(/^user:/, "") || "someone";
@@ -117,12 +150,25 @@ function shows(card: { kind?: string; from?: string }): string {
   return card.from === "metric" ? "one figure for the whole connection" : "one figure";
 }
 
-function remembered(connectionId: string): string {
-  try { return localStorage.getItem(`pramanyx:cockpit:${connectionId}`) ?? ""; } catch { return ""; }
+/** The dashboard another page asked to be opened on arrival (one just started, one a button was just placed on): read once. */
+function askedToOpen(connectionId: string): string {
+  try {
+    const id = localStorage.getItem(dashboardToOpenKey(connectionId)) ?? "";
+    if (id) localStorage.removeItem(dashboardToOpenKey(connectionId));
+    return id;
+  } catch { return ""; }
 }
 
-function remember(connectionId: string, dashboardId: string) {
-  try { localStorage.setItem(`pramanyx:cockpit:${connectionId}`, dashboardId); } catch { /* private mode: the choice just won't persist */ }
+/** The dashboard open in this browser tab, so a reload stays on it. Dashboards otherwise opens on its home. */
+function openInThisTab(connectionId: string): string {
+  try { return sessionStorage.getItem(`pramanyx:dashboard-open:${connectionId}`) ?? ""; } catch { return ""; }
+}
+
+function keepOpenInThisTab(connectionId: string, dashboardId: string) {
+  try {
+    if (dashboardId) sessionStorage.setItem(`pramanyx:dashboard-open:${connectionId}`, dashboardId);
+    else sessionStorage.removeItem(`pramanyx:dashboard-open:${connectionId}`);
+  } catch { /* private mode: a reload opens the home */ }
 }
 
 function Refused({ outcome }: { outcome: DashboardKept }) {
@@ -298,13 +344,28 @@ function DraftReview({ connectionId, dashboardId, result, proposal, held, onKept
 /** A new dashboard, three ways (2026-10-09): empty — its name and a first note in the person's words, since a dashboard
  *  holding nothing is refused; for a declared process — its board, its open-and-overdue objects and one beside them;
  *  or drafted by a model for an area, the one way here that asks one. The walk-through found only the last. */
+/** The box a new dashboard is described in: the one place on this page the brand's colours stand. */
+const ASK_BOX: CSSProperties = { ...brandEdge("var(--bg-2)"), position: "relative", width: "100%", borderRadius: 12, padding: "12px 52px 12px 14px" };
+
+/** The most a new dashboard is described in: the server reads no more (`dashboards.ask.MAX_AREA`). */
+const MAX_DESCRIBED = 1500;
+
+type NewWay = "draft" | "tables" | "sql" | "file" | "object" | "pack" | "process" | "empty";
+/** The ways to start other than describing it, along the foot of the new dashboard's page. */
+const WAYS: { way: Exclude<NewWay, "draft">; label: string; icon: IconName }[] = [
+  { way: "tables", label: "From tables", icon: "table" }, { way: "sql", label: "From SQL", icon: "sql" }, { way: "file", label: "From a file", icon: "upload" },
+  { way: "object", label: "From an object", icon: "graph" }, { way: "pack", label: "From a pack template", icon: "layers" },
+  { way: "process", label: "For a process", icon: "process" }, { way: "empty", label: "Start empty", icon: "plus" },
+];
+
+/** A new dashboard opens as a blank page of its own (the user, 2026-11-18): describe it, or start another way. */
 function NewDashboard({ connectionId, schema, sym, onKept, onClose, onBusy }: {
   connectionId: string; schema?: string; onKept: (dashboardId: string) => void; onClose: () => void;
   sym: string;
   /** Told while a draft or a start is in flight, so the dialog around it is held open with its Close disabled. */
   onBusy?: (busy: boolean) => void;
 }) {
-  const [way, setWay] = useState<"empty" | "file" | "object" | "pack" | "process" | "draft">("empty");
+  const [way, setWay] = useState<NewWay>("draft");
   const [types, setTypes] = useState<{ object_type: string; display_name: string }[] | null>(null);
   const [entity, setEntity] = useState("");
   // Arc AP-5 — what each object suggests a dashboard be
@@ -348,35 +409,89 @@ function NewDashboard({ connectionId, schema, sym, onKept, onClose, onBusy }: {
   const [drafting, setDrafting] = useState(false);
   const [result, setResult] = useState<DashboardDrafted | null>(null);
   const [proposal, setProposal] = useState<StagedProposal | null>(null);
+  // The draft being watched, from the moment it is asked for; none while the request is still being written.
+  const [watch, setWatch] = useState<DraftWatch | null>(null);
+  const [stopped, setStopped] = useState(false);
+  const running = useRef<AbortController | null>(null);
+  useEffect(() => () => running.current?.abort(), []);
 
   useEffect(() => { onBusy?.(drafting || starting); }, [drafting, starting, onBusy]);
 
   const draft = async () => {
-    setDrafting(true); setResult(null); setProposal(null);
+    const run = new AbortController();
+    running.current = run;
+    setDrafting(true); setResult(null); setProposal(null); setStopped(false); setWatch(startWatch());
     try {
-      const out = await draftDashboard(connectionId, area, schema);
-      setResult(out);
+      const out = await draftDashboard(connectionId, area, schema, { signal: run.signal, hear: frame => setWatch(w => w && heardFrame(w, frame)) });
       if (out.staged) setProposal(await getProposalById(out.proposal_id));
+      setResult(out);
+      setWatch(w => w && finishedWatch(w, out));
     } catch (e) {
-      toast.error("The draft did not go through", { description: (e as Error).message.slice(0, 160) });
+      setWatch(null);
+      if (run.signal.aborted) setStopped(true);
+      else toast.error("The draft did not go through", { description: (e as Error).message.slice(0, 160) });
     } finally { setDrafting(false); }
   };
+  const backToTheRequest = () => { setWatch(null); setResult(null); setProposal(null); };
+
+  // What came back, from a description or a pack's template: the draft to review, or why there is none.
+  const cameBack = result && !result.staged ? (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 12 }}>
+      <Refusal kind="Not drafted" claim="No dashboard was drafted for this."
+        detail={<ul data-testid="dashboard-not-drafted" style={{ margin: 0, paddingLeft: 18 }}>
+          {result.sentences.map((s, i) => <li key={`${i}-${s.slice(0, 24)}`}>{s}</li>)}
+        </ul>} />
+      <Button size="sm" variant="secondary" data-testid="dashboard-draft-change" onClick={backToTheRequest}>Change the request</Button>
+    </div>
+  ) : result?.staged && proposal ? (
+    <DraftReview connectionId={connectionId} dashboardId={result.cockpit_id} result={result} proposal={proposal}
+      onKept={onKept} onDiscarded={backToTheRequest} />
+  ) : undefined;
+
+  if (watch) {
+    return (
+      <div data-testid="dashboard-new" style={{ flex: 1, minHeight: "100%", display: "flex" }}>
+        <DraftBuilding asked={area} watch={watch} onStop={() => running.current?.abort()}>{cameBack}</DraftBuilding>
+      </div>
+    );
+  }
 
   return (
-    <div data-testid="dashboard-new">
-      <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
-        {([["empty", "Start empty"], ["file", "From a file"], ["object", "From an object"], ["pack", "From a pack template"], ["process", "For a process"],
-           ["draft", "Draft it with a model"]] as const).map(([w, label]) => (
-          <Button key={w} size="xs" variant={way === w ? "secondary" : "ghost"} aria-pressed={way === w}
-            data-testid={`dashboard-new-${w}`} disabled={drafting || starting || !!proposal} onClick={() => setWay(w)}>{label}</Button>
-        ))}
-      </div>
-
+    <div data-testid="dashboard-new" style={{ flex: 1, minHeight: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 20, padding: "32px 24px 20px",
+      backgroundImage: "radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--b1) 75%, transparent) 1px, transparent 1.4px)", backgroundSize: "40px 40px" }}>
+      <div style={{ flex: 1, width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 14, justifyContent: way === "draft" ? "center" : "flex-start" }}>
+      {way === "draft" ? (
+        <div data-testid="dashboard-new-ask" style={{ width: "min(720px, 100%)", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, textAlign: "center" }}>
+          <div className="aug-fs-display" style={{ color: "var(--t1)", fontWeight: 600 }}>Create a dashboard</div>
+          <div className="aug-fs-ui" style={{ color: "var(--t2)", marginBottom: 12 }}>Describe what you want to see, and a model drafts it for you to review.</div>
+          <div style={ASK_BOX}>
+            <textarea autoFocus rows={3} maxLength={MAX_DESCRIBED} aria-label="What this dashboard is for" placeholder="Returns by category, what they cost, and which products drive them" className="aug-focus-frame aug-fs-ui"
+              value={area} onChange={e => setArea(e.target.value)}
+              style={{ display: "block", width: "100%", background: "transparent", border: "none", outline: "none", resize: "none", color: "var(--t1)", fontFamily: "inherit", textAlign: "left" }}
+              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (area.trim()) void draft(); } }} />
+            <Button size="icon-sm" aria-label="Draft it" title="Draft it" disabled={!area.trim()} onClick={() => void draft()}
+              style={{ position: "absolute", right: 10, bottom: 10 }}><Icon name="send" size={15} /></Button>
+          </div>
+          <div className="aug-fs-sm" data-testid="dashboard-new-ask-says" style={{ color: "var(--t3)", marginTop: 4 }}>
+            {stopped ? "Stopped. Nothing was kept." : "Asks a model once. Nothing is kept until you keep it."}
+          </div>
+        </div>
+      ) : (
+        <section aria-label={WAYS.find(w => w.way === way)?.label} data-testid="dashboard-new-way"
+          style={{ width: "min(960px, 100%)", background: "var(--bg-2)", border: "1px solid var(--card-edge)", borderRadius: "var(--r3)", padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <Button size="xs" variant="ghost" data-testid="dashboard-new-draft" disabled={starting || !!proposal} onClick={() => setWay("draft")}>
+              <Icon name="chevl" size={13} /> Describe it instead
+            </Button>
+            <span className="aug-fs-ui" style={{ color: "var(--t1)", fontWeight: 600 }}>{WAYS.find(w => w.way === way)?.label}</span>
+          </div>
+      {way === "tables" && <FromTables connectionId={connectionId} onKept={onKept} onBusy={onBusy} />}
+      {way === "sql" && <FromSql connectionId={connectionId} onKept={onKept} />}
       {way === "file" && (
         <FromFile onKept={(id, connection) => {
           // a file's dashboard lives on the Sheets connection: opened there, whichever connection this page was on
           if (connection === connectionId) { onKept(id); return; }
-          remember(connection, id);
+          askToOpenDashboard(connection, id);
           onClose();
           requestTab("dashboards", { conn: connection });
         }} />
@@ -474,36 +589,24 @@ function NewDashboard({ connectionId, schema, sym, onKept, onClose, onBusy }: {
         </div>
       )}
 
-      {way === "draft" && (<>
-      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-        <Input aria-label="What this dashboard is for" placeholder="What is it for? Returns, pricing, marketing…"
-          value={area} onChange={e => setArea(e.target.value)} disabled={drafting || !!proposal}
-          onKeyDown={e => { if (e.key === "Enter" && area.trim() && !drafting) void draft(); }}
-          style={{ maxWidth: 420, flex: 1 }} />
-        <Button size="sm" disabled={!area.trim() || drafting || !!proposal} onClick={() => void draft()}>
-          {drafting ? "Drafting…" : "Draft it"}
-        </Button>
-      </div>
-      <div className="aug-fs-sm" style={{ color: "var(--t3)", marginTop: 6 }}>
-        {drafting
-          ? "A model is drafting it from the connection's approved metrics, trusted queries and findings. This can take a minute."
-          : "Drafting asks a model once. Nothing is kept until you keep it."}
-      </div>
-      </>)}
+        </section>
+      )}
 
-      {result && !result.staged && (
-        <div style={{ marginTop: 12 }}>
-          <Refusal kind="Not drafted" claim="No dashboard was drafted for this."
-            detail={<ul data-testid="dashboard-not-drafted" style={{ margin: 0, paddingLeft: 18 }}>
-              {result.sentences.map((s, i) => <li key={`${i}-${s.slice(0, 24)}`}>{s}</li>)}
-            </ul>} />
+      {cameBack && <div style={{ width: "min(1100px, 100%)" }}>{cameBack}</div>}
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, maxWidth: "100%" }}>
+        <span className="aug-fs-xs" style={{ color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em" }}>Or start another way</span>
+        <div role="group" aria-label="Other ways to start" data-testid="dashboard-new-ways"
+          style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 2, padding: 6, background: "var(--bg-2)", border: "1px solid var(--card-edge)", borderRadius: "var(--r3)", boxShadow: "var(--shadow-lg)" }}>
+          {WAYS.map(w => (
+            <Button key={w.way} size="sm" variant={way === w.way ? "secondary" : "ghost"} aria-pressed={way === w.way} data-testid={`dashboard-new-${w.way}`}
+              disabled={starting || !!proposal} onClick={() => setWay(w.way)}>
+              <Icon name={w.icon} size={14} /> {w.label}
+            </Button>
+          ))}
         </div>
-      )}
-
-      {result?.staged && proposal && (
-        <DraftReview connectionId={connectionId} dashboardId={result.cockpit_id} result={result} proposal={proposal}
-          onKept={onKept} onDiscarded={() => { setResult(null); setProposal(null); }} />
-      )}
+      </div>
     </div>
   );
 }
@@ -667,7 +770,7 @@ function SharedDashboardView({ connectionId, schema, owner, dashboardId, range, 
         const runs = await Promise.all(read.cards.filter(c => placed.has(c.id)).map(async (card): Promise<CardState> => {
           // Arc AP-8 — a query reading the dashboard's values is run by its own cell, with them
           if (valuesRead(card.sql).length) return { card };
-          try { return { card, run: await runCard(card.id, range, { compare: true, focus: focusFor(fx.focus, card.id) }) }; }
+          try { return { card, run: await runCard(card.id, range, { compare: true, focus: focusOfCard(read.cockpit.spec, fx.focus, card.id) }) }; }
           catch { return { card, failed: true }; }
         }));
         if (cancelled) return;
@@ -681,7 +784,7 @@ function SharedDashboardView({ connectionId, schema, owner, dashboardId, range, 
   }, [connectionId, owner, dashboardId, rangeKey, fx.key]);
   const doors = useMemo<DashboardDoors>(() => ({
     onRefresh: async (id: string) => {
-      try { const run = await runCard(id, range, { compare: true, focus: focusFor(fx.focus, id) }); setCards(cs => cs.map(c => (c.card.id === id ? { ...c, run, failed: false } : c))); }
+      try { const run = await runCard(id, range, { compare: true, focus: focusOfCard(data?.cockpit.spec, fx.focus, id) }); setCards(cs => cs.map(c => (c.card.id === id ? { ...c, run, failed: false } : c))); }
       catch { setCards(cs => cs.map(c => (c.card.id === id ? { ...c, failed: true } : c))); }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the range and the focus are read through their keys
@@ -700,26 +803,32 @@ function SharedDashboardView({ connectionId, schema, owner, dashboardId, range, 
       toast.error("No dashboard was started", { description: why.slice(0, 200) });
     } finally { setBusy(false); }
   };
+  const sharedSpec = data?.cockpit.spec as DashboardSpec | undefined;
+  // what the Ask panel asks about here, and what "Ask about this dashboard" hands it: the shared dashboard open
+  const subject = data && sharedSpec
+    ? dashboardSubject(connectionId, `shared:${owner}:${dashboardId}`, titleOfSpec(sharedSpec) || dashboardId, data.range) : null;
+  useOnPage(subject);
   if (problem) return <ErrorState kind="Not read" what="This shared dashboard could not be read." means={problem} />;
-  if (!data) return <div className="aug-fs-sm" data-testid="dashboard-loading" style={{ color: "var(--t3)" }}>Reading the shared dashboard…</div>;
-  const sharedSpec = data.cockpit.spec as DashboardSpec;
+  if (!data || !sharedSpec) return <div className="aug-fs-sm" data-testid="dashboard-loading" style={{ color: "var(--t3)" }}>Reading the shared dashboard…</div>;
   return (
     <div data-testid="dashboard-shared" data-owner={owner} data-dashboard={dashboardId}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
-        {!holdsPeriod(sharedSpec) && (
-          <PeriodPicker value={chosenRange} onChange={onRange} showing={data.range.status === "standing" ? null : data.range} />
-        )}
+
         <span className="aug-fs-sm" data-testid="dashboard-shared-by" style={{ color: "var(--t2)" }}>
-          An App by {personName(data.published_by)}, for {data.published_to.map(t => t.name).join(", ")} · version {data.cockpit.version} · read-only
+          An App by {personName(data.published_by)}, for {data.published_to.map(t => t.name).join(", ")} · version {data.cockpit.version}
+          {data.ontology?.current ? ` · ontology release ${numberOf(data.ontology.current)}` : ""} · read-only
         </span>
         <CertificationMark compact target={{ kind: "dashboard", ref: dashboardRef(connectionId, owner, dashboardId), connectionId }} />
-        <Button size="xs" variant="secondary" disabled={busy} style={{ marginLeft: "auto" }} onClick={() => void start()}>
+        <Button size="xs" variant="ghost" data-testid="ask-about-dashboard" style={{ marginLeft: "auto" }} onClick={() => {
+          if (subject) askAbout(subject);
+        }}>Ask about this dashboard</Button>
+        <Button size="xs" variant="secondary" disabled={busy} onClick={() => void start()}>
           Start my dashboard from this
         </Button>
       </div>
-      {data.ontology && <PinStrip pin={data.ontology} spec={data.cockpit.spec} />}
+      {data.ontology && <PinStrip pin={data.ontology} spec={sharedSpec} />}
       <ComposedDashboard spec={sharedSpec} cards={cards} host={host} doors={doors} sym={data.currency_symbol || "$"}
-        period={{ value: chosenRange, onChange: onRange, showing: data.range.status === "standing" ? null : data.range }}
+        period={null}
         images={images} range={range} schema={schema} connectionId={connectionId} dashboardId={`shared:${owner}:${dashboardId}`}
         focus={fx.focus} onFocus={fx.setFocus} />
     </div>
@@ -743,6 +852,9 @@ export function placedQueries(spec: { elements?: Record<string, { type?: string;
     .map(c => ({ id: c.id, title: c.title || "A query of yours" }));
 }
 
+/** When an open dashboard was last kept, after "Updated": "3 hours ago", "yesterday", "Nov 3". */
+const keptWords = (iso: string) => { const w = modifiedWords(iso); return /^(Yesterday|Just now)$/.test(w) ? w.toLowerCase() : w; };
+
 export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvidence }: {
   connectionId: string;
   schema?: string;
@@ -753,6 +865,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
   // dashboard is watched month by month, as the mock showed it.
   const [picked, setChosenRange] = useState<RangeChoice | null>(null);
   const [list, setList] = useState<DashboardList | null>(null);
+  const [certified, setCertified] = useState<Record<string, Certification>>({});
   const [chosen, setChosen] = useState("");
   const [data, setData] = useState<PersonDashboard | null>(null);
   const [cards, setCards] = useState<CardState[]>([]);
@@ -785,6 +898,9 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
   const [newOpen, setNewOpen] = useState(false);
   const [newBusy, setNewBusy] = useState(false);
   const openNew = () => { setNewBusy(false); setNewOpen(true); };
+  // what a dashboard file was refused for, said above the home's list until the next one is read in
+  const [importSaid, setImportSaid] = useState<string[]>([]);
+  const [subscribing, setSubscribing] = useState(false);
   const [composing, setComposing] = useState(false);
   // The two doors by hand only: a note's words and an image are the person's, never a model's.
   const [noting, setNoting] = useState(false);
@@ -814,6 +930,8 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
   const [tick, setTick] = useState(0);
   // The dashboard is being read for a period while the cards on screen are still the period before.
   const [reading, setReading] = useState(false);
+  // the ⋯ menu's "Certify or deprecate…": each asking opens the certification form beside the dashboard's facts
+  const [certifying, setCertifying] = useState(0);
   const known = useRef<Set<string>>(new Set());
   const adopt = useRef(false);
   // what the version that places the adopted card says it did — a pinned card, or a query of the person's own (Arc AP-7)
@@ -824,10 +942,20 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
   // v15 — a dashboard that holds its period as a piece opens on the period that piece says
   const opensOn = periodOpensOn(current);
   const chosenRange: RangeChoice = picked ?? (opensOn ? { preset: opensOn } as RangeChoice : { preset: "previous_month" });
-  const range: BriefingRange | null = chosenRange.preset === "standing" ? null : chosenRange;
+  // A dashboard is read as its cards are written, and cut only by its filters (the user, 2026-11-19: "Remove Period part as
+  // dashboard filters alone should drive it"); a date filter's days are the cards' window (`focus.without_own_window`). The
+  // Metrics page keeps its period: it is a ledger of measures, with no filters of its own.
+  const range: BriefingRange | null = chosen === METRICS_DASHBOARD && chosenRange.preset !== "standing" ? chosenRange : null;
   // when this browser last saw a burst kept, and whether one is waiting or on its way — the builder's "saved" says them
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [pending, setPending] = useState(false);
+  // the dashboard open now, by its id and its title
+  const openId = data?.cockpit_id ?? "";
+  const heldTitle = titleOfSpec(data?.cockpit.spec) || openId;
+  // the Ask panel asks about the dashboard open here, for the period on screen
+  useOnPage(data && chosen && chosen !== METRICS_DASHBOARD && !chosen.startsWith("shared:") && !editing
+    ? dashboardSubject(connectionId, `${connectionId}:${openId}`, heldTitle, data.range.status === "standing" ? null : data.range)
+    : null);
   // the builder's undo and redo: the specs before and after, in this sitting — each step back is kept as a version too
   const NO_STEPS = { past: [] as DashboardSpec[], future: [] as DashboardSpec[] };
   const [stacks, setStacks] = useState(NO_STEPS);
@@ -838,6 +966,11 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
   /** When the open dashboard's cards were last read — the title row's "last read". */
   const [readAt, setReadAt] = useState<string | undefined>(undefined);
   const reload = useCallback(() => setTick(t => t + 1), []);
+  // a change allowed in the Ask panel's conversation reaches the dashboard on screen without a refresh
+  useEffect(() => {
+    window.addEventListener(DASHBOARD_CHANGED, reload);
+    return () => window.removeEventListener(DASHBOARD_CHANGED, reload);
+  }, [reload]);
 
   // The person's dashboards.
   useEffect(() => {
@@ -846,16 +979,18 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
       if (cancelled) return;
       setList(l);
       const live = l.cockpits.filter(c => !c.retired);
-      // The metrics are the dashboard a person opens on (asked 2026-10-05); one of their own is
-      // opened when it is where they left off.
+      // Dashboards opens on its home (the user, 2026-11-18), unless another page asked for one or this tab has one open.
+      const asked = askedToOpen(connectionId) || dashboardInAddress();
       setChosen(prev => {
-        const want = prev || remembered(connectionId);
-        return live.some(c => c.cockpit_id === want) || want.startsWith("shared:") ? want : METRICS_DASHBOARD;
+        const want = asked || prev || openInThisTab(connectionId);
+        return want === METRICS_DASHBOARD || live.some(c => c.cockpit_id === want) || want.startsWith("shared:") ? want : "";
       });
     }).catch(e => { if (!cancelled) setProblem((e as Error).message); });
     // What others published to a group the person is in or a role they hold (B5). Nothing to
     // show is nothing to say: the strip simply has no such heading.
     listSharedDashboards(connectionId).then(s => { if (!cancelled) setShared(s); }).catch(() => { if (!cancelled) setShared([]); });
+    // The organisation's word on each, for the home's marks and its Certified filter.
+    readCertifications("dashboard", connectionId).then(m => { if (!cancelled) setCertified(m); }).catch(() => { if (!cancelled) setCertified({}); });
     return () => { cancelled = true; };
   }, [connectionId, tick]);
 
@@ -874,7 +1009,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
         const runs = await Promise.all(read.cards.filter(c => placed.has(c.id)).map(async (card): Promise<CardState> => {
           // Arc AP-8 — a query reading the dashboard's values is run by its own cell, with them
           if (valuesRead(card.sql).length) return { card };
-          try { return { card, run: await runCard(card.id, range, { compare: true, focus: focusFor(fx.focus, card.id) }) }; }
+          try { return { card, run: await runCard(card.id, range, { compare: true, focus: focusOfCard(read.cockpit.spec, fx.focus, card.id) }) }; }
           catch { return { card, failed: true }; }
         }));
         if (cancelled) return;
@@ -922,14 +1057,14 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
   const choose = (id: string, keepEditing = false) => {
     if (burst.current.timer) sendBurst();
     setDraft(null);
-    setChosen(id); remember(connectionId, id); setShowHistory(false); setRefusal(null); setProblem("");
+    setChosen(id); keepOpenInThisTab(connectionId, id); setShowHistory(false); setRefusal(null); setProblem("");
     setPicking(false); setPublishing(false); setNoting(false); setImaging(false); setComposing(false); setQuestioning(false);
     setEditing(keepEditing); setStacks(NO_STEPS); previewAsGroup("");
   };
 
   const refreshOne = useCallback(async (id: string) => {
     try {
-      const run = await runCard(id, range, { compare: true, focus: focusFor(fx.focus, id) });
+      const run = await runCard(id, range, { compare: true, focus: focusOfCard(data?.cockpit.spec, fx.focus, id) });
       setCards(cs => cs.map(c => (c.card.id === id ? { ...c, run, failed: false } : c)));
     } catch {
       setCards(cs => cs.map(c => (c.card.id === id ? { ...c, failed: true } : c)));
@@ -989,7 +1124,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
 
   // Arc AP-1 — in the builder every change goes through here: drawn at once, kept with the burst, and undoable.
   // v15 — the period, for the Period piece: what the cards are read for, and the reader's choice of another
-  const periodDoor: PeriodDoor | null = data ? {
+  const periodDoor: PeriodDoor | null = data && chosen === METRICS_DASHBOARD ? {
     value: chosenRange, onChange: setChosenRange, reading, disabled: busy,
     showing: data.range.status === "standing" || reading ? null : data.range,
   } : null;
@@ -1042,9 +1177,18 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
       // the board study — a piece dragged by its header, or Alt+Shift+arrows, lands beside another
       onMove: (key: string, target: string, place: "before" | "after") => on(s => moveTo(s, key, target, place), "moved by hand"),
       onFilterWidth: (grades: number) => on(s => setFilterWidth(s, grades), "the filter column resized by hand"),
+      onAddGlobalFilter: () => { if (!current) return null; const made = addGlobalFilter(current); if (made.key) change(made.spec, "a global filter added by hand"); return made.key; },
       // Arc AP-4 — an empty section's offer: the piece picker for it, or sections of its own
       onAddPiece: (section: string) => setAdding({ section }),
       onLayOut: (section: string, layout: Layout) => on(s => layOut(s, section, layout), `laid out in ${layout} by hand`),
+      // the study's R18 — pages, made and changed on the canvas
+      pages: {
+        add: () => { if (!current) return null; const made = addPage(current); change(made.spec, "a page added by hand"); return made.name; },
+        rename: (key: string, label: string) => on(s => rename(s, key, label), "a page renamed by hand"),
+        duplicate: (key: string) => { if (!current) return null; const made = duplicatePage(current, key); if (made.name) change(made.spec, "a page copied by hand"); return made.name; },
+        remove: (key: string) => on(s => removePage(s, key), "a page taken off by hand"),
+        hide: (key: string, hidden: boolean) => on(s => setProps(s, key, { hidden: hidden || null }), hidden ? "a page hidden from readers by hand" : "a page shown to readers by hand"),
+      },
     };
   }, [current, change, refreshOne, onOpenSource, onEvidence]);
   const host = useMemo(() => hostStateOf(data?.range.status ?? "standing", cards), [data?.range.status, cards]);
@@ -1063,19 +1207,24 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
   const sharedNow = chosen.startsWith("shared:") ? shared.find(x => `shared:${x.owner}/${x.cockpit_id}` === chosen) : undefined;
   // The builder is a work surface (the user, 2026-11-10: "no header banners, no breadcrumbs"): while a dashboard is
   // built the shell draws no breadcrumb or title row — the builder's own bar says what is open, Editing, and its doors.
-  usePageChrome(editing && inShell ? { bare: true } : {
-    title: chosen === METRICS_DASHBOARD ? "Metrics"
-      : sharedNow ? (sharedNow.title || sharedNow.cockpit_id)
-      : (list?.cockpits.find(c => c.cockpit_id === chosen)?.title || undefined),
+  const openTitle = chosen === METRICS_DASHBOARD ? "Metrics"
+    : sharedNow ? (sharedNow.title || sharedNow.cockpit_id)
+    : (list?.cockpits.find(c => c.cockpit_id === chosen)?.title || undefined);
+  // An open dashboard's way back to the home, named by where it goes: "‹ Dashboards" before its title.
+  useChromeBack(newOpen ? () => { if (!newBusy) setNewOpen(false); } : chosen && !editing ? () => choose("") : null);
+  usePageChrome(editing && inShell ? { bare: true, noScope: true } : {
+    title: newOpen ? "New dashboard" : chosen ? openTitle : "Dashboards",
+    // an open dashboard takes the row under its title; the Metrics page keeps its period there
+    ...(chosen && chosen !== METRICS_DASHBOARD ? { noScope: true } : {}),
+    ...(chosen ? { trail: [openTitle ?? chosen] } : {}),
+    // an open dashboard's title row is its name, when it was kept, Edit, Publish and ⋯ (the user, 2026-11-19): no way back
+    // drawn (the rail's Dashboards row goes back), and its draft or published state said by Publish and the status strip
+    ...(chosen && chosen !== METRICS_DASHBOARD ? { noBack: true } : {}),
     status: editing ? { label: "Editing", tone: "info" }
       : sharedNow ? { label: `Shared by ${person(sharedNow.published_by || sharedNow.owner)}` }
-      : ownOpen && keptNow?.published_to?.length
-        ? (appNow.draft
-          ? { label: `Draft · readers see version ${appNow.readersSee}`, tone: "warning", title: appNow.title }
-          : { label: "Published", tone: "success", title: appNow.label })
-        : ownOpen
-          ? { label: "Draft · not published", title: "Yours alone until you publish it to a group or a role" }
-          : undefined,
+      : ownOpen && keptNow?.published_to?.length && appNow.draft
+        ? { label: `Draft · readers see version ${appNow.readersSee}`, tone: "warning", title: appNow.title }
+        : undefined,
   });
 
   if (list === null) {
@@ -1090,22 +1239,6 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
   const pinned = list.shared_cards + list.own_cards;
   const lines = new Map<string, CardLine>((data?.cards ?? []).map(c => [c.id, { title: c.title }]));
 
-  const startOwn = pinned > 0 ? (
-    <Button variant="secondary" size="xs" disabled={busy}
-      onClick={() => void write(() => startMyDashboard(connectionId), () => "“My dashboard” started from your pinned cards.")}>
-      Start “My dashboard” from {pinned} pinned {pinned === 1 ? "card" : "cards"}
-    </Button>
-  ) : (
-    <Button variant="secondary" size="xs" onClick={openNew}>New dashboard</Button>
-  );
-  // Under the Metrics dashboard, a person's own dashboards are one muted line and their door — the explanation on hover.
-  const noneYetLine = (
-    <div className="aug-fs-sm" data-testid="dashboard-none-yet" style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--t3)" }}
-      title="A dashboard is the set of cards you keep watching for one area — returns, pricing, marketing. It is yours: nobody else sees it or changes it.">
-      {list.cockpits.length ? "No dashboard of your own in use" : "No dashboard of your own yet"} — the cards you keep watching for one area
-      {startOwn}
-    </div>
-  );
   const noneYet = (
         <EmptyState icon="gauge" variant="inline"
           title={list.cockpits.length ? "You have no dashboards in use" : "You have no dashboards yet"}
@@ -1207,7 +1340,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
   const retireConfirm = retiring && data && (
     <Callout tone="amber" style={{ margin: "0 0 10px" }} data-testid="dashboard-retire-confirm">
     <span className="aug-fs-sm" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-      Retire this dashboard? It leaves your strip for good and cannot be brought back; its history stays in the record.
+      Retire this dashboard? It leaves your dashboards for good and cannot be brought back; its history stays in the record.
       <Button size="xs" disabled={busy} onClick={() => {
         setRetiring(false); setEditing(false); previewAsGroup("");
         void write(() => retireDashboard(connectionId, data.cockpit_id), () => "Dashboard retired. Its history stays.");
@@ -1247,6 +1380,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
     return (
       <div data-testid="briefing-dashboards" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
         <DashboardBuilder spec={current} onChange={change} cardTitle={id => lines.get(id)?.title} connectionId={connectionId} schema={schema}
+          release={data.ontology?.current && data.ontology.pinned === data.ontology.current ? numberOf(data.ontology.current) : null}
           onAddPiece={(section, what) => { shut(); setAsking(false); setAdding({ section, only: what }); }} checks={checks} tools={tools}
           cardReads={id => valuesRead(data.cards.find(c => c.id === id)?.sql)}
           queryCards={placedQueries(current, data.cards)}
@@ -1256,7 +1390,23 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
               id: c.card.id, title: c.card.title, date: c.run?.scoped?.grain ?? null, standing: !!c.run?.scoped?.standing,
             }));
           }}
+          cardHolds={cardId => {
+            // v17 — what the card's last run offers to draw: number columns of its table, fields whose values it colours
+            const cs = cards.find(c => c.card.id === cardId);
+            const render = (cs?.card.render ?? {}) as { shown?: Partial<QueryShown>; chartType?: string | null;
+              viz?: { type?: string; metric?: string | null; colorField?: string; colorScale?: string } };
+            const holds = holdsOf(cs?.run as Parameters<typeof holdsOf>[0], render.shown, {
+              type: render.viz?.type && render.viz.type !== "auto" ? render.viz.type : render.chartType ?? null,
+              measure: render.viz?.metric ?? null, colorField: render.viz?.colorField ?? null, colorScale: render.viz?.colorScale ?? null });
+            // a query's own chart colours its values in its editor's Color, beside the field that colours them — not again below
+            return render.shown && !isOtherKind(render.viz?.type) ? { ...holds, fields: [] } : holds;
+          }}
           onUndo={stacks.past.length > 0 ? undo : undefined} onRedo={stacks.future.length > 0 ? redo : undefined}
+          askPiece={(key, type) => (ASKS_OF_A_PIECE(type) ? (
+            <AskPiece key={key} connectionId={connectionId} dashboardId={openId} schema={schema} pieceKey={key} actor={ACTOR}
+              beforeAsk={async () => { sendBurst(); await burst.current.chain; }}
+              onKept={() => { setStacks(st => ({ past: [...st.past.slice(-49), current], future: [] })); reload(); }} />
+          ) : null)}
           bar={(
             <EditBar saved={saved} onDone={done}
               picker={(
@@ -1283,7 +1433,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
                     <Icon name="send" /> {app.label}
                   </Button>
                   <Button size="xs" variant="ghost" disabled={busy} data-testid="dashboard-retire-open" aria-expanded={retiring}
-                    title="Take this dashboard off your strip for good. Its history stays in the record."
+                    title="Take this dashboard off your dashboards for good. Its history stays in the record."
                     onClick={() => setRetiring(r => !r)}><Icon name="close" /> Retire</Button>
                 </>
               )} />
@@ -1291,11 +1441,25 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
           // the board study — the card's own chart editor held in the panel, and the statement it ran
           cardChart={cardId => {
             const cs = cards.find(c => c.card.id === cardId);
-            const viz = (cs?.card.render as { viz?: { type?: string } } | undefined)?.viz;
             const own = !!(cs?.card.render as { shown?: unknown } | undefined)?.shown;
-            // a person's own query on its own six draws no answer's chart yet: the kinds it can be drawn as instead
-            if (cs && own && !isOtherKind(viz?.type)) return <QueryKindPick key={cardId} cs={cs} onKept={reload} />;
-            return <ChartDock key={cardId} cardKey={cardId} charted={!!cs && (tileShape(cs) === "rows" || (own && isOtherKind(viz?.type)))} />;
+            // a person's own query: the one chart editor, driving its setup and its chart settings alike
+            if (cs && own) {
+              const root = current.root;
+              const colors: KeptValueColors = {
+                kept: (current.elements[root]?.props.colors ?? {}) as KeptValueColors["kept"],
+                choose: (field, value, slot) => {
+                  const keptNow = (current.elements[root]?.props.colors ?? {}) as KeptValueColors["kept"];
+                  const forField = { ...(keptNow[field] ?? {}) };
+                  if (slot) forField[value] = slot; else delete forField[value];
+                  const next = { ...keptNow };
+                  if (Object.keys(forField).length) next[field] = forField; else delete next[field];
+                  change(setProps(current, root, { colors: Object.keys(next).length ? next : null }),
+                    slot ? "a value's colour kept on the dashboard by hand" : "a value's colour let go by hand");
+                },
+              };
+              return <QueryChartEditor key={cardId} cs={cs} onKept={reload} colors={colors} />;
+            }
+            return <ChartDock key={cardId} cardKey={cardId} charted={!!cs && tileShape(cs) === "rows"} />;
           }}
           cardSql={cardId => {
             const cs = cards.find(c => c.card.id === cardId);
@@ -1306,7 +1470,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
             const held = data.cards.find(c => c.id === cardId);
             if (!held || !held.own || !(held.render as { shown?: unknown })?.shown) return null;
             return (
-              <QuerySetup key={held.id} connectionId={connectionId} card={held} values={current.values ?? {}}
+              <QuerySetup key={held.id} connectionId={connectionId} card={held} values={current.values ?? {}} shapeElsewhere
                 onKept={(kept, replaced) => replaced
                   && edit(s => swapCard(s, replaced, kept.id), "a query of your own changed by hand", `Kept the change to “${kept.title}”.`)} />
             );
@@ -1386,41 +1550,39 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
     );
   }
 
-  const pickerTabs = [
-    { id: METRICS_DASHBOARD, label: "Metrics" },
-    { heading: <span className="aug-label" style={{ color: "var(--vio4)" }}>Your dashboards</span> },
-    ...live.map(c => ({ id: c.cockpit_id, label: c.title || c.cockpit_id })),
-    // Published to a group the person is in or a role they hold: read-only, under the publisher's name.
-    ...(shared.length ? [{ heading: <span className="aug-label" style={{ color: "var(--t3)" }}>Apps shared with you</span> }] : []),
-    ...shared.map(s => ({ id: `shared:${s.owner}/${s.cockpit_id}`, label: `${s.title || s.cockpit_id} · ${person(s.published_by || s.owner)}` })),
-  ];
-  const newDoor = <Button size="xs" variant="ghost" data-testid="dashboard-new-open" onClick={openNew}>+ New dashboard</Button>;
-  const periodPicker = data && !periodPlaced && !cards.every(c => (c.card.render as { standing?: boolean } | undefined)?.standing === true) ? (
+  const newDoor = (
+    <span style={{ display: "inline-flex", gap: 6 }}>
+      <ImportDashboard connectionId={connectionId} onRefused={setImportSaid}
+        onImported={(id, title) => { setImportSaid([]); toast.success(`“${title}” read in.`); choose(id); reload(); }} />
+      <Button size="sm" variant="default" data-testid="dashboard-new-open" onClick={openNew}><Icon name="plus" size={14} /> Create dashboard</Button>
+    </span>
+  );
+  const periodPicker = data && chosen === METRICS_DASHBOARD && !periodPlaced && !cards.every(c => (c.card.render as { standing?: boolean } | undefined)?.standing === true) ? (
     <PeriodPicker value={chosenRange} onChange={setChosenRange} disabled={busy} reading={reading}
       showing={data.range.status === "standing" || reading ? null : data.range} />
   ) : null;
   // The organisation's word on this dashboard — Certified or Deprecated — set by a curator (the ontology plan, Phase 1;
   // punch list 81). Named by connection, owner and id: two people's dashboards may share an id's words.
-  const certMark = ownOpen && data ? (
-    <CertificationMark compact target={{ kind: "dashboard", ref: dashboardRef(connectionId, data.owner, chosen), connectionId }} />
+  // The ontology release the pieces read, said once beside the period (a dashboard's own strip speaks only to warn).
+  const releaseChip = data?.ontology?.current ? (
+    <Chip title={data.ontology.pinned && data.ontology.pinned !== data.ontology.current
+      ? `Its pieces read release ${numberOf(data.ontology.current)}; it was composed against ${numberOf(data.ontology.pinned)}`
+      : "The ontology release its pieces read, the one it was composed against"}>
+      Ontology release {numberOf(data.ontology.current)}
+      {data.ontology.pinned && data.ontology.pinned !== data.ontology.current ? ` · pinned ${numberOf(data.ontology.pinned)}` : ""}
+    </Chip>
   ) : null;
-  // The title row's doors in view, as the mockup draws them: View | Edit, History, Publish… (the primary), ⋯ for the rare.
+  const certMark = ownOpen && data ? (
+    <CertificationMark compact menu openRequest={certifying} target={{ kind: "dashboard", ref: dashboardRef(connectionId, data.owner, chosen), connectionId }} />
+  ) : null;
+  // The title row's doors in view (the user, 2026-11-19): Edit, Publish (the primary) and ⋯ for the rest. Reading needs no
+  // "View" door, and the Ask panel's own icon asks about the dashboard open.
   const viewDoors = (
     <>
-      <span role="group" aria-label="Mode" style={{ display: "inline-flex", gap: 2 }}>
-        <Button size="xs" variant="secondary" aria-pressed data-testid="dashboard-view" title="Reading the dashboard">View</Button>
-        <Button size="xs" variant="ghost" aria-pressed={false} data-testid="dashboard-edit" disabled={busy || reading}
-          title="Build this dashboard in place: its layout, each piece's setup, and sizes one grade at a time."
-          onClick={() => { setShowHistory(false); setRefusal(null); setEditing(true); }}>
-          <Icon name="edit" /> Edit
-        </Button>
-      </span>
-      <Button size="xs" variant="ghost" aria-expanded={showHistory} onClick={() => {
-        // a resize kept since the page was read is not in its history yet: read it again once
-        if (!showHistory && burst.current.since) { burst.current.since = false; reload(); }
-        setShowHistory(s => !s);
-      }}>
-        <Icon name="history" /> {showHistory ? "Hide history" : "History"}
+      <Button size="xs" variant="ghost" data-testid="dashboard-edit" disabled={busy || reading}
+        title="Build this dashboard in place: its layout, each piece's setup, and sizes one grade at a time."
+        onClick={() => { setShowHistory(false); setRefusal(null); setEditing(true); }}>
+        <Icon name="edit" /> Edit
       </Button>
       <Button size="xs" variant="default" disabled={busy} data-testid="dashboard-publish-view" aria-expanded={publishing}
         title={app.title || "Share this dashboard, as it stands, with a group you belong to or a role you hold."}
@@ -1429,46 +1591,60 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
       </Button>
       <DropdownMenu.Root>
         <DropdownMenu.Trigger>
-          <Button size="icon-xs" variant="ghost" aria-label="More: retire this dashboard" data-testid="dashboard-more">
+          <Button size="icon-xs" variant="ghost" aria-label="More for this dashboard" data-testid="dashboard-more">
             <Icon name="morev" size={14} />
           </Button>
         </DropdownMenu.Trigger>
         <DropdownMenu.Content size="1" align="end">
+          <DropdownMenu.Item data-testid="dashboard-history-open" onSelect={() => {
+            // a resize kept since the page was read is not in its history yet: read it again once
+            if (!showHistory && burst.current.since) { burst.current.since = false; reload(); }
+            setShowHistory(s => !s);
+          }}>{showHistory ? "Hide history" : "History"}</DropdownMenu.Item>
+          {certMark && <DropdownMenu.Item data-testid="dashboard-certify" onSelect={() => setCertifying(n => n + 1)}>Certify or deprecate…</DropdownMenu.Item>}
+          <DropdownMenu.Item data-testid="dashboard-read-again" disabled={busy || reading} onSelect={reload}>Read again</DropdownMenu.Item>
+          <DropdownMenu.Item data-testid="dashboard-subscribe-open" disabled={!(kept?.published_to?.length)} onSelect={() => setSubscribing(true)}>
+            {(kept?.published_to?.length ?? 0) > 0 ? "Subscribe…" : "Subscribe… (publish it first)"}
+          </DropdownMenu.Item>
+          <DropdownMenu.Item data-testid="dashboard-export" onSelect={() => { if (data) void exportToFile(connectionId, openId); }}>Export as JSON</DropdownMenu.Item>
+          <DropdownMenu.Separator />
           <DropdownMenu.Item onSelect={() => setRetiring(true)} data-testid="dashboard-retire-open-view">Retire this dashboard…</DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu.Root>
     </>
   );
 
-  return (
-    <div data-testid="briefing-dashboards" data-dashboard-ground="" style={{ flex: 1, overflow: "auto", padding: "14px 32px 32px", background: "var(--bg-0)" }}>
-      {/* The strip: the connection's metrics first (nobody's to arrange), then the person's own
-          cockpits under the layer's label — violet is the user's, as the Briefing has always marked
-          it — and, at the end, the door to a new one. */}
-      {/* Inside the app the strip is the shell's toolbar row and "+ New dashboard" one of the page's actions (2026-11-10,
-          ROADMAP §6 item 64); outside it, the strip carries its door at its end, as it did. */}
-      {inShell ? (
-        <>
-          {/* "+ New dashboard" at the strip's end, as the mockup's "+" after its open dashboards */}
-          <ChromeToolbar>
-            <TabStrip label="Your dashboards" size="1" value={chosen} onChange={choose} className="aug-layer-tabs" tabs={pickerTabs}
-              trailing={newDoor} />
-          </ChromeToolbar>
-        </>
-      ) : (
-        <TabStrip label="Your dashboards" size="1" value={chosen} onChange={choose} style={{ marginBottom: 12 }}
-          tabs={pickerTabs} trailing={newDoor} />
-      )}
-
-      <FormDialog open={newOpen} onOpenChange={o => { if (!o) setNewOpen(false); }} busy={newBusy} title="New dashboard"
-        testId="dashboard-new-dialog" width={900}>
+  if (newOpen) {
+    return (
+      <div data-testid="briefing-dashboards" data-dashboard-ground="" style={{ flex: 1, minHeight: 0, overflow: "auto", display: "flex", flexDirection: "column", background: "var(--bg-0)" }}>
+        {!inShell && (
+          <Button size="xs" variant="ghost" data-testid="dashboard-new-back" disabled={newBusy} style={{ alignSelf: "flex-start", margin: "10px 0 0 12px" }} onClick={() => setNewOpen(false)}>
+            <Icon name="chevl" size={13} /> Dashboards
+          </Button>
+        )}
         <NewDashboard connectionId={connectionId} schema={schema} onClose={() => setNewOpen(false)} onBusy={setNewBusy}
           sym={data?.currency_symbol || "$"}
           onKept={id => { setNewOpen(false); choose(id); reload(); }} />
-      </FormDialog>
+      </div>
+    );
+  }
+
+  return (
+    <div data-testid="briefing-dashboards" data-dashboard-ground="" style={{ flex: 1, minHeight: 0, overflow: "auto", padding: "14px 32px 32px", background: "var(--bg-0)" }}>
+      {/* On the home, the page's one action. Inside the app it sits in the title row; outside it, above the list. */}
+      {data && subscribing && (
+        <SubscribeDashboard open onClose={() => setSubscribing(false)} connectionId={connectionId} dashboardId={openId} title={heldTitle} />
+      )}
+      {!chosen && (inShell ? <ChromeActions>{newDoor}</ChromeActions> : <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>{newDoor}</div>)}
+      {/* Outside the app there is no title row to carry the way back. */}
+      {chosen && !inShell && (
+        <Button size="xs" variant="ghost" data-testid="dashboards-back" style={{ marginBottom: 10 }} onClick={() => choose("")}>
+          <Icon name="chevl" size={13} /> Dashboards
+        </Button>
+      )}
 
       {/* Dashboards that lived in a Data Canvas, offered here once (CT-10). */}
-      {list.from_canvases.map(c => (
+      {!chosen && list.from_canvases.map(c => (
         <div key={c.canvas_id} data-testid="dashboard-move-offer" className="aug-fs-sm"
           style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, color: "var(--t2)" }}>
           <span>“{c.title}” was kept in a Data Canvas, which is for questions and deep analysis now. Move it here, with its cards?</span>
@@ -1489,43 +1665,39 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
           doors={[{ label: "Try again", onClick: reload, primary: true }]} />
       )}
 
-      {chosen === METRICS_DASHBOARD ? (
+      {!chosen ? (
         <>
-          <MetricsDashboard connectionId={connectionId} schema={schema}
-            value={chosenRange} onChange={setChosenRange} />
-          {live.length === 0 && <div style={{ marginTop: 14 }}>{noneYetLine}</div>}
+          {importSaid.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <Refusal kind="Not read in" claim="Nothing was made from this file."
+                detail={<ul data-testid="dashboard-import-refused" style={{ margin: 0, paddingLeft: 18 }}>
+                  {importSaid.map((s, i) => <li key={`${i}-${s.slice(0, 24)}`}>{s}</li>)}
+                </ul>} />
+            </div>
+          )}
+          <DashboardHome connectionId={connectionId} onOpen={choose}
+            items={homeItems(connectionId, list.person, live, shared, certified, METRICS_DASHBOARD)}>
+            {live.length === 0 && <div style={{ marginTop: 14 }}>{noneYet}</div>}
+          </DashboardHome>
         </>
+      ) : chosen === METRICS_DASHBOARD ? (
+        <MetricsDashboard connectionId={connectionId} schema={schema}
+          value={chosenRange} onChange={setChosenRange} />
       ) : chosen.startsWith("shared:") ? (
         <SharedDashboardView connectionId={connectionId} schema={schema}
           owner={chosen.slice("shared:".length, chosen.lastIndexOf("/"))} dashboardId={chosen.slice(chosen.lastIndexOf("/") + 1)}
-          range={range} chosenRange={chosenRange} onRange={setChosenRange}
+          range={null} chosenRange={chosenRange} onRange={setChosenRange}
           onStarted={id => { choose(id); reload(); }} />
-      ) : live.length === 0 ? noneYet : drawn && data ? (
+      ) : drawn && data ? (
         <>
-          {/* The dashboard's own bar: its period, then History and Edit. Inside the app the period goes to the toolbar row
-              and the two doors to the page's actions (2026-11-10, ROADMAP §6 item 64); outside it, one row. */}
+          {/* The dashboard's own bar: its period, then History and Edit. Inside the app they all go to the title row, so the
+              dashboard starts right under it (the user, 2026-11-19); outside it, one row. */}
           {inShell ? (
             <>
-              <ChromeToolbar>
-                <div className="aug-toolbar-tools">
-                  {periodPicker}
-                  {data.ontology?.current && (
-                    <Chip title={data.ontology.pinned && data.ontology.pinned !== data.ontology.current
-                      ? `Its pieces read release ${numberOf(data.ontology.current)}; it was composed against ${numberOf(data.ontology.pinned)}`
-                      : "The ontology release its pieces read"}>
-                      Ontology release {numberOf(data.ontology.current)}
-                      {data.ontology.pinned && data.ontology.pinned !== data.ontology.current ? ` · pinned ${numberOf(data.ontology.pinned)}` : ""}
-                    </Chip>
-                  )}
-                  <Button size="xs" variant="ghost" disabled={busy || reading} data-testid="dashboard-read-again"
-                    title="Read every card and piece again" onClick={reload}>
-                    <Icon name="refresh" size={12} /> Read again
-                  </Button>
-                </div>
-              </ChromeToolbar>
               <ChromeFacts>
-                <span data-testid="dashboard-facts">
-                  Owner {data.owner === "default" || data.owner === "local" ? "you" : person(data.owner)} · version {kept.version}{readAt ? ` · last read ${utcDayWords(readAt, true)}` : ""}
+                <span data-testid="dashboard-facts"
+                  title={`Owner ${data.owner === "default" || data.owner === "local" ? "you" : person(data.owner)} · version ${kept.version}${readAt ? ` · last read ${utcDayWords(readAt, true)}` : ""}`}>
+                  Updated {keptWords(kept.kept_at)}
                 </span>
                 {certMark}
               </ChromeFacts>
@@ -1541,12 +1713,12 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
           ) : (
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
               {periodPicker}
+              {releaseChip}
               {certMark}
               <span style={{ marginLeft: "auto", display: "flex", gap: 4 }}>{viewDoors}</span>
             </div>
           )}
 
-          {showHistory && historyPanel}
           {retireConfirm}
 
           {composers}
@@ -1556,15 +1728,37 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
                 `re-pinned to ${data.ontology?.current}`, true),
               k => (k.status === "unchanged" ? "Already pinned there." : `Re-pinned, as version ${k.version}.`))} />
           )}
-          {reading && <Loading what={`the cards for ${choiceName(chosenRange)}`} style={{ padding: "12px 0" }} />}
-          {!reading && data.range.edge_note && (
+          {data.range.edge_note && (
             <div className="aug-fs-sm" data-testid="dashboard-edge-note" style={{ color: "var(--t2)", margin: "4px 0 8px" }}>{data.range.edge_note}</div>
           )}
-          <div aria-busy={reading || undefined}
-            style={{ opacity: reading ? 0.45 : 1, transition: "opacity 120ms ease-out", pointerEvents: reading ? "none" : undefined }}>
+          {/* While the cards are read again nothing moves (seen live 2026-11-19: a line pushed the page down under a reader's
+              pointer, and a second tick in a filter landed on Select all). The note floats over the cards, the cards alone dim
+              and wait, and the filters stay in reach for the next choice. */}
+          <div style={{ display: "flex", gap: 16, alignItems: "flex-start", minWidth: 0 }}>
+          <div aria-busy={reading || undefined} data-reading={reading || undefined} style={{ position: "relative", flex: 1, minWidth: 0 }}>
+            {reading && (
+              <Loading what="the cards"
+                style={{ position: "absolute", top: 6, left: "50%", transform: "translateX(-50%)", zIndex: 5, padding: "4px 10px",
+                  background: "var(--bg-2)", border: "1px solid var(--card-edge)", borderRadius: "var(--r3)", boxShadow: "var(--shadow-lg)" }} />
+            )}
             <ComposedDashboard spec={draft ?? kept.spec} cards={cards} host={host} doors={readDoors} sym={data.currency_symbol || "$"} period={periodDoor}
               images={images} range={range} schema={schema} connectionId={connectionId} dashboardId={`${connectionId}:${chosen}`}
               focus={fx.focus} onFocus={fx.setFocus} />
+          </div>
+          {/* History beside the cards, for as long as it is wanted (the user, 2026-11-19: "a temporary panel, not covering
+              the entire page") */}
+          {showHistory && historyPanel && (
+            <aside data-testid="dashboard-history-panel" aria-label="History"
+              style={{ flex: "none", width: 340, position: "sticky", top: 8, maxHeight: "calc(100vh - 160px)", overflowY: "auto",
+                background: "var(--bg-2)", border: "1px solid var(--card-edge)", borderRadius: "var(--r3)", padding: "8px 12px" }}>
+              <div style={{ display: "flex", alignItems: "center", marginBottom: 6 }}>
+                <span className="aug-fs-ui" style={{ color: "var(--t1)", fontWeight: 600 }}>History</span>
+                <Button size="icon-xs" variant="ghost" aria-label="Close the history" data-testid="dashboard-history-close"
+                  style={{ marginLeft: "auto" }} onClick={() => setShowHistory(false)}><Icon name="close" size={13} /></Button>
+              </div>
+              {historyPanel}
+            </aside>
+          )}
           </div>
         </>
       ) : !problem ? (

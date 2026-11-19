@@ -179,17 +179,17 @@ def test_a_spec_that_is_not_json_is_refused_before_anything_runs(premise):
 @needs_rules
 def test_the_server_reads_the_vocabulary_the_web_declares():
     vocab = V.vocabulary()
-    assert vocab["version"] == 15                # 15: the period as a piece; 14: free placement (x, y); 3: the ontology's pieces (Arc OC-4); 4: a dashboard from an object; 5: sizes one grade at a time (Arc AP-1); 6: the wiring (AP-2, AP-3); 7: the structure and the picker's pieces (AP-4); 8: variables (AP-8); 9: sets read whole (AP-8b); 10: yes-no, lists, sums, queries (AP-8c); 11: a Question (PENDING 54); 12: a breakdown
+    assert vocab["version"] == 20                # 17: column looks and kept colours; 16: a placed card's own look; 15: the period as a piece; 14: free placement (x, y); 3: the ontology's pieces (Arc OC-4); 4: a dashboard from an object; 5: sizes one grade at a time (Arc AP-1); 6: the wiring (AP-2, AP-3); 7: the structure and the picker's pieces (AP-4); 8: variables (AP-8); 9: sets read whole (AP-8b); 10: yes-no, lists, sums, queries (AP-8c); 11: a Question (PENDING 54); 12: a breakdown
     assert vocab["components"] == ["Cockpit", "Tabs", "Tab", "Section", "Card", "Note", "Image",
                                    "ProcessBoard", "ObjectTable", "ObjectDetail", "ActionButton",
                                    "ObjectFilters", "ObjectFigure", "ObjectChart", "ObjectBreakdown", "ActionButtons",
-                                   "ObjectList", "ObjectMap", "ObjectTimeline", "ChooseOne", "ObjectSearch", "Drawer", "Question", "QueryFilters", "ScenarioInputs", "AddRow", "Period"]
+                                   "ObjectList", "ObjectMap", "ObjectTimeline", "ChooseOne", "ObjectSearch", "Drawer", "Question", "QueryFilters", "ScenarioInputs", "AddRow", "Period", "GlobalFilters", "GlobalFilter"]
     # the server's own lists of pieces are the web's, read from it — a piece the web adds is checked here or refused
     from pramanyx.dashboards import app_pieces, pieces, questions
     # every piece is the ontology's (or the picker's) or a person's Question (PENDING 54), each held to its own rules
     # ... and the period, the dashboard's own (v15): it reads nothing of the ontology, a file or a question
-    assert list(pieces.PIECES) + [questions.KIND] + list(pieces.FILE_PIECES) + ["Period"] == vocab["components"][7:]
-    assert list(app_pieces.PIECES) == vocab["components"][-11:-5]
+    assert list(pieces.PIECES) + [questions.KIND] + list(pieces.FILE_PIECES) + ["Period", "GlobalFilters", "GlobalFilter"] == vocab["components"][7:]
+    assert list(app_pieces.PIECES) == vocab["components"][-13:-7]
     assert vocab["sizes"] == ["small", "wide", "tall", "large", "full", "hero"]
     assert vocab["range_statuses"] == ["standing", "final", "provisional", "to_date"]
     assert vocab["card_statuses"] == ["within", "over", "unmeasured", "withheld"]
@@ -301,3 +301,72 @@ def test_the_card_store_is_asked_for_the_persons_cards_and_the_connections(premi
     # A card the same proposal is about to create counts as held.
     verdict = V.check_spec_for_home(premise, home, also_known=["c91b2002"])
     assert verdict.status == V.ACCEPTED, said(verdict)
+
+
+# ── a placed card's own look (v16) ────────────────────────────────────────────
+
+@needs_rules
+def test_a_placed_card_may_carry_its_own_title_description_and_number_look(premise):
+    props = premise["elements"]["card-net"]["props"]
+    props.update(title="Net revenue, this quarter", show_title=True, description="After returns.",
+                 number={"decimals": 1, "compact": True, "negatives": "parens"})
+    verdict = V.check_spec(premise, known_cards=CARDS, model_written=False)
+    assert verdict.status == V.ACCEPTED, said(verdict)
+
+
+@needs_rules
+@pytest.mark.parametrize("number", [{"decimals": 3}, {"compact": "yes"}, {"negatives": "red"}, {"currency": "EUR"}])
+def test_a_number_look_outside_its_words_is_refused(premise, number):
+    premise["elements"]["card-net"]["props"]["number"] = number
+    assert V.check_spec(premise, known_cards=CARDS, model_written=False).status == V.REFUSED
+
+
+@needs_rules
+def test_a_models_title_or_description_on_a_card_is_held_to_the_numerals_law(premise):
+    props = premise["elements"]["card-net"]["props"]
+    props["description"] = "Up 12% on last month"
+    assert V.check_spec(premise, known_cards=CARDS, model_written=False).status == V.ACCEPTED   # a person's own words
+    refused = V.check_spec(premise, known_cards=CARDS, model_written=True)
+    assert refused.status == V.REFUSED and "states a figure" in said(refused)
+
+
+# ── a table's number columns and a value's colour on every card (v17) ─────────
+
+@needs_rules
+def test_a_card_may_draw_its_number_columns_and_the_dashboard_keep_a_values_colour(premise):
+    premise["elements"]["card-net"]["props"]["columns_look"] = {"revenue": "bar", "margin": "scale"}
+    premise["elements"][premise["root"]]["props"]["colors"] = {"channel": {"Email": 2, "Search": 5}}
+    verdict = V.check_spec(premise, known_cards=CARDS, model_written=False)
+    assert verdict.status == V.ACCEPTED, said(verdict)
+
+
+@needs_rules
+@pytest.mark.parametrize("where,value", [
+    ("columns_look", {"revenue": "sparkline"}),
+    ("colors", {"channel": {"Email": 7}}),
+    ("colors", {"channel": {"Email": "#ff0000"}}),
+])
+def test_a_column_look_or_kept_colour_outside_its_words_is_refused(premise, where, value):
+    key = "card-net" if where == "columns_look" else premise["root"]
+    premise["elements"][key]["props"][where] = value
+    assert V.check_spec(premise, known_cards=CARDS, model_written=False).status == V.REFUSED
+
+
+# ── a filter of multiple values offered as a dropdown (the user, 2026-11-19) ──────────────────
+
+def _with_filter(premise: dict, **props) -> dict:
+    spec = copy.deepcopy(premise)
+    root = spec["root"]
+    spec["elements"]["global-filters"] = {"type": "GlobalFilters", "props": {}, "children": ["f-type"]}
+    spec["elements"]["f-type"] = {"type": "GlobalFilter", "children": [],
+                                  "props": {"title": "Type", "kind": "multi", "table": "titles", "column": "type", **props}}
+    spec["elements"][root]["children"] = ["global-filters", *spec["elements"][root]["children"]]
+    return spec
+
+
+@needs_rules
+def test_multiple_values_may_be_offered_as_a_dropdown_and_nothing_else(premise):
+    assert V.check_spec(_with_filter(premise, show="dropdown"), known_cards=CARDS).accepted, "a dropdown filter is accepted"
+    assert V.check_spec(_with_filter(premise, show="list"), known_cards=CARDS).accepted
+    refused = V.check_spec(_with_filter(premise, show="cloud"), known_cards=CARDS)
+    assert refused.accepted is False and "show" in said(refused)

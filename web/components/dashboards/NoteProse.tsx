@@ -6,7 +6,8 @@
  * to 2,000": bold, italics, lists, links).
  *
  * Narrower than the chat's `AnswerProse` on purpose. A note is a person's reminder, not a
- * document: no headings, no tables, no code, no images, no raw HTML. A link opens in a new tab
+ * document: two levels of heading (`#` and `##`, the study's R13: a title or a section's head across the
+ * dashboard is a note), no tables, no code, no images, no raw HTML. A link opens in a new tab
  * and is kept to http and https — a note is the one place on a dashboard a person can write a
  * link, and a dashboard is a surface the platform vouches for, so the link is a door and nothing
  * more: nothing on the page runs from it.
@@ -14,7 +15,13 @@
 import type { ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 
-const ALLOWED = ["p", "ul", "ol", "li", "strong", "em", "a", "br"];
+const ALLOWED = ["h1", "h2", "p", "ul", "ol", "li", "strong", "em", "a", "br"];
+
+/** A note that is nothing but headings: a title across the dashboard, drawn with no card around it. */
+export function isHeadingNote(text: string): boolean {
+  const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+  return lines.length > 0 && lines.every(l => /^#{1,2}\s+\S/.test(l));
+}
 
 type ElProps = { children?: ReactNode };
 
@@ -30,6 +37,8 @@ export function noteHref(href: string | undefined): string | undefined {
 }
 
 const COMPONENTS = {
+  h1: ({ children }: ElProps) => <h2 className="aug-fs-h1" data-testid="note-heading" style={{ margin: 0, lineHeight: 1.25, fontWeight: 600 }}>{children}</h2>,
+  h2: ({ children }: ElProps) => <h3 className="aug-fs-h2" data-testid="note-heading" style={{ margin: 0, lineHeight: 1.35, fontWeight: 600 }}>{children}</h3>,
   p: ({ children }: ElProps) => <p style={{ margin: 0 }}>{children}</p>,
   ul: ({ children }: ElProps) => <ul style={{ margin: 0, paddingLeft: 18, listStyle: "disc" }}>{children}</ul>,
   ol: ({ children }: ElProps) => <ol style={{ margin: 0, paddingLeft: 18, listStyle: "decimal" }}>{children}</ol>,

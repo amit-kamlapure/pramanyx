@@ -6,12 +6,14 @@ import {
   createCanvas,
   getCatalogTree,
   suggestCanvasName,
+  suggestCanvasTables,
   type Connection,
   type Canvas,
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Icon as Glyph, type IconName } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 
 // ── Icon helper ───────────────────────────────────────────────────────────────
 
@@ -57,6 +59,11 @@ export function CanvasCreator({ connections, onCreated, onCancel }: Props) {
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  // Start by describing it: what the canvas should do proposes the tables, which the person checks before Create.
+  const [described, setDescribed] = useState("");
+  const [proposing, setProposing] = useState(false);
+  const [proposal, setProposal] = useState("");
 
   // The rich schema comes from the shared per-connection cache; the catalog-tree
   // fallback below is unchanged, because an EMPTY schema (not just a failed one) is
@@ -111,6 +118,28 @@ export function CanvasCreator({ connections, onCreated, onCancel }: Props) {
     setSearch("");
     setSelection(null);
     setError("");
+    setProposal("");
+  };
+
+  const proposeTables = async () => {
+    const words = described.trim();
+    if (!connId || !words || proposing) return;
+    setProposing(true);
+    setProposal("");
+    try {
+      const got = await suggestCanvasTables(connId, words, allTables);
+      if (got.tables.length) {
+        setSearch("");
+        setSelection({ kind: "tables", tables: new Set(got.tables) });
+        setProposal(`${got.tables.length === 1 ? "1 table" : `${got.tables.length} tables`} proposed. Check them, then create the canvas.${got.why ? ` ${got.why}` : ""}`);
+      } else {
+        setProposal(got.said);
+      }
+    } catch (e) {
+      setProposal(e instanceof Error ? e.message : "The tables could not be proposed");
+    } finally {
+      setProposing(false);
+    }
   };
 
   const backToCatalog = () => {
@@ -155,11 +184,12 @@ export function CanvasCreator({ connections, onCreated, onCancel }: Props) {
       const tables = selection.kind === "all" ? [] : selectedTablesList;
       // Derive a human name + description from the schema via the LLM.
       let name = selectedConn?.name ?? "New Data Canvas";
-      let description = "";
+      let description = described.trim();
       try {
         const s = await suggestCanvasName(connId, tables);
         if (s.name) name = s.name;
-        description = s.description ?? "";
+        // what the person said the canvas is for stays in their words
+        description ||= s.description ?? "";
       } catch { /* fall back to connection name */ }
       const canvas = await createCanvas(name.trim(), description.trim(), [
         { connection_id: connId, schema_name: null, tables },
@@ -290,6 +320,18 @@ export function CanvasCreator({ connections, onCreated, onCancel }: Props) {
           ) : (
             // ── Table list with multi-select ──
             <>
+              {/* Start by describing it; the list below stays the way to choose by hand */}
+              <div data-testid="canvas-describe" style={{ display: "flex", flexDirection: "column", gap: 8, padding: "6px 8px 12px", borderBottom: "1px solid var(--b0)" }}>
+                <label htmlFor="canvas-describe-words" className="aug-fs-ui" style={{ color: "var(--t1)", fontWeight: 600 }}>What should this canvas do?</label>
+                <Textarea id="canvas-describe-words" rows={2} maxLength={600} value={described} onChange={e => setDescribed(e.target.value)}
+                  placeholder="Help the sales team see which products and regions drive returns" />
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                  <Button size="sm" variant="secondary" data-testid="canvas-propose-tables" disabled={!described.trim() || proposing || !allTables.length} onClick={() => void proposeTables()} style={{ flexShrink: 0 }}>
+                    {proposing ? "Reading the tables…" : "Propose tables"}
+                  </Button>
+                  {proposal && <span role="status" data-testid="canvas-proposal" className="aug-fs-sm" style={{ color: "var(--t2)", paddingTop: 4 }}>{proposal}</span>}
+                </div>
+              </div>
               {/* All tables pseudo-row */}
               <Button variant="plain" size="xs"
                 onClick={toggleAll}

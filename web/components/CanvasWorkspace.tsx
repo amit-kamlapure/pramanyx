@@ -8,7 +8,7 @@
  * once, and the saved artifacts — each saying when it could not be read, never showing that as empty.
  */
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 import { ToolsMenu, type ToolItem } from "@/components/catalog/CatalogTools";
 import { Card, Chip, Empty, Label, MUTED, NUM, ONE_LINE, Page, ROW, RULE } from "@/components/clarity/kit";
@@ -565,8 +565,12 @@ export function CanvasWorkspace({ canvas, connections, allConnections, onClose, 
   const gone = connectionGone(canvas, known);
   const pinned = usePinnedState(canvas);
 
-  // When canvas changes, reset to chat tab, but honour initial props
+  // When canvas changes, reset to chat tab, but honour initial props. The canvas on screen is remembered so a canvas just
+  // opened keeps the chat it mounted with: remounting that chat dropped the conversation a reloaded address names.
+  const shownCanvas = useRef<string | null>(null);
   useEffect(() => {
+    const changed = shownCanvas.current !== null && shownCanvas.current !== canvas.id;
+    shownCanvas.current = canvas.id;
     setChatInitialQuestion(undefined);
     setChatInitialMode(undefined);
     setBriefingOpened(false);
@@ -582,7 +586,7 @@ export function CanvasWorkspace({ canvas, connections, allConnections, onClose, 
       setChatKey(k => k + 1);
     } else {
       setWsTab("chat");
-      setChatKey(k => k + 1);
+      if (changed) setChatKey(k => k + 1);
       setOpenInvId(null);
       setRestoreSessionId(null);
     }
@@ -680,6 +684,7 @@ export function CanvasWorkspace({ canvas, connections, allConnections, onClose, 
         }}>
           <ChatPanel
             key={chatKey}
+            address={`canvas:${canvas.id}`}
             connectionId={connectionId}
             canvasId={canvas.id}
             restoreSessionId={restoreSessionId}

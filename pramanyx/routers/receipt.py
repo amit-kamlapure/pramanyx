@@ -72,6 +72,24 @@ def _record_lines(raw: dict) -> Optional[dict]:
         return None
 
 
+@router.get("/receipt/{receipt_id}/sources")
+def get_receipt_sources(receipt_id: str) -> dict:
+    """What one answer stood on, for a person to open beside it: its metrics, Definitions and the objects it read. The same
+    fail-closed org check as the receipt: an id outside the caller's org is 404, as one that does not exist."""
+    from pramanyx.kernel.ledger import Ledger
+    from pramanyx.security.authz import org_visible_conn_ids
+    from pramanyx.trust.lineage_edges import sources_from_lineage
+
+    raw = Ledger.default().receipt_by_id(receipt_id)
+    if raw is None or not raw.get("artifact"):
+        raise HTTPException(status_code=404, detail="No such receipt")
+    conn_id = raw["artifact"].get("conn_id")
+    visible = org_visible_conn_ids()
+    if visible is not None and (conn_id is None or conn_id not in visible):
+        raise HTTPException(status_code=404, detail="No such receipt")
+    return {"receipt_id": receipt_id, "connection_id": conn_id, **sources_from_lineage(raw.get("lineage") or [])}
+
+
 @router.get("/receipt/{receipt_id}/trace")
 def get_receipt_trace(receipt_id: str) -> dict:
     """Wave P1 — the connection-graph subgraph this answer stands on.

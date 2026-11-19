@@ -98,7 +98,7 @@ import { BriefingSections, HiddenSection } from "@/components/brief/BriefingSect
 import { BriefingStrip } from "@/components/brief/BriefingStrip";
 import { BriefingOffNotice } from "@/components/brief/BriefingOff";
 import { NewCardComposer } from "@/components/brief/NewCardComposer";
-import { getMyPreferences, listDashboards, putMyPreference } from "@/lib/api";
+import { getMyPreferences, listDashboards, putMyPreference, standingDashboards } from "@/lib/api";
 import {
   DEFAULT_SECTIONS, isPart, normalizeSections, toggled, type BriefingSectionsPref, type DashboardChoice, type SectionId,
 } from "@/lib/briefingSections";
@@ -2603,7 +2603,7 @@ export function BriefingPanel({
     if (!dashboardsOn) { setMyDashboards([]); return; }
     let alive = true;
     listDashboards(connectionId).then(l => {
-      if (alive) setMyDashboards(l.cockpits.filter(c => !c.retired).map(c => ({ id: c.cockpit_id, title: c.title || c.cockpit_id })));
+      if (alive) setMyDashboards(standingDashboards(l).map(({ id, title }) => ({ id, title })));
     }).catch(() => {});
     return () => { alive = false; };
   }, [connectionId, dashboardsOn]);

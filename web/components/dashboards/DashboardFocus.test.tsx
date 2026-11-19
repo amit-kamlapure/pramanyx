@@ -55,7 +55,7 @@ describe("choosing a value", () => {
 });
 
 const premise = () => JSON.parse(readFileSync(resolve(process.cwd(), "lib/dashboards/premise.fixture.json"), "utf8"));
-function card(id: string, title: string, value: number, cut?: { applied: boolean; by: string[]; why: string }): CardState {
+function card(id: string, title: string, value: number, cut?: { applied: boolean; by: string[]; why: string; through?: string[] }): CardState {
   const refresh = { cadence: "daily", last_run: "2026-09-28T06:00:00Z", last_value: value, prev_value: null, history: [value] };
   const c: StoredCard = {
     id, connection_id: "thelook", scope: "canvas", scope_ref: "cv", source: "authored", kind: "kpi", title, sql: "SELECT 1",
@@ -67,16 +67,19 @@ function card(id: string, title: string, value: number, cut?: { applied: boolean
 const HOST: DashboardHostState = { range: { status: "final" }, cards: { c7f3a001: { status: "within" }, c91b2002: { status: "within" } } };
 
 describe("the dashboard with a focus", () => {
-  it("says what it is filtered by; a chip takes one off, Clear takes them all", () => {
+  it("says what it is filtered by in one control; its menu takes one off, or all of them", () => {
     const onFocus = vi.fn();
     const cards = [card("c7f3a001", "Return rate", 0.1), card("c91b2002", "Net revenue", 341000)];
     render(<ComposedDashboard spec={premise()} cards={cards} host={HOST} doors={{ onRefresh: vi.fn() }} focus={[SEARCH, JEANS]} onFocus={onFocus} />);
-    expect(screen.getByTestId("dashboard-focus")).toHaveTextContent("Filtered by");
+    expect(screen.getByTestId("filters-menu")).toHaveTextContent("Filters · 2");
+    expect(screen.getByTestId("filters-menu")).toHaveAttribute("title", "traffic source = Search · category = Jeans");
+    fireEvent.keyDown(screen.getByTestId("filters-menu"), { key: "Enter" });
     const chips = screen.getAllByTestId("focus-chip");
     expect(chips.map(c => c.textContent?.trim())).toEqual(["traffic source = Search", "category = Jeans"]);
     fireEvent.click(chips[0]);
     expect(onFocus).toHaveBeenLastCalledWith([JEANS]);
-    fireEvent.click(screen.getByTestId("focus-clear"));
+    fireEvent.keyDown(screen.getByTestId("filters-menu"), { key: "Enter" });
+    fireEvent.click(screen.getByTestId("filters-clear"));
     expect(onFocus).toHaveBeenLastCalledWith([]);
   });
 
@@ -89,9 +92,19 @@ describe("the dashboard with a focus", () => {
     expect(marks[0]).toHaveAttribute("title", why);
   });
 
+  it("names the column a card was cut through when the value reached it by a link", () => {
+    const by = "traffic_source = Search, through order_items.user_id";
+    const cards = [card("c7f3a001", "Return rate", 0.1, { applied: true, by: ["traffic_source = Search"], why: "", through: [by] }), card("c91b2002", "Net revenue", 341000)];
+    render(<ComposedDashboard spec={premise()} cards={cards} host={HOST} doors={{ onRefresh: vi.fn() }} focus={[SEARCH]} onFocus={vi.fn()} />);
+    const said = screen.getAllByTestId("cut-through")[0];
+    expect(said).toHaveAttribute("aria-label", "Through order_items.user_id");
+    expect(said).toHaveTextContent("");
+    expect(said).toHaveAttribute("title", by);
+  });
+
   it("draws no bar, and marks nothing, without a focus", () => {
     render(<ComposedDashboard spec={premise()} cards={[card("c7f3a001", "Return rate", 0.1)]} host={HOST} doors={{ onRefresh: vi.fn() }} />);
-    expect(screen.queryByTestId("dashboard-focus")).toBeNull();
+    expect(screen.queryByTestId("dashboard-filtered-by")).toBeNull();
     expect(screen.queryByTestId("not-filtered")).toBeNull();
   });
 });

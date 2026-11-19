@@ -20,7 +20,7 @@ DEFAULT_CRON = {
 
 #: What a subscription sends. "alert_summary" is what every subscription has always sent;
 #: "briefing" (idea 3) is the Briefing written for its period.
-CONTENTS = ("alert_summary", "briefing")
+CONTENTS = ("alert_summary", "briefing", "dashboard")
 
 #: Arc BR-5 — a subscription that replaces an automation pauses it after this many delivered
 #: mornings (the user's call, ROADMAP §6 item 34(e)): paused, not deleted.
@@ -28,7 +28,7 @@ SUPERSEDE_AFTER = 7
 
 #: The fields BR-5 added. Written only when set, so every row stored before them — and every
 #: row that never uses them — stays byte-identical.
-_BR5_FIELDS = ("bot_id", "channel", "schema_name", "supersedes")
+_BR5_FIELDS = ("bot_id", "channel", "schema_name", "supersedes", "dashboard", "dashboard_owner", "file_format", "email_to")
 
 
 class BriefSubscription(BaseModel):
@@ -54,6 +54,12 @@ class BriefSubscription(BaseModel):
     #: Arc BR-5 — the automation this subscription replaces, and the mornings delivered so far.
     supersedes:   str = ""
     delivered:    int = 0
+    #: The dashboards study's R21 — content "dashboard": the published dashboard it sends, whose it is, the file it leaves as
+    #: ("pdf" or "png"), and the address it goes to when it goes by email.
+    dashboard:    str = ""
+    dashboard_owner: str = ""
+    file_format:  str = ""
+    email_to:     str = ""
     #: Owning workspace; "" = UNOWNED, visible wherever its connection is.
     workspace_id: str = ""
     enabled:      bool = True

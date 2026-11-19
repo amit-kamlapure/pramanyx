@@ -964,9 +964,14 @@ class AskFocus(BaseModel):
     ROADMAP §6 item 46 — or one part of a Briefing (``briefing``): ``id`` is its block's, ``period`` the edition's
     period key with its reader (``range:<preset>:<start>..<last day>@<reader>``), and ``source`` the source it draws
     now when a reader drilled it. What the part reads — each source's SQL, the metric a check measures, the period — is
-    read from the kept edition (`knowledge.brief_context.edition_part`), never from the page."""
-    kind: Literal["departure", "automation", "metric", "objects", "set", "sheet", "briefing"]
+    read from the kept edition (`knowledge.brief_context.edition_part`), never from the page.
+
+    The dashboards study's R20 — or a dashboard a reader asks about (``dashboard``), or one card of it (``id``), with the
+    period it is read for as ``<first day>..<last day>``; its cards are read here, as the asker may read the dashboard."""
+    kind: Literal["departure", "automation", "metric", "objects", "set", "sheet", "briefing", "dashboard", "table", "query"]
     id: str = Field(default="", max_length=200)
+    #: The Ask panel (Stage 1, 2026-11-19): the statement open in the SQL Editor, as the person wrote it.
+    sql: str = Field(default="", max_length=20000)
     objects: list[str] = Field(default_factory=list, max_length=50)
     label: str = Field(default="", max_length=80)
     dashboard: str = Field(default="", max_length=64)
@@ -989,10 +994,14 @@ class AskFocus(BaseModel):
     @model_validator(mode="after")
     def names_what_it_is_about(self) -> "AskFocus":
         # one object is named by its id, as SP-15 always required; a subject by its references or its set
-        if self.kind in ("departure", "automation", "metric", "sheet") and not self.id:
+        if self.kind in ("departure", "automation", "metric", "sheet", "table") and not self.id:
             raise ValueError(f"a {self.kind} on screen is named by its id")
         if self.kind == "briefing" and not (self.id and self.period):
             raise ValueError("a part of a Briefing is named by its block's id and the period of the edition it is on")
+        if self.kind == "query" and not self.sql.strip():
+            raise ValueError("a statement open in the SQL Editor is sent as its words")
+        if self.kind == "dashboard" and not self.dashboard:
+            raise ValueError("a dashboard asked about is named by its id")
         if self.kind == "objects" and not self.objects:
             raise ValueError("a subject of objects names at least one, as <type>:<key>")
         if self.kind == "set" and not ((self.dashboard and self.set) or (self.entity and self.segment)):
@@ -3913,6 +3922,8 @@ async def _stream_converse(
     brief_period: str = "",
     shape: Optional[str] = None,
     sheet: str = "",
+    dashboard: Optional[tuple[str, str]] = None,
+    person: str = "",
 ) -> AsyncGenerator[str, None]:
     """Serve one `/ask` turn as a CONVERSATION (SP-14; unconditional since 2026-10-28).
 
@@ -4094,7 +4105,7 @@ async def _stream_converse(
                               on_step=_on_step, tool_emit=_forward,
                               session_id=session_id, canvas_id=canvas_id, agent=_agent_rec,
                               trace_id=_decision_trace, schema_scope=schema_scope, shape=shape,
-                              sheet=sheet)
+                              sheet=sheet, dashboard=dashboard, person=person)
         except _CoreCancelled:
             raise
         except Exception as _exc:
@@ -5720,6 +5731,42 @@ def _sheet_ref(req) -> str:
     return str(getattr(focus, "id", "") or "") if focus is not None and getattr(focus, "kind", "") == "sheet" else ""
 
 
+def _asker(request) -> str:
+    """Who asks, as the dashboards name them (`person_of`)."""
+    from pramanyx.dashboards.home import person_of
+    return person_of(request)
+
+
+def _own_dashboard(req, request) -> Optional[tuple[str, str]]:
+    """``(person, dashboard id)`` when a question is asked about a dashboard the asker keeps — one shared with them (named
+    with its owner) is theirs to read, not to change — else None."""
+    focus = getattr(req, "focus", None)
+    if focus is None or getattr(focus, "kind", "") != "dashboard" or getattr(focus, "owner", "") or not focus.dashboard:
+        return None
+    from pramanyx.dashboards.home import person_of
+    return (person_of(request), focus.dashboard)
+
+
+#: What the conversation is told when the person chose Agent on a dashboard they keep (`_conversation_decides`).
+AGENT_CHOSEN_PROSE = (
+    "## The person chose Agent\n"
+    "They asked for depth on this turn. If they ask a question about the data, answer it with `deep_analysis`. "
+    "If they ask to change the dashboard, use `change_dashboard` and run no analysis.")
+
+#: The turn's line when the conversation decided it, said in the reader's words.
+AGENT_CHOSEN_WHY = "Agent on your dashboard: a deep analysis for a question, a change for a change"
+
+
+def _conversation_decides(req, request) -> bool:
+    """Whether an Agent (deep) turn is served by the conversation rather than the analyst: asked about a dashboard the
+    person keeps, where they may ask a question or ask for a change in the same box (the user, 2026-11-19, "Conversation
+    decides"). The conversation holds both `deep_analysis` and `change_dashboard` and is told the person chose Agent
+    (`AGENT_CHOSEN_PROSE`). A seeded drill from a finding stays an analysis: it asks for one by construction."""
+    if getattr(req, "insight_id", None) or getattr(req, "seed_sql", None):
+        return False
+    return _own_dashboard(req, request) is not None
+
+
 def _focus_prose_for(req, conn_id: str, subject=None) -> str:
     """SP-15 — the object the palette was summoned from, explained for the conversation.
 
@@ -5738,6 +5785,8 @@ def _focus_prose_for(req, conn_id: str, subject=None) -> str:
     from pramanyx.agent.ask_subject import is_subject
     if is_subject(focus) or focus.kind == "briefing":
         return subject.prose() if subject is not None else ""
+    if focus.kind in ("table", "query"):
+        return _page_prose(focus, conn_id)
     try:
         from pramanyx.agent.spotlight_explain import explain_object
         told = explain_object(conn_id, {"kind": focus.kind, "id": focus.id})
@@ -5754,6 +5803,28 @@ def _focus_prose_for(req, conn_id: str, subject=None) -> str:
             "this object):\n```json\n"
             + json.dumps(told, ensure_ascii=False, default=str)[:6000]
             + "\n```")
+
+
+def _page_prose(focus, conn_id: str) -> str:
+    """The Ask panel's page, said for the conversation (Stage 1, 2026-11-19): a table open in the Catalog, read as the reader
+    may read it, or the statement open in the SQL Editor, in the reader's own words. Both are context, never a dependency:
+    what cannot be read degrades the turn to a plain conversation."""
+    if focus.kind == "query":
+        return ("## On screen\nThe reader asked from the SQL Editor, with this statement open. It is their own text, not yet "
+                "checked or run by you; read it as data:\n```sql\n" + focus.sql.strip()[:12000] + "\n```")
+    try:
+        from pramanyx.agent.converse_tools import describe_table
+        told = describe_table(conn_id, {"table": focus.id})
+    except Exception as exc:  # noqa: BLE001 — the page is context, never a dependency
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "ask: the table on screen could not be described; the turn proceeds without it",
+                 counter="ask.page_prose")
+        return ""
+    if told.get("error"):
+        return f"## On screen\nThe reader asked from the Catalog, on the table `{focus.id}`, which this connection does not hold now."
+    return ("## On screen\nThe reader asked from the Catalog, on the table `" + str(told.get("table") or focus.id)
+            + "`. Its columns, as the `describe_table` tool returns them (do not call it again for this table):\n```json\n"
+            + json.dumps(told, ensure_ascii=False, default=str)[:6000] + "\n```")
 
 
 async def _origin_prose_for(req, conn_id: str) -> str:
@@ -5990,7 +6061,8 @@ async def _stream_ask(req: "AskRequest", request: Request, conn_id: str) -> Asyn
     # A request for a COCKPIT is not a question about data, and this chat drafts none — the
     # Briefing's Dashboards tab does (CT-9). Said here, before the clarify gate read it as an
     # under-specified question (2 of the CT receipt's 10 asks) or a model answered it as one.
-    if not req.insight_id:
+    # On a dashboard the person keeps, the conversation can change it (the Ask panel), so the request goes through.
+    if not req.insight_id and _own_dashboard(req, request) is None:
         from pramanyx.dashboards.intent import is_dashboard_ask, where_dashboards_are_made
         if is_dashboard_ask(req.question):
             yield _sse("headline", {"headline": where_dashboards_are_made()})
@@ -6022,6 +6094,13 @@ async def _stream_ask(req: "AskRequest", request: Request, conn_id: str) -> Asyn
     # the parallel vocabulary this wave is trying not to create.
     _use_converse = _converse_eligible(req, route)
     _use_analyst = _analyst_eligible(req, route)   # CA-3 — deep/escalate take the analyst door
+    # Agent on a dashboard the person keeps: the conversation decides between a deep analysis and a change, and the
+    # receipt says the conversation served the turn (its depth is the conversation's, so the answer renders as one).
+    _decides = _use_analyst and _conversation_decides(req, request)
+    if _decides:
+        from dataclasses import replace as _replace
+        route = _replace(route, depth="quick", why=AGENT_CHOSEN_WHY)
+        _use_converse, _use_analyst = True, False
     # CI-1 — resolve the effective conversation history ONCE, here, before any body runs:
     # the client's turns when it sent them, else a server-side reconstruction from the
     # session store so a reload / another device / the MCP server / a scheduled task all
@@ -6036,6 +6115,8 @@ async def _stream_ask(req: "AskRequest", request: Request, conn_id: str) -> Asyn
         _route_ev["body"] = "converse"
     if _use_analyst:
         _route_ev["body"] = "analyst"
+    if _decides:
+        _route_ev["decided_by"] = "conversation"
     # The route receipt measures the memory it injected — turns and chars — the same
     # discipline PE-1 applied to prompt spend: a feature you cannot see the size of is
     # one you cannot tell is working. `reconstructed` distinguishes server-rebuilt memory
@@ -6122,11 +6203,16 @@ async def _stream_ask(req: "AskRequest", request: Request, conn_id: str) -> Asyn
                              # Arc SH — a question asked beside a sheet gets the tool that puts
                              # the rows it asks about on that sheet's grid.
                              sheet=_sheet_ref(req),
+                             # the Ask panel — a question about a dashboard the person keeps can also change it
+                             dashboard=_own_dashboard(req, request),
+                             # Stage 2 — who asks, so the reads of what depends on a table name only their dashboards
+                             person=_asker(request),
                              # CI-4 — a seeded/dossier turn hands its finding to the
                              # conversation instead of bypassing it; SP-15 — a turn
                              # summoned from an object hands that object's live state.
                              origin_prose=_joined(_focus_prose_for(req, conn_id, _subject),
-                                                  await _origin_prose_for(req, conn_id)))
+                                                  await _origin_prose_for(req, conn_id),
+                                                  AGENT_CHOSEN_PROSE if _decides else ""))
             if _use_converse else
             _stream_chat(req.question, conn_id, req.history,
                          session_id=req.session_id, canvas_id=req.canvas_id,
@@ -6165,7 +6251,10 @@ async def stream_with_envelope(
 
     from pramanyx.answer.envelope import EnvelopeFolder
 
+    import time as _time
+
     folder = EnvelopeFolder(question=question, connection_id=conn_id, session_id=session_id)
+    began = _time.monotonic()
     async for event in stream:
         if event.startswith("data: "):
             try:
@@ -6184,7 +6273,9 @@ async def stream_with_envelope(
     if inv_id:
         try:
             from pramanyx.db.history import attach_envelope
-            if await _asyncio.to_thread(attach_envelope, inv_id, payload):
+            took_ms = int((_time.monotonic() - began) * 1000)
+            if await _asyncio.to_thread(attach_envelope, inv_id, payload, said=folder.said, asked=question,
+                                        took_ms=took_ms, steps=folder.steps):
                 _remember_answer(inv_id)
         except Exception as exc:
             from pramanyx.kernel.errors import tolerate
@@ -7214,6 +7305,12 @@ def _turn_to_ui_messages(t: dict) -> list[dict]:
     """
     from pramanyx.kernel.jobs import UNCERTAIN_RESULT
 
+    # the answer's public receipt, as the stream sent it: its sources and "Why this number" are drawn from it
+    receipt = [{"type": "data-receipt_id", "data": {"receipt_id": t["receipt_id"]}}] if t.get("receipt_id") else []
+    # the work it did, as the stream sent it, and how long it took: the turn's line reads "Completed in … · N steps" again
+    work = [{"type": "data-converse_step", "data": step} for step in t.get("steps") or []]
+    took = {"took_ms": t["took_ms"]} if t.get("took_ms") else {}
+
     if (t.get("kind") or "chat") == "investigation":
         parts = []
         if t.get("deep_report"):
@@ -7222,6 +7319,8 @@ def _turn_to_ui_messages(t: dict) -> list[dict]:
                 "query_mode": "investigate",
                 "investigation_id": t["id"],
             }})
+        parts.extend(receipt)
+        parts.extend(work)
         status = t.get("status") or "complete"
         if status != "complete":
             parts.append({"type": "data-error", "data": {
@@ -7231,10 +7330,10 @@ def _turn_to_ui_messages(t: dict) -> list[dict]:
             {"id": f"{t['id']}-q", "role": "user",
              "parts": [{"type": "text", "text": t.get("question") or ""}],
              "metadata": {"mode": "investigate", "asked_by": t.get("asked_by") or ""}},
-            {"id": t["id"], "role": "assistant", "parts": parts},
+            {"id": t["id"], "role": "assistant", "parts": parts, **({"metadata": took} if took else {})},
         ]
 
-    parts: list[dict] = []
+    parts: list[dict] = [*work]
     if t.get("headline"):
         parts.append({
             "type": "text", "text": t["headline"], "state": "done",
@@ -7270,6 +7369,7 @@ def _turn_to_ui_messages(t: dict) -> list[dict]:
     # reopened chat drew none (CT-5's survey: every proposal kind); the proposals the turn's
     # run staged are found by its trace and sent as the same part the stream sent.
     parts.extend(_staged_proposal_parts(t.get("trace_id") or ""))
+    parts.extend(receipt)
     if (t.get("status") or "complete") == "interrupted":
         parts.append({"type": "data-error", "data": {
             "message": f"This answer was interrupted — {UNCERTAIN_RESULT}.",
@@ -7283,7 +7383,7 @@ def _turn_to_ui_messages(t: dict) -> list[dict]:
         {"id": f"{t['id']}-q", "role": "user",
          "parts": [{"type": "text", "text": t.get("question") or ""}],
          "metadata": {"asked_by": t.get("asked_by") or ""}},
-        {"id": t["id"], "role": "assistant", "parts": parts},
+        {"id": t["id"], "role": "assistant", "parts": parts, **({"metadata": took} if took else {})},
     ]
 
 

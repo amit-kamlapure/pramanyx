@@ -26,6 +26,8 @@ import { applyNames, type SeriesNames } from "@/components/charts/vega/names";
 import { periodsSpanned, timeBarFit } from "@/components/charts/vega/bandFit";
 import { dateAxis, utcScale } from "@/components/charts/vega/timeAxis";
 import { emphasisOpacity as emphasisOn } from "@/components/charts/vega/emphasis";
+import { HOVER_MARK, type HoverMeta } from "@/components/charts/vega/hoverTooltip";
+import type { ChartOptions } from "@/components/charts/chartCustom";
 
 /** The four post-processing ops the edit panel offers, mirroring pramanyx/tools/postproc.py. */
 export type TransformOp = "pop" | "contribution" | "rolling" | "cumulative";
@@ -142,6 +144,9 @@ export interface ResolveSpecArgs {
    *  inference pick its own y (binding Color to total_volume silently replaced the
    *  plotted gross_margin_pct). */
   measure?: string | null;
+  /** What a person set in the editor beyond the kind (study R12): line shape and markers, axis range and log, a
+   *  bar's sort and top N. */
+  options?: ChartOptions | null;
 }
 
 export interface ResolvedSpec {
@@ -179,6 +184,13 @@ export interface ResolvedSpec {
 const SELECT_PARAM = (field: string) => ({
   name: "picked",
   select: { type: "point", on: "click", fields: [field], clear: "dblclick" },
+});
+
+/** The x nearest the pointer, on a line chart (study R25): the hover rule's and the rings' param. `nearest` makes Vega
+ *  draw a voronoi over the rule, so the pointer anywhere in the plot finds its x. Cleared when the pointer leaves. */
+const HOVER_PARAM = (field: string) => ({
+  name: "hover",
+  select: { type: "point", fields: [field], nearest: true, on: "pointermove", clear: "pointerout" },
 });
 
 /** Opacity, conditioned on the selection. No colour literal: the de-emphasis is a wash, not
@@ -253,6 +265,17 @@ function bandAxis(title: string | null | undefined) {
 }
 
 /** Humanised field name for an axis or legend title, via the app's one labeller. */
+/** The value axis's scale from the editor's options (study R12): a range a person set, and a log scale where every
+ *  value is above zero (a log of zero or less is no scale at all, so it is not drawn as one). */
+function valueScale(opts: ChartOptions, values: number[]): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (typeof opts.yMin === "number" && Number.isFinite(opts.yMin)) out.domainMin = opts.yMin;
+  if (typeof opts.yMax === "number" && Number.isFinite(opts.yMax)) out.domainMax = opts.yMax;
+  if (opts.yLog && values.length && values.every((v) => v > 0)) { out.type = "log"; out.zero = false; }
+  if (out.domainMin !== undefined || out.domainMax !== undefined) out.clamp = true;
+  return out;
+}
+
 function axisTitle(explicit: string | null | undefined, field: string): string {
   return explicit && explicit.trim() ? explicit : cleanLabel(field);
 }
@@ -269,6 +292,8 @@ export function resolveVegaSpec(args: ResolveSpecArgs): ResolvedSpec | null {
 function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
   const { columns, rows, chartType, format, xTitle, yTitle, showLabels = false, title, orient,
           transform, exhibit: exhibitRaw, columnUnits, measure: chosenMeasure } = args;
+  const opts: ChartOptions = args.options ?? {};
+  const topN = typeof opts.top === "number" && opts.top > 0 ? Math.floor(opts.top) : 0;
   // Fail-open on a malformed spec: a bad exhibit costs its semantics, never the chart —
   // the same contract the ECharts resolver held.
   const exhibit = sanitizeExhibit(exhibitRaw as Parameters<typeof sanitizeExhibit>[0]);
@@ -593,27 +618,63 @@ function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
       y: { field: lineField, type: "quantitative",
            axis: valueAxis(axisTitle(yTitle, measure), linePct ? ".1%" : format) },
     };
+    const lineScale = valueScale(opts, rows.map((r) => Number(r[columns.indexOf(measure)])).filter(Number.isFinite)
+                                         .map((v) => (lineScaled ? v / 100 : v)));
+    if (Object.keys(lineScale).length) (enc.y as Record<string, unknown>).scale = lineScale;
+    const interpolate = opts.lineShape === "smooth" ? "monotone" : opts.lineShape === "step" ? "step-after" : null;
     // `sort: null` keeps the series in DATA order. Vega-Lite sorts a nominal domain
     // alphabetically by default, which hands the same series a different hue than the
     // ECharts path gives it — every screenshot in the Phase 2 diff would flag.
     if (seriesCol) enc.color = { field: seriesCol, type: "nominal", sort: null };
+    const { x: xEnc, ...lineEnc } = enc;
+    // The series as the rule's pivot names them, in data order (the colour's own order).
+    const seriesNames = seriesCol
+      ? [...new Set(rows.map((r) => r[columns.indexOf(seriesCol)]).filter((v) => v !== null && v !== undefined)
+                       .map(String))]
+      : [lineField];
+    const hover: HoverMeta = {
+      x, gran: xIsDate ? detectGranularity(x, xValues) : null, series: seriesNames,
+      label: seriesCol ? null : axisTitle(yTitle, measure),
+      format: linePct ? null : (format && format.trim() ? format : null), pct: linePct,
+      prefix: linePct ? "" : moneyPrefix(measure),
+    };
     return {
       tier: 1, resolved: seriesCol ? "multi-line" : "line", defaultH: 300, xCategories: 0,
       spec: {
         ...base,
         ...(lineScaled ? { transform: [...((base.transform as Record<string, unknown>[]) ?? []),
                                        { calculate: `datum['${measure}'] / 100`, as: lineField }] } : {}),
-
-        // A line plus its points: the point layer is the hover target and the ≥8px marker
-        // the mark spec asks for, and it keeps a single-observation series visible. Only the
-        // POINTS respond to a selection — dimming the line itself would break its continuity,
-        // which is the one thing a trend line exists to show.
+        usermeta: { hover },
+        /**
+         * The line, its points, and the hover rule (study R25). The x is shared; the value and the series are the
+         * lines' own, since the rule reads one row per x with every series in it (`pivot`).
+         *
+         * - The points are the ≥8px marker the mark spec asks for, and keep a single-observation series visible.
+         *   Only they dim on a selection: dimming the line itself would break its continuity, which is the one thing
+         *   a trend line exists to show.
+         * - A ring on each line at the x nearest the pointer.
+         * - The rule: dashed, drawn only at that x, the whole height. It owns the hover (`nearest`, so the pointer
+         *   need not touch a point) and the click that chooses an x, and its row is the tooltip: the date and every
+         *   series there (`hoverTooltip.ts`). Two params on one unit, each declared once (see SELECT_PARAM).
+         */
         layer: [
-          { mark: { type: "line" } },
-          { mark: { type: "point", tooltip: true }, params: [SELECT_PARAM(x)],
-            encoding: { opacity: emphasisOn(exhibit?.emphasis, x, xIsDate) ?? SELECT_OPACITY } },
+          { encoding: lineEnc,
+            layer: [
+              { mark: { type: "line", ...(interpolate ? { interpolate } : {}) } },
+              // the points, unless a person turned the markers off (study R12); the hover's rings stay
+              ...(opts.markers === false ? [] : [{ mark: { type: "point" },
+                encoding: { opacity: emphasisOn(exhibit?.emphasis, x, xIsDate) ?? SELECT_OPACITY } }]),
+              { transform: [{ filter: { param: "hover", empty: false } }],
+                mark: { type: "point", filled: false, size: 90, strokeWidth: 2 } },
+            ] },
+          { transform: [...(seriesCol ? [{ pivot: seriesCol, value: lineField, groupby: [x] }] : []),
+                        { calculate: "true", as: HOVER_MARK }],
+            mark: { type: "rule", strokeDash: [3, 3], tooltip: { content: "data" } },
+            params: [HOVER_PARAM(x), SELECT_PARAM(x)],
+            encoding: { y: { value: 0 }, y2: { value: { expr: "height" } },
+                        opacity: { condition: { param: "hover", empty: false, value: 0.7 }, value: 0 } } },
         ],
-        encoding: enc,
+        encoding: { x: xEnc },
       },
     };
   }
@@ -678,6 +739,9 @@ function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
   }
   const fewTest = few.rows.size && scaleMax > 0 ? `datum['${few.den}'] < ${TOO_FEW_TO_COMPARE}` : "";
   const barField = fewTest ? "__shown" : valueField;
+  const chosenScale = valueScale(opts, rows.map((r) => Number(r[columns.indexOf(measure)])).filter(Number.isFinite)
+                                          .map((v) => (pctScaled ? v / 100 : v)));
+  if (Object.keys(chosenScale).length) labelHeadroom = { scale: { ...(labelHeadroom.scale ?? {}), ...chosenScale } };
   const valueEnc = { field: barField, type: "quantitative", ...labelHeadroom,
                      axis: valueAxis(axisTitle(yTitle, measure),
                                      pct ? ".1%" : format, pct ? "" : moneyPrefix(measure)) };
@@ -810,7 +874,14 @@ function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
       const withTf = pctTransform.length ? { transform: pctTransform } : {};
       // `order: "asc"` means the query asked for the BOTTOM of the ranking, so lead with the
       // row it led with instead of burying it at the far end.
-      const ordered = horizontal ? orderedValues(measure, exhibit?.order === "asc") : data.values;
+      // a person's sort or top N (study R12) — a bar of categories only: dates and periods keep their order
+      const categorical = !bandOnTime && !numberBand && !changeByPeriod;
+      const chosenOrder = categorical && opts.sort === "label"
+        ? [...data.values].sort((a, b) => String(a[band] ?? "").localeCompare(String(b[band] ?? "")))
+        : categorical && opts.sort === "value" ? orderedValues(measure, false) : null;
+      const allOrdered = chosenOrder ?? (horizontal ? orderedValues(measure, exhibit?.order === "asc") : data.values);
+      const keep = categorical && topN ? new Set(orderedValues(measure, false).slice(0, topN)) : null;
+      const ordered = keep ? allOrdered.filter((d) => keep.has(d)) : allOrdered;
       // Too-few rows go after the others, never first, in either orientation.
       const fewLast = fewTest
         ? [...ordered.filter((d) => !(Number(d[few.den]) < TOO_FEW_TO_COMPARE)),
@@ -819,10 +890,16 @@ function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
       // A band of number periods keeps period order, whichever way it lies and wherever a too-few row is.
       const sorted = periodRows ? { data: { values: periodRows } }
         : numberBand ? {}
-        : horizontal || fewTest ? { data: { values: fewLast } } : {};
+        : horizontal || fewTest || chosenOrder || keep ? { data: { values: fewLast } } : {};
+      // the largest N said on the chart, never implied: how many of how many
+      const cutSaid = keep && keep.size < data.values.length
+        ? { title: { text: (base.title as string | undefined) ?? `The ${keep.size} largest of ${data.values.length}`,
+                     ...(base.title ? { subtitle: `The ${keep.size} largest of ${data.values.length}` } : { fontSize: 11, fontWeight: "normal" }),
+                     anchor: "start" } }
+        : {};
       return all.length > 1
-        ? { ...base, ...sorted, ...withTf, layer: all, encoding }
-        : { ...base, ...sorted, ...withTf, ...all[0], encoding };
+        ? { ...base, ...sorted, ...withTf, ...cutSaid, layer: all, encoding }
+        : { ...base, ...sorted, ...withTf, ...cutSaid, ...all[0], encoding };
     })(),
   };
 }

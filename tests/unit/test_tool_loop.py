@@ -480,3 +480,42 @@ def test_a_conclusion_is_handed_back_once_when_the_stop_check_refuses_it(provide
     assert checks == ["First answer."]        # the second stop is the answer, as for text
     assert result.conclusion["headline"] == "Second"
     assert [s.tool for s in result.steps] == ["conclude", "(answer held)", "run_sql", "conclude"]
+
+
+def test_answer_now_takes_no_further_step_and_writes_up_what_was_found(provider):
+    """The person's word is read before each step: the step in hand finishes, and the closing request writes it up."""
+    seen: list[dict] = []
+    asked: list[bool] = []
+    set_responses([
+        FauxToolCall(payload={"sql": "SELECT 1"}, name="run_sql"),
+        "from the first query: 412 orders",
+    ])
+
+    result = run_tool_loop(provider, "sys", "how many orders?", [_tool(calls=seen)],
+                           finish_now=lambda: asked.append(True) or len(seen) >= 1)
+
+    assert seen == [{"sql": "SELECT 1"}]
+    assert result.answer == "from the first query: 412 orders"
+    assert result.stop_reason == "budget_answered"
+    assert len(asked) == 2
+
+
+def test_a_loop_nobody_asked_to_finish_runs_as_it_did(provider):
+    set_responses(["four"])
+    result = run_tool_loop(provider, "sys", "what is 2+2?", [_tool()], finish_now=lambda: False)
+    assert (result.answer, result.stop_reason) == ("four", "answered")
+
+
+MARKUP = "<tool_call> <function=conclude> <parameter=answer> 412 orders </tool_call>"
+
+
+def test_a_closing_answer_written_as_a_tool_call_is_asked_for_again_in_sentences(provider):
+    set_responses([MARKUP, "There were 412 orders."])
+    result = run_tool_loop(provider, "sys", "how many orders?", [_tool()], finish_now=lambda: True)
+    assert (result.answer, result.stop_reason) == ("There were 412 orders.", "budget_answered")
+
+
+def test_a_tool_call_written_twice_never_reaches_a_person(provider):
+    set_responses([MARKUP, MARKUP])
+    result = run_tool_loop(provider, "sys", "how many orders?", [_tool()], finish_now=lambda: True)
+    assert (result.answer, result.stop_reason) == (None, "budget")

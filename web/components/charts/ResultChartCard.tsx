@@ -26,8 +26,10 @@ import { createPortal } from "react-dom";
 import { Icon } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { Chart, type ChartCustom } from "@/components/Chart";
+import type { ChartOptions } from "@/components/charts/chartCustom";
 import { SqlResultTable } from "@/components/AugTable";
 import { PivotTable } from "@/components/PivotTable";
+import { AnswerMap } from "@/components/charts/geo/AnswerMap";
 import { classifyColumns, availableChartTypes, inferChartType, ALL_CHART_TYPES, CHART_TYPE_LABEL, TYPE_TO_HINT, HINT_TO_TYPE, type ChartType } from "@/components/charts/chartTypeInference";
 import { isUngraphableGrid, offeredMeasures } from "@/components/charts/columnRoles";
 import type { ExhibitSpec, ExhibitRefLine, ExhibitColor } from "@/components/charts/exhibit";
@@ -39,7 +41,7 @@ import { pickOf, type Pick } from "@/components/charts/selection";
 import { sameVizConfig, type VizConfig } from "@/components/charts/vizConfig";
 import { useVizEditorOpen, openVizEditor, closeVizEditor, useVizDock } from "@/components/charts/vizEditorStore";
 
-const TRANSFORM_OPTS: { v: PostprocOp | "none"; t: string }[] = [
+export const TRANSFORM_OPTS: { v: PostprocOp | "none"; t: string }[] = [
   { v: "none", t: "None" },
   { v: "pop", t: "Period-over-period" },
   { v: "contribution", t: "Share of total" },
@@ -56,11 +58,22 @@ type Agg = "sum" | "avg" | "count" | "min" | "max";
 // The Customize vocabularies — kept in sync with the Query Builder Customize tab so a
 // card and a query offer the same knobs. Chart.applyCustom honors each. (Colour palette "Scheme"
 // was removed from the editor — the org-default palette applies; Color-by binding drives hue now.)
-const NUMBER_FORMATS: { v: string; t: string }[] = [
+export const NUMBER_FORMATS: { v: string; t: string }[] = [
   { v: "", t: "Auto" }, { v: ",.0f", t: "1,234" }, { v: ",.2f", t: "1,234.56" }, { v: "$,.0f", t: "$1,234" },
   { v: "$,.2f", t: "$1,234.56" }, { v: "~s", t: "1.2K (compact)" }, { v: ".0%", t: "12%" }, { v: ".1%", t: "12.3%" },
 ];
-const LEGEND_POS: { v: string; t: string }[] = [
+/** "Show": every category, or only the largest few (the dashboards study, R12). */
+export const TOP_OPTIONS: { v: string; t: string }[] = [
+  { v: "", t: "Every category" }, { v: "5", t: "The 5 largest" }, { v: "10", t: "The 10 largest" }, { v: "20", t: "The 20 largest" },
+];
+/** A number a person typed, or null for none (or not a number). */
+function numberOrNull(text: string): number | null {
+  const t = text.trim();
+  if (!t) return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+}
+export const LEGEND_POS: { v: string; t: string }[] = [
   { v: "", t: "Default" }, { v: "right", t: "Right" }, { v: "bottom", t: "Bottom" }, { v: "top", t: "Top" }, { v: "none", t: "Hidden" },
 ];
 
@@ -154,6 +167,9 @@ interface Props {
   /** A stable name for this chart's editor — a dashboard card's id — so a panel elsewhere (the builder's Chart tab) can
    *  hold it. Left out, the chart names its own. */
   editorKey?: string;
+  /** Draws the hover pencil that opens the chart's editor. A dashboard draws none (the user, 2026-11-19: two ways to edit
+   *  a chart "causing a major issue"): there the card's own panel, in Edit, is the one way, and docks this same editor. */
+  pencil?: boolean;
   /** The user's saved display choices, applied as the INITIAL state of every control. Read once
    *  per mount (the component owns the controls after that), so restoring a card and editing it
    *  can't fight each other. */
@@ -162,6 +178,10 @@ interface Props {
    *  goes (a pinned card's `render`, or `viz_configs` for a card-less chart) and is expected to
    *  debounce — this fires per interaction. Absent → the chart is ephemeral, exactly as before. */
   onConfigChange?: (config: VizConfig) => void;
+  /** The chart as it is drawn, for whoever offers to save it as a picture. */
+  onChartReady?: (chart: ChartInstance) => void;
+  /** A map answer is drawn as a map a person can pan and zoom, on the organisation's base map. Left out, as a still picture. */
+  liveMap?: boolean;
   /** Fired with what the card is showing — on mount and on every switch — so a caller that offers its
    *  own "Table" disclosure can withhold it while the card already IS a table (2026-11-06). */
   onViewChange?: (view: "chart" | "table" | "pivot") => void;
@@ -169,8 +189,9 @@ interface Props {
 
 export function ResultChartCard({
   columns, rows, title, chartType, chartConfig, custom, exhibit: exhibitProp,
-  columnUnits, defaultShowLabels, heightScale, fillHeight, onSelect, onPick, editorKey,
-  config, onConfigChange, onViewChange,
+  columnUnits, defaultShowLabels, heightScale, fillHeight, onSelect, onPick, editorKey, pencil = true,
+  config, onConfigChange, onViewChange, onChartReady,
+  liveMap = false,
 }: Props) {
   // Saved display choices seed the controls ONCE. A lazy useState (not a ref) because this is
   // read during render: it captures the first value and never changes, so a parent re-render —
@@ -203,9 +224,16 @@ export function ResultChartCard({
     [dateIdxs, catIdxs, columns],
   );
   // Any column can drive the Color binding (a dimension → discrete legend, a measure → gradient).
+  // Each column's kind, for its glyph and where the field list puts it: a measure, a date, or words.
+  const kindOfCol = useMemo(() => {
+    const k = new Map<string, "number" | "date" | "text">();
+    numericIdxs.forEach((i) => k.set(columns[i], "number"));
+    dateIdxs.forEach((i) => k.set(columns[i], "date"));
+    return (c: string) => k.get(c) ?? "text";
+  }, [numericIdxs, dateIdxs, columns]);
   const colorFieldOptions = useMemo(
-    () => [{ v: "", t: "None" }, ...columns.map((c) => ({ v: c, t: cleanLabel(c) }))],
-    [columns],
+    () => [{ v: "", t: "None" }, ...columns.map((c) => ({ v: c, t: cleanLabel(c), k: kindOfCol(c) }))],
+    [columns, kindOfCol],
   );
 
   // Chart-grammar gate: a stats/entity-profile grid opens on the TABLE (its honest
@@ -234,6 +262,17 @@ export function ResultChartCard({
   const [yTitle, setYTitle] = useState(seed.yTitle ?? "");
   const [tooltipOff, setTooltipOff] = useState(seed.tooltipOff ?? false);
   const [userRefLines, setUserRefLines] = useState<ExhibitRefLine[]>(seed.refLines ?? []);
+  // the chart options (the dashboards study, R12): line shape and markers, value axis range and log, a bar's order and top N
+  const [lineShape, setLineShape] = useState<"" | "smooth" | "step">(seed.lineShape ?? "");
+  const [markersOn, setMarkersOn] = useState(seed.markers !== false);
+  const [yMinText, setYMinText] = useState(seed.yMin !== undefined ? String(seed.yMin) : "");
+  const [yMaxText, setYMaxText] = useState(seed.yMax !== undefined ? String(seed.yMax) : "");
+  const [yLog, setYLog] = useState(!!seed.yLog);
+  const [sortBy, setSortBy] = useState<"" | "value" | "label">(seed.sortBy ?? "");
+  const [topText, setTopText] = useState(seed.top ? String(seed.top) : "");
+  const yMin = numberOrNull(yMinText);
+  const yMax = numberOrNull(yMaxText);
+  const top = numberOrNull(topText);
 
   // Default metric MUST match what <Chart> resolves when untouched, or the strip
   // label contradicts the plot. <Chart> prefers a rate/share column as its primary
@@ -317,6 +356,18 @@ export function ResultChartCard({
   const instRef = useRef<ChartInstance | null>(null);
   const handleDownload = () => { void downloadChartPng(instRef.current, title || "chart"); };
 
+  const chartOptions = useMemo<ChartOptions | null>(() => {
+    const o: ChartOptions = {};
+    if (lineShape) o.lineShape = lineShape;
+    if (!markersOn) o.markers = false;
+    if (yMin !== null) o.yMin = yMin;
+    if (yMax !== null) o.yMax = yMax;
+    if (yLog) o.yLog = true;
+    if (sortBy) o.sort = sortBy;
+    if (top !== null && top > 0) o.top = top;
+    return Object.keys(o).length ? o : null;
+  }, [lineShape, markersOn, yMin, yMax, yLog, sortBy, top]);
+
   // Customize overrides merged over the passed props (empty string = "unset" → keep the prop).
   const effCustom: ChartCustom = useMemo(() => ({
     ...(custom || {}),
@@ -328,10 +379,11 @@ export function ResultChartCard({
     ...(yTitle ? { yTitle } : {}),
     ...(tooltipOff ? { tooltip: "off" as const } : {}),
     ...(orient ? { orient } : {}),
+    ...(chartOptions ? { options: chartOptions } : {}),
     ...(declarative && transformOp !== "none" && metric
       ? { transform: { op: transformOp, valueCol: metric } as ChartCustom["transform"] } : {}),
   }), [custom, numberFormat, legendPos, colorField, xTitle, yTitle, tooltipOff, orient,
-       declarative, transformOp, metric]);
+       declarative, transformOp, metric, chartOptions]);
 
   // The color binding the user built (or null): a chosen field, its scale (explicit, else
   // auto by role — a measure ramps continuous, a dimension is categorical), and legend title.
@@ -390,9 +442,17 @@ export function ResultChartCard({
     if (userRefLines.length) c.refLines = userRefLines;
     if (transformOp !== "none") c.transform = transformOp;
     if (orient) c.orient = orient;
+    if (lineShape) c.lineShape = lineShape;
+    if (!markersOn) c.markers = false;
+    if (yMin !== null) c.yMin = yMin;
+    if (yMax !== null) c.yMax = yMax;
+    if (yLog) c.yLog = true;
+    if (sortBy) c.sortBy = sortBy;
+    if (top !== null && top > 0) c.top = top;
     return c;
   }, [view, typeSel, metricSel, dimSel, aggSel, showLabels, colorField, colorScaleSel, colorName,
       numberFormat, legendPos, xTitle, yTitle, tooltipOff, userRefLines, transformOp, orient,
+      lineShape, markersOn, yMin, yMax, yLog, sortBy, top,
       chartTypes.length, columns, rows, defaultShowLabels]);
 
   // Seeded with what we were GIVEN, so restoring a saved chart doesn't immediately save it back.
@@ -416,6 +476,9 @@ export function ResultChartCard({
     : (HINT_TO_TYPE[(chartType ?? "").toLowerCase()] ?? inferChartType(columns, rows)?.type ?? "");
   const shownType = resolvedType && offeredTypes.includes(resolvedType as ChartType) ? (resolvedType as ChartType) : (offeredTypes[0] ?? "");
 
+  // A map is moved and read in place: its picture cannot be saved the way a chart's is.
+  const isMapAnswer = liveMap && (resolvedType === "choropleth" || resolvedType === "point-map");
+
   // The control model handed to the side panel. Dropdowns show the RESOLVED field/type/agg the
   // chart uses (not the "Auto" sentinel); the *Sel state stays null until the user actually picks,
   // so an untouched chart keeps the engine's own inference.
@@ -428,10 +491,10 @@ export function ResultChartCard({
     chartTypeOptions: offeredTypes.map((t) => ({ v: t, t: CHART_TYPE_LABEL[t] })),
     setChartType: (v) => setTypeSel(v as ChartType | "auto"),
     dimValue: dimSel ?? (dimCols[0] ?? ""),
-    dimOptions: dimCols.map((c) => ({ v: c, t: cleanLabel(c) })),
+    dimOptions: dimCols.map((c) => ({ v: c, t: cleanLabel(c), k: kindOfCol(c) })),
     setDim: (v) => setDimSel(v),
     metricValue: metricSel ?? defaultMetric,
-    metricOptions: metricCols.map((c) => ({ v: c, t: cleanLabel(c) })),
+    metricOptions: metricCols.map((c) => ({ v: c, t: cleanLabel(c), k: "number" as const })),
     // A number format is chosen FOR a measure's semantics — .1% on a margin is right
     // and on a unit count prints 885900.0%. Switching the measure resets it to Auto.
     setMetric: (v) => { setMetricSel(v); setNumberFormat(""); },
@@ -445,6 +508,16 @@ export function ResultChartCard({
     // control appears on an auto-inferred bar too — which is most of them.
     orientAvailable: /bar/.test(String(resolvedType)),
     setOrient,
+    // the chart options (the dashboards study, R12)
+    lineAvailable: /line/.test(String(resolvedType)) && !/forecast/.test(String(resolvedType)),
+    lineShapeValue: lineShape, setLineShape,
+    markersOn, setMarkersOn,
+    yMinValue: yMinText, setYMin: setYMinText,
+    yMaxValue: yMaxText, setYMax: setYMaxText,
+    yLog, setYLog,
+    barSortAvailable: /bar/.test(String(resolvedType)),
+    sortValue: sortBy, setSort: setSortBy,
+    topValue: topText, topOptions: TOP_OPTIONS, setTop: setTopText,
     transformValue: transformOp,
     transformOptions: metricCols.length >= 1 ? TRANSFORM_OPTS : [],
     setTransform: (v) => setTransformOp(v as PostprocOp | "none"),
@@ -471,29 +544,12 @@ export function ResultChartCard({
     // Annotation (reference lines)
     refLines: userRefLines.map(l => ({ label: l.label, value: l.value })),
     addRefLine, addAverageLine, removeRefLine, measureLabel: cleanLabel(metric),
-    onDownload: view === "chart" ? handleDownload : null,
+    onDownload: view === "chart" && !isMapAnswer ? handleDownload : null,
   };
 
-  return (
-    <div className="group/viz relative">
-      {/* Edit visualization — the single hover affordance; every control lives in the panel. */}
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        onClick={() => openVizEditor(cardId)}
-        title="Edit visualization"
-        className="absolute -top-1 right-0 z-10 opacity-0 group-hover/viz:opacity-100 transition-opacity"
-        style={editorOpen ? { color: "var(--accent)", opacity: 1 } : { color: "var(--t3)" }}
-      >
-        <Icon name="edit" size={13} />
-      </Button>
-
-      {/* Body — clean chart / table / pivot */}
-      {view === "pivot" ? (
-        <PivotTable columns={columns} rows={rows} />
-      ) : view === "table" ? (
-        <SqlResultTable columns={effData.columns} rows={effData.rows} maxHeight={fillHeight && fillHeight > 0 ? fillHeight : 340} />
-      ) : (
+  // A map the person can move, drawn from the answer's own rows; the still chart stands in where the rows have no honest map.
+  const mapKind = liveMap && view === "chart" ? (resolvedType === "choropleth" ? "shapes" : resolvedType === "point-map" ? "points" : null) : null;
+  const drawn = (
         <Chart
           columns={effData.columns}
           rows={effData.rows}
@@ -516,9 +572,32 @@ export function ResultChartCard({
             const pick = onPick ? pickOf(datum, effData.columns, effData.rows, hint, dim || null) : null;
             if (pick) onPick?.(pick, datum);
           } : undefined}
-          onInstanceReady={(inst) => { instRef.current = inst; }}
+          onInstanceReady={(inst) => { instRef.current = inst; onChartReady?.(inst); }}
         />
-      )}
+  );
+
+  return (
+    <div className="group/viz relative">
+      {/* Edit visualization — the single hover affordance; every control lives in the panel. */}
+      {pencil && <Button
+        variant="ghost"
+        size="icon-sm"
+        onClick={() => openVizEditor(cardId)}
+        title="Edit visualization"
+        className="absolute -top-1 right-0 z-10 opacity-0 group-hover/viz:opacity-100 transition-opacity"
+        style={editorOpen ? { color: "var(--accent)", opacity: 1 } : { color: "var(--t3)" }}
+      >
+        <Icon name="edit" size={13} />
+      </Button>}
+
+      {/* Body — clean chart / table / pivot */}
+      {view === "pivot" ? (
+        <PivotTable columns={columns} rows={rows} />
+      ) : view === "table" ? (
+        <SqlResultTable columns={effData.columns} rows={effData.rows} maxHeight={fillHeight && fillHeight > 0 ? fillHeight : 340} />
+      ) : mapKind ? (
+        <AnswerMap columns={columns} rows={rows} kind={mapKind} columnUnits={columnUnits} fallback={drawn} />
+      ) : drawn}
 
       {editorOpen && typeof document !== "undefined" &&
         createPortal(<VizEditorPanel model={model} docked={!!dock} onClose={() => closeVizEditor(cardId)} />, dock ?? document.body)}

@@ -114,7 +114,8 @@ describe("declarative transforms match pramanyx/tools/postproc.py", () => {
   it("plots the derived column, not the original", async () => {
     const spec = resolveVegaSpec({ columns: ["day", "revenue"], rows: table(plain), chartType: "line",
                                    transform: { op: "cumulative", valueCol: "revenue" } })!;
-    const enc = (spec.spec as { encoding: { y: { field: string } } }).encoding;
+    // The line's value is its own group's (the hover rule reads the x alone).
+    const enc = (spec.spec as { layer: { encoding: { y: { field: string } } }[] }).layer[0].encoding;
     expect(enc.y.field).toBe("revenue_cumulative");
   });
 });

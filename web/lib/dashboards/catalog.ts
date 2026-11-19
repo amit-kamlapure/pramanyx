@@ -30,6 +30,7 @@
  * The server reads this vocabulary through the validator bundle (`pramanyx/dashboards/validate.py`)
  * rather than holding a second copy.
  */
+import { DATE_PRESETS } from "@/lib/dashboards/datePresets";
 import { defineCatalog } from "@json-render/core";
 import { schema } from "@json-render/react/schema";
 import { z } from "zod";
@@ -53,8 +54,22 @@ import { z } from "zod";
  *  admits, marked in a tone (`marked`, 2026-10-28). 13: a dashboard made from a file: a filter column over
  *  a table, the sliders of a scenario, and adding a row to its sheet (2026-11-03). 14: free placement on a section's grid —
  *  an element's column and row (`x`, `y`), gaps allowed, never two on one cell (2026-11-18). 15: the period as a piece on
- *  the dashboard (`Period`), one per dashboard, saying what it opens on (2026-11-18). */
-export const DASHBOARD_VOCABULARY_VERSION = 15;
+ *  the dashboard (`Period`), one per dashboard, saying what it opens on (2026-11-18). 16: a placed card's own look —
+ *  its title (the card's when unset) and whether it shows, a description, and how its numbers are written: decimals,
+ *  compact or whole, negatives in parentheses (`title`, `show_title`, `description`, `number`; 2026-11-18). 17: a bar
+ *  or a colour scale on a table's number column (`columns_look`, on a placed card and an objects table), and one colour
+ *  for a value on every card of the dashboard (`colors` on the root: a field's value to one of the six series colours;
+ *  2026-11-18). 18: a placed card the dashboard's filters do not cut (`not_filtered`), and a page kept from its readers
+ *  (`hidden` on a tab; 2026-11-18). 19: global filters. 20: filters that link, open on a value, name a date that moves, wait for
+ *  Apply, hold to one page, match words exactly and feed a value; a card's fixed filters and the filters it ignores (2026-11-19). */
+export const DASHBOARD_VOCABULARY_VERSION = 20;
+/** v19 — how a global filter is chosen from (the user, 2026-11-18). */
+export const GLOBAL_FILTER_KINDS = ["multi", "single", "date", "date_range", "text", "range"] as const;
+export type GlobalFilterKind = (typeof GLOBAL_FILTER_KINDS)[number];
+/** How a filter of multiple values is offered: a list of every value, or a dropdown. A list unless said. */
+export const MULTI_SHOWS = ["list", "dropdown"] as const;
+export const MAX_GLOBAL_FILTERS = 12;
+export const MAX_FILTER_DESCRIPTION = 200;
 
 /** The five tones an answer part may carry (`pramanyx/agent/present_tool.py`); parity is tested. */
 export const TONES = ["good", "warn", "bad", "info", "neutral"] as const;
@@ -67,6 +82,8 @@ export const MAX_COLUMNS = 4;
 export const MAX_NOTE = 2000;
 /** An image's caption, which also stands for it when the reader may not see it. */
 export const MAX_CAPTION = 120;
+/** A placed card's own description (v16): a line or two under its title. */
+export const MAX_CARD_DESCRIPTION = 400;
 
 /** The sizes an element may take: columns across × rows down. A section never draws more
  *  columns than it has, so a span is cut to the section's columns when it is drawn. */
@@ -82,8 +99,11 @@ export function sizeOf(w: number, h: number): Size | null {
 }
 
 /** The grid a resized section is laid on (Arc AP-1): twelve columns, and rows whose GRADE — a row and the gap under
- *  it — is 40 px, so one step of height is always 40 px and one step of width one column. */
-export const GRID = { columns: 12, row: 28, gap: 12 } as const;
+ *  it — is 40 px, so one step of height is always 40 px and one step of width one column. The gap is thin, 8 px (the
+ *  user, 2026-11-19, beside a peer product's board: "the margin between two components very thin.. ours is big and looks
+ *  tacky" — then, at 6 px, "increase only slightly": two cards' resize handles overlapped); the row took what the gap
+ *  gave up, so every card kept its place and its height. */
+export const GRID = { columns: 12, row: 32, gap: 8 } as const;
 
 /** Arc AP-4 — how a section splits into sections of its own: side by side (each taking a width in twelfths), one under
  *  another, or one at a time as tabs. A section that holds pieces says none. */
@@ -124,9 +144,9 @@ export const LIMITS = {
 } as const satisfies Record<string, { w: readonly [number, number]; h: readonly [number, number] }>;
 export type GridKind = keyof typeof LIMITS;
 
-/** The filter column's width, in grades of 40 px: 200 to 400 px. Left out, it is 272 px, as it was drawn before. */
+/** The filter column's width, in grades of 40 px: 200 to 400 px. Left out, it is 218 px (the user, 2026-11-19: a fifth narrower, the room to the dashboard). */
 export const FILTER_WIDTH = { least: 5, most: 10 } as const;
-export const FILTER_DEFAULT_PX = 272;
+export const FILTER_DEFAULT_PX = 218;
 
 /** A card id as the card store writes it: eight hex characters, or an id its caller chose. */
 const CARD_ID = /^[A-Za-z0-9_-]{1,64}$/;
@@ -280,6 +300,19 @@ export type PeriodOpens = (typeof PERIOD_OPENS)[number];
 /** A breakdown's measures per group: one to three. */
 export const MAX_BREAKDOWN_MEASURES = 3;
 
+/** v20 — one filter an author fixes on a placed card. */
+const filterValue = z.union([z.string().max(200), z.number(), z.boolean()]);
+export const MAX_FIXED_FILTERS = 5;
+const fixedFilter = z.object({
+  table: z.string().min(1).max(200),
+  column: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/).max(200),
+  op: z.enum(["eq", "in", "between", "dates", "contains"]),
+  value: filterValue.nullable().optional(),
+  values: z.array(filterValue).max(200).nullable().optional(),
+  low: z.union([z.string().max(40), z.number()]).nullable().optional(),
+  high: z.union([z.string().max(40), z.number()]).nullable().optional(),
+}).strict();
+
 const size = z.enum(SIZES).nullable().optional();
 /** An element's room on a section's grid: columns across and rows down (Arc AP-1). */
 const w = z.number().int().min(1).max(GRID.columns).nullable().optional();
@@ -300,10 +333,28 @@ const marked = z.object({
   label: z.string().min(1).max(MAX_LABEL).nullable().optional(),
 }).strict().nullable().optional();
 
+/** v17 — how a table draws a number column: a bar the length of its value, or a colour scale from its lowest to its
+ *  highest. Colours are the series' and the tones', never a hex a person types. */
+export const COLUMN_LOOKS = ["bar", "scale"] as const;
+export type ColumnLook = (typeof COLUMN_LOOKS)[number];
+export const MAX_COLUMN_LOOKS = 12;
+const columnsLook = z.record(z.string().min(1).max(200), z.enum(COLUMN_LOOKS))
+  .refine(r => Object.keys(r).length <= MAX_COLUMN_LOOKS, `At most ${MAX_COLUMN_LOOKS} columns may be drawn so.`)
+  .nullable().optional();
+/** v17 — a value's colour on every card of the dashboard: a field's value to one of the six series colours. */
+export const SERIES_SLOTS = 6;
+export const MAX_COLOR_FIELDS = 8;
+export const MAX_COLOR_VALUES = 24;
+const valueColors = z.record(z.string().min(1).max(200),
+  z.record(z.string().max(200), z.number().int().min(1).max(SERIES_SLOTS))
+    .refine(r => Object.keys(r).length <= MAX_COLOR_VALUES, `At most ${MAX_COLOR_VALUES} values of one field keep a colour.`))
+  .refine(r => Object.keys(r).length <= MAX_COLOR_FIELDS, `At most ${MAX_COLOR_FIELDS} fields keep colours.`)
+  .nullable().optional();
+
 export const dashboardCatalog = defineCatalog(schema, {
   components: {
     Cockpit: {
-      props: z.object({ title: z.string().min(1).max(MAX_TITLE) }),
+      props: z.object({ title: z.string().min(1).max(MAX_TITLE), colors: valueColors }),
       slots: ["default"],
       description: "The root. Holds one Tabs, or one or more Section. Its title names the dashboard; it is not drawn as a header.",
     },
@@ -316,9 +367,10 @@ export const dashboardCatalog = defineCatalog(schema, {
       props: z.object({
         name: z.string().regex(TAB_NAME),
         label: z.string().min(1).max(MAX_LABEL),
+        hidden: z.boolean().nullable().optional(),
       }),
       slots: ["default"],
-      description: "One tab. Holds Section elements. `name` is its identifier; `label` is what a reader sees.",
+      description: "One tab. Holds Section elements. `name` is its identifier; `label` is what a reader sees. A hidden tab is the builder's alone.",
     },
     Section: {
       props: z.object({
@@ -339,9 +391,26 @@ export const dashboardCatalog = defineCatalog(schema, {
       props: z.object({
         card: z.string().regex(CARD_ID),
         tone: z.enum(TONES).nullable().optional(),
+        // v16 — this placement's own look: a title in place of the card's, hidden or shown, a description under it, and
+        // how its numbers are written. Display only: what the card measures, and its unit, stay the card's.
+        title: z.string().min(1).max(MAX_TITLE).nullable().optional(),
+        show_title: z.boolean().nullable().optional(),
+        description: z.string().min(1).max(MAX_CARD_DESCRIPTION).nullable().optional(),
+        number: z.object({
+          decimals: z.union([z.literal(0), z.literal(1), z.literal(2)]).nullable().optional(),
+          compact: z.boolean().nullable().optional(),
+          negatives: z.enum(["minus", "parens"]).nullable().optional(),
+        }).strict().nullable().optional(),
+        columns_look: columnsLook,
+        // v18 — this placement keeps its own rows whatever a reader clicks or ticks, and says so
+        not_filtered: z.boolean().nullable().optional(),
+        // v20 — filters the author sets on this placement, which no reader changes, and the dashboard's filters it does not follow
+        fixed_filters: z.array(fixedFilter).max(MAX_FIXED_FILTERS).nullable().optional(),
+        ignores_filters: z.array(z.string().min(1).max(80)).max(MAX_GLOBAL_FILTERS).nullable().optional(),
         size, w, h, x, y,
       }),
-      description: "One card from the card store, by its id. Never a figure, never SQL. May be shown by a condition.",
+      description: "One card from the card store, by its id. Never a figure, never SQL. May be shown by a condition. "
+        + "May carry its own title, a description, and how its numbers are written.",
     },
     Note: {
       props: z.object({
@@ -378,6 +447,7 @@ export const dashboardCatalog = defineCatalog(schema, {
         sort: z.string().regex(PROPERTY_PATH).nullable().optional(),
         descending: z.boolean().nullable().optional(),
         marked,
+        columns_look: columnsLook,
         size, w, h, x, y,
       }),
       description: "The objects of an entity, or of a segment of it, a page at a time: each object's key and the columns named, read through the object door.",
@@ -399,7 +469,7 @@ export const dashboardCatalog = defineCatalog(schema, {
           /** The object a property is read through, when it is not the entity's own ("via Customer"). */
           via: z.string().max(MAX_LABEL).nullable().optional(),
         }).strict()).min(1).max(MAX_FILTERS),
-        /** Its width in grades of 40 px (Arc AP-1); left out, 272 px. */
+        /** Its width in grades of 40 px (Arc AP-1); left out, `FILTER_DEFAULT_PX`. */
         w: z.number().int().min(FILTER_WIDTH.least).max(FILTER_WIDTH.most).nullable().optional(),
         /** Arc AP-2 — the named set its counts are taken within ("China 480" of the orders waiting, not of every order
          *  ever); left out, every object of its entity. A reader's ticks still narrow every set of its entity. */
@@ -584,6 +654,49 @@ export const dashboardCatalog = defineCatalog(schema, {
       }),
       description: "The dashboard's period, on the dashboard: every card is cut to it by its own date, and a reader chooses another. One per dashboard.",
     },
+    GlobalFilters: {
+      props: z.object({
+        /** v20 — what a reader chooses waits for Apply, so several choices run the cards once. */
+        apply_button: z.boolean().nullable().optional(),
+      }),
+      description: "The dashboard's global filters, drawn beside its pages: each filter cuts every card it can reach.",
+    },
+    GlobalFilter: {
+      props: z.object({
+        /** What it is called; shown unless `show_title` is false. */
+        title: z.string().max(MAX_LABEL).nullable().optional(),
+        show_title: z.boolean().nullable().optional(),
+        /** A line under its title; none, none is drawn. */
+        description: z.string().max(MAX_FILTER_DESCRIPTION).nullable().optional(),
+        kind: z.enum(GLOBAL_FILTER_KINDS),
+        /** The table and column it filters; until they are chosen a reader is not shown it. */
+        table: z.string().min(1).max(200).nullable().optional(),
+        column: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/).max(200).nullable().optional(),
+        /** A single value offers All unless this is false. */
+        allow_all: z.boolean().nullable().optional(),
+        /** v20 — offers only what the other filters leave, unless this is false. */
+        linked: z.boolean().nullable().optional(),
+        /** v20 — what it holds when the dashboard first opens. */
+        opens_with: z.object({
+          values: z.array(filterValue).max(200).nullable().optional(),
+          value: filterValue.nullable().optional(),
+          low: z.union([z.string().max(40), z.number()]).nullable().optional(),
+          high: z.union([z.string().max(40), z.number()]).nullable().optional(),
+          words: z.string().max(200).nullable().optional(),
+          preset: z.enum(DATE_PRESETS).nullable().optional(),
+        }).strict().nullable().optional(),
+        /** v20 — how text entry matches. */
+        match: z.enum(["contains", "exact", "starts_with"]).nullable().optional(),
+        case_sensitive: z.boolean().nullable().optional(),
+        /** v20 — the page it holds to, by the page's element; none, every page. */
+        page: z.string().min(1).max(80).nullable().optional(),
+        /** v20 — the dashboard value a query reads as {{name}} that takes what this filter holds. */
+        parameter: z.string().regex(WIRE_NAME).nullable().optional(),
+        /** v20 — how multiple values are offered: a list, or a dropdown that takes one line (the user, 2026-11-19). */
+        show: z.enum(MULTI_SHOWS).nullable().optional(),
+      }),
+      description: "One global filter: multiple values, a single value, a date, a date range, text or a range of numbers, on one column.",
+    },
   },
   actions: {},
 });
@@ -592,11 +705,11 @@ export const dashboardCatalog = defineCatalog(schema, {
  *  told how to write one (`grammar.ts` teaches `WRITTEN`). */
 export type PieceName = "ProcessBoard" | "ObjectTable" | "ObjectDetail" | "ActionButton" | "ObjectFilters" | "ObjectFigure"
   | "ObjectChart" | "ObjectBreakdown" | "ActionButtons" | "ObjectList" | "ObjectMap" | "ObjectTimeline" | "ChooseOne"
-  | "ObjectSearch" | "Drawer" | "Question" | "QueryFilters" | "ScenarioInputs" | "AddRow" | "Period";
+  | "ObjectSearch" | "Drawer" | "Question" | "QueryFilters" | "ScenarioInputs" | "AddRow" | "Period" | "GlobalFilters" | "GlobalFilter";
 export const PIECE_NAMES: readonly PieceName[] = [
   "ProcessBoard", "ObjectTable", "ObjectDetail", "ActionButton", "ObjectFilters", "ObjectFigure", "ObjectChart",
   "ObjectBreakdown", "ActionButtons", "ObjectList", "ObjectMap", "ObjectTimeline", "ChooseOne", "ObjectSearch", "Drawer",
-  "Question", "QueryFilters", "ScenarioInputs", "AddRow", "Period",
+  "Question", "QueryFilters", "ScenarioInputs", "AddRow", "Period", "GlobalFilters", "GlobalFilter",
 ];
 /** Arc AP-4 — what the picker adds — its pieces and the drawer — each placed by hand and held to the structure's flag on
  *  the server. */
@@ -628,7 +741,7 @@ export const STATIC: readonly ComponentName[] = ["Note", "Image"];
 
 /** What each component may hold. A dashboard's shape is fixed so that a reader can predict it. */
 export const MAY_HOLD: Record<ComponentName, readonly ComponentName[]> = {
-  Cockpit: ["Tabs", "Section", "ObjectFilters", "QueryFilters", "Drawer"],
+  Cockpit: ["Tabs", "Section", "ObjectFilters", "QueryFilters", "GlobalFilters", "Drawer"],
   Tabs: ["Tab"],
   Tab: ["Section"],
   // Arc AP-4 — or sections of its own, when it is laid out (the rules hold a section to one or the other)
@@ -652,6 +765,8 @@ export const MAY_HOLD: Record<ComponentName, readonly ComponentName[]> = {
   ObjectSearch: [],
   Question: [],
   QueryFilters: [],
+  GlobalFilters: ["GlobalFilter"],
+  GlobalFilter: [],
   ScenarioInputs: [],
   AddRow: [],
   Period: [],
@@ -669,4 +784,6 @@ export const READER_TEXT: Partial<Record<ComponentName, readonly string[]>> = {
   Cockpit: ["title"],
   Tab: ["label"],
   Section: ["title"],
+  Card: ["title", "description"],
+  GlobalFilter: ["title", "description"],
 };

@@ -212,7 +212,7 @@ a:hover { color: var(--blue4); }
   color: var(--t1);
 }
 
-/* ── Shell · rail 248 ───────────────────────────────────────────────────── */
+/* ── Shell · rail (--sidebar) ───────────────────────────────────────────────────── */
 .aug-sidebar {
   width: var(--sidebar);
   flex-shrink: 0;
@@ -642,6 +642,21 @@ textarea.aug-input, .aug-textarea { min-height: 56px; padding: 7px 9px; line-hei
 
 /* Citation marker, inline in prose: the dashed underline says the figure is checkable, the
    superscript says where. An amber superscript is a note that argues with the sentence. */
+/* A chart's tooltip (vega-tooltip, theme "aug"): the app's raised surface, its text and a hairline, in either
+   theme, where the library drew a white box. A line's hover rule writes the date and a row per series there,
+   largest first, each beside its line's colour (study R25, `charts/vega/hoverTooltip.ts`). */
+#vg-tooltip-element.vg-tooltip.aug-theme {
+  background: var(--bg-3); color: var(--t1); border: 1px solid var(--card-edge); border-radius: var(--r2);
+  box-shadow: none; font-family: inherit; font-size: 12px; line-height: 1.5; padding: 7px 10px;
+}
+#vg-tooltip-element.aug-theme td.key { color: var(--t3); padding-right: 12px; }
+#vg-tooltip-element.aug-theme td.value { font-variant-numeric: tabular-nums; }
+.aug-tip table { border-spacing: 0; }
+.aug-tip-head { color: var(--t2); margin-bottom: 4px; }
+.aug-tip-name { display: flex; align-items: center; gap: 7px; padding: 1px 16px 1px 0; color: var(--t1); }
+.aug-tip-swatch { width: 8px; height: 8px; border-radius: 2px; flex: none; background: var(--t3); }
+.aug-tip-value { text-align: right; padding: 1px 0; font-variant-numeric: tabular-nums; }
+
 /* A drawn result — an exhibit, a chart or table under an answer — is framed while the pointer is on it,
    so a reader always sees which component they are on (the user, 2026-11-06). The whole component, at
    half the accent; an outline, so nothing moves, offset so the frame clears the content. */
@@ -1140,3 +1155,7 @@ textarea.aug-input, .aug-textarea { min-height: 56px; padding: 7px 9px; line-hei
    renamed in place) arriving in it draws it. */
 .aug-titlebar[data-plain="true"]:has(> .aug-title-facts:empty):has(> .aug-title-actions:empty):has(> .aug-page-title > .aug-title-slot:empty) {
   display: none; }
+
+/* A dashboard whose cards are being read again: the cards dim and wait, the filters beside them stay in reach (BriefingDashboards). */
+[data-reading] [data-testid="dashboard-card"] { opacity: .45; pointer-events: none; transition: opacity 120ms ease-out; }
+

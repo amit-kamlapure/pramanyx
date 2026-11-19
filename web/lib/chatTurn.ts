@@ -269,6 +269,9 @@ export interface ChatTurn {
     /** Arc FA-2 — what the turn was about, as the server read it for the asker ("About 10 of the 12 orders chosen · 2
      *  of the 12 are withheld from you"), and whether the body answering read it. Absent on a turn with no subject. */
     subject?: { said: string; carried: boolean; withheld: number };
+    /** Agent on a dashboard the person keeps: the conversation decided between a deep analysis and a change, so asking
+     *  again at the other depth would reach the same conversation. */
+    conversationDecided?: boolean;
   } | null;
 
   agent: {
@@ -324,6 +327,10 @@ export interface ChatTurn {
   investigationId: string | null;
   receiptId: string | null;
   publicReceiptId: string | null;
+  /** The run behind this turn, known from the stream's first frame, while its report has not come yet. */
+  runHandle: string | null;
+  /** What a report the person had answered early says of itself; null for one that ran its whole plan. */
+  answeredEarly: string | null;
 
   // Shared
   tablesUsed: string[];
@@ -364,6 +371,14 @@ export interface ChatTurn {
   clarifyingContext: string;
 }
 
+/** Whether a turn answers as a deep analysis: asked as one, or a conversation that ran one, whose report came back in
+ *  the turn. Seen live 2026-11-19: Agent on the person's own dashboard is the conversation's turn, it ran the deep
+ *  analysis, and the report was never drawn because the turn had not been asked as one. */
+export const answersDeep = (t: Pick<ChatTurn, "mode" | "deepReport">): boolean =>
+  // a turn is asked quick or deep; this module is also the chat route's on the server, so it reads no value from the
+  // browser's api module (2026-11-19: importing one broke every question with a 500)
+  t.mode !== "ask" || !!t.deepReport;
+
 export const EMPTY_TURN: Omit<ChatTurn, "id" | "question" | "mode"> = {
   status: "loading",
   route: null,
@@ -387,7 +402,7 @@ export const EMPTY_TURN: Omit<ChatTurn, "id" | "question" | "mode"> = {
   overviewReport: null,
   recheck: null,
   queriesExecuted: [], latestScore: null,
-  hypotheses: [], investigationId: null, receiptId: null, publicReceiptId: null,
+  hypotheses: [], investigationId: null, receiptId: null, publicReceiptId: null, runHandle: null, answeredEarly: null,
   tablesUsed: [], contextManifest: null, planPending: null, clarifyPending: null, followups: [], analysis: null, error: null, errorDetail: null,
   startedAt: 0, elapsedMs: null,
   fromCache: false, cachedQuestion: null,
@@ -437,6 +452,7 @@ const PART_PROJECTORS: Record<string, (t: ChatTurn, d: Payload) => void> = {
         carried: (d.subject as { carried?: unknown }).carried !== false,
         withheld: Number((d.subject as { withheld?: unknown }).withheld ?? 0),
       } } : {}),
+      ...(d.decided_by === "conversation" ? { conversationDecided: true } : {}),
     };
     // The router decided the depth — set the turn's effective mode so the
     // existing renderers (quick vs investigate) work unchanged.
@@ -706,6 +722,9 @@ const PART_PROJECTORS: Record<string, (t: ChatTurn, d: Payload) => void> = {
 function projectDeepReport(t: ChatTurn, d: Payload) {
   projectCacheMeta(t, d);
   t.deepReport = (d.answer_report ?? d.ada_report) as AnswerReport;
+  // the report keeps it too, so a conversation read back later still says it was answered early
+  const kept = (t.deepReport as { answered_early?: unknown } | null)?.answered_early;
+  if (typeof kept === "string") t.answeredEarly = kept;
   t.reportStream = null;
   t.queryMode = (d.query_mode as string) ?? "investigate";
   t.statusText = null;
@@ -713,6 +732,7 @@ function projectDeepReport(t: ChatTurn, d: Payload) {
 }
 
 function projectCacheMeta(t: ChatTurn, d: Payload) {
+  if (typeof d.answered_early === "string") t.answeredEarly = d.answered_early;
   if (d.from_cache) {
     t.fromCache = true;
     t.cachedQuestion = (d.cached_question as string) ?? null;
@@ -859,6 +879,12 @@ function seedHop(hops: Map<string, DelegatedHop>,
   return hop;
 }
 
+/** How long a turn read back from the server took, as the server measured it when it filed the answer. */
+function keptTook(message: PramanyxUIMessage | undefined): number | null {
+  const took = (message?.metadata as { took_ms?: unknown } | undefined)?.took_ms;
+  return typeof took === "number" && took > 0 ? took : null;
+}
+
 export function projectTurn(
   question: string,
   message: PramanyxUIMessage | undefined,
@@ -870,7 +896,8 @@ export function projectTurn(
     question,
     mode: opts.initialMode ?? "ask",
     startedAt: opts.timing?.startedAt ?? 0,
-    elapsedMs: opts.timing?.elapsedMs ?? null,
+    // measured here while the turn ran; a turn read back from the server carries how long it took
+    elapsedMs: opts.timing?.elapsedMs ?? keptTook(message),
   };
 
   // The latest full text per channel. Each adapter channel grows ONE part (a
@@ -909,6 +936,10 @@ export function projectTurn(
   }
 
   t.delegations = [...hops.values()];
+
+  // The run's handle from the stream's first frame: a report names it again, but a running turn has only this.
+  const handle = (message?.metadata as { run?: unknown } | undefined)?.run;
+  if (typeof handle === "string" && handle) t.runHandle = handle;
 
   const headlineText = channelText.get("headline") ?? "";
   const narrativeText = channelText.get("narrative") ?? "";

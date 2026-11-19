@@ -108,6 +108,16 @@ turned back on from the interface.
   the page can make, and the route is narrow: POST and JSON only, refused when a browser marks the request as
   another site's, ids checked, the body rebuilt from named fields, two fixed destinations. What was said is
   remembered in the browser by the answer's id, so a card opened again says it and does not ask twice.
+- **The screen before it opens** (2026-11-18). The shell draws its own card while its plugins load, and on a failure
+  its raw error under "Failed to load plugins". The brand plugin's host half adds a style and a small script to the
+  page's head (`webserver/index-inject`): the card shows the mark and the name, "Opening your coworker…", a quieter
+  line if it takes a while and one that says to reload if it takes too long; a failure says the coworker couldn't
+  open, with Reload, and the raw error folded under Details (`plugins/brand/lib/index.js`).
+- **Every load opens on the first screen** (2026-11-18). The shell reopens the conversation last open, and lists the
+  empty one it opens for a new question as a "New Session" row. The home plugin's host half adds two rows to the
+  page's head: a script that forgets the conversation last open, so a load or a restart lands on "Ask your data
+  anything", and a style that draws no row for an empty conversation. A conversation is in the list once the person
+  has written in it (`plugins/home/lib/index.js`, `firstScreenRows`).
 - **Pramanyx's identity.** The mark and name in the sidebar and over a new conversation, the tab's title and icon,
   the first screen's wording, the app's dark palette, small corners, and a plain ring where the shell draws its
   animal while an answer is worked on.
@@ -120,8 +130,11 @@ turned back on from the interface.
   agent searches and reads the person's own past conversations (the shell's session tools, over the sidebar's search
   index). A person's own coworker holds only theirs; the install's first coworker searches only while one person has
   used it, and refuses once a second has (`plugins/home`, `recallRefusal`).
-- **Asked in the conversation** (2026-11-18). What the coworker asks before doing — setting up a schedule, drafting
-  what a word means — is asked under the step that waits on it, with Reject and Allow once, and the box at the foot of
+- **One way of working** (2026-11-18). There is no mode to pick. The coworker reads, asks the governed path, runs a deep
+  analysis and drafts on its own. Anything that changes what the platform holds or does unattended, stops work, runs an
+  automation or starts a long exploration waits for the person's Allow, once. The list in `plugins/home` is of what may
+  go ahead, so a tool nobody has classified is asked about.
+- **Asked in the conversation** (2026-11-18). What the coworker asks before doing is asked under the step that waits on it, with Reject and Allow once, and the box at the foot of
   the page says where the question is (it asks there only if the step is not drawn). The shell's own card for it,
   which took the question box's place under a strip of its own, is not drawn for Pramanyx's steps; the answer goes to
   the same request, so what is recorded is the person's own click, as before.

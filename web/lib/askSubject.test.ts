@@ -1,10 +1,17 @@
+// @vitest-environment jsdom
 /**
  * Arc FA-2 — the subject a question carries from a dashboard, held in memory: said in a line, sent as the ask door's
  * focus (references, or a set by name — never what the set reads), and the dashboard named by a page's key.
  */
+import { createElement } from "react";
+import { render, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { askSubject, dashboardOf, focusOf, nounOf, setAskSubject, subjectWords, type AskSubject } from "@/lib/askSubject";
+import {
+  askSubject, changeable, dashboardOf, dashboardSubject, focusOf, nounOf, setAskSubject, subjectWords, useOnPage, usePageSubject,
+  type AskSubject,
+} from "@/lib/askSubject";
+import { LayerVisibleContext } from "@/lib/useVisiblePoll";
 
 const TICKED: AskSubject = { kind: "objects", connectionId: "thelook", noun: nounOf("Order"), label: "Late dispatch",
   refs: Array.from({ length: 12 }, (_, i) => `order:${48200 + i}`) };
@@ -48,5 +55,62 @@ describe("the subject a question carries", () => {
     expect(dashboardOf(undefined, "thelook")).toBeNull();
     expect(dashboardOf("other:desk", "thelook")).toBeNull();
     expect(dashboardOf("thelook:Not An Id", "thelook")).toBeNull();
+  });
+});
+
+describe("a dashboard asked about (the study's R20)", () => {
+  const range = { start: "2026-10-01", last_day: "2026-10-31", covers: "October 2026" };
+
+  it("carries the period on screen, and the card when one is asked about", () => {
+    const whole = dashboardSubject("c", "c:sales", "Sales", range);
+    expect(whole && subjectWords(whole)).toBe("Asking about Sales · October 2026");
+    expect(whole && focusOf(whole)).toEqual({ kind: "dashboard", dashboard: "sales", label: "Sales", period: "2026-10-01..2026-10-31" });
+    const one = dashboardSubject("c", "shared:ana:sales", "Sales", range, { id: "rev", title: "Revenue" });
+    expect(one && subjectWords(one)).toBe("Asking about “Revenue” on Sales · October 2026");
+    expect(one && focusOf(one)).toMatchObject({ dashboard: "sales", owner: "ana", id: "rev" });
+  });
+
+  it("says a dashboard with no period is read as written, and asks nothing of a page that names no dashboard", () => {
+    const standing = dashboardSubject("c", "c:sales", "Sales", null);
+    expect(standing && subjectWords(standing)).toBe("Asking about Sales · as written");
+    expect(standing && focusOf(standing)).toMatchObject({ period: "" });
+    expect(dashboardSubject("c", undefined, "Sales", range)).toBeNull();
+  });
+});
+
+describe("what a page says it shows (the Ask panel, Stage 1)", () => {
+  const TABLE: AskSubject = { kind: "table", connectionId: "sheets", noun: ["row", "rows"], table: "main.netflix_titles" };
+  function Page({ subject, shown }: { subject: AskSubject | null; shown: boolean }) {
+    return createElement(LayerVisibleContext.Provider, { value: shown }, createElement(Says, { subject }));
+  }
+  function Says({ subject }: { subject: AskSubject | null }) {
+    useOnPage(subject);
+    return null;
+  }
+  const onPage = () => renderHook(() => usePageSubject()).result.current;
+
+  it("is said while the page shows, and let go when it closes", () => {
+    const page = render(createElement(Page, { subject: TABLE, shown: true }));
+    expect(onPage()).toEqual(TABLE);
+    page.unmount();
+    expect(onPage()).toBeNull();
+  });
+
+  it("is let go while the page is kept behind another, and said again when it shows", () => {
+    const page = render(createElement(Page, { subject: TABLE, shown: true }));
+    page.rerender(createElement(Page, { subject: TABLE, shown: false }));
+    expect(onPage()).toBeNull();
+    page.rerender(createElement(Page, { subject: TABLE, shown: true }));
+    expect(onPage()).toEqual(TABLE);
+    page.unmount();
+  });
+});
+
+describe("where a change can be asked", () => {
+  it("is a dashboard the person keeps, never another person's or anything else", () => {
+    expect(changeable(dashboardSubject("sheets", "sheets:sales", "Sales", null))).toBe(true);
+    expect(changeable(dashboardSubject("sheets", "shared:ana:sales", "Sales", null))).toBe(false);
+    expect(changeable({ kind: "table", connectionId: "sheets", noun: ["row", "rows"], table: "main.t" })).toBe(false);
+    expect(changeable(null)).toBe(false);
   });
 });

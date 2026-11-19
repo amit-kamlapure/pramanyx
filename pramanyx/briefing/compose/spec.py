@@ -424,8 +424,8 @@ def _against_usual(sentence: str, b: Block, sources: dict[str, Source]) -> str:
     for part, subjects in ([(sentence, whole)] if alone else [(p, about(p)) for p in _CLAUSE_RE.split(sentence)]):
         src = next((s for s in subjects if _not_read_against_usual(s)), None)
         if src is not None and _claims_move(plain(part)):
-            return (f"it reads {src.label} as a move or against its usual range, and {src.label} is not at equal age with "
-                    "what it is compared with")
+            return (f"it reads {src.label} as a move or against its usual range, and {src.label} can still change, so "
+                    "the comparison is not a fair one")
     return ""
 
 

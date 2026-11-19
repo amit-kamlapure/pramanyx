@@ -1321,6 +1321,113 @@ def test_an_area_is_drafted_into_one_proposal_for_a_new_cockpit_of_the_persons(d
     assert versions.latest(home) is None                          # nothing is kept until the person keeps it
 
 
+def test_a_draft_says_what_the_platform_does_as_it_does_it(desk, faux):
+    """What a person watches: counts and checked titles from the platform, and a refusal told as it happens."""
+    from pramanyx.dashboards.ask import draft_for_area
+    from pramanyx.llm.faux import set_responses
+    no_limit = [{k: v for k, v in c.items() if k != "limit"} for c in desk.cards()]
+    set_responses([_call(op="options"), _call(op="new", spec=desk.spec(), cards=desk.cards()),
+                   _call(op="new", spec=desk.spec(), cards=no_limit), "Drafted."])
+    heard: list[dict] = []
+
+    out = draft_for_area(CONN, desk.home.owner, "returns", provider=faux, hear=heard.append)
+
+    assert out["staged"] is True and out["rounds"] == 2, out
+    kinds = [f["type"] for f in heard]
+    assert kinds[0] == "read" and kinds[1] == "checking" and "sent_back" in kinds
+    assert kinds.count("checking") == 2 and kinds.index("sent_back") < len(kinds) - 1
+    assert heard[0]["metrics"] >= 1 and set(heard[0]) == {"type", "metrics", "trusted_queries", "findings"}
+    sent_back = next(f for f in heard if f["type"] == "sent_back")
+    assert sent_back["round"] == 1 and sent_back["points"] >= 1
+    last_round = heard[len(heard) - 1 - kinds[::-1].index("checking"):]
+    assert last_round[0]["cards"] == len(no_limit)
+    passed = [f for f in last_round if f["type"] == "card" and f["state"] == "ok"]
+    assert {f["key"] for f in passed} == {c["key"] for c in no_limit}
+    assert all(f["title"] and f["shows"] in ("figure", "chart") for f in passed)
+    placed = {p.get("card") for p in last_round[0]["outline"]}
+    assert {c["key"] for c in no_limit} <= placed
+
+
+def test_leaving_a_draft_asks_the_model_nothing_more(desk, faux):
+    import threading
+
+    import pytest
+
+    from pramanyx.dashboards.ask import _Left, draft_for_area
+    from pramanyx.llm.faux import set_responses
+    set_responses([_call(op="options"), _call(op="new", spec=desk.spec(), cards=desk.cards()), "Drafted."])
+    stop = threading.Event()
+    heard: list[dict] = []
+
+    def hear(frame: dict) -> None:
+        heard.append(frame)
+        stop.set()                                                # gone as soon as the first thing is said
+
+    with pytest.raises(_Left):
+        draft_for_area(CONN, desk.home.owner, "returns", provider=faux, hear=hear, stop=stop)
+
+    assert [f["type"] for f in heard] == ["read"]                 # the draft itself was never asked for
+    assert _mine(desk) == []
+
+
+def test_a_draft_stopped_while_the_model_writes_it_is_never_staged(desk, faux):
+    """The person presses Stop while the model is writing: what it then hands back is not drafted into their Inbox."""
+    import threading
+
+    import pytest
+
+    from pramanyx.dashboards.ask import _Left, draft_for_area
+    from pramanyx.llm.faux import set_responses
+    set_responses([_call(op="options"), _call(op="new", spec=desk.spec(), cards=desk.cards()), "Drafted."])
+    stop = threading.Event()
+
+    class StoppedWhileWriting:
+        calls = 0
+
+        def __getattr__(self, name):
+            return getattr(faux, name)
+
+        def complete_with_tools(self, *args, **kwargs):
+            turn = faux.complete_with_tools(*args, **kwargs)
+            StoppedWhileWriting.calls += 1
+            if StoppedWhileWriting.calls == 2:
+                stop.set()
+            return turn
+
+    heard: list[dict] = []
+    with pytest.raises(_Left):
+        draft_for_area(CONN, desk.home.owner, "returns", provider=StoppedWhileWriting(), hear=heard.append, stop=stop)
+
+    assert StoppedWhileWriting.calls == 2 and _mine(desk) == []
+    assert [f["type"] for f in heard] == ["read"]
+
+
+def test_a_dashboard_that_places_its_period_can_still_be_outlined():
+    """The Period sits in a section beside the cards and names no card: reading it as one stopped every edit."""
+    spec = {"root": "top", "elements": {
+        "top": {"type": "Page", "props": {"title": "Sales"}, "children": ["sec"]},
+        "sec": {"type": "Section", "props": {"title": "Sales"}, "children": ["when", "rev"]},
+        "when": {"type": "Period", "props": {"opens_on": "standing"}, "children": []},
+        "rev": {"type": "Card", "props": {"card": "c1", "size": "wide"}, "children": []},
+    }}
+    moves = {"added": [], "removed": [], "changed": ["rev"]}
+    [tab] = propose.outline(spec, {"c1": "Revenue"}, set(), moves)
+    [period, card] = tab["sections"][0]["cards"]
+    assert period["static"] == "piece" and period["change"] == ""
+    assert (card["title"], card["change"]) == ("Revenue", "changed")
+
+
+def test_a_tool_call_the_model_wrote_out_is_never_shown_to_the_person(desk, faux):
+    from pramanyx.dashboards.ask import draft_for_area
+    from pramanyx.llm.faux import set_responses
+    set_responses([_call(op="options"), '<tool_call> <function=draft_dashboard> <parameter=op> edit </parameter> </function> </tool_call>'])
+
+    out = draft_for_area(CONN, desk.home.owner, "returns", provider=faux)
+
+    assert out["staged"] is False
+    assert out["sentences"] == ["The model drafted no dashboard for this area, and gave no reason."]
+
+
 def test_a_refused_draft_is_repaired_in_the_same_run(desk, faux):
     """The area names no limit, so the draft's limit of 12 is refused; the model repairs it."""
     from pramanyx.dashboards.ask import draft_for_area

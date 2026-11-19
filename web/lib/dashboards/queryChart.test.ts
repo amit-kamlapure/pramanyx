@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { QueryShaped } from "@/lib/api";
-import { queryChartSpec, seriesColours, xText } from "@/lib/dashboards/queryChart";
+import { queryChartSpec, queryLookOf, seriesColours, xText } from "@/lib/dashboards/queryChart";
 
 type Chart = Extract<QueryShaped, { as: "bar" | "line" | "area" | "scatter" }>;
 const COLOURS = { palette: ["#c1", "#c2", "#c3"], other: "#grey" };
@@ -88,8 +88,8 @@ describe("a query card's chart", () => {
     expect((queryChartSpec(span, setup(), COLOURS).data as { values: { x: string }[] }).values[0].x).toMatch(/2025/);
     const [bars, label] = layers(one);
     expect((bars.encoding.color.legend as { direction: string }).direction).toBe("horizontal");
-    expect((bars.encoding.y.axis as { format: string }).format).toBe(".3~s");
-    expect(label.encoding.text.format).toBe(".3~s");
+    expect((bars.encoding.y.axis as { format: string }).format).toBe(".2~f");
+    expect(label.encoding.text.format).toBe(".2~f");
   });
 
   it("gives Other the grey wherever it sits, and the series their colours in order", () => {
@@ -151,7 +151,120 @@ describe("a chart drafted from a file", () => {
     expect(first(queryChartSpec(chart({ series: [""], tones: {}, points: [{ x: "Jeans", s: "", v: 0.05 }], format: "percent" }), setup, colours)).y.axis?.format).toBe(".0%");
     expect(first(queryChartSpec(chart({ format: "money" }), setup, colours)).y.axis?.format).toBe("$.3~s");
     expect(first(queryChartSpec(small, setup, colours)).y.axis?.format).toBe(".2~f");
-    expect(first(queryChartSpec(chart(), setup, colours)).y.axis?.format).toBe(".3~s");
+    const days = chart({ series: [""], tones: {}, points: [{ x: "Jan", s: "", v: 2.1 }] });
+    expect(first(queryChartSpec(days, setup, colours)).y.axis?.format).toBe(".2~f");       // a tick of 0.5 is never "500m"
+    expect(first(queryChartSpec(chart(), setup, colours)).y.axis?.format).toBe(".2~f");
+    const large = chart({ series: [""], tones: {}, points: [{ x: "Jeans", s: "", v: 48000 }] });
+    expect(first(queryChartSpec(large, setup, colours)).y.axis?.format).toBe(".3~s");
   });
 });
 
+
+describe("a query card's line: the hover rule (study R25)", () => {
+  it("draws a ring and a dashed rule at the nearest place, the series pivoted into one row there", async () => {
+    const { View, parse } = await import("vega");
+    const vl = await import("vega-lite");
+    const { clickedDatum } = await import("@/components/charts/selection");
+    const { HOVER_MARK, hoverMetaOf } = await import("@/components/charts/vega/hoverTooltip");
+    const spec = queryChartSpec(chart("line"), setup(), { palette: ["#3b82f6", "#22c55e", "#f59e0b"], other: "#888888" });
+    expect(hoverMetaOf(spec)).toMatchObject({ x: "x", series: ["China", "United States", "Other"], label: null });
+    const rule = layers(spec).find((l) => l.mark.type === "rule")!;
+    expect(rule.mark.strokeDash).toEqual([3, 3]);
+    const view = new View(parse(vl.compile({ ...spec, width: 300, height: 200 } as never).spec), { renderer: "none" });
+    await view.runAsync();
+    type Item = { datum?: Record<string, unknown>; items?: Item[]; isVoronoi?: boolean };
+    const cells: Item[] = [];
+    const walk = (n: Item) => { for (const it of n.items ?? []) { if (it.isVoronoi) cells.push(it); walk(it); } };
+    walk((view.scenegraph() as unknown as { root: Item }).root);
+    view.finalize();
+    expect(cells).toHaveLength(3);
+    const row = clickedDatum(cells[0]) as Record<string, unknown>;
+    // the place as the query returned it, which is what a click reports to the dashboard
+    expect(row.xr).toBe("2026-10-08");
+    expect(row[HOVER_MARK]).toBe(true);
+    expect([row.China, row["United States"], row.Other]).toEqual([10, 11, 12]);
+  });
+
+  it("leaves bars, areas and scatters as they were", () => {
+    for (const kind of ["bar", "area", "scatter"] as const) {
+      expect(queryChartSpec(chart(kind), setup(), COLOURS).usermeta).toBeUndefined();
+    }
+  });
+});
+
+describe("a query card's chart options (the study's R12)", () => {
+  const six = (): Chart => ({ as: "bar", x: { name: "channel", kind: "text", bucket: "" }, series: [""], other: false, said: [],
+    points: [["Search", 40], ["Email", 90], ["Display", 10], ["Affiliate", 55], ["Social", 25], ["Direct", 70]].map(([x, v]) => ({ x: x as string, s: "", v: v as number })) });
+  const xs = (spec: Record<string, unknown>) => (spec.data as { values: { x: string }[] }).values.map(v => v.x);
+
+  it("draws a line's shape and its markers, and leaves it as it was with none set", () => {
+    const smooth = layers(queryChartSpec(chart("line"), setup(), COLOURS, null, undefined, { lineShape: "smooth", markers: true }))[0];
+    expect(smooth.mark).toMatchObject({ type: "line", interpolate: "monotone", point: true });
+    expect(layers(queryChartSpec(chart("area"), setup(), COLOURS, null, undefined, { lineShape: "step" }))[0].mark.interpolate).toBe("step-after");
+    const plain = layers(queryChartSpec(chart("line"), setup(), COLOURS))[0].mark;
+    expect(plain.interpolate).toBeUndefined();
+    expect(plain.point).toBeUndefined();
+  });
+
+  it("holds the value axis to a range, and draws a log scale only where every value is above zero", () => {
+    const y = (o: object, c = chart("line")) => layers(queryChartSpec(c, setup(), COLOURS, null, undefined, o))[0].encoding.y.scale;
+    expect(y({ yMin: 5, yMax: 50, yLog: true })).toEqual({ domainMin: 5, domainMax: 50, type: "log", zero: false, clamp: true });
+    const zero = chart("line");
+    zero.points[0] = { ...zero.points[0], v: 0 };
+    expect(y({ yLog: true }, zero)).toBeUndefined();
+  });
+
+  it("orders a bar's categories by name, shows only the largest, and says how many of how many", () => {
+    const named = queryChartSpec(six(), setup(), COLOURS, null, undefined, { sort: "label" });
+    expect(layers(named)[0].encoding.x.sort).toBe("ascending");
+    const top = queryChartSpec(six(), setup(), COLOURS, null, undefined, { top: 3 });
+    expect(xs(top).sort()).toEqual(["Affiliate", "Direct", "Email"]);
+    expect((top.title as { text: string }).text).toBe("The 3 largest of 6");
+    expect(queryChartSpec(six(), setup(), COLOURS, null, undefined, { top: 10 }).title).toBeUndefined();
+  });
+
+  it("keeps dates in their own order, whatever is asked", () => {
+    const dated = chart("bar");
+    const spec = queryChartSpec(dated, setup(), COLOURS, null, undefined, { top: 1, sort: "label" });
+    expect(new Set(xs(spec)).size).toBe(3);
+    expect(spec.title).toBeUndefined();
+  });
+});
+
+describe("a query card's chart, dressed in the one editor (the user, 2026-11-19)", () => {
+  it("reads its look off the card's chart settings, and none from settings that hold none", () => {
+    expect(queryLookOf({ numberFormat: "$,.0f", xTitle: "Day", tooltipOff: true, legend: "none", refLines: [{ value: 5, label: "Goal", kind: "target" }] }))
+      .toEqual({ format: "$,.0f", xTitle: "Day", tooltip: false, legend: "none", refLines: [{ value: 5, label: "Goal" }] });
+    expect(queryLookOf({ yLog: true })).toBeNull();
+    expect(queryLookOf(null)).toBeNull();
+  });
+
+  it("writes its values in the chosen format and titles its axes", () => {
+    const [bars] = layers(queryChartSpec(chart("bar"), setup("stacked", true), COLOURS, null, undefined, null,
+      { format: "$,.0f", xTitle: "Day", yTitle: "Sales" }));
+    expect((bars.encoding.y.axis as Record<string, unknown>).format).toBe("$,.0f");
+    expect((bars.encoding.y.axis as Record<string, unknown>).title).toBe("Sales");
+    expect((bars.encoding.x.axis as Record<string, unknown>).title).toBe("Day");
+    const labels = layers(queryChartSpec(chart("bar"), setup("stacked", true), COLOURS, null, undefined, null, { format: "$,.0f" }))[1];
+    expect(labels.encoding.text.format).toBe("$,.0f");
+  });
+
+  it("draws no tooltip and no hover rule when the tooltip is off, and leaves the legend out when it is hidden", () => {
+    const off = queryChartSpec(chart("line"), setup(), COLOURS, null, undefined, null, { tooltip: false, legend: "none" });
+    const [line] = layers(off);
+    expect(line.encoding.tooltip).toBeUndefined();
+    expect(off.usermeta).toBeUndefined();
+    expect(line.encoding.color.legend).toBeNull();
+    const [bars] = layers(queryChartSpec(chart("bar"), setup(), COLOURS, null, undefined, null, { tooltip: false, legend: "bottom" }));
+    expect(bars.mark.tooltip).toBe(false);
+    expect((bars.encoding.color.legend as Record<string, unknown>).orient).toBe("bottom");
+  });
+
+  it("draws a reference line across the value axis with its label", () => {
+    const spec = queryChartSpec(chart("bar", false), setup(), COLOURS, null, undefined, null, { refLines: [{ value: 25, label: "Goal" }] });
+    const rule = layers(spec).find(l => l.mark.type === "rule");
+    const text = layers(spec).find(l => l.mark.type === "text" && (l as unknown as { data?: { values: { label?: string }[] } }).data?.values[0]?.label === "Goal");
+    expect(rule?.encoding.y).toEqual({ field: "v", type: "quantitative" });
+    expect(text).toBeDefined();
+  });
+});

@@ -9,7 +9,7 @@
  * The trend's chart is a browser question (jsdom draws nothing); what is pinned for it is the
  * spec it is handed: the line, the newest point labelled, and the limit drawn across it.
  */
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@/lib/testing";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { CardState } from "@/components/brief/PinnedCardBody";
@@ -71,9 +71,10 @@ describe("a figure", () => {
     expect(screen.getByTestId("tile-change")).toHaveTextContent("3.2% higher than June");
   });
 
-  it("says a comparison is not at equal age before the range settles", () => {
+  it("keeps a comparison's caveat on its hover, in plain words, before the range settles", () => {
     tile(card(), ranged(0.1003, { ...JUNE, equal_age: false }));
-    expect(screen.getByTestId("tile-not-equal-age")).toBeInTheDocument();
+    expect(screen.getByTestId("tile-change").textContent).not.toMatch(/equal age/i);
+    expect(screen.getByTestId("tile-change").getAttribute("title")).toContain("read these comparisons as approximate");
   });
 
   it("does not colour a difference it does not read as a move, even past its limit's good side", () => {

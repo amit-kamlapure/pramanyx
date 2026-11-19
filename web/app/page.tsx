@@ -1,5 +1,6 @@
 "use client";
 import { CONNECTORS } from "@/lib/connectors.gen";
+import { BrandBar, PramanyxLogo } from "@/components/ui/brand";
 import { ErrorState } from "@/components/ui/states";
 import { toast } from "@/components/ui/toast";
 
@@ -44,8 +45,9 @@ import { Workspace as WorkspaceShell, type WorkspaceLayer } from "@/components/W
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { NAVIGATE_EVENT, type NavigateRequest } from "@/lib/navigate";
 import { NAV_DESTINATIONS, NAV_SECTION_IDS, destinationOf } from "@/lib/navDestinations";
-import { ChromeActions, ChromeFacts, ChromeToolbar, PageChromeProvider, PageHeader, StatusStrip } from "@/components/shell/PageChrome";
+import { ChromeActions, ChromeFacts, ChromeToolbar, PageChromeProvider, PageHeader, StatusStrip, useChromeBackTo } from "@/components/shell/PageChrome";
 import { InspectorHost, InspectorProvider } from "@/components/shell/Inspector";
+import { AskPanelHost, AskPanelToggle, AskPushedPage } from "@/components/ask/AskPanel";
 import { OVERVIEW_LAYER, agentOpsLayerOf, type AgentOpsLayer as AgentsLayer } from "@/lib/agentOpsLayers";
 import type { RecordLayer } from "@/components/record/RecordWorkspace";
 
@@ -131,7 +133,6 @@ import {
   type AgentRosterEntry,
 } from "@/lib/api";
 import { costSummary, fmtCompact, fmtMs } from "@/lib/cost";
-import { Segmented } from "@/components/ui/segmented";
 import { TabStrip } from "@/components/ui/tab-strip";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -239,7 +240,6 @@ function Topbar({
   onUpdateWorkspace,
   onDeleteWorkspace,
   theme,
-  onThemeChange,
 }: {
   onSearchOpen: () => void;
   onNavigate: (t: NavTab) => void;
@@ -256,7 +256,6 @@ function Topbar({
   onDeleteWorkspace: (id: string) => Promise<void>;
   /** The active theme and the setter Settings uses — a click here persists exactly as a click there. */
   theme: Theme;
-  onThemeChange: (t: Theme) => void;
 }) {
   // The rail's toggle, left of the wordmark (the user, 2026-11-10: "Place the collapse icon right at the top, left of
   // Pramanyx logo/text.. this will reduce the overall length of the rail"). It owns ⌘\ too.
@@ -272,7 +271,9 @@ function Topbar({
       </Tooltip>
       {/* The wordmark, then the scope it applies to — the workspace switcher sits beside
           the name because everything below the topbar is read through it. */}
-      <span className="aug-wordmark">Pramanyx</span>
+      <span className="aug-wordmark" style={{ display: "inline-flex", alignItems: "center", gap: 7, fontFamily: "inherit", textTransform: "none", letterSpacing: 0, fontWeight: 700 }}>
+        <PramanyxLogo height={18} />
+      </span>
       <WorkspaceSwitcher
         workspaces={workspaces}
         selectedWorkspace={selectedWorkspace}
@@ -292,9 +293,8 @@ function Topbar({
           </span>
           <kbd>⌘K</kbd>
         </button>
-        {/* The theme toggle: a segmented pair, one click from every screen. */}
-        <Segmented label="Theme" value={theme} onChange={onThemeChange}
-          options={[{ value: "dark", label: "dark" }, { value: "light", label: "light" }]} />
+        {/* Ask, on every page (Stage 1 of the plan, 2026-11-19): the one icon that shows or hides the panel */}
+        <AskPanelToggle connectionId={selectedConn} />
         {/* The nine dots — the way to the coworker. Drawn only while one is running. */}
         <AppSwitcher connectionId={selectedConn || undefined} theme={theme} />
         <AuthControl />
@@ -334,6 +334,7 @@ function Sidebar({
   /** Badge counts from read-only sources — see components/shell/useNavCounts.ts. */
   counts?: NavCounts;
 }) {
+  const backToStart = useChromeBackTo();
   // A badge is amber when what it counts waits on a human, neutral when it is only a count.
   const badgeFor = (id: string): { value: number; waiting: boolean; noun: string } | null => {
     if (id === "monitors" && counts?.unackedAlerts) return { value: counts.unackedAlerts, waiting: true, noun: "unacknowledged" };
@@ -365,6 +366,7 @@ function Sidebar({
         aria-current={row.active ? "page" : undefined}
         aria-expanded={row.expanded}
       >
+        {row.active && <BrandBar />}
         {/* A section's glyph is drawn only on the collapsed rail; open, it is its words under its destination's icon. */}
         {row.icon && (collapsed || !row.className?.includes("aug-nav-sub")) && <NavIcon name={row.icon} size={14.7} className="aug-nav-glyph" />}
         <span className="aug-nav-label">{row.label}</span>
@@ -386,7 +388,8 @@ function Sidebar({
       tip: item.blurb ? `${said} — ${item.blurb}` : said,
       alwaysTip: !!item.blurb,
       active: tab === item.id,
-      onClick: () => onNavigate(item.id as NavTab),
+      // the row of the section a reader is inside takes them to its start: an open dashboard back to the dashboards home
+      onClick: () => { if (tab === item.id && backToStart) backToStart(); else onNavigate(item.id as NavTab); },
       trailing: badgeTrail(badge),
       className,
     });
@@ -1167,6 +1170,13 @@ export default function Home() {
       if (r.secLens) setSecLens(r.secLens);
       if (r.settingsSection) setSettingsSection(r.settingsSection);
       setOpenId(detail.params?.id ?? null);
+      // a conversation named by the event opens on the Ask page: the Ask panel's "Open at full size"
+      if (detail.params?.chat) {
+        setShowHistory(false);
+        setSelectedHistoryInvId(null);
+        setSelectedChatSessionId(detail.params.chat);
+        setChatKey(k => k + 1);
+      }
       // a run named by the event opens in the Data Canvas, as `openRun` opens one (a dashboard's Question, PENDING 54)
       if (detail.params?.run) {
         setShowHistory(false);
@@ -1862,7 +1872,6 @@ export default function Home() {
       {/* Topbar */}
       <Topbar
         theme={theme}
-        onThemeChange={setTheme}
         onSearchOpen={() => setShowSearch(true)}
         onNavigate={handleNavigate}
         connections={wsConnections}
@@ -1898,8 +1907,9 @@ export default function Home() {
         {/* Sidebar */}
         <Sidebar tab={railTab} onNavigate={handleNavigate} selectedConn={selectedConn} counts={navCounts} />
 
-        {/* Content */}
+        {/* Content — beside the open Ask panel it keeps its width and moves left, scrolling sideways (`AskPushedPage`) */}
         <SchemaProvider connId={selectedConn}>
+          <AskPushedPage hidden={tab === "chat"}>
           <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
             <PageHeader place={chrome.place} fallbackTitle={chrome.title} />
 
@@ -2103,8 +2113,11 @@ export default function Home() {
                         />
                       )}
                       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
+                        {/* the Ask page is the Ask panel at full size (decision 7 of the plan, 2026-11-19): the same layout */}
                         <ChatPanel
                           key={chatKey}
+                          address="main"
+                          harness
                           connectionId={selectedConn}
                           canvasId={activeCanvas?.id}
                           restoreSessionId={selectedChatSessionId}
@@ -2230,7 +2243,7 @@ export default function Home() {
 
             {tab === "spreadsheets" && (
               <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--bg-0)" }}>
-                <SpreadsheetsPage onAsk={q => goToChat(q)} />
+                <SpreadsheetsPage />
               </div>
             )}
 
@@ -2322,8 +2335,11 @@ export default function Home() {
             )}
 
           </div>
+          </AskPushedPage>
         </SchemaProvider>
         <InspectorHost />
+        {/* The Ask panel beside every page; the Ask page itself is the same conversations at full size */}
+        <AskPanelHost connectionId={selectedConn} hidden={tab === "chat"} />
       </div>
       <StatusStrip connection={statusConn} running={navCounts?.runningRuns ?? 0} />
 

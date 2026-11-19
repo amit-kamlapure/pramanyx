@@ -1,13 +1,20 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { getConnections, listUserAgents, recordOverviewDrill, cancelInvestigation, cancelActiveDeepRun, type UserAgent } from "@/lib/api";
+import { answerableRun, getConnections, getMetrics, listCards, listDashboards, listUserAgents, recordOverviewDrill, cancelInvestigation, cancelActiveDeepRun, standingDashboards, type UserAgent } from "@/lib/api";
+import { useQuery } from "@tanstack/react-query";
+import { askedBefore, assistAt, historyStep, mentionIn, mentionOffers, withoutCommand, type Offer } from "@/lib/composerAssist";
+import { useRichSchema } from "@/lib/schema-context";
 import { doorFor, isPlainSend } from "@/lib/chatDoors";
 import { uploadAttachment, type AttachmentResult } from "@/lib/attachments";
-import { projectThread, newSessionId, type PramanyxUIMessage, type ChatTurn } from "@/lib/chatTurn";
+import { answersDeep, projectThread, newSessionId, type PramanyxUIMessage, type ChatTurn } from "@/lib/chatTurn";
 import { usePramanyxChat } from "@/lib/usePramanyxChat";
-import { focusOf, setAskSubject, subjectWords, useAskSubject } from "@/lib/askSubject";
+import { changeable, focusOf, setAskSubject, subjectKey, subjectWords, useAskSubject, usePageSubject } from "@/lib/askSubject";
+import { SHEET_FILES, SheetEntryView, SheetGrounding, SheetTurnFoot, useSheetEntries } from "@/components/ask/SheetAssist";
+import { useSheetDoors } from "@/lib/sheetBridge";
+import { asksForAChange } from "@/lib/sheets";
 import { useStickToBottom } from "@/lib/useStickToBottom";
+import { brandEdge } from "@/components/ui/brand";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/brief/StatusChip";
 import { SourcePanel, type SourcePanelData } from "./ChatMessage";
@@ -22,6 +29,10 @@ function askedByWords(askedBy: string | undefined, people: People | null): strin
 }
 import { ErrorBoundary } from "./ErrorBoundary";
 import { WhyThisNumber } from "./WhyThisNumber";
+import { AnswerNow } from "@/components/chat/AnswerNow";
+import { AnswerSources, SourceBeside } from "@/components/chat/AnswerSources";
+import { HarnessContext, type HarnessLook } from "@/components/chat/harnessLook";
+import type { AnswerSource } from "@/lib/answerSources";
 
 import { getApiBase } from "@/lib/config";
 import { FeedbackPrompt } from "@/components/FeedbackPrompt";
@@ -29,7 +40,6 @@ import { AnswerFeedback } from "@/components/AnswerFeedback";
 import { Icon } from "@/components/ui/icon";
 import { SelectField } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Segmented } from "@/components/ui/segmented";
 
 const FALLBACK_STARTERS = [
@@ -66,6 +76,16 @@ interface Props {
   /** PX-5 — arrive already talking to one agent (the agent surface's Chat door).
    *  Seeds the composer's agent picker; the person can still switch or clear it. */
   initialAgentId?: string;
+  /** Beside another page: the address stays that page's, and the connection's general suggestions are left out. */
+  beside?: boolean;
+  /** Which screen's `?chat=` is this panel's: `main` for the Ask screen, `canvas:<id>` for a canvas (`addressIsMine`). */
+  address?: string;
+  /** The coworker's layout for the conversation (`chat/harnessLook.ts`): the Ask panel's. */
+  harness?: boolean;
+  /** Told the conversation's id and its first question once it has one: the Ask panel names its tab by it. */
+  onSession?: (session: string, title: string) => void;
+  /** A new conversation, beside this one: what the composer's /new does. Absent, /new is not offered. */
+  onNew?: () => void;
 }
 
 /** The modes a person can PICK in the composer. `auto` is deliberately absent: the
@@ -81,6 +101,31 @@ export type ChatMode = "ask" | "investigate";
  *  `ChatMode` would silently delete those three behaviours.
  */
 type RouteMode = ChatMode | "auto";
+
+/** The connection's tables and metrics a person can mention with @: read from the shared caches, and only once a mention
+ *  has been started, so a conversation nobody mentions anything in reads neither. */
+function MentionObjects({ connectionId, onObjects }: { connectionId: string; onObjects: (objects: Offer[]) => void }) {
+  const { schema } = useRichSchema(connectionId || null);
+  const { data: metrics } = useQuery({
+    queryKey: ["ask-mention-metrics", connectionId], queryFn: () => getMetrics(connectionId), enabled: !!connectionId, staleTime: 5 * 60_000,
+  });
+  // Stage 2 — the person's own dashboards, and the cards placed on them (never another person's): a card is offered with
+  // the dashboard it is on
+  const { data: boards } = useQuery({
+    queryKey: ["ask-mention-dashboards", connectionId], enabled: !!connectionId, staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const mine = standingDashboards(await listDashboards(connectionId));
+      const on = new Map<string, string>();
+      for (const d of mine) for (const c of d.cards) if (!on.has(c)) on.set(c, d.title);
+      const cards = on.size ? (await listCards({ connectionId })).filter(c => on.has(c.id)) : [];
+      return { dashboards: mine, cards: cards.map(c => ({ title: c.title, on: on.get(c.id) ?? "" })) };
+    },
+  });
+  useEffect(() => {
+    onObjects(mentionOffers(schema?.tables ?? [], metrics ?? [], boards ?? { dashboards: [], cards: [] }));
+  }, [schema, metrics, boards, onObjects]);
+  return null;
+}
 
 /* ── Input box — module-level so React never remounts it on parent re-render ── */
 interface InputBoxProps {
@@ -104,11 +149,58 @@ interface InputBoxProps {
    *  way to take it off. Absent: the composer is as it was. */
   subject?: string;
   onDropSubject?: () => void;
+  /** The subject is one a change can be asked about (`changeable`): the composer says so. */
+  changes?: boolean;
+  /** The coworker's composer: its edge wears the brand's colours at rest, as the coworker's does. */
+  harness?: boolean;
+  /** What the composer offers while a person writes (`lib/composerAssist.ts`): @ objects, / commands, ↑↓ history. */
+  assist?: ComposerAssistSources;
+  /** Beside a sheet: what the composer says it takes, the files it takes (a sheet is made of one), and that a file alone
+   *  may be sent. */
+  sheet?: boolean;
 }
 
-function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, setMode, onSend, onStop, onClear, attachedFile, onAttach, agents, agentId, setAgentId, subject, onDropSubject }: InputBoxProps) {
+interface ComposerAssistSources {
+  objects: Offer[];
+  commands: Offer[];
+  onCommand: (value: string) => void;
+  /** The questions already asked in the conversation, oldest first. */
+  history: string[];
+  /** A person started writing a mention: read the objects there are to mention. */
+  onWantObjects: () => void;
+}
+
+function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, setMode, onSend, onStop, onClear, attachedFile, onAttach, agents, agentId, setAgentId, subject, onDropSubject, changes = false, harness = false, assist, sheet = false }: InputBoxProps) {
   const [focused, setFocused] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // what the composer offers at the caret, and where a walk through the questions already asked stands
+  const [caret, setCaret] = useState(0);
+  const [pick, setPick] = useState(0);
+  const [shut, setShut] = useState<number | null>(null);
+  const [walk, setWalk] = useState<{ at: number; draft: string }>({ at: -1, draft: "" });
+  const found = assist ? assistAt(input, caret, assist.objects, assist.commands) : null;
+  const offered = found && shut !== found.start ? found : null;
+  const offeredKey = offered ? `${offered.kind}:${offered.start}:${offered.query}` : "";
+  useEffect(() => { setPick(0); }, [offeredKey]);
+  const wantsObjects = !!assist && /(^|\s)@/.test(input);
+  useEffect(() => { if (wantsObjects) assist?.onWantObjects(); }, [wantsObjects]); // eslint-disable-line react-hooks/exhaustive-deps -- once a mention starts
+  const placeAt = (at: number) => requestAnimationFrame(() => {
+    const ta = textareaRef.current;
+    if (ta) { ta.setSelectionRange(at, at); setCaret(at); }
+  });
+  const choose = (offer: Offer) => {
+    if (!offered || !assist) return;
+    if (offered.kind === "mention") {
+      const next = mentionIn(input, offered, offer);
+      setInput(next.text);
+      placeAt(next.caret);
+    } else {
+      setInput(withoutCommand(input, offered));
+      placeAt(0);
+      assist.onCommand(offer.value);
+    }
+  };
+  const remembered = (e: React.SyntheticEvent<HTMLTextAreaElement>) => setCaret(e.currentTarget.selectionStart ?? 0);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] ?? null;
@@ -120,14 +212,11 @@ function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, se
     <div
       className="flex flex-col overflow-hidden"
       style={{
-        // The composer is a field: radius 4, --bg-3 and a --b2 hairline, with no shadow.
-        // Focus draws the one ring (2px --bfocus at 2px offset) on the frame, so the
-        // textarea inside keeps no outline of its own (aug-focus-frame).
+        // The composer is a field: --bg-3 and a --b2 hairline, with no shadow. Focus is drawn on the frame,
+        // so the textarea inside keeps no outline of its own (aug-focus-frame).
         borderRadius: "var(--r-composer)",
-        background: "var(--bg-3)",
-        border: "1px solid var(--b2)",
-        outline: focused ? "2px solid var(--bfocus)" : "none",
-        outlineOffset: 2,
+        // at rest a hairline; while a person is writing to the model, the edge takes the brand's colours
+        ...(focused || harness ? brandEdge("var(--bg-3)") : { background: "var(--bg-3)", border: "1.5px solid var(--b2)" }),
       }}
     >
       {/* Arc FA-2 — the subject the question carries, chosen on a dashboard */}
@@ -166,14 +255,65 @@ function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, se
         </div>
       )}
 
+      {/* What is on offer at the caret: objects to mention, or commands — chosen with the arrows and Enter, or a click */}
+      {offered && (
+        <div id="composer-offers" role="listbox" data-testid="composer-offers" data-kind={offered.kind}
+          aria-label={offered.kind === "mention" ? "Objects to mention" : "Commands"}
+          style={{ display: "flex", flexDirection: "column", gap: 1, padding: "6px 6px 0", maxHeight: 220, overflowY: "auto" }}>
+          {offered.offers.map((o, i) => (
+            <Button key={`${o.hint}:${o.value}`} variant="ghost" size="xs" role="option" aria-selected={i === pick} data-testid="composer-offer"
+              onMouseDown={e => e.preventDefault()} onClick={() => choose(o)}
+              style={{ justifyContent: "space-between", gap: 8, background: i === pick ? "var(--bg-sel)" : undefined }}>
+              <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--t1)" }}>{o.label}</span>
+              <span style={{ flex: "none", color: "var(--t3)" }}>{o.hint}</span>
+            </Button>
+          ))}
+        </div>
+      )}
+
       {/* Textarea row */}
-      <Textarea bespoke
+      <textarea
         ref={textareaRef}
-        rows={multiline ? 2 : 1}
+        rows={multiline || assist ? 2 : 1}
         value={input}
-        onChange={(e) => setInput(e.target.value)}
+        onChange={(e) => { setInput(e.target.value); setCaret(e.target.selectionStart ?? 0); if (walk.at !== -1) setWalk({ at: -1, draft: "" }); }}
+        onSelect={remembered}
+        onClick={remembered}
+        aria-expanded={offered ? true : undefined}
+        aria-controls={offered ? "composer-offers" : undefined}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); }
+          if (offered) {
+            const n = offered.offers.length;
+            if (e.key === "ArrowDown") { e.preventDefault(); setPick(i => (i + 1) % n); return; }
+            if (e.key === "ArrowUp") { e.preventDefault(); setPick(i => (i - 1 + n) % n); return; }
+            if ((e.key === "Enter" || e.key === "Tab") && !e.shiftKey) { e.preventDefault(); choose(offered.offers[Math.min(pick, n - 1)]); return; }
+            if (e.key === "Escape") { e.preventDefault(); setShut(offered.start); return; }
+          } else if (assist && !e.shiftKey && !e.altKey && !e.metaKey && !e.ctrlKey) {
+            // ↑ recalls what was asked when nothing is being written (or the walk has begun); ↓ comes back to the draft
+            const ta = e.currentTarget;
+            const top = !input.slice(0, ta.selectionStart ?? 0).includes("\n");
+            const bottom = !input.slice(ta.selectionEnd ?? input.length).includes("\n");
+            if (e.key === "ArrowUp" && top && (input === "" || walk.at !== -1)) {
+              const at = historyStep(assist.history, walk.at, "back");
+              if (at !== -1) {
+                e.preventDefault();
+                setWalk({ at, draft: walk.at === -1 ? input : walk.draft });
+                setInput(assist.history[at]);
+                placeAt(assist.history[at].length);
+                return;
+              }
+            }
+            if (e.key === "ArrowDown" && bottom && walk.at !== -1) {
+              e.preventDefault();
+              const at = historyStep(assist.history, walk.at, "forward");
+              const text = at === -1 ? walk.draft : assist.history[at];
+              setWalk({ at, draft: walk.draft });
+              setInput(text);
+              placeAt(text.length);
+              return;
+            }
+          }
+          if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); setWalk({ at: -1, draft: "" }); onSend(); }
         }}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
@@ -182,8 +322,12 @@ function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, se
            in flight (useChat.ask aborts before it starts, and the backend stops the core
            at its next checkpoint). Disabling here made the product argue with the user
            about whose turn it was. */
-        placeholder={multiline ? "Ask anything about your data…" : "Ask your question…"}
+        placeholder={harness
+          ? `${sheet ? "Ask about this sheet, drop a file, or ask for a change" : changes ? "Ask anything, or describe a change" : "Ask anything"}${assist ? " · @ for objects, / for commands, ↑↓ for history" : ""}`
+          : multiline ? "Ask anything about your data…" : "Ask your question…"}
         className="aug-focus-frame w-full bg-transparent aug-fs-sm text-zinc-100 placeholder:text-[var(--t3)] px-4 pt-3 pb-2 resize-none focus:outline-none disabled:opacity-50"
+        // the frame around it says it is being written in: the field draws no second one inside
+        style={{ display: "block", border: "none", outline: "none", boxShadow: "none", fontFamily: "inherit" }}
       />
 
       {/* Toggle row — mode buttons left, actions right */}
@@ -236,7 +380,7 @@ function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, se
           <input
             ref={fileInputRef}
             type="file"
-            accept=".pdf,.csv,.txt,.md"
+            accept={sheet ? SHEET_FILES : ".pdf,.csv,.txt,.md"}
             style={{ display: "none" }}
             onChange={handleFileChange}
           />
@@ -245,7 +389,7 @@ function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, se
           <Button
             variant="ghost" size="icon-sm"
             onClick={() => fileInputRef.current?.click()}
-            title="Attach file (PDF, CSV)"
+            title={sheet ? "Make a sheet from a file" : "Attach file (PDF, CSV)"}
             style={{ color: attachedFile ? "var(--blue4)" : "var(--t3)" }}
           >
             <Icon name="attach" size={15} label="Attach a file" />
@@ -270,13 +414,13 @@ function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, se
               variant="ghost"
               size="icon-sm"
               onClick={() => onSend()}
-              disabled={!input.trim()}
+              disabled={!input.trim() && !(sheet && attachedFile)}
               title="Send"
               className="aug-pressable rounded-[var(--r-pill)] hover:bg-transparent dark:hover:bg-transparent disabled:opacity-100"
               style={{
                 width: 32, height: 32,
-                background: input.trim() ? "var(--blue-solid)" : "var(--bg-3)",
-                color: input.trim() ? "var(--on-primary)" : "var(--t3)",
+                background: input.trim() || (sheet && attachedFile) ? "var(--blue-solid)" : "var(--bg-3)",
+                color: input.trim() || (sheet && attachedFile) ? "var(--on-primary)" : "var(--t3)",
               }}
             >
               <Icon name="send" size={16} stroke={2.2} />
@@ -365,12 +509,39 @@ function DebugLogDrawer({ eventLogRef, onClose }: { eventLogRef: React.RefObject
 /* ── Depth banner — the auto+transparency receipt on each /ask turn ──
    Shows the depth the router chose + why, with a one-click re-run at the
    other depth. Renders nothing on legacy/explicit and restored turns. */
-function DepthBanner({ turn, onRerun }: { turn: ChatTurn; onRerun: (depth: "quick" | "deep") => void }) {
+function DepthBanner({ turn, onRerun, harness = false }: { turn: ChatTurn; onRerun: (depth: "quick" | "deep") => void; harness?: boolean }) {
   const r = turn.route;
   if (!r) return null;
   const deep = r.depth === "deep";
   const overview = r.depth === "overview";
   const done = turn.status !== "loading";
+  // The coworker's layout keeps what a person acts on or must be told: how the platform read the question, what the turn
+  // was about, and the other depth to ask again at. Which depth answered is the composer's own choice, already in view.
+  if (harness) {
+    // a change asked in the conversation is not re-run as an answer, nor read as a question; a turn the conversation
+    // decided already chose its depth, and asking again at the other would reach the same conversation
+    const change = turn.stagedProposals.length > 0;
+    const rerun = done && !overview && !change && !r.conversationDecided;
+    const why = change ? "" : r.why;
+    if (!why && !r.subject && !r.downgradedFrom && !rerun) return null;
+    return (
+      <div className="aug-fs-xs" data-testid="turn-depth" style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 6, color: "var(--t3)" }}>
+        {why && <span data-testid="turn-why">{why}</span>}
+        {r.subject && (
+          <span data-testid="turn-subject" style={{ color: "var(--t2)" }}>
+            {r.subject.said}{r.subject.carried ? "" : " · this answer did not read them"}
+          </span>
+        )}
+        {r.downgradedFrom && <span style={{ fontStyle: "italic" }}>deep analysis needs an upgrade</span>}
+        {rerun && (
+          <Button variant="ghost" size="xs" onClick={() => onRerun(deep ? "quick" : "deep")} style={{ marginLeft: "auto" }}
+            title={deep ? "Re-run as a quick answer" : "Re-run as a deep analysis"}>
+            {deep ? "Answer quickly instead" : "Run a deep analysis instead"}
+          </Button>
+        )}
+      </div>
+    );
+  }
   return (
     <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
       <StatusChip
@@ -512,6 +683,24 @@ function EscalateBar({ turn, onEscalate }: { turn: ChatTurn; onEscalate: () => v
 // all afternoon. Module scope is exactly that lifetime.
 let _urlSessionUnclaimed = true;
 
+/** Whether the page's address opens the screen this panel lives on, so its `?chat=` is this panel's conversation.
+ *  `main` is the Ask screen's own conversation: every address but a canvas's. `canvas:<id>` is that canvas's chat. A panel
+ *  named by neither (a page that is all conversation) owns whatever address it is on. */
+export function addressIsMine(params: URLSearchParams, address?: string): boolean {
+  if (!address) return true;
+  const onCanvas = params.get("tab") === "canvas-workspace";
+  if (address === "main") return !onCanvas;
+  return onCanvas && `canvas:${params.get("canvas") ?? ""}` === address;
+}
+
+/** The `?chat=` this panel adopts, at most once per page load and only by the panel whose screen the address opens: the
+ *  Ask screen's panel stays mounted behind a canvas and, mounted first, took a canvas's conversation on every reload. */
+export function claimChatAddress(params: URLSearchParams, address?: string): string | null {
+  if (!_urlSessionUnclaimed || !addressIsMine(params, address)) return null;
+  _urlSessionUnclaimed = false;
+  return params.get("chat");
+}
+
 
 // ── Agent landing block ───────────────────────────────────────────────────────
 
@@ -583,7 +772,7 @@ function AgentLandingBlock({ agent, connectionName }: { agent: UserAgent; connec
   );
 }
 
-export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQuestion, initialMode, initialInsightId, capabilities, initialAgentId }: Props) {
+export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQuestion, initialMode, initialInsightId, capabilities, initialAgentId, beside = false, address, harness = false, onSession, onNew }: Props) {
   // Read during the first render, into a ref, because both this component and page.tsx's
   // URL-sync effect rewrite the query string — whichever ran first would erase the id
   // before the restore below could read it. A ref initializer is safe here specifically
@@ -592,10 +781,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
   // rendering to disagree with.
   const resumeIdRef = useRef<string | null>(null);
   if (resumeIdRef.current === null && typeof window !== "undefined") {
-    const fromUrl = _urlSessionUnclaimed
-      ? new URLSearchParams(window.location.search).get("chat")
-      : null;
-    _urlSessionUnclaimed = false;
+    const fromUrl = beside ? null : claimChatAddress(new URLSearchParams(window.location.search), address);
     resumeIdRef.current = restoreSessionId || fromUrl || "";
   }
   const resumeId = resumeIdRef.current || null;
@@ -721,6 +907,8 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
   const [showDebug, setShowDebug]   = useState(false);
   const [feedbackDone, setFeedbackDone] = useState<Set<string>>(new Set());
   const [sourcePanel, setSourcePanel] = useState<SourcePanelData | null>(null);
+  // A Data Canvas: the page of what an answer stood on, beside the conversation. One panel at a time on that side.
+  const [sourcePage, setSourcePage] = useState<AnswerSource | null>(null);
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   // CA-5 — attachments land NOW, not at send: a file whose upload is deferred to the
   // next question can fail silently after the question has already gone. `pending` is
@@ -762,7 +950,8 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
     if (!resumeId) {
       if (moved) setSessionId(newSessionId()); // a fresh Chat instance — the conversation resets with it
       const params = new URLSearchParams(window.location.search);
-      if (params.has("chat")) {
+      // only the panel the address opens may drop its conversation: a panel mounted behind it must leave it be
+      if (!beside && params.has("chat") && addressIsMine(params, address)) {
         params.delete("chat");
         const qs = params.toString();
         window.history.replaceState(null, "", `${window.location.pathname}${qs ? `?${qs}` : ""}`);
@@ -865,7 +1054,17 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
   // Arc FA-2 — what a dashboard handed over as the question's subject
   const handed = useAskSubject();
   // a subject chosen on another connection is not this conversation's to send
-  const subject = handed && handed.connectionId === connectionId ? handed : null;
+  // The Ask panel also asks about what the page on screen shows, unless a person chose something else or took it off.
+  const onPage = usePageSubject();
+  const [droppedPage, setDroppedPage] = useState("");
+  const pageHere = harness && onPage && onPage.connectionId === connectionId && subjectKey(onPage) !== droppedPage ? onPage : null;
+  const subject = (handed && handed.connectionId === connectionId ? handed : null) ?? pageHere;
+  // Beside a sheet (Stage 1, 2026-11-19: the sheet's own chat folds in): its doors while it is on screen, the proposals
+  // asked for here, and which turns were asked about it
+  const sheetHere = subject?.kind === "sheet" ? subject : null;
+  const sheetDoors = useSheetDoors(sheetHere?.id);
+  const sheetAssist = useSheetEntries(sheetHere?.id ?? null);
+  const [sheetAsked, setSheetAsked] = useState<ReadonlySet<number>>(() => new Set());
 
   const sendQuestion = useCallback((question: string, m: RouteMode = "investigate", opts: AskOpts = {}) => {
     // An interrupt — the user sent this while a turn was still streaming. The SDK
@@ -952,13 +1151,22 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
   // each time, so this and page.tsx's tab/conn/layer sync can both write without either
   // erasing the other's keys.
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || beside) return;
     if (!messages.length) return;   // see below: emptiness is not a reason to forget
     const params = new URLSearchParams(window.location.search);
-    if (params.get("chat") === sessionId) return;
+    // a panel behind another screen keeps its conversation out of that screen's address
+    if (params.get("chat") === sessionId || !addressIsMine(params, address)) return;
     params.set("chat", sessionId);
     window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
-  }, [messages.length, sessionId]);
+  }, [messages.length, sessionId, beside, address]);
+
+  // The Ask panel names its tab after the conversation's first question, and keeps the conversation's id to open it again.
+  const onSessionRef = useRef(onSession);
+  useEffect(() => { onSessionRef.current = onSession; });
+  const firstQuestion = (turns[0]?.turn.question ?? "").trim();
+  useEffect(() => {
+    if (messages.length && firstQuestion) onSessionRef.current?.(sessionId, firstQuestion.slice(0, 80));
+  }, [messages.length > 0, sessionId, firstQuestion]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Scroll: follow the newest content while pinned to the bottom, release
   //    the moment the user scrolls up to read, snap back on completion. ───────
@@ -1011,8 +1219,10 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
     e.preventDefault();
     setDragging(false);
     const files = Array.from(e.dataTransfer?.files ?? []);
+    // beside a sheet, a file dropped becomes one proposal for a new sheet, said with what was written
+    if (sheetHere && files[0]) { sheetAssist.proposeFile(files[0], input.trim(), turns.length); setInput(""); return; }
     for (const f of files) void takeFile(f);
-  }, [takeFile]);
+  }, [takeFile, sheetHere, sheetAssist, input, turns.length]);
 
   const handleSend = useCallback(async (q?: string, m?: RouteMode, opts?: { skipCache?: boolean; requestMode?: "investigate" | "explore"; purpose?: string }) => {
     const question = (q ?? input).trim();
@@ -1034,7 +1244,24 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
     textareaRef.current?.focus();
   }, [input, sendQuestion, mode, attachedFile, takeFile]);
 
-  const isEmpty = messages.length === 0;
+  /** The composer's send. Beside a sheet, a file goes to a proposal for a new sheet and a change asked for to a proposal on
+   *  the sheet; a question is asked, and remembered as asked about the sheet. */
+  const sendFromComposer = useCallback(() => {
+    if (sheetHere) {
+      const words = input.trim();
+      if (attachedFile) { const f = attachedFile; setAttachedFile(null); setInput(""); sheetAssist.proposeFile(f, words, turns.length); return; }
+      if (words && asksForAChange(words)) { setInput(""); sheetAssist.proposeChange(words, turns.length); return; }
+      if (words) setSheetAsked(s => new Set(s).add(turns.length));
+    }
+    void handleSend();
+  }, [sheetHere, input, attachedFile, sheetAssist, turns.length, handleSend]);
+  const askOnSheet = (words: string) => { setSheetAsked(s => new Set(s).add(turns.length)); void handleSend(words); };
+  const proposeOnSheet = (words: string) => sheetAssist.proposeChange(words, turns.length);
+  const sheetEntriesAfter = (n: number) => sheetAssist.entries.filter(en => en.after === n).map(en => (
+    <SheetEntryView key={en.id} entry={en} doors={sheetDoors} onSettle={sheetAssist.settle} onAsk={askOnSheet} />
+  ));
+
+  const isEmpty = messages.length === 0 && sheetAssist.entries.length === 0;
 
   // ── Feedback submission ───────────────────────────────────────────────────────
   async function handleFeedbackSubmit(invId: string, feedback: string) {
@@ -1048,26 +1275,61 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
     setFeedbackDone(prev => new Set([...prev, invId]));
   }
 
+  // The coworker's layout, for the parts of an answer that look different in it; what an answer stood on opens over the
+  // conversation, inside the panel
+  const harnessLook = useMemo<HarnessLook>(() => ({
+    on: harness,
+    ...(harness ? { openSource: (s: AnswerSource) => { setSourcePanel(null); setSourcePage(s); } } : {}),
+  }), [harness]);
+
+  // What the composer offers while a person writes (the panel's layout): the connection's tables and metrics to mention,
+  // read only once a mention is started; its commands; and the questions already asked here.
+  const [wantsObjects, setWantsObjects] = useState(false);
+  const [objects, setObjects] = useState<Offer[]>([]);
+  const assist = useMemo(() => {
+    if (!harness) return undefined;
+    const commands: Offer[] = [
+      { value: "quick", label: "/quick", hint: "answer quickly" },
+      { value: "agent", label: "/agent", hint: "investigate in depth" },
+      ...(onNew ? [{ value: "new", label: "/new", hint: "a new conversation" }] : []),
+      { value: "clear", label: "/clear", hint: "clear this conversation" },
+    ];
+    const onCommand = (value: string) => {
+      if (value === "quick") setMode("ask");
+      else if (value === "agent") setMode("investigate");
+      else if (value === "new") onNew?.();
+      else if (value === "clear") clear();
+    };
+    return { objects, commands, onCommand, history: askedBefore(turns.map(t => t.turn.question)), onWantObjects: () => setWantsObjects(true) };
+  }, [harness, objects, onNew, clear, turns]);
+
   const inputBoxProps: InputBoxProps = {
+    harness,
     textareaRef,
     input,
     setInput,
     streaming: busy,
     mode,
     setMode,
-    onSend: handleSend,
+    onSend: sendFromComposer,
     onStop: stop,
     onClear: clear,
+    assist,
     attachedFile,
     onAttach: setAttachedFile,
     agents,
     agentId,
     setAgentId,
-    ...(subject ? { subject: subjectWords(subject), onDropSubject: () => setAskSubject(null) } : {}),
+    sheet: !!sheetHere,
+    ...(subject ? { subject: subjectWords(subject), changes: changeable(subject),
+      onDropSubject: () => (subject === pageHere ? setDroppedPage(subjectKey(pageHere)) : setAskSubject(null)) } : {}),
   };
 
   return (
+    <HarnessContext.Provider value={harnessLook}>
+    {harness && wantsObjects && <MentionObjects connectionId={connectionId} onObjects={setObjects} />}
     <div
+      data-testid="chat-drop"
       className="flex-1 flex flex-col min-w-0 overflow-hidden"
       /* The chat's ground is the composer's own dark blue (--bg-3) — the landing block
          took it on 2026-09-28 and the conversation follows, at the user's word
@@ -1179,6 +1441,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
               </div>
             )}
 
+            {sheetDoors && <SheetGrounding doors={sheetDoors} />}
             <InputBox {...inputBoxProps} multiline />
 
             <p className="aug-fs-sm text-center" style={{ color: "var(--t3)" }}>Always review the accuracy of responses.</p>
@@ -1188,7 +1451,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                 border per item, an icon per item and three colour treatments (blue for the
                 overview starter, green for investigate, grey otherwise), which made a list
                 of questions read as a control panel. A question is a line of text. */}
-            <div className="pt-1">
+            {!beside && <div className="pt-1">
               <p className="text-[11px] uppercase tracking-[0.08em] mb-2" style={{ color: "var(--b3)" }}>Suggested questions</p>
               {suggestionsMissing && !loadingStarters && (
                 <p className="aug-fs-xs mb-1" style={{ color: "var(--t3)" }}>{suggestionsMissing}</p>
@@ -1228,7 +1491,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                   })}
                 </div>
               )}
-            </div>
+            </div>}
           </div>
         </div>
       ) : (
@@ -1244,6 +1507,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                 {people && turns.length > 0 && (
                   <ThreadPeople sessionId={sessionId} people={people} onChange={setPeople} onLeft={() => clear()} />
                 )}
+                {sheetEntriesAfter(0)}
                 {turns.map(({ turn, userMsg, assistantMsg }, i) => (
                   <div
                     key={turn.id}
@@ -1260,6 +1524,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                       </div>
                     )}
                     <DepthBanner
+                      harness={harness}
                       turn={turn}
                       onRerun={(depth) => sendQuestion(turn.question, "auto", { depth })}
                     />
@@ -1279,7 +1544,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                         // so this needs no new store.
                         onFollowUp={(q) => handleSend(q, undefined, { purpose: "followup" })}
                         onRunFresh={(q) => handleSend(q, "investigate", { skipCache: true })}
-                        onShowSource={setSourcePanel}
+                        onShowSource={data => { setSourcePage(null); setSourcePanel(data); }}
                         onDeeper={(q, insightId) => sendQuestion(q, "investigate", { insightId: insightId ?? undefined, deep: true })}
                         onExploreFact={(q, o) => { recordOverviewDrill(connectionId, { canvasId: canvasId ?? undefined, lens: o.lens, table: o.table }); sendQuestion(q, "investigate", { seedSql: o.seedSql, seedContext: o.seedContext, deep: true }); }}
                         onApprovePlan={(invId, keep) => resumePlan(invId, keep)}
@@ -1299,6 +1564,11 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                         )}
                       />
                     </ErrorBoundary>
+                    <SheetTurnFoot turn={turn} doors={sheetDoors} asked={sheetAsked.has(i)} onPropose={proposeOnSheet} />
+                    {answerableRun(turn) && <AnswerNow key={answerableRun(turn)} runId={answerableRun(turn) as string} />}
+                    {turn.answeredEarly && (
+                      <p data-testid="answered-early" className="aug-fs-sm" style={{ margin: "6px 0 0", color: "var(--t2)" }}>{turn.answeredEarly}</p>
+                    )}
                     {turn.clarify && (
                       <ClarifyCard
                         turn={turn}
@@ -1322,6 +1592,11 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                     {/* The ONE feedback control on an answer (2026-10-22): a second thumbs pair
                         used to sit inside the answer's "Methodology & details" and post the same
                         verdict for the same receipt. It lives here, at the foot, once. */}
+                    {(harness ? answersDeep(turn) : !!canvasId) && turn.status === "done" && turn.publicReceiptId && (
+                      <AnswerSources receiptId={turn.publicReceiptId} connectionId={connectionId}
+                        onOpen={source => { setSourcePanel(null); setSourcePage(source); }} />
+                    )}
+                    <div data-testid="turn-foot" style={harness ? { display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginTop: 4 } : undefined}>
                     {turn.status === "done" && turn.receiptId && (
                       <AnswerFeedback turn={turn} connectionId={connectionId} />
                     )}
@@ -1345,6 +1620,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                         </Button>
                       </div>
                     )}
+                    </div>
                     {/* Post-run feedback — shown once per completed deep analysis with hypotheses */}
                     {turn.mode === "investigate" &&
                      turn.status === "done" &&
@@ -1360,10 +1636,11 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                         />
                       </div>
                     )}
+                    {sheetEntriesAfter(i + 1)}
                   </div>
                 ))}
-                {/* Spacer so last message clears the floating input */}
-                <div style={{ height: 172 }} />
+                {/* Spacer so last message clears the floating input — and, beside a sheet, the line of what it reads */}
+                <div style={{ height: sheetDoors ? 196 : 172 }} />
               </div>
             </div>
 
@@ -1407,6 +1684,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
               zIndex: 2, pointerEvents: "none",
             }}>
               <div className="w-full max-w-[var(--measure-chat)] px-[var(--chat-gutter)] mx-auto space-y-2" style={{ pointerEvents: "all" }}>
+                {sheetDoors && <SheetGrounding doors={sheetDoors} />}
                 <InputBox {...inputBoxProps} />
                 <p className="aug-fs-sm text-center" style={{ color: "var(--t3)" }}>Always review the accuracy of responses.</p>
               </div>
@@ -1416,11 +1694,13 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
 
           {/* Agent trace now renders inline within each assistant turn (ChatMessage). */}
 
+          {sourcePage && <SourceBeside source={sourcePage} cover={harness && beside} onClose={() => setSourcePage(null)} />}
+
           {/* ── Source panel drawer (right side, pushes chat left) ── */}
           {sourcePanel && (
             <div
               className="flex-shrink-0 flex flex-col border-l border-zinc-700/60"
-              style={{ width: 380, background: "var(--blue1)" }}
+              style={harness && beside ? { position: "absolute", inset: 0, zIndex: 30, background: "var(--blue1)" } : { width: 380, background: "var(--blue1)" }}
             >
               <SourcePanel
                 columns={sourcePanel.columns}
@@ -1441,5 +1721,6 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
         <DebugLogDrawer eventLogRef={eventLogRef} onClose={() => setShowDebug(false)} />
       )}
     </div>
+    </HarnessContext.Provider>
   );
 }

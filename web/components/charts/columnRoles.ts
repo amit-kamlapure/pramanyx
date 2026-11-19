@@ -58,6 +58,13 @@ export const ORDINAL_COL = /(year|month|day|week|rank|_id$|^id$)/i;
  *  (fiscal_year fell through to a measure because DATE_NAME only matches `^year$`). */
 export const TEMPORAL_GRAIN_COL = /^[a-z]+_(fy|year|quarter|qtr|month|week|half)$|^(fy|qtr)$/i;
 
+/** A column that names a period: `year`, `release_year`, `fiscal_year`, `order_month`. Its whole numbers are labels, so a
+ *  table writes them as they are: 2020, never "2,020". `last_year` and `per_year` name an amount, not a period. */
+export function isPeriodColumn(name: string | null | undefined): boolean {
+  const col = name ?? "";
+  return (GRAIN_NAME.test(col) || TEMPORAL_GRAIN_COL.test(col)) && !/^(last|this|next|prev|previous|prior|current|per|each)_/i.test(col);
+}
+
 /** Pure identifier columns — excluded from measure selection. */
 export const SKIP_ID = /(_id$|^id$)/i;
 

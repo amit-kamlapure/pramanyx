@@ -37,6 +37,7 @@
  * hydration), and every access is wrapped — a disabled-storage browser degrades to a
  * working editor with no persistence, not to a blank screen.
  */
+import { useOnPage } from "@/lib/askSubject";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ResizableSplit } from "@/components/ResizableSplit";
 import { SqlEditorPane } from "@/components/query/editor/SqlEditorPane";
@@ -250,6 +251,12 @@ export function SqlMode({
 
   const active = tabs.find(t => t.id === activeId) ?? null;
   const sqlText = active?.sql ?? "";
+  // the Ask panel asks about the statement open here, read once the person pauses typing
+  const [quietSql, setQuietSql] = useState(sqlText);
+  useEffect(() => { const t = setTimeout(() => setQuietSql(sqlText), 600); return () => clearTimeout(t); }, [sqlText]);
+  // a name the person gave the tab; an untouched tab is still "Query", which names nothing
+  const chosenName = active?.name && active.name !== "Query" ? active.name : "";
+  useOnPage(quietSql.trim() ? { kind: "query", connectionId: connId, noun: ["row", "rows"], sql: quietSql, title: chosenName } : null);
   // What a run reads: the text with every `/ask` request blanked — a request is never sent to the warehouse as SQL.
   const runnable = useMemo(() => blankAskLines(sqlText), [sqlText]);
 
@@ -686,7 +693,7 @@ export function SqlMode({
   // A tab the user renamed is a name they chose — better than anything derived. Only
   // an untouched tab falls back to reading the query's own FROM clause.
   nameRef.current = () => {
-    if (active && active.name && active.name !== "Query") return active.name;
+    if (chosenName) return chosenName;
     const m = /\bfrom\s+([A-Za-z_][\w.$"]*)/i.exec(sqlText);
     return m ? `${m[1].replace(/"/g, "")} query` : "Untitled query";
   };

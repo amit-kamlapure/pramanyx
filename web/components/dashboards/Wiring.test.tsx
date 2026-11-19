@@ -235,7 +235,7 @@ describe("a dashboard drawn before the wiring (the arc's falsifier)", () => {
     expect(bodies).toEqual(new Set([
       // the filter column's own list — its code untouched by the wiring
       JSON.stringify({ object_type: "order", measures: [{ name: "n", agg: "count" }], by: ["status"], filters: [], order_by: "n", descending: true, limit: 51 }),
-      JSON.stringify({ object_type: "order", measures: [{ name: "n", agg: "count" }] }),
+      // (the whole's count is read once a filter is on: with none, nothing above the pieces says it)
       JSON.stringify({ object_type: "order", measures: [{ name: "v", agg: "count", path: "" }] }),
       JSON.stringify({ object_type: "order", measures: [{ name: "t", agg: "max", path: "created_at" }] }),
       JSON.stringify({ object_type: "order", measures: [{ name: "n", agg: "count", path: "" }], time: "created_at", grain: "day", start: day.start, end: day.end, filters: [] }),

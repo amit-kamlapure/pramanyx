@@ -41,16 +41,16 @@ const SHOWN: { value: QueryShownAs; label: string; icon: IconName }[] = [
   { value: "bar", label: "Bar", icon: "chart" }, { value: "line", label: "Line", icon: "trendup" },
   { value: "area", label: "Area", icon: "chart" }, { value: "scatter", label: "Scatter", icon: "graph" },
 ];
-const AGGS: { value: QueryAgg; label: string }[] = [
+export const AGGS: { value: QueryAgg; label: string }[] = [
   { value: "count", label: "Count" }, { value: "count_distinct", label: "Count of different" }, { value: "sum", label: "Sum" },
   { value: "avg", label: "Average" }, { value: "min", label: "Least" }, { value: "max", label: "Most" },
 ];
-const BUCKETS: { value: Exclude<QueryBucket, "">; label: string }[] = [
+export const BUCKETS: { value: Exclude<QueryBucket, "">; label: string }[] = [
   { value: "day", label: "Day" }, { value: "week", label: "Week" }, { value: "month", label: "Month" },
   { value: "quarter", label: "Quarter" }, { value: "year", label: "Year" },
 ];
-const MAX_SERIES = 4;
-const MAX_TOP = 12;
+export const MAX_SERIES = 4;
+export const MAX_TOP = 12;
 const PREVIEW_SHOWN = 5;
 
 /** A column's kind as a chart reads it — `pramanyx/dashboards/queries.py` `kind_of`. */
@@ -77,6 +77,21 @@ function firstSetup(columns: TypedColumn[], as: QueryShownAs): QueryShown {
   const x = time?.name ?? text?.name ?? columns[0]?.name ?? "";
   return { ...QUERY_DEFAULT, as, x, bucket: time ? "day" : "", series,
     split: text && text.name !== x && time ? text.name : "" };
+}
+
+/** The setup shown another way — a table, a figure, a kind of chart: a table or a setup with nothing along the bottom
+ *  starts again from the columns, a chart keeps what it is set up with. The one rule wherever the kind is chosen. */
+export function setupAs(s: QueryShown, as: QueryShownAs, columns: TypedColumn[]): QueryShown {
+  return columns.length && (s.as === "table" || !s.x) ? firstSetup(columns, as) : { ...s, as,
+    summed: as === "scatter" ? false : s.summed, segments: as === "line" || as === "scatter" ? "stacked" : s.segments };
+}
+
+/** The columns a setup reads that a statement no longer returns. */
+export function missingColumns(s: QueryShown, columns: TypedColumn[]): string[] {
+  const have = new Set(columns.map(c => c.name));
+  const read = s.as === "table" ? [...s.columns, s.sort] : s.as === "figure" ? s.series.map(x => x.column)
+    : [s.x, s.split, ...s.series.map(x => x.column)];
+  return [...new Set(read.filter(c => c && !have.has(c)))];
 }
 
 function Row({ label, hint, right, children, testid }: { label: string; hint?: ReactNode; right?: ReactNode; children: ReactNode; testid?: string }) {
@@ -112,7 +127,7 @@ const KIND_WORDS: Record<string, string> = { days: "days", number: "a number", t
 const startText = (def: DashboardValueDef) =>
   (def.from?.by ?? "author") === "author" || def.from?.by === "reader" ? (def.value === null || def.value === undefined ? "" : String(def.value)) : "";
 
-export function QuerySetup({ connectionId, card, onKept, onClose, values = NO_VALUES }: {
+export function QuerySetup({ connectionId, card, onKept, onClose, values = NO_VALUES, shapeElsewhere = false }: {
   connectionId: string;
   /** The card of the person's own query being changed; none — a new one. */
   card?: DashboardCard | null;
@@ -121,11 +136,16 @@ export function QuerySetup({ connectionId, card, onKept, onClose, values = NO_VA
   onClose?: () => void;
   /** Arc AP-8 — the dashboard's values: each may be read in the SQL as `{{name}}`. */
   values?: Record<string, DashboardValueDef>;
+  /** A card on a dashboard is drawn as its chart editor sets it (the user, 2026-11-19: one way to edit a chart): here are
+   *  its name and its SQL, and Keep keeps the setup the card holds. */
+  shapeElsewhere?: boolean;
 }) {
   const render = (card?.render ?? {}) as { shown?: QueryShown; columns?: TypedColumn[] };
   const [sql, setSql] = useState(card?.sql ?? "");
   const [title, setTitle] = useState(card?.title ?? "");
-  const [setup, setSetup] = useState<QueryShown>(render.shown ? { ...QUERY_DEFAULT, ...render.shown } : QUERY_DEFAULT);
+  const keptSetup = render.shown ? { ...QUERY_DEFAULT, ...render.shown } : QUERY_DEFAULT;
+  const [ownSetup, setSetup] = useState<QueryShown>(keptSetup);
+  const setup = shapeElsewhere ? keptSetup : ownSetup;
   const [preview, setPreview] = useState<{ sql: string; got: QueryPreview } | null>(null);
   const [refused, setRefused] = useState<string[]>([]);
   const [busy, setBusy] = useState<"" | "run" | "keep">("");
@@ -188,7 +208,14 @@ export function QuerySetup({ connectionId, card, onKept, onClose, values = NO_VA
     const given = sent();
     if ("refused" in given) { setRefused(given.refused); setBusy(""); return; }
     try {
-      const out = await keepDashboardQuery(connectionId, { sql, shown: setup, title: title.trim() || undefined, ...(card ? { replaces: card.id } : {}),
+      // a statement that no longer returns what the chart reads: the setup starts again from the columns it does return
+      let kept = setup;
+      if (shapeElsewhere && card && sql !== card.sql) {
+        const got = preview && preview.sql === sql ? preview.got
+          : await previewDashboardQuery(connectionId, { sql, shown: setup, title, ...(reads.length ? { values: given.values } : {}) }).catch(() => null);
+        if (got?.columns?.length && missingColumns(setup, got.columns).length) kept = firstSetup(got.columns, setup.as);
+      }
+      const out = await keepDashboardQuery(connectionId, { sql, shown: kept, title: title.trim() || undefined, ...(card ? { replaces: card.id } : {}),
         ...(reads.length ? { values: given.values } : {}) });
       setPreview({ sql, got: out.preview });
       onKept(out.card, card?.id ?? null);
@@ -197,8 +224,7 @@ export function QuerySetup({ connectionId, card, onKept, onClose, values = NO_VA
     } finally { setBusy(""); }
   };
   const put = (patch: Partial<QueryShown>) => setSetup(s => ({ ...s, ...patch }));
-  const shownAs = (as: QueryShownAs) => setSetup(s => (columns.length && (s.as === "table" || !s.x) ? firstSetup(columns, as) : { ...s, as,
-    summed: as === "scatter" ? false : s.summed, segments: as === "line" || as === "scatter" ? "stacked" : s.segments }));
+  const shownAs = (as: QueryShownAs) => setSetup(s => setupAs(s, as, columns));
   const xKind = kindOf(columns.find(c => c.name === setup.x)?.type ?? "");
   const chart = setup.as !== "table" && setup.as !== "figure";
 
@@ -291,13 +317,24 @@ export function QuerySetup({ connectionId, card, onKept, onClose, values = NO_VA
               <table className="aug-fs-xs" style={{ width: "100%", borderCollapse: "collapse", fontVariantNumeric: "tabular-nums" }}>
                 <thead><tr>{preview.got.columns.map((c, j) => <th key={`${c.name}-${j}`} style={{ textAlign: "left", color: "var(--t3)", fontWeight: 500, padding: "3px 5px", whiteSpace: "nowrap" }}>{c.name}</th>)}</tr></thead>
                 <tbody>{(preview.got.rows ?? []).slice(0, PREVIEW_SHOWN).map((r, i) => (
-                  <tr key={i}>{r.map((v, j) => <td key={j} style={{ padding: "3px 5px", whiteSpace: "nowrap", borderTop: "1px solid var(--b1)" }}>{cellText(v, preview.got.columns?.[j]?.type)}</td>)}</tr>
+                  <tr key={i}>{r.map((v, j) => <td key={j} style={{ padding: "3px 5px", whiteSpace: "nowrap", borderTop: "1px solid var(--b1)" }}>{cellText(v, preview.got.columns?.[j]?.type, undefined, "", "", preview.got.columns?.[j]?.name)}</td>)}</tr>
                 ))}</tbody>
               </table>
             </div>
           </div>
         )}
       </Row>
+      {shapeElsewhere && (
+        <div className="aug-fs-xs" data-testid="query-shape-elsewhere" style={{ padding: "4px 14px 8px", color: "var(--t3)", lineHeight: 1.45 }}>
+          How it is drawn (its kind, its axes and its colours) is set in Visualization, above.
+          {preview && preview.sql === sql && preview.got.columns && missingColumns(setup, preview.got.columns).length > 0 && (
+            <span data-testid="query-setup-restarts" style={{ display: "block", color: "var(--amb4)", marginTop: 4 }}>
+              The chart reads {missingColumns(setup, preview.got.columns).join(", ")}, which this statement no longer returns. Kept, it starts again from the columns it does return.
+            </span>
+          )}
+        </div>
+      )}
+      {!shapeElsewhere && <>
       <Row label="Shown as" testid="query-shown-as">
         <div role="radiogroup" aria-label="Shown as" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4 }}>
           {SHOWN.map(o => (
@@ -408,6 +445,7 @@ export function QuerySetup({ connectionId, card, onKept, onClose, values = NO_VA
           )}
         </>
       )}
+      </>}
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 14px 0", borderTop: "1px solid var(--b1)", marginTop: 6 }}>
         <span className="aug-fs-xs" style={{ color: "var(--t3)", flex: 1 }}>
           {card ? "A change is kept as a new version of this card; History keeps the one before." : "Kept as a card of yours, in this section."}

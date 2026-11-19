@@ -349,6 +349,11 @@ def _parse_schema_tables(schema_str: str) -> dict[str, list[str]]:
     return {t: [name for name, _ in cols] for t, cols in _parse_schema_typed(schema_str).items()}
 
 
+def typed_tables(schema_str: str) -> dict[str, list[tuple[str, str]]]:
+    """Each table of a rendered schema with its columns and their types."""
+    return _parse_schema_typed(schema_str)
+
+
 def _parse_schema_typed(schema_str: str) -> dict[str, list[tuple[str, str]]]:
     """Parse a schema string → {table: [(col_name, type), ...]}: ``TABLE:`` blocks (the house and the
     inline-bracket forms), and the Data Catalog's markdown tables. A type the text does not give is "".

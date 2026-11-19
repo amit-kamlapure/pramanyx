@@ -16,6 +16,7 @@
  * `isEmptyVizConfig` decides whether there is anything worth saving at all.
  */
 
+import type { ChartOptions } from "@/components/charts/chartCustom";
 import type { ChartType } from "@/components/charts/chartTypeInference";
 import type { ExhibitRefLine } from "@/components/charts/exhibit";
 import type { PostprocOp } from "@/lib/api";
@@ -48,6 +49,16 @@ export interface VizConfig {
    *  axes. Absent means "let the chart decide": a ranking reads horizontally, a trend over
    *  time reads vertically. Set only when the user has overridden that. */
   orient?:      "vertical" | "horizontal";
+  /** The chart options (the dashboards study, R12): a line's shape and its markers, the value axis's range and a
+   *  log scale, and a bar's categories by size or by name, and only the largest. Absent means as before. */
+  lineShape?:   "smooth" | "step";
+  /** An answer's line shows its points unless this says false; a query card's hides them unless it says true. */
+  markers?:     boolean;
+  yMin?:        number;
+  yMax?:        number;
+  yLog?:        boolean;
+  sortBy?:      "value" | "label";
+  top?:         number;
 }
 
 /** True when the config carries no user intent — nothing to persist, nothing to restore.
@@ -63,9 +74,26 @@ export function isEmptyVizConfig(c: VizConfig | null | undefined): boolean {
     !c.colorField && !c.colorScale && !c.colorName &&
     !c.numberFormat && !c.legend && !c.xTitle && !c.yTitle &&
     !c.tooltipOff && !c.orient &&
+    !c.lineShape && c.markers === undefined && c.yMin === undefined && c.yMax === undefined && !c.yLog &&
+    !c.sortBy && !c.top &&
     !(c.refLines && c.refLines.length) &&
     (c.transform === undefined || c.transform === "none")
   );
+}
+
+/** The chart options a saved config holds, as the charts read them; null when it holds none. */
+export function chartOptionsOf(c: VizConfig | null | undefined): ChartOptions | null {
+  if (!c) return null;
+  const o: ChartOptions = {
+    ...(c.lineShape ? { lineShape: c.lineShape } : {}),
+    ...(c.markers !== undefined ? { markers: c.markers } : {}),
+    ...(c.yMin !== undefined ? { yMin: c.yMin } : {}),
+    ...(c.yMax !== undefined ? { yMax: c.yMax } : {}),
+    ...(c.yLog ? { yLog: true } : {}),
+    ...(c.sortBy ? { sort: c.sortBy } : {}),
+    ...(c.top ? { top: c.top } : {}),
+  };
+  return Object.keys(o).length ? o : null;
 }
 
 /** Structural equality — used to skip a redundant PUT when a re-render re-emits the same

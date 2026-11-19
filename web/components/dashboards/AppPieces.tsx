@@ -144,7 +144,7 @@ export function ObjectListPiece({ elementKey, entity, set, setFrom, chooses, tic
           const on = !!choice && picked[choice]?.pk === pk;
           const isTicked = ticks_.some(t => t.pk === pk);
           const isMarked = !!marked && marks.on.has(pk);
-          const cell = (i: number) => (i > 0 ? cellText(row[i], page.columns[i - 1]?.type, undefined, page.columns[i - 1]?.unit ?? "", page.columns[i - 1]?.role ?? "") : "—");
+          const cell = (i: number) => (i > 0 ? cellText(row[i], page.columns[i - 1]?.type, undefined, page.columns[i - 1]?.unit ?? "", page.columns[i - 1]?.role ?? "", page.columns[i - 1]?.name ?? "") : "—");
           return (
             <div key={key} data-testid="object-list-card" aria-pressed={on} role="button" tabIndex={0} data-marked={isMarked || undefined}
               onClick={() => choice && pick(choice, on ? null : object)} onKeyDown={e => { if (e.key === "Enter" && choice) pick(choice, on ? null : object); }}

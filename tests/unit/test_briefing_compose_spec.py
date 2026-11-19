@@ -232,7 +232,7 @@ def _checks() -> dict:
 ])
 def test_a_sentence_may_not_read_such_a_figure_against_usual(text):
     kept, withheld, refused = P.gate([P.Block(id="l", type="lead", text=f"{text} The week was read.")], _checks())
-    assert [w["sentence"] for w in withheld] == [P.plain(text)] and "not at equal age" in withheld[0]["why"]
+    assert [w["sentence"] for w in withheld] == [P.plain(text)] and "not a fair one" in withheld[0]["why"]
     assert refused and kept[0].text == "The week was read."
 
 
@@ -253,7 +253,7 @@ def test_a_sentence_that_does_not_read_it_that_way_stands(text):
 def test_a_figure_blocks_own_words_count_and_one_kept_before_the_flag_is_read_as_it_was():
     checks = _checks()
     _k, withheld, _r = P.gate([P.Block(id="f", type="figure", source="sales", kicker="Above its usual range")], checks)
-    assert withheld and "not at equal age" in withheld[0]["why"]
+    assert withheld and "not a fair one" in withheld[0]["why"]
     old = checks["sales"].model_copy(update={"facts": {"current": 100.0, "usual_mean": 80.0}})      # no flag: before this rule
     _k, withheld, _r = P.gate([P.Block(id="f", type="figure", source="sales", kicker="Above its usual range")], {"sales": old})
     assert withheld == []
@@ -275,7 +275,7 @@ def test_a_cut_of_such_a_figure_is_gated_as_it_is():
                                facts=facts, unit="", better="up")
     line = P.Block(id="l", type="lead", text="Jeans {9,000|b1} ran above its usual.")
     _k, withheld, _r = P.gate([line], {"b1": cut({"check": "sales", "by": "category", "at_equal_age": False})})
-    assert withheld and "not at equal age" in withheld[0]["why"]
+    assert withheld and "not a fair one" in withheld[0]["why"]
     _k, withheld, _r = P.gate([line], {"b1": cut({"check": "sales", "by": "category"})})
     assert withheld == []
 

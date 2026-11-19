@@ -23,7 +23,9 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode }
 import { CanvasScale } from "@/components/dashboards/cellBox";
 import type { DashboardHandle, ReadState } from "@/components/dashboards/ComposedDashboard";
 import { PieceSetup, type CardDate } from "@/components/dashboards/PieceSetup";
+import type { CardHolds } from "@/lib/dashboards/cardHolds";
 import { ChoiceSetup, DataPane, SetSetup, ValueSetup, readingElements } from "@/components/dashboards/WiringSetup";
+import { BrandSpark } from "@/components/ui/brand";
 import { Segmented } from "@/components/ui/segmented";
 import { Button } from "@/components/ui/button";
 import { Icon, type IconName } from "@/components/ui/icon";
@@ -62,7 +64,7 @@ const PAD = 16;
 
 const ICON: Record<string, IconName> = {
   Cockpit: "gauge", Tab: "panel", Section: "layers", Card: "metric", Note: "text", Image: "attach", ProcessBoard: "process",
-  ObjectTable: "table", ObjectDetail: "list", ActionButton: "bolt", ObjectFilters: "filter", ObjectFigure: "num", ObjectChart: "chart", ObjectBreakdown: "column",
+  ObjectTable: "table", ObjectDetail: "list", ActionButton: "bolt", ObjectFilters: "filter", GlobalFilters: "filter", GlobalFilter: "filter", ObjectFigure: "num", ObjectChart: "chart", ObjectBreakdown: "column",
 };
 
 /** The pane's small uppercase heading. */
@@ -125,11 +127,17 @@ function Steps({ label, value, least, most, onStep }: { label: string; value: nu
 const Rule = () => <span aria-hidden="true" style={{ width: 1, height: 16, background: "var(--b2)", margin: "0 6px" }} />;
 
 export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words, aside, above, connectionId, schema,
-  onAddPiece, checks, cardSetup, cardChart, cardSql, cardReads, queryCards, onUndo, onRedo, cardDates, children }: {
+  onAddPiece, checks, cardSetup, cardChart, cardSql, cardReads, queryCards, onUndo, onRedo, cardDates, cardHolds, release, askPiece, children }: {
   spec: DashboardSpec;
+  /** The ontology release its pieces read, when it is the one the dashboard was composed against: said on its own setup. */
+  release?: string | null;
   /** v15 — each placed card and the date the period cuts it by, for the Period piece's setup. */
   cardDates?: () => CardDate[];
+  /** v17 — what a placed card holds that its panel offers to draw: number columns, and fields whose values it colours. */
+  cardHolds?: (cardId: string) => CardHolds;
   /** Undo and Redo, on the canvas toolbar and the editing keys (the dashboards study, R2 and R3, 2026-11-18). */
+  /** The study's R19 — the door to change the piece chosen in words, drawn above its setup. */
+  askPiece?: (key: string, type: string | undefined) => ReactNode;
   onUndo?: () => void;
   onRedo?: () => void;
   /** The canvas toolbar's doors the page keeps — words, a picture, buttons, asking in words — and which one is open. */
@@ -187,7 +195,7 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
     const before = seen.current;
     seen.current = now;
     if (!before) return;
-    const fresh = [...now].filter(k => !before.has(k));
+    const fresh = [...now].filter(k => !before.has(k) && spec.elements[k]?.type !== "GlobalFilters");
     if (fresh.length === 1) { setWire(null); setSelected(fresh[0]); }
   }, [spec]);
 
@@ -439,9 +447,9 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
               connectionId={connectionId} schema={schema} cardReads={cardReads} cardTitle={cardTitle}
               onRenamed={n => setWire(`value:${n}`)} queryCards={queryCards} />
               : wireKind === "choice" ? <ChoiceSetup spec={spec} name={wireName} />
-                : <PieceSetup spec={spec} selected={selected} onChange={apply} connectionId={connectionId} schema={schema} cardTitle={cardTitle}
+                : <>{selected && movable && askPiece?.(selected, el?.type)}<PieceSetup spec={spec} selected={selected} onChange={apply} connectionId={connectionId} schema={schema} cardTitle={cardTitle}
                   entityTitle={entityTitle} cardSetup={cardSetup} cardChart={cardChart} cardSql={cardSql}
-                  onOpenLayout={() => openPane("layout")} cardDates={cardDates} />)}
+                  onOpenLayout={() => openPane("layout")} cardDates={cardDates} cardHolds={cardHolds} release={release} /></>)}
         </aside>
       </div>
     </div>
@@ -525,7 +533,7 @@ function CanvasToolbar({ tools, onChart, onFilter, onUndo, onRedo }: {
       disabled={!onClick || (tools?.busy && testid !== "builder-tool-choose")} onClick={onClick}
       style={{ width: 34, height: 34, borderRadius: 8, color: accent ? "var(--accent-11)" : undefined,
         background: on ? "color-mix(in srgb, var(--accent) 24%, transparent)" : undefined }}>
-      <Icon name={icon} size={18} />
+      {testid === "builder-tool-ask" ? <BrandSpark size={18} /> : <Icon name={icon} size={18} />}
     </Button>
   );
   const rule = (k: string) => <span key={k} aria-hidden="true" style={{ width: 1, height: 20, background: "var(--b1)", margin: "0 4px" }} />;

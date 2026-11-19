@@ -18,6 +18,9 @@ import { useOrgSettings } from "@/lib/useOrgSettings";
 import { barsPerBand } from "@/components/charts/vega/bandFit";
 import { VegaChart } from "@/components/charts/vega/VegaChart";
 import { resolveVegaSpec } from "@/components/charts/vega/resolveSpec";
+import { readVegaTokens } from "@/components/charts/vega/config";
+import { useValueColors } from "@/components/dashboards/placementLook";
+import { withValueColors } from "@/lib/dashboards/valueColors";
 import { resolveTier3Spec } from "@/components/charts/vega/tier3";
 import { downloadChartPng, type ChartInstance } from "@/lib/chartExport";
 import type { ChartCustom } from "@/components/charts/chartCustom";
@@ -138,6 +141,7 @@ export function Chart({
   // Re-render + rebuild the option when org settings change, so the currency symbol /
   // chart palette / relabelled fields apply even if the cache populates after first render.
   const orgV = useOrgSettings();
+  const keptColors = useValueColors();
 
   // Build the option + default height. Memoized so its identity is stable across
   // renders (EChart re-inits when the option object changes) — only rebuilds when
@@ -156,8 +160,10 @@ export function Chart({
       yTitle: custom?.yTitle ?? null,
       orient: custom?.orient ?? null,
       transform: custom?.transform ?? null,
+      options: custom?.options ?? null,
     });
-    if (v) return { spec: v.spec, defaultH: v.defaultH, xCategories: v.xCategories, tier: 1 };
+    // v17 — on a dashboard, a value wears the colour the dashboard keeps for it, on every card (study R11)
+    if (v) return { spec: withValueColors(v.spec, keptColors, keptColors ? readVegaTokens().palette : []), defaultH: v.defaultH, xCategories: v.xCategories, tier: 1 };
     // A customization must never brick the chart. Saved viz-configs key by POSITION
     // (pinned__N) and pinned findings reorder across briefing regenerations, so a
     // stale seed can name columns this finding does not have — the customized
@@ -183,7 +189,7 @@ export function Chart({
     return null;
     // orgV: currency / palette / relabel settings feed the resolver via module reads.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [columns, rows, chartType, chartConfig, showLabels, custom, userFormat, orgV, columnUnits, exhibit, measure]);
+  }, [columns, rows, chartType, chartConfig, showLabels, custom, userFormat, orgV, columnUnits, exhibit, measure, keptColors]);
 
   if (!built) return null;
   const fill = !!(fitHeight && fitHeight > 0);

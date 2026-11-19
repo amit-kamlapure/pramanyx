@@ -83,15 +83,14 @@ beforeEach(() => {
 });
 
 describe("All", () => {
-  it("splits entirely by area, in the order the industry reads them, each row keeping its place", async () => {
+  it("is one list with no groupings, in the order the industry's areas read", async () => {
     show();
     await settled();
     const table = within(screen.getByRole("table"));
-    const heads = table.getAllByRole("row").map(r => r.textContent ?? "").filter(t => /^(Orders|Returns|Margin|Traffic|CRM)/.test(t));
-    expect(heads.map(h => h.split(/\d/)[0])).toEqual(["Orders & sales", "Returns", "Margin & pricing", "Traffic & conversion", "CRM & consent"]);
+    const said = table.getAllByRole("row").map(r => r.textContent ?? "");
+    expect(said.some(t => /^(Orders & sales|Returns|Margin & pricing|Traffic & conversion|CRM & consent)/.test(t))).toBe(false);
     expect(rows()).toEqual(["gmv", "aov", "net", "returns", "items", "margin", "conv"]);
     expect(table.queryByText(/outside its usual range/i)).toBeNull();    // no group of its own: that is the other tab
-    expect(table.getAllByRole("row").some(r => r.textContent === "Orders & sales3 · 1 key movement · 1 not measured")).toBe(true);
   });
 
   it("never moves a row, however late its trend arrives", async () => {
@@ -106,7 +105,7 @@ describe("All", () => {
     expect(screen.getByTestId("ledger-row-conv")).toHaveAttribute("data-key", "true");
   });
 
-  it("keeps what was not measured in its area, one row per reason, and says why", async () => {
+  it("keeps what was not measured at the foot of the list, one row per reason, and says why", async () => {
     show();
     await settled();
     const said = screen.getAllByTestId("ledger-not-measured").map(r => r.textContent);
@@ -138,12 +137,12 @@ describe("All", () => {
 });
 
 describe("Key movements", () => {
-  it("is the rows outside their usual range, what is bad first, furthest first, each with its area", async () => {
+  it("is the rows outside their usual range, what is bad first, furthest first", async () => {
     show();
     await settled();
     fireEvent.click(screen.getByRole("radio", { name: "Key movements 5" }));
     expect(rows()).toEqual(["returns", "conv", "items", "margin", "aov"]);
-    expect(within(screen.getByTestId("ledger-row-returns")).getByText("Returns")).toBeInTheDocument();
+    expect(within(screen.getByTestId("ledger-row-returns")).queryByText("Returns")).toBeNull();
     expect(screen.queryByTestId("ledger-not-measured")).toBeNull();
   });
 
@@ -158,74 +157,57 @@ describe("Key movements", () => {
     show({ ...BLOCK, measured: BLOCK.measured.map(m => ({ ...m, status: "to_date" as const })) });
     await screen.findByRole("radio", { name: /Key movements 0/ });
     // none of it was read, so it is not said that nothing left its usual range, nor that any of it is settling
-    expect(screen.getByTestId("ledger-tally")).toHaveTextContent("7 measured · 7 not read against usual · 4 not measured");
-    expect(within(screen.getByTestId("ledger-row-conv")).getByTestId("ledger-readout")).toHaveTextContent("Under way, so not read against its usual range");
+    expect(screen.getByTestId("ledger-tally")).toHaveTextContent("7 measured · 4 not measured");
+    expect(within(screen.getByTestId("ledger-row-conv")).getByTestId("ledger-readout")).toHaveTextContent("Still under way");
     fireEvent.click(screen.getByRole("radio", { name: /Key movements 0/ }));
-    expect(screen.getByTestId("ledger-none")).toHaveTextContent("None of the 7 metrics here was read against its usual range");
+    expect(screen.getByTestId("ledger-none")).toHaveTextContent("This data can still change, so no metric here is called a key movement.");
   });
 });
 
-describe("figures not read against their usual range", () => {
+describe("figures whose data can still change", () => {
   const unread = (m: BriefingRangeMeasure): BriefingRangeMeasure => ({ ...m, status: "provisional",
     equal_age: { equal: false, why: `${m.name} reads a table this platform has not seen stop changing.` } });
-  const SAID = "reads a table this platform has not seen stop changing.";
   const keyTab = async () => { fireEvent.click(await screen.findByRole("radio", { name: /Key movements \d/ })); };
   const at = (name: string) => BLOCK.measured.find(m => m.metric === name)!;
 
-  it("says none was read when none was, never that nothing left its usual range", async () => {
+  it("are never called a key movement, and the list says why without the jargon", async () => {
     show({ ...BLOCK, measured: BLOCK.measured.map(unread) });
     await keyTab();
-    expect(screen.getByTestId("ledger-tally")).toHaveTextContent("7 measured · 7 not read against usual · 4 not measured");
-    expect(screen.getByTestId("ledger-tally")).not.toHaveTextContent("key movement");
+    expect(screen.getByTestId("ledger-tally")).toHaveTextContent("7 measured · 4 not measured");
     expect(screen.getByTestId("ledger-tally")).not.toHaveTextContent("still settling");
-    expect(screen.getByTestId("ledger-none")).toHaveTextContent("None of the 7 metrics here was read against its usual range, so none is called a key movement.");
+    expect(screen.getByTestId("ledger-none")).toHaveTextContent("This data can still change, so no metric here is called a key movement.");
     expect(screen.getByTestId("ledger-none")).not.toHaveTextContent("Nothing left");
-    expect(screen.getByTestId("ledger-not-read")).toHaveTextContent(`7 metrics are not read against their usual range: each ${SAID}`);
   });
 
-  it("separates what was read and stayed from what was not read at all", async () => {
+  it("separates what was judged and stayed from what could not be judged", async () => {
     const flat = [at("gmv"), { ...at("net"), status: "final" as const }];
     show({ ...BLOCK, measured: [...flat, unread(at("aov"))], unmeasured: [] });
     await keyTab();
-    expect(screen.getByTestId("ledger-tally")).toHaveTextContent("3 measured · 0 key movements · 1 not read against usual");
-    expect(screen.getByTestId("ledger-none")).toHaveTextContent("None of the 2 read against their usual range left it.");
-    expect(screen.getByTestId("ledger-not-read")).toHaveTextContent(`Average Order Value is not read against its usual range: it ${SAID}`);
+    expect(screen.getByTestId("ledger-tally")).toHaveTextContent("3 measured · 0 key movements");
+    expect(screen.getByTestId("ledger-none")).toHaveTextContent("None of the 2 metrics that can be judged left its usual range.");
   });
 
-  it("does not count a figure with too few earlier readings as read", async () => {
+  it("does not count a figure with too few earlier readings as judged", async () => {
     api.readMetricTrend.mockImplementation(async (_c: string, metric: string) =>
       metric === "net" ? { series: months(FLAT), usual: null, why: "", tables: [] } : TRENDS[metric]);
     show({ ...BLOCK, measured: [at("gmv"), { ...at("net"), status: "final" as const }], unmeasured: [] });
     await keyTab();
-    expect(screen.getByTestId("ledger-tally")).toHaveTextContent("2 measured · 0 key movements · 1 not read against usual");
-    expect(screen.getByTestId("ledger-none")).toHaveTextContent("The one read against its usual range did not leave it.");
+    expect(screen.getByTestId("ledger-tally")).toHaveTextContent("2 measured · 0 key movements");
+    expect(screen.getByTestId("ledger-none")).toHaveTextContent("The one metric that can be judged did not leave its usual range.");
   });
 
-  it("says nothing left its usual range when every figure was read", async () => {
+  it("says nothing left its usual range when every figure was judged", async () => {
     show({ ...BLOCK, measured: [at("gmv"), { ...at("net"), status: "final" as const }], unmeasured: [] });
     await keyTab();
     expect(screen.getByTestId("ledger-none")).toHaveTextContent("Nothing left its usual range.");
-    expect(screen.queryByTestId("ledger-not-read")).toBeNull();
   });
 
-  it("says who was left out beside the key movements too, and only counts as settling what was read", async () => {
+  it("are left out of the key movements, and only counts as settling what was judged", async () => {
     show({ ...BLOCK, measured: BLOCK.measured.map(m => (m.metric === "aov" ? unread(m) : m)) });
     await keyTab();
-    expect(screen.getByTestId("ledger-tally")).toHaveTextContent("7 measured · 4 key movements · 1 not read against usual · 1 still settling · 4 not measured");
+    expect(screen.getByTestId("ledger-tally")).toHaveTextContent("7 measured · 4 key movements · 1 still settling · 4 not measured");
     expect(rows()).not.toContain("aov");
-    expect(screen.getByTestId("ledger-not-read")).toHaveTextContent("Average Order Value is not read against its usual range");
     expect(screen.queryByTestId("ledger-none")).toBeNull();
-  });
-
-  it("is said on Key movements, and not over a search or on All, whose rows carry it", async () => {
-    show({ ...BLOCK, measured: BLOCK.measured.map(unread) });
-    await screen.findByRole("radio", { name: /Key movements 0/ });
-    expect(screen.queryByTestId("ledger-not-read")).toBeNull();
-    expect(within(screen.getByTestId("ledger-row-aov")).getByText("not at equal age")).toBeInTheDocument();
-    await keyTab();
-    fireEvent.change(screen.getByRole("textbox", { name: "Find a metric" }), { target: { value: "zzz" } });
-    expect(screen.getByTestId("ledger-none")).toHaveTextContent("No key movement matches “zzz”.");
-    expect(screen.queryByTestId("ledger-not-read")).toBeNull();
   });
 });
 
@@ -239,12 +221,10 @@ describe("an opened row", () => {
   const one = (over: Partial<BriefingRangeMeasure>) => ({ ...BLOCK, unmeasured: [],
     measured: [fig({ name: "Revenue", metric: "aov", area: SALES, ...over })] }) as BriefingRangeBlock;
 
-  it.each([
-    ["Revenue reads a table not yet seen to stop changing.", "Not at equal age: Revenue reads a table not yet seen to stop changing."],
-    ["part of any difference is its age", "Not at equal age: part of any difference is its age."],
-  ])("ends the reason %j with one full stop", async (why, words) => {
-    const reasons = await open(one({ status: "provisional", equal_age: { equal: false, why } }), "Revenue");
-    expect(reasons.getByText(words)).toBeInTheDocument();
+  it("says once, in plain words, that its comparisons are approximate", async () => {
+    const reasons = await open(one({ status: "provisional", equal_age: { equal: false, why: "part of any difference is its age" } }), "Revenue");
+    expect(reasons.getByTestId("ledger-compare-caveat")).toHaveTextContent("read these comparisons as approximate");
+    expect(screen.getByTestId("metrics-ledger").textContent).not.toMatch(/equal age/i);
   });
 
   it("offers to ask why a figure moved only when it was read as a move", async () => {
@@ -292,18 +272,18 @@ describe("a row", () => {
     await waitFor(() => expect(screen.getAllByTestId("ledger-tally").at(-1)).toHaveTextContent("1 still settling"));
   });
 
-  it("does not call a figure not at equal age a key movement, and keeps its name readable", async () => {
+  it("does not call a figure whose data can still change a key movement, and wears no label for it", async () => {
     const young = fig({ name: "Revenue", metric: "aov", status: "provisional", better: "up", area: SALES, equal_age: { equal: false, why: "part of any difference is its age" } });
     show({ ...BLOCK, measured: [young], unmeasured: [] } as BriefingRangeBlock);
     await screen.findByRole("radio", { name: /Key movements 0/ });
-    expect(screen.getByTestId("ledger-tally")).toHaveTextContent("1 measured · 1 not read against usual");
+    expect(screen.getByTestId("ledger-tally").textContent).toBe("1 measured");
     const row = within(screen.getByTestId("ledger-row-aov"));
-    expect(row.getByText("not at equal age")).toHaveAttribute("title", "part of any difference is its age");
+    expect(row.queryByText(/equal age/i)).toBeNull();
     expect(row.queryByText("still settling")).toBeNull();
-    expect(row.getByTestId("ledger-readout")).toHaveTextContent("Not read against its usual range");
+    expect(row.getByTestId("ledger-readout").textContent).toBe("");
     fireEvent.click(row.getByRole("button", { name: "Revenue" }));
     const open = within(await screen.findByTestId("ledger-reasons"));
-    expect(open.getByText(/This figure is not held against it/)).toBeInTheDocument();
+    expect(open.getByTestId("ledger-compare-caveat")).toBeInTheDocument();
     expect(open.queryByText(/^Above its usual range/)).toBeNull();
   });
 

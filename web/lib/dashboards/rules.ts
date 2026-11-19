@@ -18,7 +18,7 @@
 import { validateSpec, type Spec } from "@json-render/core";
 import type { z } from "zod";
 
-import {
+import { MAX_GLOBAL_FILTERS,
   CHOOSERS, DASHBOARD_VOCABULARY_VERSION, COMPONENT_NAMES, GRADE, GRID, LIMITS, MAX_DEPTH, MAX_SETS, MAX_VALUES, MAY_BE_CONDITIONAL, MAY_HOLD,
   ISO_DAY, MAX_LIST, PLACED, READER_TEXT, SET_READERS, SPLIT_AGGS, SIZES, SWITCHED, TONES, VALUE_OPS, dashboardCatalog, dashboardSet, dashboardValue,
   type ActionButtonDef,
@@ -537,6 +537,25 @@ function checkCondition(key: string, cond: unknown, out: DashboardIssue[], state
 
 const REFUSED: DashboardCheck = { valid: false, issues: [], cards: [], stateCards: [], texts: [] };
 
+/** The dashboard as its readers receive it: without the pages kept from them and what those pages hold (the server's
+ *  `sharing.without_hidden_pages`). The spec itself when no page is hidden. */
+export function withoutHiddenPages<T extends Record<string, unknown>>(spec: T): T {
+  const elements = spec.elements as Record<string, { type?: string; props?: Record<string, unknown>; children?: string[] }>;
+  const hidden = Object.values(elements).filter(el => el?.type === "Tabs").flatMap(el => el.children ?? [])
+    .filter(k => elements[k]?.props?.hidden === true);
+  if (!hidden.length) return spec;
+  const gone = new Set<string>();
+  const drop = (k: string) => { if (gone.has(k)) return; gone.add(k); (elements[k]?.children ?? []).forEach(drop); };
+  hidden.forEach(drop);
+  const kept = Object.fromEntries(Object.entries(elements).filter(([k]) => !gone.has(k))
+    .map(([k, el]) => [k, el?.type === "Tabs" ? { ...el, children: (el.children ?? []).filter(c => !gone.has(c)) } : el]));
+  const tabs = Object.values(kept).find(el => el?.type === "Tabs");
+  const first = kept[tabs?.children?.[0] ?? ""]?.props?.name;
+  const state = spec.state as Record<string, unknown> | undefined;
+  const opensHidden = !!state && hidden.some(k => elements[k]?.props?.name === state.tab);
+  return { ...spec, elements: kept, ...(opensHidden ? { state: { ...state, tab: first } } : {}) };
+}
+
 export function checkDashboardSpec(spec: unknown): DashboardCheck {
   const issues: DashboardIssue[] = [];
   const cards: string[] = [];
@@ -642,9 +661,13 @@ export function checkDashboardSpec(spec: unknown): DashboardCheck {
       issues.push({ code: "bad_child", elementKey: key,
         message: `The ${el.type.toLowerCase()} ${q(key)} holds ${list(stray.map(q))}. `
           + (may.length ? `A ${el.type} holds: ${list(may)}.` : `A ${el.type} holds nothing.`) });
-    } else if (el.type === "Cockpit" && new Set(kinds.filter(k => k !== "ObjectFilters" && k !== "QueryFilters" && k !== "Drawer")).size > 1) {
+    } else if (el.type === "Cockpit" && new Set(kinds.filter(k => k !== "ObjectFilters" && k !== "QueryFilters" && k !== "GlobalFilters" && k !== "Drawer")).size > 1) {
       issues.push({ code: "bad_child", elementKey: key,
         message: `The dashboard ${q(key)} holds tabs and sections side by side. It holds one Tabs, or sections, not both.` });
+    } else if (kinds.filter(k => k === "GlobalFilters").length > 1) {
+      issues.push({ code: "bad_child", elementKey: key, message: `The dashboard ${q(key)} holds global filters twice. It holds them once.` });
+    } else if (el.type === "GlobalFilters" && el.children.length > MAX_GLOBAL_FILTERS) {
+      issues.push({ code: "bad_child", elementKey: key, message: `A dashboard holds at most ${MAX_GLOBAL_FILTERS} global filters.` });
     } else if (el.type === "Cockpit" && kinds.filter(k => k === "Tabs").length > 1) {
       issues.push({ code: "bad_child", elementKey: key,
         message: `The dashboard ${q(key)} holds more than one Tabs. It holds one.` });
@@ -654,9 +677,9 @@ export function checkDashboardSpec(spec: unknown): DashboardCheck {
     } else if (el.type === "Cockpit" && kinds.some(k => k === "ObjectFilters" || k === "QueryFilters") && kinds[0] !== "ObjectFilters" && kinds[0] !== "QueryFilters") {
       issues.push({ code: "bad_child", elementKey: key,
         message: `The dashboard ${q(key)} holds its filter column after its tabs or sections. A filter column is the dashboard's first child, drawn beside the rest.` });
-    } else if (el.type === "Cockpit" && kinds.length > 0 && kinds.every(k => k === "ObjectFilters" || k === "QueryFilters" || k === "Drawer")) {
+    } else if (el.type === "Cockpit" && kinds.length > 0 && kinds.every(k => k === "ObjectFilters" || k === "QueryFilters" || k === "GlobalFilters" || k === "Drawer")) {
       issues.push({ code: "bad_child", elementKey: key,
-        message: kinds.includes("ObjectFilters")
+        message: kinds.includes("ObjectFilters") || kinds.includes("GlobalFilters")
           ? `The dashboard ${q(key)} holds a filter column and nothing it narrows. It holds one Tabs, or sections, beside it.`
           : `The dashboard ${q(key)} holds only drawers. It holds one Tabs, or sections, for a drawer to open beside.` });
     } else if (MAY_HOLD[el.type].length && !PLACED.includes(el.type) && el.type !== "Section" && el.type !== "Drawer" && !el.children.length) {
@@ -699,7 +722,15 @@ export function checkDashboardSpec(spec: unknown): DashboardCheck {
       }
     }
     for (const prop of clean.has(key) ? READER_TEXT[el.type] ?? [] : []) {
-      texts.push({ elementKey: key, prop, text: el.props[prop] as string });
+      // a prop left out says nothing (a placed card's own title, v16, is most often left out)
+      if (typeof el.props[prop] === "string") texts.push({ elementKey: key, prop, text: el.props[prop] as string });
+    }
+  }
+
+  // v18 — a dashboard keeps at least one page its readers can open
+  for (const [key, el] of sound) {
+    if (el.type === "Tabs" && el.children.length > 0 && el.children.every(k => sound.get(k)?.props.hidden === true)) {
+      issues.push({ code: "bad_prop", elementKey: key, message: "Every page of this dashboard is hidden from its readers. Keep one for them to open." });
     }
   }
 
@@ -850,16 +881,34 @@ export function checkDashboardSpec(spec: unknown): DashboardCheck {
     }
   }
   if (issues.length) return done();
+  // v18 — readers are given the dashboard without its hidden pages, so what is left has to stand on its own
+  const forReaders = withoutHiddenPages(spec);
+  if (forReaders !== spec) {
+    const left = checkDashboardSpec(forReaders);
+    if (!left.valid) {
+      issues.push(...left.issues.map(i => ({ ...i, message: `A page hidden from readers holds what another page needs. ${i.message}` })));
+      return done();
+    }
+  }
   return { valid: true, issues: [], cards, stateCards: [...stateCards], texts };
 }
 
 /** The tab a spec opens on: the one it seeds, else the first its Tabs holds, else none. */
+/** The tab to keep open when a dashboard's spec changes: the one open, while the spec still holds a tab of that name. */
+export function tabStillThere(spec: unknown, open: unknown): string | null {
+  if (typeof open !== "string" || !isObj(spec) || !isObj(spec.elements)) return null;
+  return Object.values(spec.elements).some(el => isObj(el) && el.type === "Tab" && isObj(el.props) && el.props.name === open) ? open : null;
+}
+
 export function openingTab(spec: unknown): string | null {
   if (!isObj(spec) || !isObj(spec.elements)) return null;
-  const seeded = isObj(spec.state) ? spec.state.tab : undefined;
-  if (typeof seeded === "string") return seeded;
   const elements = spec.elements;
-  const tabs = Object.values(elements).find(el => isObj(el) && el.type === "Tabs");
-  const first = isObj(tabs) && Array.isArray(tabs.children) ? elements[String(tabs.children[0])] : null;
-  return isObj(first) && isObj(first.props) && typeof first.props.name === "string" ? first.props.name : null;
+  const holder = Object.values(elements).find(el => isObj(el) && el.type === "Tabs");
+  const tabs = (isObj(holder) && Array.isArray(holder.children) ? holder.children : []).map(k => elements[String(k)])
+    .filter((t): t is Record<string, unknown> & { props: Record<string, unknown> } => isObj(t) && isObj(t.props));
+  const seeded = isObj(spec.state) ? spec.state.tab : undefined;
+  // a page kept from readers is never where a dashboard opens
+  if (typeof seeded === "string" && !tabs.some(t => t.props.name === seeded && t.props.hidden === true)) return seeded;
+  const first = tabs.find(t => t.props.hidden !== true) ?? tabs[0];
+  return first && typeof first.props.name === "string" ? first.props.name : null;
 }

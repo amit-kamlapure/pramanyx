@@ -18,7 +18,11 @@ export interface Pick { field: string; value: string | number }
 export function clickedDatum(item: unknown): Record<string, unknown> | null {
   const role = String((item as { mark?: { role?: string } } | null)?.mark?.role ?? "");
   if (/^(axis|legend|title)/.test(role)) return null;
-  const datum = (item as { datum?: unknown } | null)?.datum;
+  // A line's hover rule is reached through the voronoi Vega draws over it (`nearest`): the click lands on a cell whose
+  // datum is the rule's mark, and the row is that mark's own datum.
+  const voronoi = (item as { isVoronoi?: boolean } | null)?.isVoronoi === true;
+  const outer = (item as { datum?: unknown } | null)?.datum;
+  const datum = voronoi ? (outer as { datum?: unknown } | null)?.datum : outer;
   return datum && typeof datum === "object" ? (datum as Record<string, unknown>) : null;
 }
 

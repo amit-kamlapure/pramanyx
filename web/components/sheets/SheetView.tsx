@@ -9,12 +9,14 @@
  * until they keep them in the view. A change made here is said under the toolbar with Undo beside it. A view can be a
  * board or a calendar, grouped with its totals, or kept to its maker (SH-3) — and rules mark rows.
  */
+import { useOnPage } from "@/lib/askSubject";
+import { hideAskPanel, openAskPanelOn, useAskPanel } from "@/lib/askPanel";
+import { useSheetDoorsHere, type SheetActions } from "@/lib/sheetBridge";
 import { type CSSProperties, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Chip, Dot, MUTED, NUM } from "@/components/clarity/kit";
 import { SheetBoard } from "@/components/sheets/SheetBoard";
 import { SheetCalendar } from "@/components/sheets/SheetCalendar";
-import { SheetChat } from "@/components/sheets/SheetChat";
 import { SheetCombine } from "@/components/sheets/SheetCombine";
 import { SheetDashboard } from "@/components/sheets/SheetDashboard";
 import { MAX_WIDTH, MIN_WIDTH, RULE_COLOR, SheetGrid, type ColumnAction, type EditResult } from "@/components/sheets/SheetGrid";
@@ -86,7 +88,7 @@ function keepFrozen(sheetId: string, n: number) {
 
 const KIND_OF_VIEW: Record<ViewKind | "grouped", IconName> = { grid: "table", grouped: "list", board: "column", calendar: "date" };
 
-type Panel = "" | "chat" | "combine" | "record" | "history";
+type Panel = "" | "combine" | "record" | "history";
 type Pop = "" | "fields" | "filter" | "sort" | "group" | "share" | "view" | "rules" | "lanes" | "card" | "by" | "fill";
 
 interface Query {
@@ -133,9 +135,8 @@ function useNarrow(): [boolean, (el: HTMLDivElement | null) => void] {
   return [narrow, setEl];
 }
 
-export function SheetView({ sheetId, onBack, onOpen, onAsk, asReference = false }: {
+export function SheetView({ sheetId, onBack, onOpen, asReference = false }: {
   sheetId: string; onBack: () => void; onOpen: (id: string) => void;
-  onAsk?: (question: string) => void;
   /** The sheet as an asset an answer read, opened beside it (`/sheets/<id>`): the grid and everything that works ON
    *  it — search, filter, sort, copy, download, views — without the row that takes the sheet somewhere else (a
    *  dashboard, sharing, the ontology, combining, a chat) and without the way back to a list there is none of. */
@@ -168,6 +169,10 @@ export function SheetView({ sheetId, onBack, onOpen, onAsk, asReference = false 
   // title row, and the sheet's own bar — "‹ Spreadsheets" back to the sheets, its name renamed in place, its facts and
   // its doors — is its first row.
   usePageChrome(useInShell() ? { bare: true } : {});
+  // the Ask panel asks about the spreadsheet open, as the sheets connection reads it, and the view of it on screen
+  const viewHere = sheet && query?.view ? sheet.views.find(v => v.id === query.view) : undefined;
+  useOnPage(sheet && !asReference ? { kind: "sheet", connectionId: "sheets", noun: ["row", "rows"], id: sheet.id, title: sheet.name,
+    ...(viewHere ? { view: viewHere.id, viewName: viewHere.name } : {}) } : null);
 
   const readDefinition = useCallback(() => readSheet(sheetId).then(s => {
     setSheet(s);
@@ -290,6 +295,19 @@ export function SheetView({ sheetId, onBack, onOpen, onAsk, asReference = false 
 
   const hidden = useMemo(() => new Set(query?.hidden ?? []), [query]);
 
+  // what the Ask panel beside the sheet asks it to do (Stage 1: the sheet's own chat folded into the panel) — the page's
+  // own actions, read as they are when used; they are made once the sheet is read, below
+  const doorsRef = useRef<SheetActions | null>(null);
+  useSheetDoorsHere(sheet && !asReference ? sheet : null, query?.view ?? "", rows.total, {
+    showRows: r => doorsRef.current?.showRows(r),
+    keepRows: r => doorsRef.current?.keepRows(r) ?? Promise.resolve(false),
+    applied: () => doorsRef.current?.applied(),
+    openView: name => doorsRef.current?.openView(name),
+    openSheet: id => doorsRef.current?.openSheet(id),
+  });
+  const askPanel = useAskPanel();
+  const askingHere = askPanel.open && askPanel.tabs.find(t => t.key === askPanel.active)?.connectionId === "sheets";
+
   if (failed && (closed === 403 || closed === 404)) {
     return (
       <div style={{ padding: "24px 22px", display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 12 }}>
@@ -368,6 +386,15 @@ export function SheetView({ sheetId, onBack, onOpen, onAsk, asReference = false 
       setQuery(fromView(s, madeId || s.views[s.views.length - 1]?.id || ""));
     }
     return ok;
+  };
+
+  doorsRef.current = {
+    showRows, keepRows, applied: () => void changed("Applied"), openSheet: onOpen,
+    openView: name => { readSheet(sheet.id).then(s => {
+      setSheet(s);
+      const v = [...s.views].reverse().find(x => x.name === name);
+      if (v) setQuery(fromView(s, v.id));
+    }); },
   };
 
   /** A click on a column's header: lowest first, then highest first, then the sheet's own order — the person's own
@@ -523,8 +550,9 @@ export function SheetView({ sheetId, onBack, onOpen, onAsk, asReference = false 
         <Button variant={panel === "combine" ? "secondary" : "outline"} size="sm"
           onClick={() => setPanel(panel === "combine" ? "" : "combine")}><Icon name="link" /> Combine</Button>
       )}
-      <Button variant={panel === "chat" ? "secondary" : "outline"} size="sm"
-        onClick={() => setPanel(panel === "chat" ? "" : "chat")}><Icon name="chat" /> Chat</Button>
+      {/* the one conversation, beside the sheet: the Ask panel, asking about this sheet and the view on screen */}
+      <Button variant={askingHere ? "secondary" : "outline"} size="sm" data-testid="sheet-ask"
+        onClick={() => (askingHere ? hideAskPanel() : openAskPanelOn("sheets"))}><Icon name="chat" /> Ask</Button>
     </span>
   );
 
@@ -741,15 +769,6 @@ export function SheetView({ sheetId, onBack, onOpen, onAsk, asReference = false 
       </div>
 
       {dashboard && <SheetDashboard sheet={sheet} viewId={query.view} onClose={() => setDashboard(false)} />}
-      {panel === "chat" && (
-        <SheetChat sheet={sheet} viewId={query.view} viewRows={rows.total} onClose={() => setPanel("")}
-          onApplied={() => void changed("Applied")} onOpenSheet={onOpen} onAsk={onAsk}
-          onOpenView={name => { readSheet(sheet.id).then(s => {
-            setSheet(s);
-            const v = [...s.views].reverse().find(x => x.name === name);
-            if (v) setQuery(fromView(s, v.id));
-          }); }} onShowRows={showRows} onKeepRows={keepRows} />
-      )}
       {panel === "combine" && editable && (
         <SheetCombine sheet={sheet} onClose={() => setPanel("")} onChanged={words => void changed(words)} />
       )}

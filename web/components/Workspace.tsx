@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { LayerVisibleContext } from "@/lib/useVisiblePoll";
 import { TabStrip } from "@/components/ui/tab-strip";
-import { ChromeToolbar, useInShell } from "@/components/shell/PageChrome";
+import { ChromeToolbar, useInShell, usePageChromeSpec } from "@/components/shell/PageChrome";
 
 /**
  * One perspective layer of a `<Workspace>` — an id, a switcher icon, a label,
@@ -69,6 +69,7 @@ export function Workspace<L extends string>({
     setVisited(prev => (prev.has(layer) ? prev : new Set(prev).add(layer)));
   }, [layer]);
   const inShell = useInShell();
+  const { noScope } = usePageChromeSpec();
   const tabRow = !hideTabs && (
     <TabStrip label={ariaLabel} value={layer} onChange={onLayerChange} className="aug-layer-tabs"
       tabs={layers.map(l => ({ id: l.id, label: l.label, title: l.blurb, badge: badges?.[l.id] }))}
@@ -94,7 +95,7 @@ export function Workspace<L extends string>({
         // item 64): what scopes the view, then the layer tabs, then what filters it and the one action — all as they
         // were, live, in one row. A Data Canvas embedding this workspace has no shell rows and keeps its own below.
         <ChromeToolbar>
-          {headerControls && <div className="aug-context-bar aug-toolbar-scope">{headerControls}</div>}
+          {headerControls && !noScope && <div className="aug-context-bar aug-toolbar-scope">{headerControls}</div>}
           {tabRow}
           {toolbar && <div className="aug-toolbar-tools">{toolbar}</div>}
         </ChromeToolbar>

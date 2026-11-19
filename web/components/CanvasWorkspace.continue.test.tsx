@@ -34,10 +34,17 @@ vi.mock("@/lib/api", async (original) => ({
   updateCanvas: vi.fn(),
 }));
 // The chat shows what it was seeded with; the past run is only its composer's hand-off.
-vi.mock("@/components/ChatPanel", () => ({
-  ChatPanel: ({ initialQuestion, initialMode }: { initialQuestion?: string; initialMode?: string }) =>
-    <div data-testid="chat" data-question={initialQuestion ?? ""} data-mode={initialMode ?? ""} />,
-}));
+const mounts = vi.hoisted(() => ({ n: 0 }));
+vi.mock("@/components/ChatPanel", async () => {
+  const { useState } = await import("react");
+  return {
+    ChatPanel: ({ initialQuestion, initialMode }: { initialQuestion?: string; initialMode?: string }) => {
+      // counted once per instance: a remount is a new instance, a re-render is not
+      useState(() => { mounts.n += 1; return 0; });
+      return <div data-testid="chat" data-question={initialQuestion ?? ""} data-mode={initialMode ?? ""} />;
+    },
+  };
+});
 vi.mock("@/components/HistoryDetailPanel", () => ({
   HistoryDetailPanel: ({ onContinue }: { onContinue?: Continue }) => {
     run.onContinue = onContinue;
@@ -72,5 +79,15 @@ describe("continuing a past run in chat", () => {
     const chat = screen.getByTestId("chat");
     expect(chat).toHaveAttribute("data-question", "Why did returns rise in July?");
     expect(chat).toHaveAttribute("data-mode", "ask");
+  });
+});
+
+describe("opening a canvas", () => {
+  it("keeps the chat it mounted with, so a reloaded conversation is not dropped; another canvas starts a fresh one", () => {
+    mounts.n = 0;
+    const { rerender } = render(<CanvasWorkspace canvas={CANVAS} connections={CONNECTIONS} onClose={vi.fn()} onCanvasUpdate={vi.fn()} />);
+    expect(mounts.n).toBe(1);
+    rerender(<CanvasWorkspace canvas={{ ...CANVAS, id: "cv2" }} connections={CONNECTIONS} onClose={vi.fn()} onCanvasUpdate={vi.fn()} />);
+    expect(mounts.n).toBe(2);
   });
 });

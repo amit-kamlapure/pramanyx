@@ -15,12 +15,13 @@ sentences; it is never a 200 with nothing kept.
 """
 from __future__ import annotations
 
+import re
 from datetime import date
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
-from fastapi.responses import Response
-from pydantic import BaseModel
+from fastapi.responses import Response, StreamingResponse
+from pydantic import BaseModel, Field
 
 from pramanyx.ontology.security import acting_agent_from_request
 from pramanyx.security.authz import connection_owner_guard
@@ -71,6 +72,8 @@ class QueryRequest(BaseModel):
 class AskRequest(BaseModel):
     words: str
     schema_name: Optional[str] = None
+    #: The one element a change is held to, when a person asks about the piece they chose.
+    target: Optional[str] = Field(default=None, max_length=120)
 
 
 class PublishRequest(BaseModel):
@@ -337,6 +340,106 @@ def _read_query(connection_id: str, req: QueryRequest) -> dict:
             tolerate(exc, "dashboard query: connection close failed after a preview", counter="cockpit.query_close")
 
 
+class FilterValuesRequest(BaseModel):
+    """What a global filter offers: the values of a column, or the numbers it runs between."""
+    table: str = Field(min_length=1, max_length=200)
+    column: str = Field(min_length=1, max_length=200)
+    read: Literal["values", "range"] = "values"
+    #: What the dashboard's other filters hold (v20): a linked filter offers only what they leave.
+    focus: list[dict[str, Any]] = Field(default_factory=list)
+
+
+#: The most values a global filter lists; past them it says there are more.
+FILTER_VALUES = 200
+
+
+def _filter_tables(connection_id: str) -> tuple[dict[str, list[tuple[str, str]]], str]:
+    """The connection's tables and their typed columns, as the query page reads them, and the dialect it speaks."""
+    from pramanyx.dashboards import queries
+    from pramanyx.db.connection import open_connection_for
+    from pramanyx.db.schema_render import typed_tables
+    from pramanyx.routers._shared import get_schema_cached
+    try:
+        db = open_connection_for(connection_id)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Connection not found: {e}")
+    try:
+        return typed_tables(get_schema_cached(connection_id, db)), queries.dialect_of(db)
+    finally:
+        db.close()
+
+
+def _filter_rows(connection_id: str, sql: str) -> list:
+    """A filter's own statement, through the door a person's query goes through: read-only, under the connection's time limit
+    and the ontology's policies. What stops it is said."""
+    from pramanyx.dashboards import pieces, queries
+    from pramanyx.db.connection import open_connection_for
+    db = open_connection_for(connection_id)
+    try:
+        try:
+            graph = pieces.served_graph(connection_id)
+        except Exception:  # noqa: BLE001 — no ontology is no policy, as a person's own query reads it
+            graph = None
+        refusal = queries.policy_refusal(graph, queries.tables_of(sql, queries.dialect_of(db)))
+        if refusal:
+            raise HTTPException(status_code=422, detail={"refused": [refusal]})
+        probe = queries.probe(db, sql, seconds=queries.time_limit(connection_id), rows=FILTER_VALUES + 1)
+        if probe["error"]:
+            raise HTTPException(status_code=422, detail={"refused": [probe["error"]]})
+        return probe["rows"]
+    finally:
+        db.close()
+
+
+@router.get("/dashboards/filters/fields")
+def filter_fields(connection_id: str) -> dict:
+    """The tables a global filter may read and the columns it may filter, each with its kind. A column whose name a filter
+    cannot hold is counted, never silently dropped."""
+    from pramanyx.dashboards.queries import kind_of
+    tables, _ = _filter_tables(connection_id)
+    simple = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")               # what a focus may name (`focus.Focus.column`)
+    out = []
+    for table, columns in tables.items():
+        # a sheet's row number is the platform's own, never a field of the data
+        own = [c for c in columns if c[0] != "_row"]
+        held = [c for c in own if simple.match(c[0])]
+        out.append({"table": table, "columns": [{"name": n, "type": t, "kind": kind_of(t)} for n, t in held],
+                    "left_out": len(own) - len(held)})
+    return {"tables": sorted(out, key=lambda t: t["table"].lower())}
+
+
+@router.post("/dashboards/filters/values")
+def filter_values(connection_id: str, req: FilterValuesRequest) -> dict:
+    """What a global filter offers a reader, read through the connection's own door: the commonest values of a column with how
+    many rows hold each, or the least and the most of a column of numbers."""
+    from sqlglot import exp
+
+    tables, dialect = _filter_tables(connection_id)
+    columns = tables.get(req.table)
+    if columns is None or req.column not in {c[0] for c in columns}:
+        raise HTTPException(status_code=422, detail={"refused": [f"This connection has no column {req.column} on {req.table}."]})
+    source = exp.to_table(req.table, dialect=dialect or None)
+    col = exp.column(req.column, quoted=True)
+    if req.read == "range":
+        sql = exp.select(exp.Min(this=col).as_("low"), exp.Max(this=col.copy()).as_("high")).from_(source).sql(dialect=dialect or None)
+    else:
+        sql = (exp.select(col.as_("value"), exp.Count(this=exp.Star()).as_("n")).from_(source).where(col.copy().is_(exp.null()).not_())
+               .group_by(exp.Literal.number(1)).order_by("n DESC").limit(FILTER_VALUES + 1).sql(dialect=dialect or None))
+    if req.focus:
+        from pramanyx.dashboards.focus import cut_statement, links_of, parsed
+        try:
+            held = parsed(req.focus)
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail={"refused": [str(e)[:300]]}) from e
+        # a filter this column cannot be reached from narrows nothing here, as it cuts nothing on a card
+        sql, _ = cut_statement(sql, held, dialect or None, links=lambda: links_of(connection_id))
+    rows = _filter_rows(connection_id, sql)
+    if req.read == "range":
+        low, high = (rows[0] if rows else [None, None])[:2]
+        return {"low": low, "high": high}
+    return {"values": [{"value": r[0], "n": r[1]} for r in rows[:FILTER_VALUES]], "more": len(rows) > FILTER_VALUES}
+
+
 @router.post("/dashboards/queries/preview")
 def preview_query(connection_id: str, req: QueryRequest) -> dict:
     """Arc AP-7 — run a person's own query as the builder would keep it, and say what it returns and how it would be
@@ -540,6 +643,16 @@ def draft_dashboard(request: Request, connection_id: str, req: DraftRequest) -> 
     return draft_for_area(connection_id, person_of(request), req.area, schema=req.schema_name)
 
 
+@router.post("/dashboards/draft/stream")
+def draft_dashboard_stream(request: Request, connection_id: str, req: DraftRequest) -> StreamingResponse:
+    """⚑ Spends model calls. The same draft, told as it is made, so a person can see the work happening. Leaving stops the
+    spending at the next step, and nothing is kept until the person keeps it."""
+    from pramanyx.dashboards.ask import draft_frames
+    from pramanyx.dashboards.home import person_of
+    return StreamingResponse(draft_frames(connection_id, person_of(request), req.area, schema=req.schema_name),
+                             media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
 @router.post("/dashboards/move")
 def move_dashboard(request: Request, connection_id: str, req: MoveRequest) -> dict:
     """Move a canvas's dashboard to the asker's Briefing. One act: the cards it places become
@@ -560,7 +673,41 @@ def ask_dashboard(request: Request, cockpit_id: str, connection_id: str, req: As
     from pramanyx.dashboards.ask import edit_in_words
     from pramanyx.dashboards.home import person_of
     home = _home(request, connection_id, cockpit_id)
-    return edit_in_words(connection_id, person_of(request), home.cockpit_id, req.words, schema=req.schema_name)
+    return edit_in_words(connection_id, person_of(request), home.cockpit_id, req.words, schema=req.schema_name, target=req.target)
+
+
+@router.post("/dashboards/{dashboard_id}/ask/stream")
+def ask_dashboard_stream(request: Request, dashboard_id: str, connection_id: str, req: AskRequest) -> StreamingResponse:
+    """⚑ Spends model calls. The same change, told as it is drafted, so a person beside the dashboard can see the work. Leaving
+    stops the spending at the next step, and nothing changes until the person allows it."""
+    from pramanyx.dashboards.ask import change_frames
+    from pramanyx.dashboards.home import person_of
+    _home(request, connection_id, dashboard_id)       # refuses a dashboard id that is not a dashboard's
+    return StreamingResponse(change_frames(connection_id, person_of(request), dashboard_id, req.words, schema=req.schema_name,
+                                           target=req.target),
+                             media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@router.get("/dashboards/{dashboard_id}/export")
+def export_dashboard(request: Request, dashboard_id: str, connection_id: str) -> dict:
+    """The dashboard as it stands, as a JSON file's contents: its spec and the cards it places, each with its source."""
+    from pramanyx.dashboards.transfer import export_of
+    out = export_of(_home(request, connection_id, dashboard_id))
+    if out is None:
+        raise HTTPException(status_code=404, detail="There is no dashboard here to export.")
+    return out
+
+
+@router.post("/dashboards/import", status_code=201)
+def import_dashboard(request: Request, connection_id: str, doc: dict[str, Any]) -> dict:
+    """A dashboard file read into the asker's dashboards on this connection. All of it or none: whatever does not resolve here
+    is refused by name, with a 422 and nothing made."""
+    from pramanyx.dashboards.home import person_of
+    from pramanyx.dashboards.transfer import import_into
+    out = import_into(connection_id, person_of(request), doc, approved_by=_approved_by(request))
+    if not out["imported"]:
+        raise HTTPException(status_code=422, detail=out)
+    return out
 
 
 @router.post("/dashboards/{cockpit_id}/publish")

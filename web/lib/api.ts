@@ -5,6 +5,8 @@ import { getApiBase } from "./config";
 import { installUpsellInterceptor } from "./upsell";
 import { installApprovalInterceptor } from "./approval";
 import { normalizeDeparture } from "./departures";
+import { readFrames } from "./sseFrames";
+import type { DraftFrame } from "./dashboards/draftProgress";
 
 // Screen every API response for HTTP 402 (capability_locked) → app-wide upsell modal,
 // and HTTP 428 (approval_required) → app-wide approval modal. Idempotent, client-only;
@@ -432,6 +434,20 @@ export async function cancelInvestigation(invId: string): Promise<void> {
   await fetch(`${getApiBase()}/investigations/${encodeURIComponent(invId)}/cancel`, { method: "POST" });
 }
 
+/** The deep analysis a turn can be asked to answer early: one still running, and not waiting on the person's own choice. */
+export function answerableRun(turn: {
+  status: string; mode: string; investigationId?: string | null; runHandle?: string | null; planPending?: unknown; clarifyPending?: unknown;
+}): string | null {
+  if (turn.status !== "loading" || turn.mode !== "investigate" || turn.planPending || turn.clarifyPending) return null;
+  return turn.investigationId ?? turn.runHandle ?? null;
+}
+
+/** Answer now: a running deep analysis stops where it is and answers from what it has found. Says why when it cannot. */
+export async function answerRunNow(runId: string): Promise<void> {
+  const res = await fetch(`${getApiBase()}/investigations/${encodeURIComponent(runId)}/answer-now`, { method: "POST" });
+  if (!res.ok) throw new Error(fastApiError(await res.json().catch(() => ({})), "It could not be asked to answer now."));
+}
+
 /** FL-1b — cancel the deep run behind a still-loading turn, if it has one.
  *  A deep run executes as a KERNEL JOB (K1): aborting the HTTP stream stops the
  *  watching, not the work, so stop/interrupt must also cancel the job. Lives
@@ -439,9 +455,9 @@ export async function cancelInvestigation(invId: string): Promise<void> {
  *  frozen `investigation` spelling (the vocabulary ratchet's rule); best-effort,
  *  like the reject path above. */
 export function cancelActiveDeepRun(
-  turn: { investigationId?: string | null } | null | undefined,
+  turn: { investigationId?: string | null; runHandle?: string | null } | null | undefined,
 ): void {
-  const id = turn?.investigationId;
+  const id = turn?.investigationId ?? turn?.runHandle;
   if (id) void cancelInvestigation(id).catch(() => { /* best-effort */ });
 }
 
@@ -2923,7 +2939,8 @@ export interface CardRunResult {
   refresh: StoredCardRefresh;
   /** BR-9 — present when the run asked for a range: what the number covers, or `standing`
    *  with why the card's SQL could not be cut to it (no date on its tables). */
-  scoped?: { covers: string; standing: boolean; why: string; grain: string | null } | null;
+  /** `own_window`: the card's own window, reckoned from today, gave way to the range chosen. */
+  scoped?: { covers: string; standing: boolean; why: string; grain: string | null; own_window?: string } | null;
   /** Asked for with `compare`: the card's figure for the window its range is compared with,
    *  cut the same way. `word` is short enough to follow "higher than"; `covers` is the full
    *  phrase. `equal_age` is false until the range is final — part of any difference is then
@@ -2935,7 +2952,8 @@ export interface CardRunResult {
   ran?: { sql: string; params: Record<string, unknown> | null } | null;
   /** The board study — present when the run was asked with the dashboard's focus: whether it was cut by every chosen
    *  value (`by` what), and why not by the rest — a card that cannot be cut says so in its own place. */
-  cut?: { applied: boolean; by: string[]; why: string } | null;
+  /** `own_window`: the card's own window, reckoned from today, gave way to the days a filter chose. */
+  cut?: { applied: boolean; by: string[]; why: string; through?: string[]; own_window?: string } | null;
   /** Arc AP-7 — a card of a person's own query, as it is shown: its figure, its table or its chart's points. */
   shown?: QueryShaped | null;
   duration_ms?: number;
@@ -3012,6 +3030,29 @@ export interface QueryNarrowing { table: string; column: string; values: (string
 /** A query that could not be kept: each reason, as the server says it. */
 export class QueryRefused extends Error {
   constructor(public reasons: string[]) { super(reasons.join(" ")); }
+}
+
+export interface FilterField { table: string; columns: { name: string; type: string; kind: "number" | "date" | "time" | "text" }[]; left_out: number }
+
+/** The tables and columns a global filter may read. */
+export async function dashboardFilterFields(connectionId: string): Promise<FilterField[]> {
+  const res = await fetch(`${getApiBase()}/dashboards/filters/fields?connection_id=${encodeURIComponent(connectionId)}`);
+  if (!res.ok) throw new Error(fastApiError(await res.json().catch(() => ({})), "The tables could not be read"));
+  return ((await res.json()) as { tables: FilterField[] }).tables;
+}
+
+export type FilterValues = { values: { value: string | number | boolean; n: number }[]; more: boolean };
+
+/** What a global filter offers a reader: a column's commonest values, or the numbers it runs between. */
+export async function dashboardFilterValues(connectionId: string, asked: { table: string; column: string; read: "values"; focus?: unknown[] }): Promise<FilterValues>;
+export async function dashboardFilterValues(connectionId: string, asked: { table: string; column: string; read: "range"; focus?: unknown[] }): Promise<{ low: number | null; high: number | null }>;
+export async function dashboardFilterValues(connectionId: string, asked: { table: string; column: string; read: "values" | "range"; focus?: unknown[] }): Promise<unknown> {
+  const res = await fetch(`${getApiBase()}/dashboards/filters/values?connection_id=${encodeURIComponent(connectionId)}`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(asked),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((body as { detail?: { refused?: string[] } }).detail?.refused?.join(" ") || fastApiError(body, "The filter's values could not be read"));
+  return body;
 }
 
 export async function previewDashboardQuery(connectionId: string, asked: QueryAsked): Promise<QueryPreview> {
@@ -3251,7 +3292,8 @@ export async function saveVizConfig(
 export async function runCard(cardId: string, range?: BriefingRange | null,
   opts: { compare?: boolean; values?: Record<string, { kind: string; value: unknown }>; filters?: QueryNarrowing[];
     /** The board study — the dashboard's focus this card is asked with: each cuts it, or `cut` says why not. */
-    focus?: { table: string; column: string; value: string | number | boolean }[] } = {}): Promise<CardRunResult> {
+    focus?: { table: string; column: string; value: string | number | boolean; op?: string; values?: (string | number | boolean)[];
+      low?: string | number | null; high?: string | number | null }[] } = {}): Promise<CardRunResult> {
   const q = new URLSearchParams();
   if (range) {
     if (range.preset === "custom") { if (range.start) q.set("start", range.start); if (range.end) q.set("end", range.end); }
@@ -3493,6 +3535,12 @@ export async function listDashboards(connectionId: string): Promise<DashboardLis
   return res.json();
 }
 
+/** The person's dashboards still standing — none retired — by id and title (the id where it has none), with the cards
+ *  each places. The server's field names are the stored ones (GLOSSARY, frozen names): read once, here. */
+export function standingDashboards(list: DashboardList): { id: string; title: string; cards: string[] }[] {
+  return list.cockpits.filter(d => !d.retired).map(d => ({ id: d.cockpit_id, title: d.title || d.cockpit_id, cards: d.cards ?? [] }));
+}
+
 /** One of the asker's dashboards as it stands, read for a range when one is chosen. */
 export async function getDashboard(connectionId: string, dashboardId: string, range?: BriefingRange | null): Promise<PersonDashboard> {
   const res = await fetch(dashboardUrl(`/dashboards/${encodeURIComponent(dashboardId)}`, connectionId, rangeParams(range)));
@@ -3599,18 +3647,38 @@ export async function getDashboardFromObject(connectionId: string, entity: strin
 }
 
 /** ⚑ Spends model calls. Draft a new dashboard for an area the person names. */
-export async function draftDashboard(connectionId: string, area: string, schema?: string): Promise<DashboardDrafted> {
-  const res = await fetch(dashboardUrl("/dashboards/draft", connectionId), {
+/** What a draft or a change is told as it runs. Aborting stops the model at its next step. */
+export interface DraftLive { hear?: (frame: DraftFrame) => void; signal?: AbortSignal }
+
+async function draftTold(url: string, body: unknown, refused: string, live?: DraftLive): Promise<DashboardDrafted> {
+  const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ area, schema_name: schema || null }),
+    body: JSON.stringify(body),
+    signal: live?.signal,
   });
-  if (!res.ok) {
+  if (!res.ok || !res.body) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(fastApiError(err, "Failed to draft the dashboard"));
+    throw new Error(fastApiError(err, refused));
   }
-  return res.json();
+  let drafted: DashboardDrafted | null = null;
+  let failed = "";
+  for await (const { data } of readFrames(res.body, live?.signal)) {
+    const frame = data as unknown as DraftFrame;
+    live?.hear?.(frame);
+    if (frame.type === "done") drafted = frame.result;
+    if (frame.type === "failed") failed = frame.sentences.join(" ");
+  }
+  if (!drafted) throw new Error(failed || "The draft was cut short. Nothing was kept.");
+  return drafted;
 }
+
+/** Draft a dashboard, hearing each thing the platform does as it does it. */
+export function draftDashboard(connectionId: string, area: string, schema?: string, live?: DraftLive): Promise<DashboardDrafted> {
+  return draftTold(dashboardUrl("/dashboards/draft/stream", connectionId), { area, schema_name: schema || null },
+    "Failed to draft the dashboard", live);
+}
+
 
 /** Move a canvas's dashboard to the asker's Briefing. */
 export async function moveCanvasDashboard(connectionId: string, canvasId: string): Promise<DashboardMoved> {
@@ -3638,10 +3706,31 @@ export async function restoreDashboard(connectionId: string, dashboardId: string
 
 /** ⚑ Spends model calls. A change to one of the asker's dashboards, asked for in words: a proposal
  *  to keep or not — an edit against the version on screen, or a publish. */
-export async function askDashboard(connectionId: string, dashboardId: string, words: string, schema?: string): Promise<DashboardDrafted> {
+/** A dashboard as a file's contents: its spec and the cards it places, each with its source (the study's R22). */
+export async function exportDashboard(connectionId: string, dashboardId: string): Promise<{ title: string } & Record<string, unknown>> {
+  const res = await fetch(dashboardUrl(`/dashboards/${encodeURIComponent(dashboardId)}/export`, connectionId));
+  if (!res.ok) throw new Error(fastApiError(await res.json().catch(() => ({})), "The dashboard could not be exported"));
+  return res.json();
+}
+
+export type DashboardImported = { imported: true; dashboard_id: string; title: string; version: number } | { imported: false; sentences: string[] };
+
+/** A dashboard file read into this connection: made whole, or refused by name with nothing made. */
+export async function importDashboard(connectionId: string, doc: unknown): Promise<DashboardImported> {
+  const res = await fetch(dashboardUrl("/dashboards/import", connectionId), {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(doc),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (res.ok) return body as DashboardImported;
+  const said = (body as { detail?: { sentences?: string[] } }).detail?.sentences;
+  if (res.status === 422 && said?.length) return { imported: false, sentences: said };
+  throw new Error(fastApiError(body, "The file could not be read in"));
+}
+
+export async function askDashboard(connectionId: string, dashboardId: string, words: string, schema?: string, target?: string): Promise<DashboardDrafted> {
   const res = await fetch(dashboardUrl(`/dashboards/${encodeURIComponent(dashboardId)}/ask`, connectionId), {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ words, schema_name: schema ?? null }),
+    body: JSON.stringify({ words, schema_name: schema ?? null, ...(target ? { target } : {}) }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -4870,6 +4959,21 @@ export async function getColumnDistinct(
 }
 
 /** LLM-inferred Canvas name + description from the scoped tables' schema. */
+/** The tables that fit what a person says a canvas should do, for them to check. `said` says why when there are none. */
+export async function suggestCanvasTables(
+  connectionId: string,
+  description: string,
+  tables: string[],
+): Promise<{ tables: string[]; why: string; said: string }> {
+  const res = await fetch(`${getApiBase()}/canvases/suggest-tables`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ connection_id: connectionId, description, tables }),
+  });
+  if (!res.ok) throw new Error(fastApiError(await res.json().catch(() => ({})), "The tables could not be proposed"));
+  return res.json();
+}
+
 export async function suggestCanvasName(
   connectionId: string,
   tables: string[],
@@ -7677,7 +7781,12 @@ export interface BriefSubscription {
   send_cron: string;
   /** What it sends: the alert summary (absent = "alert_summary", every row saved before idea 3) or
    *  the Briefing written for its period. */
-  content?: "alert_summary" | "briefing";
+  content?: "alert_summary" | "briefing" | "dashboard";
+  /** The dashboards study's R21: the published dashboard it sends, the file it leaves as, and an address to email. */
+  dashboard?: string;
+  dashboard_owner?: string;
+  file_format?: "pdf" | "png";
+  email_to?: string;
   trigger_id: string;
   /** Arc BR-5 — a Slack bot and channel instead of a trigger; the scope; the automation it
    *  replaces (paused after seven delivered mornings) and the mornings delivered so far. */
@@ -7703,7 +7812,9 @@ export async function getBriefSubscriptions(connId?: string): Promise<BriefSubsc
 }
 
 export async function createBriefSubscription(
-  body: { conn_id: string; name: string; trigger_id: string; period?: BriefSubscription["period"]; send_cron?: string; enabled?: boolean; content?: "alert_summary" | "briefing" },
+  body: { conn_id: string; name: string; trigger_id: string; period?: BriefSubscription["period"]; send_cron?: string; enabled?: boolean;
+    content?: "alert_summary" | "briefing" | "dashboard"; dashboard?: string; dashboard_owner?: string; file_format?: "pdf" | "png"; email_to?: string;
+    bot_id?: string; channel?: string },
 ): Promise<BriefSubscription> {
   const res = await fetch(`${getApiBase()}/briefing/subscriptions`, {
     method: "POST",
@@ -7716,7 +7827,7 @@ export async function createBriefSubscription(
 
 export async function updateBriefSubscription(
   id: string,
-  body: { conn_id: string; name: string; trigger_id: string; period?: BriefSubscription["period"]; send_cron?: string; enabled?: boolean; content?: "alert_summary" | "briefing" },
+  body: { conn_id: string; name: string; trigger_id: string; period?: BriefSubscription["period"]; send_cron?: string; enabled?: boolean; content?: "alert_summary" | "briefing" | "dashboard" },
 ): Promise<BriefSubscription> {
   const res = await fetch(`${getApiBase()}/briefing/subscriptions/${encodeURIComponent(id)}`, {
     method: "PUT",
@@ -7738,6 +7849,13 @@ export interface BriefDeliveryResult {
   error: string | null;
   summary: string | null;
   markdown: string | null;
+}
+
+/** What a subscription would send, built and judged as a send is, and not sent. */
+export async function previewBriefSubscription(id: string): Promise<{ status: string; markdown?: string; held_lines?: string[]; error?: string }> {
+  const res = await fetch(`${getApiBase()}/briefing/subscriptions/${encodeURIComponent(id)}/test?dry_run=true`, { method: "POST" });
+  if (!res.ok) throw new Error("The subscription could not be previewed");
+  return res.json();
 }
 
 export async function testBriefSubscription(id: string): Promise<BriefDeliveryResult> {
@@ -9727,6 +9845,21 @@ export interface AnswerTrace {
   edges: TracedEdge[];
   counts?: { nodes: number; edges: number; unresolved: number };
   has_unresolved?: boolean;
+}
+
+/** What one answer stood on, for a person to open beside it. */
+export interface ReceiptSources {
+  receipt_id: string;
+  connection_id: string | null;
+  metrics: { name: string; departed: boolean }[];
+  definitions: string[];
+  objects: string[];
+}
+
+export async function getReceiptSources(receiptId: string): Promise<ReceiptSources> {
+  const res = await fetch(`${getApiBase()}/receipt/${encodeURIComponent(receiptId)}/sources`);
+  if (!res.ok) throw new Error(fastApiError(await res.json().catch(() => ({})), "What this answer stood on could not be read"));
+  return res.json();
 }
 
 /** The knowledge-graph subgraph one answer stands on. A separate call from the receipt:

@@ -657,7 +657,8 @@ _QUESTION_PARAMS = {
 def converse_tools(connection_id: str, *, emit: Optional[Emit] = None,
                    session_id: str = "", canvas_id: Optional[str] = None,
                    user_question: str = "", agent: Any = None,
-                   schema_scope: Optional[str] = None, sheet: str = "") -> list[ToolSpec]:
+                   schema_scope: Optional[str] = None, sheet: str = "",
+                   dashboard: Optional[tuple[str, str]] = None, person: str = "") -> list[ToolSpec]:
     """The tool set for one connection.
 
     Bound to the connection by closure rather than taking it as a model-supplied
@@ -684,12 +685,20 @@ def converse_tools(connection_id: str, *, emit: Optional[Emit] = None,
     ``sheet`` (Arc SH, SH-4) is the sheet a question was summoned from, ``<sheet id>`` or
     ``<sheet id>:<view id>``, bound the same way: it adds ``show_rows``, which puts the rows
     asked about on that sheet's grid. Empty for every other turn, whose tools are unchanged.
+
+    ``dashboard`` (the Ask panel, 2026-11-19) is ``(person, dashboard id)`` when a question is asked about a dashboard that
+    person keeps: it adds ``change_dashboard``, which drafts a change for them to allow (`dashboards.chat_change`).
+
+    ``person`` (Stage 2, 2026-11-19) is who asks, as the dashboards name them: the reads of where data comes from and what
+    the platform holds over it (`origin_tools`) name only the dashboards that person keeps or was shared.
     """
     from pramanyx.agent.action_tools import action_tools
     from pramanyx.agent.delegate_tool import delegation_tools
+    from pramanyx.agent.origin_tools import origin_tools
     from pramanyx.agent.platform_tools import platform_tools
     from pramanyx.agent.present_tool import present_tools
     from pramanyx.agent.spotlight_roster import spotlight_roster
+    from pramanyx.dashboards.chat_change import change_tools
     from pramanyx.sheets.answer import sheet_tools
 
     return [
@@ -762,8 +771,9 @@ def converse_tools(connection_id: str, *, emit: Optional[Emit] = None,
                                         schema_scope=schema_scope),
         ),
     ] + action_tools(connection_id, agent=agent) + platform_tools(connection_id, session_id=session_id) + spotlight_roster(
-        connection_id, session_id=session_id, emit=emit) + present_tools(emit=emit) + delegation_tools(
-        connection_id, emit=emit, session_id=session_id) + sheet_tools(sheet, emit=emit)
+        connection_id, session_id=session_id, emit=emit) + origin_tools(connection_id, person=person) + present_tools(
+        emit=emit) + delegation_tools(connection_id, emit=emit, session_id=session_id) + sheet_tools(sheet, emit=emit) + change_tools(
+        connection_id, dashboard, emit=emit, schema=schema_scope)
 
 
 class _Regrounded(BaseModel):
@@ -950,7 +960,8 @@ def converse(connection_id: str, question: str, *, extra_context: Optional[str] 
              on_step=None, tool_emit: Optional[Emit] = None,
              session_id: str = "", canvas_id: Optional[str] = None, agent: Any = None,
              trace_id: str = "", schema_scope: Optional[str] = None,
-             shape: Optional[str] = None, sheet: str = ""):
+             shape: Optional[str] = None, sheet: str = "", dashboard: Optional[tuple[str, str]] = None,
+             person: str = ""):
     """Answer one question as a conversation rather than a compiled query spec.
 
     The whole body in one place: state-not-instructions prompt, the connection's tools,
@@ -989,7 +1000,7 @@ def converse(connection_id: str, question: str, *, extra_context: Optional[str] 
         question,
         converse_tools(connection_id, emit=tool_emit, session_id=session_id,
                        canvas_id=canvas_id, user_question=question, agent=agent,
-                       schema_scope=schema_scope, sheet=sheet),
+                       schema_scope=schema_scope, sheet=sheet, dashboard=dashboard, person=person),
         max_steps=max_steps,
         on_step=on_step,
         conn_id=connection_id or "",
@@ -1041,6 +1052,14 @@ def _engine_and_clock(connection_id: str) -> str:
         from pramanyx.db.dialects import writer_rules
         note += "\n\n" + writer_rules(conn)
     return note
+
+
+#: The tools are the platform's way of working, not the reader's words (seen live 2026-11-19: an answer said
+#: "get_table_health returns 'No quality checks have run for this table'"). Said once, in the prompt every conversation reads.
+TOOLS_UNNAMED = (
+    "The tools are how you work, not words the reader knows. Never name one, nor quote what a tool returned as a tool's "
+    "message: say what you found in plain words (\"no quality checks have run on this table\", not the name of the "
+    "tool that said so).")
 
 
 def converse_system_prompt(connection_id: str, extra: Optional[str] = None,
@@ -1122,6 +1141,8 @@ def converse_system_prompt(connection_id: str, extra: Optional[str] = None,
         "Do not write markdown tables. The rows a query returned travel with the answer "
         "as its exhibit, and a table in your prose would be shown twice; name the "
         "figures that matter in a sentence instead.",
+        "",
+        TOOLS_UNNAMED,
         *(["", settling_note] if settling_note else []),
         *(["", sql_note] if sql_note else []),
         "",

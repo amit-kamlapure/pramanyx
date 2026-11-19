@@ -16,7 +16,7 @@
 import { useState, type ReactNode } from "react";
 
 import { Foot, Frame, Title } from "@/components/dashboards/DashboardTile";
-import { NoteProse } from "@/components/dashboards/NoteProse";
+import { NoteProse, isHeadingNote } from "@/components/dashboards/NoteProse";
 import { useCellBox } from "@/components/dashboards/cellBox";
 import { SizePick } from "@/components/dashboards/SizePick";
 import { Button } from "@/components/ui/button";
@@ -73,8 +73,9 @@ export function NoteTile({ elementKey, text, author, writtenAt, size, doors }: {
   const stamp = author
     ? `${person(author)} · written ${writtenAt ? formatDateTime(writtenAt) : "just now"}`
     : "Not yet kept";
+  const headingOnly = isHeadingNote(text) && !editing;
   return (
-    <Frame testid="dashboard-note" doors={own && !editing ? (
+    <Frame testid="dashboard-note" bare={headingOnly} doors={own && !editing ? (
       <DoorsBar>
         {doors.onEditNote && (
           <Button variant="ghost" size="icon-xs" aria-label="Edit the note" title="Change its words. The note is re-stamped when kept."
@@ -87,7 +88,7 @@ export function NoteTile({ elementKey, text, author, writtenAt, size, doors }: {
         )}
       </DoorsBar>
     ) : undefined}>
-      <Title title="Note" right={<span className="aug-fs-xs" data-testid="note-chip" style={{ color: "var(--t3)", whiteSpace: "nowrap" }}>Your words</span>} />
+      {!headingOnly && <Title title="Note" right={<span className="aug-fs-xs" data-testid="note-chip" style={{ color: "var(--t3)", whiteSpace: "nowrap" }}>Your words</span>} />}
       {editing ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 6, flex: 1 }}>
           <Textarea aria-label="The note's words" value={draft} maxLength={MAX_NOTE} autoFocus
@@ -100,9 +101,10 @@ export function NoteTile({ elementKey, text, author, writtenAt, size, doors }: {
           </div>
         </div>
       ) : (
-        <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}><NoteProse text={text} /></div>
+        // a heading's stamp is said on hover: it stands on the page as a title, and its words are still the person's
+        <div title={headingOnly ? `${stamp} · not measured, cited by nothing` : undefined} style={{ flex: 1, minHeight: 0, overflow: "auto" }}><NoteProse text={text} /></div>
       )}
-      <Foot icon="user">{stamp} · not measured, cited by nothing</Foot>
+      {!headingOnly && <Foot icon="user">{stamp} · not measured, cited by nothing</Foot>}
     </Frame>
   );
 }

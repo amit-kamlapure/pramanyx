@@ -10,6 +10,11 @@
 
 /* ── Dark mode (default) ─────────────────────────────────────────────────── */
 :root {
+  /* A map answer's controls wear the page's ground and ink; each map sets these for its own frame (`charts/geo/mapDrawing.ts`). */
+  --pm-ground: var(--bg-2);
+  --pm-ink: var(--t1);
+  --pm-edge: var(--b1);
+  --pm-invert: none;
   /* ── Backgrounds ──
      A calm near-black: flat, deep, very slightly cool — NOT charcoal.
      Tight steps so panels barely lift off the page and read as surfaces, not boxes. */

@@ -111,4 +111,29 @@ describe("your own query, set up in the builder", () => {
     fireEvent.click(within(list).getByText("thelook.users"));
     expect(screen.getByLabelText("SQL")).toHaveValue("thelook.users");
   });
+
+  it("on a dashboard, leaves how it is drawn to the chart editor and keeps the setup the card holds (2026-11-19)", async () => {
+    api.keepDashboardQuery.mockResolvedValueOnce({ card: card({ id: "q2" }), preview: RAN });
+    render(<QuerySetup connectionId="thelook" card={card()} onKept={vi.fn()} shapeElsewhere />);
+    expect(screen.queryByTestId("query-shown-as")).toBeNull();
+    expect(screen.getByTestId("query-shape-elsewhere")).toHaveTextContent("set in Visualization, above");
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Sales by day" } });
+    fireEvent.click(screen.getByTestId("query-keep"));
+    await waitFor(() => expect(api.keepDashboardQuery).toHaveBeenCalled());
+    expect(api.keepDashboardQuery).toHaveBeenCalledWith("thelook", expect.objectContaining({ replaces: "q1",
+      shown: expect.objectContaining({ as: "bar", x: "day", split: "country", top: 4, labels: true }) }));
+  });
+
+  it("says when a statement no longer returns what the chart reads, and starts the setup again from what it does", async () => {
+    const renamed = { ...RAN, columns: [{ name: "week", type: "DATE" }, { name: "country", type: "VARCHAR" }, { name: "sales", type: "DOUBLE" }] };
+    api.previewDashboardQuery.mockResolvedValue(renamed);
+    api.keepDashboardQuery.mockResolvedValueOnce({ card: card({ id: "q2" }), preview: renamed });
+    render(<QuerySetup connectionId="thelook" card={card()} onKept={vi.fn()} shapeElsewhere />);
+    fireEvent.change(screen.getByLabelText("SQL"), { target: { value: SQL.replace("AS day", "AS week") } });
+    fireEvent.click(screen.getByTestId("query-run"));
+    expect(await screen.findByTestId("query-setup-restarts")).toHaveTextContent("The chart reads day, which this statement no longer returns");
+    fireEvent.click(screen.getByTestId("query-keep"));
+    await waitFor(() => expect(api.keepDashboardQuery).toHaveBeenCalled());
+    expect(api.keepDashboardQuery).toHaveBeenCalledWith("thelook", expect.objectContaining({ shown: expect.objectContaining({ as: "bar", x: "week" }) }));
+  });
 });

@@ -126,6 +126,15 @@ export function compactNumber(n: number | null | undefined, digits = 1): string 
   return Number.isInteger(n) ? String(n) : n.toFixed(digits);
 }
 
+/** A figure on a map's legend or hover box, short, in its column's unit: "$1.2M" for a currency code, "4.5K km" for any other unit. */
+export function compactInUnit(n: number, unit?: string): string {
+  const currency = unit && /^[A-Z]{3}$/.test(unit) ? unit : "";
+  const said = new Intl.NumberFormat(undefined, currency
+    ? { style: "currency", currency, notation: "compact", maximumFractionDigits: 1 }
+    : { notation: "compact", maximumFractionDigits: 2 }).format(n);
+  return currency || !unit ? said : `${said} ${unit}`;
+}
+
 /** Thousands-separated number (e.g. row counts in a table): 1234567 → "1,234,567". */
 export function formatCount(n: number | null | undefined): string {
   if (n === null || n === undefined || isNaN(n)) return "—";

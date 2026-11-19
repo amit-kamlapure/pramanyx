@@ -62,7 +62,7 @@ import {
   IconArrowsSort, IconArrowsSplit2, IconBinaryTree, IconChartDots3, IconGauge, IconHandStop, IconStack2,
   IconList, IconPaperclip, IconNumber123, IconBraces, IconBinary, createReactComponent,
   IconPointer, IconPhoto, IconArrowBackUp, IconArrowForwardUp, IconLayoutSidebarLeftCollapse,
-  IconLayoutSidebarLeftExpand, IconTypography, IconChartLine,
+  IconLayoutSidebarLeftExpand, IconTypography, IconChartLine, IconLayoutList, IconLayoutGrid, IconStarFilled,
 } from "@tabler/icons-react";
 import { createContext, useContext, type ComponentType, type ReactNode } from "react";
 
@@ -209,6 +209,9 @@ const ICONS = {
   scales: IconScale,
   zoom: IconZoomIn,
   star: IconStar,
+  starred: IconStarFilled,
+  viewdetail: IconLayoutList,
+  viewgrid: IconLayoutGrid,
   chat: IconMessage,
   sun: IconSun,
   moon: IconMoon,

@@ -13,7 +13,7 @@ import { useEffect, useState } from "react";
 import { QuestionComposer } from "@/components/dashboards/QuestionComposer";
 import { Button } from "@/components/ui/button";
 import { SelectField } from "@/components/ui/select";
-import { getDashboard, keepDashboard, listDashboards, setAutomationEnabled, type DashboardListed, type QuestionRhythm } from "@/lib/api";
+import { getDashboard, keepDashboard, listDashboards, setAutomationEnabled, standingDashboards, type QuestionRhythm } from "@/lib/api";
 import { placeQuestion } from "@/lib/dashboards/edit";
 import { requestTab } from "@/lib/navigate";
 
@@ -34,8 +34,7 @@ export function KeepOnDashboard({ connectionId, schema, question, runId }: {
     let alive = true;
     listDashboards(connectionId).then(l => {
       if (!alive) return;
-      // the server's field names are the stored ones (GLOSSARY, frozen names); read once, here
-      const standing = l.cockpits.filter((d: DashboardListed) => !d.retired).map(d => ({ id: d.cockpit_id, title: d.title }));
+      const standing = standingDashboards(l).map(({ id, title }) => ({ id, title }));
       setMine(standing);
       setChosen(standing[0]?.id ?? "");
     }).catch(() => { if (alive) setMine([]); });

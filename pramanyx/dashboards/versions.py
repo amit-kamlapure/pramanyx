@@ -250,6 +250,43 @@ def version(home: Home, number: int) -> Optional[dict]:
     return None
 
 
+#: The most pieces a dashboard's miniature on the dashboards home draws.
+MAX_OUTLINE = 32
+#: What a miniature leaves out: a filter column and a drawer sit beside the page, not on it.
+_NOT_ON_THE_PAGE = {"ObjectFilters", "QueryFilters", "GlobalFilters", "GlobalFilter", "Drawer"}
+
+
+def outline_of(spec: Any, *, cards: bool = False) -> list[dict]:
+    """What a dashboard opens on, piece by piece in reading order: each piece's kind and the room it says it takes.
+    The dashboards home draws its miniature from this. Layout only: no title, no figure, nothing a card read. With
+    ``cards``, every tab is walked and each card's piece names the card it places, for the person a draft is being made for."""
+    elements = spec.get("elements") if isinstance(spec, dict) else None
+    if not isinstance(elements, dict):
+        return []
+    out: list[dict] = []
+
+    def walk(key: Any, depth: int) -> None:
+        element = elements.get(key)
+        if not isinstance(element, dict) or depth > 8 or len(out) >= MAX_OUTLINE:
+            return
+        kind, children = element.get("type"), element.get("children") or []
+        if kind == "Tabs" and not cards:                    # the tab it opens on
+            seeded = (spec.get("state") or {}).get("tab") if isinstance(spec.get("state"), dict) else None
+            named = [c for c in children if ((elements.get(c) or {}).get("props") or {}).get("name") == seeded]
+            for child in (named or children)[:1]:
+                walk(child, depth + 1)
+        elif kind in ("Cockpit", "Tabs", "Tab", "Section"):
+            for child in children:
+                walk(child, depth + 1)
+        elif kind not in _NOT_ON_THE_PAGE:
+            props = element.get("props") or {}
+            out.append({"kind": kind, **{k: props[k] for k in ("size", "w", "h") if props.get(k) is not None},
+                        **({"card": props.get("card")} if cards and kind == "Card" else {})})
+
+    walk(spec.get("root"), 0)
+    return out
+
+
 def of_person(connection_id: str, owner: str) -> list[dict]:
     """This person's dashboards on this connection, as they stand now — retired ones included,
     and said to be — oldest first, so the strip keeps its order as dashboards are added."""
@@ -261,9 +298,10 @@ def of_person(connection_id: str, owner: str) -> list[dict]:
     for row in rows:
         entry = _entry(row, with_spec=False)
         first = _first_kept(row["natural_key"])
-        out.append({"cockpit_id": row["natural_key"][len(mine):],
+        # the dashboard's id twice: under the name the home strip has always read, and under the word new code says
+        out.append({"cockpit_id": row["natural_key"][len(mine):], "dashboard_id": row["natural_key"][len(mine):],
                     "title": title_of(row["payload"].get("spec")) or row["payload"].get("title") or "",
-                    "started_at": first, **entry})
+                    "started_at": first, "outline": outline_of(row["payload"].get("spec")), **entry})
     return sorted(out, key=lambda c: (c["started_at"], c["cockpit_id"]))
 
 

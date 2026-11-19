@@ -8,6 +8,7 @@
  * Every write is the server's to check — the kinds, the versions, who may — and a refusal comes back as an Error
  * carrying the server's own sentence, which the screen shows as said.
  */
+import { isPeriodColumn } from "@/components/charts/columnRoles";
 import { fastApiError, type QueryShaped, type QueryShown } from "@/lib/api";
 import { getApiBase } from "@/lib/config";
 import { formatCount, formatMoney, formatNumberAs, type NumberFormat } from "@/lib/format";
@@ -689,7 +690,7 @@ export function showDate(v: string, withTime: boolean): string {
 }
 
 /** A value of a column as the grid shows it. Empty is "" — the grid draws it as empty, never as a zero. */
-export function showValue(value: unknown, column: Pick<SheetColumn, "kind" | "currency">): string {
+export function showValue(value: unknown, column: Pick<SheetColumn, "kind" | "currency"> & { name?: string }): string {
   if (value === null || value === undefined || value === "") return "";
   switch (column.kind) {
     case "money": {
@@ -699,6 +700,8 @@ export function showValue(value: unknown, column: Pick<SheetColumn, "kind" | "cu
     case "number": {
       const n = Number(value);
       if (isNaN(n)) return String(value);
+      // a period's whole number is a label: a `release_year` of 2020, never "2,020"
+      if (Number.isInteger(n) && isPeriodColumn(column.name)) return String(n);
       return Number.isInteger(n) ? formatCount(n) : String(Math.round(n * 1e6) / 1e6);
     }
     case "date": return showDate(String(value), false);
@@ -716,7 +719,7 @@ export function formatSymbol(column: Pick<SheetColumn, "currency">): string {
 
 /** A value as its cell and the totals under it show it: a Number column in its format (`formatNumberAs`), every other
  *  as its kind shows it (`showValue`). What is SHOWN only — a copy, the CSV, a filter and a sort read the value itself. */
-export function cellText(value: unknown, column: Pick<SheetColumn, "kind" | "currency" | "format">): string {
+export function cellText(value: unknown, column: Pick<SheetColumn, "kind" | "currency" | "format"> & { name?: string }): string {
   if (value === null || value === undefined || value === "") return "";
   if (column.kind === "number" && column.format) return formatNumberAs(value, column.format, formatSymbol(column));
   return showValue(value, column);

@@ -13,28 +13,34 @@
  */
 import { createElement as h } from "react";
 import mark from "../assets/mark.png";
-import wordmark from "../assets/wordmark.png";
+import { MARK_BOX, MARK_LINE, MARK_RING, MARK_RING_COLORS, NAME_BAR, NAME_BAR_STOPS, NAME_BOX, NAME_LETTERS } from "../../../../web/components/ui/brandArt";
 
 const NAME = "Pramanyx";
 const SHELL_NAME = "DeepSeek Harness";
 
-/** A one-colour artwork drawn in the text colour around it, so one file serves the dark theme and the light. */
-function ink(url, width, height, label) {
-  const paint = `url("${url}") center / contain no-repeat`;
-  return h("span", {
-    role: "img", "aria-label": label,
-    style: { display: "inline-block", width, height, flex: "none", background: "currentColor", WebkitMask: paint, mask: paint },
-  });
-}
+/** The ring, one colour a step round its circle, each step just over its neighbour so no seam shows. */
+const RING = MARK_RING_COLORS.map((fill, i) => {
+  const { cx, cy, outer: [ox, oy], inner: [ix, iy] } = MARK_RING;
+  const at = (step) => (step / MARK_RING_COLORS.length) * 2 * Math.PI;
+  const [a, b] = [at(i - 0.15), at(i + 1.15)];
+  const p = (angle, rx, ry) => `${(cx + rx * Math.cos(angle)).toFixed(1)} ${(cy + ry * Math.sin(angle)).toFixed(1)}`;
+  return { fill, d: `M${p(a, ox, oy)}A${ox} ${oy} 0 0 1 ${p(b, ox, oy)}L${p(b, ix, iy)}A${ix} ${iy} 0 0 0 ${p(a, ix, iy)}Z` };
+});
 
-/** The mark is wider than it is tall (160 × 129); it is fitted inside the square the shell asks for. */
+/** The mark, fitted inside the square the shell asks for: its outer line in the text's colour, around the ring. */
 function Mark({ size, className }) {
   return h("span", { className, style: { display: "inline-flex", width: size, height: size, alignItems: "center", justifyContent: "center" } },
-    ink(mark, size, Math.round(size * 129 / 160), NAME));
+    h("svg", { width: size, height: Math.round(size * MARK_BOX.h / MARK_BOX.w), viewBox: `0 0 ${MARK_BOX.w} ${MARK_BOX.h}`, role: "img", "aria-label": NAME },
+      h("path", { d: MARK_LINE, fill: "currentColor", fillRule: "evenodd" }),
+      RING.map((w, i) => h("path", { key: i, d: w.d, fill: w.fill }))));
 }
 
 function Name() {
-  return ink(wordmark, 82, 20, NAME);
+  const height = 15;
+  return h("svg", { width: Math.round(height * NAME_BOX.w / NAME_BOX.h), height, viewBox: `0 0 ${NAME_BOX.w} ${NAME_BOX.h}`, role: "img", "aria-label": NAME },
+    h("defs", null, h("linearGradient", { id: "pramanyx-name-bar" }, NAME_BAR_STOPS.map(([offset, stopColor]) => h("stop", { key: offset, offset, stopColor })))),
+    h("path", { d: NAME_LETTERS, fill: "currentColor", fillRule: "evenodd" }),
+    h("rect", { x: NAME_BAR.x, y: NAME_BAR.y, width: NAME_BAR.w, height: NAME_BAR.h, fill: "url(#pramanyx-name-bar)" }));
 }
 
 /**
@@ -44,7 +50,32 @@ function Name() {
  * the corners and the type — the app's light values were not measured, and a guess would be a second palette.
  * The attribute is written twice so these outrank the shell's own rule for it, whichever loads last.
  */
+const STOPS = NAME_BAR_STOPS.map(([at, colour]) => `${colour} ${at * 100}%`).join(", ");
+
 const LOOK = `
+/*
+ * The logo's colours, where the platform uses them: a thin edge around the box a person writes to the model in, the
+ * platform's accent on its send button, and the bar that marks what is open. Never a fill.
+ */
+[data-composer-card][data-composer-card] {
+  --pramanyx-ground: #ffffff;
+  border: 1.5px solid transparent !important;
+  border-radius: 12px !important;
+  background: linear-gradient(var(--pramanyx-ground), var(--pramanyx-ground)) padding-box, linear-gradient(115deg, ${STOPS}) border-box !important;
+  box-shadow: none !important;
+}
+body[data-ds-dark-theme] [data-composer-card][data-composer-card] { --pramanyx-ground: #18191b; }
+[data-composer-card] [class*="_primary"] { background: #46a0c4 !important; color: #ffffff !important; }
+[data-composer-card] [class*="_primary"]:disabled { background: #2e3135 !important; color: #8b9099 !important; opacity: 1 !important; }
+body:not([data-ds-dark-theme]) [data-composer-card] [class*="_primary"]:disabled { background: #e8e9eb !important; color: #8b9099 !important; }
+/* The shell's strip of turns, tokens and cache under the box: its own accounting, of no use to a person asking about a business. */
+[class*="_dock"]:has(> [data-slot="conversation.composer.dock"]) { display: none !important; }
+[class*="_sessionRow"][class*="_selected"] { position: relative; }
+[class*="_sessionRow"][class*="_selected"]::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; z-index: 1;
+  background: linear-gradient(180deg, ${STOPS});
+}
+body[data-ds-dark-theme] [class*="_sessionRow"][class*="_selected"] { background: #0f3747; }
 body {
   --dsw-radius-xs: 2px; --dsw-radius-sm: 3px; --dsw-radius-md: 4px; --dsw-radius-lg: 6px; --dsw-radius-xl: 6px;
   --dsw-radius-panel: 6px;
@@ -72,8 +103,8 @@ body[data-ds-dark-theme][data-ds-dark-theme] {
 }
 /*
  * The mark beside "…for 19s" while an answer is being worked on. The shell draws its own animal there and offers
- * no place to draw another, so its two drawings are hidden and a plain open ring turns in their box. The ring is
- * an SVG used as a mask, so it takes the row's own colour. Matched by the part of the class name the shell writes
+ * no place to draw another, so its two drawings are hidden and an open ring turns in their box, in the logo's
+ * colours. The ring is an SVG used as a mask. Matched by the part of the class name the shell writes
  * by hand; if that changes, the shell's drawing simply shows again.
  */
 [data-chat-running] [class*="_runningIcon"] > * { display: none !important; }
@@ -81,7 +112,7 @@ body[data-ds-dark-theme][data-ds-dark-theme] {
   content: "";
   position: absolute;
   inset: 0;
-  background: currentColor;
+  background: conic-gradient(${STOPS}, ${NAME_BAR_STOPS[0][1]});
   -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 2.25a5.75 5.75 0 1 0 5.75 5.75' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E") center / contain no-repeat;
   mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 2.25a5.75 5.75 0 1 0 5.75 5.75' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E") center / contain no-repeat;
   animation: pramanyx-working 0.9s linear infinite;
@@ -130,7 +161,7 @@ function markTheTab() {
     canvas.width = edge; canvas.height = edge;
     const pen = canvas.getContext("2d");
     if (!pen) return;
-    const width = 60, height = Math.round(width * 129 / 160);
+    const width = 60, height = Math.round(width * MARK_BOX.h / MARK_BOX.w);
     pen.drawImage(art, (edge - width) / 2, (edge - height) / 2, width, height);
     pen.globalCompositeOperation = "source-in";
     pen.fillStyle = dark.matches ? "#edeef0" : "#111113";

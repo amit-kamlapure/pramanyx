@@ -20,12 +20,16 @@ import {
   type Certification,
 } from "@/lib/certification";
 
-export function CertificationMark({ target, initial, compact = false }: {
+export function CertificationMark({ target, initial, compact = false, menu = false, openRequest = 0 }: {
   target: CertTarget;
   /** What the caller already read (a list's batch read), so a row asks nothing more. */
   initial?: Certification | null;
   /** In a list row: the mark only, and the action as a small link-sized button. */
   compact?: boolean;
+  /** The action lives in the page's ⋯ menu (a dashboard's title row, the user, 2026-11-19): the mark only, and the form
+   *  opens each time `openRequest` goes up. */
+  menu?: boolean;
+  openRequest?: number;
 }) {
   const [mark, setMark] = useState<Certification | null | undefined>(initial);
   const [open, setOpen] = useState(false);
@@ -40,6 +44,11 @@ export function CertificationMark({ target, initial, compact = false }: {
     readCertification(target).then((c) => { if (alive) setMark(c); }).catch(() => { if (alive) setMark(null); });
     return () => { alive = false; };
   }, [target.kind, target.ref, target.connectionId, initial]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!menu || !openRequest) return;
+    setStatus(mark?.status ?? "certified"); setWhy(mark?.why ?? ""); setOpen(true);
+  }, [openRequest]); // eslint-disable-line react-hooks/exhaustive-deps -- opened by the menu, once per asking
 
   const save = async (next: CertStatus | "") => {
     setBusy(true); setError("");
@@ -60,7 +69,7 @@ export function CertificationMark({ target, initial, compact = false }: {
           {mark.status === "certified" ? "Certified" : "Deprecated"}
         </Chip>
       )}
-      {!open && (
+      {!open && !menu && (
         <Button size="xs" variant={compact ? "ghost" : "outline"} onClick={() => { setStatus(mark?.status ?? "certified"); setWhy(mark?.why ?? ""); setOpen(true); }}
           title="Certify it as an asset the organisation vouches for, or deprecate it">
           {mark ? "Change" : "Certify or deprecate"}

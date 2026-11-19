@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
@@ -139,6 +140,7 @@ def _run_tool_loop(
     replay_args: Optional[dict] = None,
     stop_check: Optional[Callable[[str], Optional[str]]] = None,
     preface: str = "",
+    finish_now: Optional[Callable[[], bool]] = None,
 ) -> LoopResult:
     """Run one converse turn to an answer, or until the budget runs out.
 
@@ -180,6 +182,9 @@ def _run_tool_loop(
     ask for and must still read as results. It rides the question's own message, never as a tool
     call the model did not make (see `_exchange`); the decision records keep the bare question.
     Empty (every caller but the analyst) leaves the loop exactly as it was.
+
+    ``finish_now`` says the person wants the answer from what is in hand (Answer now): it is read before each step, and
+    once true the loop takes no further step and goes to the tool-free closing request the budget's end goes to.
     """
     by_name = {t.name: t for t in tools}
     wire = [t.as_wire() for t in tools]
@@ -213,6 +218,8 @@ def _run_tool_loop(
 
     asked = f"{question}\n\n{preface}" if preface else question
     for call_index in range(budget):
+        if finish_now is not None and finish_now():
+            break
         turn: ToolTurn = provider.complete_with_tools(
             system, asked, wire, history=history or None)
 
@@ -337,12 +344,17 @@ def _run_tool_loop(
     # step — it can only write up what the first eight found, which is the thing the reader
     # was owed. A turn that genuinely has nothing to say returns empty and falls through to
     # the caller's out-of-steps sentence, exactly as before this existed.
+    #
+    # With no tools on the wire a model can still WRITE a tool call as words. That is never a sentence for a person
+    # to read: it is asked once more for plain sentences, and a second one is no answer.
     try:
-        final = provider.complete_with_tools(
-            system + "\n\n" + _FINAL_TURN, asked, [], history=history or None)
-        text = (final.text or "").strip()
-        if text:
-            return LoopResult(answer=text, steps=steps, stop_reason="budget_answered")
+        for closing in (_FINAL_TURN, _FINAL_TURN + _IN_SENTENCES):
+            final = provider.complete_with_tools(system + "\n\n" + closing, asked, [], history=history or None)
+            text = (final.text or "").strip()
+            if text and not TOOL_MARKUP.search(text):
+                return LoopResult(answer=text, steps=steps, stop_reason="budget_answered")
+            if not text:
+                break
     except Exception as exc:
         # Never fatal: the steps above are real work and the caller can still report them.
         logger.warning("tool_loop: the final answer attempt failed (%s)", str(exc)[:200])
@@ -358,6 +370,13 @@ _FINAL_TURN = (
     "part is missing rather than filling it in — an incomplete answer that names its own "
     "gap is what this turn is for."
 )
+
+
+#: Asked of a closing answer that came back written as a tool call.
+_IN_SENTENCES = " Write ordinary sentences for a person to read. Do not write a tool call, a function name or any markup."
+
+#: A tool call a model wrote out as words instead of making it.
+TOOL_MARKUP = re.compile(r"</?\s*(?:tool_call|function|parameter)\b", re.IGNORECASE)
 
 
 def _budget_note(used: int, budget: int) -> str:

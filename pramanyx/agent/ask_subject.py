@@ -22,11 +22,13 @@ from typing import Any, Optional
 
 #: The kinds of subject this module reads; every other focus kind is SP-15's one object, or a part of a Briefing
 #: (`knowledge.brief_context.edition_part`).
-KINDS = ("objects", "set")
+KINDS = ("objects", "set", "dashboard")
 #: The most objects a subject names by key and title — a page of a queue, never a warehouse.
 MAX_CHOSEN = 50
 #: The most of the reader's own filters a set's subject carries — as many as a filter column holds.
 MAX_READER_FILTERS = 20
+#: The most cards of a dashboard the conversation is told of.
+MAX_DASHBOARD_CARDS = 30
 #: What the conversation is handed at most, as the SP-15 focus is.
 _MAX_PROSE = 8000
 
@@ -64,6 +66,7 @@ class Subject:
     read: dict = field(default_factory=dict)       # a set as the door read it: entity, segment, filters
     narrowed: bool = False                         # the reader's own filters narrowed the set
     refused: str = ""
+    board: dict = field(default_factory=dict)      # a dashboard asked about: its title, cards and period
 
     @property
     def withheld(self) -> int:
@@ -78,6 +81,11 @@ class Subject:
         2 of the 12 are withheld from you"."""
         if self.refused:
             return f"The subject could not be read: {self.refused}"
+        if self.kind == "dashboard":
+            cards = self.board.get("cards") or []
+            head = (f"About “{cards[0]['title']}” on “{self.board.get('title')}”" if self.board.get("card")
+                    else f"About the dashboard “{self.board.get('title')}” · {len(cards):,} card{'' if len(cards) == 1 else 's'}")
+            return f"{head} · {self.board.get('covers')}"
         refused = [f"{p.entity}: {p.refused}" for p in self.parts if p.refused]
         if self.kind == "set":
             p = self.parts[0]
@@ -112,6 +120,16 @@ class Subject:
         body: dict[str, Any] = {"subject": self.words()}
         if self.refused:
             body["refused"] = self.refused
+        if self.kind == "dashboard" and not self.refused:
+            held = self.board.get("period")
+            rule = (f"Answer for {self.board.get('covers')}, from {held['start']} to {held['last_day']} inclusive, the period the "
+                    "reader has on screen, and say that period with every figure. If the question needs any other period, say "
+                    "so and ask before leaving this one." if held else
+                    "These cards are read as they are written, for no chosen period: say the period of every figure you give.")
+            return ("## On screen\n"
+                    f"The reader asks about what they have on a dashboard. {rule} Each card's statement is how the dashboard "
+                    "measures it: read a figure the same way.\n```json\n"
+                    + json.dumps({**body, **self.board}, ensure_ascii=False, default=str)[:_MAX_PROSE] + "\n```")
         if self.kind == "set":
             body["set"] = self.label
             body["read_as"] = self.read
@@ -144,6 +162,8 @@ def resolve(focus: Any, connection_id: str, schema_name: Optional[str] = None, *
     try:
         if focus.kind == "objects":
             return _objects(list(focus.objects or []), connection_id, schema_name, label=str(focus.label or ""))
+        if focus.kind == "dashboard":
+            return _about_dashboard(focus, connection_id, person=person)
         return _set(focus, connection_id, schema_name, person=person)
     except Exception as exc:  # noqa: BLE001 — the subject is context, never a dependency of the turn
         from pramanyx.kernel.errors import tolerate
@@ -256,7 +276,7 @@ def _set(focus: Any, connection_id: str, schema_name: Optional[str], *, person: 
     if not focus.dashboard and focus.entity and focus.segment:
         return _segment(focus, connection_id, schema_name)
     out = Subject(kind="set")
-    spec, why = _dashboard_spec(connection_id, str(focus.dashboard or ""), str(focus.owner or ""), person)
+    spec, why = dashboard_spec(connection_id, str(focus.dashboard or ""), str(focus.owner or ""), person)
     if spec is None:
         out.refused = why
         return out
@@ -330,7 +350,51 @@ def _listed(out: Subject, connection_id: str, schema_name: Optional[str], entity
     return out
 
 
-def _dashboard_spec(connection_id: str, dashboard: str, owner: str, person: str) -> tuple[Optional[dict], str]:
+def held_period(said: str) -> Optional[dict]:
+    """The period a page read a dashboard for, ``<first day>..<last day>``: real days, in order, or None."""
+    from datetime import date
+    first, sep, last = str(said or "").partition("..")
+    if not sep:
+        return None
+    try:
+        a, b = date.fromisoformat(first), date.fromisoformat(last)
+    except ValueError:
+        return None
+    return {"start": a.isoformat(), "last_day": b.isoformat()} if a <= b else None
+
+
+def _about_dashboard(focus: Any, connection_id: str, *, person: str) -> Subject:
+    """A dashboard, or one card of it, as the asker may read it: its cards' titles and statements, and the period on screen."""
+    from pramanyx.cards.store import get_card
+
+    spec, why = dashboard_spec(connection_id, str(focus.dashboard), str(focus.owner or ""), person)
+    if spec is None:
+        return Subject(kind="dashboard", refused=why)
+    elements = spec.get("elements") or {}
+    root = elements.get(spec.get("root")) or {}
+    title = str((root.get("props") or {}).get("title") or focus.dashboard)
+    placed: dict[str, dict] = {}
+    for el in elements.values():
+        if isinstance(el, dict) and el.get("type") == "Card" and (el.get("props") or {}).get("card"):
+            placed.setdefault(str(el["props"]["card"]), el["props"])
+    wanted = str(focus.id or "")
+    if wanted and wanted not in placed:
+        return Subject(kind="dashboard", refused="this card is not on the dashboard you can read")
+    cards: list[dict] = []
+    for card_id, props in placed.items():
+        if wanted and card_id != wanted:
+            continue
+        card = get_card(card_id)
+        if card is None:
+            continue
+        cards.append({"id": card_id, "title": str(props.get("title") or card.title), "sql": str(card.sql or "")[:1500]})
+    period = held_period(str(focus.period or ""))
+    covers = f"{period['start']} to {period['last_day']}" if period else "as written"
+    return Subject(kind="dashboard", label=title, board={"title": title, "card": wanted, "cards": cards[:MAX_DASHBOARD_CARDS],
+                                                         "period": period, "covers": covers})
+
+
+def dashboard_spec(connection_id: str, dashboard: str, owner: str, person: str) -> tuple[Optional[dict], str]:
     """The spec of the dashboard a set is read from, as the asker reads it: their own newest version, or — for one
     another person published to them — the version its readers read. ``(None, why)`` when it is not theirs to read."""
     from pramanyx.dashboards import sharing, versions

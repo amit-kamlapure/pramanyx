@@ -395,6 +395,20 @@ const PERIOD_COL = /(^|_)(period|age|month_number|week_number|months_since|weeks
 const LOWER_COL = /lower|lo_|_low|p10/i;
 const UPPER_COL = /upper|hi_|_high|p90/i;
 
+/**
+ * The map an answer in the conversation should be drawn as, as a chart hint, or null. Rows that carry coordinates are places
+ * to see, unless the answer already chose another chart. Shapes are drawn when the person asked for a map: a bar compares
+ * countries better, so a column of countries alone does not make one. What the person asked for wins over what was chosen.
+ */
+export function mapHintFor(question: string, columns: string[], rows: unknown[][], chartType?: string | null): string | null {
+  const types = availableChartTypes(columns, rows);
+  const asked = /\bmaps?\b/i.test(question);
+  const undecided = !chartType || chartType === "auto";
+  if (types.includes("point-map") && (asked || undecided)) return TYPE_TO_HINT["point-map"];
+  if (types.includes("choropleth") && asked) return TYPE_TO_HINT.choropleth;
+  return null;
+}
+
 export function availableChartTypes(columns: string[], rows: unknown[][]): ChartType[] {
   if (!columns.length || rows.length < 2) return [];
   const { dateIdxs, numericIdxs, catIdxs } = classifyColumns(columns, rows);

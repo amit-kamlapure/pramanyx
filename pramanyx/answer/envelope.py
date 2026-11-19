@@ -256,6 +256,22 @@ class EnvelopeFolder:
         self._mode = ""
         self._confidence = ""
         self._error = ""
+        self._steps: list[dict[str, Any]] = []
+
+    #: The most steps a turn keeps for a reload; a deep loop can run fifty.
+    MOST_STEPS = 60
+
+    @property
+    def steps(self) -> list[dict[str, Any]]:
+        """The tools the turn called, in order, as its thinking row lists them: name, whether it went through, and a short
+        line. Never the arguments, which can carry a whole statement."""
+        return list(self._steps)
+
+    @property
+    def said(self) -> str:
+        """The answer as the reader saw it: the settled headline frame whole. The conversation sends its prose that way,
+        many lines long, and `finish` splits it into a first sentence and a body; a reload shows it whole again."""
+        return self._headline
 
     # ── frames ──
     def feed(self, kind: str, payload: Any) -> None:
@@ -269,6 +285,11 @@ class EnvelopeFolder:
             self._mode = self._mode or str(p.get("body") or "")
         elif kind == "receipt_id":
             self._receipt_id = str(p.get("receipt_id") or self._receipt_id)
+        elif kind == "converse_step":
+            if len(self._steps) < self.MOST_STEPS:
+                self._steps.append({"index": int(p.get("index") or len(self._steps) + 1), "tool": str(p.get("tool") or ""),
+                                    "ok": p.get("ok") is not False, "detail": str(p.get("detail") or "")[:200],
+                                    "result_chars": int(p.get("result_chars") or 0)})
         elif kind == "sql":
             sql = str(p.get("sql") or "").strip()
             if sql and sql not in self._sql:

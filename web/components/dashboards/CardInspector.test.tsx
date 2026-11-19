@@ -29,12 +29,18 @@ function cs(ran: CardState["run"] extends infer R ? R extends { ran?: infer X } 
 }
 
 describe("the card's panel", () => {
-  it("opens on its look — the chart editor first — with what it reads and the SQL folded below (2026-11-18)", () => {
+  it("opens as a widget — its title and description, then the chart editor — with what it reads and the SQL folded below (2026-11-19)", () => {
     render(<PieceSetup spec={SPEC} selected={PLACED} onChange={() => {}} connectionId="thelook"
       cardSetup={() => <div data-testid="the-setup" />}
       cardChart={() => <div data-testid="the-chart" />} cardSql={() => <div data-testid="the-sql" />} />);
     const panel = screen.getByTestId("card-panel");
-    expect(panel.firstElementChild).toBe(screen.getByTestId("the-chart"));
+    expect(panel.firstElementChild).toBe(screen.getByTestId("card-widget"));
+    expect(screen.getByTestId("card-widget").nextElementSibling).toBe(screen.getByTestId("the-chart"));
+    expect(screen.getByRole("checkbox", { name: "Show the title" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Show the description" })).not.toBeChecked();
+    expect(screen.queryByRole("textbox", { name: "Description" })).toBeNull();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Show the description" }));
+    expect(screen.getByRole("textbox", { name: "Description" })).toBeInTheDocument();
     expect(screen.getByText("Edge")).toBeInTheDocument();
     expect(screen.queryByTestId("the-sql")).toBeNull();
     expect(screen.queryByTestId("the-setup")).toBeNull();
@@ -59,6 +65,15 @@ describe("the card's panel", () => {
     expect(screen.getByTestId("setup-empty")).toHaveTextContent(/Cards\s*1/);
     fireEvent.click(screen.getByTestId("setup-open-layout"));
     expect(opened).toBe(1);
+  });
+});
+
+describe("the dashboard's own setup", () => {
+  it("says the ontology release its pieces read, where the canvas no longer does", () => {
+    const { rerender } = render(<PieceSetup spec={SPEC} selected={null} onChange={() => {}} connectionId="thelook" release="6" />);
+    expect(screen.getByTestId("setup-release")).toHaveTextContent("Its pieces read release 6, the one it was composed against.");
+    rerender(<PieceSetup spec={SPEC} selected={null} onChange={() => {}} connectionId="thelook" />);
+    expect(screen.queryByTestId("setup-release")).toBeNull();
   });
 });
 

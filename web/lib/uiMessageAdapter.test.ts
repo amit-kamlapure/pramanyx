@@ -338,3 +338,13 @@ describe("empty channels do not become empty text parts", () => {
     expect(k).toEqual(["start", "finish"]);
   });
 });
+
+describe("the run's handle", () => {
+  it("rides the first frame, with the question or without it", () => {
+    const meta = (data: Record<string, unknown>) => adaptFrames([{ event: "start", data }]).chunks.filter((c) => c.type === "message-metadata")
+      .map((c) => (c as { messageMetadata: unknown }).messageMetadata);
+    expect(meta({ question: "Why?", investigation_id: "inv7" })).toEqual([{ question: "Why?", run: "inv7" }]);
+    expect(meta({ investigation_id: "inv7" })).toEqual([{ run: "inv7" }]);
+    expect(meta({ question: "Why?" })).toEqual([{ question: "Why?" }]);
+  });
+});

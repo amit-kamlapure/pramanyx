@@ -38,6 +38,8 @@ export const KIND_WORDS: Record<ComponentName, string> = {
   AddRow: "add a row",
   Drawer: "drawer",
   Period: "period",
+  GlobalFilters: "global filters",
+  GlobalFilter: "global filter",
 };
 
 /** A component's word, or the type itself when it is none of the catalog's. */
@@ -99,6 +101,7 @@ export function nameOf(elements: Record<string, El | undefined>, key: string,
         if (p.set) return setTitle(String(p.set)) ?? words(p.set);
         return entity(p.entity);
       case "ObjectSearch": return String(p.label ?? "");
+      case "GlobalFilter": return String(p.title ?? "");
       case "Drawer": return String(p.title ?? "");
       case "ActionButtons": return (Array.isArray(p.buttons) ? p.buttons as { action?: unknown; label?: unknown }[] : [])
         .map(b => String(b.label ?? "") || words(b.action)).filter(Boolean).join(" · ");

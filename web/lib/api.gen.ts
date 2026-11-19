@@ -2862,6 +2862,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/canvases/suggest-tables": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Suggest Canvas Tables
+         * @description ⚑ Spends one model call, when a person asks. The tables that fit what they say a canvas should do, for them to check
+         *     before anything is made. A name the page does not offer is never proposed.
+         */
+        post: operations["suggest_canvas_tables_canvases_suggest_tables_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/canvases/{canvas_id}": {
         parameters: {
             query?: never;
@@ -4861,6 +4882,69 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/dashboards/draft/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Draft Dashboard Stream
+         * @description ⚑ Spends model calls. The same draft, told as it is made, so a person can see the work happening. Leaving stops the
+         *     spending at the next step, and nothing is kept until the person keeps it.
+         */
+        post: operations["draft_dashboard_stream_dashboards_draft_stream_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dashboards/filters/fields": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Filter Fields
+         * @description The tables a global filter may read and the columns it may filter, each with its kind. A column whose name a filter
+         *     cannot hold is counted, never silently dropped.
+         */
+        get: operations["filter_fields_dashboards_filters_fields_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dashboards/filters/values": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Filter Values
+         * @description What a global filter offers a reader, read through the connection's own door: the commonest values of a column with how
+         *     many rows hold each, or the least and the most of a column of numbers.
+         */
+        post: operations["filter_values_dashboards_filters_values_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/dashboards/from-object": {
         parameters: {
             query?: never;
@@ -4922,6 +5006,27 @@ export interface paths {
         get: operations["read_image_dashboards_images__object_id__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dashboards/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Dashboard
+         * @description A dashboard file read into the asker's dashboards on this connection. All of it or none: whatever does not resolve here
+         *     is refused by name, with a 422 and nothing made.
+         */
+        post: operations["import_dashboard_dashboards_import_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5320,6 +5425,47 @@ export interface paths {
          * @description Stop sharing a dashboard. A version too: its history says when it reached whom.
          */
         post: operations["unpublish_dashboard_dashboards__cockpit_id__unpublish_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dashboards/{dashboard_id}/ask/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask Dashboard Stream
+         * @description ⚑ Spends model calls. The same change, told as it is drafted, so a person beside the dashboard can see the work. Leaving
+         *     stops the spending at the next step, and nothing changes until the person allows it.
+         */
+        post: operations["ask_dashboard_stream_dashboards__dashboard_id__ask_stream_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dashboards/{dashboard_id}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Dashboard
+         * @description The dashboard as it stands, as a JSON file's contents: its spec and the cards it places, each with its source.
+         */
+        get: operations["export_dashboard_dashboards__dashboard_id__export_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -16396,6 +16542,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/receipt/{receipt_id}/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Receipt Sources
+         * @description What one answer stood on, for a person to open beside it: its metrics, Definitions and the objects it read. The same
+         *     fail-closed org check as the receipt: an id outside the caller's org is 404, as one that does not exist.
+         */
+        get: operations["get_receipt_sources_receipt__receipt_id__sources_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/receipt/{receipt_id}/trace": {
         parameters: {
             query?: never;
@@ -20165,6 +20332,9 @@ export interface components {
          *     period key with its reader (``range:<preset>:<start>..<last day>@<reader>``), and ``source`` the source it draws
          *     now when a reader drilled it. What the part reads — each source's SQL, the metric a check measures, the period — is
          *     read from the kept edition (`knowledge.brief_context.edition_part`), never from the page.
+         *
+         *     The dashboards study's R20 — or a dashboard a reader asks about (``dashboard``), or one card of it (``id``), with the
+         *     period it is read for as ``<first day>..<last day>``; its cards are read here, as the asker may read the dashboard.
          */
         AskFocus: {
             /** Chosen */
@@ -20194,7 +20364,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "departure" | "automation" | "metric" | "objects" | "set" | "sheet" | "briefing";
+            kind: "departure" | "automation" | "metric" | "objects" | "set" | "sheet" | "briefing" | "dashboard" | "table" | "query";
             /**
              * Label
              * @default
@@ -20232,6 +20402,11 @@ export interface components {
              * @default
              */
             source: string;
+            /**
+             * Sql
+             * @default
+             */
+            sql: string;
             /** Values */
             values?: {
                 [key: string]: unknown;
@@ -22357,6 +22532,26 @@ export interface components {
              * @default
              */
             view: string;
+        };
+        /**
+         * FilterValuesRequest
+         * @description What a global filter offers: the values of a column, or the numbers it runs between.
+         */
+        FilterValuesRequest: {
+            /** Column */
+            column: string;
+            /** Focus */
+            focus?: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Read
+             * @default values
+             * @enum {string}
+             */
+            read: "values" | "range";
+            /** Table */
+            table: string;
         };
         /**
          * FixAllRequest
@@ -25375,6 +25570,15 @@ export interface components {
              */
             tables: string[];
         };
+        /** SuggestTablesRequest */
+        SuggestTablesRequest: {
+            /** Connection Id */
+            connection_id: string;
+            /** Description */
+            description: string;
+            /** Tables */
+            tables?: string[];
+        };
         /** SuggestionDecision */
         SuggestionDecision: {
             /** Accept */
@@ -27528,10 +27732,30 @@ export interface components {
              */
             content: string;
             /**
+             * Dashboard
+             * @default
+             */
+            dashboard: string;
+            /**
+             * Dashboard Owner
+             * @default
+             */
+            dashboard_owner: string;
+            /**
+             * Email To
+             * @default
+             */
+            email_to: string;
+            /**
              * Enabled
              * @default true
              */
             enabled: boolean;
+            /**
+             * File Format
+             * @default
+             */
+            file_format: string;
             /** Name */
             name: string;
             /**
@@ -27761,6 +27985,8 @@ export interface components {
         pramanyx__routers__dashboards__AskRequest: {
             /** Schema Name */
             schema_name?: string | null;
+            /** Target */
+            target?: string | null;
             /** Words */
             words: string;
         };
@@ -32836,6 +33062,39 @@ export interface operations {
             };
         };
     };
+    suggest_canvas_tables_canvases_suggest_tables_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SuggestTablesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_canvas_endpoint_canvases__canvas_id__get: {
         parameters: {
             query?: never;
@@ -36274,6 +36533,111 @@ export interface operations {
             };
         };
     };
+    draft_dashboard_stream_dashboards_draft_stream_post: {
+        parameters: {
+            query: {
+                connection_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    filter_fields_dashboards_filters_fields_get: {
+        parameters: {
+            query: {
+                connection_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    filter_values_dashboards_filters_values_post: {
+        parameters: {
+            query: {
+                connection_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FilterValuesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     propose_from_object_dashboards_from_object_get: {
         parameters: {
             query: {
@@ -36366,6 +36730,45 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_dashboard_dashboards_import_post: {
+        parameters: {
+            query: {
+                connection_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */
@@ -37083,6 +37486,78 @@ export interface operations {
             header?: never;
             path: {
                 cockpit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ask_dashboard_stream_dashboards__dashboard_id__ask_stream_post: {
+        parameters: {
+            query: {
+                connection_id: string;
+            };
+            header?: never;
+            path: {
+                dashboard_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["pramanyx__routers__dashboards__AskRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_dashboard_dashboards__dashboard_id__export_get: {
+        parameters: {
+            query: {
+                connection_id: string;
+            };
+            header?: never;
+            path: {
+                dashboard_id: string;
             };
             cookie?: never;
         };
@@ -55432,6 +55907,39 @@ export interface operations {
         };
     };
     get_receipt_receipt__receipt_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                receipt_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_receipt_sources_receipt__receipt_id__sources_get: {
         parameters: {
             query?: never;
             header?: never;

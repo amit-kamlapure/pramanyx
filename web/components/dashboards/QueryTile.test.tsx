@@ -54,7 +54,8 @@ describe("a card of a person's own query", () => {
     expect(layer.mark.type).toBe("bar");
     expect(layer.encoding.y.stack).toBe("zero");
     expect(within(tile).getByTestId("query-tile-said")).toHaveTextContent("Only the first 2,000 groups are drawn");
-    expect(tile).toHaveTextContent("Your query · 1.1 s · read straight from the tables");
+    expect(tile).not.toHaveTextContent("Your query");
+    expect(tile).not.toHaveTextContent("read straight from the tables");
   });
 
   it("is a figure with its label, or a table of the columns it shows, each cell written as its type reads", () => {

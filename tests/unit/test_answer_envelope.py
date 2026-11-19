@@ -409,7 +409,10 @@ def test_the_ask_stream_ends_with_the_envelope_and_files_it(monkeypatch):
 
     filed: list[tuple[str, dict]] = []
     monkeypatch.setattr("pramanyx.db.history.attach_envelope",
-                        lambda inv_id, env: filed.append((inv_id, env)) or True)
+                        lambda inv_id, env, **kw: filed.append((inv_id, env)) or True)
+    # a filed answer is also remembered, on a thread of its own that opens the history store; it is not under test here,
+    # and left running it raced the next test's migration of that store
+    monkeypatch.setattr("pramanyx.routers.investigations._remember_answer", lambda inv_id: None)
 
     async def body():
         for frame in converse_frames():
@@ -589,3 +592,131 @@ def test_the_converse_prompt_records_receipts_instead_of_narrating_them():
     assert "never report that none fired" in prompt
     assert "Do not write markdown tables" in prompt
     assert "say so in your answer" not in prompt
+
+
+# ── a reload shows what was read live (the user, 2026-11-19: "Fix the reload losing the answer's prose") ──
+
+def test_the_stream_files_the_answer_as_it_was_said_and_the_question_as_it_was_asked(monkeypatch):
+    import asyncio
+
+    from pramanyx.routers.investigations import stream_with_envelope
+
+    filed: list[dict] = []
+    monkeypatch.setattr("pramanyx.db.history.attach_envelope",
+                        lambda inv_id, env, **kw: filed.append(kw) or True)
+    # a filed answer is also remembered, on a thread of its own that opens the history store; it is not under test here,
+    # and left running it raced the next test's migration of that store
+    monkeypatch.setattr("pramanyx.routers.investigations._remember_answer", lambda inv_id: None)
+
+    async def body():
+        for frame in converse_frames():
+            yield _sse(frame)
+
+    async def run():
+        return [e async for e in stream_with_envelope(body(), question="what leads revenue?", conn_id="c1")]
+
+    asyncio.run(run())
+    [kept] = filed
+    assert kept["said"] == PROSE and kept["asked"] == "what leads revenue?"
+    assert kept["took_ms"] >= 0 and kept["steps"] == []                      # these frames ran no tool
+
+
+def test_a_reload_shows_the_conversations_whole_answer_and_the_persons_question():
+    # Seen live: a conversation that called a tool came back after a reload as its first line alone
+    # ("What this table is"), the rest of what the person had read gone.
+    from pramanyx.db.history import attach_envelope, get_session_turns, save_chat_turn
+
+    sid = "reload-keeps-the-answer"
+    inv_id = save_chat_turn(question="describe_table netflix_titles", connection_id="conn-env",
+                            headline="Outerwear & Coats led revenue last month at $41.2K.", sql="SELECT 1",
+                            session_id=sid)
+    env = fold_frames(converse_frames(), question="what leads revenue?", connection_id="conn-env").model_dump()
+    assert attach_envelope(inv_id, env, said=PROSE, asked="what leads revenue?") is True
+    [turn] = get_session_turns(sid)
+    assert turn["headline"] == PROSE.strip()
+    assert turn["question"] == "what leads revenue?"
+
+
+def test_a_one_line_answer_is_kept_as_it_was():
+    from pramanyx.db.history import attach_envelope, get_investigation, get_session_turns, save_chat_turn
+
+    sid = "reload-one-line"
+    inv_id = save_chat_turn(question="how many?", connection_id="conn-env", headline="There are 12.", sql="",
+                            session_id=sid)
+    env = fold_frames([{"type": "headline", "headline": "There are 12."},
+                       {"type": "done", "inv_id": inv_id}], question="how many?", connection_id="conn-env").model_dump()
+    assert attach_envelope(inv_id, env, said="There are 12.", asked="how many?") is True
+    assert "said" not in (get_investigation(inv_id) or {}).get("report", {})
+    [turn] = get_session_turns(sid)
+    assert turn["headline"] == "There are 12." and turn["question"] == "how many?"
+
+
+def test_a_reload_brings_back_the_answers_receipt_so_its_sources_are_drawn_again():
+    # Seen live: a restored turn had no Sources and no "Why this number" — the receipt id the stream sent was not read back.
+    from pramanyx.db.history import attach_envelope, get_session_turns, save_chat_turn
+    from pramanyx.routers.investigations import _turn_to_ui_messages
+
+    sid = "reload-keeps-the-receipt"
+    inv_id = save_chat_turn(question="q", connection_id="conn-env", headline="h", sql="SELECT 1", session_id=sid)
+    frames = [*converse_frames(), {"type": "receipt_id", "receipt_id": "rcpt-77"}]
+    env = fold_frames(frames, question="q", connection_id="conn-env").model_dump()
+    assert env["provenance"]["receipt_id"] == "rcpt-77"
+    assert attach_envelope(inv_id, env) is True
+    [turn] = get_session_turns(sid)
+    assert turn["receipt_id"] == "rcpt-77"
+    [_, answer] = _turn_to_ui_messages(turn)
+    assert {"type": "data-receipt_id", "data": {"receipt_id": "rcpt-77"}} in answer["parts"]
+
+
+def test_a_turn_without_a_receipt_restores_as_before():
+    from pramanyx.db.history import get_session_turns, save_chat_turn
+    from pramanyx.routers.investigations import _turn_to_ui_messages
+
+    sid = "reload-no-receipt"
+    save_chat_turn(question="q", connection_id="conn-env", headline="h", sql="", session_id=sid)
+    [turn] = get_session_turns(sid)
+    assert "receipt_id" not in turn
+    assert not any(p["type"] == "data-receipt_id" for p in _turn_to_ui_messages(turn)[1]["parts"])
+
+
+def test_a_reload_says_how_long_the_turn_took_and_lists_its_steps():
+    from pramanyx.answer.envelope import EnvelopeFolder
+    from pramanyx.db.history import attach_envelope, get_session_turns, save_chat_turn
+    from pramanyx.routers.investigations import _turn_to_ui_messages
+
+    folder = EnvelopeFolder(question="q", connection_id="conn-env")
+    folder.feed("converse_step", {"index": 1, "tool": "run_sql", "arguments": {"sql": "SELECT secret"}, "ok": True,
+                                  "detail": "5 rows", "result_chars": 210})
+    assert folder.steps == [{"index": 1, "tool": "run_sql", "ok": True, "detail": "5 rows", "result_chars": 210}]  # no arguments
+    sid = "reload-keeps-the-work"
+    inv_id = save_chat_turn(question="q", connection_id="conn-env", headline="h", sql="SELECT 1", session_id=sid)
+    env = fold_frames(converse_frames(), question="q", connection_id="conn-env").model_dump()
+    assert attach_envelope(inv_id, env, took_ms=12400, steps=folder.steps) is True
+    [turn] = get_session_turns(sid)
+    [_, answer] = _turn_to_ui_messages(turn)
+    assert answer["metadata"] == {"took_ms": 12400}
+    assert [p["data"]["tool"] for p in answer["parts"] if p["type"] == "data-converse_step"] == ["run_sql"]
+
+
+def test_an_answer_filed_before_it_was_kept_whole_comes_back_from_its_envelope():
+    # Filed before 2026-11-19: the row holds the first sentence, the envelope the rest; with no narrative of its own, the
+    # rest is what the conversation said after that sentence.
+    import json
+
+    from pramanyx.db.history import _conn, get_session_turns, save_chat_turn
+
+    sid = "reload-older-answer"
+    inv_id = save_chat_turn(question="describe_table netflix", connection_id="conn-env",
+                            headline="Outerwear & Coats led revenue last month at $41.2K.", sql="SELECT 1", session_id=sid)
+    env = fold_frames(converse_frames(), question="what leads revenue?", connection_id="conn-env").model_dump()
+    c = _conn()
+    report = json.loads(c.execute("SELECT report_json FROM investigations WHERE id = ?", (inv_id,)).fetchone()[0])
+    report["envelope"] = env                                     # as the older filing left it: no said, no asked
+    c.execute("UPDATE investigations SET report_json = ? WHERE id = ?", (json.dumps(report), inv_id))
+    c.commit()
+    c.close()
+    [turn] = get_session_turns(sid)
+    assert turn["headline"].startswith("Outerwear & Coats led revenue last month at $41.2K.\n\n")
+    assert "Jeans and Sweaters follow at some distance." in turn["headline"]
+    assert turn["question"] == "what leads revenue?"
+

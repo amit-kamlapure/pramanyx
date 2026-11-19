@@ -231,7 +231,7 @@ describe("BriefingEdition", () => {
     expect(within(card()).getByTestId("edition-drill-trail")).toBeTruthy();
   });
 
-  it("says on the figure's own card when it is not read against usual; an edition kept before that rule draws as it was", async () => {
+  it("draws a figure whose data can still change with its usual band and no label", async () => {
     const why = "Sales reads a table this platform has not seen stop changing.";
     const figure = { id: "sales", label: "Sales", metric: "sales", unit: "EUR", better: "up", why: "", current: 102818, previous: 97989,
       last_year: null, rel: 0.05, rel_last_year: null, n: 900, status: "provisional", z: null, outside: false, floor: false, streak: 2,
@@ -240,19 +240,10 @@ describe("BriefingEdition", () => {
     const edition = (fig: object): Edition => ({ ...WRITTEN, period: { ...PERIOD, measured: [fig as never] },
       blocks: [{ id: "lead", type: "lead", text: "A week." }, { id: "f", type: "figure", source: "sales" }] });
     api.readBriefingEdition.mockResolvedValue(edition({ ...figure, equal_age: { equal: false, why } }));
-    const { unmount } = render(<BriefingEdition connectionId="dcc63d83" schema="luxexperience" />);
-    const line = await screen.findByTestId("edition-figure-not-read");
-    expect(line.textContent).toContain("not read against usual");
-    expect(line.getAttribute("title")).toBe(why);
-    expect(line.closest('[data-testid="edition-block"]')?.textContent).toContain("usual €78.7k–€93.5k");       // the band stays
-    unmount();
-    for (const age of [{ equal_age: { equal: true, why: "" } }, {}]) {
-      api.readBriefingEdition.mockResolvedValue(edition({ ...figure, ...age }));
-      const again = render(<BriefingEdition connectionId="dcc63d83" schema="luxexperience" />);
-      await screen.findByText("€102.8k");
-      expect(screen.queryByTestId("edition-figure-not-read")).toBeNull();
-      again.unmount();
-    }
+    render(<BriefingEdition connectionId="dcc63d83" schema="luxexperience" />);
+    const shown = await screen.findByText("€102.8k");
+    expect(shown.closest('[data-testid="edition-block"]')?.textContent).toContain("usual €78.7k–€93.5k");       // the band stays
+    expect(screen.queryByText(/not read against usual/)).toBeNull();
   });
 
   it("says what the edition did not read and why, and leaves the guide's own notes to the guide", async () => {

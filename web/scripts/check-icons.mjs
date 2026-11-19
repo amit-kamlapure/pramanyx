@@ -43,6 +43,7 @@ const DRAWINGS = {
   "components/dashboards/MetricsLedger.tsx": "a metric's trend: its line, its usual range behind it and its newest point, computed per reading",
   "components/home/LeadChart.tsx":  "the lead's metric as a line with its unsettled band and restatement, computed per width",
   "components/BrandLogos.tsx":      "vendor trademarks — Snowflake, Stripe, Postgres et al",
+  "components/ui/brand.tsx":        "Pramanyx's own mark and the star in its colours: a trademark, which no icon set supplies",
   "components/OntologyCanvas.tsx":  "graph edges and node geometry, computed per layout",
   "components/ontology/EntityTypeMap.tsx": "the entity-type map's link lines and arrowheads, computed per layout",
   "components/ontology/EntityShape.tsx":

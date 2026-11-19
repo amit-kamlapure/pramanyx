@@ -110,7 +110,7 @@ def test_a_card_that_reads_none_of_the_focus_tables_is_not_cut_and_says_why(clie
     run = client.post(f"/cards/{card.id}/run", json={"focus": [{"table": "customers", "column": "country", "value": "DE"}]}).json()
     assert run["value"] == pytest.approx(sum(float(r["total_amount"]) for r in rows))
     assert run["cut"]["applied"] is False
-    assert run["cut"]["why"] == "Not cut by country = DE: it reads no customers."
+    assert run["cut"]["why"] == "Not cut by country = DE: it reads no customers, and no link leads from what it reads to customers."
 
 
 def test_a_query_of_a_person_s_own_is_cut_by_the_focus_and_its_figure_is_never_its_standing_one(client, rows):  # noqa: F811 — the fixtures, by name
@@ -188,8 +188,8 @@ def test_a_metric_card_is_cut_by_one_value_on_its_own_table_and_says_why_not_the
     assert run["value"] == pytest.approx(130.0)                                 # rows 1 and 3: Complete alone
     assert "status = 'Complete'" in run["ran"]["sql"]
     assert run["cut"] == {"applied": False, "by": ["status = Complete"], "why": (
-        "Not cut by country = DE: the metric is measured on order_items, not users. "
-        "Not cut by id = 2: a metric is cut by one value at a time.")}
+        "Not cut by id = 2: a metric is cut by one value at a time. "
+        "Not cut by country = DE: it reads no users, and no link leads from what it reads to users.")}
     whole = _metric_card_for_range(card, metric, spec, False, [])
     assert whole["value"] == pytest.approx(180.0) and "cut" not in whole        # Cancelled cut by its own CTE
 
@@ -228,3 +228,170 @@ def test_a_focus_is_cut_with_the_range_a_dashboard_always_sends_and_its_comparis
                         json={"values": {}, "filters": [], "focus": []}).json()
     assert "cut" not in whole
     assert whole["value"] == pytest.approx(sum(float(r["total_amount"]) for r in rows if str(r["order_date"]).startswith("2024")))
+
+
+# ── through a link (the study's R16): a value on a table the card does not read ─────────────────────────────────────────
+
+ORDERS_TO_CUSTOMERS = F.Link("orders", "customer_id", "customers", "customer_id")
+LINES_TO_ORDERS = F.Link("order_lines", "order_id", "orders", "order_id")
+DE = F.Focus(table="customers", column="country", value="DE")
+
+
+def test_a_card_is_cut_through_the_link_from_what_it_reads_to_the_value_and_says_which_column_it_used():
+    sql, cut = F.cut_statement("SELECT SUM(total_amount) AS revenue FROM ecommerce.orders", [DE], "duckdb",
+                               links=lambda: [ORDERS_TO_CUSTOMERS])
+    assert "customer_id IN (SELECT customer_id FROM ecommerce.customers WHERE country = 'DE')" in sql
+    assert cut == {"applied": True, "by": ["country = DE"], "why": "", "through": ["country = DE, through orders.customer_id"]}
+
+
+def test_a_cut_follows_several_links_and_no_more_than_it_may():
+    sql, cut = F.cut_statement("SELECT SUM(amount) AS revenue FROM shop.order_lines", [DE], "duckdb",
+                               links=lambda: [ORDERS_TO_CUSTOMERS, LINES_TO_ORDERS])
+    assert ("order_id IN (SELECT order_id FROM shop.orders WHERE customer_id IN "
+            "(SELECT customer_id FROM shop.customers WHERE country = 'DE'))") in sql
+    assert cut["through"] == ["country = DE, through order_lines.order_id then orders.customer_id"]
+    chain = [F.Link("a", "x", "b", "x"), F.Link("b", "x", "c", "x"), F.Link("c", "x", "d", "x"), F.Link("d", "x", "e", "x")]
+    assert len(F.ways_to("a", "d", chain)) == 1 and F.ways_to("a", "e", chain) == []
+
+
+def test_two_equally_short_ways_are_refused_by_name_and_the_statement_is_left_as_it_was():
+    links = [ORDERS_TO_CUSTOMERS, F.Link("orders", "billed_to", "customers", "customer_id")]
+    written = "SELECT SUM(total_amount) AS revenue FROM ecommerce.orders"
+    sql, cut = F.cut_statement(written, [DE], "duckdb", links=lambda: links)
+    assert sql == written and cut["applied"] is False
+    assert "orders reaches customers by more than one way (orders.billed_to, orders.customer_id)" in cut["why"]
+
+
+def test_a_card_no_link_reaches_says_so():
+    sql, cut = F.cut_statement("SELECT COUNT(*) AS n FROM ecommerce.suppliers", [DE], "duckdb", links=lambda: [ORDERS_TO_CUSTOMERS])
+    assert "IN (" not in sql
+    assert cut == {"applied": False, "by": [], "why": "Not cut by country = DE: it reads no customers, and no link leads from what it reads to customers."}
+
+
+def test_rows_added_from_a_table_no_link_reaches_leave_the_card_uncut_rather_than_half_cut():
+    written = "SELECT total_amount FROM ecommerce.orders UNION ALL SELECT amount FROM ecommerce.refunds"
+    sql, cut = F.cut_statement(written, [DE], "duckdb", links=lambda: [ORDERS_TO_CUSTOMERS])
+    assert sql == written and "it adds refunds to its rows" in cut["why"]
+
+
+@pytest.mark.parametrize("cardinality, followed", [("N:1", True), ("1:1", True), ("N:N", False), ("1:N", False)])
+def test_a_link_is_followed_only_from_its_many_side_to_its_one(cardinality, followed):
+    class R:
+        from_table, from_col, to_table, to_col = "ecommerce.orders", "customer_id", "ecommerce.customers", "customer_id"
+        traversal, value_overlap = "join", 1.0
+    R.cardinality = cardinality
+    assert (ORDERS_TO_CUSTOMERS in F.links_from([R()])) is followed
+
+
+def test_a_link_whose_values_never_meet_or_that_crosses_sources_is_not_followed():
+    class Base:
+        from_table, from_col, to_table, to_col, cardinality = "orders", "customer_id", "customers", "customer_id", "N:1"
+        traversal, value_overlap = "join", 1.0
+    class Disjoint(Base):
+        value_overlap = 0
+    class Across(Base):
+        traversal = "cross-source"
+    assert F.links_from([Disjoint(), Across()]) == [] and F.links_from([Base()]) == [ORDERS_TO_CUSTOMERS]
+
+
+def test_a_card_run_is_cut_through_a_link_and_its_figure_is_the_rows_of_that_value(client, rows, monkeypatch):  # noqa: F811 — the fixtures, by name
+    monkeypatch.setattr(F, "links_of", lambda _c: [ORDERS_TO_CUSTOMERS])
+    conn = f"f{uuid.uuid4().hex[:6]}"
+    card = _card(conn, "SELECT SUM(total_amount) AS revenue FROM ecommerce.orders")
+    run = client.post(f"/cards/{card.id}/run", json={"focus": [{"table": "customers", "column": "country", "value": "DE"}]}).json()
+    assert run["error"] is None
+    assert run["value"] == pytest.approx(sum(float(r["total_amount"]) for r in rows if r["country"] == "DE"))
+    assert run["cut"]["applied"] is True and run["cut"]["through"] == ["country = DE, through orders.customer_id"]
+
+
+def test_a_metric_is_cut_through_a_link_on_its_own_dates(monkeypatch):
+    import contextlib
+    from datetime import date
+    from types import SimpleNamespace
+
+    import duckdb
+
+    from pramanyx.briefing import ranges
+    from pramanyx.cards.models import StoredCard
+    from pramanyx.knowledge import period_brief
+    from pramanyx.routers.cards import _metric_card_for_range
+
+    con = duckdb.connect()
+    con.execute("CREATE TABLE users (id INT, traffic_source VARCHAR)")
+    con.executemany("INSERT INTO users VALUES (?,?)", [(1, "Email"), (2, "Search")])
+    con.execute("CREATE TABLE order_items (id INT, user_id INT, created_at TIMESTAMP, sale_price DOUBLE)")
+    con.executemany("INSERT INTO order_items VALUES (?,?,?,?)", [
+        (1, 1, "2026-08-17 10:00", 100.0), (2, 2, "2026-08-20 10:00", 50.0), (3, 1, "2026-08-26 23:00", 30.0),
+        (4, 1, "2026-07-01 10:00", 999.0)])                                       # outside the period: its dates still hold
+
+    def run_sql(sql):
+        cur = con.execute(sql)
+        return [d[0] for d in cur.description], cur.fetchall(), None
+
+    monkeypatch.setattr(period_brief, "connection_runner", lambda conn_id, **kw: contextlib.nullcontext((run_sql, "duckdb")))
+    monkeypatch.setattr(F, "links_of", lambda _c: [F.Link("order_items", "user_id", "users", "id")])
+    metric = SimpleNamespace(name="revenue", version=1, status="approved", tables=[], filters=[], time_kind="flow",
+                             time_column="order_items.created_at", sql="SELECT SUM(sale_price) AS revenue FROM order_items")
+    spec, why = ranges.resolve_range("custom", start=date(2026, 8, 17), end=date(2026, 8, 26), today=date(2026, 9, 26))
+    assert spec is not None, why
+    card = StoredCard(connection_id="m", source="authored", kind="kpi", title="Revenue", sql="SELECT 1")
+
+    run = _metric_card_for_range(card, metric, spec, False, [F.Focus(table="users", column="traffic_source", value="Email")])
+    assert run["value"] == pytest.approx(130.0)
+    assert run["cut"] == {"applied": True, "by": ["traffic_source = Email"], "why": "",
+                          "through": ["traffic_source = Email, through order_items.user_id"]}
+
+
+# ── a card's own window gives way to the dashboard's dates (the user, 2026-11-19, on Operations) ──────────────────────
+
+OPERATIONS_RETURN_RATE = (
+    "SELECT SAFE_DIVIDE(COUNTIF(returned_at IS NOT NULL), COUNT(*)) AS return_rate FROM order_items "
+    "WHERE status <> 'Cancelled' AND created_at >= TIMESTAMP(DATE_SUB(DATE_TRUNC(CURRENT_DATE(), MONTH), INTERVAL 12 MONTH)) "
+    "AND created_at < TIMESTAMP(DATE_TRUNC(CURRENT_DATE(), MONTH))")
+
+
+def test_a_window_reckoned_from_today_is_taken_out_and_the_rest_stays():
+    from pramanyx.dashboards.focus import without_own_window
+
+    sql, taken = without_own_window(OPERATIONS_RETURN_RATE, "bigquery")
+    assert len(taken) == 2 and all("CURRENT_DATE" in t for t in taken)
+    assert "CURRENT_DATE" not in sql and "status <> 'Cancelled'" in sql
+    # duckdb's now() and current_date, and a window that is the whole condition
+    sql, taken = without_own_window("SELECT 1 FROM t WHERE d > now() - INTERVAL 30 DAY", "duckdb")
+    assert len(taken) == 1 and "WHERE" not in sql.upper()
+
+
+def test_dates_named_outright_and_other_conditions_are_the_cards_own_and_stay():
+    from pramanyx.dashboards.focus import without_own_window
+
+    fixed = "SELECT COUNT(*) FROM orders WHERE created_at >= DATE '2024-01-01' AND status = 'Shipped'"
+    assert without_own_window(fixed, "duckdb") == (fixed, [])
+    assert without_own_window("SELECT * FROM", "duckdb") == ("SELECT * FROM", [])        # unreadable: as written
+
+
+def test_a_date_filter_replaces_the_cards_own_window_and_says_so_a_value_filter_does_not():
+    from pramanyx.dashboards.focus import Focus, cut_statement
+
+    dates = Focus(table="order_items", column="created_at", op="dates", low="2024-03-01", high="2024-03-31")
+    sql, said = cut_statement(OPERATIONS_RETURN_RATE, [dates], "bigquery")
+    assert said["applied"] and "own_window" in said
+    assert "CURRENT_DATE" not in sql and "2024-03-01" in sql and "status <> 'Cancelled'" in sql
+    country = Focus(table="order_items", column="status", op="in", values=["Complete"])
+    sql, said = cut_statement(OPERATIONS_RETURN_RATE, [country], "bigquery")
+    assert said["applied"] and "own_window" not in said and "CURRENT_DATE" in sql
+
+
+def test_a_filter_can_keep_every_value_but_those_chosen_and_keeps_rows_with_none():
+    # v20 Include / Exclude (the user, 2026-11-19): "everything but these", the rows with no value among them
+    import duckdb
+
+    from pramanyx.dashboards.focus import Focus, cut_statement
+
+    con = duckdb.connect()
+    con.execute("CREATE TABLE users AS SELECT * FROM (VALUES (1, 'China'), (2, 'Japan'), (3, NULL), (4, 'Brasil')) t(id, country)")
+    f = Focus(table="users", column="country", op="not_in", values=["China", "Japan"])
+    sql, said = cut_statement("SELECT COUNT(*) FROM users", [f], "duckdb")
+    assert said["applied"] and said["by"] == ["country not in China, Japan"]
+    assert con.execute(sql).fetchone()[0] == 2                  # Brasil, and the row with no country
+    with pytest.raises(ValueError):
+        Focus(table="users", column="country", op="not_in", values=[])

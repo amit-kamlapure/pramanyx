@@ -159,3 +159,44 @@ def column_keys(lineage: Iterable[dict]) -> Optional[list[str]]:
     if info["level"] != "column":
         return None
     return sorted({f"{c['table'].split('.')[-1].lower()}.{c['column'].lower()}" for c in info["columns"]})
+
+
+def _named(ref: Any) -> str:
+    """What a lineage ref names: the part after its kind, ``table:orders`` → ``orders``."""
+    return str(ref or "").split(":", 1)[1] if ":" in str(ref or "") else ""
+
+
+def _same_thing(a: str, b: str) -> bool:
+    """The object ``Order`` and the table ``orders`` are one thing, however each is spelled."""
+    one, other = (x.rsplit(".", 1)[-1].lower().removesuffix("s") for x in (a, b))
+    return one == other
+
+
+def sources_from_lineage(lineage: Iterable[dict]) -> dict[str, Any]:
+    """What an answer stood on, for a person to open: the approved metrics it was held to (and any it departed from), the
+    Definitions it was given, and the ontology's objects and tables it read, each once. A link between two objects names
+    two things and opens as neither, so it is left out."""
+    metrics: dict[str, bool] = {}
+    definitions: list[str] = []
+    objects: list[str] = []
+    tables: list[str] = []
+    for edge in lineage or []:
+        relation, ref = edge.get("relation"), str(edge.get("ref") or "")
+        name = _named(ref)
+        if not name:
+            continue
+        if relation in ("metric_used", "trusted_metric"):
+            metrics.setdefault(name, False)
+        elif relation == "metric_drift":
+            metrics[name] = True
+        elif relation == "input" and ref.startswith("table:") and name not in tables:
+            tables.append(name)
+        elif relation == "grounded_in_graph" and "-->" not in ref:
+            if ref.startswith("glossary_term:definition:"):
+                term = str(edge.get("detail") or "").strip() or ref.removeprefix("glossary_term:definition:").replace("-", " ")
+                if term not in definitions:
+                    definitions.append(term)
+            elif ref.startswith("table:") and name not in objects:
+                objects.append(name)
+    read = objects + [t for t in tables if not any(_same_thing(t, o) for o in objects)]
+    return {"metrics": [{"name": n, "departed": d} for n, d in metrics.items()], "definitions": definitions, "objects": read}

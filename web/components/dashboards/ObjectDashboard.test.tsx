@@ -76,14 +76,14 @@ const figure = (label: string) => screen.getAllByTestId("object-figure").find(f 
 const asked = () => objects.queryObjects.mock.calls.map(c => c[0] as ObjectQueryRequest);
 
 describe("a dashboard started from an object", () => {
-  it("draws the filter column, the whole as figures, and says how many objects there are", async () => {
+  it("draws the filter column and the whole as figures, with no line above the pieces while no filter is on", async () => {
     draw();
-    await waitFor(() => expect(screen.getByTestId("object-filter-count").textContent).toBe("125,080 orders"));
+    await waitFor(() => expect(figure("Orders").textContent).toContain("125,080"));
     expect(screen.getAllByTestId("object-facet")).toHaveLength(2);
     expect(screen.getByText("via Customer")).toBeTruthy();
-    await waitFor(() => expect(figure("Orders").textContent).toContain("125,080"));
     expect(figure("Revenue").textContent).toContain("$10.80M");
     expect(screen.queryByTestId("not-filtered")).toBeNull();
+    expect(screen.queryByTestId("dashboard-filtered-by")).toBeNull();
   });
 
   it("narrows every piece over the entity on a click, and says the whole beside each figure", async () => {
@@ -124,8 +124,9 @@ describe("a dashboard started from an object", () => {
     first.unmount();
     draw();
     await waitFor(() => expect(screen.getByTestId("object-filter-count").textContent).toBe("37,838 of 125,080 orders"));
-    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
-    await waitFor(() => expect(screen.getByTestId("object-filter-count").textContent).toBe("125,080 orders"));
+    fireEvent.keyDown(screen.getByTestId("filters-menu"), { key: "Enter" });
+    fireEvent.click(screen.getByRole("menuitem", { name: "Clear all" }));
+    await waitFor(() => expect(screen.queryByTestId("dashboard-filtered-by")).toBeNull());
     expect(localStorage.getItem("pramanyx:cockpit-filters:thelook:orders-1a2b")).toBe("{}");
   });
 

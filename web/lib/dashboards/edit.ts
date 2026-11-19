@@ -13,7 +13,7 @@
  *
  * No model, no figure. A title a person types is theirs; the server keeps it as theirs.
  */
-import {
+import { MAX_GLOBAL_FILTERS,
   FILTER_WIDTH, GRID, LIMITS, MAX_CAPTION, MAX_GRID_ROW, MAX_LABEL, MAX_NOTE, MAX_TITLE, PLACED, SPAN, type DashboardSetDef, type DashboardValueDef,
   type GridKind, type Layout, type Size,
 } from "@/lib/dashboards/catalog";
@@ -593,27 +593,79 @@ export function moveSectionToNewTab(spec: unknown, sectionKey: string, label: st
   const s = copy(spec);
   const name = label.trim().slice(0, MAX_LABEL);
   if (s.elements[sectionKey]?.type !== "Section" || !name) return s;
-  let tabs = tabsElement(s);
-  if (!tabs) {
-    const root = s.elements[s.root];
-    // the filter column stays the dashboard's own first child, beside the tabs: a tab holds sections only
-    const column = root.children.filter(k => s.elements[k]?.type === "ObjectFilters");
-    const first = freshKey(s, "tab-overview");
-    s.elements[first] = { type: "Tab", props: { name: "overview", label: "Overview" },
-      children: root.children.filter(k => !column.includes(k)) };
-    tabs = freshKey(s, "tabs");
-    s.elements[tabs] = { type: "Tabs", props: { value: { $bindState: "/tab" } }, children: [first] };
-    root.children = [...column, tabs];
-    s.state = { ...(s.state ?? {}), tab: "overview" };
-  }
-  const names = new Set(tabsOf(s).map(t => t.name));
-  let tabName = name.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || "tab";
-  for (let n = 2; names.has(tabName); n++) tabName = `${tabName.replace(/-\d+$/, "")}-${n}`;
-  const tab = freshKey(s, `tab-${tabName}`);
-  s.elements[tab] = { type: "Tab", props: { name: tabName, label: name }, children: [] };
-  s.elements[tabs].children.push(tab);
+  const tab = newTab(s, name).key;
   detach(s, sectionKey, false);
   s.elements[tab].children.push(sectionKey);
+  return settle(s);
+}
+
+/** The dashboard's Tabs: what it has, or its sections gathered as a first page when it has none. */
+function ensureTabs(s: DashboardSpec): string {
+  const held = tabsElement(s);
+  if (held) return held;
+  const root = s.elements[s.root];
+  // the filter column stays the dashboard's own first child, beside the tabs: a tab holds sections only
+  const column = root.children.filter(k => ["ObjectFilters", "QueryFilters", "GlobalFilters"].includes(s.elements[k]?.type));
+  const first = freshKey(s, "tab-overview");
+  s.elements[first] = { type: "Tab", props: { name: "overview", label: "Overview" },
+    children: root.children.filter(k => !column.includes(k)) };
+  const tabs = freshKey(s, "tabs");
+  s.elements[tabs] = { type: "Tabs", props: { value: { $bindState: "/tab" } }, children: [first] };
+  root.children = [...column, tabs];
+  s.state = { ...(s.state ?? {}), tab: "overview" };
+  return tabs;
+}
+
+/** A page name no other page holds. */
+function freshTabName(s: DashboardSpec, label: string): string {
+  const names = new Set(tabsOf(s).map(t => t.name));
+  const base = label.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || "tab";
+  let name = base;
+  for (let n = 2; names.has(name); n++) name = `${base}-${n}`;
+  return name;
+}
+
+function newTab(s: DashboardSpec, label: string): { key: string; name: string } {
+  const tabs = ensureTabs(s);
+  const name = freshTabName(s, label);
+  const key = freshKey(s, `tab-${name}`);
+  s.elements[key] = { type: "Tab", props: { name, label }, children: [] };
+  s.elements[tabs].children.push(key);
+  return { key, name };
+}
+
+/** A new page at the end, with a section ready to take its first piece (the study's R18). */
+export function addPage(spec: unknown): { spec: DashboardSpec; name: string } {
+  const s = copy(spec);
+  const label = `Page ${(tabsElement(s) ? tabsOf(s).length : 1) + 1}`.slice(0, MAX_LABEL);
+  const { key, name } = newTab(s, label);
+  const section = freshKey(s, "sec-new");
+  s.elements[section] = { type: "Section", props: { title: NEW_SECTION }, children: [] };
+  s.elements[key].children.push(section);
+  return { spec: settle(s), name };
+}
+
+/** A copy of a page and all it holds, right after it. */
+export function duplicatePage(spec: unknown, tabKey: string): { spec: DashboardSpec; name: string | null } {
+  const made = duplicate(spec, tabKey);
+  if (!made.key) return { spec: made.spec, name: null };
+  const s = made.spec;
+  const props = s.elements[made.key].props;
+  const label = `${String(props.label)} copy`.slice(0, MAX_LABEL);
+  s.elements[made.key].props = { ...props, name: "", label };
+  const name = freshTabName(s, label);
+  s.elements[made.key].props.name = name;
+  return { spec: s, name };
+}
+
+/** Take a page off, with all it holds. A dashboard keeps at least one. */
+export function removePage(spec: unknown, tabKey: string): DashboardSpec {
+  const s = copy(spec);
+  const holder = tabsElement(s);
+  if (!holder || s.elements[tabKey]?.type !== "Tab" || s.elements[holder].children.length < 2) return s;
+  s.elements[holder].children = s.elements[holder].children.filter(k => k !== tabKey);
+  const drop = (k: string) => { for (const c of s.elements[k]?.children ?? []) drop(c); delete s.elements[k]; };
+  drop(tabKey);
   return settle(s);
 }
 
@@ -651,7 +703,7 @@ export function takeOffAll(spec: unknown, key: string): DashboardSpec {
   const s = spec as DashboardSpec;
   const el = s.elements[key];
   if (!el || key === s.root) return copy(spec);
-  if (PLACED.includes(el.type as never) || el.type === "ObjectFilters" || el.type === "ActionButton") return takeOff(spec, key);
+  if (PLACED.includes(el.type as never) || el.type === "ObjectFilters" || el.type === "GlobalFilter" || el.type === "ActionButton") return takeOff(spec, key);
   let out = copy(spec);
   for (const child of [...el.children]) out = takeOffAll(out, child);
   return key in out.elements ? takeOff(out, key) : out;
@@ -852,6 +904,24 @@ export function nameByPiece(spec: unknown, sectionKey: string, name: string): Da
 }
 
 /** Arc AP-4 — the dashboard's filter column, placed by hand: its first child, beside what it narrows. A dashboard holds one. */
+/** A new global filter, beside the dashboard's pages (v19): its column made if the dashboard has none. */
+export function addGlobalFilter(spec: unknown): { spec: DashboardSpec; key: string | null } {
+  const s = copy(spec);
+  const root = s.elements[s.root];
+  let holder = root.children.find(k => s.elements[k]?.type === "GlobalFilters");
+  if (holder && s.elements[holder].children.length >= MAX_GLOBAL_FILTERS) return { spec: s, key: null };
+  if (!holder) {
+    holder = freshKey(s, "global-filters");
+    s.elements[holder] = { type: "GlobalFilters", props: {}, children: [] };
+    // a filter column stays the dashboard's first child
+    root.children.splice(root.children.filter(k => ["ObjectFilters", "QueryFilters"].includes(s.elements[k]?.type)).length, 0, holder);
+  }
+  const key = freshKey(s, "filter");
+  s.elements[key] = { type: "GlobalFilter", props: { title: "Filter", kind: "multi" }, children: [] };
+  s.elements[holder].children.push(key);
+  return { spec: s, key };
+}
+
 export function placeFilterColumn(spec: unknown, props: Record<string, unknown>): { spec: DashboardSpec; key: string | null } {
   const s = copy(spec);
   const root = s.elements[s.root];

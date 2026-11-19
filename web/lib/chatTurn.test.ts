@@ -21,6 +21,7 @@ import { readUIMessageStream } from "ai";
 
 import { DECLARED_DATA_PARTS } from "./pramanyxUIDataTypes";
 import {
+  answersDeep,
   FALLBACK_PARTS,
   PROJECTED_PARTS,
   projectThread,
@@ -124,6 +125,38 @@ describe("quick-path parity (the reducer's ask-mode fields)", () => {
       { event: "done", data: {} },
     ]));
     expect(t.route?.subject).toEqual({ said, carried: true, withheld: 2 });
+  });
+
+  it("marks a turn the conversation decided: Agent on the person's own dashboard (2026-11-19)", async () => {
+    const decided = projectTurn("make the card wide", await messageFrom([
+      { event: "route", data: { depth: "quick", why: "Agent on your dashboard", body: "converse", decided_by: "conversation" } },
+      { event: "headline", data: { headline: "A change waits for your Allow." } },
+      { event: "done", data: {} },
+    ]), { initialMode: "investigate" });
+    expect(decided.route?.conversationDecided).toBe(true);
+    expect(decided.mode).toBe("ask");                     // rendered as the conversation's answer, not a deep report
+    const plain = projectTurn("q", await messageFrom([{ event: "route", data: { depth: "quick", why: "" } }, { event: "done", data: {} }]));
+    expect(plain.route).not.toHaveProperty("conversationDecided");
+  });
+
+  it("reads back how long a restored turn took and the steps it ran, so its line says so again", () => {
+    const msg = {
+      id: "a1", role: "assistant", metadata: { took_ms: 12400 },
+      parts: [
+        { type: "data-converse_step", data: { index: 1, tool: "run_sql", ok: true, detail: "", result_chars: 300 } },
+        { type: "text", text: "TV-MA leads.", state: "done", providerMetadata: { pramanyx: { channel: "headline" } } },
+      ],
+    } as unknown as PramanyxUIMessage;
+    const t = projectTurn("q", msg);
+    expect(t.elapsedMs).toBe(12400);
+    expect(t.converseSteps.map(s => s.tool)).toEqual(["run_sql"]);
+    expect(projectTurn("q", msg, { timing: { startedAt: 1, elapsedMs: 900 } }).elapsedMs).toBe(900);   // a live turn's own clock wins
+  });
+
+  it("answers as a deep analysis when asked as one, or when a conversation's report came back in the turn", () => {
+    expect(answersDeep({ mode: "investigate", deepReport: null })).toBe(true);
+    expect(answersDeep({ mode: "ask", deepReport: { headline: "h" } as never })).toBe(true);
+    expect(answersDeep({ mode: "ask", deepReport: null })).toBe(false);
   });
 
   it("renders a resumed run whole — orphan assistant gets a synthesized user side (FL-1b)", async () => {
@@ -563,5 +596,21 @@ describe("the thinking row names a step, never its id", () => {
     const text = projectTurn("q", bare, { streaming: true }).statusText ?? "";
     expect(text).not.toContain("adhoc_3");
     expect(text).toBe("Analyzing…");
+  });
+});
+
+describe("a deep analysis still running", () => {
+  it("knows its own run from the stream's first frame, so it can be answered early", () => {
+    const message = { id: "m1", role: "assistant", parts: [], metadata: { run: "run7" } } as unknown as PramanyxUIMessage;
+    expect(projectTurn("Why did returns rise?", message, { streaming: true }).runHandle).toBe("run7");
+  });
+
+  it("carries what a report answered early says of itself", async () => {
+    const message = await messageFrom([
+      { event: "start", data: {} },
+      { event: "answer_report", data: { answer_report: { headline: "Returns rose" }, answered_early: "Answered now." } },
+      { event: "done", data: {} },
+    ]);
+    expect(projectTurn("q", message).answeredEarly).toBe("Answered now.");
   });
 });

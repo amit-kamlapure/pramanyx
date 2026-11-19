@@ -17,6 +17,7 @@ import { createPortal } from "react-dom";
 import { readAgainIn, statusWords, whatHappens } from "./runs.js";
 import { deckOf } from "./deck.js";
 import { driveFilesOf } from "./drive.js";
+import { DOES, PREFIX, saidOf, turnedDown } from "./steps.js";
 import { drawChart, labelOf, numericColumns } from "./chart";
 import {
   PANE, PANE_PATTERN, PaneBody, downloadCsv, groundingOf, pageFor, PaneTitle, ResultGrid, button, faint, hasPane, idOf, line,
@@ -462,8 +463,11 @@ function tailAfter(node) {
   return null;
 }
 
-/** A tool's row in the steps, and its card at the end of the turn: the place every answer and every draft is read. */
-const inTail = (Step, Whole) => function TailCard(props) {
+/** A tool's row in the steps, and its card at the end of the turn: the place every answer and every draft is read.
+ *  A function declaration, hoisted: cards built from it at the module's top (`DeepAnalysisCard`) may stand above it
+ *  (2026-11-18: as a `const` it was undefined where that card was built, and the plugin failed to load). */
+function inTail(Step, Whole) {
+  return function TailCard(props) {
   const here = useRef(null);
   const [tail, setTail] = useState(null);
   useEffect(() => {
@@ -487,7 +491,8 @@ const inTail = (Step, Whole) => function TailCard(props) {
   return h("div", { ref: here },
     h(Step, props),
     tail ? createPortal(h(Whole, props), tail) : null);
-};
+  };
+}
 
 const AnswerCard = inTail((props) => h(AnswerStep, props), (props) => h(Card, props));
 
@@ -973,6 +978,8 @@ function Step({ kind, title, note, busy, failed, children }) {
 function AnswerStep(props) {
   const asked = String(argsOf(props.block).question || "");
   if (props.phase !== "result") return h(Step, { kind: "rows", busy: true, title: asked ? `Asking: ${asked}` : "Asking" });
+  const refused = props.block?.isError ? turnedDown(resultText(props.block)) : null;
+  if (refused) return h(Step, { kind: "rows", title: asked || "Run the automation", note: refused });
   const read = readAnswer(resultText(props.block));
   if (!read || props.block?.isError) {
     return h(Step, { kind: "rows", failed: true, title: asked || "A question" },
@@ -988,87 +995,24 @@ function AnswerStep(props) {
 }
 
 /**
- * Pramanyx's other tools, in the words of what each does. A tool's wire name is `mcp__pramanyx__get_metric`; a
- * person reading the steps is told a metric's definition was read, and which. The second entry names the argument
- * that says which. A tool not listed is named from its own name, with the underscores taken out.
- */
-const DOES = {
-  deep_analysis: ["Ran a deep analysis", ["question"]],
-  draft_email: ["Drafted an email", ["subject", "to"]],
-  schedule: ["Set up a schedule", ["request"]],
-  schedule_question: ["Set a question on a schedule", ["question", "cron"]],
-  search_the_web: ["Searched the web", ["query"]],
-  explore: ["Explored", ["question", "topic", "focus"]],
-  explain: ["Asked how an answer was reached", ["investigation_id"]],
-  get_metric: ["Read the definition of the metric", ["name", "metric", "metric_name"]],
-  describe_entity: ["Read the object", ["entity", "name", "entity_id"]],
-  get_object: ["Read the object", ["name", "object", "object_id", "id"]],
-  list_objects: ["Listed the objects", ["kind", "type"]],
-  search_graph: ["Searched what is already known about", ["query", "q", "question"]],
-  list_findings: ["Read earlier findings", ["query", "table"]],
-  list_trusted_queries: ["Read the trusted queries", []],
-  get_table_health: ["Checked the health of the table", ["table", "table_name"]],
-  table_popularity: ["Read which tables are used most", []],
-  list_connections: ["Listed the connections", []],
-  list_platform_connections: ["Listed the connections", []],
-  get_briefing: ["Read the Briefing", []],
-  get_investigation: ["Read an earlier analysis", ["investigation_id", "id"]],
-  list_runs: ["Listed recent runs", []],
-  inspect_run: ["Looked into a run", ["trace_id"]],
-  read_run_span: ["Read one step of a run", ["span_id"]],
-  get_job: ["Checked on a job", ["job_id", "id"]],
-  list_jobs: ["Listed the jobs", []],
-  read_claims: ["Read the Record", ["subject", "kind"]],
-  read_contract: ["Read the agent contract", []],
-  read_restatements: ["Read what was restated", []],
-  post_claim: ["Wrote a claim to the Record", ["subject", "kind"]],
-  answer_accuracy: ["Read how accurate answers have been", []],
-  ground_agent: ["Read what an agent rests on", ["agent", "agent_id"]],
-  investigation_cadence: ["Read how often analyses run", []],
-  review_missed_move: ["Reviewed a missed move", ["id"]],
-  platform_audit: ["Read the audit log", []],
-  platform_guide: ["Read the platform guide", ["topic"]],
-  platform_limits: ["Read the platform's limits", []],
-  platform_premortem: ["Read the platform's pre-mortem", []],
-  platform_runs: ["Read the platform's runs", []],
-  platform_traces: ["Read the platform's traces", []],
-  platform_usage: ["Read usage and spend", []],
-  get_definitions: ["Read what the words mean", ["term"]],
-  read_learned: ["Read what is already learned", ["about"]],
-  bring_in_file: ["Brought in a file", ["name"]],
-  draft_definition: ["Drafted what a word means", ["term"]],
-  remember_for_me: ["Remembered for you", ["text"]],
-  my_memories: ["Read what you asked me to remember", []],
-  forget_for_me: ["Forgot one thing you asked me to remember", []],
-  deck_of_answers: ["Made a deck of answers", ["title"]],
-  search_my_drive: ["Searched your Drive", ["words"]],
-};
-const PREFIX = "mcp__pramanyx__";
-
-function saidOf(toolName, args) {
-  const short = toolName.startsWith(PREFIX) ? toolName.slice(PREFIX.length) : toolName;
-  const [does, whichKeys] = DOES[short] ?? [short.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase()), []];
-  const which = whichKeys.map((key) => args[key]).find((value) => typeof value === "string" && value.trim());
-  return which ? `${does}: ${which}` : does;
-}
-
-/**
  * Any other Pramanyx tool in the list of steps: named by what it does, opening to what came back. What came back
  * — a metric's definition, an object of the ontology, the Briefing, earlier findings — can be opened beside the
  * conversation, laid out to be read, as a tab that stays while the conversation goes on.
  */
 function ToolStep(props) {
   const args = argsOf(props.block);
-  const title = saidOf(props.toolName || "", args);
   const done = props.phase === "result";
   const text = done ? resultText(props.block) : "";
   const failed = Boolean(props.block?.isError);
+  const title = saidOf(props.toolName || "", args, done && !failed);
   const id = thingId(props.toolName || "", args);
   let value = null;
   if (done && !failed && text) { try { value = JSON.parse(text); } catch { value = null; } }
   const opens = value !== null && typeof value === "object" && hasPane();
   useEffect(() => { if (opens) rememberThing(id, title, value); }, [opens, id, title, text]);
   if (!done) return h(Step, { kind: "read", busy: true, title });
+  const refused = failed ? turnedDown(text) : null;
+  if (refused) return h(Step, { kind: "read", title, note: refused });
   return h(Step, { kind: "read", title, failed },
     opens ? h("div", null, h("button", { type: "button", style: button(false), onClick: () => openBeside("thing", id) }, "Open beside the conversation")) : null,
     text ? h("pre", { style: { margin: 0, fontSize: 12, whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: 320, overflow: "auto" } },
@@ -1640,7 +1584,9 @@ function DriveCard(props) {
 function DraftedDefinitionCard(props) {
   const args = argsOf(props.block);
   const term = String(args.term || "a word");
-  if (props.phase !== "result") return h(Step, { kind: "read", busy: true, title: `Drafting what “${term}” means` });
+  if (props.phase !== "result") return h(Step, { kind: "read", busy: true, title: `Draft what “${term}” means` });
+  const refused = props.block?.isError ? turnedDown(resultText(props.block)) : null;
+  if (refused) return h(Step, { kind: "read", title: `Draft what “${term}” means`, note: refused });
   let got = null;
   try { got = JSON.parse(resultText(props.block)); } catch { got = null; }
   if (!got || props.block?.isError || !got.made) {
@@ -1665,6 +1611,8 @@ function Card(props) {
     return h("div", { style: frame }, h("div", { style: quiet }, asked ? `Asking: ${asked}` : "Asking"));
   }
 
+  // Turned down, nothing was asked of the data: the row in the work says so, and there is no answer to be missing.
+  if (props.block?.isError && turnedDown(resultText(props.block))) return null;
   const read = readAnswer(resultText(props.block));
   if (!read || props.block?.isError) {
     return h("div", { style: frame },

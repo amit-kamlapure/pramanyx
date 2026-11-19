@@ -14,6 +14,7 @@
  * beside each dashboard that shows them one at a time, and a press dry-run on a real object. Declaring goes through the
  * existing door (and its approval gate); then the release; then the button goes onto the dashboards a person ticks.
  */
+import { askToOpenDashboard } from "@/lib/dashboards/start";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -304,7 +305,7 @@ export function ActionDesigner({ connectionId, schema, types, entity, within = "
   };
 
   const openDashboard = (dashboardId: string) => {
-    try { localStorage.setItem(`pramanyx:cockpit:${connectionId}`, dashboardId); } catch { /* the cockpit opens on its own tab */ }
+    askToOpenDashboard(connectionId, dashboardId);
     requestTab("dashboards", { conn: connectionId });
   };
 

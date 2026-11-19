@@ -49,6 +49,9 @@ function openChoicesOf(p: StagedProposal): OpenChoice[] {
     .filter(c => Number.isFinite(c.action) && c.key !== "");
 }
 
+/** A change to a dashboard, drafted or to publish: the proposal kinds the inbox stores under the dashboard's old name. */
+export const isDashboardProposal = (kind: string): boolean => kind === "cockpit_draft" || kind === "cockpit_publish";
+
 const KIND_CHIP: Record<string, { hue: ChipHue; label: string }> = {
   declared_action: { hue: "caution", label: "action" },
   integration: { hue: "caution", label: "integration write" },
@@ -520,7 +523,7 @@ export function ProposalCard({ proposal, actor, onResolved, onOpenInEditor, inbo
           </span>
         </div>
       )}
-      {(p.kind === "cockpit_draft" || p.kind === "cockpit_publish") && <DashboardBody p={p} />}
+      {isDashboardProposal(p.kind) && <DashboardBody p={p} />}
       {p.kind === "ontology_candidate" && (
         <div className="flex flex-col gap-1">
           <Row label="Proposes" mono>{String(p.params?.proposal ?? "")}</Row>

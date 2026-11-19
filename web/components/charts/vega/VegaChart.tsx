@@ -18,6 +18,7 @@ import { useEffect, useRef, useState } from "react";
 import { bandPaddingFor, withBandPadding } from "@/components/charts/vega/bandFit";
 import { buildVegaConfig, buildVegaRuntimeConfig, readVegaTokens } from "@/components/charts/vega/config";
 import { clickedDatum } from "@/components/charts/selection";
+import { HOVER_MARK, hoverHtml, hoverMetaOf } from "@/components/charts/vega/hoverTooltip";
 import type { ChartInstance, PngOptions } from "@/lib/chartExport";
 
 type VegaModules = {
@@ -48,6 +49,8 @@ interface Props {
   onCompiled?: (vegaSpec: unknown) => void;
   /** Click a mark to drill in — receives the datum behind it, same contract as EChart. */
   onSelect?: (datum: Record<string, unknown>) => void;
+  /** A right click on a mark, with where the pointer is. */
+  onContext?: (datum: Record<string, unknown>, at: { x: number; y: number }) => void;
   /** Hand an export handle back to the parent, same contract as EChart's onReady. */
   onReady?: (instance: ChartInstance) => void;
   /** Band fit (`bandFit.ts`): the distinct categories on a VERTICAL band axis and the bars in each,
@@ -56,13 +59,15 @@ interface Props {
   barsPerBand?: number;
 }
 
-export function VegaChart({ spec, tier = 1, height = 300, className, onCompiled, onSelect, onReady, bands, barsPerBand }: Props) {
+export function VegaChart({ spec, tier = 1, height = 300, className, onCompiled, onSelect, onContext, onReady, bands, barsPerBand }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<{ finalize: () => void } | null>(null);
   const onCompiledRef = useRef(onCompiled);
   onCompiledRef.current = onCompiled;
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
+  const onContextRef = useRef(onContext);
+  onContextRef.current = onContext;
   const onReadyRef = useRef(onReady);
   onReadyRef.current = onReady;
   const [themeTick, setThemeTick] = useState(0);
@@ -119,13 +124,38 @@ export function VegaChart({ spec, tier = 1, height = 300, className, onCompiled,
             onCompiledRef.current?.(sized);
             viewRef.current?.finalize();
             const view = new vega.View(runtime, { renderer: "svg", container: el, hover: true });
-            view.tooltip(new tooltip.Handler().call);
+            // A line's hover rule writes its own tooltip: the date and every series there, largest first, each beside
+            // its line's colour (`hoverTooltip.ts`). Every other mark's tooltip is vega-tooltip's own table. Both wear
+            // the app's surface (`.aug-theme`, globals.css), not vega-tooltip's white box.
+            const hover = tier === 3 ? null : hoverMetaOf(spec);
+            const colorOf = (series: string): string | null => {
+              try {
+                const scale = view.scale("color") as ((v: string) => unknown) | undefined;
+                const c = scale ? scale(series) : config.line && typeof config.line === "object"
+                  ? (config.line as { color?: unknown }).color : null;
+                return typeof c === "string" ? c : tokens.palette[0] ?? null;
+              } catch { return tokens.palette[0] ?? null; }
+            };
+            view.tooltip(new tooltip.Handler({
+              theme: "aug",
+              formatTooltip: (value, valueToHtml, maxDepth, baseURL) =>
+                hover && value && typeof value === "object" && (value as Record<string, unknown>)[HOVER_MARK]
+                  ? hoverHtml(value as Record<string, unknown>, hover, colorOf, valueToHtml)
+                  : tooltip.formatValue(value, valueToHtml, maxDepth, baseURL),
+            }).call);
             viewRef.current = view;
 
             view.addEventListener("click", (_e: unknown, item: unknown) => {
               // only a mark answers a click (the board study §6.2: a click filters a dashboard)
               const datum = clickedDatum(item);
               if (datum) onSelectRef.current?.(datum);
+            });
+            view.addEventListener("contextmenu", (e: unknown, item: unknown) => {
+              const datum = clickedDatum(item);
+              if (!datum || !onContextRef.current) return;
+              const pointer = e as MouseEvent;
+              pointer.preventDefault();
+              onContextRef.current(datum, { x: pointer.clientX, y: pointer.clientY });
             });
 
             /**

@@ -37,6 +37,11 @@ vi.mock("@/lib/events", () => ({ subscribeKernelEvents: () => () => {} }));
 vi.mock("@/components/ProfilePanel", () => ({ ProfilePanel: () => <p>Profile layer</p> }));
 
 const CONN = "c1";
+vi.mock("@/components/DatasetProgram", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/components/DatasetProgram")>()),
+  ScopeMaturity: () => <span data-testid="scope-maturity" />,
+}));
+
 const noop = () => {};
 
 /** The workspace as the shell renders it — with a NEW `connections` array each time, the way
@@ -170,5 +175,17 @@ describe("IntelligenceWorkspace — the Dashboards tab, beside the Briefing (Arc
       canvasId="cv1" workspaceId="default" />);
     await waitFor(() => expect(onLayerChange).toHaveBeenCalledWith("briefing"));
     expect(tabs()).not.toContain("Dashboards");
+  });
+});
+
+describe("the scope bar's maturity", () => {
+  it("is said on the other layers, and leaves the dashboards their room (the user, 2026-11-18)", async () => {
+    const first = render(shell("graph", "public"));
+    await settle();
+    expect(screen.queryByTestId("scope-maturity")).not.toBeNull();
+    first.unmount();
+    render(shell("dashboards", "public"));
+    await settle();
+    expect(screen.queryByTestId("scope-maturity")).toBeNull();
   });
 });

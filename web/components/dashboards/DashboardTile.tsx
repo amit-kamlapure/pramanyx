@@ -23,7 +23,11 @@
  * Every tile's foot says where its figure comes from. Its doors — refresh, an alert, the
  * evidence, taking it off — show when the tile is pointed at or focused.
  */
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { DropdownMenu } from "@radix-ui/themes";
+import { COMPARE_CAVEAT } from "@/lib/dashboards/ledger";
+import { downloadChartPng, type ChartInstance } from "@/lib/chartExport";
+import { csvFilename, downloadCsv, toCsv, type CsvCell } from "@/lib/query/csv";
 
 import { useMarkRead } from "@/components/dashboards/readSlot";
 import { CardAlertForm, usePersistViz, type CardState } from "@/components/brief/PinnedCardBody";
@@ -31,7 +35,7 @@ import { seriesTrend, type SeriesTrend } from "@/components/brief/Sparkline";
 import { deltaInfo, formatMetric } from "@/components/brief/metricFormat";
 import { ResultChartCard } from "@/components/charts/ResultChartCard";
 import { type ChartCustom } from "@/components/Chart";
-import { type VizConfig } from "@/components/charts/vizConfig";
+import { chartOptionsOf, type VizConfig } from "@/components/charts/vizConfig";
 import { ALL_CHART_TYPES } from "@/components/charts/chartTypeInference";
 import type { Pick as ChartPick } from "@/components/charts/selection";
 import { VegaChart } from "@/components/charts/vega/VegaChart";
@@ -41,12 +45,16 @@ import { Button } from "@/components/ui/button";
 import { Icon, type IconName } from "@/components/ui/icon";
 import { readMetricTrend, type BriefingRange, type CardRunPrevious, type DashboardCard, type QueryShaped, type QueryShown, type StatedRange } from "@/lib/api";
 import { readVegaTokens } from "@/components/charts/vega/config";
-import { queryChartSpec } from "@/lib/dashboards/queryChart";
+import { queryChartSpec, queryLookOf } from "@/lib/dashboards/queryChart";
 import { cellText } from "@/lib/dashboards/objectView";
 import { SPAN, type Size } from "@/lib/dashboards/catalog";
 import { cardValue } from "@/lib/dashboards/hostStatus";
 import type { CardStatus } from "@/lib/dashboards/hostState";
-import { fmtDate, formatMetricValue, formatSeconds } from "@/lib/format";
+import { fmtDate, formatCount, formatMetricValue } from "@/lib/format";
+import { NumberedPager } from "@/components/dashboards/NumberedPager";
+import { usePlacementLook, useValueColors } from "@/components/dashboards/placementLook";
+import type { NumberLook } from "@/lib/dashboards/numberLook";
+import { cellLook, columnRanges } from "@/lib/dashboards/columnLook";
 import { draftedFigure } from "@/lib/dashboards/figureText";
 
 export type TileShape = "figure" | "trend" | "rows";
@@ -73,6 +81,8 @@ export function tileShape(cs: CardState): TileShape {
 export const WIDE: Record<TileShape, boolean> = { figure: false, trend: true, rows: true };
 
 export interface TileDoors {
+  /** The study's R20 — open the Data Canvas with this card as the question's subject. */
+  onAskAbout?: (id: string, title: string) => void;
   /** Take the card off this dashboard. Absent where the reader may not change it — a strip, a published one. */
   onRemove?: (id: string) => void;
   onRefresh: (id: string) => void;
@@ -84,6 +94,9 @@ export interface TileDoors {
 
 /** Where a tile stands: the element it draws, and its size. A tile drawn outside a dashboard's spec
  *  (a test, a strip) has no element, and offers no size. */
+/** Rows a card offers to take away. */
+export interface CardTable { columns: string[]; rows: CsvCell[][] }
+
 export interface TilePlace {
   elementKey: string | null;
   size: Size;
@@ -116,9 +129,9 @@ function limitsOf(card: DashboardCard): { values: number[]; below: boolean; watc
 
 /** One figure, at the scale its unit states. A figure its unit says cannot be is still shown —
  *  a dashboard hides nothing — plainly, and said to be outside its range. */
-export function figureText(v: number, card: DashboardCard, sym: string): { text: string; outside: boolean } {
+export function figureText(v: number, card: DashboardCard, sym: string, look: NumberLook | null = null): { text: string; outside: boolean } {
   const range = card.stated_range ?? undefined;
-  const f = formatMetric(v, card.unit ?? "", sym, card.title, range);
+  const f = formatMetric(v, card.unit ?? "", sym, card.title, range, look);
   if (f.ok) return { text: f.display, outside: false };
   const bounded = !!range && ["ratio01", "pct100", "band"].includes(range.kind);
   return { text: formatMetricValue(v), outside: bounded && v !== 0 };
@@ -147,8 +160,11 @@ function moveColour(sign: number, card: DashboardCard): string {
   return towardTheLimit ? "var(--red4)" : "var(--grn4)";
 }
 
-export function Frame({ testid, shape, over, dashed, children, doors }: {
-  testid: string; shape?: TileShape; over?: boolean; dashed?: boolean; children: ReactNode; doors?: ReactNode;
+export function Frame({ testid, shape, over, dashed, bare, children, doors }: {
+  testid: string; shape?: TileShape; over?: boolean; dashed?: boolean;
+  /** Words standing on the page itself, a heading across the dashboard: no card around them. */
+  bare?: boolean;
+  children: ReactNode; doors?: ReactNode;
 }) {
   return (
     <div className="group" data-testid={testid} data-shape={shape} style={{
@@ -156,10 +172,10 @@ export function Frame({ testid, shape, over, dashed, children, doors }: {
       // on a section's grid the box is fixed: what it holds stays inside it, and a piece's own body scrolls (Arc AP-1)
       minHeight: 0, overflow: "hidden",
       // the quieter card of the board study (docs/OPENDASHBOARDS_STUDY.md §6.2): more air, no shadow (CLARITY.md)
-      gap: 8, padding: "16px 18px 14px", background: "var(--bg-2)", borderRadius: "var(--r3)",
+      gap: 8, padding: bare ? "4px 2px" : "16px 18px 14px", background: bare ? "transparent" : "var(--bg-2)", borderRadius: "var(--r3)",
       // a card stands on the page by its fill; an edge is drawn only where it says something — dashed for a piece
       // that cannot be read, red for a figure over its limit (CLARITY.md, "cards on the ground")
-      border: `1px ${dashed ? "dashed" : "solid"} ${over ? "color-mix(in srgb, var(--red4) 55%, var(--b1))" : dashed ? "var(--b1)" : "var(--card-edge)"}`,
+      border: `1px ${dashed ? "dashed" : "solid"} ${bare ? "transparent" : over ? "color-mix(in srgb, var(--red4) 55%, var(--b1))" : dashed ? "var(--b1)" : "var(--card-edge)"}`,
     }}>
       {children}
       {doors}
@@ -170,14 +186,27 @@ export function Frame({ testid, shape, over, dashed, children, doors }: {
 /** A piece's name: the card says what it shows at full strength (14/600); a figure's name is its muted label, the
  *  figure being the point (CLARITY.md, "a row of figures": label muted · value 22–30px). */
 export function Title({ title, right, muted = false }: { title: string; right?: ReactNode; muted?: boolean }) {
+  // a placed card's own look (v16): its title hidden, or a description under it
+  const look = usePlacementLook();
   return (
-    <div style={{ display: "flex", alignItems: "baseline", gap: 10, minWidth: 0, paddingRight: 64 }}>
-      <div className={muted ? "aug-fs-chrome" : "aug-fs-ui"} title={title} style={{
-        flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-        ...(muted ? { fontWeight: 500, color: "var(--t2)" } : { fontWeight: 600, color: "var(--t1)" }),
-      }}>{title}</div>
-      {right}
-    </div>
+    <>
+      {(look.showTitle || right) && (
+        <div style={{ display: "flex", alignItems: "baseline", gap: 10, minWidth: 0, paddingRight: 64 }}>
+          {look.showTitle ? (
+            <div className={muted ? "aug-fs-chrome" : "aug-fs-ui"} title={title} data-testid="tile-title" style={{
+              flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+              ...(muted ? { fontWeight: 500, color: "var(--t2)" } : { fontWeight: 600, color: "var(--t1)" }),
+            }}>{title}</div>
+          ) : <div style={{ flex: 1 }} />}
+          {right}
+        </div>
+      )}
+      {look.description && (
+        <div className="aug-fs-xs" data-testid="tile-description" style={{ color: "var(--t3)", lineHeight: 1.45, paddingRight: look.showTitle ? 0 : 64 }}>
+          {look.description}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -192,7 +221,26 @@ export function Foot({ icon, children, aside }: { icon: IconName; children: Reac
 }
 
 /** The card's doors, shown when the tile is pointed at or focused. */
-function Doors({ card, doors, onAlert, place }: { card: DashboardCard; doors: TileDoors; onAlert?: () => void; place: TilePlace }) {
+/** What a card offers to take away (the study's R23): the rows it read as they are drawn here, and its chart as a picture. */
+function CardFiles({ title, table, chart }: { title: string; table: CardTable | null; chart?: RefObject<ChartInstance | null> }) {
+  if (!table?.columns.length && !chart) return null;
+  const name = title.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "card";
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger>
+        <Button variant="ghost" size="icon-xs" aria-label="Download" title="Download this card's rows or its chart" data-testid="card-download"><Icon name="download" /></Button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content size="1" align="end">
+        {!!table?.columns.length && (
+          <DropdownMenu.Item data-testid="card-download-csv" onSelect={() => downloadCsv(csvFilename(name), toCsv(table.columns, table.rows))}>Rows as CSV</DropdownMenu.Item>
+        )}
+        {chart && <DropdownMenu.Item data-testid="card-download-png" onSelect={() => void downloadChartPng(chart.current, title)}>Chart as PNG</DropdownMenu.Item>}
+      </DropdownMenu.Content>
+    </DropdownMenu.Root>
+  );
+}
+
+function Doors({ card, doors, onAlert, place, files }: { card: DashboardCard; doors: TileDoors; onAlert?: () => void; place: TilePlace; files?: ReactNode }) {
   const iid = card.provenance.insight_id;
   return (
     <div className="opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
@@ -200,6 +248,10 @@ function Doors({ card, doors, onAlert, place }: { card: DashboardCard; doors: Ti
       style={{ position: "absolute", top: 8, right: 8, display: "flex", gap: 2, alignItems: "center", background: "var(--bg-2)", borderRadius: "var(--r2)" }}>
       {doors.onResize && place.elementKey && (
         <SizePick value={place.size} label={`Size of ${card.title}`} onPick={s => doors.onResize?.(place.elementKey as string, s)} />
+      )}
+      {doors.onAskAbout && (
+        <Button variant="ghost" size="icon-xs" aria-label="Ask about this card" title="Ask about this card, for the period on screen" data-testid="card-ask-about"
+          onClick={() => doors.onAskAbout?.(card.id, card.title)}><Icon name="chat" /></Button>
       )}
       {iid && doors.onEvidence && (
         <Button variant="ghost" size="icon-xs" aria-label="Evidence" title="See the evidence behind this finding"
@@ -213,6 +265,7 @@ function Doors({ card, doors, onAlert, place }: { card: DashboardCard; doors: Ti
         <Button variant="ghost" size="icon-xs" aria-label="Set an alert" title="Alert me when this figure crosses a threshold (schedules a monitor)"
           onClick={onAlert}><Icon name="bell" /></Button>
       )}
+      {files}
       <Button variant="ghost" size="icon-xs" aria-label="Refresh" title="Run this card again"
         onClick={() => doors.onRefresh(card.id)}><Icon name="refresh" /></Button>
       {doors.onRemove && (
@@ -234,16 +287,10 @@ function Moved({ value, previous, card }: { value: number; previous: CardRunPrev
   const moved = changeWords(value, previous.value, card, previous.word);
   if (!moved) return null;
   return (
-    <div className="aug-fs-sm" data-testid="tile-change" title={`Against ${previous.covers}`}
+    <div className="aug-fs-sm" data-testid="tile-change" title={`Against ${previous.covers}${previous.equal_age ? "" : `. ${COMPARE_CAVEAT}`}`}
       style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap", color: previous.equal_age ? moveColour(moved.sign, card) : "var(--t2)" }}>
       {moved.sign !== 0 && <Icon name={moved.sign > 0 ? "rises" : "falls"} size={13} />}
       <span>{moved.text}</span>
-      {!previous.equal_age && (
-        <span data-testid="tile-not-equal-age" style={{ color: "var(--amb4)" }}
-          title="This range's days may still change, so part of the difference may not be a move.">
-          · not at equal age
-        </span>
-      )}
     </div>
   );
 }
@@ -290,6 +337,7 @@ function MetricTrendStrip({ card, place, sym }: { card: DashboardCard; place: Ti
 }
 
 function FigureTile({ cs, status, sym, doors, place }: { cs: CardState & { card: DashboardCard }; status: CardStatus; sym: string; doors: TileDoors; place: TilePlace }) {
+  const numberLook = usePlacementLook().number;
   const { card, run, failed } = cs;
   const errored = failed || !!run?.error;
   const value = cardValue(cs);
@@ -299,7 +347,7 @@ function FigureTile({ cs, status, sym, doors, place }: { cs: CardState & { card:
   const [alerting, setAlerting] = useState(watched);
   const source = sourceOf(card);
   const over = status === "over";
-  const shown = value !== null ? figureText(value, card, sym) : null;
+  const shown = value !== null ? figureText(value, card, sym, numberLook) : null;
   // Standing: what it moved by since the card last ran, if it did.
   const standingPrev = !ranged ? (run?.refresh?.prev_value ?? null) : null;
   const caveats = run?.caveats ?? [];
@@ -313,7 +361,8 @@ function FigureTile({ cs, status, sym, doors, place }: { cs: CardState & { card:
 
   return (
     <Frame testid="dashboard-tile" shape="figure" over={over}
-      doors={<Doors card={card} doors={doors} place={place} onAlert={value !== null && !alerting ? () => setAlertOpen(o => !o) : undefined} />}>
+      doors={<Doors card={card} doors={doors} place={place} onAlert={value !== null && !alerting ? () => setAlertOpen(o => !o) : undefined}
+        files={<CardFiles title={card.title} table={runTable(cs.run)} />} />}>
       <Title title={card.title} muted />
       {errored ? (
         <>
@@ -351,7 +400,7 @@ function FigureTile({ cs, status, sym, doors, place }: { cs: CardState & { card:
       {limits.length > 0 && (
         <div className="aug-fs-sm" data-testid="card-limit" style={{ color: over ? "var(--red4)" : "var(--t3)" }}
           title={alerting ? "A monitor watches this limit" : "This card carries a limit. Nothing is scheduled to watch it."}>
-          {over ? "Past its limit" : "Limit"}: {below ? "at or below" : "at or above"} {limits.map(v => figureText(v, card, sym).text).join(", ")}
+          {over ? "Past its limit" : "Limit"}: {below ? "at or below" : "at or above"} {limits.map(v => figureText(v, card, sym, numberLook).text).join(", ")}
           {alerting ? " · alerting" : ""}
         </div>
       )}
@@ -409,19 +458,23 @@ export function trendSpec(trend: SeriesTrend, card: DashboardCard, sym: string, 
 }
 
 function TrendTile({ cs, trend, status, sym, doors, place }: { cs: CardState & { card: DashboardCard }; trend: SeriesTrend; status: CardStatus; sym: string; doors: TileDoors; place: TilePlace }) {
+  const numberLook = usePlacementLook().number;
   const { card } = cs;
   const source = sourceOf(card);
   const spec = useMemo(() => trendSpec(trend, card, sym), [trend, card, sym]);
   const n = trend.values.length;
-  const newest = `${fmtDate(trend.dates[n - 1], trend.gran)} · ${figureText(trend.values[n - 1], card, sym).text}`;
+  const newest = `${fmtDate(trend.dates[n - 1], trend.gran)} · ${figureText(trend.values[n - 1], card, sym, numberLook).text}`;
   const [room, height] = useChartHeight(SPAN[place.size].h === 2 ? 340 : 170);
+  const chart = useRef<ChartInstance | null>(null);
+  const table: CardTable = { columns: ["date", card.title], rows: trend.dates.map((d, i) => [d, trend.values[i]]) };
   return (
-    <Frame testid="dashboard-tile" shape="trend" over={status === "over"} doors={<Doors card={card} doors={doors} place={place} />}>
+    <Frame testid="dashboard-tile" shape="trend" over={status === "over"}
+      doors={<Doors card={card} doors={doors} place={place} files={<CardFiles title={card.title} table={table} chart={chart} />} />}>
       <Title title={card.title} right={
         <span className="aug-fs-sm" data-testid="tile-newest" style={{ color: "var(--t1)", fontWeight: 500, whiteSpace: "nowrap" }}>{newest}</span>
       } />
       <div ref={room} style={{ flex: 1, minHeight: 0 }}>
-        <VegaChart spec={spec} tier={2} height={height} />
+        <VegaChart spec={spec} tier={2} height={height} onReady={i => { chart.current = i; }} />
       </div>
       <Foot icon={source.icon}>{source.words}, by {trend.gran}</Foot>
     </Frame>
@@ -436,17 +489,20 @@ function RowsTile({ cs, doors, place, focus }: { cs: CardState & { card: Dashboa
     chartType?: string; chartConfig?: Record<string, unknown>; custom?: ChartCustom; showDataLabels?: boolean; viz?: VizConfig;
   };
   const [room, height] = useChartHeight(SPAN[place.size].h === 2 ? 400 : 200);
+  const chart = useRef<ChartInstance | null>(null);
   return (
-    <Frame testid="dashboard-tile" shape="rows" doors={<Doors card={card} doors={doors} place={place} />}>
+    <Frame testid="dashboard-tile" shape="rows"
+      doors={<Doors card={card} doors={doors} place={place} files={<CardFiles title={card.title} table={runTable(run)} chart={chart} />} />}>
       <Title title={card.title} />
       <div ref={room} style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
         {run && (
-          <ResultChartCard editorKey={card.id} columns={run.columns} rows={run.rows as unknown[][]}
+          <ResultChartCard editorKey={card.id} pencil={false} columns={run.columns} rows={run.rows as unknown[][]}
             // the board study — a click filters the dashboard; what is chosen stays lit, beside the card's own exhibit
             onPick={focus?.onPick ? (p) => focus.onPick?.(p) : undefined}
             exhibit={focusExhibit(render.chartConfig, run.columns, focus)}
             chartType={render.chartType ?? null} chartConfig={render.chartConfig ?? null} custom={render.custom ?? null}
-            defaultShowLabels={render.showDataLabels} fillHeight={height} config={render.viz ?? null} onConfigChange={persistViz} />
+            defaultShowLabels={render.showDataLabels} fillHeight={height} config={render.viz ?? null} onConfigChange={persistViz}
+            onChartReady={i => { chart.current = i; }} />
         )}
       </div>
       <Foot icon={source.icon}>{source.words}{run?.scoped && !run.scoped.standing ? `, for ${run.scoped.covers}` : ""}</Foot>
@@ -466,6 +522,9 @@ export function DashboardTile({ cs, status, sym, doors, place = STANDING, waits 
   place?: TilePlace;
   waits?: QueryWaiting | null;
 }) {
+  // a placed card's own title (v16) stands for the card's wherever a tile names it
+  const look = usePlacementLook();
+  if (look.title && look.title !== cs.card.title) cs = { ...cs, card: { ...cs.card, title: look.title } };
   if (waits) {
     const chrome = <Doors card={cs.card} doors={doors} place={place} />;
     return "reading" in waits ? <QueryReading title={cs.card.title} doors={chrome} />
@@ -483,9 +542,64 @@ export function DashboardTile({ cs, status, sym, doors, place = STANDING, waits 
   return <FigureTile cs={cs} status={status} sym={sym} doors={doors} place={place} />;
 }
 
+const ROWS_HEAD_PX = 28;
+const ROWS_ROW_PX = 27;
+const ROWS_PAGER_PX = 32;
+const NUMERIC_TYPE = /INT|DOUBLE|FLOAT|DECIMAL|NUMERIC|REAL/i;
+
+/** A query card's table, a page at a time (study R26): as many rows as its box holds, numbered pages beneath. The count is
+ *  the rows the card holds, said as the first of more when the query returned more than a card keeps. */
+export function QueryRows({ shaped, height }: { shaped: Extract<QueryShaped, { as: "table" }>; height: number }) {
+  // v17 — a number column drawn as a bar or a colour scale, against every row the card holds (not the page alone)
+  const looks = usePlacementLook().columns;
+  const names = shaped.columns.map(c => c.name);
+  const ranges = useMemo(() => columnRanges(names, shaped.rows as unknown[][], looks),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the rows and the looks are what it reads
+    [shaped.rows, looks]);
+  const per = Math.max(3, Math.floor((height - ROWS_HEAD_PX - ROWS_PAGER_PX) / ROWS_ROW_PX));
+  const pages = Math.max(1, Math.ceil(shaped.rows.length / per));
+  const [page, setPage] = useState(1);
+  // a new run starts on its first page
+  useEffect(() => { setPage(1); }, [shaped.rows]);
+  const at = Math.min(page, pages);
+  const from = (at - 1) * per;
+  const shown = shaped.rows.slice(from, from + per);
+  const right = (j: number) => NUMERIC_TYPE.test(shaped.columns[j]?.type ?? "");
+  return (
+    <>
+      <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+        <table className="aug-fs-sm" style={{ width: "100%", borderCollapse: "collapse", fontVariantNumeric: "tabular-nums" }}>
+          <thead><tr>{shaped.columns.map((c, j) => (
+            <th key={`${c.name}-${j}`} style={{ textAlign: right(j) ? "right" : "left", color: "var(--t3)", fontWeight: 500, padding: "4px 6px", borderBottom: "1px solid var(--b1)", whiteSpace: "nowrap" }}>{c.name}</th>
+          ))}</tr></thead>
+          <tbody>{shown.map((r, i) => (
+            <tr key={from + i}>{r.map((v, j) => (
+              <td key={j} style={{ padding: "4px 6px", borderBottom: "1px solid var(--b1)", whiteSpace: "nowrap", textAlign: right(j) ? "right" : "left",
+                ...cellLook(v, looks?.[names[j]], ranges[names[j]]) }}>
+                {cellText(v, shaped.columns[j]?.type, undefined, "", "", names[j])}
+              </td>
+            ))}</tr>
+          ))}</tbody>
+        </table>
+      </div>
+      {pages > 1 && (
+        <div data-testid="query-tile-pages" className="aug-fs-xs"
+          style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, paddingTop: 6, color: "var(--t3)", fontVariantNumeric: "tabular-nums" }}>
+          <span>{formatCount(from + 1)}–{formatCount(from + shown.length)} of {shaped.more ? `the first ${formatCount(shaped.rows.length)}` : formatCount(shaped.rows.length)}</span>
+          <NumberedPager testid="query-tile-pager" page={at} pages={pages} onPage={setPage} />
+        </div>
+      )}
+    </>
+  );
+}
+
 /** Arc AP-7 — a card of a person's own query, as they set it up: its figure, its table or its chart, and what the run
  *  left out said beneath it. A query that cannot be read says why, in its place. */
 function QueryTile({ cs, doors, place, focus }: { cs: CardState & { card: DashboardCard }; doors: TileDoors; place: TilePlace; focus?: TileFocus }) {
+  const numberLook = usePlacementLook().number;
+  // v17 — the colours the dashboard keeps for the split's values
+  const keptColors = useValueColors();
+  const chart = useRef<ChartInstance | null>(null);
   const { card, run } = cs;
   const shaped = run?.shown ?? null;
   const setup = (card.render as { shown?: QueryShown }).shown;
@@ -498,8 +612,8 @@ function QueryTile({ cs, doors, place, focus }: { cs: CardState & { card: Dashbo
   const spec = useMemo(() => {
     if (!shaped || !setup || shaped.as === "figure" || shaped.as === "table" || anyKind) return null;
     const t = readVegaTokens();
-    return queryChartSpec(shaped, setup, { palette: t.palette, other: t.deemph }, chosen);
-  }, [shaped, setup, anyKind, chosen]);
+    return queryChartSpec(shaped, setup, { palette: t.palette, other: t.deemph }, chosen, keptColors?.[setup.split], chartOptionsOf(viz), queryLookOf(viz));
+  }, [shaped, setup, anyKind, chosen, keptColors, viz]);
   const grid = useMemo(() => (anyKind && shaped && setup ? queryGrid(shaped as Parameters<typeof queryGrid>[0], setup) : null),
     [anyKind, shaped, setup]);
   // A card drafted from a file says what it means, read off its statement: under a figure always, under a chart behind Details.
@@ -510,12 +624,7 @@ function QueryTile({ cs, doors, place, focus }: { cs: CardState & { card: Dashbo
     <Foot icon="sql" aside={<Button size="xs" variant="ghost" aria-expanded={details} data-testid="query-tile-details" onClick={() => setDetails(d => !d)}>Details</Button>}>
       Reads the sheet
     </Foot>
-  ) : (
-    <Foot icon="sql">
-      Your query{run?.duration_ms != null ? ` · ${formatSeconds(run.duration_ms)}` : ""}
-      {run?.scoped && !run.scoped.standing ? `, for ${run.scoped.covers}` : ""} · read straight from the tables
-    </Foot>
-  );
+  ) : null;
   const explained = details && (
     <div data-testid="query-tile-explained" className="aug-fs-xs" style={{ display: "flex", flexDirection: "column", gap: 4, color: "var(--t2)" }}>
       <div>{definition || "This query is too involved to say in words. Read it below."}</div>
@@ -528,47 +637,42 @@ function QueryTile({ cs, doors, place, focus }: { cs: CardState & { card: Dashbo
     <div className="aug-fs-xs" data-testid="query-tile-said" style={{ color: "var(--t3)" }}>{shaped.said.join(" ")}</div>
   );
   return (
-    <Frame testid="dashboard-tile" shape={shaped.as === "figure" ? "figure" : "rows"} doors={<Doors card={card} doors={doors} place={place} />}>
+    <Frame testid="dashboard-tile" shape={shaped.as === "figure" ? "figure" : "rows"}
+      doors={<Doors card={card} doors={doors} place={place} files={<CardFiles title={card.title} table={shapedTable(shaped, setup)}
+        chart={shaped.as === "figure" || shaped.as === "table" ? undefined : chart} />} />}>
       <Title title={card.title} muted={shaped.as === "figure"} />
       {shaped.as === "figure" ? (
         <div data-testid="query-tile-figure" style={{ display: "flex", flexDirection: "column", gap: 2 }}>
           <span style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
-            <span data-testid="query-tile-value" className="aug-fs-display" style={{ lineHeight: 1.1, letterSpacing: "-0.02em", fontWeight: 600, color: "var(--t1)", fontVariantNumeric: "tabular-nums" }}>{shaped.format ? draftedFigure(shaped.value, shaped.format) : formatMetricValue(shaped.value)}</span>
+            <span data-testid="query-tile-value" className="aug-fs-display" style={{ lineHeight: 1.1, letterSpacing: "-0.02em", fontWeight: 600, color: "var(--t1)", fontVariantNumeric: "tabular-nums" }}>{shaped.format || numberLook ? draftedFigure(shaped.value, shaped.format, numberLook) : formatMetricValue(shaped.value)}</span>
             {beside && (
               <span data-testid="query-tile-beside" className="aug-fs-sm" style={{ padding: "0 6px", borderRadius: "var(--r2)", background: "var(--bg-3)", color: "var(--t2)", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
-                {besideText(beside)}
+                {besideText(beside, numberLook)}
               </span>
             )}
           </span>
           <span className="aug-fs-sm" data-testid="query-tile-definition" style={{ color: "var(--t3)" }}>{drafted && definition ? definition : shaped.label}</span>
         </div>
       ) : shaped.as === "table" ? (
-        <div ref={room} data-testid="query-tile-table" style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
-          <table className="aug-fs-sm" style={{ width: "100%", borderCollapse: "collapse", fontVariantNumeric: "tabular-nums" }}>
-            <thead><tr>{shaped.columns.map((c, j) => (
-              <th key={`${c.name}-${j}`} style={{ textAlign: /INT|DOUBLE|FLOAT|DECIMAL|NUMERIC|REAL/i.test(c.type) ? "right" : "left", color: "var(--t3)", fontWeight: 500, padding: "4px 6px", borderBottom: "1px solid var(--b1)", whiteSpace: "nowrap" }}>{c.name}</th>
-            ))}</tr></thead>
-            <tbody>{shaped.rows.map((r, i) => (
-              <tr key={i}>{r.map((v, j) => (
-                <td key={j} style={{ padding: "4px 6px", borderBottom: "1px solid var(--b1)", whiteSpace: "nowrap", textAlign: /INT|DOUBLE|FLOAT|DECIMAL|NUMERIC|REAL/i.test(shaped.columns[j]?.type ?? "") ? "right" : "left" }}>
-                  {cellText(v, shaped.columns[j]?.type)}
-                </td>
-              ))}</tr>
-            ))}</tbody>
-          </table>
+        <div ref={room} data-testid="query-tile-table" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+          <QueryRows shaped={shaped} height={height} />
         </div>
       ) : (
         <div ref={room} data-testid="query-tile-chart" style={{ flex: 1, minHeight: 0 }}>
-          {spec && <VegaChart spec={spec} tier={2} height={height}
+          {spec && <VegaChart spec={spec} tier={2} height={height} onReady={i => { chart.current = i; }}
             onSelect={focus?.onPick ? (d) => {
               // the place a click stands for, as the query returned it — never the words it was drawn with
               if (d && "xr" in d && d.xr !== null && d.xr !== undefined) {
                 focus.onPick?.({ field: shaped.x.name, value: d.xr as string | number });
               }
+            } : undefined}
+            onContext={focus?.onDrill ? (d, at) => {
+              if ("xr" in d && d.xr !== null && d.xr !== undefined) focus.onDrill?.({ field: shaped.x.name, value: d.xr as string | number }, at);
             } : undefined} />}
           {grid && (
-            <ResultChartCard editorKey={card.id} columns={grid.columns} rows={grid.rows} chartType={viz?.type ?? null} config={viz ?? null}
-              onConfigChange={persistViz} fillHeight={height} exhibit={chosen ? { emphasis: chosen } : undefined}
+            // drawn afresh when its settings change: the card's panel sets them, and a chart reads its settings once
+            <ResultChartCard key={settingsKey(viz)} editorKey={card.id} pencil={false} columns={grid.columns} rows={grid.rows} chartType={viz?.type ?? null} config={viz ?? null}
+              onConfigChange={persistViz} fillHeight={height} exhibit={chosen ? { emphasis: chosen } : undefined} onChartReady={i => { chart.current = i; }}
               onPick={focus?.onPick ? (p) => focus.onPick?.(p) : undefined} />
           )}
         </div>
@@ -585,6 +689,8 @@ function QueryTile({ cs, doors, place, focus }: { cs: CardState & { card: Dashbo
 export interface TileFocus {
   chosen?: (field: string) => string[] | null;
   onPick?: (pick: ChartPick) => void;
+  /** A right click on a mark, offering the dashboard's other pages already filtered to it. */
+  onDrill?: (pick: ChartPick, at: { x: number; y: number }) => void;
 }
 
 /** A card's own exhibit with the dashboard's chosen values laid over it — undefined when nothing is chosen, so the card's
@@ -594,6 +700,11 @@ function focusExhibit(chartConfig: Record<string, unknown> | undefined, columns:
   if (!chosen) return undefined;
   const own = (chartConfig?.exhibit ?? {}) as Record<string, unknown>;
   return { ...own, emphasis: chosen } as never;
+}
+
+/** A card's chart settings as one string, the same whatever order they were kept in. */
+export function settingsKey(viz: VizConfig | null | undefined): string {
+  return JSON.stringify(Object.entries(viz ?? {}).sort(([a], [b]) => a.localeCompare(b)));
 }
 
 /** A kind an answer's chart draws that a query card's own six do not (bar, line, area, scatter, a figure, a table). */
@@ -613,9 +724,21 @@ export function queryGrid(c: Extract<QueryShaped, { as: "bar" | "line" | "area" 
     : { columns: [c.x.name, measure], rows: c.points.map(p => [p.x, p.v]) };
 }
 
+/** A card's run as rows to take away. */
+function runTable(run: CardState["run"]): CardTable | null {
+  return run?.columns?.length ? { columns: run.columns, rows: (run.rows ?? []) as CsvCell[][] } : null;
+}
+
+/** A query card's result as rows to take away: its table, its chart's points, or its figure. */
+export function shapedTable(shaped: QueryShaped, setup?: QueryShown): CardTable | null {
+  if (shaped.as === "table") return { columns: shaped.columns.map(c => c.name), rows: shaped.rows as CsvCell[][] };
+  if (shaped.as === "figure") return { columns: [shaped.label || "value"], rows: [[shaped.value]] };
+  return setup ? (queryGrid(shaped, setup) as CardTable) : null;
+}
+
 /** A value said beside a figure, in the form its statement asked for. */
-function besideText(b: { value: number | null; words: string; format: string }): string {
-  const text = draftedFigure(b.value, b.format);
+function besideText(b: { value: number | null; words: string; format: string }, look: NumberLook | null = null): string {
+  const text = draftedFigure(b.value, b.format, look);
   return b.words ? `${text} ${b.words}` : text;
 }
 

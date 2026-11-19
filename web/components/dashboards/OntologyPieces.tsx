@@ -28,6 +28,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { AskAboutPiece } from "@/components/dashboards/AskAbout";
 import { useCellBox, useMeasured, useSettled } from "@/components/dashboards/cellBox";
 import { Foot, Frame, Title } from "@/components/dashboards/DashboardTile";
+import { NumberedPager } from "@/components/dashboards/NumberedPager";
+import { cellLook, columnRanges, looksOf } from "@/lib/dashboards/columnLook";
 import { Masked } from "@/components/objects/Masked";
 import { Button } from "@/components/ui/button";
 import { Freshness } from "@/components/ui/freshness";
@@ -46,6 +48,7 @@ import {
 } from "@/lib/dashboards/objectView";
 import { CHOOSERS, MAX_TICKED_RUNS, SWITCHED, rowsTall, type PieceName } from "@/lib/dashboards/catalog";
 import { choicesOf, doorConditions, isRefused, pieceSet, readSet, readsItself, type DoorCondition, type ValueNow, type WireSpec } from "@/lib/dashboards/sets";
+import { valuesFed } from "@/lib/dashboards/globalFilters";
 import { useMarkRead } from "@/components/dashboards/readSlot";
 import { queryValue, typedValue, valueFits, valueWords, valuesFor, valuesRead } from "@/lib/dashboards/values";
 import { runCard } from "@/lib/api";
@@ -680,7 +683,7 @@ export function ProcessBoardPiece({ process }: { process: string }) {
 const TABLE_ROW_PX = 29;
 const TABLE_CHROME_PX = 110;
 
-export function ObjectTablePiece({ elementKey, entity, segment, set, setFrom, chooses, ticks, columns, sort, descending, tall, marked }: {
+export function ObjectTablePiece({ elementKey, entity, segment, set, setFrom, chooses, ticks, columns, sort, descending, tall, marked, columnsLook }: {
   elementKey: string | null;
   entity?: string | null;
   segment?: string | null;
@@ -695,8 +698,11 @@ export function ObjectTablePiece({ elementKey, entity, segment, set, setFrom, ch
   tall: boolean;
   /** the rows a declared rule or segment admits, marked in its tone */
   marked?: Marked | null;
+  /** v17 — number columns drawn as a bar or a colour scale, against the page shown */
+  columnsLook?: Record<string, unknown> | null;
 }) {
   const { connectionId, schema, tick, picked, pick, ticked, tickOne, tickNone, asGroup, say } = usePieces();
+  const looks = looksOf({ columns_look: columnsLook });
   const query = useSetQuery({ entity, segment, set, set_from: setFrom });
   const target = "entity" in query ? query : null;
   const [offset, setOffset] = useState(0);
@@ -749,6 +755,9 @@ export function ObjectTablePiece({ elementKey, entity, segment, set, setFrom, ch
   // the type as a person reads it — "Distribution center", never "DistributionCenter"
   const heading = query.label || `${typeWord(page.type_id)}${target?.segment ? ` · ${words(target.segment)}` : ""}`;
   const shown = page.rows.length;
+  // the looks are kept by property path, as the panel lists the columns; the key leads each row
+  const paths = [page.key, ...page.columns.map(c => c.path)];
+  const ranges = columnRanges(paths, page.rows as unknown[][], looks);
   return (
     <Frame testid="object-table">
       <Title title={heading} right={<>
@@ -794,13 +803,14 @@ export function ObjectTablePiece({ elementKey, entity, segment, set, setFrom, ch
                     // the key in mono; every other cell written as its column's type reads (a moment, a number)
                     const type = i > 0 ? page.columns[i - 1]?.type : "";
                     const col = i > 0 ? page.columns[i - 1] : undefined;
-                    const text = cellText(v, type, undefined, col?.unit ?? "", col?.role ?? "");
+                    const text = cellText(v, type, undefined, col?.unit ?? "", col?.role ?? "", col?.name ?? "");
                     const num = i > 0 && isNumericType(type);
                     return (
                       <td key={page.names[i] ?? i} className={i === 0 ? "aug-mono" : undefined} style={{
                         padding: i === 0 && marked ? "5px 8px 5px 8px" : "5px 8px 5px 0", borderBottom: "1px solid var(--b1)", whiteSpace: "nowrap",
                         boxShadow: i === 0 && isMarked && marked ? `inset 3px 0 0 ${MARK_TONE[marked.tone]}` : undefined,
-                        textAlign: num ? "right" : undefined, color: text === "—" ? "var(--t3)" : "var(--t1)", fontVariantNumeric: "tabular-nums" }}>
+                        textAlign: num ? "right" : undefined, color: text === "—" ? "var(--t3)" : "var(--t1)", fontVariantNumeric: "tabular-nums",
+                        ...(i > 0 ? cellLook(v, looks?.[paths[i]], ranges[paths[i]]) : null) }}>
                         {i > 0 && page.columns[i - 1]?.edited && text !== "—" && <Icon name="edit" size={11} label="Edited" />} {text}
                       </td>
                     );
@@ -821,11 +831,10 @@ export function ObjectTablePiece({ elementKey, entity, segment, set, setFrom, ch
       <Foot icon="table" aside={
         <span style={{ display: "inline-flex", gap: 4 }}>
           <AskAboutPiece query={query} ticked={ticks_} total={page.total} typeId={page.type_id} />
-          <Button size="icon-xs" variant="ghost" aria-label="Previous page" disabled={offset === 0}
-            onClick={() => setOffset(o => Math.max(0, o - limit))}><Icon name="chevl" /></Button>
-          <Button size="icon-xs" variant="ghost" aria-label="Next page"
-            disabled={page.total != null ? offset + shown >= page.total : shown < limit}
-            onClick={() => setOffset(o => o + limit)}><Icon name="chevr" /></Button>
+          {/* numbered pages (study R26), counted from the total the door read; with none, forward one at a time */}
+          <NumberedPager testid="object-table-pager" page={Math.floor(offset / limit) + 1}
+            pages={page.total != null ? Math.max(1, Math.ceil(page.total / limit)) : null} more={shown >= limit}
+            onPage={(p) => setOffset(Math.max(0, (p - 1) * limit))} />
         </span>}>
         {shown ? `${formatCount(offset + 1)}–${formatCount(offset + shown)}` : "0"}{page.total != null ? ` of ${formatCount(page.total)}` : ""}
         {sort ? ` · by ${words(sort)}${descending ? ", highest first" : ""}` : ""}
@@ -897,7 +906,7 @@ export function ObjectDetailPiece({ follows, children }: { follows: string; chil
             <dd className="aug-fs-sm" data-testid={p.overlay ? "object-detail-edit" : undefined}
               style={{ margin: 0, overflowWrap: "anywhere", color: p.value == null ? "var(--t3)" : "var(--t1)" }}>
               {/* a value written as the table writes it: a moment as "Sep 28, 00:24", money as $25.00 */}
-              {p.withheld ? <Masked why={p.withheld} /> : cellText(p.value, p.data_type || p.semantic_type, undefined, p.unit ?? "", p.semantic_type)}
+              {p.withheld ? <Masked why={p.withheld} /> : cellText(p.value, p.data_type || p.semantic_type, undefined, p.unit ?? "", p.semantic_type, p.name)}
               {p.overlay && (
                 <span className="aug-fs-xs" style={{ display: "block", color: "var(--t3)" }}>
                   {p.overlay.provenance}{p.overlay.note ? ` — ${p.overlay.note}` : ""}
@@ -1178,7 +1187,6 @@ function Facet({ entity, prop, set }: { entity: string; prop: FilterProperty; se
   );
 }
 
-/** Above the pieces a filter column narrows: what is chosen, a way out, and how many objects that leaves. */
 // ── Arc AP-8 — the values a reader sets ─────────────────────────────────────────────────────
 
 /** The most choices drawn side by side; more are a list to pick from. */
@@ -1193,7 +1201,9 @@ const boxText = (v: unknown) => (v === null || v === undefined ? "" : Array.isAr
 export function ValuesBar({ spaced = true }: { spaced?: boolean }) {
   const { wire, valueOf, readerValues, setValue } = usePieces();
   // a slider is a scenario's, drawn on its own tab (`ScenarioInputs`), not in this bar
-  const offered = Object.entries(wire.values ?? {}).filter(([, v]) => v.from?.by === "reader" && !v.from.slider);
+  // nor is a value a filter feeds: the filter is where it is set
+  const fed = valuesFed(wire.elements);
+  const offered = Object.entries(wire.values ?? {}).filter(([name, v]) => v.from?.by === "reader" && !v.from.slider && !fed.has(name));
   if (!offered.length) return null;
   return (
     <div role="group" aria-label="Values you set" data-testid="dashboard-values" className="aug-fs-sm"
@@ -1277,7 +1287,15 @@ function ReaderValue({ name, label, kind, value, options, changed, start, onSet,
   );
 }
 
-export function FilterBar({ entity, properties, set }: { entity: string; properties: FilterProperty[]; set?: string | null }) {
+/** One thing a dashboard is cut by, as the "Filtered by" bar says it (the study's R14). */
+export interface BarChip { key: string; words: string; testid: string; clear: () => void }
+/** What a filter column gives that bar: its ticks, the way to clear them, and how many objects they leave. */
+export interface ObjectBarWords { chips: BarChip[]; clearAll: (() => void) | null; count: string | null }
+
+/** Reads a filter column for the "Filtered by" bar and hands the bar what it says. */
+export function ObjectFilterWords({ entity, properties, set, children }: {
+  entity: string; properties: FilterProperty[]; set?: string | null; children: (said: ObjectBarWords) => ReactNode;
+}) {
   const { filters, toggle, clear } = usePieces();
   const noun = useNoun(entity);
   const narrowed = conditionsFor(filters, entity);
@@ -1288,7 +1306,8 @@ export function FilterBar({ entity, properties, set }: { entity: string; propert
   const setConditions = scoped ? scoped.conditions : [];
   const some = useObjectQuery(narrowed.length && !(within && "refused" in within)
     ? { ...base, measures: [COUNT], filters: [...setConditions, ...narrowed] } : null);
-  const every = useObjectQuery(within && "refused" in within ? null
+  // the whole is read only where it is said: beside a filter that is on, or as the set the column counts within
+  const every = useObjectQuery((within && "refused" in within) || !(narrowed.length || scoped) ? null
     : scoped ? { ...base, measures: [COUNT], ...(setConditions.length ? { filters: setConditions } : {}) } : { object_type: entity, measures: [COUNT] });
   const total = every && "rows" in every ? num(every.rows[0]?.[0]) : null;
   const left = some && "rows" in some ? num(some.rows[0]?.[0]) : null;
@@ -1296,28 +1315,32 @@ export function FilterBar({ entity, properties, set }: { entity: string; propert
   // a search box's words are held under the property marked (Arc AP-4): named by the property, said in quotes
   const label = (path: string) => { const bare = path.startsWith(WORDS) ? path.slice(WORDS.length) : path;
     return properties.find(p => p.path === bare)?.label ?? words(bare); };
-  return (
-    <div data-testid="object-filter-bar" className="aug-fs-sm" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", minHeight: 26 }}>
-      {chosen.map(([path, values]) => (
-        <span key={path} data-testid="object-filter-chip" style={{ display: "inline-flex", alignItems: "center", gap: 4,
-          background: "var(--bg-sel)", color: "var(--accent-text)", padding: "2px 4px 2px 9px", borderRadius: "var(--r-pill)" }}>
-          {label(path)}: {path.startsWith(WORDS) ? `“${values[0]}”` : values.join(", ")}
-          <Button size="icon-xs" variant="ghost" aria-label={`Clear ${label(path)}`}
-            onClick={() => values.forEach(v => toggle(entity, path, v))}><Icon name="close" size={11} /></Button>
-        </span>
-      ))}
-      {chosen.length > 0 && <Button size="xs" variant="ghost" onClick={() => clear(entity)}>Clear</Button>}
-      <span data-testid="object-filter-count" style={{ marginLeft: "auto", color: "var(--t2)", fontVariantNumeric: "tabular-nums" }}>
-        {within && "refused" in within ? within.refused
-          : scoped ? (narrowed.length
-            ? `${left == null ? "…" : formatCount(left)} of ${total == null ? "…" : formatCount(total)} in “${scoped.label}”`
-            : `${total == null ? "…" : formatCount(total)} in “${scoped.label}”`)
-          : narrowed.length
-            ? `${left == null ? "…" : formatCount(left)} of ${total == null ? "…" : formatCount(total)} ${noun}`
-            : `${total == null ? "…" : formatCount(total)} ${noun}`}
-      </span>
-    </div>
-  );
+  const chips = chosen.map(([path, values]): BarChip => ({ key: `object:${path}`, testid: "object-filter-chip",
+    words: `${label(path)}: ${path.startsWith(WORDS) ? `“${values[0]}”` : values.join(", ")}`,
+    clear: () => values.forEach(v => toggle(entity, path, v)) }));
+  // nothing chosen and no set to name: no count to say
+  const count = !chosen.length && !narrowed.length && !within ? null
+    : within && "refused" in within ? within.refused
+      : scoped ? (narrowed.length
+        ? `${left == null ? "…" : formatCount(left)} of ${total == null ? "…" : formatCount(total)} in “${scoped.label}”`
+        : `${total == null ? "…" : formatCount(total)} in “${scoped.label}”`)
+        : `${left == null ? "…" : formatCount(left)} of ${total == null ? "…" : formatCount(total)} ${noun}`;
+  return <>{children({ chips, clearAll: chosen.length ? () => clear(entity) : null, count })}</>;
+}
+
+/** The values a reader has moved off where the dashboard was made, each a chip that puts it back. */
+export function useValueChips(): BarChip[] {
+  const { wire, valueOf, readerValues, setValue } = usePieces();
+  // a value a filter feeds is said once, by the filter's own chip
+  const fed = valuesFed(wire.elements);
+  return Object.entries(wire.values ?? {}).flatMap(([name, def]): BarChip[] => {
+    if (def.from?.by !== "reader" || def.from.slider || !(name in readerValues) || fed.has(name)) return [];
+    const now = valueOf(name);
+    const value = "value" in now ? now.value : def.value ?? null;
+    if (JSON.stringify(value) === JSON.stringify(def.value ?? null)) return [];
+    return [{ key: `value:${name}`, testid: "value-chip", clear: () => setValue(name, undefined),
+      words: `${def.label}: ${Array.isArray(value) ? value.join(", ") : valueText(def.kind, value)}` }];
+  });
 }
 
 /** One figure over an entity's objects, narrowed by the reader's filters, and said beside the whole. */

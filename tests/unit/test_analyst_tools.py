@@ -961,3 +961,42 @@ def test_the_analyst_serves_the_shape_the_door_handed_it(monkeypatch, traffic_db
     assert seen["state_shape"] == "describe"
     reports = [p["answer_report"] for t, p in frames if t == "answer_report"]
     assert [r.get("question_shape") for r in reports] == ["describe"]
+
+
+def test_answer_now_ends_the_looking_and_the_report_says_so(monkeypatch, traffic_db, faux_llm):
+    """Agent mode runs here, not through the graph: a person's Answer now must stop this loop too, and be said."""
+    from pramanyx.agent import answer_now as AN
+
+    looked = []
+    _patch_seams(monkeypatch, traffic_db,
+                 intake=lambda state, conn=None: {"_ada_intake": {"metric_label": "sessions"}, "investigation_phases": [{
+                     "phase_id": "intake", "phase_name": "Intake", "phase_icon": "", "status": "complete", "summary": "", "findings": []}]},
+                 baseline=lambda state, conn: looked.append(True) or {},
+                 synthesize=lambda state: {"answer_report": {"headline": "Sessions rose", "phases": state.get("investigation_phases") or []}})
+    import pramanyx.db.history as H
+    import pramanyx.routers.investigations as R
+    monkeypatch.setattr(H, "create_investigation", lambda *a, **k: "inv-early")
+    monkeypatch.setattr(H, "complete_investigation", lambda *a, **k: None)
+    monkeypatch.setattr(R, "write_answer_receipt", lambda **kw: {"receipt_id": "r"})
+    faux_llm.set_responses(["what was found so far"])
+    AN.ask("inv-early")
+    try:
+        frames: list[tuple] = []
+        result = an.run_analyst("conn-t", "why did sessions rise?", emit=lambda t, p: frames.append((t, p)))
+    finally:
+        AN.forget("inv-early")
+    assert looked == [] and result.stop_reason == "budget_answered"
+    sent = next(p for t, p in frames if t == "answer_report")
+    assert sent["answered_early"] == AN.SAID and sent["answer_report"]["answered_early"] == AN.SAID
+
+
+def test_a_run_nobody_answered_early_does_not_say_it_was(monkeypatch, traffic_db, faux_llm):
+    _patch_seams(monkeypatch, traffic_db,
+                 intake=lambda state, conn=None: {"_ada_intake": {"metric_label": "sessions"}, "investigation_phases": [{
+                     "phase_id": "intake", "phase_name": "Intake", "phase_icon": "", "status": "complete", "summary": "", "findings": []}]},
+                 synthesize=lambda state: {"answer_report": {"headline": "Sessions rose", "phases": state.get("investigation_phases") or []}})
+    faux_llm.set_responses(["the whole answer"])
+    frames: list[tuple] = []
+    result = an.run_analyst("conn-t", "why did sessions rise?", persist=False, emit=lambda t, p: frames.append((t, p)))
+    sent = next(p for t, p in frames if t == "answer_report")
+    assert "answered_early" not in sent and "answered_early" not in sent["answer_report"] and result.answer == "the whole answer"

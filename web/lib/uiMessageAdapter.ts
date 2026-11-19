@@ -312,8 +312,12 @@ export class PramanyxToUIMessage {
       // message metadata: a resumed stream arrives with no user message in the
       // thread, and this is what lets the projection synthesize one.
       const q = data["question"];
+      // The run's handle rides with it, so a turn still running can be stopped or answered early by name.
+      const handle = this.invId ? { run: this.invId } : {};
       if (typeof q === "string" && q.trim()) {
-        chunks.push({ type: "message-metadata", messageMetadata: { question: q } });
+        chunks.push({ type: "message-metadata", messageMetadata: { question: q, ...handle } });
+      } else if (this.invId) {
+        chunks.push({ type: "message-metadata", messageMetadata: handle });
       }
       return { chunks, investigationId: this.invId, terminal: false };
     }

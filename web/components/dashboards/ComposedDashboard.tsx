@@ -43,19 +43,25 @@ import type { CardState } from "@/components/brief/PinnedCardBody";
 import { CanvasScale, CellBoxContext, OFF_GRID, useMeasured, type CellBox } from "@/components/dashboards/cellBox";
 import { QuestionPiece } from "@/components/dashboards/QuestionPiece";
 import { DashboardTile, Frame, SaidTile, WIDE, WithheldTile, tileShape, type QueryWaiting, type TileDoors, type TileFocus } from "@/components/dashboards/DashboardTile";
+import { PlacementLookProvider, ValueColorsProvider, placementLookOf } from "@/components/dashboards/placementLook";
+import { valueColorsOf } from "@/lib/dashboards/valueColors";
 import { PeriodPicker } from "@/components/dashboards/PeriodPicker";
 import type { RangeChoice } from "@/components/brief/BriefRange";
 import { ActionButtonsPiece } from "@/components/dashboards/ActionButtonsPiece";
 import { ReadSlotContext, type ReadSlot, type ReadStatus } from "@/components/dashboards/readSlot";
 import { ChooseOnePiece, ObjectListPiece, ObjectMapPiece, ObjectSearchPiece, ObjectTimelinePiece } from "@/components/dashboards/AppPieces";
 import {
-  ActionButtonPiece, FilterBar, NotFiltered, ObjectBreakdownPiece, type Marked, ObjectChartPiece, ObjectDetailPiece, ObjectFigurePiece,
-  ObjectFiltersPiece, ObjectTablePiece, PiecesProvider, ProcessBoardPiece, ValuesBar, chooseWords, useFiltering, usePieceFiltering, usePieces,
-  type FilterProperty,
+  ActionButtonPiece, NotFiltered, ObjectBreakdownPiece, ObjectFilterWords, type Marked, ObjectChartPiece, ObjectDetailPiece, ObjectFigurePiece,
+  ObjectFiltersPiece, ObjectTablePiece, PiecesProvider, ProcessBoardPiece, ValuesBar, chooseWords, useFiltering, usePieceFiltering, usePieces, useValueChips,
+  type BarChip, type FilterProperty, type ObjectBarWords,
 } from "@/components/dashboards/OntologyPieces";
+import { FiltersHead, FiltersMenuPlace, FiltersShutStrip, GlobalFiltersColumn, useFiltersShut } from "@/components/dashboards/GlobalFilters";
+import { followsByValue, heldBy, openedWith, stillHeld, type GlobalFilterProps } from "@/lib/dashboards/globalFilters";
 import { ImageTile, NoteTile, type ImageStamp, type StaticDoors } from "@/components/dashboards/StaticTile";
+import { DropdownMenu } from "@radix-ui/themes";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
+import { Input } from "@/components/ui/input";
 import { Refusal } from "@/components/ui/states";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { runCard, traceField, type BriefingRange, type CardRunResult, type DashboardCard, type DashboardRange, type QueryNarrowing } from "@/lib/api";
@@ -65,11 +71,12 @@ import {
 } from "@/lib/dashboards/catalog";
 import { boxOf, clampBox, type Box } from "@/lib/dashboards/edit";
 import { stateModel, type DashboardHostState } from "@/lib/dashboards/hostState";
-import { checkDashboardSpec, openingTab } from "@/lib/dashboards/rules";
+import { checkDashboardSpec, openingTab, tabStillThere } from "@/lib/dashboards/rules";
 import type { WireSpec } from "@/lib/dashboards/sets";
 import { valuesFor, valuesRead, type ValuesSent } from "@/lib/dashboards/values";
-import { chosenOn, focusFor, focusWords, traceAndChoose, type DashboardFocus } from "@/lib/dashboards/focus";
+import { chooseIn, chosenOn, filterLink, filterSource, focusOfCard, focusWords, fromFilter, notFiltered, traceAndChoose, type DashboardFocus } from "@/lib/dashboards/focus";
 import { toast } from "@/components/ui/toast";
+import { askAbout, dashboardSubject } from "@/lib/askSubject";
 import type { Pick as ChartPick } from "@/components/charts/selection";
 import { AddRowPiece } from "@/components/dashboards/AddRowPiece";
 import { QueryFiltersPiece, QueryNarrowingProvider, readsTable, useQueryNarrowing, type FilterColumn } from "@/components/dashboards/QueryFilters";
@@ -94,6 +101,19 @@ export interface DashboardDoors extends TileDoors, StaticDoors {
   onLayOut?: (sectionKey: string, layout: Layout) => void;
   /** Arc AP-6 — what each placed element read: refused (with why), still reading, or read cleanly; null once it goes. */
   onReadState?: (key: string, state: ReadState | null) => void;
+  /** v19 — a new global filter; returns its key, for the builder to choose it. */
+  onAddGlobalFilter?: () => string | null;
+  /** The study's R18 — the builder's pages: each returns the new page's name, for the page to open on. */
+  pages?: PageDoors;
+}
+
+/** What the builder may do to a dashboard's pages. */
+export interface PageDoors {
+  add: () => string | null;
+  rename: (key: string, label: string) => void;
+  duplicate: (key: string) => string | null;
+  remove: (key: string) => void;
+  hide: (key: string, hidden: boolean) => void;
 }
 
 /** What the builder may ask of a dashboard it draws (Arc AP-1): an element's room on its section's grid — measured from
@@ -118,6 +138,8 @@ interface DashboardContextValue {
   schema?: string;
   /** The connection the dashboard reads — what a Question asks of. */
   connectionId?: string;
+  /** The page's key for this dashboard, for a question asked about it. */
+  dashboardId?: string;
   /** The element chosen in the builder, outlined where it is drawn. */
   selected: string | null;
   /** Arc AP-2 — the elements that read the set, value or choice chosen in the builder, dashed where they are drawn. */
@@ -127,6 +149,15 @@ interface DashboardContextValue {
   /** The board study — the reader's focus, and where a click on a card's mark goes. */
   focus: DashboardFocus[];
   pick: ((cardId: string, p: ChartPick) => void) | null;
+  /** v20 — a right click on a mark, and the pages it offers to open already filtered to it. */
+  drilling: Drilling | null;
+  drill: ((next: Drilling | null) => void) | null;
+  /** Where the menu of what cuts the dashboard is drawn: the filters' own heading, once one gives the place. */
+  filtersMenu: HTMLElement | null;
+  /** The study's R14 — the door that changes the reader's focus; null where the page keeps none. */
+  setFocus: ((next: DashboardFocus[]) => void) | null;
+  /** The spec drawn, for what a placement says of itself (v18: a card the filters do not cut). */
+  spec: unknown;
   /** v15 — the dashboard's period and the door that changes it, read by the Period piece; null where the page offers
    *  no choice of period (it then says the period it was read for). */
   period: PeriodDoor | null;
@@ -156,6 +187,10 @@ function useDashboard(): DashboardContextValue {
   return ctx;
 }
 
+/** What the dashboard is called, as its root says. */
+const boardTitleOf = (elements: Spec["elements"]) =>
+  (Object.values(elements).find(el => el?.type === "Cockpit")?.props as { title?: string } | undefined)?.title;
+
 function sameList(a: unknown, b: unknown): boolean {
   return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((v, i) => v === b[i]);
 }
@@ -177,11 +212,101 @@ const TONE_RULE: Record<Tone, string> = {
 /** The filter column's width beside the pieces it narrows, when a person has set none (the approved mockup's). */
 const FILTER_COLUMN = FILTER_DEFAULT_PX;
 
-function DashboardRoot({ element, children }: ComponentRenderProps<{ title: string }>) {
+interface Drilling { cardId: string; pick: ChartPick; x: number; y: number }
+
+/** v20 — a right click on a mark: the dashboard's other pages, each opened filtered to what was clicked. Gone at the next action. */
+function DrillMenu() {
+  const { drilling, drill, elements, focus, setFocus } = useDashboard();
+  const { get, set } = useStateStore();
+  useEffect(() => {
+    if (!drilling) return;
+    const away = () => drill?.(null);
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") away(); };
+    window.addEventListener("pointerdown", away);
+    window.addEventListener("scroll", away, true);
+    window.addEventListener("keydown", key);
+    return () => { window.removeEventListener("pointerdown", away); window.removeEventListener("scroll", away, true); window.removeEventListener("keydown", key); };
+  }, [drilling, drill]);
+  if (!drilling || !setFocus) return null;
+  const open = get("/tab");
+  const pages = pagesOf(elements, false).filter(t => t.name !== open);
+  if (!pages.length) return null;
+  const go = async (page: { key: string; name: string }) => {
+    drill?.(null);
+    try {
+      const t = await traceField(drilling.cardId, drilling.pick.field);
+      if ("refused" in t) { toast.info("This click filters nothing", { description: t.refused }); return; }
+      setFocus(chooseIn(focus, { table: t.table, column: t.column, value: drilling.pick.value, page: page.key, source: { card: drilling.cardId, field: drilling.pick.field } }));
+      set("/tab", page.name);
+    } catch (e) { toast.error("The click could not be read", { description: (e as Error).message }); }
+  };
+  return (
+    <div role="menu" aria-label="Drill to a page" data-testid="drill-menu" onPointerDown={e => e.stopPropagation()}
+      style={{ position: "fixed", left: drilling.x, top: drilling.y, zIndex: 60, display: "flex", flexDirection: "column", minWidth: 180, padding: 4, background: "var(--bg-2)", border: "1px solid var(--card-edge)", borderRadius: "var(--r3)", boxShadow: "var(--shadow-lg)" }}>
+      {pages.map(t => (
+        <Button key={t.key} role="menuitem" size="xs" variant="ghost" data-testid="drill-to-page" style={{ justifyContent: "flex-start" }} onClick={() => void go(t)}>Drill to {t.label}</Button>
+      ))}
+    </div>
+  );
+}
+
+/** v19 — the dashboard's global filters beside everything else it draws. */
+function DashboardRoot(props: ComponentRenderProps<{ title: string }>) {
+  return <><DrillMenu /><DashboardRootBody {...props} /></>;
+}
+
+function DashboardRootBody(props: ComponentRenderProps<{ title: string }>) {
+  const { elements, focus } = useDashboard();
+  const shut = useFiltersShut();
+  const keys = props.element.children ?? [];
+  const at = keys.findIndex(k => elements[k]?.type === "GlobalFilters");
+  if (at < 0) return <RootLayout {...props} />;
+  const kids = Children.toArray(props.children);
+  const rest = { ...props, element: { ...props.element, children: keys.filter((_, i) => i !== at) }, children: kids.filter((_, i) => i !== at) };
+  const held = (elements[keys[at]]?.children ?? [])
+    .filter(key => heldBy(focus, key, elements[key]?.props as unknown as GlobalFilterProps)).length;
+  // put away, the column stays mounted, out of sight: it is also what feeds the values the cards' queries read
+  const column = <div hidden={shut} style={shut ? { display: "none" } : { minWidth: 0 }}>{kids[at]}</div>;
+  if (shut) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
+        <FiltersShutStrip held={held} />
+        {column}
+        <div style={{ minWidth: 0 }}><RootLayout {...rest} /></div>
+      </div>
+    );
+  }
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: `${FILTER_COLUMN}px minmax(0, 1fr)`, gap: SPACE, alignItems: "start" }}>
+      {column}
+      <div style={{ minWidth: 0 }}><RootLayout {...rest} /></div>
+    </div>
+  );
+}
+
+function DashboardGlobalFilters({ element }: ComponentRenderProps<{ apply_button?: boolean | null }>) {
+  const { elements, focus, setFocus, connectionId, doors, selected } = useDashboard();
+  const { get } = useStateStore();
+  const { setValue, readerValues, wire } = usePieces();
+  // a filter holding nothing hands its value back; one a reader never moved has nothing to hand back
+  const feed = useCallback((name: string, value: unknown) => { if (value !== undefined || name in readerValues) setValue(name, value); }, [setValue, readerValues]);
+  const filters = useMemo(() => (element.children ?? []).map(key => ({ key, props: elements[key]?.props as unknown as GlobalFilterProps })), [element.children, elements]);
+  const pages = pagesOf(elements, true);
+  const open = get("/tab");
+  const page = (pages.find(t => t.name === open) ?? pages[0])?.key ?? null;
+  return (
+    <GlobalFiltersColumn filters={filters} connectionId={connectionId} focus={focus} onFocus={setFocus} building={!!doors.onSelect} selected={selected}
+      applyButton={element.props.apply_button === true} page={page} onParameter={feed} valueKinds={wire.values ?? undefined}
+      onChoose={doors.onSelect} onAdd={doors.onAddGlobalFilter ? () => { const key = doors.onAddGlobalFilter?.(); if (key) doors.onSelect?.(key); } : undefined} />
+  );
+}
+
+function RootLayout({ element, children }: ComponentRenderProps<{ title: string }>) {
   // The title names the dashboard for a screen reader and for the history. It is not drawn as a
   // header: the strip of dashboards above it already carries the name, and a panel does not
   // repeat its own title.
   const { elements, doors, selected } = useDashboard();
+  const shut = useFiltersShut();
   const firstKey = element.children?.[0] ?? "";
   const first = elements[firstKey];
   const [preview, setPreview] = useState<number | null>(null);
@@ -189,62 +314,173 @@ function DashboardRoot({ element, children }: ComponentRenderProps<{ title: stri
     // A dashboard made from a file: its filter column at the left, and every query card that reads the table narrowed by it
     const [queryColumn, ...others] = Children.toArray(children);
     const held = first.props as { table: string; w?: number | null };
+    if (shut) {
+      // put away, a button above the cards brings it back; the column stays mounted, it holds what the reader chose
+      return (
+        <QueryNarrowingProvider table={held.table}>
+          <div role="region" aria-label={element.props.title} data-testid="dashboard" style={{ display: "flex", flexDirection: "column", gap: SPACE, minWidth: 0 }}>
+            <QueryFiltersShut />
+            <div data-testid="dashboard-filter-column" hidden style={{ display: "none" }}>{queryColumn}</div>
+            <ValuesBar spaced={false} /><FilteredBy /><FirstPageDoor />{others}
+          </div>
+        </QueryNarrowingProvider>
+      );
+    }
     return (
       <QueryNarrowingProvider table={held.table}>
         <div role="region" aria-label={element.props.title} data-testid="dashboard"
-          style={{ display: "grid", gridTemplateColumns: `${(held.w ?? null) ? (held.w as number) * GRADE : FILTER_COLUMN}px minmax(0, 1fr)`, gap: 14, alignItems: "start" }}>
-          <div data-testid="dashboard-filter-column" style={{ alignSelf: "stretch", minWidth: 0 }}>{queryColumn}</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}><ValuesBar spaced={false} />{others}</div>
+          style={{ display: "grid", gridTemplateColumns: `${(held.w ?? null) ? (held.w as number) * GRADE : FILTER_COLUMN}px minmax(0, 1fr)`, gap: SPACE, alignItems: "start" }}>
+          <div data-testid="dashboard-filter-column" style={{ alignSelf: "stretch", minWidth: 0 }}><FiltersHead />{queryColumn}</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: SPACE, minWidth: 0 }}><ValuesBar spaced={false} /><FilteredBy /><FirstPageDoor />{others}</div>
         </div>
       </QueryNarrowingProvider>
     );
   }
   if (first?.type !== "ObjectFilters") {
-    return <QueryNarrowingProvider table={null}><div role="region" aria-label={element.props.title} data-testid="dashboard"><ValuesBar />{children}</div></QueryNarrowingProvider>;
+    return <QueryNarrowingProvider table={null}><div role="region" aria-label={element.props.title} data-testid="dashboard"><ValuesBar /><FilteredBy /><FirstPageDoor />{children}</div></QueryNarrowingProvider>;
   }
   // A dashboard started from an object: its filter column at the left, the pieces it narrows beside it, and above them
   // what is chosen and how many objects that leaves (the rules hold the column to the root's first child, once).
   const [column, ...rest] = Children.toArray(children);
   const props = first.props as { entity: string; properties: FilterProperty[]; w?: number | null; set?: string | null };
+  if (shut) {
+    return (
+      <div role="region" aria-label={element.props.title} data-testid="dashboard" style={{ display: "flex", flexDirection: "column", gap: SPACE, minWidth: 0 }}>
+        <ObjectFiltersShut />
+        <div data-testid="dashboard-filter-column" hidden style={{ display: "none" }}>{column}</div>
+        <ValuesBar spaced={false} />
+        <ObjectFilterWords entity={props.entity} properties={props.properties} set={props.set}>
+          {said => <FilteredBy objects={said} />}
+        </ObjectFilterWords>
+        <FirstPageDoor />
+        {rest}
+      </div>
+    );
+  }
   // Arc AP-1 — its width in grades of 40 px, when a person set one; else as it was drawn before
   const grades = preview ?? props.w ?? null;
   const width = grades ? grades * GRADE : FILTER_COLUMN;
   return (
     <div role="region" aria-label={element.props.title} data-testid="dashboard"
-      style={{ display: "grid", gridTemplateColumns: `${width}px minmax(0, 1fr)`, gap: 14, alignItems: "start" }}>
+      style={{ display: "grid", gridTemplateColumns: `${width}px minmax(0, 1fr)`, gap: SPACE, alignItems: "start" }}>
       <div className="group" data-testid="dashboard-filter-column" data-width={width} data-selected={selected === firstKey || undefined}
         onPointerDownCapture={doors.onSelect ? () => doors.onSelect?.(firstKey) : undefined}
         style={{ position: "relative", alignSelf: "stretch", minWidth: 0, borderRadius: "var(--r3)",
           outline: selected === firstKey ? "2px solid var(--accent)" : undefined, outlineOffset: 2 }}>
+        <FiltersHead />
         {column}
         {doors.onFilterWidth && (
           <WidthHandle from={grades ?? Math.round(FILTER_COLUMN / GRADE)} onPreview={setPreview}
             onDone={g => doors.onFilterWidth?.(g)} />
         )}
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: SPACE, minWidth: 0 }}>
         <ValuesBar spaced={false} />
-        <FilterBar entity={props.entity} properties={props.properties} set={props.set} />
+        <ObjectFilterWords entity={props.entity} properties={props.properties} set={props.set}>
+          {said => <FilteredBy objects={said} />}
+        </ObjectFilterWords>
+        <FirstPageDoor />
         {rest}
       </div>
     </div>
   );
 }
 
-function DashboardTabs({ element, children, bindings }: ComponentRenderProps<{ value: string }>) {
-  const { elements } = useDashboard();
-  const [open, setOpen] = useBoundProp<string>(element.props.value, bindings?.value);
-  const tabs = (element.children ?? []).map(key => {
-    const props = elements[key]?.props as { name: string; label: string };
-    return { key, name: props.name, label: props.label };
-  });
+/** The button above the cards of a dashboard made from a file, once its filters are put away: how many columns hold a choice. */
+function QueryFiltersShut() {
+  const { narrowing } = useQueryNarrowing();
+  return <FiltersShutStrip held={narrowing.length} />;
+}
+
+/** The same above a dashboard started from an object: how many of its properties hold a choice. */
+function ObjectFiltersShut() {
+  const { filters } = usePieces();
+  const held = Object.values(filters).reduce((n, props) => n + Object.values(props).filter(v => v.length > 0).length, 0);
+  return <FiltersShutStrip held={held} />;
+}
+
+/** The dashboard's pages as a reader may open them, in order: a page hidden from readers is drawn only in the builder. */
+function pagesOf(elements: Spec["elements"], building: boolean): { key: string; name: string; label: string; hidden: boolean }[] {
+  const holder = Object.values(elements).find(el => el?.type === "Tabs");
+  return (holder?.children ?? []).map(key => {
+    const props = elements[key]?.props as { name: string; label: string; hidden?: boolean | null };
+    return { key, name: props.name, label: props.label, hidden: props.hidden === true };
+  }).filter(t => building || !t.hidden);
+}
+
+/** The words of a page being renamed, in the place of its tab: Enter or leaving keeps them, Escape does not. */
+function PageName({ label, onDone }: { label: string; onDone: (next: string | null) => void }) {
+  const [text, setText] = useState(label);
   return (
-    <Tabs value={open ?? tabs[0]?.name} onValueChange={v => setOpen(String(v))}>
-      <TabsList>
-        {tabs.map(t => <TabsTrigger key={t.key} value={t.name}>{t.label}</TabsTrigger>)}
-      </TabsList>
+    <Input autoFocus aria-label="The page's name" data-testid="dashboard-page-name" value={text} maxLength={40} style={{ width: 150 }}
+      onChange={e => setText(e.target.value)} onFocus={e => e.target.select()}
+      onBlur={() => onDone(text.trim() && text.trim() !== label ? text.trim() : null)}
+      onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") onDone(null); }} />
+  );
+}
+
+function DashboardTabs({ element, children, bindings }: ComponentRenderProps<{ value: string }>) {
+  const { elements, doors } = useDashboard();
+  const [open, setOpen] = useBoundProp<string>(element.props.value, bindings?.value);
+  const pages = doors.onSelect ? doors.pages : undefined;
+  const tabs = pagesOf(elements, !!pages);
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const shown = tabs.some(t => t.name === open) ? open : tabs[0]?.name;
+  const here = tabs.find(t => t.name === shown);
+  const seen = tabs.filter(t => !t.hidden).length;
+  const openNew = (name: string | null) => { if (name) setOpen(name); };
+  return (
+    <Tabs value={shown} onValueChange={v => setOpen(String(v))}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+        <TabsList>
+          {tabs.map(t => (renaming === t.key
+            ? <PageName key={t.key} label={t.label} onDone={next => { setRenaming(null); if (next) pages?.rename(t.key, next); }} />
+            : (
+              <TabsTrigger key={t.key} value={t.name} data-hidden-page={t.hidden || undefined}
+                title={pages ? (t.hidden ? "Hidden from readers. Double-click to rename." : "Double-click to rename") : undefined}
+                onDoubleClick={pages ? () => setRenaming(t.key) : undefined}>
+                {t.hidden && <Icon name="eyeoff" size={12} />}{t.label}
+              </TabsTrigger>
+            )))}
+        </TabsList>
+        {pages && (
+          <Button size="icon-xs" variant="ghost" aria-label="Add a page" title="Add a page" data-testid="dashboard-add-page" onClick={() => openNew(pages.add())}>
+            <Icon name="plus" size={13} />
+          </Button>
+        )}
+        {pages && here && (
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger>
+              <Button size="icon-xs" variant="ghost" aria-label={`More for the page ${here.label}`} title="This page" data-testid="dashboard-page-menu"><Icon name="more" size={13} /></Button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content size="1">
+              <DropdownMenu.Item onSelect={() => setRenaming(here.key)}>Rename</DropdownMenu.Item>
+              <DropdownMenu.Item onSelect={() => openNew(pages.duplicate(here.key))}>Duplicate page</DropdownMenu.Item>
+              <DropdownMenu.Item disabled={!here.hidden && seen < 2} onSelect={() => pages.hide(here.key, !here.hidden)}>
+                {here.hidden ? "Show to readers" : "Hide from readers"}
+              </DropdownMenu.Item>
+              <DropdownMenu.Separator />
+              <DropdownMenu.Item color="red" disabled={tabs.length < 2} onSelect={() => pages.remove(here.key)}>Take off</DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
+        )}
+      </div>
       {children}
     </Tabs>
+  );
+}
+
+/** In the builder, the way to a second page on a dashboard that has one page and no tabs yet. */
+function FirstPageDoor() {
+  const { elements, doors } = useDashboard();
+  const { set } = useStateStore();
+  if (!doors.onSelect || !doors.pages || Object.values(elements).some(el => el?.type === "Tabs")) return null;
+  return (
+    <div style={{ marginBottom: 8 }}>
+      <Button size="xs" variant="ghost" data-testid="dashboard-add-first-page" onClick={() => { const name = doors.pages?.add(); if (name) set("/tab", name); }}>
+        <Icon name="plus" size={12} /> Add a page
+      </Button>
+    </div>
   );
 }
 
@@ -275,7 +511,11 @@ function DashboardTab({ element, children }: ComponentRenderProps<{ name: string
 
 /** The narrowest a tile is drawn. A section never asks for more columns than fit. */
 const MIN_TILE = 200;
-const GAP = 12;
+/** Between a dashboard's parts — its filters column and its sections, one under another: a little more than between cards. */
+const SPACE = 10;
+
+/** Between cards laid out by size: the grid's own thin gap, so a dashboard reads the same either way. */
+const GAP = GRID.gap;
 const MAX_AUTO_COLUMNS = 4;
 /** The room a second row gives a tile when nothing beside it sets the row's height. */
 const TALL_MIN = 320;
@@ -367,7 +607,7 @@ function LaidOutSection({ element, children }: ComponentRenderProps<SectionProps
         </>
       ) : (
         <div ref={box} style={layout === "columns" ? {
-          display: "grid", gap: GRID.gap * 1.5, alignItems: "start", gridTemplateColumns: `repeat(${narrow ? 1 : GRID.columns}, minmax(0, 1fr))`,
+          display: "grid", gap: GRID.gap, alignItems: "start", gridTemplateColumns: `repeat(${narrow ? 1 : GRID.columns}, minmax(0, 1fr))`,
         } : { display: "flex", flexDirection: "column", gap: 4 }}>
           {kids.map((node, i) => {
             const w = Number(elements[held[i]]?.props?.w ?? GRID.columns);
@@ -421,8 +661,7 @@ function PiecesSection({ element, children }: ComponentRenderProps<SectionProps>
   const { elements, doors, selected } = useDashboard();
   // A section named as the dashboard is named says nothing new: its heading is not drawn (a dashboard started from an
   // object holds one such section).
-  const named = Object.values(elements).find(el => el?.type === "Cockpit")?.props as { title?: string } | undefined;
-  const heading = element.props.title !== named?.title;
+  const heading = element.props.title !== boardTitleOf(elements);
   const waiting = useWaiting(element.children);
   const [ref, columns, width] = useColumns(element.props.columns);
   // Arc AP-1 — on the grid: twelve columns and rows of one grade, each element placed by its w and h
@@ -640,19 +879,22 @@ function GridHandles({ cell, kind, from, gridded, chosen = false, onPreview, onD
       style={{ position: "absolute", zIndex: 3, background: "var(--bg-1)", border: "1.5px solid var(--accent)",
         borderRadius: round ? "50%" : 999, cursor, touchAction: "none", boxSizing: "border-box", ...place }} />
   );
+  // half the gap out from the edge: two neighbours' handles meet in the gap between them and never overlap (the user,
+  // 2026-11-19: with the gap thinned, "the controls are overlapping")
+  const out = -GRID.gap / 2;
   const columns = "Drag: one column at a time";
   const rows = "Drag: one row at a time";
   const both = "Drag: columns and rows · Alt+arrows: one grade";
   return (
     <>
-      {bar("w", { right: -6, top: "50%", width: 7, height: 26, transform: "translateY(-50%)" }, "ew-resize", columns)}
-      {bar("left", { left: -6, top: "50%", width: 7, height: 26, transform: "translateY(-50%)" }, "ew-resize", columns)}
-      {bar("h", { bottom: -6, left: "50%", height: 7, width: 26, transform: "translateX(-50%)" }, "ns-resize", rows)}
-      {bar("top", { top: -6, left: "50%", height: 7, width: 26, transform: "translateX(-50%)" }, "ns-resize", rows)}
-      {bar("both", { right: -6, bottom: -6, width: 10, height: 10 }, "nwse-resize", both, true)}
-      {bar("nw", { left: -6, top: -6, width: 10, height: 10 }, "nwse-resize", both, true)}
-      {bar("ne", { right: -6, top: -6, width: 10, height: 10 }, "nesw-resize", both, true)}
-      {bar("sw", { left: -6, bottom: -6, width: 10, height: 10 }, "nesw-resize", both, true)}
+      {bar("w", { right: out, top: "50%", width: 7, height: 26, transform: "translateY(-50%)" }, "ew-resize", columns)}
+      {bar("left", { left: out, top: "50%", width: 7, height: 26, transform: "translateY(-50%)" }, "ew-resize", columns)}
+      {bar("h", { bottom: out, left: "50%", height: 7, width: 26, transform: "translateX(-50%)" }, "ns-resize", rows)}
+      {bar("top", { top: out, left: "50%", height: 7, width: 26, transform: "translateX(-50%)" }, "ns-resize", rows)}
+      {bar("both", { right: out, bottom: out, width: 10, height: 10 }, "nwse-resize", both, true)}
+      {bar("nw", { left: out, top: out, width: 10, height: 10 }, "nwse-resize", both, true)}
+      {bar("ne", { right: out, top: out, width: 10, height: 10 }, "nesw-resize", both, true)}
+      {bar("sw", { left: out, bottom: out, width: 10, height: 10 }, "nesw-resize", both, true)}
       {said && (
         <span data-testid="grid-size-said" className="aug-fs-sm" style={{ position: "absolute", right: 12, bottom: 10, zIndex: 4,
           background: "var(--bg-3)", border: "1px solid var(--b2)", color: "var(--t1)", borderRadius: "var(--r2)", padding: "1px 8px",
@@ -965,12 +1207,13 @@ function useValuedRun(cs: CardState | undefined, range: BriefingRange | null | u
   cs: CardState | undefined; waits: QueryWaiting | null; onRefresh: (() => void) | null;
 } {
   const { valueOf, wire } = usePieces();
-  const { focus } = useDashboard();
-  const focusSent = cs ? JSON.stringify(focusFor(focus, cs.card.id)) : "[]";
+  const { focus, spec } = useDashboard();
+  const uncut = !!cs && notFiltered(spec, cs.card.id);
+  const focusSent = cs ? JSON.stringify(focusOfCard(spec, focus, cs.card.id)) : "[]";
   // a dashboard made from a file: a reader's filters narrow a query that reads its table, and a row added here is read again
   const { narrowing, table, changes } = useQueryNarrowing();
   const isQuery = !!(cs?.card.render as { shown?: unknown } | undefined)?.shown;
-  const filters = isQuery && readsTable(cs?.card.sql, table) ? narrowing : [];
+  const filters = isQuery && !uncut && readsTable(cs?.card.sql, table) ? narrowing : [];
   const names = valuesRead(cs?.card.sql);
   const now = names.length ? valuesFor(names, wire.values, valueOf) : filters.length || (isQuery && changes > 0) ? { values: {} } : null;
   const sent = now && "values" in now ? JSON.stringify(now.values) : "";
@@ -1002,14 +1245,39 @@ function useValuedRun(cs: CardState | undefined, range: BriefingRange | null | u
   return { cs: { card, run: got.run, failed: got.failed }, waits: null, onRefresh };
 }
 
+/** A card a chosen value reached through a link: a small mark that says which columns it used when pointed at (the study's R16),
+ *  so the words never sit over the card's own title. */
+function CutThrough({ ways, ownWindow }: { ways: string[]; ownWindow?: string }) {
+  const columns = [...new Set(ways.map(w => w.split(", through ").pop() ?? w))];
+  // the card's own window giving way to the dates chosen is said too: its figure no longer covers what its query says
+  const said = [columns.length ? `Through ${columns.join(", ")}` : "", ownWindow ?? ""].filter(Boolean).join(". ");
+  return (
+    <span data-testid="cut-through" role="img" aria-label={said} title={[...ways, ownWindow ?? ""].filter(Boolean).join(". ")}
+      data-own-window={ownWindow ? true : undefined}
+      style={{ position: "absolute", top: 10, right: 12, zIndex: 1, display: "inline-flex", color: "var(--t3)" }}>
+      <Icon name={columns.length ? "link" : "date"} size={13} />
+    </span>
+  );
+}
+
 function DashboardCard({ element }: ComponentRenderProps<{ card: string; tone?: Tone | null; size?: Size | null }>) {
-  const { cards, host, tileDoors, sym, range, schema } = useDashboard();
+  const { cards, host, tileDoors, sym, range, schema, connectionId, dashboardId, period, elements, doors: pageDoors } = useDashboard();
   const id = element.props.card;
   const tone = element.props.tone ?? null;
   const valued = useValuedRun(cards.get(id), range);
   const cs = valued.cs;
   const own = valued.onRefresh;
-  const doors = useMemo(() => (own ? { ...tileDoors, onRefresh: own } : tileDoors), [tileDoors, own]);
+  const boardTitle = boardTitleOf(elements) ?? "";
+  const shownRange = period?.showing ?? null;
+  const reading = !pageDoors.onSelect;
+  const doors = useMemo(() => {
+    const placed = (element.props as { title?: string | null }).title;
+    const ask = reading && connectionId ? (cardId: string, title: string) => {
+      const subject = dashboardSubject(connectionId, dashboardId, boardTitle, shownRange, { id: cardId, title: placed || title });
+      if (subject) askAbout(subject);
+    } : undefined;
+    return { ...tileDoors, ...(own ? { onRefresh: own } : {}), ...(ask ? { onAskAbout: ask } : {}) };
+  }, [tileDoors, own, reading, connectionId, dashboardId, boardTitle, shownRange, element.props]);
   const status = host.cards[id]?.status ?? "unmeasured";
   // A card that says no size takes what its shape asks, as it did before sizes: a chart or a
   // table two columns, a figure one.
@@ -1017,23 +1285,42 @@ function DashboardCard({ element }: ComponentRenderProps<{ card: string; tone?: 
   // a saved card is a fixed query: the reader's filters cannot narrow it, and it says so while one is on
   const filtering = useFiltering();
   // the board study — a click on its chart chooses a value for the whole dashboard; what it chose stays lit on it
-  const { focus, pick } = useDashboard();
+  const { focus, pick, drill, spec, elements: placedOn } = useDashboard();
+  const { narrowing } = useQueryNarrowing();
+  // v18 — placed so the dashboard's filters do not cut it, and it says so while one is on
+  const optedOut = (element.props as { not_filtered?: boolean | null }).not_filtered === true;
+  // v20 — a filter this card is set not to follow, while a reader is using it; a card reading the value it feeds does follow it
+  const ignoring = ((element.props as { ignores_filters?: string[] | null }).ignores_filters ?? [])
+    .some(k => focus.some(f => f.source.card === filterSource(k)) && !followsByValue(placedOn, k, valuesRead(cs?.card.sql)));
+  const cutBySomething = focus.length > 0 || narrowing.length > 0 || filtering.on;
   const tileFocus = useMemo<TileFocus | undefined>(() => (pick
-    ? { chosen: (field: string) => chosenOn(focus, id, field), onPick: (p: ChartPick) => pick(id, p) } : undefined), [focus, pick, id]);
+    ? { chosen: (field: string) => chosenOn(focus, id, field), onPick: (p: ChartPick) => pick(id, p),
+        ...(drill && !pageDoors.onSelect && pagesOf(placedOn, false).length > 1 ? { onDrill: (p: ChartPick, at: { x: number; y: number }) => drill({ cardId: id, pick: p, ...at }) } : {}) }
+    : undefined), [focus, pick, id, drill, pageDoors.onSelect, placedOn]);
   const cut = cs?.run?.cut ?? null;
-  const notCut = !!cut && !cut.applied && focusFor(focus, id).length > 0;
+  const notCut = !!cut && !cut.applied && focusOfCard(spec, focus, id).length > 0;
+  const ownWindow = cut?.own_window ?? cs?.run?.scoped?.own_window;
+  // v16 — this placement's own title, description and number look, read by the tile it draws
+  const placed = element.props as Record<string, unknown>;
+  const lookKey = JSON.stringify([placed.title, placed.show_title, placed.description, placed.number, placed.columns_look]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the props it reads
+  const look = useMemo(() => placementLookOf(placed), [lookKey]);
   return (
     <Cell type="Card" props={element.props as Record<string, unknown>} size={size} testid="dashboard-card"
       extra={{ attrs: { "data-card": id, "data-tone": tone ?? undefined },
         style: { boxShadow: tone ? `inset 3px 0 0 ${TONE_RULE[tone]}` : undefined, paddingLeft: tone ? 3 : 0 } }}>
-      {key => <>{notCut ? <NotFiltered why={cut?.why || undefined} /> : filtering.on && <NotFiltered />}{status === "withheld"
+      {key => <>{ignoring && !optedOut && <NotFiltered why="Its author set this card not to follow one of the filters in use." />}{optedOut ? cutBySomething && <NotFiltered why="Its author set this card not to be cut by the dashboard's filters." />
+        : notCut ? <NotFiltered why={cut?.why || undefined} />
+        : cut?.through?.length || ownWindow ? <CutThrough ways={cut?.through ?? []} ownWindow={ownWindow} /> : filtering.on && <NotFiltered />}{status === "withheld"
         ? <WithheldTile />
         : !cs
           ? <SaidTile what="Not one of your cards">The dashboard places a card you do not have.</SaidTile>
           : (
             <CardBoundary key={`${id}:${cs.run ? JSON.stringify(cs.run.rows).length : 0}:${cs.failed ? 1 : 0}`}>
-              <DashboardTile cs={cs as CardState & { card: DashboardCard }} status={status} sym={sym} doors={doors}
-                place={{ elementKey: key, size, range, schema }} waits={valued.waits} focus={tileFocus} />
+              <PlacementLookProvider value={look}>
+                <DashboardTile cs={cs as CardState & { card: DashboardCard }} status={status} sym={sym} doors={doors}
+                  place={{ elementKey: key, size, range, schema }} waits={valued.waits} focus={tileFocus} />
+              </PlacementLookProvider>
             </CardBoundary>
           )}</>}
     </Cell>
@@ -1058,6 +1345,9 @@ function DashboardNote({ element }: ComponentRenderProps<{ text: string; size?: 
  *  sized and set up like any other. Where the page offers no choice it says the period the cards were read for. */
 function DashboardPeriod({ element }: ComponentRenderProps<{ label?: string | null; size?: Size | null }>) {
   const { period, host } = useDashboard();
+  // Retired (the user, 2026-11-19: "Remove Period part as dashboard filters alone should drive it"): a dashboard's dates are
+  // its date filter's. A spec that still holds the piece keeps it, drawn as nothing, so no version needs rewriting.
+  if (!period) return null;
   const label = element.props.label || "Period";
   return (
     <Cell type="Period" props={element.props as Record<string, unknown>} size={element.props.size ?? "small"} testid="dashboard-period-piece">
@@ -1157,6 +1447,7 @@ function DashboardObjectTable({ element }: ComponentRenderProps<{
         {filtering.on && !filtering.narrows && <NotFiltered />}
         <ObjectTablePiece elementKey={key} entity={p.entity} segment={p.segment} set={p.set} setFrom={p.set_from}
           chooses={p.chooses} ticks={p.ticks} columns={p.columns} sort={p.sort} descending={p.descending}
+          columnsLook={(p as { columns_look?: Record<string, unknown> | null }).columns_look ?? null}
           tall={SPAN[size].h === 2} marked={p.marked} />
       </>)}
     </Cell>
@@ -1394,26 +1685,86 @@ const REGISTRY = {
   ScenarioInputs: DashboardScenarioInputs,
   AddRow: DashboardAddRow,
   Period: DashboardPeriod,
+  GlobalFilters: DashboardGlobalFilters,
+  GlobalFilter: () => null,
 } satisfies Record<ComponentName, unknown>;
 
 const NO_IMAGES: Record<string, ImageStamp> = {};
 const NO_FOCUS: DashboardFocus[] = [];
 
-/** The board study — what the dashboard is filtered by, each value a chip that takes it off; Clear takes them all. */
-function FocusBar({ focus, onFocus }: { focus: DashboardFocus[]; onFocus: (next: DashboardFocus[]) => void }) {
-  return (
-    <div data-testid="dashboard-focus" className="aug-fs-sm"
-      style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, margin: "0 0 14px", color: "var(--t3)" }}>
-      <span>Filtered by</span>
-      {focus.map(f => (
-        <Button key={`${f.table}.${f.column}`} size="xs" variant="ghost" data-testid="focus-chip"
-          title="Take this off" onClick={() => onFocus(focus.filter(x => x !== f))}>
-          {focusWords(f)} <Icon name="close" size={12} />
-        </Button>
-      ))}
-      <Button size="xs" variant="ghost" data-testid="focus-clear" onClick={() => onFocus([])}>Clear</Button>
-    </div>
+/** Everything a dashboard is cut by, in one control in the title row (the user, 2026-11-19: no strip above the dashboard, its room
+ *  is the dashboard's): the filter column's ticks, the query filters, the values a reader moved and the marks they clicked, each
+ *  taken off from its menu, with Clear all and Copy link. With nothing cutting the dashboard it is not drawn. */
+function FilteredBy({ objects = null }: { objects?: ObjectBarWords | null }) {
+  const { focus, setFocus, period, host, elements, doors, cards, dashboardId, filtersMenu: place } = useDashboard();
+  const values = useValueChips();
+  const { narrowing, toggle, clear: clearNarrowing } = useQueryNarrowing();
+  const { get, set } = useStateStore();
+  const focused = setFocus ? focus : NO_FOCUS;
+  const chips: BarChip[] = [
+    ...(objects?.chips ?? []),
+    ...narrowing.map((n): BarChip => ({ key: `query:${n.column}`, testid: "query-filter-chip", words: `${n.column.replace(/_/g, " ")}: ${n.values.join(", ")}`,
+      clear: () => n.values.forEach(v => toggle(n.column, String(v), n.grain)) })),
+    ...values,
+    ...focused.map((f): BarChip => ({ key: `focus:${f.source.card}:${f.table}.${f.column}`, testid: "focus-chip", words: focusWords(f),
+      clear: () => setFocus?.(focused.filter(x => x !== f)) })),
+  ];
+  const count = objects?.count ?? null;
+  if (!chips.length && !count) return null;
+  // the period is said only where a card was cut to it: a dashboard that reads a whole file is filtered by no month
+  const cutToPeriod = [...cards.values()].some(c => c.run?.scoped && !c.run.scoped.standing);
+  const covers = cutToPeriod ? period?.showing?.covers || (host.range as { covers?: string }).covers || "" : "";
+  const clearAll = () => {
+    objects?.clearAll?.();
+    clearNarrowing();
+    values.forEach(v => v.clear());
+    if (focused.length) setFocus?.([]);
+  };
+  // v20 — this view of the dashboard, as an address another reader opens on the same filters
+  const copyLink = () => {
+    // the page's key is `<connection>:<dashboard>`, or `shared:<owner>:<dashboard>` for one another person published
+    const key = dashboardId ?? "";
+    const opened = key.startsWith("shared:") ? key.replace(/:([^:]+)$/, "/$1") : key.slice(key.indexOf(":") + 1);
+    const link = filterLink(focused, window.location.href, opened);
+    if (!link) { toast.info("Too many filters for one link", { description: "Take a few off and copy it again." }); return; }
+    navigator.clipboard.writeText(link).then(() => toast.success("Link copied"), () => toast.error("The link could not be copied"));
+  };
+  // the study's R17 — with a mark chosen, the other pages it can be read on (the focus holds across a dashboard's pages)
+  const openPage = get("/tab");
+  const others = focused.some(f => !fromFilter(f)) ? pagesOf(elements, !!doors.onSelect).filter(t => t.name !== openPage).slice(0, 3) : [];
+  const menu = (
+      <span role="group" aria-label="What this dashboard is filtered by" data-testid="dashboard-filtered-by" className="aug-fs-sm"
+        style={{ display: "inline-flex", alignItems: "center", gap: 8, color: "var(--t2)" }}>
+        {count && <span data-testid="object-filter-count" style={{ fontVariantNumeric: "tabular-nums" }}>{count}</span>}
+        {chips.length > 0 && (
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger>
+              <Button size="xs" variant="outline" data-testid="filters-menu" title={chips.map(c => c.words).join(" · ")}>
+                <Icon name="filter" size={12} /> Filters · {chips.length}
+              </Button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content size="1" align="end" style={{ maxWidth: 340 }}>
+              {covers && <DropdownMenu.Label data-testid="filtered-by-period">{covers}</DropdownMenu.Label>}
+              {chips.map(c => (
+                <DropdownMenu.Item key={c.key} data-testid={c.testid} title={`Take off ${c.words}`} onSelect={c.clear}>
+                  <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.words}</span>
+                  <Icon name="close" size={12} />
+                </DropdownMenu.Item>
+              ))}
+              <DropdownMenu.Separator />
+              <DropdownMenu.Item data-testid="filters-clear" onSelect={clearAll}>Clear all</DropdownMenu.Item>
+              {focused.length > 0 && <DropdownMenu.Item data-testid="filters-copy-link" onSelect={copyLink}>Copy link</DropdownMenu.Item>}
+              {others.map(t => (
+                <DropdownMenu.Item key={t.key} data-testid="focus-open-page" onSelect={() => set("/tab", t.name)}>Open on {t.label}</DropdownMenu.Item>
+              ))}
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
+        )}
+      </span>
   );
+  // beside the filters' own heading (or the button standing for them); a dashboard with no filters column shows it above
+  // its cards, only while something cuts it
+  return place ? createPortal(menu, place) : <div style={{ display: "flex", justifyContent: "flex-end" }}>{menu}</div>;
 }
 const NO_READS: readonly string[] = [];
 
@@ -1450,6 +1801,29 @@ export function ComposedDashboard({ spec, cards, host, doors, sym = "$", images 
   focus?: DashboardFocus[];
   onFocus?: (next: DashboardFocus[]) => void;
 }) {
+  // v17 — the colours the dashboard keeps for values, honoured by every card on it (study R11); one object while they hold
+  const rootProps = (spec as { root?: string; elements?: Record<string, { props?: Record<string, unknown> }> } | null)
+    ?.elements?.[String((spec as { root?: string } | null)?.root ?? "")]?.props;
+  const colorsKey = JSON.stringify(rootProps?.colors ?? null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the colours it reads
+  const keptColors = useMemo(() => valueColorsOf(rootProps), [colorsKey]);
+  const altClick = useRef(false);
+  // what a reader chose on a filter the dashboard no longer holds as it was is not kept cutting its cards
+  const filterProps = useMemo(() => Object.fromEntries(Object.entries((spec as { elements?: Record<string, { type?: string; props?: unknown }> } | null)?.elements ?? {})
+    .filter(([, el]) => el?.type === "GlobalFilter").map(([k, el]) => [k, el.props as GlobalFilterProps])), [spec]);
+  useEffect(() => {
+    if (!onFocus) return;
+    const left = stillHeld(focus, filterProps);
+    if (left.length !== focus.length) onFocus(left);
+  }, [focus, filterProps, onFocus]);
+  // v20 — what the filters open on, the first time a reader meets them
+  useEffect(() => {
+    if (!onFocus || doors.onSelect || !dashboardId) return;
+    const opened = openedWith(dashboardId, filterProps, focus);
+    if (opened) onFocus(opened);
+  }, [dashboardId, filterProps]); // eslint-disable-line react-hooks/exhaustive-deps -- once for each set of openings
+  const [drilling, setDrilling] = useState<Drilling | null>(null);
+  const [filtersMenu, setFiltersMenu] = useState<HTMLElement | null>(null);
   // A spec is known by what it says, not by which object says it: a caller that parses the
   // same JSON again on every render hands over a new object each time, and that must not
   // close the tab a reader opened.
@@ -1458,12 +1832,15 @@ export function ComposedDashboard({ spec, cards, host, doors, sym = "$", images 
   const check = useMemo(() => checkDashboardSpec(spec), [written]);
 
   // One store per spec. The host's tree is laid over it on every change, so a spec can seed
-  // the open tab and nothing else, and a reader's choice of tab survives a refresh of the cards.
-  const store = useMemo(
-    () => createStateStore(stateModel(openingTab(spec), host)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- the host is laid over below, not at creation
-    [written],
-  );
+  // the open tab and nothing else, and a reader's choice of tab survives a refresh of the cards. An edit to the same
+  // dashboard keeps the tab being worked on, while it is still there; another dashboard opens on its own.
+  const [held, setHeld] = useState(() => ({ written, dashboardId, store: createStateStore(stateModel(openingTab(spec), host)) }));
+  let store = held.store;
+  if (held.written !== written || held.dashboardId !== dashboardId) {
+    const open = held.dashboardId === dashboardId ? tabStillThere(spec, held.store.get("/tab")) : null;
+    store = createStateStore(stateModel(open ?? openingTab(spec), host));
+    setHeld({ written, dashboardId, store });
+  }
   useEffect(() => {
     store.update({ "/range": { status: host.range.status }, "/cards": host.cards });
   }, [store, host]);
@@ -1492,18 +1869,26 @@ export function ComposedDashboard({ spec, cards, host, doors, sym = "$", images 
     range,
     schema,
     connectionId,
+    dashboardId,
     selected,
     steppers,
     reads: new Set(readsKey ? readsKey.split("\n") : []),
     focus,
+    setFocus: onFocus ?? null,
+    spec,
     period,
+    drilling,
+    drill: onFocus ? setDrilling : null,
+    filtersMenu,
     pick: onFocus ? (cardId: string, p: ChartPick) => {
+      // in the builder a click chooses the piece and reshapes nothing; Alt and a click tries the filter (the study's R4)
+      if (doors.onSelect && !altClick.current) return;
       // what the click stands for, traced off the card's own statement — or said, when a click on it filters nothing
       traceAndChoose(traceField, cardId, p, focus, onFocus, why => toast.info("This click filters nothing", { description: why }))
         .catch(e => toast.error("The click could not be read", { description: (e as Error).message }));
     } : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on what the spec and the range say
-  }), [check.valid, written, cards, host, doors, sym, images, rangeKey, schema, connectionId, selected, steppers, readsKey, focus, onFocus, period]);
+  }), [check.valid, written, cards, host, doors, sym, images, rangeKey, schema, connectionId, dashboardId, selected, steppers, readsKey, focus, onFocus, period, drilling, filtersMenu]);
 
   if (!check.valid) {
     return (
@@ -1520,16 +1905,21 @@ export function ComposedDashboard({ spec, cards, host, doors, sym = "$", images 
   }
 
   return (
+    <div style={{ display: "contents" }} onPointerDownCapture={e => { altClick.current = e.altKey; }}>
     <DashboardContext.Provider value={context}>
+    <FiltersMenuPlace.Provider value={setFiltersMenu}>
       <PiecesProvider connectionId={connectionId} schema={schema} elements={context.elements} onPlaceTable={doors.onPlaceTable}
         asGroup={asGroup} onSaid={onSaid}
         sets={check.valid ? (spec as WireSpec).sets : undefined} values={check.valid ? (spec as WireSpec).values : undefined}
         dashboardId={dashboardId} cardSql={cardSql}>
-        {focus.length > 0 && onFocus && <FocusBar focus={focus} onFocus={onFocus} />}
-        <JSONUIProvider registry={REGISTRY as ComponentRegistry} store={store}>
-          <Renderer spec={spec as Spec} registry={REGISTRY as ComponentRegistry} />
-        </JSONUIProvider>
+        <ValueColorsProvider value={keptColors}>
+          <JSONUIProvider registry={REGISTRY as ComponentRegistry} store={store}>
+            <Renderer spec={spec as Spec} registry={REGISTRY as ComponentRegistry} />
+          </JSONUIProvider>
+        </ValueColorsProvider>
       </PiecesProvider>
+    </FiltersMenuPlace.Provider>
     </DashboardContext.Provider>
+    </div>
   );
 }

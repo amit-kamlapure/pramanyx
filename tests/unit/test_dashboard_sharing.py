@@ -247,3 +247,27 @@ def test_publish_read_as_a_reader_and_copy_over_http(client, monkeypatch):
     off = client.post(f"/dashboards/{o.home.cockpit_id}/unpublish", params=q, headers=_as(o.org, AMIT))
     assert off.status_code == 200 and off.json()["version"] == 3
     assert client.get("/dashboards/shared", params=q, headers=_as(o.org, PRIYA)).json()["cockpits"] == []
+
+
+# ── a page kept from readers (dashboard format v18) ──────────────────────────────────────────
+
+def test_a_page_hidden_from_readers_is_not_in_what_they_are_given():
+    spec = {"root": "r", "state": {"tab": "plans"}, "elements": {
+        "r": {"props": {"title": "T"}, "children": ["tabs"]},
+        "tabs": {"type": "Tabs", "props": {"value": {"$bindState": "/tab"}}, "children": ["open", "plans"]},
+        "open": {"type": "Tab", "props": {"name": "open", "label": "Open"}, "children": ["s1"]},
+        "plans": {"type": "Tab", "props": {"name": "plans", "label": "Plans", "hidden": True}, "children": ["s2"]},
+        "s1": {"type": "Section", "props": {}, "children": ["c1"]},
+        "s2": {"type": "Section", "props": {}, "children": ["c2"]},
+        "c1": {"type": "Card", "props": {"card": "a"}, "children": []},
+        "c2": {"type": "Card", "props": {"card": "secret"}, "children": []},
+    }}
+    before = json.dumps(spec)
+    read = sharing.without_hidden_pages(spec)
+    assert set(read["elements"]) == {"r", "tabs", "open", "s1", "c1"}
+    assert read["elements"]["tabs"]["children"] == ["open"]
+    assert read["state"]["tab"] == "open"                              # it opens on a page the reader has
+    assert "secret" not in json.dumps(read)
+    assert json.dumps(spec) == before                                  # the kept spec is not changed
+    plain = {"root": "r", "elements": {"r": {"props": {}, "children": []}}}
+    assert sharing.without_hidden_pages(plain) is plain

@@ -10,6 +10,7 @@
  * Pure (no React, no fetch), and measured over every range the industry packages ship in
  * `metricFormat.test.ts`.
  */
+import { isPlainLook, writeNumber, type NumberLook } from "@/lib/dashboards/numberLook";
 import type { Format } from "@number-flow/react";
 
 import type { StatedRange } from "@/lib/api";
@@ -75,10 +76,13 @@ const FLOW_2DP: Format = { minimumFractionDigits: 2, maximumFractionDigits: 2, u
  *  is one its text states. Reading the words instead — "ratio" anywhere meant 0..1, "0-1000" contained
  *  "0-100" — hid an inventory turnover of 5, a net review ratio of -0.2 and a €404 AOV, and showed the
  *  airline package's 0.82 load factor ('ratio 0..1 (0..100%)') as "0.8%". */
-export function formatMetric(v: number, unit: string, sym: string, name: string, range: StatedRange = UNSTATED): { display: string; ok: boolean; flow?: KpiFlow } {
+export function formatMetric(v: number, unit: string, sym: string, name: string, range: StatedRange = UNSTATED,
+  look: NumberLook | null = null): { display: string; ok: boolean; flow?: KpiFlow } {
   const u = (unit || "").toLowerCase();
   let display: string;
   let flow: KpiFlow | undefined;
+  // a placed card's own look (dashboards v16, study R9): the same bounds and units, written its way; no counting flow
+  const looked = !isPlainLook(look) ? look as NumberLook : null;
   if (isMultiplier(name, u)) {
     if (v <= 0 || v > 1000) return { display: "", ok: false };
     const s = v.toFixed(2);
@@ -88,20 +92,20 @@ export function formatMetric(v: number, unit: string, sym: string, name: string,
     if (v < -0.001 || v > 1.05) return { display: "", ok: false };   // broken bounded rate (>1)
     if (v >= 0.9995) return { display: "", ok: false };              // rounds to 100% — degenerate
     const s = (v * 100).toFixed(1);
-    display = `${s}%`;
-    flow = { value: Number(s), format: FLOW_1DP, suffix: "%" };
+    display = looked ? writeNumber(v * 100, looked, { percent: true, compact: false }) : `${s}%`;
+    flow = looked ? undefined : { value: Number(s), format: FLOW_1DP, suffix: "%" };
   } else if (range.kind === "pct100") {
     if (v < -0.5 || v > 105) return { display: "", ok: false };
     if (v >= 99.95) return { display: "", ok: false };
     const s = v.toFixed(1);
-    display = `${s}%`;
-    flow = { value: Number(s), format: FLOW_1DP, suffix: "%" };
+    display = looked ? writeNumber(v, looked, { percent: true, compact: false }) : `${s}%`;
+    flow = looked ? undefined : { value: Number(s), format: FLOW_1DP, suffix: "%" };
   } else if (outsideStatedBand(v, range)) {
     return { display: "", ok: false };                               // 26 block hours in a 0..24 day
   } else if (isDays(u)) {
     const s = v.toFixed(1);
-    display = `${s}d`;
-    flow = { value: Number(s), format: FLOW_1DP, suffix: "d" };
+    display = looked ? writeNumber(v, looked, { suffix: "d", compact: false }) : `${s}d`;
+    flow = looked ? undefined : { value: Number(s), format: FLOW_1DP, suffix: "d" };
   } else {
     const a = Math.abs(v);
     const [s, mag, fmt] = a >= 1e9 ? [(v / 1e9).toFixed(1), "B", FLOW_1DP] as const
@@ -110,8 +114,8 @@ export function formatMetric(v: number, unit: string, sym: string, name: string,
                         : Number.isInteger(v) ? [String(v), "", FLOW_INT] as const
                         : [v.toFixed(2), "", FLOW_2DP] as const;
     const pre = isMoney(u) ? sym : "";
-    display = pre + s + mag;
-    flow = { value: Number(s), format: fmt, prefix: pre || undefined, suffix: mag || undefined };
+    display = looked ? writeNumber(v, looked, { prefix: pre, compact: true }) : pre + s + mag;
+    flow = looked ? undefined : { value: Number(s), format: fmt, prefix: pre || undefined, suffix: mag || undefined };
   }
   if (Math.abs(parseFloat(display.replace(/[^0-9.eE-]/g, "")) || 0) === 0) return { display: "", ok: false };
   return { display, ok: true, flow };
