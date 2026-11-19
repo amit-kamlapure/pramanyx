@@ -71,6 +71,8 @@ interface Props {
   initialAgentId?: string;
   /** Beside another page: the address stays that page's, and the connection's general suggestions are left out. */
   beside?: boolean;
+  /** Which screen's `?chat=` is this panel's: `main` for the Ask screen, `canvas:<id>` for a canvas (`addressIsMine`). */
+  address?: string;
 }
 
 /** The modes a person can PICK in the composer. `auto` is deliberately absent: the
@@ -516,6 +518,24 @@ function EscalateBar({ turn, onEscalate }: { turn: ChatTurn; onEscalate: () => v
 // all afternoon. Module scope is exactly that lifetime.
 let _urlSessionUnclaimed = true;
 
+/** Whether the page's address opens the screen this panel lives on, so its `?chat=` is this panel's conversation.
+ *  `main` is the Ask screen's own conversation: every address but a canvas's. `canvas:<id>` is that canvas's chat. A panel
+ *  named by neither (a page that is all conversation) owns whatever address it is on. */
+export function addressIsMine(params: URLSearchParams, address?: string): boolean {
+  if (!address) return true;
+  const onCanvas = params.get("tab") === "canvas-workspace";
+  if (address === "main") return !onCanvas;
+  return onCanvas && `canvas:${params.get("canvas") ?? ""}` === address;
+}
+
+/** The `?chat=` this panel adopts, at most once per page load and only by the panel whose screen the address opens: the
+ *  Ask screen's panel stays mounted behind a canvas and, mounted first, took a canvas's conversation on every reload. */
+export function claimChatAddress(params: URLSearchParams, address?: string): string | null {
+  if (!_urlSessionUnclaimed || !addressIsMine(params, address)) return null;
+  _urlSessionUnclaimed = false;
+  return params.get("chat");
+}
+
 
 // ── Agent landing block ───────────────────────────────────────────────────────
 
@@ -587,7 +607,7 @@ function AgentLandingBlock({ agent, connectionName }: { agent: UserAgent; connec
   );
 }
 
-export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQuestion, initialMode, initialInsightId, capabilities, initialAgentId, beside = false }: Props) {
+export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQuestion, initialMode, initialInsightId, capabilities, initialAgentId, beside = false, address }: Props) {
   // Read during the first render, into a ref, because both this component and page.tsx's
   // URL-sync effect rewrite the query string — whichever ran first would erase the id
   // before the restore below could read it. A ref initializer is safe here specifically
@@ -596,10 +616,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
   // rendering to disagree with.
   const resumeIdRef = useRef<string | null>(null);
   if (resumeIdRef.current === null && typeof window !== "undefined") {
-    const fromUrl = _urlSessionUnclaimed && !beside
-      ? new URLSearchParams(window.location.search).get("chat")
-      : null;
-    if (!beside) _urlSessionUnclaimed = false;
+    const fromUrl = beside ? null : claimChatAddress(new URLSearchParams(window.location.search), address);
     resumeIdRef.current = restoreSessionId || fromUrl || "";
   }
   const resumeId = resumeIdRef.current || null;
@@ -768,7 +785,8 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
     if (!resumeId) {
       if (moved) setSessionId(newSessionId()); // a fresh Chat instance — the conversation resets with it
       const params = new URLSearchParams(window.location.search);
-      if (params.has("chat")) {
+      // only the panel the address opens may drop its conversation: a panel mounted behind it must leave it be
+      if (!beside && params.has("chat") && addressIsMine(params, address)) {
         params.delete("chat");
         const qs = params.toString();
         window.history.replaceState(null, "", `${window.location.pathname}${qs ? `?${qs}` : ""}`);
@@ -961,10 +979,11 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
     if (typeof window === "undefined" || beside) return;
     if (!messages.length) return;   // see below: emptiness is not a reason to forget
     const params = new URLSearchParams(window.location.search);
-    if (params.get("chat") === sessionId) return;
+    // a panel behind another screen keeps its conversation out of that screen's address
+    if (params.get("chat") === sessionId || !addressIsMine(params, address)) return;
     params.set("chat", sessionId);
     window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
-  }, [messages.length, sessionId, beside]);
+  }, [messages.length, sessionId, beside, address]);
 
   // ── Scroll: follow the newest content while pinned to the bottom, release
   //    the moment the user scrolls up to read, snap back on completion. ───────

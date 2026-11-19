@@ -680,6 +680,7 @@ export function CanvasWorkspace({ canvas, connections, allConnections, onClose, 
         }}>
           <ChatPanel
             key={chatKey}
+            address={`canvas:${canvas.id}`}
             connectionId={connectionId}
             canvasId={canvas.id}
             restoreSessionId={restoreSessionId}

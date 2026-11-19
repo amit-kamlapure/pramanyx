@@ -2104,6 +2104,7 @@ export default function Home() {
                       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
                         <ChatPanel
                           key={chatKey}
+                          address="main"
                           connectionId={selectedConn}
                           canvasId={activeCanvas?.id}
                           restoreSessionId={selectedChatSessionId}
