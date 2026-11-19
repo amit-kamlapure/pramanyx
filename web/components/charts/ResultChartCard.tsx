@@ -41,7 +41,7 @@ import { pickOf, type Pick } from "@/components/charts/selection";
 import { sameVizConfig, type VizConfig } from "@/components/charts/vizConfig";
 import { useVizEditorOpen, openVizEditor, closeVizEditor, useVizDock } from "@/components/charts/vizEditorStore";
 
-const TRANSFORM_OPTS: { v: PostprocOp | "none"; t: string }[] = [
+export const TRANSFORM_OPTS: { v: PostprocOp | "none"; t: string }[] = [
   { v: "none", t: "None" },
   { v: "pop", t: "Period-over-period" },
   { v: "contribution", t: "Share of total" },
@@ -58,12 +58,12 @@ type Agg = "sum" | "avg" | "count" | "min" | "max";
 // The Customize vocabularies — kept in sync with the Query Builder Customize tab so a
 // card and a query offer the same knobs. Chart.applyCustom honors each. (Colour palette "Scheme"
 // was removed from the editor — the org-default palette applies; Color-by binding drives hue now.)
-const NUMBER_FORMATS: { v: string; t: string }[] = [
+export const NUMBER_FORMATS: { v: string; t: string }[] = [
   { v: "", t: "Auto" }, { v: ",.0f", t: "1,234" }, { v: ",.2f", t: "1,234.56" }, { v: "$,.0f", t: "$1,234" },
   { v: "$,.2f", t: "$1,234.56" }, { v: "~s", t: "1.2K (compact)" }, { v: ".0%", t: "12%" }, { v: ".1%", t: "12.3%" },
 ];
 /** "Show": every category, or only the largest few (the dashboards study, R12). */
-const TOP_OPTIONS: { v: string; t: string }[] = [
+export const TOP_OPTIONS: { v: string; t: string }[] = [
   { v: "", t: "Every category" }, { v: "5", t: "The 5 largest" }, { v: "10", t: "The 10 largest" }, { v: "20", t: "The 20 largest" },
 ];
 /** A number a person typed, or null for none (or not a number). */
@@ -73,7 +73,7 @@ function numberOrNull(text: string): number | null {
   const n = Number(t);
   return Number.isFinite(n) ? n : null;
 }
-const LEGEND_POS: { v: string; t: string }[] = [
+export const LEGEND_POS: { v: string; t: string }[] = [
   { v: "", t: "Default" }, { v: "right", t: "Right" }, { v: "bottom", t: "Bottom" }, { v: "top", t: "Top" }, { v: "none", t: "Hidden" },
 ];
 
@@ -224,9 +224,16 @@ export function ResultChartCard({
     [dateIdxs, catIdxs, columns],
   );
   // Any column can drive the Color binding (a dimension → discrete legend, a measure → gradient).
+  // Each column's kind, for its glyph and where the field list puts it: a measure, a date, or words.
+  const kindOfCol = useMemo(() => {
+    const k = new Map<string, "number" | "date" | "text">();
+    numericIdxs.forEach((i) => k.set(columns[i], "number"));
+    dateIdxs.forEach((i) => k.set(columns[i], "date"));
+    return (c: string) => k.get(c) ?? "text";
+  }, [numericIdxs, dateIdxs, columns]);
   const colorFieldOptions = useMemo(
-    () => [{ v: "", t: "None" }, ...columns.map((c) => ({ v: c, t: cleanLabel(c) }))],
-    [columns],
+    () => [{ v: "", t: "None" }, ...columns.map((c) => ({ v: c, t: cleanLabel(c), k: kindOfCol(c) }))],
+    [columns, kindOfCol],
   );
 
   // Chart-grammar gate: a stats/entity-profile grid opens on the TABLE (its honest
@@ -484,10 +491,10 @@ export function ResultChartCard({
     chartTypeOptions: offeredTypes.map((t) => ({ v: t, t: CHART_TYPE_LABEL[t] })),
     setChartType: (v) => setTypeSel(v as ChartType | "auto"),
     dimValue: dimSel ?? (dimCols[0] ?? ""),
-    dimOptions: dimCols.map((c) => ({ v: c, t: cleanLabel(c) })),
+    dimOptions: dimCols.map((c) => ({ v: c, t: cleanLabel(c), k: kindOfCol(c) })),
     setDim: (v) => setDimSel(v),
     metricValue: metricSel ?? defaultMetric,
-    metricOptions: metricCols.map((c) => ({ v: c, t: cleanLabel(c) })),
+    metricOptions: metricCols.map((c) => ({ v: c, t: cleanLabel(c), k: "number" as const })),
     // A number format is chosen FOR a measure's semantics — .1% on a margin is right
     // and on a unit count prints 885900.0%. Switching the measure resets it to Auto.
     setMetric: (v) => { setMetricSel(v); setNumberFormat(""); },

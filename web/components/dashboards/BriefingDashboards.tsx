@@ -103,7 +103,7 @@ import { emptyDashboardSpec, overdueSegmentOf, processDashboardHolds, processDas
 import { valuesRead } from "@/lib/dashboards/values";
 import { dashboardInAddress, focusOfCard, useDashboardFocus } from "@/lib/dashboards/focus";
 import { isOtherKind, tileShape } from "@/components/dashboards/DashboardTile";
-import { CardSql, ChartDock, QueryKindPick } from "@/components/dashboards/CardInspector";
+import { CardSql, ChartDock, QueryChartEditor, type KeptValueColors } from "@/components/dashboards/CardInspector";
 import { formatDateTime, utcDayWords } from "@/lib/format";
 import { withUniqueKeys } from "@/lib/listKeys";
 import { foldNavFor } from "@/lib/navCollapse";
@@ -1395,9 +1395,11 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
             const cs = cards.find(c => c.card.id === cardId);
             const render = (cs?.card.render ?? {}) as { shown?: Partial<QueryShown>; chartType?: string | null;
               viz?: { type?: string; metric?: string | null; colorField?: string; colorScale?: string } };
-            return holdsOf(cs?.run as Parameters<typeof holdsOf>[0], render.shown, {
+            const holds = holdsOf(cs?.run as Parameters<typeof holdsOf>[0], render.shown, {
               type: render.viz?.type && render.viz.type !== "auto" ? render.viz.type : render.chartType ?? null,
               measure: render.viz?.metric ?? null, colorField: render.viz?.colorField ?? null, colorScale: render.viz?.colorScale ?? null });
+            // a query's own chart colours its values in its editor's Color, beside the field that colours them — not again below
+            return render.shown && !isOtherKind(render.viz?.type) ? { ...holds, fields: [] } : holds;
           }}
           onUndo={stacks.past.length > 0 ? undo : undefined} onRedo={stacks.future.length > 0 ? redo : undefined}
           askPiece={(key, type) => (ASKS_OF_A_PIECE(type) ? (
@@ -1439,16 +1441,23 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
           // the board study — the card's own chart editor held in the panel, and the statement it ran
           cardChart={cardId => {
             const cs = cards.find(c => c.card.id === cardId);
-            const viz = (cs?.card.render as { viz?: { type?: string } } | undefined)?.viz;
             const own = !!(cs?.card.render as { shown?: unknown } | undefined)?.shown;
-            // a person's own query: every kind it can be drawn as, in one place; another kind's own settings under it
+            // a person's own query: the one chart editor, driving its setup and its chart settings alike
             if (cs && own) {
-              return (
-                <>
-                  <QueryKindPick key={cardId} cs={cs} onKept={reload} />
-                  {isOtherKind(viz?.type) && <ChartDock key={`${cardId}-dock`} cardKey={cardId} charted />}
-                </>
-              );
+              const root = current.root;
+              const colors: KeptValueColors = {
+                kept: (current.elements[root]?.props.colors ?? {}) as KeptValueColors["kept"],
+                choose: (field, value, slot) => {
+                  const keptNow = (current.elements[root]?.props.colors ?? {}) as KeptValueColors["kept"];
+                  const forField = { ...(keptNow[field] ?? {}) };
+                  if (slot) forField[value] = slot; else delete forField[value];
+                  const next = { ...keptNow };
+                  if (Object.keys(forField).length) next[field] = forField; else delete next[field];
+                  change(setProps(current, root, { colors: Object.keys(next).length ? next : null }),
+                    slot ? "a value's colour kept on the dashboard by hand" : "a value's colour let go by hand");
+                },
+              };
+              return <QueryChartEditor key={cardId} cs={cs} onKept={reload} colors={colors} />;
             }
             return <ChartDock key={cardId} cardKey={cardId} charted={!!cs && tileShape(cs) === "rows"} />;
           }}
@@ -1461,7 +1470,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
             const held = data.cards.find(c => c.id === cardId);
             if (!held || !held.own || !(held.render as { shown?: unknown })?.shown) return null;
             return (
-              <QuerySetup key={held.id} connectionId={connectionId} card={held} values={current.values ?? {}}
+              <QuerySetup key={held.id} connectionId={connectionId} card={held} values={current.values ?? {}} shapeElsewhere
                 onKept={(kept, replaced) => replaced
                   && edit(s => swapCard(s, replaced, kept.id), "a query of your own changed by hand", `Kept the change to “${kept.title}”.`)} />
             );

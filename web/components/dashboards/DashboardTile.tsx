@@ -45,7 +45,7 @@ import { Button } from "@/components/ui/button";
 import { Icon, type IconName } from "@/components/ui/icon";
 import { readMetricTrend, type BriefingRange, type CardRunPrevious, type DashboardCard, type QueryShaped, type QueryShown, type StatedRange } from "@/lib/api";
 import { readVegaTokens } from "@/components/charts/vega/config";
-import { queryChartSpec } from "@/lib/dashboards/queryChart";
+import { queryChartSpec, queryLookOf } from "@/lib/dashboards/queryChart";
 import { cellText } from "@/lib/dashboards/objectView";
 import { SPAN, type Size } from "@/lib/dashboards/catalog";
 import { cardValue } from "@/lib/dashboards/hostStatus";
@@ -612,7 +612,7 @@ function QueryTile({ cs, doors, place, focus }: { cs: CardState & { card: Dashbo
   const spec = useMemo(() => {
     if (!shaped || !setup || shaped.as === "figure" || shaped.as === "table" || anyKind) return null;
     const t = readVegaTokens();
-    return queryChartSpec(shaped, setup, { palette: t.palette, other: t.deemph }, chosen, keptColors?.[setup.split], chartOptionsOf(viz));
+    return queryChartSpec(shaped, setup, { palette: t.palette, other: t.deemph }, chosen, keptColors?.[setup.split], chartOptionsOf(viz), queryLookOf(viz));
   }, [shaped, setup, anyKind, chosen, keptColors, viz]);
   const grid = useMemo(() => (anyKind && shaped && setup ? queryGrid(shaped as Parameters<typeof queryGrid>[0], setup) : null),
     [anyKind, shaped, setup]);
@@ -670,7 +670,8 @@ function QueryTile({ cs, doors, place, focus }: { cs: CardState & { card: Dashbo
               if ("xr" in d && d.xr !== null && d.xr !== undefined) focus.onDrill?.({ field: shaped.x.name, value: d.xr as string | number }, at);
             } : undefined} />}
           {grid && (
-            <ResultChartCard editorKey={card.id} pencil={false} columns={grid.columns} rows={grid.rows} chartType={viz?.type ?? null} config={viz ?? null}
+            // drawn afresh when its settings change: the card's panel sets them, and a chart reads its settings once
+            <ResultChartCard key={settingsKey(viz)} editorKey={card.id} pencil={false} columns={grid.columns} rows={grid.rows} chartType={viz?.type ?? null} config={viz ?? null}
               onConfigChange={persistViz} fillHeight={height} exhibit={chosen ? { emphasis: chosen } : undefined} onChartReady={i => { chart.current = i; }}
               onPick={focus?.onPick ? (p) => focus.onPick?.(p) : undefined} />
           )}
@@ -699,6 +700,11 @@ function focusExhibit(chartConfig: Record<string, unknown> | undefined, columns:
   if (!chosen) return undefined;
   const own = (chartConfig?.exhibit ?? {}) as Record<string, unknown>;
   return { ...own, emphasis: chosen } as never;
+}
+
+/** A card's chart settings as one string, the same whatever order they were kept in. */
+export function settingsKey(viz: VizConfig | null | undefined): string {
+  return JSON.stringify(Object.entries(viz ?? {}).sort(([a], [b]) => a.localeCompare(b)));
 }
 
 /** A kind an answer's chart draws that a query card's own six do not (bar, line, area, scatter, a figure, a table). */

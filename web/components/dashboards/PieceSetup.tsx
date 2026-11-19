@@ -273,9 +273,49 @@ function KeptColors({ fields, spec, onChange }: { fields: { field: string; value
 
 type Look = { decimals?: 0 | 1 | 2 | null; compact?: boolean | null; negatives?: "minus" | "parens" | null };
 
-/** A placed card's own title, description and number look (dashboards v16; study R8, R9). Display only: what the card
- *  measures and its unit stay the card's. */
-function CardLook({ p, own, set }: { p: Props; own: string; set: (patch: Props, note: string) => void }) {
+/** A placed card as a widget, first in its panel (the user, 2026-11-19): its title and its description,
+ *  each ticked to be shown — for this dashboard alone; what the card measures stays the card's. */
+function CardWidget({ p, own, set }: { p: Props; own: string; set: (patch: Props, note: string) => void }) {
+  const [wantsWords, setWantsWords] = useState(false);
+  const described = !!p.description || wantsWords;
+  const tick = (checked: boolean, label: string, onChange: (b: boolean) => void) => (
+    <label className="aug-fs-chrome" style={{ display: "inline-flex", alignItems: "center", gap: 8, color: "var(--t1)", fontWeight: 500 }}>
+      <Tick checked={checked} aria-label={`Show the ${label.toLowerCase()}`} onChange={e => onChange(e.target.checked)} />
+      {label}
+    </label>
+  );
+  return (
+    <div data-testid="card-widget" style={{ display: "flex", flexDirection: "column", gap: 8, padding: "12px 16px", borderBottom: "1px solid var(--b1)" }}>
+      <span className="aug-fs-chrome" style={{ fontWeight: 600, color: "var(--t1)" }}>Widget</span>
+      <div data-testid="card-look-title" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {tick(p.show_title !== false, "Title", on => set({ show_title: on ? null : false }, on ? "a card's title shown by hand" : "a card's title hidden by hand"))}
+        {p.show_title !== false && (
+          <>
+            <Words clearable label="Title" value={String(p.title ?? "")} placeholder={own} max={MAX_TITLE}
+              onSave={v => set({ title: v || null }, v ? "a card retitled on this dashboard by hand" : "a card's own title used again")} />
+            <span className="aug-fs-xs" style={{ color: "var(--t3)", lineHeight: 1.45 }}>
+              {p.title ? `For this dashboard alone; the card's own is "${own}". Empty it to use that again.` : "The card's own. Write one for this dashboard alone."}
+            </span>
+          </>
+        )}
+      </div>
+      <div data-testid="card-look-description" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {tick(described, "Description", on => {
+          setWantsWords(on);
+          if (!on && p.description) set({ description: null }, "a card's description taken off");
+        })}
+        {described && (
+          <Words many clearable rows={2} label="Description" value={String(p.description ?? "")} placeholder="A line under the title" max={MAX_CARD_DESCRIPTION}
+            onSave={v => set({ description: v || null }, v ? "a card's description written by hand" : "a card's description taken off")} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** A placed card's filters and number look (dashboards v16; study R8, R9). Display only: what the card measures and its
+ *  unit stay the card's. */
+function CardLook({ p, set }: { p: Props; set: (patch: Props, note: string) => void }) {
   const look = (p.number ?? {}) as Look;
   const setLook = (patch: Look, note: string) => {
     const next = { ...look, ...patch };
@@ -284,20 +324,6 @@ function CardLook({ p, own, set }: { p: Props; own: string; set: (patch: Props, 
   };
   return (
     <div data-testid="card-look">
-      <Row label="Title" testid="card-look-title" right={
-        <label className="aug-fs-xs" style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--t2)" }}>
-          <Tick checked={p.show_title !== false} aria-label="Show the title"
-            onChange={e => set({ show_title: e.target.checked ? null : false }, e.target.checked ? "a card's title shown by hand" : "a card's title hidden by hand")} />
-          Shown
-        </label>}
-        hint={p.title ? `For this dashboard alone; the card's own is "${own}". Empty it to use that again.` : "The card's own. Write one for this dashboard alone."}>
-        <Words clearable label="Title" value={String(p.title ?? "")} placeholder={own} max={MAX_TITLE}
-          onSave={v => set({ title: v || null }, v ? "a card retitled on this dashboard by hand" : "a card's own title used again")} />
-      </Row>
-      <Row label="Description" testid="card-look-description">
-        <Words many clearable rows={2} label="Description" value={String(p.description ?? "")} placeholder="A line under the title" max={MAX_CARD_DESCRIPTION}
-          onSave={v => set({ description: v || null }, v ? "a card's description written by hand" : "a card's description taken off")} />
-      </Row>
       <Row label="Filters" testid="card-look-filters" hint="A card set apart keeps its whole figure while a reader filters the rest, and says so.">
         <label className="aug-fs-sm" style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--t1)" }}>
           <Tick checked={p.not_filtered === true} aria-label="Not cut by the dashboard's filters"
@@ -1224,13 +1250,14 @@ export function PieceSetup({ spec, selected, onChange, connectionId, schema, car
       )}
       {el.type === "Card" && (
         <div data-testid="card-panel">
-          {/* one panel for a card that opens on its look (the dashboards study, R6, 2026-11-18): how it is drawn first,
-              then what it reads and the statement it ran, each a fold below — they were tabs a click away */}
+          {/* one panel for a card, laid out as a widget (the user, 2026-11-19): its title and description, how it is drawn,
+              then its filters and look, and what it reads and the statement it ran, each a fold below */}
+          <CardWidget p={p} own={cardTitle?.(String(p.card ?? "")) ?? "the card's title"} set={set} />
           {cardChart?.(String(p.card ?? ""))}
           <div className="aug-fs-xs" data-testid="card-alt-click" style={{ padding: "8px 14px 0", color: "var(--t3)" }}>
             A click here chooses the card. Alt and a click on a mark tries the filter it makes for readers.
           </div>
-          <CardLook p={p} own={cardTitle?.(String(p.card ?? "")) ?? "the card's title"} set={set} />
+          <CardLook p={p} set={set} />
           <CardFilters p={p} set={set} spec={spec} connectionId={connectionId} />
           <ColumnLooks numbers={cardHolds?.(String(p.card ?? "")).numbers ?? []} p={p} set={set}
             hint="Each against every row the card holds. A bar runs the length of its value; a scale washes a cell from its column's lowest to its highest." />

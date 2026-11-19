@@ -1108,9 +1108,12 @@ describe("your own query on the dashboard (Arc AP-7)", () => {
     await screen.findByTestId("dashboard-builder");
     openLayout();
     fireEvent.click((await screen.findAllByTestId("builder-line")).find(l => l.dataset.key === "card-net")!);
+    // how it is drawn is its chart editor's, above; what it reads is folded below it, and a change to that is kept as a new card
+    expect(screen.getByTestId("query-chart-editor")).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("card-fold-reads"));
     const setup = await screen.findByTestId("query-setup");
-    fireEvent.click(within(setup).getByRole("radio", { name: /Line/ }));
+    expect(within(setup).queryByTestId("query-shown-as")).toBeNull();
+    fireEvent.change(within(setup).getByLabelText("Name"), { target: { value: "Net sales by day" } });
     fireEvent.click(within(setup).getByTestId("query-keep"));
     await waitFor(() => expect(api.keepDashboard).toHaveBeenCalled(), { timeout: 3000 });
     const [, , spec, note] = api.keepDashboard.mock.calls.at(-1)!;

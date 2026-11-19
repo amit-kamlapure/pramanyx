@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { QueryShaped } from "@/lib/api";
-import { queryChartSpec, seriesColours, xText } from "@/lib/dashboards/queryChart";
+import { queryChartSpec, queryLookOf, seriesColours, xText } from "@/lib/dashboards/queryChart";
 
 type Chart = Extract<QueryShaped, { as: "bar" | "line" | "area" | "scatter" }>;
 const COLOURS = { palette: ["#c1", "#c2", "#c3"], other: "#grey" };
@@ -228,5 +228,43 @@ describe("a query card's chart options (the study's R12)", () => {
     const spec = queryChartSpec(dated, setup(), COLOURS, null, undefined, { top: 1, sort: "label" });
     expect(new Set(xs(spec)).size).toBe(3);
     expect(spec.title).toBeUndefined();
+  });
+});
+
+describe("a query card's chart, dressed in the one editor (the user, 2026-11-19)", () => {
+  it("reads its look off the card's chart settings, and none from settings that hold none", () => {
+    expect(queryLookOf({ numberFormat: "$,.0f", xTitle: "Day", tooltipOff: true, legend: "none", refLines: [{ value: 5, label: "Goal", kind: "target" }] }))
+      .toEqual({ format: "$,.0f", xTitle: "Day", tooltip: false, legend: "none", refLines: [{ value: 5, label: "Goal" }] });
+    expect(queryLookOf({ yLog: true })).toBeNull();
+    expect(queryLookOf(null)).toBeNull();
+  });
+
+  it("writes its values in the chosen format and titles its axes", () => {
+    const [bars] = layers(queryChartSpec(chart("bar"), setup("stacked", true), COLOURS, null, undefined, null,
+      { format: "$,.0f", xTitle: "Day", yTitle: "Sales" }));
+    expect((bars.encoding.y.axis as Record<string, unknown>).format).toBe("$,.0f");
+    expect((bars.encoding.y.axis as Record<string, unknown>).title).toBe("Sales");
+    expect((bars.encoding.x.axis as Record<string, unknown>).title).toBe("Day");
+    const labels = layers(queryChartSpec(chart("bar"), setup("stacked", true), COLOURS, null, undefined, null, { format: "$,.0f" }))[1];
+    expect(labels.encoding.text.format).toBe("$,.0f");
+  });
+
+  it("draws no tooltip and no hover rule when the tooltip is off, and leaves the legend out when it is hidden", () => {
+    const off = queryChartSpec(chart("line"), setup(), COLOURS, null, undefined, null, { tooltip: false, legend: "none" });
+    const [line] = layers(off);
+    expect(line.encoding.tooltip).toBeUndefined();
+    expect(off.usermeta).toBeUndefined();
+    expect(line.encoding.color.legend).toBeNull();
+    const [bars] = layers(queryChartSpec(chart("bar"), setup(), COLOURS, null, undefined, null, { tooltip: false, legend: "bottom" }));
+    expect(bars.mark.tooltip).toBe(false);
+    expect((bars.encoding.color.legend as Record<string, unknown>).orient).toBe("bottom");
+  });
+
+  it("draws a reference line across the value axis with its label", () => {
+    const spec = queryChartSpec(chart("bar", false), setup(), COLOURS, null, undefined, null, { refLines: [{ value: 25, label: "Goal" }] });
+    const rule = layers(spec).find(l => l.mark.type === "rule");
+    const text = layers(spec).find(l => l.mark.type === "text" && (l as unknown as { data?: { values: { label?: string }[] } }).data?.values[0]?.label === "Goal");
+    expect(rule?.encoding.y).toEqual({ field: "v", type: "quantitative" });
+    expect(text).toBeDefined();
   });
 });
