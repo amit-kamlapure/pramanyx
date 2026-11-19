@@ -1104,9 +1104,9 @@ describe("your own query on the dashboard (Arc AP-7)", () => {
       api.getDashboard.mockResolvedValue({ ...READ, cards: [...READ.cards, queryCard("qdata")] });
       fireEvent.click(screen.getByTestId("chart-from-data-place"));
       await waitFor(() => expect(api.keepDashboard).toHaveBeenCalled());
-      // drawn first from the data's own columns: its date along the bottom, its number summed, its words as the colour
+      // drawn first from the data's own columns: its date along the bottom, its number summed; the colour is left for the person
       expect(api.keepDashboardQuery).toHaveBeenCalledWith("thelook", expect.objectContaining({ sql: "SELECT * FROM thelook.orders", title: "Orders",
-        shown: expect.objectContaining({ as: "line", x: "day", bucket: "day", split: "country", series: [{ column: "sales", agg: "sum" }] }) }));
+        shown: expect.objectContaining({ as: "line", x: "day", bucket: "day", split: "", series: [{ column: "sales", agg: "sum" }] }) }));
       const [, , kept, note] = api.keepDashboard.mock.calls.at(-1)!;
       expect(note).toBe("a chart built on a dataset by hand");
       const placed = Object.values((kept as { elements: Record<string, { type: string; props: Record<string, unknown> }> }).elements)

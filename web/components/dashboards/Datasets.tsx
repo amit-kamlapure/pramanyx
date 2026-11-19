@@ -229,6 +229,8 @@ export function DatasetsList({ spec, connectionId, onChange }: {
   );
 }
 
+const CAPTION = { color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em" } as const;
+
 /** The ways a chart built on a dataset may first be drawn; the chart editor changes it after, to any kind it offers. */
 export const CHART_KINDS: { value: QueryShownAs; label: string }[] = [
   { value: "bar", label: "Bar" }, { value: "line", label: "Line" }, { value: "area", label: "Area" },
@@ -259,7 +261,9 @@ export function ChartFromData({ spec, connectionId, busy = false, onChange, onMa
     try {
       const first = await previewDashboardQuery(connectionId, { sql: chosen.sql, shown: { ...QUERY_DEFAULT, as: "table" }, title: chosen.label });
       if (first.refused.length) { setProblem(first.refused); return; }
-      const shown = setupAs({ ...QUERY_DEFAULT, as: "table" }, as, first.columns ?? []);
+      // what runs along the bottom and what is measured are read from the columns; the colour is the person's to add, never
+      // a guess (on a table of rows the first words are often an id: a colour per order)
+      const shown = { ...setupAs({ ...QUERY_DEFAULT, as: "table" }, as, first.columns ?? []), split: "" };
       const { card } = await keepDashboardQuery(connectionId, { sql: chosen.sql, shown, title: chosen.label });
       onMade(card.id, chosen.label);
     } catch (e) {
@@ -289,8 +293,8 @@ export function ChartFromData({ spec, connectionId, busy = false, onChange, onMa
         </>
       ) : (
         <>
-          <div className="aug-fs-xs" style={{ display: "flex", flexDirection: "column", gap: 4, color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em" }}>
-            Dataset
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span className="aug-fs-xs" style={CAPTION}>Dataset</span>
             <SelectField aria-label="Dataset" data-testid="chart-dataset" value={chosenName} disabled={making} onChange={e => setName(e.target.value)}>
               {held.map(([n, d]) => <option key={n} value={n}>{d.label}</option>)}
             </SelectField>
@@ -301,14 +305,14 @@ export function ChartFromData({ spec, connectionId, busy = false, onChange, onMa
               <Button size="xs" variant="ghost" data-testid="chart-add-sql" disabled={making} onClick={() => setAdding("sql")}><Icon name="plus" /> Add SQL dataset</Button>
             </span>
           )}
-          <div className="aug-fs-xs" style={{ display: "flex", flexDirection: "column", gap: 4, color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em" }}>
-            Visualization
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span className="aug-fs-xs" style={CAPTION}>Visualization</span>
             <SelectField aria-label="Visualization" data-testid="chart-kind" value={as} disabled={making} onChange={e => setAs(e.target.value as QueryShownAs)}>
               {CHART_KINDS.map(k => <option key={k.value} value={k.value}>{k.label}</option>)}
             </SelectField>
           </div>
           <span className="aug-fs-sm" style={{ color: "var(--t2)", lineHeight: 1.45 }}>
-            Drawn first from {chosen?.label ?? "the data"}&rsquo;s own columns. Its X axis, Y axis and colour are then set in the panel, each a field of the data.
+            Drawn first from the columns of {chosen?.label ?? "the data"}. Its X axis, Y axis and colour are then set in the panel, each a field of the data.
           </span>
           {problem.length > 0 && (
             <ul className="aug-fs-sm" role="alert" data-testid="chart-from-data-refused" style={{ margin: 0, paddingLeft: 18, color: "var(--t1)" }}>
