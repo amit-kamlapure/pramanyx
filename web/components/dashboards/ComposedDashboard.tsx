@@ -55,7 +55,7 @@ import {
   ObjectFiltersPiece, ObjectTablePiece, PiecesProvider, ProcessBoardPiece, ValuesBar, chooseWords, useFiltering, usePieceFiltering, usePieces, useValueChips,
   type BarChip, type FilterProperty, type ObjectBarWords,
 } from "@/components/dashboards/OntologyPieces";
-import { FiltersShutStrip, GlobalFiltersColumn, useFiltersShut } from "@/components/dashboards/GlobalFilters";
+import { FiltersHead, FiltersShutStrip, GlobalFiltersColumn, useFiltersShut } from "@/components/dashboards/GlobalFilters";
 import { followsByValue, heldBy, openedWith, stillHeld, type GlobalFilterProps } from "@/lib/dashboards/globalFilters";
 import { ImageTile, NoteTile, type ImageStamp, type StaticDoors } from "@/components/dashboards/StaticTile";
 import { DropdownMenu } from "@radix-ui/themes";
@@ -305,6 +305,7 @@ function RootLayout({ element, children }: ComponentRenderProps<{ title: string 
   // header: the strip of dashboards above it already carries the name, and a panel does not
   // repeat its own title.
   const { elements, doors, selected } = useDashboard();
+  const shut = useFiltersShut();
   const firstKey = element.children?.[0] ?? "";
   const first = elements[firstKey];
   const [preview, setPreview] = useState<number | null>(null);
@@ -312,11 +313,23 @@ function RootLayout({ element, children }: ComponentRenderProps<{ title: string 
     // A dashboard made from a file: its filter column at the left, and every query card that reads the table narrowed by it
     const [queryColumn, ...others] = Children.toArray(children);
     const held = first.props as { table: string; w?: number | null };
+    if (shut) {
+      // put away, a button above the cards brings it back; the column stays mounted, it holds what the reader chose
+      return (
+        <QueryNarrowingProvider table={held.table}>
+          <div role="region" aria-label={element.props.title} data-testid="dashboard" style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
+            <QueryFiltersShut />
+            <div data-testid="dashboard-filter-column" hidden style={{ display: "none" }}>{queryColumn}</div>
+            <ValuesBar spaced={false} /><FilteredBy /><FirstPageDoor />{others}
+          </div>
+        </QueryNarrowingProvider>
+      );
+    }
     return (
       <QueryNarrowingProvider table={held.table}>
         <div role="region" aria-label={element.props.title} data-testid="dashboard"
           style={{ display: "grid", gridTemplateColumns: `${(held.w ?? null) ? (held.w as number) * GRADE : FILTER_COLUMN}px minmax(0, 1fr)`, gap: 14, alignItems: "start" }}>
-          <div data-testid="dashboard-filter-column" style={{ alignSelf: "stretch", minWidth: 0 }}>{queryColumn}</div>
+          <div data-testid="dashboard-filter-column" style={{ alignSelf: "stretch", minWidth: 0 }}><FiltersHead />{queryColumn}</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}><ValuesBar spaced={false} /><FilteredBy /><FirstPageDoor />{others}</div>
         </div>
       </QueryNarrowingProvider>
@@ -329,6 +342,20 @@ function RootLayout({ element, children }: ComponentRenderProps<{ title: string 
   // what is chosen and how many objects that leaves (the rules hold the column to the root's first child, once).
   const [column, ...rest] = Children.toArray(children);
   const props = first.props as { entity: string; properties: FilterProperty[]; w?: number | null; set?: string | null };
+  if (shut) {
+    return (
+      <div role="region" aria-label={element.props.title} data-testid="dashboard" style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
+        <ObjectFiltersShut />
+        <div data-testid="dashboard-filter-column" hidden style={{ display: "none" }}>{column}</div>
+        <ValuesBar spaced={false} />
+        <ObjectFilterWords entity={props.entity} properties={props.properties} set={props.set}>
+          {said => <FilteredBy objects={said} />}
+        </ObjectFilterWords>
+        <FirstPageDoor />
+        {rest}
+      </div>
+    );
+  }
   // Arc AP-1 — its width in grades of 40 px, when a person set one; else as it was drawn before
   const grades = preview ?? props.w ?? null;
   const width = grades ? grades * GRADE : FILTER_COLUMN;
@@ -339,6 +366,7 @@ function RootLayout({ element, children }: ComponentRenderProps<{ title: string 
         onPointerDownCapture={doors.onSelect ? () => doors.onSelect?.(firstKey) : undefined}
         style={{ position: "relative", alignSelf: "stretch", minWidth: 0, borderRadius: "var(--r3)",
           outline: selected === firstKey ? "2px solid var(--accent)" : undefined, outlineOffset: 2 }}>
+        <FiltersHead />
         {column}
         {doors.onFilterWidth && (
           <WidthHandle from={grades ?? Math.round(FILTER_COLUMN / GRADE)} onPreview={setPreview}
@@ -355,6 +383,19 @@ function RootLayout({ element, children }: ComponentRenderProps<{ title: string 
       </div>
     </div>
   );
+}
+
+/** The button above the cards of a dashboard made from a file, once its filters are put away: how many columns hold a choice. */
+function QueryFiltersShut() {
+  const { narrowing } = useQueryNarrowing();
+  return <FiltersShutStrip held={narrowing.length} />;
+}
+
+/** The same above a dashboard started from an object: how many of its properties hold a choice. */
+function ObjectFiltersShut() {
+  const { filters } = usePieces();
+  const held = Object.values(filters).reduce((n, props) => n + Object.values(props).filter(v => v.length > 0).length, 0);
+  return <FiltersShutStrip held={held} />;
 }
 
 /** The dashboard's pages as a reader may open them, in order: a page hidden from readers is drawn only in the builder. */

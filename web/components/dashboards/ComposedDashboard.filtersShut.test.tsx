@@ -18,7 +18,8 @@ import type { StoredCard } from "@/lib/api";
 import type { DashboardFocus } from "@/lib/dashboards/focus";
 
 const dashboardFilterValues = vi.hoisted(() => vi.fn(async () => ({ values: [{ value: "Movie", n: 6131 }], more: false })));
-vi.mock("@/lib/api", async (original) => ({ ...(await original<typeof import("@/lib/api")>()), dashboardFilterValues }));
+const previewDashboardQuery = vi.hoisted(() => vi.fn(async () => ({ refused: [], rows: [["Search", 4], ["Email", 3]] })));
+vi.mock("@/lib/api", async (original) => ({ ...(await original<typeof import("@/lib/api")>()), dashboardFilterValues, previewDashboardQuery }));
 vi.mock("@/components/dashboards/DashboardTile", async (original) => ({
   ...(await original<typeof import("@/components/dashboards/DashboardTile")>()),
   DashboardTile: ({ cs }: { cs: CardState }) => <div>{cs.card.title}</div>,
@@ -71,3 +72,19 @@ describe("a card whose own window gave way to the dates chosen (2026-11-19)", ()
     expect(marks[0]).toHaveAttribute("aria-label", own);
   });
 });
+
+describe("the filter column of a dashboard made from a file", () => {
+  it("is put away the same way, to a button above the cards, and comes back", () => {
+    const spec = JSON.parse(readFileSync(resolve(process.cwd(), "lib/dashboards/premise.fixture.json"), "utf8"));
+    spec.elements.qf = { type: "QueryFilters", props: { table: "orders", columns: [{ column: "channel", label: "Channel" }] }, children: [] };
+    spec.elements[spec.root].children = ["qf", ...spec.elements[spec.root].children];
+    render(<ComposedDashboard spec={spec} cards={CARDS} host={HOST} doors={{ onRefresh: vi.fn() }} />);
+    expect(screen.getByTestId("query-filters")).toBeVisible();
+    fireEvent.click(screen.getByTestId("global-filters-hide"));
+    expect(screen.getByTestId("global-filters-shut")).toBeInTheDocument();
+    expect(screen.getByTestId("query-filters")).not.toBeVisible();          // still mounted: it holds what was chosen
+    act(() => { fireEvent.click(screen.getByTestId("global-filters-show")); });
+    expect(screen.getByTestId("query-filters")).toBeVisible();
+  });
+});
+

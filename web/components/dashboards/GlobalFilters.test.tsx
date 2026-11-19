@@ -175,6 +175,21 @@ describe("multiple values as a dropdown (the user, 2026-11-19)", () => {
     expect(asked(onFocus)).toEqual([{ table: "titles", column: "type", value: "", op: "in", values: ["TV Show"] }]);
   });
 
+  it("leaves out the values ticked when Exclude is chosen, and says so", async () => {
+    const onFocus = draw(P({}));
+    fireEvent.click(await screen.findByRole("radio", { name: "Exclude" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "TV Show" }));
+    expect(asked(onFocus)).toEqual([{ table: "titles", column: "type", value: "", op: "not_in", values: ["TV Show"] }]);
+    expect(heldWords(["TV Show"], true)).toBe("Not TV Show");
+    expect(focusWords({ table: "titles", column: "type", value: "", op: "not_in", values: ["TV Show"], label: "Type" })).toBe("Type: not TV Show");
+  });
+
+  it("offers no Exclude on a filter that feeds a dashboard value: every value but some names none", async () => {
+    draw(P({ parameter: "picked" }));
+    await screen.findByRole("checkbox", { name: "TV Show" });
+    expect(screen.queryByRole("radio", { name: "Exclude" })).toBeNull();
+  });
+
   it("says what it holds in one line", () => {
     expect(heldWords([])).toBe("All");
     expect(heldWords(["Brasil", "China"])).toBe("Brasil, China");

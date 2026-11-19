@@ -379,3 +379,19 @@ def test_a_date_filter_replaces_the_cards_own_window_and_says_so_a_value_filter_
     country = Focus(table="order_items", column="status", op="in", values=["Complete"])
     sql, said = cut_statement(OPERATIONS_RETURN_RATE, [country], "bigquery")
     assert said["applied"] and "own_window" not in said and "CURRENT_DATE" in sql
+
+
+def test_a_filter_can_keep_every_value_but_those_chosen_and_keeps_rows_with_none():
+    # v20 Include / Exclude (the user, 2026-11-19): "everything but these", the rows with no value among them
+    import duckdb
+
+    from pramanyx.dashboards.focus import Focus, cut_statement
+
+    con = duckdb.connect()
+    con.execute("CREATE TABLE users AS SELECT * FROM (VALUES (1, 'China'), (2, 'Japan'), (3, NULL), (4, 'Brasil')) t(id, country)")
+    f = Focus(table="users", column="country", op="not_in", values=["China", "Japan"])
+    sql, said = cut_statement("SELECT COUNT(*) FROM users", [f], "duckdb")
+    assert said["applied"] and said["by"] == ["country not in China, Japan"]
+    assert con.execute(sql).fetchone()[0] == 2                  # Brasil, and the row with no country
+    with pytest.raises(ValueError):
+        Focus(table="users", column="country", op="not_in", values=[])

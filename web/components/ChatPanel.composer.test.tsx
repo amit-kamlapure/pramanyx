@@ -4,7 +4,7 @@
  * offers the connection's tables and metrics, read only once one is started; a command at the start changes how the next
  * question is answered; ↑ in an empty box brings back what was asked. The chat transport is a double: no network.
  */
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -80,10 +80,9 @@ describe("the Ask composer", () => {
     const { box } = await panel();
     expect(api.getSchemaRich).not.toHaveBeenCalled();
     type(box, "How many rows in @ord");
-    await act(async () => {});
-    type(box, "How many rows in @ord");                     // the objects have arrived
-    const offers = screen.getAllByTestId("composer-offer").map(o => o.textContent);
-    expect(offers).toEqual(["main.orderstable", "main.order_itemstable"]);
+    // the list appears once the objects arrive, with no further keystroke
+    await waitFor(() => expect(screen.getAllByTestId("composer-offer").map(o => o.textContent))
+      .toEqual(["main.orderstable", "main.order_itemstable"]));
     fireEvent.keyDown(box, { key: "ArrowDown" });
     fireEvent.keyDown(box, { key: "Tab" });
     expect(box.value).toBe("How many rows in @main.order_items ");

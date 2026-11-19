@@ -55,7 +55,7 @@ export function fits(kind: GlobalFilterKind, column: "number" | "date" | "time" 
 }
 
 export type FilterChoice =
-  | { kind: "multi"; values: FocusValue[] } | { kind: "single"; value: FocusValue } | { kind: "date"; day: string; preset?: DatePreset }
+  | { kind: "multi"; values: FocusValue[]; exclude?: boolean } | { kind: "single"; value: FocusValue } | { kind: "date"; day: string; preset?: DatePreset }
   | { kind: "date_range"; low: string; high: string; preset?: DatePreset } | { kind: "text"; words: string } | { kind: "range"; low: number; high: number };
 
 /** What a reader's choice asks of the cards; null when it asks nothing, and the filter stands at All. */
@@ -64,7 +64,8 @@ export function focusOfChoice(key: string, p: GlobalFilterProps, choice: FilterC
   const base = { table: p.table, column: p.column, value: "" as FocusValue, label: p.title || undefined, source: { card: filterSource(key), field: p.column },
     ...(p.page ? { page: p.page } : {}) };
   switch (choice.kind) {
-    case "multi": return choice.values.length ? { ...base, op: "in", values: choice.values } : null;
+    // v20 Include / Exclude: every value but the ones ticked, when the reader excludes them
+    case "multi": return choice.values.length ? { ...base, op: choice.exclude ? "not_in" : "in", values: choice.values } : null;
     case "single": return { ...base, value: choice.value };
     case "date": {
       if (choice.preset) { const { low, high } = rangeOfPreset(choice.preset); return { ...base, op: "dates", low, high, preset: choice.preset }; }
@@ -125,6 +126,8 @@ export function narrowedBy(focus: DashboardFocus[], key: string, p: GlobalFilter
  *  than the value can hold, and the value goes back to its own. */
 export function parameterValue(held: DashboardFocus | null, kind?: string): unknown {
   if (!held) return undefined;
+  // "every value but these" names no value to hand on
+  if (held.op === "not_in") return undefined;
   const said = held.op === "in" ? held.values : held.op === "dates" ? held.low ?? held.high ?? undefined : held.op === "between" ? held.low ?? undefined : held.value;
   if (!kind || said === undefined || said === null) return said ?? undefined;
   if (kind === "list") return Array.isArray(said) ? said : [said];

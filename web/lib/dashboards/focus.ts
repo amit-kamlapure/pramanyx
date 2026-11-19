@@ -12,7 +12,7 @@ export type FocusValue = string | number | boolean;
 /** One value clicked on a mark; or, from a global filter (v19), several values, a range of numbers or days, or words. */
 export interface FocusOn {
   table: string; column: string; value: FocusValue;
-  op?: "eq" | "in" | "between" | "dates" | "contains";
+  op?: "eq" | "in" | "not_in" | "between" | "dates" | "contains";
   values?: FocusValue[];
   low?: string | number | null;
   high?: string | number | null;
@@ -111,7 +111,10 @@ export async function traceAndChoose(
 
 export function focusWords(f: FocusOn & { label?: string }): string {
   const name = f.label || f.column.replace(/_/g, " ");
-  if (f.op === "in") return `${name}: ${(f.values ?? []).slice(0, 3).map(String).join(", ")}${(f.values?.length ?? 0) > 3 ? ` +${(f.values?.length ?? 0) - 3}` : ""}`;
+  if (f.op === "in" || f.op === "not_in") {
+    const listed = `${(f.values ?? []).slice(0, 3).map(String).join(", ")}${(f.values?.length ?? 0) > 3 ? ` +${(f.values?.length ?? 0) - 3}` : ""}`;
+    return f.op === "not_in" ? `${name}: not ${listed}` : `${name}: ${listed}`;
+  }
   if (f.op === "contains") return `${name}: “${String(f.value)}”`;
   if ((f as DashboardFocus).preset) return `${name}: ${PRESET_WORDS[(f as DashboardFocus).preset as DatePreset]}`;
   if (f.op === "between" || f.op === "dates") {

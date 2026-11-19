@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
+import { Segmented } from "@/components/ui/segmented";
 import { SelectField } from "@/components/ui/select";
 import { dashboardFilterValues, type FilterValues } from "@/lib/api";
 import { MAX_GLOBAL_FILTERS } from "@/lib/dashboards/catalog";
@@ -54,21 +55,32 @@ function ValueList({ p, connectionId, held, choose, narrow }: Control) {
   const { got, problem } = useValues(connectionId, String(p.table), String(p.column), narrow);
   const [term, setTerm] = useState("");
   const picked = held?.values ?? [];
+  // v20 Include / Exclude (the user, 2026-11-19): keep the values ticked, or every value but them. A filter that feeds a
+  // dashboard value only includes: "every value but these" names no value to hand on.
+  const excludes = !p.parameter;
+  const [exclude, setExclude] = useState(held?.op === "not_in");
+  useEffect(() => { if (held) setExclude(held.op === "not_in"); }, [held?.op]); // eslint-disable-line react-hooks/exhaustive-deps -- follows what is held
+  const pick = (values: FocusValue[], out = exclude) => choose({ kind: "multi", values, ...(out && excludes ? { exclude: true } : {}) });
   if (problem) return <Note>{problem}</Note>;
   if (!got) return <Note>Reading…</Note>;
   const q = term.trim().toLowerCase();
   // what a reader ticked stays on the list, even once another filter leaves none of it
   const listed = [...got.values, ...picked.filter(v => !got.values.some(x => x.value === v)).map(value => ({ value, n: 0 }))];
   const shown = listed.filter(v => !q || String(v.value).toLowerCase().includes(q));
-  const flip = (v: FocusValue) => choose({ kind: "multi", values: picked.includes(v) ? picked.filter(x => x !== v) : [...picked, v] });
-  const allShown = () => choose({ kind: "multi", values: [...new Set([...picked, ...shown.map(v => v.value)])].slice(0, MOST_VALUES) });
+  const flip = (v: FocusValue) => pick(picked.includes(v) ? picked.filter(x => x !== v) : [...picked, v]);
+  const allShown = () => pick([...new Set([...picked, ...shown.map(v => v.value)])].slice(0, MOST_VALUES));
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      {excludes && (
+        <Segmented label={`${p.title || p.column}: keep or leave out the values ticked`} value={exclude ? "exclude" : "include"}
+          onChange={v => { const out = v === "exclude"; setExclude(out); if (picked.length) pick(picked, out); }}
+          options={[{ value: "include", label: "Include" }, { value: "exclude", label: "Exclude" }]} />
+      )}
       {got.values.length > 8 && <Input type="search" aria-label={`Find a value of ${p.title || p.column}`} placeholder="Find a value" value={term} onChange={e => setTerm(e.target.value)} />}
       {shown.length > 1 && (
         <div style={{ display: "flex", gap: 4 }}>
           <Button size="xs" variant="ghost" data-testid="global-filter-select-all" onClick={allShown}>{q ? "Select all matching" : "Select all"}</Button>
-          {picked.length > 0 && <Button size="xs" variant="ghost" data-testid="global-filter-select-none" onClick={() => choose({ kind: "multi", values: [] })}>Clear</Button>}
+          {picked.length > 0 && <Button size="xs" variant="ghost" data-testid="global-filter-select-none" onClick={() => pick([])}>Clear</Button>}
         </div>
       )}
       <div style={{ maxHeight: 220, overflowY: "auto" }}>
@@ -85,11 +97,12 @@ function ValueList({ p, connectionId, held, choose, narrow }: Control) {
   );
 }
 
-/** What a dropdown says it holds, in one line: All, the values, or the first two and how many more. */
-export function heldWords(picked: FocusValue[]): string {
+/** What a dropdown says it holds, in one line: All, the values, or the first two and how many more — "Not …" when they are
+ *  the ones left out. */
+export function heldWords(picked: FocusValue[], exclude = false): string {
   if (!picked.length) return "All";
-  if (picked.length <= 2) return picked.map(String).join(", ");
-  return `${String(picked[0])}, ${String(picked[1])} +${formatCount(picked.length - 2)}`;
+  const listed = picked.length <= 2 ? picked.map(String).join(", ") : `${String(picked[0])}, ${String(picked[1])} +${formatCount(picked.length - 2)}`;
+  return exclude ? `Not ${listed}` : listed;
 }
 
 /** Multiple values in one line, as a dropdown (the user, 2026-11-19: it "takes less space and gives a better UX"). The
@@ -97,7 +110,7 @@ export function heldWords(picked: FocusValue[]): string {
 function MultiDropdown(props: Control) {
   const [open, setOpen] = useState(false);
   const picked = props.held?.values ?? [];
-  const words = heldWords(picked);
+  const words = heldWords(picked, props.held?.op === "not_in");
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger>
@@ -277,6 +290,24 @@ export function FiltersShutStrip({ held }: { held: number }) {
   );
 }
 
+/** The control that puts a filters column away; every filters column a dashboard draws carries it. */
+export function FiltersHideButton() {
+  return (
+    <Button size="icon-xs" variant="ghost" aria-label="Put the filters away" title="Put the filters away · they keep what they hold"
+      data-testid="global-filters-hide" onClick={() => shutFilters(true)}><Icon name="chevl" size={14} /></Button>
+  );
+}
+
+/** The head of a filters column that draws none of its own: its name, and the way to put it away. */
+export function FiltersHead() {
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", minHeight: 24, marginBottom: 8 }}>
+      <span className="aug-fs-ui" style={{ color: "var(--t1)", fontWeight: 600 }}>Filters</span>
+      <FiltersHideButton />
+    </div>
+  );
+}
+
 export function GlobalFiltersColumn({ filters, connectionId, focus, onFocus, building, selected, onChoose, onAdd, applyButton = false, page = null, onParameter, valueKinds }: {
   filters: { key: string; props: GlobalFilterProps }[];
   connectionId?: string;
@@ -329,8 +360,7 @@ export function GlobalFiltersColumn({ filters, connectionId, focus, onFocus, bui
             <Button size="icon-xs" variant="ghost" aria-label="Add a global filter" title="Add a global filter" data-testid="global-filter-add"
               disabled={filters.length >= MAX_GLOBAL_FILTERS} onClick={onAdd}><Icon name="plus" size={14} /></Button>
           )}
-          <Button size="icon-xs" variant="ghost" aria-label="Put the filters away" title="Put the filters away · they keep what they hold"
-            data-testid="global-filters-hide" onClick={() => shutFilters(true)}><Icon name="chevl" size={14} /></Button>
+          <FiltersHideButton />
         </span>
       </div>
       {shown.map(({ key, props: p }) => {

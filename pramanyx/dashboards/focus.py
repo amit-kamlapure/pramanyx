@@ -46,7 +46,7 @@ class Focus(BaseModel):
     table: str = Field(min_length=1, max_length=200)
     column: str = Field(min_length=1, max_length=200, pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
     value: Union[str, int, float, bool] = ""
-    op: Literal["eq", "in", "between", "dates", "contains"] = "eq"
+    op: Literal["eq", "in", "not_in", "between", "dates", "contains"] = "eq"
     values: list[Union[str, int, float, bool]] = Field(default_factory=list, max_length=MAX_FOCUS_VALUES)
     low: Optional[Union[str, int, float]] = None
     high: Optional[Union[str, int, float]] = None
@@ -56,7 +56,7 @@ class Focus(BaseModel):
 
     @model_validator(mode="after")
     def holds_what_its_op_reads(self) -> "Focus":
-        if self.op == "in" and not self.values:
+        if self.op in ("in", "not_in") and not self.values:
             raise ValueError("a filter of several values holds at least one")
         if self.op in ("between", "dates") and self.low is None and self.high is None:
             raise ValueError("a range says where it starts or where it ends")
@@ -150,6 +150,9 @@ def condition_of(f: Focus) -> Any:
     col = exp.column(f.column)
     if f.op == "in":
         return col.isin(*[_literal(v) for v in f.values])
+    if f.op == "not_in":
+        # every value but these (v20, the user, 2026-11-19: "Include / Exclude"); a row with no value is none of them, and stays
+        return exp.or_(exp.not_(col.isin(*[_literal(v) for v in f.values])), exp.Is(this=col.copy(), expression=exp.Null()))
     if f.op == "contains":
         said = str(f.value).strip()
         side = exp.cast(col, "TEXT") if f.case_sensitive else exp.Lower(this=exp.cast(col, "TEXT"))
@@ -174,8 +177,9 @@ def predicate(column: str, value: Any, dialect: Optional[str]) -> str:
 
 
 def words(f: Focus) -> str:
-    if f.op == "in":
-        return f"{f.column} in {', '.join(str(v) for v in f.values[:5])}" + (f" and {len(f.values) - 5} more" if len(f.values) > 5 else "")
+    if f.op in ("in", "not_in"):
+        return f"{f.column} {'not in' if f.op == 'not_in' else 'in'} {', '.join(str(v) for v in f.values[:5])}" + \
+            (f" and {len(f.values) - 5} more" if len(f.values) > 5 else "")
     if f.op == "contains":
         how = {"exact": "is exactly", "starts_with": "starts with"}.get(f.match, "contains")
         return f"{f.column} {how} {f.value}"
