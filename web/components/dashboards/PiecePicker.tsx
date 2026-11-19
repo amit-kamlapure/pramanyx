@@ -1,9 +1,10 @@
 "use client";
 
 /**
- * Every piece a dashboard may hold, by what it is for (Arc AP-4; design-mockups/cockpit-builder.html screen 5) — the door
- * that lets a person build the dispatch desk by hand: a figure, a chart and the filter column were placed only by the
- * starter before it (the scenarios on theLook, 2026-10-11).
+ * What a box set down on the canvas is (the user, 2026-11-19: place a box first, "then I choose what kind of chart, filter or
+ * text or picture" — no static list in the panel): one dropdown of every piece the box's kind may be, by what it is for,
+ * then "Place it here". Before, this was a list a person chose from first (Arc AP-4; design-mockups/cockpit-builder.html
+ * screen 5); every piece it offered is still offered, now in the dropdown of the box it suits.
  *
  * A piece is placed in the section a person chose — the empty one whose "Add a piece" they pressed, or the one chosen in
  * the builder — reading the entity or the set named above the list, with what the ontology offers as its first setup:
@@ -17,11 +18,11 @@ import {
 } from "@/components/dashboards/PieceSetup";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
-import { Input } from "@/components/ui/input";
 import { SelectField } from "@/components/ui/select";
+import { FILTER_TYPES, propsOfType } from "@/lib/dashboards/globalFilters";
 import { CHART_DAYS, MAX_FILTERS, MAX_LABEL, MAX_TABLE_COLUMNS } from "@/lib/dashboards/catalog";
 import {
-  addDrawer, addGlobalFilter, freshWireName, nameByPiece, placeFilterColumn, placePiece, putSet, sectionsOf, type DashboardSpec,
+  addDrawer, addGlobalFilter, freshWireName, nameByPiece, placeFilterColumn, placeGlobalFilterIn, placePiece, putSet, sectionsOf, type DashboardSpec,
 } from "@/lib/dashboards/edit";
 import { choicesOf, isRefused, readSet } from "@/lib/dashboards/sets";
 import { withUniqueKeys } from "@/lib/listKeys";
@@ -38,7 +39,7 @@ type Placed = "ObjectTable" | "ObjectDetail" | "ObjectFigure" | "ObjectChart" | 
 /** "Linked" places two things: a set of what the chosen object links to, and a table of it; a drawer is the dashboard's own,
  *  holding a detail of the object it opens on. */
 type Kind = Placed | "ObjectFilters" | "GlobalFilter" | "Linked" | "Drawer" | HandOff;
-interface Entry { kind: Kind; label: string; says: string }
+interface Entry { kind: Kind; label: string; says: string; type?: string }
 const GROUPS: { group: string; pieces: Entry[] }[] = [
   { group: "Show objects", pieces: [
     { kind: "ObjectTable", label: "Objects table", says: "Rows of a set; a click chooses, a tick collects." },
@@ -93,8 +94,13 @@ function firstEntity(spec: DashboardSpec): string {
   return "";
 }
 
-/** Which of the groups the canvas toolbar asked for: a chart (what measures, and what shows objects), a filter, or all. */
+/** Which of the groups a box offers: a chart's (what measures, and what shows objects), a filter's, or every one. */
 const ONLY: Record<"chart" | "filter", string[]> = { chart: ["Measure", "Show objects"], filter: ["Filter"] };
+
+/** A global filter, offered by its type — single value, multiple values, a date, a range… — as a filter box is set up. */
+const BY_TYPE: Entry[] = FILTER_TYPES.map(t => ({ kind: "GlobalFilter" as const, type: t.value, label: t.label,
+  says: "Cuts every card it can reach. Its field is chosen next, in its own setup." }));
+const idOf = (e: Entry) => (e.type ? `${e.kind}:${e.type}` : e.kind);
 
 export function PiecePicker({ spec, section, connectionId, schema, onPlace, onHandOff, onClose, only }: {
   spec: DashboardSpec;
@@ -109,13 +115,10 @@ export function PiecePicker({ spec, section, connectionId, schema, onPlace, onHa
   onClose: () => void;
 }) {
   const target = section ?? sectionsOf(spec)[0]?.key ?? null;
-  const [every, setEvery] = useState(false);
-  const groups = only && only !== "all" && !every ? ONLY[only] : null;
-  const sectionTitle = target ? String(spec.elements[target]?.props.title ?? "the section") : "";
+  const groups = only && only !== "all" ? ONLY[only] : null;
   const [entities, setEntities] = useState<{ value: string; label: string }[]>([]);
   const [entity, setEntity] = useState(() => firstEntity(spec));
   const [reads, setReads] = useState("");                       // "" — every object of the entity; else a set's name
-  const [find, setFind] = useState("");
   const [fields, setFields] = useState<{ entity: string; f: EntityFields } | null>(null);
   const [actions, setActions] = useState<DeclaredAction[] | null>(null);
   const [processes, setProcesses] = useState<{ id: string; entity: string }[] | null>(null);
@@ -279,7 +282,10 @@ export function PiecePicker({ spec, section, connectionId, schema, onPlace, onHa
     const p = plan(e.kind);
     if (p.why || !p.props) return;
     let next: DashboardSpec | null = null;
-    if (e.kind === "GlobalFilter") next = addGlobalFilter(spec).spec;
+    // a filter box's global filter is placed in the box's section, of the type chosen; one asked for nowhere goes to the column
+    if (e.kind === "GlobalFilter") {
+      next = target ? placeGlobalFilterIn(spec, target, { ...propsOfType(e.type ?? "multi"), title: "Filter" }).spec : addGlobalFilter(spec).spec;
+    }
     else if (e.kind === "ObjectFilters") next = placeFilterColumn(spec, p.props).spec;
     else if (e.kind === "Drawer") {
       const on = String(p.props.opens_on);
@@ -307,29 +313,23 @@ export function PiecePicker({ spec, section, connectionId, schema, onPlace, onHa
     onClose();
   };
 
-  const shown = useMemo(() => {
-    const q = find.trim().toLowerCase();
-    // in the order asked: a chart's list opens on what measures, then what shows objects
-    return (groups ? groups.flatMap(name => GROUPS.filter(g => g.group === name)) : GROUPS)
-      .map(g => ({ ...g, pieces: g.pieces.filter(p => !q || `${p.label} ${p.says}`.toLowerCase().includes(q)) }))
-      .filter(g => g.pieces.length);
-  }, [find, groups]);
-
-  // drawn in the builder's setup panel, beside the dashboard it adds to — no longer a dialog over it (the dashboards
-  // study, R2, 2026-11-18): a person sees where the piece goes while choosing it
-  const heading = groups && only === "chart" ? "Add a chart" : groups && only === "filter" ? "Add a filter" : "Add a piece";
+  // every piece the box may be, in the order asked (a chart's opens on what measures, then what shows objects); a filter's
+  // global filter by each of its types
+  const entries = useMemo(() => (groups ? groups.flatMap(name => GROUPS.filter(g => g.group === name)) : GROUPS)
+    .flatMap(g => g.pieces.flatMap(p => (p.kind === "GlobalFilter" ? BY_TYPE : [p])).map(p => ({ ...p, group: g.group }))), [groups]);
+  const [pick, setPick] = useState(() => idOf(entries[0] ?? GROUPS[0].pieces[0]));
+  const chosenEntry = entries.find(e => idOf(e) === pick) ?? entries[0];
+  const why = !chosenEntry ? "" : HANDED.includes(chosenEntry.kind) ? (target ? "" : "There is no section to place it in.")
+    : plan(chosenEntry.kind as Placed | "ObjectFilters" | "GlobalFilter" | "Linked" | "Drawer").why;
+  // what the piece reads is asked only of a piece that reads objects
+  const readsObjects = !!chosenEntry && !HANDED.includes(chosenEntry.kind) && !["GlobalFilter", "ProcessBoard", "ActionButtons", "ObjectDetail", "Drawer"].includes(chosenEntry.kind);
   return (
-    <div data-testid="piece-picker" role="region" aria-label={heading}
+    <div data-testid="piece-picker" role="region" aria-label="What this box is"
       style={{ display: "flex", flexDirection: "column", gap: 10, padding: "12px 14px" }}>
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: 600 }}>{heading}</div>
-            <div className="aug-fs-xs" style={{ color: "var(--t3)", marginTop: 2 }}>
-              {target ? `To ${sectionTitle}.` : "To the dashboard."} Its setup changes the rest after.
-            </div>
-          </div>
-          <Button size="icon-sm" variant="ghost" aria-label="Close" data-testid="piece-picker-close" onClick={onClose}><Icon name="close" size={14} /></Button>
-        </div>
+      <SelectField aria-label="What it is" data-testid="piece-picker-kind" value={pick} onChange={e => setPick(e.target.value)}>
+        {withUniqueKeys(entries, idOf).map(([k, e]) => <option key={k} value={idOf(e)}>{groups && groups.length === 1 ? e.label : `${e.group} · ${e.label}`}</option>)}
+      </SelectField>
+      {readsObjects && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
           <SelectField aria-label="What it reads" value={entity} onChange={e => { setEntity(e.target.value); setReads(""); }}>
             {!entity && <option value="">Choose an entity</option>}
@@ -343,35 +343,18 @@ export function PiecePicker({ spec, section, connectionId, schema, onPlace, onHa
             </SelectField>
           )}
         </div>
-        <Input aria-label="Find a piece" placeholder="Find a piece" value={find} onChange={e => setFind(e.target.value)} />
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {withUniqueKeys(shown, g => g.group).map(([gk, g]) => (
-            <div key={gk}>
-              <div className="aug-fs-xs" style={{ color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em", margin: "2px 0 4px" }}>{g.group}</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 6 }}>
-                {withUniqueKeys(g.pieces, e => e.kind).map(([ek, e]) => {
-                  const p = HANDED.includes(e.kind) ? { why: target ? "" : "There is no section to place it in." } : plan(e.kind as Placed | "ObjectFilters" | "GlobalFilter" | "Linked" | "Drawer");
-                  return (
-                    <Button key={ek} variant="outline" data-testid="piece-picker-entry" data-kind={e.kind} disabled={!!p.why}
-                      title={p.why || e.says} onClick={() => place(e)}
-                      style={{ height: "auto", justifyContent: "flex-start", textAlign: "left", padding: "8px 10px", whiteSpace: "normal" }}>
-                      <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
-                        <span className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: 500 }}>{e.label}</span>
-                        <span className="aug-fs-xs" data-testid="piece-picker-says" style={{ color: "var(--t3)" }}>{p.why || e.says}</span>
-                      </span>
-                    </Button>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-          {!shown.length && <div className="aug-fs-sm" style={{ color: "var(--t3)" }}>No piece is called that. <Icon name="search" size={12} /></div>}
+      )}
+      {chosenEntry && (
+        <div className="aug-fs-sm" data-testid="piece-picker-says" style={{ color: why ? "var(--amb4)" : "var(--t2)", lineHeight: 1.45 }}>
+          {why || chosenEntry.says}
         </div>
-        {groups && (
-          <Button size="xs" variant="ghost" data-testid="piece-picker-every" onClick={() => setEvery(true)} style={{ alignSelf: "flex-start" }}>
-            Every piece
-          </Button>
-        )}
+      )}
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <Button size="sm" data-testid="piece-picker-place" disabled={!chosenEntry || !!why} onClick={() => chosenEntry && place(chosenEntry)}>
+          <Icon name="check" size={14} /> {chosenEntry && HANDED.includes(chosenEntry.kind) ? "Set it up" : "Place it here"}
+        </Button>
+        <Button size="sm" variant="ghost" data-testid="piece-picker-close" onClick={onClose}>Cancel</Button>
+      </div>
     </div>
   );
 }

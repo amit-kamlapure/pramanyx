@@ -450,7 +450,7 @@ describe("the ontology's pieces (Arc OC-4)", () => {
       s.elements.d1.children = [];
       const section = Object.keys(s.elements).find(k => s.elements[k].type === "Section") as string;
       (s.elements[section].children as string[]).push("a1");
-    })).toContain('holds "a1". A Section holds: Card, Note, Image, ProcessBoard, ObjectTable, ObjectDetail, ObjectFigure, ObjectChart, ObjectBreakdown, ActionButtons, ObjectList, ObjectMap, ObjectTimeline, ChooseOne, ObjectSearch, Question, ScenarioInputs, AddRow, Period, Section.');
+    })).toContain('holds "a1". A Section holds: Card, Note, Image, ProcessBoard, ObjectTable, ObjectDetail, ObjectFigure, ObjectChart, ObjectBreakdown, ActionButtons, ObjectList, ObjectMap, ObjectTimeline, ChooseOne, ObjectSearch, Question, ScenarioInputs, AddRow, Period, GlobalFilter, Section.');
   });
 
   it("refuses an expression where an id belongs, as for every prop", () => {
@@ -510,7 +510,7 @@ describe("a dashboard started from an object (2026-10-10)", () => {
 
   it("refuses a filter column inside a section", () => {
     expect(refused(s => placed(s, "f1", structuredClone(FILTERS))))
-      .toContain('holds "f1". A Section holds: Card, Note, Image, ProcessBoard, ObjectTable, ObjectDetail, ObjectFigure, ObjectChart, ObjectBreakdown, ActionButtons, ObjectList, ObjectMap, ObjectTimeline, ChooseOne, ObjectSearch, Question, ScenarioInputs, AddRow, Period, Section.');
+      .toContain('holds "f1". A Section holds: Card, Note, Image, ProcessBoard, ObjectTable, ObjectDetail, ObjectFigure, ObjectChart, ObjectBreakdown, ActionButtons, ObjectList, ObjectMap, ObjectTimeline, ChooseOne, ObjectSearch, Question, ScenarioInputs, AddRow, Period, GlobalFilter, Section.');
   });
 
   it("refuses a filter whose entry says more than its path, label and object", () => {

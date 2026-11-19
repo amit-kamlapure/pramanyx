@@ -319,8 +319,10 @@ export function FiltersHead() {
   );
 }
 
-export function GlobalFiltersColumn({ filters, connectionId, focus, onFocus, building, selected, onChoose, onAdd, applyButton = false, page = null, onParameter, valueKinds }: {
+export function GlobalFiltersColumn({ filters, connectionId, focus, onFocus, building, selected, onChoose, onAdd, applyButton = false, page = null, onParameter, valueKinds, bare = false }: {
   filters: { key: string; props: GlobalFilterProps }[];
+  /** One filter placed on the canvas as a box of its own (2026-11-19): the filter alone, filling its box — no column head. */
+  bare?: boolean;
   connectionId?: string;
   focus: DashboardFocus[];
   onFocus: ((next: DashboardFocus[]) => void) | null;
@@ -364,8 +366,10 @@ export function GlobalFiltersColumn({ filters, connectionId, focus, onFocus, bui
   const shown = useMemo(() => filters.filter(f => building || (f.props.table && f.props.column && (!f.props.page || !page || f.props.page === page))), [filters, building, page]);
   if (!shown.length && !building) return null;
   return (
-    <aside aria-label="Global filters" data-testid="global-filters" style={{ display: "flex", flexDirection: "column", gap: 10, alignSelf: "start", position: "sticky", top: 12, minWidth: 0 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", minHeight: 24 }}>
+    <aside aria-label={bare ? "Filter" : "Global filters"} data-testid={bare ? "placed-filter" : "global-filters"}
+      style={bare ? { display: "flex", flexDirection: "column", height: "100%", minWidth: 0 }
+        : { display: "flex", flexDirection: "column", gap: 10, alignSelf: "start", position: "sticky", top: 12, minWidth: 0 }}>
+      {!bare && <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", minHeight: 24 }}>
         <span className="aug-fs-ui" style={{ color: "var(--t1)", fontWeight: 600 }}>{building ? "Global filters" : "Filters"}</span>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 2 }}>
           {!shut && <FiltersMenuSlot />}
@@ -375,7 +379,7 @@ export function GlobalFiltersColumn({ filters, connectionId, focus, onFocus, bui
           )}
           <FiltersHideButton />
         </span>
-      </div>
+      </div>}
       {shown.map(({ key, props: p }) => {
         const ready = !!p.table && !!p.column && !!connectionId;
         const chosen = selected === key;
@@ -385,7 +389,7 @@ export function GlobalFiltersColumn({ filters, connectionId, focus, onFocus, bui
           <section key={key} data-testid="global-filter" data-kind={p.kind} data-selected={chosen || undefined} aria-label={p.title || "Filter"}
             onPointerDownCapture={building ? () => onChoose?.(key) : undefined}
             style={{ background: "var(--bg-2)", border: "1px solid var(--card-edge)", borderRadius: "var(--r3)", padding: "10px 12px", display: "flex", flexDirection: "column", gap: 6,
-              outline: chosen ? "2px solid var(--accent)" : undefined, outlineOffset: 1 }}>
+              outline: chosen ? "2px solid var(--accent)" : undefined, outlineOffset: 1, ...(bare ? { flex: 1, minHeight: 0, overflow: "auto" } : {}) }}>
             {p.show_title !== false && <div className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: 500 }}>{p.title || "Filter"}</div>}
             {p.description && <div className="aug-fs-sm" style={{ color: "var(--t3)" }}>{p.description}</div>}
             {ready ? (

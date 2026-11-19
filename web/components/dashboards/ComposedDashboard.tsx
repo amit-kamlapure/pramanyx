@@ -56,6 +56,8 @@ import {
   type BarChip, type FilterProperty, type ObjectBarWords,
 } from "@/components/dashboards/OntologyPieces";
 import { FiltersHead, FiltersMenuPlace, FiltersShutStrip, GlobalFiltersColumn, useFiltersShut } from "@/components/dashboards/GlobalFilters";
+import { PLACE_WORDS, measureSection } from "@/lib/dashboards/placing";
+import { PlacementShown, type PlacementView } from "@/components/dashboards/placementView";
 import { followsByValue, heldBy, openedWith, stillHeld, type GlobalFilterProps } from "@/lib/dashboards/globalFilters";
 import { ImageTile, NoteTile, type ImageStamp, type StaticDoors } from "@/components/dashboards/StaticTile";
 import { DropdownMenu } from "@radix-ui/themes";
@@ -567,6 +569,38 @@ function useSectionKey(element: { children?: string[] }): string | null {
   [elements, element.children]);
 }
 
+/** The boxes a section shows while one is placed: where the pointer would set it down, and the one set down. */
+function usePlacedHere(section: string | null) {
+  const view = useContext(PlacementShown);
+  if (!view || !section) return { boxes: [] as { b: NonNullable<PlacementView["box"]>; ghost: boolean }[], floor: 0, onBox: undefined };
+  const boxes = [
+    ...(view.box?.section === section ? [{ b: view.box, ghost: false }] : []),
+    ...(view.ghost?.section === section ? [{ b: view.ghost, ghost: true }] : []),
+  ];
+  const floor = Math.max(0, ...boxes.map(({ b }) => (b.y - 1) * GRADE + rowsTall(b.h)));
+  return { boxes, floor, onBox: view.onBox };
+}
+
+function PlacedBoxes({ boxes, onBox }: ReturnType<typeof usePlacedHere>) {
+  return (
+    <>
+      {boxes.map(({ b, ghost }) => (
+        <div key={ghost ? "ghost" : "box"} data-testid={ghost ? "place-ghost" : "place-box"} data-kind={b.kind}
+          role={ghost ? undefined : "button"} tabIndex={ghost ? undefined : 0} onClick={ghost ? undefined : onBox}
+          onKeyDown={ghost ? undefined : e => { if (e.key === "Enter") onBox?.(); }}
+          className="aug-fs-sm"
+          style={{ position: "absolute", zIndex: 4, left: `calc((100% + ${GRID.gap}px) * ${(b.x - 1) / GRID.columns})`, top: (b.y - 1) * GRADE,
+            width: `calc((100% + ${GRID.gap}px) * ${b.w / GRID.columns} - ${GRID.gap}px)`, height: rowsTall(b.h),
+            border: "2px dashed var(--accent)", borderRadius: "var(--r3)", pointerEvents: ghost ? "none" : "auto", cursor: ghost ? undefined : "pointer",
+            background: ghost ? "color-mix(in srgb, var(--accent) 16%, transparent)" : "color-mix(in srgb, var(--accent) 7%, var(--bg-2))",
+            display: "flex", alignItems: "center", justifyContent: "center", padding: 8, textAlign: "center", color: "var(--t2)" }}>
+          {PLACE_WORDS[b.kind]}{ghost ? "" : " · choose what it is in the panel"}
+        </div>
+      ))}
+    </>
+  );
+}
+
 /** A section: one laid out in sections of its own, one that holds nothing yet, or one that holds pieces (Arc AP-4). */
 function DashboardSection(props: ComponentRenderProps<SectionProps>) {
   if (props.element.props.layout) return <LaidOutSection {...props} />;
@@ -678,6 +712,8 @@ function PiecesSection({ element, children }: ComponentRenderProps<SectionProps>
   const held = element.children ?? [];
   const key = useSectionKey(element);
   const keys = useMemo(() => ({ key, columns, children: held, grid: gridded, stacked }), [key, columns, held, gridded, stacked]);
+  // a box being placed here, or set down here, drawn over the section's own pieces, the section tall enough to hold it
+  const placedHere = usePlacedHere(key);
   return (
     // in the builder a click anywhere in a section chooses it — and a click on one of its pieces then chooses the piece
     <section data-testid="dashboard-section" aria-label={element.props.title ?? "Section"} data-key={key ?? undefined} data-selected={(key !== null && selected === key) || undefined}
@@ -694,7 +730,7 @@ function PiecesSection({ element, children }: ComponentRenderProps<SectionProps>
         )}
       </div>
       <div ref={ref} data-columns={gridded ? GRID.columns : columns} data-grid={gridded ? GRID.columns : undefined}
-        style={gridded ? {
+        style={{ ...(gridded ? {
           // the cells' offsets are read from it (`measureSection`): where each is drawn is its column and row
           position: "relative",
           display: "grid", gap: GRID.gap, alignItems: "stretch", gridAutoRows: `${GRID.row}px`,
@@ -709,7 +745,8 @@ function PiecesSection({ element, children }: ComponentRenderProps<SectionProps>
           position: "relative",
           display: "grid", gap: GAP, alignItems: "stretch", gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
           gridAutoFlow: "row dense",
-        }}>
+        }), ...(placedHere.floor ? { minHeight: placedHere.floor } : {}) }}>
+        <PlacedBoxes {...placedHere} />
         <SectionKeys.Provider value={keys}>{children}</SectionKeys.Provider>
       </div>
     </section>
@@ -778,26 +815,6 @@ function ResizeCorner({ cell, columns, from, onPreview, onDone }: {
       ◢
     </span>
   );
-}
-
-/** What every element of a section measures on screen, as columns (twelfths of the section) and rows of one grade —
- *  so a section moving onto the grid keeps the room each element had for the reader (Arc AP-1). */
-function measureSection(grid: HTMLElement): Record<string, Box> {
-  const colW = (grid.clientWidth - GRID.gap * (GRID.columns - 1)) / GRID.columns;
-  const out: Record<string, Box> = {};
-  if (colW <= 0) return out;
-  for (const child of Array.from(grid.children) as HTMLElement[]) {
-    const key = child.dataset.element;
-    // the layout's own px — the builder's canvas may draw the dashboard scaled, and the grid is laid out unscaled
-    const r = { width: child.offsetWidth, height: child.offsetHeight };
-    if (!key || !r.width || !r.height) continue;
-    out[key] = {
-      w: Math.round((r.width + GRID.gap) / (colW + GRID.gap)), h: Math.round((r.height + GRID.gap) / GRADE),
-      // where it is drawn, on the twelve columns and the 40 px rows (free placement, v14)
-      x: Math.max(1, Math.round(child.offsetLeft / (colW + GRID.gap)) + 1), y: Math.max(1, Math.round(child.offsetTop / GRADE) + 1),
-    };
-  }
-  return out;
 }
 
 /** The edge or corner a handle moves: `w` the right edge (columns), `h` the bottom (rows), `both` the bottom-right
@@ -1591,6 +1608,29 @@ function DashboardChooseOne({ element }: ComponentRenderProps<{ entity?: string 
   );
 }
 
+/** A global filter placed on the canvas as a box of its own (2026-11-19): drawn as one in the filters column is, a cell of the
+ *  grid that is chosen, moved and sized as every piece is. In the column it is the column's to draw. */
+function SectionGlobalFilter({ element }: ComponentRenderProps<GlobalFilterProps & { size?: Size | null }>) {
+  const { focus, setFocus, connectionId, doors, elements } = useDashboard();
+  const { setValue, readerValues, wire } = usePieces();
+  const { get } = useStateStore();
+  const { key: section } = useContext(SectionKeys);
+  const feed = useCallback((name: string, value: unknown) => { if (value !== undefined || name in readerValues) setValue(name, value); }, [setValue, readerValues]);
+  const pages = pagesOf(elements, true);
+  const open = get("/tab");
+  const page = (pages.find(t => t.name === open) ?? pages[0])?.key ?? null;
+  if (!section) return null;
+  const p = element.props;
+  return (
+    <Cell type="GlobalFilter" props={p as unknown as Record<string, unknown>} size={p.size ?? "small"} testid="dashboard-filter-cell">
+      {key => key ? (
+        <GlobalFiltersColumn bare filters={[{ key, props: p }]} connectionId={connectionId} focus={focus} onFocus={setFocus}
+          building={!!doors.onSelect} selected={null} page={page} onParameter={feed} valueKinds={wire.values ?? undefined} />
+      ) : null}
+    </Cell>
+  );
+}
+
 function DashboardObjectSearch({ element }: ComponentRenderProps<{ entity: string; path: string; label: string; size?: Size | null }>) {
   const p = element.props;
   return (
@@ -1694,7 +1734,8 @@ const REGISTRY = {
   AddRow: DashboardAddRow,
   Period: DashboardPeriod,
   GlobalFilters: DashboardGlobalFilters,
-  GlobalFilter: () => null,
+  // in the filters column the column draws it; placed on the canvas in a section, it is a box of its own
+  GlobalFilter: SectionGlobalFilter,
 } satisfies Record<ComponentName, unknown>;
 
 const NO_IMAGES: Record<string, ImageStamp> = {};

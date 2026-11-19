@@ -70,13 +70,13 @@ const DEFAULT_SIZE: Record<GridKind, Size> = {
   Card: "small", Note: "small", Image: "small", ProcessBoard: "full", ObjectTable: "wide", ObjectDetail: "small",
   ObjectFigure: "small", ObjectChart: "full", ObjectBreakdown: "wide", ActionButtons: "small",
   ObjectList: "wide", ObjectMap: "wide", ObjectTimeline: "full", ChooseOne: "wide", ObjectSearch: "wide", Question: "wide", ScenarioInputs: "full", AddRow: "full",
-  Period: "small",
+  Period: "small", GlobalFilter: "small",
 };
 /** The rows a kind takes on the grid when nothing measured it: about the room one row of its size gave it. */
 const ROWS: Record<GridKind, number> = {
   Card: 4, Note: 3, Image: 5, ProcessBoard: 7, ObjectTable: 8, ObjectDetail: 7, ObjectFigure: 3, ObjectChart: 6, ObjectBreakdown: 8,
   ActionButtons: 2, ObjectList: 8, ObjectMap: 9, ObjectTimeline: 7, ChooseOne: 7, ObjectSearch: 3, Question: 14, ScenarioInputs: 4, AddRow: 2,
-  Period: 2,
+  Period: 2, GlobalFilter: 2,
 };
 
 const clamp = (lo: number, hi: number, v: number) => Math.max(lo, Math.min(hi, v));
@@ -919,6 +919,20 @@ export function addGlobalFilter(spec: unknown): { spec: DashboardSpec; key: stri
   const key = freshKey(s, "filter");
   s.elements[key] = { type: "GlobalFilter", props: { title: "Filter", kind: "multi" }, children: [] };
   s.elements[holder].children.push(key);
+  return { spec: s, key };
+}
+
+/** A global filter placed on the canvas in a section, as a box of its own (the user, 2026-11-19), of the type chosen: it cuts
+ *  the cards as one in the filters column does. Its field is chosen in its setup; until then a reader is not shown it. */
+export function placeGlobalFilterIn(spec: unknown, sectionKey: string, props: Record<string, unknown> = {}): { spec: DashboardSpec; key: string | null } {
+  const s = copy(spec);
+  if (!holdsPieces(s, sectionKey)) return { spec: s, key: null };
+  const placed = Object.values(s.elements).filter(e => e.type === "GlobalFilter").length;
+  if (placed >= MAX_GLOBAL_FILTERS) return { spec: s, key: null };
+  const key = freshKey(s, "filter");
+  s.elements[key] = { type: "GlobalFilter", props: { title: "Filter", kind: "multi", ...props }, children: [] };
+  s.elements[sectionKey].children.push(key);
+  fitTo(s, sectionKey, key);
   return { spec: s, key };
 }
 

@@ -10,7 +10,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { act, choose, fireEvent, optionsOf, render, screen, waitFor, within } from "@/lib/testing";
+import { act, change, choose, fireEvent, optionsOf, render, screen, waitFor, within } from "@/lib/testing";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BriefingDashboards } from "@/components/dashboards/BriefingDashboards";
@@ -95,13 +95,19 @@ const openBuilder = async () => {
   fireEvent.click(await screen.findByTestId("dashboard-edit"));
   await screen.findByTestId("dashboard-builder");
 };
-/** A door that moved into the canvas toolbar's Chart list (2026-11-18): a card, a finding, a question, the ontology. */
+/** A box set down on the canvas (2026-11-19): the strip's tool picks it up, a click on the canvas sets it down. */
+const setDown = (tool: string) => {
+  fireEvent.click(screen.getByTestId(tool));
+  fireEvent.click(screen.getByTestId("place-layer"));
+};
+/** A door a chart's box offers (2026-11-19): a card, a finding, a question, the ontology, a query of one's own. */
 const chartDoor = async (kind: string) => {
-  // the list reads the declared actions and processes to say which pieces can be placed
+  // the box's setup reads the declared actions and processes to say which pieces can be placed
   api.getDeclaredActions.mockResolvedValue({});
   ontology.getProcesses.mockResolvedValue({ processes: [] });
-  fireEvent.click(screen.getByTestId("builder-add-piece"));
-  fireEvent.click((await screen.findAllByTestId("piece-picker-entry")).find(e => e.dataset.kind === kind)!);
+  setDown("builder-add-piece");
+  change(await screen.findByLabelText("What it is"), { target: { value: kind } });
+  fireEvent.click(screen.getByTestId("piece-picker-place"));
 };
 /** The layout pane, folded to a strip until a person opens it (2026-11-18). */
 const openLayout = () => fireEvent.click(screen.getByTestId("builder-open-layout"));
@@ -535,14 +541,16 @@ describe("the dashboards home, where Dashboards opens (the user, 2026-11-18)", (
 describe("the canvas: a note, an image and a size, by hand (2026-10-08)", () => {
   it("a note typed here is placed in the first section and kept as the next version, its stamps the server's", async () => {
     await openBuilder();
-    fireEvent.click(screen.getByTestId("dashboard-note-new"));
+    setDown("dashboard-note-new");
     fireEvent.change(screen.getByRole("textbox", { name: "The note's words" }), { target: { value: "Check **ops** before the 15th." } });
     fireEvent.click(screen.getByRole("button", { name: "Place the note" }));
     await waitFor(() => expect(api.keepDashboard).toHaveBeenCalled());
     const [conn, id, spec, note] = api.keepDashboard.mock.calls[0] as [string, string, { elements: Record<string, { type: string; props: Record<string, unknown> }> }, string];
     expect([conn, id, note]).toEqual(["thelook", "returns-1", "a note written by hand"]);
     const placed = Object.values(spec.elements).find(e => e.type === "Note")!;
-    expect(placed.props).toEqual({ text: "Check **ops** before the 15th." });     // no author: the server stamps it
+    // no author: the server stamps it; drawn in the box set down — words across the page, from the section's first row
+    expect(placed.props).toMatchObject({ text: "Check **ops** before the 15th.", x: 1, y: 1, w: 12, h: 2 });
+    expect(placed.props).not.toHaveProperty("author");
     expect(spec.elements["sec-headline"]).toBeDefined();
     expect(screen.queryByTestId("dashboard-note-composer")).toBeNull();
   });
@@ -551,7 +559,7 @@ describe("the canvas: a note, an image and a size, by hand (2026-10-08)", () => 
     api.uploadDashboardImage.mockResolvedValue({ object: "ab12cd34ef56", file_name: "promo.png", uploaded_by: "user:default",
       uploaded_at: "2026-10-08T09:00:00Z", content_type: "image/png", bytes: 72, readable: true, why: "" });
     await openBuilder();
-    fireEvent.click(screen.getByTestId("dashboard-image-new"));
+    setDown("dashboard-image-new");
     const file = new File([new Uint8Array([137, 80, 78, 71])], "promo.png", { type: "image/png" });
     fireEvent.change(screen.getByLabelText("The image file"), { target: { files: [file] } });
     fireEvent.change(screen.getByRole("textbox", { name: "Caption" }), { target: { value: "Promo calendar" } });
@@ -560,14 +568,14 @@ describe("the canvas: a note, an image and a size, by hand (2026-10-08)", () => 
     expect(api.uploadDashboardImage).toHaveBeenCalledWith("thelook", file);
     const spec = api.keepDashboard.mock.calls[0][2] as { elements: Record<string, { type: string; props: Record<string, unknown> }> };
     const placed = Object.values(spec.elements).find(e => e.type === "Image")!;
-    expect(placed.props).toEqual({ object: "ab12cd34ef56", caption: "Promo calendar" });
+    expect(placed.props).toMatchObject({ object: "ab12cd34ef56", caption: "Promo calendar", x: 1, y: 1, w: 4, h: 6 });
     expect(api.keepDashboard.mock.calls[0][3]).toBe("an image uploaded by hand");
   });
 
   it("an upload the server refuses is said where the file was chosen, and nothing is kept", async () => {
     api.uploadDashboardImage.mockRejectedValue(new Error("The file is not a PNG, JPEG, GIF, WebP or SVG image (it was sent as text/html)."));
     await openBuilder();
-    fireEvent.click(screen.getByTestId("dashboard-image-new"));
+    setDown("dashboard-image-new");
     fireEvent.change(screen.getByLabelText("The image file"), { target: { files: [new File(["<html>"], "page.html", { type: "text/html" })] } });
     fireEvent.click(screen.getByRole("button", { name: "Upload and place" }));
     expect(await screen.findByTestId("dashboard-image-refused")).toHaveTextContent("sent as text/html");
@@ -799,7 +807,7 @@ describe("building a dashboard in place (Arc AP-1)", () => {
     await openBuilder();
     await waitFor(() => expect(doors().onRegrid).toBeTypeOf("function"));
     act(() => { doors().onRegrid!("card-net", { w: 6, h: 5 }, {}); });
-    fireEvent.click(screen.getByTestId("dashboard-note-new"));
+    setDown("dashboard-note-new");
     fireEvent.change(await screen.findByLabelText("The note's words"), { target: { value: "Watch returns in Q4" } });
     fireEvent.click(screen.getByRole("button", { name: "Place the note" }));
     await waitFor(() => expect(api.keepDashboard).toHaveBeenCalledTimes(1));
@@ -817,7 +825,7 @@ describe("building a dashboard in place (Arc AP-1)", () => {
     await waitFor(() => expect(doors().onRegrid).toBeTypeOf("function"));
     act(() => { doors().onRegrid!("card-net", { w: 6, h: 5 }, {}); });
     await waitFor(() => expect(api.keepDashboard).toHaveBeenCalledTimes(1), { timeout: 3000 });   // the resize, on its way
-    fireEvent.click(screen.getByTestId("dashboard-note-new"));
+    setDown("dashboard-note-new");
     fireEvent.change(await screen.findByLabelText("The note's words"), { target: { value: "After the resize" } });
     fireEvent.click(screen.getByRole("button", { name: "Place the note" }));
     await new Promise(r => setTimeout(r, 50));
@@ -1084,9 +1092,8 @@ describe("your own query on the dashboard (Arc AP-7)", () => {
     show();
     fireEvent.click(await screen.findByTestId("dashboard-edit"));
     await screen.findByTestId("dashboard-builder");
-    fireEvent.click(await screen.findByTestId("builder-add-piece"));
-    const entry = (await screen.findAllByTestId("piece-picker-entry")).find(e => e.dataset.kind === "query")!;
-    fireEvent.click(entry);
+    await screen.findByTestId("builder-add-piece");
+    await chartDoor("query");
     const setup = await screen.findByTestId("query-setup");
     fireEvent.change(within(setup).getByLabelText("SQL"), { target: { value: "SELECT day, sales FROM thelook.orders" } });
     api.getDashboard.mockResolvedValue({ ...READ, cards: [...READ.cards, queryCard("qnew")] });

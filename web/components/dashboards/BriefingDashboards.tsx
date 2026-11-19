@@ -34,7 +34,7 @@ import { NewCardComposer } from "@/components/brief/NewCardComposer";
 import type { RangeChoice } from "@/components/brief/BriefRange";
 import type { CardState } from "@/components/brief/PinnedCardBody";
 import { DashboardArrange, type CardLine } from "@/components/dashboards/DashboardArrange";
-import { DashboardBuilder, EditBar, type AddWhat, type CanvasTools } from "@/components/dashboards/DashboardBuilder";
+import { DashboardBuilder, EditBar, type CanvasTools } from "@/components/dashboards/DashboardBuilder";
 import { cardHolds as holdsOf } from "@/lib/dashboards/cardHolds";
 import type { QueryShown } from "@/lib/api";
 import { ComposedDashboard, type DashboardDoors, type PeriodDoor, type ReadState } from "@/components/dashboards/ComposedDashboard";
@@ -42,7 +42,8 @@ import { FindingPicker } from "@/components/dashboards/FindingPicker";
 import { ObjectDashboardStarter } from "@/components/dashboards/ObjectDashboardStarter";
 import { PackTemplatePicker } from "@/components/dashboards/PackTemplatePicker";
 import { OntologyPieceComposer } from "@/components/dashboards/OntologyPieceComposer";
-import { PiecePicker } from "@/components/dashboards/PiecePicker";
+import { PiecePicker, type HandOff } from "@/components/dashboards/PiecePicker";
+import { PLACE_SIZE, PLACE_WORDS, intoBox, type PlaceKind, type PlacedBox } from "@/lib/dashboards/placing";
 import { QuerySetup } from "@/components/dashboards/QuerySetup";
 import { PinStrip, numberOf } from "@/components/dashboards/PinStrip";
 import { DashboardHome } from "@/components/dashboards/DashboardHome";
@@ -183,6 +184,38 @@ function Refused({ outcome }: { outcome: DashboardKept }) {
           </ul>
         }
       />
+    </div>
+  );
+}
+
+/** A box set down on the canvas (the user, 2026-11-19): what it is, chosen here — a chart's or a filter's kind in one dropdown,
+ *  the words of a note, a picture's upload — and the piece made is drawn in the box, where it was set down. */
+function BoxSetup({ box, spec, connectionId, schema, busy, onCancel, onPlace, onNote, onImage, onHandOff }: {
+  box: PlacedBox; spec: DashboardSpec; connectionId: string; schema?: string; busy: boolean; onCancel: () => void;
+  onPlace: (next: DashboardSpec, note: string) => void; onNote: (text: string) => void; onImage: (objectId: string, caption: string) => void;
+  onHandOff: (kind: HandOff, section: string | null) => void;
+}) {
+  return (
+    <div data-testid="place-setup" data-kind={box.kind} style={{ display: "flex", flexDirection: "column" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "12px 14px 4px" }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="aug-fs-xs" style={{ color: "var(--accent-11)", textTransform: "uppercase", letterSpacing: ".06em" }}>{PLACE_WORDS[box.kind]}</div>
+          <div className="aug-fs-xs" style={{ color: "var(--t3)", marginTop: 2 }}>
+            Set down at column {box.x}, row {box.y}: {box.w} columns by {box.h} rows. Choose what it is.
+          </div>
+        </div>
+        <Button size="icon-sm" variant="ghost" aria-label="Take the box away" data-testid="place-setup-cancel" onClick={onCancel}><Icon name="close" size={14} /></Button>
+      </div>
+      {box.kind === "chart" || box.kind === "filter" ? (
+        <PiecePicker key={`${box.section}:${box.x}:${box.y}:${box.kind}`} spec={spec} section={box.section} only={box.kind}
+          connectionId={connectionId} schema={schema} onPlace={onPlace} onHandOff={onHandOff} onClose={onCancel} />
+      ) : (
+        <div style={{ padding: "8px 14px" }}>
+          {box.kind === "text"
+            ? <NoteComposer busy={busy} onPlace={onNote} onClose={onCancel} />
+            : <ImageComposer connectionId={connectionId} busy={busy} onPlace={onImage} onClose={onCancel} />}
+        </div>
+      )}
     </div>
   );
 }
@@ -913,7 +946,21 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
   const [writing, setWriting] = useState<{ section: string | null } | null>(null);
   // the picker open, for a section (none: the first that holds pieces); and where a card, a note, an image or a finding
   // handed off from it lands
-  const [adding, setAdding] = useState<{ section: string | null; only?: AddWhat } | null>(null);
+  // the user, 2026-11-19: the strip's chart, filter, words or picture is placed as a box first, then chosen in the panel
+  const [placeKind, setPlaceKind] = useState<PlaceKind | null>(null);
+  const [box, setBox] = useState<PlacedBox | null>(null);
+  const boxRef = useRef<PlacedBox | null>(null);
+  boxRef.current = box;
+  /** The piece a change made, set where the box waiting for it was set down — whichever door made it; the box is then done. */
+  const boxed = useCallback((before: DashboardSpec, after: DashboardSpec): DashboardSpec => {
+    const b = boxRef.current;
+    if (!b) return after;
+    const placed = intoBox(before, after, b);
+    if (!placed) return after;
+    boxRef.current = null;
+    setBox(null);
+    return placed;
+  }, []);
   // the canvas toolbar's Ask (2026-11-18): the change asked in words, drawn above the canvas while it is open
   const [asking, setAsking] = useState(false);
   const target = useRef<string | null>(null);
@@ -1082,8 +1129,8 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
     const base = (b.spec && b.cockpit === data.cockpit_id ? b.spec : data.cockpit.spec) as DashboardSpec;
     if (b.timer) { clearTimeout(b.timer); b.timer = null; }
     if (b.spec) { b.spec = null; setDraft(null); setPending(false); }
-    b.chain = b.chain.then(() => write(() => keepDashboard(connectionId, data.cockpit_id, change(base), note), () => said).then(() => undefined));
-  }, [connectionId, data, write]);
+    b.chain = b.chain.then(() => write(() => keepDashboard(connectionId, data.cockpit_id, boxed(base, change(base)), note), () => said).then(() => undefined));
+  }, [connectionId, data, write, boxed]);
 
   // Arc AP-1 — a resize is drawn at once and kept as ONE version per burst of steps, a moment after the last. The cards
   // are not read again: the room changed, and nothing measured did. Keeps go one after another, never two at once, and
@@ -1113,12 +1160,13 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
     if (!data?.cockpit.spec) return;
     const b = burst.current;
     const same = b.spec && b.cockpit === data.cockpit_id;
-    const next = change((same ? b.spec : data.cockpit.spec) as DashboardSpec);
+    const prev = (same ? b.spec : data.cockpit.spec) as DashboardSpec;
+    const next = boxed(prev, change(prev));
     b.spec = next; b.cockpit = data.cockpit_id; b.note = note;
     setDraft(next); setPending(true);
     if (b.timer) clearTimeout(b.timer);
     b.timer = setTimeout(sendBurst, KEEP_AFTER_MS);
-  }, [data, sendBurst]);
+  }, [data, sendBurst, boxed]);
   // a burst still waiting is kept before the page leaves it
   useEffect(() => () => { if (burst.current.timer) sendBurst(); }, [sendBurst]);
 
@@ -1179,7 +1227,8 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
       onFilterWidth: (grades: number) => on(s => setFilterWidth(s, grades), "the filter column resized by hand"),
       onAddGlobalFilter: () => { if (!current) return null; const made = addGlobalFilter(current); if (made.key) change(made.spec, "a global filter added by hand"); return made.key; },
       // Arc AP-4 — an empty section's offer: the piece picker for it, or sections of its own
-      onAddPiece: (section: string) => setAdding({ section }),
+      // an empty section's "Add a piece": a chart's box set down across its top, chosen in the panel
+      onAddPiece: (section: string) => { setPlaceKind(null); setBox({ kind: "chart", section, x: 1, y: 1, w: 12, h: PLACE_SIZE.chart.h, measured: {} }); },
       onLayOut: (section: string, layout: Layout) => on(s => layOut(s, section, layout), `laid out in ${layout} by hand`),
       // the study's R18 — pages, made and changed on the canvas
       pages: {
@@ -1356,7 +1405,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
       : `saved ${Number.isNaN(at) ? "" : new Date(at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })} · version ${kept.version}`;
     const shut = () => { setComposing(false); setNoting(false); setImaging(false); setPicking(false); setPlacing(false); setQuestioning(false); };
     // every door of the canvas toolbar puts away what another opened, so one thing is open at a time
-    const only = (open: () => void) => () => { shut(); setAdding(null); setAsking(false); open(); };
+    const only = (open: () => void) => () => { shut(); setPlaceKind(null); setBox(null); setAsking(false); open(); };
     const placeButtons = async () => {
       try {
         const declared = Object.values(await getDeclaredActions(connectionId, schema));
@@ -1368,12 +1417,12 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
       }
     };
     const tools: CanvasTools = {
-      active: asking ? "ask" : adding ? (adding.only === "filter" ? "filter" : "chart")
-        : noting ? "text" : imaging ? "image" : composing || picking || placing || questioning ? "chart" : null,
+      active: asking ? "ask" : placeKind ?? box?.kind
+        ?? (noting ? "text" : imaging ? "image" : composing || picking || placing || questioning ? "chart" : null),
       onChoose: only(() => {}),
       onAsk: asking ? only(() => {}) : only(() => setAsking(true)),
-      onText: only(() => setNoting(true)),
-      onImage: only(() => setImaging(true)),
+      onText: only(() => setPlaceKind("text")),
+      onImage: only(() => setPlaceKind("image")),
       onButtons: only(() => { void placeButtons(); }),
       busy,
     };
@@ -1381,7 +1430,9 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
       <div data-testid="briefing-dashboards" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
         <DashboardBuilder spec={current} onChange={change} cardTitle={id => lines.get(id)?.title} connectionId={connectionId} schema={schema}
           release={data.ontology?.current && data.ontology.pinned === data.ontology.current ? numberOf(data.ontology.current) : null}
-          onAddPiece={(section, what) => { shut(); setAsking(false); setAdding({ section, only: what }); }} checks={checks} tools={tools}
+          onAddPiece={(_section, what) => { shut(); setAsking(false); setBox(null); setPlaceKind(what === "filter" ? "filter" : "chart"); }}
+          placing={{ kind: placeKind, box, onPlaced: b => { setPlaceKind(null); setBox(b); }, onCancel: () => setPlaceKind(null), onBox: () => {} }}
+          checks={checks} tools={tools}
           cardReads={id => valuesRead(data.cards.find(c => c.id === id)?.sql)}
           queryCards={placedQueries(current, data.cards)}
           cardDates={() => {
@@ -1489,12 +1540,16 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
                 target.current = writing.section; adopt.current = true; adoptNote.current = "a query of your own placed by hand";
                 setWriting(null); reload();
               }} />
-          ) : adding ? (
-            // the toolbar's Chart and Filter, and an empty section's "Add a piece", list their pieces here, in the panel
-            <PiecePicker key={`${adding.section ?? ""}:${adding.only ?? "all"}`} spec={current} section={adding.section} only={adding.only}
-              connectionId={connectionId} schema={schema} onPlace={change} onClose={() => setAdding(null)}
+          ) : box ? (
+            // a box set down on the canvas, waiting for what it is: chosen here, and the piece made is drawn in the box
+            <BoxSetup box={box} spec={current} connectionId={connectionId} schema={schema} busy={busy}
+              onCancel={() => setBox(null)}
+              onPlace={change}
+              onNote={text => edit(s => placeNote(s, text, box.section), "a note written by hand", "Placed. Its author and date are stamped as it is kept.")}
+              onImage={(objectId, caption) => edit(s => placeImage(s, objectId, caption, box.section), "an image uploaded by hand",
+                "Placed. The upload is stamped with your name and the date.")}
               onHandOff={(kind, section) => {
-                setAdding(null); shut(); target.current = section;
+                shut(); target.current = section;
                 if (kind === "query") { setShowHistory(false); setWriting({ section }); return; }
                 if (kind === "card") setComposing(true); else if (kind === "note") setNoting(true);
                 else if (kind === "image") setImaging(true); else if (kind === "question") setQuestioning(true);

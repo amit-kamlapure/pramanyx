@@ -474,3 +474,36 @@ describe("building safely (Arc AP-6)", () => {
     expect(screen.queryByTestId("set-read-time")).toBeNull();
   });
 });
+
+describe("placing a box (the user, 2026-11-19)", () => {
+  /** The builder carrying a box of `kind`, over a stub section whose grid is drawn 1192 px wide at the page's top left. */
+  function carrying(kind: "chart" | "filter" | "text" | "image") {
+    const onPlaced = vi.fn(), onCancel = vi.fn();
+    render(
+      <DashboardBuilder spec={objectDashboard()} onChange={vi.fn()} connectionId="thelook" schema="thelook" bar={<span />}
+        placing={{ kind, box: null, onPlaced, onCancel, onBox: vi.fn() }}>
+        {() => (
+          <section data-key="sec"><div data-columns="12" data-testid="stub-grid" /></section>
+        )}
+      </DashboardBuilder>,
+    );
+    const grid = screen.getByTestId("stub-grid");
+    Object.defineProperty(grid, "offsetWidth", { value: 1192, configurable: true });
+    grid.getBoundingClientRect = () => ({ left: 0, top: 0, right: 1192, bottom: 400, width: 1192, height: 400, x: 0, y: 0, toJSON: () => ({}) });
+    return { onPlaced, onCancel, layer: screen.getByTestId("place-layer") };
+  }
+
+  it("sets a box of the tool's size down in the cell under the pointer, in the section there", () => {
+    const { onPlaced, layer } = carrying("filter");
+    fireEvent.click(layer, { clientX: 250, clientY: 85 });
+    expect(onPlaced).toHaveBeenCalledWith(expect.objectContaining({ kind: "filter", section: "sec", x: 3, y: 3, w: 4, h: 2 }));
+  });
+
+  it("below a section's last row, sets it in that section further down; Esc lets the box go", () => {
+    const { onPlaced, onCancel, layer } = carrying("chart");
+    fireEvent.click(layer, { clientX: 20, clientY: 600 });
+    expect(onPlaced).toHaveBeenCalledWith(expect.objectContaining({ kind: "chart", section: "sec", x: 1, y: 16, w: 6, h: 8 }));
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(onCancel).toHaveBeenCalled();
+  });
+});

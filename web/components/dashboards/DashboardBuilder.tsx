@@ -22,6 +22,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode }
 
 import { CanvasScale } from "@/components/dashboards/cellBox";
 import type { DashboardHandle, ReadState } from "@/components/dashboards/ComposedDashboard";
+import { PlacementShown, type PlacementView } from "@/components/dashboards/placementView";
+import { PLACE_SIZE, PLACE_WORDS, cellOf, measureSection, type PlaceKind, type PlacedBox } from "@/lib/dashboards/placing";
 import { PieceSetup, type CardDate } from "@/components/dashboards/PieceSetup";
 import type { CardHolds } from "@/lib/dashboards/cardHolds";
 import { ChoiceSetup, DataPane, SetSetup, ValueSetup, readingElements } from "@/components/dashboards/WiringSetup";
@@ -32,7 +34,7 @@ import { Icon, type IconName } from "@/components/ui/icon";
 import { toast } from "@/components/ui/toast";
 import { FILTER_DEFAULT_PX, FILTER_WIDTH, GRADE, LIMITS, type GridKind } from "@/lib/dashboards/catalog";
 import {
-  addSectionInside, canMove, duplicate, inColumns, moveWithin, outline, setFilterWidth, setSectionWidth, splitSection, takeOffAll,
+  addSectionInside, canMove, duplicate, inColumns, moveWithin, outline, sectionsOf, setFilterWidth, setSectionWidth, splitSection, takeOffAll,
   type Box, type DashboardSpec, type Side,
 } from "@/lib/dashboards/edit";
 import { lineOf, nameOf, setTitles } from "@/lib/dashboards/names";
@@ -127,8 +129,11 @@ function Steps({ label, value, least, most, onStep }: { label: string; value: nu
 const Rule = () => <span aria-hidden="true" style={{ width: 1, height: 16, background: "var(--b2)", margin: "0 6px" }} />;
 
 export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words, aside, above, connectionId, schema,
-  onAddPiece, checks, cardSetup, cardChart, cardSql, cardReads, queryCards, onUndo, onRedo, cardDates, cardHolds, release, askPiece, children }: {
+  onAddPiece, checks, cardSetup, cardChart, cardSql, cardReads, queryCards, onUndo, onRedo, cardDates, cardHolds, release, askPiece, placing, children }: {
   spec: DashboardSpec;
+  /** A box being placed (the user, 2026-11-19): the kind the strip picked up, the box set down and waiting for what it is,
+   *  and where a box set down, let go, or clicked goes. */
+  placing?: { kind: PlaceKind | null; box: PlacedBox | null; onPlaced: (box: PlacedBox) => void; onCancel: () => void; onBox: () => void } | null;
   /** The ontology release its pieces read, when it is the one the dashboard was composed against: said on its own setup. */
   release?: string | null;
   /** v15 — each placed card and the date the period cuts it by, for the Period piece's setup. */
@@ -212,6 +217,40 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
   // the canvas: laid out at least as wide as the mockup's page; scaled to fit a narrower canvas, unless the person asks 100%
   const canvas = useRef<HTMLDivElement>(null);
   const page = useRef<HTMLDivElement>(null);
+  // a box picked up from the strip follows the pointer, a grid cell at a time, over the section under it; a click sets it down
+  const [ghost, setGhost] = useState<PlacementView["ghost"]>(null);
+  const placingKind = placing?.kind ?? null;
+  useEffect(() => { setGhost(null); }, [placingKind]);
+  useEffect(() => {
+    if (!placingKind) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") placing?.onCancel(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [placingKind, placing]);
+  const cellUnder = (cx: number, cy: number): { el: HTMLElement | null; ghost: NonNullable<PlacementView["ghost"]> } | null => {
+    const at = page.current;
+    if (!at || !placingKind) return null;
+    const size = PLACE_SIZE[placingKind];
+    // the section under the pointer, or — below a section's last row — the nearest one above it, in the same column of the page
+    let best: HTMLElement | null = null;
+    let bestTop = -Infinity;
+    for (const g of Array.from(at.querySelectorAll<HTMLElement>("section[data-key] > [data-columns]"))) {
+      if (!g.offsetWidth) continue;
+      const r = g.getBoundingClientRect();
+      if (cx < r.left || cx > r.right) continue;
+      if (cy >= r.top && cy <= r.bottom) { best = g; break; }
+      if (r.top <= cy && r.top > bestTop) { best = g; bestTop = r.top; }
+    }
+    const section = best?.parentElement?.getAttribute("data-key");
+    if (!best || !section) {
+      // no section under the pointer — an empty page, say: the first that holds pieces, from its first row
+      const first = sectionsOf(spec).find(sec => (spec.elements[sec.key]?.children ?? []).every(k => spec.elements[k]?.type !== "Section"));
+      return first ? { el: null, ghost: { section: first.key, x: 1, y: 1, ...size, kind: placingKind } } : null;
+    }
+    const { x, y } = cellOf(best.getBoundingClientRect(), best.offsetWidth, cx, cy, size);
+    return { el: best, ghost: { section, x, y, ...size, kind: placingKind } };
+  };
+  const view = useMemo<PlacementView | null>(() => (placing ? { ghost, box: placing.box, onBox: placing.onBox } : null), [placing, ghost]);
   const [room, setRoom] = useState({ width: 0, height: 0 });
   const [whole, setWhole] = useState(false);
   useEffect(() => {
@@ -424,13 +463,29 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
           </div>
           <div ref={canvas} data-testid="builder-canvas" data-dashboard-ground="" style={{ flex: 1, minHeight: 0, overflow: "auto", padding: PAD, background: "var(--bg-0)" }}>
             {above}
-            <div style={{ width: layout ? layout * scale : undefined, height: room.height ? room.height * scale : undefined }}>
+            <div style={{ position: "relative", width: layout ? layout * scale : undefined, height: room.height ? room.height * scale : undefined }}>
               <div ref={page} data-testid="builder-page" data-zoom={zoom}
                 style={{ width: layout, transform: scale < 1 ? `scale(${scale})` : undefined, transformOrigin: "0 0" }}>
                 <CanvasScale.Provider value={scale}>
-                  {children({ selected, onSelect: choose, handle, reads })}
+                  <PlacementShown.Provider value={view}>
+                    {children({ selected, onSelect: choose, handle, reads })}
+                  </PlacementShown.Provider>
                 </CanvasScale.Provider>
               </div>
+              {placingKind && (
+                // over the whole page while a box is carried: it follows the pointer, a click sets it down, Esc lets it go
+                <div data-testid="place-layer" aria-label={`${PLACE_WORDS[placingKind]}: click where it goes · Esc lets it go`} role="application"
+                  title={`${PLACE_WORDS[placingKind]}: click where it goes · Esc lets it go`}
+                  style={{ position: "absolute", inset: 0, zIndex: 20, cursor: "crosshair" }}
+                  onPointerMove={e => setGhost(cellUnder(e.clientX, e.clientY)?.ghost ?? null)}
+                  onPointerLeave={() => setGhost(null)}
+                  onClick={e => {
+                    const at = cellUnder(e.clientX, e.clientY);
+                    if (!at) return;
+                    setGhost(null);
+                    placing?.onPlaced({ ...at.ghost, measured: at.el ? measureSection(at.el) : {} });
+                  }} />
+              )}
             </div>
             {/* room under the dashboard, so the floating toolbar never covers its last row */}
             <div aria-hidden="true" style={{ height: 72 }} />

@@ -136,6 +136,7 @@ export const LIMITS = {
   ObjectMap: { w: [3, 12], h: [5, 20] },
   ObjectTimeline: { w: [4, 12], h: [4, 20] },
   ChooseOne: { w: [2, 12], h: [4, 14] },
+  GlobalFilter: { w: [2, 12], h: [2, 8] },
   ObjectSearch: { w: [2, 12], h: [3, 4] },
   Question: { w: [4, 12], h: [6, 30] },
   ScenarioInputs: { w: [4, 12], h: [3, 10] },
@@ -694,8 +695,10 @@ export const dashboardCatalog = defineCatalog(schema, {
         parameter: z.string().regex(WIRE_NAME).nullable().optional(),
         /** v20 — how multiple values are offered: a list, or a dropdown that takes one line (the user, 2026-11-19). */
         show: z.enum(MULTI_SHOWS).nullable().optional(),
+        /** Placed on the canvas as a box of its own (the user, 2026-11-19, of a peer product's editor): its room and place. */
+        size, w, h, x, y,
       }),
-      description: "One global filter: multiple values, a single value, a date, a date range, text or a range of numbers, on one column.",
+      description: "One global filter: multiple values, a single value, a date, a date range, text or a range of numbers, on one column. In the filters column, or placed on the canvas in a section.",
     },
   },
   actions: {},
@@ -745,7 +748,8 @@ export const MAY_HOLD: Record<ComponentName, readonly ComponentName[]> = {
   Tabs: ["Tab"],
   Tab: ["Section"],
   // Arc AP-4 — or sections of its own, when it is laid out (the rules hold a section to one or the other)
-  Section: [...PLACED, "Section"],
+  // and a global filter placed on the canvas as a box of its own (2026-11-19), as well as in the filters column
+  Section: [...PLACED, "GlobalFilter", "Section"],
   Card: [],
   Note: [],
   Image: [],
