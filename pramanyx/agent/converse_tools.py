@@ -999,8 +999,15 @@ def converse(connection_id: str, question: str, *, extra_context: Optional[str] 
     def _not_yet(answer: str) -> Optional[str]:
         return working_notes(answer) or breakdown_where_one_figure_was_asked(question, results, answer)
 
+    provider = provider or get_provider("coder")
+    if max_steps is None:
+        # Stage 4 (2026-11-20): a request of several parts has room for each — the model's own budget, and four steps more
+        # for every part after the first (seen live: three parts spent eight steps before the second was reached)
+        from pramanyx.agent.orchestrate import steps_for
+        max_steps = steps_for(question, provider)
+
     return run_tool_loop(
-        provider or get_provider("coder"),
+        provider,
         converse_system_prompt(connection_id, extra_context, question=question, agent=agent, shape=shape),
         question,
         converse_tools(connection_id, emit=tool_emit, session_id=session_id,

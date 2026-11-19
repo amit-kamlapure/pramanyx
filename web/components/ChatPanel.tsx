@@ -517,8 +517,10 @@ function DebugLogDrawer({ eventLogRef, onClose }: { eventLogRef: React.RefObject
 }
 
 /** A turn's steps as lines, for the conversation to continue from: each tool, and what it said when it said no. */
-function stepsSaid(steps: { index: number; tool: string; ok: boolean; detail: string; refused?: boolean }[]): string {
-  return steps.map(s => `${s.index}. ${s.tool}${s.refused ? ` — said no: ${s.detail}` : !s.ok ? ` — failed: ${s.detail}` : ""}`).join("\n");
+function stepsSaid(steps: { index: number; tool: string; ok: boolean; detail: string; refused?: boolean }[], found: string[] = []): string {
+  const said = steps.map(s => `${s.index}. ${s.tool}${s.refused ? ` — said no: ${s.detail}` : !s.ok ? ` — failed: ${s.detail}` : ""}`).join("\n");
+  // what the queries found, so the next turn starts from it rather than running them again (2026-11-20)
+  return found.length ? `${said}\nWhat the queries found:\n${found.join("\n")}` : said;
 }
 
 /* ── Depth banner — the auto+transparency receipt on each /ask turn ──
@@ -1618,7 +1620,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                     {turn.keepGoing && turn.status !== "loading" && i === turns.length - 1 && (
                       // the turn spent every step: it goes on from where it stopped, with what it already did
                       <Button size="xs" variant="outline" data-testid="keep-going" style={{ marginTop: 8 }}
-                        onClick={() => sendQuestion(turn.question, mode, { keepGoing: stepsSaid(turn.converseSteps) })}>
+                        onClick={() => sendQuestion(turn.question, mode, { keepGoing: stepsSaid(turn.converseSteps, turn.keepGoingFound) })}>
                         <Icon name="run" size={13} /> Keep going
                       </Button>
                     )}

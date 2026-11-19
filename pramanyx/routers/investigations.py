@@ -4212,7 +4212,8 @@ async def _stream_converse(
         emit("headline", {"headline": answer})
         # The turn spent every step (2026-11-20): Keep going picks up from where it stopped, with the steps it took
         if result.stop_reason in ("budget", "budget_answered"):
-            emit("keep_going", {"steps": len(result.steps)})
+            from pramanyx.agent.orchestrate import found_lines
+            emit("keep_going", {"steps": len(result.steps), "found": found_lines(turn["results"])})
 
         # RC-2 — file the exchange when nothing else did. A converse turn that
         # called a tool already has a row: `answer_core` writes one and returns

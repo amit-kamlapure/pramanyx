@@ -16,7 +16,7 @@ const stopped = (keepGoing: boolean) => [
     { type: "data-converse_step", data: { index: 1, tool: "change_chart", ok: true, refused: true, detail: "“monthFormat” is not something the chart editor sets." } },
     { type: "data-converse_step", data: { index: 2, tool: "explain_dashboard", ok: true, detail: "" } },
     { type: "text", text: "I used all 8 steps this turn before finishing.", providerMetadata: { pramanyx: { channel: "headline" } } },
-    ...(keepGoing ? [{ type: "data-keep_going", data: { steps: 8 } }] : []),
+    ...(keepGoing ? [{ type: "data-keep_going", data: { steps: 8, found: ["1. SELECT day, SUM(paid) FROM o GROUP BY 1 → 46 rows"] } }] : []),
     { type: "data-done", data: {} },
   ] },
 ];
@@ -58,7 +58,8 @@ describe("a turn that ran out of steps", () => {
     act(() => { fireEvent.click(screen.getByTestId("keep-going")); });
     expect(sent).toHaveLength(1);
     expect(sent[0].text).toBe("Write the months as YYYY-MM");
-    expect(sent[0].body.keep_going).toBe("1. change_chart — said no: “monthFormat” is not something the chart editor sets.\n2. explain_dashboard");
+    expect(sent[0].body.keep_going).toBe("1. change_chart — said no: “monthFormat” is not something the chart editor sets.\n2. explain_dashboard"
+      + "\nWhat the queries found:\n1. SELECT day, SUM(paid) FROM o GROUP BY 1 → 46 rows");
   });
 
   it("is not offered on a turn that finished", async () => {

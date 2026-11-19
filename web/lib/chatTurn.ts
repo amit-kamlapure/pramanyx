@@ -245,6 +245,8 @@ export interface ChatTurn {
   converseSteps: ConverseStep[];
   /** The turn spent every step before finishing: Keep going is offered (2026-11-20). */
   keepGoing: boolean;
+  /** What that turn's queries found, a line each, for Keep going to start from (2026-11-20). */
+  keepGoingFound: string[];
   /** The plan of a request with several parts, each step marked as it is done (Stage 4, 2026-11-20). Empty for most. */
   plan: PlanStep[];
   /** SP-9 — proposals this turn staged, in arrival order. Empty for most turns. */
@@ -401,6 +403,7 @@ export const EMPTY_TURN: Omit<ChatTurn, "id" | "question" | "mode"> = {
   delegations: [],
   converseSteps: [],
   keepGoing: false,
+  keepGoingFound: [],
   plan: [],
   stagedProposals: [],
   sheetRows: [],
@@ -522,7 +525,10 @@ const PART_PROJECTORS: Record<string, (t: ChatTurn, d: Payload) => void> = {
     }];
   },
   // the turn spent every step (2026-11-20): Keep going picks up from where it stopped
-  keep_going: (t) => { t.keepGoing = true; },
+  keep_going: (t, d) => {
+    t.keepGoing = true;
+    t.keepGoingFound = Array.isArray(d.found) ? d.found.filter((l): l is string => typeof l === "string") : [];
+  },
   // the plan as it stands: each call says the whole plan again, so the last one is the plan (Stage 4, 2026-11-20)
   plan: (t, d) => {
     const steps = Array.isArray(d.steps) ? d.steps : [];

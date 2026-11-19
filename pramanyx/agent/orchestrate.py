@@ -156,7 +156,7 @@ def helpers_tool(connection_id: str, *, session_id: str = "", canvas_id: Optiona
 #: The kinds of part a request can hold, each with the ability made for it. Matched on the person's words.
 PART_KINDS: tuple[tuple[str, "re.Pattern[str]", str], ...] = (
     ("why", re.compile(r"\b(investigate|find out why|work out why|why (?:did|has|is|was|are)|root cause|what (?:caused|drove))\b", re.I),
-     "deep_analysis, or answer_question and ask_in_parallel for a short look"),
+     "deep_analysis"),
     ("dashboard", re.compile(r"\b(create|build|make|set up|draft)\b[^.]{0,40}\bdashboard\b", re.I), "make_dashboard"),
     ("alert", re.compile(r"\b(notify|alert|warn|tell|let)\b[^.]{0,60}\b(team|me|us|someone|channel)\b|\bif it happens again\b|\bmonitor\b", re.I),
      "draft_monitor"),
@@ -176,10 +176,45 @@ def parts_note(question: str) -> str:
     found = parts_of(question)
     if not found:
         return ""
-    words = {"why": "finding out why", "dashboard": "a new dashboard", "alert": "an alert for when it happens again"}
+    words = {"why": "finding out why (hand it the person's question as they asked it; do not work it out by hand with "
+                    "queries)", "dashboard": "a new dashboard", "alert": "an alert for when it happens again"}
     lines = [f"- {words[kind]}: {ability}" for kind, ability in found]
     return ("## This request has several parts\n"
             "The person asked for several things at once:\n" + "\n".join(lines) + "\n"
             "Write the plan first (plan), then work each part in order, handing it to the ability named for it. A part "
             "staged for the person's Allow is done once it is staged. If the data cannot answer a part — a day it holds "
             "no rows for — say so plainly and go on with the rest.")
+
+
+#: Steps more for every part of a request after the first.
+STEPS_PER_PART = 4
+
+
+def steps_for(question: str, provider: Any) -> Optional[int]:
+    """The step budget of a turn: None (the model's own, as the loop reads it) for a single question; for a request of
+    several parts, that budget and ``STEPS_PER_PART`` more for every part after the first."""
+    found = parts_of(question)
+    if not found:
+        return None
+    from pramanyx.agent.tool_loop import _budget
+    return _budget(provider) + STEPS_PER_PART * (len(found) - 1)
+
+
+def found_lines(results: list[dict], most: int = 8) -> list[str]:
+    """What a turn's queries found, a line each — the SQL, how many rows, and the first row — so a turn that goes on
+    (Keep going) starts from what was found, not only from which tools ran (seen live 2026-11-20: told only the tools, the
+    next turn ran the same exploration again)."""
+    import json
+    out: list[str] = []
+    for i, r in enumerate((results or [])[-most:], 1):
+        sql = r.get("sql")
+        sql = sql.get("sql") if isinstance(sql, dict) else sql
+        cols = list((r.get("columns") or {}).get("columns") or []) if isinstance(r.get("columns"), dict) else []
+        rows = list((r.get("rows") or {}).get("rows") or []) if isinstance(r.get("rows"), dict) else []
+        line = f"{i}. {' '.join(str(sql or '').split())[:220]} → {len(rows)} rows"
+        if rows:
+            first = rows[0]
+            shown = dict(zip(cols, first)) if cols and isinstance(first, (list, tuple)) else first
+            line += f"; first: {json.dumps(shown, default=str)[:240]}"
+        out.append(line)
+    return out

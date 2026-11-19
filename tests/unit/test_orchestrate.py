@@ -108,3 +108,22 @@ def test_the_conversation_is_told_a_request_has_parts(monkeypatch):
     assert seen["extra_context"].startswith("## This request has several parts")
     asyncio.run(go("How many orders?"))
     assert "several parts" not in (seen["extra_context"] or "")
+
+
+def test_a_request_of_several_parts_has_room_for_each_and_a_single_question_keeps_the_models_budget(monkeypatch):
+    import pramanyx.agent.tool_loop as loop
+    from pramanyx.agent.orchestrate import STEPS_PER_PART, steps_for
+    monkeypatch.setattr(loop, "_budget", lambda provider: 8)
+    asked = "Our revenue dropped yesterday. Investigate why, create a monitoring dashboard, and notify the team if it happens again."
+    assert steps_for(asked, object()) == 8 + 2 * STEPS_PER_PART
+    assert steps_for("Why did revenue drop?", object()) is None
+
+
+def test_what_the_queries_found_goes_on_with_the_turn():
+    from pramanyx.agent.orchestrate import found_lines, parts_note
+    results = [{"sql": {"sql": "SELECT day,\n SUM(paid) AS revenue FROM o GROUP BY 1"}, "columns": {"columns": ["day", "revenue"]},
+                "rows": {"rows": [["2018-10-16", 1234.5], ["2018-10-17", 99.0]]}},
+               {"sql": {"sql": "SELECT 1"}}]
+    assert found_lines(results) == ['1. SELECT day, SUM(paid) AS revenue FROM o GROUP BY 1 → 2 rows; first: {"day": "2018-10-16", "revenue": 1234.5}',
+                                    "2. SELECT 1 → 0 rows"]
+    assert "do not work it out by hand with queries" in parts_note("Investigate why sales fell and create a dashboard")
