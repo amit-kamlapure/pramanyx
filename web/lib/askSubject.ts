@@ -79,6 +79,10 @@ export function usePageSubject(): AskSubject | null {
   return useSyncExternalStore(l => { pageListeners.add(l); return () => { pageListeners.delete(l); }; }, () => onPage, () => null);
 }
 
+/** Whether a change can be asked about this subject: a dashboard the person keeps, the one the server hands the change tool
+ *  (`_own_dashboard`). Another person's, or anything else, is read only. */
+export const changeable = (s: AskSubject | null | undefined): boolean => s?.kind === "dashboard" && !s.owner;
+
 /** One subject's identity, to know it again: what the ask door would be sent. */
 export const subjectKey = (s: AskSubject | null): string => (s ? JSON.stringify(focusOf(s)) : "");
 
@@ -116,7 +120,7 @@ export function subjectWords(s: AskSubject): string {
   }
   if (s.kind === "sheet") return `Asking about ${s.title}`;
   if (s.kind === "table") return `Asking about the table ${s.table}`;
-  if (s.kind === "query") return `Asking about the query ${s.title ? `“${s.title}”` : "in the editor"}`;
+  if (s.kind === "query") return `Asking about the query ${s.title ? `“${s.title}”` : "in the SQL Editor"}`;
   if (s.kind === "objects") {
     const n = s.refs.length;
     return `Asking about ${formatCount(n)} ${n === 1 ? s.noun[0] : s.noun[1]}${s.label ? ` · from ${s.label}` : ""}`;

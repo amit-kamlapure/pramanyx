@@ -2112,9 +2112,11 @@ export default function Home() {
                         />
                       )}
                       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
+                        {/* the Ask page is the Ask panel at full size (decision 7 of the plan, 2026-11-19): the same layout */}
                         <ChatPanel
                           key={chatKey}
                           address="main"
+                          harness
                           connectionId={selectedConn}
                           canvasId={activeCanvas?.id}
                           restoreSessionId={selectedChatSessionId}

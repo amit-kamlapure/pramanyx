@@ -1156,7 +1156,7 @@ function NarrativeBrief({
     ...(showFigure && (turn.columns.length > 0 || streaming) ? [{ id: "results" as const, label: turn.rows.length ? `Results · ${formatCount(turn.rows.length)}` : "Results" }] : []),
     ...(hasExplanation || streamingProse != null ? [{ id: "explanation" as const, label: streamingProse != null ? "Explanation · writing" : "Explanation" }] : []),
     ...(turn.sql?.trim() ? [{ id: "sql" as const, label: "SQL" }] : []),
-    ...(insightDetailsApply(turn, connectionId) ? [{ id: "evidence" as const, label: "Evidence" }] : []),
+    ...(hasEvidence(turn, connectionId) ? [{ id: "evidence" as const, label: "Evidence" }] : []),
   ];
   const shown: AnswerView | null = view && views.some(v => v.id === view) ? view : views[0]?.id ?? null;
   // Post-done arrival fade (uplift pattern) — live turns only; restored turns render
@@ -1169,7 +1169,11 @@ function NarrativeBrief({
   // The coworker's layout: the headline, what the rows say with what they stood on at its end, the exhibit, what stands out,
   // the follow-ups, and what the answer can become under one More. Nothing of the answer is dropped, only arranged.
   if (harness.on && !lean) {
-    const prose = streamingProse != null ? safePartial(streamingProse) : proseText;
+    // The words written for this answer. The summary computed from the rows stands in only where no figure is shown: beside
+    // the exhibit it says the figure a third time ("Row Count: 8.8K" under "…contains 8,807 rows", above 8.8K).
+    const figureShown = showFigure && turn.columns.length > 0;
+    const prose = streamingProse != null ? safePartial(streamingProse)
+      : turn.narrative?.narrative?.trim() || (figureShown ? "" : proseText);
     return (
       <Brief>
         {turn.headline && readsAsProse(turn.headline)
@@ -1336,7 +1340,7 @@ function NarrativeBrief({
           )}
           {shown === "evidence" && (
             <div data-testid="answer-evidence">
-              <InsightDetails turn={turn} connectionId={connectionId} onShowSource={onShowSource} bare />
+              <AnswerEvidence turn={turn} connectionId={connectionId} onShowSource={onShowSource} bare />
             </div>
           )}
         </>
@@ -1378,26 +1382,37 @@ function NarrativeBrief({
   );
 }
 
-/** The coworker's exhibit: the result framed, with its statement one click away and how many rows it read. */
+/** The coworker's exhibit: the result framed, with its statement and its evidence one click away, and how many rows it
+ *  read. The evidence is the classic layout's Evidence view, kept: the panel arranges an answer, it drops nothing. */
 function HarnessExhibit({ turn, onShowSource, streaming, connectionId }: {
   turn: ChatTurn; onShowSource?: (data: SourcePanelData) => void; streaming: boolean; connectionId?: string;
 }) {
-  const [sql, setSql] = useState(false);
+  const [open, setOpen] = useState<"sql" | "evidence" | null>(null);
+  const flip = (what: "sql" | "evidence") => setOpen(o => (o === what ? null : what));
   const rows = turn.rows.length;
+  const evidence = hasEvidence(turn, connectionId);
   return (
     <div data-testid="answer-exhibit" style={{ border: "1px solid var(--card-edge)", borderRadius: "var(--r3)", padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8, minWidth: 0 }}>
       <ResultFigure turn={turn} onShowSource={onShowSource} streaming={streaming} connectionId={connectionId} />
       {!streaming && turn.columns.length > 0 && (
         <div className="aug-fs-xs" style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--t3)" }}>
           {turn.sql?.trim() && (
-            <Button variant="ghost" size="xs" aria-expanded={sql} data-testid="answer-show-sql" onClick={() => setSql(s => !s)}>
-              {sql ? "Hide the SQL" : "Show the SQL"}
+            <Button variant="ghost" size="xs" aria-expanded={open === "sql"} data-testid="answer-show-sql" onClick={() => flip("sql")}>
+              {open === "sql" ? "Hide the SQL" : "Show the SQL"}
+            </Button>
+          )}
+          {evidence && (
+            <Button variant="ghost" size="xs" aria-expanded={open === "evidence"} data-testid="answer-show-evidence" onClick={() => flip("evidence")}>
+              {open === "evidence" ? "Hide the evidence" : "Evidence"}
             </Button>
           )}
           <span style={{ marginLeft: "auto" }}>{formatCount(rows)} {rows === 1 ? "row" : "rows"} from the query</span>
         </div>
       )}
-      {sql && turn.sql && <SqlBlock sql={turn.sql} />}
+      {open === "sql" && turn.sql && <SqlBlock sql={turn.sql} />}
+      {open === "evidence" && (
+        <div data-testid="answer-evidence"><AnswerEvidence turn={turn} connectionId={connectionId} onShowSource={onShowSource} bare /></div>
+      )}
     </div>
   );
 }
@@ -1586,8 +1601,8 @@ function GroundingDetails({ connectionId, question }: { connectionId: string; qu
 }
 
 // ── Insight machinery — folded into one quiet disclosure ──────────────────────
-/** Whether an answer has anything for its Evidence view — the same test `InsightDetails` makes. */
-function insightDetailsApply(turn: ChatTurn, connectionId?: string): boolean {
+/** Whether an answer has anything for its Evidence view — the same test `AnswerEvidence` makes. */
+function hasEvidence(turn: ChatTurn, connectionId?: string): boolean {
   return !!(
     (turn.analysis && (turn.analysis.intent || turn.analysis.steps.length > 0)) || turn.tablesUsed.length > 0
     || (turn.contextManifest && connectionId) || turn.columns.length > 0 || turn.playbookRefs.length > 0
@@ -1595,7 +1610,7 @@ function insightDetailsApply(turn: ChatTurn, connectionId?: string): boolean {
   );
 }
 
-function InsightDetails({
+function AnswerEvidence({
   turn, connectionId, onShowSource, bare = false,
 }: {
   turn: ChatTurn;

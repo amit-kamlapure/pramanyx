@@ -6,7 +6,7 @@ import { doorFor, isPlainSend } from "@/lib/chatDoors";
 import { uploadAttachment, type AttachmentResult } from "@/lib/attachments";
 import { projectThread, newSessionId, type PramanyxUIMessage, type ChatTurn } from "@/lib/chatTurn";
 import { usePramanyxChat } from "@/lib/usePramanyxChat";
-import { focusOf, setAskSubject, subjectKey, subjectWords, useAskSubject, usePageSubject } from "@/lib/askSubject";
+import { changeable, focusOf, setAskSubject, subjectKey, subjectWords, useAskSubject, usePageSubject } from "@/lib/askSubject";
 import { useStickToBottom } from "@/lib/useStickToBottom";
 import { brandEdge } from "@/components/ui/brand";
 import { Button } from "@/components/ui/button";
@@ -116,11 +116,13 @@ interface InputBoxProps {
    *  way to take it off. Absent: the composer is as it was. */
   subject?: string;
   onDropSubject?: () => void;
+  /** The subject is one a change can be asked about (`changeable`): the composer says so. */
+  changes?: boolean;
   /** The coworker's composer: its edge wears the brand's colours at rest, as the coworker's does. */
   harness?: boolean;
 }
 
-function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, setMode, onSend, onStop, onClear, attachedFile, onAttach, agents, agentId, setAgentId, subject, onDropSubject, harness = false }: InputBoxProps) {
+function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, setMode, onSend, onStop, onClear, attachedFile, onAttach, agents, agentId, setAgentId, subject, onDropSubject, changes = false, harness = false }: InputBoxProps) {
   const [focused, setFocused] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -193,7 +195,7 @@ function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, se
            in flight (useChat.ask aborts before it starts, and the backend stops the core
            at its next checkpoint). Disabling here made the product argue with the user
            about whose turn it was. */
-        placeholder={harness ? "Ask anything, or describe a change" : multiline ? "Ask anything about your data…" : "Ask your question…"}
+        placeholder={harness ? (changes ? "Ask anything, or describe a change" : "Ask anything") : multiline ? "Ask anything about your data…" : "Ask your question…"}
         className="aug-focus-frame w-full bg-transparent aug-fs-sm text-zinc-100 placeholder:text-[var(--t3)] px-4 pt-3 pb-2 resize-none focus:outline-none disabled:opacity-50"
         // the frame around it says it is being written in: the field draws no second one inside
         style={{ display: "block", border: "none", outline: "none", boxShadow: "none", fontFamily: "inherit" }}
@@ -384,14 +386,17 @@ function DepthBanner({ turn, onRerun, harness = false }: { turn: ChatTurn; onRer
   const deep = r.depth === "deep";
   const overview = r.depth === "overview";
   const done = turn.status !== "loading";
-  // The coworker's layout keeps only what a person acts on or must be told: what the turn was about, as the server read
-  // it, and the other depth to ask again at. Which depth answered is the composer's own choice, already in view.
+  // The coworker's layout keeps what a person acts on or must be told: how the platform read the question, what the turn
+  // was about, and the other depth to ask again at. Which depth answered is the composer's own choice, already in view.
   if (harness) {
-    // a change asked in the conversation is not re-run as an answer
-    const rerun = done && !overview && !turn.stagedProposals.length;
-    if (!r.subject && !r.downgradedFrom && !rerun) return null;
+    // a change asked in the conversation is not re-run as an answer, nor read as a question
+    const change = turn.stagedProposals.length > 0;
+    const rerun = done && !overview && !change;
+    const why = change ? "" : r.why;
+    if (!why && !r.subject && !r.downgradedFrom && !rerun) return null;
     return (
       <div className="aug-fs-xs" data-testid="turn-depth" style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 6, color: "var(--t3)" }}>
+        {why && <span data-testid="turn-why">{why}</span>}
         {r.subject && (
           <span data-testid="turn-subject" style={{ color: "var(--t2)" }}>
             {r.subject.said}{r.subject.carried ? "" : " · this answer did not read them"}
@@ -1138,7 +1143,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
     agents,
     agentId,
     setAgentId,
-    ...(subject ? { subject: subjectWords(subject),
+    ...(subject ? { subject: subjectWords(subject), changes: changeable(subject),
       onDropSubject: () => (subject === pageHere ? setDroppedPage(subjectKey(pageHere)) : setAskSubject(null)) } : {}),
   };
 
@@ -1504,13 +1509,13 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
 
           {/* Agent trace now renders inline within each assistant turn (ChatMessage). */}
 
-          {sourcePage && <SourceBeside source={sourcePage} cover={harness} onClose={() => setSourcePage(null)} />}
+          {sourcePage && <SourceBeside source={sourcePage} cover={harness && beside} onClose={() => setSourcePage(null)} />}
 
           {/* ── Source panel drawer (right side, pushes chat left) ── */}
           {sourcePanel && (
             <div
               className="flex-shrink-0 flex flex-col border-l border-zinc-700/60"
-              style={harness ? { position: "absolute", inset: 0, zIndex: 30, background: "var(--blue1)" } : { width: 380, background: "var(--blue1)" }}
+              style={harness && beside ? { position: "absolute", inset: 0, zIndex: 30, background: "var(--blue1)" } : { width: 380, background: "var(--blue1)" }}
             >
               <SourcePanel
                 columns={sourcePanel.columns}

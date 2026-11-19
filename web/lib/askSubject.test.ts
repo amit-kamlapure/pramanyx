@@ -8,7 +8,8 @@ import { render, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
-  askSubject, dashboardOf, dashboardSubject, focusOf, nounOf, setAskSubject, subjectWords, useOnPage, usePageSubject, type AskSubject,
+  askSubject, changeable, dashboardOf, dashboardSubject, focusOf, nounOf, setAskSubject, subjectWords, useOnPage, usePageSubject,
+  type AskSubject,
 } from "@/lib/askSubject";
 import { LayerVisibleContext } from "@/lib/useVisiblePoll";
 
@@ -102,5 +103,14 @@ describe("what a page says it shows (the Ask panel, Stage 1)", () => {
     page.rerender(createElement(Page, { subject: TABLE, shown: true }));
     expect(onPage()).toEqual(TABLE);
     page.unmount();
+  });
+});
+
+describe("where a change can be asked", () => {
+  it("is a dashboard the person keeps, never another person's or anything else", () => {
+    expect(changeable(dashboardSubject("sheets", "sheets:sales", "Sales", null))).toBe(true);
+    expect(changeable(dashboardSubject("sheets", "shared:ana:sales", "Sales", null))).toBe(false);
+    expect(changeable({ kind: "table", connectionId: "sheets", noun: ["row", "rows"], table: "main.t" })).toBe(false);
+    expect(changeable(null)).toBe(false);
   });
 });
