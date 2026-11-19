@@ -530,9 +530,9 @@ function WorkbenchInner({
     : null;
   // What is open, kept or not: a saved query names its sync state on hover; a tab not saved as a query is a draft.
   const somethingOpen = mode === "sql" ? sqlTitle !== undefined : true;
-  const stateChip = !somethingOpen ? null : syncWords
-    ? <Chip testId="saved-sync" tone="up" title={syncWords.title}>Saved · {syncWords.label}</Chip>
-    : <Chip testId="draft-state" title="Not saved as a query yet — Save query keeps it, with its versions">Draft · not saved</Chip>;
+  // a saved query says it is; a tab not saved says nothing (the user, 2026-11-19: remove "Draft · not saved")
+  const stateChip = !somethingOpen || !syncWords ? null
+    : <Chip testId="saved-sync" tone="up" title={syncWords.title}>Saved · {syncWords.label}</Chip>;
   const shareControl = (
     <Button variant="outline" size="xs" data-testid="workbench-share" onClick={shareQuery}
       title={activeSaved ? "Copy a link that opens this saved query" : "Save the query first — a share link points at a saved query"}>
@@ -604,6 +604,8 @@ function WorkbenchInner({
         min={200}
         max={560}
         collapsed={!showCatalog}
+        // folded from its own divider, a chevron there and a slim strip to bring it back (the user, 2026-11-19)
+        collapsible={{ onToggle: () => setShowCatalog(v => !v), name: "the catalog" }}
         style={{ flex: 1, minWidth: 0, minHeight: 0 }}
         left={
           <CatalogRail
@@ -643,7 +645,6 @@ function WorkbenchInner({
                 shown={mode === "sql"}
                 onTitle={setSqlTitle}
                 catalogOpen={showCatalog}
-                onToggleCatalog={() => setShowCatalog(v => !v)}
                 sharedTools={shared}
                 connectionName={(connections ?? []).find(c => c.id === connId)?.name}
                 saved={savedList}
