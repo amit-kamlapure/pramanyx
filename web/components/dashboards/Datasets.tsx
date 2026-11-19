@@ -258,6 +258,8 @@ function DatasetEditor({ spec, name, connectionId, onChange, onFollow, onClose }
   const [editing, setEditing] = useState(false);
   const [edited, setEdited] = useState<{ before: string; notes: string[] } | null>(null);
   const box = useRef<HTMLTextAreaElement>(null);
+  // where the person last was in the statement; never there yet, what is put in goes at its end (seen live: at its start)
+  const placed = useRef(false);
   const reads = valuesRead(sql);
   const given = triedValues(reads, spec.values, tried);
   const charts = cardsBuiltOn(spec, name).length;
@@ -266,9 +268,13 @@ function DatasetEditor({ spec, name, connectionId, onChange, onFollow, onClose }
   /** `text` put in the statement where the person was writing, and the writing goes on after it. */
   const insert = (text: string) => {
     const el = box.current;
-    const at = el ? el.selectionStart : sql.length;
-    setSql(sql.slice(0, at) + text + sql.slice(el ? el.selectionEnd : at));
-    requestAnimationFrame(() => { el?.focus(); el?.setSelectionRange(at + text.length, at + text.length); });
+    const at = el && placed.current ? el.selectionStart : sql.length;
+    const to = el && placed.current ? el.selectionEnd : at;
+    const gap = at === sql.length && sql && !/\s$/.test(sql) ? " " : "";
+    setSql(sql.slice(0, at) + gap + text + sql.slice(to));
+    placed.current = true;
+    const end = at + gap.length + text.length;
+    requestAnimationFrame(() => { el?.focus(); el?.setSelectionRange(end, end); });
   };
   const keep = async () => {
     const def: DashboardDataset = { label: label.trim().slice(0, 120), sql: sqlChanged ? sql.trim() : was.sql, ...(sqlChanged ? {} : { table: was.table ?? null }) };
@@ -292,7 +298,7 @@ function DatasetEditor({ spec, name, connectionId, onChange, onFollow, onClose }
     <div data-testid="data-dataset-editor" style={{ display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
       <Input aria-label="The dataset's name" value={label} maxLength={120} disabled={busy} onChange={e => setLabel(e.target.value)} style={{ maxWidth: 420 }} />
       <Textarea ref={box} aria-label="The dataset's SQL" data-testid="data-dataset-sql" rows={12} spellCheck={false} value={sql} disabled={busy}
-        onChange={e => setSql(e.target.value)}
+        onChange={e => setSql(e.target.value)} onSelect={() => { placed.current = true; }}
         onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); setRunAsked(n => n + 1); } }}
         style={{ fontFamily: "var(--font-mono)" }} />
       <span style={{ display: "flex", alignItems: "center", gap: 8 }}>

@@ -223,7 +223,7 @@ describe("a dataset's parameters and Edit ✦ (2026-11-20)", () => {
     fireEvent.click(screen.getByTestId("data-dataset-add-parameter"));
     fireEvent.click(screen.getByTestId("data-parameter"));
     const box = screen.getByLabelText("The dataset's SQL") as HTMLTextAreaElement;
-    expect(box.value).toContain("{{window}}");
+    expect(box.value).toBe(`${ORDERS.sql} {{window}}`);              // never placed in it yet: at its end, never its start
     expect(screen.getByLabelText("Run with Window as")).toHaveValue(14);
     fireEvent.change(screen.getByLabelText("Run with Window as"), { target: { value: "30" } });
     fireEvent.click(screen.getByTestId("data-dataset-run"));
