@@ -18,12 +18,13 @@
  * It holds no store and keeps nothing itself: every change is handed to `onChange` as the next spec, checked by the
  * rules first so a change they refuse is said and never drawn. The page keeps it — one version for a burst.
  */
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { CanvasScale } from "@/components/dashboards/cellBox";
 import type { DashboardHandle, ReadState } from "@/components/dashboards/ComposedDashboard";
 import { PlacementShown, type PlacementView } from "@/components/dashboards/placementView";
 import { PLACE_SIZE, PLACE_WORDS, cellOf, freeSpot, measureSection, type PlaceKind, type PlacedBox } from "@/lib/dashboards/placing";
+import { OpenDatasetContext } from "@/components/dashboards/Datasets";
 import { PieceSetup, type CardDate } from "@/components/dashboards/PieceSetup";
 import type { CardHolds } from "@/lib/dashboards/cardHolds";
 import { ChoiceSetup, DataPane, SetSetup, ValueSetup, readingElements } from "@/components/dashboards/WiringSetup";
@@ -186,6 +187,12 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
   // the layout pane, folded to a strip so the canvas has the room (the dashboards study, R7, 2026-11-18); one click opens it
   const [paneOpen, setPaneOpen] = useState(false);
   const openPane = (t: "layout" | "data") => { setTab(t); setPaneOpen(true); if (t === "layout") setWire(null); };
+  // a dataset a chart is built on, opened in the Data pane from the chart's setup (2026-11-19); counted, so a second
+  // click on the same one opens it again
+  const [dataOpen, setDataOpen] = useState<{ name: string; n: number } | null>(null);
+  const openDataset = useCallback((name: string) => {
+    setTab("data"); setPaneOpen(true); setDataOpen(o => ({ name, n: (o?.n ?? 0) + 1 }));
+  }, []);
   // a set, a value or a choice chosen in the Data tab: `set:<name>`, `value:<name>`, `choice:<name>`
   const [wire, setWire] = useState<string | null>(null);
   const wireName = wire ? wire.slice(wire.indexOf(":") + 1) : "";
@@ -346,6 +353,7 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
   }, []);
 
   return (
+    <OpenDatasetContext.Provider value={openDataset}>
     <div data-testid="dashboard-builder" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
       {bar}
       <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: `${paneOpen ? 232 : 44}px minmax(0, 1fr) 304px` }}>
@@ -369,7 +377,7 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
           </div>
           {tab === "data" ? (
             <DataPane spec={spec} selected={wire} onSelect={key => { setWire(key); setSelected(null); }} onChange={apply}
-              connectionId={connectionId} schema={schema} cardReads={cardReads} onFollow={onFollow} />
+              connectionId={connectionId} schema={schema} cardReads={cardReads} onFollow={onFollow} opened={dataOpen} />
           ) : (
             <>
               <PaneLabel>Layout · {lines} {lines === 1 ? "line" : "lines"}</PaneLabel>
@@ -517,6 +525,7 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
         </aside>
       </div>
     </div>
+    </OpenDatasetContext.Provider>
   );
 }
 

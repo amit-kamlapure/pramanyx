@@ -69,7 +69,7 @@ import { finishedWatch, heardFrame, startWatch, type DraftWatch } from "@/lib/da
 import { askAbout, dashboardSubject, useOnPage } from "@/lib/askSubject";
 import { ImportDashboard } from "@/components/dashboards/ImportDashboard";
 import { SubscribeDashboard } from "@/components/dashboards/SubscribeDashboard";
-import { BuiltOnDataset, ChartFromData, followDataset, withFollowed } from "@/components/dashboards/Datasets";
+import { BuiltOnDataset, ChartFromData, DatasetLine, followDataset, moveToDataset, withFollowed } from "@/components/dashboards/Datasets";
 import { FromSql, FromTables } from "@/components/dashboards/StartFromData";
 import { downloadText } from "@/lib/query/csv";
 import { Chip } from "@/components/clarity/kit";
@@ -1254,6 +1254,9 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
       // the board study — a piece dragged by its header, or Alt+Shift+arrows, lands beside another
       onMove: (key: string, target: string, place: "before" | "after") => on(s => moveTo(s, key, target, place), "moved by hand"),
       onFilterWidth: (grades: number) => on(s => setFilterWidth(s, grades), "the filter column resized by hand"),
+      // as the peer product does: the filters panel open or put away when the dashboard is edited is what readers first see
+      onFiltersShut: (shut: boolean) => on(s => setProps(s, s.root, { filters_shut: shut || null }),
+        shut ? "the filters panel put away by hand" : "the filters panel opened by hand"),
       onAddGlobalFilter: () => { if (!current) return null; const made = addGlobalFilter(current); if (made.key) change(made.spec, "a global filter added by hand"); return made.key; },
       // Arc AP-4 — an empty section's offer: the piece picker for it, or sections of its own
       // an empty section's "Add a piece": a chart's box set down across its top, chosen in the panel
@@ -1545,7 +1548,18 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
                     slot ? "a value's colour kept on the dashboard by hand" : "a value's colour let go by hand");
                 },
               };
-              return <QueryChartEditor key={cardId} cs={cs} onKept={reload} colors={colors} />;
+              // what it is built on, under its Visualization: the dataset, opened in the Data pane, and the way to another
+              const dataset = (
+                <DatasetLine spec={current} cardId={cardId} onMove={async to => {
+                  const out = await moveToDataset(connectionId, current, cs.card, to);
+                  if ("refused" in out) return out.refused;
+                  const label = current.datasets?.[to]?.label ?? to;
+                  edit(s => builtOn(swapCard(s, cardId, out.cardId), out.cardId, to), "a chart built on another dataset by hand",
+                    out.reset ? `Now built on ${label}. Its fields were set again from the columns of ${label}.` : `Now built on ${label}.`);
+                  return [];
+                }} />
+              );
+              return <QueryChartEditor key={cardId} cs={cs} onKept={reload} colors={colors} dataset={dataset} />;
             }
             return <ChartDock key={cardId} cardKey={cardId} charted={!!cs && tileShape(cs) === "rows"} />;
           }}
@@ -1731,7 +1745,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
   }
 
   return (
-    <div data-testid="briefing-dashboards" data-dashboard-ground="" style={{ flex: 1, minHeight: 0, overflow: "auto", padding: "14px 32px 32px", background: "var(--bg-0)" }}>
+    <div data-testid="briefing-dashboards" data-dashboard-ground="" style={{ flex: 1, minHeight: 0, overflow: "auto", padding: "8px 16px 24px", background: "var(--bg-0)" }}>
       {/* On the home, the page's one action. Inside the app it sits in the title row; outside it, above the list. */}
       {data && subscribing && (
         <SubscribeDashboard open onClose={() => setSubscribing(false)} connectionId={connectionId} dashboardId={openId} title={heldTitle} />

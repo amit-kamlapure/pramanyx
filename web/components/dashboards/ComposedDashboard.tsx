@@ -55,7 +55,9 @@ import {
   ObjectFiltersPiece, ObjectTablePiece, PiecesProvider, ProcessBoardPiece, ValuesBar, chooseWords, useFiltering, usePieceFiltering, usePieces, useValueChips,
   type BarChip, type FilterProperty, type ObjectBarWords,
 } from "@/components/dashboards/OntologyPieces";
-import { FiltersHead, FiltersMenuPlace, FiltersShutStrip, GlobalFiltersColumn, useFiltersShut } from "@/components/dashboards/GlobalFilters";
+import {
+  FiltersFoldProvider, FiltersHead, FiltersMenuPlace, FiltersShutStrip, GlobalFiltersColumn, HeldReport, useFiltersFold, useFiltersShut,
+} from "@/components/dashboards/GlobalFilters";
 import { PLACE_WORDS, measureSection } from "@/lib/dashboards/placing";
 import { PlacementShown, type PlacementView } from "@/components/dashboards/placementView";
 import { followsByValue, heldBy, openedWith, stillHeld, type GlobalFilterProps } from "@/lib/dashboards/globalFilters";
@@ -96,6 +98,8 @@ export interface DashboardDoors extends TileDoors, StaticDoors {
   onMove?: (key: string, target: string, place: "before" | "after") => void;
   /** Arc AP-1 — the filter column's width, in grades of 40 px. */
   onFilterWidth?: (grades: number) => void;
+  /** v21 — the builder: whether the dashboard's filters panel is open, kept on the dashboard as readers first see it. */
+  onFiltersShut?: (shut: boolean) => void;
   /** Arc AP-1 — the builder: a piece, the filter column or a section pointed at is the one chosen to set up. */
   onSelect?: (key: string) => void;
   /** Arc AP-4 — an empty section's offer: a piece placed in it, or sections of its own laid out in it. */
@@ -253,9 +257,18 @@ function DrillMenu() {
 }
 
 /** v19 — the dashboard's global filters beside everything else it draws. */
-function DashboardRoot(props: ComponentRenderProps<{ title: string }>) {
-  return <><DrillMenu /><DashboardRootBody {...props} /></>;
+function DashboardRoot(props: ComponentRenderProps<{ title: string; filters_shut?: boolean | null }>) {
+  const { doors } = useDashboard();
+  // whether the filters panel is open is the dashboard's own (v21): set in the builder, and what a reader first sees
+  return (
+    <FiltersFoldProvider authored={props.element.props.filters_shut === true} onAuthor={doors.onFiltersShut ?? null}>
+      <DrillMenu /><DashboardRootBody {...props} />
+    </FiltersFoldProvider>
+  );
 }
+
+/** How wide the strip is that stands for the filters put away: the filter icon's own width. */
+const FOLD_STRIP = 32;
 
 /** A filters column stays in reach while the Ask panel moves the page left (`--ask-pushed`, set by `AskPushedPage`): it
  *  stands as far in from the page's edge as the page moved, over the cards that pass under it, as a frozen column does in
@@ -266,26 +279,33 @@ const PINNED: CSSProperties = { position: "relative", zIndex: 3, transform: "tra
   boxShadow: "-40px 0 0 0 var(--bg-0)" };
 
 function DashboardRootBody(props: ComponentRenderProps<{ title: string }>) {
-  const { elements, focus } = useDashboard();
-  const shut = useFiltersShut();
+  const { elements, focus, doors } = useDashboard();
+  const { shut, held: elsewhere } = useFiltersFold();
   const keys = props.element.children ?? [];
   const at = keys.findIndex(k => elements[k]?.type === "GlobalFilters");
-  if (at < 0) return <RootLayout {...props} />;
   const kids = Children.toArray(props.children);
-  const rest = { ...props, element: { ...props.element, children: keys.filter((_, i) => i !== at) }, children: kids.filter((_, i) => i !== at) };
-  const held = (elements[keys[at]]?.children ?? [])
-    .filter(key => heldBy(focus, key, elements[key]?.props as unknown as GlobalFilterProps)).length;
+  const rest = at < 0 ? props
+    : { ...props, element: { ...props.element, children: keys.filter((_, i) => i !== at) }, children: kids.filter((_, i) => i !== at) };
+  const globals = at >= 0 ? elements[keys[at]]?.children ?? [] : [];
+  const held = globals.filter(key => heldBy(focus, key, elements[key]?.props as unknown as GlobalFilterProps)).length;
+  // the filters this dashboard draws in a column: its global filters (each the builder's, or one a reader can use), and a
+  // file's or an object's column leading its pages
+  const firstType = elements[(rest.element.children ?? [])[0] ?? ""]?.type;
+  const drawsGlobals = at >= 0 && (!!doors.onSelect || globals.some(k => { const p = elements[k]?.props as Partial<GlobalFilterProps> | undefined; return !!p?.table && !!p?.column; }));
+  const columns = drawsGlobals || firstType === "QueryFilters" || firstType === "ObjectFilters";
   // put away, the column stays mounted, out of sight: it is also what feeds the values the cards' queries read
-  const column = <div hidden={shut} data-testid="dashboard-global-filter-column" style={shut ? { display: "none" } : { minWidth: 0, ...PINNED }}>{kids[at]}</div>;
-  if (shut) {
+  const column = at < 0 ? null
+    : <div hidden={shut} data-testid="dashboard-global-filter-column" style={shut ? { display: "none" } : { minWidth: 0, ...PINNED }}>{kids[at]}</div>;
+  if (shut && columns) {
+    // one filter icon at the canvas's upper left stands for every column put away, and takes none of the page's height
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
-        <FiltersShutStrip held={held} />
-        {column}
-        <div style={{ minWidth: 0 }}><RootLayout {...rest} /></div>
+      <div data-testid="dashboard-filters-folded" style={{ display: "grid", gridTemplateColumns: `${FOLD_STRIP}px minmax(0, 1fr)`, gap: SPACE, alignItems: "start" }}>
+        <div style={{ alignSelf: "stretch", ...PINNED }}><FiltersShutStrip held={held + elsewhere} /></div>
+        <div style={{ minWidth: 0 }}>{column}<RootLayout {...rest} /></div>
       </div>
     );
   }
+  if (at < 0) return <RootLayout {...props} />;
   return (
     <div style={{ display: "grid", gridTemplateColumns: `${FILTER_COLUMN}px minmax(0, 1fr)`, gap: SPACE, alignItems: "start" }}>
       {column}
@@ -329,7 +349,7 @@ function RootLayout({ element, children }: ComponentRenderProps<{ title: string 
       return (
         <QueryNarrowingProvider table={held.table}>
           <div role="region" aria-label={element.props.title} data-testid="dashboard" style={{ display: "flex", flexDirection: "column", gap: SPACE, minWidth: 0 }}>
-            <QueryFiltersShut />
+            <QueryFiltersHeld />
             <div data-testid="dashboard-filter-column" hidden style={{ display: "none" }}>{queryColumn}</div>
             <ValuesBar spaced={false} /><FilteredBy /><FirstPageDoor />{others}
           </div>
@@ -356,7 +376,7 @@ function RootLayout({ element, children }: ComponentRenderProps<{ title: string 
   if (shut) {
     return (
       <div role="region" aria-label={element.props.title} data-testid="dashboard" style={{ display: "flex", flexDirection: "column", gap: SPACE, minWidth: 0 }}>
-        <ObjectFiltersShut />
+        <ObjectFiltersHeld />
         <div data-testid="dashboard-filter-column" hidden style={{ display: "none" }}>{column}</div>
         <ValuesBar spaced={false} />
         <ObjectFilterWords entity={props.entity} properties={props.properties} set={props.set}>
@@ -396,17 +416,17 @@ function RootLayout({ element, children }: ComponentRenderProps<{ title: string 
   );
 }
 
-/** The button above the cards of a dashboard made from a file, once its filters are put away: how many columns hold a choice. */
-function QueryFiltersShut() {
+/** A dashboard made from a file, its filters put away: how many columns hold a choice, said to the one filter icon. */
+function QueryFiltersHeld() {
   const { narrowing } = useQueryNarrowing();
-  return <FiltersShutStrip held={narrowing.length} />;
+  return <HeldReport column="query" n={narrowing.length} />;
 }
 
-/** The same above a dashboard started from an object: how many of its properties hold a choice. */
-function ObjectFiltersShut() {
+/** The same for a dashboard started from an object: how many of its properties hold a choice. */
+function ObjectFiltersHeld() {
   const { filters } = usePieces();
   const held = Object.values(filters).reduce((n, props) => n + Object.values(props).filter(v => v.length > 0).length, 0);
-  return <FiltersShutStrip held={held} />;
+  return <HeldReport column="object" n={held} />;
 }
 
 /** The dashboard's pages as a reader may open them, in order: a page hidden from readers is drawn only in the builder. */

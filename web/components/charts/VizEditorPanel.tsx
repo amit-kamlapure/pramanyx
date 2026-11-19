@@ -49,6 +49,8 @@ export interface VizEditorModel {
   vizValue?: string;
   vizOptions?: VizSelectOption[];
   setViz?: (v: string) => void;
+  /** What the chart is built on, said under the Visualization dropdown (a dashboard's dataset, 2026-11-19). */
+  vizBelow?: ReactNode;
   // X axis
   dimValue: string;
   dimOptions: VizSelectOption[];         // [] → no X control
@@ -618,6 +620,7 @@ export function VizEditorPanel({ model, onClose, docked = false }: { model: VizE
           ) : undefined}>
           <Select label="Visualization" value={vizValue} options={vizOptions} onChange={setViz}
             leading={<span style={{ color: "var(--accent)", flexShrink: 0, display: "inline-flex", marginRight: 6 }}><Icon name={VIZ_ICON[vizValue] ?? "chart"} size={15} /></span>} />
+          {model.vizBelow}
         </Section>
 
         {chartMode && model.dimOptions.length > 0 && (

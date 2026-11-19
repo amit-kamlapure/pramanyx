@@ -5,7 +5,7 @@
  * is theirs, kept in their browser and said in the "Filtered by" bar. In the builder a filter is chosen like any piece and set up in
  * the right panel.
  */
-import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Popover, Slider } from "@radix-ui/themes";
 
 import { Button } from "@/components/ui/button";
@@ -247,33 +247,45 @@ function FilterControl(props: Control & { clear: () => void }) {
 }
 
 // ── the column, put away and brought back (the user, 2026-11-19: "our Global filters need to be collapsible") ──
+// One filter icon at the canvas's upper left stands for every filters column put away, as in the peer product the user
+// pointed at (2026-11-19): whether the panel is open is the dashboard's own, set while it is edited, and is what a reader
+// first sees; a reader's own toggle lasts their visit. Before, it was one choice kept in the browser for every dashboard,
+// and each column drew its own button: three stacked "Filters" buttons on a dashboard with three columns.
 
-const SHUT_KEY = "pramanyx:dashboard-filters-shut";
-let shut: boolean | null = null;
-const shutListeners = new Set<() => void>();
-const readShut = (): boolean => {
-  if (shut !== null) return shut;
-  try { shut = window.localStorage.getItem(SHUT_KEY) === "1"; } catch { shut = false; }
-  return shut;
-};
+export interface FiltersFold {
+  shut: boolean;
+  setShut: (next: boolean) => void;
+  /** How many choices the columns other than the global filters hold, reported by each (a file's, an object's). */
+  held: number;
+  report: (column: string, n: number) => void;
+}
+export const FiltersFoldContext = createContext<FiltersFold>({ shut: false, setShut: () => {}, held: 0, report: () => {} });
 
-/** Whether the reader has put the filters column away: theirs, kept in their browser, for every dashboard. */
-export function useFiltersShut(): boolean {
-  return useSyncExternalStore(
-    l => { shutListeners.add(l); return () => { shutListeners.delete(l); }; },
-    () => (typeof window === "undefined" ? false : readShut()),
-    () => false,
-  );
+/** Whether the dashboard's filters are put away now. */
+export function useFiltersShut(): boolean { return useContext(FiltersFoldContext).shut; }
+export function useFiltersFold(): FiltersFold { return useContext(FiltersFoldContext); }
+
+/** The fold of a dashboard's filters: `authored` is the dashboard's own (open unless it says shut). In the builder,
+ *  `onAuthor` keeps a change on the dashboard; a reader's change is theirs, for this visit. */
+export function FiltersFoldProvider({ authored, onAuthor, children }: {
+  authored: boolean; onAuthor?: ((next: boolean) => void) | null; children: ReactNode;
+}) {
+  const [mine, setMine] = useState<boolean | null>(null);
+  const [counts, setCounts] = useState<Record<string, number>>({});
+  const shut = onAuthor ? authored : (mine ?? authored);
+  const setShut = useCallback((next: boolean) => { if (onAuthor) onAuthor(next); else setMine(next); }, [onAuthor]);
+  const report = useCallback((column: string, n: number) => setCounts(c => (c[column] === n ? c : { ...c, [column]: n })), []);
+  const held = Object.values(counts).reduce((a, b) => a + b, 0);
+  const fold = useMemo(() => ({ shut, setShut, held, report }), [shut, setShut, held, report]);
+  return <FiltersFoldContext.Provider value={fold}>{children}</FiltersFoldContext.Provider>;
 }
 
-export function shutFilters(next: boolean): void {
-  shut = next;
-  try { window.localStorage.setItem(SHUT_KEY, next ? "1" : "0"); } catch { /* kept while the page is open */ }
-  shutListeners.forEach(l => l());
+/** A filters column's count of choices, said up to the one icon that stands for it once put away. Draws nothing. */
+export function HeldReport({ column, n }: { column: string; n: number }) {
+  const { report } = useFiltersFold();
+  useEffect(() => { report(column, n); return () => report(column, 0); }, [column, n, report]);
+  return null;
 }
-
-/** For tests: forget what this browser kept. */
-export function resetFiltersShut(): void { shut = null; }
 
 /** Where the menu of everything cutting the dashboard goes (its filters' choices, a mark clicked on a chart, Clear all, Copy
  *  link): beside the filters' own heading, never in the title row (the user, 2026-11-19: "The filter icon at the top is not
@@ -285,27 +297,29 @@ function FiltersMenuSlot() {
   return place ? <span ref={place} data-testid="filters-menu-place" style={{ display: "inline-flex" }} /> : null;
 }
 
-/** What stands above the cards once the column is put away: the way back to it, and how many filters still hold a choice,
- *  so a reader never forgets the cards are narrowed. It takes a line above the cards and none of their width (the user,
- *  2026-11-19: "it should sit on top of the dashboard components ... no vertical space occupying dashboard area"). */
+/** What stands for the filters once put away: one filter icon at the canvas's upper left, on a strip as narrow as the icon,
+ *  with how many filters still hold a choice, so a reader never forgets the cards are narrowed. It takes none of the
+ *  page's height (the user, 2026-11-19: "no vertical space occupying dashboard area"). */
 export function FiltersShutStrip({ held }: { held: number }) {
+  const { setShut } = useFiltersFold();
   return (
-    <div data-testid="global-filters-shut" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-      <FiltersMenuSlot />
-      <Button size="sm" variant="secondary" data-testid="global-filters-show" onClick={() => shutFilters(false)}
-        aria-label={held ? `Show the filters · ${held} holding a choice` : "Show the filters"} style={{ gap: 6 }}>
-        <Icon name="filter" size={14} /> Filters
-        {held > 0 && <span data-testid="global-filters-held" style={{ color: "var(--t2)", fontVariantNumeric: "tabular-nums" }}>· {held}</span>}
+    <div data-testid="global-filters-shut" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, position: "sticky", top: 12 }}>
+      <Button size="icon-sm" variant="secondary" data-testid="global-filters-show" onClick={() => setShut(false)}
+        aria-label={held ? `Show the filters · ${held} holding a choice` : "Show the filters"} title="Show the filters">
+        <Icon name="filter" size={15} />
       </Button>
+      {held > 0 && <span className="aug-fs-xs" data-testid="global-filters-held" style={{ color: "var(--t2)", fontVariantNumeric: "tabular-nums" }}>{held}</span>}
+      <FiltersMenuSlot />
     </div>
   );
 }
 
 /** The control that puts a filters column away; every filters column a dashboard draws carries it. */
 export function FiltersHideButton() {
+  const { setShut } = useFiltersFold();
   return (
     <Button size="icon-xs" variant="ghost" aria-label="Put the filters away" title="Put the filters away · they keep what they hold"
-      data-testid="global-filters-hide" onClick={() => shutFilters(true)}><Icon name="chevl" size={14} /></Button>
+      data-testid="global-filters-hide" onClick={() => setShut(true)}><Icon name="chevl" size={14} /></Button>
   );
 }
 

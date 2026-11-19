@@ -63,7 +63,7 @@ import { z } from "zod";
  *  (`hidden` on a tab; 2026-11-18). 19: global filters. 20: filters that link, open on a value, name a date that moves, wait for
  *  Apply, hold to one page, match words exactly and feed a value; a card's fixed filters and the filters it ignores (2026-11-19).
  *  21: the datasets a dashboard's charts are built on (`datasets` on the spec), and the one a placed card is built on
- *  (`dataset`; 2026-11-19). */
+ *  (`dataset`); whether the filters panel is put away as a reader first sees it (`filters_shut` on the root; 2026-11-19). */
 export const DASHBOARD_VOCABULARY_VERSION = 21;
 /** v21 — a dataset's name, as the spec holds it and a placed card names it. */
 export const DATASET_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;
@@ -359,7 +359,8 @@ const valueColors = z.record(z.string().min(1).max(200),
 export const dashboardCatalog = defineCatalog(schema, {
   components: {
     Cockpit: {
-      props: z.object({ title: z.string().min(1).max(MAX_TITLE), colors: valueColors }),
+      // v21 — whether the filters panel is put away: what a reader first sees, as the author left it
+      props: z.object({ title: z.string().min(1).max(MAX_TITLE), colors: valueColors, filters_shut: z.boolean().nullable().optional() }),
       slots: ["default"],
       description: "The root. Holds one Tabs, or one or more Section. Its title names the dashboard; it is not drawn as a header.",
     },

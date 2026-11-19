@@ -190,7 +190,7 @@ function CountOf({ spec, set, sum, connectionId, schema }: { spec: DashboardSpec
 /** The Data pane (Arc AP-8; the datasets, 2026-11-19): the datasets the charts are built on first, then the values, each
  *  with where it comes from, what it holds now and how many read it; then the sets; then what the pieces output — a row
  *  chosen, rows ticked, a figure clicked — and the doors to new ones. */
-export function DataPane({ spec, selected, onSelect, onChange, connectionId, schema, cardReads, onFollow }: {
+export function DataPane({ spec, selected, onSelect, onChange, connectionId, schema, cardReads, onFollow, opened }: {
   spec: DashboardSpec;
   /** `set:<name>`, `value:<name>` or `choice:<name>` while one is chosen. */
   selected: string | null;
@@ -202,6 +202,8 @@ export function DataPane({ spec, selected, onSelect, onChange, connectionId, sch
   cardReads?: (cardId: string) => string[];
   /** A dataset's statement changed: kept on every chart built on it, or each reason one cannot follow. */
   onFollow?: (name: string, def: DashboardDataset) => Promise<string[]>;
+  /** A dataset to open at once, asked from a chart built on it. */
+  opened?: { name: string; n: number } | null;
 }) {
   const sets = Object.keys(spec.sets ?? {});
   const values = Object.keys(spec.values ?? {});
@@ -237,7 +239,7 @@ export function DataPane({ spec, selected, onSelect, onChange, connectionId, sch
   return (
     <div data-testid="builder-data" style={{ padding: "0 6px 8px" }}>
       <Label right={`${Object.keys(spec.datasets ?? {}).length} of ${MAX_DATASETS}`}>Datasets</Label>
-      <DatasetsList spec={spec} connectionId={connectionId} onChange={onChange} onFollow={onFollow} />
+      <DatasetsList spec={spec} connectionId={connectionId} onChange={onChange} onFollow={onFollow} opened={opened} />
       <Label right={`${values.length} of ${MAX_VALUES}`}>Values</Label>
       {values.map(n => {
         const v = spec.values?.[n];

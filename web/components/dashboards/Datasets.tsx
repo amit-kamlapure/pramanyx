@@ -7,7 +7,7 @@
  * what runs along the bottom, what is measured, what colours it. A dataset is never itself a piece of the page, and adding
  * one asks no model.
  */
-import { useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 import { QUERY_DEFAULT, setupAs } from "@/components/dashboards/QuerySetup";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,7 @@ import { SelectField } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { QueryRefused, getCatalogTree, keepDashboardQuery, previewDashboardQuery, type QueryShown, type QueryShownAs } from "@/lib/api";
 import {
-  MAX_DATASETS, cardsBuiltOn, dropDataset, freshDatasetName, putDataset, swapCard, type DashboardDataset, type DashboardSpec,
+  MAX_DATASETS, cardsBuiltOn, datasetOfCard, dropDataset, freshDatasetName, putDataset, swapCard, type DashboardDataset, type DashboardSpec,
 } from "@/lib/dashboards/edit";
 import { formatCount } from "@/lib/format";
 import { withUniqueKeys } from "@/lib/listKeys";
@@ -279,14 +279,18 @@ function DatasetEditor({ spec, name, connectionId, onChange, onFollow, onClose }
 /** The dashboard's datasets in its Data pane: each by its name, what it reads and how many charts are built on it,
  *  changed with its pencil, taken off with ×; and the two doors to more. A chart built on one taken off keeps reading
  *  what it read, on no dataset now. */
-export function DatasetsList({ spec, connectionId, onChange, onFollow }: {
+export function DatasetsList({ spec, connectionId, onChange, onFollow, opened = null }: {
   spec: DashboardSpec; connectionId: string; onChange: (next: DashboardSpec, note: string) => void;
   /** A dataset's statement changed: kept on every chart built on it, or each reason one cannot follow. */
   onFollow?: (name: string, def: DashboardDataset) => Promise<string[]>;
+  /** A dataset opened from a chart built on it: its editor shown at once. */
+  opened?: { name: string; n: number } | null;
 }) {
   const held = Object.entries(spec.datasets ?? {});
   const [adding, setAdding] = useState<"" | "table" | "sql">("");
-  const [changing, setChanging] = useState<string | null>(null);
+  const [changing, setChanging] = useState<string | null>(opened?.name ?? null);
+  const [seen, setSeen] = useState(opened?.n ?? 0);
+  if (opened && opened.n !== seen) { setSeen(opened.n); setChanging(opened.name); }
   return (
     <div data-testid="data-datasets" style={{ display: "flex", flexDirection: "column", gap: 2 }}>
       {!held.length && !adding && (
@@ -449,6 +453,89 @@ export function BuiltOnDataset({ label, table, onOwnSql }: { label: string; tabl
       <span>
         <Button size="xs" variant="ghost" data-testid="chart-own-sql" onClick={onOwnSql}>Write its own SQL instead</Button>
       </span>
+    </div>
+  );
+}
+
+/** The builder's door to a dataset in its Data pane, for a chart's setup to open the one it is built on. */
+export const OpenDatasetContext = createContext<((name: string) => void) | null>(null);
+
+/** A chart moved onto another of the dashboard's datasets: kept again on its statement as a new card that replaces its
+ *  own. Its fields are kept where the dataset has them; where it does not, they are set again from its columns, and
+ *  `reset` says so. */
+export async function moveToDataset(connectionId: string, spec: DashboardSpec, card: CardHeld, to: string)
+  : Promise<{ refused: string[] } | { cardId: string; reset: boolean }> {
+  const def = spec.datasets?.[to];
+  const shown = (card.render as { shown?: QueryShown } | undefined)?.shown;
+  if (!def || !shown) return { refused: ["This chart cannot be moved: its dataset or its setup is not read here."] };
+  let use: QueryShown = shown;
+  let reset = false;
+  const tried = await previewDashboardQuery(connectionId, { sql: def.sql, shown, title: card.title });
+  if (tried.refused.length) {
+    const plain = tried.columns?.length ? tried : await previewDashboardQuery(connectionId, { sql: def.sql, shown: { ...QUERY_DEFAULT, as: "table" }, title: card.title });
+    if (!plain.columns?.length) return { refused: plain.refused.length ? plain.refused : tried.refused };
+    use = { ...setupAs({ ...QUERY_DEFAULT, as: "table" }, shown.as, plain.columns), split: "" };
+    reset = true;
+  }
+  const { card: kept } = await keepDashboardQuery(connectionId, { sql: def.sql, shown: use, title: card.title, replaces: card.id });
+  return { cardId: kept.id, reset };
+}
+
+/** What a chart is built on, under its Visualization (the user, 2026-11-19, of a peer product's editor): the dataset by
+ *  name — which opens it in the Data pane — and a pencil to build it on another. A chart of its own SQL says so, and may
+ *  be moved onto one of the dashboard's datasets the same way. */
+export function DatasetLine({ spec, cardId, onMove }: {
+  spec: DashboardSpec; cardId: string;
+  /** Build the chart on the dataset `to`: each reason it cannot, or none. */
+  onMove: (to: string) => Promise<string[]>;
+}) {
+  const on = datasetOfCard(spec, cardId);
+  const d = on ? spec.datasets?.[on] : undefined;
+  const held = Object.entries(spec.datasets ?? {});
+  const open = useContext(OpenDatasetContext);
+  const [choosing, setChoosing] = useState(false);
+  const [moving, setMoving] = useState(false);
+  const [problem, setProblem] = useState<string[]>([]);
+  if (!d && !held.length) return null;
+  const move = async (to: string) => {
+    if (!to || to === on) { setChoosing(false); return; }
+    setMoving(true); setProblem([]);
+    try {
+      const said = await onMove(to);
+      if (said.length) setProblem(said); else setChoosing(false);
+    } catch (e) {
+      setProblem([e instanceof QueryRefused ? e.reasons.join(" ") : (e as Error).message]);
+    } finally { setMoving(false); }
+  };
+  return (
+    <div data-testid="chart-dataset-line" style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+        <span style={{ color: "var(--t3)", display: "inline-flex" }}><Icon name={d ? (d.table ? "table" : "sql") : "sql"} size={15} /></span>
+        {d && on ? (
+          <Button size="xs" variant="ghost" data-testid="chart-dataset-open" title="Open it in the Data tab" onClick={() => open?.(on)}
+            style={{ flex: 1, minWidth: 0, justifyContent: "flex-start", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {d.label}
+          </Button>
+        ) : (
+          <span className="aug-fs-sm" style={{ flex: 1, color: "var(--t3)" }}>Its own SQL</span>
+        )}
+        {held.length > 0 && (
+          <Button size="icon-sm" variant="ghost" aria-label="Change dataset" title="Change dataset" data-testid="chart-dataset-change"
+            aria-pressed={choosing} disabled={moving} onClick={() => setChoosing(c => !c)}><Icon name="edit" size={14} /></Button>
+        )}
+      </div>
+      {choosing && (
+        <SelectField aria-label="Build it on" data-testid="chart-dataset-choose" value={on ?? ""} disabled={moving} onChange={e => void move(e.target.value)}>
+          {!on && <option value="">Its own SQL</option>}
+          {held.map(([n, x]) => <option key={n} value={n}>{x.label}</option>)}
+        </SelectField>
+      )}
+      {moving && <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>Building it on the other dataset…</span>}
+      {problem.length > 0 && (
+        <ul className="aug-fs-sm" role="alert" data-testid="chart-dataset-refused" style={{ margin: 0, paddingLeft: 18, color: "var(--t1)" }}>
+          {withUniqueKeys(problem, p => p).map(([k, p]) => <li key={k}>{p}</li>)}
+        </ul>
+      )}
     </div>
   );
 }

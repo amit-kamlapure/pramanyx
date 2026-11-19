@@ -2,10 +2,10 @@
 
 /** The data a dashboard is built on (2026-11-19): datasets added from the connection's tables or a statement of one's own,
  *  each held once, taken off with ×, and never a piece of the page. */
-import { fireEvent, render, screen, waitFor } from "@/lib/testing";
+import { change, fireEvent, render, screen, waitFor } from "@/lib/testing";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DatasetsList, addDatasets, followDataset, tableDataset } from "@/components/dashboards/Datasets";
+import { DatasetLine, DatasetsList, OpenDatasetContext, addDatasets, followDataset, moveToDataset, tableDataset } from "@/components/dashboards/Datasets";
 import { MAX_DATASETS, builtOn, cardsBuiltOn, datasetOfCard, dropDataset, freshDatasetName, placeCard, type DashboardSpec } from "@/lib/dashboards/edit";
 import { cardsDashboardSpec } from "@/lib/dashboards/start";
 
@@ -144,5 +144,46 @@ describe("charts built on a dataset (2026-11-19: link them)", () => {
     fireEvent.click(screen.getByTestId("data-dataset-keep"));
     expect(await screen.findByTestId("data-dataset-refused")).toHaveTextContent("Trend: day is not a column");
     expect(screen.getByTestId("data-dataset-editor")).toBeInTheDocument();
+  });
+});
+
+describe("what a chart is built on, under its Visualization (2026-11-19)", () => {
+  const two = () => addDatasets(linked(), [{ label: "Returns", sql: "SELECT * FROM shop.returns" }]).spec;
+
+  it("names its dataset, which opens it in the Data pane, and moves it to another with the pencil", async () => {
+    const open = vi.fn();
+    const onMove = vi.fn(async () => [] as string[]);
+    render(<OpenDatasetContext.Provider value={open}><DatasetLine spec={two()} cardId="bars0001" onMove={onMove} /></OpenDatasetContext.Provider>);
+    fireEvent.click(screen.getByTestId("chart-dataset-open"));
+    expect(open).toHaveBeenCalledWith("orders");
+    expect(screen.getByTestId("chart-dataset-open")).toHaveTextContent("Orders");
+    fireEvent.click(screen.getByRole("button", { name: "Change dataset" }));
+    change(screen.getByLabelText("Build it on"), { target: { value: "returns" } });
+    await waitFor(() => expect(onMove).toHaveBeenCalledWith("returns"));
+  });
+
+  it("says a chart of its own SQL is one, and offers the dashboard's datasets", () => {
+    render(<DatasetLine spec={two()} cardId="solo0003" onMove={vi.fn(async () => [])} />);
+    expect(screen.getByTestId("chart-dataset-line")).toHaveTextContent("Its own SQL");
+    expect(screen.getByRole("button", { name: "Change dataset" })).toBeInTheDocument();
+  });
+
+  it("says nothing on a dashboard with no data, for a chart of its own SQL", () => {
+    render(<DatasetLine spec={blank()} cardId="solo0003" onMove={vi.fn(async () => [])} />);
+    expect(screen.queryByTestId("chart-dataset-line")).toBeNull();
+  });
+
+  it("keeps a chart's fields where the other dataset has them, and sets them again from its columns where it does not", async () => {
+    api.keepDashboardQuery.mockImplementation(async (_c: string, q: { replaces: string }) => ({ card: { id: `new-${q.replaces}` }, preview: {} }));
+    api.previewDashboardQuery.mockResolvedValueOnce({ connection_id: "c", refused: [] });
+    const fits = await moveToDataset("c", two(), held("bars0001") as never, "returns");
+    expect(fits).toEqual({ cardId: "new-bars0001", reset: false });
+    expect(api.keepDashboardQuery.mock.calls[0][1]).toEqual(expect.objectContaining({ sql: "SELECT * FROM shop.returns", replaces: "bars0001",
+      shown: expect.objectContaining({ x: "day" }) }));
+    api.previewDashboardQuery.mockResolvedValueOnce({ connection_id: "c", refused: ["day is not a column of what it returns."],
+      columns: [{ name: "returned_on", type: "DATE" }, { name: "refund", type: "DOUBLE" }] });
+    const reset = await moveToDataset("c", two(), held("bars0001") as never, "returns");
+    expect(reset).toEqual({ cardId: "new-bars0001", reset: true });
+    expect(api.keepDashboardQuery.mock.calls[1][1].shown).toEqual(expect.objectContaining({ as: "bar", x: "returned_on", series: [{ column: "refund", agg: "sum" }], split: "" }));
   });
 });

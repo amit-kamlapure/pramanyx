@@ -9,7 +9,7 @@
  *   - SQL: the statement as it RAN — after the guards translated and hardened it, cut to the range, around a person's
  *     own query — its values beside it, never pasted in. A card that has not run here says so, with its statement as kept.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import type { CardState } from "@/components/brief/PinnedCardBody";
 import { CHART_TYPE_LABEL, availableChartTypes, type ChartType } from "@/components/charts/chartTypeInference";
@@ -109,7 +109,11 @@ export interface KeptValueColors {
   choose: (field: string, value: string, slot: number | null) => void;
 }
 
-export function QueryChartEditor({ cs, onKept, colors = null }: { cs: CardState; onKept: () => void; colors?: KeptValueColors | null }) {
+export function QueryChartEditor({ cs, onKept, colors = null, dataset }: {
+  cs: CardState; onKept: () => void; colors?: KeptValueColors | null;
+  /** The dataset it is built on, and the way to another, said under its Visualization (2026-11-19). */
+  dataset?: ReactNode;
+}) {
   const render = (cs.card.render ?? {}) as { shown?: QueryShown; viz?: VizConfig; columns?: TypedColumn[] };
   const kept = JSON.stringify({ shown: render.shown ?? null, viz: render.viz ?? {} });
   const fromCard = (): Draft => ({ shown: { ...QUERY_DEFAULT, ...render.shown }, viz: render.viz ?? {} });
@@ -226,6 +230,7 @@ export function QueryChartEditor({ cs, onKept, colors = null }: { cs: CardState;
 
   const model: VizEditorModel = {
     title: cs.card.title,
+    vizBelow: dataset,
     view: chart ? "chart" : "table", setView: () => {}, chartAvailable: true, canPivot: false,
     chartTypeValue: kind, chartTypeOptions: [], setChartType: setViz,
     vizValue: kind, vizOptions, setViz,

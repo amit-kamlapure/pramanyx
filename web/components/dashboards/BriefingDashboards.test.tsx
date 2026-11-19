@@ -1171,6 +1171,38 @@ describe("your own query on the dashboard (Arc AP-7)", () => {
     }
   });
 
+  it("a chart says under its Visualization what it is built on; the name opens it, the pencil builds it on another", async () => {
+    const net = SPEC.elements["card-net"].props;
+    SPEC.datasets = { orders: { label: "Orders", sql: "SELECT day, sales FROM thelook.orders" },
+      returns: { label: "Returns", sql: "SELECT day, sales FROM thelook.returns" } };
+    SPEC.elements["card-net"].props = { ...net, dataset: "orders" };
+    try {
+      api.getDashboard.mockResolvedValue({ ...READ, cards: [READ.cards[0], queryCard("c91b2002"), READ.cards[2]] });
+      api.previewDashboardQuery.mockResolvedValue({ connection_id: "thelook", refused: [] });
+      api.keepDashboardQuery.mockResolvedValue({ card: queryCard("q0ret001"), preview: { connection_id: "thelook", refused: [] } });
+      await openBuilder();
+      openLayout();
+      fireEvent.click((await screen.findAllByTestId("builder-line")).find(l => l.dataset.key === "card-net")!);
+      const line = await screen.findByTestId("chart-dataset-line");
+      expect(within(screen.getByTestId("viz-visualization")).getByTestId("chart-dataset-line")).toBe(line);
+      fireEvent.click(within(line).getByTestId("chart-dataset-open"));
+      expect(screen.getByRole("radio", { name: "Data" })).toBeChecked();
+      expect(await screen.findByTestId("data-dataset-editor")).toBeInTheDocument();
+      expect(screen.getByLabelText("The dataset's name")).toHaveValue("Orders");
+      fireEvent.click(within(line).getByRole("button", { name: "Change dataset" }));
+      change(screen.getByLabelText("Build it on"), { target: { value: "returns" } });
+      await waitFor(() => expect(api.keepDashboard).toHaveBeenCalled());
+      expect(api.keepDashboardQuery).toHaveBeenCalledWith("thelook", expect.objectContaining({ sql: "SELECT day, sales FROM thelook.returns", replaces: "c91b2002" }));
+      const [, , kept, note] = api.keepDashboard.mock.calls.at(-1)!;
+      expect(note).toBe("a chart built on another dataset by hand");
+      expect((kept as { elements: Record<string, { props: Record<string, unknown> }> }).elements["card-net"].props)
+        .toEqual(expect.objectContaining({ card: "q0ret001", dataset: "returns" }));
+    } finally {
+      delete SPEC.datasets;
+      SPEC.elements["card-net"].props = net;
+    }
+  });
+
   it("a chart box on a dashboard with no data yet asks for data first, held as a dataset", async () => {
     api.getCatalogTree.mockResolvedValue({ sections: [{ id: "s", label: "S", entries: [{ conn_id: "thelook", conn_type: "bigquery", schemas: [
       { name: "thelook", tables: [{ name: "order_items" }] }] }] }] } as never);
