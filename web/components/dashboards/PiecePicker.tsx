@@ -62,7 +62,6 @@ const GROUPS: { group: string; pieces: Entry[] }[] = [
   ] },
   { group: "Filter", pieces: [
     { kind: "GlobalFilter", label: "Global filter", says: "Values, a date, a date range, text or a range of numbers, for every card." },
-    { kind: "Period", label: "Period · a date range", says: "The period every card is cut to, on the dashboard; a reader chooses another." },
     { kind: "ObjectFilters", label: "Filter column", says: "Values with how many hold each; a reader ticks." },
     { kind: "ObjectSearch", label: "Search", says: "Words that narrow every piece over the same objects." },
     { kind: "ChooseOne", label: "Choose one", says: "One object found by name, for the pieces that follow it." },

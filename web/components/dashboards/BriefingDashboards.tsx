@@ -46,13 +46,13 @@ import { PiecePicker } from "@/components/dashboards/PiecePicker";
 import { QuerySetup } from "@/components/dashboards/QuerySetup";
 import { PinStrip, numberOf } from "@/components/dashboards/PinStrip";
 import { DashboardHome } from "@/components/dashboards/DashboardHome";
-import { homeItems } from "@/lib/dashboards/homeList";
+import { homeItems, modifiedWords } from "@/lib/dashboards/homeList";
 import { askToOpenDashboard, dashboardToOpenKey } from "@/lib/dashboards/start";
 import { METRICS_DASHBOARD, MetricsDashboard } from "@/components/dashboards/MetricsDashboard";
 import { QuestionComposer } from "@/components/dashboards/QuestionComposer";
 import { FromFile } from "@/components/dashboards/FromFile";
 import { requestTab } from "@/lib/navigate";
-import { PeriodPicker, choiceName } from "@/components/dashboards/PeriodPicker";
+import { PeriodPicker } from "@/components/dashboards/PeriodPicker";
 import { person as personName, type ImageStamp } from "@/components/dashboards/StaticTile";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
@@ -62,7 +62,7 @@ import type { IconName } from "@/components/ui/icon";
 import { EmptyState } from "@/components/ui/empty-state";
 import { DropdownMenu } from "@radix-ui/themes";
 import { ASKS_OF_A_PIECE, AskPiece } from "@/components/dashboards/AskPiece";
-import { BrandSpark, brandEdge } from "@/components/ui/brand";
+import { brandEdge } from "@/components/ui/brand";
 import { DraftBuilding } from "@/components/dashboards/DraftBuilding";
 import { finishedWatch, heardFrame, startWatch, type DraftWatch } from "@/lib/dashboards/draftProgress";
 import { askAbout, dashboardSubject, useOnPage } from "@/lib/askSubject";
@@ -813,9 +813,7 @@ function SharedDashboardView({ connectionId, schema, owner, dashboardId, range, 
   return (
     <div data-testid="dashboard-shared" data-owner={owner} data-dashboard={dashboardId}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
-        {!holdsPeriod(sharedSpec) && (
-          <PeriodPicker value={chosenRange} onChange={onRange} showing={data.range.status === "standing" ? null : data.range} />
-        )}
+
         <span className="aug-fs-sm" data-testid="dashboard-shared-by" style={{ color: "var(--t2)" }}>
           An App by {personName(data.published_by)}, for {data.published_to.map(t => t.name).join(", ")} · version {data.cockpit.version}
           {data.ontology?.current ? ` · ontology release ${numberOf(data.ontology.current)}` : ""} · read-only
@@ -830,7 +828,7 @@ function SharedDashboardView({ connectionId, schema, owner, dashboardId, range, 
       </div>
       {data.ontology && <PinStrip pin={data.ontology} spec={sharedSpec} />}
       <ComposedDashboard spec={sharedSpec} cards={cards} host={host} doors={doors} sym={data.currency_symbol || "$"}
-        period={{ value: chosenRange, onChange: onRange, showing: data.range.status === "standing" ? null : data.range }}
+        period={null}
         images={images} range={range} schema={schema} connectionId={connectionId} dashboardId={`shared:${owner}:${dashboardId}`}
         focus={fx.focus} onFocus={fx.setFocus} />
     </div>
@@ -853,6 +851,9 @@ export function placedQueries(spec: { elements?: Record<string, { type?: string;
   return cards.filter(c => placed.has(c.id) && (c.sql ?? "").trim() && c.render?.shown != null)
     .map(c => ({ id: c.id, title: c.title || "A query of yours" }));
 }
+
+/** When an open dashboard was last kept, after "Updated": "3 hours ago", "yesterday", "Nov 3". */
+const keptWords = (iso: string) => { const w = modifiedWords(iso); return /^(Yesterday|Just now)$/.test(w) ? w.toLowerCase() : w; };
 
 export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvidence }: {
   connectionId: string;
@@ -929,6 +930,8 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
   const [tick, setTick] = useState(0);
   // The dashboard is being read for a period while the cards on screen are still the period before.
   const [reading, setReading] = useState(false);
+  // the ⋯ menu's "Certify or deprecate…": each asking opens the certification form beside the dashboard's facts
+  const [certifying, setCertifying] = useState(0);
   const known = useRef<Set<string>>(new Set());
   const adopt = useRef(false);
   // what the version that places the adopted card says it did — a pinned card, or a query of the person's own (Arc AP-7)
@@ -939,7 +942,10 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
   // v15 — a dashboard that holds its period as a piece opens on the period that piece says
   const opensOn = periodOpensOn(current);
   const chosenRange: RangeChoice = picked ?? (opensOn ? { preset: opensOn } as RangeChoice : { preset: "previous_month" });
-  const range: BriefingRange | null = chosenRange.preset === "standing" ? null : chosenRange;
+  // A dashboard is read as its cards are written, and cut only by its filters (the user, 2026-11-19: "Remove Period part as
+  // dashboard filters alone should drive it"); a date filter's days are the cards' window (`focus.without_own_window`). The
+  // Metrics page keeps its period: it is a ledger of measures, with no filters of its own.
+  const range: BriefingRange | null = chosen === METRICS_DASHBOARD && chosenRange.preset !== "standing" ? chosenRange : null;
   // when this browser last saw a burst kept, and whether one is waiting or on its way — the builder's "saved" says them
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [pending, setPending] = useState(false);
@@ -1118,7 +1124,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
 
   // Arc AP-1 — in the builder every change goes through here: drawn at once, kept with the burst, and undoable.
   // v15 — the period, for the Period piece: what the cards are read for, and the reader's choice of another
-  const periodDoor: PeriodDoor | null = data ? {
+  const periodDoor: PeriodDoor | null = data && chosen === METRICS_DASHBOARD ? {
     value: chosenRange, onChange: setChosenRange, reading, disabled: busy,
     showing: data.range.status === "standing" || reading ? null : data.range,
   } : null;
@@ -1211,15 +1217,14 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
     // an open dashboard takes the row under its title; the Metrics page keeps its period there
     ...(chosen && chosen !== METRICS_DASHBOARD ? { noScope: true } : {}),
     ...(chosen ? { trail: [openTitle ?? chosen] } : {}),
+    // an open dashboard's title row is its name, when it was kept, Edit, Publish and ⋯ (the user, 2026-11-19): no way back
+    // drawn (the rail's Dashboards row goes back), and its draft or published state said by Publish and the status strip
+    ...(chosen && chosen !== METRICS_DASHBOARD ? { noBack: true } : {}),
     status: editing ? { label: "Editing", tone: "info" }
       : sharedNow ? { label: `Shared by ${person(sharedNow.published_by || sharedNow.owner)}` }
-      : ownOpen && keptNow?.published_to?.length
-        ? (appNow.draft
-          ? { label: `Draft · readers see version ${appNow.readersSee}`, tone: "warning", title: appNow.title }
-          : { label: "Published", tone: "success", title: appNow.label })
-        : ownOpen
-          ? { label: "Draft · not published", title: "Yours alone until you publish it to a group or a role" }
-          : undefined,
+      : ownOpen && keptNow?.published_to?.length && appNow.draft
+        ? { label: `Draft · readers see version ${appNow.readersSee}`, tone: "warning", title: appNow.title }
+        : undefined,
   });
 
   if (list === null) {
@@ -1436,9 +1441,16 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
             const cs = cards.find(c => c.card.id === cardId);
             const viz = (cs?.card.render as { viz?: { type?: string } } | undefined)?.viz;
             const own = !!(cs?.card.render as { shown?: unknown } | undefined)?.shown;
-            // a person's own query on its own six draws no answer's chart yet: the kinds it can be drawn as instead
-            if (cs && own && !isOtherKind(viz?.type)) return <QueryKindPick key={cardId} cs={cs} onKept={reload} />;
-            return <ChartDock key={cardId} cardKey={cardId} charted={!!cs && (tileShape(cs) === "rows" || (own && isOtherKind(viz?.type)))} />;
+            // a person's own query: every kind it can be drawn as, in one place; another kind's own settings under it
+            if (cs && own) {
+              return (
+                <>
+                  <QueryKindPick key={cardId} cs={cs} onKept={reload} />
+                  {isOtherKind(viz?.type) && <ChartDock key={`${cardId}-dock`} cardKey={cardId} charted />}
+                </>
+              );
+            }
+            return <ChartDock key={cardId} cardKey={cardId} charted={!!cs && tileShape(cs) === "rows"} />;
           }}
           cardSql={cardId => {
             const cs = cards.find(c => c.card.id === cardId);
@@ -1536,7 +1548,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
       <Button size="sm" variant="default" data-testid="dashboard-new-open" onClick={openNew}><Icon name="plus" size={14} /> Create dashboard</Button>
     </span>
   );
-  const periodPicker = data && !periodPlaced && !cards.every(c => (c.card.render as { standing?: boolean } | undefined)?.standing === true) ? (
+  const periodPicker = data && chosen === METRICS_DASHBOARD && !periodPlaced && !cards.every(c => (c.card.render as { standing?: boolean } | undefined)?.standing === true) ? (
     <PeriodPicker value={chosenRange} onChange={setChosenRange} disabled={busy} reading={reading}
       showing={data.range.status === "standing" || reading ? null : data.range} />
   ) : null;
@@ -1552,32 +1564,16 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
     </Chip>
   ) : null;
   const certMark = ownOpen && data ? (
-    <CertificationMark compact target={{ kind: "dashboard", ref: dashboardRef(connectionId, data.owner, chosen), connectionId }} />
+    <CertificationMark compact menu openRequest={certifying} target={{ kind: "dashboard", ref: dashboardRef(connectionId, data.owner, chosen), connectionId }} />
   ) : null;
-  // The title row's doors in view, as the mockup draws them: View | Edit, History, Publish… (the primary), ⋯ for the rare.
+  // The title row's doors in view (the user, 2026-11-19): Edit, Publish (the primary) and ⋯ for the rest. Reading needs no
+  // "View" door, and the Ask panel's own icon asks about the dashboard open.
   const viewDoors = (
     <>
-      <span role="group" aria-label="Mode" style={{ display: "inline-flex", gap: 2 }}>
-        <Button size="xs" variant="secondary" aria-pressed data-testid="dashboard-view" title="Reading the dashboard">View</Button>
-        <Button size="xs" variant="ghost" aria-pressed={false} data-testid="dashboard-edit" disabled={busy || reading}
-          title="Build this dashboard in place: its layout, each piece's setup, and sizes one grade at a time."
-          onClick={() => { setShowHistory(false); setRefusal(null); setEditing(true); }}>
-          <Icon name="edit" /> Edit
-        </Button>
-      </span>
-      <Button size="xs" variant="ghost" data-testid="ask-about-dashboard" title="Ask about this dashboard, for the period on screen" onClick={() => {
-        const subject = data ? dashboardSubject(connectionId, `${connectionId}:${openId}`, heldTitle,
-          data.range.status === "standing" ? null : data.range) : null;
-        if (subject) askAbout(subject);
-      }}>
-        <BrandSpark size={14} /> Ask
-      </Button>
-      <Button size="xs" variant="ghost" aria-expanded={showHistory} onClick={() => {
-        // a resize kept since the page was read is not in its history yet: read it again once
-        if (!showHistory && burst.current.since) { burst.current.since = false; reload(); }
-        setShowHistory(s => !s);
-      }}>
-        <Icon name="history" /> {showHistory ? "Hide history" : "History"}
+      <Button size="xs" variant="ghost" data-testid="dashboard-edit" disabled={busy || reading}
+        title="Build this dashboard in place: its layout, each piece's setup, and sizes one grade at a time."
+        onClick={() => { setShowHistory(false); setRefusal(null); setEditing(true); }}>
+        <Icon name="edit" /> Edit
       </Button>
       <Button size="xs" variant="default" disabled={busy} data-testid="dashboard-publish-view" aria-expanded={publishing}
         title={app.title || "Share this dashboard, as it stands, with a group you belong to or a role you hold."}
@@ -1591,6 +1587,12 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
           </Button>
         </DropdownMenu.Trigger>
         <DropdownMenu.Content size="1" align="end">
+          <DropdownMenu.Item data-testid="dashboard-history-open" onSelect={() => {
+            // a resize kept since the page was read is not in its history yet: read it again once
+            if (!showHistory && burst.current.since) { burst.current.since = false; reload(); }
+            setShowHistory(s => !s);
+          }}>{showHistory ? "Hide history" : "History"}</DropdownMenu.Item>
+          {certMark && <DropdownMenu.Item data-testid="dashboard-certify" onSelect={() => setCertifying(n => n + 1)}>Certify or deprecate…</DropdownMenu.Item>}
           <DropdownMenu.Item data-testid="dashboard-read-again" disabled={busy || reading} onSelect={reload}>Read again</DropdownMenu.Item>
           <DropdownMenu.Item data-testid="dashboard-subscribe-open" disabled={!(kept?.published_to?.length)} onSelect={() => setSubscribing(true)}>
             {(kept?.published_to?.length ?? 0) > 0 ? "Subscribe…" : "Subscribe… (publish it first)"}
@@ -1675,7 +1677,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
       ) : chosen.startsWith("shared:") ? (
         <SharedDashboardView connectionId={connectionId} schema={schema}
           owner={chosen.slice("shared:".length, chosen.lastIndexOf("/"))} dashboardId={chosen.slice(chosen.lastIndexOf("/") + 1)}
-          range={range} chosenRange={chosenRange} onRange={setChosenRange}
+          range={null} chosenRange={chosenRange} onRange={setChosenRange}
           onStarted={id => { choose(id); reload(); }} />
       ) : drawn && data ? (
         <>
@@ -1684,12 +1686,13 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
           {inShell ? (
             <>
               <ChromeFacts>
-                <span data-testid="dashboard-facts">
-                  Owner {data.owner === "default" || data.owner === "local" ? "you" : person(data.owner)} · version {kept.version}{readAt ? ` · last read ${utcDayWords(readAt, true)}` : ""}
+                <span data-testid="dashboard-facts"
+                  title={`Owner ${data.owner === "default" || data.owner === "local" ? "you" : person(data.owner)} · version ${kept.version}${readAt ? ` · last read ${utcDayWords(readAt, true)}` : ""}`}>
+                  Updated {keptWords(kept.kept_at)}
                 </span>
                 {certMark}
               </ChromeFacts>
-              <ChromeActions>{periodPicker && <span style={{ order: -2, display: "inline-flex" }}>{periodPicker}</span>}{viewDoors}</ChromeActions>
+              <ChromeActions>{viewDoors}</ChromeActions>
               <ChromeStatus>
                 <span>Dashboard {(kept.published_to?.length ?? 0) > 0 ? (app.draft ? "draft" : "published") : "draft"} · version {kept.version} · saved</span>
                 {data.ontology?.current && (
@@ -1707,7 +1710,6 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
             </div>
           )}
 
-          {showHistory && historyPanel}
           {retireConfirm}
 
           {composers}
@@ -1723,15 +1725,31 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
           {/* While the cards are read again nothing moves (seen live 2026-11-19: a line pushed the page down under a reader's
               pointer, and a second tick in a filter landed on Select all). The note floats over the cards, the cards alone dim
               and wait, and the filters stay in reach for the next choice. */}
-          <div aria-busy={reading || undefined} data-reading={reading || undefined} style={{ position: "relative" }}>
+          <div style={{ display: "flex", gap: 16, alignItems: "flex-start", minWidth: 0 }}>
+          <div aria-busy={reading || undefined} data-reading={reading || undefined} style={{ position: "relative", flex: 1, minWidth: 0 }}>
             {reading && (
-              <Loading what={`the cards for ${choiceName(chosenRange)}`}
+              <Loading what="the cards"
                 style={{ position: "absolute", top: 6, left: "50%", transform: "translateX(-50%)", zIndex: 5, padding: "4px 10px",
                   background: "var(--bg-2)", border: "1px solid var(--card-edge)", borderRadius: "var(--r3)", boxShadow: "var(--shadow-lg)" }} />
             )}
             <ComposedDashboard spec={draft ?? kept.spec} cards={cards} host={host} doors={readDoors} sym={data.currency_symbol || "$"} period={periodDoor}
               images={images} range={range} schema={schema} connectionId={connectionId} dashboardId={`${connectionId}:${chosen}`}
               focus={fx.focus} onFocus={fx.setFocus} />
+          </div>
+          {/* History beside the cards, for as long as it is wanted (the user, 2026-11-19: "a temporary panel, not covering
+              the entire page") */}
+          {showHistory && historyPanel && (
+            <aside data-testid="dashboard-history-panel" aria-label="History"
+              style={{ flex: "none", width: 340, position: "sticky", top: 8, maxHeight: "calc(100vh - 160px)", overflowY: "auto",
+                background: "var(--bg-2)", border: "1px solid var(--card-edge)", borderRadius: "var(--r3)", padding: "8px 12px" }}>
+              <div style={{ display: "flex", alignItems: "center", marginBottom: 6 }}>
+                <span className="aug-fs-ui" style={{ color: "var(--t1)", fontWeight: 600 }}>History</span>
+                <Button size="icon-xs" variant="ghost" aria-label="Close the history" data-testid="dashboard-history-close"
+                  style={{ marginLeft: "auto" }} onClick={() => setShowHistory(false)}><Icon name="close" size={13} /></Button>
+              </div>
+              {historyPanel}
+            </aside>
+          )}
           </div>
         </>
       ) : !problem ? (

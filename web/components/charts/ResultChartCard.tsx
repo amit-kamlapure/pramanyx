@@ -167,6 +167,9 @@ interface Props {
   /** A stable name for this chart's editor — a dashboard card's id — so a panel elsewhere (the builder's Chart tab) can
    *  hold it. Left out, the chart names its own. */
   editorKey?: string;
+  /** Draws the hover pencil that opens the chart's editor. A dashboard draws none (the user, 2026-11-19: two ways to edit
+   *  a chart "causing a major issue"): there the card's own panel, in Edit, is the one way, and docks this same editor. */
+  pencil?: boolean;
   /** The user's saved display choices, applied as the INITIAL state of every control. Read once
    *  per mount (the component owns the controls after that), so restoring a card and editing it
    *  can't fight each other. */
@@ -186,7 +189,7 @@ interface Props {
 
 export function ResultChartCard({
   columns, rows, title, chartType, chartConfig, custom, exhibit: exhibitProp,
-  columnUnits, defaultShowLabels, heightScale, fillHeight, onSelect, onPick, editorKey,
+  columnUnits, defaultShowLabels, heightScale, fillHeight, onSelect, onPick, editorKey, pencil = true,
   config, onConfigChange, onViewChange, onChartReady,
   liveMap = false,
 }: Props) {
@@ -569,7 +572,7 @@ export function ResultChartCard({
   return (
     <div className="group/viz relative">
       {/* Edit visualization — the single hover affordance; every control lives in the panel. */}
-      <Button
+      {pencil && <Button
         variant="ghost"
         size="icon-sm"
         onClick={() => openVizEditor(cardId)}
@@ -578,7 +581,7 @@ export function ResultChartCard({
         style={editorOpen ? { color: "var(--accent)", opacity: 1 } : { color: "var(--t3)" }}
       >
         <Icon name="edit" size={13} />
-      </Button>
+      </Button>}
 
       {/* Body — clean chart / table / pivot */}
       {view === "pivot" ? (

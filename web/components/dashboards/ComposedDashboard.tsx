@@ -55,11 +55,10 @@ import {
   ObjectFiltersPiece, ObjectTablePiece, PiecesProvider, ProcessBoardPiece, ValuesBar, chooseWords, useFiltering, usePieceFiltering, usePieces, useValueChips,
   type BarChip, type FilterProperty, type ObjectBarWords,
 } from "@/components/dashboards/OntologyPieces";
-import { FiltersHead, FiltersShutStrip, GlobalFiltersColumn, useFiltersShut } from "@/components/dashboards/GlobalFilters";
+import { FiltersHead, FiltersMenuPlace, FiltersShutStrip, GlobalFiltersColumn, useFiltersShut } from "@/components/dashboards/GlobalFilters";
 import { followsByValue, heldBy, openedWith, stillHeld, type GlobalFilterProps } from "@/lib/dashboards/globalFilters";
 import { ImageTile, NoteTile, type ImageStamp, type StaticDoors } from "@/components/dashboards/StaticTile";
 import { DropdownMenu } from "@radix-ui/themes";
-import { ChromeActions } from "@/components/shell/PageChrome";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
@@ -153,6 +152,8 @@ interface DashboardContextValue {
   /** v20 — a right click on a mark, and the pages it offers to open already filtered to it. */
   drilling: Drilling | null;
   drill: ((next: Drilling | null) => void) | null;
+  /** Where the menu of what cuts the dashboard is drawn: the filters' own heading, once one gives the place. */
+  filtersMenu: HTMLElement | null;
   /** The study's R14 — the door that changes the reader's focus; null where the page keeps none. */
   setFocus: ((next: DashboardFocus[]) => void) | null;
   /** The spec drawn, for what a placement says of itself (v18: a card the filters do not cut). */
@@ -1337,6 +1338,9 @@ function DashboardNote({ element }: ComponentRenderProps<{ text: string; size?: 
  *  sized and set up like any other. Where the page offers no choice it says the period the cards were read for. */
 function DashboardPeriod({ element }: ComponentRenderProps<{ label?: string | null; size?: Size | null }>) {
   const { period, host } = useDashboard();
+  // Retired (the user, 2026-11-19: "Remove Period part as dashboard filters alone should drive it"): a dashboard's dates are
+  // its date filter's. A spec that still holds the piece keeps it, drawn as nothing, so no version needs rewriting.
+  if (!period) return null;
   const label = element.props.label || "Period";
   return (
     <Cell type="Period" props={element.props as Record<string, unknown>} size={element.props.size ?? "small"} testid="dashboard-period-piece">
@@ -1685,7 +1689,7 @@ const NO_FOCUS: DashboardFocus[] = [];
  *  is the dashboard's): the filter column's ticks, the query filters, the values a reader moved and the marks they clicked, each
  *  taken off from its menu, with Clear all and Copy link. With nothing cutting the dashboard it is not drawn. */
 function FilteredBy({ objects = null }: { objects?: ObjectBarWords | null }) {
-  const { focus, setFocus, period, host, elements, doors, cards, dashboardId } = useDashboard();
+  const { focus, setFocus, period, host, elements, doors, cards, dashboardId, filtersMenu: place } = useDashboard();
   const values = useValueChips();
   const { narrowing, toggle, clear: clearNarrowing } = useQueryNarrowing();
   const { get, set } = useStateStore();
@@ -1721,10 +1725,9 @@ function FilteredBy({ objects = null }: { objects?: ObjectBarWords | null }) {
   // the study's R17 — with a mark chosen, the other pages it can be read on (the focus holds across a dashboard's pages)
   const openPage = get("/tab");
   const others = focused.some(f => !fromFilter(f)) ? pagesOf(elements, !!doors.onSelect).filter(t => t.name !== openPage).slice(0, 3) : [];
-  return (
-    <ChromeActions>
+  const menu = (
       <span role="group" aria-label="What this dashboard is filtered by" data-testid="dashboard-filtered-by" className="aug-fs-sm"
-        style={{ order: -1, display: "inline-flex", alignItems: "center", gap: 8, color: "var(--t2)" }}>
+        style={{ display: "inline-flex", alignItems: "center", gap: 8, color: "var(--t2)" }}>
         {count && <span data-testid="object-filter-count" style={{ fontVariantNumeric: "tabular-nums" }}>{count}</span>}
         {chips.length > 0 && (
           <DropdownMenu.Root>
@@ -1751,8 +1754,10 @@ function FilteredBy({ objects = null }: { objects?: ObjectBarWords | null }) {
           </DropdownMenu.Root>
         )}
       </span>
-    </ChromeActions>
   );
+  // beside the filters' own heading (or the button standing for them); a dashboard with no filters column shows it above
+  // its cards, only while something cuts it
+  return place ? createPortal(menu, place) : <div style={{ display: "flex", justifyContent: "flex-end" }}>{menu}</div>;
 }
 const NO_READS: readonly string[] = [];
 
@@ -1811,6 +1816,7 @@ export function ComposedDashboard({ spec, cards, host, doors, sym = "$", images 
     if (opened) onFocus(opened);
   }, [dashboardId, filterProps]); // eslint-disable-line react-hooks/exhaustive-deps -- once for each set of openings
   const [drilling, setDrilling] = useState<Drilling | null>(null);
+  const [filtersMenu, setFiltersMenu] = useState<HTMLElement | null>(null);
   // A spec is known by what it says, not by which object says it: a caller that parses the
   // same JSON again on every render hands over a new object each time, and that must not
   // close the tab a reader opened.
@@ -1866,6 +1872,7 @@ export function ComposedDashboard({ spec, cards, host, doors, sym = "$", images 
     period,
     drilling,
     drill: onFocus ? setDrilling : null,
+    filtersMenu,
     pick: onFocus ? (cardId: string, p: ChartPick) => {
       // in the builder a click chooses the piece and reshapes nothing; Alt and a click tries the filter (the study's R4)
       if (doors.onSelect && !altClick.current) return;
@@ -1874,7 +1881,7 @@ export function ComposedDashboard({ spec, cards, host, doors, sym = "$", images 
         .catch(e => toast.error("The click could not be read", { description: (e as Error).message }));
     } : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on what the spec and the range say
-  }), [check.valid, written, cards, host, doors, sym, images, rangeKey, schema, connectionId, dashboardId, selected, steppers, readsKey, focus, onFocus, period, drilling]);
+  }), [check.valid, written, cards, host, doors, sym, images, rangeKey, schema, connectionId, dashboardId, selected, steppers, readsKey, focus, onFocus, period, drilling, filtersMenu]);
 
   if (!check.valid) {
     return (
@@ -1893,6 +1900,7 @@ export function ComposedDashboard({ spec, cards, host, doors, sym = "$", images 
   return (
     <div style={{ display: "contents" }} onPointerDownCapture={e => { altClick.current = e.altKey; }}>
     <DashboardContext.Provider value={context}>
+    <FiltersMenuPlace.Provider value={setFiltersMenu}>
       <PiecesProvider connectionId={connectionId} schema={schema} elements={context.elements} onPlaceTable={doors.onPlaceTable}
         asGroup={asGroup} onSaid={onSaid}
         sets={check.valid ? (spec as WireSpec).sets : undefined} values={check.valid ? (spec as WireSpec).values : undefined}
@@ -1903,6 +1911,7 @@ export function ComposedDashboard({ spec, cards, host, doors, sym = "$", images 
           </JSONUIProvider>
         </ValueColorsProvider>
       </PiecesProvider>
+    </FiltersMenuPlace.Provider>
     </DashboardContext.Provider>
     </div>
   );

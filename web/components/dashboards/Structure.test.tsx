@@ -396,7 +396,8 @@ describe("the piece picker", () => {
   it("for a filter, lists the filters", async () => {
     pick(desk(), "right", "filter");
     expect(screen.getByRole("region", { name: "Add a filter" })).toBeInTheDocument();
-    expect(screen.getAllByTestId("piece-picker-entry").map(e => e.dataset.kind)).toEqual(["GlobalFilter", "Period", "ObjectFilters", "ObjectSearch", "ChooseOne"]);
+    // no Period: a dashboard's dates are its date filter's (the user, 2026-11-19)
+    expect(screen.getAllByTestId("piece-picker-entry").map(e => e.dataset.kind)).toEqual(["GlobalFilter", "ObjectFilters", "ObjectSearch", "ChooseOne"]);
     await act(async () => {});
   });
 

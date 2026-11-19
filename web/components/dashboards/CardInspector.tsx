@@ -14,7 +14,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CardState } from "@/components/brief/PinnedCardBody";
 import { CHART_TYPE_LABEL, availableChartTypes, type ChartType } from "@/components/charts/chartTypeInference";
 import { closeVizEditor, openVizEditor, setVizDock } from "@/components/charts/vizEditorStore";
-import { queryGrid } from "@/components/dashboards/DashboardTile";
+import { isOtherKind, queryGrid } from "@/components/dashboards/DashboardTile";
 import { SqlView } from "@/components/query/SqlView";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -73,34 +73,36 @@ export function CardSql({ cs, readsValues = false }: { cs?: CardState; readsValu
   );
 }
 
-/** A person's own query draws its own six kinds; any other an answer's chart draws is asked for here — kept on the
- *  card as its chart settings, after which the Chart tab holds that chart's full editor. Only the kinds its result can
- *  carry are offered. */
+/** The one place a card of a person's own query is given its kind of chart (the user, 2026-11-19: "the chart type is not
+ *  editable ... two ways to edit a visualisation ... causing a major issue"). Every kind it can be drawn as is listed
+ *  together and the one in force is marked: the query's own (bar, line, area, scatter) is kept with its setup, and any other
+ *  an answer's chart draws is kept as the card's chart settings — choosing one of the query's own clears it, so the card is
+ *  drawn one way wherever it is read. A table or a figure is chosen under What it reads, where its columns are set. */
+const OWN_KINDS: ChartType[] = ["bar", "line", "area", "scatter"];
+
 export function QueryKindPick({ cs, onKept }: { cs: CardState; onKept: () => void }) {
   const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState("");
   const shaped = cs.run?.shown ?? null;
   const setup = (cs.card.render as { shown?: QueryShown }).shown;
-  const kinds = useMemo(() => {
+  const viz = ((cs.card.render ?? {}) as { viz?: VizConfig }).viz;
+  const others = useMemo(() => {
     if (!shaped || !setup || shaped.as === "figure" || shaped.as === "table") return [];
     const g = queryGrid(shaped, setup);
-    return availableChartTypes(g.columns, g.rows).filter(t => !["bar", "line", "area", "scatter", "counter"].includes(t));
+    return availableChartTypes(g.columns, g.rows).filter(t => !OWN_KINDS.includes(t) && t !== "counter");
   }, [shaped, setup]);
-  if (!kinds.length) {
+  if (!setup || setup.as === "figure" || setup.as === "table") {
     return (
-      <>
-        <div className="aug-fs-sm" data-testid="query-kind-none" style={NOTE}>
-          It is drawn as its query says — set that up under What it reads, below. Its result carries no other kind of chart.
-        </div>
-        <QueryChartOptions cs={cs} onKept={onKept} />
-      </>
+      <div className="aug-fs-sm" data-testid="query-kind-none" style={NOTE}>
+        Drawn as a {setup?.as === "figure" ? "figure" : "table"}: choose a chart under What it reads, below, where its columns are set.
+      </div>
     );
   }
-  const pick = async (type: ChartType) => {
+  const inForce: string = isOtherKind(viz?.type) ? String(viz?.type) : setup.as;
+  const keep = async (render: Record<string, unknown>) => {
     setSaving(true);
     setProblem("");
     try {
-      const render = { ...(cs.card.render ?? {}), viz: { ...(((cs.card.render ?? {}) as { viz?: object }).viz ?? {}), type } };
       await updateCard(cs.card.id, { ...cs.card, render });
       onKept();
     } catch (e) {
@@ -109,12 +111,23 @@ export function QueryKindPick({ cs, onKept }: { cs: CardState; onKept: () => voi
       setSaving(false);
     }
   };
+  const pick = (t: ChartType) => {
+    const render = (cs.card.render ?? {}) as Record<string, unknown>;
+    if (OWN_KINDS.includes(t)) {
+      // the query's own kind, kept with its setup; the chart settings' kind cleared, so nothing else draws it another way
+      const { type: _cleared, ...rest } = (viz ?? {}) as VizConfig & { type?: string };
+      void keep({ ...render, shown: { ...setup, as: t }, viz: rest });
+    } else {
+      void keep({ ...render, viz: { ...(viz ?? {}), type: t } });
+    }
+  };
   return (
     <div data-testid="query-kind-pick" style={{ ...NOTE, display: "flex", flexDirection: "column", gap: 8 }}>
-      <div className="aug-fs-sm">Drawn as its query says (bar, line, area or scatter, under What it reads, below). It can also be drawn as:</div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-        {kinds.map(t => (
-          <Button key={t} size="xs" variant="ghost" disabled={saving} onClick={() => void pick(t)} data-kind={t}>
+      <div className="aug-fs-sm">Drawn as</div>
+      <div role="radiogroup" aria-label="Kind of chart" style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+        {[...OWN_KINDS, ...others].map(t => (
+          <Button key={t} size="xs" variant={t === inForce ? "secondary" : "ghost"} role="radio" aria-checked={t === inForce}
+            disabled={saving} onClick={() => { if (t !== inForce) pick(t); }} data-kind={t}>
             {CHART_TYPE_LABEL[t]}
           </Button>
         ))}

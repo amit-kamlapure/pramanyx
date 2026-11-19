@@ -380,8 +380,8 @@ describe("the period on the dashboard (v15)", () => {
     expect(within(piece).getByLabelText("Dashboard period")).toHaveTextContent("Last month");
   });
 
-  it("where the page offers no choice, says the period the cards were read for", () => {
+  it("draws nothing where the page hands it no period: a dashboard's dates are its date filter's (2026-11-19)", () => {
     render(<ComposedDashboard spec={withPeriod()} cards={CARDS} host={{ ...HOST, range: { status: "final", covers: "October 2026" } as never }} doors={READER} />);
-    expect(screen.getByTestId("dashboard-period-said")).toHaveTextContent("October 2026");
+    expect(screen.queryByTestId("dashboard-period-piece")).toBeNull();
   });
 });

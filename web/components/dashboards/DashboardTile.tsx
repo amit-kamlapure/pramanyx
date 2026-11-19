@@ -496,7 +496,7 @@ function RowsTile({ cs, doors, place, focus }: { cs: CardState & { card: Dashboa
       <Title title={card.title} />
       <div ref={room} style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
         {run && (
-          <ResultChartCard editorKey={card.id} columns={run.columns} rows={run.rows as unknown[][]}
+          <ResultChartCard editorKey={card.id} pencil={false} columns={run.columns} rows={run.rows as unknown[][]}
             // the board study — a click filters the dashboard; what is chosen stays lit, beside the card's own exhibit
             onPick={focus?.onPick ? (p) => focus.onPick?.(p) : undefined}
             exhibit={focusExhibit(render.chartConfig, run.columns, focus)}
@@ -670,7 +670,7 @@ function QueryTile({ cs, doors, place, focus }: { cs: CardState & { card: Dashbo
               if ("xr" in d && d.xr !== null && d.xr !== undefined) focus.onDrill?.({ field: shaped.x.name, value: d.xr as string | number }, at);
             } : undefined} />}
           {grid && (
-            <ResultChartCard editorKey={card.id} columns={grid.columns} rows={grid.rows} chartType={viz?.type ?? null} config={viz ?? null}
+            <ResultChartCard editorKey={card.id} pencil={false} columns={grid.columns} rows={grid.rows} chartType={viz?.type ?? null} config={viz ?? null}
               onConfigChange={persistViz} fillHeight={height} exhibit={chosen ? { emphasis: chosen } : undefined} onChartReady={i => { chart.current = i; }}
               onPick={focus?.onPick ? (p) => focus.onPick?.(p) : undefined} />
           )}

@@ -5,7 +5,7 @@
  * is theirs, kept in their browser and said in the "Filtered by" bar. In the builder a filter is chosen like any piece and set up in
  * the right panel.
  */
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Popover, Slider } from "@radix-ui/themes";
 
 import { Button } from "@/components/ui/button";
@@ -275,12 +275,23 @@ export function shutFilters(next: boolean): void {
 /** For tests: forget what this browser kept. */
 export function resetFiltersShut(): void { shut = null; }
 
+/** Where the menu of everything cutting the dashboard goes (its filters' choices, a mark clicked on a chart, Clear all, Copy
+ *  link): beside the filters' own heading, never in the title row (the user, 2026-11-19: "The filter icon at the top is not
+ *  necessary"). The dashboard gives the place; each filters heading, and the button that stands for a put-away column, holds it. */
+export const FiltersMenuPlace = createContext<((el: HTMLElement | null) => void) | null>(null);
+
+function FiltersMenuSlot() {
+  const place = useContext(FiltersMenuPlace);
+  return place ? <span ref={place} data-testid="filters-menu-place" style={{ display: "inline-flex" }} /> : null;
+}
+
 /** What stands above the cards once the column is put away: the way back to it, and how many filters still hold a choice,
  *  so a reader never forgets the cards are narrowed. It takes a line above the cards and none of their width (the user,
  *  2026-11-19: "it should sit on top of the dashboard components ... no vertical space occupying dashboard area"). */
 export function FiltersShutStrip({ held }: { held: number }) {
   return (
     <div data-testid="global-filters-shut" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <FiltersMenuSlot />
       <Button size="sm" variant="secondary" data-testid="global-filters-show" onClick={() => shutFilters(false)}
         aria-label={held ? `Show the filters · ${held} holding a choice` : "Show the filters"} style={{ gap: 6 }}>
         <Icon name="filter" size={14} /> Filters
@@ -303,7 +314,7 @@ export function FiltersHead() {
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", minHeight: 24, marginBottom: 8 }}>
       <span className="aug-fs-ui" style={{ color: "var(--t1)", fontWeight: 600 }}>Filters</span>
-      <FiltersHideButton />
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 2 }}>{!useFiltersShut() && <FiltersMenuSlot />}<FiltersHideButton /></span>
     </div>
   );
 }
@@ -328,6 +339,7 @@ export function GlobalFiltersColumn({ filters, connectionId, focus, onFocus, bui
   valueKinds?: Record<string, { kind: string }>;
 }) {
   const holds = applyButton && !building;
+  const shut = useFiltersShut();
   const [draft, setDraft] = useState<DashboardFocus[] | null>(null);
   const applied = JSON.stringify(focus);
   // a chip taken off, or a click on a chart, is what the dashboard holds now: a choice still waiting is laid aside
@@ -355,7 +367,8 @@ export function GlobalFiltersColumn({ filters, connectionId, focus, onFocus, bui
     <aside aria-label="Global filters" data-testid="global-filters" style={{ display: "flex", flexDirection: "column", gap: 10, alignSelf: "start", position: "sticky", top: 12, minWidth: 0 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", minHeight: 24 }}>
         <span className="aug-fs-ui" style={{ color: "var(--t1)", fontWeight: 600 }}>{building ? "Global filters" : "Filters"}</span>
-        <span style={{ display: "inline-flex", gap: 2 }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 2 }}>
+          {!shut && <FiltersMenuSlot />}
           {building && onAdd && (
             <Button size="icon-xs" variant="ghost" aria-label="Add a global filter" title="Add a global filter" data-testid="global-filter-add"
               disabled={filters.length >= MAX_GLOBAL_FILTERS} onClick={onAdd}><Icon name="plus" size={14} /></Button>

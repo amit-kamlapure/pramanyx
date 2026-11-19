@@ -45,6 +45,9 @@ export interface PageChromeSpec {
   /** A page whose room is its own (an open dashboard, the user, 2026-11-19): what scopes the section is chosen where the section
    *  starts, and the status strip still names it. */
   noScope?: boolean;
+  /** Draws no way back before the title (an open dashboard, the user, 2026-11-19: "No breadcrumbs ... takes up space"): the
+   *  rail's row for the section still goes back, through `useChromeBack`. */
+  noBack?: boolean;
 }
 
 type SlotName = "title" | "actions" | "facts" | "toolbar" | "status";
@@ -195,7 +198,7 @@ export function PageHeader({ place, fallbackTitle }: {
   // No breadcrumb row (the user, 2026-11-10: "I think we should not have breadcrumbs at all"): the rail says where the
   // reader is, the title what is open. A page inside its section (an open canvas, an agent, a record, a catalog's
   // schema) keeps its way back as one control before the title, named by where it goes: "‹ Data Canvas".
-  const parent = back && crumbs.length >= 2 ? crumbs[crumbs.length - 2].label : null;
+  const parent = back && !spec.noBack && crumbs.length >= 2 ? crumbs[crumbs.length - 2].label : null;
   // A title row that would only repeat the section's name says nothing the rail does not (the user, 2026-11-10: "the
   // Semantic Layer has header banner.. let remove such where there is no purpose or interactity or info statements").
   // It is marked plain, and drawn only once something arrives in it — a fact, an action (`globals.css`, :has).

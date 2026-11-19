@@ -135,39 +135,46 @@ beforeEach(() => {
     items: [{ metric: "revenue", name: "Revenue", why: "", expected: { claim_id: "p1", low: 100, mid: 108, high: 116, text: "$100 to $116", state: "open", scored_against: null, must_say: ["6 earlier ranges"], n: 6 } }] });
 });
 
+/** History, from the title row's ⋯ menu (the user, 2026-11-19: Edit, Publish and ⋯ in the title row). */
+async function openHistory() {
+  fireEvent.keyDown(screen.getByTestId("dashboard-more"), { key: "Enter" });
+  fireEvent.click(await screen.findByTestId("dashboard-history-open"));
+}
+
 describe("a person's dashboards", () => {
-  it("draws the one asked for, each card it places run for the month", async () => {
+  it("draws the one asked for, each card it places run as written", async () => {
     show();
     await waitFor(() => expect(drawn.props.length).toBeGreaterThan(0));
-    expect(api.getDashboard).toHaveBeenCalledWith("thelook", "returns-1", { preset: "previous_month" });
+    expect(api.getDashboard).toHaveBeenCalledWith("thelook", "returns-1", null);
     // Only the cards the spec places are run — the pinned card it does not place is not.
     expect(api.runCard.mock.calls.map(c => c[0]).sort()).toEqual(["c7f3a001", "c91b2002"]);
-    expect(api.runCard.mock.calls[0][1]).toEqual({ preset: "previous_month" });
+    expect(api.runCard.mock.calls[0][1]).toBeNull();
     const last = drawn.props.at(-1)!;
     expect(last.spec).toEqual(SPEC);
     expect(last.sym).toBe("$");
     // The version is said in the history, not above the cards.
     expect(screen.queryByTestId("dashboard-version")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /History/ }));
+    await openHistory();
     expect(screen.getByTestId("dashboard-version")).toHaveTextContent("Version 3 · kept by person");
+    // beside the cards, closed again (the user, 2026-11-19: "a temporary panel, not covering the entire page")
+    expect(screen.getByTestId("dashboard-history-panel")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("dashboard-history-close"));
+    expect(screen.queryByTestId("dashboard-history-panel")).toBeNull();
   });
 
-  it("opens on last month and asks each card how it moved against the one before", async () => {
-    api.getDashboard.mockResolvedValue({ ...READ, currency_symbol: "€",
-      range: { ...READ.range, status: "final", preset: "last_month", covers: "July 2026" } });
+  it("reads its cards as written, with no period: its filters alone cut them (the user, 2026-11-19)", async () => {
+    api.getDashboard.mockResolvedValue({ ...READ, currency_symbol: "€" });
     show();
-    await waitFor(() => expect(api.getDashboard).toHaveBeenCalledWith("thelook", "returns-1", { preset: "previous_month" }));
-    await waitFor(() => expect(api.runCard).toHaveBeenCalledWith("c7f3a001", { preset: "previous_month" }, { compare: true, focus: [] }));
-    // Never first read as written: that run would roll every card's standing value.
-    expect(api.getDashboard).not.toHaveBeenCalledWith("thelook", "returns-1", null);
-    expect(await screen.findByTestId("dashboard-range")).toHaveTextContent("July 2026 · final");
+    await waitFor(() => expect(api.runCard).toHaveBeenCalledWith("c7f3a001", null, { compare: true, focus: [] }));
+    expect(api.getDashboard).not.toHaveBeenCalledWith("thelook", "returns-1", { preset: "previous_month" });
+    expect(screen.queryByTestId("dashboard-range")).toBeNull();                 // no period said or chosen
     await waitFor(() => expect(drawn.props.at(-1)!.sym).toBe("€"));
   });
 
   it("opens the one the person chose last time", async () => {
     localStorage.setItem("pramanyx:dashboard-to-open:thelook", "pricing-1");
     show();
-    await waitFor(() => expect(api.getDashboard).toHaveBeenCalledWith("thelook", "pricing-1", { preset: "previous_month" }));
+    await waitFor(() => expect(api.getDashboard).toHaveBeenCalledWith("thelook", "pricing-1", null));
   });
 
   it("'Remove' on a card takes it off THIS dashboard and keeps the card", async () => {
@@ -208,7 +215,6 @@ describe("a retired dashboard", () => {
     fireEvent.click(screen.getByTestId("dashboard-retire-open"));
     fireEvent.click(screen.getByRole("button", { name: "Retire it" }));
     await waitFor(() => expect(api.retireDashboard).toHaveBeenCalledWith("thelook", "returns-1"));
-    fireEvent.click(screen.getByRole("button", { name: /History/ }));
     expect(screen.queryByRole("button", { name: "Retire this dashboard" })).toBeNull();
   });
 
@@ -496,7 +502,7 @@ describe("the dashboards home, where Dashboards opens (the user, 2026-11-18)", (
   it("opens one of the person's own, keeps it through a reload of this tab, and forgets it on going back", async () => {
     const first = show();
     await openFromHome("Returns");
-    await waitFor(() => expect(api.getDashboard).toHaveBeenCalledWith("thelook", "returns-1", { preset: "previous_month" }));
+    await waitFor(() => expect(api.getDashboard).toHaveBeenCalledWith("thelook", "returns-1", null));
     expect(sessionStorage.getItem("pramanyx:dashboard-open:thelook")).toBe("returns-1");
     first.unmount();
     show();
@@ -510,7 +516,7 @@ describe("the dashboards home, where Dashboards opens (the user, 2026-11-18)", (
   it("opens what another page asked for once, and the home after that", async () => {
     localStorage.setItem("pramanyx:dashboard-to-open:thelook", "pricing-1");
     const first = show();
-    await waitFor(() => expect(api.getDashboard).toHaveBeenCalledWith("thelook", "pricing-1", { preset: "previous_month" }));
+    await waitFor(() => expect(api.getDashboard).toHaveBeenCalledWith("thelook", "pricing-1", null));
     expect(localStorage.getItem("pramanyx:dashboard-to-open:thelook")).toBeNull();
     first.unmount();
     show();
@@ -744,7 +750,9 @@ describe("building a dashboard in place (Arc AP-1)", () => {
     for (const id of ["dashboard-card-new", "dashboard-note-new", "dashboard-arrange-open", "dashboard-publish-open", "dashboard-retire-open", "dashboard-ask"]) {
       expect(screen.queryByTestId(id)).toBeNull();
     }
-    expect(screen.getByRole("button", { name: /History/ })).toBeInTheDocument();
+    fireEvent.keyDown(screen.getByTestId("dashboard-more"), { key: "Enter" });
+    expect(await screen.findByTestId("dashboard-history-open")).toBeInTheDocument();
+    fireEvent.keyDown(screen.getByTestId("dashboard-history-open"), { key: "Escape" });
     await waitFor(() => expect(Object.entries(doors()).filter(([, v]) => v !== undefined).map(([k]) => k)).toEqual(["onRefresh"]));
   });
 
@@ -928,7 +936,8 @@ describe("History, in words (Arc AP-6)", () => {
       { ...version(1), current: false, changes: { added: ["a", "b"], removed: [], changed: ["c"] } },
     ] });
     show();
-    fireEvent.click(await screen.findByRole("button", { name: /History/ }));
+    await screen.findByTestId("dashboard-more");
+    await openHistory();
     const rows = within(await screen.findByTestId("dashboard-history")).getAllByRole("listitem");
     expect(within(rows[0]).getByTestId("dashboard-history-said")).toHaveTextContent("Added the map · distribution center · Moved a note to the section Waiting");
     expect(within(rows[1]).queryByTestId("dashboard-history-said")).toBeNull();          // published: its source says it
@@ -1135,7 +1144,7 @@ describe("your own query on the dashboard (Arc AP-7)", () => {
 });
 
 describe("inside the app's shell (2026-11-10, the dashboard mockup)", () => {
-  it("names the dashboard in the title with the way back before it, and puts its doors in the title row", async () => {
+  it("names the dashboard in the title, when it was kept beside it, and its doors: Edit, Publish and ⋯ (the user, 2026-11-19)", async () => {
     const { PageChromeProvider, PageHeader } = await import("@/components/shell/PageChrome");
     render(
       <PageChromeProvider pageKey="dashboards">
@@ -1146,14 +1155,17 @@ describe("inside the app's shell (2026-11-10, the dashboard mockup)", () => {
     await waitFor(() => expect(drawn.props.length).toBeGreaterThan(0));
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Returns");
     expect(screen.queryByRole("tablist")).toBeNull();
-    expect(screen.getByRole("button", { name: /Dashboards/ })).toBeInTheDocument();
-    // View | Edit, History, Publish… and ⋯ in the title row;
-    // owner, version and the last read beside the title; the dashboard's state, release and reader in the status strip
+    // no way back drawn before the title: the rail's Dashboards row goes back
+    expect(screen.queryByTestId("page-back")).toBeNull();
+    // Edit, Publish… and ⋯ in the title row, and nothing else: no View, no Ask (the top bar's icon asks), no History
     expect(screen.getByTestId("dashboard-edit").closest(".aug-title-actions")).toBeTruthy();
-    expect(screen.getByTestId("dashboard-view")).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByTestId("dashboard-view")).toBeNull();
+    expect(screen.queryByTestId("ask-about-dashboard")).toBeNull();
     expect(screen.getByTestId("dashboard-publish-view")).toHaveTextContent("Publish…");
     expect(screen.getByTestId("dashboard-more").closest(".aug-title-actions")).toBeTruthy();
-    expect(screen.getByTestId("dashboard-facts")).toHaveTextContent("version 3");
+    // when it was kept beside the title; owner, version and the last read in its title
+    expect(screen.getByTestId("dashboard-facts")).toHaveTextContent(/^Updated /);
+    expect(screen.getByTestId("dashboard-facts").getAttribute("title")).toContain("version 3");
     // the dashboard starts right under its title (the user, 2026-11-19): Read again waits in the ⋯ menu
     expect(screen.queryByTestId("dashboard-read-again")).toBeNull();
     fireEvent.keyDown(screen.getByTestId("dashboard-more"), { key: "Enter" });
@@ -1182,40 +1194,28 @@ describe("the period as a piece (v15; the user, 2026-11-18: 'remove period bar')
     return () => { delete SPEC.elements.period; SPEC.elements[section].children.shift(); };
   };
 
-  it("opens on the period its piece says, hands the piece the period and the door to change it, and draws no period above it", async () => {
-    const takeOff = placePeriod();
-    try {
-    show();
-    await waitFor(() => expect(api.getDashboard).toHaveBeenCalledWith("thelook", "returns-1", { preset: "current_month" }));
-    await waitFor(() => expect((drawn.props.at(-1)?.period as { value?: unknown } | undefined)?.value).toEqual({ preset: "current_month" }));
-    expect(screen.queryByTestId("dashboard-period")).toBeNull();
-    const door = drawn.props.at(-1)!.period as { onChange: (c: unknown) => void };
-    act(() => door.onChange({ preset: "previous_year" }));
-    await waitFor(() => expect(api.getDashboard).toHaveBeenLastCalledWith("thelook", "returns-1", { preset: "previous_year" }));
-    } finally { takeOff(); }
-  });
-
-  it("reads the cards again without moving the page: the note floats, and only the cards wait (2026-11-19)", async () => {
+  it("a dashboard that still holds the piece is read as written, with no period handed to it (2026-11-19)", async () => {
     const takeOff = placePeriod();
     try {
     show();
     await waitFor(() => expect(drawn.props.length).toBeGreaterThan(0));
+    expect(api.getDashboard).toHaveBeenCalledWith("thelook", "returns-1", null);
+    expect(drawn.props.at(-1)?.period).toBeNull();                                 // the piece draws nothing
+    } finally { takeOff(); }
+  });
+
+  it("reads the cards again without moving the page: the note floats, and only the cards wait (2026-11-19)", async () => {
+    show();
+    await waitFor(() => expect(drawn.props.length).toBeGreaterThan(0));
     api.getDashboard.mockImplementationOnce(() => new Promise(() => {}));     // the next read is still on its way
-    const door = drawn.props.at(-1)!.period as { onChange: (c: unknown) => void };
-    act(() => door.onChange({ preset: "previous_year" }));
+    fireEvent.keyDown(screen.getByTestId("dashboard-more"), { key: "Enter" });
+    fireEvent.click(await screen.findByTestId("dashboard-read-again"));
     const note = await screen.findByRole("status");
-    expect(note).toHaveTextContent(/the cards for/);
+    expect(note).toHaveTextContent(/the cards/);
     expect(note.style.position).toBe("absolute");                               // it takes no room: nothing below it moves
     const busy = note.parentElement as HTMLElement;
     expect(busy).toHaveAttribute("data-reading");                               // the stylesheet dims the cards inside it alone
     expect(busy.style.opacity).toBe("");                                        // not the filters beside them
     expect(busy.style.pointerEvents).toBe("");
-    } finally { takeOff(); }
-  });
-
-  it("a dashboard without the piece keeps its period above it", async () => {
-    show();
-    await waitFor(() => expect(drawn.props.length).toBeGreaterThan(0));
-    expect((drawn.props.at(-1)?.period as { value?: unknown } | undefined)?.value).toEqual({ preset: "previous_month" });
   });
 });
