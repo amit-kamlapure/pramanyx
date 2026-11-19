@@ -17,7 +17,7 @@ import { createPortal } from "react-dom";
 import { readAgainIn, statusWords, whatHappens } from "./runs.js";
 import { deckOf } from "./deck.js";
 import { driveFilesOf } from "./drive.js";
-import { ABOUT_TO, DOES, PREFIX, STAGED, saidOf, turnedDown } from "./steps.js";
+import { ABOUT_TO, DOES, PREFIX, STAGED, saidOf, stagedOf, turnedDown } from "./steps.js";
 import { drawChart, labelOf, numericColumns } from "./chart";
 import {
   PANE, PANE_PATTERN, PaneBody, downloadCsv, groundingOf, pageFor, PaneTitle, ResultGrid, button, faint, hasPane, idOf, line,
@@ -1672,15 +1672,12 @@ function StagedCard(props) {
   const text = resultText(props.block);
   const refused = props.block?.isError ? turnedDown(text) : null;
   if (refused) return h(Step, { kind: "read", title, note: refused });
-  let got = null;
-  try { got = JSON.parse(text); } catch { got = null; }
-  if (!got || props.block?.isError || !got.staged || !got.proposal_id) {
-    // what the platform said, without its own bookkeeping ("(proposal …)", "in the inbox")
-    const why = String(got?.summary || got?.error || text || "The platform did not stage it.").replace(/\s*\(proposal [^)]*\)/g, "");
+  const got = stagedOf(text);
+  if (props.block?.isError || !got.staged) {
     return h(Step, { kind: "read", failed: true, title: `${ABOUT_TO[short] || title}: nothing was staged` },
-      h("div", { style: quiet }, why.slice(0, 600)));
+      h("div", { style: quiet }, got.said));
   }
-  return h(StagedDecision, { id: String(got.proposal_id), title });
+  return h(StagedDecision, { id: got.id, title });
 }
 
 function Card(props) {

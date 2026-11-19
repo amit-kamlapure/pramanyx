@@ -152,3 +152,23 @@ def test_the_panels_step_words_are_the_rows():
     assert {n for n, a in A.ABILITIES.items() if A.PANEL in a.places} == set(said), "every panel ability has its words, and only those"
     for name, words in said.items():
         assert A.ABILITIES[name].words == words, f"{name}: the panel says “{words}”, the rows “{A.ABILITIES[name].words}”"
+
+
+def test_a_change_staged_over_mcp_is_said_as_waiting_for_the_persons_allow_never_by_its_id():
+    import asyncio
+
+    from pramanyx.mcp import server
+
+    class Door:
+        async def call_spotlight_tool(self, name, *, connection="", args=None):
+            return {"tool": name, "result": {"staged": True, "proposal_id": "p-1", "summary": "staged (proposal p-1)"}}
+
+    out = asyncio.run(server._spotlight_runner(Door(), "draft_monitor")(connection="sheets", name="x"))
+    assert out["next"] == server.STAGED_NEXT and "Never name it by its id" in out["next"]
+    assert out["result"]["proposal_id"] == "p-1"          # the card reads it; the person never does
+
+    class Read(Door):
+        async def call_spotlight_tool(self, name, *, connection="", args=None):
+            return {"tool": name, "result": {"rows": []}}
+
+    assert "next" not in asyncio.run(server._spotlight_runner(Read(), "platform_usage")())

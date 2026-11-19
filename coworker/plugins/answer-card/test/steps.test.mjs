@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import { abilitiesOf, ASKED_FIRST, mayGoAhead, NO_STANDS } from "../../home/lib/index.js";
-import { ABOUT_TO, DOES, PREFIX, STAGED, saidOf, turnedDown } from "../src/steps.js";
+import { ABOUT_TO, DOES, PREFIX, STAGED, saidOf, stagedOf, turnedDown } from "../src/steps.js";
 
 // the platform's rows (`GET /abilities`), as the home plugin's snapshot of them
 const ROWS = abilitiesOf(JSON.parse(readFileSync(new URL("../../home/test/abilities.fixture.json", import.meta.url), "utf8")));
@@ -43,4 +43,14 @@ test("a person's answer is told from a failure, in each of the harness's own sen
   assert.equal(turnedDown(`Error: ${NO_STANDS}`), "you said no");
   assert.equal(turnedDown("The warehouse did not answer."), null);
   assert.equal(turnedDown(""), null);
+});
+
+test("a staging tool's answer is read through the platform's door: staged, with its change, or what was said", () => {
+  // seen live 2026-11-20: the door answers {tool, result}, and a staged monitor was drawn as "nothing was staged"
+  const door = JSON.stringify({ tool: "draft_monitor", result: { staged: true, proposal_id: "58a8-1", summary: "x" }, next: "..." });
+  assert.deepEqual(stagedOf(door), { staged: true, id: "58a8-1", said: "" });
+  assert.deepEqual(stagedOf(JSON.stringify({ staged: true, proposal_id: "p2" })), { staged: true, id: "p2", said: "" });
+  const refused = stagedOf(JSON.stringify({ tool: "draft_monitor", result: { staged: false, summary: "Nothing staged: no metric (proposal p3)." } }));
+  assert.deepEqual(refused, { staged: false, id: "", said: "Nothing staged: no metric." });
+  assert.equal(stagedOf("the platform is down").said, "the platform is down");
 });

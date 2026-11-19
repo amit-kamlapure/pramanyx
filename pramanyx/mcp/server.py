@@ -1276,15 +1276,30 @@ def _declare_arguments(name: str, schema: dict) -> None:
         "fn_metadata": tool.fn_metadata.model_copy(update={"arg_model": _DeclaredArguments})})
 
 
+#: What a client is told when a change was staged (2026-11-20): the coworker draws the staged change as its card in the
+#: conversation, with Allow and Reject, and a reply naming the proposal by its id read as the platform's plumbing (seen
+#: live the same day: "staged as proposal 58a8…"). A client with no card leaves it for the person in the Inbox.
+STAGED_NEXT = ("Staged for the person's Allow; nothing has changed yet. Where the person is shown the change as a card, "
+               "they allow or reject it there, once. Say in one sentence what it would do and that it waits for their "
+               "Allow. Never name it by its id.")
+
+
+def _staged_said(out: Any) -> Any:
+    """The door's answer, told what to say when it staged a change."""
+    if isinstance(out, dict) and isinstance(out.get("result"), dict) and out["result"].get("staged") is True:
+        return {**out, "next": STAGED_NEXT}
+    return out
+
+
 def _spotlight_runner(api: "PramanyxClient", name: str):
     """A factory, not a loop lambda — the same late-binding trap the automation
     runner already refuses. `connection` binds the connection-flavoured tools;
     org-level reads ignore it."""
     async def _run(**arguments: Any) -> Any:
         connection = str(arguments.pop("connection", "") or "")
-        return await api.call_spotlight_tool(
+        return _staged_said(await api.call_spotlight_tool(
             name, connection=connection,
-            args={k: v for k, v in arguments.items() if v is not None})
+            args={k: v for k, v in arguments.items() if v is not None}))
 
     return _run
 
