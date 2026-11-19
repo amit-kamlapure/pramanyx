@@ -30,7 +30,7 @@
  */
 import {
   Children, Component, createContext, useCallback, useContext, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState,
-  type PointerEvent as ReactPointerEvent, type ReactNode, type Ref, type RefObject,
+  type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode, type Ref, type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
 import { evaluateVisibility, type Spec, type VisibilityCondition } from "@json-render/core";
@@ -255,6 +255,12 @@ function DashboardRoot(props: ComponentRenderProps<{ title: string }>) {
   return <><DrillMenu /><DashboardRootBody {...props} /></>;
 }
 
+/** A filters column stays in reach while the Ask panel moves the page left (`--ask-pushed`, set by `AskPushedPage`): it
+ *  stands as far in from the page's edge as the page moved, over the cards that pass under it, as a frozen column does in
+ *  a sheet (the user, 2026-11-19: "the Global filters are not visible" with the panel open). Without the panel, it is
+ *  where it always was. */
+const PINNED: CSSProperties = { position: "relative", zIndex: 3, transform: "translateX(var(--ask-pushed, 0px))", background: "var(--bg-0)" };
+
 function DashboardRootBody(props: ComponentRenderProps<{ title: string }>) {
   const { elements, focus } = useDashboard();
   const shut = useFiltersShut();
@@ -266,7 +272,7 @@ function DashboardRootBody(props: ComponentRenderProps<{ title: string }>) {
   const held = (elements[keys[at]]?.children ?? [])
     .filter(key => heldBy(focus, key, elements[key]?.props as unknown as GlobalFilterProps)).length;
   // put away, the column stays mounted, out of sight: it is also what feeds the values the cards' queries read
-  const column = <div hidden={shut} style={shut ? { display: "none" } : { minWidth: 0 }}>{kids[at]}</div>;
+  const column = <div hidden={shut} data-testid="dashboard-global-filter-column" style={shut ? { display: "none" } : { minWidth: 0, ...PINNED }}>{kids[at]}</div>;
   if (shut) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
@@ -330,7 +336,7 @@ function RootLayout({ element, children }: ComponentRenderProps<{ title: string 
       <QueryNarrowingProvider table={held.table}>
         <div role="region" aria-label={element.props.title} data-testid="dashboard"
           style={{ display: "grid", gridTemplateColumns: `${(held.w ?? null) ? (held.w as number) * GRADE : FILTER_COLUMN}px minmax(0, 1fr)`, gap: SPACE, alignItems: "start" }}>
-          <div data-testid="dashboard-filter-column" style={{ alignSelf: "stretch", minWidth: 0 }}><FiltersHead />{queryColumn}</div>
+          <div data-testid="dashboard-filter-column" style={{ alignSelf: "stretch", minWidth: 0, ...PINNED }}><FiltersHead />{queryColumn}</div>
           <div style={{ display: "flex", flexDirection: "column", gap: SPACE, minWidth: 0 }}><ValuesBar spaced={false} /><FilteredBy /><FirstPageDoor />{others}</div>
         </div>
       </QueryNarrowingProvider>
@@ -365,7 +371,7 @@ function RootLayout({ element, children }: ComponentRenderProps<{ title: string 
       style={{ display: "grid", gridTemplateColumns: `${width}px minmax(0, 1fr)`, gap: SPACE, alignItems: "start" }}>
       <div className="group" data-testid="dashboard-filter-column" data-width={width} data-selected={selected === firstKey || undefined}
         onPointerDownCapture={doors.onSelect ? () => doors.onSelect?.(firstKey) : undefined}
-        style={{ position: "relative", alignSelf: "stretch", minWidth: 0, borderRadius: "var(--r3)",
+        style={{ ...PINNED, alignSelf: "stretch", minWidth: 0, borderRadius: "var(--r3)",
           outline: selected === firstKey ? "2px solid var(--accent)" : undefined, outlineOffset: 2 }}>
         <FiltersHead />
         {column}

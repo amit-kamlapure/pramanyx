@@ -86,5 +86,11 @@ describe("the filter column of a dashboard made from a file", () => {
     act(() => { fireEvent.click(screen.getByTestId("global-filters-show")); });
     expect(screen.getByTestId("query-filters")).toBeVisible();
   });
-});
 
+  it("stands in from the page's edge as far as the Ask panel moved the page, so readers always see it (2026-11-19)", () => {
+    render(<ComposedDashboard spec={withFilters()} cards={CARDS} host={HOST} focus={HELD} onFocus={vi.fn()} doors={{ onRefresh: vi.fn() }} />);
+    const column = screen.getByTestId("dashboard-global-filter-column");
+    expect(column.style.transform).toBe("translateX(var(--ask-pushed, 0px))");
+    expect(column.style.zIndex).toBe("3");                                     // over the cards that pass under it
+  });
+});

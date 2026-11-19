@@ -4,7 +4,7 @@
  * width it had without it and scrolls sideways, rather than being squeezed into what is left; closed, hidden on the Ask
  * page, or on a screen too narrow for both, nothing moves.
  */
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AskPushedPage } from "@/components/ask/AskPanel";
@@ -47,5 +47,16 @@ describe("the page beside the Ask panel", () => {
     narrow = true;
     page();
     expect(screen.getByTestId("ask-pushed-page")).not.toHaveAttribute("data-pushed");
+  });
+
+  it("says how far it moved the page, so what must stay in reach — a dashboard's filters — stands that far in (2026-11-19)", () => {
+    page();
+    act(() => openAskPanel("c1"));
+    const scroller = screen.getByTestId("ask-pushed-page");
+    Object.defineProperty(scroller, "scrollLeft", { value: 368, configurable: true });
+    fireEvent.scroll(scroller);
+    expect(inner().style.getPropertyValue("--ask-pushed")).toBe("368px");
+    act(() => hideAskPanel());
+    expect(inner().style.getPropertyValue("--ask-pushed")).toBe("0px");                  // closed, nothing stands in
   });
 });

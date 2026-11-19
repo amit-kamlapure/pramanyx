@@ -51,15 +51,24 @@ export function AskPushedPage({ hidden = false, children }: { hidden?: boolean; 
   const width = useAskPanelWidth();
   const pushed = open && tabs.length > 0 && !hidden && !narrow;
   const scroller = useRef<HTMLDivElement>(null);
+  const page = useRef<HTMLDivElement>(null);
+  // how far the page is moved, as `--ask-pushed`: what must stay in reach — a dashboard's filters — stands that far in
+  // from the page's left edge, so it is never hidden under the rail (the user, 2026-11-19: "the Global filters are not
+  // visible" with the panel open)
+  const said = useCallback(() => {
+    const el = scroller.current;
+    page.current?.style.setProperty("--ask-pushed", `${pushed && el ? el.scrollLeft : 0}px`);
+  }, [pushed]);
   // opening the panel moves the page left by the panel's width: what was at its right edge stays beside the panel
   useEffect(() => {
     const el = scroller.current;
     if (pushed && el) el.scrollLeft = el.scrollWidth;
-  }, [pushed]);
+    said();
+  }, [pushed, said]);
   return (
-    <div ref={scroller} data-testid="ask-pushed-page" data-pushed={pushed || undefined}
+    <div ref={scroller} data-testid="ask-pushed-page" data-pushed={pushed || undefined} onScroll={said}
       style={{ flex: 1, minWidth: 0, display: "flex", overflowX: pushed ? "auto" : "hidden", overflowY: "hidden" }}>
-      <div style={{ display: "flex", minWidth: 0, ...(pushed ? { flex: "none", width: `calc(100% + ${width}px)` } : { flex: 1 }) }}>
+      <div ref={page} style={{ display: "flex", minWidth: 0, ...(pushed ? { flex: "none", width: `calc(100% + ${width}px)` } : { flex: 1 }) }}>
         {children}
       </div>
     </div>
