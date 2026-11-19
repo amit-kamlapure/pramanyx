@@ -1049,6 +1049,14 @@ def _engine_and_clock(connection_id: str) -> str:
     return note
 
 
+#: The tools are the platform's way of working, not the reader's words (seen live 2026-11-19: an answer said
+#: "get_table_health returns 'No quality checks have run for this table'"). Said once, in the prompt every conversation reads.
+TOOLS_UNNAMED = (
+    "The tools are how you work, not words the reader knows. Never name one, nor quote what a tool returned as a tool's "
+    "message: say what you found in plain words (\"no quality checks have run on this table\", not the name of the "
+    "tool that said so).")
+
+
 def converse_system_prompt(connection_id: str, extra: Optional[str] = None,
                            question: str = "", agent: Any = None,
                            shape: Optional[str] = None) -> str:
@@ -1128,6 +1136,8 @@ def converse_system_prompt(connection_id: str, extra: Optional[str] = None,
         "Do not write markdown tables. The rows a query returned travel with the answer "
         "as its exhibit, and a table in your prose would be shown twice; name the "
         "figures that matter in a sentence instead.",
+        "",
+        TOOLS_UNNAMED,
         *(["", settling_note] if settling_note else []),
         *(["", sql_note] if sql_note else []),
         "",

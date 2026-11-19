@@ -497,3 +497,12 @@ def test_run_sql_tells_the_model_when_its_rows_are_finer_than_the_turn_asked(mon
     right = ct.run_sql("c1", {"sql": "SELECT status, SUM(total) FROM orders GROUP BY 1"},
                        user_question="What is total GMV by order status?")
     assert not any(r.get("guard") == "result_shape" for r in right["guard_receipts"])
+
+
+def test_the_conversation_is_told_its_tools_are_not_the_readers_words():
+    # Seen live 2026-11-19: an answer quoted "get_table_health returns ..." to the person reading it.
+    from pramanyx.agent.converse_tools import TOOLS_UNNAMED, converse_system_prompt
+
+    prompt = converse_system_prompt("c1")
+    assert TOOLS_UNNAMED in prompt
+    assert "Never name one" in TOOLS_UNNAMED
