@@ -245,3 +245,29 @@ def test_a_model_call_is_recorded_inside_the_step_it_ran_in(monkeypatch):
     with telemetry.bind_trace("cw-88f4fdd19a454d47-3"):
         session_log.emit(session_log.LLM_CALL, name="coder", model="m")
     assert [r["parent_span_id"] for r in written] == ["call_9", "call_9", None, None]
+
+
+def test_a_turn_that_ended_with_a_reply_is_filed_once_in_the_conversation_store(taken, monkeypatch):
+    """One record for both places (2026-11-20): a coworker turn's question and the coworker's own reply are filed as a
+    turn of the conversation `coworker:<session>`, on its connection, as the person it was for; the Ask panel's history
+    lists it beside its own. Sent twice, it is filed once; a turn with no reply is not filed."""
+    from pramanyx.db.history import chat_session_turn_ids, get_investigation
+    from pramanyx.security import delegation
+    from pramanyx.security.authz import Principal
+    client, seen = taken
+    monkeypatch.setattr(delegation, "resolve", lambda secret, audience=delegation.AUDIENCE:
+                        Principal(user_id="ana", org_id="default") if secret == "d" * 30 else None)
+    turn = {"trace_id": "cw-77aa11bb22cc-3", "session": "session-77aa11bb-22cc"}
+    end = {"kind": "final_response", "ok": True, "conn_id": "sheets",
+           "payload": {"question": "How many orders were delivered?", "answer": "96,478 orders were delivered.", "turn": 3}}
+    for _ in range(2):
+        assert client.post("/coworker/trace", json={**turn, "events": [end]}, headers={delegation.HEADER: "d" * 30}).status_code == 200
+    # the trace keeps where things are, never what the agent said
+    assert all("answer" not in e["payload"] for e in seen if e["kind"] == "final_response")
+    assert chat_session_turn_ids("coworker:" + turn["session"]) == [turn["trace_id"]]
+    row = get_investigation(turn["trace_id"])
+    assert row["question"] == "How many orders were delivered?" and row["headline"] == "96,478 orders were delivered."
+    assert row["connection_id"] == "sheets" and row.get("asked_by") == "ana"
+    silent = {"trace_id": "cw-77aa11bb22cc-4", "session": turn["session"]}
+    client.post("/coworker/trace", json={**silent, "events": [{"kind": "final_response", "ok": True, "payload": {"question": "x"}}]})
+    assert get_investigation(silent["trace_id"]) is None

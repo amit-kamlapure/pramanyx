@@ -815,9 +815,10 @@ export function turnEvents(record, sessionId, held, event, header = {}) {
     const kind = data.source?.kind;
     if (kind === "user") {
       now.asked = true;
+      const asked = clip(textOf(data.content), 2000);
       questions.set(sessionId, { trace: now.trace, started: now.started, running: questions.get(sessionId)?.running ?? new Set(),
-                                 answers: new Set(), spawns: [], replies: [], ended: false, checked: "" });
-      return [{ kind: "user_request", name: "coworker", conn_id, payload: { question: clip(textOf(data.content), 2000), turn: now.turn, ...where } }];
+                                 answers: new Set(), spawns: [], replies: [], ended: false, checked: "", asked });
+      return [{ kind: "user_request", name: "coworker", conn_id, payload: { question: asked, turn: now.turn, ...where } }];
     }
     if (REPORTS.has(kind)) {
       now.asked = true;
@@ -827,10 +828,12 @@ export function turnEvents(record, sessionId, held, event, header = {}) {
       return [];
     }
   }
-  if (event.type === "assistant/message" && now.report && !now.helper) {
-    // What the main agent says after its helpers report: where the question's one answer is.
+  if (event.type === "assistant/message" && !now.helper) {
     const said = (data.message?.content ?? []).filter((part) => part?.type === "text").map((part) => String(part.text ?? "")).join("");
-    if (said.trim()) questions.get(sessionId)?.replies.push(said);
+    // What the main agent last said in this turn: its reply, filed with the question at its end (2026-11-20).
+    if (said.trim()) now.reply = said;
+    // What the main agent says after its helpers report: where the question's one answer is.
+    if (now.report && said.trim()) questions.get(sessionId)?.replies.push(said);
     return [];
   }
   if (event.type === "tool/call" && data.callId) {
@@ -899,8 +902,12 @@ export function turnEvents(record, sessionId, held, event, header = {}) {
     if (ours && question.ended) return [];
     if (ours) question.ended = true;
     const started = ours ? question.started : now.started;
+    // ONE RECORD FOR BOTH PLACES (2026-11-20): the question and the coworker's own reply go with its end, and the platform
+    // files the turn in its conversation store, where the Ask panel's history lists it.
+    const reply = (ours && question.spawns.length ? closeOf(question.replies) : "") || now.reply || "";
+    const filed = ours && question.asked && reply.trim() ? { question: question.asked, answer: clip(reply, 4000) } : {};
     return [{ kind: "final_response", name: "coworker", ok: reason === "completed", duration_ms: Math.max(0, at - started), conn_id,
-              payload: { ...(now.headline ? { headline: now.headline } : {}), reason, calls: now.tools, turn: now.turn, ...where } }];
+              payload: { ...(now.headline ? { headline: now.headline } : {}), reason, calls: now.tools, turn: now.turn, ...filed, ...where } }];
   }
   return [];
 }

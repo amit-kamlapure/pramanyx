@@ -40,6 +40,7 @@ platform's own.
 from __future__ import annotations
 
 import ipaddress
+import logging
 import re
 import time
 from typing import Any, Literal, Optional
@@ -51,6 +52,7 @@ from pydantic import BaseModel, Field
 from pramanyx.security.authz import connection_owner_guard
 
 router = APIRouter(tags=["coworker"])
+logger = logging.getLogger(__name__)
 
 #: How long an announcement stands (`pramanyx/coworkers.py`, which keeps them: one per person's coworker).
 from pramanyx.coworkers import FRESH_FOR  # noqa: E402,F401 — re-exported for readers of this router
@@ -162,6 +164,8 @@ _PAYLOAD_KEYS = frozenset({
     "headline", "rows", "reason", "error", "message", "shell_session", "seq", "calls",
     # A helper the turn started: which session it is, and its brief's one-line description.
     "helper", "description",
+    # Not "answer": the coworker's reply comes with a turn's end only to be filed in the conversation store (2026-11-20);
+    # the trace keeps where things are, never what the agent said.
 })
 
 
@@ -216,11 +220,35 @@ def take_a_coworker_turn(body: CoworkerTraceBatch, request: Request) -> Coworker
                 error_class=("coworker" if event.ok is False and event.kind != "tool_call" else None),
                 payload={k: v for k, v in event.payload.items() if k in _PAYLOAD_KEYS},
             )
+            if event.kind == "final_response":
+                file_the_turn(body.session, body.trace_id, event)
     finally:
         if person is not None:
             reset_user_id(person)
         reset_session_id(token)
     return CoworkerTraceTaken(written=len(body.events))
+
+
+def file_the_turn(session: str, trace_id: str, event: CoworkerTraceEvent) -> Optional[str]:
+    """ONE RECORD FOR BOTH PLACES (the user, 2026-11-20: "One record for all"). A coworker turn is filed in the platform's
+    conversation store as it ends, under the conversation `coworker:<shell session>`: its question and the coworker's own
+    reply, on its connection, as the person it was for. The Ask panel's history then lists the coworker's conversations
+    beside its own, and the app's thread opens one. Filed once per question, however often its end is sent: the row is
+    named by the turn's trace. A turn with no reply, or none that ended, is not filed. Never raises: the trace stands."""
+    question = str(event.payload.get("question") or "").strip()
+    answer = str(event.payload.get("answer") or "").strip()
+    if not question or not answer or not _SESSION_NAME.match(session) or not TRACE_NAME.match(trace_id):
+        return None
+    try:
+        from pramanyx.db.history import get_investigation, save_chat_turn
+        if get_investigation(trace_id):
+            return trace_id
+        return save_chat_turn(question[:2000], str(event.conn_id or ""), answer[:4000], "",
+                              session_id=f"coworker:{session}", inv_id=trace_id,
+                              status="complete" if event.ok is not False else "interrupted")
+    except Exception:
+        logger.debug("a coworker turn was not filed in the conversation store", exc_info=True)
+        return None
 
 
 # ── the platform's work for a turn, inside the turn's trace ──────────────────────────────────────────────────────

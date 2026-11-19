@@ -1203,6 +1203,16 @@ def converse_system_prompt(connection_id: str, extra: Optional[str] = None,
             from pramanyx.kernel.errors import tolerate
             tolerate(exc, "the question frame is additive; the conversation stands without it",
                      counter="converse.question_frame")
+    # One record for both places (2026-11-20): what the person asked to be remembered, read into the conversation as the
+    # governed answer reads it (`grounding.person_memory`) — the coworker's "remember for me" holds in the Ask panel too,
+    # where the conversation answers without that path. '' when they asked for nothing: the prompt is byte-identical.
+    try:
+        from pramanyx.agent.grounding import person_memory
+        remembered = person_memory().strip()
+        if remembered:
+            lines += ["", remembered]
+    except Exception:                       # never let a person's memory break the prompt
+        logger.debug("the person's memory was not read into the conversation", exc_info=True)
     if extra:
         lines += ["", extra]
     # AO-1a — the agent's brief LEADS the prompt, as it leads the quick body's SQL prompt

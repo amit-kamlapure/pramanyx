@@ -508,3 +508,17 @@ def test_the_conversation_is_told_its_tools_are_not_the_readers_words():
     assert "Never name one" in TOOLS_UNNAMED
     # 2026-11-20: a chart's answer offered "lineWidth: 6" — a setting is named as the screen names it
     assert "never by its field" in TOOLS_UNNAMED
+
+
+def test_the_conversation_reads_what_the_person_asked_to_be_remembered(monkeypatch):
+    # One record for both places (2026-11-20): the coworker's "remember for me" holds in the Ask panel's conversation too
+    from types import SimpleNamespace
+
+    import pramanyx.semantic.ambiguity_ledger as ledger
+    from pramanyx.agent.converse_tools import converse_system_prompt
+
+    monkeypatch.setattr(ledger, "memories_of", lambda person, **k: [SimpleNamespace(resolved_reading="Figures in EUR, please")])
+    prompt = converse_system_prompt("c1")
+    assert "WHAT THE PERSON ASKING ASKED YOU TO REMEMBER" in prompt and "- Figures in EUR, please" in prompt
+    monkeypatch.setattr(ledger, "memories_of", lambda person, **k: [])
+    assert "ASKED YOU TO REMEMBER" not in converse_system_prompt("c1")

@@ -17,7 +17,7 @@ import { Loading } from "@/components/ui/states";
 import { Tooltip } from "@/components/ui/tooltip";
 import type { ChatSessionSummary } from "@/components/ThreadsRail";
 import {
-  closeAskTab, followPageConnection, hideAskPanel, newAskTab, noteAskSession, openAskConversation, PANEL_MAX_W, PANEL_MIN_W, selectAskTab,
+  closeAskTab, followPageConnection, hideAskPanel, inTheCoworker, newAskTab, noteAskSession, openAskConversation, PANEL_MAX_W, PANEL_MIN_W, selectAskTab,
   setAskPanelWidth, toggleAskPanel, useAskPanel, useAskPanelWidth, type AskTab,
 } from "@/lib/askPanel";
 import { getApiBase } from "@/lib/config";
@@ -103,6 +103,8 @@ function History({ connectionId }: { connectionId: string }) {
         {(rows ?? []).map(r => (
           <DropdownMenu.Item key={r.session_id} data-testid="ask-panel-history-row" onSelect={() => openAskConversation(r.session_id, r.title, connectionId)}>
             <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.title || "Untitled"}</span>
+            {/* one record for both places (2026-11-20): a conversation held in the coworker app says so */}
+            {inTheCoworker(r.session_id) && <span data-testid="ask-panel-history-coworker" className="aug-fs-xs" style={{ flex: "none", color: "var(--t3)" }}>coworker</span>}
           </DropdownMenu.Item>
         ))}
       </DropdownMenu.Content>

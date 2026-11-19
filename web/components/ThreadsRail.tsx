@@ -24,6 +24,7 @@ import { relTime } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
+import { inTheCoworker } from "@/lib/askPanel";
 
 export interface ChatSessionSummary {
   session_id: string;
@@ -205,6 +206,8 @@ export function ThreadsRail({
                       {" · "}with {(t.members ?? []).length + 1} people
                     </span>
                   )}
+                  {/* one record for both places (2026-11-20): a conversation held in the coworker app says so */}
+                  {inTheCoworker(t.session_id) && <span data-testid="thread-coworker">{" · "}in the coworker</span>}
                 </span>
               </Button>
 

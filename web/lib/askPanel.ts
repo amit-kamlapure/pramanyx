@@ -117,6 +117,10 @@ export function selectAskTab(key: string): void {
 }
 
 /** Open an earlier conversation: brought to the front where it is already a tab, else in a tab of its own. */
+/** A conversation held in the coworker app: one record for both places (2026-11-20), so the platform files each coworker
+ *  turn under `coworker:<its session>` and the panel's history lists it beside the panel's own. */
+export const inTheCoworker = (sessionId: string): boolean => sessionId.startsWith("coworker:");
+
 export function openAskConversation(session: string, title: string, connectionId: string): void {
   const s = read();
   const there = s.tabs.find(t => t.session === session);
