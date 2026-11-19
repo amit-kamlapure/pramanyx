@@ -267,6 +267,18 @@ describe("a query card's chart, dressed in the one editor (the user, 2026-11-19)
     expect((bars.encoding.color.legend as Record<string, unknown>).orient).toBe("bottom");
   });
 
+  it("writes its dates the way the person chose, months a statement wrote as text included, and leaves categories alone", () => {
+    const xs = (spec: Record<string, unknown>) => (spec.data as { values: { x: string }[] }).values.map(v => v.x);
+    expect(queryLookOf({ dateFormat: "YYYY-MM" })).toEqual({ dateFormat: "YYYY-MM" });
+    const dated = queryChartSpec(chart("line", false), setup(), COLOURS, null, undefined, null, { dateFormat: "YYYY-MM" });
+    expect(new Set(xs(dated))).toEqual(new Set(["2026-10"]));
+    const text = { as: "bar", x: { name: "m", kind: "text", bucket: null }, series: [""], other: false, said: [],
+      points: ["2026-09-01", "2026-10-01"].map((x, i) => ({ x, s: "", v: i })) } as unknown as Chart;
+    expect(xs(queryChartSpec(text, setup(), COLOURS, null, undefined, null, { dateFormat: "MMM YYYY" }))).toEqual(["Sep 2026", "Oct 2026"]);
+    const words = queryChartSpec(chart("bar", false, "text"), setup(), COLOURS, null, undefined, null, { dateFormat: "YYYY-MM" });
+    expect(xs(words)).toEqual(["Shipped", "Processing", "Returned"]);
+  });
+
   it("draws a reference line across the value axis with its label", () => {
     const spec = queryChartSpec(chart("bar", false), setup(), COLOURS, null, undefined, null, { refLines: [{ value: 25, label: "Goal" }] });
     const rule = layers(spec).find(l => l.mark.type === "rule");

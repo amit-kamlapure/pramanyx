@@ -516,6 +516,11 @@ function DebugLogDrawer({ eventLogRef, onClose }: { eventLogRef: React.RefObject
   );
 }
 
+/** A turn's steps as lines, for the conversation to continue from: each tool, and what it said when it said no. */
+function stepsSaid(steps: { index: number; tool: string; ok: boolean; detail: string; refused?: boolean }[]): string {
+  return steps.map(s => `${s.index}. ${s.tool}${s.refused ? ` — said no: ${s.detail}` : !s.ok ? ` — failed: ${s.detail}` : ""}`).join("\n");
+}
+
 /* ── Depth banner — the auto+transparency receipt on each /ask turn ──
    Shows the depth the router chose + why, with a one-click re-run at the
    other depth. Renders nothing on legacy/explicit and restored turns. */
@@ -1061,6 +1066,8 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
     depth?: "quick" | "deep"; skipClarify?: boolean; clarifyReading?: string;
     clarifySubject?: string; clarifySource?: string;
     requestMode?: "investigate" | "explore"; purpose?: string;
+    /** Keep going (2026-11-20): the steps the turn before took, for the conversation to continue from. */
+    keepGoing?: string;
   }
 
   // Arc FA-2 — what a dashboard handed over as the question's subject
@@ -1122,6 +1129,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
         skip_cache: opts.skipCache ?? false,
         request_mode: opts.requestMode ?? null,
         purpose: opts.purpose ?? "",
+        ...(opts.keepGoing ? { keep_going: opts.keepGoing.slice(0, 3900) } : {}),
         ...(about ? { focus: focusOf(about) } : {}),
       } },
     );
@@ -1599,6 +1607,13 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                     </ErrorBoundary>
                     <SheetTurnFoot turn={turn} doors={sheetDoors} asked={sheetAsked.has(i)} onPropose={proposeOnSheet} />
                     {answerableRun(turn) && <AnswerNow key={answerableRun(turn)} runId={answerableRun(turn) as string} />}
+                    {turn.keepGoing && turn.status !== "loading" && i === turns.length - 1 && (
+                      // the turn spent every step: it goes on from where it stopped, with what it already did
+                      <Button size="xs" variant="outline" data-testid="keep-going" style={{ marginTop: 8 }}
+                        onClick={() => sendQuestion(turn.question, mode, { keepGoing: stepsSaid(turn.converseSteps) })}>
+                        <Icon name="run" size={13} /> Keep going
+                      </Button>
+                    )}
                     {turn.answeredEarly && (
                       <p data-testid="answered-early" className="aug-fs-sm" style={{ margin: "6px 0 0", color: "var(--t2)" }}>{turn.answeredEarly}</p>
                     )}

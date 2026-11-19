@@ -37,6 +37,15 @@ const TOOL_LABEL: Record<string, string> = {
   list_monitors: "Checked monitors and alerts",
   list_packs: "Checked the specialist packs",
   platform_help: "Consulted the platform guide",
+  // the Ask panel's own (2026-11-19/20)
+  change_chart: "Proposed a change to how the chart is drawn",
+  change_dashboard: "Proposed a change to the dashboard",
+  explain_dashboard: "Read the dashboard",
+  explain_definition: "Read a Definition",
+  table_origin: "Read where the table came from",
+  table_dependents: "Read what depends on the table",
+  show_rows: "Put the rows on the sheet",
+  delegate_task: "Asked a saved agent",
 };
 
 function truncate(s: string, n = 110): string {
@@ -62,16 +71,19 @@ export function ToolTrail({
             key={`${s.tool}-${s.index}-${i}`}
             label={TOOL_LABEL[s.tool] ?? s.tool}
             description={
-              s.ok
-                ? (s.detail ? truncate(s.detail) : undefined)
-                : `failed${s.detail ? ` — ${truncate(s.detail)}` : ""} (the model saw this and can recover)`
+              s.refused
+                ? `said no — ${truncate(s.detail)}`
+                : s.ok
+                  ? (s.detail ? truncate(s.detail) : undefined)
+                  : `failed${s.detail ? ` — ${truncate(s.detail)}` : ""} (the model saw this and can recover)`
             }
             status="complete"
             icon={
-              s.ok ? undefined : (
+              s.ok && !s.refused ? undefined : (
                 <span
+                  data-testid={s.refused ? "step-refused" : "step-failed"}
                   className="block h-1.5 w-1.5 rounded-[var(--r-pill)]"
-                  style={{ background: "var(--red4)" }}
+                  style={{ background: s.refused ? "var(--amb4)" : "var(--red4)" }}
                 />
               )
             }

@@ -11,7 +11,7 @@ import type { ChartOptions } from "@/components/charts/chartCustom";
 import type { VizConfig } from "@/components/charts/vizConfig";
 import type { QueryShaped, QueryShown } from "@/lib/api";
 import { dayLabel } from "@/lib/dashboards/objectView";
-import { fmtDate, type Gran } from "@/lib/format";
+import { fmtDate, formatDateAs, type DateFormat, type Gran } from "@/lib/format";
 import { emphasisOpacity } from "@/components/charts/vega/emphasis";
 import { HOVER_MARK, type HoverMeta } from "@/components/charts/vega/hoverTooltip";
 import { colorsFor } from "@/lib/dashboards/valueColors";
@@ -75,6 +75,8 @@ export interface QueryChartLook {
   /** Where the legend stands, or "none". */
   legend?: string;
   refLines?: { value: number; label: string }[];
+  /** How dates along the bottom are written. */
+  dateFormat?: DateFormat;
 }
 
 /** The look a card's chart settings hold, as the query's chart reads it; null when they hold none. */
@@ -87,6 +89,7 @@ export function queryLookOf(viz: VizConfig | null | undefined): QueryChartLook |
     ...(viz.tooltipOff ? { tooltip: false } : {}),
     ...(viz.legend ? { legend: viz.legend } : {}),
     ...(viz.refLines?.length ? { refLines: viz.refLines.map(l => ({ value: l.value, label: l.label })) } : {}),
+    ...(viz.dateFormat ? { dateFormat: viz.dateFormat } : {}),
   };
   return Object.keys(look).length ? look : null;
 }
@@ -100,7 +103,10 @@ export function queryChartSpec(c: QueryChart, setup: Pick<QueryShown, "segments"
   const wholeMonths = temporal && !c.x.bucket && c.points.length > 1 && c.points.every(p => String(p.x ?? "").slice(8, 10) === "01");
   // `xr` is the place as the query returned it, beside the words it is drawn with: what a click reports, and what a
   // dashboard's focus lights (the board study, 2026-11-16)
-  const every = c.points.map(p => ({ x: xText(p.x, c.x.kind, wholeMonths ? "month" : c.x.bucket, manyYears), xr: p.x, s: p.s || "", v: p.v }));
+  // a person's own way of writing dates, when they chose one (a date written as text by its statement included)
+  const datedText = c.x.kind === "text" && c.points.length > 0 && c.points.every(p => DATE_AS_TEXT.test(String(p.x ?? "")));
+  const written = (x: unknown) => (look?.dateFormat && (temporal || datedText) ? formatDateAs(x, look.dateFormat) : null);
+  const every = c.points.map(p => ({ x: written(p.x) ?? xText(p.x, c.x.kind, wholeMonths ? "month" : c.x.bucket, manyYears), xr: p.x, s: p.s || "", v: p.v }));
   // only the largest places along the bottom, a person's choice (the study's R12): categories only, said on the chart
   const categories = c.x.kind === "text" && c.as === "bar" && !every.every(p => DATE_AS_TEXT.test(String(p.x ?? "")));
   const totals = new Map<unknown, number>();
@@ -123,7 +129,7 @@ export function queryChartSpec(c: QueryChart, setup: Pick<QueryShown, "segments"
   const bars = c.as === "bar";
   // a category along the bottom reads largest first; dates and numbers in their own order. A date a statement wrote as text
   // (`strftime(day, '%Y-%m')`) is still a date: months ranked by size read as a chart of nothing.
-  const datesAsText = c.x.kind === "text" && c.points.length > 0 && c.points.every(p => DATE_AS_TEXT.test(String(p.x ?? "")));
+  const datesAsText = datedText;
   const xSort = categories && options?.sort === "label" ? "ascending" as const
     : c.x.kind === "text" && bars && !setup.running && !datesAsText ? { op: "sum", field: "v", order: "descending" } : null;
   const x = {

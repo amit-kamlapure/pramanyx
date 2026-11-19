@@ -38,9 +38,10 @@ _CHART_PARAMS = {
             "table columns, sort, descending.")},
         "viz": {"type": "object", "description": (
             "Only the dressing that changes, null to take one off: lineWidth (1-6, default 2), lineShape (smooth, step; "
-            "null is straight), markers, numberFormat (a d3 format such as ',.0f', '$,.2f', '.1%'), yMin, yMax, yLog, "
-            "sortBy (value, label), top, legend (top, bottom, left, right, none), xTitle, yTitle, tooltipOff, orient "
-            "(vertical, horizontal), refLines ([{value, label}]).")},
+            "null is straight), markers, numberFormat (a d3 format such as ',.0f', '$,.2f', '.1%'), dateFormat (how dates "
+            "are written along the bottom and in a table: YYYY-MM-DD, YYYY-MM, MMM YYYY, DD MMM YYYY, MMM D, YYYY, YYYY-QQ, "
+            "YYYY), yMin, yMax, yLog, sortBy (value, label), top, legend (top, bottom, left, right, none), xTitle, yTitle, "
+            "tooltipOff, orient (vertical, horizontal), refLines ([{value, label}]).")},
         "summary": {"type": "string", "description": "What changes, in one sentence of the person's own words."},
     },
 }
@@ -127,7 +128,10 @@ def change_tools(connection_id: str, dashboard: Optional[tuple[str, ...]], *, em
             staged = chart_look.propose(connection_id, person, dashboard_id, card_id, a.get("shown"), a.get("viz"),
                                         str(a.get("summary") or ""), schema=schema)
         except chart_look.Refused as e:
-            return {"staged": False, "said": e.sentences, "next": "Nothing was staged. Tell the person why, in these words."}
+            # what it can change, said with the refusal: a model told only "no" tries other names (seen live 2026-11-20)
+            return {"staged": False, "said": e.sentences, "can_set": chart_look.CAN_SET,
+                    "next": ("Nothing was staged. Tell the person why in these words, and what can be changed instead (can_set). "
+                             "Do not try other names for the same setting.")}
         announced(staged.id)
         return {"staged": True, "changes": list((staged.detail or {}).get("lines") or []),
                 "next": ("The change to this one chart is staged and shown to the person, line by line, with Allow and "

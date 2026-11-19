@@ -20,6 +20,7 @@ import type { ChartOptions } from "@/components/charts/chartCustom";
 import type { ChartType } from "@/components/charts/chartTypeInference";
 import type { ExhibitRefLine } from "@/components/charts/exhibit";
 import type { PostprocOp } from "@/lib/api";
+import type { DateFormat } from "@/lib/format";
 
 export type VizAgg = "sum" | "avg" | "count" | "min" | "max";
 export type VizView = "chart" | "table" | "pivot";
@@ -54,6 +55,8 @@ export interface VizConfig {
   lineShape?:   "smooth" | "step";
   /** A line's width in pixels, 1 to 6; absent, 2 (2026-11-19: "increase the thickness of lines"). */
   lineWidth?:   number;
+  /** How the card's dates are written, along the bottom and in its table (`DATE_FORMATS`); absent, as the card chooses. */
+  dateFormat?:  DateFormat;
   /** An answer's line shows its points unless this says false; a query card's hides them unless it says true. */
   markers?:     boolean;
   yMin?:        number;

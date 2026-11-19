@@ -24,6 +24,7 @@ import { SqlView } from "@/components/query/SqlView";
 import { updateCard, type QueryAgg, type QueryBucket, type QuerySegments, type QueryShown, type QueryShownAs, type TypedColumn } from "@/lib/api";
 import { SERIES_SLOTS } from "@/lib/dashboards/catalog";
 import { seriesColours } from "@/lib/dashboards/queryChart";
+import { DATE_FORMATS, DATE_FORMAT_WORDS, type DateFormat } from "@/lib/format";
 
 const NOTE = { padding: "12px 14px", color: "var(--t2)", lineHeight: 1.5 } as const;
 
@@ -262,6 +263,12 @@ export function QueryChartEditor({ cs, onKept, colors = null, dataset }: {
     lineAvailable: lined,
     markersAvailable: other ? true : shown.as === "line",
     lineShapeValue: viz.lineShape ?? "", setLineShape: v => style({ lineShape: v || undefined }),
+    // how its dates are written (2026-11-20: "put the month format as YYYY-MM"), wherever it has dates to write
+    ...((chart ? dated : columns.some(c => ["date", "time"].includes(kindOf(c.type)))) ? {
+      dateFormatValue: viz.dateFormat ?? "",
+      dateFormatOptions: [{ v: "", t: "As the card chooses" }, ...DATE_FORMATS.map(f => ({ v: f, t: `${f} · ${DATE_FORMAT_WORDS[f]}` }))],
+      setDateFormat: (v: string) => style({ dateFormat: (v || undefined) as DateFormat | undefined }),
+    } : {}),
     // a query card's line width (2026-11-19): 2 is the default and is kept as nothing
     ...(!other && shown.as === "line" ? { lineWidthValue: String(viz.lineWidth ?? 2), setLineWidth: (v: string) => style({ lineWidth: v === "2" ? undefined : Number(v) }) } : {}),
     // a query card's line hides its points unless they are asked for; an answer's chart shows them unless they are not

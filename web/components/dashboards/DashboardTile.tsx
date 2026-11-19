@@ -51,7 +51,7 @@ import { cellText } from "@/lib/dashboards/objectView";
 import { SPAN, type Size } from "@/lib/dashboards/catalog";
 import { cardValue } from "@/lib/dashboards/hostStatus";
 import type { CardStatus } from "@/lib/dashboards/hostState";
-import { fmtDate, formatCount, formatMetricValue } from "@/lib/format";
+import { fmtDate, formatCount, formatDateAs, formatMetricValue, type DateFormat } from "@/lib/format";
 import { NumberedPager } from "@/components/dashboards/NumberedPager";
 import { usePlacementLook, useValueColors } from "@/components/dashboards/placementLook";
 import type { NumberLook } from "@/lib/dashboards/numberLook";
@@ -555,7 +555,11 @@ const NUMERIC_TYPE = /INT|DOUBLE|FLOAT|DECIMAL|NUMERIC|REAL/i;
 
 /** A query card's table, a page at a time (study R26): as many rows as its box holds, numbered pages beneath. The count is
  *  the rows the card holds, said as the first of more when the query returned more than a card keeps. */
-export function QueryRows({ shaped, height }: { shaped: Extract<QueryShaped, { as: "table" }>; height: number }) {
+export function QueryRows({ shaped, height, dateFormat }: {
+  shaped: Extract<QueryShaped, { as: "table" }>; height: number;
+  /** How its dates are written, when the card says (2026-11-20); else each as the platform writes a day. */
+  dateFormat?: DateFormat;
+}) {
   // v17 — a number column drawn as a bar or a colour scale, against every row the card holds (not the page alone)
   const looks = usePlacementLook().columns;
   const names = shaped.columns.map(c => c.name);
@@ -582,7 +586,8 @@ export function QueryRows({ shaped, height }: { shaped: Extract<QueryShaped, { a
             <tr key={from + i}>{r.map((v, j) => (
               <td key={j} style={{ padding: "4px 6px", borderBottom: "1px solid var(--b1)", whiteSpace: "nowrap", textAlign: right(j) ? "right" : "left",
                 ...cellLook(v, looks?.[names[j]], ranges[names[j]]) }}>
-                {cellText(v, shaped.columns[j]?.type, undefined, "", "", names[j])}
+                {(dateFormat && /DATE|TIME/i.test(shaped.columns[j]?.type ?? "") ? formatDateAs(v, dateFormat) : null)
+                  ?? cellText(v, shaped.columns[j]?.type, undefined, "", "", names[j])}
               </td>
             ))}</tr>
           ))}</tbody>
@@ -661,7 +666,7 @@ function QueryTile({ cs, doors, place, focus }: { cs: CardState & { card: Dashbo
         </div>
       ) : shaped.as === "table" ? (
         <div ref={room} data-testid="query-tile-table" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-          <QueryRows shaped={shaped} height={height} />
+          <QueryRows shaped={shaped} height={height} dateFormat={viz?.dateFormat} />
         </div>
       ) : (
         <div ref={room} data-testid="query-tile-chart" style={{ flex: 1, minHeight: 0 }}>

@@ -94,6 +94,10 @@ export interface VizEditorModel {
   /** A line's width, "1" to "6"; left out, not offered. */
   lineWidthValue?: string;
   setLineWidth?: (v: string) => void;
+  /** How the card's dates are written, along the bottom or in its table; left out, not offered (no dates to write). */
+  dateFormatValue?: string;
+  dateFormatOptions?: VizSelectOption[];
+  setDateFormat?: (v: string) => void;
   markersOn: boolean;
   setMarkersOn: (b: boolean) => void;
   yMinValue: string;
@@ -773,6 +777,12 @@ export function VizEditorPanel({ model, onClose, docked = false }: { model: VizE
         )}
         {chartMode && model.lineAvailable && model.markersAvailable !== false && (
           <ToggleRow title="Marker" on={model.markersOn} onChange={model.setMarkersOn} />
+        )}
+        {model.setDateFormat && model.dateFormatOptions && (
+          <div data-testid="viz-date-format" style={{ ...ROW, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+            <span className="aug-fs-chrome" style={TITLE}>Dates as</span>
+            <Select label="Dates as" value={model.dateFormatValue ?? ""} options={model.dateFormatOptions} onChange={model.setDateFormat} />
+          </div>
         )}
         {chartMode && <ToggleRow title="Tooltip" on={model.tooltipOn} onChange={model.setTooltipOn} />}
         {chartMode && model.labelsAvailable !== false && <ToggleRow title="Labels" on={model.showLabels} onChange={model.setShowLabels} />}

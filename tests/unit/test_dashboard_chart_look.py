@@ -96,3 +96,23 @@ def test_the_conversation_is_told_how_the_chart_is_drawn_now():
     drawn = chart_look.drawn({"shown": SHOWN, "viz": {"lineWidth": 3}, "columns": COLUMNS})
     assert drawn["shown"] == SHOWN and drawn["viz"] == {"lineWidth": 3}
     assert drawn["columns"] == [{"name": "day", "kind": "date"}, {"name": "total", "kind": "number"}, {"name": "priority", "kind": "text"}]
+
+
+def test_dates_are_written_as_asked_and_the_formats_are_the_webs_own(chart):
+    p = _propose(chart, viz={"dateFormat": "YYYY-MM"})
+    assert p.detail["lines"] == ["Dates written as: none → YYYY-MM"]
+    with pytest.raises(chart_look.Refused, match="Dates written as is one of"):
+        _propose(chart, viz={"dateFormat": "%Y/%m"})
+    # one list: the server's formats are exactly the ones the web writes (lib/format.ts DATE_FORMATS)
+    import re
+    from pathlib import Path
+    web = (Path(__file__).resolve().parents[2] / "web" / "lib" / "format.ts").read_text()
+    listed = re.search(r"DATE_FORMATS = \[([^\]]*)\]", web).group(1)
+    assert tuple(re.findall(r'"([^"]+)"', listed)) == chart_look.DATE_FORMATS
+
+
+def test_a_refused_change_says_what_can_be_set_and_not_to_guess(chart):
+    tools = change_tools(chart.home.connection_id, (chart.home.owner, chart.board, chart.card.id))
+    out = tools[1].run({"viz": {"monthFormat": "YYYY-MM"}})
+    assert out["staged"] is False and "dates written as" in out["can_set"]
+    assert "Do not try other names" in out["next"]

@@ -28085,6 +28085,11 @@ export interface components {
             hitl: boolean;
             /** Insight Id */
             insight_id?: string | null;
+            /**
+             * Keep Going
+             * @default
+             */
+            keep_going: string;
             /** Mode */
             mode?: ("investigate" | "explore") | null;
             /** Principal Ref */

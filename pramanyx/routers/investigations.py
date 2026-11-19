@@ -1078,6 +1078,9 @@ class AskRequest(BaseModel):
     insight_id: Optional[str] = None
     seed_sql: Optional[str] = None
     seed_context: str = ""
+    #: Keep going (2026-11-20): the earlier turn on this question stopped at its step limit; what it did, in lines, for
+    #: the conversation to continue from rather than start again. Empty for every other turn.
+    keep_going: str = Field(default="", max_length=4000)
     hitl: bool = False
     skip_cache: bool = False
 
@@ -3914,6 +3917,7 @@ async def _stream_converse(
     connection_id: str,
     history: list[ChatHistoryTurn],
     session_id: str = "",
+    keep_going: str = "",
     canvas_id: Optional[str] = None,
     origin_prose: str = "",
     agent_id: str = "",
@@ -4008,6 +4012,8 @@ async def _stream_converse(
                 "ok": step.ok,
                 "detail": str(step.detail or "")[:500],
                 "result_chars": step.result_chars,
+                # the tool said no, its reason in `detail` (2026-11-20): drawn as a refusal, not a done step
+                "refused": bool(getattr(step, "refused", False)),
             })
             # The trail, in the log the flag's exit receipt reads. `name=step.tool` folds
             # into the existing per-tool reliability aggregate, which is the honest place
@@ -4028,6 +4034,12 @@ async def _stream_converse(
             resolve_prior_answers(question, connection_id, session_id)))
         if origin_prose:
             _memory = origin_prose + "\n\n" + _memory if _memory else origin_prose
+        # Keep going (2026-11-20): the last turn on this question stopped at its step limit; it goes on from there
+        if keep_going.strip():
+            _kg = ("## Keep going\nThe person asked to keep going: the last turn on this question stopped at its step limit "
+                   "after these steps:\n" + keep_going.strip()[:4000] + "\nContinue from there. Do not repeat a step that "
+                   "already worked, and do not call again a tool that said no.")
+            _memory = _kg + "\n\n" + _memory if _memory else _kg
         # Summon surface (SP-2, §3.11) — same one-line orientation the quick path
         # prepends, same sanitation, '' from every door but the ⌘K overlay.
         if surface:
@@ -4135,10 +4147,10 @@ async def _stream_converse(
             # reader off to narrow a question that was never the problem.
             steps_n = len(result.steps)
             if result.stop_reason == "budget":
+                # never "ask a narrower question" (2026-11-20): the question was rarely the problem — Keep going is
                 answer = (
-                    f"I ran out of steps before reaching an answer ({steps_n} tool "
-                    "calls). What each step found is above — ask a narrower question "
-                    "and I can finish it."
+                    f"I used all {steps_n} steps this turn before finishing. What each step found is above. "
+                    "Keep going picks up from there."
                 )
             elif result.stop_reason == "silent":
                 answer = (
@@ -4193,6 +4205,9 @@ async def _stream_converse(
             # text-only converse answer renders exactly like a definitional one does.
             emit("mode", {"query_mode": "final_text"})
         emit("headline", {"headline": answer})
+        # The turn spent every step (2026-11-20): Keep going picks up from where it stopped, with the steps it took
+        if result.stop_reason in ("budget", "budget_answered"):
+            emit("keep_going", {"steps": len(result.steps)})
 
         # RC-2 — file the exchange when nothing else did. A converse turn that
         # called a tool already has a row: `answer_core` writes one and returns
@@ -4311,6 +4326,8 @@ async def _stream_analyst(
                 "ok": step.ok,
                 "detail": str(step.detail or "")[:500],
                 "result_chars": step.result_chars,
+                # the tool said no, its reason in `detail` (2026-11-20): drawn as a refusal, not a done step
+                "refused": bool(getattr(step, "refused", False)),
             })
             session_log.emit(session_log.TOOL_CALL_RESULT, name=step.tool,
                              conn_id=connection_id, ok=step.ok,
@@ -6205,6 +6222,8 @@ async def _stream_ask(req: "AskRequest", request: Request, conn_id: str) -> Asyn
                              # Arc SH — a question asked beside a sheet gets the tool that puts
                              # the rows it asks about on that sheet's grid.
                              sheet=_sheet_ref(req),
+                             # Keep going — the steps the turn before took, to continue from
+                             keep_going=req.keep_going,
                              # the Ask panel — a question about a dashboard the person keeps can also change it
                              dashboard=_own_dashboard(req, request),
                              # Stage 2 — who asks, so the reads of what depends on a table name only their dashboards

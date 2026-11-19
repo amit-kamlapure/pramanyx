@@ -22,6 +22,8 @@ KIND = "chart_look"
 #: What a chart's dressing may be changed to — each the chart editor's own control (`VizEditorPanel`), with what it takes.
 LINE_WIDTHS = (1, 2, 3, 4, 5, 6)
 LEGENDS = ("top", "bottom", "left", "right", "none")
+#: How a card's dates may be written (the web's `DATE_FORMATS`, lib/format.ts): along the bottom and in its table.
+DATE_FORMATS = ("YYYY-MM-DD", "YYYY-MM", "MMM YYYY", "DD MMM YYYY", "MMM D, YYYY", "YYYY-QQ", "YYYY")
 NUMBER_FORMAT_MAX = 24
 TITLE_MAX = 80
 MAX_REF_LINES = 6
@@ -37,8 +39,16 @@ VIZ_WORDS = {
     "lineWidth": "Line width", "lineShape": "Line shape", "markers": "Points on the line", "numberFormat": "Number format",
     "yMin": "Value axis from", "yMax": "Value axis to", "yLog": "Log scale", "sortBy": "Bars ordered by", "top": "Only the largest",
     "legend": "Legend", "xTitle": "X axis title", "yTitle": "Y axis title", "tooltipOff": "Tooltip off", "orient": "Bars run",
-    "refLines": "Reference lines",
+    "refLines": "Reference lines", "dateFormat": "Dates written as",
 }
+
+#: Everything a chart's look can be changed in, said once to a model whose change was refused, so it stops guessing.
+CAN_SET = ("kind (bar, line, area, scatter, table, figure); along the bottom and its buckets (day, week, month, quarter, "
+           "year); what is measured and how (sum, average, count, count of different, least, most); colour by a column and "
+           "how many colours; stacked, side by side or shares; running total; labels; bars sideways; a table's columns and "
+           "sort; line width (1-6) and shape; points on a line; number format; dates written as "
+           f"({', '.join(DATE_FORMATS)}); value axis range and log scale; bar order; only the largest; legend; axis titles; "
+           "tooltip on or off; reference lines")
 AS_WORDS = {"table": "Table", "figure": "Figure", "bar": "Bar", "line": "Line", "area": "Area", "scatter": "Scatter"}
 
 
@@ -84,6 +94,8 @@ def _viz_problem(key: str, v: Any) -> Optional[str]:
         return None if isinstance(v, str) and len(v) <= TITLE_MAX else f"{word} is words, at most {TITLE_MAX} characters."
     if key == "orient":
         return None if v in ("vertical", "horizontal") else f"{word} vertical or horizontal."
+    if key == "dateFormat":
+        return None if v in DATE_FORMATS else f"{word} is one of {', '.join(DATE_FORMATS)}."
     if key == "refLines":
         ok = isinstance(v, list) and len(v) <= MAX_REF_LINES and all(
             isinstance(r, dict) and _number(r.get("value")) and isinstance(r.get("label", ""), str) and len(str(r.get("label", ""))) <= 60

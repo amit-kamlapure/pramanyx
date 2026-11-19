@@ -519,3 +519,37 @@ def test_a_tool_call_written_twice_never_reaches_a_person(provider):
     set_responses([MARKUP, MARKUP])
     result = run_tool_loop(provider, "sys", "how many orders?", [_tool()], finish_now=lambda: True)
     assert (result.answer, result.stop_reason) == (None, "budget")
+
+
+def test_a_tool_that_says_no_twice_is_not_run_a_third_time(provider):
+    """Seen live 2026-11-20: asked for "the month format as YYYY-MM", a model called the chart tool seven times, each
+    refused, guessing other names for a setting that did not exist, and ran out of steps. A refusal is now marked, the
+    second one tells the model to stop and say what cannot be done, and a third call is not run."""
+    ran: list[dict] = []
+
+    def chart(args):
+        ran.append(args)
+        return {"staged": False, "said": [f"“{list(args)[0]}” is not something the chart editor sets."], "can_set": "kind; line width"}
+
+    set_responses([
+        FauxToolCall(payload={"monthFormat": "YYYY-MM"}, name="change_chart"),
+        FauxToolCall(payload={"xFormat": "%Y-%m"}, name="change_chart"),
+        FauxToolCall(payload={"dateLabel": "YYYY-MM"}, name="change_chart"),
+        "The chart editor cannot set how months are written here; it can change the kind or the line width.",
+    ])
+    tool = ToolSpec(name="change_chart", description="change the chart", parameters={"type": "object"}, run=chart)
+    result = run_tool_loop(provider, "sys", "put the month format as YYYY-MM", [tool])
+
+    assert len(ran) == 2                                                  # the third was never run
+    assert [s.refused for s in result.steps] == [True, True, True]
+    assert result.steps[0].detail == "“monthFormat” is not something the chart editor sets."
+    assert result.steps[2].detail.startswith("Not run: it refused 2 times")
+    assert result.answer.startswith("The chart editor cannot set")
+
+
+def test_a_tool_that_raised_is_an_error_not_a_refusal(provider):
+    def boom(_args):
+        raise RuntimeError("the warehouse is down")
+    set_responses([FauxToolCall(payload={"sql": "SELECT 1"}, name="run_sql"), "It could not be read."])
+    result = run_tool_loop(provider, "sys", "q", [_tool(fn=boom)])
+    assert result.steps[0].ok is False and result.steps[0].refused is False
