@@ -90,7 +90,7 @@ describe("the Data tab (2026-11-19)", () => {
     fireEvent.click(screen.getByTestId("data-dataset-run"));
     expect(await screen.findByTestId("data-dataset-rows")).toHaveTextContent("2026-11-0112.5");
     expect(api.previewDashboardQuery).toHaveBeenCalledWith("c", expect.objectContaining({ sql: "SELECT day, total FROM shop.orders" }));
-    expect(screen.getByTestId("data-dataset-result")).toHaveTextContent("2 columns · the first 2 rows, and more");
+    expect(screen.getByTestId("data-dataset-result")).toHaveTextContent("2 columns · the first 2 rows, and more · 0.12 s");
     fireEvent.click(screen.getByRole("radio", { name: "Schema" }));
     expect(screen.getByTestId("data-dataset-schema")).toHaveTextContent("daydate · DATE");
   });

@@ -490,7 +490,7 @@ function DatasetResult({ connectionId, sql, asked, values = null }: {
           options={[{ value: "rows", label: "Result table" }, { value: "schema", label: "Schema" }]} />
         <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>
           {running ? "Running…" : got && !got.refused.length
-            ? `${formatCount(columns.length)} columns · the first ${formatCount(rows.length)} rows${got.more ? ", and more" : ""}${got.duration_ms != null && got.duration_ms >= 10 ? ` · ${formatSeconds(got.duration_ms / 1000)}` : ""}` : ""}
+            ? `${formatCount(columns.length)} columns · the first ${formatCount(rows.length)} rows${got.more ? ", and more" : ""}${got.duration_ms != null && got.duration_ms >= 10 ? ` · ${formatSeconds(got.duration_ms)}` : ""}` : ""}
         </span>
       </div>
       {problem && <div className="aug-fs-sm" role="alert" style={{ color: "var(--t1)" }}>{problem}</div>}
