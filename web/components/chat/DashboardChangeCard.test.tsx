@@ -45,4 +45,21 @@ describe("a dashboard change asked in the conversation", () => {
     render(<DashboardChangeCard proposalId="gone" />);
     expect(await screen.findByTestId("dashboard-change-gone")).toBeTruthy();
   });
+
+  it("says a change a later one replaced was replaced, not rejected", async () => {
+    api.getProposalById.mockResolvedValue({ ...STAGED, status: "superseded" });
+    render(<DashboardChangeCard proposalId="p1" />);
+    expect(await screen.findByTestId("dashboard-change-decided")).toHaveTextContent("Replaced by a later change. Nothing changed by this one.");
+  });
+
+  it("reads itself again when a later change is drafted, so a replaced one stops offering Allow (seen live 2026-11-19)", async () => {
+    const status: Record<string, string> = { p1: "pending", p2: "pending" };
+    api.getProposalById.mockImplementation(async (id: string) => ({ ...STAGED, id, status: status[id] }));
+    render(<DashboardChangeCard proposalId="p1" />);
+    expect(await screen.findByTestId("dashboard-change-allow")).toBeTruthy();
+    status.p1 = "superseded";                                   // the next draft replaces it
+    render(<DashboardChangeCard proposalId="p2" />);
+    await waitFor(() => expect(screen.getByTestId("dashboard-change-decided")).toHaveAttribute("data-decision", "replaced"));
+    expect(screen.getAllByTestId("dashboard-change-allow")).toHaveLength(1);   // only the latest still asks
+  });
 });

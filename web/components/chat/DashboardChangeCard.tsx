@@ -16,22 +16,57 @@ import { changeCardOf } from "@/lib/dashboards/changeCard";
 const ACTOR = "briefing";
 /** Told on the page when a change is allowed, so the dashboard on screen reads itself again. */
 export const DASHBOARD_CHANGED = "pramanyx:dashboard-changed";
+/** Told when a change is drafted: a later draft replaces an earlier one, whose card must read itself again. */
+export const DASHBOARD_DRAFTED = "pramanyx:dashboard-drafted";
 
-type Decision = "waiting" | "allowing" | "allowed" | "rejected" | "gone";
+type Decision = "waiting" | "allowing" | "allowed" | "rejected" | "replaced" | "failed" | "held" | "uncertain" | "gone";
 
 const decisionOf = (p: StagedProposal): Decision =>
-  p.status === "pending" ? "waiting" : p.status === "accepted" || p.status === "executed" ? "allowed" : "rejected";
+  p.status === "pending" ? "waiting"
+    : p.status === "accepted" || p.status === "executed" ? "allowed"
+    : p.status === "superseded" ? "replaced"
+    : p.status === "failed" ? "failed"
+    : p.status === "approval_required" ? "held"
+    : p.status === "uncertain" ? "uncertain"
+    : "rejected";
+
+/** What a change that is no longer waiting says, by how it ended. */
+const ENDED: Record<string, string> = {
+  rejected: "Rejected. Nothing changed.",
+  replaced: "Replaced by a later change. Nothing changed by this one.",
+  failed: "This change could not be applied. Nothing changed.",
+  held: "This change waits for someone who may approve it.",
+  uncertain: "Whether this change was applied is not known. The dashboard shows what stands.",
+};
 
 export function DashboardChangeCard({ proposalId }: { proposalId: string }) {
   const [proposal, setProposal] = useState<StagedProposal | null>(null);
   const [decision, setDecision] = useState<Decision | null>(null);
   const [problem, setProblem] = useState("");
+  const [reads, setReads] = useState(0);
   useEffect(() => {
     let alive = true;
     getProposalById(proposalId)
-      .then(p => { if (!alive) return; setProposal(p); setDecision(p ? decisionOf(p) : "gone"); })
+      .then(p => {
+        if (!alive) return;
+        setProposal(p);
+        setDecision(p ? decisionOf(p) : "gone");
+        // a change just drafted says so once, so a card for one it replaced reads itself again
+        if (reads === 0 && p?.status === "pending") {
+          window.dispatchEvent(new CustomEvent(DASHBOARD_DRAFTED, { detail: { proposalId } }));
+        }
+      })
       .catch(() => { if (alive) setDecision("gone"); });
     return () => { alive = false; };
+  }, [proposalId, reads]);
+  useEffect(() => {
+    // another change drafted or allowed may have replaced this one
+    const again = (e: Event) => {
+      if ((e as CustomEvent<{ proposalId?: string }>).detail?.proposalId !== proposalId) setReads(n => n + 1);
+    };
+    window.addEventListener(DASHBOARD_DRAFTED, again);
+    window.addEventListener(DASHBOARD_CHANGED, again);
+    return () => { window.removeEventListener(DASHBOARD_DRAFTED, again); window.removeEventListener(DASHBOARD_CHANGED, again); };
   }, [proposalId]);
 
   if (decision === null) return <p className="aug-fs-sm" style={{ color: "var(--t3)", margin: "6px 0" }}>Reading the change…</p>;
@@ -45,7 +80,7 @@ export function DashboardChangeCard({ proposalId }: { proposalId: string }) {
     try {
       await acceptProposal(proposalId, ACTOR);
       setDecision("allowed");
-      window.dispatchEvent(new CustomEvent(DASHBOARD_CHANGED, { detail: { connectionId: proposal.connection_id } }));
+      window.dispatchEvent(new CustomEvent(DASHBOARD_CHANGED, { detail: { connectionId: proposal.connection_id, proposalId } }));
     } catch (e) {
       setDecision("waiting");
       setProblem((e as Error).message.slice(0, 240));
@@ -56,12 +91,12 @@ export function DashboardChangeCard({ proposalId }: { proposalId: string }) {
     try { await rejectProposal(proposalId, ACTOR); } catch { /* it lapses by itself, and nothing was changed */ }
   };
 
-  if (decision === "allowed" || decision === "rejected") {
+  if (decision !== "waiting" && decision !== "allowing") {
     return (
       <div data-testid="dashboard-change-decided" data-decision={decision} className="aug-fs-sm"
         style={{ display: "flex", alignItems: "center", gap: 8, margin: "6px 0", padding: "9px 12px", border: "1px solid var(--card-edge)", borderRadius: "var(--r3)",
           color: decision === "allowed" ? "var(--t1)" : "var(--t3)" }}>
-        <span style={{ flex: 1, minWidth: 0 }}>{decision === "allowed" ? card.did : "Rejected. Nothing changed."}</span>
+        <span style={{ flex: 1, minWidth: 0 }}>{decision === "allowed" ? card.did : ENDED[decision]}</span>
         {decision === "allowed" && <span style={{ display: "inline-flex", color: "var(--blue4)" }}><Icon name="check" size={15} label="Done" /></span>}
       </div>
     );
