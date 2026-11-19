@@ -1212,7 +1212,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
     : (list?.cockpits.find(c => c.cockpit_id === chosen)?.title || undefined);
   // An open dashboard's way back to the home, named by where it goes: "‹ Dashboards" before its title.
   useChromeBack(newOpen ? () => { if (!newBusy) setNewOpen(false); } : chosen && !editing ? () => choose("") : null);
-  usePageChrome(editing && inShell ? { bare: true } : {
+  usePageChrome(editing && inShell ? { bare: true, noScope: true } : {
     title: newOpen ? "New dashboard" : chosen ? openTitle : "Dashboards",
     // an open dashboard takes the row under its title; the Metrics page keeps its period there
     ...(chosen && chosen !== METRICS_DASHBOARD ? { noScope: true } : {}),
