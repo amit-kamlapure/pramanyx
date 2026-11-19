@@ -300,7 +300,11 @@ function FiltersMenuSlot({ compact = false }: { compact?: boolean }) {
 
 /** Whether the dashboard draws a filters column at all, and how many choices its columns hold: said by the dashboard's
  *  body to the button that stands for them once put away, which sits under the pages (2026-11-19). */
-export const FiltersToggleContext = createContext<{ columns: boolean; held: number; beside?: boolean } | null>(null);
+export const FiltersToggleContext = createContext<{ columns: boolean; held: number } | null>(null);
+
+/** One Filters panel (the user, 2026-11-20: "Yes, one panel"): where a dashboard holds global filters AND a file's or an
+ *  object's own column, the column is drawn inside the global filters' panel, below them, at `slot`. */
+export const FiltersPanelSlot = createContext<{ merged: boolean; slot: HTMLElement | null; hold: (el: HTMLElement | null) => void } | null>(null);
 
 /** What stands for the filters once put away (the user, 2026-11-19, of a peer product's editor: "Global filters", tight
  *  under the page tabs): one button that brings them back, and beside it how many things cut the dashboard (its menu),
@@ -333,21 +337,20 @@ export function FiltersHideButton() {
 }
 
 /** The head of a filters column that draws none of its own: its name, and the way to put it away. */
-export function FiltersHead({ title = "Filters", menu = true }: {
-  /** What the column filters, where the dashboard has more than one column: "Cases" beside "Global filters". */
-  title?: string;
-  /** The menu of what cuts the dashboard is drawn in one place: beside the global filters, when they are beside this. */
-  menu?: boolean;
-}) {
+export function FiltersHead() {
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", minHeight: 24, marginBottom: 8 }}>
-      <span className="aug-fs-ui" style={{ color: "var(--t1)", fontWeight: 600 }}>{title}</span>
-      <span style={{ display: "inline-flex", alignItems: "center", gap: 2 }}>{menu && !useFiltersShut() && <FiltersMenuSlot />}<FiltersHideButton /></span>
+      <span className="aug-fs-ui" style={{ color: "var(--t1)", fontWeight: 600 }}>Filters</span>
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 2 }}>{!useFiltersShut() && <FiltersMenuSlot />}<FiltersHideButton /></span>
     </div>
   );
 }
 
-export function GlobalFiltersColumn({ filters, connectionId, focus, onFocus, building, selected, onChoose, onAdd, applyButton = false, page = null, onParameter, valueKinds, bare = false }: {
+export function GlobalFiltersColumn({ filters, connectionId, focus, onFocus, building, selected, onChoose, onAdd, applyButton = false, page = null, onParameter, valueKinds, bare = false, title = "Global filters", slotFor }: {
+  /** The panel's heading: "Filters" where it also holds the dashboard's own column. */
+  title?: string;
+  /** Where the dashboard's own column is drawn, below these filters, in the one panel. */
+  slotFor?: (el: HTMLElement | null) => void;
   filters: { key: string; props: GlobalFilterProps }[];
   /** One filter placed on the canvas as a box of its own (2026-11-19): the filter alone, filling its box — no column head. */
   bare?: boolean;
@@ -398,7 +401,7 @@ export function GlobalFiltersColumn({ filters, connectionId, focus, onFocus, bui
       style={bare ? { display: "flex", flexDirection: "column", height: "100%", minWidth: 0 }
         : { display: "flex", flexDirection: "column", gap: 10, alignSelf: "start", position: "sticky", top: 12, minWidth: 0 }}>
       {!bare && <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", minHeight: 24 }}>
-        <span className="aug-fs-ui" style={{ color: "var(--t1)", fontWeight: 600 }}>Global filters</span>
+        <span className="aug-fs-ui" style={{ color: "var(--t1)", fontWeight: 600 }}>{title}</span>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 2 }}>
           {!shut && <FiltersMenuSlot />}
           {building && onAdd && (
@@ -433,6 +436,7 @@ export function GlobalFiltersColumn({ filters, connectionId, focus, onFocus, bui
           <Button size="sm" variant="secondary" data-testid="global-filters-discard" onClick={() => setDraft(null)}>Discard</Button>
         </div>
       )}
+      {slotFor && <div ref={slotFor} data-testid="filters-panel-more" style={{ display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }} />}
     </aside>
   );
 }

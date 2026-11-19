@@ -132,18 +132,26 @@ describe("the filter column of a dashboard made from a file", () => {
     expect(screen.getByTestId("query-filters")).toBeVisible();
   });
 
-  it("beside the global filters, paints nothing over them, is named by what it filters, and leaves them the one menu (2026-11-20)", () => {
-    // seen on Operations: the second column's ground, painted to its left, covered the global filters' right edge
+  it("with global filters, is drawn inside their panel: one Filters panel, one way to put it away, one menu (2026-11-20)", () => {
+    // seen on Operations: two columns side by side, both called Filters, the second painting over the first's right edge
     const spec = withFilters();
     spec.elements.qf = { type: "QueryFilters", props: { table: "shop.order_items", columns: [{ column: "channel", label: "Channel" }] }, children: [] };
     spec.elements[spec.root].children = ["qf", ...spec.elements[spec.root].children];
     render(<ComposedDashboard spec={spec} cards={CARDS} host={HOST} focus={HELD} onFocus={vi.fn()} doors={{ onRefresh: vi.fn() }} />);
-    expect(screen.getByTestId("dashboard-global-filter-column").style.boxShadow).toBe("-40px 0 0 0 var(--bg-0)");
+    const panel = screen.getByTestId("global-filters");
+    expect(within(panel).getByText("Filters")).toBeInTheDocument();
     const own = screen.getByTestId("dashboard-filter-column");
-    expect(own.style.boxShadow).toBe("");
-    expect(within(screen.getByTestId("global-filters")).getByText("Global filters")).toBeInTheDocument();
-    expect(within(own).getByText("Order items")).toBeInTheDocument();
+    expect(within(screen.getByTestId("filters-panel-more")).getByTestId("dashboard-filter-column")).toBe(own);   // below the global ones
+    expect(own).toHaveTextContent("Order items");
+    expect(within(own).getByTestId("query-filters")).toBeInTheDocument();
+    expect(screen.getAllByTestId("global-filters-hide")).toHaveLength(1);
     expect(screen.getAllByTestId("filters-menu-place")).toHaveLength(1);
+    // the cards take the rest of the page, beside the one panel
+    expect(screen.getByTestId("dashboard").style.gridTemplateColumns).toBe("");
+    // put away, it all goes, and one button brings it back
+    fireEvent.click(screen.getByTestId("global-filters-hide"));
+    expect(screen.getAllByTestId("global-filters-show")).toHaveLength(1);
+    expect(screen.getByTestId("query-filters")).not.toBeVisible();
   });
 
   it("takes no room while none of its global filters can be used yet", () => {

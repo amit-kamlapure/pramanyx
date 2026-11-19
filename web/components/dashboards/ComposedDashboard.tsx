@@ -56,7 +56,8 @@ import {
   type BarChip, type FilterProperty, type ObjectBarWords,
 } from "@/components/dashboards/OntologyPieces";
 import {
-  FiltersFoldProvider, FiltersHead, FiltersMenuPlace, FiltersShutStrip, FiltersToggleContext, GlobalFiltersColumn, HeldReport, useFiltersFold, useFiltersShut,
+  FiltersFoldProvider, FiltersHead, FiltersMenuPlace, FiltersPanelSlot, FiltersShutStrip, FiltersToggleContext, GlobalFiltersColumn, HeldReport, useFiltersFold,
+  useFiltersShut,
 } from "@/components/dashboards/GlobalFilters";
 import { PLACE_WORDS, measureSection } from "@/lib/dashboards/placing";
 import { PlacementShown, type PlacementView } from "@/components/dashboards/placementView";
@@ -277,10 +278,21 @@ function DashboardRoot(props: ComponentRenderProps<{ title: string; filters_shut
 const PINNED: CSSProperties = { position: "relative", zIndex: 3, transform: "translateX(var(--ask-pushed, 0px))", background: "var(--bg-0)",
   // the page's own margin at its left is the column's ground too, so no card shows beside it as it passes under
   boxShadow: "-40px 0 0 0 var(--bg-0)" };
-/** A column pinned beside another pinned column: no ground painted to its left, which is the other column's room (seen on
- *  Operations, 2026-11-20: an object's column, beside the global filters, painted over their right edge). */
 const capitalized = (w: string) => w.charAt(0).toUpperCase() + w.slice(1);
-const PINNED_BESIDE: CSSProperties = { ...PINNED, boxShadow: undefined };
+
+/** A dashboard's own column, drawn as part of the one Filters panel (2026-11-20; before, it stood beside the global filters
+ *  as a second column, and its ground painted over their right edge): below a rule, named by what it filters. In the
+ *  builder a click chooses it, as it chose the column. */
+function PanelPart({ title, chosen = false, onChoose, children }: { title: string; chosen?: boolean; onChoose?: () => void; children: ReactNode }) {
+  return (
+    <section data-testid="dashboard-filter-column" aria-label={title} data-selected={chosen || undefined} onPointerDownCapture={onChoose}
+      style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 0, paddingTop: 10, borderTop: "1px solid var(--b1)", borderRadius: chosen ? "var(--r2)" : undefined,
+        outline: chosen ? "2px solid var(--accent)" : undefined, outlineOffset: 2 }}>
+      <span className="aug-fs-xs" style={{ color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em" }}>{title}</span>
+      {children}
+    </section>
+  );
+}
 
 function DashboardRootBody(props: ComponentRenderProps<{ title: string }>) {
   const { elements, focus, doors } = useDashboard();
@@ -300,8 +312,15 @@ function DashboardRootBody(props: ComponentRenderProps<{ title: string }>) {
   // put away, the column stays mounted, out of sight: it is also what feeds the values the cards' queries read
   const column = at < 0 ? null
     : <div hidden={shut} data-testid="dashboard-global-filter-column" style={shut ? { display: "none" } : { minWidth: 0, ...PINNED }}>{kids[at]}</div>;
-  // a file's or an object's own column stands beside the global filters when both are drawn: one panel's room, one menu
-  const toggle = { columns, held: held + elsewhere, beside: drawsGlobals && !shut };
+  const toggle = { columns, held: held + elsewhere };
+  // one Filters panel (the user, 2026-11-20): a file's or an object's own column is drawn inside the global filters' panel,
+  // below them — one heading, one way to put them away, one menu — at the width that column was given
+  const [slot, hold] = useState<HTMLElement | null>(null);
+  const own = rest.element.children?.[0] ?? "";
+  const merged = drawsGlobals && !shut && (firstType === "QueryFilters" || firstType === "ObjectFilters");
+  const panel = useMemo(() => ({ merged, slot, hold }), [merged, slot]);
+  const ownGrades = merged ? (elements[own]?.props as { w?: number | null } | undefined)?.w ?? null : null;
+  const width = ownGrades ? Math.max(ownGrades * GRADE, FILTER_COLUMN) : FILTER_COLUMN;
   if (shut && columns) {
     // put away, the columns stay mounted out of sight; the button that brings them back sits under the pages (`FiltersShutStrip`)
     return (
@@ -322,16 +341,19 @@ function DashboardRootBody(props: ComponentRenderProps<{ title: string }>) {
   }
   return (
     <FiltersToggleContext.Provider value={toggle}>
-      <div style={{ display: "grid", gridTemplateColumns: `${FILTER_COLUMN}px minmax(0, 1fr)`, gap: SPACE, alignItems: "start" }}>
-        {column}
-        <div style={{ minWidth: 0 }}><RootLayout {...rest} /></div>
-      </div>
+      <FiltersPanelSlot.Provider value={panel}>
+        <div style={{ display: "grid", gridTemplateColumns: `${width}px minmax(0, 1fr)`, gap: SPACE, alignItems: "start" }}>
+          {column}
+          <div style={{ minWidth: 0 }}><RootLayout {...rest} /></div>
+        </div>
+      </FiltersPanelSlot.Provider>
     </FiltersToggleContext.Provider>
   );
 }
 
 function DashboardGlobalFilters({ element }: ComponentRenderProps<{ apply_button?: boolean | null }>) {
   const { elements, focus, setFocus, connectionId, doors, selected } = useDashboard();
+  const panel = useContext(FiltersPanelSlot);
   const { get } = useStateStore();
   const { setValue, readerValues, wire } = usePieces();
   // a filter holding nothing hands its value back; one a reader never moved has nothing to hand back
@@ -342,6 +364,7 @@ function DashboardGlobalFilters({ element }: ComponentRenderProps<{ apply_button
   const page = (pages.find(t => t.name === open) ?? pages[0])?.key ?? null;
   return (
     <GlobalFiltersColumn filters={filters} connectionId={connectionId} focus={focus} onFocus={setFocus} building={!!doors.onSelect} selected={selected}
+      {...(panel?.merged ? { title: "Filters", slotFor: panel.hold } : {})}
       applyButton={element.props.apply_button === true} page={page} onParameter={feed} valueKinds={wire.values ?? undefined}
       onChoose={doors.onSelect} onAdd={doors.onAddGlobalFilter ? () => { const key = doors.onAddGlobalFilter?.(); if (key) doors.onSelect?.(key); } : undefined} />
   );
@@ -353,8 +376,9 @@ function RootLayout({ element, children }: ComponentRenderProps<{ title: string 
   // repeat its own title.
   const { elements, doors, selected } = useDashboard();
   const shut = useFiltersShut();
-  // the global filters drawn to the left of this dashboard's own column
-  const beside = useContext(FiltersToggleContext)?.beside === true;
+  // one Filters panel: this dashboard's own column drawn inside the global filters' panel, below them
+  const panel = useContext(FiltersPanelSlot);
+  const merged = panel?.merged === true;
   const firstKey = element.children?.[0] ?? "";
   const first = elements[firstKey];
   const [preview, setPreview] = useState<number | null>(null);
@@ -374,13 +398,22 @@ function RootLayout({ element, children }: ComponentRenderProps<{ title: string 
         </QueryNarrowingProvider>
       );
     }
+    if (merged) {
+      return (
+        <QueryNarrowingProvider table={held.table}>
+          {panel?.slot && createPortal(
+            <PanelPart title={capitalized((held.table.split(".").pop() ?? held.table).replace(/[_-]+/g, " "))}>{queryColumn}</PanelPart>, panel.slot)}
+          <div role="region" aria-label={element.props.title} data-testid="dashboard" style={{ display: "flex", flexDirection: "column", gap: SPACE, minWidth: 0 }}>
+            <ValuesBar spaced={false} /><FilteredBy /><FirstPageDoor />{others}
+          </div>
+        </QueryNarrowingProvider>
+      );
+    }
     return (
       <QueryNarrowingProvider table={held.table}>
         <div role="region" aria-label={element.props.title} data-testid="dashboard"
           style={{ display: "grid", gridTemplateColumns: `${(held.w ?? null) ? (held.w as number) * GRADE : FILTER_COLUMN}px minmax(0, 1fr)`, gap: SPACE, alignItems: "start" }}>
-          <div data-testid="dashboard-filter-column" style={{ alignSelf: "stretch", minWidth: 0, ...(beside ? PINNED_BESIDE : PINNED) }}>
-            <FiltersHead title={beside ? capitalized((held.table.split(".").pop() ?? held.table).replace(/[_-]+/g, " ")) : "Filters"} menu={!beside} />{queryColumn}
-          </div>
+          <div data-testid="dashboard-filter-column" style={{ alignSelf: "stretch", minWidth: 0, ...PINNED }}><FiltersHead />{queryColumn}</div>
           <div style={{ display: "flex", flexDirection: "column", gap: SPACE, minWidth: 0 }}><TopFiltersButton /><ValuesBar spaced={false} /><FilteredBy /><FirstPageDoor />{others}</div>
         </div>
       </QueryNarrowingProvider>
@@ -408,6 +441,21 @@ function RootLayout({ element, children }: ComponentRenderProps<{ title: string 
       </div>
     );
   }
+  if (merged) {
+    return (
+      <div role="region" aria-label={element.props.title} data-testid="dashboard" style={{ display: "flex", flexDirection: "column", gap: SPACE, minWidth: 0 }}>
+        {panel?.slot && createPortal(
+          <PanelPart title={capitalized(nounOf(props.entity)[1])} chosen={selected === firstKey}
+            onChoose={doors.onSelect ? () => doors.onSelect?.(firstKey) : undefined}>{column}</PanelPart>, panel.slot)}
+        <ValuesBar spaced={false} />
+        <ObjectFilterWords entity={props.entity} properties={props.properties} set={props.set}>
+          {said => <FilteredBy objects={said} />}
+        </ObjectFilterWords>
+        <FirstPageDoor />
+        {rest}
+      </div>
+    );
+  }
   // Arc AP-1 — its width in grades of 40 px, when a person set one; else as it was drawn before
   const grades = preview ?? props.w ?? null;
   const width = grades ? grades * GRADE : FILTER_COLUMN;
@@ -416,9 +464,9 @@ function RootLayout({ element, children }: ComponentRenderProps<{ title: string 
       style={{ display: "grid", gridTemplateColumns: `${width}px minmax(0, 1fr)`, gap: SPACE, alignItems: "start" }}>
       <div className="group" data-testid="dashboard-filter-column" data-width={width} data-selected={selected === firstKey || undefined}
         onPointerDownCapture={doors.onSelect ? () => doors.onSelect?.(firstKey) : undefined}
-        style={{ ...(beside ? PINNED_BESIDE : PINNED), alignSelf: "stretch", minWidth: 0, borderRadius: "var(--r3)",
+        style={{ ...PINNED, alignSelf: "stretch", minWidth: 0, borderRadius: "var(--r3)",
           outline: selected === firstKey ? "2px solid var(--accent)" : undefined, outlineOffset: 2 }}>
-        <FiltersHead title={beside ? capitalized(nounOf(props.entity)[1]) : "Filters"} menu={!beside} />
+        <FiltersHead />
         {column}
         {doors.onFilterWidth && (
           <WidthHandle from={grades ?? Math.round(FILTER_COLUMN / GRADE)} onPreview={setPreview}
