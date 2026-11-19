@@ -9,7 +9,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { act, fireEvent, render, screen } from "@/lib/testing";
+import { act, fireEvent, render, screen, within } from "@/lib/testing";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ComposedDashboard } from "@/components/dashboards/ComposedDashboard";
@@ -46,7 +46,9 @@ describe("the dashboard's filters column", () => {
     render(<ComposedDashboard spec={withFilters()} cards={CARDS} host={HOST} focus={HELD} onFocus={vi.fn()} doors={{ onRefresh: vi.fn() }} />);
     expect(screen.getByTestId("global-filters")).toBeVisible();
     fireEvent.click(screen.getByTestId("global-filters-hide"));
-    expect(screen.getByTestId("global-filters-held")).toHaveTextContent("1");
+    // under the icon, how many things cut the dashboard — its menu, no wider than the strip
+    expect(within(screen.getByTestId("global-filters-shut")).getByTestId("filters-menu")).toHaveTextContent(/^1$/);
+    expect(screen.getByRole("button", { name: "Show the filters · 1 holding a choice" })).toBeInTheDocument();
     // beside the cards, as narrow as the icon: none of the page's height
     const folded = screen.getByTestId("dashboard-filters-folded");
     expect(folded.style.gridTemplateColumns).toBe("32px minmax(0, 1fr)");

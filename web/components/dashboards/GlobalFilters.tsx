@@ -292,14 +292,15 @@ export function HeldReport({ column, n }: { column: string; n: number }) {
  *  necessary"). The dashboard gives the place; each filters heading, and the button that stands for a put-away column, holds it. */
 export const FiltersMenuPlace = createContext<((el: HTMLElement | null) => void) | null>(null);
 
-function FiltersMenuSlot() {
+function FiltersMenuSlot({ compact = false }: { compact?: boolean }) {
   const place = useContext(FiltersMenuPlace);
-  return place ? <span ref={place} data-testid="filters-menu-place" style={{ display: "inline-flex" }} /> : null;
+  // `compact`: the strip standing for the filters put away, as narrow as an icon — the menu shows only how many things cut it
+  return place ? <span ref={place} data-testid="filters-menu-place" data-compact={compact ? "1" : undefined} style={{ display: "inline-flex" }} /> : null;
 }
 
 /** What stands for the filters once put away: one filter icon at the canvas's upper left, on a strip as narrow as the icon,
- *  with how many filters still hold a choice, so a reader never forgets the cards are narrowed. It takes none of the
- *  page's height (the user, 2026-11-19: "no vertical space occupying dashboard area"). */
+ *  and under it how many things cut the dashboard (its menu), so a reader never forgets the cards are narrowed. It takes
+ *  none of the page's height (the user, 2026-11-19: "no vertical space occupying dashboard area"). */
 export function FiltersShutStrip({ held }: { held: number }) {
   const { setShut } = useFiltersFold();
   return (
@@ -308,8 +309,8 @@ export function FiltersShutStrip({ held }: { held: number }) {
         aria-label={held ? `Show the filters · ${held} holding a choice` : "Show the filters"} title="Show the filters">
         <Icon name="filter" size={15} />
       </Button>
-      {held > 0 && <span className="aug-fs-xs" data-testid="global-filters-held" style={{ color: "var(--t2)", fontVariantNumeric: "tabular-nums" }}>{held}</span>}
-      <FiltersMenuSlot />
+      {/* what cuts the dashboard, by count: its menu takes each off, clears all or copies the link */}
+      <FiltersMenuSlot compact />
     </div>
   );
 }

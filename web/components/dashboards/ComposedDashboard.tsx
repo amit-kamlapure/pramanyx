@@ -1801,16 +1801,25 @@ function FilteredBy({ objects = null }: { objects?: ObjectBarWords | null }) {
   // the study's R17 — with a mark chosen, the other pages it can be read on (the focus holds across a dashboard's pages)
   const openPage = get("/tab");
   const others = focused.some(f => !fromFilter(f)) ? pagesOf(elements, !!doors.onSelect).filter(t => t.name !== openPage).slice(0, 3) : [];
+  // in the strip that stands for the filters put away, only the count: the strip is as narrow as an icon
+  const compact = place?.dataset.compact === "1";
   const menu = (
       <span role="group" aria-label="What this dashboard is filtered by" data-testid="dashboard-filtered-by" className="aug-fs-sm"
         style={{ display: "inline-flex", alignItems: "center", gap: 8, color: "var(--t2)" }}>
-        {count && <span data-testid="object-filter-count" style={{ fontVariantNumeric: "tabular-nums" }}>{count}</span>}
+        {count && !compact && <span data-testid="object-filter-count" style={{ fontVariantNumeric: "tabular-nums" }}>{count}</span>}
         {chips.length > 0 && (
           <DropdownMenu.Root>
             <DropdownMenu.Trigger>
-              <Button size="xs" variant="outline" data-testid="filters-menu" title={chips.map(c => c.words).join(" · ")}>
-                <Icon name="filter" size={12} /> Filters · {chips.length}
-              </Button>
+              {compact ? (
+                <Button size="xs" variant="outline" data-testid="filters-menu" aria-label={`What cuts this dashboard · ${chips.length}`}
+                  title={chips.map(c => c.words).join(" · ")} style={{ minWidth: 0, padding: "0 7px", fontVariantNumeric: "tabular-nums" }}>
+                  {chips.length}
+                </Button>
+              ) : (
+                <Button size="xs" variant="outline" data-testid="filters-menu" title={chips.map(c => c.words).join(" · ")}>
+                  <Icon name="filter" size={12} /> Filters · {chips.length}
+                </Button>
+              )}
             </DropdownMenu.Trigger>
             <DropdownMenu.Content size="1" align="end" style={{ maxWidth: 340 }}>
               {covers && <DropdownMenu.Label data-testid="filtered-by-period">{covers}</DropdownMenu.Label>}
