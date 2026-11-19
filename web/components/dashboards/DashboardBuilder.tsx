@@ -476,7 +476,8 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
                 // over the whole page while a box is carried: it follows the pointer, a click sets it down, Esc lets it go
                 <div data-testid="place-layer" aria-label={`${PLACE_WORDS[placingKind]}: click where it goes · Esc lets it go`} role="application"
                   title={`${PLACE_WORDS[placingKind]}: click where it goes · Esc lets it go`}
-                  style={{ position: "absolute", inset: 0, zIndex: 20, cursor: "crosshair" }}
+                  // the page and twelve rows under it: a box goes below the last piece as readily as beside it
+                  style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: -GRADE * PLACE_BELOW * scale, zIndex: 20, cursor: "crosshair" }}
                   onPointerMove={e => setGhost(cellUnder(e.clientX, e.clientY)?.ghost ?? null)}
                   onPointerLeave={() => setGhost(null)}
                   onClick={e => {
@@ -556,6 +557,9 @@ export interface EditBarProps {
   actions: ReactNode;
   onDone: () => void;
 }
+
+/** The rows under the dashboard's last piece a box may be set down in. */
+const PLACE_BELOW = 12;
 
 /** What the canvas toolbar opens in the setup panel: the pieces that measure or show, the filters, or every piece. */
 export type AddWhat = "chart" | "filter" | "all";
