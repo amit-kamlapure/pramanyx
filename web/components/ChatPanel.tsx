@@ -10,6 +10,9 @@ import { uploadAttachment, type AttachmentResult } from "@/lib/attachments";
 import { answersDeep, projectThread, newSessionId, type PramanyxUIMessage, type ChatTurn } from "@/lib/chatTurn";
 import { usePramanyxChat } from "@/lib/usePramanyxChat";
 import { changeable, focusOf, setAskSubject, subjectKey, subjectWords, useAskSubject, usePageSubject } from "@/lib/askSubject";
+import { SHEET_FILES, SheetEntryView, SheetGrounding, SheetTurnFoot, useSheetEntries } from "@/components/ask/SheetAssist";
+import { useSheetDoors } from "@/lib/sheetBridge";
+import { asksForAChange } from "@/lib/sheets";
 import { useStickToBottom } from "@/lib/useStickToBottom";
 import { brandEdge } from "@/components/ui/brand";
 import { Button } from "@/components/ui/button";
@@ -143,6 +146,9 @@ interface InputBoxProps {
   harness?: boolean;
   /** What the composer offers while a person writes (`lib/composerAssist.ts`): @ objects, / commands, ↑↓ history. */
   assist?: ComposerAssistSources;
+  /** Beside a sheet: what the composer says it takes, the files it takes (a sheet is made of one), and that a file alone
+   *  may be sent. */
+  sheet?: boolean;
 }
 
 interface ComposerAssistSources {
@@ -155,7 +161,7 @@ interface ComposerAssistSources {
   onWantObjects: () => void;
 }
 
-function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, setMode, onSend, onStop, onClear, attachedFile, onAttach, agents, agentId, setAgentId, subject, onDropSubject, changes = false, harness = false, assist }: InputBoxProps) {
+function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, setMode, onSend, onStop, onClear, attachedFile, onAttach, agents, agentId, setAgentId, subject, onDropSubject, changes = false, harness = false, assist, sheet = false }: InputBoxProps) {
   const [focused, setFocused] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // what the composer offers at the caret, and where a walk through the questions already asked stands
@@ -308,7 +314,7 @@ function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, se
            at its next checkpoint). Disabling here made the product argue with the user
            about whose turn it was. */
         placeholder={harness
-          ? `${changes ? "Ask anything, or describe a change" : "Ask anything"}${assist ? " · @ for objects, / for commands, ↑↓ for history" : ""}`
+          ? `${sheet ? "Ask about this sheet, drop a file, or ask for a change" : changes ? "Ask anything, or describe a change" : "Ask anything"}${assist ? " · @ for objects, / for commands, ↑↓ for history" : ""}`
           : multiline ? "Ask anything about your data…" : "Ask your question…"}
         className="aug-focus-frame w-full bg-transparent aug-fs-sm text-zinc-100 placeholder:text-[var(--t3)] px-4 pt-3 pb-2 resize-none focus:outline-none disabled:opacity-50"
         // the frame around it says it is being written in: the field draws no second one inside
@@ -365,7 +371,7 @@ function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, se
           <input
             ref={fileInputRef}
             type="file"
-            accept=".pdf,.csv,.txt,.md"
+            accept={sheet ? SHEET_FILES : ".pdf,.csv,.txt,.md"}
             style={{ display: "none" }}
             onChange={handleFileChange}
           />
@@ -374,7 +380,7 @@ function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, se
           <Button
             variant="ghost" size="icon-sm"
             onClick={() => fileInputRef.current?.click()}
-            title="Attach file (PDF, CSV)"
+            title={sheet ? "Make a sheet from a file" : "Attach file (PDF, CSV)"}
             style={{ color: attachedFile ? "var(--blue4)" : "var(--t3)" }}
           >
             <Icon name="attach" size={15} label="Attach a file" />
@@ -399,13 +405,13 @@ function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, se
               variant="ghost"
               size="icon-sm"
               onClick={() => onSend()}
-              disabled={!input.trim()}
+              disabled={!input.trim() && !(sheet && attachedFile)}
               title="Send"
               className="aug-pressable rounded-[var(--r-pill)] hover:bg-transparent dark:hover:bg-transparent disabled:opacity-100"
               style={{
                 width: 32, height: 32,
-                background: input.trim() ? "var(--blue-solid)" : "var(--bg-3)",
-                color: input.trim() ? "var(--on-primary)" : "var(--t3)",
+                background: input.trim() || (sheet && attachedFile) ? "var(--blue-solid)" : "var(--bg-3)",
+                color: input.trim() || (sheet && attachedFile) ? "var(--on-primary)" : "var(--t3)",
               }}
             >
               <Icon name="send" size={16} stroke={2.2} />
@@ -1044,6 +1050,12 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
   const [droppedPage, setDroppedPage] = useState("");
   const pageHere = harness && onPage && onPage.connectionId === connectionId && subjectKey(onPage) !== droppedPage ? onPage : null;
   const subject = (handed && handed.connectionId === connectionId ? handed : null) ?? pageHere;
+  // Beside a sheet (Stage 1, 2026-11-19: the sheet's own chat folds in): its doors while it is on screen, the proposals
+  // asked for here, and which turns were asked about it
+  const sheetHere = subject?.kind === "sheet" ? subject : null;
+  const sheetDoors = useSheetDoors(sheetHere?.id);
+  const sheetAssist = useSheetEntries(sheetHere?.id ?? null);
+  const [sheetAsked, setSheetAsked] = useState<ReadonlySet<number>>(() => new Set());
 
   const sendQuestion = useCallback((question: string, m: RouteMode = "investigate", opts: AskOpts = {}) => {
     // An interrupt — the user sent this while a turn was still streaming. The SDK
@@ -1198,8 +1210,10 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
     e.preventDefault();
     setDragging(false);
     const files = Array.from(e.dataTransfer?.files ?? []);
+    // beside a sheet, a file dropped becomes one proposal for a new sheet, said with what was written
+    if (sheetHere && files[0]) { sheetAssist.proposeFile(files[0], input.trim(), turns.length); setInput(""); return; }
     for (const f of files) void takeFile(f);
-  }, [takeFile]);
+  }, [takeFile, sheetHere, sheetAssist, input, turns.length]);
 
   const handleSend = useCallback(async (q?: string, m?: RouteMode, opts?: { skipCache?: boolean; requestMode?: "investigate" | "explore"; purpose?: string }) => {
     const question = (q ?? input).trim();
@@ -1221,7 +1235,24 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
     textareaRef.current?.focus();
   }, [input, sendQuestion, mode, attachedFile, takeFile]);
 
-  const isEmpty = messages.length === 0;
+  /** The composer's send. Beside a sheet, a file goes to a proposal for a new sheet and a change asked for to a proposal on
+   *  the sheet; a question is asked, and remembered as asked about the sheet. */
+  const sendFromComposer = useCallback(() => {
+    if (sheetHere) {
+      const words = input.trim();
+      if (attachedFile) { const f = attachedFile; setAttachedFile(null); setInput(""); sheetAssist.proposeFile(f, words, turns.length); return; }
+      if (words && asksForAChange(words)) { setInput(""); sheetAssist.proposeChange(words, turns.length); return; }
+      if (words) setSheetAsked(s => new Set(s).add(turns.length));
+    }
+    void handleSend();
+  }, [sheetHere, input, attachedFile, sheetAssist, turns.length, handleSend]);
+  const askOnSheet = (words: string) => { setSheetAsked(s => new Set(s).add(turns.length)); void handleSend(words); };
+  const proposeOnSheet = (words: string) => sheetAssist.proposeChange(words, turns.length);
+  const sheetEntriesAfter = (n: number) => sheetAssist.entries.filter(en => en.after === n).map(en => (
+    <SheetEntryView key={en.id} entry={en} doors={sheetDoors} onSettle={sheetAssist.settle} onAsk={askOnSheet} />
+  ));
+
+  const isEmpty = messages.length === 0 && sheetAssist.entries.length === 0;
 
   // ── Feedback submission ───────────────────────────────────────────────────────
   async function handleFeedbackSubmit(invId: string, feedback: string) {
@@ -1271,7 +1302,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
     streaming: busy,
     mode,
     setMode,
-    onSend: handleSend,
+    onSend: sendFromComposer,
     onStop: stop,
     onClear: clear,
     assist,
@@ -1280,6 +1311,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
     agents,
     agentId,
     setAgentId,
+    sheet: !!sheetHere,
     ...(subject ? { subject: subjectWords(subject), changes: changeable(subject),
       onDropSubject: () => (subject === pageHere ? setDroppedPage(subjectKey(pageHere)) : setAskSubject(null)) } : {}),
   };
@@ -1288,6 +1320,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
     <HarnessContext.Provider value={harnessLook}>
     {harness && wantsObjects && <MentionObjects connectionId={connectionId} onObjects={setObjects} />}
     <div
+      data-testid="chat-drop"
       className="flex-1 flex flex-col min-w-0 overflow-hidden"
       /* The chat's ground is the composer's own dark blue (--bg-3) — the landing block
          took it on 2026-09-28 and the conversation follows, at the user's word
@@ -1399,6 +1432,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
               </div>
             )}
 
+            {sheetDoors && <SheetGrounding doors={sheetDoors} />}
             <InputBox {...inputBoxProps} multiline />
 
             <p className="aug-fs-sm text-center" style={{ color: "var(--t3)" }}>Always review the accuracy of responses.</p>
@@ -1464,6 +1498,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                 {people && turns.length > 0 && (
                   <ThreadPeople sessionId={sessionId} people={people} onChange={setPeople} onLeft={() => clear()} />
                 )}
+                {sheetEntriesAfter(0)}
                 {turns.map(({ turn, userMsg, assistantMsg }, i) => (
                   <div
                     key={turn.id}
@@ -1520,6 +1555,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                         )}
                       />
                     </ErrorBoundary>
+                    <SheetTurnFoot turn={turn} doors={sheetDoors} asked={sheetAsked.has(i)} onPropose={proposeOnSheet} />
                     {answerableRun(turn) && <AnswerNow key={answerableRun(turn)} runId={answerableRun(turn) as string} />}
                     {turn.answeredEarly && (
                       <p data-testid="answered-early" className="aug-fs-sm" style={{ margin: "6px 0 0", color: "var(--t2)" }}>{turn.answeredEarly}</p>
@@ -1591,6 +1627,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                         />
                       </div>
                     )}
+                    {sheetEntriesAfter(i + 1)}
                   </div>
                 ))}
                 {/* Spacer so last message clears the floating input */}
@@ -1638,6 +1675,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
               zIndex: 2, pointerEvents: "none",
             }}>
               <div className="w-full max-w-[var(--measure-chat)] px-[var(--chat-gutter)] mx-auto space-y-2" style={{ pointerEvents: "all" }}>
+                {sheetDoors && <SheetGrounding doors={sheetDoors} />}
                 <InputBox {...inputBoxProps} />
                 <p className="aug-fs-sm text-center" style={{ color: "var(--t3)" }}>Always review the accuracy of responses.</p>
               </div>

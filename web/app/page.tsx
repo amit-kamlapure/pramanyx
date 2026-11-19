@@ -2243,7 +2243,7 @@ export default function Home() {
 
             {tab === "spreadsheets" && (
               <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--bg-0)" }}>
-                <SpreadsheetsPage onAsk={q => goToChat(q)} />
+                <SpreadsheetsPage />
               </div>
             )}
 

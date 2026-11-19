@@ -1,211 +1,30 @@
 "use client";
 
 /**
- * The chat beside a sheet (SH-4; mockup screens 3 to 5).
+ * What a sheet's conversation shows (SH-4; mockup screens 3 to 5), drawn in the Ask panel beside the sheet
+ * (`components/ask/SheetAssist.tsx`) since the sheet's own chat folded into it (Stage 1, the user, 2026-11-19).
  *
- * A question is answered by a query on the Sheets connection, through the one ask door, with the sheet and the view on
- * screen handed to it server-side — the table, its columns, and the view's own filter and count — so "how many of
- * these" counts the rows the grid shows. The line under the header says what the chat sees.
- *
- * A change asked for — "flag the ones that still need following up" — comes back as ONE proposal card: each change
- * checked and counted by the platform, ticked by default, applied all or in part by the person, recorded as proposed
- * by the assistant and applied by them. Which of the two something is, is read from its first words; the other way is
- * one click under the answer, so a misreading costs a click and never a change.
- *
- * A file dropped here becomes one proposal for a new sheet (screen 5): its name, its kinds and a few views. Nothing is
- * made until the person creates it, and undo removes it whole.
+ * - The rows an answer is about: how many of what whole, and the two things to do with them.
+ * - A change asked for comes back as ONE proposal card: each change checked and counted by the platform, ticked by
+ *   default, applied all or in part by the person, recorded as proposed by the assistant and applied by them.
+ * - A file becomes one proposal for a new sheet (screen 5): its name, its kinds and a few views. Nothing is made until the
+ *   person creates it, and undo removes it whole. The Spreadsheets home makes one the same way (`NewSheetChat`).
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
 import { Chip, Dot, MUTED, NUM } from "@/components/clarity/kit";
-import { PartsMessage } from "@/components/chat/PartsMessage";
 import { RULE_COLOR } from "@/components/sheets/SheetGrid";
 import { PANEL, PanelHead } from "@/components/sheets/SheetRecord";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
-import { newSessionId, projectThread, type SheetRowsRef } from "@/lib/chatTurn";
+import type { SheetRowsRef } from "@/lib/chatTurn";
 import { formatCount } from "@/lib/format";
 import {
-  KIND_LABEL, RULE_TONES, applyProposal, asksForAChange, filterWords, propose, proposeNewSheet, readGrounding, rowsWord,
-  stageFile, undo, type Grounding, type Proposal, type ProposeOutcome, type RuleTone, type Sheet,
+  KIND_LABEL, RULE_TONES, applyProposal, filterWords, proposeNewSheet, rowsWord, stageFile, undo,
+  type Proposal, type ProposeOutcome, type RuleTone, type Sheet,
 } from "@/lib/sheets";
-import { usePramanyxChat } from "@/lib/usePramanyxChat";
-
-type Entry =
-  | { id: string; type: "ask"; words: string }
-  | { id: string; type: "propose"; words: string; outcome: ProposeOutcome | null; error?: string; applied?: number[];
-      appliedSheet?: string };
-
-let seq = 0;
-const nextId = () => `e${++seq}`;
-
-export function SheetChat({ sheet, viewId, viewRows, onClose, onApplied, onOpenSheet, onAsk, onOpenView, onShowRows,
-  onKeepRows }: {
-  sheet: Sheet; viewId: string; viewRows: number | null; onClose: () => void; onApplied: () => void;
-  onOpenSheet: (id: string) => void; onAsk?: (q: string) => void; onOpenView: (name: string) => void;
-  /** The rows an answer is about, on the grid as the person's own until they keep them. */
-  onShowRows: (r: SheetRowsRef) => void;
-  /** The same rows kept as a view of the answer's name — true when it was kept. */
-  onKeepRows: (r: SheetRowsRef) => Promise<boolean>;
-}) {
-  const [sessionId] = useState(() => newSessionId());
-  const focus = useMemo(() => ({ kind: "sheet", id: viewId ? `${sheet.id}:${viewId}` : sheet.id }), [sheet.id, viewId]);
-  const { messages, sendMessage, status, error } = usePramanyxChat({
-    connectionId: "sheets", sessionId,
-    // quick depth: an answer on the sheet, never a deep analysis from here; `focus` is the sheet on screen, read by
-    // the server from its own stores — nothing about the sheet is sent from this panel.
-    body: { depth: "quick", surface: "sheet", focus },
-  });
-  const streaming = status === "submitted" || status === "streaming";
-  const turns = useMemo(() => projectThread(messages, {
-    streaming, transportError: status === "error" ? (error?.message ?? "The turn failed.") : null,
-  }), [messages, streaming, status, error]);
-  const [entries, setEntries] = useState<Entry[]>([]);
-  const [draft, setDraft] = useState("");
-  const [grounding, setGrounding] = useState<Grounding | null>(null);
-  const [dropping, setDropping] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    readGrounding(sheet.id, viewId).then(setGrounding).catch(() => setGrounding(null));
-  }, [sheet.id, viewId, viewRows]);
-
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (el && el.scrollHeight - el.scrollTop - el.clientHeight < 240) el.scrollTop = el.scrollHeight;
-  }, [entries, turns.length, streaming]);
-
-  const ask = useCallback((words: string) => {
-    if (streaming) return;
-    setEntries(e => [...e, { id: nextId(), type: "ask", words }]);
-    void sendMessage({ text: words, metadata: { mode: "ask" } });
-  }, [sendMessage, streaming]);
-
-  const proposeChange = useCallback((words: string) => {
-    const id = nextId();
-    setEntries(e => [...e, { id, type: "propose", words, outcome: null }]);
-    propose(sheet.id, words)
-      .then(outcome => setEntries(e => e.map(x => (x.id === id ? { ...x, outcome } as Entry : x))))
-      .catch(err => setEntries(e => e.map(x => (x.id === id ? { ...x, error: err instanceof Error ? err.message : String(err) } as Entry : x))));
-  }, [sheet.id]);
-
-  const dropped = useCallback((file: File, words: string) => {
-    const id = nextId();
-    setEntries(e => [...e, { id, type: "propose", words: `${file.name} — ${words || "make this a sheet"}`, outcome: null }]);
-    stageFile(file).then(st => proposeNewSheet(st.token, words))
-      .then(outcome => setEntries(e => e.map(x => (x.id === id ? { ...x, outcome } as Entry : x))))
-      .catch(err => setEntries(e => e.map(x => (x.id === id ? { ...x, error: err instanceof Error ? err.message : String(err) } as Entry : x))));
-  }, []);
-
-  const send = () => {
-    const words = draft.trim();
-    if (!words) return;
-    setDraft("");
-    if (asksForAChange(words)) proposeChange(words); else ask(words);
-  };
-
-  const applied = (entryId: string, picks: number[], p: Proposal, sheetId: string) => {
-    setEntries(e => e.map(x => (x.id === entryId ? { ...x, applied: picks, appliedSheet: sheetId } as Entry : x)));
-    if (p.new_sheet) { onOpenSheet(sheetId); return; }
-    onApplied();
-    const view = picks.map(i => p.changes[i]).find(c => c.type === "view");
-    if (view?.name) onOpenView(String(view.name));
-  };
-
-  let askIndex = -1;
-  return (
-    <aside aria-label="Ask about this sheet" style={PANEL}
-      onDragOver={e => { e.preventDefault(); setDropping(true); }} onDragLeave={() => setDropping(false)}
-      onDrop={e => {
-        e.preventDefault();
-        setDropping(false);
-        const f = e.dataTransfer.files?.[0];
-        if (f) { dropped(f, draft.trim()); setDraft(""); }
-      }}>
-      <PanelHead title="Ask about this sheet" chip={grounding?.view ? `${sheet.name} · ${grounding.view.name}` : sheet.name}
-        onClose={onClose} />
-      {grounding?.found && (
-        <div className="aug-fs-xs" title={grounding.view?.where ? `WHERE ${grounding.view.where}` : undefined}
-          style={{ ...MUTED, ...NUM, padding: "6px 14px", borderBottom: "1px solid var(--b0)" }}>
-          The chat reads <span className="aug-mono">{grounding.table}</span>
-          {grounding.view ? ` · the view ${grounding.view.name}: ${formatCount(grounding.view.rows)} rows` : ` · ${formatCount(grounding.rows ?? 0)} rows`}
-        </div>
-      )}
-      <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "12px 14px",
-        outline: dropping ? "2px dashed var(--blue3)" : undefined, outlineOffset: -6 }}>
-        {entries.length === 0 ? (
-          <div className="aug-fs-xs" style={{ ...MUTED, lineHeight: 1.6 }}>
-            Ask about this sheet — answers are queries on it, each with its receipt — or ask for a change: a view, a
-            computed column, a column to tick, a link to another sheet. A change is proposed and counted first; nothing
-            changes until you apply it. Drop a file here to make a new sheet of it.
-          </div>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {entries.map(en => {
-              if (en.type === "ask") {
-                askIndex += 1;
-                const t = turns[askIndex];
-                return (
-                  <div key={en.id}>
-                    {t ? (
-                      <PartsMessage turn={t.turn} message={t.assistantMsg} connectionId="sheets" lean
-                        onFollowUp={(q: string) => ask(q)} onDeeper={(q: string) => onAsk?.(q)} />
-                    ) : <div className="aug-fs-sm">{en.words}</div>}
-                    {t?.turn.sheetRows.filter(r => r.sheet === sheet.id).map((r, i) => (
-                      <RowsCard key={`${r.about}-${i}`} rows={r} sheet={sheet} onShow={() => onShowRows(r)}
-                        onKeep={() => onKeepRows(r)} />
-                    ))}
-                    <div className="aug-fs-xs" style={{ ...MUTED, marginTop: 4 }}>
-                      Answered as a question ·{" "}
-                      <Button variant="link" size="xs" onClick={() => proposeChange(en.words)}>propose a change instead</Button>
-                    </div>
-                  </div>
-                );
-              }
-              return (
-                <div key={en.id} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  <div className="aug-fs-sm" style={{ alignSelf: "flex-end", background: "var(--bg-3)", padding: "6px 10px",
-                    borderRadius: "var(--r3)", maxWidth: "90%" }}>{en.words}</div>
-                  {en.error ? <span role="alert" className="aug-fs-sm" style={{ color: "var(--red4)" }}>{en.error}</span>
-                    : !en.outcome ? <span className="aug-fs-xs" style={MUTED}>Proposing — every change is checked and counted first…</span>
-                      : en.outcome.staged ? (
-                        <ProposalCard proposal={en.outcome.proposal} applied={en.applied} appliedSheet={en.appliedSheet}
-                          onApplied={(picks, sheetId) => applied(en.id, picks, (en.outcome as { proposal: Proposal }).proposal, sheetId)}
-                          onUndone={() => { onApplied(); setEntries(e => e.map(x => (x.id === en.id ? { ...x, applied: undefined } as Entry : x))); }} />
-                      ) : (
-                        <div className="aug-fs-sm" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                          <span className="aug-fs-xs" style={MUTED}>Nothing was proposed:</span>
-                          {en.outcome.sentences.map(s => <span key={s}>{s}</span>)}
-                        </div>
-                      )}
-                  {!en.words.includes(" — ") && (
-                    <div className="aug-fs-xs" style={MUTED}>
-                      Proposed as a change ·{" "}
-                      <Button variant="link" size="xs" onClick={() => ask(en.words)}>ask it as a question instead</Button>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-      <div style={{ flex: "0 0 auto", padding: "10px 14px", borderTop: "1px solid var(--b1)", display: "flex", gap: 6 }}>
-        <input ref={fileRef} type="file" hidden accept=".csv,.tsv,.parquet,.json,.xlsx"
-          onChange={e => { const f = e.target.files?.[0]; if (f) { dropped(f, draft.trim()); setDraft(""); } e.target.value = ""; }} />
-        <Button variant="ghost" size="icon-sm" aria-label="Make a sheet from a file" title="Make a sheet from a file"
-          onClick={() => fileRef.current?.click()}><Icon name="attach" /></Button>
-        <Input value={draft} onChange={e => setDraft(e.target.value)} disabled={streaming}
-          placeholder="Ask about this sheet, drop a file, or ask for a change…" aria-label="A question, or a change to make"
-          style={{ flex: 1 }} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} />
-        <Button onClick={send} disabled={!draft.trim() || streaming} aria-label="Send"><Icon name="send" /></Button>
-      </div>
-    </aside>
-  );
-}
 
 /** The rows an answer beside the sheet is about (SH-4): how many of what whole, the filter in the grid's words, and the
  *  two things to do with them — see them in the grid, or keep them as a view. Nothing changes until one is clicked. */

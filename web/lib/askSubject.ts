@@ -35,7 +35,8 @@ export type AskSubject =
   | Common & { kind: "dashboard"; dashboard: string; owner?: string; title: string; card?: { id: string; title: string };
       period: { start: string; last_day: string; covers: string } | null }
   // the Ask panel's page (Stage 1, 2026-11-19): the spreadsheet open, the table open in the Catalog, the statement in the editor
-  | Common & { kind: "sheet"; id: string; title: string }
+  // a sheet, and the view of it on screen: an answer counts the rows the grid shows
+  | Common & { kind: "sheet"; id: string; title: string; view?: string; viewName?: string }
   | Common & { kind: "table"; table: string }
   | Common & { kind: "query"; sql: string; title: string };
 
@@ -118,7 +119,7 @@ export function subjectWords(s: AskSubject): string {
   if (s.kind === "dashboard") {
     return `Asking about ${s.card ? `“${s.card.title}” on ` : ""}${s.title} · ${s.period?.covers ?? "as written"}`;
   }
-  if (s.kind === "sheet") return `Asking about ${s.title}`;
+  if (s.kind === "sheet") return `Asking about ${s.title}${s.viewName ? ` · the view ${s.viewName}` : ""}`;
   if (s.kind === "table") return `Asking about the table ${s.table}`;
   if (s.kind === "query") return `Asking about the query ${s.title ? `“${s.title}”` : "in the SQL Editor"}`;
   if (s.kind === "objects") {
@@ -135,7 +136,7 @@ export function focusOf(s: AskSubject): Record<string, unknown> {
   if (s.kind === "dashboard") return { kind: "dashboard", dashboard: s.dashboard, ...(s.owner ? { owner: s.owner } : {}),
     ...(s.card ? { id: s.card.id } : {}), label: s.title.slice(0, 80), period: s.period ? `${s.period.start}..${s.period.last_day}` : "" };
   if (s.kind === "objects") return { kind: "objects", objects: s.refs.slice(0, MAX_SUBJECT), ...(s.label ? { label: s.label.slice(0, 80) } : {}) };
-  if (s.kind === "sheet") return { kind: "sheet", id: s.id };
+  if (s.kind === "sheet") return { kind: "sheet", id: s.view ? `${s.id}:${s.view}` : s.id };
   if (s.kind === "table") return { kind: "table", id: s.table.slice(0, 200) };
   if (s.kind === "query") return { kind: "query", sql: s.sql.slice(0, 20000), ...(s.title ? { label: s.title.slice(0, 80) } : {}) };
   if (s.kind === "segment") return { kind: "set", entity: s.entity, segment: s.segment, label: s.label.slice(0, 80),

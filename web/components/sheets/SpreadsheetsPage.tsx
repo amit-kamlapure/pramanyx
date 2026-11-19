@@ -25,13 +25,13 @@ function putSheetInUrl(id: string) {
   window.history.replaceState(window.history.state, "", url.toString());
 }
 
-export function SpreadsheetsPage({ onAsk }: { onAsk?: (question: string) => void }) {
+export function SpreadsheetsPage() {
   const [open, setOpen] = useState<string>(() => sheetInUrl());
 
   const openSheet = useCallback((id: string) => { setOpen(id); putSheetInUrl(id); }, []);
 
   if (open) {
-    return <SheetView key={open} sheetId={open} onBack={() => openSheet("")} onOpen={openSheet} onAsk={onAsk} />;
+    return <SheetView key={open} sheetId={open} onBack={() => openSheet("")} onOpen={openSheet} />;
   }
   return <SheetsHome onOpen={openSheet} />;
 }

@@ -1,21 +1,11 @@
 // @vitest-environment jsdom
 /**
- * The chat beside a sheet (Arc SH, SH-4): it asks FROM the sheet — the sheet and the view on screen ride every turn as
- * the object in focus, read by the server from its own stores — and a proposal changes nothing until the person
- * applies it, and then only the changes they left ticked.
+ * What a sheet's conversation shows (Arc SH, SH-4): a proposal changes nothing until the person applies it, and then only
+ * the changes they left ticked; an answer's rows say how many of what whole. Asking FROM the sheet, in the Ask panel since
+ * the sheet's own chat folded into it, is ChatPanel.sheet.test.tsx.
  */
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
-const seen: { body?: Record<string, unknown>; connectionId?: string } = {};
-
-vi.mock("@/lib/usePramanyxChat", () => ({
-  usePramanyxChat: (opts: { body?: Record<string, unknown>; connectionId: string }) => {
-    seen.body = opts.body;
-    seen.connectionId = opts.connectionId;
-    return { messages: [], sendMessage: vi.fn(), status: "ready", error: undefined };
-  },
-}));
 
 const applyProposal = vi.fn(async (_id: string, picks: number[] | null) => ({ change_id: "c1", applied: picks ?? [], sheet: "s1" }));
 const propose = vi.fn();
@@ -27,7 +17,7 @@ vi.mock("@/lib/sheets", async importOriginal => ({
     view: { name: "Overdue, still open", where: "TRUE", rows: 2 } }),
 }));
 
-import { ProposalCard, RowsCard, SheetChat } from "./SheetChat";
+import { ProposalCard, RowsCard } from "./SheetChat";
 import type { SheetRowsRef } from "@/lib/chatTurn";
 import type { Proposal, Sheet } from "@/lib/sheets";
 
@@ -42,26 +32,6 @@ const PROPOSAL: Proposal = {
 };
 
 beforeEach(() => { applyProposal.mockClear(); propose.mockReset(); });
-
-describe("SheetChat", () => {
-  it("asks from the sheet and the view on screen, on the Sheets connection, never a deep analysis", async () => {
-    render(<SheetChat sheet={SHEET} viewId="v9" viewRows={2} onClose={() => {}} onApplied={() => {}}
-      onOpenSheet={() => {}} onOpenView={() => {}} onShowRows={() => {}} onKeepRows={async () => true} />);
-    expect(seen.connectionId).toBe("sheets");
-    expect(seen.body).toMatchObject({ depth: "quick", surface: "sheet", focus: { kind: "sheet", id: "s1:v9" } });
-    expect(await screen.findByText(/the view Overdue, still open: 2 rows/)).toBeInTheDocument();
-  });
-
-  it("sends an instruction to be proposed, not answered", async () => {
-    propose.mockResolvedValue({ staged: true, proposal: PROPOSAL });
-    render(<SheetChat sheet={SHEET} viewId="" viewRows={6} onClose={() => {}} onApplied={() => {}}
-      onOpenSheet={() => {}} onOpenView={() => {}} onShowRows={() => {}} onKeepRows={async () => true} />);
-    fireEvent.change(screen.getByLabelText("A question, or a change to make"), { target: { value: "Flag the ones still open" } });
-    fireEvent.click(screen.getByLabelText("Send"));
-    await waitFor(() => expect(propose).toHaveBeenCalledWith("s1", "Flag the ones still open"));
-    expect(await screen.findByText("3 changes")).toBeInTheDocument();
-  });
-});
 
 describe("ProposalCard", () => {
   it("applies only the changes left ticked, and nothing before the click", async () => {
