@@ -47,6 +47,7 @@ import { NAVIGATE_EVENT, type NavigateRequest } from "@/lib/navigate";
 import { NAV_DESTINATIONS, NAV_SECTION_IDS, destinationOf } from "@/lib/navDestinations";
 import { ChromeActions, ChromeFacts, ChromeToolbar, PageChromeProvider, PageHeader, StatusStrip, useChromeBackTo } from "@/components/shell/PageChrome";
 import { InspectorHost, InspectorProvider } from "@/components/shell/Inspector";
+import { AskPanelHost, AskPanelToggle } from "@/components/ask/AskPanel";
 import { OVERVIEW_LAYER, agentOpsLayerOf, type AgentOpsLayer as AgentsLayer } from "@/lib/agentOpsLayers";
 import type { RecordLayer } from "@/components/record/RecordWorkspace";
 
@@ -292,6 +293,8 @@ function Topbar({
           </span>
           <kbd>⌘K</kbd>
         </button>
+        {/* Ask, on every page (Stage 1 of the plan, 2026-11-19): the one icon that shows or hides the panel */}
+        <AskPanelToggle connectionId={selectedConn} />
         {/* The nine dots — the way to the coworker. Drawn only while one is running. */}
         <AppSwitcher connectionId={selectedConn || undefined} theme={theme} />
         <AuthControl />
@@ -1167,6 +1170,13 @@ export default function Home() {
       if (r.secLens) setSecLens(r.secLens);
       if (r.settingsSection) setSettingsSection(r.settingsSection);
       setOpenId(detail.params?.id ?? null);
+      // a conversation named by the event opens on the Ask page: the Ask panel's "Open at full size"
+      if (detail.params?.chat) {
+        setShowHistory(false);
+        setSelectedHistoryInvId(null);
+        setSelectedChatSessionId(detail.params.chat);
+        setChatKey(k => k + 1);
+      }
       // a run named by the event opens in the Data Canvas, as `openRun` opens one (a dashboard's Question, PENDING 54)
       if (detail.params?.run) {
         setShowHistory(false);
@@ -2324,6 +2334,8 @@ export default function Home() {
           </div>
         </SchemaProvider>
         <InspectorHost />
+        {/* The Ask panel beside every page; the Ask page itself is the same conversations at full size */}
+        <AskPanelHost connectionId={selectedConn} hidden={tab === "chat"} />
       </div>
       <StatusStrip connection={statusConn} running={navCounts?.runningRuns ?? 0} />
 

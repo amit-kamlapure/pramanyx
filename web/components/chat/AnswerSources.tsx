@@ -97,12 +97,16 @@ function TableSource({ connection, name }: { connection: string; name: string })
 }
 
 /** The source's own page, beside the conversation. It pushes the conversation over, and covers it only on a narrow screen. */
-export function SourceBeside({ source, onClose }: { source: AnswerSource; onClose: () => void }) {
+export function SourceBeside({ source, onClose, cover = false }: {
+  source: AnswerSource; onClose: () => void;
+  /** Over the conversation it was opened from, as in a panel too narrow to share: the Ask panel's way. */
+  cover?: boolean;
+}) {
   const narrow = useNarrowScreen();
   return (
     <aside aria-label={`${source.label}, beside the conversation`} data-testid="source-beside"
       style={{ display: "flex", flexDirection: "column", minHeight: 0, background: "var(--bg-1)", borderLeft: "1px solid var(--b1)",
-        ...(narrow ? { position: "fixed", inset: 0, zIndex: 40 } : { flex: "0 0 clamp(380px, 46%, 820px)" }) }}>
+        ...(cover ? { position: "absolute", inset: 0, zIndex: 30 } : narrow ? { position: "fixed", inset: 0, zIndex: 40 } : { flex: "0 0 clamp(380px, 46%, 820px)" }) }}>
       <div style={{ flex: "none", display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderBottom: "1px solid var(--b1)" }}>
         <span className="aug-fs-ui" title={source.label} style={{ flex: 1, minWidth: 0, color: "var(--t1)", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{source.label}</span>
         <Button size="icon-sm" variant="ghost" aria-label="Close" title="Close" data-testid="source-beside-close" onClick={onClose}><Icon name="close" size={15} /></Button>

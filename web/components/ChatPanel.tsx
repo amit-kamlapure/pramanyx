@@ -73,6 +73,10 @@ interface Props {
   beside?: boolean;
   /** Which screen's `?chat=` is this panel's: `main` for the Ask screen, `canvas:<id>` for a canvas (`addressIsMine`). */
   address?: string;
+  /** The coworker's layout for the conversation (`chat/harnessLook.ts`): the Ask panel's. */
+  harness?: boolean;
+  /** Told the conversation's id and its first question once it has one: the Ask panel names its tab by it. */
+  onSession?: (session: string, title: string) => void;
 }
 
 /** The modes a person can PICK in the composer. `auto` is deliberately absent: the
@@ -607,7 +611,7 @@ function AgentLandingBlock({ agent, connectionName }: { agent: UserAgent; connec
   );
 }
 
-export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQuestion, initialMode, initialInsightId, capabilities, initialAgentId, beside = false, address }: Props) {
+export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQuestion, initialMode, initialInsightId, capabilities, initialAgentId, beside = false, address, harness = false, onSession }: Props) {
   // Read during the first render, into a ref, because both this component and page.tsx's
   // URL-sync effect rewrite the query string — whichever ran first would erase the id
   // before the restore below could read it. A ref initializer is safe here specifically
@@ -985,6 +989,14 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
     window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
   }, [messages.length, sessionId, beside, address]);
 
+  // The Ask panel names its tab after the conversation's first question, and keeps the conversation's id to open it again.
+  const onSessionRef = useRef(onSession);
+  useEffect(() => { onSessionRef.current = onSession; });
+  const firstQuestion = (turns[0]?.turn.question ?? "").trim();
+  useEffect(() => {
+    if (messages.length && firstQuestion) onSessionRef.current?.(sessionId, firstQuestion.slice(0, 80));
+  }, [messages.length > 0, sessionId, firstQuestion]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Scroll: follow the newest content while pinned to the bottom, release
   //    the moment the user scrolls up to read, snap back on completion. ───────
   const streamingKey = turns.map(({ turn: t }) => `${t.id}:${t.phases.length}:${t.statusText}`).join("|");
@@ -1351,7 +1363,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                     {/* The ONE feedback control on an answer (2026-10-22): a second thumbs pair
                         used to sit inside the answer's "Methodology & details" and post the same
                         verdict for the same receipt. It lives here, at the foot, once. */}
-                    {canvasId && turn.status === "done" && turn.publicReceiptId && (
+                    {(harness ? turn.mode === "investigate" : !!canvasId) && turn.status === "done" && turn.publicReceiptId && (
                       <AnswerSources receiptId={turn.publicReceiptId} connectionId={connectionId}
                         onOpen={source => { setSourcePanel(null); setSourcePage(source); }} />
                     )}
@@ -1449,7 +1461,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
 
           {/* Agent trace now renders inline within each assistant turn (ChatMessage). */}
 
-          {sourcePage && <SourceBeside source={sourcePage} onClose={() => setSourcePage(null)} />}
+          {sourcePage && <SourceBeside source={sourcePage} cover={harness} onClose={() => setSourcePage(null)} />}
 
           {/* ── Source panel drawer (right side, pushes chat left) ── */}
           {sourcePanel && (
