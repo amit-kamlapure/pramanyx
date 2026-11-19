@@ -269,6 +269,9 @@ export interface ChatTurn {
     /** Arc FA-2 — what the turn was about, as the server read it for the asker ("About 10 of the 12 orders chosen · 2
      *  of the 12 are withheld from you"), and whether the body answering read it. Absent on a turn with no subject. */
     subject?: { said: string; carried: boolean; withheld: number };
+    /** Agent on a dashboard the person keeps: the conversation decided between a deep analysis and a change, so asking
+     *  again at the other depth would reach the same conversation. */
+    conversationDecided?: boolean;
   } | null;
 
   agent: {
@@ -441,6 +444,7 @@ const PART_PROJECTORS: Record<string, (t: ChatTurn, d: Payload) => void> = {
         carried: (d.subject as { carried?: unknown }).carried !== false,
         withheld: Number((d.subject as { withheld?: unknown }).withheld ?? 0),
       } } : {}),
+      ...(d.decided_by === "conversation" ? { conversationDecided: true } : {}),
     };
     // The router decided the depth — set the turn's effective mode so the
     // existing renderers (quick vs investigate) work unchanged.

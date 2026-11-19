@@ -5740,6 +5740,26 @@ def _own_dashboard(req, request) -> Optional[tuple[str, str]]:
     return (person_of(request), focus.dashboard)
 
 
+#: What the conversation is told when the person chose Agent on a dashboard they keep (`_conversation_decides`).
+AGENT_CHOSEN_PROSE = (
+    "## The person chose Agent\n"
+    "They asked for depth on this turn. If they ask a question about the data, answer it with `deep_analysis`. "
+    "If they ask to change the dashboard, use `change_dashboard` and run no analysis.")
+
+#: The turn's line when the conversation decided it, said in the reader's words.
+AGENT_CHOSEN_WHY = "Agent on your dashboard: a deep analysis for a question, a change for a change"
+
+
+def _conversation_decides(req, request) -> bool:
+    """Whether an Agent (deep) turn is served by the conversation rather than the analyst: asked about a dashboard the
+    person keeps, where they may ask a question or ask for a change in the same box (the user, 2026-11-19, "Conversation
+    decides"). The conversation holds both `deep_analysis` and `change_dashboard` and is told the person chose Agent
+    (`AGENT_CHOSEN_PROSE`). A seeded drill from a finding stays an analysis: it asks for one by construction."""
+    if getattr(req, "insight_id", None) or getattr(req, "seed_sql", None):
+        return False
+    return _own_dashboard(req, request) is not None
+
+
 def _focus_prose_for(req, conn_id: str, subject=None) -> str:
     """SP-15 — the object the palette was summoned from, explained for the conversation.
 
@@ -6034,7 +6054,8 @@ async def _stream_ask(req: "AskRequest", request: Request, conn_id: str) -> Asyn
     # A request for a COCKPIT is not a question about data, and this chat drafts none — the
     # Briefing's Dashboards tab does (CT-9). Said here, before the clarify gate read it as an
     # under-specified question (2 of the CT receipt's 10 asks) or a model answered it as one.
-    if not req.insight_id:
+    # On a dashboard the person keeps, the conversation can change it (the Ask panel), so the request goes through.
+    if not req.insight_id and _own_dashboard(req, request) is None:
         from pramanyx.dashboards.intent import is_dashboard_ask, where_dashboards_are_made
         if is_dashboard_ask(req.question):
             yield _sse("headline", {"headline": where_dashboards_are_made()})
@@ -6066,6 +6087,13 @@ async def _stream_ask(req: "AskRequest", request: Request, conn_id: str) -> Asyn
     # the parallel vocabulary this wave is trying not to create.
     _use_converse = _converse_eligible(req, route)
     _use_analyst = _analyst_eligible(req, route)   # CA-3 — deep/escalate take the analyst door
+    # Agent on a dashboard the person keeps: the conversation decides between a deep analysis and a change, and the
+    # receipt says the conversation served the turn (its depth is the conversation's, so the answer renders as one).
+    _decides = _use_analyst and _conversation_decides(req, request)
+    if _decides:
+        from dataclasses import replace as _replace
+        route = _replace(route, depth="quick", why=AGENT_CHOSEN_WHY)
+        _use_converse, _use_analyst = True, False
     # CI-1 — resolve the effective conversation history ONCE, here, before any body runs:
     # the client's turns when it sent them, else a server-side reconstruction from the
     # session store so a reload / another device / the MCP server / a scheduled task all
@@ -6080,6 +6108,8 @@ async def _stream_ask(req: "AskRequest", request: Request, conn_id: str) -> Asyn
         _route_ev["body"] = "converse"
     if _use_analyst:
         _route_ev["body"] = "analyst"
+    if _decides:
+        _route_ev["decided_by"] = "conversation"
     # The route receipt measures the memory it injected — turns and chars — the same
     # discipline PE-1 applied to prompt spend: a feature you cannot see the size of is
     # one you cannot tell is working. `reconstructed` distinguishes server-rebuilt memory
@@ -6172,7 +6202,8 @@ async def _stream_ask(req: "AskRequest", request: Request, conn_id: str) -> Asyn
                              # conversation instead of bypassing it; SP-15 — a turn
                              # summoned from an object hands that object's live state.
                              origin_prose=_joined(_focus_prose_for(req, conn_id, _subject),
-                                                  await _origin_prose_for(req, conn_id)))
+                                                  await _origin_prose_for(req, conn_id),
+                                                  AGENT_CHOSEN_PROSE if _decides else ""))
             if _use_converse else
             _stream_chat(req.question, conn_id, req.history,
                          session_id=req.session_id, canvas_id=req.canvas_id,

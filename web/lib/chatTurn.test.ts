@@ -126,6 +126,18 @@ describe("quick-path parity (the reducer's ask-mode fields)", () => {
     expect(t.route?.subject).toEqual({ said, carried: true, withheld: 2 });
   });
 
+  it("marks a turn the conversation decided: Agent on the person's own dashboard (2026-11-19)", async () => {
+    const decided = projectTurn("make the card wide", await messageFrom([
+      { event: "route", data: { depth: "quick", why: "Agent on your dashboard", body: "converse", decided_by: "conversation" } },
+      { event: "headline", data: { headline: "A change waits for your Allow." } },
+      { event: "done", data: {} },
+    ]), { initialMode: "investigate" });
+    expect(decided.route?.conversationDecided).toBe(true);
+    expect(decided.mode).toBe("ask");                     // rendered as the conversation's answer, not a deep report
+    const plain = projectTurn("q", await messageFrom([{ event: "route", data: { depth: "quick", why: "" } }, { event: "done", data: {} }]));
+    expect(plain.route).not.toHaveProperty("conversationDecided");
+  });
+
   it("renders a resumed run whole — orphan assistant gets a synthesized user side (FL-1b)", async () => {
     // A reloaded tab resumes mid-run: the thread restarts empty and the resume
     // stream delivers ONLY the assistant message. Dropping it rendered a live

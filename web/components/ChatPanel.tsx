@@ -389,9 +389,10 @@ function DepthBanner({ turn, onRerun, harness = false }: { turn: ChatTurn; onRer
   // The coworker's layout keeps what a person acts on or must be told: how the platform read the question, what the turn
   // was about, and the other depth to ask again at. Which depth answered is the composer's own choice, already in view.
   if (harness) {
-    // a change asked in the conversation is not re-run as an answer, nor read as a question
+    // a change asked in the conversation is not re-run as an answer, nor read as a question; a turn the conversation
+    // decided already chose its depth, and asking again at the other would reach the same conversation
     const change = turn.stagedProposals.length > 0;
-    const rerun = done && !overview && !change;
+    const rerun = done && !overview && !change && !r.conversationDecided;
     const why = change ? "" : r.why;
     if (!why && !r.subject && !r.downgradedFrom && !rerun) return null;
     return (
