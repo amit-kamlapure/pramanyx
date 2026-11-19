@@ -83,6 +83,9 @@ interface Props {
   address?: string;
   /** The coworker's layout for the conversation (`chat/harnessLook.ts`): the Ask panel's. */
   harness?: boolean;
+  /** The one coworker's conversation at full size (a Data Canvas, 2026-11-20): with `harness`, the Ask panel's composer
+   *  and conversation, as beside the work. */
+  oneConversation?: boolean;
   /** Told the conversation's id and its first question once it has one: the Ask panel names its tab by it. */
   onSession?: (session: string, title: string) => void;
   /** A new conversation, beside this one: what the composer's /new does. Absent, /new is not offered. */
@@ -349,8 +352,19 @@ function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, se
             ]} />
         )}
 
+        {/* The one conversation (2026-11-20) has no agent picker: a saved agent is asked by name in the conversation. One
+            the person arrived talking to (an agent's own Chat door) is still said here, and can be let go. */}
+        {plain && agentId && setAgentId && (
+          <span data-testid="composer-agent" className="aug-fs-xs" style={{ marginRight: "auto", display: "inline-flex", alignItems: "center", gap: 6, color: "var(--t2)" }}>
+            Talking to {agents?.find(a => a.id === agentId)?.name ?? "a saved agent"}
+            <Button variant="ghost" size="icon-xs" aria-label="Stop talking to this agent" title="Stop talking to this agent" onClick={() => setAgentId("")}>
+              <Icon name="close" size={12} />
+            </Button>
+          </span>
+        )}
+
         {/* Agent picker — answer AS a saved user-defined persona.
-            Hidden when the roster is empty (flag off → the list endpoint 404s → []), and in the Ask panel. */}
+            Hidden when the roster is empty (flag off → the list endpoint 404s → []), and in the one conversation. */}
         {!plain && (agents?.length ?? 0) > 0 && setAgentId && (
           <SelectField bespoke
             value={agentId ?? ""}
@@ -789,7 +803,7 @@ function AgentLandingBlock({ agent, connectionName }: { agent: UserAgent; connec
   );
 }
 
-export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQuestion, initialMode, initialInsightId, capabilities, initialAgentId, beside = false, address, harness = false, onSession, onNew, takesQueued = false }: Props) {
+export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQuestion, initialMode, initialInsightId, capabilities, initialAgentId, beside = false, address, harness = false, oneConversation = false, onSession, onNew, takesQueued = false }: Props) {
   // Read during the first render, into a ref, because both this component and page.tsx's
   // URL-sync effect rewrite the query string — whichever ran first would erase the id
   // before the restore below could read it. A ref initializer is safe here specifically
@@ -898,7 +912,10 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
 
   const [input, setInput]           = useState("");
   // the Ask panel beside a page sends every question to the conversation, which decides how far to go
-  const inPanel = beside && harness;
+  // The one coworker's conversation (2026-11-20): the Ask panel beside the work, and a Data Canvas — its page and an
+  // opened canvas, scoped to the canvas's tables. One composer with no Quick/Agent picker (/agent goes deep), the same
+  // abilities and one Allow rule, staged cards, Keep going, plans and helpers.
+  const inPanel = harness && (beside || oneConversation);
   const [mode, setMode]             = useState<ChatMode>(inPanel ? "ask" : "investigate");
   // User-defined agents: the roster + the picked persona.
   const [agents, setAgents]         = useState<UserAgent[]>([]);

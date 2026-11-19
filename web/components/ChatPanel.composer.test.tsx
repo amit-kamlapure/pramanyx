@@ -77,7 +77,26 @@ describe("the Ask composer", () => {
     act(() => setAskSubject(null));
   });
 
-  it("on its own page, where the picker stays, still says Agent or Quick", async () => {
+  it("on a Data Canvas is the one conversation: the panel's composer, no picker, /agent to go deep (2026-11-20)", async () => {
+    render(<QueryClientProvider client={new QueryClient()}><ChatPanel connectionId="sheets" canvasId="cv1" harness oneConversation /></QueryClientProvider>);
+    await act(async () => {});
+    expect(screen.getByTestId("chat-empty-how")).toHaveTextContent("Answers straight away. Type /agent to investigate in depth.");
+    expect(screen.queryByRole("radiogroup", { name: "How to answer" })).toBeNull();
+    const box = screen.getByRole("textbox") as HTMLTextAreaElement;
+    fireEvent.change(box, { target: { value: "how many orders?" } });
+    fireEvent.keyDown(box, { key: "Enter" });
+    expect(sent.at(-1)?.body).toMatchObject({ depth: "quick" });
+  });
+
+  it("says which saved agent the person arrived talking to, and lets it go", async () => {
+    render(<QueryClientProvider client={new QueryClient()}><ChatPanel connectionId="sheets" harness oneConversation initialAgentId="ag1" /></QueryClientProvider>);
+    await act(async () => {});
+    expect(screen.getByTestId("composer-agent")).toHaveTextContent("Talking to");
+    fireEvent.click(screen.getByRole("button", { name: "Stop talking to this agent" }));
+    expect(screen.queryByTestId("composer-agent")).toBeNull();
+  });
+
+  it("on the legacy chat page, where the picker stays, still says Agent or Quick", async () => {
     render(<QueryClientProvider client={new QueryClient()}><ChatPanel connectionId="sheets" /></QueryClientProvider>);
     await act(async () => {});
     expect(screen.getByTestId("chat-empty-how")).toHaveTextContent("Agent investigates in depth — switch to Quick for a straight answer.");

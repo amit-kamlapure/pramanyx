@@ -684,6 +684,8 @@ export function CanvasWorkspace({ canvas, connections, allConnections, onClose, 
         }}>
           <ChatPanel
             key={chatKey}
+            harness
+            oneConversation
             address={`canvas:${canvas.id}`}
             connectionId={connectionId}
             canvasId={canvas.id}
