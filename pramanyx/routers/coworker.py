@@ -240,12 +240,23 @@ def file_the_turn(session: str, trace_id: str, event: CoworkerTraceEvent) -> Opt
     if not question or not answer or not _SESSION_NAME.match(session) or not TRACE_NAME.match(trace_id):
         return None
     try:
-        from pramanyx.db.history import get_investigation, save_chat_turn
+        from pramanyx import telemetry
+        from pramanyx.db.history import chat_session_turn_ids, get_investigation, restate_chat_turn, save_chat_turn
         if get_investigation(trace_id):
             return trace_id
-        return save_chat_turn(question[:2000], str(event.conn_id or ""), answer[:4000], "",
-                              session_id=f"coworker:{session}", inv_id=trace_id,
-                              status="complete" if event.ok is not False else "interrupted")
+        # the person's own question, asked by the coworker as a step of this turn and filed in its conversation already:
+        # that row takes the reply, keeping its query and rows, so the conversation holds the question once
+        conversation = f"coworker:{session}"
+        for step in chat_session_turn_ids(conversation):
+            row = get_investigation(step) or {}
+            if row.get("trace_id") == trace_id and str(row.get("question") or "").strip() == question:
+                restate_chat_turn(step, answer[:4000])
+                return step
+        # the turn's row names its trace, so the conversation's turn opens on the run in Agent Ops
+        with telemetry.bind_trace(trace_id):
+            return save_chat_turn(question[:2000], str(event.conn_id or ""), answer[:4000], "",
+                                  session_id=conversation, inv_id=trace_id,
+                                  status="complete" if event.ok is not False else "interrupted")
     except Exception:
         logger.debug("a coworker turn was not filed in the conversation store", exc_info=True)
         return None

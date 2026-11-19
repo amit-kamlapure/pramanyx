@@ -427,6 +427,14 @@ def save_chat_turn(
     # ``inv_id`` (CP-4) — the caller's id when the turn already has one elsewhere (the
     # receipt a converse tool minted), so the row and the receipt share the key.
     inv_id = inv_id or uuid.uuid4().hex[:8]
+    if not session_id:
+        # One record for the coworker's two places (2026-11-20): a question the coworker asked as a step of its turn runs
+        # with that turn's conversation in scope (`coworker:<session>`, set where the coworker claimed it), and is filed
+        # in that conversation, not as a conversation of its own.
+        from pramanyx.org.context import current_session_id
+        ambient = current_session_id() or ""
+        if ambient.startswith("coworker:"):
+            session_id = ambient
     sid = session_id or uuid.uuid4().hex[:12]
     now = _now()
     c = _conn()
@@ -459,6 +467,18 @@ def save_chat_turn(
     c.commit()
     c.close()
     return inv_id
+
+
+def restate_chat_turn(inv_id: str, headline: str) -> bool:
+    """A chat turn's answer as the person was given it (2026-11-20): the coworker asked the person's own question as a
+    step and then answered them in its own words, so the step's row — its query, its rows and its receipt kept — reads
+    that reply rather than holding the same question twice in one conversation. True when a turn was restated."""
+    c = _conn()
+    ensure_once(c, _ensure_schema)
+    n = c.execute("UPDATE investigations SET headline = ? WHERE id = ? AND kind = 'chat'", (str(headline)[:4000], inv_id)).rowcount
+    c.commit()
+    c.close()
+    return bool(n)
 
 
 def attach_envelope(inv_id: str, envelope: dict | None, *, said: str = "", asked: str = "", took_ms: int = 0,
