@@ -410,6 +410,9 @@ def test_the_ask_stream_ends_with_the_envelope_and_files_it(monkeypatch):
     filed: list[tuple[str, dict]] = []
     monkeypatch.setattr("pramanyx.db.history.attach_envelope",
                         lambda inv_id, env, **kw: filed.append((inv_id, env)) or True)
+    # a filed answer is also remembered, on a thread of its own that opens the history store; it is not under test here,
+    # and left running it raced the next test's migration of that store
+    monkeypatch.setattr("pramanyx.routers.investigations._remember_answer", lambda inv_id: None)
 
     async def body():
         for frame in converse_frames():
@@ -601,6 +604,9 @@ def test_the_stream_files_the_answer_as_it_was_said_and_the_question_as_it_was_a
     filed: list[dict] = []
     monkeypatch.setattr("pramanyx.db.history.attach_envelope",
                         lambda inv_id, env, **kw: filed.append(kw) or True)
+    # a filed answer is also remembered, on a thread of its own that opens the history store; it is not under test here,
+    # and left running it raced the next test's migration of that store
+    monkeypatch.setattr("pramanyx.routers.investigations._remember_answer", lambda inv_id: None)
 
     async def body():
         for frame in converse_frames():
@@ -641,3 +647,32 @@ def test_a_one_line_answer_is_kept_as_it_was():
     assert "said" not in (get_investigation(inv_id) or {}).get("report", {})
     [turn] = get_session_turns(sid)
     assert turn["headline"] == "There are 12." and turn["question"] == "how many?"
+
+
+def test_a_reload_brings_back_the_answers_receipt_so_its_sources_are_drawn_again():
+    # Seen live: a restored turn had no Sources and no "Why this number" — the receipt id the stream sent was not read back.
+    from pramanyx.db.history import attach_envelope, get_session_turns, save_chat_turn
+    from pramanyx.routers.investigations import _turn_to_ui_messages
+
+    sid = "reload-keeps-the-receipt"
+    inv_id = save_chat_turn(question="q", connection_id="conn-env", headline="h", sql="SELECT 1", session_id=sid)
+    frames = [*converse_frames(), {"type": "receipt_id", "receipt_id": "rcpt-77"}]
+    env = fold_frames(frames, question="q", connection_id="conn-env").model_dump()
+    assert env["provenance"]["receipt_id"] == "rcpt-77"
+    assert attach_envelope(inv_id, env) is True
+    [turn] = get_session_turns(sid)
+    assert turn["receipt_id"] == "rcpt-77"
+    [_, answer] = _turn_to_ui_messages(turn)
+    assert {"type": "data-receipt_id", "data": {"receipt_id": "rcpt-77"}} in answer["parts"]
+
+
+def test_a_turn_without_a_receipt_restores_as_before():
+    from pramanyx.db.history import get_session_turns, save_chat_turn
+    from pramanyx.routers.investigations import _turn_to_ui_messages
+
+    sid = "reload-no-receipt"
+    save_chat_turn(question="q", connection_id="conn-env", headline="h", sql="", session_id=sid)
+    [turn] = get_session_turns(sid)
+    assert "receipt_id" not in turn
+    assert not any(p["type"] == "data-receipt_id" for p in _turn_to_ui_messages(turn)[1]["parts"])
+

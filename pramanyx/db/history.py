@@ -932,6 +932,12 @@ def get_session_turns(session_id: str) -> list[dict]:
         # the question as the person asked it, where a tool filed the row under its own (`attach_envelope`)
         if isinstance(report, dict) and str(report.get("asked") or "").strip():
             d["question"] = str(report["asked"])
+        # the answer's public receipt, from the envelope it was filed with: what draws its sources and "Why this number"
+        # (a reload drew neither until 2026-11-19); absent on a turn filed before envelopes carried one
+        env = report.get("envelope") if isinstance(report, dict) else None
+        receipt = ((env.get("provenance") or {}).get("receipt_id") if isinstance(env, dict) else "") or ""
+        if str(receipt).strip():
+            d["receipt_id"] = str(receipt)
         if d["kind"] == "chat":
             d["sql"]         = report.get("sql", "")
             d["columns"]     = report.get("columns", [])

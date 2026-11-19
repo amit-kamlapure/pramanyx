@@ -7291,6 +7291,9 @@ def _turn_to_ui_messages(t: dict) -> list[dict]:
     """
     from pramanyx.kernel.jobs import UNCERTAIN_RESULT
 
+    # the answer's public receipt, as the stream sent it: its sources and "Why this number" are drawn from it
+    receipt = [{"type": "data-receipt_id", "data": {"receipt_id": t["receipt_id"]}}] if t.get("receipt_id") else []
+
     if (t.get("kind") or "chat") == "investigation":
         parts = []
         if t.get("deep_report"):
@@ -7299,6 +7302,7 @@ def _turn_to_ui_messages(t: dict) -> list[dict]:
                 "query_mode": "investigate",
                 "investigation_id": t["id"],
             }})
+        parts.extend(receipt)
         status = t.get("status") or "complete"
         if status != "complete":
             parts.append({"type": "data-error", "data": {
@@ -7347,6 +7351,7 @@ def _turn_to_ui_messages(t: dict) -> list[dict]:
     # reopened chat drew none (CT-5's survey: every proposal kind); the proposals the turn's
     # run staged are found by its trace and sent as the same part the stream sent.
     parts.extend(_staged_proposal_parts(t.get("trace_id") or ""))
+    parts.extend(receipt)
     if (t.get("status") or "complete") == "interrupted":
         parts.append({"type": "data-error", "data": {
             "message": f"This answer was interrupted — {UNCERTAIN_RESULT}.",
