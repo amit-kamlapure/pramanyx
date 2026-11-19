@@ -521,9 +521,12 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
             {/* room under the dashboard, so the floating toolbar never covers its last row */}
             <div aria-hidden="true" style={{ height: 72 }} />
           </div>
-          <CanvasToolbar tools={tools} onUndo={onUndo} onRedo={onRedo}
-            onChart={onAddPiece ? () => onAddPiece(target, "chart") : undefined}
-            onFilter={onAddPiece ? () => onAddPiece(target, "filter") : undefined} />
+          {/* the canvas's own tools: nothing to place on the Data view */}
+          {!dataView && (
+            <CanvasToolbar tools={tools} onUndo={onUndo} onRedo={onRedo}
+              onChart={onAddPiece ? () => onAddPiece(target, "chart") : undefined}
+              onFilter={onAddPiece ? () => onAddPiece(target, "filter") : undefined} />
+          )}
         </div>
 
         <aside aria-label="Setup" data-testid="builder-setup"
