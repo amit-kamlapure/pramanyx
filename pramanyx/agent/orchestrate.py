@@ -9,9 +9,8 @@ was one long turn with nothing to show for its parts. Two abilities here, each a
   - ``ask_in_parallel`` hands two or three questions that do not depend on each other to helpers, which answer them side
     by side through the governed answer pipeline, as `answer_question` does one.
 
-Hand-offs to specialists are abilities of their own: a deep analysis (`deep_analysis`), a new dashboard drafted by the
-dashboard drafter (`make_dashboard`), a monitor and its alert (`draft_monitor`), a person's saved agent
-(`delegate_task`). Continuing past the step limit is Keep going (Stage A).
+A part handed on is an ability of its own: a deep analysis (`deep_analysis`), a new dashboard drafted by the dashboard
+drafter (`make_dashboard`), a monitor and its alert (`draft_monitor`), a person's saved agent (`delegate_task`). Continuing past the step limit is Keep going (Stage A).
 """
 from __future__ import annotations
 
@@ -196,8 +195,8 @@ def steps_for(question: str, provider: Any) -> Optional[int]:
     found = parts_of(question)
     if not found:
         return None
-    from pramanyx.agent.tool_loop import _budget
-    return _budget(provider) + STEPS_PER_PART * (len(found) - 1)
+    from pramanyx.llm.profile import profile_for
+    return profile_for(provider.role).tool_loop_steps + STEPS_PER_PART * (len(found) - 1)
 
 
 def found_lines(results: list[dict], most: int = 8) -> list[str]:

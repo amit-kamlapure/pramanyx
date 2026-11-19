@@ -111,12 +111,15 @@ def test_the_conversation_is_told_a_request_has_parts(monkeypatch):
 
 
 def test_a_request_of_several_parts_has_room_for_each_and_a_single_question_keeps_the_models_budget(monkeypatch):
-    import pramanyx.agent.tool_loop as loop
+    from types import SimpleNamespace
+
+    import pramanyx.llm.profile as profile
     from pramanyx.agent.orchestrate import STEPS_PER_PART, steps_for
-    monkeypatch.setattr(loop, "_budget", lambda provider: 8)
+    monkeypatch.setattr(profile, "profile_for", lambda role: SimpleNamespace(tool_loop_steps=8))
+    coder = SimpleNamespace(role="coder")
     asked = "Our revenue dropped yesterday. Investigate why, create a monitoring dashboard, and notify the team if it happens again."
-    assert steps_for(asked, object()) == 8 + 2 * STEPS_PER_PART
-    assert steps_for("Why did revenue drop?", object()) is None
+    assert steps_for(asked, coder) == 8 + 2 * STEPS_PER_PART
+    assert steps_for("Why did revenue drop?", coder) is None
 
 
 def test_what_the_queries_found_goes_on_with_the_turn():

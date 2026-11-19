@@ -388,7 +388,8 @@ def _about_dashboard(focus: Any, connection_id: str, *, person: str) -> Subject:
         if card is None:
             continue
         one = {"id": card_id, "title": str(props.get("title") or card.title), "sql": str(card.sql or "")[:1500]}
-        render = card.render if isinstance(card.render, dict) else {}
+        render = getattr(card, "render", None)
+        render = render if isinstance(render, dict) else {}
         if wanted and isinstance(render.get("shown"), dict):
             # the one chart asked about, as it is drawn now: what a change to its look starts from (2026-11-19)
             from pramanyx.dashboards.chart_look import drawn

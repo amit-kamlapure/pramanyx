@@ -773,12 +773,12 @@ def converse_tools(connection_id: str, *, emit: Optional[Emit] = None,
         ),
     ] + action_tools(connection_id, agent=agent) + platform_tools(connection_id, session_id=session_id) + spotlight_roster(
         connection_id, session_id=session_id, emit=emit) + origin_tools(connection_id, person=person) + present_tools(
-        emit=emit) + delegation_tools(connection_id, emit=emit, session_id=session_id) + sheet_tools(sheet, emit=emit) + change_tools(
-        connection_id, dashboard, emit=emit, schema=schema_scope) + new_dashboard_tools(
-        connection_id, person, emit=emit, schema=schema_scope) + [
+        emit=emit) + delegation_tools(connection_id, emit=emit, session_id=session_id) + [
         # Stage 4 (2026-11-20): a request of several parts is planned and worked step by step, and questions that do not
         # depend on each other are answered by helpers side by side (`agent/orchestrate.py`)
-        plan_tool(emit), helpers_tool(connection_id, session_id=session_id, canvas_id=canvas_id, schema_scope=schema_scope)]
+        plan_tool(emit), helpers_tool(connection_id, session_id=session_id, canvas_id=canvas_id, schema_scope=schema_scope),
+    ] + sheet_tools(sheet, emit=emit) + change_tools(connection_id, dashboard, emit=emit, schema=schema_scope) + new_dashboard_tools(
+        connection_id, person, emit=emit, schema=schema_scope)
 
 
 class _Regrounded(BaseModel):
