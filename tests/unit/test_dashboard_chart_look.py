@@ -116,3 +116,9 @@ def test_a_refused_change_says_what_can_be_set_and_not_to_guess(chart):
     out = tools[1].run({"viz": {"monthFormat": "YYYY-MM"}})
     assert out["staged"] is False and "dates written as" in out["can_set"]
     assert "Do not try other names" in out["next"]
+
+
+def test_the_chart_tool_says_what_it_cannot_do_in_the_editors_words(chart):
+    # 2026-11-20: asked for a glow, the answer offered "lineWidth: 6" through "change_chart"
+    tool = change_tools(chart.home.connection_id, (chart.home.owner, chart.board, chart.card.id))[1]
+    assert "in the chart editor's words" in tool.description and "never this tool's name" in tool.description

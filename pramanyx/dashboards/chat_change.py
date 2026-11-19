@@ -155,7 +155,9 @@ def change_tools(connection_id: str, dashboard: Optional[tuple[str, ...]], *, em
                 "is measured, what colours it, its labels, a line's width or shape, its number format, its axes, its "
                 "legend, its reference lines. Name only the settings that change, from how it is drawn now (`drawn` in "
                 "what is on screen); the rest stay. Use it for any change to this chart's look; use change_dashboard only "
-                "to arrange the dashboard. It stages the change for the person to allow; never say it is done."),
+                "to arrange the dashboard. It stages the change for the person to allow; never say it is done. When a "
+                "change is not one it makes, say what can be changed in the chart editor's words (line width, dates "
+                "written as), never this tool's name nor a setting's field name."),
             parameters=_CHART_PARAMS,
             run=chart,
         ))

@@ -506,3 +506,5 @@ def test_the_conversation_is_told_its_tools_are_not_the_readers_words():
     prompt = converse_system_prompt("c1")
     assert TOOLS_UNNAMED in prompt
     assert "Never name one" in TOOLS_UNNAMED
+    # 2026-11-20: a chart's answer offered "lineWidth: 6" — a setting is named as the screen names it
+    assert "never by its field" in TOOLS_UNNAMED
