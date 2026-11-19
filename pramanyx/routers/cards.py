@@ -478,13 +478,17 @@ def run_card_route(card_id: str, preset: Optional[str] = None, start: Optional[s
         covers = phrases(spec)["covers"]
         table, col, why = grain_for(as_written, [], profile_entry_for(card.connection_id, statement_tables(as_written)) or {}, dialect)
         cut = None
+        # the range chosen is the card's window: one it worked out from today gives way (`focus.without_own_window`),
+        # or a range outside "the last 12 months" it was written for would read nothing
+        windowless, gave_way = F.without_own_window(base, dialect)
         if table is not None:
-            cut, why, _ = scoped_statement(base, table, window_predicate(col, spec.start, spec.end), dialect=dialect)
+            cut, why, _ = scoped_statement(windowless, table, window_predicate(col, spec.start, spec.end), dialect=dialect)
         if cut is None:
             scoped = {"covers": covers, "standing": True, "why": why, "grain": None}
         else:
-            sql, cut_on = cut, (table, col, dialect)
-            scoped = {"covers": covers, "standing": False, "why": "", "grain": f"{table}.{col}"}
+            sql, cut_on, base = cut, (table, col, dialect), windowless
+            scoped = {"covers": covers, "standing": False, "why": "", "grain": f"{table}.{col}",
+                      **({"own_window": "Its own window, reckoned from today, gave way to the range chosen."} if gave_way else {})}
     if shown is not None or unread:
         # Arc AP-7 — a card of a person's own query, shown as they asked
         try:

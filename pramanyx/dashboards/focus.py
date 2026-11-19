@@ -291,6 +291,58 @@ def _cut_through(sql: str, written: str, f: Focus, dialect: str, links: list[Lin
     return sql, "", used
 
 
+#: How the dialects a card is written in say "today": the parser's own nodes, and the calls it leaves as they are.
+_TODAY_NODES = frozenset({"CurrentDate", "CurrentDatetime", "CurrentTimestamp", "CurrentTimestampLTZ", "CurrentTime"})
+_TODAY_CALLS = frozenset({"NOW", "GETDATE", "TODAY", "SYSDATE", "SYSDATETIME", "LOCALTIMESTAMP"})
+
+
+def _from_today(node: Any) -> bool:
+    from sqlglot import exp
+    return any(type(n).__name__ in _TODAY_NODES or (isinstance(n, exp.Anonymous) and n.name.upper() in _TODAY_CALLS)
+               for n in node.walk())
+
+
+def _own_window(node: Any) -> bool:
+    """A condition bounding a column by a day worked out from today: the window a card draws for itself,
+    ``created_at >= DATE_SUB(DATE_TRUNC(CURRENT_DATE(), MONTH), INTERVAL 12 MONTH)``."""
+    from sqlglot import exp
+    if isinstance(node, exp.Paren):
+        node = node.unnest()
+    return isinstance(node, (exp.GT, exp.GTE, exp.LT, exp.LTE, exp.EQ, exp.Between)) \
+        and node.find(exp.Column) is not None and _from_today(node)
+
+
+def without_own_window(sql: str, dialect: Optional[str]) -> tuple[str, list[str]]:
+    """``sql`` with every window it works out from today taken out of its conditions, and those windows as written.
+
+    A dashboard's dates are the window once a reader chooses them (the user, 2026-11-19, on Operations: "check if global
+    date filters are working well"). Every card there was written for "the last 12 complete months", so a filter for this
+    month, or for any day before that, cut inside a window that held none of it and the card read empty with nothing said.
+    Only windows reckoned from today give way; a card's other conditions, and dates it names outright, stay as written."""
+    import sqlglot
+    from sqlglot import exp
+
+    from pramanyx.sql.lineage import sqlglot_dialect
+    d = sqlglot_dialect(dialect or "duckdb")
+    try:
+        tree = sqlglot.parse_one(sql, read=d)
+    except Exception:  # noqa: BLE001 — a statement the parser cannot read keeps its window, said by the cut that reads it
+        return sql, []
+    taken: list[str] = []
+    for where in list(tree.find_all(exp.Where)):
+        parts = list(where.this.flatten()) if isinstance(where.this, exp.And) else [where.this]
+        own = [p for p in parts if _own_window(p)]
+        if not own:
+            continue
+        taken.extend(p.sql(dialect=d) for p in own)
+        keep = [p for p in parts if not any(p is o for o in own)]
+        if keep:
+            where.set("this", exp.and_(*keep))
+        else:
+            where.pop()
+    return (tree.sql(dialect=d) if taken else sql), taken
+
+
 def cut_statement(sql: str, focus: list[Focus], dialect: Optional[str],
                   links: Optional[Callable[[], list[Link]]] = None) -> tuple[str, dict[str, Any]]:
     """``sql`` cut by every focus it can be — each table it reads replaced by itself filtered to the value, or, for a table
@@ -325,13 +377,20 @@ def cut_statement(sql: str, focus: list[Focus], dialect: Optional[str],
             continue
         sql = cut
         applied.append(words(f))
-    return sql, verdict(applied, not_cut, used)
+    gave_way: list[str] = []
+    if any(f.op == "dates" and words(f) in applied for f in focus):
+        # the chosen days are the card's window now: one it worked out from today gives way, and says so
+        sql, gave_way = without_own_window(sql, said)
+    return sql, verdict(applied, not_cut, used, gave_way)
 
 
-def verdict(applied: list[str], not_cut: list[str], through_: Optional[list[str]] = None) -> dict[str, Any]:
-    """Applied when the card was cut by every focus; otherwise what it was cut by and why not the rest."""
+def verdict(applied: list[str], not_cut: list[str], through_: Optional[list[str]] = None,
+            gave_way: Optional[list[str]] = None) -> dict[str, Any]:
+    """Applied when the card was cut by every focus; otherwise what it was cut by and why not the rest. ``own_window``
+    says the card's own window, reckoned from today, gave way to the days chosen."""
     return {"applied": not not_cut and bool(applied), "by": applied, "why": " ".join(not_cut),
-            **({"through": through_} if through_ else {})}
+            **({"through": through_} if through_ else {}),
+            **({"own_window": "Its own window, reckoned from today, gave way to the days chosen."} if gave_way else {})}
 
 
 def parsed(raw: list[dict[str, Any]]) -> list[Focus]:

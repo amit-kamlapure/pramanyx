@@ -12,7 +12,6 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
-import { Tooltip } from "@/components/ui/tooltip";
 import { SelectField } from "@/components/ui/select";
 import { dashboardFilterValues, type FilterValues } from "@/lib/api";
 import { MAX_GLOBAL_FILTERS } from "@/lib/dashboards/catalog";
@@ -263,18 +262,17 @@ export function shutFilters(next: boolean): void {
 /** For tests: forget what this browser kept. */
 export function resetFiltersShut(): void { shut = null; }
 
-/** What stands where the column was: the way back to it, and how many filters still hold a choice, so a reader never
- *  forgets the cards are narrowed. */
+/** What stands above the cards once the column is put away: the way back to it, and how many filters still hold a choice,
+ *  so a reader never forgets the cards are narrowed. It takes a line above the cards and none of their width (the user,
+ *  2026-11-19: "it should sit on top of the dashboard components ... no vertical space occupying dashboard area"). */
 export function FiltersShutStrip({ held }: { held: number }) {
-  const words = held ? `Show the filters · ${held} holding a choice` : "Show the filters";
   return (
-    <div data-testid="global-filters-shut" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, position: "sticky", top: 12 }}>
-      <Tooltip content={words} side="right">
-        <Button size="icon-sm" variant="secondary" aria-label={words} data-testid="global-filters-show" onClick={() => shutFilters(false)}>
-          <Icon name="filter" size={15} />
-        </Button>
-      </Tooltip>
-      {held > 0 && <span className="aug-fs-xs" data-testid="global-filters-held" style={{ color: "var(--t2)", fontVariantNumeric: "tabular-nums" }}>{held}</span>}
+    <div data-testid="global-filters-shut" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <Button size="sm" variant="secondary" data-testid="global-filters-show" onClick={() => shutFilters(false)}
+        aria-label={held ? `Show the filters · ${held} holding a choice` : "Show the filters"} style={{ gap: 6 }}>
+        <Icon name="filter" size={14} /> Filters
+        {held > 0 && <span data-testid="global-filters-held" style={{ color: "var(--t2)", fontVariantNumeric: "tabular-nums" }}>· {held}</span>}
+      </Button>
     </div>
   );
 }

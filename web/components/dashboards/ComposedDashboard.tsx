@@ -254,9 +254,6 @@ function DashboardRoot(props: ComponentRenderProps<{ title: string }>) {
   return <><DrillMenu /><DashboardRootBody {...props} /></>;
 }
 
-/** The width of the strip that stands where the filters column was, once a reader puts it away. */
-const SHUT_COLUMN = 32;
-
 function DashboardRootBody(props: ComponentRenderProps<{ title: string }>) {
   const { elements, focus } = useDashboard();
   const shut = useFiltersShut();
@@ -267,13 +264,20 @@ function DashboardRootBody(props: ComponentRenderProps<{ title: string }>) {
   const rest = { ...props, element: { ...props.element, children: keys.filter((_, i) => i !== at) }, children: kids.filter((_, i) => i !== at) };
   const held = (elements[keys[at]]?.children ?? [])
     .filter(key => heldBy(focus, key, elements[key]?.props as unknown as GlobalFilterProps)).length;
-  return (
-    <div style={{ display: "grid", gridTemplateColumns: `${shut ? SHUT_COLUMN : FILTER_COLUMN}px minmax(0, 1fr)`, gap: 14, alignItems: "start" }}>
-      <div style={{ minWidth: 0 }}>
-        {shut && <FiltersShutStrip held={held} />}
-        {/* put away, the column stays mounted: it is also what feeds the values the cards' queries read */}
-        <div hidden={shut} style={shut ? { display: "none" } : undefined}>{kids[at]}</div>
+  // put away, the column stays mounted, out of sight: it is also what feeds the values the cards' queries read
+  const column = <div hidden={shut} style={shut ? { display: "none" } : { minWidth: 0 }}>{kids[at]}</div>;
+  if (shut) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
+        <FiltersShutStrip held={held} />
+        {column}
+        <div style={{ minWidth: 0 }}><RootLayout {...rest} /></div>
       </div>
+    );
+  }
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: `${FILTER_COLUMN}px minmax(0, 1fr)`, gap: 14, alignItems: "start" }}>
+      {column}
       <div style={{ minWidth: 0 }}><RootLayout {...rest} /></div>
     </div>
   );
@@ -1194,13 +1198,15 @@ function useValuedRun(cs: CardState | undefined, range: BriefingRange | null | u
 
 /** A card a chosen value reached through a link: a small mark that says which columns it used when pointed at (the study's R16),
  *  so the words never sit over the card's own title. */
-function CutThrough({ ways }: { ways: string[] }) {
+function CutThrough({ ways, ownWindow }: { ways: string[]; ownWindow?: string }) {
   const columns = [...new Set(ways.map(w => w.split(", through ").pop() ?? w))];
-  const said = `Through ${columns.join(", ")}`;
+  // the card's own window giving way to the dates chosen is said too: its figure no longer covers what its query says
+  const said = [columns.length ? `Through ${columns.join(", ")}` : "", ownWindow ?? ""].filter(Boolean).join(". ");
   return (
-    <span data-testid="cut-through" role="img" aria-label={said} title={ways.join(". ")}
+    <span data-testid="cut-through" role="img" aria-label={said} title={[...ways, ownWindow ?? ""].filter(Boolean).join(". ")}
+      data-own-window={ownWindow ? true : undefined}
       style={{ position: "absolute", top: 10, right: 12, zIndex: 1, display: "inline-flex", color: "var(--t3)" }}>
-      <Icon name="link" size={13} />
+      <Icon name={columns.length ? "link" : "date"} size={13} />
     </span>
   );
 }
@@ -1244,6 +1250,7 @@ function DashboardCard({ element }: ComponentRenderProps<{ card: string; tone?: 
     : undefined), [focus, pick, id, drill, pageDoors.onSelect, placedOn]);
   const cut = cs?.run?.cut ?? null;
   const notCut = !!cut && !cut.applied && focusOfCard(spec, focus, id).length > 0;
+  const ownWindow = cut?.own_window ?? cs?.run?.scoped?.own_window;
   // v16 — this placement's own title, description and number look, read by the tile it draws
   const placed = element.props as Record<string, unknown>;
   const lookKey = JSON.stringify([placed.title, placed.show_title, placed.description, placed.number, placed.columns_look]);
@@ -1254,7 +1261,8 @@ function DashboardCard({ element }: ComponentRenderProps<{ card: string; tone?: 
       extra={{ attrs: { "data-card": id, "data-tone": tone ?? undefined },
         style: { boxShadow: tone ? `inset 3px 0 0 ${TONE_RULE[tone]}` : undefined, paddingLeft: tone ? 3 : 0 } }}>
       {key => <>{ignoring && !optedOut && <NotFiltered why="Its author set this card not to follow one of the filters in use." />}{optedOut ? cutBySomething && <NotFiltered why="Its author set this card not to be cut by the dashboard's filters." />
-        : notCut ? <NotFiltered why={cut?.why || undefined} /> : cut?.through?.length ? <CutThrough ways={cut.through} /> : filtering.on && <NotFiltered />}{status === "withheld"
+        : notCut ? <NotFiltered why={cut?.why || undefined} />
+        : cut?.through?.length || ownWindow ? <CutThrough ways={cut?.through ?? []} ownWindow={ownWindow} /> : filtering.on && <NotFiltered />}{status === "withheld"
         ? <WithheldTile />
         : !cs
           ? <SaidTile what="Not one of your cards">The dashboard places a card you do not have.</SaidTile>

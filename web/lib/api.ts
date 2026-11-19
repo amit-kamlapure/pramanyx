@@ -2939,7 +2939,8 @@ export interface CardRunResult {
   refresh: StoredCardRefresh;
   /** BR-9 — present when the run asked for a range: what the number covers, or `standing`
    *  with why the card's SQL could not be cut to it (no date on its tables). */
-  scoped?: { covers: string; standing: boolean; why: string; grain: string | null } | null;
+  /** `own_window`: the card's own window, reckoned from today, gave way to the range chosen. */
+  scoped?: { covers: string; standing: boolean; why: string; grain: string | null; own_window?: string } | null;
   /** Asked for with `compare`: the card's figure for the window its range is compared with,
    *  cut the same way. `word` is short enough to follow "higher than"; `covers` is the full
    *  phrase. `equal_age` is false until the range is final — part of any difference is then
@@ -2951,7 +2952,8 @@ export interface CardRunResult {
   ran?: { sql: string; params: Record<string, unknown> | null } | null;
   /** The board study — present when the run was asked with the dashboard's focus: whether it was cut by every chosen
    *  value (`by` what), and why not by the rest — a card that cannot be cut says so in its own place. */
-  cut?: { applied: boolean; by: string[]; why: string; through?: string[] } | null;
+  /** `own_window`: the card's own window, reckoned from today, gave way to the days a filter chose. */
+  cut?: { applied: boolean; by: string[]; why: string; through?: string[]; own_window?: string } | null;
   /** Arc AP-7 — a card of a person's own query, as it is shown: its figure, its table or its chart's points. */
   shown?: QueryShaped | null;
   duration_ms?: number;

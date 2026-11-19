@@ -340,3 +340,42 @@ def test_a_metric_is_cut_through_a_link_on_its_own_dates(monkeypatch):
     assert run["value"] == pytest.approx(130.0)
     assert run["cut"] == {"applied": True, "by": ["traffic_source = Email"], "why": "",
                           "through": ["traffic_source = Email, through order_items.user_id"]}
+
+
+# ── a card's own window gives way to the dashboard's dates (the user, 2026-11-19, on Operations) ──────────────────────
+
+OPERATIONS_RETURN_RATE = (
+    "SELECT SAFE_DIVIDE(COUNTIF(returned_at IS NOT NULL), COUNT(*)) AS return_rate FROM order_items "
+    "WHERE status <> 'Cancelled' AND created_at >= TIMESTAMP(DATE_SUB(DATE_TRUNC(CURRENT_DATE(), MONTH), INTERVAL 12 MONTH)) "
+    "AND created_at < TIMESTAMP(DATE_TRUNC(CURRENT_DATE(), MONTH))")
+
+
+def test_a_window_reckoned_from_today_is_taken_out_and_the_rest_stays():
+    from pramanyx.dashboards.focus import without_own_window
+
+    sql, taken = without_own_window(OPERATIONS_RETURN_RATE, "bigquery")
+    assert len(taken) == 2 and all("CURRENT_DATE" in t for t in taken)
+    assert "CURRENT_DATE" not in sql and "status <> 'Cancelled'" in sql
+    # duckdb's now() and current_date, and a window that is the whole condition
+    sql, taken = without_own_window("SELECT 1 FROM t WHERE d > now() - INTERVAL 30 DAY", "duckdb")
+    assert len(taken) == 1 and "WHERE" not in sql.upper()
+
+
+def test_dates_named_outright_and_other_conditions_are_the_cards_own_and_stay():
+    from pramanyx.dashboards.focus import without_own_window
+
+    fixed = "SELECT COUNT(*) FROM orders WHERE created_at >= DATE '2024-01-01' AND status = 'Shipped'"
+    assert without_own_window(fixed, "duckdb") == (fixed, [])
+    assert without_own_window("SELECT * FROM", "duckdb") == ("SELECT * FROM", [])        # unreadable: as written
+
+
+def test_a_date_filter_replaces_the_cards_own_window_and_says_so_a_value_filter_does_not():
+    from pramanyx.dashboards.focus import Focus, cut_statement
+
+    dates = Focus(table="order_items", column="created_at", op="dates", low="2024-03-01", high="2024-03-31")
+    sql, said = cut_statement(OPERATIONS_RETURN_RATE, [dates], "bigquery")
+    assert said["applied"] and "own_window" in said
+    assert "CURRENT_DATE" not in sql and "2024-03-01" in sql and "status <> 'Cancelled'" in sql
+    country = Focus(table="order_items", column="status", op="in", values=["Complete"])
+    sql, said = cut_statement(OPERATIONS_RETURN_RATE, [country], "bigquery")
+    assert said["applied"] and "own_window" not in said and "CURRENT_DATE" in sql

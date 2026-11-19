@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 /**
  * The dashboard's filters column put away and brought back (the user, 2026-11-19: "our Global filters need to be
- * collapsible"). Put away, a thin strip stands in its place saying how many filters still hold a choice; the column stays
+ * collapsible"; "it should sit on top of the dashboard components"). Put away, a button above the cards says how many filters
+ * still hold a choice, and the cards take the column's width; the column stays
  * mounted, because it also feeds the values the cards' queries read. The choice is the reader's, kept in their browser.
  */
 import { readFileSync } from "node:fs";
@@ -45,10 +46,28 @@ describe("the dashboard's filters column", () => {
     expect(screen.getByTestId("global-filters")).toBeVisible();
     fireEvent.click(screen.getByTestId("global-filters-hide"));
     expect(screen.getByTestId("global-filters-held")).toHaveTextContent("1");
+    // above the cards, not beside them: the button and the dashboard stand in one column, each the full width
+    const shut = screen.getByTestId("global-filters-shut");
+    expect(shut.parentElement?.style.flexDirection).toBe("column");
+    expect(shut.parentElement?.style.gridTemplateColumns).toBe("");
+    expect(shut.compareDocumentPosition(screen.getByTestId("dashboard")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByTestId("global-filters")).not.toBeVisible();          // still mounted, out of sight
     expect(window.localStorage.getItem("pramanyx:dashboard-filters-shut")).toBe("1");
     act(() => { fireEvent.click(screen.getByTestId("global-filters-show")); });
     expect(screen.queryByTestId("global-filters-shut")).toBeNull();
     expect(screen.getByTestId("global-filters")).toBeVisible();
+  });
+});
+
+describe("a card whose own window gave way to the dates chosen (2026-11-19)", () => {
+  it("says so on the card: its figure no longer covers what its query says", () => {
+    const own = "Its own window, reckoned from today, gave way to the days chosen.";
+    const ran = CARDS.map(c => ({ ...c, run: { columns: ["n"], rows: [["1"]], row_count: 1, caveats: [], error: null, value: 1,
+      refresh: null, cut: { applied: true, by: ["created_at 2024-03-01 to 2024-03-31"], why: "", own_window: own } } })) as unknown as CardState[];
+    render(<ComposedDashboard spec={withFilters()} cards={ran} host={HOST} focus={HELD} onFocus={vi.fn()} doors={{ onRefresh: vi.fn() }} />);
+    const marks = screen.getAllByTestId("cut-through");
+    expect(marks.length).toBeGreaterThan(0);
+    expect(marks[0]).toHaveAttribute("data-own-window");
+    expect(marks[0]).toHaveAttribute("aria-label", own);
   });
 });
