@@ -56,7 +56,7 @@ import {
   type BarChip, type FilterProperty, type ObjectBarWords,
 } from "@/components/dashboards/OntologyPieces";
 import {
-  FiltersFoldProvider, FiltersHead, FiltersMenuPlace, FiltersShutStrip, GlobalFiltersColumn, HeldReport, useFiltersFold, useFiltersShut,
+  FiltersFoldProvider, FiltersHead, FiltersMenuPlace, FiltersShutStrip, FiltersToggleContext, GlobalFiltersColumn, HeldReport, useFiltersFold, useFiltersShut,
 } from "@/components/dashboards/GlobalFilters";
 import { PLACE_WORDS, measureSection } from "@/lib/dashboards/placing";
 import { PlacementShown, type PlacementView } from "@/components/dashboards/placementView";
@@ -82,6 +82,7 @@ import { chooseIn, chosenOn, filterLink, filterSource, focusOfCard, focusWords, 
 import { toast } from "@/components/ui/toast";
 import { dashboardSubject } from "@/lib/askSubject";
 import { CardPrompt } from "@/components/dashboards/CardPrompt";
+import { DataTabShown, pagesOf } from "@/components/dashboards/dataTab";
 import type { Pick as ChartPick } from "@/components/charts/selection";
 import { AddRowPiece } from "@/components/dashboards/AddRowPiece";
 import { QueryFiltersPiece, QueryNarrowingProvider, readsTable, useQueryNarrowing, type FilterColumn } from "@/components/dashboards/QueryFilters";
@@ -268,8 +269,6 @@ function DashboardRoot(props: ComponentRenderProps<{ title: string; filters_shut
   );
 }
 
-/** How wide the strip is that stands for the filters put away: the filter icon's own width. */
-const FOLD_STRIP = 32;
 
 /** A filters column stays in reach while the Ask panel moves the page left (`--ask-pushed`, set by `AskPushedPage`): it
  *  stands as far in from the page's edge as the page moved, over the cards that pass under it, as a frozen column does in
@@ -297,16 +296,16 @@ function DashboardRootBody(props: ComponentRenderProps<{ title: string }>) {
   // put away, the column stays mounted, out of sight: it is also what feeds the values the cards' queries read
   const column = at < 0 ? null
     : <div hidden={shut} data-testid="dashboard-global-filter-column" style={shut ? { display: "none" } : { minWidth: 0, ...PINNED }}>{kids[at]}</div>;
+  const toggle = { columns, held: held + elsewhere };
   if (shut && columns) {
-    // one filter icon at the canvas's upper left stands for every column put away, and takes none of the page's height
+    // put away, the columns stay mounted out of sight; the button that brings them back sits under the pages (`FiltersShutStrip`)
     return (
-      <div data-testid="dashboard-filters-folded" style={{ display: "grid", gridTemplateColumns: `${FOLD_STRIP}px minmax(0, 1fr)`, gap: SPACE, alignItems: "start" }}>
-        <div style={{ alignSelf: "stretch", ...PINNED }}><FiltersShutStrip held={held + elsewhere} /></div>
-        <div style={{ minWidth: 0 }}>{column}<RootLayout {...rest} /></div>
-      </div>
+      <FiltersToggleContext.Provider value={toggle}>
+        <div data-testid="dashboard-filters-folded" style={{ minWidth: 0 }}>{column}<RootLayout {...rest} /></div>
+      </FiltersToggleContext.Provider>
     );
   }
-  if (at < 0) return <RootLayout {...props} />;
+  if (at < 0) return <FiltersToggleContext.Provider value={toggle}><RootLayout {...props} /></FiltersToggleContext.Provider>;
   return (
     <div style={{ display: "grid", gridTemplateColumns: `${FILTER_COLUMN}px minmax(0, 1fr)`, gap: SPACE, alignItems: "start" }}>
       {column}
@@ -352,7 +351,7 @@ function RootLayout({ element, children }: ComponentRenderProps<{ title: string 
           <div role="region" aria-label={element.props.title} data-testid="dashboard" style={{ display: "flex", flexDirection: "column", gap: SPACE, minWidth: 0 }}>
             <QueryFiltersHeld />
             <div data-testid="dashboard-filter-column" hidden style={{ display: "none" }}>{queryColumn}</div>
-            <ValuesBar spaced={false} /><FilteredBy /><FirstPageDoor />{others}
+            <TopFiltersButton /><ValuesBar spaced={false} /><FilteredBy /><FirstPageDoor />{others}
           </div>
         </QueryNarrowingProvider>
       );
@@ -362,13 +361,13 @@ function RootLayout({ element, children }: ComponentRenderProps<{ title: string 
         <div role="region" aria-label={element.props.title} data-testid="dashboard"
           style={{ display: "grid", gridTemplateColumns: `${(held.w ?? null) ? (held.w as number) * GRADE : FILTER_COLUMN}px minmax(0, 1fr)`, gap: SPACE, alignItems: "start" }}>
           <div data-testid="dashboard-filter-column" style={{ alignSelf: "stretch", minWidth: 0, ...PINNED }}><FiltersHead />{queryColumn}</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: SPACE, minWidth: 0 }}><ValuesBar spaced={false} /><FilteredBy /><FirstPageDoor />{others}</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: SPACE, minWidth: 0 }}><TopFiltersButton /><ValuesBar spaced={false} /><FilteredBy /><FirstPageDoor />{others}</div>
         </div>
       </QueryNarrowingProvider>
     );
   }
   if (first?.type !== "ObjectFilters") {
-    return <QueryNarrowingProvider table={null}><div role="region" aria-label={element.props.title} data-testid="dashboard"><ValuesBar /><FilteredBy /><FirstPageDoor />{children}</div></QueryNarrowingProvider>;
+    return <QueryNarrowingProvider table={null}><div role="region" aria-label={element.props.title} data-testid="dashboard"><TopFiltersButton /><ValuesBar /><FilteredBy /><FirstPageDoor />{children}</div></QueryNarrowingProvider>;
   }
   // A dashboard started from an object: its filter column at the left, the pieces it narrows beside it, and above them
   // what is chosen and how many objects that leaves (the rules hold the column to the root's first child, once).
@@ -379,6 +378,7 @@ function RootLayout({ element, children }: ComponentRenderProps<{ title: string 
       <div role="region" aria-label={element.props.title} data-testid="dashboard" style={{ display: "flex", flexDirection: "column", gap: SPACE, minWidth: 0 }}>
         <ObjectFiltersHeld />
         <div data-testid="dashboard-filter-column" hidden style={{ display: "none" }}>{column}</div>
+        <TopFiltersButton />
         <ValuesBar spaced={false} />
         <ObjectFilterWords entity={props.entity} properties={props.properties} set={props.set}>
           {said => <FilteredBy objects={said} />}
@@ -417,7 +417,13 @@ function RootLayout({ element, children }: ComponentRenderProps<{ title: string 
   );
 }
 
-/** A dashboard made from a file, its filters put away: how many columns hold a choice, said to the one filter icon. */
+/** On a dashboard of one page, the button that brings the filters back stands at the top of its cards. */
+function TopFiltersButton() {
+  const { elements } = useDashboard();
+  return <FiltersShutStrip under="top" hasPages={Object.values(elements).some(el => el?.type === "Tabs")} />;
+}
+
+/** A dashboard made from a file, its filters put away: how many columns hold a choice, said to the one filter button. */
 function QueryFiltersHeld() {
   const { narrowing } = useQueryNarrowing();
   return <HeldReport column="query" n={narrowing.length} />;
@@ -430,14 +436,6 @@ function ObjectFiltersHeld() {
   return <HeldReport column="object" n={held} />;
 }
 
-/** The dashboard's pages as a reader may open them, in order: a page hidden from readers is drawn only in the builder. */
-function pagesOf(elements: Spec["elements"], building: boolean): { key: string; name: string; label: string; hidden: boolean }[] {
-  const holder = Object.values(elements).find(el => el?.type === "Tabs");
-  return (holder?.children ?? []).map(key => {
-    const props = elements[key]?.props as { name: string; label: string; hidden?: boolean | null };
-    return { key, name: props.name, label: props.label, hidden: props.hidden === true };
-  }).filter(t => building || !t.hidden);
-}
 
 /** The words of a page being renamed, in the place of its tab: Enter or leaving keeps them, Escape does not. */
 function PageName({ label, onDone }: { label: string; onDone: (next: string | null) => void }) {
@@ -447,6 +445,20 @@ function PageName({ label, onDone }: { label: string; onDone: (next: string | nu
       onChange={e => setText(e.target.value)} onFocus={e => e.target.select()}
       onBlur={() => onDone(text.trim() && text.trim() !== label ? text.trim() : null)}
       onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") onDone(null); }} />
+  );
+}
+
+/** The builder's Data tab, first in the row of pages (2026-11-19): the data that backs the dashboard, on a view of its own. */
+function DataTabDoor() {
+  const dataTab = useContext(DataTabShown);
+  if (!dataTab) return null;
+  return (
+    <>
+      <Button size="xs" variant="ghost" data-testid="dashboard-data-tab" title="The data this dashboard's charts are built on" onClick={dataTab.show}>
+        <Icon name="table" size={13} /> Data
+      </Button>
+      <span aria-hidden="true" style={{ width: 1, alignSelf: "stretch", margin: "4px 2px", background: "var(--b1)" }} />
+    </>
   );
 }
 
@@ -460,9 +472,14 @@ function DashboardTabs({ element, children, bindings }: ComponentRenderProps<{ v
   const here = tabs.find(t => t.name === shown);
   const seen = tabs.filter(t => !t.hidden).length;
   const openNew = (name: string | null) => { if (name) setOpen(name); };
+  // a page asked for from the Data view: the canvas comes back on it
+  const asked = useContext(DataTabShown)?.page ?? null;
+  const [took, setTook] = useState(0);
+  if (asked && asked.n !== took) { setTook(asked.n); if (tabs.some(t => t.name === asked.name)) setOpen(asked.name); }
   return (
     <Tabs value={shown} onValueChange={v => setOpen(String(v))}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+        <DataTabDoor />
         <TabsList>
           {tabs.map(t => (renaming === t.key
             ? <PageName key={t.key} label={t.label} onDone={next => { setRenaming(null); if (next) pages?.rename(t.key, next); }} />
@@ -496,6 +513,7 @@ function DashboardTabs({ element, children, bindings }: ComponentRenderProps<{ v
           </DropdownMenu.Root>
         )}
       </div>
+      <FiltersShutStrip under="pages" hasPages />
       {children}
     </Tabs>
   );
@@ -507,7 +525,8 @@ function FirstPageDoor() {
   const { set } = useStateStore();
   if (!doors.onSelect || !doors.pages || Object.values(elements).some(el => el?.type === "Tabs")) return null;
   return (
-    <div style={{ marginBottom: 8 }}>
+    <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+      <DataTabDoor />
       <Button size="xs" variant="ghost" data-testid="dashboard-add-first-page" onClick={() => { const name = doors.pages?.add(); if (name) set("/tab", name); }}>
         <Icon name="plus" size={12} /> Add a page
       </Button>

@@ -221,8 +221,8 @@ describe("the bar above the dashboard", () => {
     expect(screen.getAllByTestId("builder-line").length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: "Fold the layout" }));
     expect(screen.getByTestId("builder-pane-folded")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Open the data" }));
-    expect(screen.getByRole("radio", { name: "Data" })).toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Open the variables" }));
+    expect(screen.getByRole("radio", { name: "Variables" })).toBeChecked();
   });
 
   it("chooses the one element a change brings — a piece just placed is set up in the panel", () => {
@@ -347,6 +347,34 @@ describe("with the dashboard itself drawn", () => {
     s: { type: "Section", props: { title: "Notes", grid: 12 }, children: ["n"] },
     n: { type: "Note", props: { text: "Watch the overdue ones", w: 6, h: 4 }, children: [] },
   } };
+
+  it("opens the Data tab in place of the canvas from the row of pages, and a page brings the canvas back on it (2026-11-19)", () => {
+    globalThis.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver;
+    const paged = { root: "c", state: { tab: "one" }, datasets: { orders: { label: "Orders", sql: "SELECT * FROM shop.orders", table: "shop.orders" } },
+      elements: {
+        c: { type: "Cockpit", props: { title: "Ops" }, children: ["tabs"] },
+        tabs: { type: "Tabs", props: { value: { $bindState: "/tab" } }, children: ["t1", "t2"] },
+        t1: { type: "Tab", props: { name: "one", label: "One" }, children: ["s1"] },
+        t2: { type: "Tab", props: { name: "two", label: "Two" }, children: ["s2"] },
+        s1: { type: "Section", props: { title: "First", grid: 12 }, children: ["n1"] },
+        s2: { type: "Section", props: { title: "Second", grid: 12 }, children: ["n2"] },
+        n1: { type: "Note", props: { text: "On page one", w: 6, h: 4 }, children: [] },
+        n2: { type: "Note", props: { text: "On page two", w: 6, h: 4 }, children: [] },
+      } } as unknown as DashboardSpec;
+    render(<Page start={paged} />);
+    expect(screen.getByText("On page one")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("dashboard-data-tab"));
+    // the data that backs the dashboard, on a view of its own: its datasets, the one chosen set up beside them
+    expect(screen.getByTestId("data-view")).toBeInTheDocument();
+    expect(screen.getByTestId("builder-canvas")).not.toBeVisible();
+    expect(screen.getByTestId("data-dataset")).toHaveTextContent("Ordersshop.orders");
+    expect(screen.getByLabelText("The dataset's name")).toHaveValue("Orders");
+    expect(screen.getAllByTestId("data-view-page").map(b => b.textContent)).toEqual(["One", "Two"]);
+    fireEvent.click(screen.getAllByTestId("data-view-page")[1]);
+    expect(screen.queryByTestId("data-view")).toBeNull();
+    expect(screen.getByTestId("builder-canvas")).toBeVisible();
+    expect(screen.getByText("On page two")).toBeInTheDocument();
+  });
 
   it("says the room a step has just given, never the one before it", () => {
     globalThis.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver;

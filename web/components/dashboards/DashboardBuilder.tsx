@@ -24,7 +24,8 @@ import { CanvasScale } from "@/components/dashboards/cellBox";
 import type { DashboardHandle, ReadState } from "@/components/dashboards/ComposedDashboard";
 import { PlacementShown, type PlacementView } from "@/components/dashboards/placementView";
 import { PLACE_SIZE, PLACE_WORDS, cellOf, freeSpot, measureSection, type PlaceKind, type PlacedBox } from "@/lib/dashboards/placing";
-import { OpenDatasetContext } from "@/components/dashboards/Datasets";
+import { DataView, OpenDatasetContext } from "@/components/dashboards/Datasets";
+import { DataTabShown, pagesOf, type DataTab } from "@/components/dashboards/dataTab";
 import { PieceSetup, type CardDate } from "@/components/dashboards/PieceSetup";
 import type { CardHolds } from "@/lib/dashboards/cardHolds";
 import { ChoiceSetup, DataPane, SetSetup, ValueSetup, readingElements } from "@/components/dashboards/WiringSetup";
@@ -187,12 +188,15 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
   // the layout pane, folded to a strip so the canvas has the room (the dashboards study, R7, 2026-11-18); one click opens it
   const [paneOpen, setPaneOpen] = useState(false);
   const openPane = (t: "layout" | "data") => { setTab(t); setPaneOpen(true); if (t === "layout") setWire(null); };
-  // a dataset a chart is built on, opened in the Data pane from the chart's setup (2026-11-19); counted, so a second
-  // click on the same one opens it again
+  // the Data tab (2026-11-19): the data that backs the dashboard on a view of its own, in place of the canvas; a dataset
+  // opened from a chart built on it is chosen there, and a page chosen there brings the canvas back on it
+  const [dataView, setDataView] = useState(false);
   const [dataOpen, setDataOpen] = useState<{ name: string; n: number } | null>(null);
+  const [askedPage, setAskedPage] = useState<{ name: string; n: number } | null>(null);
   const openDataset = useCallback((name: string) => {
-    setTab("data"); setPaneOpen(true); setDataOpen(o => ({ name, n: (o?.n ?? 0) + 1 }));
+    setDataView(true); setDataOpen(o => ({ name, n: (o?.n ?? 0) + 1 }));
   }, []);
+  const dataTab = useMemo<DataTab>(() => ({ show: () => setDataView(true), page: askedPage }), [askedPage]);
   // a set, a value or a choice chosen in the Data tab: `set:<name>`, `value:<name>`, `choice:<name>`
   const [wire, setWire] = useState<string | null>(null);
   const wireName = wire ? wire.slice(wire.indexOf(":") + 1) : "";
@@ -354,6 +358,7 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
 
   return (
     <OpenDatasetContext.Provider value={openDataset}>
+    <DataTabShown.Provider value={dataTab}>
     <div data-testid="dashboard-builder" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
       {bar}
       <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: `${paneOpen ? 232 : 44}px minmax(0, 1fr) 304px` }}>
@@ -362,14 +367,14 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
             style={{ minHeight: 0, borderRight: "1px solid var(--b1)", background: "var(--bg-1)", display: "flex", flexDirection: "column", alignItems: "center", gap: 6, paddingTop: 10 }}>
             <Button size="icon-sm" variant="outline" aria-label="Open the layout" title={`Open the layout · ${lines} ${lines === 1 ? "line" : "lines"}`}
               data-testid="builder-open-layout" onClick={() => openPane("layout")}><Icon name="unfold" size={16} /></Button>
-            <Button size="icon-sm" variant="outline" aria-label="Open the data" title="Open the data: datasets, values, sets and choices"
+            <Button size="icon-sm" variant="outline" aria-label="Open the variables" title="Open the variables: values, sets and choices"
               data-testid="builder-open-variables" onClick={() => openPane("data")}><Icon name="json" size={16} /></Button>
           </aside>
         ) : (
         <aside aria-label="Layout" style={{ minHeight: 0, overflow: "auto", borderRight: "1px solid var(--b1)", background: "var(--bg-1)", display: "flex", flexDirection: "column" }}>
           <div style={{ padding: "10px 10px 0", display: "flex", alignItems: "center", gap: 6 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <Segmented label="The left pane" value={tab} options={[{ value: "layout", label: "Layout" }, { value: "data", label: "Data" }]}
+              <Segmented label="The left pane" value={tab} options={[{ value: "layout", label: "Layout" }, { value: "data", label: "Variables" }]}
                 onChange={v => { setTab(v as "layout" | "data"); if (v === "layout") setWire(null); }} />
             </div>
             <Button size="icon-sm" variant="ghost" aria-label="Fold the layout" title="Fold the layout away: the canvas takes the room"
@@ -377,7 +382,7 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
           </div>
           {tab === "data" ? (
             <DataPane spec={spec} selected={wire} onSelect={key => { setWire(key); setSelected(null); }} onChange={apply}
-              connectionId={connectionId} schema={schema} cardReads={cardReads} onFollow={onFollow} opened={dataOpen} />
+              connectionId={connectionId} schema={schema} cardReads={cardReads} />
           ) : (
             <>
               <PaneLabel>Layout · {lines} {lines === 1 ? "line" : "lines"}</PaneLabel>
@@ -477,7 +482,16 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
               {scale < 1 ? `Fit · ${zoom}%` : "100%"}
             </Button>
           </div>
-          <div ref={canvas} data-testid="builder-canvas" data-dashboard-ground="" style={{ flex: 1, minHeight: 0, overflow: "auto", padding: PAD, background: "var(--bg-0)" }}>
+          {dataView && (
+            <div style={{ flex: 1, minHeight: 0, display: "flex", background: "var(--bg-0)" }}>
+              <DataView spec={spec} connectionId={connectionId} onChange={apply} onFollow={onFollow} opened={dataOpen}
+                pages={pagesOf(spec.elements, true)}
+                onPage={name => { setDataView(false); if (name) setAskedPage(p => ({ name, n: (p?.n ?? 0) + 1 })); }} />
+            </div>
+          )}
+          {/* the canvas stays drawn under the Data view, as it was: back on a page, nothing is read again */}
+          <div ref={canvas} data-testid="builder-canvas" data-dashboard-ground="" hidden={dataView}
+            style={{ flex: 1, minHeight: 0, overflow: "auto", padding: PAD, background: "var(--bg-0)", display: dataView ? "none" : undefined }}>
             {above}
             <div style={{ position: "relative", width: layout ? layout * scale : undefined, height: room.height ? room.height * scale : undefined }}>
               <div ref={page} data-testid="builder-page" data-zoom={zoom}
@@ -525,6 +539,7 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
         </aside>
       </div>
     </div>
+    </DataTabShown.Provider>
     </OpenDatasetContext.Provider>
   );
 }

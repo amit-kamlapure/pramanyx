@@ -5,7 +5,7 @@
 import { change, fireEvent, render, screen, waitFor } from "@/lib/testing";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DatasetLine, DatasetsList, OpenDatasetContext, addDatasets, followDataset, moveToDataset, tableDataset } from "@/components/dashboards/Datasets";
+import { DataView, DatasetLine, OpenDatasetContext, addDatasets, followDataset, moveToDataset, tableDataset } from "@/components/dashboards/Datasets";
 import { MAX_DATASETS, builtOn, cardsBuiltOn, datasetOfCard, dropDataset, freshDatasetName, placeCard, type DashboardSpec } from "@/lib/dashboards/edit";
 import { cardsDashboardSpec } from "@/lib/dashboards/start";
 
@@ -43,12 +43,15 @@ describe("holding datasets", () => {
   });
 });
 
-describe("the Data pane's datasets", () => {
-  const pane = (spec: DashboardSpec, onChange = vi.fn()) => { render(<DatasetsList spec={spec} connectionId="c" onChange={onChange} />); return onChange; };
+describe("the Data tab (2026-11-19)", () => {
+  const view = (spec: DashboardSpec, onChange = vi.fn(), extra: Partial<Parameters<typeof DataView>[0]> = {}) => {
+    render(<DataView spec={spec} connectionId="c" onChange={onChange} pages={[]} onPage={vi.fn()} {...extra} />);
+    return onChange;
+  };
 
   it("says how to get going when there are none, and adds the tables ticked", async () => {
-    const onChange = pane(blank());
-    expect(screen.getByTestId("data-datasets-empty")).toHaveTextContent("Add data to get going");
+    const onChange = view(blank());
+    expect(screen.getByTestId("data-view-empty")).toHaveTextContent("Add data to get going");
     fireEvent.click(screen.getByTestId("data-add-table"));
     fireEvent.click(await screen.findByRole("checkbox", { name: "shop.orders" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "shop.order lines" }));
@@ -60,7 +63,7 @@ describe("the Data pane's datasets", () => {
 
   it("adds a statement of one's own only once it is checked to read", async () => {
     api.previewDashboardQuery.mockResolvedValue({ connection_id: "c", refused: [], columns: [] });
-    const onChange = pane(blank());
+    const onChange = view(blank());
     fireEvent.click(screen.getByTestId("data-add-sql"));
     fireEvent.change(screen.getByLabelText("The dataset's name"), { target: { value: "Late orders" } });
     fireEvent.change(screen.getByLabelText("The dataset's SQL"), { target: { value: "SELECT * FROM shop.orders WHERE late" } });
@@ -71,11 +74,32 @@ describe("the Data pane's datasets", () => {
   });
 
   it("takes one off with ×", () => {
-    const onChange = pane(addDatasets(blank(), [ORDERS]).spec);
+    const onChange = view(addDatasets(blank(), [ORDERS]).spec);
     expect(screen.getByTestId("data-dataset")).toHaveTextContent("Ordersshop.orders");
     fireEvent.click(screen.getByRole("button", { name: "Take Orders off" }));
     expect(onChange.mock.calls[0][0].datasets).toBeUndefined();
     expect(onChange.mock.calls[0][1]).toBe("a dataset taken off by hand");
+  });
+
+  it("runs the statement as typed, and shows its first rows or its columns", async () => {
+    api.previewDashboardQuery.mockResolvedValue({ connection_id: "c", refused: [], more: true, duration_ms: 120,
+      columns: [{ name: "day", type: "DATE" }, { name: "total", type: "DOUBLE" }], rows: [["2026-11-01", 12.5], ["2026-11-02", 8]] });
+    view(addDatasets(blank(), [ORDERS]).spec);
+    expect(screen.getByTestId("data-dataset-result")).toHaveTextContent("Run it to see what it returns.");
+    fireEvent.change(screen.getByLabelText("The dataset's SQL"), { target: { value: "SELECT day, total FROM shop.orders" } });
+    fireEvent.click(screen.getByTestId("data-dataset-run"));
+    expect(await screen.findByTestId("data-dataset-rows")).toHaveTextContent("2026-11-0112.5");
+    expect(api.previewDashboardQuery).toHaveBeenCalledWith("c", expect.objectContaining({ sql: "SELECT day, total FROM shop.orders" }));
+    expect(screen.getByTestId("data-dataset-result")).toHaveTextContent("2 columns · the first 2 rows, and more");
+    fireEvent.click(screen.getByRole("radio", { name: "Schema" }));
+    expect(screen.getByTestId("data-dataset-schema")).toHaveTextContent("daydate · DATE");
+  });
+
+  it("goes back to the canvas on a page chosen above it", () => {
+    const onPage = vi.fn();
+    view(blank(), vi.fn(), { pages: [{ name: "one", label: "One", hidden: false }, { name: "two", label: "Two", hidden: true }], onPage });
+    fireEvent.click(screen.getAllByTestId("data-view-page")[1]);
+    expect(onPage).toHaveBeenCalledWith("two");
   });
 });
 
@@ -119,31 +143,29 @@ describe("charts built on a dataset (2026-11-19: link them)", () => {
     expect(api.keepDashboardQuery).not.toHaveBeenCalled();
   });
 
-  it("the pane says how many charts each holds, renames without running, and sends a new statement to the charts", async () => {
+  it("the Data tab says how many charts each holds, renames without running, and sends a new statement to the charts", async () => {
     api.previewDashboardQuery.mockResolvedValue({ connection_id: "c", refused: [] });
     const onChange = vi.fn();
     const onFollow = vi.fn(async () => [] as string[]);
-    render(<DatasetsList spec={linked()} connectionId="c" onChange={onChange} onFollow={onFollow} />);
+    render(<DataView spec={linked()} connectionId="c" onChange={onChange} onFollow={onFollow} pages={[]} onPage={vi.fn()} />);
     expect(screen.getByTestId("data-dataset")).toHaveTextContent("shop.orders · 2 charts");
-    fireEvent.click(screen.getByRole("button", { name: "Change Orders" }));
     fireEvent.change(screen.getByLabelText("The dataset's name"), { target: { value: "Paid orders" } });
     fireEvent.click(screen.getByTestId("data-dataset-keep"));
     expect(onChange.mock.calls[0][0].datasets.orders).toEqual({ ...ORDERS, label: "Paid orders" });
     expect(api.previewDashboardQuery).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Change Orders" }));
     fireEvent.change(screen.getByLabelText("The dataset's SQL"), { target: { value: "SELECT * FROM shop.orders WHERE paid" } });
     fireEvent.click(screen.getByTestId("data-dataset-keep"));
     await waitFor(() => expect(onFollow).toHaveBeenCalledWith("orders", { label: "Orders", sql: "SELECT * FROM shop.orders WHERE paid" }));
   });
 
-  it("shows what stops the charts following, and keeps the editor open", async () => {
+  it("shows what stops the charts following, and keeps the statement as typed", async () => {
     api.previewDashboardQuery.mockResolvedValue({ connection_id: "c", refused: [] });
-    render(<DatasetsList spec={linked()} connectionId="c" onChange={vi.fn()} onFollow={async () => ["Trend: day is not a column of what it returns."]} />);
-    fireEvent.click(screen.getByRole("button", { name: "Change Orders" }));
+    render(<DataView spec={linked()} connectionId="c" onChange={vi.fn()} pages={[]} onPage={vi.fn()}
+      onFollow={async () => ["Trend: day is not a column of what it returns."]} />);
     fireEvent.change(screen.getByLabelText("The dataset's SQL"), { target: { value: "SELECT total FROM shop.orders" } });
     fireEvent.click(screen.getByTestId("data-dataset-keep"));
     expect(await screen.findByTestId("data-dataset-refused")).toHaveTextContent("Trend: day is not a column");
-    expect(screen.getByTestId("data-dataset-editor")).toBeInTheDocument();
+    expect(screen.getByLabelText("The dataset's SQL")).toHaveValue("SELECT total FROM shop.orders");
   });
 });
 

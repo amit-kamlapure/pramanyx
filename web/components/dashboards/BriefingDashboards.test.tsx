@@ -1133,9 +1133,10 @@ describe("your own query on the dashboard (Arc AP-7)", () => {
       // its SQL is the dataset's: no query of its own to change here, and a way to one
       expect(await screen.findByTestId("chart-built-on")).toHaveTextContent("Orders");
       expect(screen.queryByTestId("query-setup")).toBeNull();
-      fireEvent.click(screen.getByRole("radio", { name: "Data" }));
+      // the dataset, opened from the chart in the Data tab, its statement there to change
+      fireEvent.click(screen.getByTestId("chart-dataset-open"));
+      expect(screen.getByTestId("data-view")).toBeInTheDocument();
       expect(screen.getByTestId("data-dataset")).toHaveTextContent("Your own SQL · 1 chart");
-      fireEvent.click(screen.getByRole("button", { name: "Change Orders" }));
       fireEvent.change(screen.getByLabelText("The dataset's SQL"), { target: { value: "SELECT day, sales FROM thelook.orders WHERE paid" } });
       fireEvent.click(screen.getByTestId("data-dataset-keep"));
       await waitFor(() => expect(api.keepDashboard).toHaveBeenCalled());
@@ -1186,7 +1187,7 @@ describe("your own query on the dashboard (Arc AP-7)", () => {
       const line = await screen.findByTestId("chart-dataset-line");
       expect(within(screen.getByTestId("viz-visualization")).getByTestId("chart-dataset-line")).toBe(line);
       fireEvent.click(within(line).getByTestId("chart-dataset-open"));
-      expect(screen.getByRole("radio", { name: "Data" })).toBeChecked();
+      expect(screen.getByTestId("data-view")).toBeInTheDocument();                // the Data tab, in place of the canvas
       expect(await screen.findByTestId("data-dataset-editor")).toBeInTheDocument();
       expect(screen.getByLabelText("The dataset's name")).toHaveValue("Orders");
       fireEvent.click(within(line).getByRole("button", { name: "Change dataset" }));
@@ -1281,7 +1282,7 @@ describe("your own query on the dashboard (Arc AP-7)", () => {
     fireEvent.click(screen.getByTestId("card-fold-reads"));
     const setup = await screen.findByTestId("query-setup");
     expect(within(setup).getByTestId("query-values-open")).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: "Data" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Variables" })).toBeInTheDocument();
   });
 });
 

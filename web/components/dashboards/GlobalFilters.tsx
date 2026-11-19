@@ -298,16 +298,24 @@ function FiltersMenuSlot({ compact = false }: { compact?: boolean }) {
   return place ? <span ref={place} data-testid="filters-menu-place" data-compact={compact ? "1" : undefined} style={{ display: "inline-flex" }} /> : null;
 }
 
-/** What stands for the filters once put away: one filter icon at the canvas's upper left, on a strip as narrow as the icon,
- *  and under it how many things cut the dashboard (its menu), so a reader never forgets the cards are narrowed. It takes
- *  none of the page's height (the user, 2026-11-19: "no vertical space occupying dashboard area"). */
-export function FiltersShutStrip({ held }: { held: number }) {
-  const { setShut } = useFiltersFold();
+/** Whether the dashboard draws a filters column at all, and how many choices its columns hold: said by the dashboard's
+ *  body to the button that stands for them once put away, which sits under the pages (2026-11-19). */
+export const FiltersToggleContext = createContext<{ columns: boolean; held: number } | null>(null);
+
+/** What stands for the filters once put away (the user, 2026-11-19, of a peer product's editor: "Global filters", tight
+ *  under the page tabs): one button that brings them back, and beside it how many things cut the dashboard (its menu),
+ *  so a reader never forgets the cards are narrowed. `under` is where it is drawn: below the row of pages, or — on a
+ *  dashboard of one page — at the top of its cards. */
+export function FiltersShutStrip({ under, hasPages }: { under: "pages" | "top"; hasPages: boolean }) {
+  const { shut, setShut } = useFiltersFold();
+  const toggle = useContext(FiltersToggleContext);
+  if (!shut || !toggle?.columns || (under === "pages") !== hasPages) return null;
+  const held = toggle.held;
   return (
-    <div data-testid="global-filters-shut" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, position: "sticky", top: 12 }}>
-      <Button size="icon-sm" variant="secondary" data-testid="global-filters-show" onClick={() => setShut(false)}
-        aria-label={held ? `Show the filters · ${held} holding a choice` : "Show the filters"} title="Show the filters">
-        <Icon name="filter" size={15} />
+    <div data-testid="global-filters-shut" style={{ display: "flex", alignItems: "center", gap: 6, margin: under === "pages" ? "8px 0 2px" : "0 0 4px" }}>
+      <Button size="xs" variant="outline" data-testid="global-filters-show" onClick={() => setShut(false)}
+        aria-label={held ? `Show the global filters · ${held} holding a choice` : "Show the global filters"} title="Show the filters">
+        <Icon name="filter" size={13} /> Global filters
       </Button>
       {/* what cuts the dashboard, by count: its menu takes each off, clears all or copies the link */}
       <FiltersMenuSlot compact />

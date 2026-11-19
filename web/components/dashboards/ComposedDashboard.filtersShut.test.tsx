@@ -42,22 +42,38 @@ const HOST = { range: { status: "final" as const }, cards: { c7f3a001: { status:
 const HELD: DashboardFocus[] = [{ table: "titles", column: "type", value: "", op: "in", values: ["Movie"], source: { card: "filter:f-type", field: "type" } }];
 
 describe("the dashboard's filters column", () => {
-  it("is put away to one filter icon at the left that says how many filters hold a choice, stays mounted, and comes back", () => {
+  it("is put away to one Global filters button under the pages, beside how many things cut it, stays mounted, and comes back", () => {
     render(<ComposedDashboard spec={withFilters()} cards={CARDS} host={HOST} focus={HELD} onFocus={vi.fn()} doors={{ onRefresh: vi.fn() }} />);
     expect(screen.getByTestId("global-filters")).toBeVisible();
     fireEvent.click(screen.getByTestId("global-filters-hide"));
-    // under the icon, how many things cut the dashboard — its menu, no wider than the strip
-    expect(within(screen.getByTestId("global-filters-shut")).getByTestId("filters-menu")).toHaveTextContent(/^1$/);
-    expect(screen.getByRole("button", { name: "Show the filters · 1 holding a choice" })).toBeInTheDocument();
-    // beside the cards, as narrow as the icon: none of the page's height
-    const folded = screen.getByTestId("dashboard-filters-folded");
-    expect(folded.style.gridTemplateColumns).toBe("32px minmax(0, 1fr)");
-    expect(folded.contains(screen.getByTestId("dashboard"))).toBe(true);
+    const shut = screen.getByTestId("global-filters-shut");
+    expect(within(shut).getByRole("button", { name: "Show the global filters · 1 holding a choice" })).toHaveTextContent("Global filters");
+    // beside it, how many things cut the dashboard — its menu
+    expect(within(shut).getByTestId("filters-menu")).toHaveTextContent(/^1$/);
+    // tight under the row of pages (the user, 2026-11-19, of a peer product's editor), above the cards, the cards at full width
+    expect(shut.closest('[role="tablist"]')).toBeNull();
+    expect(screen.getByRole("tablist").compareDocumentPosition(shut) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(shut.compareDocumentPosition(screen.getAllByTestId("dashboard-card")[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByTestId("dashboard-filters-folded").style.gridTemplateColumns).toBe("");
     expect(screen.getByTestId("global-filters")).not.toBeVisible();          // still mounted, out of sight
     expect(window.localStorage.length).toBe(0);                             // the reader's, for this visit: nothing kept in the browser
     act(() => { fireEvent.click(screen.getByTestId("global-filters-show")); });
     expect(screen.queryByTestId("global-filters-shut")).toBeNull();
     expect(screen.getByTestId("global-filters")).toBeVisible();
+  });
+
+  it("on a dashboard of one page, is at the top of its cards", () => {
+    // one page: the root holds its filters and one section, and nothing else
+    const spec = withFilters();
+    const section = spec.elements["tab-overview"].children[0];
+    const keep = new Set([spec.root, "global-filters", "f-type", section, ...spec.elements[section].children]);
+    for (const key of Object.keys(spec.elements)) if (!keep.has(key)) delete spec.elements[key];
+    spec.elements[spec.root].children = ["global-filters", section];
+    delete spec.state;
+    spec.elements[spec.root].props.filters_shut = true;
+    render(<ComposedDashboard spec={spec} cards={CARDS} host={HOST} focus={HELD} onFocus={vi.fn()} doors={{ onRefresh: vi.fn() }} />);
+    expect(screen.queryByRole("tablist")).toBeNull();
+    expect(screen.getAllByTestId("global-filters-show")).toHaveLength(1);
   });
 
   it("opens as the dashboard was left: put away when it says so, and a reader may still open it", () => {
@@ -77,7 +93,7 @@ describe("the dashboard's filters column", () => {
     expect(screen.getByTestId("global-filters")).toBeVisible();             // the dashboard says what it is, once kept
   });
 
-  it("is ONE filter icon however many columns the dashboard draws (2026-11-19: three stacked Filters buttons)", () => {
+  it("is ONE button however many columns the dashboard draws (2026-11-19: three stacked Filters buttons)", () => {
     const spec = withFilters();
     spec.elements.qf = { type: "QueryFilters", props: { table: "orders", columns: [{ column: "channel", label: "Channel" }] }, children: [] };
     spec.elements[spec.root].children = ["qf", ...spec.elements[spec.root].children];                // a file's column leads
@@ -103,7 +119,7 @@ describe("a card whose own window gave way to the dates chosen (2026-11-19)", ()
 });
 
 describe("the filter column of a dashboard made from a file", () => {
-  it("is put away the same way, to the one filter icon, and comes back", () => {
+  it("is put away the same way, to the one Global filters button, and comes back", () => {
     const spec = JSON.parse(readFileSync(resolve(process.cwd(), "lib/dashboards/premise.fixture.json"), "utf8"));
     spec.elements.qf = { type: "QueryFilters", props: { table: "orders", columns: [{ column: "channel", label: "Channel" }] }, children: [] };
     spec.elements[spec.root].children = ["qf", ...spec.elements[spec.root].children];

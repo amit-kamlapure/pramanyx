@@ -9,18 +9,19 @@
  */
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
-import { QUERY_DEFAULT, setupAs } from "@/components/dashboards/QuerySetup";
+import { QUERY_DEFAULT, kindOf, setupAs } from "@/components/dashboards/QuerySetup";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
+import { Segmented } from "@/components/ui/segmented";
 import { SelectField } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { QueryRefused, getCatalogTree, keepDashboardQuery, previewDashboardQuery, type QueryShown, type QueryShownAs } from "@/lib/api";
+import { QueryRefused, getCatalogTree, keepDashboardQuery, previewDashboardQuery, type QueryPreview, type QueryShown, type QueryShownAs } from "@/lib/api";
 import {
   MAX_DATASETS, cardsBuiltOn, datasetOfCard, dropDataset, freshDatasetName, putDataset, swapCard, type DashboardDataset, type DashboardSpec,
 } from "@/lib/dashboards/edit";
-import { formatCount } from "@/lib/format";
+import { formatCount, formatSeconds } from "@/lib/format";
 import { withUniqueKeys } from "@/lib/listKeys";
 
 export interface TableChoice { schema: string; table: string }
@@ -223,8 +224,8 @@ export function withFollowed(spec: DashboardSpec, name: string, def: DashboardDa
   return swaps.reduce((s, [from, to]) => swapCard(s, from, to), putDataset(spec, name, def));
 }
 
-/** A dataset's name and statement, changed: the statement run once to check it reads, then kept on the dataset — and,
- *  through `onFollow`, on every chart built on it. */
+/** A dataset's name and statement, changed (the Data view): Run shows what the statement as typed returns; Keep runs it
+ *  once to check it reads, then keeps it on the dataset — and, through `onFollow`, on every chart built on it. */
 function DatasetEditor({ spec, name, connectionId, onChange, onFollow, onClose }: {
   spec: DashboardSpec; name: string; connectionId: string; onChange: (next: DashboardSpec, note: string) => void;
   onFollow?: (name: string, def: DashboardDataset) => Promise<string[]>; onClose: () => void;
@@ -234,6 +235,8 @@ function DatasetEditor({ spec, name, connectionId, onChange, onFollow, onClose }
   const [sql, setSql] = useState(was?.sql ?? "");
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string[]>([]);
+  // Run, in the Data view: what the statement as typed returns
+  const [runAsked, setRunAsked] = useState(0);
   const charts = cardsBuiltOn(spec, name).length;
   if (!was) return null;
   const sqlChanged = sql.trim() !== was.sql.trim();
@@ -254,10 +257,12 @@ function DatasetEditor({ spec, name, connectionId, onChange, onFollow, onClose }
     } finally { setBusy(false); }
   };
   return (
-    <div data-testid="data-dataset-editor" style={{ display: "flex", flexDirection: "column", gap: 8, border: "1px solid var(--b1)", borderRadius: "var(--r3)", padding: 10, margin: "2px 0 6px" }}>
-      <Input aria-label="The dataset's name" value={label} maxLength={120} disabled={busy} onChange={e => setLabel(e.target.value)} />
-      <Textarea aria-label="The dataset's SQL" data-testid="data-dataset-sql" rows={6} spellCheck={false} value={sql} disabled={busy}
-        onChange={e => setSql(e.target.value)} style={{ fontFamily: "var(--font-mono)" }} />
+    <div data-testid="data-dataset-editor" style={{ display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
+      <Input aria-label="The dataset's name" value={label} maxLength={120} disabled={busy} onChange={e => setLabel(e.target.value)} style={{ maxWidth: 420 }} />
+      <Textarea aria-label="The dataset's SQL" data-testid="data-dataset-sql" rows={12} spellCheck={false} value={sql} disabled={busy}
+        onChange={e => setSql(e.target.value)}
+        onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); setRunAsked(n => n + 1); } }}
+        style={{ fontFamily: "var(--font-mono)" }} />
       <span className="aug-fs-xs" style={{ color: "var(--t3)", lineHeight: 1.45 }}>
         {!charts ? "No chart is built on it yet." : `${formatCount(charts)} ${charts === 1 ? "chart is" : "charts are"} built on it. A change to its SQL is kept on each, as it is set up; none changes unless every one can read it.`}
       </span>
@@ -270,67 +275,76 @@ function DatasetEditor({ spec, name, connectionId, onChange, onFollow, onClose }
         <Button size="sm" data-testid="data-dataset-keep" disabled={busy || !label.trim() || !sql.trim() || (label.trim() === was.label && !sqlChanged)} onClick={() => void keep()}>
           {busy ? "Checking…" : sqlChanged ? "Check and keep" : "Keep"}
         </Button>
-        <Button size="sm" variant="ghost" disabled={busy} onClick={onClose}>Cancel</Button>
+        <Button size="sm" variant="ghost" disabled={busy} onClick={onClose}>Undo my edits</Button>
+        <Button size="sm" variant="secondary" data-testid="data-dataset-run" disabled={busy || !sql.trim()} onClick={() => setRunAsked(n => n + 1)}
+          title="Run it as typed · ⌘Enter" style={{ marginLeft: "auto" }}><Icon name="run" size={13} /> Run</Button>
       </span>
+      <DatasetResult connectionId={connectionId} sql={sql} asked={runAsked} />
     </div>
   );
 }
 
-/** The dashboard's datasets in its Data pane: each by its name, what it reads and how many charts are built on it,
- *  changed with its pencil, taken off with ×; and the two doors to more. A chart built on one taken off keeps reading
- *  what it read, on no dataset now. */
-export function DatasetsList({ spec, connectionId, onChange, onFollow, opened = null }: {
-  spec: DashboardSpec; connectionId: string; onChange: (next: DashboardSpec, note: string) => void;
-  /** A dataset's statement changed: kept on every chart built on it, or each reason one cannot follow. */
-  onFollow?: (name: string, def: DashboardDataset) => Promise<string[]>;
-  /** A dataset opened from a chart built on it: its editor shown at once. */
-  opened?: { name: string; n: number } | null;
-}) {
-  const held = Object.entries(spec.datasets ?? {});
-  const [adding, setAdding] = useState<"" | "table" | "sql">("");
-  const [changing, setChanging] = useState<string | null>(opened?.name ?? null);
-  const [seen, setSeen] = useState(opened?.n ?? 0);
-  if (opened && opened.n !== seen) { setSeen(opened.n); setChanging(opened.name); }
+/** What a dataset's statement returns, run as typed (the Data view): its first rows, or its columns and their kinds. */
+function DatasetResult({ connectionId, sql, asked }: { connectionId: string; sql: string; asked: number }) {
+  const [got, setGot] = useState<QueryPreview | null>(null);
+  const [running, setRunning] = useState(false);
+  const [problem, setProblem] = useState("");
+  const [view, setView] = useState<"rows" | "schema">("rows");
+  useEffect(() => {
+    if (!asked) return;
+    let alive = true;
+    setRunning(true); setProblem("");
+    previewDashboardQuery(connectionId, { sql, shown: { ...QUERY_DEFAULT, as: "table" } })
+      .then(p => { if (alive) { setGot(p); if (p.refused.length) setProblem(p.refused.join(" ")); } })
+      .catch(e => { if (alive) setProblem((e as Error).message); })
+      .finally(() => { if (alive) setRunning(false); });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run when Run is pressed, with the statement as it stands then
+  }, [asked, connectionId]);
+  if (!asked) {
+    return <div className="aug-fs-sm" data-testid="data-dataset-result" style={{ color: "var(--t3)", padding: "8px 0" }}>Run it to see what it returns.</div>;
+  }
+  const columns = got?.columns ?? [];
+  const rows = got?.rows ?? [];
   return (
-    <div data-testid="data-datasets" style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-      {!held.length && !adding && (
-        <div className="aug-fs-xs" data-testid="data-datasets-empty" style={{ color: "var(--t3)", padding: "0 10px 6px", lineHeight: 1.45 }}>
-          Add data to get going: choose a table, or write your own SQL. Charts set down on the canvas are built on it.
-        </div>
-      )}
-      {held.map(([name, d]) => {
-        const charts = cardsBuiltOn(spec, name).length;
-        return (
-          <div key={name}>
-            <div data-testid="data-dataset" data-name={name} className="aug-fs-sm"
-              style={{ display: "grid", gridTemplateColumns: "auto 1fr auto auto", alignItems: "center", gap: 6, padding: "6px 10px", borderRadius: "var(--r2)" }}>
-              <Icon name={d.table ? "table" : "sql"} size={14} />
-              <span style={{ minWidth: 0 }}>
-                <span style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--t1)" }}>{d.label}</span>
-                <span className="aug-fs-xs" title={d.sql} style={{ display: "block", color: "var(--t3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {d.table ?? "Your own SQL"}{charts ? ` · ${formatCount(charts)} ${charts === 1 ? "chart" : "charts"}` : ""}
-                </span>
-              </span>
-              <Button size="icon-sm" variant="ghost" aria-label={`Change ${d.label}`} data-testid="data-dataset-change" aria-pressed={changing === name}
-                onClick={() => setChanging(c => (c === name ? null : name))}><Icon name="edit" size={13} /></Button>
-              <Button size="icon-sm" variant="ghost" aria-label={`Take ${d.label} off`} data-testid="data-dataset-drop"
-                onClick={() => onChange(dropDataset(spec, name), "a dataset taken off by hand")}><Icon name="close" size={13} /></Button>
-            </div>
-            {changing === name && (
-              <DatasetEditor key={name} spec={spec} name={name} connectionId={connectionId} onChange={onChange} onFollow={onFollow} onClose={() => setChanging(null)} />
-            )}
-          </div>
-        );
-      })}
-      {adding ? (
-        <AddData spec={spec} connectionId={connectionId} way={adding} onClose={() => setAdding("")}
-          onAdd={(next, _names, note) => { onChange(next, note); setAdding(""); }} />
-      ) : held.length < MAX_DATASETS && (
-        <span style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-          <Button size="xs" variant="ghost" data-testid="data-add-table" onClick={() => setAdding("table")}><Icon name="plus" /> Add data</Button>
-          <Button size="xs" variant="ghost" data-testid="data-add-sql" onClick={() => setAdding("sql")}><Icon name="plus" /> Add SQL dataset</Button>
+    <div data-testid="data-dataset-result" style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <Segmented label="What it returns" value={view} onChange={v => setView(v as "rows" | "schema")}
+          options={[{ value: "rows", label: "Result table" }, { value: "schema", label: "Schema" }]} />
+        <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>
+          {running ? "Running…" : got && !got.refused.length
+            ? `${formatCount(columns.length)} columns · the first ${formatCount(rows.length)} rows${got.more ? ", and more" : ""}${got.duration_ms != null ? ` · ${formatSeconds(got.duration_ms / 1000)}` : ""}` : ""}
         </span>
-      )}
+      </div>
+      {problem && <div className="aug-fs-sm" role="alert" style={{ color: "var(--t1)" }}>{problem}</div>}
+      {got && !got.refused.length && (view === "schema" ? (
+        <table className="aug-fs-sm" data-testid="data-dataset-schema" style={{ borderCollapse: "collapse", width: "auto" }}>
+          <tbody>
+            {withUniqueKeys(columns, c => c.name).map(([k, c]) => (
+              <tr key={k}>
+                <td style={{ padding: "4px 16px 4px 0", color: "var(--t1)" }}>{c.name}</td>
+                <td style={{ padding: "4px 0", color: "var(--t3)" }}>{kindOf(c.type)} · {c.type}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <div style={{ overflow: "auto", maxHeight: 360, border: "1px solid var(--b1)", borderRadius: "var(--r2)" }}>
+          <table className="aug-fs-sm" data-testid="data-dataset-rows" style={{ borderCollapse: "collapse", minWidth: "100%" }}>
+            <thead>
+              <tr>{withUniqueKeys(columns, c => c.name).map(([k, c]) => <th key={k} style={{ position: "sticky", top: 0, background: "var(--bg-2)", textAlign: "left", padding: "6px 10px", color: "var(--t2)", fontWeight: 500, whiteSpace: "nowrap" }}>{c.name}</th>)}</tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                // eslint-disable-next-line react/no-array-index-key -- a preview's rows have no identity of their own
+                <tr key={i} style={{ borderTop: "1px solid var(--b1)" }}>
+                  {r.map((v, j) => <td key={columns[j]?.name ?? j} style={{ padding: "5px 10px", color: "var(--t1)", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{v == null ? "" : String(v)}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ))}
     </div>
   );
 }
@@ -536,6 +550,103 @@ export function DatasetLine({ spec, cardId, onMove }: {
           {withUniqueKeys(problem, p => p).map(([k, p]) => <li key={k}>{p}</li>)}
         </ul>
       )}
+    </div>
+  );
+}
+
+/** The dashboard's Data tab (the user, 2026-11-19, of a peer product's editor: "Data | Summary | +"): the data that backs
+ *  the dashboard on a view of its own. At the left, its datasets and the doors to more; at the right, the one chosen — its
+ *  name and statement, Run and what it returns, and Keep, which carries a new statement to every chart built on it. Above,
+ *  Data and the pages: a page goes back to the canvas on it. */
+export function DataView({ spec, connectionId, onChange, onFollow, opened = null, pages, onPage }: {
+  spec: DashboardSpec; connectionId: string; onChange: (next: DashboardSpec, note: string) => void;
+  onFollow?: (name: string, def: DashboardDataset) => Promise<string[]>;
+  /** A dataset opened from a chart built on it: chosen at once. */
+  opened?: { name: string; n: number } | null;
+  /** The dashboard's pages, in order; none on a dashboard of one page. */
+  pages: { name: string; label: string; hidden: boolean }[];
+  /** Back to the canvas, on the page `name` — or as it was, with none. */
+  onPage: (name: string | null) => void;
+}) {
+  const held = Object.entries(spec.datasets ?? {});
+  const [chosen, setChosen] = useState<string | null>(opened?.name ?? held[0]?.[0] ?? null);
+  const [seen, setSeen] = useState(opened?.n ?? 0);
+  if (opened && opened.n !== seen) { setSeen(opened.n); setChosen(opened.name); }
+  const [adding, setAdding] = useState<"" | "table" | "sql">("");
+  const [fresh, setFresh] = useState(0);
+  const name = chosen && spec.datasets?.[chosen] ? chosen : held[0]?.[0] ?? null;
+  const def = name ? spec.datasets?.[name] : undefined;
+  const title = String((spec.elements[spec.root]?.props as { title?: string } | undefined)?.title ?? "The dashboard");
+  const add = (way: "table" | "sql") => setAdding(way);
+  return (
+    <div data-testid="data-view" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+      <div role="tablist" aria-label="Data and pages" style={{ flex: "none", display: "flex", alignItems: "center", gap: 4, padding: "6px 12px", borderBottom: "1px solid var(--b1)" }}>
+        <Button size="xs" variant="ghost" role="tab" aria-selected data-testid="data-view-tab" style={{ boxShadow: "inset 0 -2px 0 var(--accent)", borderRadius: 0 }}>
+          <Icon name="table" size={13} /> Data
+        </Button>
+        <span aria-hidden="true" style={{ width: 1, alignSelf: "stretch", margin: "4px 4px", background: "var(--b1)" }} />
+        {(pages.length ? pages : [{ name: "", label: title, hidden: false }]).map(p => (
+          <Button key={p.name || "page"} size="xs" variant="ghost" role="tab" aria-selected={false} data-testid="data-view-page" onClick={() => onPage(p.name || null)}>
+            {p.hidden && <Icon name="eyeoff" size={12} />}{p.label}
+          </Button>
+        ))}
+      </div>
+      <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: "260px minmax(0, 1fr)" }}>
+        <aside aria-label="Datasets" style={{ minHeight: 0, overflow: "auto", borderRight: "1px solid var(--b1)", padding: "10px 8px", display: "flex", flexDirection: "column", gap: 2 }}>
+          <div className="aug-fs-xs" style={{ display: "flex", alignItems: "baseline", ...CAPTION, padding: "2px 6px 6px" }}>
+            Datasets<span style={{ marginLeft: "auto", textTransform: "none", letterSpacing: 0 }}>{held.length} of {MAX_DATASETS}</span>
+          </div>
+          {held.map(([n, d]) => {
+            const charts = cardsBuiltOn(spec, n).length;
+            const on = !adding && n === name;
+            return (
+              <div key={n} data-testid="data-dataset" data-name={n} style={{ display: "flex", alignItems: "center", gap: 2, borderRadius: "var(--r2)", background: on ? "var(--bg-sel)" : undefined }}>
+                <Button size="sm" variant="ghost" aria-pressed={on} onClick={() => { setAdding(""); setChosen(n); }}
+                  style={{ flex: 1, minWidth: 0, justifyContent: "flex-start", height: "auto", padding: "6px 8px", gap: 8 }}>
+                  <Icon name={d.table ? "table" : "sql"} size={14} />
+                  <span style={{ minWidth: 0, textAlign: "left" }}>
+                    <span style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--t1)" }}>{d.label}</span>
+                    <span className="aug-fs-xs" style={{ display: "block", color: "var(--t3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {d.table ?? "Your own SQL"}{charts ? ` · ${formatCount(charts)} ${charts === 1 ? "chart" : "charts"}` : ""}
+                    </span>
+                  </span>
+                </Button>
+                <Button size="icon-sm" variant="ghost" aria-label={`Take ${d.label} off`} data-testid="data-dataset-drop"
+                  onClick={() => onChange(dropDataset(spec, n), "a dataset taken off by hand")}><Icon name="close" size={13} /></Button>
+              </div>
+            );
+          })}
+          {held.length < MAX_DATASETS && (
+            <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 4, marginTop: 8, padding: "0 4px" }}>
+              <Button size="xs" variant="outline" data-testid="data-add-table" aria-pressed={adding === "table"} onClick={() => add("table")}><Icon name="plus" /> Add data</Button>
+              <Button size="xs" variant="outline" data-testid="data-add-sql" aria-pressed={adding === "sql"} onClick={() => add("sql")}><Icon name="plus" /> Add SQL dataset</Button>
+            </span>
+          )}
+        </aside>
+        <section aria-label={adding ? "Add data" : def?.label ?? "Add data"} style={{ minHeight: 0, minWidth: 0, overflow: "auto", padding: "14px 18px" }}>
+          {adding ? (
+            <div style={{ maxWidth: 640 }}>
+              <AddData spec={spec} connectionId={connectionId} way={adding} onClose={() => setAdding("")}
+                onAdd={(next, names, note) => { onChange(next, note); setAdding(""); if (names[0]) setChosen(names[0]); }} />
+            </div>
+          ) : name && def ? (
+            <DatasetEditor key={`${name}:${def.label}:${def.sql}:${fresh}`} spec={spec} name={name} connectionId={connectionId}
+              onChange={onChange} onFollow={onFollow} onClose={() => setFresh(f => f + 1)} />
+          ) : (
+            <div data-testid="data-view-empty" style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 8, padding: "48px 16px" }}>
+              <Icon name="table" size={28} />
+              <span className="aug-fs-ui" style={{ color: "var(--t1)", fontWeight: 600 }}>Add data to get going</span>
+              <span className="aug-fs-sm" style={{ color: "var(--t2)", maxWidth: 420 }}>
+                Create a dataset for your dashboard by choosing a table, or by writing your own SQL. Its charts are built on it.
+              </span>
+              <span style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                <Button size="sm" variant="secondary" onClick={() => add("table")}><Icon name="table" size={14} /> Choose a table</Button>
+                <Button size="sm" variant="secondary" onClick={() => add("sql")}><Icon name="sql" size={14} /> Write SQL</Button>
+              </span>
+            </div>
+          )}
+        </section>
+      </div>
     </div>
   );
 }
