@@ -33,7 +33,7 @@
 
 import type { UIMessage } from "ai";
 
-import { DEEP_ANALYSIS_MODE, type AnswerRecheck, type PlaybookRef, type FindingDossier } from "@/lib/api";
+import type { AnswerRecheck, PlaybookRef, FindingDossier } from "@/lib/api";
 import type {
   AnswerReport,
   ExplorationReport,
@@ -375,7 +375,9 @@ export interface ChatTurn {
  *  the turn. Seen live 2026-11-19: Agent on the person's own dashboard is the conversation's turn, it ran the deep
  *  analysis, and the report was never drawn because the turn had not been asked as one. */
 export const answersDeep = (t: Pick<ChatTurn, "mode" | "deepReport">): boolean =>
-  t.mode === DEEP_ANALYSIS_MODE || !!t.deepReport;
+  // a turn is asked quick or deep; this module is also the chat route's on the server, so it reads no value from the
+  // browser's api module (2026-11-19: importing one broke every question with a 500)
+  t.mode !== "ask" || !!t.deepReport;
 
 export const EMPTY_TURN: Omit<ChatTurn, "id" | "question" | "mode"> = {
   status: "loading",
