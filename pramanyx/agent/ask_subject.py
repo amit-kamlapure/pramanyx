@@ -276,7 +276,7 @@ def _set(focus: Any, connection_id: str, schema_name: Optional[str], *, person: 
     if not focus.dashboard and focus.entity and focus.segment:
         return _segment(focus, connection_id, schema_name)
     out = Subject(kind="set")
-    spec, why = _dashboard_spec(connection_id, str(focus.dashboard or ""), str(focus.owner or ""), person)
+    spec, why = dashboard_spec(connection_id, str(focus.dashboard or ""), str(focus.owner or ""), person)
     if spec is None:
         out.refused = why
         return out
@@ -367,7 +367,7 @@ def _about_dashboard(focus: Any, connection_id: str, *, person: str) -> Subject:
     """A dashboard, or one card of it, as the asker may read it: its cards' titles and statements, and the period on screen."""
     from pramanyx.cards.store import get_card
 
-    spec, why = _dashboard_spec(connection_id, str(focus.dashboard), str(focus.owner or ""), person)
+    spec, why = dashboard_spec(connection_id, str(focus.dashboard), str(focus.owner or ""), person)
     if spec is None:
         return Subject(kind="dashboard", refused=why)
     elements = spec.get("elements") or {}
@@ -394,7 +394,7 @@ def _about_dashboard(focus: Any, connection_id: str, *, person: str) -> Subject:
                                                          "period": period, "covers": covers})
 
 
-def _dashboard_spec(connection_id: str, dashboard: str, owner: str, person: str) -> tuple[Optional[dict], str]:
+def dashboard_spec(connection_id: str, dashboard: str, owner: str, person: str) -> tuple[Optional[dict], str]:
     """The spec of the dashboard a set is read from, as the asker reads it: their own newest version, or — for one
     another person published to them — the version its readers read. ``(None, why)`` when it is not theirs to read."""
     from pramanyx.dashboards import sharing, versions

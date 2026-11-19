@@ -11,6 +11,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const api = vi.hoisted(() => ({
   getSchemaRich: vi.fn(async () => ({ tables: [{ name: "main.orders", row_count: "1", columns: [] }, { name: "main.order_items", row_count: "1", columns: [] }], joins: [], isolated: [], warnings: [] })),
   getMetrics: vi.fn(async () => [{ name: "gross_revenue", label: "Gross revenue" }]),
+  listDashboards: vi.fn(async () => ({ person: "ana", cockpits: [{ cockpit_id: "d1", title: "Operations", retired: false, cards: ["c1"] }] })),
+  listCards: vi.fn(async () => [{ id: "c1", title: "Orders by day" }, { id: "c9", title: "Someone else's" }]),
 }));
 const sent: { text: string; body: Record<string, unknown> }[] = [];
 const prior = vi.hoisted(() => ({ messages: [] as unknown[] }));
@@ -81,8 +83,9 @@ describe("the Ask composer", () => {
     expect(api.getSchemaRich).not.toHaveBeenCalled();
     type(box, "How many rows in @ord");
     // the list appears once the objects arrive, with no further keystroke
+    // the tables first, then a card on the person's own dashboard, said with the dashboard it is on — never another's
     await waitFor(() => expect(screen.getAllByTestId("composer-offer").map(o => o.textContent))
-      .toEqual(["main.orderstable", "main.order_itemstable"]));
+      .toEqual(["main.orderstable", "main.order_itemstable", "Orders by daycard · Operations"]));
     fireEvent.keyDown(box, { key: "ArrowDown" });
     fireEvent.keyDown(box, { key: "Tab" });
     expect(box.value).toBe("How many rows in @main.order_items ");

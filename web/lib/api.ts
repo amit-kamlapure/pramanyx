@@ -3535,6 +3535,12 @@ export async function listDashboards(connectionId: string): Promise<DashboardLis
   return res.json();
 }
 
+/** The person's dashboards still standing — none retired — by id and title (the id where it has none), with the cards
+ *  each places. The server's field names are the stored ones (GLOSSARY, frozen names): read once, here. */
+export function standingDashboards(list: DashboardList): { id: string; title: string; cards: string[] }[] {
+  return list.cockpits.filter(d => !d.retired).map(d => ({ id: d.cockpit_id, title: d.title || d.cockpit_id, cards: d.cards ?? [] }));
+}
+
 /** One of the asker's dashboards as it stands, read for a range when one is chosen. */
 export async function getDashboard(connectionId: string, dashboardId: string, range?: BriefingRange | null): Promise<PersonDashboard> {
   const res = await fetch(dashboardUrl(`/dashboards/${encodeURIComponent(dashboardId)}`, connectionId, rangeParams(range)));

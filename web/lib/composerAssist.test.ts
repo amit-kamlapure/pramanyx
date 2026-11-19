@@ -1,7 +1,7 @@
 /** What the Ask composer offers while a person writes: @ for objects, / for commands, ↑↓ for history. */
 import { describe, expect, it } from "vitest";
 
-import { askedBefore, assistAt, historyStep, mentionIn, MOST_OFFERS, withoutCommand, type Offer } from "@/lib/composerAssist";
+import { askedBefore, assistAt, historyStep, mentionIn, mentionOffers, MOST_OFFERS, withoutCommand, type Offer } from "@/lib/composerAssist";
 
 const OBJECTS: Offer[] = [
   { value: "main.orders", label: "main.orders", hint: "table" },
@@ -62,5 +62,22 @@ describe("↑↓ for history", () => {
 
   it("holds each question once, at its latest asking", () => {
     expect(askedBefore(["a", "b", " a ", "", "c"])).toEqual(["b", "a", "c"]);
+  });
+});
+
+describe("what @ can name (Stage 2)", () => {
+  it("offers tables, metrics, the person's dashboards, their cards with the dashboard they are on, and columns last", () => {
+    const offers = mentionOffers(
+      [{ name: "main.orders", columns: [{ name: "status" }, { name: "created_at" }] }],
+      [{ name: "gross_revenue", label: "Gross revenue" }],
+      { dashboards: [{ title: "Operations" }], cards: [{ title: "Orders by day", on: "Operations" }] },
+    );
+    expect(offers.map(o => `${o.hint}:${o.value}`)).toEqual([
+      "table:main.orders", "metric:gross_revenue", "dashboard:Operations", "card · Operations:Orders by day",
+      "column:main.orders.status", "column:main.orders.created_at",
+    ]);
+    // a table is found before its own columns
+    expect(assistAt("@main.or", 8, offers, COMMANDS)?.offers[0].value).toBe("main.orders");
+    expect(assistAt("@main.orders.st", 15, offers, COMMANDS)?.offers.map(o => o.value)).toEqual(["main.orders.status"]);
   });
 });

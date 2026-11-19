@@ -2,7 +2,8 @@
  * What the Ask composer offers while a person writes (Stage 1 of the plan, the user, 2026-11-19: "@ for objects, / for
  * commands, ↑↓ for history"). Kept apart from the box that draws it, so what it offers is decided by what was typed alone.
  *
- * - `@word` anywhere offers the connection's objects to mention: its tables and its metrics, by name.
+ * - `@word` anywhere offers the connection's objects to mention: its tables, their columns, its metrics, and the person's
+ *   own dashboards and their cards, by name (`mentionOffers`).
  * - `/word` at the very start offers the composer's commands.
  * - With nothing on offer, ↑ and ↓ walk the questions already asked in the conversation, and back to what was being written.
  */
@@ -15,6 +16,29 @@ export interface Offer {
   label: string;
   /** A word on what it is: "table", "metric", or what a command does. */
   hint: string;
+}
+
+/** Most columns offered for @: a wide schema's every column would bury its tables. */
+export const MOST_COLUMN_OFFERS = 2000;
+
+/**
+ * Everything @ can name on a connection (Stage 2): its tables, each table's columns as `table.column`, its metrics, the
+ * person's own dashboards, and the cards on them — each with a word on what it is. Tables come first, then metrics, so
+ * a short word finds a table before one of its columns.
+ */
+export function mentionOffers(
+  tables: { name: string; columns?: { name: string }[] }[],
+  metrics: { name: string; label?: string | null }[],
+  boards: { dashboards: { title: string }[]; cards: { title: string; on: string }[] },
+): Offer[] {
+  const columns = tables.flatMap(t => (t.columns ?? []).map(c => ({ value: `${t.name}.${c.name}`, label: `${t.name}.${c.name}`, hint: "column" })));
+  return [
+    ...tables.map(t => ({ value: t.name, label: t.name, hint: "table" })),
+    ...metrics.map(m => ({ value: m.name, label: m.label || m.name, hint: "metric" })),
+    ...boards.dashboards.map(d => ({ value: d.title, label: d.title, hint: "dashboard" })),
+    ...boards.cards.map(c => ({ value: c.title, label: c.title, hint: c.on ? `card · ${c.on}` : "card" })),
+    ...columns.slice(0, MOST_COLUMN_OFFERS),
+  ];
 }
 
 /** What is being offered, and the stretch of the text the choice replaces. */
@@ -32,9 +56,13 @@ export const MOST_OFFERS = 8;
 const MENTION = /(^|\s)@([\w.]*)$/;
 const COMMAND = /^\/(\w*)$/;
 
+/** The last part of a qualified name: `orders` of `main.orders`, `status` of `main.orders.status`. */
+const leaf = (name: string): string => name.toLowerCase().split(".").pop() ?? "";
+
 const matching = (offers: Offer[], query: string): Offer[] => {
   const q = query.toLowerCase();
-  const starts = offers.filter(o => o.value.toLowerCase().startsWith(q) || o.label.toLowerCase().startsWith(q));
+  // a qualified name starts where its own name does, too: "ord" starts main.orders as much as it starts "Orders by day"
+  const starts = offers.filter(o => o.value.toLowerCase().startsWith(q) || o.label.toLowerCase().startsWith(q) || leaf(o.value).startsWith(q));
   const within = offers.filter(o => !starts.includes(o) && (o.value.toLowerCase().includes(q) || o.label.toLowerCase().includes(q)));
   return [...starts, ...within].slice(0, MOST_OFFERS);
 };

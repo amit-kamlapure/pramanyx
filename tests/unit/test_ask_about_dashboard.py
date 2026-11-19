@@ -22,7 +22,7 @@ CARDS = {"rev": SimpleNamespace(title="Revenue", sql="SELECT SUM(x) FROM o"), "o
 @pytest.fixture
 def board(monkeypatch):
     import pramanyx.cards.store as store
-    monkeypatch.setattr(S, "_dashboard_spec", lambda *_a: (SPEC, ""))
+    monkeypatch.setattr(S, "dashboard_spec", lambda *_a: (SPEC, ""))
     monkeypatch.setattr(store, "get_card", CARDS.get)
 
 
@@ -55,7 +55,7 @@ def test_a_dashboard_with_no_period_says_each_figure_s_own(board):
 
 
 def test_a_dashboard_the_asker_may_not_read_is_said_and_nothing_of_it_is_told(monkeypatch):
-    monkeypatch.setattr(S, "_dashboard_spec", lambda *_a: (None, "This dashboard is not shared with you."))
+    monkeypatch.setattr(S, "dashboard_spec", lambda *_a: (None, "This dashboard is not shared with you."))
     got = _ask()
     assert got.refused == "This dashboard is not shared with you." and "SELECT" not in got.prose()
 

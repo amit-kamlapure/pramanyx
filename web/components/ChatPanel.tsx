@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { answerableRun, getConnections, getMetrics, listUserAgents, recordOverviewDrill, cancelInvestigation, cancelActiveDeepRun, type UserAgent } from "@/lib/api";
+import { answerableRun, getConnections, getMetrics, listCards, listDashboards, listUserAgents, recordOverviewDrill, cancelInvestigation, cancelActiveDeepRun, standingDashboards, type UserAgent } from "@/lib/api";
 import { useQuery } from "@tanstack/react-query";
-import { askedBefore, assistAt, historyStep, mentionIn, withoutCommand, type Offer } from "@/lib/composerAssist";
+import { askedBefore, assistAt, historyStep, mentionIn, mentionOffers, withoutCommand, type Offer } from "@/lib/composerAssist";
 import { useRichSchema } from "@/lib/schema-context";
 import { doorFor, isPlainSend } from "@/lib/chatDoors";
 import { uploadAttachment, type AttachmentResult } from "@/lib/attachments";
@@ -109,12 +109,21 @@ function MentionObjects({ connectionId, onObjects }: { connectionId: string; onO
   const { data: metrics } = useQuery({
     queryKey: ["ask-mention-metrics", connectionId], queryFn: () => getMetrics(connectionId), enabled: !!connectionId, staleTime: 5 * 60_000,
   });
+  // Stage 2 — the person's own dashboards, and the cards placed on them (never another person's): a card is offered with
+  // the dashboard it is on
+  const { data: boards } = useQuery({
+    queryKey: ["ask-mention-dashboards", connectionId], enabled: !!connectionId, staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const mine = standingDashboards(await listDashboards(connectionId));
+      const on = new Map<string, string>();
+      for (const d of mine) for (const c of d.cards) if (!on.has(c)) on.set(c, d.title);
+      const cards = on.size ? (await listCards({ connectionId })).filter(c => on.has(c.id)) : [];
+      return { dashboards: mine, cards: cards.map(c => ({ title: c.title, on: on.get(c.id) ?? "" })) };
+    },
+  });
   useEffect(() => {
-    onObjects([
-      ...(schema?.tables ?? []).map(t => ({ value: t.name, label: t.name, hint: "table" })),
-      ...(metrics ?? []).map(m => ({ value: m.name, label: m.label || m.name, hint: "metric" })),
-    ]);
-  }, [schema, metrics, onObjects]);
+    onObjects(mentionOffers(schema?.tables ?? [], metrics ?? [], boards ?? { dashboards: [], cards: [] }));
+  }, [schema, metrics, boards, onObjects]);
   return null;
 }
 

@@ -658,7 +658,7 @@ def converse_tools(connection_id: str, *, emit: Optional[Emit] = None,
                    session_id: str = "", canvas_id: Optional[str] = None,
                    user_question: str = "", agent: Any = None,
                    schema_scope: Optional[str] = None, sheet: str = "",
-                   dashboard: Optional[tuple[str, str]] = None) -> list[ToolSpec]:
+                   dashboard: Optional[tuple[str, str]] = None, person: str = "") -> list[ToolSpec]:
     """The tool set for one connection.
 
     Bound to the connection by closure rather than taking it as a model-supplied
@@ -688,9 +688,13 @@ def converse_tools(connection_id: str, *, emit: Optional[Emit] = None,
 
     ``dashboard`` (the Ask panel, 2026-11-19) is ``(person, dashboard id)`` when a question is asked about a dashboard that
     person keeps: it adds ``change_dashboard``, which drafts a change for them to allow (`dashboards.chat_change`).
+
+    ``person`` (Stage 2, 2026-11-19) is who asks, as the dashboards name them: the reads of where data comes from and what
+    the platform holds over it (`origin_tools`) name only the dashboards that person keeps or was shared.
     """
     from pramanyx.agent.action_tools import action_tools
     from pramanyx.agent.delegate_tool import delegation_tools
+    from pramanyx.agent.origin_tools import origin_tools
     from pramanyx.agent.platform_tools import platform_tools
     from pramanyx.agent.present_tool import present_tools
     from pramanyx.agent.spotlight_roster import spotlight_roster
@@ -767,8 +771,8 @@ def converse_tools(connection_id: str, *, emit: Optional[Emit] = None,
                                         schema_scope=schema_scope),
         ),
     ] + action_tools(connection_id, agent=agent) + platform_tools(connection_id, session_id=session_id) + spotlight_roster(
-        connection_id, session_id=session_id, emit=emit) + present_tools(emit=emit) + delegation_tools(
-        connection_id, emit=emit, session_id=session_id) + sheet_tools(sheet, emit=emit) + change_tools(
+        connection_id, session_id=session_id, emit=emit) + origin_tools(connection_id, person=person) + present_tools(
+        emit=emit) + delegation_tools(connection_id, emit=emit, session_id=session_id) + sheet_tools(sheet, emit=emit) + change_tools(
         connection_id, dashboard, emit=emit, schema=schema_scope)
 
 
@@ -956,7 +960,8 @@ def converse(connection_id: str, question: str, *, extra_context: Optional[str] 
              on_step=None, tool_emit: Optional[Emit] = None,
              session_id: str = "", canvas_id: Optional[str] = None, agent: Any = None,
              trace_id: str = "", schema_scope: Optional[str] = None,
-             shape: Optional[str] = None, sheet: str = "", dashboard: Optional[tuple[str, str]] = None):
+             shape: Optional[str] = None, sheet: str = "", dashboard: Optional[tuple[str, str]] = None,
+             person: str = ""):
     """Answer one question as a conversation rather than a compiled query spec.
 
     The whole body in one place: state-not-instructions prompt, the connection's tools,
@@ -995,7 +1000,7 @@ def converse(connection_id: str, question: str, *, extra_context: Optional[str] 
         question,
         converse_tools(connection_id, emit=tool_emit, session_id=session_id,
                        canvas_id=canvas_id, user_question=question, agent=agent,
-                       schema_scope=schema_scope, sheet=sheet, dashboard=dashboard),
+                       schema_scope=schema_scope, sheet=sheet, dashboard=dashboard, person=person),
         max_steps=max_steps,
         on_step=on_step,
         conn_id=connection_id or "",

@@ -3923,6 +3923,7 @@ async def _stream_converse(
     shape: Optional[str] = None,
     sheet: str = "",
     dashboard: Optional[tuple[str, str]] = None,
+    person: str = "",
 ) -> AsyncGenerator[str, None]:
     """Serve one `/ask` turn as a CONVERSATION (SP-14; unconditional since 2026-10-28).
 
@@ -4104,7 +4105,7 @@ async def _stream_converse(
                               on_step=_on_step, tool_emit=_forward,
                               session_id=session_id, canvas_id=canvas_id, agent=_agent_rec,
                               trace_id=_decision_trace, schema_scope=schema_scope, shape=shape,
-                              sheet=sheet, dashboard=dashboard)
+                              sheet=sheet, dashboard=dashboard, person=person)
         except _CoreCancelled:
             raise
         except Exception as _exc:
@@ -5730,6 +5731,12 @@ def _sheet_ref(req) -> str:
     return str(getattr(focus, "id", "") or "") if focus is not None and getattr(focus, "kind", "") == "sheet" else ""
 
 
+def _asker(request) -> str:
+    """Who asks, as the dashboards name them (`person_of`)."""
+    from pramanyx.dashboards.home import person_of
+    return person_of(request)
+
+
 def _own_dashboard(req, request) -> Optional[tuple[str, str]]:
     """``(person, dashboard id)`` when a question is asked about a dashboard the asker keeps — one shared with them (named
     with its owner) is theirs to read, not to change — else None."""
@@ -6198,6 +6205,8 @@ async def _stream_ask(req: "AskRequest", request: Request, conn_id: str) -> Asyn
                              sheet=_sheet_ref(req),
                              # the Ask panel — a question about a dashboard the person keeps can also change it
                              dashboard=_own_dashboard(req, request),
+                             # Stage 2 — who asks, so the reads of what depends on a table name only their dashboards
+                             person=_asker(request),
                              # CI-4 — a seeded/dossier turn hands its finding to the
                              # conversation instead of bypassing it; SP-15 — a turn
                              # summoned from an object hands that object's live state.

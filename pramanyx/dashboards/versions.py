@@ -298,7 +298,8 @@ def of_person(connection_id: str, owner: str) -> list[dict]:
     for row in rows:
         entry = _entry(row, with_spec=False)
         first = _first_kept(row["natural_key"])
-        out.append({"cockpit_id": row["natural_key"][len(mine):],
+        # the dashboard's id twice: under the name the home strip has always read, and under the word new code says
+        out.append({"cockpit_id": row["natural_key"][len(mine):], "dashboard_id": row["natural_key"][len(mine):],
                     "title": title_of(row["payload"].get("spec")) or row["payload"].get("title") or "",
                     "started_at": first, "outline": outline_of(row["payload"].get("spec")), **entry})
     return sorted(out, key=lambda c: (c["started_at"], c["cockpit_id"]))
