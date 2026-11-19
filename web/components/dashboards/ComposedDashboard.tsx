@@ -879,19 +879,22 @@ function GridHandles({ cell, kind, from, gridded, chosen = false, onPreview, onD
       style={{ position: "absolute", zIndex: 3, background: "var(--bg-1)", border: "1.5px solid var(--accent)",
         borderRadius: round ? "50%" : 999, cursor, touchAction: "none", boxSizing: "border-box", ...place }} />
   );
+  // half the gap out from the edge: two neighbours' handles meet in the gap between them and never overlap (the user,
+  // 2026-11-19: with the gap thinned, "the controls are overlapping")
+  const out = -GRID.gap / 2;
   const columns = "Drag: one column at a time";
   const rows = "Drag: one row at a time";
   const both = "Drag: columns and rows · Alt+arrows: one grade";
   return (
     <>
-      {bar("w", { right: -6, top: "50%", width: 7, height: 26, transform: "translateY(-50%)" }, "ew-resize", columns)}
-      {bar("left", { left: -6, top: "50%", width: 7, height: 26, transform: "translateY(-50%)" }, "ew-resize", columns)}
-      {bar("h", { bottom: -6, left: "50%", height: 7, width: 26, transform: "translateX(-50%)" }, "ns-resize", rows)}
-      {bar("top", { top: -6, left: "50%", height: 7, width: 26, transform: "translateX(-50%)" }, "ns-resize", rows)}
-      {bar("both", { right: -6, bottom: -6, width: 10, height: 10 }, "nwse-resize", both, true)}
-      {bar("nw", { left: -6, top: -6, width: 10, height: 10 }, "nwse-resize", both, true)}
-      {bar("ne", { right: -6, top: -6, width: 10, height: 10 }, "nesw-resize", both, true)}
-      {bar("sw", { left: -6, bottom: -6, width: 10, height: 10 }, "nesw-resize", both, true)}
+      {bar("w", { right: out, top: "50%", width: 7, height: 26, transform: "translateY(-50%)" }, "ew-resize", columns)}
+      {bar("left", { left: out, top: "50%", width: 7, height: 26, transform: "translateY(-50%)" }, "ew-resize", columns)}
+      {bar("h", { bottom: out, left: "50%", height: 7, width: 26, transform: "translateX(-50%)" }, "ns-resize", rows)}
+      {bar("top", { top: out, left: "50%", height: 7, width: 26, transform: "translateX(-50%)" }, "ns-resize", rows)}
+      {bar("both", { right: out, bottom: out, width: 10, height: 10 }, "nwse-resize", both, true)}
+      {bar("nw", { left: out, top: out, width: 10, height: 10 }, "nwse-resize", both, true)}
+      {bar("ne", { right: out, top: out, width: 10, height: 10 }, "nesw-resize", both, true)}
+      {bar("sw", { left: out, bottom: out, width: 10, height: 10 }, "nesw-resize", both, true)}
       {said && (
         <span data-testid="grid-size-said" className="aug-fs-sm" style={{ position: "absolute", right: 12, bottom: 10, zIndex: 4,
           background: "var(--bg-3)", border: "1px solid var(--b2)", color: "var(--t1)", borderRadius: "var(--r2)", padding: "1px 8px",

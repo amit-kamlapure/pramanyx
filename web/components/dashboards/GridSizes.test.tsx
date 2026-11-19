@@ -70,8 +70,8 @@ describe("a section on the grid", () => {
     const grid = document.querySelector('[data-grid="12"]') as HTMLElement;
     expect(grid.style.gridTemplateColumns).toBe("repeat(12, minmax(0, 1fr))");
     // a thin gap between cards (the user, 2026-11-19, beside a peer product's board), the row taking what it gave up: a step stays 40 px
-    expect(grid.style.gridAutoRows).toBe("34px");
-    expect(grid.style.gap).toBe("6px");
+    expect(grid.style.gridAutoRows).toBe("32px");
+    expect(grid.style.gap).toBe("8px");
     const net = cellOf("card-net");
     expect(net.dataset).toMatchObject({ w: "8", h: "6" });
     expect(net.style.gridColumn).toBe("span 8");
@@ -82,7 +82,7 @@ describe("a section on the grid", () => {
     const { unmount } = render(<ComposedDashboard spec={gridded()} cards={CARDS} host={HOST} doors={owner()} />);
     const grid = document.querySelector('[data-grid="12"]') as HTMLElement;
     expect(grid.style.backgroundImage).toContain("radial-gradient");
-    expect(grid.style.backgroundSize).toBe("calc((100% + 6px) / 12) 8px, 8px 40px");
+    expect(grid.style.backgroundSize).toBe("calc((100% + 8px) / 12) 8px, 8px 40px");
     unmount();
     render(<ComposedDashboard spec={gridded()} cards={CARDS} host={HOST} doors={READER} />);
     expect((document.querySelector('[data-grid="12"]') as HTMLElement).style.backgroundImage).toBe("");
@@ -129,11 +129,19 @@ describe("resizing one grade at a time", () => {
     expect(doors.onRegrid).toHaveBeenCalledWith("card-rate", { w: 5, h: 4 }, {});
   });
 
+  it("holds its handles half the gap out, so two neighbours' handles meet in the gap and never overlap (2026-11-19)", () => {
+    render(<ComposedDashboard spec={gridded()} cards={CARDS} host={HOST} doors={owner()} />);
+    const cell = cellOf("card-net");
+    expect(within(cell).getByTestId("grid-handle-w").style.right).toBe("-4px");
+    expect(within(cell).getByTestId("grid-handle-left").style.left).toBe("-4px");
+    expect(within(cell).getByTestId("grid-handle-both").style.bottom).toBe("-4px");
+  });
+
   it("a drag of the right edge lands once, on release, as many columns as it crossed — saying the size as it moves", () => {
     const doors = owner();
     render(<ComposedDashboard spec={gridded()} cards={CARDS} host={HOST} doors={doors} />);
     const grid = document.querySelector('[data-grid="12"]') as HTMLElement;
-    // 12 columns of 89 px and 11 gaps of 12: one column and its gap is 101 px
+    // 12 columns of 92.7 px and 11 gaps of 8: one column and its gap is about 101 px
     Object.defineProperty(grid, "clientWidth", { value: 1200, configurable: true });
     const handle = within(cellOf("card-net")).getByTestId("grid-handle-w");
     fireEvent.pointerDown(handle, { clientX: 500, clientY: 300, pointerId: 1 });

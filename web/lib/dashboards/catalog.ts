@@ -99,10 +99,11 @@ export function sizeOf(w: number, h: number): Size | null {
 }
 
 /** The grid a resized section is laid on (Arc AP-1): twelve columns, and rows whose GRADE — a row and the gap under
- *  it — is 40 px, so one step of height is always 40 px and one step of width one column. The gap is thin, 6 px (the
+ *  it — is 40 px, so one step of height is always 40 px and one step of width one column. The gap is thin, 8 px (the
  *  user, 2026-11-19, beside a peer product's board: "the margin between two components very thin.. ours is big and looks
- *  tacky"); the row took what the gap gave up, so every card kept its place and its height. */
-export const GRID = { columns: 12, row: 34, gap: 6 } as const;
+ *  tacky" — then, at 6 px, "increase only slightly": two cards' resize handles overlapped); the row took what the gap
+ *  gave up, so every card kept its place and its height. */
+export const GRID = { columns: 12, row: 32, gap: 8 } as const;
 
 /** Arc AP-4 — how a section splits into sections of its own: side by side (each taking a width in twelfths), one under
  *  another, or one at a time as tabs. A section that holds pieces says none. */
