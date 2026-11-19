@@ -114,7 +114,7 @@ def test_names_only_the_dashboards_the_asker_keeps_or_was_shared_and_counts_the_
     monkeypatch.setattr(versions, "is_mine", lambda _r: True)
     monkeypatch.setattr(sharing, "audience_of", lambda _p: {"groups": [{"kind": "group", "id": "g1"}], "roles": []})
     out = O.dashboards_reading("thelook", "orders", "ana")
-    assert out["cards_reading"] == 1
+    assert out["cards_reading"] == 1 and out["cards_on_no_dashboard"] == 0
     assert [(d["dashboard"], d["yours"], d["cards"]) for d in out["dashboards"]] == [
         ("Mine", True, ["Orders by day"]), ("Cy's shared", False, ["Orders by day"])]
     assert out["dashboards_not_yours"] == 1
@@ -127,10 +127,11 @@ def test_says_what_depends_on_a_table_and_what_it_does_not_cover(monkeypatch):
     report.dependents.append(Dependent(node_id="metric:aov", kind="metric", label="Average order value", depth=1,
                                        via="grounded_in", site="", site_kind="", site_line=0))
     monkeypatch.setattr("pramanyx.govern.lineage.dependents_of_table", lambda *_a, **_k: report)
-    monkeypatch.setattr(O, "dashboards_reading", lambda *_a: {"dashboards": [], "dashboards_not_yours": 0, "cards_reading": 2})
+    monkeypatch.setattr(O, "dashboards_reading", lambda *_a: {"dashboards": [], "dashboards_not_yours": 0, "cards_reading": 2,
+                                                             "cards_on_no_dashboard": 1})
     monkeypatch.setattr("pramanyx.db.connection.open_connection_for", lambda _c: SimpleNamespace(dialect="bigquery"))
     out = O.table_dependents("thelook", {"table": "orders"}, person="ana")
-    assert out["summary"] == "1 metric, 2 dashboard cards depend on orders."
+    assert out["summary"] == "1 metric, 2 cards (1 on no dashboard now) depend on orders."
     assert out["lineage"]["dependents"][0]["label"] == "Average order value"
     assert "outside Pramanyx" in out["does_not_cover"]
 

@@ -69,7 +69,7 @@ def dashboards_reading(connection_id: str, table: str, person: str, dialect: str
 
     reading = {c.id: c for c in list_cards(connection_id=connection_id)
                if not c.provenance.superseded_by and c.sql and _reads(c.sql, table, dialect)}
-    shown, withheld = [], 0
+    shown, withheld, placed = [], 0, set()
     if reading:
         for row in Ledger.default().artifacts_of_kind(versions.KIND, conn_id=connection_id, limit=1000):
             payload = row.get("payload") if versions.is_mine(row) else None
@@ -78,6 +78,7 @@ def dashboards_reading(connection_id: str, table: str, person: str, dialect: str
             held = [reading[i] for i in payload.get("cards") or [] if i in reading]
             if not held:
                 continue
+            placed |= {c.id for c in held}
             owner = owner_of(str(row.get("natural_key") or ""), connection_id)
             yours = owner == person
             if yours or dashboard_sharing.reaches(payload.get("published_to"), dashboard_sharing.audience_of(person)):
@@ -87,7 +88,9 @@ def dashboards_reading(connection_id: str, table: str, person: str, dialect: str
             else:
                 withheld += 1
     return {"dashboards": shown[:MOST_LISTED], "more_dashboards": max(0, len(shown) - MOST_LISTED),
-            "dashboards_not_yours": withheld, "cards_reading": len(reading)}
+            "dashboards_not_yours": withheld, "cards_reading": len(reading),
+            # a card can read the table and stand on no dashboard now (its dashboard retired, or never placed): said apart
+            "cards_on_no_dashboard": len(set(reading) - placed)}
 
 
 def table_dependents(connection_id: str, args: dict, *, person: str = "") -> dict:
@@ -114,7 +117,9 @@ def table_dependents(connection_id: str, args: dict, *, person: str = "") -> dic
     counts = dict(report.counts_by_kind)
     said = [f"{n} {k}{'' if n == 1 else 's'}" for k, n in sorted(counts.items())]
     if boards.get("cards_reading"):
-        said.append(f"{boards['cards_reading']} dashboard card{'' if boards['cards_reading'] == 1 else 's'}")
+        n, loose = boards["cards_reading"], boards.get("cards_on_no_dashboard", 0)
+        where = (" (none on a dashboard now)" if loose == n else f" ({loose} on no dashboard now)" if loose else "")
+        said.append(f"{n} card{'' if n == 1 else 's'}{where}")
     return {
         "table": table, "column": column,
         "lineage": {"dependents": lineage[:MOST_LISTED], "more": max(0, len(lineage) - MOST_LISTED),
