@@ -35,6 +35,19 @@ export function cellOf(rect: { left: number; top: number; width: number }, layou
   return { x: Math.min(Math.max(1, col), GRID.columns - Math.min(size.w, GRID.columns) + 1), y: Math.max(1, row) };
 }
 
+/** Where a box goes so it covers no piece already there: its own column, and — where it would cover one — the first rows
+ *  below what it would cover. A new box takes the room left; it never moves what a person already placed. */
+export function freeSpot(box: { x: number; y: number; w: number; h: number }, others: Box[]): { x: number; y: number } {
+  let y = box.y;
+  for (let guard = 0; guard < 500; guard++) {
+    const hit = others.filter(o => o.x !== undefined && o.y !== undefined
+      && o.x < box.x + box.w && box.x < o.x + o.w && o.y < y + box.h && y < o.y + o.h);
+    if (!hit.length) break;
+    y = Math.max(...hit.map(o => (o.y as number) + o.h));
+  }
+  return { x: box.x, y };
+}
+
 /** The newest piece a change put in a section that was not there before, or null. */
 export function madeIn(before: DashboardSpec, after: DashboardSpec, section: string): string | null {
   const was = new Set(before.elements[section]?.children ?? []);
@@ -46,7 +59,8 @@ export function madeIn(before: DashboardSpec, after: DashboardSpec, section: str
 export function intoBox(before: DashboardSpec, after: DashboardSpec, box: PlacedBox): DashboardSpec | null {
   const key = madeIn(before, after, box.section);
   if (!key) return null;
-  return regrid(after, key, { x: box.x, y: box.y, w: box.w, h: box.h }, box.measured);
+  const at = freeSpot(box, Object.values(box.measured));
+  return regrid(after, key, { x: at.x, y: at.y, w: box.w, h: box.h }, box.measured);
 }
 
 /** What every element of a section measures on screen, as columns (twelfths of the section) and rows of one grade —

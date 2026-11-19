@@ -23,7 +23,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode }
 import { CanvasScale } from "@/components/dashboards/cellBox";
 import type { DashboardHandle, ReadState } from "@/components/dashboards/ComposedDashboard";
 import { PlacementShown, type PlacementView } from "@/components/dashboards/placementView";
-import { PLACE_SIZE, PLACE_WORDS, cellOf, measureSection, type PlaceKind, type PlacedBox } from "@/lib/dashboards/placing";
+import { PLACE_SIZE, PLACE_WORDS, cellOf, freeSpot, measureSection, type PlaceKind, type PlacedBox } from "@/lib/dashboards/placing";
 import { PieceSetup, type CardDate } from "@/components/dashboards/PieceSetup";
 import type { CardHolds } from "@/lib/dashboards/cardHolds";
 import { ChoiceSetup, DataPane, SetSetup, ValueSetup, readingElements } from "@/components/dashboards/WiringSetup";
@@ -251,7 +251,9 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
       const first = sectionsOf(spec).find(sec => (spec.elements[sec.key]?.children ?? []).every(k => spec.elements[k]?.type !== "Section"));
       return first ? { el: null, ghost: { section: first.key, x: 1, y: 1, ...size, kind: placingKind } } : null;
     }
-    const { x, y } = cellOf(best.getBoundingClientRect(), best.offsetWidth, cx, cy, size);
+    const cell = cellOf(best.getBoundingClientRect(), best.offsetWidth, cx, cy, size);
+    // over a piece already there, the box shows — and goes — in the first free rows below it: nothing placed moves
+    const { x, y } = freeSpot({ ...cell, ...size }, Object.values(measureSection(best)));
     return { el: best, ghost: { section, x, y, ...size, kind: placingKind } };
   };
   const view = useMemo<PlacementView | null>(() => (placing ? { ghost, box: placing.box, onBox: placing.onBox } : null), [placing, ghost]);

@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { placeGlobalFilterIn, placeNote, type DashboardSpec } from "@/lib/dashboards/edit";
 import { checkDashboardSpec } from "@/lib/dashboards/rules";
 import { cardsDashboardSpec } from "@/lib/dashboards/start";
-import { PLACE_SIZE, cellOf, intoBox, type PlacedBox } from "@/lib/dashboards/placing";
+import { PLACE_SIZE, cellOf, freeSpot, intoBox, type PlacedBox } from "@/lib/dashboards/placing";
 
 // a dashboard of one empty section, "sec", as a dashboard made from a sheet starts
 const spec = (): DashboardSpec => cardsDashboardSpec("Ops", []);
@@ -46,5 +46,24 @@ describe("the piece made, in its box", () => {
     const before = spec();
     const renamed = { ...before, elements: { ...before.elements, sec: { ...before.elements.sec, props: { title: "Other" } } } };
     expect(intoBox(before, renamed, box)).toBeNull();
+  });
+});
+
+describe("a box set down over a piece already there", () => {
+  it("goes to the first free rows below what it would cover, in its own columns; nothing placed moves", () => {
+    const chart = { x: 1, y: 1, w: 8, h: 10 };
+    expect(freeSpot({ x: 1, y: 9, w: 4, h: 2 }, [chart])).toEqual({ x: 1, y: 11 });
+    expect(freeSpot({ x: 9, y: 3, w: 4, h: 2 }, [chart])).toEqual({ x: 9, y: 3 });           // beside it, it stays
+    expect(freeSpot({ x: 5, y: 2, w: 6, h: 8 }, [chart, { x: 9, y: 11, w: 4, h: 3 }])).toEqual({ x: 5, y: 14 });
+  });
+
+  it("draws the piece made there, and keeps every other piece where it was", () => {
+    const before = cardsDashboardSpec("Ops", [{ card: "c1", size: "small" }]);
+    const card = before.elements.sec.children[0];
+    const box: PlacedBox = { kind: "filter", section: "sec", x: 1, y: 9, w: 4, h: 2, measured: { [card]: { x: 1, y: 1, w: 8, h: 10 } } };
+    const placed = intoBox(before, placeGlobalFilterIn(before, "sec", { kind: "single" }).spec, box)!;
+    const filter = placed.elements.sec.children.find(k => placed.elements[k].type === "GlobalFilter")!;
+    expect(placed.elements[filter].props).toMatchObject({ x: 1, y: 11, w: 4, h: 2 });
+    expect(placed.elements[card].props).toMatchObject({ x: 1, y: 1, w: 8, h: 10 });
   });
 });
