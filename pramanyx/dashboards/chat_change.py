@@ -79,8 +79,10 @@ def change_tools(connection_id: str, dashboard: Optional[tuple[str, str]], *, em
             if staged is not None:
                 announce_staged(emit, staged)
             # No id goes back to the model: the person sees the change as a card, and a reply naming a proposal or a
-            # card by its id reads as the platform's plumbing (seen live 2026-11-19).
-            return {"staged": True, "summary": out.get("summary") or "",
+            # card by its id reads as the platform's plumbing (seen live 2026-11-19). The drafting's own summary is not
+            # handed on either: it is written for the dashboard page's model, names the proposal and any draft it
+            # replaces by id, and says the result appears "in the Briefing" (seen live the same day, in Agent mode).
+            return {"staged": True,
                     "next": ("A change is staged and shown to the person with Allow and Reject. Nothing has changed yet. "
                              "Say in one sentence what the change does, naming cards by their titles and never by an id, "
                              "and that it waits for their Allow.")}

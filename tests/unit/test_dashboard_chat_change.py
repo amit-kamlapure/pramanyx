@@ -20,7 +20,9 @@ def test_a_change_is_drafted_on_the_persons_own_dashboard_and_staged_for_their_a
         asked.update(conn=conn, person=person, dashboard=dashboard, words=words, schema=schema)
         hear({"type": "read", "metrics": 3, "trusted_queries": 1, "findings": 2})
         hear({"type": "checking", "cards": 1})
-        return {"staged": True, "proposal_id": "p1", "summary": "Adds one card."}
+        return {"staged": True, "proposal_id": "p1", "summary": (
+            'Drafted an edit to the dashboard "Sales": 1 section, 1 card (proposal p1). Nothing is changed yet. The person '
+            "keeps it, and it then appears among their dashboards in the Briefing. It replaces the earlier draft p0.")}
 
     kept = SimpleNamespace(id="p1", kind=KIND, connection_id="c1", action_id="as-staged")
     [tool] = change_tools("c1", ("ana", "sales"), emit=lambda k, p: frames.append((k, p)), schema="s", draft=draft,
@@ -28,7 +30,8 @@ def test_a_change_is_drafted_on_the_persons_own_dashboard_and_staged_for_their_a
     out = tool.run({"change": "  make the revenue   card bigger "})
     assert asked == {"conn": "c1", "person": "ana", "dashboard": "sales", "words": "make the revenue card bigger", "schema": "s"}
     assert out["staged"] and "Nothing has changed yet" in out["next"] and "never by an id" in out["next"]
-    assert "p1" not in str(out)   # the model is handed no id to repeat
+    assert "p1" not in str(out) and "p0" not in str(out)    # the model is handed no id to repeat
+    assert "Briefing" not in str(out)                         # nor the dashboard page's own account of where it lands
     # the card is the stored proposal, as the inbox keeps it
     assert ("proposal_staged", {"proposal_id": "p1", "kind": KIND, "connection_id": "c1", "action_id": "as-staged"}) in frames
     assert [p["text"] for k, p in frames if k == "status"] == [
