@@ -46,6 +46,8 @@ import { ToolTrail } from "@/components/ToolTrail";
 import { ProposalCardById } from "@/components/ProposalCard";
 import { approverName } from "@/lib/auth";
 import { AnswerParts } from "@/components/chat/AnswerParts";
+import { AnswerSources } from "@/components/chat/AnswerSources";
+import { useHarness } from "@/components/chat/harnessLook";
 import { InFlightFindings } from "@/components/RunProgressCard";
 import { ContextRibbon } from "@/components/ContextRibbon";
 import { PlanGateCard } from "@/components/PlanGateCard";
@@ -927,6 +929,7 @@ function PlaybookRefs({ refs }: { refs: PlaybookRef[] }) {
 // tools the model called, any delegation and the guards that intervened all sit inside it,
 // one click away; none of them is a row of its own, and the wait has no progress box.
 function InlineAgentTrace({ turn, onShowSource }: { turn: ChatTurn; onShowSource?: (data: SourcePanelData) => void }) {
+  const harness = useHarness();
   const running = turn.status === "loading";
   const [open, setOpen] = useState(false);
   const prevRunning = useRef(running);
@@ -940,10 +943,13 @@ function InlineAgentTrace({ turn, onShowSource }: { turn: ChatTurn; onShowSource
   // The stream's own status line is the freshest word on what the run is doing; the
   // trace's step in hand stands in before the first one arrives.
   const latest = turn.statusText || latestThought(traceState) || "Thinking…";
-  const steps = traceState.investigationPhases?.length || traceState.subQuestions?.length || traceState.hypotheses?.length || 0;
+  const steps = traceState.investigationPhases?.length || traceState.subQuestions?.length || traceState.hypotheses?.length
+    || (harness.on ? turn.converseSteps.length : 0) || 0;
+  // The coworker's words for the work once it is done: how long it took, the steps one click away. No word for thinking.
+  const done = harness.on && turn.elapsedMs != null ? `Completed in ${formatElapsed(turn.elapsedMs)}` : harness.on ? "The work" : "Thought process";
 
   return (
-    <div className="mb-4" role="group" aria-label="Thought process">
+    <div className="mb-4" role="group" aria-label={harness.on ? "The work" : "Thought process"}>
       <Button
         variant="plain"
         onClick={() => setOpen(o => !o)}
@@ -963,7 +969,7 @@ function InlineAgentTrace({ turn, onShowSource }: { turn: ChatTurn; onShowSource
             <span key={latest} className="min-w-0 truncate aug-anim-fade">{latest}</span>
           ) : (
             <>
-              Thought process
+              {done}
               {!open && steps > 0 && (
                 <span className="text-zinc-500 font-normal">· {steps} {steps === 1 ? "step" : "steps"}</span>
               )}
@@ -1118,6 +1124,7 @@ function NarrativeBrief({
   /** The answer and nothing of the template under it (see ChatMessageProps.lean). */
   lean?: boolean;
 }) {
+  const harness = useHarness();
   const streaming = turn.status === "loading";
   // a withheld answer says "the result below is what the query returned" — so its result is shown, lean or not
   const showFigure = !lean || turn.guardReceipts.some(g => g.action === "withheld the answer");
@@ -1154,6 +1161,63 @@ function NarrativeBrief({
   // Post-done arrival fade (uplift pattern) — live turns only; restored turns render
   // instantly, and prefers-reduced-motion disables the CSS animation globally.
   const fadeCls = turn.startedAt > 0 ? "aug-anim-fade" : "";
+  const openInEditor = openInQuery && turn.sql?.trim()
+    ? () => openInQuery({ sql: turn.sql!, connId: connectionId, mode: "sql", name: (turn.question || "Answer").slice(0, 40) })
+    : undefined;
+
+  // The coworker's layout: the headline, what the rows say with what they stood on at its end, the exhibit, what stands out,
+  // the follow-ups, and what the answer can become under one More. Nothing of the answer is dropped, only arranged.
+  if (harness.on && !lean) {
+    const prose = streamingProse != null ? safePartial(streamingProse) : proseText;
+    return (
+      <Brief>
+        {turn.headline && readsAsProse(turn.headline)
+          ? <AnswerProse text={turn.headline} />
+          : turn.headline
+          ? <BriefHeadline animate={turn.startedAt > 0}>{turn.headline}</BriefHeadline>
+          : streamingHeadline != null
+            ? <BriefHeadline animate={false} className="aug-stream-in">{safePartial(streamingHeadline)}</BriefHeadline>
+            : streaming ? <HeadlineSkeleton /> : null}
+        {inspect && inspect.issues.length > 0 && (
+          <p role="alert" className="aug-text-sm text-amber-400/90 leading-relaxed flex items-start gap-1.5">
+            <span className="shrink-0 mt-0.5"><Icon name="warning" size={16} label="Warning" /></span>
+            <span>{inspect.kind === "not_what_was_asked" ? inspect.issues.join(" ") : <>Result may be incomplete — {inspect.issues.join("; ")}{inspect.suggestedFix ? `. ${inspect.suggestedFix}` : ""}</>}</span>
+          </p>
+        )}
+        {prose && (readsAsProse(prose)
+          ? <AnswerProse className={fadeCls} text={prose} caret={streamingProse != null} />
+          : <BriefProse className={fadeCls} text={prose} caret={streamingProse != null} />)}
+        {!streaming && turn.publicReceiptId && harness.openSource && connectionId && (
+          <AnswerSources receiptId={turn.publicReceiptId} connectionId={connectionId} onOpen={harness.openSource} />
+        )}
+        {showFigure && (turn.columns.length > 0 || streaming) && (
+          <HarnessExhibit turn={turn} onShowSource={onShowSource} streaming={streaming} connectionId={connectionId} />
+        )}
+        {!streaming && anomalies.length > 0 && (
+          <BriefSection className={fadeCls} label="What stands out"><BriefBullets items={anomalies} /></BriefSection>
+        )}
+        {!streaming && turn.followups.length > 0 && (
+          <BriefSection className={fadeCls} label="Follow-ups">
+            <div className="flex flex-col gap-1">
+              {turn.followups.map((q, i) => (
+                <Button key={i} variant="ghost" size="xs" onClick={() => onFollowUp?.(q)}
+                  className="h-auto items-start justify-start gap-1.5 p-0 text-left whitespace-normal aug-text-sm font-normal text-zinc-500 hover:text-zinc-300 hover:bg-transparent dark:hover:bg-transparent">
+                  <span className="shrink-0 text-zinc-500 mt-0.5"><Icon name="next" size={16} /></span>
+                  <span>{q}</span>
+                </Button>
+              ))}
+            </div>
+          </BriefSection>
+        )}
+        {!streaming && (
+          <HarnessMore>
+            <TurnActions turn={turn} connectionId={connectionId} onDrill={onDrill} onOpenInEditor={openInEditor} />
+            {turn.headline && <CopyAnswerButton text={[turn.headline, turn.narrative?.narrative?.trim()].filter(Boolean).join("\n\n")} />}
+          </HarnessMore>
+        )}
+      </Brief>
+    );
+  }
 
   return (
     <Brief>
@@ -1303,10 +1367,7 @@ function NarrativeBrief({
       )}
 
       {!streaming && !lean && (
-        <TurnActions turn={turn} connectionId={connectionId} onDrill={onDrill}
-          onOpenInEditor={openInQuery && turn.sql?.trim()
-            ? () => openInQuery({ sql: turn.sql!, connId: connectionId, mode: "sql", name: (turn.question || "Answer").slice(0, 40) })
-            : undefined} />
+        <TurnActions turn={turn} connectionId={connectionId} onDrill={onDrill} onOpenInEditor={openInEditor} />
       )}
 
       {/* Hover toolbar (CK-grade): message actions stay invisible until the turn is
@@ -1319,6 +1380,44 @@ function NarrativeBrief({
       )}
 
     </Brief>
+  );
+}
+
+/** The coworker's exhibit: the result framed, with its statement one click away and how many rows it read. */
+function HarnessExhibit({ turn, onShowSource, streaming, connectionId }: {
+  turn: ChatTurn; onShowSource?: (data: SourcePanelData) => void; streaming: boolean; connectionId?: string;
+}) {
+  const [sql, setSql] = useState(false);
+  const rows = turn.rows.length;
+  return (
+    <div data-testid="answer-exhibit" style={{ border: "1px solid var(--card-edge)", borderRadius: "var(--r3)", padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8, minWidth: 0 }}>
+      <ResultFigure turn={turn} onShowSource={onShowSource} streaming={streaming} connectionId={connectionId} />
+      {!streaming && turn.columns.length > 0 && (
+        <div className="aug-fs-xs" style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--t3)" }}>
+          {turn.sql?.trim() && (
+            <Button variant="ghost" size="xs" aria-expanded={sql} data-testid="answer-show-sql" onClick={() => setSql(s => !s)}>
+              {sql ? "Hide the SQL" : "Show the SQL"}
+            </Button>
+          )}
+          <span style={{ marginLeft: "auto" }}>{formatCount(rows)} {rows === 1 ? "row" : "rows"} from the query</span>
+        </div>
+      )}
+      {sql && turn.sql && <SqlBlock sql={turn.sql} />}
+    </div>
+  );
+}
+
+/** What an answer can become, under one quiet More, as the coworker keeps it. */
+function HarnessMore({ children }: { children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div data-testid="answer-more" className="flex flex-col gap-2 mt-1">
+      <Button variant="ghost" size="xs" aria-expanded={open} onClick={() => setOpen(o => !o)} className="self-start gap-1"
+        title="What this answer can become: open it in the SQL Editor, a deep analysis, a pin, kept on a dashboard, exported">
+        More <Chevron open={open} />
+      </Button>
+      {open && children}
+    </div>
   );
 }
 
@@ -1643,6 +1742,7 @@ export function ChatMessage({
     setEditing(false);
     onEdit(q);
   };
+  const harness = useHarness();
   const isInvestigate = turn.mode === "investigate";
   const hasResult = isInvestigate
     ? !!(turn.deepReport ?? turn.report ?? turn.exploreReport ?? turn.dossierReport)
@@ -1650,7 +1750,11 @@ export function ChatMessage({
   const isDone = turn.status === "done" || hasResult;
   // An Agent turn's process — its steps, the tools it called, any delegation, the guards
   // that intervened — lives in its one thinking row; a turn without that row shows them itself.
-  const thinkingRow = isInvestigate && (turn.status === "loading" || isDone || turn.status === "error");
+  // In the coworker's layout every turn has that one row: what it is doing while it runs, and how long it took once done.
+  const hasWork = turn.converseSteps.length > 0 || turn.delegations.length > 0 || turn.guardReceipts.length > 0;
+  const thinkingRow = harness.on
+    ? turn.status === "loading" || isInvestigate || hasWork
+    : isInvestigate && (turn.status === "loading" || isDone || turn.status === "error");
   // Quick-mode scaffold-then-fill: the backend delivers a quick answer's data at
   // `done` (not incrementally), so instead of bare thinking-dots we mount the
   // Brief as a shimmer scaffold for the whole wait — a preview of the answer's
@@ -1726,13 +1830,21 @@ export function ChatMessage({
             </div>
           ) : (
             // No box (the user, 2026-09-30): the question is coloured text — purple for an
-            // Agent question, blue for a Quick one — in the tokens the mode labels use.
+            // Agent question, blue for a Quick one — in the tokens the mode labels use. The coworker's layout sets it in a
+            // bubble of its own, as the coworker does.
+            harness.on ? (
+              <div data-testid="question-bubble" className="aug-fs-sm leading-snug"
+                style={{ padding: "7px 11px", borderRadius: 10, background: "var(--bg-2)", border: "1px solid var(--card-edge)", color: "var(--t1)", overflowWrap: "anywhere" }}>
+                {turn.question}
+              </div>
+            ) : (
             <div
               className="py-1 aug-fs-sm font-semibold leading-snug"
               style={{ color: isInvestigate ? "var(--vio5)" : "var(--blue5)" }}
             >
               {turn.question}
             </div>
+            )
           )}
         </div>
       </div>
@@ -1793,7 +1905,7 @@ export function ChatMessage({
           {/* The "Interpreting automatically" banner is removed — users don't value the
               intake/assumptions disclosure in the trace; it read as a stuck human-in-the-loop
               prompt. The thinking trace itself carries what the run is doing. */}
-          {!isInvestigate ? (
+          {!isInvestigate && !harness.on ? (
             <>
               {/* Quick (ask) mode has no multi-step trace — a compact thinking cue
                   sits above the shimmer scaffold (rendered below) during the wait */}
@@ -1856,7 +1968,7 @@ export function ChatMessage({
       {/* ── Timing. The "Found relevant data" row of table chips that sat here is gone
            at the user's word (2026-09-29): each query in the trace opens its own SQL and
            rows in the right panel, which already says which tables an answer read. ── */}
-      {isDone && isInvestigate && turn.elapsedMs != null && (
+      {isDone && isInvestigate && !harness.on && turn.elapsedMs != null && (
         <p className="aug-fs-xs text-zinc-500 mb-3">Completed in {formatElapsed(turn.elapsedMs)}</p>
       )}
 
@@ -1931,19 +2043,30 @@ export function ChatMessage({
               ))}
             </div>
           )}
-          <TurnActions turn={turn} connectionId={connectionId} />
+          {!harness.on && <TurnActions turn={turn} connectionId={connectionId} />}
         </>
       )}
 
-      {/* ── Export this response as PDF / PowerPoint (Insight or Deep Analysis) ── */}
-      {isDone && !lean && (turn.investigationId || turn.receiptId) && (
+      {/* ── Export this response as PDF / PowerPoint (Insight or Deep Analysis) ── In the coworker's layout what an
+           answer can become sits under one quiet More, as the coworker's does. */}
+      {isDone && !lean && (turn.investigationId || turn.receiptId) && (harness.on ? (
+        <HarnessMore>
+          {isInvestigate && <TurnActions turn={turn} connectionId={connectionId} />}
+          <div className="flex flex-wrap items-center gap-2">
+            {turn.investigationId && connectionId && (
+              <RunDoors invId={turn.investigationId} connectionId={connectionId} question={turn.question} />
+            )}
+            <ExportButton invId={(turn.investigationId ?? turn.receiptId) as string} />
+          </div>
+        </HarnessMore>
+      ) : (
         <div className="flex flex-wrap justify-end items-center gap-2 mt-3">
           {turn.investigationId && connectionId && (
             <RunDoors invId={turn.investigationId} connectionId={connectionId} question={turn.question} />
           )}
           <ExportButton invId={(turn.investigationId ?? turn.receiptId) as string} />
         </div>
-      )}
+      ))}
     </div>
   );
 }

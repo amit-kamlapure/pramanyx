@@ -25,6 +25,7 @@ import { ErrorBoundary } from "./ErrorBoundary";
 import { WhyThisNumber } from "./WhyThisNumber";
 import { AnswerNow } from "@/components/chat/AnswerNow";
 import { AnswerSources, SourceBeside } from "@/components/chat/AnswerSources";
+import { HarnessContext, type HarnessLook } from "@/components/chat/harnessLook";
 import type { AnswerSource } from "@/lib/answerSources";
 
 import { getApiBase } from "@/lib/config";
@@ -115,9 +116,11 @@ interface InputBoxProps {
    *  way to take it off. Absent: the composer is as it was. */
   subject?: string;
   onDropSubject?: () => void;
+  /** The coworker's composer: its edge wears the brand's colours at rest, as the coworker's does. */
+  harness?: boolean;
 }
 
-function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, setMode, onSend, onStop, onClear, attachedFile, onAttach, agents, agentId, setAgentId, subject, onDropSubject }: InputBoxProps) {
+function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, setMode, onSend, onStop, onClear, attachedFile, onAttach, agents, agentId, setAgentId, subject, onDropSubject, harness = false }: InputBoxProps) {
   const [focused, setFocused] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -135,7 +138,7 @@ function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, se
         // so the textarea inside keeps no outline of its own (aug-focus-frame).
         borderRadius: "var(--r-composer)",
         // at rest a hairline; while a person is writing to the model, the edge takes the brand's colours
-        ...(focused ? brandEdge("var(--bg-3)") : { background: "var(--bg-3)", border: "1.5px solid var(--b2)" }),
+        ...(focused || harness ? brandEdge("var(--bg-3)") : { background: "var(--bg-3)", border: "1.5px solid var(--b2)" }),
       }}
     >
       {/* Arc FA-2 — the subject the question carries, chosen on a dashboard */}
@@ -190,7 +193,7 @@ function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, se
            in flight (useChat.ask aborts before it starts, and the backend stops the core
            at its next checkpoint). Disabling here made the product argue with the user
            about whose turn it was. */
-        placeholder={multiline ? "Ask anything about your data…" : "Ask your question…"}
+        placeholder={harness ? "Ask anything, or describe a change" : multiline ? "Ask anything about your data…" : "Ask your question…"}
         className="aug-focus-frame w-full bg-transparent aug-fs-sm text-zinc-100 placeholder:text-[var(--t3)] px-4 pt-3 pb-2 resize-none focus:outline-none disabled:opacity-50"
         // the frame around it says it is being written in: the field draws no second one inside
         style={{ display: "block", border: "none", outline: "none", boxShadow: "none", fontFamily: "inherit" }}
@@ -1085,7 +1088,15 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
     setFeedbackDone(prev => new Set([...prev, invId]));
   }
 
+  // The coworker's layout, for the parts of an answer that look different in it; what an answer stood on opens over the
+  // conversation, inside the panel
+  const harnessLook = useMemo<HarnessLook>(() => ({
+    on: harness,
+    ...(harness ? { openSource: (s: AnswerSource) => { setSourcePanel(null); setSourcePage(s); } } : {}),
+  }), [harness]);
+
   const inputBoxProps: InputBoxProps = {
+    harness,
     textareaRef,
     input,
     setInput,
@@ -1104,6 +1115,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
   };
 
   return (
+    <HarnessContext.Provider value={harnessLook}>
     <div
       className="flex-1 flex flex-col min-w-0 overflow-hidden"
       /* The chat's ground is the composer's own dark blue (--bg-3) — the landing block
@@ -1367,6 +1379,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                       <AnswerSources receiptId={turn.publicReceiptId} connectionId={connectionId}
                         onOpen={source => { setSourcePanel(null); setSourcePage(source); }} />
                     )}
+                    <div data-testid="turn-foot" style={harness ? { display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginTop: 4 } : undefined}>
                     {turn.status === "done" && turn.receiptId && (
                       <AnswerFeedback turn={turn} connectionId={connectionId} />
                     )}
@@ -1390,6 +1403,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                         </Button>
                       </div>
                     )}
+                    </div>
                     {/* Post-run feedback — shown once per completed deep analysis with hypotheses */}
                     {turn.mode === "investigate" &&
                      turn.status === "done" &&
@@ -1467,7 +1481,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
           {sourcePanel && (
             <div
               className="flex-shrink-0 flex flex-col border-l border-zinc-700/60"
-              style={{ width: 380, background: "var(--blue1)" }}
+              style={harness ? { position: "absolute", inset: 0, zIndex: 30, background: "var(--blue1)" } : { width: 380, background: "var(--blue1)" }}
             >
               <SourcePanel
                 columns={sourcePanel.columns}
@@ -1488,5 +1502,6 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
         <DebugLogDrawer eventLogRef={eventLogRef} onClose={() => setShowDebug(false)} />
       )}
     </div>
+    </HarnessContext.Provider>
   );
 }
