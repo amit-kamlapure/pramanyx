@@ -1,10 +1,16 @@
+// @vitest-environment jsdom
 /**
  * Arc FA-2 — the subject a question carries from a dashboard, held in memory: said in a line, sent as the ask door's
  * focus (references, or a set by name — never what the set reads), and the dashboard named by a page's key.
  */
+import { createElement } from "react";
+import { render, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { askSubject, dashboardOf, dashboardSubject, focusOf, nounOf, setAskSubject, subjectWords, type AskSubject } from "@/lib/askSubject";
+import {
+  askSubject, dashboardOf, dashboardSubject, focusOf, nounOf, setAskSubject, subjectWords, useOnPage, usePageSubject, type AskSubject,
+} from "@/lib/askSubject";
+import { LayerVisibleContext } from "@/lib/useVisiblePoll";
 
 const TICKED: AskSubject = { kind: "objects", connectionId: "thelook", noun: nounOf("Order"), label: "Late dispatch",
   refs: Array.from({ length: 12 }, (_, i) => `order:${48200 + i}`) };
@@ -68,5 +74,33 @@ describe("a dashboard asked about (the study's R20)", () => {
     expect(standing && subjectWords(standing)).toBe("Asking about Sales · as written");
     expect(standing && focusOf(standing)).toMatchObject({ period: "" });
     expect(dashboardSubject("c", undefined, "Sales", range)).toBeNull();
+  });
+});
+
+describe("what a page says it shows (the Ask panel, Stage 1)", () => {
+  const TABLE: AskSubject = { kind: "table", connectionId: "sheets", noun: ["row", "rows"], table: "main.netflix_titles" };
+  function Page({ subject, shown }: { subject: AskSubject | null; shown: boolean }) {
+    return createElement(LayerVisibleContext.Provider, { value: shown }, createElement(Says, { subject }));
+  }
+  function Says({ subject }: { subject: AskSubject | null }) {
+    useOnPage(subject);
+    return null;
+  }
+  const onPage = () => renderHook(() => usePageSubject()).result.current;
+
+  it("is said while the page shows, and let go when it closes", () => {
+    const page = render(createElement(Page, { subject: TABLE, shown: true }));
+    expect(onPage()).toEqual(TABLE);
+    page.unmount();
+    expect(onPage()).toBeNull();
+  });
+
+  it("is let go while the page is kept behind another, and said again when it shows", () => {
+    const page = render(createElement(Page, { subject: TABLE, shown: true }));
+    page.rerender(createElement(Page, { subject: TABLE, shown: false }));
+    expect(onPage()).toBeNull();
+    page.rerender(createElement(Page, { subject: TABLE, shown: true }));
+    expect(onPage()).toEqual(TABLE);
+    page.unmount();
   });
 });

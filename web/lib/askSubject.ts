@@ -8,11 +8,12 @@
  * above its input, with a way to take it off, and sends it as the turn's `focus`; the server reads it again through the
  * object door under the reader's row policy and says what it read on the turn's receipt. No key rides a query string.
  */
-import { useEffect, useRef, useSyncExternalStore } from "react";
+import { useContext, useEffect, useRef, useSyncExternalStore } from "react";
 
 import { plural, typeWord } from "@/lib/dashboards/objectView";
 import { formatCount } from "@/lib/format";
 import { openAskPanelOn } from "@/lib/askPanel";
+import { LayerVisibleContext } from "@/lib/useVisiblePoll";
 
 /** The most objects one subject names — the server's own bound, and a press's (`MAX_TICKED_RUNS`). */
 export const MAX_SUBJECT = 50;
@@ -81,14 +82,16 @@ export function usePageSubject(): AskSubject | null {
 /** One subject's identity, to know it again: what the ask door would be sent. */
 export const subjectKey = (s: AskSubject | null): string => (s ? JSON.stringify(focusOf(s)) : "");
 
-/** A page says what it shows while it is open: `subject`, or nothing. Set again only when what it shows changes. */
+/** A page says what it shows while it is open: `subject`, or nothing. Set again only when what it shows changes. A page
+ *  kept mounted behind another (the Data pages are) says nothing while it is hidden. */
 export function useOnPage(subject: AskSubject | null): void {
+  const shown = useContext(LayerVisibleContext);
   const latest = useRef(subject);
   latest.current = subject;
-  const key = subjectKey(subject);
+  const key = shown ? subjectKey(subject) : "";
   useEffect(() => {
     const held = latest.current;
-    if (!held) return;
+    if (!held || !key) return;
     setPageSubject(held);
     return () => setPageSubject(null, held);
   }, [key]);

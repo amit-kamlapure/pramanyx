@@ -387,7 +387,8 @@ function DepthBanner({ turn, onRerun, harness = false }: { turn: ChatTurn; onRer
   // The coworker's layout keeps only what a person acts on or must be told: what the turn was about, as the server read
   // it, and the other depth to ask again at. Which depth answered is the composer's own choice, already in view.
   if (harness) {
-    const rerun = done && !overview;
+    // a change asked in the conversation is not re-run as an answer
+    const rerun = done && !overview && !turn.stagedProposals.length;
     if (!r.subject && !r.downgradedFrom && !rerun) return null;
     return (
       <div className="aug-fs-xs" data-testid="turn-depth" style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 6, color: "var(--t3)" }}>

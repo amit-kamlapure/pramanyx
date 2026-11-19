@@ -27,7 +27,8 @@ def test_a_change_is_drafted_on_the_persons_own_dashboard_and_staged_for_their_a
                           record=lambda pid: kept if pid == "p1" else None)
     out = tool.run({"change": "  make the revenue   card bigger "})
     assert asked == {"conn": "c1", "person": "ana", "dashboard": "sales", "words": "make the revenue card bigger", "schema": "s"}
-    assert out["staged"] and out["proposal_id"] == "p1" and "Nothing has changed yet" in out["next"]
+    assert out["staged"] and "Nothing has changed yet" in out["next"] and "never by an id" in out["next"]
+    assert "p1" not in str(out)   # the model is handed no id to repeat
     # the card is the stored proposal, as the inbox keeps it
     assert ("proposal_staged", {"proposal_id": "p1", "kind": KIND, "connection_id": "c1", "action_id": "as-staged"}) in frames
     assert [p["text"] for k, p in frames if k == "status"] == [

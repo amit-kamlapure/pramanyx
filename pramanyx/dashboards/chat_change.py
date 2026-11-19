@@ -78,9 +78,12 @@ def change_tools(connection_id: str, dashboard: Optional[tuple[str, str]], *, em
             staged = read(out["proposal_id"])
             if staged is not None:
                 _announce(emit, staged)
-            return {"staged": True, "proposal_id": out["proposal_id"], "summary": out.get("summary") or "",
+            # No id goes back to the model: the person sees the change as a card, and a reply naming a proposal or a
+            # card by its id reads as the platform's plumbing (seen live 2026-11-19).
+            return {"staged": True, "summary": out.get("summary") or "",
                     "next": ("A change is staged and shown to the person with Allow and Reject. Nothing has changed yet. "
-                             "Say in one sentence what the change does, and that it waits for their Allow.")}
+                             "Say in one sentence what the change does, naming cards by their titles and never by an id, "
+                             "and that it waits for their Allow.")}
         return {"staged": False, "said": list(out.get("sentences") or ["No change was drafted."]),
                 "next": "Nothing was staged. Tell the person why, in these words."}
 
