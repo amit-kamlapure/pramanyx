@@ -70,14 +70,14 @@ def change_tools(connection_id: str, dashboard: Optional[tuple[str, str]], *, em
         if out.get("staged"):
             # The card is drawn from the stored proposal, announced as the inbox keeps it — its kind and its action as
             # staged, never spelled again here.
-            from pramanyx.agent.dashboard_tool import _announce
+            from pramanyx.agent.dashboard_tool import announce_staged
             if record is None:
                 from pramanyx.actions.inbox import get_proposal as read
             else:
                 read = record
             staged = read(out["proposal_id"])
             if staged is not None:
-                _announce(emit, staged)
+                announce_staged(emit, staged)
             # No id goes back to the model: the person sees the change as a card, and a reply naming a proposal or a
             # card by its id reads as the platform's plumbing (seen live 2026-11-19).
             return {"staged": True, "summary": out.get("summary") or "",

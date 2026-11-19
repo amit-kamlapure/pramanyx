@@ -73,7 +73,7 @@ _PARAMS = {
 }
 
 
-def _announce(emit: Optional[Emit], p: Any) -> None:
+def announce_staged(emit: Optional[Emit], p: Any) -> None:
     """The staged proposal, on the turn's frame channel, so the chat draws the RECORD as a
     card. Best-effort: a dropped frame loses a card on screen, never a proposal."""
     if emit is None:
@@ -115,7 +115,7 @@ def draft_dashboard(home: Home, args: dict, *, emit: Optional[Emit] = None, said
             told = " ".join(published.refusals)
             return {"staged": False, "refused": list(published.refusals), "error": told,
                     "summary": "Nothing staged. Name a group the person belongs to, or a role they may publish to."}
-        _announce(emit, published.proposal)
+        announce_staged(emit, published.proposal)
         to = ", ".join(t["name"] for t in (published.proposal.params or {}).get("to") or [])
         return {"staged": True, "proposal_id": published.proposal.id, "expires_at": published.proposal.expires_at,
                 "summary": (f'Proposed to publish the dashboard "{(published.proposal.detail or {}).get("title")}" to {to} '
@@ -142,7 +142,7 @@ def draft_dashboard(home: Home, args: dict, *, emit: Optional[Emit] = None, said
                 "summary": "Nothing staged. Repair every point in `refused`, then draft it again."}
 
     p = drafted.proposal
-    _announce(emit, p)
+    announce_staged(emit, p)
     detail = p.detail or {}
     n = detail.get("counts") or {}
     shape = ", ".join(filter(None, [
