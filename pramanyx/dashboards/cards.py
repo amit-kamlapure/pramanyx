@@ -12,6 +12,7 @@ A card placed in a dashboard is not moved by being placed: the spec points at it
 """
 from __future__ import annotations
 
+import json
 from typing import Any, Iterable, Optional
 
 from pramanyx.dashboards.home import Home
@@ -81,14 +82,21 @@ def place(home: Home, card: StoredCard, *, metric: Optional[Any] = None) -> Stor
 
 def same_card_key(card: Any) -> str:
     """What makes two cards one: the approved metric each was made from; else the same kind, title
-    and query, spaced and cased alike — a copy. Two definitions of one figure under different names
-    are the metric approval's to catch (``semantic/metric_twins.py``), by their figures."""
+    and query, spaced and cased alike, drawn the same way — a copy. Two charts built on one of a
+    dashboard's datasets read the same query and are drawn differently, so they are two cards (the
+    user, 2026-11-19). Two definitions of one figure under different names are the metric approval's
+    to catch (``semantic/metric_twins.py``), by their figures."""
     metric = str(getattr(getattr(card, "provenance", None), "metric", "") or "")
     if metric:
         return f"metric:{metric}"
     sql = " ".join(str(getattr(card, "sql", "") or "").lower().split()).rstrip("; ")
     title = " ".join(str(getattr(card, "title", "") or "").lower().split())
-    return f"copy:{getattr(card, 'kind', '')}|{title}|{sql}" if sql else ""
+    render = getattr(card, "render", None)
+    render = render if isinstance(render, dict) else {}
+    viz = render.get("viz") if isinstance(render.get("viz"), dict) else {}
+    drawn = json.dumps({"shown": render.get("shown"), "as": viz.get("type")}, sort_keys=True, default=str) \
+        if render.get("shown") is not None else ""
+    return f"copy:{getattr(card, 'kind', '')}|{title}|{sql}|{drawn}" if sql else ""
 
 
 def not_offered(home: Home, held: list, placed: Iterable[str]) -> dict[str, str]:

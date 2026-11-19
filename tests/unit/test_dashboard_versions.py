@@ -479,6 +479,19 @@ def test_copies_a_cockpit_already_had_are_not_refused_again(desk):
     assert len(versions.twin_cards([desk.rate, desk.net], before=[desk.rate])) == 1
 
 
+def test_two_charts_built_on_one_dataset_are_two_cards(desk):
+    """Two charts set down on one of a dashboard's datasets read the same query under its name, each drawn its own way
+    (2026-11-19, seen live: the second was refused as a copy). Drawn the same way, they are still a copy."""
+    _copy_of_rate(desk)
+    for cid, shown in ((desk.rate, {"as": "bar", "x": "day"}), (desk.net, {"as": "line", "x": "day"})):
+        card = card_store.get_card(cid)
+        card_store.upsert_card(card.model_copy(update={"render": {**(card.render or {}), "shown": shown}}))
+    assert versions.twin_cards([desk.rate, desk.net]) == []
+    card = card_store.get_card(desk.net)
+    card_store.upsert_card(card.model_copy(update={"render": {**card.render, "shown": {"as": "bar", "x": "day"}}}))
+    assert len(versions.twin_cards([desk.rate, desk.net])) == 1
+
+
 def test_two_cards_of_one_approved_metric_are_one_card_whatever_their_titles(desk):
     for cid in (desk.rate, desk.net):
         card = card_store.get_card(cid)
