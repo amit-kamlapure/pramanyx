@@ -20364,7 +20364,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "departure" | "automation" | "metric" | "objects" | "set" | "sheet" | "briefing" | "dashboard";
+            kind: "departure" | "automation" | "metric" | "objects" | "set" | "sheet" | "briefing" | "dashboard" | "table" | "query";
             /**
              * Label
              * @default
@@ -20402,6 +20402,11 @@ export interface components {
              * @default
              */
             source: string;
+            /**
+             * Sql
+             * @default
+             */
+            sql: string;
             /** Values */
             values?: {
                 [key: string]: unknown;
