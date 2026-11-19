@@ -5754,6 +5754,18 @@ def _asker(request) -> str:
     return person_of(request)
 
 
+def _conversation_drafts_dashboards(req, request) -> bool:
+    """Whether the body that serves this turn is the conversation, holding `make_dashboard` (Stage 4, 2026-11-20): a quick
+    turn, for a person the dashboards know, on a model that calls tools."""
+    if req.depth != "quick" or not _asker(request):
+        return False
+    try:
+        from pramanyx.agent.converse_tools import binding_calls_tools
+        return bool(binding_calls_tools())
+    except Exception:  # noqa: BLE001 — not known: the door says where dashboards are made, as before
+        return False
+
+
 def _own_dashboard(req, request) -> Optional[tuple[str, ...]]:
     """``(person, dashboard id)`` when a question is asked about a dashboard the asker keeps — one shared with them (named
     with its owner) is theirs to read, not to change — else None; ``(person, dashboard id, card id)`` when it is asked about
@@ -6080,8 +6092,10 @@ async def _stream_ask(req: "AskRequest", request: Request, conn_id: str) -> Asyn
     # A request for a COCKPIT is not a question about data, and this chat drafts none — the
     # Briefing's Dashboards tab does (CT-9). Said here, before the clarify gate read it as an
     # under-specified question (2 of the CT receipt's 10 asks) or a model answered it as one.
-    # On a dashboard the person keeps, the conversation can change it (the Ask panel), so the request goes through.
-    if not req.insight_id and _own_dashboard(req, request) is None:
+    # On a dashboard the person keeps, the conversation can change it (the Ask panel), so the request goes through; and
+    # since Stage 4 (2026-11-20) the conversation drafts a new one (`make_dashboard`), so a quick turn it serves for a
+    # person it knows goes through too. Anywhere else — a deep run, nobody known, a model that calls no tools — it is said.
+    if not req.insight_id and _own_dashboard(req, request) is None and not _conversation_drafts_dashboards(req, request):
         from pramanyx.dashboards.intent import is_dashboard_ask, where_dashboards_are_made
         if is_dashboard_ask(req.question):
             yield _sse("headline", {"headline": where_dashboards_are_made()})

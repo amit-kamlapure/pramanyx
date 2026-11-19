@@ -115,10 +115,14 @@ def test_a_change_naming_the_dashboard_reaches_the_conversation_on_the_persons_o
     ask = "Add a revenue card to this dashboard"
     _ask(client, ask, OWN, depth="quick")
     assert served["body"] == "converse"
-    # with no dashboard of theirs open, the same words are still told where dashboards are made
+    # with no dashboard of theirs open, the conversation drafts a new one since Stage 4 (2026-11-20): a quick turn reaches it
     served.clear()
-    evs = _ask(client, ask, None, depth="quick")
-    assert not served
+    _ask(client, "Create a revenue dashboard", None, depth="quick")
+    assert served["body"] == "converse" and served["person"] == "ana"
+    # a deep run holds no dashboard drafting: it is still told where dashboards are made
+    served.clear()
+    evs = _ask(client, ask, None, depth="deep")
+    assert served.get("body") != "converse"
     assert next(e["headline"] for e in evs if e["type"] == "headline").startswith("Dashboards are drafted in the Briefing")
 
 
