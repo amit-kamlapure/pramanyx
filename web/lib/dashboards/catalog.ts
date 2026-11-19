@@ -61,8 +61,12 @@ import { z } from "zod";
  *  for a value on every card of the dashboard (`colors` on the root: a field's value to one of the six series colours;
  *  2026-11-18). 18: a placed card the dashboard's filters do not cut (`not_filtered`), and a page kept from its readers
  *  (`hidden` on a tab; 2026-11-18). 19: global filters. 20: filters that link, open on a value, name a date that moves, wait for
- *  Apply, hold to one page, match words exactly and feed a value; a card's fixed filters and the filters it ignores (2026-11-19). */
-export const DASHBOARD_VOCABULARY_VERSION = 20;
+ *  Apply, hold to one page, match words exactly and feed a value; a card's fixed filters and the filters it ignores (2026-11-19).
+ *  21: the datasets a dashboard's charts are built on (`datasets` on the spec), and the one a placed card is built on
+ *  (`dataset`; 2026-11-19). */
+export const DASHBOARD_VOCABULARY_VERSION = 21;
+/** v21 — a dataset's name, as the spec holds it and a placed card names it. */
+export const DATASET_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;
 /** v19 — how a global filter is chosen from (the user, 2026-11-18). */
 export const GLOBAL_FILTER_KINDS = ["multi", "single", "date", "date_range", "text", "range"] as const;
 export type GlobalFilterKind = (typeof GLOBAL_FILTER_KINDS)[number];
@@ -408,6 +412,8 @@ export const dashboardCatalog = defineCatalog(schema, {
         // v20 — filters the author sets on this placement, which no reader changes, and the dashboard's filters it does not follow
         fixed_filters: z.array(fixedFilter).max(MAX_FIXED_FILTERS).nullable().optional(),
         ignores_filters: z.array(z.string().min(1).max(80)).max(MAX_GLOBAL_FILTERS).nullable().optional(),
+        // v21 — the dashboard's dataset this chart is built on: a change to the dataset's statement is kept on it too
+        dataset: z.string().regex(DATASET_NAME).nullable().optional(),
         size, w, h, x, y,
       }),
       description: "One card from the card store, by its id. Never a figure, never SQL. May be shown by a condition. "

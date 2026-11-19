@@ -69,7 +69,7 @@ import { finishedWatch, heardFrame, startWatch, type DraftWatch } from "@/lib/da
 import { askAbout, dashboardSubject, useOnPage } from "@/lib/askSubject";
 import { ImportDashboard } from "@/components/dashboards/ImportDashboard";
 import { SubscribeDashboard } from "@/components/dashboards/SubscribeDashboard";
-import { ChartFromData } from "@/components/dashboards/Datasets";
+import { BuiltOnDataset, ChartFromData, followDataset, withFollowed } from "@/components/dashboards/Datasets";
 import { FromSql, FromTables } from "@/components/dashboards/StartFromData";
 import { downloadText } from "@/lib/query/csv";
 import { Chip } from "@/components/clarity/kit";
@@ -95,7 +95,7 @@ import { appWords } from "@/lib/dashboards/appVersion";
 import { MAX_CAPTION, MAX_NOTE, type Layout } from "@/lib/dashboards/catalog";
 import {
   addGlobalFilter, addPage, duplicatePage, removePage, rename, setProps,
-  cardsPlaced, editNote, layOut, moveTo, placeCard, placeImage, placeNote, placePiece, placeQuestion, recaption, regrid, sectionsOf, setFilterWidth, swapCard, takeOff, takeOffCard,
+  builtOn, cardsPlaced, datasetOfCard, editNote, layOut, moveTo, placeCard, placeImage, placeNote, placePiece, placeQuestion, recaption, regrid, sectionsOf, setFilterWidth, swapCard, takeOff, takeOffCard,
   type DashboardSpec,
   type Box,
 } from "@/lib/dashboards/edit";
@@ -195,8 +195,8 @@ function BoxSetup({ box, spec, connectionId, schema, busy, onCancel, onPlace, on
   box: PlacedBox; spec: DashboardSpec; connectionId: string; schema?: string; busy: boolean; onCancel: () => void;
   onPlace: (next: DashboardSpec, note: string) => void; onNote: (text: string) => void; onImage: (objectId: string, caption: string) => void;
   onHandOff: (kind: HandOff, section: string | null) => void;
-  /** A chart built on one of the dashboard's datasets, its card kept: placed in the box. */
-  onChart: (cardId: string, title: string) => void;
+  /** A chart built on one of the dashboard's datasets, its card kept: placed in the box, built on that dataset. */
+  onChart: (cardId: string, title: string, dataset: string) => void;
 }) {
   // a chart is built on the dashboard's data (the user, 2026-11-19); every other piece a chart box may be is one click away
   const [others, setOthers] = useState(false);
@@ -1458,6 +1458,14 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
     return (
       <div data-testid="briefing-dashboards" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
         <DashboardBuilder spec={current} onChange={change} cardTitle={id => lines.get(id)?.title} connectionId={connectionId} schema={schema}
+          onFollow={async (name, def) => {
+            // a dataset's statement changed (the user, 2026-11-19: "link them"): every chart built on it follows, or none does
+            const out = await followDataset(connectionId, current, name, def, id => data.cards.find(c => c.id === id));
+            if ("refused" in out) return out.refused;
+            edit(s => withFollowed(s, name, def, out.swaps), "a dataset's statement changed by hand, and the charts built on it",
+              `Kept. ${out.charts} ${out.charts === 1 ? "chart reads" : "charts read"} the new statement.`);
+            return [];
+          }}
           release={data.ontology?.current && data.ontology.pinned === data.ontology.current ? numberOf(data.ontology.current) : null}
           onAddPiece={(_section, what) => { shut(); setAsking(false); setBox(null); setPlaceKind(what === "filter" ? "filter" : "chart"); }}
           placing={{ kind: placeKind, box, chosen: justPlaced, onPlaced: b => { setPlaceKind(null); setBox(b); }, onCancel: () => setPlaceKind(null), onBox: () => {} }}
@@ -1549,6 +1557,13 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
             // Arc AP-7 — a card of the person's own query is set up here: its SQL, how it is shown, and Keep
             const held = data.cards.find(c => c.id === cardId);
             if (!held || !held.own || !(held.render as { shown?: unknown })?.shown) return null;
+            // a chart built on a dataset reads the dataset's statement: changed in the Data pane, for every chart on it
+            const on = datasetOfCard(current, cardId);
+            const dataset = on ? current.datasets?.[on] : undefined;
+            if (on && dataset) {
+              return <BuiltOnDataset label={dataset.label} table={dataset.table ?? null}
+                onOwnSql={() => change(builtOn(current, cardId, null), "a chart given its own query by hand, on no dataset now")} />;
+            }
             return (
               <QuerySetup key={held.id} connectionId={connectionId} card={held} values={current.values ?? {}} shapeElsewhere
                 onKept={(kept, replaced) => replaced
@@ -1574,7 +1589,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
             <BoxSetup box={box} spec={current} connectionId={connectionId} schema={schema} busy={busy}
               onCancel={() => setBox(null)}
               onPlace={change}
-              onChart={(cardId, title) => edit(s => placeCard(s, cardId, box.section), "a chart built on a dataset by hand",
+              onChart={(cardId, title, dataset) => edit(s => builtOn(placeCard(s, cardId, box.section), cardId, dataset), "a chart built on a dataset by hand",
                 `Placed “${title}”. Set its X axis, Y axis and colour in the panel.`)}
               onNote={text => edit(s => placeNote(s, text, box.section), "a note written by hand", "Placed. Its author and date are stamped as it is kept.")}
               onImage={(objectId, caption) => edit(s => placeImage(s, objectId, caption, box.section), "an image uploaded by hand",

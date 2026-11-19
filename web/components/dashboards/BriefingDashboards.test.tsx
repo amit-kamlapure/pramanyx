@@ -1112,9 +1112,63 @@ describe("your own query on the dashboard (Arc AP-7)", () => {
       const placed = Object.values((kept as { elements: Record<string, { type: string; props: Record<string, unknown> }> }).elements)
         .filter(el => el.type === "Card" && el.props.card === "qdata");
       expect(placed).toHaveLength(1);
-      expect(placed[0].props).toEqual(expect.objectContaining({ w: 6, h: 8 }));        // the box's own size
+      expect(placed[0].props).toEqual(expect.objectContaining({ w: 6, h: 8, dataset: "orders" }));   // the box's own size, built on its data
       expect((kept as { datasets?: unknown }).datasets).toEqual(datasets);            // the data stays the dashboard's
     } finally { delete SPEC.datasets; }
+  });
+
+  it("a dataset's statement changed is kept on the chart built on it, which says what it is built on (link them)", async () => {
+    const datasets = { orders: { label: "Orders", sql: "SELECT day, sales FROM thelook.orders" } };
+    const net = SPEC.elements["card-net"].props;
+    SPEC.datasets = datasets;
+    SPEC.elements["card-net"].props = { ...net, dataset: "orders" };
+    try {
+      api.getDashboard.mockResolvedValue({ ...READ, cards: [READ.cards[0], queryCard("c91b2002"), READ.cards[2]] });
+      api.previewDashboardQuery.mockResolvedValue({ connection_id: "thelook", refused: [] });
+      api.keepDashboardQuery.mockResolvedValue({ card: queryCard("q0paid01"), preview: { connection_id: "thelook", refused: [] } });
+      await openBuilder();
+      openLayout();
+      fireEvent.click((await screen.findAllByTestId("builder-line")).find(l => l.dataset.key === "card-net")!);
+      fireEvent.click(screen.getByTestId("card-fold-reads"));
+      // its SQL is the dataset's: no query of its own to change here, and a way to one
+      expect(await screen.findByTestId("chart-built-on")).toHaveTextContent("Orders");
+      expect(screen.queryByTestId("query-setup")).toBeNull();
+      fireEvent.click(screen.getByRole("radio", { name: "Data" }));
+      expect(screen.getByTestId("data-dataset")).toHaveTextContent("Your own SQL · 1 chart");
+      fireEvent.click(screen.getByRole("button", { name: "Change Orders" }));
+      fireEvent.change(screen.getByLabelText("The dataset's SQL"), { target: { value: "SELECT day, sales FROM thelook.orders WHERE paid" } });
+      fireEvent.click(screen.getByTestId("data-dataset-keep"));
+      await waitFor(() => expect(api.keepDashboard).toHaveBeenCalled());
+      expect(api.keepDashboardQuery).toHaveBeenCalledWith("thelook", expect.objectContaining({
+        sql: "SELECT day, sales FROM thelook.orders WHERE paid", replaces: "c91b2002", title: "Sales by day" }));
+      const [, , kept, note] = api.keepDashboard.mock.calls.at(-1)!;
+      expect(note).toBe("a dataset's statement changed by hand, and the charts built on it");
+      const k = kept as { datasets: Record<string, { sql: string }>; elements: Record<string, { props: Record<string, unknown> }> };
+      expect(k.datasets.orders.sql).toBe("SELECT day, sales FROM thelook.orders WHERE paid");
+      expect(k.elements["card-net"].props).toEqual(expect.objectContaining({ card: "q0paid01", dataset: "orders" }));
+    } finally {
+      delete SPEC.datasets;
+      SPEC.elements["card-net"].props = net;
+    }
+  });
+
+  it("a chart built on a dataset can be given its own SQL, after which the dataset no longer reaches it", async () => {
+    const net = SPEC.elements["card-net"].props;
+    SPEC.datasets = { orders: { label: "Orders", sql: "SELECT day, sales FROM thelook.orders" } };
+    SPEC.elements["card-net"].props = { ...net, dataset: "orders" };
+    try {
+      api.getDashboard.mockResolvedValue({ ...READ, cards: [READ.cards[0], queryCard("c91b2002"), READ.cards[2]] });
+      await openBuilder();
+      openLayout();
+      fireEvent.click((await screen.findAllByTestId("builder-line")).find(l => l.dataset.key === "card-net")!);
+      fireEvent.click(screen.getByTestId("card-fold-reads"));
+      fireEvent.click(await screen.findByTestId("chart-own-sql"));
+      expect(await screen.findByTestId("query-setup")).toBeInTheDocument();
+      expect(screen.queryByTestId("chart-built-on")).toBeNull();
+    } finally {
+      delete SPEC.datasets;
+      SPEC.elements["card-net"].props = net;
+    }
   });
 
   it("a chart box on a dashboard with no data yet asks for data first, held as a dataset", async () => {

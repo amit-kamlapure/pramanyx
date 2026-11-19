@@ -78,7 +78,7 @@ def test_the_first_spec_kept_is_version_one(desk):
     assert latest["approved_by"] == "user1"
     assert latest["source"] == "a person's own hand"
     assert latest["note"] == "the first cut"
-    assert latest["vocabulary_version"] == 20                    # 17: column looks and kept colours; 16: a placed card's own look; 15: the period as a piece; 14: free placement (x, y)
+    assert latest["vocabulary_version"] == 21                    # 21: datasets; 17: column looks and kept colours; 16: a placed card's own look; 15: the period as a piece; 14: free placement (x, y)
     assert latest["cards"] == [desk.rate, desk.net]
     assert latest["changes"] == {"added": sorted(desk.spec()["elements"]), "removed": [], "changed": []}
     assert latest["kept_at"]

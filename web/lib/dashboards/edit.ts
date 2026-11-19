@@ -764,12 +764,38 @@ export function putDataset(spec: unknown, name: string, def: DashboardDataset): 
   return s;
 }
 
-/** The dataset `name` taken off; the charts already built on it keep reading what they read. */
+/** The dataset `name` taken off; the charts already built on it keep reading what they read, no longer built on it. */
 export function dropDataset(spec: unknown, name: string): DashboardSpec {
   const s = copy(spec);
   const rest = { ...(s.datasets ?? {}) };
   delete rest[name];
   if (Object.keys(rest).length) s.datasets = rest; else delete s.datasets;
+  for (const el of Object.values(s.elements)) {
+    if (el.type === "Card" && el.props?.dataset === name) { const { dataset: _gone, ...props } = el.props; el.props = props; }
+  }
+  return s;
+}
+
+/** The cards placed as charts built on the dataset `name`, each once. */
+export function cardsBuiltOn(spec: DashboardSpec, name: string): string[] {
+  return [...new Set(Object.values(spec.elements).filter(el => el.type === "Card" && el.props?.dataset === name)
+    .map(el => String(el.props.card ?? "")).filter(Boolean))];
+}
+
+/** The dataset the card `cardId` is built on where it is placed, if any. */
+export function datasetOfCard(spec: DashboardSpec, cardId: string): string | null {
+  const el = Object.values(spec.elements).find(e => e.type === "Card" && e.props?.card === cardId && typeof e.props?.dataset === "string");
+  return el ? String(el.props.dataset) : null;
+}
+
+/** The card `cardId` built on the dataset `name` wherever it is placed — or, with none, on no dataset: its own query. */
+export function builtOn(spec: unknown, cardId: string, name: string | null): DashboardSpec {
+  const s = copy(spec);
+  for (const el of Object.values(s.elements)) {
+    if (el.type !== "Card" || el.props?.card !== cardId) continue;
+    const { dataset: _was, ...props } = el.props;
+    el.props = name ? { ...props, dataset: name } : props;
+  }
   return s;
 }
 

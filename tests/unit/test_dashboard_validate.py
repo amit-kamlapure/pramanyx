@@ -52,6 +52,17 @@ def test_the_premise_is_accepted_and_names_the_cards_it_places(premise):
 # ── what only the platform knows ──────────────────────────────────────────────
 
 @needs_rules
+def test_the_server_holds_a_dashboards_datasets_and_the_one_each_chart_is_built_on(premise):
+    """2026-11-19: a dashboard's charts are built on its datasets, and a change to a dataset reaches each chart on it."""
+    premise["datasets"] = {"orders": {"label": "Orders", "sql": "SELECT * FROM shop.orders", "table": "shop.orders"}}
+    premise["elements"]["card-net"]["props"]["dataset"] = "orders"
+    assert V.check_spec(premise, known_cards=CARDS).status == V.ACCEPTED
+    premise["elements"]["card-net"]["props"]["dataset"] = "returns"
+    refused = V.check_spec(premise, known_cards=CARDS)
+    assert refused.status == V.REFUSED and 'built on the dataset "returns", which the dashboard does not hold' in said(refused)
+
+
+@needs_rules
 def test_a_card_this_canvas_does_not_hold_is_refused_by_name(premise):
     verdict = V.check_spec(premise, known_cards={"c7f3a001"})
     assert verdict.status == V.REFUSED
@@ -179,7 +190,7 @@ def test_a_spec_that_is_not_json_is_refused_before_anything_runs(premise):
 @needs_rules
 def test_the_server_reads_the_vocabulary_the_web_declares():
     vocab = V.vocabulary()
-    assert vocab["version"] == 20                # 17: column looks and kept colours; 16: a placed card's own look; 15: the period as a piece; 14: free placement (x, y); 3: the ontology's pieces (Arc OC-4); 4: a dashboard from an object; 5: sizes one grade at a time (Arc AP-1); 6: the wiring (AP-2, AP-3); 7: the structure and the picker's pieces (AP-4); 8: variables (AP-8); 9: sets read whole (AP-8b); 10: yes-no, lists, sums, queries (AP-8c); 11: a Question (PENDING 54); 12: a breakdown
+    assert vocab["version"] == 21                # 21: datasets and the one a chart is built on; 17: column looks and kept colours; 16: a placed card's own look; 15: the period as a piece; 14: free placement (x, y); 3: the ontology's pieces (Arc OC-4); 4: a dashboard from an object; 5: sizes one grade at a time (Arc AP-1); 6: the wiring (AP-2, AP-3); 7: the structure and the picker's pieces (AP-4); 8: variables (AP-8); 9: sets read whole (AP-8b); 10: yes-no, lists, sums, queries (AP-8c); 11: a Question (PENDING 54); 12: a breakdown
     assert vocab["components"] == ["Cockpit", "Tabs", "Tab", "Section", "Card", "Note", "Image",
                                    "ProcessBoard", "ObjectTable", "ObjectDetail", "ActionButton",
                                    "ObjectFilters", "ObjectFigure", "ObjectChart", "ObjectBreakdown", "ActionButtons",

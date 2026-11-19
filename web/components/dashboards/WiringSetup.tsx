@@ -22,7 +22,7 @@ import {
   MAX_LABEL, MAX_SETS, MAX_VALUE_OPTIONS, MAX_VALUES, MAX_WHERE, SET_COMBINES, SET_OPS, VALUE_KINDS, VALUE_OPS, type DashboardSetDef, type DashboardValueDef,
   type SetCombine, type SetOp,
 } from "@/lib/dashboards/catalog";
-import { MAX_DATASETS, dropWire, freshWireName, putSet, putValue, renameValue, type DashboardSpec } from "@/lib/dashboards/edit";
+import { MAX_DATASETS, dropWire, freshWireName, putSet, putValue, renameValue, type DashboardDataset, type DashboardSpec } from "@/lib/dashboards/edit";
 import { lineOf, setTitles, wireWords } from "@/lib/dashboards/names";
 import { choicesOf, doorConditions, isRefused, readSet, readersOf, segmentId, segmentRule } from "@/lib/dashboards/sets";
 import { typedValue, valueFits, valueWords } from "@/lib/dashboards/values";
@@ -190,7 +190,7 @@ function CountOf({ spec, set, sum, connectionId, schema }: { spec: DashboardSpec
 /** The Data pane (Arc AP-8; the datasets, 2026-11-19): the datasets the charts are built on first, then the values, each
  *  with where it comes from, what it holds now and how many read it; then the sets; then what the pieces output — a row
  *  chosen, rows ticked, a figure clicked — and the doors to new ones. */
-export function DataPane({ spec, selected, onSelect, onChange, connectionId, schema, cardReads }: {
+export function DataPane({ spec, selected, onSelect, onChange, connectionId, schema, cardReads, onFollow }: {
   spec: DashboardSpec;
   /** `set:<name>`, `value:<name>` or `choice:<name>` while one is chosen. */
   selected: string | null;
@@ -200,6 +200,8 @@ export function DataPane({ spec, selected, onSelect, onChange, connectionId, sch
   schema?: string;
   /** The values a card of the person's own query reads, by the card's id. */
   cardReads?: (cardId: string) => string[];
+  /** A dataset's statement changed: kept on every chart built on it, or each reason one cannot follow. */
+  onFollow?: (name: string, def: DashboardDataset) => Promise<string[]>;
 }) {
   const sets = Object.keys(spec.sets ?? {});
   const values = Object.keys(spec.values ?? {});
@@ -235,7 +237,7 @@ export function DataPane({ spec, selected, onSelect, onChange, connectionId, sch
   return (
     <div data-testid="builder-data" style={{ padding: "0 6px 8px" }}>
       <Label right={`${Object.keys(spec.datasets ?? {}).length} of ${MAX_DATASETS}`}>Datasets</Label>
-      <DatasetsList spec={spec} connectionId={connectionId} onChange={onChange} />
+      <DatasetsList spec={spec} connectionId={connectionId} onChange={onChange} onFollow={onFollow} />
       <Label right={`${values.length} of ${MAX_VALUES}`}>Values</Label>
       {values.map(n => {
         const v = spec.values?.[n];

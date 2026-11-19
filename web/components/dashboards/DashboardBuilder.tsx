@@ -35,7 +35,7 @@ import { toast } from "@/components/ui/toast";
 import { FILTER_DEFAULT_PX, FILTER_WIDTH, GRADE, LIMITS, type GridKind } from "@/lib/dashboards/catalog";
 import {
   addSectionInside, canMove, duplicate, inColumns, moveWithin, outline, sectionsOf, setFilterWidth, setSectionWidth, splitSection, takeOffAll,
-  type Box, type DashboardSpec, type Side,
+  type Box, type DashboardDataset, type DashboardSpec, type Side,
 } from "@/lib/dashboards/edit";
 import { lineOf, nameOf, setTitles } from "@/lib/dashboards/names";
 import { checkDashboardSpec } from "@/lib/dashboards/rules";
@@ -129,7 +129,7 @@ function Steps({ label, value, least, most, onStep }: { label: string; value: nu
 const Rule = () => <span aria-hidden="true" style={{ width: 1, height: 16, background: "var(--b2)", margin: "0 6px" }} />;
 
 export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words, aside, above, connectionId, schema,
-  onAddPiece, checks, cardSetup, cardChart, cardSql, cardReads, queryCards, onUndo, onRedo, cardDates, cardHolds, release, askPiece, placing, children }: {
+  onAddPiece, checks, cardSetup, cardChart, cardSql, cardReads, queryCards, onUndo, onRedo, cardDates, cardHolds, release, askPiece, placing, onFollow, children }: {
   spec: DashboardSpec;
   /** A box being placed (the user, 2026-11-19): the kind the strip picked up, the box set down and waiting for what it is,
    *  and where a box set down, let go, or clicked goes. */
@@ -172,6 +172,8 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
   cardChart?: (cardId: string) => ReactNode | null;
   cardSql?: (cardId: string) => ReactNode | null;
   /** Arc AP-8 — the dashboard's values a card of the person's own query reads, by the card's id. */
+  /** A dataset's statement changed in the Data pane: kept on every chart built on it, or each reason one cannot follow. */
+  onFollow?: (name: string, def: DashboardDataset) => Promise<string[]>;
   cardReads?: (cardId: string) => string[];
   /** Arc AP-8c — the cards of the person's own query the dashboard places: a value may read one's first value. */
   queryCards?: { id: string; title: string }[];
@@ -367,7 +369,7 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
           </div>
           {tab === "data" ? (
             <DataPane spec={spec} selected={wire} onSelect={key => { setWire(key); setSelected(null); }} onChange={apply}
-              connectionId={connectionId} schema={schema} cardReads={cardReads} />
+              connectionId={connectionId} schema={schema} cardReads={cardReads} onFollow={onFollow} />
           ) : (
             <>
               <PaneLabel>Layout · {lines} {lines === 1 ? "line" : "lines"}</PaneLabel>

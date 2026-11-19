@@ -47,7 +47,7 @@ describe("the catalog", () => {
       card_statuses: ["within", "over", "unmeasured", "withheld"],
       limits: { elements: MAX_ELEMENTS, tabs: MAX_TABS, cards: MAX_CARDS },
     });
-    expect(DASHBOARD_VOCABULARY_VERSION).toBe(20);        // 17: column looks and kept colours; 16: a placed card's own look; 15: the period as a piece; 14: free placement (x, y); 13: a dashboard made from a file; 5: sizes one grade at a time (Arc AP-1); 6: the wiring (AP-2, AP-3); 7: the structure (AP-4); 8: variables (AP-8); 9: sets read whole (AP-8b); 10: yes-no, lists, sums, queries (AP-8c); 11: a Question (PENDING 54); 12: a breakdown (the Grist study §10)
+    expect(DASHBOARD_VOCABULARY_VERSION).toBe(21);        // 21: datasets and the one a chart is built on; 17: column looks and kept colours; 16: a placed card's own look; 15: the period as a piece; 14: free placement (x, y); 13: a dashboard made from a file; 5: sizes one grade at a time (Arc AP-1); 6: the wiring (AP-2, AP-3); 7: the structure (AP-4); 8: variables (AP-8); 9: sets read whole (AP-8b); 10: yes-no, lists, sums, queries (AP-8c); 11: a Question (PENDING 54); 12: a breakdown (the Grist study §10)
   });
 });
 
@@ -168,6 +168,15 @@ describe("the datasets a dashboard's charts are built on (2026-11-19)", () => {
     ["a field it has never heard of", { orders: { label: "Orders", sql: "SELECT 1", cards: ["c1"] } }],
   ])("refuses %s", (_what, datasets) => {
     expect(refused(s => { s.datasets = datasets; })).toMatch(/is not a label and the statement it reads/);
+  });
+
+  it("a chart is built on a dataset the dashboard holds", () => {
+    const spec = premise();
+    spec.datasets = { orders: { label: "Orders", sql: "SELECT * FROM shop.orders" } };
+    (spec.elements["card-rate"].props as Record<string, unknown>).dataset = "orders";
+    expect(checkDashboardSpec(spec).valid).toBe(true);
+    expect(refused(s => { (s.elements["card-rate"].props as Record<string, unknown>).dataset = "orders"; }))
+      .toMatch(/"card-rate" is built on the dataset "orders", which the dashboard does not hold/);
   });
 
   it("refuses more than it holds, and a list", () => {
