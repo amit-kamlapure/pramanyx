@@ -277,7 +277,7 @@ function DashboardRootBody(props: ComponentRenderProps<{ title: string }>) {
     );
   }
   return (
-    <div style={{ display: "grid", gridTemplateColumns: `${FILTER_COLUMN}px minmax(0, 1fr)`, gap: 14, alignItems: "start" }}>
+    <div style={{ display: "grid", gridTemplateColumns: `${FILTER_COLUMN}px minmax(0, 1fr)`, gap: SPACE, alignItems: "start" }}>
       {column}
       <div style={{ minWidth: 0 }}><RootLayout {...rest} /></div>
     </div>
@@ -318,7 +318,7 @@ function RootLayout({ element, children }: ComponentRenderProps<{ title: string 
       // put away, a button above the cards brings it back; the column stays mounted, it holds what the reader chose
       return (
         <QueryNarrowingProvider table={held.table}>
-          <div role="region" aria-label={element.props.title} data-testid="dashboard" style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
+          <div role="region" aria-label={element.props.title} data-testid="dashboard" style={{ display: "flex", flexDirection: "column", gap: SPACE, minWidth: 0 }}>
             <QueryFiltersShut />
             <div data-testid="dashboard-filter-column" hidden style={{ display: "none" }}>{queryColumn}</div>
             <ValuesBar spaced={false} /><FilteredBy /><FirstPageDoor />{others}
@@ -329,9 +329,9 @@ function RootLayout({ element, children }: ComponentRenderProps<{ title: string 
     return (
       <QueryNarrowingProvider table={held.table}>
         <div role="region" aria-label={element.props.title} data-testid="dashboard"
-          style={{ display: "grid", gridTemplateColumns: `${(held.w ?? null) ? (held.w as number) * GRADE : FILTER_COLUMN}px minmax(0, 1fr)`, gap: 14, alignItems: "start" }}>
+          style={{ display: "grid", gridTemplateColumns: `${(held.w ?? null) ? (held.w as number) * GRADE : FILTER_COLUMN}px minmax(0, 1fr)`, gap: SPACE, alignItems: "start" }}>
           <div data-testid="dashboard-filter-column" style={{ alignSelf: "stretch", minWidth: 0 }}><FiltersHead />{queryColumn}</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}><ValuesBar spaced={false} /><FilteredBy /><FirstPageDoor />{others}</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: SPACE, minWidth: 0 }}><ValuesBar spaced={false} /><FilteredBy /><FirstPageDoor />{others}</div>
         </div>
       </QueryNarrowingProvider>
     );
@@ -345,7 +345,7 @@ function RootLayout({ element, children }: ComponentRenderProps<{ title: string 
   const props = first.props as { entity: string; properties: FilterProperty[]; w?: number | null; set?: string | null };
   if (shut) {
     return (
-      <div role="region" aria-label={element.props.title} data-testid="dashboard" style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
+      <div role="region" aria-label={element.props.title} data-testid="dashboard" style={{ display: "flex", flexDirection: "column", gap: SPACE, minWidth: 0 }}>
         <ObjectFiltersShut />
         <div data-testid="dashboard-filter-column" hidden style={{ display: "none" }}>{column}</div>
         <ValuesBar spaced={false} />
@@ -362,7 +362,7 @@ function RootLayout({ element, children }: ComponentRenderProps<{ title: string 
   const width = grades ? grades * GRADE : FILTER_COLUMN;
   return (
     <div role="region" aria-label={element.props.title} data-testid="dashboard"
-      style={{ display: "grid", gridTemplateColumns: `${width}px minmax(0, 1fr)`, gap: 14, alignItems: "start" }}>
+      style={{ display: "grid", gridTemplateColumns: `${width}px minmax(0, 1fr)`, gap: SPACE, alignItems: "start" }}>
       <div className="group" data-testid="dashboard-filter-column" data-width={width} data-selected={selected === firstKey || undefined}
         onPointerDownCapture={doors.onSelect ? () => doors.onSelect?.(firstKey) : undefined}
         style={{ position: "relative", alignSelf: "stretch", minWidth: 0, borderRadius: "var(--r3)",
@@ -374,7 +374,7 @@ function RootLayout({ element, children }: ComponentRenderProps<{ title: string 
             onDone={g => doors.onFilterWidth?.(g)} />
         )}
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: SPACE, minWidth: 0 }}>
         <ValuesBar spaced={false} />
         <ObjectFilterWords entity={props.entity} properties={props.properties} set={props.set}>
           {said => <FilteredBy objects={said} />}
@@ -511,7 +511,11 @@ function DashboardTab({ element, children }: ComponentRenderProps<{ name: string
 
 /** The narrowest a tile is drawn. A section never asks for more columns than fit. */
 const MIN_TILE = 200;
-const GAP = 12;
+/** Between a dashboard's parts — its filters column and its sections, one under another: a little more than between cards. */
+const SPACE = 10;
+
+/** Between cards laid out by size: the grid's own thin gap, so a dashboard reads the same either way. */
+const GAP = GRID.gap;
 const MAX_AUTO_COLUMNS = 4;
 /** The room a second row gives a tile when nothing beside it sets the row's height. */
 const TALL_MIN = 320;
@@ -603,7 +607,7 @@ function LaidOutSection({ element, children }: ComponentRenderProps<SectionProps
         </>
       ) : (
         <div ref={box} style={layout === "columns" ? {
-          display: "grid", gap: GRID.gap * 1.5, alignItems: "start", gridTemplateColumns: `repeat(${narrow ? 1 : GRID.columns}, minmax(0, 1fr))`,
+          display: "grid", gap: GRID.gap, alignItems: "start", gridTemplateColumns: `repeat(${narrow ? 1 : GRID.columns}, minmax(0, 1fr))`,
         } : { display: "flex", flexDirection: "column", gap: 4 }}>
           {kids.map((node, i) => {
             const w = Number(elements[held[i]]?.props?.w ?? GRID.columns);
