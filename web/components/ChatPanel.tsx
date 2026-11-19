@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { answerableRun, getConnections, listUserAgents, recordOverviewDrill, cancelInvestigation, cancelActiveDeepRun, type UserAgent } from "@/lib/api";
+import { answerableRun, getConnections, getMetrics, listUserAgents, recordOverviewDrill, cancelInvestigation, cancelActiveDeepRun, type UserAgent } from "@/lib/api";
+import { useQuery } from "@tanstack/react-query";
+import { askedBefore, assistAt, historyStep, mentionIn, withoutCommand, type Offer } from "@/lib/composerAssist";
+import { useRichSchema } from "@/lib/schema-context";
 import { doorFor, isPlainSend } from "@/lib/chatDoors";
 import { uploadAttachment, type AttachmentResult } from "@/lib/attachments";
 import { answersDeep, projectThread, newSessionId, type PramanyxUIMessage, type ChatTurn } from "@/lib/chatTurn";
@@ -78,6 +81,8 @@ interface Props {
   harness?: boolean;
   /** Told the conversation's id and its first question once it has one: the Ask panel names its tab by it. */
   onSession?: (session: string, title: string) => void;
+  /** A new conversation, beside this one: what the composer's /new does. Absent, /new is not offered. */
+  onNew?: () => void;
 }
 
 /** The modes a person can PICK in the composer. `auto` is deliberately absent: the
@@ -93,6 +98,22 @@ export type ChatMode = "ask" | "investigate";
  *  `ChatMode` would silently delete those three behaviours.
  */
 type RouteMode = ChatMode | "auto";
+
+/** The connection's tables and metrics a person can mention with @: read from the shared caches, and only once a mention
+ *  has been started, so a conversation nobody mentions anything in reads neither. */
+function MentionObjects({ connectionId, onObjects }: { connectionId: string; onObjects: (objects: Offer[]) => void }) {
+  const { schema } = useRichSchema(connectionId || null);
+  const { data: metrics } = useQuery({
+    queryKey: ["ask-mention-metrics", connectionId], queryFn: () => getMetrics(connectionId), enabled: !!connectionId, staleTime: 5 * 60_000,
+  });
+  useEffect(() => {
+    onObjects([
+      ...(schema?.tables ?? []).map(t => ({ value: t.name, label: t.name, hint: "table" })),
+      ...(metrics ?? []).map(m => ({ value: m.name, label: m.label || m.name, hint: "metric" })),
+    ]);
+  }, [schema, metrics, onObjects]);
+  return null;
+}
 
 /* ── Input box — module-level so React never remounts it on parent re-render ── */
 interface InputBoxProps {
@@ -120,11 +141,51 @@ interface InputBoxProps {
   changes?: boolean;
   /** The coworker's composer: its edge wears the brand's colours at rest, as the coworker's does. */
   harness?: boolean;
+  /** What the composer offers while a person writes (`lib/composerAssist.ts`): @ objects, / commands, ↑↓ history. */
+  assist?: ComposerAssistSources;
 }
 
-function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, setMode, onSend, onStop, onClear, attachedFile, onAttach, agents, agentId, setAgentId, subject, onDropSubject, changes = false, harness = false }: InputBoxProps) {
+interface ComposerAssistSources {
+  objects: Offer[];
+  commands: Offer[];
+  onCommand: (value: string) => void;
+  /** The questions already asked in the conversation, oldest first. */
+  history: string[];
+  /** A person started writing a mention: read the objects there are to mention. */
+  onWantObjects: () => void;
+}
+
+function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, setMode, onSend, onStop, onClear, attachedFile, onAttach, agents, agentId, setAgentId, subject, onDropSubject, changes = false, harness = false, assist }: InputBoxProps) {
   const [focused, setFocused] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // what the composer offers at the caret, and where a walk through the questions already asked stands
+  const [caret, setCaret] = useState(0);
+  const [pick, setPick] = useState(0);
+  const [shut, setShut] = useState<number | null>(null);
+  const [walk, setWalk] = useState<{ at: number; draft: string }>({ at: -1, draft: "" });
+  const found = assist ? assistAt(input, caret, assist.objects, assist.commands) : null;
+  const offered = found && shut !== found.start ? found : null;
+  const offeredKey = offered ? `${offered.kind}:${offered.start}:${offered.query}` : "";
+  useEffect(() => { setPick(0); }, [offeredKey]);
+  const wantsObjects = !!assist && /(^|\s)@/.test(input);
+  useEffect(() => { if (wantsObjects) assist?.onWantObjects(); }, [wantsObjects]); // eslint-disable-line react-hooks/exhaustive-deps -- once a mention starts
+  const placeAt = (at: number) => requestAnimationFrame(() => {
+    const ta = textareaRef.current;
+    if (ta) { ta.setSelectionRange(at, at); setCaret(at); }
+  });
+  const choose = (offer: Offer) => {
+    if (!offered || !assist) return;
+    if (offered.kind === "mention") {
+      const next = mentionIn(input, offered, offer);
+      setInput(next.text);
+      placeAt(next.caret);
+    } else {
+      setInput(withoutCommand(input, offered));
+      placeAt(0);
+      assist.onCommand(offer.value);
+    }
+  };
+  const remembered = (e: React.SyntheticEvent<HTMLTextAreaElement>) => setCaret(e.currentTarget.selectionStart ?? 0);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] ?? null;
@@ -179,14 +240,65 @@ function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, se
         </div>
       )}
 
+      {/* What is on offer at the caret: objects to mention, or commands — chosen with the arrows and Enter, or a click */}
+      {offered && (
+        <div id="composer-offers" role="listbox" data-testid="composer-offers" data-kind={offered.kind}
+          aria-label={offered.kind === "mention" ? "Objects to mention" : "Commands"}
+          style={{ display: "flex", flexDirection: "column", gap: 1, padding: "6px 6px 0", maxHeight: 220, overflowY: "auto" }}>
+          {offered.offers.map((o, i) => (
+            <Button key={`${o.hint}:${o.value}`} variant="ghost" size="xs" role="option" aria-selected={i === pick} data-testid="composer-offer"
+              onMouseDown={e => e.preventDefault()} onClick={() => choose(o)}
+              style={{ justifyContent: "space-between", gap: 8, background: i === pick ? "var(--bg-sel)" : undefined }}>
+              <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--t1)" }}>{o.label}</span>
+              <span style={{ flex: "none", color: "var(--t3)" }}>{o.hint}</span>
+            </Button>
+          ))}
+        </div>
+      )}
+
       {/* Textarea row */}
       <textarea
         ref={textareaRef}
         rows={multiline ? 2 : 1}
         value={input}
-        onChange={(e) => setInput(e.target.value)}
+        onChange={(e) => { setInput(e.target.value); setCaret(e.target.selectionStart ?? 0); if (walk.at !== -1) setWalk({ at: -1, draft: "" }); }}
+        onSelect={remembered}
+        onClick={remembered}
+        aria-expanded={offered ? true : undefined}
+        aria-controls={offered ? "composer-offers" : undefined}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); }
+          if (offered) {
+            const n = offered.offers.length;
+            if (e.key === "ArrowDown") { e.preventDefault(); setPick(i => (i + 1) % n); return; }
+            if (e.key === "ArrowUp") { e.preventDefault(); setPick(i => (i - 1 + n) % n); return; }
+            if ((e.key === "Enter" || e.key === "Tab") && !e.shiftKey) { e.preventDefault(); choose(offered.offers[Math.min(pick, n - 1)]); return; }
+            if (e.key === "Escape") { e.preventDefault(); setShut(offered.start); return; }
+          } else if (assist && !e.shiftKey && !e.altKey && !e.metaKey && !e.ctrlKey) {
+            // ↑ recalls what was asked when nothing is being written (or the walk has begun); ↓ comes back to the draft
+            const ta = e.currentTarget;
+            const top = !input.slice(0, ta.selectionStart ?? 0).includes("\n");
+            const bottom = !input.slice(ta.selectionEnd ?? input.length).includes("\n");
+            if (e.key === "ArrowUp" && top && (input === "" || walk.at !== -1)) {
+              const at = historyStep(assist.history, walk.at, "back");
+              if (at !== -1) {
+                e.preventDefault();
+                setWalk({ at, draft: walk.at === -1 ? input : walk.draft });
+                setInput(assist.history[at]);
+                placeAt(assist.history[at].length);
+                return;
+              }
+            }
+            if (e.key === "ArrowDown" && bottom && walk.at !== -1) {
+              e.preventDefault();
+              const at = historyStep(assist.history, walk.at, "forward");
+              const text = at === -1 ? walk.draft : assist.history[at];
+              setWalk({ at, draft: walk.draft });
+              setInput(text);
+              placeAt(text.length);
+              return;
+            }
+          }
+          if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); setWalk({ at: -1, draft: "" }); onSend(); }
         }}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
@@ -195,7 +307,9 @@ function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, se
            in flight (useChat.ask aborts before it starts, and the backend stops the core
            at its next checkpoint). Disabling here made the product argue with the user
            about whose turn it was. */
-        placeholder={harness ? (changes ? "Ask anything, or describe a change" : "Ask anything") : multiline ? "Ask anything about your data…" : "Ask your question…"}
+        placeholder={harness
+          ? `${changes ? "Ask anything, or describe a change" : "Ask anything"}${assist ? " · @ for objects, / for commands, ↑↓ for history" : ""}`
+          : multiline ? "Ask anything about your data…" : "Ask your question…"}
         className="aug-focus-frame w-full bg-transparent aug-fs-sm text-zinc-100 placeholder:text-[var(--t3)] px-4 pt-3 pb-2 resize-none focus:outline-none disabled:opacity-50"
         // the frame around it says it is being written in: the field draws no second one inside
         style={{ display: "block", border: "none", outline: "none", boxShadow: "none", fontFamily: "inherit" }}
@@ -643,7 +757,7 @@ function AgentLandingBlock({ agent, connectionName }: { agent: UserAgent; connec
   );
 }
 
-export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQuestion, initialMode, initialInsightId, capabilities, initialAgentId, beside = false, address, harness = false, onSession }: Props) {
+export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQuestion, initialMode, initialInsightId, capabilities, initialAgentId, beside = false, address, harness = false, onSession, onNew }: Props) {
   // Read during the first render, into a ref, because both this component and page.tsx's
   // URL-sync effect rewrite the query string — whichever ran first would erase the id
   // before the restore below could read it. A ref initializer is safe here specifically
@@ -1128,6 +1242,27 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
     ...(harness ? { openSource: (s: AnswerSource) => { setSourcePanel(null); setSourcePage(s); } } : {}),
   }), [harness]);
 
+  // What the composer offers while a person writes (the panel's layout): the connection's tables and metrics to mention,
+  // read only once a mention is started; its commands; and the questions already asked here.
+  const [wantsObjects, setWantsObjects] = useState(false);
+  const [objects, setObjects] = useState<Offer[]>([]);
+  const assist = useMemo(() => {
+    if (!harness) return undefined;
+    const commands: Offer[] = [
+      { value: "quick", label: "/quick", hint: "answer quickly" },
+      { value: "agent", label: "/agent", hint: "investigate in depth" },
+      ...(onNew ? [{ value: "new", label: "/new", hint: "a new conversation" }] : []),
+      { value: "clear", label: "/clear", hint: "clear this conversation" },
+    ];
+    const onCommand = (value: string) => {
+      if (value === "quick") setMode("ask");
+      else if (value === "agent") setMode("investigate");
+      else if (value === "new") onNew?.();
+      else if (value === "clear") clear();
+    };
+    return { objects, commands, onCommand, history: askedBefore(turns.map(t => t.turn.question)), onWantObjects: () => setWantsObjects(true) };
+  }, [harness, objects, onNew, clear, turns]);
+
   const inputBoxProps: InputBoxProps = {
     harness,
     textareaRef,
@@ -1139,6 +1274,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
     onSend: handleSend,
     onStop: stop,
     onClear: clear,
+    assist,
     attachedFile,
     onAttach: setAttachedFile,
     agents,
@@ -1150,6 +1286,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
 
   return (
     <HarnessContext.Provider value={harnessLook}>
+    {harness && wantsObjects && <MentionObjects connectionId={connectionId} onObjects={setObjects} />}
     <div
       className="flex-1 flex flex-col min-w-0 overflow-hidden"
       /* The chat's ground is the composer's own dark blue (--bg-3) — the landing block

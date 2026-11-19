@@ -177,7 +177,7 @@ export function AskPanelHost({ connectionId, hidden = false }: { connectionId: s
         <div key={t.key} role="tabpanel" aria-label={tabName(t)} hidden={t.key !== front.key}
           style={{ flex: 1, minHeight: 0, display: t.key === front.key ? "flex" : "none", flexDirection: "column" }}>
           <ChatPanel connectionId={t.connectionId} beside harness restoreSessionId={t.session}
-            onSession={(session, title) => noteAskSession(t.key, session, title)} />
+            onSession={(session, title) => noteAskSession(t.key, session, title)} onNew={() => newAskTab(t.connectionId)} />
         </div>
       ))}
     </aside>
