@@ -1475,10 +1475,18 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
             {!capabilities && !activeAgent && (
               <div className="text-center">
                 <p className="aug-fs-sm font-bold text-zinc-200">Ask your data anything</p>
-                <p className="aug-fs-sm text-zinc-500 mt-1.5">
-                  <span className="text-violet-400/90 font-bold">Agent</span> investigates in depth —
-                  switch to <span className="text-zinc-400 font-bold">Quick</span> for a straight answer.
-                </p>
+                {inPanel ? (
+                  // the Ask panel has no Quick/Agent picker (2026-11-20): it answers straight away, and /agent goes deep
+                  <p data-testid="chat-empty-how" className="aug-fs-sm mt-1.5" style={{ color: "var(--t3)" }}>
+                    {inputBoxProps.changes ? "Ask a question or describe a change: nothing changes until you allow it. " : "Answers straight away. "}
+                    Type <span className="font-bold" style={{ color: "var(--t2)" }}>/agent</span> to investigate in depth.
+                  </p>
+                ) : (
+                  <p data-testid="chat-empty-how" className="aug-fs-sm text-zinc-500 mt-1.5">
+                    <span className="text-violet-400/90 font-bold">Agent</span> investigates in depth —
+                    switch to <span className="text-zinc-400 font-bold">Quick</span> for a straight answer.
+                  </p>
+                )}
               </div>
             )}
 
