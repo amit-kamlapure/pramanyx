@@ -1155,3 +1155,7 @@ textarea.aug-input, .aug-textarea { min-height: 56px; padding: 7px 9px; line-hei
    renamed in place) arriving in it draws it. */
 .aug-titlebar[data-plain="true"]:has(> .aug-title-facts:empty):has(> .aug-title-actions:empty):has(> .aug-page-title > .aug-title-slot:empty) {
   display: none; }
+
+/* A dashboard whose cards are being read again: the cards dim and wait, the filters beside them stay in reach (BriefingDashboards). */
+[data-reading] [data-testid="dashboard-card"] { opacity: .45; pointer-events: none; transition: opacity 120ms ease-out; }
+

@@ -1195,6 +1195,24 @@ describe("the period as a piece (v15; the user, 2026-11-18: 'remove period bar')
     } finally { takeOff(); }
   });
 
+  it("reads the cards again without moving the page: the note floats, and only the cards wait (2026-11-19)", async () => {
+    const takeOff = placePeriod();
+    try {
+    show();
+    await waitFor(() => expect(drawn.props.length).toBeGreaterThan(0));
+    api.getDashboard.mockImplementationOnce(() => new Promise(() => {}));     // the next read is still on its way
+    const door = drawn.props.at(-1)!.period as { onChange: (c: unknown) => void };
+    act(() => door.onChange({ preset: "previous_year" }));
+    const note = await screen.findByRole("status");
+    expect(note).toHaveTextContent(/the cards for/);
+    expect(note.style.position).toBe("absolute");                               // it takes no room: nothing below it moves
+    const busy = note.parentElement as HTMLElement;
+    expect(busy).toHaveAttribute("data-reading");                               // the stylesheet dims the cards inside it alone
+    expect(busy.style.opacity).toBe("");                                        // not the filters beside them
+    expect(busy.style.pointerEvents).toBe("");
+    } finally { takeOff(); }
+  });
+
   it("a dashboard without the piece keeps its period above it", async () => {
     show();
     await waitFor(() => expect(drawn.props.length).toBeGreaterThan(0));

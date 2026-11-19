@@ -1717,12 +1717,18 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
                 `re-pinned to ${data.ontology?.current}`, true),
               k => (k.status === "unchanged" ? "Already pinned there." : `Re-pinned, as version ${k.version}.`))} />
           )}
-          {reading && <Loading what={`the cards for ${choiceName(chosenRange)}`} style={{ padding: "12px 0" }} />}
-          {!reading && data.range.edge_note && (
+          {data.range.edge_note && (
             <div className="aug-fs-sm" data-testid="dashboard-edge-note" style={{ color: "var(--t2)", margin: "4px 0 8px" }}>{data.range.edge_note}</div>
           )}
-          <div aria-busy={reading || undefined}
-            style={{ opacity: reading ? 0.45 : 1, transition: "opacity 120ms ease-out", pointerEvents: reading ? "none" : undefined }}>
+          {/* While the cards are read again nothing moves (seen live 2026-11-19: a line pushed the page down under a reader's
+              pointer, and a second tick in a filter landed on Select all). The note floats over the cards, the cards alone dim
+              and wait, and the filters stay in reach for the next choice. */}
+          <div aria-busy={reading || undefined} data-reading={reading || undefined} style={{ position: "relative" }}>
+            {reading && (
+              <Loading what={`the cards for ${choiceName(chosenRange)}`}
+                style={{ position: "absolute", top: 6, left: "50%", transform: "translateX(-50%)", zIndex: 5, padding: "4px 10px",
+                  background: "var(--bg-2)", border: "1px solid var(--card-edge)", borderRadius: "var(--r3)", boxShadow: "var(--shadow-lg)" }} />
+            )}
             <ComposedDashboard spec={draft ?? kept.spec} cards={cards} host={host} doors={readDoors} sym={data.currency_symbol || "$"} period={periodDoor}
               images={images} range={range} schema={schema} connectionId={connectionId} dashboardId={`${connectionId}:${chosen}`}
               focus={fx.focus} onFocus={fx.setFocus} />
