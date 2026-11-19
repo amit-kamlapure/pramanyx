@@ -409,7 +409,7 @@ def test_the_ask_stream_ends_with_the_envelope_and_files_it(monkeypatch):
 
     filed: list[tuple[str, dict]] = []
     monkeypatch.setattr("pramanyx.db.history.attach_envelope",
-                        lambda inv_id, env: filed.append((inv_id, env)) or True)
+                        lambda inv_id, env, **kw: filed.append((inv_id, env)) or True)
 
     async def body():
         for frame in converse_frames():
@@ -589,3 +589,55 @@ def test_the_converse_prompt_records_receipts_instead_of_narrating_them():
     assert "never report that none fired" in prompt
     assert "Do not write markdown tables" in prompt
     assert "say so in your answer" not in prompt
+
+
+# ── a reload shows what was read live (the user, 2026-11-19: "Fix the reload losing the answer's prose") ──
+
+def test_the_stream_files_the_answer_as_it_was_said_and_the_question_as_it_was_asked(monkeypatch):
+    import asyncio
+
+    from pramanyx.routers.investigations import stream_with_envelope
+
+    filed: list[dict] = []
+    monkeypatch.setattr("pramanyx.db.history.attach_envelope",
+                        lambda inv_id, env, **kw: filed.append(kw) or True)
+
+    async def body():
+        for frame in converse_frames():
+            yield _sse(frame)
+
+    async def run():
+        return [e async for e in stream_with_envelope(body(), question="what leads revenue?", conn_id="c1")]
+
+    asyncio.run(run())
+    assert filed == [{"said": PROSE, "asked": "what leads revenue?"}]
+
+
+def test_a_reload_shows_the_conversations_whole_answer_and_the_persons_question():
+    # Seen live: a conversation that called a tool came back after a reload as its first line alone
+    # ("What this table is"), the rest of what the person had read gone.
+    from pramanyx.db.history import attach_envelope, get_session_turns, save_chat_turn
+
+    sid = "reload-keeps-the-answer"
+    inv_id = save_chat_turn(question="describe_table netflix_titles", connection_id="conn-env",
+                            headline="Outerwear & Coats led revenue last month at $41.2K.", sql="SELECT 1",
+                            session_id=sid)
+    env = fold_frames(converse_frames(), question="what leads revenue?", connection_id="conn-env").model_dump()
+    assert attach_envelope(inv_id, env, said=PROSE, asked="what leads revenue?") is True
+    [turn] = get_session_turns(sid)
+    assert turn["headline"] == PROSE.strip()
+    assert turn["question"] == "what leads revenue?"
+
+
+def test_a_one_line_answer_is_kept_as_it_was():
+    from pramanyx.db.history import attach_envelope, get_investigation, get_session_turns, save_chat_turn
+
+    sid = "reload-one-line"
+    inv_id = save_chat_turn(question="how many?", connection_id="conn-env", headline="There are 12.", sql="",
+                            session_id=sid)
+    env = fold_frames([{"type": "headline", "headline": "There are 12."},
+                       {"type": "done", "inv_id": inv_id}], question="how many?", connection_id="conn-env").model_dump()
+    assert attach_envelope(inv_id, env, said="There are 12.", asked="how many?") is True
+    assert "said" not in (get_investigation(inv_id) or {}).get("report", {})
+    [turn] = get_session_turns(sid)
+    assert turn["headline"] == "There are 12." and turn["question"] == "how many?"

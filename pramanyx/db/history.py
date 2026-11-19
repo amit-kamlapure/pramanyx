@@ -461,7 +461,7 @@ def save_chat_turn(
     return inv_id
 
 
-def attach_envelope(inv_id: str, envelope: dict | None) -> bool:
+def attach_envelope(inv_id: str, envelope: dict | None, *, said: str = "", asked: str = "") -> bool:
     """CP-4 — merge the folded answer envelope into a turn's ``report_json``, any kind.
 
     Written once, when the ask stream ends — the only moment every field exists (the
@@ -511,6 +511,15 @@ def attach_envelope(inv_id: str, envelope: dict | None) -> bool:
             return False
     report = json.loads(row["report_json"] or "{}")
     report["envelope"] = envelope
+    # What the reader saw, kept for a reload (2026-11-19): a conversation's answer arrives whole as its headline, many
+    # lines long, while the row a tool filed holds that tool's headline, or the envelope's first sentence. And the
+    # question in the person's own words, where the row was filed under a tool's (a deep analysis the conversation ran
+    # asks its own). Each is kept only where it differs from what the row already says.
+    whole = (said or "").strip()
+    if "\n" in whole and whole != str(envelope.get("headline") or "").strip():
+        report["said"] = whole
+    if (asked or "").strip():
+        report["asked"] = asked.strip()
     c.execute(
         "UPDATE investigations SET report_json = ? WHERE id = ?",
         (json.dumps(report), inv_id),
@@ -920,6 +929,9 @@ def get_session_turns(session_id: str) -> list[dict]:
         d = dict(r)
         d["kind"] = d.get("kind") or "investigation"
         report = json.loads(d.pop("report_json") or "{}")
+        # the question as the person asked it, where a tool filed the row under its own (`attach_envelope`)
+        if isinstance(report, dict) and str(report.get("asked") or "").strip():
+            d["question"] = str(report["asked"])
         if d["kind"] == "chat":
             d["sql"]         = report.get("sql", "")
             d["columns"]     = report.get("columns", [])
@@ -931,6 +943,9 @@ def get_session_turns(session_id: str) -> list[dict]:
             d["insight"]     = report.get("insight", None)
             d["overview_report"] = report.get("overview_report", None)
             d["deep_report"] = None
+            # the conversation's answer whole, as it was read live — the row keeps only its first sentence or a tool's
+            if str(report.get("said") or "").strip():
+                d["headline"] = str(report["said"])
             # Idea 5 — the latest re-check that found the answer changed. Absent (not null)
             # when there is none, so a turn nobody re-checked projects exactly as before.
             # the LATEST re-check, and only while it says the answer has changed — a later re-check

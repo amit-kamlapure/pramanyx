@@ -257,6 +257,12 @@ class EnvelopeFolder:
         self._confidence = ""
         self._error = ""
 
+    @property
+    def said(self) -> str:
+        """The answer as the reader saw it: the settled headline frame whole. The conversation sends its prose that way,
+        many lines long, and `finish` splits it into a first sentence and a body; a reload shows it whole again."""
+        return self._headline
+
     # ── frames ──
     def feed(self, kind: str, payload: Any) -> None:
         p = payload if isinstance(payload, dict) else {}

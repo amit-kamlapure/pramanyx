@@ -6261,7 +6261,7 @@ async def stream_with_envelope(
     if inv_id:
         try:
             from pramanyx.db.history import attach_envelope
-            if await _asyncio.to_thread(attach_envelope, inv_id, payload):
+            if await _asyncio.to_thread(attach_envelope, inv_id, payload, said=folder.said, asked=question):
                 _remember_answer(inv_id)
         except Exception as exc:
             from pramanyx.kernel.errors import tolerate
