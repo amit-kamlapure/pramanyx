@@ -17,7 +17,7 @@ import { Loading } from "@/components/ui/states";
 import { Tooltip } from "@/components/ui/tooltip";
 import type { ChatSessionSummary } from "@/components/ThreadsRail";
 import {
-  closeAskTab, hideAskPanel, newAskTab, noteAskSession, openAskConversation, selectAskTab, toggleAskPanel, useAskPanel,
+  closeAskTab, followPageConnection, hideAskPanel, newAskTab, noteAskSession, openAskConversation, selectAskTab, toggleAskPanel, useAskPanel,
   type AskTab,
 } from "@/lib/askPanel";
 import { getApiBase } from "@/lib/config";
@@ -96,6 +96,8 @@ export function AskPanelHost({ connectionId, hidden = false }: { connectionId: s
   const narrow = useNarrowScreen();
   const [width, setWidth] = useState(DEFAULT_W);
   useEffect(() => { setWidth(readWidth()); }, []);
+  // a conversation nothing has been asked in yet is about the page's connection
+  useEffect(() => { if (open) followPageConnection(connectionId); }, [open, connectionId, active]);
 
   const keep = (w: number) => {
     const next = Math.min(MAX_W, Math.max(MIN_W, Math.round(w)));

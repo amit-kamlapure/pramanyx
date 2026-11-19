@@ -37,6 +37,7 @@
  * hydration), and every access is wrapped — a disabled-storage browser degrades to a
  * working editor with no persistence, not to a blank screen.
  */
+import { useOnPage } from "@/lib/askSubject";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ResizableSplit } from "@/components/ResizableSplit";
 import { SqlEditorPane } from "@/components/query/editor/SqlEditorPane";
@@ -250,6 +251,10 @@ export function SqlMode({
 
   const active = tabs.find(t => t.id === activeId) ?? null;
   const sqlText = active?.sql ?? "";
+  // the Ask panel asks about the statement open here, read once the person pauses typing
+  const [quietSql, setQuietSql] = useState(sqlText);
+  useEffect(() => { const t = setTimeout(() => setQuietSql(sqlText), 600); return () => clearTimeout(t); }, [sqlText]);
+  useOnPage(quietSql.trim() ? { kind: "query", connectionId: connId, noun: ["row", "rows"], sql: quietSql, title: active?.name ?? "" } : null);
   // What a run reads: the text with every `/ask` request blanked — a request is never sent to the warehouse as SQL.
   const runnable = useMemo(() => blankAskLines(sqlText), [sqlText]);
 

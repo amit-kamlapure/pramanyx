@@ -123,6 +123,26 @@ export function openAskConversation(session: string, title: string, connectionId
   write({ open: true, tabs: withTab(s.tabs, tab), active: tab.key });
 }
 
+/** Show the panel on a conversation on `connectionId`: the one in front when it is on that connection, else the latest
+ *  there, else a new one. A question asked about something on that connection lands where it can be read. */
+export function openAskPanelOn(connectionId: string): void {
+  const s = read();
+  const front = s.tabs.find(t => t.key === s.active);
+  if (front?.connectionId === connectionId) { write({ ...s, open: true }); return; }
+  const there = [...s.tabs].reverse().find(t => t.connectionId === connectionId);
+  if (there) { write({ ...s, open: true, active: there.key }); return; }
+  const tab = freshTab(connectionId);
+  write({ open: true, tabs: withTab(s.tabs, tab), active: tab.key });
+}
+
+/** A conversation nothing has been asked in yet follows the page to another connection. */
+export function followPageConnection(connectionId: string): void {
+  const s = read();
+  const front = s.tabs.find(t => t.key === s.active);
+  if (!front || front.session || !connectionId || front.connectionId === connectionId) return;
+  write({ ...s, tabs: s.tabs.map(t => (t.key === front.key ? { ...t, connectionId } : t)) });
+}
+
 /** A tab's conversation came to exist, or was named by its first question. */
 export function noteAskSession(key: string, session: string, title: string): void {
   const s = read();

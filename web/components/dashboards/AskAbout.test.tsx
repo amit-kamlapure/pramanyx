@@ -63,6 +63,12 @@ function draw(piece: "table" | "every" | "list" = "table") {
     </PiecesProvider>);
 }
 
+/** The connection of the conversation the Ask panel shows, when it is open: a question asked about a choice opens it there. */
+function panelOn(): string | null {
+  const kept = JSON.parse(window.localStorage.getItem("pramanyx:ask-panel") ?? "null") as { open: boolean; active: string; tabs: { key: string; connectionId: string }[] } | null;
+  return kept?.open ? kept.tabs.find(t => t.key === kept.active)?.connectionId ?? null : null;
+}
+
 describe("asking about what a reader chose", () => {
   it("offers a segment the ontology names, read by a table directly, by its entity and segment", async () => {
     render(
@@ -74,7 +80,8 @@ describe("asking about what a reader chose", () => {
     expect(subject).toMatchObject({ kind: "segment", connectionId: "thelook", entity: "order", segment: "overdue_dispatch",
       total: 1400, filters: [], narrowed: false });
     expect(subject && "label" in subject && subject.label).toBe("overdue dispatch");
-    expect(went).toEqual([{ tab: "chat", params: { conn: "thelook" } }]);
+    expect(went).toEqual([]);
+    expect(panelOn()).toBe("thelook");
   });
 
   it("offers the set a table reads, and carries it by name with the page's values — the address holds the connection only", async () => {
@@ -82,7 +89,8 @@ describe("asking about what a reader chose", () => {
     fireEvent.click(await screen.findByTestId("ask-about-set"));
     expect(askSubject()).toEqual({ kind: "set", connectionId: "thelook", noun: ["order", "orders"], dashboard: "desk-3f2a1c",
       set: "waiting", label: "Late dispatch", total: 1400, values: { window: 14 }, chosen: {}, filters: [], narrowed: false });
-    expect(went).toEqual([{ tab: "chat", params: { conn: "thelook" } }]);
+    expect(went).toEqual([]);
+    expect(panelOn()).toBe("thelook");
   });
 
   it("offers the objects ticked instead, by reference, once a row is ticked", async () => {
@@ -94,7 +102,8 @@ describe("asking about what a reader chose", () => {
     fireEvent.click(screen.getByTestId("ask-about-ticked"));
     expect(askSubject()).toEqual({ kind: "objects", connectionId: "thelook", noun: ["order", "orders"],
       refs: ["order:38330", "order:79251"], label: "Late dispatch" });
-    expect(went).toEqual([{ tab: "chat", params: { conn: "thelook" } }]);
+    expect(went).toEqual([]);
+    expect(panelOn()).toBe("thelook");
   });
 
   it("offers ticked objects from a list of cards too", async () => {

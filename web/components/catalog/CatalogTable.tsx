@@ -17,6 +17,7 @@
  * "Not recorded" — never filled in. The study's Quality and Permissions views are not drawn: no per-table checks or
  * grants exist to show, and an empty view is a promise the page cannot keep.
  */
+import { useOnPage } from "@/lib/askSubject";
 import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -82,6 +83,8 @@ export function CatalogTable({ connId, catalogName, schemaName, table, view, onA
 }) {
   const [tab, setTab] = useState<Tab>("overview");
   const inShell = useInShell();
+  // the Ask panel asks about the table open here
+  useOnPage({ kind: "table", connectionId: connId, noun: ["row", "rows"], table: schemaName ? `${schemaName}.${table.name}` : table.name });
   const [colsMode, setColsMode] = useState<"list" | "profile">("list");
   const [baseCols, setBaseCols] = useState<TableColumn[]>([]);
   const [colsLoading, setColsLoading] = useState(true);

@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { answerableRun, getConnections, listUserAgents, recordOverviewDrill, cancelInvestigation, cancelActiveDeepRun, type UserAgent } from "@/lib/api";
+import { answerableRun, DEEP_ANALYSIS_MODE, getConnections, listUserAgents, recordOverviewDrill, cancelInvestigation, cancelActiveDeepRun, type UserAgent } from "@/lib/api";
 import { doorFor, isPlainSend } from "@/lib/chatDoors";
 import { uploadAttachment, type AttachmentResult } from "@/lib/attachments";
 import { projectThread, newSessionId, type PramanyxUIMessage, type ChatTurn } from "@/lib/chatTurn";
 import { usePramanyxChat } from "@/lib/usePramanyxChat";
-import { focusOf, setAskSubject, subjectWords, useAskSubject } from "@/lib/askSubject";
+import { focusOf, setAskSubject, subjectKey, subjectWords, useAskSubject, usePageSubject } from "@/lib/askSubject";
 import { useStickToBottom } from "@/lib/useStickToBottom";
 import { brandEdge } from "@/components/ui/brand";
 import { Button } from "@/components/ui/button";
@@ -378,12 +378,34 @@ function DebugLogDrawer({ eventLogRef, onClose }: { eventLogRef: React.RefObject
 /* ── Depth banner — the auto+transparency receipt on each /ask turn ──
    Shows the depth the router chose + why, with a one-click re-run at the
    other depth. Renders nothing on legacy/explicit and restored turns. */
-function DepthBanner({ turn, onRerun }: { turn: ChatTurn; onRerun: (depth: "quick" | "deep") => void }) {
+function DepthBanner({ turn, onRerun, harness = false }: { turn: ChatTurn; onRerun: (depth: "quick" | "deep") => void; harness?: boolean }) {
   const r = turn.route;
   if (!r) return null;
   const deep = r.depth === "deep";
   const overview = r.depth === "overview";
   const done = turn.status !== "loading";
+  // The coworker's layout keeps only what a person acts on or must be told: what the turn was about, as the server read
+  // it, and the other depth to ask again at. Which depth answered is the composer's own choice, already in view.
+  if (harness) {
+    const rerun = done && !overview;
+    if (!r.subject && !r.downgradedFrom && !rerun) return null;
+    return (
+      <div className="aug-fs-xs" data-testid="turn-depth" style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 6, color: "var(--t3)" }}>
+        {r.subject && (
+          <span data-testid="turn-subject" style={{ color: "var(--t2)" }}>
+            {r.subject.said}{r.subject.carried ? "" : " · this answer did not read them"}
+          </span>
+        )}
+        {r.downgradedFrom && <span style={{ fontStyle: "italic" }}>deep analysis needs an upgrade</span>}
+        {rerun && (
+          <Button variant="ghost" size="xs" onClick={() => onRerun(deep ? "quick" : "deep")} style={{ marginLeft: "auto" }}
+            title={deep ? "Re-run as a quick answer" : "Re-run as a deep analysis"}>
+            {deep ? "Answer quickly instead" : "Run a deep analysis instead"}
+          </Button>
+        )}
+      </div>
+    );
+  }
   return (
     <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
       <StatusChip
@@ -896,7 +918,11 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
   // Arc FA-2 — what a dashboard handed over as the question's subject
   const handed = useAskSubject();
   // a subject chosen on another connection is not this conversation's to send
-  const subject = handed && handed.connectionId === connectionId ? handed : null;
+  // The Ask panel also asks about what the page on screen shows, unless a person chose something else or took it off.
+  const onPage = usePageSubject();
+  const [droppedPage, setDroppedPage] = useState("");
+  const pageHere = harness && onPage && onPage.connectionId === connectionId && subjectKey(onPage) !== droppedPage ? onPage : null;
+  const subject = (handed && handed.connectionId === connectionId ? handed : null) ?? pageHere;
 
   const sendQuestion = useCallback((question: string, m: RouteMode = "investigate", opts: AskOpts = {}) => {
     // An interrupt — the user sent this while a turn was still streaming. The SDK
@@ -1111,7 +1137,8 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
     agents,
     agentId,
     setAgentId,
-    ...(subject ? { subject: subjectWords(subject), onDropSubject: () => setAskSubject(null) } : {}),
+    ...(subject ? { subject: subjectWords(subject),
+      onDropSubject: () => (subject === pageHere ? setDroppedPage(subjectKey(pageHere)) : setAskSubject(null)) } : {}),
   };
 
   return (
@@ -1309,6 +1336,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                       </div>
                     )}
                     <DepthBanner
+                      harness={harness}
                       turn={turn}
                       onRerun={(depth) => sendQuestion(turn.question, "auto", { depth })}
                     />
@@ -1375,7 +1403,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                     {/* The ONE feedback control on an answer (2026-10-22): a second thumbs pair
                         used to sit inside the answer's "Methodology & details" and post the same
                         verdict for the same receipt. It lives here, at the foot, once. */}
-                    {(harness ? turn.mode === "investigate" : !!canvasId) && turn.status === "done" && turn.publicReceiptId && (
+                    {(harness ? turn.mode === DEEP_ANALYSIS_MODE : !!canvasId) && turn.status === "done" && turn.publicReceiptId && (
                       <AnswerSources receiptId={turn.publicReceiptId} connectionId={connectionId}
                         onOpen={source => { setSourcePanel(null); setSourcePage(source); }} />
                     )}

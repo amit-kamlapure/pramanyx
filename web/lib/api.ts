@@ -3671,11 +3671,6 @@ export function draftDashboard(connectionId: string, area: string, schema?: stri
     "Failed to draft the dashboard", live);
 }
 
-/** Draft a change to a dashboard, hearing each thing the platform does. Nothing changes until the person allows it. */
-export function changeDashboardLive(connectionId: string, dashboardId: string, words: string, schema?: string, live?: DraftLive): Promise<DashboardDrafted> {
-  return draftTold(dashboardUrl(`/dashboards/${encodeURIComponent(dashboardId)}/ask/stream`, connectionId),
-    { words, schema_name: schema ?? null }, "The change could not be drafted", live);
-}
 
 /** Move a canvas's dashboard to the asker's Briefing. */
 export async function moveCanvasDashboard(connectionId: string, canvasId: string): Promise<DashboardMoved> {

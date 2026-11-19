@@ -27,7 +27,7 @@ import { Button } from "@/components/ui/button";
 import { ErrorState, Loading } from "@/components/ui/states";
 import type { ChatTurn, CompiledFrame } from "@/lib/chatTurn";
 import { BACKEND_LABEL } from "@/lib/llmMeta";
-import { validateQuery, annotateTable, proposeLearnedSkill, saveLearnedSkill, getGroundingContext, pinQueryToDashboard, type QueryValidation, type GroundingReceipt } from "@/lib/api";
+import { DEEP_ANALYSIS_MODE, validateQuery, annotateTable, proposeLearnedSkill, saveLearnedSkill, getGroundingContext, pinQueryToDashboard, type QueryValidation, type GroundingReceipt } from "@/lib/api";
 import { KeepOnDashboard } from "@/components/dashboards/KeepOnDashboard";
 import { InvestigationReportView } from "@/components/InvestigationReport";
 import { ExplorationReportView } from "@/components/ExplorationReport";
@@ -43,10 +43,11 @@ import { csvFilename, downloadCsv, toCsv } from "@/lib/query/csv";
 import { fileSlug, rawCells } from "@/components/TableActions";
 import { figureValue } from "@/components/FindingFigures";
 import { ToolTrail } from "@/components/ToolTrail";
-import { ProposalCardById } from "@/components/ProposalCard";
+import { isDashboardProposal, ProposalCardById } from "@/components/ProposalCard";
 import { approverName } from "@/lib/auth";
 import { AnswerParts } from "@/components/chat/AnswerParts";
 import { AnswerSources } from "@/components/chat/AnswerSources";
+import { DashboardChangeCard } from "@/components/chat/DashboardChangeCard";
 import { useHarness } from "@/components/chat/harnessLook";
 import { InFlightFindings } from "@/components/RunProgressCard";
 import { ContextRibbon } from "@/components/ContextRibbon";
@@ -1209,12 +1210,6 @@ function NarrativeBrief({
             </div>
           </BriefSection>
         )}
-        {!streaming && (
-          <HarnessMore>
-            <TurnActions turn={turn} connectionId={connectionId} onDrill={onDrill} onOpenInEditor={openInEditor} />
-            {turn.headline && <CopyAnswerButton text={[turn.headline, turn.narrative?.narrative?.trim()].filter(Boolean).join("\n\n")} />}
-          </HarnessMore>
-        )}
       </Brief>
     );
   }
@@ -1743,8 +1738,9 @@ export function ChatMessage({
     onEdit(q);
   };
   const harness = useHarness();
-  const isInvestigate = turn.mode === "investigate";
-  const hasResult = isInvestigate
+  const openInQuery = useOpenInQuery();
+  const deep = turn.mode === DEEP_ANALYSIS_MODE;
+  const hasResult = deep
     ? !!(turn.deepReport ?? turn.report ?? turn.exploreReport ?? turn.dossierReport)
     : turn.status === "done";
   const isDone = turn.status === "done" || hasResult;
@@ -1753,20 +1749,20 @@ export function ChatMessage({
   // In the coworker's layout every turn has that one row: what it is doing while it runs, and how long it took once done.
   const hasWork = turn.converseSteps.length > 0 || turn.delegations.length > 0 || turn.guardReceipts.length > 0;
   const thinkingRow = harness.on
-    ? turn.status === "loading" || isInvestigate || hasWork
-    : isInvestigate && (turn.status === "loading" || isDone || turn.status === "error");
+    ? turn.status === "loading" || deep || hasWork
+    : deep && (turn.status === "loading" || isDone || turn.status === "error");
   // Quick-mode scaffold-then-fill: the backend delivers a quick answer's data at
   // `done` (not incrementally), so instead of bare thinking-dots we mount the
   // Brief as a shimmer scaffold for the whole wait — a preview of the answer's
   // shape (headline + figure) that fills in place when the result lands.
-  const quickScaffold = !isInvestigate && turn.status === "loading";
+  const quickScaffold = !deep && turn.status === "loading";
   // Show streaming deep analysis phases even while still loading (not for direct/explore routes)
-  const showStreamingBody = isInvestigate && turn.status === "loading" && turn.phases.length > 0
+  const showStreamingBody = deep && turn.status === "loading" && turn.phases.length > 0
     && turn.queryMode !== "direct";
 
   // Context-aware loading text: once the backend tells us the route, use a specific label
   function defaultStatusText(): string {
-    if (!isInvestigate) return "Thinking…";
+    if (!deep) return "Thinking…";
     switch (turn.queryMode) {
       case "direct":  return "Running query…";
       case "explore": return "Investigating…";
@@ -1840,7 +1836,7 @@ export function ChatMessage({
             ) : (
             <div
               className="py-1 aug-fs-sm font-semibold leading-snug"
-              style={{ color: isInvestigate ? "var(--vio5)" : "var(--blue5)" }}
+              style={{ color: deep ? "var(--vio5)" : "var(--blue5)" }}
             >
               {turn.question}
             </div>
@@ -1866,8 +1862,10 @@ export function ChatMessage({
              prose, with Accept and its open-choice fields right here ── */}
       {turn.stagedProposals.length > 0 && (
         <div className="flex flex-col gap-2 my-2">
-          {turn.stagedProposals.map(ref => (
-            <ProposalCardById key={ref.proposalId} proposalId={ref.proposalId} actor={approverName("chat")} />
+          {turn.stagedProposals.map(ref => (isDashboardProposal(ref.kind)
+            // a change to the dashboard on screen, asked in the conversation: its lines, and Allow or Reject, right here
+            ? <DashboardChangeCard key={ref.proposalId} proposalId={ref.proposalId} />
+            : <ProposalCardById key={ref.proposalId} proposalId={ref.proposalId} actor={approverName("chat")} />
           ))}
         </div>
       )}
@@ -1905,7 +1903,7 @@ export function ChatMessage({
           {/* The "Interpreting automatically" banner is removed — users don't value the
               intake/assumptions disclosure in the trace; it read as a stuck human-in-the-loop
               prompt. The thinking trace itself carries what the run is doing. */}
-          {!isInvestigate && !harness.on ? (
+          {!deep && !harness.on ? (
             <>
               {/* Quick (ask) mode has no multi-step trace — a compact thinking cue
                   sits above the shimmer scaffold (rendered below) during the wait */}
@@ -1968,7 +1966,7 @@ export function ChatMessage({
       {/* ── Timing. The "Found relevant data" row of table chips that sat here is gone
            at the user's word (2026-09-29): each query in the trace opens its own SQL and
            rows in the right panel, which already says which tables an answer read. ── */}
-      {isDone && isInvestigate && !harness.on && turn.elapsedMs != null && (
+      {isDone && deep && !harness.on && turn.elapsedMs != null && (
         <p className="aug-fs-xs text-zinc-500 mb-3">Completed in {formatElapsed(turn.elapsedMs)}</p>
       )}
 
@@ -1983,7 +1981,7 @@ export function ChatMessage({
 
       {/* ── Quick answer — the answer as a clean Brief; mounts as a shimmer scaffold
            during the wait (fills in place) and completes at done. ── */}
-      {!collapsed && !isInvestigate && !turn.overviewReport && (isDone || quickScaffold) && (
+      {!collapsed && !deep && !turn.overviewReport && (isDone || quickScaffold) && (
         <NarrativeBrief
           turn={turn}
           connectionId={connectionId}
@@ -1996,7 +1994,7 @@ export function ChatMessage({
       )}
 
       {/* ── Deep Analysis — interim wrapping (Phase C rebuilds this on the Brief) ── */}
-      {!collapsed && isDone && isInvestigate && !turn.overviewReport && (
+      {!collapsed && isDone && deep && !turn.overviewReport && (
         <>
           {turn.fromCache && (
             <div className="flex items-start gap-2 mb-4 px-3 py-2 rounded-[var(--r3)] bg-amber-950/30 border border-amber-800/40 aug-fs-xs text-amber-400 leading-snug">
@@ -2049,24 +2047,33 @@ export function ChatMessage({
 
       {/* ── Export this response as PDF / PowerPoint (Insight or Deep Analysis) ── In the coworker's layout what an
            answer can become sits under one quiet More, as the coworker's does. */}
-      {isDone && !lean && (turn.investigationId || turn.receiptId) && (harness.on ? (
+      {harness.on && isDone && !lean && !collapsed && (
         <HarnessMore>
-          {isInvestigate && <TurnActions turn={turn} connectionId={connectionId} />}
-          <div className="flex flex-wrap items-center gap-2">
-            {turn.investigationId && connectionId && (
-              <RunDoors invId={turn.investigationId} connectionId={connectionId} question={turn.question} />
-            )}
-            <ExportButton invId={(turn.investigationId ?? turn.receiptId) as string} />
-          </div>
+          <TurnActions turn={turn} connectionId={connectionId}
+            onDrill={!deep && onDeeper ? () => onDeeper(turn.question, null) : undefined}
+            onOpenInEditor={!deep && openInQuery && turn.sql?.trim()
+              ? () => openInQuery({ sql: turn.sql!, connId: connectionId, mode: "sql", name: (turn.question || "Answer").slice(0, 40) })
+              : undefined} />
+          <RunFoot turn={turn} connectionId={connectionId} className="flex flex-wrap items-center gap-2" />
+          {!deep && turn.headline && <CopyAnswerButton text={[turn.headline, turn.narrative?.narrative?.trim()].filter(Boolean).join("\n\n")} />}
         </HarnessMore>
-      ) : (
-        <div className="flex flex-wrap justify-end items-center gap-2 mt-3">
-          {turn.investigationId && connectionId && (
-            <RunDoors invId={turn.investigationId} connectionId={connectionId} question={turn.question} />
-          )}
-          <ExportButton invId={(turn.investigationId ?? turn.receiptId) as string} />
-        </div>
-      ))}
+      )}
+      {!harness.on && isDone && !lean && (
+        <RunFoot turn={turn} connectionId={connectionId} className="flex flex-wrap justify-end items-center gap-2 mt-3" />
+      )}
+    </div>
+  );
+}
+
+/** Under a finished answer: what its run may become, and its export. Nothing when there is no run or receipt. */
+function RunFoot({ turn, connectionId, className }: { turn: ChatTurn; connectionId?: string; className: string }) {
+  const run = turn.investigationId;
+  const handle = run ?? turn.receiptId;
+  if (!handle) return null;
+  return (
+    <div className={className}>
+      {run && connectionId && <RunDoors invId={run} connectionId={connectionId} question={turn.question} />}
+      <ExportButton invId={handle} />
     </div>
   );
 }

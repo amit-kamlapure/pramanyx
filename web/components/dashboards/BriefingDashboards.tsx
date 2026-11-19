@@ -27,6 +27,7 @@
  * what is chosen, the rail folded to its icons until Done. Every change there is drawn at once and kept as one version
  * a moment after a burst of them, with undo and redo. No model; a change asked in words is the one exception, as here.
  */
+import { DASHBOARD_CHANGED } from "@/components/chat/DashboardChangeCard";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 import { NewCardComposer } from "@/components/brief/NewCardComposer";
@@ -62,10 +63,9 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { DropdownMenu } from "@radix-ui/themes";
 import { ASKS_OF_A_PIECE, AskPiece } from "@/components/dashboards/AskPiece";
 import { BrandSpark, brandEdge } from "@/components/ui/brand";
-import { AskBeside } from "@/components/dashboards/AskBeside";
 import { DraftBuilding } from "@/components/dashboards/DraftBuilding";
 import { finishedWatch, heardFrame, startWatch, type DraftWatch } from "@/lib/dashboards/draftProgress";
-import { askAbout, dashboardSubject } from "@/lib/askSubject";
+import { askAbout, dashboardSubject, useOnPage } from "@/lib/askSubject";
 import { ImportDashboard } from "@/components/dashboards/ImportDashboard";
 import { SubscribeDashboard } from "@/components/dashboards/SubscribeDashboard";
 import { FromSql, FromTables } from "@/components/dashboards/StartFromData";
@@ -803,9 +803,13 @@ function SharedDashboardView({ connectionId, schema, owner, dashboardId, range, 
       toast.error("No dashboard was started", { description: why.slice(0, 200) });
     } finally { setBusy(false); }
   };
+  const sharedSpec = data?.cockpit.spec as DashboardSpec | undefined;
+  // what the Ask panel asks about here, and what "Ask about this dashboard" hands it: the shared dashboard open
+  const subject = data && sharedSpec
+    ? dashboardSubject(connectionId, `shared:${owner}:${dashboardId}`, titleOfSpec(sharedSpec) || dashboardId, data.range) : null;
+  useOnPage(subject);
   if (problem) return <ErrorState kind="Not read" what="This shared dashboard could not be read." means={problem} />;
-  if (!data) return <div className="aug-fs-sm" data-testid="dashboard-loading" style={{ color: "var(--t3)" }}>Reading the shared dashboard…</div>;
-  const sharedSpec = data.cockpit.spec as DashboardSpec;
+  if (!data || !sharedSpec) return <div className="aug-fs-sm" data-testid="dashboard-loading" style={{ color: "var(--t3)" }}>Reading the shared dashboard…</div>;
   return (
     <div data-testid="dashboard-shared" data-owner={owner} data-dashboard={dashboardId}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
@@ -818,14 +822,13 @@ function SharedDashboardView({ connectionId, schema, owner, dashboardId, range, 
         </span>
         <CertificationMark compact target={{ kind: "dashboard", ref: dashboardRef(connectionId, owner, dashboardId), connectionId }} />
         <Button size="xs" variant="ghost" data-testid="ask-about-dashboard" style={{ marginLeft: "auto" }} onClick={() => {
-          const subject = dashboardSubject(connectionId, `shared:${owner}:${dashboardId}`, titleOfSpec(sharedSpec) || dashboardId, data.range);
           if (subject) askAbout(subject);
         }}>Ask about this dashboard</Button>
         <Button size="xs" variant="secondary" disabled={busy} onClick={() => void start()}>
           Start my dashboard from this
         </Button>
       </div>
-      {data.ontology && <PinStrip pin={data.ontology} spec={data.cockpit.spec} />}
+      {data.ontology && <PinStrip pin={data.ontology} spec={sharedSpec} />}
       <ComposedDashboard spec={sharedSpec} cards={cards} host={host} doors={doors} sym={data.currency_symbol || "$"}
         period={{ value: chosenRange, onChange: onRange, showing: data.range.status === "standing" ? null : data.range }}
         images={images} range={range} schema={schema} connectionId={connectionId} dashboardId={`shared:${owner}:${dashboardId}`}
@@ -943,6 +946,10 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
   // the dashboard open now, by its id and its title
   const openId = data?.cockpit_id ?? "";
   const heldTitle = titleOfSpec(data?.cockpit.spec) || openId;
+  // the Ask panel asks about the dashboard open here, for the period on screen
+  useOnPage(data && chosen && chosen !== METRICS_DASHBOARD && !chosen.startsWith("shared:") && !editing
+    ? dashboardSubject(connectionId, `${connectionId}:${openId}`, heldTitle, data.range.status === "standing" ? null : data.range)
+    : null);
   // the builder's undo and redo: the specs before and after, in this sitting — each step back is kept as a version too
   const NO_STEPS = { past: [] as DashboardSpec[], future: [] as DashboardSpec[] };
   const [stacks, setStacks] = useState(NO_STEPS);
@@ -953,6 +960,11 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
   /** When the open dashboard's cards were last read — the title row's "last read". */
   const [readAt, setReadAt] = useState<string | undefined>(undefined);
   const reload = useCallback(() => setTick(t => t + 1), []);
+  // a change allowed in the Ask panel's conversation reaches the dashboard on screen without a refresh
+  useEffect(() => {
+    window.addEventListener(DASHBOARD_CHANGED, reload);
+    return () => window.removeEventListener(DASHBOARD_CHANGED, reload);
+  }, [reload]);
 
   // The person's dashboards.
   useEffect(() => {
@@ -1607,10 +1619,6 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
   }
 
   return (
-    <AskBeside connectionId={connectionId} dashboardKey={chosen} title={chosen ? heldTitle : ""}
-      change={data && kept && chosen && chosen !== METRICS_DASHBOARD && !chosen.startsWith("shared:")
-        ? { dashboardId: openId, schema, unpublished: (kept.published_to?.length ?? 0) === 0, onChanged: reload, onPublish: () => setPublishing(true) }
-        : null}>
     <div data-testid="briefing-dashboards" data-dashboard-ground="" style={{ flex: 1, minHeight: 0, overflow: "auto", padding: "14px 32px 32px", background: "var(--bg-0)" }}>
       {/* On the home, the page's one action. Inside the app it sits in the title row; outside it, above the list. */}
       {data && subscribing && (
@@ -1724,6 +1732,5 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
         <div className="aug-fs-sm" data-testid="dashboard-loading" style={{ color: "var(--t3)" }}>Reading the dashboard…</div>
       ) : null}
     </div>
-    </AskBeside>
   );
 }

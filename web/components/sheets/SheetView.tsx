@@ -9,6 +9,7 @@
  * until they keep them in the view. A change made here is said under the toolbar with Undo beside it. A view can be a
  * board or a calendar, grouped with its totals, or kept to its maker (SH-3) — and rules mark rows.
  */
+import { useOnPage } from "@/lib/askSubject";
 import { type CSSProperties, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Chip, Dot, MUTED, NUM } from "@/components/clarity/kit";
@@ -168,6 +169,8 @@ export function SheetView({ sheetId, onBack, onOpen, onAsk, asReference = false 
   // title row, and the sheet's own bar — "‹ Spreadsheets" back to the sheets, its name renamed in place, its facts and
   // its doors — is its first row.
   usePageChrome(useInShell() ? { bare: true } : {});
+  // the Ask panel asks about the spreadsheet open, as the sheets connection reads it
+  useOnPage(sheet && !asReference ? { kind: "sheet", connectionId: "sheets", noun: ["row", "rows"], id: sheet.id, title: sheet.name } : null);
 
   const readDefinition = useCallback(() => readSheet(sheetId).then(s => {
     setSheet(s);
