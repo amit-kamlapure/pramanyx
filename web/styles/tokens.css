@@ -105,7 +105,8 @@
   --vio-solid: var(--vio3);
 
   /* ── Layout ── */
-  --sidebar:  224px;
+  /* the left rail, 20% narrower than its 224px (the user, 2026-11-19: "This width needs be to cut down by 20%") */
+  --sidebar:  179px;
   --topbar:   48px;
 
   /* ── Elevation ── */

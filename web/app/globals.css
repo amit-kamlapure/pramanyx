@@ -212,7 +212,7 @@ a:hover { color: var(--blue4); }
   color: var(--t1);
 }
 
-/* ── Shell · rail 248 ───────────────────────────────────────────────────── */
+/* ── Shell · rail (--sidebar) ───────────────────────────────────────────────────── */
 .aug-sidebar {
   width: var(--sidebar);
   flex-shrink: 0;
