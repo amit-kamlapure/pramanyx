@@ -1630,8 +1630,8 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                     {sheetEntriesAfter(i + 1)}
                   </div>
                 ))}
-                {/* Spacer so last message clears the floating input */}
-                <div style={{ height: 172 }} />
+                {/* Spacer so last message clears the floating input — and, beside a sheet, the line of what it reads */}
+                <div style={{ height: sheetDoors ? 196 : 172 }} />
               </div>
             </div>
 
