@@ -132,6 +132,28 @@ describe("the filter column of a dashboard made from a file", () => {
     expect(screen.getByTestId("query-filters")).toBeVisible();
   });
 
+  it("beside the global filters, paints nothing over them, is named by what it filters, and leaves them the one menu (2026-11-20)", () => {
+    // seen on Operations: the second column's ground, painted to its left, covered the global filters' right edge
+    const spec = withFilters();
+    spec.elements.qf = { type: "QueryFilters", props: { table: "shop.order_items", columns: [{ column: "channel", label: "Channel" }] }, children: [] };
+    spec.elements[spec.root].children = ["qf", ...spec.elements[spec.root].children];
+    render(<ComposedDashboard spec={spec} cards={CARDS} host={HOST} focus={HELD} onFocus={vi.fn()} doors={{ onRefresh: vi.fn() }} />);
+    expect(screen.getByTestId("dashboard-global-filter-column").style.boxShadow).toBe("-40px 0 0 0 var(--bg-0)");
+    const own = screen.getByTestId("dashboard-filter-column");
+    expect(own.style.boxShadow).toBe("");
+    expect(within(screen.getByTestId("global-filters")).getByText("Global filters")).toBeInTheDocument();
+    expect(within(own).getByText("Order items")).toBeInTheDocument();
+    expect(screen.getAllByTestId("filters-menu-place")).toHaveLength(1);
+  });
+
+  it("takes no room while none of its global filters can be used yet", () => {
+    const spec = withFilters();
+    spec.elements["f-type"].props = { title: "Type", kind: "multi" };                 // no table, no column yet
+    render(<ComposedDashboard spec={spec} cards={CARDS} host={HOST} doors={{ onRefresh: vi.fn() }} />);
+    expect(screen.getByTestId("dashboard-global-filter-column")).not.toBeVisible();
+    expect(screen.queryByTestId("global-filters-shut")).toBeNull();
+  });
+
   it("stands in from the page's edge as far as the Ask panel moved the page, so readers always see it (2026-11-19)", () => {
     render(<ComposedDashboard spec={withFilters()} cards={CARDS} host={HOST} focus={HELD} onFocus={vi.fn()} doors={{ onRefresh: vi.fn() }} />);
     const column = screen.getByTestId("dashboard-global-filter-column");

@@ -80,7 +80,7 @@ import type { WireSpec } from "@/lib/dashboards/sets";
 import { valuesFor, valuesRead, type ValuesSent } from "@/lib/dashboards/values";
 import { chooseIn, chosenOn, filterLink, filterSource, focusOfCard, focusWords, fromFilter, notFiltered, traceAndChoose, type DashboardFocus } from "@/lib/dashboards/focus";
 import { toast } from "@/components/ui/toast";
-import { dashboardSubject } from "@/lib/askSubject";
+import { dashboardSubject, nounOf } from "@/lib/askSubject";
 import { CardPrompt } from "@/components/dashboards/CardPrompt";
 import { DataTabShown, pagesOf } from "@/components/dashboards/dataTab";
 import type { Pick as ChartPick } from "@/components/charts/selection";
@@ -277,6 +277,10 @@ function DashboardRoot(props: ComponentRenderProps<{ title: string; filters_shut
 const PINNED: CSSProperties = { position: "relative", zIndex: 3, transform: "translateX(var(--ask-pushed, 0px))", background: "var(--bg-0)",
   // the page's own margin at its left is the column's ground too, so no card shows beside it as it passes under
   boxShadow: "-40px 0 0 0 var(--bg-0)" };
+/** A column pinned beside another pinned column: no ground painted to its left, which is the other column's room (seen on
+ *  Operations, 2026-11-20: an object's column, beside the global filters, painted over their right edge). */
+const capitalized = (w: string) => w.charAt(0).toUpperCase() + w.slice(1);
+const PINNED_BESIDE: CSSProperties = { ...PINNED, boxShadow: undefined };
 
 function DashboardRootBody(props: ComponentRenderProps<{ title: string }>) {
   const { elements, focus, doors } = useDashboard();
@@ -296,7 +300,8 @@ function DashboardRootBody(props: ComponentRenderProps<{ title: string }>) {
   // put away, the column stays mounted, out of sight: it is also what feeds the values the cards' queries read
   const column = at < 0 ? null
     : <div hidden={shut} data-testid="dashboard-global-filter-column" style={shut ? { display: "none" } : { minWidth: 0, ...PINNED }}>{kids[at]}</div>;
-  const toggle = { columns, held: held + elsewhere };
+  // a file's or an object's own column stands beside the global filters when both are drawn: one panel's room, one menu
+  const toggle = { columns, held: held + elsewhere, beside: drawsGlobals && !shut };
   if (shut && columns) {
     // put away, the columns stay mounted out of sight; the button that brings them back sits under the pages (`FiltersShutStrip`)
     return (
@@ -306,11 +311,22 @@ function DashboardRootBody(props: ComponentRenderProps<{ title: string }>) {
     );
   }
   if (at < 0) return <FiltersToggleContext.Provider value={toggle}><RootLayout {...props} /></FiltersToggleContext.Provider>;
+  if (!drawsGlobals) {
+    // global filters none of which can be used yet take no room: mounted, out of sight
+    return (
+      <FiltersToggleContext.Provider value={toggle}>
+        <div hidden data-testid="dashboard-global-filter-column" style={{ display: "none" }}>{kids[at]}</div>
+        <RootLayout {...rest} />
+      </FiltersToggleContext.Provider>
+    );
+  }
   return (
-    <div style={{ display: "grid", gridTemplateColumns: `${FILTER_COLUMN}px minmax(0, 1fr)`, gap: SPACE, alignItems: "start" }}>
-      {column}
-      <div style={{ minWidth: 0 }}><RootLayout {...rest} /></div>
-    </div>
+    <FiltersToggleContext.Provider value={toggle}>
+      <div style={{ display: "grid", gridTemplateColumns: `${FILTER_COLUMN}px minmax(0, 1fr)`, gap: SPACE, alignItems: "start" }}>
+        {column}
+        <div style={{ minWidth: 0 }}><RootLayout {...rest} /></div>
+      </div>
+    </FiltersToggleContext.Provider>
   );
 }
 
@@ -337,6 +353,8 @@ function RootLayout({ element, children }: ComponentRenderProps<{ title: string 
   // repeat its own title.
   const { elements, doors, selected } = useDashboard();
   const shut = useFiltersShut();
+  // the global filters drawn to the left of this dashboard's own column
+  const beside = useContext(FiltersToggleContext)?.beside === true;
   const firstKey = element.children?.[0] ?? "";
   const first = elements[firstKey];
   const [preview, setPreview] = useState<number | null>(null);
@@ -360,7 +378,9 @@ function RootLayout({ element, children }: ComponentRenderProps<{ title: string 
       <QueryNarrowingProvider table={held.table}>
         <div role="region" aria-label={element.props.title} data-testid="dashboard"
           style={{ display: "grid", gridTemplateColumns: `${(held.w ?? null) ? (held.w as number) * GRADE : FILTER_COLUMN}px minmax(0, 1fr)`, gap: SPACE, alignItems: "start" }}>
-          <div data-testid="dashboard-filter-column" style={{ alignSelf: "stretch", minWidth: 0, ...PINNED }}><FiltersHead />{queryColumn}</div>
+          <div data-testid="dashboard-filter-column" style={{ alignSelf: "stretch", minWidth: 0, ...(beside ? PINNED_BESIDE : PINNED) }}>
+            <FiltersHead title={beside ? capitalized((held.table.split(".").pop() ?? held.table).replace(/[_-]+/g, " ")) : "Filters"} menu={!beside} />{queryColumn}
+          </div>
           <div style={{ display: "flex", flexDirection: "column", gap: SPACE, minWidth: 0 }}><TopFiltersButton /><ValuesBar spaced={false} /><FilteredBy /><FirstPageDoor />{others}</div>
         </div>
       </QueryNarrowingProvider>
@@ -396,9 +416,9 @@ function RootLayout({ element, children }: ComponentRenderProps<{ title: string 
       style={{ display: "grid", gridTemplateColumns: `${width}px minmax(0, 1fr)`, gap: SPACE, alignItems: "start" }}>
       <div className="group" data-testid="dashboard-filter-column" data-width={width} data-selected={selected === firstKey || undefined}
         onPointerDownCapture={doors.onSelect ? () => doors.onSelect?.(firstKey) : undefined}
-        style={{ ...PINNED, alignSelf: "stretch", minWidth: 0, borderRadius: "var(--r3)",
+        style={{ ...(beside ? PINNED_BESIDE : PINNED), alignSelf: "stretch", minWidth: 0, borderRadius: "var(--r3)",
           outline: selected === firstKey ? "2px solid var(--accent)" : undefined, outlineOffset: 2 }}>
-        <FiltersHead />
+        <FiltersHead title={beside ? capitalized(nounOf(props.entity)[1]) : "Filters"} menu={!beside} />
         {column}
         {doors.onFilterWidth && (
           <WidthHandle from={grades ?? Math.round(FILTER_COLUMN / GRADE)} onPreview={setPreview}
