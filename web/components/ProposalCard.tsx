@@ -258,6 +258,7 @@ function DashboardBody({ p }: { p: StagedProposal }) {
     return (
       <div className="flex flex-col gap-1" data-testid="chart-look">
         <Row label="Chart">{String(d.title ?? "")}</Row>
+        {typeof d.stand_in === "string" && d.stand_in && <Row label="Not as asked">{d.stand_in}</Row>}
         {lines.map(l => <Row key={l} label="Changes">{l}</Row>)}
       </div>
     );

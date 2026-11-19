@@ -122,3 +122,23 @@ def test_the_chart_tool_says_what_it_cannot_do_in_the_editors_words(chart):
     # 2026-11-20: asked for a glow, the answer offered "lineWidth: 6" through "change_chart"
     tool = change_tools(chart.home.connection_id, (chart.home.owner, chart.board, chart.card.id))[1]
     assert "in the chart editor's words" in tool.description and "never this tool's name" in tool.description
+
+
+def test_a_stand_in_for_what_no_setting_does_says_so_and_a_change_as_asked_does_not(chart):
+    # 2026-11-20: asked for a neon glow, a thicker line was staged as if it were the glow
+    p = _propose(chart, viz={"lineWidth": 5})
+    assert "stand_in" not in p.detail
+    tools = change_tools(chart.home.connection_id, (chart.home.owner, chart.board, chart.card.id))
+    out = tools[1].run({"viz": {"lineWidth": 6}, "instead_of": "a neon glow.", "summary": "A bolder line"})
+    assert out["staged"] and out["stand_in"] == "Not possible here: a neon glow. This is the closest the chart can do."
+    assert "Say first that what they asked for is not something a chart can do" in out["next"]
+    from pramanyx.actions.inbox import get_proposal
+    staged = [p for p in _pending(chart) if p.detail.get("lines") == ["Line width: 2 → 6"]]
+    assert staged and get_proposal(staged[0].id).detail["stand_in"] == out["stand_in"]   # what both cards read
+    assert "Never stage a stand-in as if it were what they asked" in tools[1].description
+    assert "instead_of" in tools[1].parameters["properties"]
+
+
+def _pending(chart):
+    from pramanyx.actions.inbox import list_proposals
+    return [p for p in list_proposals(status="pending") if p.kind == "chart_look" and p.params.get("card") == chart.card.id]

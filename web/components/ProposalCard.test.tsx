@@ -382,3 +382,21 @@ describe("outbound_send (SP-7 widened)", () => {
     expect(accept).toHaveBeenCalledWith("prop-1", "tester", true, {});
   });
 });
+
+describe("a change to how one chart is drawn, in the Inbox", () => {
+  const look = (detail: Record<string, unknown>) => proposal({ kind: "chart_look", action_id: "chart:c1", params: { card: "c1" }, detail });
+
+  it("names the chart and each setting that changes", () => {
+    render(<ProposalCard proposal={look({ title: "Olist orders", lines: ["Line width: 4 → 6"] })} actor="tester" />);
+    expect(screen.getByTestId("chart-look")).toHaveTextContent("Olist orders");
+    expect(screen.getByTestId("chart-look")).toHaveTextContent("Line width: 4 → 6");
+    expect(screen.queryByText("Not as asked")).toBeNull();
+  });
+
+  it("says when it is only the closest the chart can do to what was asked (2026-11-20)", () => {
+    render(<ProposalCard proposal={look({ title: "Olist orders", lines: ["Line width: 4 → 6"],
+      stand_in: "Not possible here: a neon glow. This is the closest the chart can do." })} actor="tester" />);
+    expect(screen.getByText("Not as asked")).toBeInTheDocument();
+    expect(screen.getByTestId("chart-look")).toHaveTextContent("Not possible here: a neon glow. This is the closest the chart can do.");
+  });
+});

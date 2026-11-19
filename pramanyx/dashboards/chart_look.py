@@ -194,10 +194,18 @@ def changed(render: dict, shown_patch: Any, viz_patch: Any) -> dict:
     return {"shown": shown_out, "viz": viz}
 
 
+def stand_in_words(instead_of: str) -> str:
+    """What a change that only stands in for the ask says, before its lines ("" for a change that is what was asked).
+    Asked for a neon glow, a thicker line was once staged as if it were the glow (2026-11-20)."""
+    wanted = " ".join(str(instead_of or "").split())[:120].rstrip(" .")
+    return f"Not possible here: {wanted}. This is the closest the chart can do." if wanted else ""
+
+
 def propose(connection_id: str, person: str, dashboard_id: str, card_id: str, shown_patch: Any, viz_patch: Any,
-            summary: str = "", *, schema: Optional[str] = None) -> Any:
+            summary: str = "", *, schema: Optional[str] = None, instead_of: str = "") -> Any:
     """Stage ONE change to how the card ``card_id`` on the dashboard ``dashboard_id`` the person keeps is drawn, or
-    refuse with every reason. Staged, it waits for their Allow; nothing is changed before."""
+    refuse with every reason. Staged, it waits for their Allow; nothing is changed before. ``instead_of`` is what the
+    person asked for that no setting does, when this change is only the closest: the card says so above its lines."""
     from pramanyx.actions.inbox import StagedProposal, stage_proposal
     from pramanyx.cards.store import get_card
     from pramanyx.dashboards import cards
@@ -217,11 +225,13 @@ def propose(connection_id: str, person: str, dashboard_id: str, card_id: str, sh
     if not lines:
         raise Refused(["That is how the chart is drawn already: nothing would change."])
     title = str(card.title or "the chart")
+    stand_in = stand_in_words(instead_of)
     return stage_proposal(StagedProposal(
         kind=KIND, org_id=current_org_id() or "", connection_id=connection_id, schema_name=schema or "",
         action_id=f"chart:{card_id}",
         params={"card": card_id, "shown": after["shown"], "viz": after["viz"], "was": look_key(render)},
-        detail={"title": title, "dashboard": dashboard_id, "person": person, "lines": lines},
+        detail={"title": title, "dashboard": dashboard_id, "person": person, "lines": lines,
+                **({"stand_in": stand_in} if stand_in else {})},
         reasoning=(summary or f"Change how “{title}” is drawn").strip()[:300],
         proposer="dashboard", source="agent"))
 

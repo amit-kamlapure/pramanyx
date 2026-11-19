@@ -3,12 +3,16 @@
  * staged: the pieces it adds or changes, and the pieces it takes off.
  */
 export interface ChangeLine { verb: "Add" | "Change" | "Remove"; title: string }
-export interface ChangeCard { asks: string; did: string; lines: ChangeLine[] }
+export interface ChangeCard {
+  asks: string; did: string; lines: ChangeLine[];
+  /** A change that only stands in for what was asked says so, above its lines (2026-11-20). */
+  standIn?: string;
+}
 
 interface Placed { title?: string; change?: string }
 interface Section extends Placed { cards?: Placed[] }
 interface Tab { tab?: string; change?: string; sections?: Section[] }
-interface Detail { mode?: string; to?: string[]; outline?: Tab[]; taken_off?: { title?: string; from?: string }[]; title?: string; lines?: unknown[] }
+interface Detail { mode?: string; to?: string[]; outline?: Tab[]; taken_off?: { title?: string; from?: string }[]; title?: string; lines?: unknown[]; stand_in?: unknown }
 
 const VERB: Record<string, ChangeLine["verb"]> = { added: "Add", changed: "Change" };
 const count = (n: number) => `${n} ${n === 1 ? "change" : "changes"}`;
@@ -19,7 +23,8 @@ export function changeCardOf(detail: Record<string, unknown> | null | undefined,
   if (kind === "chart_look") {
     const title = d.title || "the chart";
     const lines = (d.lines ?? []).filter((l): l is string => typeof l === "string").map(l => ({ verb: "Change" as const, title: l }));
-    return { asks: `Change how “${title}” is drawn?`, did: `“${title}” is drawn as allowed`, lines };
+    const standIn = typeof d.stand_in === "string" && d.stand_in.trim() ? d.stand_in.trim() : undefined;
+    return { asks: `Change how “${title}” is drawn?`, did: `“${title}” is drawn as allowed`, lines, ...(standIn ? { standIn } : {}) };
   }
   if (d.mode === "publish") {
     const to = (d.to ?? []).join(", ");

@@ -43,6 +43,10 @@ _CHART_PARAMS = {
             "YYYY), yMin, yMax, yLog, sortBy (value, label), top, legend (top, bottom, left, right, none), xTitle, yTitle, "
             "tooltipOff, orient (vertical, horizontal), refLines ([{value, label}]).")},
         "summary": {"type": "string", "description": "What changes, in one sentence of the person's own words."},
+        "instead_of": {"type": "string", "description": (
+            "Only when the person asked for something no setting of a chart does (a glow, a shadow, 3D) and this change is "
+            "the closest: what they asked for, in a few of their own words (\"a neon glow\"). Empty when the change is what "
+            "they asked.")},
     },
 }
 
@@ -126,16 +130,25 @@ def change_tools(connection_id: str, dashboard: Optional[tuple[str, ...]], *, em
         a = args or {}
         try:
             staged = chart_look.propose(connection_id, person, dashboard_id, card_id, a.get("shown"), a.get("viz"),
-                                        str(a.get("summary") or ""), schema=schema)
+                                        str(a.get("summary") or ""), schema=schema, instead_of=str(a.get("instead_of") or ""))
         except chart_look.Refused as e:
             # what it can change, said with the refusal: a model told only "no" tries other names (seen live 2026-11-20)
             return {"staged": False, "said": e.sentences, "can_set": chart_look.CAN_SET,
                     "next": ("Nothing was staged. Tell the person why in these words, and what can be changed instead (can_set). "
                              "Do not try other names for the same setting.")}
         announced(staged.id)
+        stand_in = str((staged.detail or {}).get("stand_in") or "")
+        if stand_in:
+            # a stand-in is said as one, first (2026-11-20: a thicker line was offered as if it were the glow asked for)
+            return {"staged": True, "changes": list((staged.detail or {}).get("lines") or []), "stand_in": stand_in,
+                    "next": ("The closest change is staged and shown to the person, with Allow and Reject, under the words "
+                             "in stand_in. Nothing has changed yet. Say first that what they asked for is not something a "
+                             "chart can do, then in one sentence what the closest change does, and that it waits for their "
+                             "Allow. Never say it is made.")}
         return {"staged": True, "changes": list((staged.detail or {}).get("lines") or []),
                 "next": ("The change to this one chart is staged and shown to the person, line by line, with Allow and "
-                         "Reject. Nothing has changed yet. Say in one sentence what changes and that it waits for their Allow.")}
+                         "Reject. Nothing has changed yet. Say in one sentence what changes and that it waits for their "
+                         "Allow. Never say it is made.")}
 
     tools = [ToolSpec(
         name="change_dashboard",
@@ -157,7 +170,8 @@ def change_tools(connection_id: str, dashboard: Optional[tuple[str, ...]], *, em
                 "what is on screen); the rest stay. Use it for any change to this chart's look; use change_dashboard only "
                 "to arrange the dashboard. It stages the change for the person to allow; never say it is done. When a "
                 "change is not one it makes, say what can be changed in the chart editor's words (line width, dates "
-                "written as), never this tool's name nor a setting's field name."),
+                "written as), never this tool's name nor a setting's field name. Never stage a stand-in as if it were "
+                "what they asked: the closest change to something no setting does is staged only with instead_of."),
             parameters=_CHART_PARAMS,
             run=chart,
         ))
