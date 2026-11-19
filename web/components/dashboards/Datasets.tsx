@@ -7,9 +7,10 @@
  * what runs along the bottom, what is measured, what colours it. A dataset is never itself a piece of the page, and adding
  * one asks no model.
  */
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 import { QUERY_DEFAULT, kindOf, setupAs } from "@/components/dashboards/QuerySetup";
+import { BrandSpark, brandEdge } from "@/components/ui/brand";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Icon } from "@/components/ui/icon";
@@ -17,10 +18,13 @@ import { Input } from "@/components/ui/input";
 import { Segmented } from "@/components/ui/segmented";
 import { SelectField } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { QueryRefused, getCatalogTree, keepDashboardQuery, previewDashboardQuery, type QueryPreview, type QueryShown, type QueryShownAs } from "@/lib/api";
+import { QueryRefused, askForSql, getCatalogTree, keepDashboardQuery, previewDashboardQuery, type QueryPreview, type QueryShown, type QueryShownAs } from "@/lib/api";
+import { MAX_LABEL, MAX_VALUES, type DashboardValueDef } from "@/lib/dashboards/catalog";
 import {
-  MAX_DATASETS, cardsBuiltOn, datasetOfCard, dropDataset, freshDatasetName, putDataset, swapCard, type DashboardDataset, type DashboardSpec,
+  MAX_DATASETS, cardsBuiltOn, datasetOfCard, dropDataset, freshDatasetName, freshWireName, putDataset, putValue, swapCard, type DashboardDataset,
+  type DashboardSpec,
 } from "@/lib/dashboards/edit";
+import { VALUE_KIND_WORDS, startText, triedValues, typedValue, valuesRead, type ValuesSent } from "@/lib/dashboards/values";
 import { formatCount, formatSeconds } from "@/lib/format";
 import { withUniqueKeys } from "@/lib/listKeys";
 
@@ -194,6 +198,14 @@ export function AddData({ spec, connectionId, way, onAdd, onClose, doneWords = "
 /** A card as the page holds it: what a chart built on a dataset is re-kept with. */
 export interface CardHeld { id: string; title: string; render?: unknown }
 
+/** The dashboard's values a statement reads, as they start, for a chart kept on it — or why they cannot be sent. */
+function paramsOf(spec: DashboardSpec, sql: string): { values?: ValuesSent } | { refused: string[] } {
+  const names = valuesRead(sql);
+  if (!names.length) return {};
+  const got = triedValues(names, spec.values);
+  return "refused" in got ? got : { values: got.values };
+}
+
 /** A dataset's new statement, kept on every chart built on it (the user, 2026-11-19: "link them"). Each chart is checked
  *  with its own setup first, so none changes unless every one reads the new statement; then each is kept again as a new
  *  card that replaces its own, dressed as it was. Back: the spec holding the new statement and the new cards, or each
@@ -204,16 +216,18 @@ export async function followDataset(connectionId: string, spec: DashboardSpec, n
     const card = cardOf(id);
     return { id, card, shown: (card?.render as { shown?: QueryShown } | undefined)?.shown };
   });
+  const sent = paramsOf(spec, def.sql);
+  if ("refused" in sent) return sent;
   const refused: string[] = [];
   for (const { id, card, shown } of held) {
     if (!card || !shown) { refused.push(`A chart built on it (card ${id}) is not read on this page, so it cannot follow.`); continue; }
-    const got = await previewDashboardQuery(connectionId, { sql: def.sql, shown, title: card.title });
+    const got = await previewDashboardQuery(connectionId, { sql: def.sql, shown, title: card.title, ...sent });
     if (got.refused.length) refused.push(`${card.title}: ${got.refused.join(" ")}`);
   }
   if (refused.length) return { refused };
   const swaps: [string, string][] = [];
   for (const { id, card, shown } of held) {
-    const { card: kept } = await keepDashboardQuery(connectionId, { sql: def.sql, shown: shown!, title: card!.title, replaces: id });
+    const { card: kept } = await keepDashboardQuery(connectionId, { sql: def.sql, shown: shown!, title: card!.title, replaces: id, ...sent });
     swaps.push([id, kept.id]);
   }
   return { spec: withFollowed(spec, name, def, swaps), charts: held.length, swaps };
@@ -237,16 +251,34 @@ function DatasetEditor({ spec, name, connectionId, onChange, onFollow, onClose }
   const [problem, setProblem] = useState<string[]>([]);
   // Run, in the Data view: what the statement as typed returns
   const [runAsked, setRunAsked] = useState(0);
+  // the dashboard's values it reads, `{{name}}` — its parameters — and what each is tried with here (2026-11-20)
+  const [adding, setAdding] = useState(false);
+  const [tried, setTried] = useState<Record<string, string>>({});
+  // Edit ✦ (2026-11-20, of a peer product's dataset editor): the statement rewritten as asked, in place, the one before kept
+  const [editing, setEditing] = useState(false);
+  const [edited, setEdited] = useState<{ before: string; notes: string[] } | null>(null);
+  const box = useRef<HTMLTextAreaElement>(null);
+  const reads = valuesRead(sql);
+  const given = triedValues(reads, spec.values, tried);
   const charts = cardsBuiltOn(spec, name).length;
   if (!was) return null;
   const sqlChanged = sql.trim() !== was.sql.trim();
+  /** `text` put in the statement where the person was writing, and the writing goes on after it. */
+  const insert = (text: string) => {
+    const el = box.current;
+    const at = el ? el.selectionStart : sql.length;
+    setSql(sql.slice(0, at) + text + sql.slice(el ? el.selectionEnd : at));
+    requestAnimationFrame(() => { el?.focus(); el?.setSelectionRange(at + text.length, at + text.length); });
+  };
   const keep = async () => {
     const def: DashboardDataset = { label: label.trim().slice(0, 120), sql: sqlChanged ? sql.trim() : was.sql, ...(sqlChanged ? {} : { table: was.table ?? null }) };
     if (!def.table) delete def.table;
     if (!sqlChanged) { onChange(putDataset(spec, name, def), "a dataset renamed by hand"); onClose(); return; }
+    if ("refused" in given) { setProblem(given.refused); return; }
     setBusy(true); setProblem([]);
     try {
-      const got = await previewDashboardQuery(connectionId, { sql: def.sql, shown: { ...QUERY_DEFAULT, as: "table" }, title: def.label });
+      const got = await previewDashboardQuery(connectionId, { sql: def.sql, shown: { ...QUERY_DEFAULT, as: "table" }, title: def.label,
+        ...(reads.length ? { values: given.values } : {}) });
       if (got.refused.length) { setProblem(got.refused); return; }
       if (!charts) { onChange(putDataset(spec, name, def), "a dataset's statement changed by hand"); onClose(); return; }
       if (!onFollow) { setProblem(["The charts built on it cannot follow a change made here."]); return; }
@@ -259,10 +291,54 @@ function DatasetEditor({ spec, name, connectionId, onChange, onFollow, onClose }
   return (
     <div data-testid="data-dataset-editor" style={{ display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
       <Input aria-label="The dataset's name" value={label} maxLength={120} disabled={busy} onChange={e => setLabel(e.target.value)} style={{ maxWidth: 420 }} />
-      <Textarea aria-label="The dataset's SQL" data-testid="data-dataset-sql" rows={12} spellCheck={false} value={sql} disabled={busy}
+      <Textarea ref={box} aria-label="The dataset's SQL" data-testid="data-dataset-sql" rows={12} spellCheck={false} value={sql} disabled={busy}
         onChange={e => setSql(e.target.value)}
         onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); setRunAsked(n => n + 1); } }}
         style={{ fontFamily: "var(--font-mono)" }} />
+      <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <Button size="xs" variant="outline" data-testid="data-dataset-add-parameter" aria-expanded={adding} onClick={() => setAdding(a => !a)}
+          title="One of the dashboard's values, read as a bound parameter: the engine binds it, never pasted into the statement.">
+          <Icon name="plus" size={13} /> Add parameter
+        </Button>
+        <Button size="xs" variant="outline" data-testid="data-dataset-edit" aria-expanded={editing} disabled={busy} onClick={() => setEditing(e => !e)}
+          title="Ask in words for a change to this SQL: it is rewritten here, and nothing is run or kept until you do">
+          <BrandSpark size={13} /> Edit
+        </Button>
+      </span>
+      {editing && (
+        <SqlAsk connectionId={connectionId} sql={sql} onClose={() => setEditing(false)}
+          onSql={(next, notes) => { setEdited({ before: sql, notes }); setSql(next); setEditing(false); }} />
+      )}
+      {edited && (
+        <div data-testid="data-dataset-edited" className="aug-fs-xs" style={{ display: "flex", alignItems: "flex-start", gap: 8, color: "var(--t2)", maxWidth: 640 }}>
+          <span style={{ flex: 1, minWidth: 0, lineHeight: 1.45 }}>
+            Rewritten as asked. Nothing is run or kept until you do.{edited.notes.length ? ` ${edited.notes.join(" ")}` : ""}
+          </span>
+          <Button size="xs" variant="ghost" data-testid="data-dataset-edit-undo" onClick={() => { setSql(edited.before); setEdited(null); }}>Undo the edit</Button>
+        </div>
+      )}
+      {adding && (
+        <ParameterPicker spec={spec} onChange={onChange} onPick={n => { insert(`{{${n}}}`); setAdding(false); }} />
+      )}
+      {reads.length > 0 && (
+        <div data-testid="data-dataset-tried" style={{ display: "flex", flexDirection: "column", gap: 4, maxWidth: 520 }}>
+          <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>Run with these; on the page its charts read what the page holds.</span>
+          {reads.map(n => {
+            const v = spec.values?.[n];
+            return (
+              <label key={n} className="aug-fs-xs" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 160px", alignItems: "center", gap: 6, color: "var(--t2)" }}>
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <span style={{ fontFamily: "var(--font-mono)" }}>{`{{${n}}}`}</span>{v ? ` ${v.label}` : " — not a value of this dashboard"}
+                </span>
+                {v && (
+                  <Input aria-label={`Run with ${v.label} as`} value={tried[n] ?? startText(v)} type={v.kind === "date" ? "date" : v.kind === "days" || v.kind === "number" ? "number" : "text"}
+                    onChange={e => setTried(t => ({ ...t, [n]: e.target.value }))} />
+                )}
+              </label>
+            );
+          })}
+        </div>
+      )}
       <span className="aug-fs-xs" style={{ color: "var(--t3)", lineHeight: 1.45 }}>
         {!charts ? "No chart is built on it yet." : `${formatCount(charts)} ${charts === 1 ? "chart is" : "charts are"} built on it. A change to its SQL is kept on each, as it is set up; none changes unless every one can read it.`}
       </span>
@@ -279,13 +355,107 @@ function DatasetEditor({ spec, name, connectionId, onChange, onFollow, onClose }
         <Button size="sm" variant="secondary" data-testid="data-dataset-run" disabled={busy || !sql.trim()} onClick={() => setRunAsked(n => n + 1)}
           title="Run it as typed · ⌘Enter" style={{ marginLeft: "auto" }}><Icon name="run" size={13} /> Run</Button>
       </span>
-      <DatasetResult connectionId={connectionId} sql={sql} asked={runAsked} />
+      <DatasetResult connectionId={connectionId} sql={sql} asked={runAsked} values={"refused" in given ? given.refused : reads.length ? given.values : null} />
+    </div>
+  );
+}
+
+/** A change to a dataset's statement asked in words (2026-11-20, of a peer product's dataset editor, "Edit ✦"): written by
+ *  the SQL editor's own question-to-SQL path with the statement as it stands, run nowhere and kept nowhere — it lands in
+ *  the editor, for the person to run and keep. */
+function SqlAsk({ connectionId, sql, onSql, onClose }: {
+  connectionId: string; sql: string; onSql: (next: string, notes: string[]) => void; onClose: () => void;
+}) {
+  const [text, setText] = useState("");
+  const [writing, setWriting] = useState(false);
+  const [problem, setProblem] = useState("");
+  const ask = async () => {
+    const asked = text.trim();
+    if (!asked || writing) return;
+    setWriting(true); setProblem("");
+    try {
+      const got = await askForSql(connectionId, asked, { sql });
+      if (!got.sql?.trim()) { setProblem("No statement came back. Nothing was changed."); return; }
+      onSql(got.sql.trim(), got.notes ?? []);
+    } catch (e) {
+      setProblem((e as Error).message);
+    } finally { setWriting(false); }
+  };
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, maxWidth: 640 }}>
+      <div data-testid="data-dataset-ask" role="group" aria-label="Ask to change this SQL"
+        style={{ ...brandEdge("var(--bg-2)"), borderRadius: 10, display: "flex", alignItems: "center", gap: 2, padding: "3px 4px 3px 10px" }}>
+        <input autoFocus aria-label="Ask to change this SQL" placeholder="Ask to change this SQL… (only orders since 2018, add the customer's state)" value={text}
+          maxLength={500} disabled={writing} className="aug-fs-sm" data-testid="data-dataset-ask-input" onChange={e => setText(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void ask(); }
+            if (e.key === "Escape") { e.preventDefault(); onClose(); }
+          }}
+          style={{ flex: 1, minWidth: 0, background: "transparent", border: "none", outline: "none", color: "var(--t1)", fontFamily: "inherit", padding: "4px 0" }} />
+        <Button size="icon-xs" variant="ghost" aria-label="Close" title="Close" onClick={onClose} disabled={writing}><Icon name="close" size={14} /></Button>
+        <Button size="icon-xs" variant="ghost" aria-label="Write it" title="Write it" data-testid="data-dataset-ask-send" disabled={!text.trim() || writing} onClick={() => void ask()}>
+          <Icon name="send" size={14} />
+        </Button>
+      </div>
+      {writing && <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>Writing the statement…</span>}
+      {problem && <span className="aug-fs-sm" role="alert" style={{ color: "var(--t1)" }}>{problem}</span>}
+    </div>
+  );
+}
+
+/** The parameters a dataset may read (2026-11-20, of a peer product's "+ Add parameter"): the dashboard's values, each put
+ *  in the statement as `{{name}}` — or a new one, named, of a kind, with what it starts as, kept on the dashboard as a
+ *  value its readers may then be offered. */
+function ParameterPicker({ spec, onChange, onPick }: {
+  spec: DashboardSpec; onChange: (next: DashboardSpec, note: string) => void; onPick: (name: string) => void;
+}) {
+  const held = Object.entries(spec.values ?? {});
+  const [label, setLabel] = useState("");
+  const [kind, setKind] = useState<"days" | "number" | "text" | "date">("number");
+  const [start, setStart] = useState("");
+  const value = typedValue(kind, start);
+  const room = held.length < MAX_VALUES;
+  const make = () => {
+    if (!label.trim() || value === null) return;
+    const name = freshWireName(spec, label.trim());
+    onChange(putValue(spec, name, { label: label.trim().slice(0, MAX_LABEL), kind, value } as DashboardValueDef), "a parameter added to a dataset by hand");
+    onPick(name);
+  };
+  return (
+    <div data-testid="data-parameter-picker" style={{ display: "flex", flexDirection: "column", gap: 8, border: "1px solid var(--b1)", borderRadius: "var(--r3)", padding: 10, maxWidth: 520 }}>
+      {held.length > 0 && (
+        <div role="list" aria-label="The dashboard's values" style={{ display: "flex", flexDirection: "column" }}>
+          {held.map(([n, v]) => (
+            <Button key={n} role="listitem" size="xs" variant="ghost" data-testid="data-parameter" onClick={() => onPick(n)} style={{ justifyContent: "flex-start", gap: 8 }}>
+              <span style={{ fontFamily: "var(--font-mono)" }}>{`{{${n}}}`}</span>
+              <span style={{ color: "var(--t3)" }}>{v.label} · {VALUE_KIND_WORDS[v.kind] ?? v.kind}</span>
+            </Button>
+          ))}
+        </div>
+      )}
+      {room ? (
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 120px 120px auto", gap: 6, alignItems: "center" }}>
+          <Input aria-label="The parameter's name" placeholder="New parameter: its name" value={label} maxLength={MAX_LABEL} onChange={e => setLabel(e.target.value)} />
+          <SelectField aria-label="What it holds" value={kind} onChange={e => { setKind(e.target.value as typeof kind); setStart(""); }}>
+            <option value="number">A number</option><option value="days">Days</option><option value="text">Words</option><option value="date">A day</option>
+          </SelectField>
+          <Input aria-label="What it starts as" placeholder="Starts as" value={start} type={kind === "date" ? "date" : kind === "text" ? "text" : "number"}
+            onChange={e => setStart(e.target.value)} />
+          <Button size="sm" data-testid="data-parameter-make" disabled={!label.trim() || value === null} onClick={make}>Add</Button>
+        </div>
+      ) : (
+        <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>The dashboard holds {MAX_VALUES} values, the most it may.</span>
+      )}
     </div>
   );
 }
 
 /** What a dataset's statement returns, run as typed (the Data view): its first rows, or its columns and their kinds. */
-function DatasetResult({ connectionId, sql, asked }: { connectionId: string; sql: string; asked: number }) {
+function DatasetResult({ connectionId, sql, asked, values = null }: {
+  connectionId: string; sql: string; asked: number;
+  /** What its parameters are run with — or why they cannot be, said before anything runs. */
+  values?: ValuesSent | string[] | null;
+}) {
   const [got, setGot] = useState<QueryPreview | null>(null);
   const [running, setRunning] = useState(false);
   const [problem, setProblem] = useState("");
@@ -293,8 +463,9 @@ function DatasetResult({ connectionId, sql, asked }: { connectionId: string; sql
   useEffect(() => {
     if (!asked) return;
     let alive = true;
+    if (Array.isArray(values)) { setGot(null); setProblem(values.join(" ")); return; }
     setRunning(true); setProblem("");
-    previewDashboardQuery(connectionId, { sql, shown: { ...QUERY_DEFAULT, as: "table" } })
+    previewDashboardQuery(connectionId, { sql, shown: { ...QUERY_DEFAULT, as: "table" }, ...(values ? { values } : {}) })
       .then(p => { if (alive) { setGot(p); if (p.refused.length) setProblem(p.refused.join(" ")); } })
       .catch(e => { if (alive) setProblem((e as Error).message); })
       .finally(() => { if (alive) setRunning(false); });
@@ -377,14 +548,16 @@ export function ChartFromData({ spec, connectionId, busy = false, onChange, onMa
   const chosen = chosenName ? spec.datasets?.[chosenName] : undefined;
   const make = async () => {
     if (!chosen) return;
+    const sent = paramsOf(spec, chosen.sql);
+    if ("refused" in sent) { setProblem(sent.refused); return; }
     setMaking(true); setProblem([]);
     try {
-      const first = await previewDashboardQuery(connectionId, { sql: chosen.sql, shown: { ...QUERY_DEFAULT, as: "table" }, title: chosen.label });
+      const first = await previewDashboardQuery(connectionId, { sql: chosen.sql, shown: { ...QUERY_DEFAULT, as: "table" }, title: chosen.label, ...sent });
       if (first.refused.length) { setProblem(first.refused); return; }
       // what runs along the bottom and what is measured are read from the columns; the colour is the person's to add, never
       // a guess (on a table of rows the first words are often an id: a colour per order)
       const shown = { ...setupAs({ ...QUERY_DEFAULT, as: "table" }, as, first.columns ?? []), split: "" };
-      const { card } = await keepDashboardQuery(connectionId, { sql: chosen.sql, shown, title: chosen.label });
+      const { card } = await keepDashboardQuery(connectionId, { sql: chosen.sql, shown, title: chosen.label, ...sent });
       onMade(card.id, chosen.label, chosenName);
     } catch (e) {
       setProblem(e instanceof QueryRefused ? e.reasons : [(e as Error).message]);
@@ -482,16 +655,18 @@ export async function moveToDataset(connectionId: string, spec: DashboardSpec, c
   const def = spec.datasets?.[to];
   const shown = (card.render as { shown?: QueryShown } | undefined)?.shown;
   if (!def || !shown) return { refused: ["This chart cannot be moved: its dataset or its setup is not read here."] };
+  const sent = paramsOf(spec, def.sql);
+  if ("refused" in sent) return sent;
   let use: QueryShown = shown;
   let reset = false;
-  const tried = await previewDashboardQuery(connectionId, { sql: def.sql, shown, title: card.title });
+  const tried = await previewDashboardQuery(connectionId, { sql: def.sql, shown, title: card.title, ...sent });
   if (tried.refused.length) {
-    const plain = tried.columns?.length ? tried : await previewDashboardQuery(connectionId, { sql: def.sql, shown: { ...QUERY_DEFAULT, as: "table" }, title: card.title });
+    const plain = tried.columns?.length ? tried : await previewDashboardQuery(connectionId, { sql: def.sql, shown: { ...QUERY_DEFAULT, as: "table" }, title: card.title, ...sent });
     if (!plain.columns?.length) return { refused: plain.refused.length ? plain.refused : tried.refused };
     use = { ...setupAs({ ...QUERY_DEFAULT, as: "table" }, shown.as, plain.columns), split: "" };
     reset = true;
   }
-  const { card: kept } = await keepDashboardQuery(connectionId, { sql: def.sql, shown: use, title: card.title, replaces: card.id });
+  const { card: kept } = await keepDashboardQuery(connectionId, { sql: def.sql, shown: use, title: card.title, replaces: card.id, ...sent });
   return { cardId: kept.id, reset };
 }
 

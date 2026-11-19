@@ -9,7 +9,7 @@ import { DataView, DatasetLine, OpenDatasetContext, addDatasets, followDataset, 
 import { MAX_DATASETS, builtOn, cardsBuiltOn, datasetOfCard, dropDataset, freshDatasetName, placeCard, type DashboardSpec } from "@/lib/dashboards/edit";
 import { cardsDashboardSpec } from "@/lib/dashboards/start";
 
-const api = vi.hoisted(() => ({ getCatalogTree: vi.fn(), previewDashboardQuery: vi.fn(), keepDashboardQuery: vi.fn() }));
+const api = vi.hoisted(() => ({ getCatalogTree: vi.fn(), previewDashboardQuery: vi.fn(), keepDashboardQuery: vi.fn(), askForSql: vi.fn() }));
 vi.mock("@/lib/api", async (original) => ({ ...(await original<typeof import("@/lib/api")>()), ...api }));
 
 const blank = () => cardsDashboardSpec("Ops", []);
@@ -207,5 +207,63 @@ describe("what a chart is built on, under its Visualization (2026-11-19)", () =>
     const reset = await moveToDataset("c", two(), held("bars0001") as never, "returns");
     expect(reset).toEqual({ cardId: "new-bars0001", reset: true });
     expect(api.keepDashboardQuery.mock.calls[1][1].shown).toEqual(expect.objectContaining({ as: "bar", x: "returned_on", series: [{ column: "refund", agg: "sum" }], split: "" }));
+  });
+});
+
+describe("a dataset's parameters and Edit ✦ (2026-11-20)", () => {
+  const withWindow = (): DashboardSpec => ({ ...addDatasets(blank(), [ORDERS]).spec, values: { window: { label: "Window", kind: "days", value: 14 } } } as DashboardSpec);
+  const view = (spec: DashboardSpec, onChange = vi.fn()) => {
+    render(<DataView spec={spec} connectionId="c" onChange={onChange} pages={[]} onPage={vi.fn()} />);
+    return onChange;
+  };
+
+  it("puts one of the dashboard's values in the statement, and runs it with the value tried", async () => {
+    api.previewDashboardQuery.mockResolvedValue({ connection_id: "c", refused: [], columns: [{ name: "total", type: "DOUBLE" }], rows: [[1]] });
+    view(withWindow());
+    fireEvent.click(screen.getByTestId("data-dataset-add-parameter"));
+    fireEvent.click(screen.getByTestId("data-parameter"));
+    const box = screen.getByLabelText("The dataset's SQL") as HTMLTextAreaElement;
+    expect(box.value).toContain("{{window}}");
+    expect(screen.getByLabelText("Run with Window as")).toHaveValue(14);
+    fireEvent.change(screen.getByLabelText("Run with Window as"), { target: { value: "30" } });
+    fireEvent.click(screen.getByTestId("data-dataset-run"));
+    await waitFor(() => expect(api.previewDashboardQuery).toHaveBeenCalledWith("c", expect.objectContaining({ values: { window: { kind: "days", value: 30 } } })));
+  });
+
+  it("makes a new parameter a value of the dashboard, and puts it in the statement", () => {
+    const onChange = view(addDatasets(blank(), [ORDERS]).spec);
+    fireEvent.click(screen.getByTestId("data-dataset-add-parameter"));
+    fireEvent.change(screen.getByLabelText("The parameter's name"), { target: { value: "Least total" } });
+    fireEvent.change(screen.getByLabelText("What it starts as"), { target: { value: "100" } });
+    fireEvent.click(screen.getByTestId("data-parameter-make"));
+    const [next, note] = onChange.mock.calls[0];
+    expect(note).toBe("a parameter added to a dataset by hand");
+    const [[name, def]] = Object.entries(next.values as Record<string, unknown>);
+    expect(def).toEqual({ label: "Least total", kind: "number", value: 100 });
+    expect((screen.getByLabelText("The dataset's SQL") as HTMLTextAreaElement).value).toContain(`{{${name}}}`);
+  });
+
+  it("says what stops a run before anything runs: a value not given", () => {
+    view(withWindow());
+    fireEvent.change(screen.getByLabelText("The dataset's SQL"), { target: { value: "SELECT * FROM shop.orders WHERE age < {{window}}" } });
+    fireEvent.change(screen.getByLabelText("Run with Window as"), { target: { value: "" } });
+    fireEvent.click(screen.getByTestId("data-dataset-run"));
+    expect(screen.getByTestId("data-dataset-result")).toHaveTextContent("Give Window days to try the query with.");
+    expect(api.previewDashboardQuery).not.toHaveBeenCalled();
+  });
+
+  it("Edit ✦ rewrites the statement as asked, in place: nothing run or kept, and the edit undone with one click", async () => {
+    api.askForSql.mockResolvedValue({ sql: "SELECT * FROM shop.orders WHERE total > 100", notes: ["Kept to orders over 100."], outcome: "" });
+    const onChange = view(addDatasets(blank(), [ORDERS]).spec);
+    fireEvent.click(screen.getByTestId("data-dataset-edit"));
+    fireEvent.change(screen.getByTestId("data-dataset-ask-input"), { target: { value: "only orders over 100" } });
+    fireEvent.keyDown(screen.getByTestId("data-dataset-ask-input"), { key: "Enter" });
+    await waitFor(() => expect(screen.getByLabelText("The dataset's SQL")).toHaveValue("SELECT * FROM shop.orders WHERE total > 100"));
+    expect(api.askForSql).toHaveBeenCalledWith("c", "only orders over 100", { sql: ORDERS.sql });
+    expect(screen.getByTestId("data-dataset-edited")).toHaveTextContent("Kept to orders over 100.");
+    expect(onChange).not.toHaveBeenCalled();
+    expect(api.previewDashboardQuery).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId("data-dataset-edit-undo"));
+    expect(screen.getByLabelText("The dataset's SQL")).toHaveValue(ORDERS.sql);
   });
 });

@@ -42,7 +42,7 @@ vi.mock("@/lib/sheets", async (importOriginal) => ({
 
 import { ChatPanel } from "./ChatPanel";
 import { setPageSubject } from "@/lib/askSubject";
-import { useSheetDoorsHere, type SheetActions } from "@/lib/sheetBridge";
+import { useSheetDoorsHere, useSheetsHomeHere, type SheetActions } from "@/lib/sheetBridge";
 import type { Proposal, Sheet } from "@/lib/sheets";
 
 const SHEET = { id: "s1", name: "Olist orders", table: "olist_orders", columns: [], views: [], rules: [] } as unknown as Sheet;
@@ -135,5 +135,41 @@ describe("the Ask panel beside a sheet", () => {
     const { doors } = await panel();
     fireEvent.click(await screen.findByRole("button", { name: "Show in the grid" }));
     expect(doors.showRows).toHaveBeenCalledWith(expect.objectContaining({ about: "Still open", rows: 2 }));
+  });
+});
+
+describe("the Ask panel's composer (2026-11-20)", () => {
+  it("offers no Quick or Agent and no agent to answer as: the conversation decides", async () => {
+    const { box } = await panel();
+    expect(screen.queryByRole("radiogroup", { name: "How to answer" })).toBeNull();
+    expect(screen.queryByText("No agent")).toBeNull();
+    send(box, "How many are still open?");
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0].body).toMatchObject({ mode: "auto", depth: "quick" });           // the conversation, with its own tools
+  });
+});
+
+function HomeOnScreen({ openSheet }: { openSheet: (id: string) => void }) {
+  useSheetsHomeHere(openSheet);
+  return null;
+}
+
+describe("the Spreadsheets home's In the chat (2026-11-20: the Ask panel, not a small panel of its own)", () => {
+  it("makes a file dropped there one proposal for a new sheet, and opens the sheet made", async () => {
+    setPageSubject(null);
+    sheets.proposeNewSheet.mockResolvedValue({ staged: true, proposal: { ...PROPOSAL, id: "p3", new_sheet: true, name: "Complaints",
+      file: "complaints.csv", rows: 40, columns: [], changes: [] } });
+    const openSheet = vi.fn();
+    render(<QueryClientProvider client={new QueryClient()}><HomeOnScreen openSheet={openSheet} /><ChatPanel connectionId="sheets" harness beside /></QueryClientProvider>);
+    await act(async () => {});
+    const box = screen.getByRole("textbox") as HTMLTextAreaElement;
+    expect(box.placeholder).toContain("Drop a file and say what it is for");
+    fireEvent.change(box, { target: { value: "complaints to follow up" } });
+    fireEvent.drop(screen.getByTestId("chat-drop"), { dataTransfer: { files: [new File(["a,b\n1,2"], "complaints.csv", { type: "text/csv" })] } });
+    await waitFor(() => expect(sheets.proposeNewSheet).toHaveBeenCalledWith("t1", "complaints to follow up"));
+    expect(await screen.findByText("A new sheet · Complaints")).toBeInTheDocument();
+    expect(sent).toHaveLength(0);
+    fireEvent.click(screen.getByRole("button", { name: "Create sheet" }));
+    await waitFor(() => expect(openSheet).toHaveBeenCalledWith("s1"));                  // made, and opened on the home
   });
 });

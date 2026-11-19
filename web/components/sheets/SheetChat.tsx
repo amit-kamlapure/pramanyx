@@ -8,22 +8,20 @@
  * - A change asked for comes back as ONE proposal card: each change checked and counted by the platform, ticked by
  *   default, applied all or in part by the person, recorded as proposed by the assistant and applied by them.
  * - A file becomes one proposal for a new sheet (screen 5): its name, its kinds and a few views. Nothing is made until the
- *   person creates it, and undo removes it whole. The Spreadsheets home makes one the same way (`NewSheetChat`).
+ *   person creates it, and undo removes it whole. The Spreadsheets home's "In the chat" is the same panel (2026-11-20).
  */
-import { useRef, useState } from "react";
+import { useState } from "react";
 
 import { Chip, Dot, MUTED, NUM } from "@/components/clarity/kit";
 import { RULE_COLOR } from "@/components/sheets/SheetGrid";
-import { PANEL, PanelHead } from "@/components/sheets/SheetRecord";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Icon } from "@/components/ui/icon";
-import { Input } from "@/components/ui/input";
 import type { SheetRowsRef } from "@/lib/chatTurn";
 import { formatCount } from "@/lib/format";
 import {
-  KIND_LABEL, RULE_TONES, applyProposal, filterWords, proposeNewSheet, rowsWord, stageFile, undo,
-  type Proposal, type ProposeOutcome, type RuleTone, type Sheet,
+  KIND_LABEL, RULE_TONES, applyProposal, filterWords, rowsWord, undo,
+  type Proposal, type RuleTone, type Sheet,
 } from "@/lib/sheets";
 
 /** The rows an answer beside the sheet is about (SH-4): how many of what whole, the filter in the grid's words, and the
@@ -143,51 +141,4 @@ export function ProposalCard({ proposal, applied, appliedSheet, onApplied, onUnd
   );
 }
 
-/** The home's "In the chat": drop a file, say what it is for, and read the one proposal it becomes. */
-export function NewSheetChat({ onClose, onMade }: { onClose: () => void; onMade: (sheetId: string) => void }) {
-  const [file, setFile] = useState<File | null>(null);
-  const [words, setWords] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [outcome, setOutcome] = useState<ProposeOutcome | null>(null);
-  const [refused, setRefused] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
-  const go = async () => {
-    if (!file) return;
-    setBusy(true);
-    setRefused(null);
-    try {
-      const st = await stageFile(file);
-      setOutcome(await proposeNewSheet(st.token, words));
-    } catch (e) {
-      setRefused(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <aside aria-label="Make a sheet in the chat" style={PANEL}
-      onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) setFile(f); }}>
-      <PanelHead title="Chat" chip="Workspace" onClose={onClose} />
-      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
-        <div className="aug-fs-xs" style={{ ...MUTED, lineHeight: 1.6 }}>
-          Drop a file and say what it is for. It comes back as one proposal — the sheet&apos;s name, the kinds read from
-          the file, and a few views — and nothing is made until you create it.
-        </div>
-        <input ref={fileRef} type="file" hidden accept=".csv,.tsv,.parquet,.json,.xlsx"
-          onChange={e => setFile(e.target.files?.[0] ?? null)} />
-        <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()} style={{ alignSelf: "flex-start" }}>
-          <Icon name="attach" /> {file ? file.name : "Choose or drop a file"}
-        </Button>
-        <Input value={words} onChange={e => setWords(e.target.value)} aria-label="What the sheet is for"
-          placeholder="What is it for? — e.g. a sheet I can follow up complaints from" />
-        <Button size="sm" onClick={() => void go()} disabled={!file || busy} style={{ alignSelf: "flex-start" }}>
-          {busy ? "Reading the file…" : "Propose a sheet"}
-        </Button>
-        {refused && <span role="alert" className="aug-fs-sm" style={{ color: "var(--red4)" }}>{refused}</span>}
-        {outcome && (outcome.staged ? (
-          <ProposalCard proposal={outcome.proposal} onApplied={(_, id) => onMade(id)} onUndone={() => undefined} />
-        ) : outcome.sentences.map(s => <span key={s} className="aug-fs-sm">{s}</span>))}
-      </div>
-    </aside>
-  );
-}
+

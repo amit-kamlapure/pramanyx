@@ -28,7 +28,7 @@ import {
 } from "@/lib/api";
 import type { DashboardValueDef } from "@/lib/dashboards/catalog";
 import { cellText } from "@/lib/dashboards/objectView";
-import { typedValue, valuesRead, type ValuesSent } from "@/lib/dashboards/values";
+import { VALUE_KIND_WORDS, startText, triedValues, valuesRead, type ValuesSent } from "@/lib/dashboards/values";
 import { formatCount, formatSeconds } from "@/lib/format";
 import { withUniqueKeys } from "@/lib/listKeys";
 
@@ -123,9 +123,7 @@ function Column({ label, value, columns, onPick, none, only }: {
 
 /** Arc AP-8 — what a value of the dashboard's is called and holds, as the setup offers it and tries a query with it. */
 const NO_VALUES: Record<string, DashboardValueDef> = {};
-const KIND_WORDS: Record<string, string> = { days: "days", number: "a number", text: "words", date: "a day" };
-const startText = (def: DashboardValueDef) =>
-  (def.from?.by ?? "author") === "author" || def.from?.by === "reader" ? (def.value === null || def.value === undefined ? "" : String(def.value)) : "";
+const KIND_WORDS = VALUE_KIND_WORDS;
 
 export function QuerySetup({ connectionId, card, onKept, onClose, values = NO_VALUES, shapeElsewhere = false }: {
   connectionId: string;
@@ -179,18 +177,7 @@ export function QuerySetup({ connectionId, card, onKept, onClose, values = NO_VA
     requestAnimationFrame(() => { el?.focus(); el?.setSelectionRange(at + text.length, at + text.length); });
   };
   /** The values the SQL reads as the query is tried with them — or what stops it, said here before anything runs. */
-  const sent = (): { values: ValuesSent } | { refused: string[] } => {
-    const out: ValuesSent = {};
-    const said: string[] = [];
-    for (const name of reads) {
-      const def = values[name];
-      if (!def) { said.push(`{{${name}}} is not one of this dashboard's values.`); continue; }
-      const v = typedValue(def.kind, tried[name] ?? startText(def));
-      if (v === null) said.push(`Give ${def.label} ${KIND_WORDS[def.kind] ?? "a value"} to try the query with.`);
-      else out[name] = { kind: def.kind, value: v };
-    }
-    return said.length ? { refused: said } : { values: out };
-  };
+  const sent = (): { values: ValuesSent } | { refused: string[] } => triedValues(reads, values, tried);
   const run = async () => {
     setBusy("run"); setRefused([]);
     const given = sent();

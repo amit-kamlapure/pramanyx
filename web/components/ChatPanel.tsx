@@ -12,7 +12,7 @@ import { usePramanyxChat } from "@/lib/usePramanyxChat";
 import { takeQueuedAsk, useQueuedAsk } from "@/lib/askPanel";
 import { changeable, focusOf, setAskSubject, subjectKey, subjectWords, useAskSubject, usePageSubject } from "@/lib/askSubject";
 import { SHEET_FILES, SheetEntryView, SheetGrounding, SheetTurnFoot, useSheetEntries } from "@/components/ask/SheetAssist";
-import { useSheetDoors } from "@/lib/sheetBridge";
+import { useSheetDoors, useSheetsHome } from "@/lib/sheetBridge";
 import { asksForAChange } from "@/lib/sheets";
 import { useStickToBottom } from "@/lib/useStickToBottom";
 import { brandEdge } from "@/components/ui/brand";
@@ -156,11 +156,16 @@ interface InputBoxProps {
   changes?: boolean;
   /** The coworker's composer: its edge wears the brand's colours at rest, as the coworker's does. */
   harness?: boolean;
+  /** The Ask panel's composer (the user, 2026-11-20: "Do we need Quick/Agent, Agent selection dropdown here? I dont think
+   *  so"): no way to choose how it answers or as whom — the conversation decides, a deep analysis being one of its tools. */
+  plain?: boolean;
   /** What the composer offers while a person writes (`lib/composerAssist.ts`): @ objects, / commands, ↑↓ history. */
   assist?: ComposerAssistSources;
   /** Beside a sheet: what the composer says it takes, the files it takes (a sheet is made of one), and that a file alone
    *  may be sent. */
   sheet?: boolean;
+  /** On the Spreadsheets home: a file it takes is made into a new sheet, said so. */
+  newSheets?: boolean;
 }
 
 interface ComposerAssistSources {
@@ -173,7 +178,7 @@ interface ComposerAssistSources {
   onWantObjects: () => void;
 }
 
-function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, setMode, onSend, onStop, onClear, attachedFile, onAttach, agents, agentId, setAgentId, subject, onDropSubject, changes = false, harness = false, assist, sheet = false }: InputBoxProps) {
+function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, setMode, onSend, onStop, onClear, attachedFile, onAttach, agents, agentId, setAgentId, subject, onDropSubject, changes = false, harness = false, plain = false, assist, sheet = false, newSheets = false }: InputBoxProps) {
   const [focused, setFocused] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // what the composer offers at the caret, and where a walk through the questions already asked stands
@@ -326,7 +331,7 @@ function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, se
            at its next checkpoint). Disabling here made the product argue with the user
            about whose turn it was. */
         placeholder={harness
-          ? `${sheet ? "Ask about this sheet, drop a file, or ask for a change" : changes ? "Ask anything, or describe a change" : "Ask anything"}${assist ? " · @ for objects, / for commands, ↑↓ for history" : ""}`
+          ? `${sheet ? "Ask about this sheet, drop a file, or ask for a change" : newSheets ? "Drop a file and say what it is for, or ask anything" : changes ? "Ask anything, or describe a change" : "Ask anything"}${assist ? " · @ for objects, / for commands, ↑↓ for history" : ""}`
           : multiline ? "Ask anything about your data…" : "Ask your question…"}
         className="aug-focus-frame w-full bg-transparent aug-fs-sm text-zinc-100 placeholder:text-[var(--t3)] px-4 pt-3 pb-2 resize-none focus:outline-none disabled:opacity-50"
         // the frame around it says it is being written in: the field draws no second one inside
@@ -335,16 +340,18 @@ function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, se
 
       {/* Toggle row — mode buttons left, actions right */}
       <div className="flex items-center justify-between px-3 pb-2">
-        {/* Mode toggle — Quick answers, Agent investigates. Agent is the default. */}
-        <Segmented label="How to answer" value={mode} onChange={setMode}
-          options={[
-            { value: "ask", label: <><Icon name="chat" size={14} /> Quick</> },
-            { value: "investigate", label: <><Icon name="spark" size={14} /> Agent</> },
-          ]} />
+        {/* Mode toggle — Quick answers, Agent investigates. Agent is the default. The Ask panel's composer has none. */}
+        {plain ? <span /> : (
+          <Segmented label="How to answer" value={mode} onChange={setMode}
+            options={[
+              { value: "ask", label: <><Icon name="chat" size={14} /> Quick</> },
+              { value: "investigate", label: <><Icon name="spark" size={14} /> Agent</> },
+            ]} />
+        )}
 
         {/* Agent picker — answer AS a saved user-defined persona.
-            Hidden when the roster is empty (flag off → the list endpoint 404s → []). */}
-        {(agents?.length ?? 0) > 0 && setAgentId && (
+            Hidden when the roster is empty (flag off → the list endpoint 404s → []), and in the Ask panel. */}
+        {!plain && (agents?.length ?? 0) > 0 && setAgentId && (
           <SelectField bespoke
             value={agentId ?? ""}
             onChange={(e) => setAgentId(e.target.value)}
@@ -383,7 +390,7 @@ function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, se
           <input
             ref={fileInputRef}
             type="file"
-            accept={sheet ? SHEET_FILES : ".pdf,.csv,.txt,.md"}
+            accept={sheet || newSheets ? SHEET_FILES : ".pdf,.csv,.txt,.md"}
             style={{ display: "none" }}
             onChange={handleFileChange}
           />
@@ -392,7 +399,7 @@ function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, se
           <Button
             variant="ghost" size="icon-sm"
             onClick={() => fileInputRef.current?.click()}
-            title={sheet ? "Make a sheet from a file" : "Attach file (PDF, CSV)"}
+            title={sheet || newSheets ? "Make a sheet from a file" : "Attach file (PDF, CSV)"}
             style={{ color: attachedFile ? "var(--blue4)" : "var(--t3)" }}
           >
             <Icon name="attach" size={15} label="Attach a file" />
@@ -883,7 +890,9 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
   }, [busy, turns, timings]);
 
   const [input, setInput]           = useState("");
-  const [mode, setMode]             = useState<ChatMode>("investigate");
+  // the Ask panel beside a page sends every question to the conversation, which decides how far to go
+  const inPanel = beside && harness;
+  const [mode, setMode]             = useState<ChatMode>(inPanel ? "ask" : "investigate");
   // User-defined agents: the roster + the picked persona.
   const [agents, setAgents]         = useState<UserAgent[]>([]);
   const [agentId, setAgentId]       = useState<string>(initialAgentId ?? "");
@@ -1066,6 +1075,13 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
   // asked for here, and which turns were asked about it
   const sheetHere = subject?.kind === "sheet" ? subject : null;
   const sheetDoors = useSheetDoors(sheetHere?.id);
+  // on the Spreadsheets home (2026-11-20, its "In the chat"): a file dropped or attached becomes a proposal for a new sheet,
+  // and the sheet made opens there
+  const homeDoors = useSheetsHome();
+  const sheetsHome = !sheetHere && !subject && homeDoors ? homeDoors : null;
+  const makesSheets = !!sheetHere || !!sheetsHome;
+  const entryDoors = useMemo(() => sheetDoors
+    ?? (sheetsHome ? { applied: () => {}, openView: () => {}, openSheet: sheetsHome.openSheet } : null), [sheetDoors, sheetsHome]);
   const sheetAssist = useSheetEntries(sheetHere?.id ?? null);
   const [sheetAsked, setSheetAsked] = useState<ReadonlySet<number>>(() => new Set());
 
@@ -1232,9 +1248,9 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
     setDragging(false);
     const files = Array.from(e.dataTransfer?.files ?? []);
     // beside a sheet, a file dropped becomes one proposal for a new sheet, said with what was written
-    if (sheetHere && files[0]) { sheetAssist.proposeFile(files[0], input.trim(), turns.length); setInput(""); return; }
+    if (makesSheets && files[0]) { sheetAssist.proposeFile(files[0], input.trim(), turns.length); setInput(""); return; }
     for (const f of files) void takeFile(f);
-  }, [takeFile, sheetHere, sheetAssist, input, turns.length]);
+  }, [takeFile, makesSheets, sheetAssist, input, turns.length]);
 
   const handleSend = useCallback(async (q?: string, m?: RouteMode, opts?: { skipCache?: boolean; requestMode?: "investigate" | "explore"; purpose?: string }) => {
     const question = (q ?? input).trim();
@@ -1259,6 +1275,9 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
   /** The composer's send. Beside a sheet, a file goes to a proposal for a new sheet and a change asked for to a proposal on
    *  the sheet; a question is asked, and remembered as asked about the sheet. */
   const sendFromComposer = useCallback(() => {
+    if (sheetsHome && attachedFile) {
+      const f = attachedFile; setAttachedFile(null); setInput(""); sheetAssist.proposeFile(f, input.trim(), turns.length); return;
+    }
     if (sheetHere) {
       const words = input.trim();
       if (attachedFile) { const f = attachedFile; setAttachedFile(null); setInput(""); sheetAssist.proposeFile(f, words, turns.length); return; }
@@ -1266,11 +1285,11 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
       if (words) setSheetAsked(s => new Set(s).add(turns.length));
     }
     void handleSend();
-  }, [sheetHere, input, attachedFile, sheetAssist, turns.length, handleSend]);
+  }, [sheetHere, sheetsHome, input, attachedFile, sheetAssist, turns.length, handleSend]);
   const askOnSheet = (words: string) => { setSheetAsked(s => new Set(s).add(turns.length)); void handleSend(words); };
   const proposeOnSheet = (words: string) => sheetAssist.proposeChange(words, turns.length);
   const sheetEntriesAfter = (n: number) => sheetAssist.entries.filter(en => en.after === n).map(en => (
-    <SheetEntryView key={en.id} entry={en} doors={sheetDoors} onSettle={sheetAssist.settle} onAsk={askOnSheet} />
+    <SheetEntryView key={en.id} entry={en} doors={entryDoors} onSettle={sheetAssist.settle} onAsk={askOnSheet} />
   ));
 
   const isEmpty = messages.length === 0 && sheetAssist.entries.length === 0;
@@ -1317,6 +1336,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
 
   const inputBoxProps: InputBoxProps = {
     harness,
+    plain: inPanel,
     textareaRef,
     input,
     setInput,
@@ -1333,6 +1353,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
     agentId,
     setAgentId,
     sheet: !!sheetHere,
+    newSheets: !!sheetsHome,
     ...(subject ? { subject: subjectWords(subject), changes: changeable(subject),
       onDropSubject: () => (subject === pageHere ? setDroppedPage(subjectKey(pageHere)) : setAskSubject(null)) } : {}),
   };

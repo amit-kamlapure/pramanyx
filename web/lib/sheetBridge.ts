@@ -66,3 +66,30 @@ export function useSheetDoors(sheetId: string | null | undefined): SheetDoors | 
     () => null,
   );
 }
+
+// ── the Spreadsheets home (2026-11-20: its "In the chat" opens the Ask panel, not a small panel of its own) ──
+
+/** What the Spreadsheets home lends the Ask panel while it is open: a sheet made from a file there opens here. */
+export interface SheetsHomeDoors { openSheet: (id: string) => void }
+let home: SheetsHomeDoors | null = null;
+const homeListeners = new Set<() => void>();
+
+/** The Spreadsheets home says it is open: in the Ask panel a file dropped or attached becomes a proposal for a new sheet. */
+export function useSheetsHomeHere(openSheet: (id: string) => void): void {
+  const latest = useRef(openSheet);
+  latest.current = openSheet;
+  useEffect(() => {
+    const held: SheetsHomeDoors = { openSheet: id => latest.current(id) };
+    home = held;
+    homeListeners.forEach(l => l());
+    return () => { if (home === held) { home = null; homeListeners.forEach(l => l()); } };
+  }, []);
+}
+
+export function useSheetsHome(): SheetsHomeDoors | null {
+  return useSyncExternalStore(
+    l => { homeListeners.add(l); return () => { homeListeners.delete(l); }; },
+    () => home,
+    () => null,
+  );
+}
