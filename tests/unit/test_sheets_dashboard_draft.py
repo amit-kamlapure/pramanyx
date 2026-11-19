@@ -220,6 +220,9 @@ def test_what_is_kept_passes_the_dashboards_own_validator_and_is_written_by_code
     tabs = spec["elements"][root["children"][1]]
     assert [spec["elements"][t]["props"]["label"] for t in tabs["children"]] == ["Overview", "Rows", "What if"]
     assert spec["values"]["return_cut"]["from"]["slider"]["unit"] == "percent"
+    # the sheet is held as the dashboard's data, for the charts set down on it later
+    [data] = spec["datasets"].values()
+    assert data["table"] == sheet.table and data["sql"] == f'SELECT * EXCLUDE (_row) FROM "{sheet.table}"'
     held = {c.title: c for c in cards.cards_of(home)}
     assert held["Kept"].render["drafted_by_model"] is True and held["Kept"].render["standing"] is True
     assert held["Kept"].render["definition"] == "Sum of Sale price where Status is Complete"

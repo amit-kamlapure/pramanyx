@@ -576,7 +576,16 @@ def spec_for(title: str, kept: list[dict], *, sheet: Sheet, filters: list[dict],
     if scenario:
         spec["values"] = {i["name"]: {"label": i["label"], "kind": "number", "value": i["start"], "from": {
             "by": "reader", "slider": {"min": i["min"], "max": i["max"], "step": i["step"], "unit": i["unit"]}}} for i in scenario["inputs"]}
+    # the sheet is the dashboard's data too (2026-11-19): a chart set down on the canvas later is built on its rows
+    spec["datasets"] = {dataset_name(sheet.name or sheet.table): {
+        "label": (sheet.name or sheet.table)[:120], "sql": f"SELECT * EXCLUDE (_row) FROM {ident(sheet.table)}", "table": sheet.table}}
     return spec
+
+
+def dataset_name(label: str) -> str:
+    """A dataset's name from its label, as the dashboard's own rules take one: "Q3 orders" is ``q3_orders``."""
+    base = re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_")[:40] or "data"
+    return base if re.match(r"[a-z_]", base) else f"d_{base}"
 
 
 def keep(sheet: Sheet, home: Any, *, title: str, cards: list[dict], filters: list[dict], scenario: Optional[dict], add_row: bool,

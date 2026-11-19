@@ -153,6 +153,30 @@ describe("what the library's own validator lets through, and these rules do not"
   });
 });
 
+describe("the datasets a dashboard's charts are built on (2026-11-19)", () => {
+  it("holds a table and a statement of one's own, each by its name", () => {
+    const spec = premise();
+    spec.datasets = { orders: { label: "Orders", sql: "SELECT * FROM shop.orders", table: "shop.orders" },
+      big_orders: { label: "Big orders", sql: "SELECT * FROM shop.orders WHERE total > 100" } };
+    expect(checkDashboardSpec(spec).valid).toBe(true);
+  });
+
+  it.each([
+    ["a name a statement cannot carry", { "big orders": { label: "Big", sql: "SELECT 1" } }],
+    ["no statement", { orders: { label: "Orders", sql: " " } }],
+    ["no label", { orders: { label: "", sql: "SELECT 1" } }],
+    ["a field it has never heard of", { orders: { label: "Orders", sql: "SELECT 1", cards: ["c1"] } }],
+  ])("refuses %s", (_what, datasets) => {
+    expect(refused(s => { s.datasets = datasets; })).toMatch(/is not a label and the statement it reads/);
+  });
+
+  it("refuses more than it holds, and a list", () => {
+    const many = Object.fromEntries(Array.from({ length: 25 }, (_, i) => [`d${i}`, { label: `D${i}`, sql: "SELECT 1" }]));
+    expect(refused(s => { s.datasets = many; })).toMatch(/holds 25 datasets\. It holds at most 24/);
+    expect(refused(s => { s.datasets = [{ label: "Orders", sql: "SELECT 1" }]; })).toMatch(/is not a map of named datasets/);
+  });
+});
+
 describe("what a spec may not carry", () => {
   it.each([
     ["watch", { "/tab": { action: "anything" } }, /runs nothing without a click/],

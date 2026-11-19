@@ -106,6 +106,8 @@ const chartDoor = async (kind: string) => {
   api.getDeclaredActions.mockResolvedValue({});
   ontology.getProcesses.mockResolvedValue({ processes: [] });
   setDown("builder-add-piece");
+  // a chart is built on the dashboard's data first; every other piece is one click away
+  fireEvent.click(await screen.findByTestId("place-other-pieces"));
   change(await screen.findByLabelText("What it is"), { target: { value: kind } });
   fireEvent.click(screen.getByTestId("piece-picker-place"));
 };
@@ -1087,6 +1089,50 @@ describe("your own query on the dashboard (Arc AP-7)", () => {
     ontology.getProcesses.mockResolvedValue({ processes: [] });
   });
 
+  it("builds a chart box on one of the dashboard's datasets, drawn where the box was set down (2026-11-19)", async () => {
+    // the dashboard read holds one dataset: put on the premise itself for this test, and taken off after it
+    const datasets = { orders: { label: "Orders", sql: "SELECT * FROM thelook.orders", table: "thelook.orders" } };
+    SPEC.datasets = datasets;
+    try {
+      api.previewDashboardQuery.mockResolvedValue({ connection_id: "thelook", refused: [], columns: [
+        { name: "day", type: "DATE" }, { name: "sales", type: "DOUBLE" }, { name: "country", type: "VARCHAR" }] });
+      api.keepDashboardQuery.mockResolvedValue({ card: queryCard("qdata"), preview: { connection_id: "thelook", refused: [] } });
+      await openBuilder();
+      setDown("builder-add-piece");
+      expect(await screen.findByTestId("chart-dataset")).toHaveAttribute("data-value", "orders");
+      change(screen.getByLabelText("Visualization"), { target: { value: "line" } });
+      api.getDashboard.mockResolvedValue({ ...READ, cards: [...READ.cards, queryCard("qdata")] });
+      fireEvent.click(screen.getByTestId("chart-from-data-place"));
+      await waitFor(() => expect(api.keepDashboard).toHaveBeenCalled());
+      // drawn first from the data's own columns: its date along the bottom, its number summed, its words as the colour
+      expect(api.keepDashboardQuery).toHaveBeenCalledWith("thelook", expect.objectContaining({ sql: "SELECT * FROM thelook.orders", title: "Orders",
+        shown: expect.objectContaining({ as: "line", x: "day", bucket: "day", split: "country", series: [{ column: "sales", agg: "sum" }] }) }));
+      const [, , kept, note] = api.keepDashboard.mock.calls.at(-1)!;
+      expect(note).toBe("a chart built on a dataset by hand");
+      const placed = Object.values((kept as { elements: Record<string, { type: string; props: Record<string, unknown> }> }).elements)
+        .filter(el => el.type === "Card" && el.props.card === "qdata");
+      expect(placed).toHaveLength(1);
+      expect(placed[0].props).toEqual(expect.objectContaining({ w: 6, h: 8 }));        // the box's own size
+      expect((kept as { datasets?: unknown }).datasets).toEqual(datasets);            // the data stays the dashboard's
+    } finally { delete SPEC.datasets; }
+  });
+
+  it("a chart box on a dashboard with no data yet asks for data first, held as a dataset", async () => {
+    api.getCatalogTree.mockResolvedValue({ sections: [{ id: "s", label: "S", entries: [{ conn_id: "thelook", conn_type: "bigquery", schemas: [
+      { name: "thelook", tables: [{ name: "order_items" }] }] }] }] } as never);
+    await openBuilder();
+    setDown("builder-add-piece");
+    expect(await screen.findByTestId("chart-from-data-empty")).toHaveTextContent("Add data to get going");
+    fireEvent.click(screen.getByTestId("chart-add-table"));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "thelook.order_items" }));
+    fireEvent.click(screen.getByTestId("add-data-tables"));
+    expect(await screen.findByTestId("chart-dataset")).toHaveAttribute("data-value", "order_items");
+    await waitFor(() => expect(api.keepDashboard).toHaveBeenCalled());
+    const [, , kept, note] = api.keepDashboard.mock.calls.at(-1)!;
+    expect(note).toBe("a table added as data by hand");
+    expect((kept as { datasets: unknown }).datasets).toEqual({ order_items: { label: "Order items", sql: "SELECT * FROM thelook.order_items", table: "thelook.order_items" } });
+  });
+
   it("writes a new one for the section the picker was opened for, and places the kept card there", async () => {
     api.keepDashboardQuery.mockResolvedValue({ card: queryCard("qnew"), preview: { connection_id: "thelook", refused: [] } });
     show();
@@ -1149,7 +1195,7 @@ describe("your own query on the dashboard (Arc AP-7)", () => {
     fireEvent.click(screen.getByTestId("card-fold-reads"));
     const setup = await screen.findByTestId("query-setup");
     expect(within(setup).getByTestId("query-values-open")).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: "Variables" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Data" })).toBeInTheDocument();
   });
 });
 

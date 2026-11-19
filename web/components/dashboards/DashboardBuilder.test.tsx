@@ -221,8 +221,8 @@ describe("the bar above the dashboard", () => {
     expect(screen.getAllByTestId("builder-line").length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: "Fold the layout" }));
     expect(screen.getByTestId("builder-pane-folded")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Open the variables" }));
-    expect(screen.getByRole("radio", { name: "Variables" })).toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Open the data" }));
+    expect(screen.getByRole("radio", { name: "Data" })).toBeChecked();
   });
 
   it("chooses the one element a change brings — a piece just placed is set up in the panel", () => {

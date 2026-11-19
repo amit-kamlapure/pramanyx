@@ -352,14 +352,14 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
             style={{ minHeight: 0, borderRight: "1px solid var(--b1)", background: "var(--bg-1)", display: "flex", flexDirection: "column", alignItems: "center", gap: 6, paddingTop: 10 }}>
             <Button size="icon-sm" variant="outline" aria-label="Open the layout" title={`Open the layout · ${lines} ${lines === 1 ? "line" : "lines"}`}
               data-testid="builder-open-layout" onClick={() => openPane("layout")}><Icon name="unfold" size={16} /></Button>
-            <Button size="icon-sm" variant="outline" aria-label="Open the variables" title="Open the variables: sets, values and choices"
+            <Button size="icon-sm" variant="outline" aria-label="Open the data" title="Open the data: datasets, values, sets and choices"
               data-testid="builder-open-variables" onClick={() => openPane("data")}><Icon name="json" size={16} /></Button>
           </aside>
         ) : (
         <aside aria-label="Layout" style={{ minHeight: 0, overflow: "auto", borderRight: "1px solid var(--b1)", background: "var(--bg-1)", display: "flex", flexDirection: "column" }}>
           <div style={{ padding: "10px 10px 0", display: "flex", alignItems: "center", gap: 6 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <Segmented label="The left pane" value={tab} options={[{ value: "layout", label: "Layout" }, { value: "data", label: "Variables" }]}
+              <Segmented label="The left pane" value={tab} options={[{ value: "layout", label: "Layout" }, { value: "data", label: "Data" }]}
                 onChange={v => { setTab(v as "layout" | "data"); if (v === "layout") setWire(null); }} />
             </div>
             <Button size="icon-sm" variant="ghost" aria-label="Fold the layout" title="Fold the layout away: the canvas takes the room"

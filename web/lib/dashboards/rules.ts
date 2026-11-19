@@ -203,6 +203,22 @@ function checkBreakdown(key: string, props: Obj, out: DashboardIssue[]): void {
   });
 }
 
+/** The datasets a dashboard's charts are built on (2026-11-19): a map of names, each a label and the statement it reads. */
+function checkDatasets(raw: unknown, issues: DashboardIssue[]): void {
+  if (raw == null) return;
+  if (!isObj(raw)) { issues.push({ code: "bad_prop", message: "The spec's \"datasets\" is not a map of named datasets." }); return; }
+  const entries = Object.entries(raw as Record<string, unknown>);
+  if (entries.length > 24) issues.push({ code: "too_large", message: `The dashboard holds ${entries.length} datasets. It holds at most 24.` });
+  for (const [name, d] of entries) {
+    const ok = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(name) && isObj(d)
+      && typeof (d as Obj).label === "string" && ((d as Obj).label as string).trim().length > 0 && ((d as Obj).label as string).length <= 120
+      && typeof (d as Obj).sql === "string" && ((d as Obj).sql as string).trim().length > 0 && ((d as Obj).sql as string).length <= 20000
+      && ((d as Obj).table == null || (typeof (d as Obj).table === "string" && ((d as Obj).table as string).length <= 200))
+      && Object.keys(d as Obj).every(k => ["label", "sql", "table"].includes(k));
+    if (!ok) issues.push({ code: "bad_prop", message: `The dataset ${q(name)} is not a label and the statement it reads.` });
+  }
+}
+
 /** Arc AP-2 and AP-3 — the wiring, by name: every set, value and choice a piece names is one the dashboard holds, sets
  *  form no ring and keep one segment, a condition says what its operator needs, a set of what a chosen object links to
  *  waits on a chosen object, one name is one thing, and every source a button's parameter names is there. Whether a
@@ -569,11 +585,12 @@ export function checkDashboardSpec(spec: unknown): DashboardCheck {
       message: "A dashboard spec is an object with a \"root\" and a map of \"elements\"." });
     return done();
   }
-  const extra = Object.keys(spec).filter(k => !["root", "elements", "state", "sets", "values"].includes(k));
+  const extra = Object.keys(spec).filter(k => !["root", "elements", "state", "sets", "values", "datasets"].includes(k));
   if (extra.length) {
     issues.push({ code: "not_a_spec",
-      message: `The spec carries ${list(extra.map(q))}. It holds "root", "elements", "state", and the "sets" and "values" its pieces read.` });
+      message: `The spec carries ${list(extra.map(q))}. It holds "root", "elements", "state", the "sets" and "values" its pieces read, and the "datasets" its charts are built on.` });
   }
+  checkDatasets(spec.datasets, issues);
   const elements = spec.elements as Record<string, unknown>;
   const keys = Object.keys(elements);
   if (keys.length > MAX_ELEMENTS) {

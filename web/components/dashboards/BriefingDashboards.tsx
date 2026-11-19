@@ -69,6 +69,7 @@ import { finishedWatch, heardFrame, startWatch, type DraftWatch } from "@/lib/da
 import { askAbout, dashboardSubject, useOnPage } from "@/lib/askSubject";
 import { ImportDashboard } from "@/components/dashboards/ImportDashboard";
 import { SubscribeDashboard } from "@/components/dashboards/SubscribeDashboard";
+import { ChartFromData } from "@/components/dashboards/Datasets";
 import { FromSql, FromTables } from "@/components/dashboards/StartFromData";
 import { downloadText } from "@/lib/query/csv";
 import { Chip } from "@/components/clarity/kit";
@@ -190,11 +191,15 @@ function Refused({ outcome }: { outcome: DashboardKept }) {
 
 /** A box set down on the canvas (the user, 2026-11-19): what it is, chosen here — a chart's or a filter's kind in one dropdown,
  *  the words of a note, a picture's upload — and the piece made is drawn in the box, where it was set down. */
-function BoxSetup({ box, spec, connectionId, schema, busy, onCancel, onPlace, onNote, onImage, onHandOff }: {
+function BoxSetup({ box, spec, connectionId, schema, busy, onCancel, onPlace, onNote, onImage, onHandOff, onChart }: {
   box: PlacedBox; spec: DashboardSpec; connectionId: string; schema?: string; busy: boolean; onCancel: () => void;
   onPlace: (next: DashboardSpec, note: string) => void; onNote: (text: string) => void; onImage: (objectId: string, caption: string) => void;
   onHandOff: (kind: HandOff, section: string | null) => void;
+  /** A chart built on one of the dashboard's datasets, its card kept: placed in the box. */
+  onChart: (cardId: string, title: string) => void;
 }) {
+  // a chart is built on the dashboard's data (the user, 2026-11-19); every other piece a chart box may be is one click away
+  const [others, setOthers] = useState(false);
   return (
     <div data-testid="place-setup" data-kind={box.kind} style={{ display: "flex", flexDirection: "column" }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "12px 14px 4px" }}>
@@ -206,9 +211,28 @@ function BoxSetup({ box, spec, connectionId, schema, busy, onCancel, onPlace, on
         </div>
         <Button size="icon-sm" variant="ghost" aria-label="Take the box away" data-testid="place-setup-cancel" onClick={onCancel}><Icon name="close" size={14} /></Button>
       </div>
-      {box.kind === "chart" || box.kind === "filter" ? (
-        <PiecePicker key={`${box.section}:${box.x}:${box.y}:${box.kind}`} spec={spec} section={box.section} only={box.kind}
-          connectionId={connectionId} schema={schema} onPlace={onPlace} onHandOff={onHandOff} onClose={onCancel} />
+      {box.kind === "chart" && !others ? (
+        <>
+          <ChartFromData key={`${box.section}:${box.x}:${box.y}`} spec={spec} connectionId={connectionId} busy={busy}
+            onChange={onPlace} onMade={onChart} onCancel={onCancel} />
+          <div style={{ padding: "4px 14px 12px", borderTop: "1px solid var(--b1)" }}>
+            <Button size="xs" variant="ghost" data-testid="place-other-pieces" onClick={() => setOthers(true)} style={{ marginTop: 8 }}>
+              Other pieces: objects, cards, findings, questions <Icon name="chevr" size={12} />
+            </Button>
+          </div>
+        </>
+      ) : box.kind === "chart" || box.kind === "filter" ? (
+        <>
+          {box.kind === "chart" && (
+            <div style={{ padding: "4px 14px 0" }}>
+              <Button size="xs" variant="ghost" data-testid="place-from-data" onClick={() => setOthers(false)}>
+                <Icon name="chevl" size={12} /> A chart of the dashboard&rsquo;s data
+              </Button>
+            </div>
+          )}
+          <PiecePicker key={`${box.section}:${box.x}:${box.y}:${box.kind}`} spec={spec} section={box.section} only={box.kind}
+            connectionId={connectionId} schema={schema} onPlace={onPlace} onHandOff={onHandOff} onClose={onCancel} />
+        </>
       ) : (
         <div style={{ padding: "8px 14px" }}>
           {box.kind === "text"
@@ -393,7 +417,9 @@ const WAYS: { way: Exclude<NewWay, "draft">; label: string; icon: IconName }[] =
 
 /** A new dashboard opens as a blank page of its own (the user, 2026-11-18): describe it, or start another way. */
 function NewDashboard({ connectionId, schema, sym, onKept, onClose, onBusy }: {
-  connectionId: string; schema?: string; onKept: (dashboardId: string) => void; onClose: () => void;
+  connectionId: string; schema?: string; onClose: () => void;
+  /** The dashboard made, opened; in the editor when it starts with nothing on it but its data. */
+  onKept: (dashboardId: string, edit?: boolean) => void;
   sym: string;
   /** Told while a draft or a start is in flight, so the dialog around it is held open with its Close disabled. */
   onBusy?: (busy: boolean) => void;
@@ -518,8 +544,8 @@ function NewDashboard({ connectionId, schema, sym, onKept, onClose, onBusy }: {
             </Button>
             <span className="aug-fs-ui" style={{ color: "var(--t1)", fontWeight: 600 }}>{WAYS.find(w => w.way === way)?.label}</span>
           </div>
-      {way === "tables" && <FromTables connectionId={connectionId} onKept={onKept} onBusy={onBusy} />}
-      {way === "sql" && <FromSql connectionId={connectionId} onKept={onKept} />}
+      {way === "tables" && <FromTables connectionId={connectionId} onKept={id => onKept(id, true)} onBusy={onBusy} />}
+      {way === "sql" && <FromSql connectionId={connectionId} onKept={id => onKept(id, true)} />}
       {way === "file" && (
         <FromFile onKept={(id, connection) => {
           // a file's dashboard lives on the Sheets connection: opened there, whichever connection this page was on
@@ -1548,6 +1574,8 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
             <BoxSetup box={box} spec={current} connectionId={connectionId} schema={schema} busy={busy}
               onCancel={() => setBox(null)}
               onPlace={change}
+              onChart={(cardId, title) => edit(s => placeCard(s, cardId, box.section), "a chart built on a dataset by hand",
+                `Placed “${title}”. Set its X axis, Y axis and colour in the panel.`)}
               onNote={text => edit(s => placeNote(s, text, box.section), "a note written by hand", "Placed. Its author and date are stamped as it is kept.")}
               onImage={(objectId, caption) => edit(s => placeImage(s, objectId, caption, box.section), "an image uploaded by hand",
                 "Placed. The upload is stamped with your name and the date.")}
@@ -1682,7 +1710,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
         )}
         <NewDashboard connectionId={connectionId} schema={schema} onClose={() => setNewOpen(false)} onBusy={setNewBusy}
           sym={data?.currency_symbol || "$"}
-          onKept={id => { setNewOpen(false); choose(id); reload(); }} />
+          onKept={(id, edit) => { setNewOpen(false); choose(id, !!edit); reload(); }} />
       </div>
     );
   }

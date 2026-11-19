@@ -33,7 +33,22 @@ export interface DashboardSpec {
   /** Arc AP-2 — the sets and values a wired dashboard's pieces read, by name. */
   sets?: Record<string, DashboardSetDef>;
   values?: Record<string, DashboardValueDef>;
+  /** The data the dashboard's charts are built on, by name (the user, 2026-11-19, of a peer product's Data section). */
+  datasets?: Record<string, DashboardDataset>;
 }
+
+/** A dataset a dashboard holds: a table of the connection, or a person's own statement. A chart set up on it reads it,
+ *  summed and split as its setup says; the dataset itself is never a piece of the page. */
+export interface DashboardDataset {
+  label: string;
+  /** What it reads: `SELECT * FROM <table>` for a table, else the person's own statement. */
+  sql: string;
+  /** The table, when it is one, as the schema names it. */
+  table?: string | null;
+}
+
+/** The most datasets a dashboard holds. */
+export const MAX_DATASETS = 24;
 
 export interface SectionRef {
   key: string; title: string; tabKey: string | null; tabLabel: string | null;
@@ -740,6 +755,32 @@ export function freshWireName(spec: unknown, label: string): string {
   const base = (label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").replace(/^[^a-z]+/, "") || "set").slice(0, 32);
   if (!used.has(base)) return base;
   for (let i = 2; ; i++) if (!used.has(`${base}-${i}`)) return `${base}-${i}`;
+}
+
+/** The dataset `name` added, or changed to `def`. */
+export function putDataset(spec: unknown, name: string, def: DashboardDataset): DashboardSpec {
+  const s = copy(spec);
+  s.datasets = { ...(s.datasets ?? {}), [name]: def };
+  return s;
+}
+
+/** The dataset `name` taken off; the charts already built on it keep reading what they read. */
+export function dropDataset(spec: unknown, name: string): DashboardSpec {
+  const s = copy(spec);
+  const rest = { ...(s.datasets ?? {}) };
+  delete rest[name];
+  if (Object.keys(rest).length) s.datasets = rest; else delete s.datasets;
+  return s;
+}
+
+/** A name for a new dataset from its label, not one the dashboard holds: "order_items", "order_items_2". */
+export function freshDatasetName(spec: DashboardSpec, label: string): string {
+  const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40) || "data";
+  const base = /^[a-z_]/.test(slug) ? slug : `d_${slug}`;
+  const held = new Set(Object.keys(spec.datasets ?? {}));
+  let name = base;
+  for (let i = 2; held.has(name); i++) name = `${base}_${i}`;
+  return name;
 }
 
 /** The set `name` added, or changed to `def`. */
