@@ -1,7 +1,7 @@
 """Canvas data models."""
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List, Literal, Optional
 from pydantic import BaseModel, Field, model_validator
 
 
@@ -37,6 +37,15 @@ class CanvasScope(BaseModel):
         return not self.tables
 
 
+class CanvasShare(BaseModel):
+    """One person or group a canvas is shared with, and what they may do: ``view`` to read it and ask in it, ``edit``
+    to change it — a sheet's shares (`sheets.model.Share`) in the same words, checked by the same rule
+    (`sheets.sharing.chosen_shares`)."""
+    kind: Literal["person", "group", "role"]
+    id: str
+    level: Literal["view", "edit"] = "view"
+
+
 class Canvas(BaseModel):
     """Named workspace that scopes investigations to a subset of tables.
 
@@ -58,6 +67,12 @@ class Canvas(BaseModel):
     #: rest of the corpus away. Empty means exactly today's behaviour.
     doc_ids: List[str] = Field(default_factory=list)
     is_legacy: bool = False   # True for auto-generated connection→Canvas migrations
+    #: Who made it (``user:<id>``), who holds it as its owner — "" for a canvas made before makers were kept
+    #: (2026-11-20), which is the workspace's until a curator first chooses who it is shared with.
+    created_by: str = ""
+    #: "workspace" — everyone in it opens and changes it, as every canvas was — or "chosen": only `shared_with`.
+    sharing: Literal["workspace", "chosen"] = "workspace"
+    shared_with: List[CanvasShare] = Field(default_factory=list)
     created_at: str = ""
     updated_at: str = ""
 

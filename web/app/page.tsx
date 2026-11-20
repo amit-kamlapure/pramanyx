@@ -1995,6 +1995,7 @@ export default function Home() {
             {tab === "canvas-workspace" && activeCanvas && (
               <ErrorBoundary label="The Canvas workspace hit an error.">
                 <CanvasWorkspace
+                  key={activeCanvas.id}
                   canvas={activeCanvas}
                   connections={wsConnections}
                   allConnections={connections}
@@ -2004,6 +2005,7 @@ export default function Home() {
                   initialOpenInvId={initialCanvasInvId}
                   initialRestoreSessionId={initialCanvasChatId}
                   workspaceId={selectedWorkspace}
+                  onOpenCanvas={handleCanvasSelect}
                 />
               </ErrorBoundary>
             )}

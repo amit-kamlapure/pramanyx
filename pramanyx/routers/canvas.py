@@ -13,11 +13,46 @@ from pramanyx.security.authz import connection_owner_guard
 def canvas_owner_guard(request: Request) -> None:
     """Object-level authz (SEC-05): a by-id canvas route is reachable only by the
     org that owns the canvas's connection. No-op on routes without a ``canvas_id``
-    (list/create/suggest-name) and in localhost mode (identity off)."""
+    (list/create/suggest-name) and in localhost mode (identity off).
+
+    Then who it is shared with (2026-11-20, `canvas/sharing.py`): reading it, asking in it and cloning it need ``view``;
+    every other change ``edit``. Changing who it is shared with and removing it need ``own``, which those routes check
+    themselves. A refusal is a 403 that names who to ask."""
     from pramanyx.security.authz import check_owner, get_principal
     canvas_id = request.path_params.get("canvas_id")
     if canvas_id:
         check_owner("canvas", canvas_id, get_principal(request))
+        from pramanyx.canvas import sharing
+        from pramanyx.canvas.store import get_canvas
+        canvas = get_canvas(canvas_id)
+        if canvas is None:
+            return                                   # each route says 404 in its own words
+        reads = request.method in ("GET", "HEAD") or request.url.path.endswith("/clone")
+        try:
+            sharing.require(canvas, _who(request), sharing.VIEW if reads else sharing.EDIT,
+                            curator=sharing.is_curator(get_principal(request)))
+        except sharing.NotShared as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from None
+
+
+def _who(request: Request) -> str:
+    """The person a canvas route acts for, as ``user:<id>``."""
+    from pramanyx.security.authz import acting_person, get_principal
+    return acting_person(get_principal(request))
+
+
+def _seen_as(canvas, request: Request) -> dict:
+    """A canvas as the person asking may see it: whole, with what they may do (``access``); or, not shared with them,
+    its name and who to ask — listed and said, never read."""
+    from pramanyx.canvas import sharing
+    from pramanyx.security.authz import get_principal
+    got = sharing.level_of(canvas, _who(request), curator=sharing.is_curator(get_principal(request)))
+    d = canvas.model_dump()
+    d["access"] = got.level
+    if not got.level:
+        d.update(description="", doc_ids=[], shared_with=[],
+                 refusal=sharing.refusal(canvas, got, sharing.VIEW))
+    return d
 
 
 #: DATA-06 — and the connection a create or a name suggestion sends in its body is the caller's org's (2026-11-08).
@@ -61,7 +96,7 @@ class SuggestTablesRequest(BaseModel):
 
 
 @router.get("/canvases")
-def get_canvases(include_legacy: bool = True, workspace_id: str | None = None):
+def get_canvases(request: Request, include_legacy: bool = True, workspace_id: str | None = None):
     """List canvases. When `workspace_id` is given, only canvases whose connection
     belongs to that workspace are returned (data-path tenancy)."""
     from pramanyx.canvas.store import list_canvases
@@ -78,7 +113,7 @@ def get_canvases(include_legacy: bool = True, workspace_id: str | None = None):
             continue
         if org_conns is not None and conn not in org_conns:
             continue
-        d = c.model_dump()
+        d = _seen_as(c, request)
         # Most recent investigation/chat timestamp for this canvas (drives the
         # "latest investigation" sort and the recently-used section).
         d["last_activity"] = activity.get(c.id)
@@ -100,17 +135,17 @@ def _derive_canvas_name(scope) -> str:
 
 
 @router.post("/canvases", status_code=201)
-def create_canvas_endpoint(req: CreateCanvasRequest,
+def create_canvas_endpoint(req: CreateCanvasRequest, request: Request,
                            idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key")):
     from pramanyx.canvas.models import CanvasScope
     from pramanyx.canvas.store import create_canvas, get_canvas
     from pramanyx.util.idempotency import lookup, remember
     prior = lookup("canvas", idempotency_key)  # API-03: retry returns the same canvas
     if prior and (existing := get_canvas(prior)):
-        return existing.model_dump()
+        return _seen_as(existing, request)
     scope = CanvasScope(connection_id=req.connection_id, schema_name=req.schema_name, tables=req.tables)
     name = (req.name or "").strip() or _derive_canvas_name(scope)
-    canvas = create_canvas(name=name, scopes=[scope], description=req.description)
+    canvas = create_canvas(name=name, scopes=[scope], description=req.description, created_by=_who(request))
     remember("canvas", idempotency_key, canvas.id)
     # R12 — canvas birth: kick off the "understand this data" job for the canvas
     # scope (eager intelligence → exploration handoff, one observable kernel job).
@@ -135,20 +170,78 @@ def create_canvas_endpoint(req: CreateCanvasRequest,
         from pramanyx.kernel.errors import tolerate
         tolerate(exc, "canvas birth kickoff is best-effort",
                  counter="birth.job", conn_id=scope.connection_id)
-    return canvas.model_dump()
+    return _seen_as(canvas, request)
 
 
 @router.get("/canvases/{canvas_id}")
-def get_canvas_endpoint(canvas_id: str):
+def get_canvas_endpoint(canvas_id: str, request: Request):
     from pramanyx.canvas.store import get_canvas
     canvas = get_canvas(canvas_id)
     if not canvas:
         raise HTTPException(status_code=404, detail="Canvas not found")
-    return canvas.model_dump()
+    return _seen_as(canvas, request)
+
+
+class CanvasSharingRequest(BaseModel):
+    #: "workspace" — everyone in it opens and changes it — or "chosen": only the people and groups below, and the maker
+    sharing: str
+    #: Each ``{kind: person | group | role, id, level: view | edit}``.
+    shared_with: list[dict] = Field(default_factory=list)
+
+
+@router.get("/canvases/{canvas_id}/sharing")
+def read_canvas_sharing(canvas_id: str, request: Request):
+    """Who a canvas is shared with — everyone in the workspace, or each person and group chosen with what they may do —
+    what the person asking may do, whether they may change it, and who they may choose from (a sheet's shape)."""
+    from pramanyx.canvas import sharing
+    from pramanyx.canvas.store import get_canvas
+    from pramanyx.security.authz import get_principal
+    canvas = get_canvas(canvas_id)
+    if not canvas:
+        raise HTTPException(status_code=404, detail="Canvas not found")
+    return sharing.described(canvas, _who(request), curator=sharing.is_curator(get_principal(request)))
+
+
+@router.put("/canvases/{canvas_id}/sharing")
+def change_canvas_sharing(canvas_id: str, req: CanvasSharingRequest, request: Request):
+    """Share a canvas with everyone in the workspace or with the people and groups chosen — its owner's choice, never
+    an agent's."""
+    from pramanyx.canvas import sharing
+    from pramanyx.canvas.store import get_canvas
+    from pramanyx.rbac.agent_gate import is_agent_request
+    from pramanyx.security.authz import get_principal
+    if is_agent_request(request):
+        raise HTTPException(status_code=403, detail="A person shares a canvas; an agent does not.")
+    canvas = get_canvas(canvas_id)
+    if not canvas:
+        raise HTTPException(status_code=404, detail="Canvas not found")
+    curator = sharing.is_curator(get_principal(request))
+    try:
+        kept = sharing.set_sharing(canvas, req.sharing, req.shared_with, by=_who(request), curator=curator)
+    except sharing.NotShared as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from None
+    except sharing.Refused as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    return sharing.described(kept, _who(request), curator=curator)
+
+
+class CloneCanvasRequest(BaseModel):
+    name: str = Field(default="", max_length=200)
+
+
+@router.post("/canvases/{canvas_id}/clone", status_code=201)
+def clone_canvas_endpoint(canvas_id: str, request: Request, req: Optional[CloneCanvasRequest] = None):
+    """A copy of a canvas as a new one, made by the person asking: its tables, description, pinned documents and
+    instructions — not its conversations, runs or saved artifacts. Anyone who may open it may clone it."""
+    from pramanyx.canvas.store import clone_canvas
+    copy = clone_canvas(canvas_id, by=_who(request), name=(req.name if req else ""))
+    if copy is None:
+        raise HTTPException(status_code=404, detail="Canvas not found")
+    return _seen_as(copy, request)
 
 
 @router.put("/canvases/{canvas_id}")
-def update_canvas_endpoint(canvas_id: str, req: UpdateCanvasRequest):
+def update_canvas_endpoint(canvas_id: str, req: UpdateCanvasRequest, request: Request):
     from pramanyx.canvas.store import get_canvas, update_canvas
     from pramanyx.canvas.models import CanvasScope
     existing = get_canvas(canvas_id)
@@ -160,7 +253,7 @@ def update_canvas_endpoint(canvas_id: str, req: UpdateCanvasRequest):
         new_scopes = [CanvasScope(connection_id=old_scope.connection_id, schema_name=old_scope.schema_name, tables=req.tables)]
     canvas = update_canvas(canvas_id, name=req.name, description=req.description,
                            scopes=new_scopes, doc_ids=_checked_doc_ids(req.doc_ids))
-    return canvas.model_dump()
+    return _seen_as(canvas, request)
 
 
 def _checked_doc_ids(doc_ids: Optional[list[str]]) -> Optional[list[str]]:
@@ -215,8 +308,16 @@ def canvas_documents(canvas_id: str):
 
 
 @router.delete("/canvases/{canvas_id}", status_code=204)
-def delete_canvas_endpoint(canvas_id: str):
-    from pramanyx.canvas.store import delete_canvas
+def delete_canvas_endpoint(canvas_id: str, request: Request):
+    from pramanyx.canvas import sharing
+    from pramanyx.canvas.store import delete_canvas, get_canvas
+    from pramanyx.security.authz import get_principal
+    existing = get_canvas(canvas_id)
+    if existing is not None:
+        try:                                         # removing it is its owner's, as changing who it is shared with is
+            sharing.require(existing, _who(request), sharing.OWN, curator=sharing.is_curator(get_principal(request)))
+        except sharing.NotShared as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from None
     if not delete_canvas(canvas_id):
         raise HTTPException(status_code=404, detail="Canvas not found")
     # A canvas's explorer must not outlive it — before this, the task kept

@@ -10,32 +10,31 @@
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
-import { ToolsMenu, type ToolItem } from "@/components/catalog/CatalogTools";
-import { Card, Chip, Empty, Label, MUTED, NUM, ONE_LINE, Page, ROW, RULE } from "@/components/clarity/kit";
+import { DropdownMenu } from "@radix-ui/themes";
+
+import { Card, Chip, Empty, MUTED, NUM, ONE_LINE, Page, ROW, RULE } from "@/components/clarity/kit";
 import { ChatPanel } from "@/components/ChatPanel";
 import { ConfigurePanel } from "@/components/ConfigurePanel";
 import { HistoryDetailPanel } from "@/components/HistoryDetailPanel";
-import { LifecyclePanel } from "@/components/LifecyclePanel";
+import { CertificationMark } from "@/components/govern/CertificationMark";
+import { ShareChooser } from "@/components/sheets/SheetSharing";
+import { useCloseOutside } from "@/components/sheets/useCloseOutside";
 import { Button } from "@/components/ui/button";
 import { PramanyxMark } from "@/components/ui/brand";
-import { ChromeActions, ChromeFacts, ChromeToolbar, useChromeBack, useInShell } from "@/components/shell/PageChrome";
+import { ChromeActions, ChromeFacts, useChromeBack, useInShell } from "@/components/shell/PageChrome";
 import { Icon } from "@/components/ui/icon";
-import { Input } from "@/components/ui/input";
-import { SelectField } from "@/components/ui/select";
 import { Loading, ReadFailed } from "@/components/ui/states";
-import { Textarea } from "@/components/ui/textarea";
 import { DEEP_ANALYSIS_MODE, type Canvas, type CanvasHistoryItem as HistoryItem, type Connection } from "@/lib/api";
+import { cloneCanvas, deleteInvestigation, getCanvasDocuments, getCanvasHistory } from "@/lib/api";
+import { readCanvasSharing, saveCanvasSharing } from "@/lib/canvasSharing";
+import type { SheetSharing } from "@/lib/sheets";
 import {
-  deleteCanvasArtifact, deleteInvestigation, getCanvasArtifacts, getCanvasDocuments, getCanvasHistory, listDocuments,
-  updateCanvas, type CanvasArtifact, type CanvasDocument, type DocumentEntry,
-} from "@/lib/api";
-import {
-  agoWords, connectionGone, connectionKind, dayMonth, foldHistory, RUN_KIND_WORD, runStateWord, scopeWords, tableNames,
+  agoWords, connectionGone, connectionKind, foldHistory, RUN_KIND_WORD, runStateWord, scopeWords, tableNames,
   tablesTitle, type AskedQuestion, type RunKind,
 } from "@/lib/canvasList";
 import { countNoun, formatCount, formatTimestamp } from "@/lib/format";
 
-type WsTab = "chat" | "briefing" | "history" | "artifacts";
+type WsTab = "chat" | "briefing" | "history";
 
 // The Briefing's module graph loads only when the tab is first opened.
 const BriefingEdition = dynamic(() => import("@/components/brief/BriefingEdition").then(m => ({ default: m.BriefingEdition })),
@@ -49,23 +48,22 @@ const HIDDEN_UNTIL_HOVER = "opacity-0 group-hover/run:opacity-100 focus-visible:
 // ── The header line ───────────────────────────────────────────────────────────────────────────────────────────────
 
 /**
- * The line an open canvas starts on — the Catalog's `PanelHead` (`catalog/CatalogTools.tsx`), drawn the same, with the
- * two things a canvas needs that it has no slot for: a way back to the list before the name, and a name that keeps
- * room for a word when the line is short. When it is, the description gives way first, then the connection's chip,
- * then the name; the views and the tools never do (with a long name and four views the line was once wider than its
- * box, and the workspace slid sideways under the rail at 1176px).
+ * The line an open canvas starts on — the Catalog's `PanelHead` (`catalog/CatalogTools.tsx`), drawn the same, with a way
+ * back to the list before the name. Its doors stand on its right, as another product's data space has them (the user, 2026-11-20): a new
+ * conversation (the pencil), its history, Configure, Share, and ⋮ for the rest — the Briefing, Clone, Certify. There is
+ * no row of views under it any more: Chat is where it opens, History is a door, the Briefing is in ⋮, and Settings and
+ * Artifacts are Configure's tabs. When the line is short the description gives way first, then the connection's chip,
+ * then the name; the doors never do.
  */
-function CanvasHead({ name, what, chips, views, actions, onBack, overlay }: {
+function CanvasHead({ name, what, chips, actions, onBack, overlay }: {
   name: string; what?: string; chips: ReactNode;
-  /** The canvas's views and the door to a new conversation. */
-  views: ReactNode;
   actions: ReactNode; onBack: () => void;
-  /** What opens from the line — the Settings popover — placed against it. */
+  /** What opens from the doors — the Share pop-over — placed against them. */
   overlay?: ReactNode;
 }) {
   // Inside the app the line FOLDS into the shell's rows (2026-11-10, ROADMAP §6 item 64): the canvas's name is already
   // the title and "Data Canvas" in the breadcrumb the way back; its description and chips stand beside the title, its
-  // views in the toolbar row, Tools with the page's actions — the Settings popover placed against them.
+  // doors with the page's actions.
   const inShell = useInShell();
   useChromeBack(inShell ? onBack : null);
   if (inShell) {
@@ -75,8 +73,7 @@ function CanvasHead({ name, what, chips, views, actions, onBack, overlay }: {
           {what && <span data-testid="canvas-what" className="aug-fs-sm" title={what} style={{ ...MUTED, ...ONE_LINE, maxWidth: 420 }}>{what}</span>}
           {chips}
         </ChromeFacts>
-        <ChromeToolbar><div className="aug-toolbar-scope" data-testid="canvas-head">{views}</div></ChromeToolbar>
-        <ChromeActions><span style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>{actions}{overlay}</span></ChromeActions>
+        <ChromeActions><span data-testid="canvas-head" style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>{actions}{overlay}</span></ChromeActions>
       </>
     );
   }
@@ -98,8 +95,35 @@ function CanvasHead({ name, what, chips, views, actions, onBack, overlay }: {
           style={{ ...MUTED, ...ONE_LINE, flex: "1 1 0%" }}>{what}</span>
       )}
       {chips}
-      <span style={{ marginLeft: "auto", ...ROW, flexWrap: "nowrap", flexShrink: 0 }}>{views}{actions}</span>
-      {overlay}
+      <span style={{ marginLeft: "auto", ...ROW, flexWrap: "nowrap", flexShrink: 0, position: "relative" }}>{actions}{overlay}</span>
+    </div>
+  );
+}
+
+/** Who a canvas is shared with, and — for its owner — the choosing: a sheet's chooser, on the canvas's own doors. */
+function CanvasSharePop({ canvas, onDone, onChanged }: {
+  canvas: Canvas; onDone: () => void; onChanged: (s: SheetSharing) => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useCloseOutside(ref, onDone);
+  // the chooser says "you" for its maker: the person asking is the maker when they own a canvas someone made
+  const me = canvas.access === "own" && canvas.created_by ? canvas.created_by : undefined;
+  return (
+    <div ref={ref} role="dialog" aria-label={`Share · ${canvas.name}`} data-testid="canvas-share-pop" className="aug-fs-sm"
+      style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", zIndex: 60, width: 380, background: "var(--bg-2)",
+        border: "1px solid var(--b1)", borderRadius: "var(--r3)", padding: "10px 12px", display: "flex",
+        flexDirection: "column", gap: 6, boxShadow: "var(--shadow-md)", textAlign: "left" }}>
+      <span className="aug-fs-xs" style={MUTED}>Share · {canvas.name}</span>
+      <ShareChooser id={canvas.id} me={me} read={readCanvasSharing} save={saveCanvasSharing} noun="canvas" onChanged={onChanged} />
+      <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+        <Button variant="outline" size="xs" onClick={() => {
+          const url = new URL(window.location.href);
+          url.searchParams.set("tab", "canvas-workspace");
+          url.searchParams.set("canvas", canvas.id);
+          void navigator.clipboard?.writeText(url.toString());
+        }}>Copy link</Button>
+        <Button variant="ghost" size="xs" onClick={onDone}>Done</Button>
+      </div>
     </div>
   );
 }
@@ -339,214 +363,6 @@ function AskedRow({ q, first, now, removing, open, onToggle, onOpen, onRemove }:
   );
 }
 
-// ── Artifacts ─────────────────────────────────────────────────────────────────────────────────────────────────────
-
-function ArtifactsPanel({ canvasId }: { canvasId: string }) {
-  const [items, setItems] = useState<CanvasArtifact[]>([]);
-  const [loading, setLoading] = useState(true);
-  // A failed read used to read as "No artifacts saved yet".
-  const [failed, setFailed] = useState<string | null>(null);
-  const [reload, setReload] = useState(0);
-  const [removing, setRemoving] = useState<string | null>(null);
-  const [removeFailed, setRemoveFailed] = useState(false);
-
-  useEffect(() => {
-    setLoading(true);
-    getCanvasArtifacts(canvasId)
-      .then(list => { setItems(list); setFailed(null); })
-      .catch(e => { setItems([]); setFailed(e instanceof Error ? e.message : String(e)); })
-      .finally(() => setLoading(false));
-  }, [canvasId, reload]);
-
-  async function handleRemove(id: string) {
-    setRemoving(id);
-    setRemoveFailed(false);
-    const prev = items;
-    setItems(list => list.filter(it => it.id !== id));
-    try { await deleteCanvasArtifact(canvasId, id); }
-    catch { setItems(prev); setRemoveFailed(true); }
-    finally { setRemoving(null); }
-  }
-
-  return (
-    <Page testId="canvas-artifacts">
-      <Card label="Artifacts" right={items.length ? <span style={NUM}>{formatCount(items.length)}</span> : undefined}
-        testId="canvas-artifacts-card">
-        {removeFailed && (
-          <div role="alert" className="aug-fs-sm" style={{ color: "var(--t2)", marginBottom: 6 }}>
-            Could not remove that artifact — it is still here.
-          </div>
-        )}
-        {loading ? <Loading what="the artifacts" />
-          : failed !== null ? <ReadFailed what="this canvas's artifacts" error={failed} onRetry={() => setReload(n => n + 1)} />
-          : items.length === 0 ? <Empty>Nothing saved on this canvas yet.</Empty>
-          : items.map((item, i) => (
-            <div key={item.id} data-testid="canvas-artifact-row" className="group/run"
-              style={{ ...(i ? RULE : {}), display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto auto", gap: 12,
-                alignItems: "center", padding: "7px 2px", opacity: removing === item.id ? 0.4 : 1 }}>
-              <div style={{ ...ROW, flexWrap: "nowrap", minWidth: 0 }}>
-                <span className="aug-fs-chrome" title={item.description || item.question || item.title}
-                  style={{ ...ONE_LINE, color: "var(--t1)" }}>{item.title}</span>
-                <Chip>{item.kind}</Chip>
-              </div>
-              <span className="aug-fs-sm" style={{ ...MUTED, ...NUM, whiteSpace: "nowrap" }}>
-                {item.created_at ? dayMonth(item.created_at) : ""}
-              </span>
-              <Button variant="ghost" size="icon-xs" title="Remove artifact" aria-label={`Remove ${item.title}`}
-                disabled={removing === item.id} className={HIDDEN_UNTIL_HOVER} onClick={() => handleRemove(item.id)}>
-                <Icon name="trash" size={13} />
-              </Button>
-            </div>
-          ))}
-      </Card>
-    </Page>
-  );
-}
-
-// ── Settings: the name, the description, the pinned documents, the versions ─────────────────────────────────────
-
-/** Bind uploaded documents to this canvas.
- *
- *  A canvas scopes DATA — a connection, a schema, a set of tables. This is the prose
- *  that belongs with it: the spec, the policy, last quarter's report. Work done here
- *  is then grounded in both, without anyone having to hope a similarity search
- *  surfaces the right file.
- *
- *  Pinned, not restrictive. Binding a document ADDS it to what is always in reach and
- *  leaves the rest of the corpus searchable — unlike an agent's documents, which fence
- *  it in. The wording below says so, because the two are easy to confuse and the
- *  consequence of guessing wrong is a workspace that quietly sees less than expected. */
-function CanvasDocuments({ canvas, onSaved }: {
-  canvas: Canvas;
-  onSaved: (updated: Canvas) => void;
-}) {
-  const [pinned, setPinned] = useState<CanvasDocument[]>([]);
-  const [all, setAll] = useState<DocumentEntry[]>([]);
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    getCanvasDocuments(canvas.id).then(setPinned).catch(() => setPinned([]));
-    listDocuments().then(setAll).catch(() => setAll([]));
-  }, [canvas.id]);
-
-  const setBinding = async (docIds: string[]) => {
-    setBusy(true);
-    try {
-      onSaved(await updateCanvas(canvas.id, { doc_ids: docIds }));
-      setPinned(await getCanvasDocuments(canvas.id));
-    } catch {
-      /* the popover stays open; the previous binding is still what is shown */
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const pinnedIds = pinned.map(d => d.doc_id);
-  const unpinned = all.filter(d => !pinnedIds.includes(d.doc_id));
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      <Label right={pinned.length ? <span style={NUM}>{formatCount(pinned.length)}</span> : undefined}>Pinned documents</Label>
-
-      {pinned.length === 0 && (
-        <Empty>None pinned · a pinned document is always in reach here; the rest stay searchable.</Empty>
-      )}
-
-      {pinned.map(doc => (
-        <div key={doc.doc_id} className="aug-fs-sm" style={{ ...ROW, flexWrap: "nowrap" }}>
-          {/* A binding whose document was deleted is SHOWN, not hidden — otherwise a
-              workspace loses context with nothing to see. */}
-          <span style={{ ...ONE_LINE, flex: 1, color: doc.missing ? "var(--t3)" : "var(--t2)" }}>
-            {doc.missing ? doc.doc_id : (doc.title || doc.filename)}
-          </span>
-          {doc.missing && <Chip tone="amber">deleted</Chip>}
-          <Button variant="ghost" size="xs" type="button" disabled={busy}
-            onClick={() => setBinding(pinnedIds.filter(id => id !== doc.doc_id))}>
-            Unpin
-          </Button>
-        </div>
-      ))}
-
-      {unpinned.length > 0 && (
-        <SelectField value="" disabled={busy}
-          onChange={e => { if (e.target.value) setBinding([...pinnedIds, e.target.value]); }}>
-          <option value="">Pin a document…</option>
-          {unpinned.map(doc => (
-            <option key={doc.doc_id} value={doc.doc_id}>{doc.title || doc.filename}</option>
-          ))}
-        </SelectField>
-      )}
-
-      {all.length === 0 && <Empty>No documents uploaded yet — add them in Documents.</Empty>}
-    </div>
-  );
-}
-
-function SettingsPopover({ canvas, onClose, onSaved }: {
-  canvas: Canvas;
-  onClose: () => void;
-  onSaved: (updated: Canvas) => void;
-}) {
-  const [name, setName] = useState(canvas.name);
-  const [desc, setDesc] = useState(canvas.description);
-  const [saving, setSaving] = useState(false);
-  const [saveFailed, setSaveFailed] = useState<string | null>(null);
-
-  const save = async () => {
-    setSaving(true);
-    setSaveFailed(null);
-    try {
-      const updated = await updateCanvas(canvas.id, { name, description: desc });
-      onSaved(updated);
-      onClose();
-    } catch (e) {
-      setSaveFailed(e instanceof Error ? e.message : String(e));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const field: CSSProperties = { display: "flex", flexDirection: "column", gap: 4, color: "var(--t3)" };
-  return (
-    <>
-      <div className="fixed inset-0 z-50" onClick={onClose} />
-      <div data-testid="canvas-settings" onClick={e => e.stopPropagation()} style={{
-        position: "absolute", top: "calc(100% + 4px)", right: 12, zIndex: 60,
-        background: "var(--bg-2)", border: "1px solid var(--b2)", borderRadius: "var(--r3)", padding: "12px 14px",
-        width: 300, display: "flex", flexDirection: "column", gap: 10, boxShadow: "var(--shadow-lg)",
-      }}>
-        <Label>Settings</Label>
-        <label className="aug-fs-xs" style={field}>
-          Name
-          <Input value={name} onChange={e => setName(e.target.value)} />
-        </label>
-        <label className="aug-fs-xs" style={field}>
-          Description
-          <Textarea value={desc} onChange={e => setDesc(e.target.value)} rows={2} style={{ resize: "none" }} />
-        </label>
-
-        {saveFailed && <div role="alert" className="aug-fs-sm" style={{ color: "var(--red4)" }}>Not saved — {saveFailed}</div>}
-
-        <div style={{ ...ROW, justifyContent: "flex-end" }}>
-          <Button onClick={onClose} variant="ghost" size="xs">Cancel</Button>
-          <Button onClick={save} disabled={saving || !name.trim()} variant="default" size="xs">
-            {saving ? "Saving…" : "Save"}
-          </Button>
-        </div>
-
-        {/* Pinned documents save on change rather than on Save, because they are a
-            binding rather than a field: Cancel restores the name you were editing,
-            and an unpin that silently came back would be worse than no Cancel at all. */}
-        <CanvasDocuments canvas={canvas} onSaved={onSaved} />
-
-        {/* The canvas's revision history, publish/revert, and the freeze pin, on the
-            artifact's own settings surface. Renders nothing until the canvas has a revision. */}
-        <LifecyclePanel kind="canvas" naturalKey={`canvas:${canvas.id}`}
-                        connectionId={canvas.scopes[0]?.connection_id} />
-      </div>
-    </>
-  );
-}
 
 // ── CanvasWorkspace ───────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -564,14 +380,11 @@ interface Props {
   onOpenDocuments?: () => void;
   /** The workspace the Briefing tab reads its range in — the same range as the Briefing page. */
   workspaceId?: string;
+  /** Open another canvas in its place — a clone, once it is made. */
+  onOpenCanvas?: (canvas: Canvas) => void;
 }
 
-const VIEWS: { id: WsTab; label: string }[] = [
-  { id: "chat", label: "Chat" }, { id: "briefing", label: "Briefing" }, { id: "history", label: "History" },
-  { id: "artifacts", label: "Artifacts" },
-];
-
-export function CanvasWorkspace({ canvas, connections, allConnections, onClose, onCanvasUpdate, initialOpenInvId, initialRestoreSessionId, onOpenDocuments, workspaceId }: Props) {
+export function CanvasWorkspace({ canvas, connections, allConnections, onClose, onCanvasUpdate, initialOpenInvId, initialRestoreSessionId, onOpenDocuments, workspaceId, onOpenCanvas }: Props) {
   // A canvas reading another workspace's connection still has it: the chip and "connection gone" read every connection
   // the install has (2026-10-12, judged against this workspace's alone two live canvases read "gone").
   const known = allConnections?.length ? allConnections : connections;
@@ -586,8 +399,12 @@ export function CanvasWorkspace({ canvas, connections, allConnections, onClose, 
   // another reason must clear the seed or the stale question would re-submit.
   const [chatInitialQuestion, setChatInitialQuestion] = useState<string | undefined>(undefined);
   const [chatInitialMode, setChatInitialMode] = useState<"ask" | "investigate" | undefined>(undefined);
-  const [showSettings, setShowSettings] = useState(false);
   const [showConfigure, setShowConfigure] = useState(false);
+  const [sharingOpen, setSharingOpen] = useState(false);
+  // ⋮ ▸ Certify opens the mark's form beside the name, once per asking (a dashboard's title row does the same)
+  const [certifying, setCertifying] = useState(0);
+  // what a door could not do — a clone that failed — said beside the name until the next door is used
+  const [doorSaid, setDoorSaid] = useState<string | null>(null);
   // The Briefing tab mounts on its first opening — opening a canvas reads no edition — and then stays mounted.
   const [briefingOpened, setBriefingOpened] = useState(false);
 
@@ -645,7 +462,7 @@ export function CanvasWorkspace({ canvas, connections, allConnections, onClose, 
   const showView = (id: WsTab) => {
     setWsTab(id);
     if (id === "briefing") setBriefingOpened(true);
-    if (id !== "artifacts") setOpenInvId(null);
+    setOpenInvId(null);
   };
 
   // A decision or a question on the Briefing taken into deep analysis: a fresh conversation in this canvas asks it.
@@ -666,41 +483,73 @@ export function CanvasWorkspace({ canvas, connections, allConnections, onClose, 
   // The landing shows: a fresh conversation in the Chat view, not yet begun.
   const onLanding = wsTab === "chat" && !openInvId && !restoreSessionId && !chatInitialQuestion && begunKey !== chatKey;
 
-  const tools: ToolItem[] = [
-    { label: "Configure…", title: "The tables it reads, its instructions and metrics, and its documents",
-      onSelect: () => { setShowConfigure(true); setShowSettings(false); }, testId: "canvas-tool-configure" },
-    { label: "Settings…", title: "Its name and description, pinned documents and versions",
-      onSelect: () => { setShowSettings(true); setShowConfigure(false); }, testId: "canvas-tool-settings" },
-  ];
+  const clone = async () => {
+    setDoorSaid(null);
+    try {
+      const copy = await cloneCanvas(canvas.id);
+      (onOpenCanvas ?? onCanvasUpdate)(copy);
+    } catch (e) {
+      setDoorSaid(`Not cloned — ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+
+  const doors = (
+    <span data-testid="canvas-doors" style={{ ...ROW, flexWrap: "nowrap", gap: 4, flexShrink: 0 }}>
+      {wsTab !== "chat" && (
+        <Button variant="outline" size="xs" onClick={() => showView("chat")} data-testid="canvas-to-chat"
+          title="Back to the conversation you were in">
+          <Icon name="chat" size={13} /> Conversation
+        </Button>
+      )}
+      <Button variant="ghost" size="icon-xs" onClick={newConversation} title="New conversation" aria-label="New conversation"
+        data-testid="canvas-new-chat">
+        <Icon name="edit" size={15} />
+      </Button>
+      <Button variant="ghost" size="icon-xs" aria-pressed={wsTab === "history"} aria-label="History" data-testid="canvas-history-door"
+        title={wsTab === "history" ? "Back to the conversation" : "History — what was asked on this canvas"}
+        onClick={() => showView(wsTab === "history" ? "chat" : "history")}>
+        <Icon name="history" size={15} />
+      </Button>
+      <Button variant="outline" size="xs" aria-pressed={showConfigure} data-testid="canvas-configure"
+        title="Its tables, instructions, documents, versions and saved artifacts"
+        onClick={() => { setShowConfigure(v => !v); setSharingOpen(false); }}>
+        <Icon name="settings" size={13} /> Configure
+      </Button>
+      <Button variant="secondary" size="xs" aria-pressed={sharingOpen} data-testid="canvas-share"
+        title={canvas.sharing === "chosen" ? "Shared with the people and groups chosen" : "Shared with everyone in the workspace"}
+        onClick={() => { setSharingOpen(v => !v); setShowConfigure(false); }}>
+        <Icon name={canvas.sharing === "chosen" ? "lock" : "users"} size={13} /> Share
+      </Button>
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger>
+          <Button variant="ghost" size="icon-xs" aria-label="More" title="Its Briefing, Clone, Certify" data-testid="canvas-more">
+            <Icon name="morev" size={15} />
+          </Button>
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content size="1" align="end">
+          <DropdownMenu.Item onSelect={() => showView("briefing")} data-testid="canvas-more-briefing">Briefing</DropdownMenu.Item>
+          <DropdownMenu.Item onSelect={() => void clone()} data-testid="canvas-more-clone">Clone</DropdownMenu.Item>
+          <DropdownMenu.Item onSelect={() => setCertifying(n => n + 1)} data-testid="canvas-more-certify">Certify or deprecate…</DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu.Root>
+    </span>
+  );
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--bg-canvas)" }}>
 
       {/* What it is for is said once: on the landing while it shows, beside the name once a conversation has begun. */}
       <CanvasHead name={canvas.name} what={onLanding ? undefined : canvas.description || undefined} onBack={onClose}
-        chips={<HeadChips canvas={canvas} connection={connection} gone={gone} pinned={pinned} />}
-        views={<>
-          {/* The three views. A fresh conversation is the "+" beside them — a distinct create action, not a second
-              "go to chat". */}
-          <span data-testid="canvas-tabs" style={{ ...ROW, flexWrap: "nowrap", gap: 2, flexShrink: 0 }}>
-            {VIEWS.map(v => (
-              <Button key={v.id} variant={wsTab === v.id ? "secondary" : "ghost"} size="xs" aria-pressed={wsTab === v.id}
-                onClick={() => showView(v.id)}>
-                {v.label}
-              </Button>
-            ))}
-          </span>
-          <Button onClick={newConversation} variant="ghost" size="icon-xs" title="New conversation" aria-label="New conversation">
-            <Icon name="plus" size={15} />
-          </Button>
+        chips={<>
+          <HeadChips canvas={canvas} connection={connection} gone={gone} pinned={pinned} />
+          <CertificationMark compact menu openRequest={certifying} target={{ kind: "canvas", ref: canvas.id, connectionId }} />
+          {doorSaid && <span role="alert" className="aug-fs-sm" style={{ color: "var(--red4)" }}>{doorSaid}</span>}
         </>}
-        actions={<ToolsMenu items={tools} testId="canvas-tools" />}
-        overlay={showSettings && (
-          <SettingsPopover
-            canvas={canvas}
-            onClose={() => setShowSettings(false)}
-            onSaved={updated => { onCanvasUpdate(updated); setShowSettings(false); }}
-          />
+        actions={doors}
+        overlay={sharingOpen && (
+          <CanvasSharePop canvas={canvas} onDone={() => setSharingOpen(false)}
+            onChanged={s => onCanvasUpdate({ ...canvas, sharing: s.sharing,
+              shared_with: s.shared_with.map(({ kind, id, level }) => ({ kind, id, level })) })} />
         )} />
 
       {/* ── Content ── */}
@@ -775,13 +624,7 @@ export function CanvasWorkspace({ canvas, connections, allConnections, onClose, 
           }
         </div>
 
-        {/* Artifacts — always mounted, hidden when not active */}
-        <div style={{
-          display: wsTab === "artifacts" ? "flex" : "none",
-          flex: 1, flexDirection: "column", overflow: "hidden",
-        }}>
-          <ArtifactsPanel canvasId={canvas.id} />
-        </div>
+        {/* Artifacts are Configure's tab now (the user, 2026-11-20). */}
       </div>
 
       {/* Configure slide-over */}

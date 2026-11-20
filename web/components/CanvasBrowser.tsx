@@ -106,6 +106,7 @@ function CanvasCard({ row, onSelect, onDelete }: { row: CanvasRow; onSelect: () 
           </div>
           <div style={{ fontSize: 11, color: "var(--t3)", marginTop: 1 }}>
             {canvas.is_legacy ? "Data Canvas · auto-generated" : "Data Canvas"}
+            {canvas.access === "" ? " · not shared with you" : canvas.sharing === "chosen" ? " · shared with people chosen" : ""}
           </div>
         </div>
         {onDelete && !canvas.is_legacy && (
@@ -186,6 +187,13 @@ export function CanvasBrowser({ connections, onSelect, onNew, workspaceId }: Pro
   const [pendingDelete, setPendingDelete] = useState<Canvas | null>(null);
   const [deleting, setDeleting]         = useState(false);
   const [deleteRefused, setDeleteRefused] = useState<string | null>(null);
+  // A canvas not shared with the person is listed and said, never opened (2026-11-20): choosing it says who to ask.
+  const [notShared, setNotShared] = useState<string | null>(null);
+  const open = (c: Canvas) => {
+    if (c.access === "") { setNotShared(c.refusal || `"${c.name}" is not shared with you.`); return; }
+    setNotShared(null);
+    onSelect(c);
+  };
 
   useEffect(() => {
     if (!workspaceId) return;   // not known yet — the list waits rather than read every workspace's
@@ -527,6 +535,11 @@ export function CanvasBrowser({ connections, onSelect, onNew, workspaceId }: Pro
 
       {/* ── Table ── */}
       <div style={{ flex: 1, overflowY: "auto", padding: "14px 32px 24px" }}>
+        {notShared && (
+          <div role="alert" data-testid="canvas-not-shared" className="aug-fs-sm" style={{ color: "var(--t2)", marginBottom: 10 }}>
+            <Icon name="lock" size={12} /> {notShared}
+          </div>
+        )}
         {/* Section bar — the page's own, outside the app */}
         {!inShell && (
           <div style={{ display: "flex", alignItems: "center", marginBottom: 10 }}>
@@ -579,7 +592,7 @@ export function CanvasBrowser({ connections, onSelect, onNew, workspaceId }: Pro
                 <CanvasCard
                   key={row.key}
                   row={row}
-                  onSelect={() => onSelect(row.canvas)}
+                  onSelect={() => open(row.canvas)}
                   onDelete={() => askDelete(row.canvas)}
                 />
               ))}
@@ -612,7 +625,7 @@ export function CanvasBrowser({ connections, onSelect, onNew, workspaceId }: Pro
               pagination={false}
               showSorterTooltip={false}
               onRow={({ canvas }) => ({
-                onClick: () => onSelect(canvas),
+                onClick: () => open(canvas),
               })}
             />
           </>

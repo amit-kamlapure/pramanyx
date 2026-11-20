@@ -23,6 +23,8 @@ import { Loading } from "@/components/ui/states";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { CanvasArtifacts, CanvasDocuments } from "@/components/canvas/CanvasParts";
+import { LifecyclePanel } from "@/components/LifecyclePanel";
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface SchemaColumn {
@@ -562,7 +564,7 @@ interface ConfigurePanelProps {
 }
 
 export function ConfigurePanel({ canvas, connections, onClose, onCanvasUpdate, onOpenDocuments }: ConfigurePanelProps) {
-  const [tab, setTab] = useState<"about" | "data" | "instructions" | "docs">("about");
+  const [tab, setTab] = useState<"about" | "data" | "instructions" | "docs" | "versions" | "artifacts">("about");
   const connectionId = canvas.scopes[0]?.connection_id ?? "";
   const connection = connections.find((c) => c.id === connectionId);
   const scopeTables = canvas.scopes[0]?.tables ?? [];
@@ -571,7 +573,11 @@ export function ConfigurePanel({ canvas, connections, onClose, onCanvasUpdate, o
     { id: "about",        label: "About" },
     { id: "data",         label: "Data" },
     { id: "instructions", label: "Instructions" },
-    { id: "docs",         label: "Docs" },
+    // What the Settings pop-over held besides the name and description About already edits — its pinned documents and
+    // its versions — and the Artifacts view, are tabs here (the user, 2026-11-20): one place to configure a canvas.
+    { id: "docs",         label: "Documents" },
+    { id: "versions",     label: "Versions" },
+    { id: "artifacts",    label: "Artifacts" },
   ];
 
   return (
@@ -586,12 +592,12 @@ export function ConfigurePanel({ canvas, connections, onClose, onCanvasUpdate, o
       {/* Panel — anchored below topbars, not covering the header */}
       <div
         className="fixed right-0 bottom-0 z-50 flex flex-col border-l border-[var(--b1)] shadow-[var(--shadow-md)]"
-        style={{ top: "100px", width: "400px", background: "var(--bg-0)" }}
+        style={{ top: "100px", width: "460px", maxWidth: "100vw", background: "var(--bg-0)" }}
       >
         {/* Panel header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--b1)] shrink-0">
           <div className="flex items-center gap-2 min-w-0">
-            <span className="text-[var(--t3)]"><Icon name="info" size={16} label="Configure" /></span>
+            <span className="text-[var(--t3)]"><Icon name="settings" size={16} label="Configure" /></span>
             <span className="aug-fs-sm font-semibold text-[var(--t1)]">Configure</span>
             <span className="aug-fs-xs text-[var(--t3)] truncate max-w-[180px]">{canvas.name}</span>
           </div>
@@ -615,11 +621,12 @@ export function ConfigurePanel({ canvas, connections, onClose, onCanvasUpdate, o
             <InstructionsTab canvasId={canvas.id} connectionId={connectionId} />
           )}
           {tab === "docs" && (
-            <div className="flex-1 overflow-auto p-4">
-              <p className="text-xs text-zinc-400 leading-relaxed max-w-md">
+            <div className="flex-1 overflow-auto p-4 flex flex-col gap-4">
+              <CanvasDocuments canvas={canvas} onSaved={(c) => onCanvasUpdate?.(c)} />
+              <p className="text-xs text-zinc-400 leading-relaxed">
                 Documents are shared across every canvas and connection — a policy uploaded
-                once is retrievable everywhere. Hosting the uploader here suggested each
-                canvas had its own set, which it never did.
+                once is retrievable everywhere. Pinning one here keeps it always in reach for work
+                done on this canvas; upload them in Documents.
               </p>
               {onOpenDocuments && (
                 <Button variant="plain" size="xs"
@@ -630,6 +637,17 @@ export function ConfigurePanel({ canvas, connections, onClose, onCanvasUpdate, o
                   Open Documents
                 </Button>
               )}
+            </div>
+          )}
+          {tab === "versions" && (
+            <div className="flex-1 overflow-auto p-4">
+              <LifecyclePanel kind="canvas" naturalKey={`canvas:${canvas.id}`} connectionId={connectionId}
+                empty="No versions yet. Each change to its name, description, tables or pinned documents is kept as one." />
+            </div>
+          )}
+          {tab === "artifacts" && (
+            <div className="flex-1 overflow-auto p-4">
+              <CanvasArtifacts canvasId={canvas.id} />
             </div>
           )}
         </div>
