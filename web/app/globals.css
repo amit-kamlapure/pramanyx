@@ -310,7 +310,7 @@ a:hover { color: var(--blue4); }
 /* Icon only: this is the one row whose meaning IS the rail, so a word for it is a
    word about the furniture. The button keeps its aria-label and its tooltip. */
 .aug-nav-head .aug-nav-label { display: none; }
-.aug-nav-foot { margin-top: auto; display: flex; flex-direction: column; gap: 2px; padding: 8px 0 10px; border-top: 1px solid var(--b1); }
+.aug-nav-foot { margin-top: auto; display: flex; flex-direction: column; gap: 2px; padding: 12px 0 10px; }  /* set apart by space, not a rule (2026-11-20) */
 /* Settings and the version on one line — the version said beside the row, not under it. */
 .aug-nav-foot-row { display: flex; align-items: center; }
 .aug-nav-foot-row .aug-nav-item { flex: 1; width: auto; min-width: 0; }
