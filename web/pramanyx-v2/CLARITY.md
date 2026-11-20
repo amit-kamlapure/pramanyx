@@ -180,5 +180,20 @@ another product's tint. Hide nothing to look minimal: typography, spacing and pr
 | **A pane is one continuous surface**: its title, search and tree on one ground; a search field soft, not outlined | A boxed header over a boxed search over a boxed tree |
 | **A grid keeps its cell lines** — they are the data's structure, not decoration | A grid with no lines, where a row cannot be followed across |
 
-First applied (2026-11-20) to the SQL Editor and the chrome every page shares; the other workspaces — Data Canvas,
-Dashboards, Ontology, Semantic Layer — follow once the user has seen it.
+First applied (2026-11-20) to the SQL Editor and the chrome every page shares, then — the user's "Keep going" — to the
+platform through its shared pieces:
+
+- **Buttons:** `ghost`, `outline` and `minimal` are the soft fill (`components/ui/button.tsx`); `secondary`, the pressed
+  or chosen one of a set, the same fill a step stronger (`.aug-btn-on`); `destructive` a soft red. No button draws an
+  outline.
+- **Facts:** a plain `Chip` and every `Badge` are their hue's tint and text, no border.
+- **Pickers and fields:** one that is not a form's (`bespoke`, or `variant="soft"` at a toolbar's call site) is a soft
+  fill; a form's field keeps its edge, where the eye looks for what to fill in.
+- **Cards:** the `edges` knob is off by default — a card is its surface on the ground; a person who turns it on, and the
+  workbench preset, still see every card boxed.
+- **The page** is a surface set into the frame (`--bg-frame`, 1.19:1), with a rounded corner where the top bar and the
+  rail meet it.
+
+What keeps a line, on purpose: the rule between panes worked side by side (`--divide`), a table's and a grid's cell
+lines and header rule, a list's row rules, a form field, the brand's edge on the box where a person talks to the model,
+and a stripe that marks something waiting on a person.
