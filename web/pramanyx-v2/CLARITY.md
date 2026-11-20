@@ -70,7 +70,7 @@ still fit, it says nothing only this product could say.
 | **Pairs side by side** — two related cards on one row (Tokens by model · Where tokens go) | One long column the reader scrolls past |
 | **Filters in a left column**: value · count · a 6px bar; the chosen row tinted; the set's size as "37,838 of 125,080" | Dropdown filters that hide the distribution |
 | **List rows: name · figure · one muted meta line**, with marks (`✓ key`, `● 1 proposed`) instead of words | A sentence per row |
-| **An action looks like a button before the pointer reaches it** — a visible edge at rest (`ghost` draws it). A link is the accent colour. No edge only on a whole row, a bare icon, a name that opens what it names, or the off side of a switch in its own track (`plain`, counted by `lint:elements`) | A word that turns out to be clickable on hover: *"not very clear between what is the reading text and what is a button"* (the user, 2026-11-03) |
+| **An action looks like a button before the pointer reaches it** — a visible edge at rest (`ghost` draws it), or, where borders are the exception (§9), a soft fill and no outline (`soft`). A link is the accent colour. No edge only on a whole row, a bare icon, a name that opens what it names, or the off side of a switch in its own track (`plain`, counted by `lint:elements`) | A word that turns out to be clickable on hover: *"not very clear between what is the reading text and what is a button"* (the user, 2026-11-03) |
 | **Read first, edit behind *Edit*.** Forms appear only when a person asks for them | Authoring forms open in a reading view |
 | **Detail behind tabs or *Details*** (Overview · Properties · Links · Actions · Sources · History) | One panel of twelve sections that never ends |
 | **Tools in one menu** (*Tools ▾*) | A row of five tool buttons |
@@ -157,3 +157,28 @@ The user, after three pages were drawn in that style on live data (`design-mocku
   Assist). It joins the drawers and a dashboard's detail piece; it replaces one only once it does all that one did.
 - **A status strip** at the foot of a working page: connection, last run, rows, freshness, save state.
 - **The accent is blue** for everyone who has not chosen their own, held to AA in `theme/tokens-v2.css`.
+
+## 9. 2026-11-20 — borders are the exception
+
+The user, on the SQL Editor beside another product's (*"Now something on the design side again. Because we are terrible
+at it."*), took this rule for the platform. Where this file disagrees with it — §3's "a 1px line wherever two surfaces
+meet" — this section wins.
+
+> **Surfaces define structure. Spacing defines groups. Typography defines hierarchy. Borders are the exception.**
+
+The noise was never the colours: it was every part getting the same emphasis — a rule under each row, an outline on
+each control, a box round each panel. Keep the neutral charcoal (`--bg-0` the work, `--bg-1` the frame); do not copy
+another product's tint. Hide nothing to look minimal: typography, spacing and progressive disclosure carry the rest.
+
+| Do | Don't |
+|---|---|
+| **One frame, one page in it**: the top bar, the rail and the status strip are one surface (`--bg-1`); the page sits inside on `--bg-0`. The contrast is the edge | A rule under the top bar, beside the rail, over the status strip |
+| **Rules only between panes** that are worked side by side — catalog \| editor, editor \| results — in `--divide`, a step under `--b0` | A rule under every toolbar, tab strip, header and foot inside a pane |
+| **One solid action per view** (Run); every other action beside it **soft**: a faint fill, no outline (`variant="soft"`, `ToolsMenu quiet`, `TableActions quiet`) — still a button at rest | An outline on Limit, Cancel, Format, Tools, Save, Share, Copy, CSV — each as loud as Run |
+| **Tabs selected by their background**: the open one is the surface it opens; the others sit on the strip with space between, names cut at a width, one mark only when something failed | An underline, a rule between tabs, a badge on each |
+| **Outcomes as coloured words** ("✓ Succeeded · 0.05 s" in green) | A boxed badge for a status a sentence can say |
+| **A pane is one continuous surface**: its title, search and tree on one ground; a search field soft, not outlined | A boxed header over a boxed search over a boxed tree |
+| **A grid keeps its cell lines** — they are the data's structure, not decoration | A grid with no lines, where a row cannot be followed across |
+
+First applied (2026-11-20) to the SQL Editor and the chrome every page shares; the other workspaces — Data Canvas,
+Dashboards, Ontology, Semantic Layer — follow once the user has seen it.

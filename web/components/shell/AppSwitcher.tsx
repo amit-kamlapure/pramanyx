@@ -119,9 +119,9 @@ export function AppSwitcher({ connectionId, theme }: { connectionId?: string; th
   return (
     <div ref={host} style={{ position: "relative" }}>
       <Button variant="ghost" size="icon-xs" aria-label="Switch to" title="Switch to the coworker" aria-expanded={open} data-testid="app-switcher"
-        // Drawn as the top bar's other controls are — an edge and full-strength ink — where a bare grey glyph
-        // beside the avatar went unseen.
-        style={{ width: 26, height: 26, border: "1px solid var(--b2)", borderRadius: "var(--r2)", background: "var(--bg-3)", color: "var(--t1)" }}
+        // Drawn as the top bar's other controls are — a soft fill and full-strength ink, no outline (2026-11-20) — where
+        // a bare grey glyph beside the avatar went unseen.
+        style={{ width: 26, height: 26, borderRadius: "var(--r2)", background: "var(--bg-hover)", color: "var(--t1)" }}
         // Looked at again as it opens: a coworker that stopped since the page loaded is not offered.
         onClick={() => {
           if (!open) look();

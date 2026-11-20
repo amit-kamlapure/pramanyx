@@ -581,7 +581,7 @@ export function ResultsPanel({
       {!empty && (
         // Copy and CSV of the rows ON SCREEN — filtered, when filters are on: exporting what is not on screen
         // would be a different result set wearing the same button.
-        <TableActions name="result" read={() => ({ columns, rows: rawCells(rows) })}
+        <TableActions quiet name="result" read={() => ({ columns, rows: rawCells(rows) })}
           shown={filters.length > 0 ? { rows: rows.length, of: rawRows.length } : undefined} />
       )}
       <span style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>

@@ -84,8 +84,10 @@ export function actionWords(shown?: { rows: number; of: number }): {
 
 /** The two actions, reading the table when clicked — so a table still streaming in copies whole. `shown`, while a
  *  filter is on: how many rows `read` hands over of how many the table holds, said on the buttons. */
-export function TableActions({ read, name = "table", shown }: {
+export function TableActions({ read, name = "table", shown, quiet = false }: {
   read: () => TableData | null; name?: string; shown?: { rows: number; of: number };
+  /** A soft fill instead of an outline, where borders are the exception (the SQL Editor's results, 2026-11-20). */
+  quiet?: boolean;
 }) {
   const words = actionWords(shown);
   const [copied, setCopied] = useState<"" | "ok" | "failed">("");
@@ -101,13 +103,13 @@ export function TableActions({ read, name = "table", shown }: {
   };
   return (
     <div className="flex items-center gap-0.5">
-      <Button variant="ghost" size="xs" onClick={() => void copy()}
+      <Button variant={quiet ? "soft" : "ghost"} size="xs" onClick={() => void copy()}
               title={words.copyTitle}
               className="text-[var(--t3)] hover:text-[var(--t1)]">
         <Icon name={copied === "ok" ? "check" : "copy"} size={12} label="Copy table" />
         {copied === "ok" ? "Copied" : copied === "failed" ? "Copy failed" : words.copy}
       </Button>
-      <Button variant="ghost" size="xs" onClick={download} title={words.csvTitle}
+      <Button variant={quiet ? "soft" : "ghost"} size="xs" onClick={download} title={words.csvTitle}
               className="text-[var(--t3)] hover:text-[var(--t1)]">
         <Icon name="download" size={12} label="Download CSV" />
         {words.csv}
