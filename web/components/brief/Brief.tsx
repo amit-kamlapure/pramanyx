@@ -81,7 +81,7 @@ export function BriefHeadline({
   );
 }
 
-// ── Section — an optional uppercase label + children. No box, no border. ────────
+// ── Section — an optional label (12px semibold, sentence case) + children. No box, no border. ────────
 export function BriefSection({
   label,
   children,

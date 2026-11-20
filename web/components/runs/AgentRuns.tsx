@@ -355,7 +355,7 @@ export function AgentRuns({ onGoToChat, onOpenRun, onOpenMachineView, workspaceI
         ) : (
           <div style={{ overflowX: "auto" }}>
             <div role="table" aria-label="Runs by question" style={{ minWidth: showConn ? 900 : 800 }}>
-              <div role="row" className="aug-fs-xs" style={{ ...grid, ...MUTED, textTransform: "uppercase", letterSpacing: ".06em", padding: "0 0 6px 8px" }}>
+              <div role="row" className="aug-fs-xs" style={{ ...grid, ...MUTED, padding: "0 0 6px 8px" }}>
                 <span role="columnheader">Question</span><span role="columnheader">Kind</span>
                 <span role="columnheader">Latest answer</span>
                 {showConn && <span role="columnheader">Connection</span>}

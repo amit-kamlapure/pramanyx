@@ -160,7 +160,7 @@ export function AddData({ spec, connectionId, way, onAdd, onClose, doneWords = "
   }
   return (
     <div data-testid="add-data" data-way={way} style={{ display: "flex", flexDirection: "column", gap: 8, background: "var(--bg-2)", borderRadius: "var(--r3)", padding: 10 }}>
-      <div className="aug-fs-xs" style={{ color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em" }}>{way === "table" ? "Add data" : "Add SQL dataset"}</div>
+      <div className="aug-label">{way === "table" ? "Add data" : "Add SQL dataset"}</div>
       {way === "table" ? (
         <>
           <TableChoices tables={tables} picked={picked} onFlip={flip} max={room} />
@@ -526,8 +526,6 @@ function DatasetResult({ connectionId, sql, asked, values = null }: {
   );
 }
 
-const CAPTION = { color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em" } as const;
-
 /** The ways a chart built on a dataset may first be drawn; the chart editor changes it after, to any kind it offers. */
 export const CHART_KINDS: { value: QueryShownAs; label: string }[] = [
   { value: "bar", label: "Bar" }, { value: "line", label: "Line" }, { value: "area", label: "Area" },
@@ -593,7 +591,7 @@ export function ChartFromData({ spec, connectionId, busy = false, onChange, onMa
       ) : (
         <>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span className="aug-fs-xs" style={CAPTION}>Dataset</span>
+            <span className="aug-label">Dataset</span>
             <SelectField aria-label="Dataset" data-testid="chart-dataset" value={chosenName} disabled={making} onChange={e => setName(e.target.value)}>
               {held.map(([n, d]) => <option key={n} value={n}>{d.label}</option>)}
             </SelectField>
@@ -605,7 +603,7 @@ export function ChartFromData({ spec, connectionId, busy = false, onChange, onMa
             </span>
           )}
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span className="aug-fs-xs" style={CAPTION}>Visualization</span>
+            <span className="aug-label">Visualization</span>
             <SelectField aria-label="Visualization" data-testid="chart-kind" value={as} disabled={making} onChange={e => setAs(e.target.value as QueryShownAs)}>
               {CHART_KINDS.map(k => <option key={k.value} value={k.value}>{k.label}</option>)}
             </SelectField>
@@ -635,7 +633,7 @@ export function ChartFromData({ spec, connectionId, busy = false, onChange, onMa
 export function BuiltOnDataset({ label, table, onOwnSql }: { label: string; table: string | null; onOwnSql: () => void }) {
   return (
     <div data-testid="chart-built-on" style={{ display: "flex", flexDirection: "column", gap: 6, padding: "10px 14px" }}>
-      <span className="aug-fs-xs" style={CAPTION}>Built on</span>
+      <span className="aug-label">Built on</span>
       <span className="aug-fs-sm" style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--t1)" }}>
         <Icon name={table ? "table" : "sql"} size={14} /> {label}
         {table && <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>{table}</span>}
@@ -775,8 +773,8 @@ export function DataView({ spec, connectionId, onChange, onFollow, opened = null
       </div>
       <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: "260px minmax(0, 1fr)" }}>
         <aside aria-label="Datasets" style={{ minHeight: 0, overflow: "auto", borderRight: "1px solid var(--divide)", padding: "10px 8px", display: "flex", flexDirection: "column", gap: 2 }}>
-          <div className="aug-fs-xs" style={{ display: "flex", alignItems: "baseline", ...CAPTION, padding: "2px 6px 6px" }}>
-            Datasets<span style={{ marginLeft: "auto", textTransform: "none", letterSpacing: 0 }}>{held.length} of {MAX_DATASETS}</span>
+          <div className="aug-label" style={{ display: "flex", alignItems: "baseline", padding: "2px 6px 6px" }}>
+            Datasets<span style={{ marginLeft: "auto", fontWeight: 400 }}>{held.length} of {MAX_DATASETS}</span>
           </div>
           {held.map(([n, d]) => {
             const charts = cardsBuiltOn(spec, n).length;

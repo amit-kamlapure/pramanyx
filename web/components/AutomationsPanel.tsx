@@ -33,6 +33,7 @@ import { cronWords, isRecurrence } from "@/components/automations/ScheduleEditor
 import { ghostBtn, useIntegrationGrants } from "@/components/automations/AutomationRows";
 import { ProposalCard } from "@/components/ProposalCard";
 import { bindingRefs } from "@/lib/automationFlow";
+import { sentenceCase } from "@/lib/format";
 import { approverName } from "@/lib/auth";
 import { MiniStat, MiniStatRow } from "@/components/ui/MiniStat";
 import { Badge } from "@/components/ui/badge";
@@ -744,9 +745,9 @@ function RunsView({ automations, runsFor, runs, versions, onPick }: {
             borderRadius: 6, color: "var(--t3)",
           }}>
             <span className="aug-fs-xs" style={{ fontWeight: 700, padding: "2px 7px",
-              borderRadius: 4, textTransform: "uppercase", background: "var(--bg-2)",
+              borderRadius: 4, background: "var(--bg-2)",
               color: "var(--t3)" }}>
-              not fired ×{row.count}
+              Not fired ×{row.count}
             </span>
             <span className="aug-fs-chrome">
               {row.reason || "the schedule was not due"}
@@ -759,7 +760,7 @@ function RunsView({ automations, runsFor, runs, versions, onPick }: {
         ) : (() => { const r = row.run; return (
           <div key={r.id} style={{ background: "var(--bg-2)", borderRadius: 6, padding: "10px 14px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <Badge variant={OUTCOME_BADGE[r.outcome] ?? "secondary"} style={{ textTransform: "uppercase" }}>{r.outcome.replace("_", " ")}</Badge>
+              <Badge variant={OUTCOME_BADGE[r.outcome] ?? "secondary"}>{sentenceCase(r.outcome.replace("_", " "))}</Badge>
               <span className="aug-fs-chrome" style={{ color: "var(--t2)" }}>{r.reason}</span>
               <div style={{ flex: 1 }} />
               <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>
@@ -838,7 +839,7 @@ function InboxView({ conn, proposals, grants, onReload, flash, onOpenInEditor }:
 
       {grants.length > 0 && (
         <>
-          <div className="aug-fs-xs" style={{ fontWeight: 600, color: "var(--t3)", textTransform: "uppercase", margin: "16px 0 8px" }}>Standing grants</div>
+          <div className="aug-label" style={{ margin: "16px 0 8px" }}>Standing grants</div>
           {grants.map(g => (
             <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 10, background: "var(--bg-2)", borderRadius: 6, padding: "8px 12px", marginBottom: 6 }}>
               <span className="aug-fs-chrome"><b>{g.action_id}</b> → {g.target_arg}=<code>{g.target_value}</code></span>
@@ -852,7 +853,7 @@ function InboxView({ conn, proposals, grants, onReload, flash, onOpenInEditor }:
 
       {resolved.length > 0 && (
         <>
-          <div className="aug-fs-xs" style={{ fontWeight: 600, color: "var(--t3)", textTransform: "uppercase", margin: "16px 0 8px" }}>Recently resolved</div>
+          <div className="aug-label" style={{ margin: "16px 0 8px" }}>Recently resolved</div>
           {resolved.slice(0, 8).map(p => (
             <div key={p.id} className="aug-fs-chrome" style={{ color: "var(--t3)", padding: "4px 0" }}>
               <span style={{ color: STATUS_COLOR[p.status] || "var(--t3)", fontWeight: 600 }}>{p.status}</span>

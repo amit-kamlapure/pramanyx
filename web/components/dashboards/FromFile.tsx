@@ -34,7 +34,6 @@ const ADD_ROW = "__add_row";
 const filterId = (f: DraftedFilter) => `filter:${f.column}`;
 
 const CARD_STYLE = { background: "var(--bg-2)", border: "1px solid var(--card-edge)", borderRadius: "var(--r3)" } as const;
-const SECTION_LABEL = { color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em" } as const;
 const QUERY_TEXT = { margin: "4px 0 2px", whiteSpace: "pre-wrap", wordBreak: "break-word", fontFamily: "var(--font-mono)", color: "var(--t2)",
   background: "var(--bg-3)", borderRadius: "var(--r2)", padding: "8px 10px" } as const;
 
@@ -50,7 +49,7 @@ function ColumnsRead({ staged }: { staged: StagedFile }) {
     <div style={{ overflowX: "auto" }}>
       <table className="aug-fs-chrome" data-testid="from-file-columns" style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead><tr style={{ color: "var(--t3)", textAlign: "left" }}>
-          {["Column", "Reads as", "What is in it"].map(h => <th key={h} className="aug-fs-xs" style={{ ...SECTION_LABEL, fontWeight: 400, padding: "0 12px 4px 0", borderBottom: "1px solid var(--b0)" }}>{h}</th>)}
+          {["Column", "Reads as", "What is in it"].map(h => <th key={h} className="aug-fs-xs" style={{ color: "var(--t3)", fontWeight: 400, padding: "0 12px 4px 0", borderBottom: "1px solid var(--b0)" }}>{h}</th>)}
         </tr></thead>
         <tbody>
           {withUniqueKeys(tab.columns, c => c.name).map(([key, c]) => (
@@ -152,9 +151,9 @@ function Row({ id, on, onToggle, preview, title, says, card, change, changed }: 
 function Group({ label, chip, children }: { label: string; chip?: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="aug-fs-xs" style={{ ...SECTION_LABEL, display: "flex", alignItems: "center", gap: 8, paddingBottom: 6 }}>
+      <div className="aug-label" style={{ display: "flex", alignItems: "center", gap: 8, paddingBottom: 6 }}>
         {label}
-        {chip && <span className="aug-fs-sm" style={{ textTransform: "none", letterSpacing: 0, padding: "0 6px", borderRadius: "var(--r2)", color: "var(--vio4)", background: "var(--vio1)" }}>{chip}</span>}
+        {chip && <span className="aug-fs-sm" style={{ fontWeight: 400, padding: "0 6px", borderRadius: "var(--r2)", color: "var(--vio4)", background: "var(--vio1)" }}>{chip}</span>}
       </div>
       <div style={{ ...CARD_STYLE, overflow: "hidden" }}>{children}</div>
     </div>
@@ -166,7 +165,7 @@ const NO_WORDS = "This query is too involved to say in words. Read it before you
 function Noticed({ noticed }: { noticed: string[] }) {
   return (
     <div data-testid="from-file-noticed">
-      <div className="aug-fs-xs" style={{ ...SECTION_LABEL, paddingBottom: 4 }}>What it noticed</div>
+      <div className="aug-label" style={{ paddingBottom: 4 }}>What it noticed</div>
       {noticed.map(n => <div key={n} className="aug-fs-sm" style={{ color: "var(--t2)", padding: "2px 0" }}>{n}</div>)}
     </div>
   );
@@ -284,7 +283,7 @@ function Check({ sheetId, draft, onRedraft, onOver, onKept, busy, noticed, fromM
 
       {waiting && (
         <section aria-label="Needs you" data-testid="from-file-needs" style={{ ...CARD_STYLE, boxShadow: NEEDS_EDGE, padding: "12px 16px" }}>
-          <div className="aug-fs-xs" style={{ ...SECTION_LABEL, color: "var(--amb3)" }}>Needs you</div>
+          <div className="aug-label" style={{ color: "var(--amb3)" }}>Needs you</div>
           {draft.questions.map(q => (
             <div key={q.says} data-testid="from-file-question" style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0 0", flexWrap: "wrap" }}>
               <div className="aug-fs-ui" style={{ flex: "1 1 320px", minWidth: 0, color: answered[q.says] ? "var(--t3)" : undefined }}>
@@ -440,7 +439,7 @@ export function FromFile({ onKept }: { onKept: (dashboardId: string, connectionI
   return (
     <div data-testid="from-file" style={{ display: "grid", gridTemplateColumns: "minmax(0, 5fr) minmax(0, 4fr)", gap: 24 }}>
       <div onDragOver={e => e.preventDefault()} onDrop={onDrop}>
-        <div className="aug-fs-xs" style={SECTION_LABEL}>The file</div>
+        <div className="aug-label">The file</div>
         <input ref={fileRef} type="file" accept=".csv,.tsv,.xlsx,.xls" data-testid="from-file-input" hidden onChange={e => { choose(e.target.files?.[0]); e.target.value = ""; }} />
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", background: "var(--bg-3)", border: "1px dashed var(--b1)", borderRadius: "var(--r2)", padding: "8px 12px", margin: "6px 0 10px" }}>
           {staged ? (
@@ -457,7 +456,7 @@ export function FromFile({ onKept }: { onKept: (dashboardId: string, connectionI
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
         <div>
-          <label className="aug-fs-xs" htmlFor="from-file-words" style={{ ...SECTION_LABEL, display: "block", marginBottom: 6 }}>What should it show?</label>
+          <label className="aug-label" htmlFor="from-file-words" style={{ display: "block", marginBottom: 6 }}>What should it show?</label>
           <Textarea id="from-file-words" data-testid="from-file-words" rows={Math.max(6, Math.min(16, Math.ceil(words.length / 62) + 1))} value={words} disabled={working} onChange={e => { setWords(e.target.value); setWrote(false); }}
             placeholder="What we sold, what came back and what's still open, by week and by channel. Which categories come back most?" />
           {written > 0 && (
@@ -476,13 +475,13 @@ export function FromFile({ onKept }: { onKept: (dashboardId: string, connectionI
         <section aria-label="Let a model explore the file" data-testid="from-file-explore" style={{ paddingTop: 16, display: "flex", flexDirection: "column", gap: 8 }}>
           {exploring ? (
             <div data-testid="from-file-exploring" aria-live="polite" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <span className="aug-fs-xs" style={SECTION_LABEL}>{exploring.drafting ? "Drafting the cards from what it found" : "Exploring the file"}</span>
+              <span className="aug-label">{exploring.drafting ? "Drafting the cards from what it found" : "Exploring the file"}</span>
               <span className="aug-fs-sm" style={{ color: "var(--t3)", fontVariantNumeric: "tabular-nums" }}>{formatCount(looks.length)} {looks.length === 1 ? "query" : "queries"} so far</span>
               <Button size="xs" variant="ghost" data-testid="from-file-stop" style={{ marginLeft: "auto" }} onClick={stop}>Stop</Button>
             </div>
           ) : (
             <>
-              <div className="aug-fs-xs" style={SECTION_LABEL}>Not sure what to ask?</div>
+              <div className="aug-label">Not sure what to ask?</div>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                 <Button size="sm" variant="ghost" data-testid="from-file-write" disabled={!staged || busy || reading} onClick={() => { void explore(false); }}>Write the words for me</Button>
                 <Button size="sm" variant="ghost" data-testid="from-file-draw" disabled={!staged || busy || reading} onClick={() => { void explore(true); }}>Explore and draw it</Button>

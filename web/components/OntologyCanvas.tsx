@@ -475,8 +475,8 @@ function EntityNode({
       {/* Lifecycle states */}
       {entity.has_lifecycle && entity.lifecycle_states.length > 0 && (
         <div className="px-3.5 py-2">
-          <p className="aug-fs-xs text-zinc-500 uppercase tracking-widest mb-1.5 font-semibold">
-            {entity.lifecycle_column ?? "status"}
+          <p className="aug-label mb-1.5">
+            {entity.lifecycle_column ?? "Status"}
           </p>
           <div className="flex flex-wrap gap-1">
             {entity.lifecycle_states.map(s => {
@@ -737,7 +737,7 @@ function CanvasLegend() {
   return (
     <div className="flex items-center gap-4 bg-zinc-900/80 backdrop-blur-sm border border-zinc-700/50 rounded-[var(--r3)] px-4 py-2.5 pointer-events-none flex-wrap">
       {/* Entity types */}
-      <span className="aug-fs-xs text-zinc-500 uppercase tracking-wider font-semibold">Objects</span>
+      <span className="aug-label">Objects</span>
       <div className="flex items-center gap-1.5">
         <span className="w-3 h-3 rounded-md bg-emerald-700/25 border border-emerald-600/30" />
         <span className="aug-fs-xs text-zinc-500">reference data</span>
@@ -753,7 +753,7 @@ function CanvasLegend() {
       {/* Divider */}
       <span className="text-zinc-500 aug-fs-xs">|</span>
       {/* Relationships */}
-      <span className="aug-fs-xs text-zinc-500 uppercase tracking-wider font-semibold">Links</span>
+      <span className="aug-label">Links</span>
       <div className="flex items-center gap-1.5">
         <svg width="28" height="8" className="shrink-0">
           <line x1="0" y1="4" x2="28" y2="4" stroke="var(--blue4)" strokeWidth="1.5"
@@ -789,7 +789,7 @@ function ColLabels({ labels }: { labels: { x: number; label: string }[] }) {
         <div
           key={x}
           className={cn(
-            "absolute aug-fs-xs uppercase tracking-widest font-semibold pointer-events-none",
+            "absolute aug-fs-xs font-semibold pointer-events-none",
             COL_LABEL_STYLE[label] ?? "text-zinc-500",
           )}
           style={{ left: x, top: 20 }}

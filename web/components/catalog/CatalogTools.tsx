@@ -208,7 +208,7 @@ const GRID: CSSProperties = {
 };
 /** A list's column heading and cell. No gap between columns — the space is the cell's padding — so the rule under each
  *  row runs the whole width instead of breaking at every column. */
-export const LIST_HEAD: CSSProperties = { ...MUTED, textTransform: "uppercase", letterSpacing: ".06em", padding: "2px 12px 6px 2px",
+export const LIST_HEAD: CSSProperties = { ...MUTED, padding: "2px 12px 6px 2px",
   whiteSpace: "nowrap" };
 export const LIST_CELL: CSSProperties = { ...RULE, padding: "8px 12px 8px 2px", minWidth: 0, display: "flex",
   flexDirection: "column", justifyContent: "center" };

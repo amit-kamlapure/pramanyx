@@ -79,9 +79,10 @@ export const inputStyle: React.CSSProperties = {
   border: "1px solid var(--b1)", background: "var(--bg-1, var(--bg-2))", color: "var(--t1)",
 };
 
+/** A field's label: `.aug-label`'s values (12px semibold, --t2, sentence case — never tracked caps, 2026-11-20),
+ *  as a style object because AutomationAuthor spreads it onto bare labels. */
 export const labelStyle: React.CSSProperties = {
-  fontSize: 11, fontWeight: 600, color: "var(--t3)", marginBottom: 5, display: "block",
-  textTransform: "uppercase",
+  fontSize: 12, fontWeight: 600, lineHeight: 1.45, color: "var(--t2)", marginBottom: 5, display: "block",
 };
 
 // The button's own soft fill stays (2026-11-20): an action reads as a button at rest; this only quiets its words.

@@ -29,8 +29,7 @@ function DoorRow({ kind, title, state, hue, detail, action }: {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px",
       background: "var(--bg-1)", borderRadius: "var(--r2)" }}>
-      <span className="aug-fs-xs" style={{ color: "var(--t3)", width: 72, flexShrink: 0,
-        textTransform: "uppercase", letterSpacing: "0.05em" }}>{kind}</span>
+      <span className="aug-fs-xs" style={{ color: "var(--t3)", width: 72, flexShrink: 0 }}>{kind}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div className="aug-fs-chrome" style={{ color: "var(--t1)", overflow: "hidden",
           textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</div>
@@ -96,16 +95,16 @@ export function AgentDoors({ agent, onChat, onOpenAutomation, onOpenIntegrations
         Every <Term id="door" /> into this agent, with its state. A door that is not built
         yet says so.
       </div>
-      <DoorRow kind="chat" title="Chat"
+      <DoorRow kind="Chat" title="Chat"
         state={agent.enabled ? "open" : "paused"} hue={agent.enabled ? "positive" : "caution"}
         detail={agent.enabled ? "answers when asked as this agent" : "paused — answers nothing"}
         action={onChat && agent.enabled ? { label: "Chat", onClick: () => onChat(agent.id) } : undefined} />
       {bots.length === 0 ? (
-        <DoorRow kind="slack" title="No Slack bot fronts this agent" state="none" hue="muted"
+        <DoorRow kind="Slack" title="No Slack bot fronts this agent" state="none" hue="muted"
           detail="Create one from the agent's Reach step or Integrations → Slack."
           action={onOpenIntegrations ? { label: "Open Integrations", onClick: onOpenIntegrations } : undefined} />
       ) : bots.map(b => (
-        <DoorRow key={b.id} kind="slack" title={b.name}
+        <DoorRow key={b.id} kind="Slack" title={b.name}
           state={!b.enabled ? "off" : b.listening ? "listening" : "not listening"}
           hue={!b.enabled ? "caution" : b.listening ? "positive" : "negative"}
           detail={!b.enabled
@@ -116,20 +115,20 @@ export function AgentDoors({ agent, onChat, onOpenAutomation, onOpenIntegrations
           action={onOpenIntegrations ? { label: "Open Integrations", onClick: onOpenIntegrations } : undefined} />
       ))}
       {automations.length === 0 ? (
-        <DoorRow kind="automation" title="No automation runs as this agent" state="none" hue="muted"
+        <DoorRow kind="Automation" title="No automation runs as this agent" state="none" hue="muted"
           detail="Bind one on the Automations layer — a schedule or a signal, answered as this agent." />
       ) : automations.map(a => (
-        <DoorRow key={a.id} kind="automation" title={a.name}
+        <DoorRow key={a.id} kind="Automation" title={a.name}
           state={a.enabled ? "enabled" : "paused"} hue={a.enabled ? "positive" : "caution"}
           detail={a.agent_id === agent.id ? "runs as this agent" : "one step runs as this agent"}
           action={onOpenAutomation ? { label: "Open automation", onClick: () => onOpenAutomation(a.id) } : undefined} />
       ))}
       {doors && (
         <>
-          <DoorRow kind="mcp" title={`MCP tool ${doors.mcp.tool}`}
+          <DoorRow kind="MCP" title={`MCP tool ${doors.mcp.tool}`}
             state={doors.mcp.state} hue={doors.mcp.state === "open" ? "positive" : "caution"}
             detail={doors.mcp.how} />
-          <DoorRow kind="http" title="HTTP — ask this agent with its key"
+          <DoorRow kind="HTTP" title="HTTP — ask this agent with its key"
             state={doors.http.state}
             hue={doors.http.state === "open" ? "positive" : doors.http.state === "no key" ? "muted" : "caution"}
             detail={doors.http.key_issued_at
@@ -158,30 +157,30 @@ export function AgentDoors({ agent, onChat, onOpenAutomation, onOpenIntegrations
               </span>
             </div>
           )}
-          <DoorRow kind="embed" title="Embed — a chat page for this agent alone"
+          <DoorRow kind="Embed" title="Embed — a chat page for this agent alone"
             state={doors.embed.state} hue={doors.embed.state === "open" ? "positive" : "muted"}
             detail={`${doors.embed.url} · asks for the agent's key once and keeps it in the browser's session only`}
             action={doors.http.key_issued_at
               ? { label: "Open", onClick: () => window.open(doors.embed.url, "_blank", "noopener") }
               : undefined} />
-          <DoorRow kind="webhook" title="Webhook — a question in, the answer back"
+          <DoorRow kind="Webhook" title="Webhook — a question in, the answer back"
             state={doors.webhook.state} hue={doors.webhook.state === "open" ? "positive" : "muted"}
             detail={`POST ${doors.webhook.url} with the key · {question, asker, callback_url?}`} />
-          <DoorRow kind="a2a" title="A2A — an agent card and a message/send endpoint"
+          <DoorRow kind="A2A" title="A2A — an agent card and a message/send endpoint"
             state={doors.a2a.state} hue={doors.a2a.state === "open" ? "positive" : "muted"}
             detail={`card ${doors.a2a.card} · POST ${doors.a2a.url} (JSON-RPC message/send, bearer key)`} />
-          <DoorRow kind="grounding" title="Grounding — what this agent would read, with no model asked"
+          <DoorRow kind="Grounding" title="Grounding — what this agent would read, with no model asked"
             state={doors.grounding.state}
             hue={doors.grounding.state === "open" ? "positive" : doors.grounding.state === "paused" ? "caution" : "muted"}
             detail={`POST ${doors.grounding.url} with the key · {question, connection_id?, schema?} · MCP tool ${doors.grounding.tool}`} />
           {doors.teams.bots.length === 0 ? (
-            <DoorRow kind="teams" title="Microsoft Teams — no bot fronts this agent"
+            <DoorRow kind="Teams" title="Microsoft Teams — no bot fronts this agent"
               state={doors.teams.state} hue="muted"
               detail="Register an Azure Bot (app id + password) and bind it here; the messaging endpoint is said back."
               action={{ label: teamsDraft ? "Cancel" : "Add a Teams bot",
                 onClick: () => setTeamsDraft(teamsDraft ? null : { name: `${agent.name} in Teams`, app_id: "", app_password: "" }) }} />
           ) : doors.teams.bots.map(b => (
-            <DoorRow key={b.id} kind="teams" title={b.name}
+            <DoorRow key={b.id} kind="Teams" title={b.name}
               state={b.enabled ? "bound" : "paused"} hue={b.enabled ? "positive" : "caution"}
               detail={`app ${b.app_id} · messaging endpoint ${doors.http.url.replace(/\/doors\/agents\/.*$/, "")}/doors/teams/${b.id}/messages`}
               action={{ label: "Remove", onClick: () => act("teams", async () => { await deleteTeamsBot(b.id); }) }} />

@@ -126,9 +126,8 @@ export function TraceExplorerPanel({ focusInvestigationId, focusTraceId }: {
           {/* `--t2`, not `--t4`. This is the only thing on a 30px rail, so it is content
               rather than a de-emphasised label, and `--t4` is 2.76:1 — below AA even for
               large text. The Agent Ops readability guard catches exactly this. */}
-          <span className="aug-fs-xs" style={{ color: "var(--t2)", writingMode: "vertical-rl",
-            letterSpacing: "0.1em", textTransform: "uppercase" }}>
-            {total === 0 ? "runs" : `${total} runs`}
+          <span className="aug-fs-xs" style={{ color: "var(--t2)", writingMode: "vertical-rl" }}>
+            {total === 0 ? "Runs" : `${total} runs`}
           </span>
         </div>
       )}

@@ -288,7 +288,7 @@ function PanelPart({ title, chosen = false, onChoose, children }: { title: strin
     <section data-testid="dashboard-filter-column" aria-label={title} data-selected={chosen || undefined} onPointerDownCapture={onChoose}
       style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 0, paddingTop: 14, borderRadius: chosen ? "var(--r2)" : undefined,
         outline: chosen ? "2px solid var(--accent)" : undefined, outlineOffset: 2 }}>
-      <span className="aug-fs-xs" style={{ color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em" }}>{title}</span>
+      <span className="aug-label">{title}</span>
       {children}
     </section>
   );

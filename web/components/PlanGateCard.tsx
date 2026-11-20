@@ -46,7 +46,7 @@ export function PlanGateCard({
       style={{ background: "var(--bg-2)" }}
     >
       <div className="flex items-center justify-between">
-        <span className="aug-text-xs uppercase tracking-wide" style={{ color: "var(--t3)" }}>
+        <span className="aug-label">
           Review plan before running
         </span>
         <span className="aug-text-xs font-mono" style={{ color: "var(--t3)" }}>

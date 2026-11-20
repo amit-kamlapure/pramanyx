@@ -25,7 +25,7 @@ const ROW = "18px 18px minmax(0, 1fr) 150px 230px";
 function Group({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div style={{ marginBottom: 10 }}>
-      <div className="aug-fs-xs" style={{ color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em", margin: "4px 0" }}>{label}</div>
+      <div className="aug-label" style={{ margin: "4px 0" }}>{label}</div>
       {children}
     </div>
   );

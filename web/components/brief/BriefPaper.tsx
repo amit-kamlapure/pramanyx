@@ -127,7 +127,7 @@ export function PaperFront({ lead, side }: { lead: ReactNode; side: ReactNode })
 export function PaperLead({ kicker, headline, children }: { kicker: string; headline: ReactNode; children?: ReactNode }) {
   return (
     <div data-testid="paper-lead">
-      <div className="aug-fs-xs" style={{ letterSpacing: "0.09em", textTransform: "uppercase", color: "var(--blue4)", marginBottom: 6 }}>{kicker}</div>
+      <div className="aug-label" style={{ color: "var(--blue4)", marginBottom: 6 }}>{kicker}</div>
       {/* A long headline (a finding's sentence, when no story is written) prints smaller, never cut. */}
       <h2 style={{ fontFamily: SERIF, fontSize: typeof headline === "string" && headline.length > 90 ? 22 : 28, lineHeight: 1.18,
         fontWeight: 600, margin: "0 0 12px", maxWidth: typeof headline === "string" && headline.length > 90 ? "52ch" : "32ch" }}>{headline}</h2>
@@ -199,8 +199,7 @@ export function PaperNumbers({ title, rows, note, after, footer, connectionId }:
         : rows.map((r, i) => (
           <Fragment key={r.key}>
           {r.area && r.area !== rows[i - 1]?.area && (
-            <div data-testid="paper-area" className="aug-fs-xs" style={{ color: "var(--t3)", textTransform: "uppercase",
-              letterSpacing: ".06em", padding: i ? "10px 0 2px" : "0 0 2px" }}>{r.area}</div>
+            <div data-testid="paper-area" className="aug-label" style={{ padding: i ? "10px 0 2px" : "0 0 2px" }}>{r.area}</div>
           )}
           <div style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "6px 0",
             borderTop: i && !(r.area && r.area !== rows[i - 1]?.area) ? ROW : "none" }}>
@@ -294,7 +293,7 @@ function Column({ spec, col, unread, refs, connectionId }: {
     <div data-testid={`paper-col-${spec.key}`} style={decide
       ? { background: "var(--amb1)", borderRadius: "var(--r3)", padding: "14px 18px", minWidth: 0 }
       : { minWidth: 0 }}>
-      <div className="aug-fs-xs" style={{ letterSpacing: "0.09em", textTransform: "uppercase", color: spec.tone, marginBottom: 4 }}>{spec.kicker}</div>
+      <div className="aug-label" style={{ color: spec.tone, marginBottom: 4 }}>{spec.kicker}</div>
       <h3 style={{ fontFamily: SERIF, fontSize: 18, fontWeight: 600, margin: "0 0 6px" }}>{spec.title}</h3>
       {col === undefined && <div className="aug-fs-sm" style={{ color: "var(--t3)" }}>Reading…</div>}
       {col === null && <div className="aug-fs-sm" style={{ color: "var(--amb4)" }}>{unread ?? "This column could not be read just now."}</div>}

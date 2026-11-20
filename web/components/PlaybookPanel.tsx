@@ -285,7 +285,7 @@ function PlaybookDetail({
 
       {/* Recommendation */}
       <div>
-        <p className="aug-fs-xs uppercase tracking-wider mb-1.5" style={{ color: "var(--t3)" }}>Recommendation</p>
+        <p className="aug-label mb-1.5">Recommendation</p>
         <p className="aug-fs-ui leading-relaxed" style={{ color: "var(--t1)" }}>{entry.recommendation}</p>
       </div>
 
@@ -297,7 +297,7 @@ function PlaybookDetail({
           { label: "Owner",           value: entry.owner_role },
         ].map(({ label, value }) => value ? (
           <div key={label}>
-            <p className="aug-fs-xs uppercase tracking-wider mb-1" style={{ color: "var(--t3)" }}>{label}</p>
+            <p className="aug-label mb-1">{label}</p>
             <p className="aug-fs-chrome" style={{ color: "var(--t2)" }}>{value}</p>
           </div>
         ) : null)}
@@ -306,7 +306,7 @@ function PlaybookDetail({
       {/* Success rate */}
       <div className="flex items-center gap-4">
         <div>
-          <p className="aug-fs-xs uppercase tracking-wider mb-1" style={{ color: "var(--t3)" }}>Historical success rate</p>
+          <p className="aug-label mb-1">Historical success rate</p>
           <p className="aug-fs-h1 font-semibold font-mono"
             style={{ color: entry.historical_success_rate > 0 ? "var(--grn4)" : "var(--t3)" }}>
             {entry.historical_success_rate > 0 ? fmtRate(entry.historical_success_rate) : "No data yet"}

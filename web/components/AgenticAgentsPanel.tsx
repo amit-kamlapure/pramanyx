@@ -704,8 +704,7 @@ function BuiltInMap({ charter }: { charter: AgentRosterEntry }) {
   }, [charter.id, tick]);
   const Row = ({ label, children }: { label: string; children: React.ReactNode }) => (
     <div style={{ display: "flex", gap: 10, alignItems: "baseline" }}>
-      <span className="aug-fs-xs" style={{ color: "var(--t3)", width: 72, flexShrink: 0,
-        textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</span>
+      <span className="aug-fs-xs" style={{ color: "var(--t3)", width: 72, flexShrink: 0 }}>{label}</span>
       <span className="aug-fs-chrome" style={{ color: "var(--t2)" }}>{children}</span>
     </div>
   );
@@ -714,18 +713,18 @@ function BuiltInMap({ charter }: { charter: AgentRosterEntry }) {
       <div className="aug-label" style={{ color: "var(--t2)", marginBottom: 6 }}>Map</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "10px 12px",
         borderRadius: "var(--r2)", background: "var(--bg-1)" }}>
-        <Row label="door">
+        <Row label="Door">
           {charter.lane === "interactive"
             ? "answers inline, inside the conversation that asks — no socket, no schedule"
             : "runs on the platform's schedule; nobody talks to it directly"}
         </Row>
-        <Row label="runs">
+        <Row label="Runs">
           {charter.job_kinds.length
             ? `job kinds ${charter.job_kinds.join(", ")}`
             : "no job kind of its own"}
           {charter.tools.length ? ` · tools ${charter.tools.join(", ")}` : ""}
         </Row>
-        <Row label="watched by">
+        <Row label="Watched by">
           {error ? (
             <ReadFailed what="the alert rules" error={error} onRetry={() => setTick(t => t + 1)} />
           ) : rules === null ? "…"

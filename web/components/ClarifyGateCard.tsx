@@ -23,7 +23,7 @@ export function ClarifyGateCard({
       style={{ background: "var(--bg-2)" }}
     >
       <div className="flex items-center justify-between">
-        <span className="aug-text-xs uppercase tracking-wide" style={{ color: "var(--t3)" }}>
+        <span className="aug-label">
           Which reading did you mean?
         </span>
         {clarify.metricLabel && (

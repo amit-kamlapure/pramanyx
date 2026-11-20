@@ -67,8 +67,9 @@ const SCALE = new Set([11, 12, 13, 14, 15, 18, 22, 28]);
  *  measured while the Slack step's What gets posted panel was built on the type scale's classes. 453 → 446
  *  (2026-11-19): the chart editor redrawn channel by channel, on the type scale's classes. 446 → 445 (2026-11-20):
  *  the SQL Editor's pass that made borders the exception. 445 → 290 (2026-11-20): every page's rows and cells put on
- *  one size (13), the literals swapped for the scale's classes as they were touched. */
-const FONT_SIZE_BASELINE = 290;
+ *  one size (13), the literals swapped for the scale's classes as they were touched. 290 → 282 (2026-11-20): section
+ *  labels made 12px semibold sentence case, never tracked caps. */
+const FONT_SIZE_BASELINE = 282;
 
 const RADIUS_RULES = [
   {

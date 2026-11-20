@@ -125,7 +125,7 @@ function OntologySettings({
       <div className="flex-1 overflow-y-auto p-4 space-y-5">
         {/* Refresh schedule */}
         <div>
-          <p className="aug-fs-xs text-zinc-500 uppercase tracking-wider mb-2 font-semibold">
+          <p className="aug-label mb-2">
             Auto-refresh interval
           </p>
           <p className="aug-fs-xs text-zinc-500 mb-3 leading-relaxed">
@@ -159,7 +159,7 @@ function OntologySettings({
         {/* Last built */}
         {graph && (
           <div>
-            <p className="aug-fs-xs text-zinc-500 uppercase tracking-wider mb-1.5 font-semibold">
+            <p className="aug-label mb-1.5">
               Last built
             </p>
             <p className="aug-fs-xs text-zinc-400 font-mono">
@@ -170,7 +170,7 @@ function OntologySettings({
 
         {/* Manual rebuild */}
         <div>
-          <p className="aug-fs-xs text-zinc-500 uppercase tracking-wider mb-2 font-semibold">
+          <p className="aug-label mb-2">
             Manual rebuild
           </p>
           <Button variant="plain" size="xs"

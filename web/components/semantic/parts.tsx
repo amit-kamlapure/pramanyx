@@ -66,7 +66,7 @@ export function Sql({ children, testId }: { children: ReactNode; testId?: string
 }
 
 /** The heading over a group of rows inside a card: its name, then how many. Sentence case, so it reads below the
- *  card's own uppercase label and above the rows. */
+ *  card's own label and above the rows. */
 export function GroupHead({ name, count, right, first }: { name: ReactNode; count: number; right?: ReactNode; first?: boolean }) {
   return (
     <div className="aug-fs-sm" style={{ display: "flex", alignItems: "baseline", gap: 8, padding: first ? "4px 0 6px" : "16px 0 6px",

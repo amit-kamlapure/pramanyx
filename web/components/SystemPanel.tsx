@@ -64,7 +64,7 @@ interface SectionProps {
 function Section({ title, children }: SectionProps) {
   return (
     <div className="mb-5">
-      <p className="aug-fs-xs uppercase tracking-widest text-zinc-500 mb-2">{title}</p>
+      <p className="aug-label mb-2">{title}</p>
       <div className="bg-white/[0.03] rounded-[var(--r3)] px-3 py-0.5">
         {children}
       </div>
@@ -314,7 +314,7 @@ export function SystemPanel() {
       </Section>
 
       {/* SQL Quality */}
-      <Section title="SQL Quality">
+      <Section title="SQL quality">
         <StatRow
           label="Self-correction retries"
           value={fmt(corrections)}
@@ -337,7 +337,7 @@ export function SystemPanel() {
       </Section>
 
       {/* Prior Analysis RAG */}
-      <Section title="Prior Analysis RAG (M1d)">
+      <Section title="Prior analysis RAG (M1d)">
         <StatRow
           label="RAG cache hits"
           value={fmt(ragHits)}
@@ -466,7 +466,7 @@ function FeatureFlags() {
       {GROUPS.filter(g => byGroup.has(g.key)).map(g => (
         <details key={g.key} open={g.open || !!q} className="mb-2 last:mb-0">
           <summary className="cursor-pointer select-none list-none flex items-baseline gap-2 pt-1 pb-1.5">
-            <span className="aug-fs-xs font-medium uppercase tracking-wide" style={{ color: "var(--t3)" }}>{g.title}</span>
+            <span className="aug-label">{g.title}</span>
             <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>{byGroup.get(g.key)!.length}</span>
             <span className="aug-fs-xs leading-snug truncate" style={{ color: "var(--t3)" }}>— {g.hint}</span>
           </summary>

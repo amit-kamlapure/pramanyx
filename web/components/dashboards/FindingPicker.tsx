@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Loading } from "@/components/ui/states";
 import { toast } from "@/components/ui/toast";
 import { listFindingsByDomain, pinFinding, type RecordedFinding } from "@/lib/api";
+import { sentenceCase } from "@/lib/format";
 
 const SHOWN = 60;
 
@@ -85,7 +86,7 @@ export function FindingPicker({ connectionId, schema, placed, busy, onPlaced, on
           {shown.map(g => (
             // Keyed by the first finding's id: a domain is a kind, and the key ratchet refuses a kind as a key.
             <div key={g.findings[0].id} data-testid="finding-domain" data-domain={g.domain}>
-              <div className="aug-fs-xs" style={{ color: "var(--t3)", letterSpacing: ".06em", textTransform: "uppercase", margin: "4px 0" }}>{g.domain}</div>
+              <div className="aug-label" style={{ margin: "4px 0" }}>{sentenceCase(g.domain)}</div>
               <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
                 {g.findings.map(f => {
                   const measured = !!(f.sql || "").trim();

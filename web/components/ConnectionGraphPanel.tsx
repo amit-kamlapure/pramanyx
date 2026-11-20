@@ -1066,7 +1066,7 @@ function GraphList({ graph, onCentre }: { graph: ConnectionGraph; onCentre: (id:
         <Label right={countNoun(nodes.length, "node")}>Nodes</Label>
         <table className="aug-fs-chrome" style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead><tr>{["Kind", "Name", "Links", "How it is known", ""].map(h => (
-            <th key={h || "act"} className="aug-fs-xs" style={{ ...MUTED, textAlign: h === "Links" ? "right" : "left", fontWeight: 500, textTransform: "uppercase", letterSpacing: ".06em", padding: "0 10px 6px 0" }}>{h}</th>
+            <th key={h || "act"} className="aug-fs-xs" style={{ ...MUTED, textAlign: h === "Links" ? "right" : "left", fontWeight: 500, padding: "0 10px 6px 0" }}>{h}</th>
           ))}</tr></thead>
           <tbody>
             {sorted.map(n => (
@@ -1088,7 +1088,7 @@ function GraphList({ graph, onCentre }: { graph: ConnectionGraph; onCentre: (id:
         {edges.length === 0 ? <Empty>No link between the nodes drawn.</Empty> : (
           <table className="aug-fs-chrome" style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead><tr>{["From", "Link", "To", "How it is known"].map(h => (
-              <th key={h} className="aug-fs-xs" style={{ ...MUTED, textAlign: "left", fontWeight: 500, textTransform: "uppercase", letterSpacing: ".06em", padding: "0 10px 6px 0" }}>{h}</th>
+              <th key={h} className="aug-fs-xs" style={{ ...MUTED, textAlign: "left", fontWeight: 500, padding: "0 10px 6px 0" }}>{h}</th>
             ))}</tr></thead>
             <tbody>
               {edges.map(e => (

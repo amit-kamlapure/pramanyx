@@ -247,13 +247,12 @@ export function RecommendationInbox({ onOpenInvestigation: openRun, workspaceId 
       {/* the queue's search and filters: inside the app, the page's toolbar row; on its own, the card's head */}
       {inShell && <ChromeToolbar>{tools}</ChromeToolbar>}
       <section aria-label="Recommendations" data-testid="inbox-list" style={CARD}>
-        <div className="aug-fs-xs" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, color: "var(--t3)",
-          textTransform: "uppercase", letterSpacing: ".06em" }}>
+        <div className="aug-label" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
           Recommendations
-          <span style={{ textTransform: "none", letterSpacing: 0 }}>
+          <span className="aug-fs-xs" style={{ fontWeight: 400, color: "var(--t3)" }}>
             {narrowed ? `${formatCount(visible.length)} shown` : null}
           </span>
-          {!inShell && <span style={{ marginLeft: "auto", textTransform: "none", letterSpacing: 0, ...ROW }}>{tools}</span>}
+          {!inShell && <span className="aug-fs-xs" style={{ marginLeft: "auto", fontWeight: 400, color: "var(--t3)", ...ROW }}>{tools}</span>}
         </div>
         {visible.length === 0 ? (
           <Empty title="Recommendations arrive from deep analyses; one needing your decision lands here">
@@ -264,7 +263,7 @@ export function RecommendationInbox({ onOpenInvestigation: openRun, workspaceId 
         ) : (
           <div style={{ overflowX: "auto" }}>
             <div style={{ minWidth: 1100 }} role="table" aria-label="Recommendations">
-              <div role="row" className="aug-fs-xs" style={{ ...QUEUE_GRID, ...MUTED, textTransform: "uppercase", letterSpacing: ".06em", padding: "0 0 6px 8px" }}>
+              <div role="row" className="aug-fs-xs" style={{ ...QUEUE_GRID, ...MUTED, padding: "0 0 6px 8px" }}>
                 <span role="columnheader">Recommendation</span><span role="columnheader">Expected impact</span>
                 <span role="columnheader">Owner</span><span role="columnheader">Status</span><span role="columnheader">Due</span>
                 <span role="columnheader">Evidence</span><span role="columnheader">Read</span><span role="columnheader" />

@@ -86,7 +86,7 @@ export function CatalogRail({
           picker under it in SQL mode; the mode's one line of affordance only where a row's hover does not say it. */}
       <div style={{ padding: "12px 14px 6px", flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span className="aug-fs-sm" style={{ flex: 1, fontWeight: 600, color: "var(--t1)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+          <span className="aug-label" style={{ flex: 1 }}>
             Catalog
           </span>
           {!(loading && !tables.length) && (

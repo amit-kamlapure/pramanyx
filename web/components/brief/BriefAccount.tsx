@@ -38,7 +38,6 @@ import { requestTab } from "@/lib/navigate";
 // columns or cells worked side by side in --divide. A panel is its surface on the ground, no edge.
 const RULE = "1px solid var(--b0)";
 const DIVIDE = "1px solid var(--divide)";
-const LABEL: React.CSSProperties = { color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 600 };
 const NUM: React.CSSProperties = { fontVariantNumeric: "tabular-nums" };
 const PANEL: React.CSSProperties = { background: "var(--bg-2)", borderRadius: "var(--r3)" };
 const STATE: Record<EditionStoryline["state"], { label: string; tone: Tone }> = {
@@ -61,7 +60,7 @@ export function Info({ children }: { children: string }) {
 export function SectionHead({ title, info, right }: { title: string; info?: string; right?: ReactNode }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", margin: "22px 0 8px" }}>
-      <h2 className="aug-fs-xs" style={{ ...LABEL, margin: 0 }}>{title}</h2>
+      <h2 className="aug-label" style={{ margin: 0 }}>{title}</h2>
       {info && <Info>{info}</Info>}
       {right && <span style={{ marginLeft: "auto", display: "inline-flex", gap: 8, alignItems: "center" }}>{right}</span>}
     </div>
@@ -159,7 +158,7 @@ export function BusinessLine({ stages, figures, chosen, onChoose }: {
 function Cell({ label, info, big, tone, children }: { label: string; info?: string; big: ReactNode; tone?: "none" | "done"; children?: ReactNode }) {
   return (
     <div style={{ padding: "10px 14px", borderRight: DIVIDE, marginRight: -1, minWidth: 0 }}>
-      <div className="aug-fs-xs" style={{ ...LABEL, display: "flex", gap: 6, alignItems: "center" }}>{label}{info && <Info>{info}</Info>}</div>
+      <div className="aug-label" style={{ display: "flex", gap: 6, alignItems: "center" }}>{label}{info && <Info>{info}</Info>}</div>
       <div className="aug-fs-ui" style={{ ...NUM, fontWeight: 600, margin: "3px 0 0",
         color: tone === "none" ? "var(--amb4)" : tone === "done" ? "var(--grn4)" : "var(--t1)" }}>{big}</div>
       {children}
@@ -312,7 +311,7 @@ export function Storylines({ stories, figures, period, readerName, teams, open, 
                     </figure>
                   )}
                   <div>
-                    <div className="aug-fs-xs" style={{ ...LABEL, marginBottom: 8 }}>The trail</div>
+                    <div className="aug-label" style={{ marginBottom: 8 }}>The trail</div>
                     <Trail trail={s.trail} onCite={onCite} />
                   </div>
                 </div>
@@ -335,7 +334,7 @@ const CLAMP: React.CSSProperties = { display: "-webkit-box", WebkitLineClamp: 2,
 function Ledger({ title, info, testid, children }: { title: string; info: string; testid: string; children: ReactNode }) {
   return (
     <section data-testid={testid} style={{ ...PANEL, padding: "12px 14px", minWidth: 0 }}>
-      <h3 className="aug-fs-xs" style={{ ...LABEL, margin: "0 0 2px", display: "flex", gap: 6, alignItems: "center" }}>{title}<Info>{info}</Info></h3>
+      <h3 className="aug-label" style={{ margin: "0 0 2px", display: "flex", gap: 6, alignItems: "center" }}>{title}<Info>{info}</Info></h3>
       {children}
     </section>
   );

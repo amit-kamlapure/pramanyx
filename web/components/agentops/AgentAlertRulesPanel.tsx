@@ -56,8 +56,7 @@ function Field({ label, children, width }: {
 }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 5, width }}>
-      <label className="aug-label" style={{ color: "var(--t3)", textTransform: "uppercase",
-        letterSpacing: "0.05em" }}>{label}</label>
+      <label className="aug-label">{label}</label>
       {children}
     </div>
   );

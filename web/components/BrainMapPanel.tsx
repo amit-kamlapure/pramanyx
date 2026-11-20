@@ -89,7 +89,7 @@ function Picture({ layout }: { layout: MapLayout }) {
       <div data-testid="brain-picture" style={{ position: "relative", height: layout.height, minWidth: 820 }}>
         {layout.columns.map((c) => (
           <div key={c.id} className="aug-fs-xs" style={{ position: "absolute", left: `${c.x0}%`, width: `${c.x1 - c.x0}%`,
-            top: 0, color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em", ...ONE_LINE }}>
+            top: 0, color: "var(--t3)", ...ONE_LINE }}>
             {c.title}
           </div>
         ))}

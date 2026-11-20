@@ -43,13 +43,12 @@ const today = () => new Date().toISOString().slice(0, 10);
 /** How much of the lead's metric the line shows, a day at a time. */
 const TREND_DAYS = 60;
 
-/** A section's small uppercase label, with what it says at its right end. */
+/** A section's label (12px semibold sentence case), with what it says at its right end. */
 function Label({ children, right, amber }: { children: ReactNode; right?: ReactNode; amber?: boolean }) {
   return (
-    <div className="aug-fs-xs" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, color: amber ? "var(--amb4)" : "var(--t3)",
-      textTransform: "uppercase", letterSpacing: ".06em" }}>
+    <div className="aug-label" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, color: amber ? "var(--amb4)" : undefined }}>
       {children}
-      {right && <span style={{ marginLeft: "auto", textTransform: "none", letterSpacing: 0 }}>{right}</span>}
+      {right && <span style={{ marginLeft: "auto", fontWeight: 400 }}>{right}</span>}
     </div>
   );
 }

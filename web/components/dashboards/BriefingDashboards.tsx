@@ -203,7 +203,7 @@ function BoxSetup({ box, spec, connectionId, schema, busy, onCancel, onPlace, on
     <div data-testid="place-setup" data-kind={box.kind} style={{ display: "flex", flexDirection: "column" }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "12px 14px 4px" }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div className="aug-fs-xs" style={{ color: "var(--accent-11)", textTransform: "uppercase", letterSpacing: ".06em" }}>{PLACE_WORDS[box.kind]}</div>
+          <div className="aug-fs-xs" style={{ color: "var(--accent-11)" }}>{PLACE_WORDS[box.kind]}</div>
           <div className="aug-fs-xs" style={{ color: "var(--t3)", marginTop: 2 }}>
             Set down at column {box.x}, row {box.y}: {box.w} columns by {box.h} rows. Choose what it is.
           </div>
@@ -586,7 +586,7 @@ function NewDashboard({ connectionId, schema, sym, onKept, onClose, onBusy }: {
             )}
           {!entity && suggested && suggested.length > 0 && (
             <div data-testid="dashboard-new-suggested">
-              <div className="aug-fs-xs" style={{ color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em", margin: "2px 0 6px" }}>What each object suggests</div>
+              <div className="aug-label" style={{ margin: "2px 0 6px" }}>What each object suggests</div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 6 }}>
                 {withUniqueKeys(suggested, x => x.entity).map(([k, x]) => (
                   <Button key={k} variant="outline" data-testid="dashboard-new-suggestion" data-shape={x.shape} onClick={() => setEntity(x.entity)}
@@ -654,7 +654,7 @@ function NewDashboard({ connectionId, schema, sym, onKept, onClose, onBusy }: {
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, maxWidth: "100%" }}>
-        <span className="aug-fs-xs" style={{ color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em" }}>Or start another way</span>
+        <span className="aug-label">Or start another way</span>
         <div role="group" aria-label="Other ways to start" data-testid="dashboard-new-ways"
           style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 2, padding: 6, background: "var(--bg-2)", border: "1px solid var(--card-edge)", borderRadius: "var(--r3)", boxShadow: "var(--shadow-lg)" }}>
           {WAYS.map(w => (
@@ -1581,7 +1581,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
           aside={showHistory ? (
             <div data-testid="builder-history-panel" style={{ padding: "4px 14px" }}>
               <div style={{ display: "flex", alignItems: "center", padding: "8px 0" }}>
-                <span className="aug-fs-xs" style={{ color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em" }}>History</span>
+                <span className="aug-label">History</span>
                 <Button size="xs" variant="ghost" style={{ marginLeft: "auto" }} onClick={() => setShowHistory(false)}>Back to the setup</Button>
               </div>
               {historyPanel}

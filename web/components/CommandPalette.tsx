@@ -612,7 +612,7 @@ export function CommandPalette({ open, onClose, selectedConn, onNavigate, onGoTo
             >
               ← <span className="aug-fs-xs" style={{ fontFamily: "var(--font-mono)" }}>Back</span>
             </Button>
-            <span className="aug-fs-xs" style={{ fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--vio3)" }}>Spotlight</span>
+            <span className="aug-label" style={{ color: "var(--vio3)" }}>Spotlight</span>
             <span className="aug-fs-sm" style={{ flex: 1, color: "var(--t2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{spotQ}</span>
             <kbd
               onClick={() => setMode("search")}
@@ -703,7 +703,7 @@ export function CommandPalette({ open, onClose, selectedConn, onNavigate, onGoTo
             grouped.map(({ type, items }) => (
               <div key={type}>
                 {/* Section header */}
-                <div style={{ padding: "12px 14px 4px", fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--t3)", ...(type === "object" ? { display: "flex", gap: 8 } : {}) }}>
+                <div className="aug-label" style={{ padding: "12px 14px 4px", ...(type === "object" ? { display: "flex", gap: 8 } : {}) }}>
                   {SECTION_LABELS[type]}
                   {type === "object" && foundNow && (
                     <span data-testid="objects-said" title={findDetail(foundNow)}

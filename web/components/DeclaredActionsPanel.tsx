@@ -335,7 +335,7 @@ function Ledger({ read, nameOf }: { read: Read<Declared[]>; nameOf: (id: string)
         : (
           <div style={{ overflowX: "auto" }}>
             <div role="table" aria-label="Declared actions" style={{ minWidth: 880 }}>
-              <div role="row" className="aug-fs-xs" style={{ ...REGISTER, ...MUTED, textTransform: "uppercase", letterSpacing: ".06em", padding: "0 0 6px 8px" }}>
+              <div role="row" className="aug-fs-xs" style={{ ...REGISTER, ...MUTED, padding: "0 0 6px 8px" }}>
                 <span role="columnheader">Action</span><span role="columnheader">Gate</span><span role="columnheader">On</span>
                 <span role="columnheader">Changes</span><span role="columnheader">Takes</span><span role="columnheader">Rules</span>
                 <span role="columnheader">Undo</span>
@@ -732,7 +732,7 @@ function Calls({ read }: { read: Read<{ sends: ActionSend[] }> }) {
           ) : (
             <div style={{ overflowX: "auto" }}>
               <div role="table" aria-label="Calls to other systems" style={{ minWidth: 860 }}>
-                <div role="row" className="aug-fs-xs" style={{ ...CALLS_GRID, ...MUTED, textTransform: "uppercase", letterSpacing: ".06em", padding: "0 0 6px" }}>
+                <div role="row" className="aug-fs-xs" style={{ ...CALLS_GRID, ...MUTED, padding: "0 0 6px" }}>
                   <span role="columnheader">Action</span><span role="columnheader">Status</span><span role="columnheader">Effect</span>
                   <span role="columnheader">Attempts</span><span role="columnheader">What settled it</span>
                   <span role="columnheader" style={{ textAlign: "right" }}>When</span>

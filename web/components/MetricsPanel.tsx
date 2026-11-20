@@ -1345,7 +1345,7 @@ export function MetricsPanel({ connId, schema, datasets = [] }: {
               {/* The register, as the Evidence → Action study draws it (§11.2: "a precise table, not cards"): what each
                   metric is, where it stands, its grain and date, unit, owner, the tables it reads, its tests and when it
                   was last approved. A row still opens in place to read and edit (the user, 2026-09-18). */}
-              <div className="aug-fs-xs" style={{ ...LIST_GRID, ...MUTED, textTransform: "uppercase", letterSpacing: ".06em", padding: "0 6px 6px" }}
+              <div className="aug-fs-xs" style={{ ...LIST_GRID, ...MUTED, padding: "0 6px 6px" }}
                 data-testid="metrics-register-head">
                 <span>Metric</span><span>State</span><span>Grain · dated by</span><span>Unit</span><span>Owner</span>
                 <span>Reads</span><span style={{ textAlign: "right" }}>Tests</span><span>Verified</span><span />

@@ -353,13 +353,7 @@ export function AutomationPalette({ connId, only, bindFilter, onClearBindFilter,
             const open = gatedOpen[group] ?? false;
             return (
               <div key={group} style={{ marginTop: 4 }}>
-                <div
-                  className="aug-fs-xs"
-                  style={{
-                    color: "var(--t3)", textTransform: "uppercase",
-                    letterSpacing: "0.06em", padding: "4px 4px 5px",
-                  }}
-                >
+                <div className="aug-label" style={{ padding: "4px 4px 5px" }}>
                   {GROUP_TITLE[group]}
                 </div>
                 {rows.map(entry => (

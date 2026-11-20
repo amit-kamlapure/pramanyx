@@ -25,13 +25,12 @@ import { NEEDS_EDGE } from "@/components/clarity/kit";
 const muted: React.CSSProperties = { color: "var(--t3)" };
 const tabular: React.CSSProperties = { fontVariantNumeric: "tabular-nums" };
 
-/** A section's small uppercase label, with what it says at its right end. */
+/** A section's label (12px semibold, sentence case), with what it says at its right end. */
 export function Label({ children, right }: { children: React.ReactNode; right?: React.ReactNode }) {
   return (
-    <div className="aug-fs-xs" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, color: "var(--t3)",
-                                        textTransform: "uppercase", letterSpacing: ".06em" }}>
+    <div className="aug-label" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
       {children}
-      {right && <span style={{ marginLeft: "auto", textTransform: "none", letterSpacing: 0 }}>{right}</span>}
+      {right && <span className="aug-fs-xs" style={{ marginLeft: "auto", fontWeight: 400, color: "var(--t3)" }}>{right}</span>}
     </div>
   );
 }

@@ -257,8 +257,8 @@ export function SavedQueryBar({
                 padding: "8px 12px", borderBottom: "1px solid var(--b0)",
               }}
             >
-              <span className="aug-fs-xs" style={{ color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em" }}>
-                Saved queries{list.length > 0 && <span style={{ textTransform: "none", letterSpacing: 0 }}> · {list.length}</span>}
+              <span className="aug-label">
+                Saved queries{list.length > 0 && ` · ${list.length}`}
               </span>
               <Button
                 variant="ghost" size="xs"

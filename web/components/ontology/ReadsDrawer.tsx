@@ -56,8 +56,7 @@ export function ReadsDrawer({ connectionId, schema, onClose }: {
       style={{ width: 400, flexShrink: 0, borderLeft: "1px solid var(--divide)", display: "flex", flexDirection: "column", minHeight: 0,
                background: "var(--bg-0)" }}>
       <header style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px 6px" }}>
-        <h3 className="aug-fs-xs"
-          style={{ margin: 0, color: "var(--t2)", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em" }}>
+        <h3 className="aug-label" style={{ margin: 0 }}>
           Reads · {state?.days ?? 30} days
         </h3>
         <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>least read first</span>

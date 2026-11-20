@@ -36,7 +36,7 @@ function FactRows({ part }: { part: Extract<AnswerPart, { kind: "fact_set" }> })
   return (
     <div className="flex flex-col gap-1">
       {part.title && (
-        <span className="aug-text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--t3)" }}>
+        <span className="aug-label">
           {part.title}
         </span>
       )}

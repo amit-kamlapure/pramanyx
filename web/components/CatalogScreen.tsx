@@ -281,7 +281,7 @@ export function CatalogScreen({ connections, selectedConn, onSelect, onDeleteCon
       nodes.push(
         <div key={`sec-${section.id}`} style={{ padding: "14px 12px 5px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ fontSize: 11, fontWeight: 600, color: "var(--t3)", textTransform: "uppercase", letterSpacing: "0.09em" }}>
+            <span className="aug-label">
               {section.label}
             </span>
           </div>
@@ -480,7 +480,7 @@ export function CatalogScreen({ connections, selectedConn, onSelect, onDeleteCon
         <div style={{ display: "flex", alignItems: "center", padding: "10px 12px 4px", flexShrink: 0, gap: 8 }}>
           <Button variant="plain" onClick={() => setSel(null)} title="Catalog home"
             className="h-auto p-0 justify-start"
-            style={{ fontSize: 12, fontWeight: 600, color: sel ? "var(--t3)" : "var(--t1)", textTransform: "uppercase", letterSpacing: "0.06em", flex: 1, textAlign: "left", background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit" }}
+            style={{ fontSize: 12, fontWeight: 600, color: sel ? "var(--t3)" : "var(--t1)", flex: 1, textAlign: "left", background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit" }}
             onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "var(--t1)"}
             onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = sel ? "var(--t3)" : "var(--t1)"}
           >Catalog</Button>

@@ -88,7 +88,7 @@ export function SourceMapping({ detail, binding, columns, said }: {
     background: active ? "var(--bg-sel)" : undefined, borderRadius: "var(--r1)", color: muted ? "var(--t3)" : "var(--t1)",
   });
   const column: React.CSSProperties = { background: "var(--bg-2)", border: "1px solid var(--card-edge)", borderRadius: "var(--r2)", padding: 4 };
-  const head: React.CSSProperties = { color: "var(--t3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em", padding: "0 8px 6px", ...CLIP };
+  const head: React.CSSProperties = { color: "var(--t3)", fontWeight: 600, padding: "0 8px 6px", ...CLIP };
   const note: React.CSSProperties = { margin: 0, padding: "6px 8px", color: "var(--t3)" };
   const readsTable = binding.reads === "table" && !!binding.table;
   const isDisplay = (p: TypeProperty) => detail.display_property?.property === p.name;

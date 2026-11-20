@@ -310,7 +310,7 @@ function Rule({ name, action, first = false, children }: { name: string; action?
     <div role="group" aria-label={name} data-testid="policy-rule"
       style={{ display: "grid", gridTemplateColumns: "minmax(90px, 150px) minmax(0, 1fr) auto", gap: "4px 18px",
         alignItems: "start", padding: "12px 2px", ...(first ? {} : RULE) }}>
-      <div className="aug-fs-xs" style={{ ...MUTED, textTransform: "uppercase", letterSpacing: ".06em", paddingTop: 3 }}>{name}</div>
+      <div className="aug-fs-xs" style={{ ...MUTED, paddingTop: 3 }}>{name}</div>
       <div style={{ minWidth: 0 }}>{children}</div>
       <div style={{ ...ROW, flexWrap: "nowrap" }}>{action}</div>
     </div>

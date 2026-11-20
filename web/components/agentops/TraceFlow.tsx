@@ -802,8 +802,7 @@ const NODE_TYPES = { traceNode: NodeCard, bandNode: BandCard };
 function RailSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div style={{ padding: "8px 10px 6px" }}>
-      <div className="aug-fs-xs" style={{ color: "var(--t3)", letterSpacing: "0.06em",
-        textTransform: "uppercase", marginBottom: 3 }}>{title}</div>
+      <div className="aug-label" style={{ marginBottom: 3 }}>{title}</div>
       {children}
     </div>
   );

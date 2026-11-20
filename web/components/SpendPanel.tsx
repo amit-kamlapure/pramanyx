@@ -67,13 +67,12 @@ const USAGE_SCAN = 5000;
 
 const say = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-/** A section's small uppercase label, with what it says at its right end. */
+/** A section's label (12px semibold, sentence case), with what it says at its right end. */
 function Label({ children, right }: { children: ReactNode; right?: ReactNode }) {
   return (
-    <div className="aug-fs-xs" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, color: "var(--t3)",
-      textTransform: "uppercase", letterSpacing: ".06em" }}>
+    <div className="aug-label" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
       {children}
-      {right && <span style={{ marginLeft: "auto", textTransform: "none", letterSpacing: 0 }}>{right}</span>}
+      {right && <span className="aug-fs-xs" style={{ marginLeft: "auto", fontWeight: 400, color: "var(--t3)" }}>{right}</span>}
     </div>
   );
 }

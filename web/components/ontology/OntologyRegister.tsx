@@ -76,7 +76,7 @@ const REGISTER: React.CSSProperties = {
   display: "grid", alignItems: "center", columnGap: 14,
   gridTemplateColumns: "minmax(200px, 2fr) minmax(90px, .8fr) 90px minmax(110px, 1fr) minmax(120px, 1fr) 50px minmax(120px, 1.1fr) minmax(110px, 1fr) minmax(150px, 1.2fr)",
 };
-const HEAD: React.CSSProperties = { ...MUTED, textTransform: "uppercase", letterSpacing: ".06em" };
+const HEAD: React.CSSProperties = MUTED;
 
 // ── The register ───────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -132,14 +132,14 @@ export function OntologyRegister({ map, lead, sources, onOpen, onOpenProcess, de
               if (!rows.length) return null;
               return (
                 <div key={g.id} role="rowgroup" data-testid={`ontology-group-${g.id}`}>
-                  <div className="aug-fs-xs" style={{ ...HEAD, padding: "12px 0 4px 8px" }}>{g.label}</div>
+                  <div className="aug-label" style={{ padding: "12px 0 4px 8px" }}>{g.label}</div>
                   {rows.map(t => <TypeRow key={t.object_type} t={t} processes={processesOf(t.object_type)} sources={sources} onOpen={onOpen} />)}
                 </div>
               );
             })}
             {parts.length > 0 && (
               <div role="rowgroup" data-testid="ontology-group-parts">
-                <div className="aug-fs-xs" style={{ ...HEAD, padding: "12px 0 4px 8px" }}>Parts</div>
+                <div className="aug-label" style={{ padding: "12px 0 4px 8px" }}>Parts</div>
                 {parts.map(t => (
                   <TypeRow key={t.object_type} t={t} processes={processesOf(t.object_type)} sources={sources} onOpen={onOpen}
                     partOf={name(t.absorbed_into ?? "")} />

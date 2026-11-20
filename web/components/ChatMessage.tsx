@@ -712,7 +712,7 @@ function Section({
 function DossierReportView({ dossier, onDeeper }: { dossier: FindingDossier; onDeeper?: () => void }) {
   return (
     <div style={{ display: "flex", flexDirection: "column" as const, gap: 14 }}>
-      <div style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 11, color: "var(--t3)", textTransform: "uppercase" as const, letterSpacing: ".06em" }}>
+      <div className="aug-label" style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
         <span>Trace · derived during exploration — instant, no re-run</span>
       </div>
       {dossier.finding && (
@@ -721,7 +721,7 @@ function DossierReportView({ dossier, onDeeper }: { dossier: FindingDossier; onD
       <DossierTrace dossier={dossier} />
       {dossier.sql && (
         <div>
-          <div style={{ fontSize: 11, color: "var(--t3)", textTransform: "uppercase" as const, letterSpacing: ".06em", marginBottom: 6 }}>Source query</div>
+          <div className="aug-label" style={{ marginBottom: 6 }}>Source query</div>
           <pre style={{ margin: 0, padding: "12px 14px", borderRadius: "var(--r2)", background: "var(--bg-2)", fontSize: 12, fontFamily: "var(--font-code)", color: "var(--t2)", whiteSpace: "pre-wrap" as const, wordBreak: "break-word" as const, lineHeight: 1.55 }}>{dossier.sql}</pre>
         </div>
       )}
@@ -880,7 +880,7 @@ function PlaybookRefs({ refs }: { refs: PlaybookRef[] }) {
         <span className="shrink-0 text-amber-400/90">
           <Icon name="warning" size={16} label="Playbook" />
         </span>
-        <span className="aug-fs-xs font-medium uppercase tracking-wide text-amber-400/90">Playbook referenced</span>
+        <span className="aug-label" style={{ color: "var(--amb4)" }}>Playbook referenced</span>
         <span className="aug-fs-xs text-zinc-500">— {items.length} item{items.length !== 1 ? "s" : ""}</span>
         <span className="ml-auto shrink-0 text-amber-600">{open ? "▲" : "▼"}</span>
       </Button>

@@ -133,8 +133,7 @@ function ContextBody({ block, src, ctx }: BodyProps) {
     : undefined;
   return (
     <div data-testid="edition-context" data-kind={src.kind}>
-      <div className="aug-fs-xs" style={{ textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 6,
-                                          color: running ? "var(--amb4)" : "var(--t3)" }}>{kicker}</div>
+      <div className="aug-label" style={{ marginBottom: 6, color: running ? "var(--amb4)" : undefined }}>{kicker}</div>
       <p className="aug-fs-h2" style={{ color: "var(--t1)", margin: 0 }}>{head}</p>
       {/* the work's own summary only when the edition wrote nothing of its own about it: both said the same thing twice */}
       {more && (src.kind !== "analysis" || !block.text) && <p className="aug-fs-ui" style={{ color: "var(--t2)", margin: "6px 0 0" }}>{more}</p>}
@@ -419,8 +418,7 @@ function BlockCard({ block: written, ctx }: { block: EditionBlock; ctx: Ctx }) {
       {(block.kicker || title) && block.type !== "control" && (
         <>
           {trail.length > 0 ? <DrillTrail card={written.id} trail={trail} ctx={ctx} />
-            : block.kicker && <div className="aug-fs-xs" style={{ letterSpacing: "0.08em", textTransform: "uppercase",
-                                                                  color: decision ? "var(--amb4)" : "var(--t3)", marginBottom: 6 }}>{block.kicker}</div>}
+            : block.kicker && <div className="aug-label" style={{ color: decision ? "var(--amb4)" : undefined, marginBottom: 6 }}>{block.kicker}</div>}
           {title && <h3 className="aug-fs-h1" style={{ color: "var(--t1)", fontWeight: 600, margin: "0 0 8px", lineHeight: 1.3 }}>{title}</h3>}
         </>
       )}

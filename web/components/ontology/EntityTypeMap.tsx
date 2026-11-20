@@ -541,8 +541,7 @@ function TypeRail({ types, parts, selected, query, onQuery, onPick, processes, r
         {shown.length === 0 && shownParts.length === 0 && <EmptyState variant="inline" title={`No type matches “${query.trim()}”.`} />}
         {shown.map((t) => row(t, false))}
         {shownParts.length > 0 && (
-          <div className="aug-fs-xs" style={{ color: "var(--t3)", padding: "8px 8px 2px", textTransform: "uppercase",
-                                              letterSpacing: ".06em", fontWeight: 600 }}>
+          <div className="aug-label" style={RAIL_HEADING}>
             Parts
           </div>
         )}
@@ -556,9 +555,8 @@ function TypeRail({ types, parts, selected, query, onQuery, onPick, processes, r
   );
 }
 
-const RAIL_HEADING: React.CSSProperties = {
-  color: "var(--t3)", padding: "8px 8px 2px", textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 600,
-};
+/** A rail's section heading, with `className="aug-label"`. */
+const RAIL_HEADING: React.CSSProperties = { padding: "8px 8px 2px" };
 
 function breachWords(rate: number | null): string {
   return rate == null ? "not counted" : `${(rate * 100).toFixed(2)}% broken`;
@@ -578,7 +576,7 @@ function DeclarationRows({ processes, rules, openProcess, onPickProcess, onPickT
   if (!processes.length && !rules.length && !onNewProcess && !onNewAction) return null;
   return (
     <>
-      {(processes.length > 0 || onNewProcess) && <div className="aug-fs-xs" style={RAIL_HEADING}>Processes</div>}
+      {(processes.length > 0 || onNewProcess) && <div className="aug-label" style={RAIL_HEADING}>Processes</div>}
       {processes.map((p) => {
         const current = p.id === openProcess;
         return (
@@ -602,14 +600,14 @@ function DeclarationRows({ processes, rules, openProcess, onPickProcess, onPickT
           <Icon name="plus" size={12} /> New process
         </Button>
       )}
-      {onNewAction && <div className="aug-fs-xs" style={RAIL_HEADING}>Actions</div>}
+      {onNewAction && <div className="aug-label" style={RAIL_HEADING}>Actions</div>}
       {onNewAction && (
         <Button variant="ghost" size="sm" onClick={onNewAction} data-testid="entity-rail-new-action"
           className="justify-start py-1.5" title="Decide an action people can press on an object — what it does, when it is allowed, who approves">
           <Icon name="plus" size={12} /> New action
         </Button>
       )}
-      {rules.length > 0 && <div className="aug-fs-xs" style={RAIL_HEADING}>Rules</div>}
+      {rules.length > 0 && <div className="aug-label" style={RAIL_HEADING}>Rules</div>}
       {rules.map((r) => (
         <Button key={r.id} variant="plain" size="sm" onClick={() => onPickType(r.entity)} data-testid="entity-rail-rule"
           className="h-auto w-full justify-start py-1.5" title={`Open ${r.entity}, where ${r.display_name} reads as a segment`}>
@@ -664,7 +662,7 @@ function ExplorerDraft({ draft, explore, confirm, onOpen, reviewSignal = 0 }: {
   return (
     <div ref={box} style={{ padding: "12px 10px 8px", display: "flex", flexDirection: "column", gap: 6 }}
       data-testid="explorer-draft">
-      <div className="aug-fs-xs" style={{ color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 600 }}>
+      <div className="aug-label">
         Explorer draft
       </div>
       {run && counts ? (

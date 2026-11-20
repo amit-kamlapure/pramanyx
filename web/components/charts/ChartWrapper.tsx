@@ -49,7 +49,7 @@ export function ChartWrapper({
         <div className="flex items-center justify-between gap-2 min-h-[20px]">
           <div className="flex flex-col gap-0">
             {title && (
-              <span className="aug-text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--t3)" }}>
+              <span className="aug-label">
                 {title}
               </span>
             )}

@@ -18,7 +18,7 @@ import {
   importOntologyTree, listOntologyOverrides, listRoutingProposals,
   type OntologyOverrideRow, type RoutingProposal,
 } from "@/lib/api";
-import { countNoun } from "@/lib/format";
+import { countNoun, sentenceCase } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 
@@ -111,7 +111,7 @@ export function OverridesDrawer({ connId, schema, onClose, onChanged }: {
         {overrides.map((o, i) => (
           <div key={i} className="bg-[var(--gray-a3)] rounded-[var(--r2)] p-2">
             <div className="flex items-center gap-2">
-              <span className="aug-fs-xs text-zinc-500 uppercase">{o.target_kind}</span>
+              <span className="aug-fs-xs text-zinc-500">{sentenceCase(o.target_kind.replace(/_/g, " "))}</span>
               <span className="aug-fs-chrome text-zinc-200 truncate">{o.target_id}</span>
               <Button size="xs" variant="ghost" className="ml-auto text-zinc-500 hover:text-red-400"
                 disabled={busy}

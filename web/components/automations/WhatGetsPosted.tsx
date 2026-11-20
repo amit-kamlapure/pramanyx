@@ -36,9 +36,6 @@ const FROM_LABEL: Record<From, string> = {
   main: "The answer's main result", over_time: "A result over time", every: "Every result, one picture each",
 };
 
-const sectionLabel: React.CSSProperties = {
-  color: "var(--t3)", textTransform: "uppercase", letterSpacing: "0.06em",
-};
 const why: React.CSSProperties = { color: "var(--t3)" };
 
 function refOf(v: unknown): string {
@@ -134,7 +131,7 @@ export function WhatGetsPosted({ automationId, index, e, siblings, onChange, onO
       <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
         {question && (
           <section style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <span className="aug-fs-xs" style={sectionLabel}>The question it answers · {sourceAlias}</span>
+            <span className="aug-label">The question it answers · {sourceAlias}</span>
             <div className="aug-fs-chrome" style={{ color: "var(--t2)", background: "var(--gray-a3)", padding: "8px 10px", borderRadius: "var(--r2)" }}>{question}</div>
             {onOpenStep && (
               <div><Button size="xs" variant="secondary" onClick={() => onOpenStep(sourceAlias)}>Edit the question</Button></div>
@@ -143,7 +140,7 @@ export function WhatGetsPosted({ automationId, index, e, siblings, onChange, onO
         )}
 
         <section style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <span className="aug-fs-xs" style={sectionLabel}>The words</span>
+          <span className="aug-label">The words</span>
           <Segmented<Words> label="The words" value={words} size="1"
             onChange={w => set(writeWords(w, sourceAlias || "step1"))}
             options={[{ value: "summary", label: "Summary", title: "The summary the deep analysis wrote" },
@@ -159,7 +156,7 @@ export function WhatGetsPosted({ automationId, index, e, siblings, onChange, onO
         </section>
 
         <section style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <span className="aug-fs-xs" style={sectionLabel}>Picture</span>
+          <span className="aug-label">Picture</span>
           <Segmented<Picture> label="Picture" value={picture} onChange={v => set({ picture: v })}
             options={[{ value: "none", label: "None" }, { value: "table", label: "Table" }, { value: "chart", label: "Chart" }]} />
           <span className="aug-fs-xs" style={why}>Posted in the message&apos;s thread, so the message stays the answer.</span>
@@ -167,7 +164,7 @@ export function WhatGetsPosted({ automationId, index, e, siblings, onChange, onO
 
         {picture === "chart" && (
           <section style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <span className="aug-fs-xs" style={sectionLabel}>Kind of chart</span>
+            <span className="aug-label">Kind of chart</span>
             <Segmented<Kind> label="Kind of chart" value={kind} onChange={v => set({ chart_kind: v })}
               options={offered.map(k => ({ value: k, label: KIND_LABEL[k] }))} />
             {leftOut.length > 0 && (
@@ -182,7 +179,7 @@ export function WhatGetsPosted({ automationId, index, e, siblings, onChange, onO
         {picture !== "none" && (
           <>
             <section style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <span className="aug-fs-xs" style={sectionLabel}>Drawn from</span>
+              <span className="aug-label">Drawn from</span>
               <SelectField value={from} aria-label="Drawn from" onChange={ev => set({ picture_from: ev.target.value })}>
                 {(Object.keys(FROM_LABEL) as From[]).map(f => <option key={f} value={f}>{FROM_LABEL[f]}</option>)}
               </SelectField>
@@ -201,7 +198,7 @@ export function WhatGetsPosted({ automationId, index, e, siblings, onChange, onO
             </section>
 
             <section style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <span className="aug-fs-xs" style={sectionLabel}>Title</span>
+              <span className="aug-label">Title</span>
               <Segmented<Titling> label="Title" value={titling} onChange={v => set({ picture_title: v })}
                 options={[{ value: "sentence", label: "The result's own sentence" }, { value: "name", label: "The automation's name" },
                           { value: "custom", label: "My own words" }]} />
@@ -213,7 +210,7 @@ export function WhatGetsPosted({ automationId, index, e, siblings, onChange, onO
 
             {(nameRows.length > 0 || axis) && (
               <section style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <span className="aug-fs-xs" style={sectionLabel}>Names</span>
+                <span className="aug-label">Names</span>
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <tbody>
                     {nameRows.map(col => (
@@ -247,7 +244,7 @@ export function WhatGetsPosted({ automationId, index, e, siblings, onChange, onO
       <div data-testid="post-preview" style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 0,
         // The post stays in view while its settings scroll beside it.
         position: "sticky", top: 0, alignSelf: "start" }}>
-        <span className="aug-fs-xs" style={sectionLabel}>As Slack will show it{preview?.run_at ? ` · from the run at ${preview.run_at.slice(0, 16).replace("T", " ")}Z` : ""}</span>
+        <span className="aug-label">As Slack will show it{preview?.run_at ? ` · from the run at ${preview.run_at.slice(0, 16).replace("T", " ")}Z` : ""}</span>
         {!automationId && <span className="aug-fs-xs" style={why}>Save the chain once to see its post here.</span>}
         {error && <span className="aug-fs-xs" style={{ ...why, color: "var(--red4)" }}>The preview could not be drawn: {error}</span>}
         {preview?.said && <span className="aug-fs-xs" style={why}>{preview.said}</span>}

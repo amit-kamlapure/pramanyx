@@ -77,7 +77,7 @@ export function EntityShape({ detail, connectionId, schema, editing, onChanged }
         {problem && <p className="aug-fs-sm" role="alert" style={{ color: "var(--red4)", margin: "0 0 10px" }}>{problem}</p>}
         {shapeCatalogue().map((group) => (
           <section key={group.role || "plain"} aria-label={SAYS[group.role]} style={{ marginBottom: 14 }}>
-            <div className="aug-fs-xs" style={{ color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6 }}>{SAYS[group.role]}</div>
+            <div className="aug-label" style={{ marginBottom: 6 }}>{SAYS[group.role]}</div>
             <div className="aug-entity-shapes">
               {group.shapes.map((shape) => (
                 <Button key={shape} variant="ghost" size="xs" className={`aug-entity-shape-tile${chosen === shape ? " is-chosen" : ""}`}

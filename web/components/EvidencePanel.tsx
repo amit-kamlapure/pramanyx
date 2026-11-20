@@ -250,7 +250,7 @@ export function EvidencePanel({ connectionId, canvasId, onInvestigate: reexamine
       ) : (
         <div style={{ overflowX: "auto" }}>
           <div role="table" aria-label="Claims" style={{ minWidth: 660 }}>
-            <div role="row" className="aug-fs-xs" style={{ ...CLAIM_GRID, ...MUTED, textTransform: "uppercase", letterSpacing: ".06em", padding: "0 0 6px 8px" }}>
+            <div role="row" className="aug-fs-xs" style={{ ...CLAIM_GRID, ...MUTED, padding: "0 0 6px 8px" }}>
               <span role="columnheader">Claim</span><span role="columnheader">Review</span>
               <span role="columnheader">Mentions</span><span role="columnheader">Reads</span>
               <span role="columnheader" style={{ textAlign: "right" }}>Recorded</span>

@@ -259,15 +259,15 @@ function TableCard({
           <DerivedQuantities tp={tableProfile} />
           <div className="aug-fs-xs" style={{
             display: "grid", gridTemplateColumns: GRID,
-            padding: "5px 14px 4px", fontWeight: 700, textTransform: "uppercase",
-            letterSpacing: "0.06em", color: "var(--t3)", borderBottom: "1px solid var(--b0)",
+            padding: "5px 14px 4px", fontWeight: 700,
+            color: "var(--t3)", borderBottom: "1px solid var(--b0)",
           }}>
             <span>Column</span>
             <span>Type</span>
             <span>Nulls</span>
             <span>Distinct</span>
             <span>Shape</span>
-            <span>Values / Range</span>
+            <span>Values / range</span>
           </div>
           {columns.map(col => (
             <div key={col.column}>

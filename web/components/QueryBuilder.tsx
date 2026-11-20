@@ -3,7 +3,7 @@ import { ErrorState } from "@/components/ui/states";
 import { Pending } from "@/components/ui/motion";
 
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
-import { formatCount, isNumericType } from "@/lib/format";
+import { formatCount, isNumericType, sentenceCase } from "@/lib/format";
 import {
   getMetrics, runDirectQuery,
   createCanvas, updateCanvas, suggestCanvasName, getMeasureGrains, getColumnDistinct,
@@ -655,7 +655,7 @@ function AggPicker({ col, table, onAdd, onCancel }: {
           <Button variant="plain" size="xs" onClick={onCancel} className="h-auto p-0.5 font-normal text-lg leading-none text-zinc-500 hover:text-zinc-300 hover:bg-transparent dark:hover:bg-transparent">×</Button>
         </div>
 
-        <p className="aug-fs-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2.5">Aggregation function</p>
+        <p className="aug-label mb-2.5">Aggregation function</p>
         <div className="grid grid-cols-5 gap-2 mb-5">
           {AGG_OPTIONS.map(o => (
             <Button variant="plain" size="xs" key={o.fn} onClick={() => changeAgg(o.fn as AggFn)} title={o.hint}
@@ -669,7 +669,7 @@ function AggPicker({ col, table, onAdd, onCancel }: {
 
         {agg === "CUSTOM" && (
           <div className="mb-5">
-            <p className="aug-fs-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">SQL expression</p>
+            <p className="aug-label mb-2">SQL expression</p>
             <Input ref={exprRef} value={expr} onChange={e => setExpr(e.target.value)}
               placeholder="e.g. ROUND(SUM(revenue) / COUNT(*), 2)"
               className="w-full" />
@@ -677,14 +677,14 @@ function AggPicker({ col, table, onAdd, onCancel }: {
         )}
 
         <div className="mb-5">
-          <p className="aug-fs-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">Column alias</p>
+          <p className="aug-label mb-2">Column alias</p>
           <Input value={alias} onChange={e => { aliasEdited.current = true; setAlias(e.target.value); }}
             placeholder="metric_name"
             className="w-full" />
         </div>
 
         <div className="mb-6 px-4 py-3 rounded-md bg-zinc-800/70">
-          <p className="aug-fs-xs text-zinc-500 uppercase tracking-wider mb-1.5">SQL preview</p>
+          <p className="aug-label mb-1.5">SQL preview</p>
           <p className="aug-fs-ui font-mono text-emerald-400 break-all">
             {preview} <span className="text-zinc-500">AS</span> {alias || "alias"}
           </p>
@@ -1799,8 +1799,8 @@ export function QueryBuilder({
             <div className="flex items-center gap-1 px-4 py-1.5 shrink-0">
               {(["data","customize"] as const).map(tab => (
                 <Button variant="plain" key={tab} onClick={()=>{ setRailTab(tab); if (controlsCollapsed) setControlsCollapsed(false); }}
-                  className={`h-auto aug-fs-sm font-semibold uppercase tracking-wide px-3 py-1.5 rounded-[var(--r3)] transition ${railTab===tab ? "bg-[var(--gray-a5)] hover:bg-[var(--gray-a5)] dark:hover:bg-[var(--gray-a5)] text-zinc-100 hover:text-zinc-100" : "text-zinc-500 hover:text-zinc-300 hover:bg-[var(--gray-a3)] dark:hover:bg-[var(--gray-a3)]"}`}>
-                  {tab}
+                  className={`h-auto aug-fs-sm font-semibold px-3 py-1.5 rounded-[var(--r3)] transition ${railTab===tab ? "bg-[var(--gray-a5)] hover:bg-[var(--gray-a5)] dark:hover:bg-[var(--gray-a5)] text-zinc-100 hover:text-zinc-100" : "text-zinc-500 hover:text-zinc-300 hover:bg-[var(--gray-a3)] dark:hover:bg-[var(--gray-a3)]"}`}>
+                  {sentenceCase(tab)}
                 </Button>
               ))}
               <Button variant="ghost" size="icon-xs" onClick={()=>setControlsCollapsed(c=>!c)} title={controlsCollapsed?"Expand panel":"Collapse panel"}
@@ -1815,7 +1815,7 @@ export function QueryBuilder({
                   Replaces both the old chart-type gallery and the Chart/Table toggle above the chart. */}
               {result && !result.error && (
                 <div className="pb-1 flex items-center gap-2">
-                  <p className="aug-fs-xs font-semibold uppercase tracking-wider text-zinc-500">Display</p>
+                  <p className="aug-label">Display</p>
                   <SelectField value={vizType} onChange={e=>setVizType(e.target.value as VizMode)}
                     className="min-w-[150px]">
                     {availTypes.length > 0 && (
@@ -1990,7 +1990,7 @@ export function QueryBuilder({
                 <div className="rounded-md bg-[var(--gray-a3)]">
                   <Button variant="plain" onClick={()=>setJoinsOpen(o=>!o)} className={`w-full h-auto justify-start rounded-none font-normal gap-2 px-3 py-2 text-left hover:bg-transparent dark:hover:bg-transparent ${SVG_SIZE_AUTO}`}>
                     <Icon name="chevr" size={11} className={`shrink-0 text-zinc-500 transition-transform ${joinsOpen?"rotate-90":""}`} />
-                    <span className="aug-fs-xs font-semibold uppercase tracking-wider text-zinc-500">Resolved joins · {allTables.length} tables</span>
+                    <span className="aug-label">Resolved joins · {allTables.length} tables</span>
                     {fanOutRisk && (
                       <span title="One-to-many joins can repeat rows from the parent table, inflating SUM/COUNT. Verify the aggregation grain."
                         className="ml-auto flex items-center gap-1 aug-fs-xs text-amber-400/90 bg-amber-500/10 rounded px-1.5 py-0.5">⚠ fan-out</span>
@@ -2180,19 +2180,19 @@ export function QueryBuilder({
               ) : (
                 <>
                   <div>
-                    <p className="aug-fs-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">Chart title</p>
+                    <p className="aug-label mb-2">Chart title</p>
                     <Input value={chartTitle} onChange={e=>setChartTitle(e.target.value)} placeholder="(auto)"
                       className="w-full" />
                   </div>
                   <div>
-                    <p className="aug-fs-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">Labels</p>
+                    <p className="aug-label mb-2">Labels</p>
                     <label className="flex items-center gap-2 cursor-pointer">
                       <Checkbox checked={showDataLabels} onChange={e=>setShowDataLabels(e.target.checked)} />
                       <span className="aug-fs-sm text-zinc-300">Show data labels on the chart</span>
                     </label>
                   </div>
                   <div>
-                    <p className="aug-fs-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">Color scheme</p>
+                    <p className="aug-label mb-2">Color scheme</p>
                     <SelectField value={colorScheme} onChange={e=>setColorScheme(e.target.value)}
                       className="w-full">
                       {COLOR_SCHEMES.map(([v,l])=><option key={v} value={v}>{l}</option>)}
@@ -2200,14 +2200,14 @@ export function QueryBuilder({
                     <p className="aug-fs-xs text-zinc-600 mt-1">Applies to multi-series charts.</p>
                   </div>
                   <div>
-                    <p className="aug-fs-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">Number format</p>
+                    <p className="aug-label mb-2">Number format</p>
                     <SelectField value={numberFormat} onChange={e=>setNumberFormat(e.target.value)}
                       className="w-full">
                       {NUMBER_FORMATS.map(([v,l])=><option key={v} value={v}>{l}</option>)}
                     </SelectField>
                   </div>
                   <div>
-                    <p className="aug-fs-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">Legend</p>
+                    <p className="aug-label mb-2">Legend</p>
                     <SelectField value={legendPos} onChange={e=>setLegendPos(e.target.value)}
                       className="w-full">
                       {LEGEND_POS.map(([v,l])=><option key={v} value={v}>{l}</option>)}
@@ -2215,12 +2215,12 @@ export function QueryBuilder({
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <p className="aug-fs-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">X axis title</p>
+                      <p className="aug-label mb-2">X axis title</p>
                       <Input value={xTitle} onChange={e=>setXTitle(e.target.value)} placeholder="(auto)"
                         className="w-full" />
                     </div>
                     <div>
-                      <p className="aug-fs-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">Y axis title</p>
+                      <p className="aug-label mb-2">Y axis title</p>
                       <Input value={yTitle} onChange={e=>setYTitle(e.target.value)} placeholder="(auto)"
                         className="w-full" />
                     </div>

@@ -264,7 +264,7 @@ function RetryPanel({ ep, connectionId, errorMsg, canvasId }: { ep: ExplorationE
 
   return (
     <div className="rounded-md p-3 space-y-2 mt-2" style={{ background: "var(--bg-0)" }}>
-      <p className="aug-fs-xs uppercase tracking-widest" style={{ color: "var(--t3)" }}>Guidance (optional)</p>
+      <p className="aug-label">Guidance (optional)</p>
       <div className="flex gap-2">
         <Input type="text" value={hint} onChange={e => setHint(e.target.value)}
           onKeyDown={e => e.key === "Enter" && !loading && handleRetry()}
@@ -353,14 +353,14 @@ function ExpandedDetail({ ep, connectionId, canvasId }: { ep: ExplorationEpisode
     <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: "12px 4px 8px" }}>
       {/* SQL */}
       <div>
-        <p className="aug-fs-xs" style={{ fontFamily: "var(--font-mono)", color: "var(--t3)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 6 }}>SQL</p>
+        <p className="aug-label" style={{ marginBottom: 6 }}>SQL</p>
         <pre className="aug-fs-xs" style={{ fontFamily: "var(--font-code)", color: "var(--t3)", background: "var(--bg-0)", borderRadius: 4, padding: "8px 10px", overflowX: "auto", whiteSpace: "pre-wrap", wordBreak: "break-all", lineHeight: 1.6, margin: 0 }}>
           {ep.sql || "(no sql)"}
         </pre>
       </div>
       {/* Result */}
       <div>
-        <p className="aug-fs-xs" style={{ fontFamily: "var(--font-mono)", color: "var(--t3)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 6 }}>Result</p>
+        <p className="aug-label" style={{ marginBottom: 6 }}>Result</p>
         <pre className="aug-fs-xs" style={{ fontFamily: "var(--font-code)", color: isError ? "var(--red4)" : "var(--t3)", background: isError ? "var(--red1)" : "var(--code-bg)", borderRadius: 4, padding: "8px 10px", overflowX: "auto", whiteSpace: "pre-wrap", wordBreak: "break-all", lineHeight: 1.6, margin: 0 }}>
           {obsPreview}
         </pre>
@@ -368,7 +368,7 @@ function ExpandedDetail({ ep, connectionId, canvasId }: { ep: ExplorationEpisode
       {/* Query intent */}
       {ep.think && (
         <div>
-          <p className="aug-fs-xs" style={{ fontFamily: "var(--font-mono)", color: "var(--t3)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 4 }}>Query intent</p>
+          <p className="aug-label" style={{ marginBottom: 4 }}>Query intent</p>
           <p className="aug-fs-sm" style={{ color: "var(--t3)", lineHeight: 1.55, margin: 0 }}>{ep.think}</p>
         </div>
       )}
@@ -409,7 +409,6 @@ function LogTable({ items, connectionId, canvasId, sortCol, sortDir, onSort }: L
     padding: "7px 8px",
     textAlign: "left",
     fontFamily: "var(--font-mono)", color: "var(--t3)",
-    textTransform: "uppercase", letterSpacing: "0.07em",
     borderBottom: "1px solid var(--b2)", fontWeight: 500,
     whiteSpace: "nowrap",
     userSelect: "none",
@@ -439,22 +438,22 @@ function LogTable({ items, connectionId, canvasId, sortCol, sortDir, onSort }: L
               #<SortIcon active={sortCol === "seq"} dir={sortDir} />
             </TableHead>
             <TableHead {...thClick("ts")}>
-              timestamp<SortIcon active={sortCol === "ts"} dir={sortDir} />
+              Timestamp<SortIcon active={sortCol === "ts"} dir={sortDir} />
             </TableHead>
             <TableHead {...thClick("type")}>
-              type<SortIcon active={sortCol === "type"} dir={sortDir} />
+              Type<SortIcon active={sortCol === "type"} dir={sortDir} />
             </TableHead>
             <TableHead {...thClick("message")}>
-              message<SortIcon active={sortCol === "message"} dir={sortDir} />
+              Message<SortIcon active={sortCol === "message"} dir={sortDir} />
             </TableHead>
             <TableHead {...thClick("status")}>
-              status<SortIcon active={sortCol === "status"} dir={sortDir} />
+              Status<SortIcon active={sortCol === "status"} dir={sortDir} />
             </TableHead>
             <TableHead {...thClick("rows")} style={{ ...TH, textAlign: "right", color: sortCol === "rows" ? "var(--blue4)" : "var(--t3)", cursor: "pointer" }}>
-              rows<SortIcon active={sortCol === "rows"} dir={sortDir} />
+              Rows<SortIcon active={sortCol === "rows"} dir={sortDir} />
             </TableHead>
             <TableHead {...thClick("object")}>
-              object<SortIcon active={sortCol === "object"} dir={sortDir} />
+              Object<SortIcon active={sortCol === "object"} dir={sortDir} />
             </TableHead>
             <TableHead className="aug-fs-xs" style={{ ...TH, cursor: "default" }} />
           </TableRow>

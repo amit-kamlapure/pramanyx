@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { ExplorationReport as ExplorationReportType, SubQuestion, SubQuestionAnswer } from "@/lib/types";
 import { ResultChartCard } from "@/components/charts/ResultChartCard";
 import { BriefDetails, BriefDetailBlock, renderEmphasis } from "@/components/brief/Brief";
-import { stripPlannerNotes } from "@/lib/format";
+import { sentenceCase, stripPlannerNotes } from "@/lib/format";
 import { recordVerdict } from "@/lib/api";
 import { soleSqlOfSteps } from "@/lib/verdictSql";
 import { FixItForm } from "@/components/FixItForm";
@@ -35,9 +35,9 @@ const PURPOSE_STYLE: Record<string, { label: string; chip: string; icon: string 
   synthesis:    { label: "Synthesis",    icon: "✦", chip: "bg-[var(--gray-a3)] text-zinc-400"   },
 };
 
-// One small uppercase section label, used everywhere for a consistent rhythm.
+// One section label (12px semibold sentence case), used everywhere for a consistent rhythm.
 function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <p className="aug-fs-xs uppercase tracking-wide text-zinc-500">{children}</p>;
+  return <p className="aug-label">{children}</p>;
 }
 
 // ── Sub-question step — chart + table shown upfront, only SQL collapsed ────────
@@ -98,7 +98,7 @@ function SubQuestionCard({
           {/* Insight */}
           {answer.insight && answer.insight !== answer.answer && stripPlannerNotes(answer.insight) && (
             <p className="aug-fs-sm text-zinc-400 leading-relaxed pt-2">
-              <span className="text-zinc-500 uppercase tracking-wide aug-fs-xs mr-1.5">Takeaway</span>
+              <span className="text-zinc-500 aug-fs-xs mr-1.5">Takeaway</span>
               {renderEmphasis(stripPlannerNotes(answer.insight))}
             </p>
           )}
@@ -139,9 +139,9 @@ const BAND_STYLE: Record<string, string> = {
 
 function ConfidenceChip({ band, earned }: { band: string; earned: number }) {
   return (
-    <span className={`shrink-0 aug-fs-xs font-mono uppercase tracking-wide px-2 py-0.5 rounded ${BAND_STYLE[band] ?? BAND_STYLE.low}`}
+    <span className={`shrink-0 aug-fs-xs font-mono px-2 py-0.5 rounded ${BAND_STYLE[band] ?? BAND_STYLE.low}`}
       title="Computed from guard coverage × chain completeness × data trust — not asserted by the model.">
-      {band} confidence · {Math.round(earned * 100)}%
+      {sentenceCase(band)} confidence · {Math.round(earned * 100)}%
     </span>
   );
 }

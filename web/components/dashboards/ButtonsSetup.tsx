@@ -36,7 +36,7 @@ export const sameEntity = (a: string, b: string) => {
 function Row({ label, hint, children, testid }: { label: string; hint?: string; children: React.ReactNode; testid?: string }) {
   return (
     <div data-testid={testid} style={{ display: "flex", flexDirection: "column", gap: 6, padding: "10px 14px" }}>
-      <div className="aug-fs-xs" style={{ color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em" }}>{label}</div>
+      <div className="aug-label">{label}</div>
       {children}
       {hint && <div className="aug-fs-xs" style={{ color: "var(--t3)", lineHeight: 1.45 }}>{hint}</div>}
     </div>

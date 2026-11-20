@@ -97,8 +97,8 @@ export function missingColumns(s: QueryShown, columns: TypedColumn[]): string[] 
 function Row({ label, hint, right, children, testid }: { label: string; hint?: ReactNode; right?: ReactNode; children: ReactNode; testid?: string }) {
   return (
     <div data-testid={testid} style={{ display: "flex", flexDirection: "column", gap: 6, padding: "10px 14px" }}>
-      <div className="aug-fs-xs" style={{ display: "flex", alignItems: "baseline", gap: 6, color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em" }}>
-        {label}{right && <span style={{ marginLeft: "auto", textTransform: "none", letterSpacing: 0 }}>{right}</span>}
+      <div className="aug-label" style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+        {label}{right && <span style={{ marginLeft: "auto", fontWeight: 400 }}>{right}</span>}
       </div>
       {children}
       {hint && <div className="aug-fs-xs" style={{ color: "var(--t3)", lineHeight: 1.45 }}>{hint}</div>}
@@ -219,7 +219,7 @@ export function QuerySetup({ connectionId, card, onKept, onClose, values = NO_VA
     <div data-testid="query-setup" style={{ display: "flex", flexDirection: "column", paddingBottom: 14 }}>
       <div style={{ display: "flex", alignItems: "center", padding: "12px 14px 4px", gap: 8 }}>
         <div style={{ display: "flex", flexDirection: "column", minWidth: 0, flex: 1 }}>
-          <span className="aug-fs-xs" style={{ color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em" }}>Card · your own query</span>
+          <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>Card · your own query</span>
           <span className="aug-fs-chrome" style={{ color: "var(--t1)", fontWeight: 600 }}>{card?.title || "A new query"}</span>
         </div>
         {onClose && <Button size="xs" variant="ghost" onClick={onClose}>Close</Button>}

@@ -152,7 +152,7 @@ export function HistoryPanel({ selectedId, onSelect }: Props) {
                   <div className="flex items-center gap-1.5 flex-1 min-w-0">
                     {/* Kind badge */}
                     <span className={cn(
-                      "inline-flex shrink-0 items-center px-1 py-0.5 rounded aug-fs-xs font-semibold uppercase tracking-wider",
+                      "inline-flex shrink-0 items-center px-1 py-0.5 rounded aug-fs-xs font-semibold",
                       isChat
                         ? "bg-sky-500/10 text-sky-400"
                         : "bg-violet-500/10 text-violet-400"

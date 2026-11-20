@@ -169,8 +169,8 @@ function useEntityFields(entity: string | undefined, connectionId: string, schem
 function Row({ label, right, hint, children, testid }: { label: string; right?: ReactNode; hint?: ReactNode; children: ReactNode; testid?: string }) {
   return (
     <div data-testid={testid} style={{ display: "flex", flexDirection: "column", gap: 6, padding: "10px 14px" }}>
-      <div className="aug-fs-xs" style={{ display: "flex", alignItems: "baseline", gap: 6, color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em" }}>
-        {label}{right && <span style={{ marginLeft: "auto", textTransform: "none", letterSpacing: 0 }}>{right}</span>}
+      <div className="aug-label" style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+        {label}{right && <span style={{ marginLeft: "auto", fontWeight: 400 }}>{right}</span>}
       </div>
       {children}
       {hint && <div className="aug-fs-xs" style={{ color: "var(--t3)", lineHeight: 1.45 }}>{hint}</div>}
@@ -1116,7 +1116,7 @@ function DashboardSetup({ spec, onChange, onOpenLayout, release }: { spec: Dashb
   return (
     <div data-testid="setup-empty">
       <div style={{ padding: "12px 14px 10px" }}>
-        <div className="aug-fs-xs" style={{ color: "var(--accent-11)", textTransform: "uppercase", letterSpacing: ".06em" }}>Dashboard</div>
+        <div className="aug-fs-xs" style={{ color: "var(--accent-11)" }}>Dashboard</div>
         <div className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: 600, marginTop: 2 }}>{String(top?.props.title ?? "") || "This dashboard"}</div>
         <div className="aug-fs-xs" style={{ color: "var(--t3)", marginTop: 4, lineHeight: 1.45 }}>
           Nothing is chosen: this is the dashboard's own setup. Choose a piece on the dashboard to set it up; its size moves
@@ -1225,7 +1225,7 @@ export function PieceSetup({ spec, selected, onChange, connectionId, schema, car
   return (
     <div data-testid="piece-setup" data-kind={el.type}>
       <div style={{ padding: "12px 14px 10px" }}>
-        <div className="aug-fs-xs" style={{ color: "var(--accent-11)", textTransform: "uppercase", letterSpacing: ".06em" }}>{kind}</div>
+        <div className="aug-fs-xs" style={{ color: "var(--accent-11)" }}>{kind}</div>
         <div className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: 600, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis" }}>{title || kind}</div>
       </div>
       {el.type === "Cockpit" && (

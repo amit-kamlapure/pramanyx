@@ -25,7 +25,7 @@ import { OrgSettingsPanel } from "@/components/OrgSettingsPanel";
 import { OwnersPanel } from "@/components/OwnersPanel";
 import { registerCurrencyLoader, setCurrentDataset, setDataCurrency, setOrgSettingsCache } from "@/lib/orgSettings";
 import { rememberedSchema } from "@/lib/schemaChoice";
-import { formatCount } from "@/lib/format";
+import { formatCount, sentenceCase } from "@/lib/format";
 import { ExplorationBadge } from "@/components/ExplorationBadge";
 import { SchemaProvider } from "@/lib/schema-context";
 import { OpenInQueryProvider, type OpenInQueryRequest } from "@/lib/openInQuery";
@@ -730,7 +730,7 @@ function AddConnectionForm({
                     }}
                   >
                     <div style={{ fontWeight: 500 }}>{ct.label}</div>
-                    <div style={{ fontSize: 11, color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".04em", marginTop: 2 }}>{ct.category}</div>
+                    <div className="aug-fs-xs" style={{ color: "var(--t3)", marginTop: 2 }}>{sentenceCase(ct.category)}</div>
                   </Button>
                 ))
               ))}

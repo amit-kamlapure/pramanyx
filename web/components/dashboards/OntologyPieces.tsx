@@ -1067,17 +1067,17 @@ function useObjectQuery(body: ObjectQueryRequest | null): Read {
 
 const COUNT = { name: "n", agg: "count" };
 
-/** The small uppercase label a column or a card is headed by. */
+/** The section label (12px semibold sentence case) a column or a card is headed by. */
 export function Label({ children, right }: { children: ReactNode; right?: ReactNode }) {
   return (
-    <div className="aug-fs-xs" style={{ display: "flex", alignItems: "baseline", gap: 6, color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em" }}>
+    <div className="aug-label" style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
       {children}{right}
     </div>
   );
 }
 
 const Via = ({ what }: { what: string }) => (
-  <span style={{ color: "var(--vio4)", textTransform: "none", letterSpacing: 0 }}>via {what}</span>
+  <span style={{ color: "var(--vio4)", fontWeight: 400 }}>via {what}</span>
 );
 
 export interface FilterProperty { path: string; label: string; via?: string | null }

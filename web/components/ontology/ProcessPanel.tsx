@@ -66,8 +66,7 @@ function Section({ title, aside, children }: { title: string; aside?: React.Reac
   return (
     <section style={{ padding: "14px 16px" }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 8 }}>
-        <h3 className="aug-fs-xs"
-          style={{ margin: 0, color: "var(--t2)", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em" }}>
+        <h3 className="aug-label" style={{ margin: 0 }}>
           {title}
         </h3>
         {aside && <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>{aside}</span>}

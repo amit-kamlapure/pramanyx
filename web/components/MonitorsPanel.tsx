@@ -533,7 +533,7 @@ function Overview({ monitors, alerts, openAlerts, proofs, metrics, triggers, che
         <Label>Monitors</Label>
         <div style={{ overflowX: "auto" }}>
           <div role="table" aria-label="Monitors" style={{ minWidth: 1060 }}>
-            <div role="row" className="aug-fs-xs" style={{ ...REGISTER, ...MUTED, textTransform: "uppercase", letterSpacing: ".06em", padding: "0 0 6px 8px" }}>
+            <div role="row" className="aug-fs-xs" style={{ ...REGISTER, ...MUTED, padding: "0 0 6px 8px" }}>
               <span role="columnheader">On</span><span role="columnheader">Monitor</span><span role="columnheader">Rule</span>
               <span role="columnheader">Schedule</span><span role="columnheader">Proof</span><span role="columnheader">Last alert</span>
               <span role="columnheader">Sends to</span><span role="columnheader" />
@@ -724,7 +724,7 @@ function RunLog({ connId }: { connId: string }) {
         : (
           <div style={{ overflowX: "auto" }}>
             <div role="table" aria-label="Run log" style={{ minWidth: 760 }}>
-              <div role="row" className="aug-fs-xs" style={{ ...LOG_GRID, ...MUTED, textTransform: "uppercase", letterSpacing: ".06em", padding: "0 0 6px" }}>
+              <div role="row" className="aug-fs-xs" style={{ ...LOG_GRID, ...MUTED, padding: "0 0 6px" }}>
                 <span role="columnheader">When</span><span role="columnheader">Ended</span><span role="columnheader">Statement</span>
                 <span role="columnheader" style={{ textAlign: "right" }}>Rows</span><span role="columnheader" style={{ textAlign: "right" }}>Took</span>
               </div>
@@ -1131,7 +1131,7 @@ function MonitorForm({
 function Field({ label, children, style }: { label: string; children: React.ReactNode; style?: React.CSSProperties }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 5, ...style }}>
-      <label className="aug-label aug-fs-xs" style={{ color: "var(--t3)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</label>
+      <label className="aug-label">{label}</label>
       {children}
     </div>
   );

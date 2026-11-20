@@ -246,7 +246,7 @@ export function HistoryDetailPanel({ invId, onBack, onContinue }: Props) {
           {/* Question */}
           <div>
             <div className="flex items-center gap-2 mb-2">
-              <p className="text-xs uppercase tracking-wide" style={{ color: "var(--t3)" }}>Question</p>
+              <p className="aug-label">Question</p>
                 {(reportType === "investigate" || reportType === "explore") && (
                 <span style={{ fontSize: 11, color: "var(--vio5)", background: "var(--vio1)", borderRadius: "var(--r1)", padding: "1px 8px", fontWeight: 500 }}>Agentic</span>
               )}
@@ -318,8 +318,8 @@ export function HistoryDetailPanel({ invId, onBack, onContinue }: Props) {
 
               {(reportType === "direct" || reportType === "legacy") && (
                 <>
-                  <p className="text-xs uppercase tracking-wide" style={{ color: "var(--t3)" }}>
-                    {reportType === "direct" ? "Query Report" : "Agent report"}
+                  <p className="aug-label">
+                    {reportType === "direct" ? "Query report" : "Agent report"}
                   </p>
                   <ReportView
                     report={inv.report as Report}

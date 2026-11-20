@@ -5,6 +5,7 @@ import { onApprovalRequired, approveAction, type ApprovalInfo } from "@/lib/appr
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
+import { sentenceCase } from "@/lib/format";
 
 // Friendly labels for the high-risk actions the backend gates.
 const ACTION_LABELS: Record<string, string> = {
@@ -78,8 +79,8 @@ export function ApprovalModal() {
           }}><Icon name="lock" size={16} /></div>
           <div>
             <DialogTitle style={{ fontSize: 15, fontWeight: 600, color: "var(--t1)" }}>Approval required</DialogTitle>
-            <div style={{ fontSize: 11, color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".05em" }}>
-              {info.risk}-risk action
+            <div style={{ fontSize: 11, color: "var(--t3)" }}>
+              {sentenceCase(info.risk)}-risk action
             </div>
           </div>
         </div>

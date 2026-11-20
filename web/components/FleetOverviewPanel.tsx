@@ -673,10 +673,9 @@ export function FleetOverviewPanel({ onOpenAgent, onOpenAttention, onOpenInvesti
 
           {/* ── the runs behind the figures ───────────────────────────────────────── */}
           <section ref={runsRef} aria-label="Runs" data-testid="ao-runs" style={CARD}>
-            <div className="aug-fs-xs" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8,
-              color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em" }}>
+            <div className="aug-label" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
               Runs
-              <span style={{ marginLeft: "auto", textTransform: "none", letterSpacing: 0 }}>
+              <span className="aug-fs-xs" style={{ marginLeft: "auto", fontWeight: 400, color: "var(--t3)" }}>
                 <Segmented label="Which runs" value={runFilter} onChange={setRunFilter}
                   options={RUN_FILTERS.map(f => ({ value: f.value, label: f.label, title: f.title }))} />
               </span>

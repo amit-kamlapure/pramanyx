@@ -116,7 +116,7 @@ function GroundingWalk({ trace }: { trace: AnswerTrace }) {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      <div className="aug-fs-xs" style={{ color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em" }}>{title}</div>
+      <div className="aug-label">{title}</div>
       {children}
     </div>
   );

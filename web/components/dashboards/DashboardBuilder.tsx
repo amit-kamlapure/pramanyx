@@ -42,6 +42,7 @@ import {
 import { lineOf, nameOf, setTitles } from "@/lib/dashboards/names";
 import { checkDashboardSpec } from "@/lib/dashboards/rules";
 import { withUniqueKeys } from "@/lib/listKeys";
+import { sentenceCase } from "@/lib/format";
 import { cachedObjectCatalog } from "@/lib/objects";
 
 /** The name the ontology gives each entity, by its id and its api name — "Customer Order" for `order` — read once a
@@ -71,10 +72,10 @@ const ICON: Record<string, IconName> = {
   ObjectTable: "table", ObjectDetail: "list", ActionButton: "bolt", ObjectFilters: "filter", GlobalFilters: "filter", GlobalFilter: "filter", ObjectFigure: "num", ObjectChart: "chart", ObjectBreakdown: "column",
 };
 
-/** The pane's small uppercase heading. */
+/** The pane's section label (12px semibold sentence case). */
 function PaneLabel({ children }: { children: ReactNode }) {
   return (
-    <div className="aug-fs-xs" style={{ color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em", padding: "12px 12px 6px" }}>
+    <div className="aug-label" style={{ padding: "12px 12px 6px" }}>
       {children}
     </div>
   );
@@ -399,7 +400,7 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
             style={{ display: "flex", alignItems: "center", gap: 4, padding: "6px 12px", minHeight: 40, flexWrap: "wrap" }}>
             {wire ? (
               <>
-                <span className="aug-fs-xs" style={{ color: "var(--accent-11)", textTransform: "uppercase", letterSpacing: ".06em", marginRight: 6 }}>
+                <span className="aug-fs-xs" style={{ color: "var(--accent-11)", marginRight: 6 }}>
                   {wireKind === "set" ? "Set" : wireKind === "value" ? "Variable" : "Chosen"}
                 </span>
                 <span style={{ color: "var(--t1)" }}>{wireKind === "set" ? spec.sets?.[wireName]?.label : wireKind === "value" ? spec.values?.[wireName]?.label : wireName.replace(/[-_]/g, " ")}</span>
@@ -409,7 +410,7 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
               </>
             ) : named ? (
               <>
-                <span className="aug-fs-xs" style={{ color: "var(--accent-11)", textTransform: "uppercase", letterSpacing: ".06em", marginRight: 6 }}>{named.kind}</span>
+                <span className="aug-fs-xs" style={{ color: "var(--accent-11)", marginRight: 6 }}>{sentenceCase(named.kind)}</span>
                 <span style={{ color: "var(--t1)", minWidth: 0, maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{named.title}</span>
                 <span style={{ flex: 1 }} />
                 {movable && (
@@ -421,7 +422,7 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
                     <Rule />
                     {section && (
                       <>
-                        <span className="aug-fs-xs" style={{ color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em", margin: "0 4px" }}>Split</span>
+                        <span className="aug-label" style={{ margin: "0 4px" }}>Split</span>
                         {(["above", "below", "left", "right"] as const).map(side => (
                           <Button key={side} size="xs" variant="ghost" aria-label={`Split it: a new section ${side === "left" || side === "right" ? `to the ${side}` : side}`}
                             data-testid={`builder-split-${side}`} onClick={() => split(side)}>

@@ -395,6 +395,14 @@ export function stripPlannerNotes(text: string): string {
     .trim();
 }
 
+/** A label as a sentence: its first letter capital, the rest as written — "built-in" → "Built-in", "flagged" → "Flagged".
+ *  For words that were shown in CSS caps and now read in sentence case (2026-11-20: labels are 12px semibold sentence
+ *  case, never tracked caps). `cleanLabel` title-cases every word; this touches only the first. */
+export function sentenceCase(s: string | null | undefined): string {
+  const t = s ?? "";
+  return t ? t.charAt(0).toUpperCase() + t.slice(1) : t;
+}
+
 export function cleanLabel(s: string): string {
   return (s ?? "")
     .replace(/_/g, " ")

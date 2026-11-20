@@ -27,10 +27,8 @@ import { Button } from "@/components/ui/button";
 import { Loading } from "@/components/ui/states";
 import { Textarea } from "@/components/ui/textarea";
 
-const LABEL: React.CSSProperties = {
-  fontSize: 11, color: "var(--t3)", textTransform: "uppercase",
-  letterSpacing: "0.07em", fontWeight: 600, marginBottom: 6,
-};
+/** Spacing only: the type is the section label's own (.aug-label). */
+const LABEL: React.CSSProperties = { marginBottom: 6 };
 
 /** Inline click-to-edit field (single value). Reused for every annotation. */
 function EditableField({ value, placeholder, multiline = true, onSave }: {
@@ -134,7 +132,7 @@ export function GlossaryPanel({ table, columns, schema, connectionId }: {
 
       {/* ── Table level ── */}
       <div style={{ marginBottom: 22 }}>
-        <div style={LABEL}>Table comment</div>
+        <div className="aug-label" style={LABEL}>Table comment</div>
         <EditableField value={entry.description ?? ""} placeholder="Describe what this table represents…"
           onSave={async v => { await updateTableGlossary(table, { description: v }, schema); load(); }} />
 
@@ -159,7 +157,7 @@ export function GlossaryPanel({ table, columns, schema, connectionId }: {
       </div>
 
       {/* ── Column level ── */}
-      <div style={LABEL}>Columns</div>
+      <div className="aug-label" style={LABEL}>Columns</div>
       {columns.length === 0 && <p style={{ fontSize: 12, color: "var(--t3)" }}>No columns.</p>}
       {columns.map(c => {
         const ce = colEntry(c);

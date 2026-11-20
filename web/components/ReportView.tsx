@@ -15,7 +15,7 @@ import {
 import type { DataQualityNote, Finding, Hypothesis, QueryCitation, Report, StatResult, Verdict } from "@/lib/types";
 import { logOutcome, getInvestigationOutcomes, type RecOutcome, type RecStatus } from "@/lib/api";
 import { ResultChartCard } from "@/components/charts/ResultChartCard";
-import { SHARE_COL_PATTERN, buildColumnFormatter, compactNumber, pct } from "@/lib/format";
+import { SHARE_COL_PATTERN, buildColumnFormatter, compactNumber, pct, sentenceCase } from "@/lib/format";
 import { H_PALETTES } from "@/lib/palette";
 import { StatusChip, chipTone, type ChipHue } from "@/components/brief/StatusChip";
 import { Button } from "@/components/ui/button";
@@ -52,12 +52,13 @@ const STAT_META: Record<StatResult["type"], { icon: string; hue: ChipHue }> = {
 function CollapsibleSection({
   title,
   badge,
-  titleClass = "text-zinc-300",
+  titleColor,
   children,
 }: {
   title: string;
   badge?: React.ReactNode;
-  titleClass?: string;
+  /** A tone for the section label (a CSS colour); the label's own --t2 otherwise. */
+  titleColor?: string;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -67,7 +68,7 @@ function CollapsibleSection({
         onClick={() => setOpen(o => !o)}
         className="flex items-center gap-2 w-full text-left group py-1"
       >
-        <h3 className={`text-sm font-semibold uppercase tracking-wide ${titleClass}`}>{title}</h3>
+        <h3 className="aug-label" style={titleColor ? { color: titleColor } : undefined}>{title}</h3>
         {badge}
         <span className="ml-auto text-zinc-500 group-hover:text-zinc-400 text-xs transition">
           {open ? "▲" : "▼"}
@@ -122,7 +123,7 @@ function QueryEvidence({
     <div className="p-4 space-y-3">
       {/* Query header */}
       <div className="flex items-center gap-2.5">
-        <span className="aug-fs-xs text-zinc-500 font-mono uppercase tracking-wide">
+        <span className="aug-label">
           Query {index + 1}/{total}
         </span>
         {query.error
@@ -229,7 +230,7 @@ function HypothesisAccordion({
 
           {/* 1. Key finding */}
           <div className="px-4 py-3 space-y-1.5">
-            <p className="aug-fs-xs text-zinc-500 uppercase tracking-widest font-mono">Key Finding</p>
+            <p className="aug-label">Key finding</p>
             <p className="text-sm text-zinc-200 leading-relaxed">
               {hypothesis.key_finding || "No finding recorded for this hypothesis."}
             </p>
@@ -251,7 +252,7 @@ function HypothesisAccordion({
           {/* 3. Synthesis link — if the final report references this hypothesis */}
           {linkedFinding && (
             <div className="px-4 py-3 space-y-2">
-              <p className="aug-fs-xs text-zinc-500 uppercase tracking-widest font-mono">Report Synthesis</p>
+              <p className="aug-label">Report synthesis</p>
               <blockquote className="border-l-2 border-emerald-500/40 pl-3 space-y-1">
                 <p className="text-sm text-zinc-200 leading-relaxed italic">&quot;{linkedFinding.claim}&quot;</p>
                 {linkedFinding.evidence && (
@@ -293,8 +294,8 @@ function HypothesisPanel({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-zinc-300 uppercase tracking-wide">
-          Hypotheses Tested
+        <h3 className="aug-label">
+          Hypotheses tested
         </h3>
         <div className="flex items-center gap-2 aug-fs-xs font-mono">
           {confirmed > 0 && <span className="text-emerald-400">{confirmed} confirmed</span>}
@@ -401,7 +402,7 @@ function KeyFindingCard({
       {open && finding.evidence && (
         <div className="px-4 pb-4 pt-0">
           <div className="rounded bg-zinc-800/50 p-3 space-y-1.5">
-            <p className="aug-fs-xs text-zinc-500 uppercase tracking-widest font-mono">Supporting Evidence</p>
+            <p className="aug-label">Supporting evidence</p>
             <p className="text-sm text-zinc-300 leading-relaxed">{finding.evidence}</p>
             {linkedHypothesis && (
               <p className="text-xs text-zinc-500 pt-2">
@@ -529,8 +530,8 @@ export function ReportView({ report, queryCount, queryHistory = [], queryMode, h
     <div className="space-y-6">
       {/* 1. Verdict / Headline */}
       <div className={`rounded-[var(--r3)] p-5 ${isQueryFailure ? "bg-red-500/5" : "bg-emerald-500/5"}`}>
-        <p className={`text-xs font-medium uppercase tracking-widest mb-2 ${isQueryFailure ? "text-red-400" : "text-emerald-400"}`}>
-          {isQueryFailure ? "Query Failed" : isDirect ? "Top Finding" : "Verdict"}
+        <p className="aug-label mb-2" style={{ color: isQueryFailure ? "var(--red4)" : "var(--grn4)" }}>
+          {isQueryFailure ? "Query failed" : isDirect ? "Top finding" : "Verdict"}
         </p>
         <p className="text-lg font-semibold text-white leading-snug">{report.headline}</p>
       </div>
@@ -538,15 +539,15 @@ export function ReportView({ report, queryCount, queryHistory = [], queryMode, h
       {/* 2. Diagnosis / Executive Summary */}
       {!isQueryFailure && (
         <div className="space-y-4">
-          <h3 className="text-sm font-semibold text-zinc-300 uppercase tracking-wide">
-            {isDirect ? "Executive Summary" : "Diagnosis"}
+          <h3 className="aug-label">
+            {isDirect ? "Executive summary" : "Diagnosis"}
           </h3>
           <p className="text-sm text-zinc-300 leading-relaxed">{report.verdict}</p>
 
           {/* Key findings — rich cards for both modes */}
           {(report.key_findings ?? []).length > 0 && (
             <div className="space-y-2 pt-1">
-              <p className="text-xs text-zinc-500 uppercase tracking-widest font-mono">Key Findings</p>
+              <p className="aug-label">Key findings</p>
               {(report.key_findings ?? []).map((f, i) => (
                 <KeyFindingCard key={i} finding={f} index={i} hypotheses={hypotheses} />
               ))}
@@ -583,8 +584,8 @@ export function ReportView({ report, queryCount, queryHistory = [], queryMode, h
       {/* 7. Data Quality Issues */}
       {dqNotes.length > 0 && (
         <CollapsibleSection
-          title={isQueryFailure ? "Execution Error" : "Data Quality Issues"}
-          titleClass="text-orange-400"
+          title={isQueryFailure ? "Execution error" : "Data quality issues"}
+          titleColor="var(--amb4)"
           badge={
             <Badge variant="outline" className="bg-orange-500/10 text-orange-400 text-xs">
               {isQueryFailure ? "query failed" : `${dqNotes.length} found`}
@@ -604,7 +605,7 @@ export function ReportView({ report, queryCount, queryHistory = [], queryMode, h
 
       {/* 8. Risks */}
       {(report.risks ?? []).length > 0 && (
-        <CollapsibleSection title="Risks & Considerations">
+        <CollapsibleSection title="Risks & considerations">
           <div className="space-y-2">
             {(report.risks ?? []).map((risk, i) => (
               <div key={i} className="rounded-[var(--r3)] bg-amber-500/5 p-3 flex items-start gap-3 border-l-2 border-l-amber-500/50">
@@ -618,7 +619,7 @@ export function ReportView({ report, queryCount, queryHistory = [], queryMode, h
 
       {/* 9. Recommended Actions */}
       {(report.recommended_actions ?? []).length > 0 && (
-        <CollapsibleSection title="Recommended Actions">
+        <CollapsibleSection title="Recommended actions">
           <div className="space-y-2">
             {invId && outcomesError && (
               <ReadFailed what="where these stand" error={outcomesError} onRetry={() => setOutcomesRead(n => n + 1)} />
@@ -647,7 +648,7 @@ export function ReportView({ report, queryCount, queryHistory = [], queryMode, h
 
       {/* 10. Excluded Causes */}
       {(report.what_is_not_the_cause ?? []).length > 0 && (
-        <CollapsibleSection title="Excluded Causes" titleClass="text-zinc-500">
+        <CollapsibleSection title="Excluded causes">
           <ul className="space-y-1">
             {(report.what_is_not_the_cause ?? []).map((item, i) => (
               <li key={i} className="flex items-start gap-2 text-sm text-zinc-500 leading-relaxed">
@@ -692,7 +693,7 @@ function KPIHighlight({ table }: { table: QueryCitation }) {
       {metrics.slice(0, 3).map(({ col, val }) => (
         <div key={col} className="rounded-[var(--r3)] bg-zinc-800/60 p-4 text-center space-y-1">
           <p className="text-2xl font-mono font-semibold text-emerald-400 tracking-tight">{fmt(col, val)}</p>
-          <p className="text-xs text-zinc-500 uppercase tracking-wide">{col.replace(/_/g, " ")}</p>
+          <p className="aug-label">{sentenceCase(col.replace(/_/g, " "))}</p>
         </div>
       ))}
     </div>
@@ -708,7 +709,7 @@ function DirectResultTable({ table }: { table: QueryCitation }) {
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-zinc-300 uppercase tracking-wide">Query Results</h3>
+        <h3 className="aug-label">Query results</h3>
         <span className="text-xs text-zinc-500 font-mono">
           {table.row_count} row{table.row_count !== 1 ? "s" : ""}
         </span>

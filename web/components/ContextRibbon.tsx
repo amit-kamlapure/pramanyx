@@ -45,7 +45,7 @@ export function ContextRibbon({
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center gap-2 aug-text-xs" style={{ color: "var(--t3)" }}>
-        <span className="uppercase tracking-wide">Context</span>
+        <span className="aug-label">Context</span>
         <span style={{ color: "var(--t3)" }}>
           {kept.length} table{kept.length === 1 ? "" : "s"} · ~{formatCount(tokens)} tokens
         </span>

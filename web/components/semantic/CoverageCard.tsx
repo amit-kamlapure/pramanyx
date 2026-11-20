@@ -173,7 +173,7 @@ export function CoverageCard({ connId, schema, rows, onAdopted }: {
       <SuggestedAreas connId={connId} schema={schema} areas={declared} onSaved={savedAreas} />
       <div style={{ overflowX: "auto" }}>
         <div style={{ minWidth: 640 }}>
-          <div className="aug-fs-xs" style={{ ...GRID, ...MUTED, textTransform: "uppercase", letterSpacing: ".06em", padding: "0 6px 6px" }}>
+          <div className="aug-fs-xs" style={{ ...GRID, ...MUTED, padding: "0 6px 6px" }}>
             <span>Area</span><span>Data</span><span>Metrics</span><span>Proposals</span><span />
           </div>
           {coverage.areas.map(a => {
@@ -256,7 +256,7 @@ function AreaDetail({ coverage, area, connId, schema, rows, onAdopted }: {
         <p key={key} className="aug-fs-sm" style={{ margin: 0, color: "var(--amb4)" }}>{s}</p>
       ))}
       <section>
-        <div className="aug-fs-xs" style={{ ...MUTED, textTransform: "uppercase", letterSpacing: ".06em" }}>Data</div>
+        <div className="aug-label">Data</div>
         {area.tables.length === 0 ? <Empty>No table is placed here.</Empty> : withUniqueKeys(area.tables, t => `table:${t.name}`).map(([key, t]) => (
           <div key={key} className="aug-fs-chrome" style={{ ...ROW, ...RULE, padding: "4px 0" }}>
             <span style={{ fontFamily: "var(--font-mono)", color: "var(--t1)" }}>{t.name}</span>
@@ -266,7 +266,7 @@ function AreaDetail({ coverage, area, connId, schema, rows, onAdopted }: {
         ))}
       </section>
       <section>
-        <div className="aug-fs-xs" style={{ ...MUTED, textTransform: "uppercase", letterSpacing: ".06em" }}>Metrics</div>
+        <div className="aug-label">Metrics</div>
         {area.metrics.length === 0 ? <Empty>No metric reads on this area.</Empty> : withUniqueKeys(area.metrics, m => `metric:${m.name}`).map(([key, m]) => (
           <div key={key} className="aug-fs-chrome" style={{ ...ROW, ...RULE, padding: "4px 0" }}>
             <span style={{ color: "var(--t1)" }}>{m.label}</span>
@@ -277,7 +277,7 @@ function AreaDetail({ coverage, area, connId, schema, rows, onAdopted }: {
         ))}
       </section>
       <section>
-        <div className="aug-fs-xs" style={{ ...MUTED, textTransform: "uppercase", letterSpacing: ".06em" }}>
+        <div className="aug-label">
           {`The knowledge base · ${countNoun(area.patterns.length, "pattern")}`}
         </div>
         {area.patterns.length === 0 ? <Empty>No pattern covers this area yet.</Empty> : (
@@ -290,7 +290,7 @@ function AreaDetail({ coverage, area, connId, schema, rows, onAdopted }: {
         )}
       </section>
       <section>
-        <div className="aug-fs-xs" style={{ ...MUTED, textTransform: "uppercase", letterSpacing: ".06em" }}>
+        <div className="aug-label">
           {`Proposals · ${countNoun(proposals.length, "proposal")}`}
         </div>
         {proposals.length === 0 ? <Empty>Nothing is proposed for this area.</Empty>

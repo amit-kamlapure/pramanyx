@@ -153,7 +153,8 @@ function ConnectorCard({ info, onClick }: { info: ConnectorTypeInfo; onClick: ()
 
 const S: React.CSSProperties = { width: "100%", fontSize: 12, padding: "8px 10px", borderRadius: 6, background: "var(--bg-0)", border: "1px solid var(--b1)", color: "var(--t1)", outline: "none", fontFamily: "inherit" };
 const L: React.CSSProperties = { fontSize: 11, color: "var(--t3)", marginBottom: 5, display: "block", fontWeight: 500 };
-const sectionLabel: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: "var(--t2)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 12, display: "flex", alignItems: "center", gap: 7 };
+/** Layout only: the type is the section label's own (.aug-label — 12px semibold sentence case). */
+const sectionLabel: React.CSSProperties = { marginBottom: 12, display: "flex", alignItems: "center", gap: 7 };
 
 // ── Workspace file-upload view ──────────────────────────────────────────────────
 
@@ -378,9 +379,9 @@ function WorkspaceUploader({ onAdded, workspaceId }: {
 
         {/* Columns + types */}
         <div>
-          <p style={sectionLabel}>
+          <p className="aug-label" style={sectionLabel}>
             Columns · {a.columns.length}
-            {mismatches > 0 && <span style={{ fontSize: 11, fontWeight: 600, padding: "1px 7px", borderRadius: 4, background: "color-mix(in srgb, var(--amb4) 16%, transparent)", color: "var(--amb4)", textTransform: "none", letterSpacing: 0 }}>{mismatches} type suggestion{mismatches > 1 ? "s" : ""}</span>}
+            {mismatches > 0 && <span style={{ fontSize: 11, fontWeight: 600, padding: "1px 7px", borderRadius: 4, background: "color-mix(in srgb, var(--amb4) 16%, transparent)", color: "var(--amb4)" }}>{mismatches} type suggestion{mismatches > 1 ? "s" : ""}</span>}
           </p>
           <div style={{ borderRadius: 8, overflow: "hidden" }}>
             {a.columns.map((c, i) => {
@@ -435,7 +436,7 @@ function WorkspaceUploader({ onAdded, workspaceId }: {
         {/* Preview */}
         {a.preview.columns.length > 0 && (
           <div>
-            <p style={sectionLabel}>Preview · first {a.preview.rows.length} rows</p>
+            <p className="aug-label" style={sectionLabel}>Preview · first {a.preview.rows.length} rows</p>
             <div style={{ overflowX: "auto", borderRadius: 8 }}>
               <Table style={{ fontSize: 11 }}>
                 <TableHeader>
@@ -602,7 +603,7 @@ function WorkspaceUploader({ onAdded, workspaceId }: {
 
       {/* Existing tables, grouped by schema */}
       <div>
-        <p style={sectionLabel}>Tables in {label}{files.length ? ` · ${files.length}` : ""}</p>
+        <p className="aug-label" style={sectionLabel}>Tables in {label}{files.length ? ` · ${files.length}` : ""}</p>
         {files.length === 0 ? (
           <p style={{ fontSize: 12, color: "var(--t3)" }}>No tables yet. Upload a file to create your first one.</p>
         ) : (
@@ -613,7 +614,7 @@ function WorkspaceUploader({ onAdded, workspaceId }: {
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   {g.items.map(f => (
                     <div key={`${f.schema}.${f.filename}`} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 13px", borderRadius: 8, background: "var(--bg-2)" }}>
-                      <span style={{ width: 30, height: 30, borderRadius: 6, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--gray-a3)", fontSize: 11, fontWeight: 700, color: "var(--t3)", textTransform: "uppercase" }}>
+                      <span style={{ width: 30, height: 30, borderRadius: 6, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--gray-a3)", fontSize: 11, fontWeight: 700, color: "var(--t3)" }}>
                         {f.extension.replace(".", "")}
                       </span>
                       <span style={{ minWidth: 0, flex: 1 }}>
@@ -853,7 +854,7 @@ export function AddDataPanel({ onClose, onAdded, workspaceId }: {
             {/* Files */}
             {fileSources.length > 0 && (
               <div style={{ marginBottom: 30 }}>
-                <p style={sectionLabel}>Files</p>
+                <p className="aug-label" style={sectionLabel}>Files</p>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 12 }}>
                   {fileSources.map(info => <FileTile key={info.type} info={info} onClick={() => pick(info)} />)}
                 </div>
@@ -863,7 +864,7 @@ export function AddDataPanel({ onClose, onAdded, workspaceId }: {
             {/* Connectors */}
             {grouped.map(g => (
               <div key={g.id} style={{ marginBottom: 28 }}>
-                <p style={sectionLabel}>{g.label}</p>
+                <p className="aug-label" style={sectionLabel}>{g.label}</p>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: 10 }}>
                   {g.items.map(info => <ConnectorCard key={info.type} info={info} onClick={() => pick(info)} />)}
                 </div>

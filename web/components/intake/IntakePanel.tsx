@@ -622,8 +622,7 @@ export function IntakePanel({ connId, schema }: { connId: string; schema?: strin
         {/* Imports rail */}
         <div style={{ width: 260, flexShrink: 0, display: "flex", flexDirection: "column", gap: 8 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span className="aug-fs-xs" style={{ color: "var(--t3)", fontWeight: 600,
-              textTransform: "uppercase", letterSpacing: "0.06em" }}>Imports</span>
+            <span className="aug-label">Imports</span>
             <Button size="xs" variant="ghost" onClick={doExport} disabled={busy}>
               <Icon name="download" size={12} /> Export
             </Button>

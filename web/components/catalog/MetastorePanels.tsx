@@ -166,7 +166,7 @@ export function PermissionsPanel({ catalogId }: { catalogId: string }) {
       </p>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 160px 110px", padding: "5px 4px", borderBottom: "0.5px solid var(--b1)" }}>
         {["Workspace", "Access", ""].map(h => (
-          <span key={h} style={{ fontSize: 11, color: "var(--t3)", textTransform: "uppercase", letterSpacing: "0.07em", fontWeight: 600 }}>{h}</span>
+          <span key={h} style={{ fontSize: 11, color: "var(--t3)", fontWeight: 600 }}>{h}</span>
         ))}
       </div>
       {rows.map(({ ws, member, granted }) => (

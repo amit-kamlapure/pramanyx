@@ -2,7 +2,7 @@
 
 /**
  * The one kit a screen redone to CLARITY is built from (`pramanyx-v2/CLARITY.md`): the page, a card on the ground, a
- * small uppercase section label with its meta at the right, a fact as a chip, a figure (label · value · one muted
+ * section label (12px semibold, sentence case) with its meta at the right, a fact as a chip, a figure (label · value · one muted
  * line), the amber "Needs you" card and its rows, a bar, bars by category, columns over time, a section folded shut,
  * and the one muted line an empty section is.
  *
@@ -42,15 +42,17 @@ export function Page({ children, testId }: { children: ReactNode; testId?: strin
   );
 }
 
-/** A section's small uppercase label, with what it counts (or its one tool) at its right end. */
+/** A section's label, with what it counts (or its one tool) at its right end. 12px semibold in sentence case, as
+ *  `.aug-label` and every section label on the platform (the user, 2026-11-20: "Yes, unify them" — it was 11px tracked
+ *  caps beside sentence-case labels elsewhere). Its meta at the right is meta: 11px, regular. */
 export function Label({ children, right, tone }: { children: ReactNode; right?: ReactNode; tone?: "amber" }) {
   return (
-    <div className="aug-fs-xs" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, minHeight: 20,
-      color: tone === "amber" ? "var(--amb4)" : "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em" }}>
+    <div className="aug-label" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, minHeight: 20,
+      ...(tone === "amber" ? { color: "var(--amb4)" } : {}) }}>
       {children}
       {right != null && right !== false && (
-        <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 8, textTransform: "none",
-          letterSpacing: 0, color: "var(--t3)" }}>{right}</span>
+        <span className="aug-fs-xs" style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 8,
+          fontWeight: 400, color: "var(--t3)" }}>{right}</span>
       )}
     </div>
   );

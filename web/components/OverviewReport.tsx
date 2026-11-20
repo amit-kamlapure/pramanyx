@@ -21,6 +21,7 @@ import type { SourcePanelData } from "@/components/ChatMessage";
 import { StatusChip, type ChipHue } from "@/components/brief/StatusChip";
 import { Button } from "@/components/ui/button";
 import { Chart } from "@/components/Chart";
+import { sentenceCase } from "@/lib/format";
 
 // lens → one semantic hue, so the diverse fact TYPES read as distinct chips at a glance.
 // (concentration/composition = "where the mass is" → info · outlier/relationship = a
@@ -82,8 +83,8 @@ function FactCard({
     >
       {/* lens chip + originating table */}
       <div className="flex items-center justify-between gap-2">
-        <StatusChip hue={lensHue(fact.lens)} strength="soft" className="uppercase tracking-wide">
-          {fact.lens}
+        <StatusChip hue={lensHue(fact.lens)} strength="soft">
+          {sentenceCase(fact.lens)}
         </StatusChip>
         {fact.table && (
           <span className="aug-fs-xs font-mono truncate min-w-0" style={{ color: "var(--t3)" }} title={fact.table}>

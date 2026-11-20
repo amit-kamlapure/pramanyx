@@ -432,8 +432,8 @@ export function CatalogTree({
                           : `${c.name}${c.type ? ` (${c.type})` : ""}`}
                         // the type, said at the row's right as the mockup's rail says it (2026-11-10) — not only on hover
                         badge={(c.type || c.is_fk) ? (
-                          <span className="aug-fs-xs" style={{ color: "var(--t3)", flexShrink: 0, textTransform: "uppercase" }}>
-                            {c.type ? c.type.split(" ")[0].slice(0, 10) : ""}{c.is_fk ? `${c.type ? " · " : ""}FK` : ""}
+                          <span className="aug-fs-xs" style={{ color: "var(--t3)", flexShrink: 0 }}>
+                            {c.type ? c.type.split(" ")[0].slice(0, 10).toUpperCase() : ""}{c.is_fk ? `${c.type ? " · " : ""}FK` : ""}
                           </span>
                         ) : undefined}
                         onClick={onSelectColumn ? () => onSelectColumn(c.name, t.name) : undefined}

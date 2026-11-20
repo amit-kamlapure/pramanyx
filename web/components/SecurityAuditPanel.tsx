@@ -228,7 +228,7 @@ function AuditTable({ records, connections, testId }: { records: AuditRecord[]; 
               <span key={h.label} role="columnheader" aria-sort={active ? (sortDir === "asc" ? "ascending" : "descending") : undefined}
                 onClick={h.col ? () => sortBy(h.col!) : undefined}
                 style={{ textAlign: h.right ? "right" : "left", color: active ? "var(--blue3)" : "var(--t3)", whiteSpace: "nowrap",
-                  textTransform: "uppercase", letterSpacing: ".06em", cursor: h.col ? "pointer" : "default", userSelect: "none" }}>
+                  cursor: h.col ? "pointer" : "default", userSelect: "none" }}>
                 {h.label}{h.col && <SortMark active={active} dir={sortDir} />}
               </span>
             );
@@ -635,7 +635,7 @@ function QueriesLens({ connId, connections, reloadKey, onLoading }: {
         ) : (
           <div style={{ overflowX: "auto" }}>
             <div style={{ minWidth: 690 }}>
-              <div className="aug-fs-xs" style={{ ...GROUP_GRID, ...MUTED, textTransform: "uppercase", letterSpacing: ".06em", padding: "0 0 6px 8px" }}>
+              <div className="aug-fs-xs" style={{ ...GROUP_GRID, ...MUTED, padding: "0 0 6px 8px" }}>
                 <span>Outcome</span><span>Who</span><span>What happened</span><span style={{ textAlign: "right" }}>Checks</span><span>When</span><span />
               </div>
               {groups.map(g => (
@@ -831,7 +831,7 @@ function ActionApprovalsSection() {
                   {trail && (
                     <div data-testid="approval-trail" role="table" aria-label="The approval trail" className="aug-fs-chrome"
                       style={{ maxHeight: 260, overflow: "auto", marginTop: 4 }}>
-                      <div role="row" className="aug-fs-xs" style={{ ...TRAIL_GRID, ...MUTED, textTransform: "uppercase", letterSpacing: ".06em", padding: "0 0 4px",
+                      <div role="row" className="aug-fs-xs" style={{ ...TRAIL_GRID, ...MUTED, padding: "0 0 4px",
                         position: "sticky", top: 0, background: "var(--bg-2)" }}>
                         <span role="columnheader">When</span><span role="columnheader">Decision</span><span role="columnheader">Action</span>
                         <span role="columnheader">Scope</span><span role="columnheader">Who</span>

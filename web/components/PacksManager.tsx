@@ -26,7 +26,7 @@ export function PacksManager() {
 
   return (
     <div className="mb-5">
-      <p className="aug-fs-xs uppercase tracking-widest text-zinc-500 mb-2">
+      <p className="aug-label mb-2">
         Packs{enabled ? "" : " · flag off (gated)"}
       </p>
       <div className="bg-white/[0.03] rounded-[var(--r3)] divide-y divide-white/5">

@@ -46,8 +46,8 @@ export interface StatTileProps {
   /** A 2px left accent bar in `accent` (the Briefing digest / suggested-pin variant). The
    *  KPI strip leaves this off and keeps its borderless look. */
   accentBar?: boolean;
-  /** Render the label as a wrapped, sentence-case descriptor (N lines) instead of the
-   *  uppercase caption — for digest tiles whose label is a phrase, not a metric name. */
+  /** Render the label as a wrapped descriptor (N lines) instead of the one-line section-label
+   *  caption — for digest tiles whose label is a phrase, not a metric name. */
   labelLines?: number;
   /** A footer slot rendered in place of the delta/sparkline/caption (e.g. a context figure
    *  + a "finding →" deep-link). When set, delta/sparkline/caption are ignored. */

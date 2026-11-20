@@ -24,7 +24,6 @@ const SERIF = "var(--font-serif)";
 // the exception); an area's name heads its rows with no rule of its own.
 const RULE = "1px solid var(--divide)";
 const ROW = "1px solid var(--b0)";
-const KICKER = { letterSpacing: "0.08em", textTransform: "uppercase" as const, fontWeight: 600 };
 
 /** The front box's last line: how many figures read below, and the door to choosing them. */
 export function FrontFooter({ arranged, onChoose }: { arranged: Arranged; onChoose: () => void }) {
@@ -73,7 +72,7 @@ export function EveryFigure({ arranged, connectionId, comparedWith, onChoose }: 
             return (
               <div key={key} data-testid="paper-area-card">
                 <div style={{ display: "flex", alignItems: "baseline", gap: 8, paddingBottom: 4 }}>
-                  <span className="aug-fs-xs" style={{ ...KICKER, color: "var(--t2)" }}>{g.area}</span>
+                  <span className="aug-label">{g.area}</span>
                   <span className="aug-fs-xs" style={{ marginLeft: "auto", color: "var(--t3)" }}>
                     {`${g.rows.length}${movers ? ` · ${movers} moved 10%+` : ""}`}
                   </span>
@@ -166,7 +165,7 @@ export function ChooseFigures({ rows, choice, onChange, onClose, busy }: {
       </p>
       {withUniqueKeys(groups, g => `choose:${g.area}`).map(([key, g]) => (
         <Fragment key={key}>
-          <div className="aug-fs-xs" style={{ ...KICKER, color: "var(--t3)", padding: "8px 0 4px" }}>{g.area}</div>
+          <div className="aug-label" style={{ padding: "8px 0 4px" }}>{g.area}</div>
           {withUniqueKeys(g.rows, r => `choose-row:${idOf(r)}`).map(([rk, r]) => {
             const id = idOf(r);
             const place = placeOf(rows, choice, id);

@@ -174,7 +174,7 @@ export function WorkspaceSwitcher({
             /* ── membership editor ── */
             <>
               <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 8px 4px" }}>
-                <span className="aug-fs-xs" style={{ color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <span className="aug-label" style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {managed.name} · connections
                 </span>
                 <Button variant="ghost" size="xs" disabled={busy}
@@ -220,8 +220,7 @@ export function WorkspaceSwitcher({
           ) : (
             /* ── workspace list ── */
             <>
-              <div className="aug-fs-xs" style={{ color: "var(--t3)",
-                textTransform: "uppercase", letterSpacing: ".06em", padding: "6px 8px 5px" }}>
+              <div className="aug-label" style={{ padding: "6px 8px 5px" }}>
                 Workspaces
               </div>
               {workspaces.map(w => {

@@ -25,7 +25,7 @@ import { planRuns, pressSaid, runsOf, type ParamDecl } from "@/lib/dashboards/ru
 import { choicesOf, doorConditions, isRefused, readSet } from "@/lib/dashboards/sets";
 import { conditionsFor } from "@/lib/dashboards/objectView";
 import { withUniqueKeys } from "@/lib/listKeys";
-import { formatCount } from "@/lib/format";
+import { formatCount, sentenceCase } from "@/lib/format";
 import { listObjects, runOrPropose, type DeclaredAction } from "@/lib/objects";
 
 const words = (s: string) => s.replace(/[_-]+/g, " ").trim();
@@ -171,7 +171,7 @@ function OneButton({ def, declared }: { def: ActionButtonDef; declared: Declared
             </DialogHeader>
             {withUniqueKeys(plan.said, s => s.param.name).map(([key, { param, words: w }]) => (
               <div key={key} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <span className="aug-fs-xs" style={{ color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em" }}>{param.display_name || words(param.name)}</span>
+                <span className="aug-label">{sentenceCase(param.display_name || words(param.name))}</span>
                 <span className="aug-fs-sm" style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--t1)" }}>
                   <Icon name="lock" size={12} />{w}{plan.set && param.name === plan.set.param && setKeys ? ` · ${formatCount(setKeys.keys.length)} now` : ""}
                 </span>
@@ -179,8 +179,8 @@ function OneButton({ def, declared }: { def: ActionButtonDef; declared: Declared
             ))}
             {withUniqueKeys(plan.asks, p => p.name).map(([key, p]) => (
               <label key={key} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <span className="aug-fs-xs" style={{ color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em" }}>
-                  {p.display_name || words(p.name)}{p.required && p.default_value == null ? "" : " · if you like"}
+                <span className="aug-label">
+                  {sentenceCase(p.display_name || words(p.name))}{p.required && p.default_value == null ? "" : " · if you like"}
                 </span>
                 {isFlag(p.data_type) ? (
                   <Checkbox checked={asked[p.name] === true} aria-label={p.display_name || words(p.name)}

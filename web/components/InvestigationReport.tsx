@@ -463,7 +463,7 @@ function StreamingPhaseCard({ phase }: { phase: InvestigationPhase }) {
         {isRunning && (
           <Pending label="Loading" className="aug-fs-xs text-zinc-400" />
         )}
-        <span className={`aug-fs-xs font-medium uppercase tracking-wide ${isSkipped ? "text-zinc-500" : "text-zinc-400"}`}>
+        <span className="aug-label" style={isSkipped ? { color: "var(--t3)" } : undefined}>
           {phase.phase_name}
         </span>
         {isSkipped && <span className="aug-fs-xs text-zinc-500 italic">{phase.skipped_reason}</span>}
