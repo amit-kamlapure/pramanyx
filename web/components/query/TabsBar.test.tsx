@@ -78,4 +78,11 @@ describe("SQL editor tabs", () => {
     fireEvent.keyDown(tabs[2], { key: "Enter" });
     expect(on.onSelect).toHaveBeenCalledWith("c");
   });
+
+  it("scrolls its open queries sideways, so many never run under the controls at the row's right end (2026-11-19)", () => {
+    render(<TabsBar tabs={TABS} activeId="a" onSelect={vi.fn()} onNew={vi.fn()} onClose={vi.fn()} onRename={vi.fn()} trailing={<span>Save query</span>} />);
+    const strip = screen.getByTestId("sql-tabs");
+    expect(strip.style.overflowX).toBe("auto");
+    expect(["0", "0px"]).toContain(strip.style.minWidth);                       // it may shrink below its tabs
+  });
 });

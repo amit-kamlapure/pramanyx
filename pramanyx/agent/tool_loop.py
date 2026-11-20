@@ -68,6 +68,9 @@ class LoopStep:
     #: fetched once is paid for again on each later turn. That re-sending — not any
     #: repeated query — is what 4.3's handles actually remove.
     prompt_chars: int = 0
+    #: The tool ran and said no — a change it would not make, a setting it does not have — with its reason in `detail`
+    #: (2026-11-20: a chart tool refused seven times in one turn while the model guessed other names for a setting).
+    refused: bool = False
 
 
 @dataclass
@@ -203,6 +206,10 @@ def _run_tool_loop(
     # formatting slip, and re-asking would spend the whole budget on silence.
     nudged = False
     held = False                  # one hand-back of an answer `stop_check` refused, likewise
+    # A tool that refused twice is not tried a third time, and the same call made three times is told to change course
+    # (the coworker's shell reminds at 3, 5 and 8 identical calls; here a refusal is the stronger signal, so it binds).
+    refusals: dict[str, int] = {}
+    same: dict[str, int] = {}
 
     def _record(step: LoopStep, *, result: Any = None, elapsed_ms: Optional[float] = None) -> None:
         """Append, announce and RECORD, together. Four branches record a step and all
@@ -278,6 +285,12 @@ def _run_tool_loop(
             history.extend(_exchange(call, f"No tool named {call.name!r}. Available: {offered}."))
             continue
 
+        if refusals.get(call.name, 0) >= REFUSALS_BEFORE_STOP:
+            _record(LoopStep(tool=call.name, arguments=call.arguments, ok=False, refused=True,
+                             detail=f"Not run: it refused {REFUSALS_BEFORE_STOP} times already this turn."))
+            history.extend(_exchange(call, STOP_AFTER_REFUSALS + _budget_note(len(steps), budget)))
+            continue
+
         _t0 = time.monotonic()
         try:
             result = spec.run(call.arguments)
@@ -289,10 +302,13 @@ def _run_tool_loop(
             logger.warning("tool_loop: %s raised (%s)", call.name, str(exc)[:200])
             ok, payload = False, f"{type(exc).__name__}: {exc}"
             result = None
+        said_no = refusal_of(result) if ok else ""
+        if said_no:
+            refusals[call.name] = refusals.get(call.name, 0) + 1
         _record(LoopStep(tool=call.name, arguments=call.arguments, ok=ok,
-                         detail="" if ok else payload,
+                         detail=said_no if said_no else ("" if ok else payload),
                          result_chars=len(payload),
-                         prompt_chars=_history_chars(history)),
+                         prompt_chars=_history_chars(history), refused=bool(said_no)),
                 result=result, elapsed_ms=(time.monotonic() - _t0) * 1000.0)
         # One decision record per executed choice: the menu the model picked from, what
         # it picked, and whether the pick ran clean. The context is a routing glimpse
@@ -333,7 +349,11 @@ def _run_tool_loop(
         # The remaining-step count rides the RESULT, not the system prompt: it changes
         # every step, and the prompt is fingerprinted once per turn and prefix-cached.
         # Appended after `_record` so `result_chars` stays the tool's own size.
-        history.extend(_exchange(call, payload + _budget_note(len(steps), budget)))
+        key = f"{call.name}:{json.dumps(call.arguments, sort_keys=True, default=str)}"
+        same[key] = same.get(key, 0) + 1
+        note = (STOP_AFTER_REFUSALS if said_no and refusals[call.name] >= REFUSALS_BEFORE_STOP
+                else SAME_CALL_AGAIN if same[key] >= SAME_CALLS_BEFORE_NOTE else "")
+        history.extend(_exchange(call, payload + (f"\n\n[{note}]" if note else "") + _budget_note(len(steps), budget)))
 
     # Budget spent — but the turn is rarely empty. Every result is still in `history`, and
     # the failure measured live was not "no answer exists", it was that nothing ever ASKED
@@ -377,6 +397,28 @@ _IN_SENTENCES = " Write ordinary sentences for a person to read. Do not write a 
 
 #: A tool call a model wrote out as words instead of making it.
 TOOL_MARKUP = re.compile(r"</?\s*(?:tool_call|function|parameter)\b", re.IGNORECASE)
+
+
+#: How many times one tool may say no in a turn before it is not run again.
+REFUSALS_BEFORE_STOP = 2
+#: How many times the same call (one tool, the same arguments) is made before the model is told to change course.
+SAME_CALLS_BEFORE_NOTE = 3
+STOP_AFTER_REFUSALS = ("This tool has said no twice this turn and will not be run again. Do not try other names or "
+                       "settings for the same thing: tell the person plainly what cannot be done here, and what can.")
+SAME_CALL_AGAIN = "You have made this same call three times. Change your approach, or answer now from what you have."
+
+
+def refusal_of(result: Any) -> str:
+    """The reason a tool said no, when it did — a change not staged with what it said, or a refusal list — else ''.
+    A tool that raised is not a refusal: it is an error, recorded as one."""
+    if not isinstance(result, dict):
+        return ""
+    said = result.get("said") if result.get("staged") is False else result.get("refused")
+    if isinstance(said, str):
+        said = [said]
+    if isinstance(said, list) and said:
+        return " ".join(str(x) for x in said if x)[:300]
+    return ""
 
 
 def _budget_note(used: int, budget: int) -> str:

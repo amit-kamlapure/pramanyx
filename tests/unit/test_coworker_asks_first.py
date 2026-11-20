@@ -1,33 +1,33 @@
-"""The coworker goes ahead only with what the platform itself calls harmless. The list it goes ahead with lives in its browser-side
-plugin, so this holds that list against the platform's own account of what each tool does."""
+"""The coworker goes ahead only with what the platform itself says goes ahead (one rule for both places, 2026-11-20).
+
+Until then its browser-side plugin kept a list of its own (`OWN_WORK`), held here against the platform's levels. It now
+reads the platform's rows (`GET /abilities`, `pramanyx/abilities.py`) and keeps no list; its tests read a snapshot of
+those rows, held here to the rows themselves so the snapshot cannot drift from what the platform says."""
 from __future__ import annotations
 
-import re
+import json
 from pathlib import Path
 
-from pramanyx.mcp import policy
+from pramanyx import abilities
 
-HOME = Path(__file__).resolve().parents[2] / "coworker" / "plugins" / "home" / "lib" / "index.js"
-
-
-def _own_work() -> set[str]:
-    block = re.search(r"const OWN_WORK = new Set\(\[(.*?)\]\);", HOME.read_text(), re.S)
-    assert block, "the coworker's list of what goes ahead was not found"
-    return set(re.findall(r'"([a-z_]+)"', block.group(1)))
+HOME = Path(__file__).resolve().parents[2] / "coworker" / "plugins" / "home"
 
 
-def test_nothing_that_changes_something_goes_ahead_without_asking():
-    acts = {name for name, level in policy.TOOL_LEVELS.items() if level == "act"} | set(policy.SPOTLIGHT_ACT_TOOLS)
-    # a file the person attached becomes their own private sheet: the attaching was the asking
-    assert _own_work() & acts == {"bring_in_file"}
+def test_the_coworker_keeps_no_list_of_its_own_and_reads_the_platforms():
+    source = (HOME / "lib" / "index.js").read_text()
+    assert "OWN_WORK" not in source
+    assert "/abilities" in source and "abilitiesOf" in source
 
 
-def test_what_books_an_entry_or_crawls_the_warehouse_is_asked_about():
-    assert not _own_work() & {"post_claim", "explore", "schedule"}
+def test_the_coworkers_snapshot_of_the_rows_is_the_rows():
+    snapshot = json.loads((HOME / "test" / "abilities.fixture.json").read_text())
+    assert snapshot == {"abilities": abilities.as_rows()}, (
+        "the coworker's test snapshot is stale: write it again from pramanyx.abilities.as_rows()")
 
 
-def test_every_tool_on_the_list_is_one_the_platform_has():
-    known = set(policy.TOOL_LEVELS) | {"ground_agent", "list_platform_connections", "platform_usage", "platform_limits", "review_missed_move",
-                                       "platform_runs", "investigation_cadence", "answer_accuracy", "table_popularity", "platform_traces",
-                                       "platform_premortem", "platform_audit", "get_object", "explain", "platform_guide"}
-    assert _own_work() <= known
+def test_nothing_that_changes_something_goes_ahead_without_asking_or_a_card():
+    goes = {a.name for a in abilities.ABILITIES.values() if abilities.allowed(a) == "goes_ahead"}
+    acts = {a.name for a in abilities.ABILITIES.values() if a.needs == "act"}
+    # a file the person attached becomes their own private sheet: the attaching was the asking; a cosmetic setting of
+    # their own is applied and undone the same way; a high-confidence note on one column carries its evidence
+    assert goes & acts == {"bring_in_file", "set_preference", "propose_context_note"}

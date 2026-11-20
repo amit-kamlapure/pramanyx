@@ -27,7 +27,7 @@ export function doorFor(mode: ButtonMode, depth: Depth, plain = true): { mode: B
 
 /** The only per-turn options a plain question carries; anything else set means the send carries
  *  more than a question, and keeps its own door. */
-const PLAIN_KEYS = new Set(["depth", "schema"]);
+const PLAIN_KEYS = new Set(["depth", "schema", "keepGoing"]);
 
 export function isPlainSend(opts: object): boolean {
   return Object.entries(opts).every(([k, v]) => PLAIN_KEYS.has(k) || !v);

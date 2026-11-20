@@ -198,6 +198,9 @@ class StagedProposal(BaseModel):
                   # The canvas (B5, 2026-10-08): a dashboard published to a group or a role, asked
                   # for in words; accept publishes it as a version under the owner's name.
                   "cockpit_publish",
+                  # The Ask panel (2026-11-19): how ONE chart of a person's own query is drawn, asked about
+                  # that chart; accept draws it so, as the chart editor writes it (`dashboards/chart_look.py`).
+                  "chart_look",
                   # AO-7e — a crystallised skill, staged by memory at L2+ autonomy; accept
                   # saves it through the governed door, never before.
                   "skill_draft",
@@ -605,6 +608,8 @@ def gov_action_of(p: StagedProposal) -> str:
         return "cockpit.draft"
     if p.kind == "cockpit_publish":
         return "cockpit.publish"
+    if p.kind == "chart_look":
+        return "dashboard.chart_look"
     return f"kinetic.{p.action_id}"
 
 
@@ -772,6 +777,8 @@ def accept_proposal(proposal_id: str, *, actor: str, mint_grant: bool = False,
         return _accept_dashboard_draft(p, actor=actor), ""
     if p.kind == "cockpit_publish":
         return _accept_dashboard_publish(p, actor=actor), ""
+    if p.kind == "chart_look":
+        return _accept_chart_look(p, actor=actor), ""
     if p.kind == "skill_draft":
         return _accept_skill_draft(p, actor=actor), ""
     if p.kind == "ontology_candidate":
@@ -1232,6 +1239,21 @@ def _accept_dashboard_draft(p: StagedProposal, *, actor: str):
     made = len(out["cards_created"])
     said = (f"dashboard '{out['title']}' kept as version {out['version']} in the Briefing"
             + (f", with {made} new card{'s' if made != 1 else ''}" if made else ""))
+    _record_outcome(p.id, "executed", said, out)
+    return _Result("executed", True, p.action_id, message=said, outcome=out, detail=out)
+
+
+def _accept_chart_look(p: StagedProposal, *, actor: str):
+    """Draw one chart as the person allowed (the Ask panel, 2026-11-19) — or nothing, when it was changed since it was
+    drafted or is no longer theirs. ``actor`` is recorded by the queue; the chart is the person's own either way."""
+    _Result = _executor_result()
+    from pramanyx.dashboards import chart_look
+
+    ok, out = chart_look.accept(dict(p.params or {}), dict(p.detail or {}), connection_id=p.connection_id)
+    if not ok:
+        _record_outcome(p.id, "failed", str(out), {})
+        return _Result("dispatch_error", False, p.action_id, message=f"not changed: {out}")
+    said = f"“{out['title']}” drawn as allowed"
     _record_outcome(p.id, "executed", said, out)
     return _Result("executed", True, p.action_id, message=said, outcome=out, detail=out)
 

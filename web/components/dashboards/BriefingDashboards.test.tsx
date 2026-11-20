@@ -10,7 +10,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { act, choose, fireEvent, optionsOf, render, screen, waitFor, within } from "@/lib/testing";
+import { act, change, choose, fireEvent, optionsOf, render, screen, waitFor, within } from "@/lib/testing";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BriefingDashboards } from "@/components/dashboards/BriefingDashboards";
@@ -95,13 +95,21 @@ const openBuilder = async () => {
   fireEvent.click(await screen.findByTestId("dashboard-edit"));
   await screen.findByTestId("dashboard-builder");
 };
-/** A door that moved into the canvas toolbar's Chart list (2026-11-18): a card, a finding, a question, the ontology. */
+/** A box set down on the canvas (2026-11-19): the strip's tool picks it up, a click on the canvas sets it down. */
+const setDown = (tool: string) => {
+  fireEvent.click(screen.getByTestId(tool));
+  fireEvent.click(screen.getByTestId("place-layer"));
+};
+/** A door a chart's box offers (2026-11-19): a card, a finding, a question, the ontology, a query of one's own. */
 const chartDoor = async (kind: string) => {
-  // the list reads the declared actions and processes to say which pieces can be placed
+  // the box's setup reads the declared actions and processes to say which pieces can be placed
   api.getDeclaredActions.mockResolvedValue({});
   ontology.getProcesses.mockResolvedValue({ processes: [] });
-  fireEvent.click(screen.getByTestId("builder-add-piece"));
-  fireEvent.click((await screen.findAllByTestId("piece-picker-entry")).find(e => e.dataset.kind === kind)!);
+  setDown("builder-add-piece");
+  // a chart is built on the dashboard's data first; every other piece is one click away
+  fireEvent.click(await screen.findByTestId("place-other-pieces"));
+  change(await screen.findByLabelText("What it is"), { target: { value: kind } });
+  fireEvent.click(screen.getByTestId("piece-picker-place"));
 };
 /** The layout pane, folded to a strip until a person opens it (2026-11-18). */
 const openLayout = () => fireEvent.click(screen.getByTestId("builder-open-layout"));
@@ -535,14 +543,16 @@ describe("the dashboards home, where Dashboards opens (the user, 2026-11-18)", (
 describe("the canvas: a note, an image and a size, by hand (2026-10-08)", () => {
   it("a note typed here is placed in the first section and kept as the next version, its stamps the server's", async () => {
     await openBuilder();
-    fireEvent.click(screen.getByTestId("dashboard-note-new"));
+    setDown("dashboard-note-new");
     fireEvent.change(screen.getByRole("textbox", { name: "The note's words" }), { target: { value: "Check **ops** before the 15th." } });
     fireEvent.click(screen.getByRole("button", { name: "Place the note" }));
     await waitFor(() => expect(api.keepDashboard).toHaveBeenCalled());
     const [conn, id, spec, note] = api.keepDashboard.mock.calls[0] as [string, string, { elements: Record<string, { type: string; props: Record<string, unknown> }> }, string];
     expect([conn, id, note]).toEqual(["thelook", "returns-1", "a note written by hand"]);
     const placed = Object.values(spec.elements).find(e => e.type === "Note")!;
-    expect(placed.props).toEqual({ text: "Check **ops** before the 15th." });     // no author: the server stamps it
+    // no author: the server stamps it; drawn in the box set down — words across the page, from the section's first row
+    expect(placed.props).toMatchObject({ text: "Check **ops** before the 15th.", x: 1, y: 1, w: 12, h: 2 });
+    expect(placed.props).not.toHaveProperty("author");
     expect(spec.elements["sec-headline"]).toBeDefined();
     expect(screen.queryByTestId("dashboard-note-composer")).toBeNull();
   });
@@ -551,7 +561,7 @@ describe("the canvas: a note, an image and a size, by hand (2026-10-08)", () => 
     api.uploadDashboardImage.mockResolvedValue({ object: "ab12cd34ef56", file_name: "promo.png", uploaded_by: "user:default",
       uploaded_at: "2026-10-08T09:00:00Z", content_type: "image/png", bytes: 72, readable: true, why: "" });
     await openBuilder();
-    fireEvent.click(screen.getByTestId("dashboard-image-new"));
+    setDown("dashboard-image-new");
     const file = new File([new Uint8Array([137, 80, 78, 71])], "promo.png", { type: "image/png" });
     fireEvent.change(screen.getByLabelText("The image file"), { target: { files: [file] } });
     fireEvent.change(screen.getByRole("textbox", { name: "Caption" }), { target: { value: "Promo calendar" } });
@@ -560,14 +570,14 @@ describe("the canvas: a note, an image and a size, by hand (2026-10-08)", () => 
     expect(api.uploadDashboardImage).toHaveBeenCalledWith("thelook", file);
     const spec = api.keepDashboard.mock.calls[0][2] as { elements: Record<string, { type: string; props: Record<string, unknown> }> };
     const placed = Object.values(spec.elements).find(e => e.type === "Image")!;
-    expect(placed.props).toEqual({ object: "ab12cd34ef56", caption: "Promo calendar" });
+    expect(placed.props).toMatchObject({ object: "ab12cd34ef56", caption: "Promo calendar", x: 1, y: 1, w: 4, h: 6 });
     expect(api.keepDashboard.mock.calls[0][3]).toBe("an image uploaded by hand");
   });
 
   it("an upload the server refuses is said where the file was chosen, and nothing is kept", async () => {
     api.uploadDashboardImage.mockRejectedValue(new Error("The file is not a PNG, JPEG, GIF, WebP or SVG image (it was sent as text/html)."));
     await openBuilder();
-    fireEvent.click(screen.getByTestId("dashboard-image-new"));
+    setDown("dashboard-image-new");
     fireEvent.change(screen.getByLabelText("The image file"), { target: { files: [new File(["<html>"], "page.html", { type: "text/html" })] } });
     fireEvent.click(screen.getByRole("button", { name: "Upload and place" }));
     expect(await screen.findByTestId("dashboard-image-refused")).toHaveTextContent("sent as text/html");
@@ -799,7 +809,7 @@ describe("building a dashboard in place (Arc AP-1)", () => {
     await openBuilder();
     await waitFor(() => expect(doors().onRegrid).toBeTypeOf("function"));
     act(() => { doors().onRegrid!("card-net", { w: 6, h: 5 }, {}); });
-    fireEvent.click(screen.getByTestId("dashboard-note-new"));
+    setDown("dashboard-note-new");
     fireEvent.change(await screen.findByLabelText("The note's words"), { target: { value: "Watch returns in Q4" } });
     fireEvent.click(screen.getByRole("button", { name: "Place the note" }));
     await waitFor(() => expect(api.keepDashboard).toHaveBeenCalledTimes(1));
@@ -817,7 +827,7 @@ describe("building a dashboard in place (Arc AP-1)", () => {
     await waitFor(() => expect(doors().onRegrid).toBeTypeOf("function"));
     act(() => { doors().onRegrid!("card-net", { w: 6, h: 5 }, {}); });
     await waitFor(() => expect(api.keepDashboard).toHaveBeenCalledTimes(1), { timeout: 3000 });   // the resize, on its way
-    fireEvent.click(screen.getByTestId("dashboard-note-new"));
+    setDown("dashboard-note-new");
     fireEvent.change(await screen.findByLabelText("The note's words"), { target: { value: "After the resize" } });
     fireEvent.click(screen.getByRole("button", { name: "Place the note" }));
     await new Promise(r => setTimeout(r, 50));
@@ -1079,14 +1089,144 @@ describe("your own query on the dashboard (Arc AP-7)", () => {
     ontology.getProcesses.mockResolvedValue({ processes: [] });
   });
 
+  it("builds a chart box on one of the dashboard's datasets, drawn where the box was set down (2026-11-19)", async () => {
+    // the dashboard read holds one dataset: put on the premise itself for this test, and taken off after it
+    const datasets = { orders: { label: "Orders", sql: "SELECT * FROM thelook.orders", table: "thelook.orders" } };
+    SPEC.datasets = datasets;
+    try {
+      api.previewDashboardQuery.mockResolvedValue({ connection_id: "thelook", refused: [], columns: [
+        { name: "day", type: "DATE" }, { name: "sales", type: "DOUBLE" }, { name: "country", type: "VARCHAR" }] });
+      api.keepDashboardQuery.mockResolvedValue({ card: queryCard("qdata"), preview: { connection_id: "thelook", refused: [] } });
+      await openBuilder();
+      setDown("builder-add-piece");
+      expect(await screen.findByTestId("chart-dataset")).toHaveAttribute("data-value", "orders");
+      change(screen.getByLabelText("Visualization"), { target: { value: "line" } });
+      api.getDashboard.mockResolvedValue({ ...READ, cards: [...READ.cards, queryCard("qdata")] });
+      fireEvent.click(screen.getByTestId("chart-from-data-place"));
+      await waitFor(() => expect(api.keepDashboard).toHaveBeenCalled());
+      // drawn first from the data's own columns: its date along the bottom, its number summed; the colour is left for the person
+      expect(api.keepDashboardQuery).toHaveBeenCalledWith("thelook", expect.objectContaining({ sql: "SELECT * FROM thelook.orders", title: "Orders",
+        shown: expect.objectContaining({ as: "line", x: "day", bucket: "day", split: "", series: [{ column: "sales", agg: "sum" }] }) }));
+      const [, , kept, note] = api.keepDashboard.mock.calls.at(-1)!;
+      expect(note).toBe("a chart built on a dataset by hand");
+      const placed = Object.values((kept as { elements: Record<string, { type: string; props: Record<string, unknown> }> }).elements)
+        .filter(el => el.type === "Card" && el.props.card === "qdata");
+      expect(placed).toHaveLength(1);
+      expect(placed[0].props).toEqual(expect.objectContaining({ w: 6, h: 8, dataset: "orders" }));   // the box's own size, built on its data
+      expect((kept as { datasets?: unknown }).datasets).toEqual(datasets);            // the data stays the dashboard's
+    } finally { delete SPEC.datasets; }
+  });
+
+  it("a dataset's statement changed is kept on the chart built on it, which says what it is built on (link them)", async () => {
+    const datasets = { orders: { label: "Orders", sql: "SELECT day, sales FROM thelook.orders" } };
+    const net = SPEC.elements["card-net"].props;
+    SPEC.datasets = datasets;
+    SPEC.elements["card-net"].props = { ...net, dataset: "orders" };
+    try {
+      api.getDashboard.mockResolvedValue({ ...READ, cards: [READ.cards[0], queryCard("c91b2002"), READ.cards[2]] });
+      api.previewDashboardQuery.mockResolvedValue({ connection_id: "thelook", refused: [] });
+      api.keepDashboardQuery.mockResolvedValue({ card: queryCard("q0paid01"), preview: { connection_id: "thelook", refused: [] } });
+      await openBuilder();
+      openLayout();
+      fireEvent.click((await screen.findAllByTestId("builder-line")).find(l => l.dataset.key === "card-net")!);
+      fireEvent.click(screen.getByTestId("card-fold-reads"));
+      // its SQL is the dataset's: no query of its own to change here, and a way to one
+      expect(await screen.findByTestId("chart-built-on")).toHaveTextContent("Orders");
+      expect(screen.queryByTestId("query-setup")).toBeNull();
+      // the dataset, opened from the chart in the Data tab, its statement there to change
+      fireEvent.click(screen.getByTestId("chart-dataset-open"));
+      expect(screen.getByTestId("data-view")).toBeInTheDocument();
+      expect(screen.getByTestId("data-dataset")).toHaveTextContent("Your own SQL · 1 chart");
+      fireEvent.change(screen.getByLabelText("The dataset's SQL"), { target: { value: "SELECT day, sales FROM thelook.orders WHERE paid" } });
+      fireEvent.click(screen.getByTestId("data-dataset-keep"));
+      await waitFor(() => expect(api.keepDashboard).toHaveBeenCalled());
+      expect(api.keepDashboardQuery).toHaveBeenCalledWith("thelook", expect.objectContaining({
+        sql: "SELECT day, sales FROM thelook.orders WHERE paid", replaces: "c91b2002", title: "Sales by day" }));
+      const [, , kept, note] = api.keepDashboard.mock.calls.at(-1)!;
+      expect(note).toBe("a dataset's statement changed by hand, and the charts built on it");
+      const k = kept as { datasets: Record<string, { sql: string }>; elements: Record<string, { props: Record<string, unknown> }> };
+      expect(k.datasets.orders.sql).toBe("SELECT day, sales FROM thelook.orders WHERE paid");
+      expect(k.elements["card-net"].props).toEqual(expect.objectContaining({ card: "q0paid01", dataset: "orders" }));
+    } finally {
+      delete SPEC.datasets;
+      SPEC.elements["card-net"].props = net;
+    }
+  });
+
+  it("a chart built on a dataset can be given its own SQL, after which the dataset no longer reaches it", async () => {
+    const net = SPEC.elements["card-net"].props;
+    SPEC.datasets = { orders: { label: "Orders", sql: "SELECT day, sales FROM thelook.orders" } };
+    SPEC.elements["card-net"].props = { ...net, dataset: "orders" };
+    try {
+      api.getDashboard.mockResolvedValue({ ...READ, cards: [READ.cards[0], queryCard("c91b2002"), READ.cards[2]] });
+      await openBuilder();
+      openLayout();
+      fireEvent.click((await screen.findAllByTestId("builder-line")).find(l => l.dataset.key === "card-net")!);
+      fireEvent.click(screen.getByTestId("card-fold-reads"));
+      fireEvent.click(await screen.findByTestId("chart-own-sql"));
+      expect(await screen.findByTestId("query-setup")).toBeInTheDocument();
+      expect(screen.queryByTestId("chart-built-on")).toBeNull();
+    } finally {
+      delete SPEC.datasets;
+      SPEC.elements["card-net"].props = net;
+    }
+  });
+
+  it("a chart says under its Visualization what it is built on; the name opens it, the pencil builds it on another", async () => {
+    const net = SPEC.elements["card-net"].props;
+    SPEC.datasets = { orders: { label: "Orders", sql: "SELECT day, sales FROM thelook.orders" },
+      returns: { label: "Returns", sql: "SELECT day, sales FROM thelook.returns" } };
+    SPEC.elements["card-net"].props = { ...net, dataset: "orders" };
+    try {
+      api.getDashboard.mockResolvedValue({ ...READ, cards: [READ.cards[0], queryCard("c91b2002"), READ.cards[2]] });
+      api.previewDashboardQuery.mockResolvedValue({ connection_id: "thelook", refused: [] });
+      api.keepDashboardQuery.mockResolvedValue({ card: queryCard("q0ret001"), preview: { connection_id: "thelook", refused: [] } });
+      await openBuilder();
+      openLayout();
+      fireEvent.click((await screen.findAllByTestId("builder-line")).find(l => l.dataset.key === "card-net")!);
+      const line = await screen.findByTestId("chart-dataset-line");
+      expect(within(screen.getByTestId("viz-visualization")).getByTestId("chart-dataset-line")).toBe(line);
+      fireEvent.click(within(line).getByTestId("chart-dataset-open"));
+      expect(screen.getByTestId("data-view")).toBeInTheDocument();                // the Data tab, in place of the canvas
+      expect(await screen.findByTestId("data-dataset-editor")).toBeInTheDocument();
+      expect(screen.getByLabelText("The dataset's name")).toHaveValue("Orders");
+      fireEvent.click(within(line).getByRole("button", { name: "Change dataset" }));
+      change(screen.getByLabelText("Build it on"), { target: { value: "returns" } });
+      await waitFor(() => expect(api.keepDashboard).toHaveBeenCalled());
+      expect(api.keepDashboardQuery).toHaveBeenCalledWith("thelook", expect.objectContaining({ sql: "SELECT day, sales FROM thelook.returns", replaces: "c91b2002" }));
+      const [, , kept, note] = api.keepDashboard.mock.calls.at(-1)!;
+      expect(note).toBe("a chart built on another dataset by hand");
+      expect((kept as { elements: Record<string, { props: Record<string, unknown> }> }).elements["card-net"].props)
+        .toEqual(expect.objectContaining({ card: "q0ret001", dataset: "returns" }));
+    } finally {
+      delete SPEC.datasets;
+      SPEC.elements["card-net"].props = net;
+    }
+  });
+
+  it("a chart box on a dashboard with no data yet asks for data first, held as a dataset", async () => {
+    api.getCatalogTree.mockResolvedValue({ sections: [{ id: "s", label: "S", entries: [{ conn_id: "thelook", conn_type: "bigquery", schemas: [
+      { name: "thelook", tables: [{ name: "order_items" }] }] }] }] } as never);
+    await openBuilder();
+    setDown("builder-add-piece");
+    expect(await screen.findByTestId("chart-from-data-empty")).toHaveTextContent("Add data to get going");
+    fireEvent.click(screen.getByTestId("chart-add-table"));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "thelook.order_items" }));
+    fireEvent.click(screen.getByTestId("add-data-tables"));
+    expect(await screen.findByTestId("chart-dataset")).toHaveAttribute("data-value", "order_items");
+    await waitFor(() => expect(api.keepDashboard).toHaveBeenCalled());
+    const [, , kept, note] = api.keepDashboard.mock.calls.at(-1)!;
+    expect(note).toBe("a table added as data by hand");
+    expect((kept as { datasets: unknown }).datasets).toEqual({ order_items: { label: "Order items", sql: "SELECT * FROM thelook.order_items", table: "thelook.order_items" } });
+  });
+
   it("writes a new one for the section the picker was opened for, and places the kept card there", async () => {
     api.keepDashboardQuery.mockResolvedValue({ card: queryCard("qnew"), preview: { connection_id: "thelook", refused: [] } });
     show();
     fireEvent.click(await screen.findByTestId("dashboard-edit"));
     await screen.findByTestId("dashboard-builder");
-    fireEvent.click(await screen.findByTestId("builder-add-piece"));
-    const entry = (await screen.findAllByTestId("piece-picker-entry")).find(e => e.dataset.kind === "query")!;
-    fireEvent.click(entry);
+    await screen.findByTestId("builder-add-piece");
+    await chartDoor("query");
     const setup = await screen.findByTestId("query-setup");
     fireEvent.change(within(setup).getByLabelText("SQL"), { target: { value: "SELECT day, sales FROM thelook.orders" } });
     api.getDashboard.mockResolvedValue({ ...READ, cards: [...READ.cards, queryCard("qnew")] });

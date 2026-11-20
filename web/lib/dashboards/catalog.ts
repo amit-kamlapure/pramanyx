@@ -61,8 +61,12 @@ import { z } from "zod";
  *  for a value on every card of the dashboard (`colors` on the root: a field's value to one of the six series colours;
  *  2026-11-18). 18: a placed card the dashboard's filters do not cut (`not_filtered`), and a page kept from its readers
  *  (`hidden` on a tab; 2026-11-18). 19: global filters. 20: filters that link, open on a value, name a date that moves, wait for
- *  Apply, hold to one page, match words exactly and feed a value; a card's fixed filters and the filters it ignores (2026-11-19). */
-export const DASHBOARD_VOCABULARY_VERSION = 20;
+ *  Apply, hold to one page, match words exactly and feed a value; a card's fixed filters and the filters it ignores (2026-11-19).
+ *  21: the datasets a dashboard's charts are built on (`datasets` on the spec), and the one a placed card is built on
+ *  (`dataset`); whether the filters panel is put away as a reader first sees it (`filters_shut` on the root; 2026-11-19). */
+export const DASHBOARD_VOCABULARY_VERSION = 21;
+/** v21 — a dataset's name, as the spec holds it and a placed card names it. */
+export const DATASET_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;
 /** v19 — how a global filter is chosen from (the user, 2026-11-18). */
 export const GLOBAL_FILTER_KINDS = ["multi", "single", "date", "date_range", "text", "range"] as const;
 export type GlobalFilterKind = (typeof GLOBAL_FILTER_KINDS)[number];
@@ -136,6 +140,7 @@ export const LIMITS = {
   ObjectMap: { w: [3, 12], h: [5, 20] },
   ObjectTimeline: { w: [4, 12], h: [4, 20] },
   ChooseOne: { w: [2, 12], h: [4, 14] },
+  GlobalFilter: { w: [2, 12], h: [2, 8] },
   ObjectSearch: { w: [2, 12], h: [3, 4] },
   Question: { w: [4, 12], h: [6, 30] },
   ScenarioInputs: { w: [4, 12], h: [3, 10] },
@@ -354,7 +359,8 @@ const valueColors = z.record(z.string().min(1).max(200),
 export const dashboardCatalog = defineCatalog(schema, {
   components: {
     Cockpit: {
-      props: z.object({ title: z.string().min(1).max(MAX_TITLE), colors: valueColors }),
+      // v21 — whether the filters panel is put away: what a reader first sees, as the author left it
+      props: z.object({ title: z.string().min(1).max(MAX_TITLE), colors: valueColors, filters_shut: z.boolean().nullable().optional() }),
       slots: ["default"],
       description: "The root. Holds one Tabs, or one or more Section. Its title names the dashboard; it is not drawn as a header.",
     },
@@ -407,6 +413,8 @@ export const dashboardCatalog = defineCatalog(schema, {
         // v20 — filters the author sets on this placement, which no reader changes, and the dashboard's filters it does not follow
         fixed_filters: z.array(fixedFilter).max(MAX_FIXED_FILTERS).nullable().optional(),
         ignores_filters: z.array(z.string().min(1).max(80)).max(MAX_GLOBAL_FILTERS).nullable().optional(),
+        // v21 — the dashboard's dataset this chart is built on: a change to the dataset's statement is kept on it too
+        dataset: z.string().regex(DATASET_NAME).nullable().optional(),
         size, w, h, x, y,
       }),
       description: "One card from the card store, by its id. Never a figure, never SQL. May be shown by a condition. "
@@ -694,8 +702,10 @@ export const dashboardCatalog = defineCatalog(schema, {
         parameter: z.string().regex(WIRE_NAME).nullable().optional(),
         /** v20 — how multiple values are offered: a list, or a dropdown that takes one line (the user, 2026-11-19). */
         show: z.enum(MULTI_SHOWS).nullable().optional(),
+        /** Placed on the canvas as a box of its own (the user, 2026-11-19, of a peer product's editor): its room and place. */
+        size, w, h, x, y,
       }),
-      description: "One global filter: multiple values, a single value, a date, a date range, text or a range of numbers, on one column.",
+      description: "One global filter: multiple values, a single value, a date, a date range, text or a range of numbers, on one column. In the filters column, or placed on the canvas in a section.",
     },
   },
   actions: {},
@@ -745,7 +755,8 @@ export const MAY_HOLD: Record<ComponentName, readonly ComponentName[]> = {
   Tabs: ["Tab"],
   Tab: ["Section"],
   // Arc AP-4 — or sections of its own, when it is laid out (the rules hold a section to one or the other)
-  Section: [...PLACED, "Section"],
+  // and a global filter placed on the canvas as a box of its own (2026-11-19), as well as in the filters column
+  Section: [...PLACED, "GlobalFilter", "Section"],
   Card: [],
   Note: [],
   Image: [],

@@ -109,3 +109,28 @@ export function queryValue(kind: string, column: string | null | undefined,
 const KIND_WORDS: Record<string, string> = {
   days: "a whole number of days", number: "a number", text: "words", date: "a day", yesno: "yes or no", list: "a list",
 };
+
+/** What a value's kind asks a person for, in words: "Give Window days". */
+export const VALUE_KIND_WORDS: Record<string, string> = { days: "days", number: "a number", text: "words", date: "a day" };
+
+/** What a value starts from, as text to try a statement with: the author's or a reader's starting value; one read from a
+ *  set or a chosen object starts empty. */
+export function startText(def: { value?: unknown; from?: { by?: string } | null }): string {
+  return (def.from?.by ?? "author") === "author" || def.from?.by === "reader" ? (def.value === null || def.value === undefined ? "" : String(def.value)) : "";
+}
+
+/** The values a statement reads, as it is tried with them — each as typed in `tried`, else as it starts — or each reason
+ *  one cannot be: a name the dashboard holds no value of, or one not given. Said before anything runs. */
+export function triedValues(names: string[], defs: Record<string, { kind: string; label: string; value?: unknown; from?: { by?: string } | null }> | null | undefined,
+  tried: Record<string, string> = {}): { values: ValuesSent } | { refused: string[] } {
+  const out: ValuesSent = {};
+  const said: string[] = [];
+  for (const name of names) {
+    const def = defs?.[name];
+    if (!def) { said.push(`{{${name}}} is not one of this dashboard's values.`); continue; }
+    const v = typedValue(def.kind, tried[name] ?? startText(def));
+    if (v === null) said.push(`Give ${def.label} ${VALUE_KIND_WORDS[def.kind] ?? "a value"} to try the query with.`);
+    else out[name] = { kind: def.kind, value: v };
+  }
+  return said.length ? { refused: said } : { values: out };
+}

@@ -148,12 +148,20 @@ export interface DelegatedHop {
 }
 
 /** CI-6a — one converse tool step: the model chose a tool, and this is the record. */
+/** One step of a request's plan, in the person's words, and whether it is done. */
+export interface PlanStep {
+  text: string;
+  done: boolean;
+}
+
 export interface ConverseStep {
   index: number;
   tool: string;
   ok: boolean;
   detail: string;
   resultChars: number;
+  /** The tool said no — its reason in `detail` (2026-11-20). */
+  refused?: boolean;
 }
 
 /** SP-9 — a proposal this turn STAGED, announced by the act tool that staged it. The
@@ -235,6 +243,12 @@ export interface ChatTurn {
   /** VA-2 — delegated hops, in first-seen order. Empty for an undelegated turn. */
   delegations: DelegatedHop[];
   converseSteps: ConverseStep[];
+  /** The turn spent every step before finishing: Keep going is offered (2026-11-20). */
+  keepGoing: boolean;
+  /** What that turn's queries found, a line each, for Keep going to start from (2026-11-20). */
+  keepGoingFound: string[];
+  /** The plan of a request with several parts, each step marked as it is done (Stage 4, 2026-11-20). Empty for most. */
+  plan: PlanStep[];
   /** SP-9 — proposals this turn staged, in arrival order. Empty for most turns. */
   stagedProposals: StagedProposalRef[];
   /** Arc SH — the rows a sheet question put on the grid, in arrival order. Empty off a sheet. */
@@ -388,6 +402,9 @@ export const EMPTY_TURN: Omit<ChatTurn, "id" | "question" | "mode"> = {
   guardReceipts: [],
   delegations: [],
   converseSteps: [],
+  keepGoing: false,
+  keepGoingFound: [],
+  plan: [],
   stagedProposals: [],
   sheetRows: [],
   answerParts: [],
@@ -504,7 +521,19 @@ const PART_PROJECTORS: Record<string, (t: ChatTurn, d: Payload) => void> = {
       ok: d.ok !== false,
       detail: (d.detail as string) ?? "",
       resultChars: (d.result_chars as number) ?? 0,
+      ...(d.refused === true ? { refused: true } : {}),
     }];
+  },
+  // the turn spent every step (2026-11-20): Keep going picks up from where it stopped
+  keep_going: (t, d) => {
+    t.keepGoing = true;
+    t.keepGoingFound = Array.isArray(d.found) ? d.found.filter((l): l is string => typeof l === "string") : [];
+  },
+  // the plan as it stands: each call says the whole plan again, so the last one is the plan (Stage 4, 2026-11-20)
+  plan: (t, d) => {
+    const steps = Array.isArray(d.steps) ? d.steps : [];
+    t.plan = steps.filter((s): s is { text: string; done?: boolean } => !!s && typeof (s as { text?: unknown }).text === "string")
+      .map(s => ({ text: s.text, done: s.done === true }));
   },
   answer_parts: (t, d) => {
     const parts = Array.isArray(d.parts) ? (d.parts as AnswerPart[]) : [];

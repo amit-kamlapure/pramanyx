@@ -36,10 +36,15 @@ test("a turn comes to its question, each tool call and result, and its end — i
   assert.equal(turns.size, 0, "a finished turn is forgotten");
 });
 
-test("what the agent was given and what it said are not sent — only where they are", () => {
-  const sent = JSON.stringify(aTurn().out);
+test("what the agent was given is not sent, and what it said goes only with the turn's end, to be filed", () => {
+  // 2026-11-20 ("One record for all"): the question and the coworker's reply go with the end, and the platform files
+  // the turn in its conversation store; the trace itself still keeps only where things are.
+  const out = aTurn().out;
+  const sent = JSON.stringify(out);
   assert.ok(!sent.includes("the folder's instructions"));
-  assert.ok(!sent.includes("I'll check."));
+  assert.ok(!JSON.stringify(out.slice(0, -1)).includes("I'll check."));
+  assert.equal(out.at(-1).payload.answer, "I'll check.");
+  assert.equal(out.at(-1).payload.question, "What is total GMV by platform?");
   assert.ok(!sent.includes("llm_call"), "a model call is the door's to record");
   assert.equal(aTurn().out[1].payload.shell_session, S);
   assert.equal(aTurn().out[1].payload.seq, 19);

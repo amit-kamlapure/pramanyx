@@ -12,7 +12,7 @@ import { useContext, useEffect, useRef, useSyncExternalStore } from "react";
 
 import { plural, typeWord } from "@/lib/dashboards/objectView";
 import { formatCount } from "@/lib/format";
-import { openAskPanelOn } from "@/lib/askPanel";
+import { openAskPanelOn, queueAsk } from "@/lib/askPanel";
 import { LayerVisibleContext } from "@/lib/useVisiblePoll";
 
 /** The most objects one subject names — the server's own bound, and a press's (`MAX_TICKED_RUNS`). */
@@ -106,6 +106,13 @@ export function useOnPage(subject: AskSubject | null): void {
 export function askAbout(subject: AskSubject): void {
   setAskSubject(subject);
   openAskPanelOn(subject.connectionId);
+}
+
+/** Ask `text` about `subject` in the Ask panel at once (2026-11-19: a chart's own prompt): the conversation in front sends it,
+ *  with the subject, where its steps and any change it drafts are shown. */
+export function askInPanel(subject: AskSubject, text: string): void {
+  askAbout(subject);
+  queueAsk(subject.connectionId, text, subjectKey(subject));
 }
 
 /** How a type's objects are called, from the type the object door names: ["order", "orders"]. */

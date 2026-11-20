@@ -9,7 +9,6 @@ import { type CSSProperties, Fragment, useCallback, useEffect, useMemo, useState
 
 import { Chip, Empty, Label, MUTED, NUM, ONE_LINE } from "@/components/clarity/kit";
 import { NewSheetDialog, type NewSheetStart } from "@/components/sheets/NewSheetDialog";
-import { NewSheetChat } from "@/components/sheets/SheetChat";
 import { RemoveSheetConfirm } from "@/components/sheets/SheetRemove";
 import { SharePop } from "@/components/sheets/SheetSharing";
 import { Button } from "@/components/ui/button";
@@ -17,7 +16,9 @@ import { ChromeFacts, ChromeToolbar, useInShell } from "@/components/shell/PageC
 import { Icon, type IconName } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
 import { Loading, ReadFailed } from "@/components/ui/states";
+import { openAskPanelOn } from "@/lib/askPanel";
 import { formatCount, formatTimestamp } from "@/lib/format";
+import { useSheetsHomeHere } from "@/lib/sheetBridge";
 import {
   isWithheld, lastChangeWords, listSheets, sharedWords, type SheetSummary, type UploadedFile, type WithheldSheet, who,
 } from "@/lib/sheets";
@@ -34,12 +35,13 @@ function size(bytes: number): string {
 }
 
 export function SheetsHome({ onOpen }: { onOpen: (id: string) => void }) {
+  // "In the chat" is the Ask panel (2026-11-20): a file dropped there becomes one proposal for a new sheet, opened here
+  useSheetsHomeHere(onOpen);
   // the sheets the reader may open, and apart from them the ones not shared with them — named, never read (SH-8)
   const [data, setData] = useState<{ sheets: SheetSummary[]; withheld: WithheldSheet[]; uploads: UploadedFile[];
     me: string } | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const [start, setStart] = useState<NewSheetStart | null>(null);
-  const [chatting, setChatting] = useState(false);
   const [find, setFind] = useState("");
   const inShell = useInShell();
   const [sharing, setSharing] = useState<string>("");
@@ -129,7 +131,7 @@ export function SheetsHome({ onOpen }: { onOpen: (id: string) => void }) {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
               {tiles.map(t => (
                 <Button key={t.start === "chat" ? "chat" : t.start.source} variant="plain"
-                  onClick={() => (t.start === "chat" ? setChatting(true) : setStart(t.start))}
+                  onClick={() => (t.start === "chat" ? openAskPanelOn("sheets") : setStart(t.start))}
                   style={{ display: "flex", alignItems: "flex-start", justifyContent: "flex-start", gap: 10, height: "auto", padding: "12px 14px",
                     textAlign: "left", whiteSpace: "normal", border: "1px solid var(--card-edge)",
                     background: "var(--bg-2)", borderRadius: "var(--r3)", fontWeight: 400 }}>
@@ -275,9 +277,6 @@ export function SheetsHome({ onOpen }: { onOpen: (id: string) => void }) {
       {start && (
         <NewSheetDialog start={start} onClose={() => setStart(null)}
           onMade={ids => { setStart(null); read(); if (ids[0]) onOpen(ids[0]); }} />
-      )}
-      {chatting && (
-        <NewSheetChat onClose={() => setChatting(false)} onMade={id => { setChatting(false); onOpen(id); }} />
       )}
     </div>
   );

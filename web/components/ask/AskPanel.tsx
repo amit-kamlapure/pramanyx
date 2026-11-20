@@ -17,7 +17,7 @@ import { Loading } from "@/components/ui/states";
 import { Tooltip } from "@/components/ui/tooltip";
 import type { ChatSessionSummary } from "@/components/ThreadsRail";
 import {
-  closeAskTab, followPageConnection, hideAskPanel, newAskTab, noteAskSession, openAskConversation, PANEL_MAX_W, PANEL_MIN_W, selectAskTab,
+  closeAskTab, followPageConnection, hideAskPanel, inTheCoworker, newAskTab, noteAskSession, openAskConversation, PANEL_MAX_W, PANEL_MIN_W, selectAskTab,
   setAskPanelWidth, toggleAskPanel, useAskPanel, useAskPanelWidth, type AskTab,
 } from "@/lib/askPanel";
 import { getApiBase } from "@/lib/config";
@@ -51,15 +51,24 @@ export function AskPushedPage({ hidden = false, children }: { hidden?: boolean; 
   const width = useAskPanelWidth();
   const pushed = open && tabs.length > 0 && !hidden && !narrow;
   const scroller = useRef<HTMLDivElement>(null);
+  const page = useRef<HTMLDivElement>(null);
+  // how far the page is moved, as `--ask-pushed`: what must stay in reach — a dashboard's filters — stands that far in
+  // from the page's left edge, so it is never hidden under the rail (the user, 2026-11-19: "the Global filters are not
+  // visible" with the panel open)
+  const said = useCallback(() => {
+    const el = scroller.current;
+    page.current?.style.setProperty("--ask-pushed", `${pushed && el ? el.scrollLeft : 0}px`);
+  }, [pushed]);
   // opening the panel moves the page left by the panel's width: what was at its right edge stays beside the panel
   useEffect(() => {
     const el = scroller.current;
     if (pushed && el) el.scrollLeft = el.scrollWidth;
-  }, [pushed]);
+    said();
+  }, [pushed, said]);
   return (
-    <div ref={scroller} data-testid="ask-pushed-page" data-pushed={pushed || undefined}
+    <div ref={scroller} data-testid="ask-pushed-page" data-pushed={pushed || undefined} onScroll={said}
       style={{ flex: 1, minWidth: 0, display: "flex", overflowX: pushed ? "auto" : "hidden", overflowY: "hidden" }}>
-      <div style={{ display: "flex", minWidth: 0, ...(pushed ? { flex: "none", width: `calc(100% + ${width}px)` } : { flex: 1 }) }}>
+      <div ref={page} style={{ display: "flex", minWidth: 0, ...(pushed ? { flex: "none", width: `calc(100% + ${width}px)` } : { flex: 1 }) }}>
         {children}
       </div>
     </div>
@@ -94,6 +103,8 @@ function History({ connectionId }: { connectionId: string }) {
         {(rows ?? []).map(r => (
           <DropdownMenu.Item key={r.session_id} data-testid="ask-panel-history-row" onSelect={() => openAskConversation(r.session_id, r.title, connectionId)}>
             <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.title || "Untitled"}</span>
+            {/* one record for both places (2026-11-20): a conversation held in the coworker app says so */}
+            {inTheCoworker(r.session_id) && <span data-testid="ask-panel-history-coworker" className="aug-fs-xs" style={{ flex: "none", color: "var(--t3)" }}>coworker</span>}
           </DropdownMenu.Item>
         ))}
       </DropdownMenu.Content>
@@ -176,7 +187,7 @@ export function AskPanelHost({ connectionId, hidden = false }: { connectionId: s
       {tabs.map(t => (
         <div key={t.key} role="tabpanel" aria-label={tabName(t)} hidden={t.key !== front.key}
           style={{ flex: 1, minHeight: 0, display: t.key === front.key ? "flex" : "none", flexDirection: "column" }}>
-          <ChatPanel connectionId={t.connectionId} beside harness restoreSessionId={t.session}
+          <ChatPanel connectionId={t.connectionId} beside harness restoreSessionId={t.session} takesQueued={shown && t.key === front.key}
             onSession={(session, title) => noteAskSession(t.key, session, title)} onNew={() => newAskTab(t.connectionId)} />
         </div>
       ))}

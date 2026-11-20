@@ -12,7 +12,7 @@
  * a heavy session eventually throws QuotaExceededError on write, and the failure would
  * surface as "my tabs stopped saving" long after the cause.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Dot } from "@/components/clarity/kit";
@@ -119,6 +119,11 @@ export function TabsBar({
   startLabel?: string;
 }) {
   const [editing, setEditing] = useState("");
+  const strip = useRef<HTMLDivElement>(null);
+  // the open query is always in view: one opened or chosen beyond the strip's edge is scrolled to
+  useEffect(() => {
+    strip.current?.querySelector<HTMLElement>(`[data-tab-id="${activeId}"]`)?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+  }, [activeId, tabs.length]);
   const [draftName, setDraftName] = useState("");
   const [plusMenu, setPlusMenu] = useState(false);
 
@@ -145,7 +150,10 @@ export function TabsBar({
         borderBottom: "1px solid var(--b1)", flexShrink: 0,
       }}
     >
-      <div role="tablist" aria-label="Open queries" style={{ display: "flex", alignItems: "stretch", minWidth: 0 }}>
+      {/* the open queries scroll sideways — the wheel too — and never run under the controls at the row's right end */}
+      <div role="tablist" aria-label="Open queries" data-testid="sql-tabs" ref={strip}
+        onWheel={e => { if (strip.current && Math.abs(e.deltaY) > Math.abs(e.deltaX)) strip.current.scrollLeft += e.deltaY; }}
+        style={{ display: "flex", alignItems: "stretch", flex: "0 1 auto", minWidth: 0, overflowX: "auto", overflowY: "hidden", scrollbarWidth: "thin" }}>
       {tabs.length === 0 && startLabel && (
         <div role="tab" aria-selected tabIndex={0} data-testid="sql-start-tab" className="aug-folder-tab aug-fs-ui"
           style={{ display: "flex", alignItems: "center", flexShrink: 0, padding: "0 12px",
@@ -220,7 +228,7 @@ export function TabsBar({
         );
       })}
       </div>
-      <div style={{ display: "flex", alignItems: "center", padding: "0 6px" }}>
+      <div style={{ display: "flex", alignItems: "center", padding: "0 6px", flexShrink: 0 }}>
       {onOpenExisting ? (
         <div style={{ position: "relative", flexShrink: 0 }}>
           <Button variant="plain" size="xs" className="aug-fs-ui"

@@ -224,3 +224,27 @@ describe("an Ask this briefing turn carries what it was asked from", () => {
     expect(seen.body?.brief_period).toBe("range:last_month:2026-08-01..2026-08-31");
   });
 });
+
+describe("Keep going carries what the stopped turn already did", () => {
+  /** A turn that ran out of steps offers Keep going; the panel sends the same question with the
+   *  steps it took (refusals marked), so the next turn picks up rather than starting over
+   *  (2026-11-20, the Operations chart asked for "YYYY-MM" seven times). */
+  it("forwards keep_going to the unified door, and nothing when there is none", async () => {
+    const bodies: Record<string, unknown>[] = [];
+    vi.stubGlobal("fetch", async (_url: string, init: RequestInit) => {
+      bodies.push(JSON.parse(String(init.body)) as Record<string, unknown>);
+      return sse('data: {"type":"done"}\n\n');
+    });
+    const ask = (extra: Record<string, unknown>) => POST(new Request("http://localhost/api/chat", {
+      method: "POST",
+      body: JSON.stringify({
+        messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "Write the months as YYYY-MM" }] }],
+        connection_id: "sheets", session_id: "s1", ...extra,
+      }),
+    }));
+    await ask({ keep_going: "1. change_chart — said no: “monthFormat” is not something the chart editor sets." });
+    await ask({});
+    expect(bodies[0].keep_going).toBe("1. change_chart — said no: “monthFormat” is not something the chart editor sets.");
+    expect(bodies[1]).not.toHaveProperty("keep_going");
+  });
+});

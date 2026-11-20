@@ -47,7 +47,7 @@ describe("the catalog", () => {
       card_statuses: ["within", "over", "unmeasured", "withheld"],
       limits: { elements: MAX_ELEMENTS, tabs: MAX_TABS, cards: MAX_CARDS },
     });
-    expect(DASHBOARD_VOCABULARY_VERSION).toBe(20);        // 17: column looks and kept colours; 16: a placed card's own look; 15: the period as a piece; 14: free placement (x, y); 13: a dashboard made from a file; 5: sizes one grade at a time (Arc AP-1); 6: the wiring (AP-2, AP-3); 7: the structure (AP-4); 8: variables (AP-8); 9: sets read whole (AP-8b); 10: yes-no, lists, sums, queries (AP-8c); 11: a Question (PENDING 54); 12: a breakdown (the Grist study §10)
+    expect(DASHBOARD_VOCABULARY_VERSION).toBe(21);        // 21: datasets and the one a chart is built on; 17: column looks and kept colours; 16: a placed card's own look; 15: the period as a piece; 14: free placement (x, y); 13: a dashboard made from a file; 5: sizes one grade at a time (Arc AP-1); 6: the wiring (AP-2, AP-3); 7: the structure (AP-4); 8: variables (AP-8); 9: sets read whole (AP-8b); 10: yes-no, lists, sums, queries (AP-8c); 11: a Question (PENDING 54); 12: a breakdown (the Grist study §10)
   });
 });
 
@@ -150,6 +150,39 @@ describe("what the library's own validator lets through, and these rules do not"
   it("a prop nobody declared", () => {
     expect(refused(s => { s.elements["card-net"].props = { card: "c91b2002", value: "8.1M" }; }))
       .toMatch(/"card-net" has a problem with its props: Unrecognized key/);
+  });
+});
+
+describe("the datasets a dashboard's charts are built on (2026-11-19)", () => {
+  it("holds a table and a statement of one's own, each by its name", () => {
+    const spec = premise();
+    spec.datasets = { orders: { label: "Orders", sql: "SELECT * FROM shop.orders", table: "shop.orders" },
+      big_orders: { label: "Big orders", sql: "SELECT * FROM shop.orders WHERE total > 100" } };
+    expect(checkDashboardSpec(spec).valid).toBe(true);
+  });
+
+  it.each([
+    ["a name a statement cannot carry", { "big orders": { label: "Big", sql: "SELECT 1" } }],
+    ["no statement", { orders: { label: "Orders", sql: " " } }],
+    ["no label", { orders: { label: "", sql: "SELECT 1" } }],
+    ["a field it has never heard of", { orders: { label: "Orders", sql: "SELECT 1", cards: ["c1"] } }],
+  ])("refuses %s", (_what, datasets) => {
+    expect(refused(s => { s.datasets = datasets; })).toMatch(/is not a label and the statement it reads/);
+  });
+
+  it("a chart is built on a dataset the dashboard holds", () => {
+    const spec = premise();
+    spec.datasets = { orders: { label: "Orders", sql: "SELECT * FROM shop.orders" } };
+    (spec.elements["card-rate"].props as Record<string, unknown>).dataset = "orders";
+    expect(checkDashboardSpec(spec).valid).toBe(true);
+    expect(refused(s => { (s.elements["card-rate"].props as Record<string, unknown>).dataset = "orders"; }))
+      .toMatch(/"card-rate" is built on the dataset "orders", which the dashboard does not hold/);
+  });
+
+  it("refuses more than it holds, and a list", () => {
+    const many = Object.fromEntries(Array.from({ length: 25 }, (_, i) => [`d${i}`, { label: `D${i}`, sql: "SELECT 1" }]));
+    expect(refused(s => { s.datasets = many; })).toMatch(/holds 25 datasets\. It holds at most 24/);
+    expect(refused(s => { s.datasets = [{ label: "Orders", sql: "SELECT 1" }]; })).toMatch(/is not a map of named datasets/);
   });
 });
 
@@ -450,7 +483,7 @@ describe("the ontology's pieces (Arc OC-4)", () => {
       s.elements.d1.children = [];
       const section = Object.keys(s.elements).find(k => s.elements[k].type === "Section") as string;
       (s.elements[section].children as string[]).push("a1");
-    })).toContain('holds "a1". A Section holds: Card, Note, Image, ProcessBoard, ObjectTable, ObjectDetail, ObjectFigure, ObjectChart, ObjectBreakdown, ActionButtons, ObjectList, ObjectMap, ObjectTimeline, ChooseOne, ObjectSearch, Question, ScenarioInputs, AddRow, Period, Section.');
+    })).toContain('holds "a1". A Section holds: Card, Note, Image, ProcessBoard, ObjectTable, ObjectDetail, ObjectFigure, ObjectChart, ObjectBreakdown, ActionButtons, ObjectList, ObjectMap, ObjectTimeline, ChooseOne, ObjectSearch, Question, ScenarioInputs, AddRow, Period, GlobalFilter, Section.');
   });
 
   it("refuses an expression where an id belongs, as for every prop", () => {
@@ -510,7 +543,7 @@ describe("a dashboard started from an object (2026-10-10)", () => {
 
   it("refuses a filter column inside a section", () => {
     expect(refused(s => placed(s, "f1", structuredClone(FILTERS))))
-      .toContain('holds "f1". A Section holds: Card, Note, Image, ProcessBoard, ObjectTable, ObjectDetail, ObjectFigure, ObjectChart, ObjectBreakdown, ActionButtons, ObjectList, ObjectMap, ObjectTimeline, ChooseOne, ObjectSearch, Question, ScenarioInputs, AddRow, Period, Section.');
+      .toContain('holds "f1". A Section holds: Card, Note, Image, ProcessBoard, ObjectTable, ObjectDetail, ObjectFigure, ObjectChart, ObjectBreakdown, ActionButtons, ObjectList, ObjectMap, ObjectTimeline, ChooseOne, ObjectSearch, Question, ScenarioInputs, AddRow, Period, GlobalFilter, Section.');
   });
 
   it("refuses a filter whose entry says more than its path, label and object", () => {

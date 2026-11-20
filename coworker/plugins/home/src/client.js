@@ -13,6 +13,7 @@
 import { createElement as h, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { NAME_BAR_STOPS } from "../../../../web/components/ui/brandArt";
+import { inTheApp, withOthers } from "./threads.js";
 
 const CHOSEN = "pramanyx.coworker.connection";
 const QUESTIONS_SHOWN = 4;
@@ -302,6 +303,7 @@ function SchedulesPage() {
 }
 
 const WITH_OTHERS = "pramanyx-with-others";
+const IN_THE_APP = "pramanyx-in-the-app";
 
 /** The sidebar's drawing for conversations with others: two heads. */
 function WithOthersIcon({ size = 16 }) {
@@ -311,22 +313,22 @@ function WithOthersIcon({ size = 16 }) {
 }
 
 /**
- * CONVERSATIONS WITH OTHERS (group conversations, 2026-11-17; the user: "there cannot be shared conversations unless
- * users add other users in it"). This coworker is its person's alone; a conversation more than one person is in lives
- * on the platform, where each person is known, and is the app's own thread: everyone added sees it as it grows and
- * asks in it as themselves. This page lists the ones its person is in and opens one as the app's own page, in a
- * frame — the same thread, the same answers, the same "Add people".
+ * THE PLATFORM'S CONVERSATIONS, LISTED HERE AND OPENED AS THE APP'S OWN THREADS. Two lists use it:
+ *
+ *  - CONVERSATIONS WITH OTHERS (2026-11-17; the user: "there cannot be shared conversations unless users add other users
+ *    in it"). This coworker is its person's alone; a conversation more than one person is in lives on the platform,
+ *    where each person is known: everyone added sees it as it grows and asks in it as themselves, with "Add people".
+ *  - YOUR CONVERSATIONS IN THE APP (2026-11-20, "One record for all"): what the person asked in the Ask panel or on a
+ *    Data Canvas, the same record this coworker's turns are filed in (`./threads.js`).
+ *
+ * Each opens as the app's own page, in a frame — the same thread, the same answers.
  */
-export function withOthers(threads) {
-  return (Array.isArray(threads) ? threads : []).filter((t) => t && t.shared);
-}
-
-function WithOthersPage() {
+function AppThreadsPage({ pick, heading, note, empty, back, rowOf }) {
   const [threads, setThreads] = useState(null);
   const [open, setOpen] = useState(null);
   useEffect(() => {
     let live = true;
-    read("/chat-sessions?limit=50").then((all) => { if (live) setThreads(withOthers(all)); }).catch(() => { if (live) setThreads([]); });
+    read("/chat-sessions?limit=50").then((all) => { if (live) setThreads(pick(all)); }).catch(() => { if (live) setThreads([]); });
     return () => { live = false; };
   }, []);
   if (open) {
@@ -335,7 +337,7 @@ function WithOthersPage() {
       h("div", { style: { padding: "8px 14px", fontSize: 12.5, display: "flex", gap: 10, alignItems: "center" } },
         h("button", { type: "button", onClick: () => setOpen(null),
                       style: { font: "inherit", color: "inherit", background: "transparent", border: `1px solid ${line}`, borderRadius: 4, padding: "2px 10px", cursor: "pointer" } },
-          "All conversations with others"),
+          back),
         h("span", { style: quiet }, open.title)),
       h("iframe", {
         src: `${appOrigin()}/?tab=chat&chat=${encodeURIComponent(open.session_id)}${conn}`, title: open.title,
@@ -343,16 +345,35 @@ function WithOthersPage() {
       }));
   }
   return h("div", { style: { padding: "22px 26px", fontSize: 13, maxWidth: 760 } },
-    h("div", { style: { fontSize: 15, fontWeight: 600, paddingBottom: 4 } }, "Conversations with others"),
-    h("div", { style: { ...quiet, paddingBottom: 14 } },
-      "This coworker is yours alone. A conversation with others is the platform's: everyone added sees it as it grows and asks in it as themselves. Start one in the app, then Add people."),
-    threads === null ? h("div", { style: quiet }, "Reading your conversations with others…")
-      : !threads.length ? h("div", { style: quiet }, "You are in no conversation with others yet.")
-        : threads.map((t) => h(Row, {
-          key: t.session_id,
-          text: `${t.title} — ${t.owner ? `${t.owner}'s, ` : ""}with ${(t.members || []).length + 1} people`,
-          onPick: () => setOpen(t),
-        })));
+    h("div", { style: { fontSize: 15, fontWeight: 600, paddingBottom: 4 } }, heading),
+    h("div", { style: { ...quiet, paddingBottom: 14 } }, note),
+    threads === null ? h("div", { style: quiet }, "Reading your conversations…")
+      : !threads.length ? h("div", { style: quiet }, empty)
+        : threads.map((t) => h(Row, { key: t.session_id, text: rowOf(t), onPick: () => setOpen(t) })));
+}
+
+function WithOthersPage() {
+  return h(AppThreadsPage, {
+    pick: withOthers, heading: "Conversations with others", back: "All conversations with others",
+    note: "This coworker is yours alone. A conversation with others is the platform's: everyone added sees it as it grows and asks in it as themselves. Start one in the app, then Add people.",
+    empty: "You are in no conversation with others yet.",
+    rowOf: (t) => `${t.title} — ${t.owner ? `${t.owner}'s, ` : ""}with ${(t.members || []).length + 1} people`,
+  });
+}
+
+function InTheAppPage() {
+  return h(AppThreadsPage, {
+    pick: inTheApp, heading: "Your conversations in the app", back: "All your conversations in the app",
+    note: "What you asked in the app, beside your work in the Ask panel or on a Data Canvas. It is one record with this coworker's: each of your conversations here is listed in the app too.",
+    empty: "You have no conversations in the app yet.",
+    rowOf: (t) => `${t.title}${t.turns ? ` — ${t.turns} ${t.turns === 1 ? "turn" : "turns"}` : ""}`,
+  });
+}
+
+/** The sidebar's drawing for conversations in the app: a window with a line of talk. */
+function InTheAppIcon({ size = 16 }) {
+  return h("svg", { width: size, height: size, viewBox: "0 0 16 16", fill: "none", stroke: "currentColor", strokeWidth: 1.3, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" },
+    h("rect", { x: 2, y: 2.5, width: 12, height: 11, rx: 1.5 }), h("path", { d: "M2 5.5h12M5 8.5h6M5 11h4" }));
 }
 
 const BACK = "pramanyx.coworker.back";
@@ -596,6 +617,11 @@ export function apply(ctx) {
   ctx.slots.inject("sidebar.panellist", () =>
     ctx.slots.register({ name: "sidebar.panellist", id: WITH_OTHERS, order: 7, label: () => "With others" }, WithOthersIcon));
   ctx.slots.inject("main", () => ctx.slots.register({ name: "main", key: WITH_OTHERS }, WithOthersPage));
+
+  // Your conversations in the app (2026-11-20): one record for both places, opened as the app's own threads.
+  ctx.slots.inject("sidebar.panellist", () =>
+    ctx.slots.register({ name: "sidebar.panellist", id: IN_THE_APP, order: 8, label: () => "In the app" }, InTheAppIcon));
+  ctx.slots.inject("main", () => ctx.slots.register({ name: "main", key: IN_THE_APP }, InTheAppPage));
 
   // A scheduled run that landed while the person was away (punch list 85): marked on its conversation's row until it
   // is opened.

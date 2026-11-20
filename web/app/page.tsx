@@ -2118,6 +2118,7 @@ export default function Home() {
                           key={chatKey}
                           address="main"
                           harness
+                          oneConversation
                           connectionId={selectedConn}
                           canvasId={activeCanvas?.id}
                           restoreSessionId={selectedChatSessionId}

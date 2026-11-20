@@ -18,10 +18,14 @@
  * It holds no store and keeps nothing itself: every change is handed to `onChange` as the next spec, checked by the
  * rules first so a change they refuse is said and never drawn. The page keeps it — one version for a burst.
  */
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { CanvasScale } from "@/components/dashboards/cellBox";
 import type { DashboardHandle, ReadState } from "@/components/dashboards/ComposedDashboard";
+import { PlacementShown, type PlacementView } from "@/components/dashboards/placementView";
+import { PLACE_SIZE, PLACE_WORDS, cellOf, freeSpot, measureSection, type PlaceKind, type PlacedBox } from "@/lib/dashboards/placing";
+import { DataView, OpenDatasetContext } from "@/components/dashboards/Datasets";
+import { DataTabShown, pagesOf, type DataTab } from "@/components/dashboards/dataTab";
 import { PieceSetup, type CardDate } from "@/components/dashboards/PieceSetup";
 import type { CardHolds } from "@/lib/dashboards/cardHolds";
 import { ChoiceSetup, DataPane, SetSetup, ValueSetup, readingElements } from "@/components/dashboards/WiringSetup";
@@ -32,8 +36,8 @@ import { Icon, type IconName } from "@/components/ui/icon";
 import { toast } from "@/components/ui/toast";
 import { FILTER_DEFAULT_PX, FILTER_WIDTH, GRADE, LIMITS, type GridKind } from "@/lib/dashboards/catalog";
 import {
-  addSectionInside, canMove, duplicate, inColumns, moveWithin, outline, setFilterWidth, setSectionWidth, splitSection, takeOffAll,
-  type Box, type DashboardSpec, type Side,
+  addSectionInside, canMove, duplicate, inColumns, moveWithin, outline, sectionsOf, setFilterWidth, setSectionWidth, splitSection, takeOffAll,
+  type Box, type DashboardDataset, type DashboardSpec, type Side,
 } from "@/lib/dashboards/edit";
 import { lineOf, nameOf, setTitles } from "@/lib/dashboards/names";
 import { checkDashboardSpec } from "@/lib/dashboards/rules";
@@ -127,8 +131,13 @@ function Steps({ label, value, least, most, onStep }: { label: string; value: nu
 const Rule = () => <span aria-hidden="true" style={{ width: 1, height: 16, background: "var(--b2)", margin: "0 6px" }} />;
 
 export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words, aside, above, connectionId, schema,
-  onAddPiece, checks, cardSetup, cardChart, cardSql, cardReads, queryCards, onUndo, onRedo, cardDates, cardHolds, release, askPiece, children }: {
+  onAddPiece, checks, cardSetup, cardChart, cardSql, cardReads, queryCards, onUndo, onRedo, cardDates, cardHolds, release, askPiece, placing, onFollow, children }: {
   spec: DashboardSpec;
+  /** A box being placed (the user, 2026-11-19): the kind the strip picked up, the box set down and waiting for what it is,
+   *  and where a box set down, let go, or clicked goes. */
+  placing?: { kind: PlaceKind | null; box: PlacedBox | null; onPlaced: (box: PlacedBox) => void; onCancel: () => void; onBox: () => void;
+    /** The piece just made in a box: chosen, so its own setup opens. */
+    chosen?: string | null } | null;
   /** The ontology release its pieces read, when it is the one the dashboard was composed against: said on its own setup. */
   release?: string | null;
   /** v15 — each placed card and the date the period cuts it by, for the Period piece's setup. */
@@ -165,6 +174,8 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
   cardChart?: (cardId: string) => ReactNode | null;
   cardSql?: (cardId: string) => ReactNode | null;
   /** Arc AP-8 — the dashboard's values a card of the person's own query reads, by the card's id. */
+  /** A dataset's statement changed in the Data pane: kept on every chart built on it, or each reason one cannot follow. */
+  onFollow?: (name: string, def: DashboardDataset) => Promise<string[]>;
   cardReads?: (cardId: string) => string[];
   /** Arc AP-8c — the cards of the person's own query the dashboard places: a value may read one's first value. */
   queryCards?: { id: string; title: string }[];
@@ -177,6 +188,15 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
   // the layout pane, folded to a strip so the canvas has the room (the dashboards study, R7, 2026-11-18); one click opens it
   const [paneOpen, setPaneOpen] = useState(false);
   const openPane = (t: "layout" | "data") => { setTab(t); setPaneOpen(true); if (t === "layout") setWire(null); };
+  // the Data tab (2026-11-19): the data that backs the dashboard on a view of its own, in place of the canvas; a dataset
+  // opened from a chart built on it is chosen there, and a page chosen there brings the canvas back on it
+  const [dataView, setDataView] = useState(false);
+  const [dataOpen, setDataOpen] = useState<{ name: string; n: number } | null>(null);
+  const [askedPage, setAskedPage] = useState<{ name: string; n: number } | null>(null);
+  const openDataset = useCallback((name: string) => {
+    setDataView(true); setDataOpen(o => ({ name, n: (o?.n ?? 0) + 1 }));
+  }, []);
+  const dataTab = useMemo<DataTab>(() => ({ show: () => setDataView(true), page: askedPage }), [askedPage]);
   // a set, a value or a choice chosen in the Data tab: `set:<name>`, `value:<name>`, `choice:<name>`
   const [wire, setWire] = useState<string | null>(null);
   const wireName = wire ? wire.slice(wire.indexOf(":") + 1) : "";
@@ -187,6 +207,8 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
   // an element taken off, by hand or by an undo, is no longer chosen; nor is an element while a set is
   const selected = !wire && chosen && spec.elements[chosen] ? chosen : null;
   const choose = (key: string) => { setWire(null); setSelected(key); };
+  const justPlaced = placing?.chosen ?? null;
+  useEffect(() => { if (justPlaced) { setWire(null); setSelected(justPlaced); } }, [justPlaced]);
   // add, then set up (the dashboards study, R2, 2026-11-18): the one element a change brings is chosen, so the panel
   // turns to its setup — a piece placed from the toolbar, a card pinned, a piece an undo puts back
   const seen = useRef<Set<string> | null>(null);
@@ -212,6 +234,42 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
   // the canvas: laid out at least as wide as the mockup's page; scaled to fit a narrower canvas, unless the person asks 100%
   const canvas = useRef<HTMLDivElement>(null);
   const page = useRef<HTMLDivElement>(null);
+  // a box picked up from the strip follows the pointer, a grid cell at a time, over the section under it; a click sets it down
+  const [ghost, setGhost] = useState<PlacementView["ghost"]>(null);
+  const placingKind = placing?.kind ?? null;
+  useEffect(() => { setGhost(null); }, [placingKind]);
+  useEffect(() => {
+    if (!placingKind) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") placing?.onCancel(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [placingKind, placing]);
+  const cellUnder = (cx: number, cy: number): { el: HTMLElement | null; ghost: NonNullable<PlacementView["ghost"]> } | null => {
+    const at = page.current;
+    if (!at || !placingKind) return null;
+    const size = PLACE_SIZE[placingKind];
+    // the section under the pointer, or — below a section's last row — the nearest one above it, in the same column of the page
+    let best: HTMLElement | null = null;
+    let bestTop = -Infinity;
+    for (const g of Array.from(at.querySelectorAll<HTMLElement>("section[data-key] > [data-columns]"))) {
+      if (!g.offsetWidth) continue;
+      const r = g.getBoundingClientRect();
+      if (cx < r.left || cx > r.right) continue;
+      if (cy >= r.top && cy <= r.bottom) { best = g; break; }
+      if (r.top <= cy && r.top > bestTop) { best = g; bestTop = r.top; }
+    }
+    const section = best?.parentElement?.getAttribute("data-key");
+    if (!best || !section) {
+      // no section under the pointer — an empty page, say: the first that holds pieces, from its first row
+      const first = sectionsOf(spec).find(sec => (spec.elements[sec.key]?.children ?? []).every(k => spec.elements[k]?.type !== "Section"));
+      return first ? { el: null, ghost: { section: first.key, x: 1, y: 1, ...size, kind: placingKind } } : null;
+    }
+    const cell = cellOf(best.getBoundingClientRect(), best.offsetWidth, cx, cy, size);
+    // over a piece already there, the box shows — and goes — in the first free rows below it: nothing placed moves
+    const { x, y } = freeSpot({ ...cell, ...size }, Object.values(measureSection(best)));
+    return { el: best, ghost: { section, x, y, ...size, kind: placingKind } };
+  };
+  const view = useMemo<PlacementView | null>(() => (placing ? { ghost, box: placing.box, onBox: placing.onBox } : null), [placing, ghost]);
   const [room, setRoom] = useState({ width: 0, height: 0 });
   const [whole, setWhole] = useState(false);
   useEffect(() => {
@@ -299,6 +357,8 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
   }, []);
 
   return (
+    <OpenDatasetContext.Provider value={openDataset}>
+    <DataTabShown.Provider value={dataTab}>
     <div data-testid="dashboard-builder" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
       {bar}
       <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: `${paneOpen ? 232 : 44}px minmax(0, 1fr) 304px` }}>
@@ -307,7 +367,7 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
             style={{ minHeight: 0, borderRight: "1px solid var(--b1)", background: "var(--bg-1)", display: "flex", flexDirection: "column", alignItems: "center", gap: 6, paddingTop: 10 }}>
             <Button size="icon-sm" variant="outline" aria-label="Open the layout" title={`Open the layout · ${lines} ${lines === 1 ? "line" : "lines"}`}
               data-testid="builder-open-layout" onClick={() => openPane("layout")}><Icon name="unfold" size={16} /></Button>
-            <Button size="icon-sm" variant="outline" aria-label="Open the variables" title="Open the variables: sets, values and choices"
+            <Button size="icon-sm" variant="outline" aria-label="Open the variables" title="Open the variables: values, sets and choices"
               data-testid="builder-open-variables" onClick={() => openPane("data")}><Icon name="json" size={16} /></Button>
           </aside>
         ) : (
@@ -422,22 +482,51 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
               {scale < 1 ? `Fit · ${zoom}%` : "100%"}
             </Button>
           </div>
-          <div ref={canvas} data-testid="builder-canvas" data-dashboard-ground="" style={{ flex: 1, minHeight: 0, overflow: "auto", padding: PAD, background: "var(--bg-0)" }}>
+          {dataView && (
+            <div style={{ flex: 1, minHeight: 0, display: "flex", background: "var(--bg-0)" }}>
+              <DataView spec={spec} connectionId={connectionId} onChange={apply} onFollow={onFollow} opened={dataOpen}
+                pages={pagesOf(spec.elements, true)}
+                onPage={name => { setDataView(false); if (name) setAskedPage(p => ({ name, n: (p?.n ?? 0) + 1 })); }} />
+            </div>
+          )}
+          {/* the canvas stays drawn under the Data view, as it was: back on a page, nothing is read again */}
+          <div ref={canvas} data-testid="builder-canvas" data-dashboard-ground="" hidden={dataView}
+            style={{ flex: 1, minHeight: 0, overflow: "auto", padding: PAD, background: "var(--bg-0)", display: dataView ? "none" : undefined }}>
             {above}
-            <div style={{ width: layout ? layout * scale : undefined, height: room.height ? room.height * scale : undefined }}>
+            <div style={{ position: "relative", width: layout ? layout * scale : undefined, height: room.height ? room.height * scale : undefined }}>
               <div ref={page} data-testid="builder-page" data-zoom={zoom}
                 style={{ width: layout, transform: scale < 1 ? `scale(${scale})` : undefined, transformOrigin: "0 0" }}>
                 <CanvasScale.Provider value={scale}>
-                  {children({ selected, onSelect: choose, handle, reads })}
+                  <PlacementShown.Provider value={view}>
+                    {children({ selected, onSelect: choose, handle, reads })}
+                  </PlacementShown.Provider>
                 </CanvasScale.Provider>
               </div>
+              {placingKind && (
+                // over the whole page while a box is carried: it follows the pointer, a click sets it down, Esc lets it go
+                <div data-testid="place-layer" aria-label={`${PLACE_WORDS[placingKind]}: click where it goes · Esc lets it go`} role="application"
+                  title={`${PLACE_WORDS[placingKind]}: click where it goes · Esc lets it go`}
+                  // the page and twelve rows under it: a box goes below the last piece as readily as beside it
+                  style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: -GRADE * PLACE_BELOW * scale, zIndex: 20, cursor: "crosshair" }}
+                  onPointerMove={e => setGhost(cellUnder(e.clientX, e.clientY)?.ghost ?? null)}
+                  onPointerLeave={() => setGhost(null)}
+                  onClick={e => {
+                    const at = cellUnder(e.clientX, e.clientY);
+                    if (!at) return;
+                    setGhost(null);
+                    placing?.onPlaced({ ...at.ghost, measured: at.el ? measureSection(at.el) : {} });
+                  }} />
+              )}
             </div>
             {/* room under the dashboard, so the floating toolbar never covers its last row */}
             <div aria-hidden="true" style={{ height: 72 }} />
           </div>
-          <CanvasToolbar tools={tools} onUndo={onUndo} onRedo={onRedo}
-            onChart={onAddPiece ? () => onAddPiece(target, "chart") : undefined}
-            onFilter={onAddPiece ? () => onAddPiece(target, "filter") : undefined} />
+          {/* the canvas's own tools: nothing to place on the Data view */}
+          {!dataView && (
+            <CanvasToolbar tools={tools} onUndo={onUndo} onRedo={onRedo}
+              onChart={onAddPiece ? () => onAddPiece(target, "chart") : undefined}
+              onFilter={onAddPiece ? () => onAddPiece(target, "filter") : undefined} />
+          )}
         </div>
 
         <aside aria-label="Setup" data-testid="builder-setup"
@@ -453,6 +542,8 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
         </aside>
       </div>
     </div>
+    </DataTabShown.Provider>
+    </OpenDatasetContext.Provider>
   );
 }
 
@@ -501,6 +592,9 @@ export interface EditBarProps {
   actions: ReactNode;
   onDone: () => void;
 }
+
+/** The rows under the dashboard's last piece a box may be set down in. */
+const PLACE_BELOW = 12;
 
 /** What the canvas toolbar opens in the setup panel: the pieces that measure or show, the filters, or every piece. */
 export type AddWhat = "chart" | "filter" | "all";

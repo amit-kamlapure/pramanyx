@@ -1,18 +1,18 @@
 // @vitest-environment jsdom
 /**
  * The dashboard's filters column put away and brought back (the user, 2026-11-19: "our Global filters need to be
- * collapsible"; "it should sit on top of the dashboard components"). Put away, a button above the cards says how many filters
- * still hold a choice, and the cards take the column's width; the column stays
- * mounted, because it also feeds the values the cards' queries read. The choice is the reader's, kept in their browser.
+ * collapsible", and later the peer product's model: one filter icon at the canvas's upper left, the panel open or put away
+ * as the dashboard was published). Put away, ONE filter icon on a strip at the left stands for every column, says how many
+ * filters still hold a choice, and takes none of the page's height; the columns stay mounted, because they also feed the
+ * values the cards' queries read. Whether it opens is the dashboard's own; a reader's toggle lasts their visit.
  */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { act, fireEvent, render, screen } from "@/lib/testing";
+import { act, fireEvent, render, screen, within } from "@/lib/testing";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ComposedDashboard } from "@/components/dashboards/ComposedDashboard";
-import { resetFiltersShut } from "@/components/dashboards/GlobalFilters";
 import type { CardState } from "@/components/brief/PinnedCardBody";
 import type { StoredCard } from "@/lib/api";
 import type { DashboardFocus } from "@/lib/dashboards/focus";
@@ -28,7 +28,7 @@ vi.mock("@/components/dashboards/DashboardTile", async (original) => ({
 beforeAll(() => {
   globalThis.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver;
 });
-beforeEach(() => { window.localStorage.clear(); resetFiltersShut(); });
+beforeEach(() => { window.localStorage.clear(); });
 
 function withFilters() {
   const spec = JSON.parse(readFileSync(resolve(process.cwd(), "lib/dashboards/premise.fixture.json"), "utf8"));
@@ -42,21 +42,66 @@ const HOST = { range: { status: "final" as const }, cards: { c7f3a001: { status:
 const HELD: DashboardFocus[] = [{ table: "titles", column: "type", value: "", op: "in", values: ["Movie"], source: { card: "filter:f-type", field: "type" } }];
 
 describe("the dashboard's filters column", () => {
-  it("is put away to a strip that says how many filters hold a choice, stays mounted, and comes back", () => {
+  it("is put away to one Global filters button under the pages, beside how many things cut it, stays mounted, and comes back", () => {
     render(<ComposedDashboard spec={withFilters()} cards={CARDS} host={HOST} focus={HELD} onFocus={vi.fn()} doors={{ onRefresh: vi.fn() }} />);
     expect(screen.getByTestId("global-filters")).toBeVisible();
     fireEvent.click(screen.getByTestId("global-filters-hide"));
-    expect(screen.getByTestId("global-filters-held")).toHaveTextContent("1");
-    // above the cards, not beside them: the button and the dashboard stand in one column, each the full width
     const shut = screen.getByTestId("global-filters-shut");
-    expect(shut.parentElement?.style.flexDirection).toBe("column");
-    expect(shut.parentElement?.style.gridTemplateColumns).toBe("");
-    expect(shut.compareDocumentPosition(screen.getByTestId("dashboard")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(shut).getByRole("button", { name: "Show the global filters · 1 holding a choice" })).toHaveTextContent("Global filters");
+    // beside it, how many things cut the dashboard — its menu
+    expect(within(shut).getByTestId("filters-menu")).toHaveTextContent(/^1$/);
+    // tight under the row of pages (the user, 2026-11-19, of a peer product's editor), above the cards, the cards at full width
+    expect(shut.closest('[role="tablist"]')).toBeNull();
+    expect(screen.getByRole("tablist").compareDocumentPosition(shut) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(shut.compareDocumentPosition(screen.getAllByTestId("dashboard-card")[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByTestId("dashboard-filters-folded").style.gridTemplateColumns).toBe("");
     expect(screen.getByTestId("global-filters")).not.toBeVisible();          // still mounted, out of sight
-    expect(window.localStorage.getItem("pramanyx:dashboard-filters-shut")).toBe("1");
+    expect(window.localStorage.length).toBe(0);                             // the reader's, for this visit: nothing kept in the browser
     act(() => { fireEvent.click(screen.getByTestId("global-filters-show")); });
     expect(screen.queryByTestId("global-filters-shut")).toBeNull();
     expect(screen.getByTestId("global-filters")).toBeVisible();
+  });
+
+  it("on a dashboard of one page, is at the top of its cards", () => {
+    // one page: the root holds its filters and one section, and nothing else
+    const spec = withFilters();
+    const section = spec.elements["tab-overview"].children[0];
+    const keep = new Set([spec.root, "global-filters", "f-type", section, ...spec.elements[section].children]);
+    for (const key of Object.keys(spec.elements)) if (!keep.has(key)) delete spec.elements[key];
+    spec.elements[spec.root].children = ["global-filters", section];
+    delete spec.state;
+    spec.elements[spec.root].props.filters_shut = true;
+    render(<ComposedDashboard spec={spec} cards={CARDS} host={HOST} focus={HELD} onFocus={vi.fn()} doors={{ onRefresh: vi.fn() }} />);
+    expect(screen.queryByRole("tablist")).toBeNull();
+    expect(screen.getAllByTestId("global-filters-show")).toHaveLength(1);
+  });
+
+  it("opens as the dashboard was left: put away when it says so, and a reader may still open it", () => {
+    const spec = withFilters();
+    spec.elements[spec.root].props.filters_shut = true;
+    render(<ComposedDashboard spec={spec} cards={CARDS} host={HOST} focus={HELD} onFocus={vi.fn()} doors={{ onRefresh: vi.fn() }} />);
+    expect(screen.getByTestId("global-filters-shut")).toBeInTheDocument();
+    act(() => { fireEvent.click(screen.getByTestId("global-filters-show")); });
+    expect(screen.getByTestId("global-filters")).toBeVisible();
+  });
+
+  it("in the builder, keeps the panel open or put away on the dashboard, for its readers", () => {
+    const onFiltersShut = vi.fn();
+    render(<ComposedDashboard spec={withFilters()} cards={CARDS} host={HOST} focus={HELD} onFocus={vi.fn()} doors={{ onRefresh: vi.fn(), onFiltersShut }} />);
+    fireEvent.click(screen.getByTestId("global-filters-hide"));
+    expect(onFiltersShut).toHaveBeenCalledWith(true);
+    expect(screen.getByTestId("global-filters")).toBeVisible();             // the dashboard says what it is, once kept
+  });
+
+  it("is ONE button however many columns the dashboard draws (2026-11-19: three stacked Filters buttons)", () => {
+    const spec = withFilters();
+    spec.elements.qf = { type: "QueryFilters", props: { table: "orders", columns: [{ column: "channel", label: "Channel" }] }, children: [] };
+    spec.elements[spec.root].children = ["qf", ...spec.elements[spec.root].children];                // a file's column leads
+    spec.elements[spec.root].props.filters_shut = true;
+    render(<ComposedDashboard spec={spec} cards={CARDS} host={HOST} focus={HELD} onFocus={vi.fn()} doors={{ onRefresh: vi.fn() }} />);
+    expect(screen.getAllByTestId("global-filters-show")).toHaveLength(1);
+    expect(screen.getByTestId("query-filters")).not.toBeVisible();
+    expect(screen.getByTestId("global-filters")).not.toBeVisible();
   });
 });
 
@@ -74,7 +119,7 @@ describe("a card whose own window gave way to the dates chosen (2026-11-19)", ()
 });
 
 describe("the filter column of a dashboard made from a file", () => {
-  it("is put away the same way, to a button above the cards, and comes back", () => {
+  it("is put away the same way, to the one Global filters button, and comes back", () => {
     const spec = JSON.parse(readFileSync(resolve(process.cwd(), "lib/dashboards/premise.fixture.json"), "utf8"));
     spec.elements.qf = { type: "QueryFilters", props: { table: "orders", columns: [{ column: "channel", label: "Channel" }] }, children: [] };
     spec.elements[spec.root].children = ["qf", ...spec.elements[spec.root].children];
@@ -86,5 +131,41 @@ describe("the filter column of a dashboard made from a file", () => {
     act(() => { fireEvent.click(screen.getByTestId("global-filters-show")); });
     expect(screen.getByTestId("query-filters")).toBeVisible();
   });
-});
 
+  it("with global filters, is drawn inside their panel: one Filters panel, one way to put it away, one menu (2026-11-20)", () => {
+    // seen on Operations: two columns side by side, both called Filters, the second painting over the first's right edge
+    const spec = withFilters();
+    spec.elements.qf = { type: "QueryFilters", props: { table: "shop.order_items", columns: [{ column: "channel", label: "Channel" }] }, children: [] };
+    spec.elements[spec.root].children = ["qf", ...spec.elements[spec.root].children];
+    render(<ComposedDashboard spec={spec} cards={CARDS} host={HOST} focus={HELD} onFocus={vi.fn()} doors={{ onRefresh: vi.fn() }} />);
+    const panel = screen.getByTestId("global-filters");
+    expect(within(panel).getByText("Filters")).toBeInTheDocument();
+    const own = screen.getByTestId("dashboard-filter-column");
+    expect(within(screen.getByTestId("filters-panel-more")).getByTestId("dashboard-filter-column")).toBe(own);   // below the global ones
+    expect(own).toHaveTextContent("Order items");
+    expect(within(own).getByTestId("query-filters")).toBeInTheDocument();
+    expect(screen.getAllByTestId("global-filters-hide")).toHaveLength(1);
+    expect(screen.getAllByTestId("filters-menu-place")).toHaveLength(1);
+    // the cards take the rest of the page, beside the one panel
+    expect(screen.getByTestId("dashboard").style.gridTemplateColumns).toBe("");
+    // put away, it all goes, and one button brings it back
+    fireEvent.click(screen.getByTestId("global-filters-hide"));
+    expect(screen.getAllByTestId("global-filters-show")).toHaveLength(1);
+    expect(screen.getByTestId("query-filters")).not.toBeVisible();
+  });
+
+  it("takes no room while none of its global filters can be used yet", () => {
+    const spec = withFilters();
+    spec.elements["f-type"].props = { title: "Type", kind: "multi" };                 // no table, no column yet
+    render(<ComposedDashboard spec={spec} cards={CARDS} host={HOST} doors={{ onRefresh: vi.fn() }} />);
+    expect(screen.getByTestId("dashboard-global-filter-column")).not.toBeVisible();
+    expect(screen.queryByTestId("global-filters-shut")).toBeNull();
+  });
+
+  it("stands in from the page's edge as far as the Ask panel moved the page, so readers always see it (2026-11-19)", () => {
+    render(<ComposedDashboard spec={withFilters()} cards={CARDS} host={HOST} focus={HELD} onFocus={vi.fn()} doors={{ onRefresh: vi.fn() }} />);
+    const column = screen.getByTestId("dashboard-global-filter-column");
+    expect(column.style.transform).toBe("translateX(var(--ask-pushed, 0px))");
+    expect(column.style.zIndex).toBe("3");                                     // over the cards that pass under it
+  });
+});

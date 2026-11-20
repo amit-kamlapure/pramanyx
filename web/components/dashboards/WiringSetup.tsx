@@ -187,7 +187,8 @@ function CountOf({ spec, set, sum, connectionId, schema }: { spec: DashboardSpec
 }
 
 /** The Variables pane (Arc AP-8): the values first, each with where it comes from, what it holds now and how many read
- *  it; then the sets; then what the pieces output — a row chosen, rows ticked, a figure clicked — and the doors to new ones. */
+ *  it; then the sets; then what the pieces output — a row chosen, rows ticked, a figure clicked — and the doors to new ones.
+ *  The datasets the charts are built on have the Data tab, beside the pages (2026-11-19). */
 export function DataPane({ spec, selected, onSelect, onChange, connectionId, schema, cardReads }: {
   spec: DashboardSpec;
   /** `set:<name>`, `value:<name>` or `choice:<name>` while one is chosen. */

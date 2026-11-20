@@ -468,9 +468,13 @@ def keep_query(request: Request, connection_id: str, req: QueryRequest) -> dict:
     if read.get("refused"):
         raise HTTPException(status_code=422, detail={"refused": read["refused"]})
     setup = read["setup"]
+    # a card changed keeps how its chart is dressed — its number format, reference lines, a line's shape — which the
+    # chart editor sets beside the setup (2026-11-19: a dataset's statement changed re-keeps every chart built on it)
+    dressed = (old.render or {}).get("viz") if old is not None and isinstance(old.render, dict) else None
     card = StoredCard(connection_id=connection_id, source="authored", kind="kpi" if setup["as"] == "figure" else "chart",
                          title=doors.clip_title(req.title or "", old.title if old else "Your own query"),
-                         sql=req.sql.strip(), render={"shown": setup, "columns": read["columns"]})
+                         sql=req.sql.strip(), render={"shown": setup, "columns": read["columns"],
+                                                      **({"viz": dressed} if isinstance(dressed, dict) and dressed else {})})
     try:
         saved = cards.place(home, card)
     except cards.Refused as e:

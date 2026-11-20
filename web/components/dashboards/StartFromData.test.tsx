@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 
-/** A dashboard started from the tables a person chooses, with no model asked. */
+/** A dashboard started from the tables a person chooses, or a statement of their own, each held as a dataset; no model asked. */
 import { fireEvent, render, screen, waitFor } from "@/lib/testing";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { FromTables, MAX_START_TABLES, tableSql } from "@/components/dashboards/StartFromData";
+import { FromSql, FromTables, MAX_START_TABLES, tableSql } from "@/components/dashboards/StartFromData";
 
-const api = vi.hoisted(() => ({ getCatalogTree: vi.fn(), keepDashboardQuery: vi.fn(), keepDashboard: vi.fn() }));
+const api = vi.hoisted(() => ({ getCatalogTree: vi.fn(), keepDashboardQuery: vi.fn(), keepDashboard: vi.fn(), previewDashboardQuery: vi.fn() }));
 vi.mock("@/lib/api", async (original) => ({ ...(await original<typeof import("@/lib/api")>()), ...api }));
 
 const TREE = (n = 3, type = "duckdb") => ({ sections: [{ id: "s", label: "S", entries: [{ conn_id: "c", conn_type: type, schemas: [
@@ -20,7 +20,7 @@ beforeEach(() => {
 });
 
 describe("starting from tables", () => {
-  it("places a card of each table chosen and asks no model", async () => {
+  it("holds each table chosen as a dataset, places no card of its rows, and asks no model", async () => {
     const onKept = vi.fn();
     render(<FromTables connectionId="c" onKept={onKept} />);
     fireEvent.click(await screen.findByRole("checkbox", { name: "shop.orders" }));
@@ -29,10 +29,13 @@ describe("starting from tables", () => {
     fireEvent.change(screen.getByLabelText("The dashboard's name"), { target: { value: "Sales" } });
     fireEvent.click(screen.getByTestId("dashboard-start-tables"));
     await waitFor(() => expect(onKept).toHaveBeenCalledTimes(1));
-    expect(api.keepDashboardQuery.mock.calls.map(c => c[1].sql)).toEqual(["SELECT * FROM shop.orders", "SELECT * FROM shop.order_lines"]);
-    expect(api.keepDashboardQuery.mock.calls[1][1].title).toBe("Order lines");
-    const spec = api.keepDashboard.mock.calls[0][2] as { elements: Record<string, { type: string; props: { card?: string } }> };
-    expect(Object.values(spec.elements).filter(e => e.type === "Card").map(e => e.props.card)).toEqual(["card-Orders", "card-Order lines"]);
+    expect(api.keepDashboardQuery).not.toHaveBeenCalled();
+    const spec = api.keepDashboard.mock.calls[0][2] as { elements: Record<string, { type: string }>; datasets: Record<string, { label: string; sql: string; table: string }> };
+    expect(Object.values(spec.elements).filter(e => e.type === "Card")).toEqual([]);
+    expect(spec.datasets).toEqual({
+      orders: { label: "Orders", sql: "SELECT * FROM shop.orders", table: "shop.orders" },
+      order_lines: { label: "Order lines", sql: "SELECT * FROM shop.order_lines", table: "shop.order_lines" },
+    });
   });
 
   it("finds a table by its name", async () => {
@@ -51,14 +54,22 @@ describe("starting from tables", () => {
     expect(boxes[MAX_START_TABLES]).toBeDisabled();
   });
 
-  it("says why when no table could be read, and makes nothing", async () => {
-    api.keepDashboardQuery.mockRejectedValue(new Error("the table is gone"));
-    render(<FromTables connectionId="c" onKept={vi.fn()} />);
-    fireEvent.click(await screen.findByRole("checkbox", { name: "shop.orders" }));
-    fireEvent.change(screen.getByLabelText("The dashboard's name"), { target: { value: "Sales" } });
-    fireEvent.click(screen.getByTestId("dashboard-start-tables"));
-    expect(await screen.findByTestId("dashboard-from-tables-problem")).toHaveTextContent("shop.orders: the table is gone");
+  it("starts on a statement of one's own once it is checked to read, held as the first dataset", async () => {
+    api.previewDashboardQuery.mockResolvedValueOnce({ connection_id: "c", refused: ["It reads nothing this card can read."] });
+    const onKept = vi.fn();
+    render(<FromSql connectionId="c" onKept={onKept} />);
+    fireEvent.change(screen.getByLabelText("The dataset's name"), { target: { value: "Big orders" } });
+    fireEvent.change(screen.getByLabelText("The dataset's SQL"), { target: { value: "SELECT * FROM shop.orders WHERE total > 100" } });
+    fireEvent.click(screen.getByTestId("add-data-check"));
+    expect(await screen.findByTestId("add-data-refused")).toHaveTextContent("It reads nothing this card can read.");
     expect(api.keepDashboard).not.toHaveBeenCalled();
+    api.previewDashboardQuery.mockResolvedValueOnce({ connection_id: "c", refused: [], columns: [{ name: "total", type: "DOUBLE" }] });
+    fireEvent.click(screen.getByTestId("add-data-check"));
+    await waitFor(() => expect(onKept).toHaveBeenCalledTimes(1));
+    const [, , spec, note] = api.keepDashboard.mock.calls[0];
+    expect(note).toBe("Started from your own SQL");
+    expect((spec as { datasets: unknown }).datasets).toEqual({ big_orders: { label: "Big orders", sql: "SELECT * FROM shop.orders WHERE total > 100" } });
+    expect(api.keepDashboardQuery).not.toHaveBeenCalled();
   });
 
   it("writes a name that needs quoting as the connection quotes it", () => {

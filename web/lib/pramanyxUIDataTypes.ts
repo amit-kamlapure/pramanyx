@@ -116,6 +116,10 @@ export type PramanyxProgressData = {
   // "unrecognised: proposal_staged", which is exactly how the user's first live
   // bundle rendered (2026-09-15).
   "proposal_staged": unknown;
+  // 2026-11-20 — the turn spent every step: the chat offers Keep going.
+  "keep_going": unknown;
+  /** The plan of a request with several parts, as it stands (Stage 4, 2026-11-20). */
+  "plan": unknown;
   // Arc SH, SH-4 — the rows a question asked beside a sheet is about, counted by the grid:
   // the sheet's chat renders them as a card that opens them in the grid or keeps them as a view.
   "sheet_rows": unknown;
@@ -189,7 +193,7 @@ const DECLARED = [
   "clarify", "clarify_pending", "clarifying_questions", "plan_pending", "escalate",
   "followups",
   "agent", "status", "phase_complete", "phase_progress", "converse_step", "mode",
-  "chain_state", "proposal_staged", "sheet_rows", "answer_parts",
+  "chain_state", "proposal_staged", "keep_going", "plan", "sheet_rows", "answer_parts",
   "explore_plan", "subq_answer",
   "inspect_warning",
   "error", "done",

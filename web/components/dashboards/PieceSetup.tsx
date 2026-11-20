@@ -1105,6 +1105,7 @@ function DashboardSetup({ spec, onChange, onOpenLayout, release }: { spec: Dashb
   const top = spec.elements[root];
   const count = (types: string[]) => Object.values(spec.elements).filter(e => types.includes(e.type)).length;
   const holds: [string, number][] = [
+    ["Datasets", Object.keys(spec.datasets ?? {}).length],
     ["Sections", count(["Section"])],
     ["Cards", count(["Card"])],
     ["Pieces from the ontology", Object.values(spec.elements).filter(e => e.type.startsWith("Object") || e.type === "ProcessBoard").length],

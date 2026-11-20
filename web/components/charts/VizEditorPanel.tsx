@@ -49,6 +49,8 @@ export interface VizEditorModel {
   vizValue?: string;
   vizOptions?: VizSelectOption[];
   setViz?: (v: string) => void;
+  /** What the chart is built on, said under the Visualization dropdown (a dashboard's dataset, 2026-11-19). */
+  vizBelow?: ReactNode;
   // X axis
   dimValue: string;
   dimOptions: VizSelectOption[];         // [] → no X control
@@ -89,6 +91,13 @@ export interface VizEditorModel {
   markersAvailable?: boolean;
   lineShapeValue: "" | "smooth" | "step";
   setLineShape: (v: "" | "smooth" | "step") => void;
+  /** A line's width, "1" to "6"; left out, not offered. */
+  lineWidthValue?: string;
+  setLineWidth?: (v: string) => void;
+  /** How the card's dates are written, along the bottom or in its table; left out, not offered (no dates to write). */
+  dateFormatValue?: string;
+  dateFormatOptions?: VizSelectOption[];
+  setDateFormat?: (v: string) => void;
   markersOn: boolean;
   setMarkersOn: (b: boolean) => void;
   yMinValue: string;
@@ -618,6 +627,7 @@ export function VizEditorPanel({ model, onClose, docked = false }: { model: VizE
           ) : undefined}>
           <Select label="Visualization" value={vizValue} options={vizOptions} onChange={setViz}
             leading={<span style={{ color: "var(--accent)", flexShrink: 0, display: "inline-flex", marginRight: 6 }}><Icon name={VIZ_ICON[vizValue] ?? "chart"} size={15} /></span>} />
+          {model.vizBelow}
         </Section>
 
         {chartMode && model.dimOptions.length > 0 && (
@@ -758,8 +768,21 @@ export function VizEditorPanel({ model, onClose, docked = false }: { model: VizE
               options={[["", "Straight"], ["smooth", "Smooth"], ["step", "Step"]]} />
           </div>
         )}
+        {chartMode && model.lineAvailable && model.setLineWidth && (
+          <div style={{ ...ROW, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+            <span className="aug-fs-chrome" style={TITLE}>Line width</span>
+            <SegToggle label="Line width" value={model.lineWidthValue ?? "2"} onChange={model.setLineWidth}
+              options={[["1", "1"], ["2", "2"], ["3", "3"], ["4", "4"], ["5", "5"], ["6", "6"]]} />
+          </div>
+        )}
         {chartMode && model.lineAvailable && model.markersAvailable !== false && (
           <ToggleRow title="Marker" on={model.markersOn} onChange={model.setMarkersOn} />
+        )}
+        {model.setDateFormat && model.dateFormatOptions && (
+          <div data-testid="viz-date-format" style={{ ...ROW, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+            <span className="aug-fs-chrome" style={TITLE}>Dates as</span>
+            <Select label="Dates as" value={model.dateFormatValue ?? ""} options={model.dateFormatOptions} onChange={model.setDateFormat} />
+          </div>
         )}
         {chartMode && <ToggleRow title="Tooltip" on={model.tooltipOn} onChange={model.setTooltipOn} />}
         {chartMode && model.labelsAvailable !== false && <ToggleRow title="Labels" on={model.showLabels} onChange={model.setShowLabels} />}

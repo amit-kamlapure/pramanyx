@@ -17,7 +17,7 @@ import { createPortal } from "react-dom";
 import { readAgainIn, statusWords, whatHappens } from "./runs.js";
 import { deckOf } from "./deck.js";
 import { driveFilesOf } from "./drive.js";
-import { DOES, PREFIX, saidOf, turnedDown } from "./steps.js";
+import { ABOUT_TO, DOES, PREFIX, STAGED, saidOf, stagedOf, turnedDown } from "./steps.js";
 import { drawChart, labelOf, numericColumns } from "./chart";
 import {
   PANE, PANE_PATTERN, PaneBody, downloadCsv, groundingOf, pageFor, PaneTitle, ResultGrid, button, faint, hasPane, idOf, line,
@@ -1603,6 +1603,83 @@ function DraftedDefinitionCard(props) {
         got.made === "draft" ? "Open to publish" : "Open the definition")));
 }
 
+/**
+ * A CHANGE THE PLATFORM STAGED, ALLOWED ONCE ON ITS CARD (2026-11-20; the user's choice for the coworker: "Staged card in
+ * chat", as the Ask panel draws one). A new monitor, automation, agent or brief, an agent's limit or access: the coworker
+ * does not ask before staging it, since staging changes nothing; the card asks, under the step, after the person has read
+ * what Allow would do, line by line, in the platform's own words (`GET /kinetic-actions/inbox/<id>/said`). Allow and
+ * Reject are the person's own clicks, through this page's door (`/pramanyx-staged`), recorded as theirs. Where it stands
+ * is read every time the card is drawn, so a change decided elsewhere says how it ended here too.
+ */
+const ENDED = {
+  executed: "Allowed, and done", accepted: "Allowed, and done", rejected: "Rejected. Nothing changed.",
+  superseded: "Replaced by a later change. Nothing changed by this one.", expired: "It lapsed. Nothing changed.",
+  failed: "It could not be applied. Nothing changed.", approval_required: "It waits for someone who may approve it.",
+};
+
+function StagedDecision({ id, title }) {
+  const [said, setSaid] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState("");
+  const read = () => fetch(`/pramanyx/kinetic-actions/inbox/${encodeURIComponent(id)}/said`, { headers: { accept: "application/json" } })
+    .then((answer) => (answer.ok ? answer.json() : null)).then((got) => setSaid(got || { gone: true }))
+    .catch(() => setSaid({ gone: true }));
+  useEffect(() => { read(); }, [id]);
+  const decide = async (action) => {
+    setBusy(true);
+    setProblem("");
+    try {
+      const answer = await fetch("/pramanyx-staged", { method: "POST", headers: { "content-type": "application/json" },
+                                                       body: JSON.stringify({ proposal: id, action }) });
+      const got = await answer.json().catch(() => ({}));
+      if (!answer.ok) setProblem(String(got?.detail || "It could not be done."));
+      await read();
+    } catch {
+      setProblem("The platform is not answering.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (!said) return h(Step, { kind: "read", busy: true, title });
+  if (said.gone) return h(Step, { kind: "read", title, note: "this change could not be read" });
+  if (said.status !== "pending") return h(Step, { kind: "read", title, note: ENDED[said.status] || String(said.status || "") });
+  const lines = Array.isArray(said.lines) ? said.lines : [];
+  return h("div", { "data-pramanyx-staged": id, style: { margin: "6px 0", border: `1px solid ${line}`, borderRadius: 6, fontSize: 13.5 } },
+    h("div", { style: { padding: "10px 12px 4px", fontWeight: 600 } }, String(said.asks || "Allow this change?")),
+    lines.length ? h("ul", { style: { margin: 0, padding: "2px 12px 8px 30px", display: "flex", flexDirection: "column", gap: 4 } },
+      lines.map((l, i) => h("li", { key: `${i}-${l}`, style: { overflowWrap: "anywhere" } }, String(l)))) : null,
+    said.why ? h("div", { style: { ...quiet, padding: "0 12px 8px" } }, `Why: ${said.why}`) : null,
+    said.needs_choices ? h("div", { style: { ...quiet, padding: "0 12px 8px" } },
+      "A choice is still open, such as where it posts. Make it on the full card, in Automations under Inbox.") : null,
+    problem ? h("div", { role: "alert", style: { padding: "0 12px 8px" } }, problem) : null,
+    h("div", { style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, padding: "8px 12px", borderTop: `1px solid ${line}` } },
+      h("span", { style: { ...quiet, flex: "1 1 200px", fontSize: 12.5 } }, "Nothing changes until you allow it."),
+      said.needs_choices && said.connection_id
+        ? h("button", { type: "button", style: button(false), onClick: () => openBeside("page", `/automations?conn=${encodeURIComponent(said.connection_id)}`) }, "Open Automations")
+        : null,
+      h("button", { type: "button", style: button(false), disabled: busy, onClick: () => decide("reject") }, "Reject"),
+      said.needs_choices ? null
+        : h("button", { type: "button", style: { ...button(true), fontWeight: 600 }, disabled: busy, onClick: () => decide("allow") },
+          busy ? "Applying…" : "Allow")));
+}
+
+function StagedCard(props) {
+  const short = String(props.toolName || "").slice(PREFIX.length);
+  const args = argsOf(props.block);
+  const done = props.phase === "result";
+  const title = saidOf(props.toolName || "", args, done && !props.block?.isError);
+  if (!done) return h(Step, { kind: "read", busy: true, title });
+  const text = resultText(props.block);
+  const refused = props.block?.isError ? turnedDown(text) : null;
+  if (refused) return h(Step, { kind: "read", title, note: refused });
+  const got = stagedOf(text);
+  if (props.block?.isError || !got.staged) {
+    return h(Step, { kind: "read", failed: true, title: `${ABOUT_TO[short] || title}: nothing was staged` },
+      h("div", { style: quiet }, got.said));
+  }
+  return h(StagedDecision, { id: got.id, title });
+}
+
 function Card(props) {
   const frame = { margin: "8px 0", fontSize: 13 };
   const asked = String(argsOf(props.block).question || "");
@@ -1715,7 +1792,8 @@ export function apply(ctx) {
           : name === PREFIX + "deep_analysis" ? DeepAnalysisCard
           : name === PREFIX + "deck_of_answers" ? DeckCard
           : name === PREFIX + "search_my_drive" ? DriveCard
-          : SCHEDULES.test(name) ? ScheduleCard : ToolStep)));
+          : SCHEDULES.test(name) ? ScheduleCard
+          : STAGED.has(name.slice(PREFIX.length)) ? StagedCard : ToolStep)));
   };
   // What a Pramanyx step waits on is asked in the conversation, under the step; the foot of the page says where. The
   // composer's occupants are tried lowest priority first, and the shell's approval card is 1 (its question card 0, a

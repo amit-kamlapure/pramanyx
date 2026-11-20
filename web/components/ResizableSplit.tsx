@@ -19,6 +19,9 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
+import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icon";
+
 export function ResizableSplit({
   storageKey,
   initial = 280,
@@ -30,6 +33,7 @@ export function ResizableSplit({
   resizePane = "first",
   collapsed = false,
   soloFirst = false,
+  collapsible,
   className,
   style,
 }: {
@@ -60,6 +64,9 @@ export function ResizableSplit({
    *  The SQL editor's results before anything has run: the editor takes the column, and the results open beneath it,
    *  at the size the user set, when a statement runs. Wins over `collapsed`. */
   soloFirst?: boolean;
+  /** A round chevron on the divider folds the first pane away, and a slim strip with the same chevron brings it back (the
+   *  user, 2026-11-19, of a peer product's editor). `name` says what folds: "the catalog". Side by side, first pane only. */
+  collapsible?: { onToggle: () => void; name: string };
   className?: string;
   style?: React.CSSProperties;
 }) {
@@ -130,6 +137,16 @@ export function ResizableSplit({
       >
         {left}
       </div>
+      {/* folded away, a slim strip that brings it back */}
+      {collapsible && collapsed && !vertical && !sizeSecond && (
+        <div data-testid="split-unfold-strip" style={{ width: 14, flexShrink: 0, position: "relative", borderRight: "1px solid var(--b0)" }}>
+          <Button variant="secondary" size="icon-xs" aria-label={`Show ${collapsible.name}`} title={`Show ${collapsible.name}`}
+            data-testid="split-unfold" onClick={collapsible.onToggle}
+            style={{ position: "absolute", top: "50%", left: 7, transform: "translate(-50%, -50%)", borderRadius: "var(--r-pill)", zIndex: 6 }}>
+            <Icon name="chevr" size={13} />
+          </Button>
+        </div>
+      )}
       {/* Divider — gone with the pane it sizes; a handle that resizes nothing is a
           control that lies about what it does. */}
       <div
@@ -155,6 +172,13 @@ export function ResizableSplit({
           onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "var(--blue4, #60a5fa)"; }}
           onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "var(--b0)"; }}
         />
+        {collapsible && !vertical && !sizeSecond && (
+          <Button variant="secondary" size="icon-xs" aria-label={`Hide ${collapsible.name}`} title={`Hide ${collapsible.name}`}
+            data-testid="split-fold" onMouseDown={e => e.stopPropagation()} onClick={collapsible.onToggle}
+            style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", borderRadius: "var(--r-pill)", cursor: "pointer" }}>
+            <Icon name="chevl" size={13} />
+          </Button>
+        )}
       </div>
       <div
         style={soloFirst

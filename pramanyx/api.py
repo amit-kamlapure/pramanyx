@@ -1280,6 +1280,8 @@ from pramanyx.routers import web_search as web_search_router  # noqa: E402 — t
 app.include_router(web_search_router.router)
 from pramanyx.routers import email as email_router  # noqa: E402 — an email a person wrote, sent on their click
 app.include_router(email_router.router)
+from pramanyx.routers import abilities as abilities_router  # noqa: E402 — one list of abilities for the coworker's two places
+app.include_router(abilities_router.router)
 app.include_router(metastore.router)
 app.include_router(approvals.router)
 app.include_router(metastore.grants_router)

@@ -68,7 +68,7 @@ import { ShortcutSheet } from "@/components/query/ShortcutSheet";
 import { ToolsMenu } from "@/components/catalog/CatalogTools";
 import { Chip, MUTED } from "@/components/clarity/kit";
 import { type JoinHint } from "@/components/query/editor/intentions";
-import { countNoun, formatCount, formatSeconds } from "@/lib/format";
+import { countNoun, formatCount, formatSeconds, queryTabName } from "@/lib/format";
 import { editorTools, tableInsert, tableStarter, verdictChip, type ToolSpec } from "@/lib/query/workbench";
 
 type EditorApi = { insert: (text: string) => void; focus: () => void; relint: () => void; cursorToEnd: () => void };
@@ -254,8 +254,8 @@ export function SqlMode({
   // the Ask panel asks about the statement open here, read once the person pauses typing
   const [quietSql, setQuietSql] = useState(sqlText);
   useEffect(() => { const t = setTimeout(() => setQuietSql(sqlText), 600); return () => clearTimeout(t); }, [sqlText]);
-  // a name the person gave the tab; an untouched tab is still "Query", which names nothing
-  const chosenName = active?.name && active.name !== "Query" ? active.name : "";
+  // a name the person gave the tab; an untouched tab still has its stamped name (or the old "Query"), which names nothing
+  const chosenName = active?.name && active.name !== "Query" && !/^New Query \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(active.name) ? active.name : "";
   useOnPage(quietSql.trim() ? { kind: "query", connectionId: connId, noun: ["row", "rows"], sql: quietSql, title: chosenName } : null);
   // What a run reads: the text with every `/ask` request blanked — a request is never sent to the warehouse as SQL.
   const runnable = useMemo(() => blankAskLines(sqlText), [sqlText]);
@@ -427,7 +427,7 @@ export function SqlMode({
   const setSql = useCallback((sql: string) => patchActive({ sql }), [patchActive]);
 
   const openInNewTab = useCallback((
-    sql: string, name = "Query", paramDefs?: Record<string, ParamDef>,
+    sql: string, name = queryTabName(), paramDefs?: Record<string, ParamDef>,
   ) => {
     const t = opening({ ...newTab(name), sql, ...(paramDefs && Object.keys(paramDefs).length ? { paramDefs } : {}) });
     setTabs(prev => [...prev, t]);

@@ -1078,6 +1078,9 @@ class AskRequest(BaseModel):
     insight_id: Optional[str] = None
     seed_sql: Optional[str] = None
     seed_context: str = ""
+    #: Keep going (2026-11-20): the earlier turn on this question stopped at its step limit; what it did, in lines, for
+    #: the conversation to continue from rather than start again. Empty for every other turn.
+    keep_going: str = Field(default="", max_length=4000)
     hitl: bool = False
     skip_cache: bool = False
 
@@ -1793,6 +1796,13 @@ class _AnswerCoreResult:
 #: return and the raise path; the consumer breaks on it and then awaits the future,
 #: which is where success-vs-raise is actually decided.
 _CORE_DONE = object()
+#: Said by a bridge that has had nothing to send for `KEEP_ALIVE_EVERY` seconds: written as an SSE comment, which every
+#: reader skips (`web/lib/sseFrames.ts` reads `data:` lines only) and every wrapper here passes through (each parses only
+#: a chunk starting `data: `). Seen live 2026-11-20: a deep analysis handed off from the Ask panel spent 320 s in one
+#: phase without a frame, and the web's fetch dropped a body silent for 300 s, cancelling the run at six minutes.
+_KEEP_ALIVE = object()
+KEEP_ALIVE_EVERY = 20.0
+KEEP_ALIVE_SAID = ": keep-alive\n\n"
 
 
 def _answer_core_workers() -> int:
@@ -3826,7 +3836,11 @@ async def _core_frames(
     fut = loop.run_in_executor(_ANSWER_CORE_POOL, _work)
     try:
         while True:
-            item = await frames.get()
+            try:
+                item = await asyncio.wait_for(frames.get(), timeout=KEEP_ALIVE_EVERY)
+            except asyncio.TimeoutError:
+                yield (_KEEP_ALIVE, None)              # nothing to send yet: the stream is kept open
+                continue
             if item is _CORE_DONE:
                 break
             yield item
@@ -3881,7 +3895,7 @@ async def _stream_chat(
     _bridge = _core_frames(_run)
     try:
         async for _frame_type, _frame_payload in _bridge:
-            yield _sse(_frame_type, _frame_payload)
+            yield KEEP_ALIVE_SAID if _frame_type is _KEEP_ALIVE else _sse(_frame_type, _frame_payload)
     except _CoreCancelled:
         return
     except Exception as e:
@@ -3914,6 +3928,7 @@ async def _stream_converse(
     connection_id: str,
     history: list[ChatHistoryTurn],
     session_id: str = "",
+    keep_going: str = "",
     canvas_id: Optional[str] = None,
     origin_prose: str = "",
     agent_id: str = "",
@@ -3922,7 +3937,7 @@ async def _stream_converse(
     brief_period: str = "",
     shape: Optional[str] = None,
     sheet: str = "",
-    dashboard: Optional[tuple[str, str]] = None,
+    dashboard: Optional[tuple[str, ...]] = None,
     person: str = "",
 ) -> AsyncGenerator[str, None]:
     """Serve one `/ask` turn as a CONVERSATION (SP-14; unconditional since 2026-10-28).
@@ -4008,6 +4023,8 @@ async def _stream_converse(
                 "ok": step.ok,
                 "detail": str(step.detail or "")[:500],
                 "result_chars": step.result_chars,
+                # the tool said no, its reason in `detail` (2026-11-20): drawn as a refusal, not a done step
+                "refused": bool(getattr(step, "refused", False)),
             })
             # The trail, in the log the flag's exit receipt reads. `name=step.tool` folds
             # into the existing per-tool reliability aggregate, which is the honest place
@@ -4028,6 +4045,17 @@ async def _stream_converse(
             resolve_prior_answers(question, connection_id, session_id)))
         if origin_prose:
             _memory = origin_prose + "\n\n" + _memory if _memory else origin_prose
+        # Stage 4 (2026-11-20): a request of several parts is said to be one, with the ability for each part
+        from pramanyx.agent.orchestrate import parts_note
+        _parts = parts_note(question)
+        if _parts:
+            _memory = _parts + "\n\n" + _memory if _memory else _parts
+        # Keep going (2026-11-20): the last turn on this question stopped at its step limit; it goes on from there
+        if keep_going.strip():
+            _kg = ("## Keep going\nThe person asked to keep going: the last turn on this question stopped at its step limit "
+                   "after these steps:\n" + keep_going.strip()[:4000] + "\nContinue from there. Do not repeat a step that "
+                   "already worked, and do not call again a tool that said no.")
+            _memory = _kg + "\n\n" + _memory if _memory else _kg
         # Summon surface (SP-2, §3.11) — same one-line orientation the quick path
         # prepends, same sanitation, '' from every door but the ⌘K overlay.
         if surface:
@@ -4135,10 +4163,10 @@ async def _stream_converse(
             # reader off to narrow a question that was never the problem.
             steps_n = len(result.steps)
             if result.stop_reason == "budget":
+                # never "ask a narrower question" (2026-11-20): the question was rarely the problem — Keep going is
                 answer = (
-                    f"I ran out of steps before reaching an answer ({steps_n} tool "
-                    "calls). What each step found is above — ask a narrower question "
-                    "and I can finish it."
+                    f"I used all {steps_n} steps this turn before finishing. What each step found is above. "
+                    "Keep going picks up from there."
                 )
             elif result.stop_reason == "silent":
                 answer = (
@@ -4193,6 +4221,10 @@ async def _stream_converse(
             # text-only converse answer renders exactly like a definitional one does.
             emit("mode", {"query_mode": "final_text"})
         emit("headline", {"headline": answer})
+        # The turn spent every step (2026-11-20): Keep going picks up from where it stopped, with the steps it took
+        if result.stop_reason in ("budget", "budget_answered"):
+            from pramanyx.agent.orchestrate import found_lines
+            emit("keep_going", {"steps": len(result.steps), "found": found_lines(turn["results"])})
 
         # RC-2 — file the exchange when nothing else did. A converse turn that
         # called a tool already has a row: `answer_core` writes one and returns
@@ -4248,7 +4280,7 @@ async def _stream_converse(
     _bridge = _core_frames(_run)
     try:
         async for _frame_type, _frame_payload in _bridge:
-            yield _sse(_frame_type, _frame_payload)
+            yield KEEP_ALIVE_SAID if _frame_type is _KEEP_ALIVE else _sse(_frame_type, _frame_payload)
     except _CoreCancelled:
         pass
     except Exception as e:
@@ -4311,6 +4343,8 @@ async def _stream_analyst(
                 "ok": step.ok,
                 "detail": str(step.detail or "")[:500],
                 "result_chars": step.result_chars,
+                # the tool said no, its reason in `detail` (2026-11-20): drawn as a refusal, not a done step
+                "refused": bool(getattr(step, "refused", False)),
             })
             session_log.emit(session_log.TOOL_CALL_RESULT, name=step.tool,
                              conn_id=connection_id, ok=step.ok,
@@ -4395,7 +4429,7 @@ async def _stream_analyst(
     _bridge = _core_frames(_run)
     try:
         async for _frame_type, _frame_payload in _bridge:
-            yield _sse(_frame_type, _frame_payload)
+            yield KEEP_ALIVE_SAID if _frame_type is _KEEP_ALIVE else _sse(_frame_type, _frame_payload)
     except _CoreCancelled:
         return
     except Exception as e:
@@ -5599,7 +5633,11 @@ async def _job_streamed_body(
     )
     logger.debug("investigation job %s submitted", job_id)
     while True:
-        item = await queue.get()
+        try:
+            item = await asyncio.wait_for(queue.get(), timeout=KEEP_ALIVE_EVERY)
+        except asyncio.TimeoutError:
+            yield KEEP_ALIVE_SAID                     # a deep run's long phase: the stream is kept open
+            continue
         if item is _STREAM_END:
             break
         yield item
@@ -5737,14 +5775,28 @@ def _asker(request) -> str:
     return person_of(request)
 
 
-def _own_dashboard(req, request) -> Optional[tuple[str, str]]:
+def _conversation_drafts_dashboards(req, request) -> bool:
+    """Whether the body that serves this turn is the conversation, holding `make_dashboard` (Stage 4, 2026-11-20): a quick
+    turn, for a person the dashboards know, on a model that calls tools."""
+    if req.depth != "quick" or not _asker(request):
+        return False
+    try:
+        from pramanyx.agent.converse_tools import binding_calls_tools
+        return bool(binding_calls_tools())
+    except Exception:  # noqa: BLE001 — not known: the door says where dashboards are made, as before
+        return False
+
+
+def _own_dashboard(req, request) -> Optional[tuple[str, ...]]:
     """``(person, dashboard id)`` when a question is asked about a dashboard the asker keeps — one shared with them (named
-    with its owner) is theirs to read, not to change — else None."""
+    with its owner) is theirs to read, not to change — else None; ``(person, dashboard id, card id)`` when it is asked about
+    one chart of it (2026-11-19: the chart's own look can then be changed)."""
     focus = getattr(req, "focus", None)
     if focus is None or getattr(focus, "kind", "") != "dashboard" or getattr(focus, "owner", "") or not focus.dashboard:
         return None
     from pramanyx.dashboards.home import person_of
-    return (person_of(request), focus.dashboard)
+    card = str(getattr(focus, "id", "") or "")
+    return (person_of(request), focus.dashboard, card) if card else (person_of(request), focus.dashboard)
 
 
 #: What the conversation is told when the person chose Agent on a dashboard they keep (`_conversation_decides`).
@@ -6061,8 +6113,10 @@ async def _stream_ask(req: "AskRequest", request: Request, conn_id: str) -> Asyn
     # A request for a COCKPIT is not a question about data, and this chat drafts none — the
     # Briefing's Dashboards tab does (CT-9). Said here, before the clarify gate read it as an
     # under-specified question (2 of the CT receipt's 10 asks) or a model answered it as one.
-    # On a dashboard the person keeps, the conversation can change it (the Ask panel), so the request goes through.
-    if not req.insight_id and _own_dashboard(req, request) is None:
+    # On a dashboard the person keeps, the conversation can change it (the Ask panel), so the request goes through; and
+    # since Stage 4 (2026-11-20) the conversation drafts a new one (`make_dashboard`), so a quick turn it serves for a
+    # person it knows goes through too. Anywhere else — a deep run, nobody known, a model that calls no tools — it is said.
+    if not req.insight_id and _own_dashboard(req, request) is None and not _conversation_drafts_dashboards(req, request):
         from pramanyx.dashboards.intent import is_dashboard_ask, where_dashboards_are_made
         if is_dashboard_ask(req.question):
             yield _sse("headline", {"headline": where_dashboards_are_made()})
@@ -6203,6 +6257,8 @@ async def _stream_ask(req: "AskRequest", request: Request, conn_id: str) -> Asyn
                              # Arc SH — a question asked beside a sheet gets the tool that puts
                              # the rows it asks about on that sheet's grid.
                              sheet=_sheet_ref(req),
+                             # Keep going — the steps the turn before took, to continue from
+                             keep_going=req.keep_going,
                              # the Ask panel — a question about a dashboard the person keeps can also change it
                              dashboard=_own_dashboard(req, request),
                              # Stage 2 — who asks, so the reads of what depends on a table name only their dashboards

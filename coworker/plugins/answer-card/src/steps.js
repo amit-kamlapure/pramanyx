@@ -71,6 +71,16 @@ export const DOES = {
   propose_agent_grant: ["Proposed giving an agent more access", ["agent", "agent_id"]],
 };
 
+/**
+ * The platform's abilities that STAGE a change for the person's Allow (`GET /abilities`, "staged"; 2026-11-20): each is
+ * drawn as the staged change's card, where the person allows it once. `tests/unit/test_abilities.py` holds this to the
+ * platform's own rows.
+ */
+export const STAGED = new Set([
+  "draft_agent", "draft_automation", "edit_automation", "draft_monitor", "draft_brief", "pause_or_resume_automation",
+  "set_agent_limit", "propose_agent_grant",
+]);
+
 /** What a tool that changes something is about to do: its words until it has done it. */
 export const ABOUT_TO = {
   schedule: "Set up a schedule",
@@ -116,4 +126,18 @@ const NOT_CARRIED_OUT = [
 export function turnedDown(text) {
   const said = String(text || "");
   return NOT_CARRIED_OUT.find(([sentence]) => sentence.test(said))?.[1] ?? null;
+}
+
+/**
+ * What a staging tool's result says (2026-11-20): `{staged, id, said}` — whether it staged a change, the change to draw as
+ * its card, and otherwise the platform's own words without its bookkeeping. The platform's door answers `{tool, result}`
+ * (`/spotlight/tools/<name>`), so the staging tool's own answer is its `result`; a result that is not JSON is said as it is.
+ */
+export function stagedOf(text) {
+  let got = null;
+  try { got = JSON.parse(String(text ?? "")); } catch { got = null; }
+  if (got && typeof got.result === "object" && got.result !== null) got = got.result;
+  if (got && got.staged === true && got.proposal_id) return { staged: true, id: String(got.proposal_id), said: "" };
+  const said = String(got?.summary || got?.error || text || "The platform did not stage it.").replace(/\s*\(proposal [^)]*\)/g, "");
+  return { staged: false, id: "", said: said.slice(0, 600) };
 }

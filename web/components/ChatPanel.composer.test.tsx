@@ -34,6 +34,8 @@ vi.mock("@/lib/api", async (importOriginal) => ({
   cancelActiveDeepRun: vi.fn(),
 }));
 
+import { dashboardSubject, setAskSubject } from "@/lib/askSubject";
+
 import { ChatPanel } from "./ChatPanel";
 
 beforeEach(() => {
@@ -58,6 +60,46 @@ describe("the Ask composer", () => {
   it("says what it offers in its placeholder", async () => {
     const { box } = await panel();
     expect(box.placeholder).toContain("@ for objects, / for commands, ↑↓ for history");
+  });
+
+  it("opens saying how it answers, with no Quick or Agent to switch to (2026-11-20)", async () => {
+    await panel();
+    const how = screen.getByTestId("chat-empty-how");
+    expect(how).toHaveTextContent("Answers straight away. Type /agent to investigate in depth.");
+    expect(how).not.toHaveTextContent("Quick");
+  });
+
+  it("beside a dashboard the person keeps, says a change waits for their Allow", async () => {
+    act(() => setAskSubject(dashboardSubject("sheets", "sheets:ops", "Ops", null)));
+    await panel();
+    expect(screen.getByTestId("chat-empty-how")).toHaveTextContent(
+      "Ask a question or describe a change: nothing changes until you allow it. Type /agent to investigate in depth.");
+    act(() => setAskSubject(null));
+  });
+
+  it("on a Data Canvas is the one conversation: the panel's composer, no picker, /agent to go deep (2026-11-20)", async () => {
+    render(<QueryClientProvider client={new QueryClient()}><ChatPanel connectionId="sheets" canvasId="cv1" harness oneConversation /></QueryClientProvider>);
+    await act(async () => {});
+    expect(screen.getByTestId("chat-empty-how")).toHaveTextContent("Answers straight away. Type /agent to investigate in depth.");
+    expect(screen.queryByRole("radiogroup", { name: "How to answer" })).toBeNull();
+    const box = screen.getByRole("textbox") as HTMLTextAreaElement;
+    fireEvent.change(box, { target: { value: "how many orders?" } });
+    fireEvent.keyDown(box, { key: "Enter" });
+    expect(sent.at(-1)?.body).toMatchObject({ depth: "quick" });
+  });
+
+  it("says which saved agent the person arrived talking to, and lets it go", async () => {
+    render(<QueryClientProvider client={new QueryClient()}><ChatPanel connectionId="sheets" harness oneConversation initialAgentId="ag1" /></QueryClientProvider>);
+    await act(async () => {});
+    expect(screen.getByTestId("composer-agent")).toHaveTextContent("Talking to");
+    fireEvent.click(screen.getByRole("button", { name: "Stop talking to this agent" }));
+    expect(screen.queryByTestId("composer-agent")).toBeNull();
+  });
+
+  it("on the legacy chat page, where the picker stays, still says Agent or Quick", async () => {
+    render(<QueryClientProvider client={new QueryClient()}><ChatPanel connectionId="sheets" /></QueryClientProvider>);
+    await act(async () => {});
+    expect(screen.getByTestId("chat-empty-how")).toHaveTextContent("Agent investigates in depth — switch to Quick for a straight answer.");
   });
 
   it("offers commands at the start, and /quick answers the next question quickly", async () => {

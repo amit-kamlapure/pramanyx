@@ -99,6 +99,9 @@ interface ChatBody {
    *  backend opens the turn on that object's live state. Arc FA-2 — or the subject a reader
    *  chose on a dashboard (`kind` objects or set, `lib/askSubject.ts`), read again by the backend. */
   focus?: { kind: string; id?: string; [more: string]: unknown } | null;
+  /** Keep going (2026-11-20): the steps the turn before took, when it spent every one — forwarded for the
+   *  conversation to continue from. */
+  keep_going?: string;
 }
 
 /**
@@ -267,6 +270,7 @@ function upstreamRequest(body: ChatBody): { url: string; payload: Record<string,
       surface: body.surface ?? "",
       brief_period: body.brief_period ?? "",
       focus: body.focus ?? null,
+      ...(body.keep_going ? { keep_going: String(body.keep_going).slice(0, 4000) } : {}),
     },
   };
 }

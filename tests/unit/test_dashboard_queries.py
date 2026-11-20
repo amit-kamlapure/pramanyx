@@ -320,6 +320,23 @@ def test_a_kept_query_is_a_card_of_the_person_s_own_and_a_change_supersedes_it(c
     assert run["error"] is None and run["shown"]["as"] == "bar" and len(run["shown"]["points"]) == 24
 
 
+def test_a_card_changed_keeps_how_its_chart_is_dressed(client):
+    """A dataset's statement changed re-keeps every chart built on it (2026-11-19): each keeps its number format and
+    reference lines, which the chart editor kept beside the setup."""
+    from pramanyx.cards.store import get_card, upsert_card
+    conn = f"q{uuid.uuid4().hex[:6]}"
+    shown = {"as": "line", "x": "order_date", "bucket": "month", "series": [{"column": "total_amount", "agg": "sum"}]}
+    first = client.post("/dashboards/queries", params={"connection_id": conn},
+                        json={"sql": SALES, "shown": shown, "title": "Sales"}).json()["card"]
+    viz = {"numberFormat": "currency", "refLines": [{"value": 100, "label": "Target", "kind": "target"}]}
+    held = get_card(first["id"])
+    upsert_card(held.model_copy(update={"render": {**held.render, "viz": viz}}))
+    r = client.post("/dashboards/queries", params={"connection_id": conn},
+                    json={"sql": SALES + " WHERE total_amount > 0", "shown": shown, "replaces": first["id"]})
+    assert r.status_code == 201, r.text
+    assert r.json()["card"]["render"]["viz"] == viz
+
+
 def test_a_change_to_a_card_that_is_not_the_person_s_own_is_refused(client):
     from pramanyx.cards.models import StoredCard
     from pramanyx.cards.store import upsert_card

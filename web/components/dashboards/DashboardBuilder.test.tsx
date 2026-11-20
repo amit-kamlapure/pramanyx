@@ -348,6 +348,34 @@ describe("with the dashboard itself drawn", () => {
     n: { type: "Note", props: { text: "Watch the overdue ones", w: 6, h: 4 }, children: [] },
   } };
 
+  it("opens the Data tab in place of the canvas from the row of pages, and a page brings the canvas back on it (2026-11-19)", () => {
+    globalThis.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver;
+    const paged = { root: "c", state: { tab: "one" }, datasets: { orders: { label: "Orders", sql: "SELECT * FROM shop.orders", table: "shop.orders" } },
+      elements: {
+        c: { type: "Cockpit", props: { title: "Ops" }, children: ["tabs"] },
+        tabs: { type: "Tabs", props: { value: { $bindState: "/tab" } }, children: ["t1", "t2"] },
+        t1: { type: "Tab", props: { name: "one", label: "One" }, children: ["s1"] },
+        t2: { type: "Tab", props: { name: "two", label: "Two" }, children: ["s2"] },
+        s1: { type: "Section", props: { title: "First", grid: 12 }, children: ["n1"] },
+        s2: { type: "Section", props: { title: "Second", grid: 12 }, children: ["n2"] },
+        n1: { type: "Note", props: { text: "On page one", w: 6, h: 4 }, children: [] },
+        n2: { type: "Note", props: { text: "On page two", w: 6, h: 4 }, children: [] },
+      } } as unknown as DashboardSpec;
+    render(<Page start={paged} />);
+    expect(screen.getByText("On page one")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("dashboard-data-tab"));
+    // the data that backs the dashboard, on a view of its own: its datasets, the one chosen set up beside them
+    expect(screen.getByTestId("data-view")).toBeInTheDocument();
+    expect(screen.getByTestId("builder-canvas")).not.toBeVisible();
+    expect(screen.getByTestId("data-dataset")).toHaveTextContent("Ordersshop.orders");
+    expect(screen.getByLabelText("The dataset's name")).toHaveValue("Orders");
+    expect(screen.getAllByTestId("data-view-page").map(b => b.textContent)).toEqual(["One", "Two"]);
+    fireEvent.click(screen.getAllByTestId("data-view-page")[1]);
+    expect(screen.queryByTestId("data-view")).toBeNull();
+    expect(screen.getByTestId("builder-canvas")).toBeVisible();
+    expect(screen.getByText("On page two")).toBeInTheDocument();
+  });
+
   it("says the room a step has just given, never the one before it", () => {
     globalThis.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver;
     render(<Page start={notes} />);
@@ -472,5 +500,48 @@ describe("building safely (Arc AP-6)", () => {
     fireEvent.click(screen.getByTestId("data-set"));
     await waitFor(() => expect(screen.getByTestId("set-holds")).toHaveTextContent("cannot be read"));
     expect(screen.queryByTestId("set-read-time")).toBeNull();
+  });
+});
+
+describe("placing a box (the user, 2026-11-19)", () => {
+  /** The builder carrying a box of `kind`, over a stub section whose grid is drawn 1192 px wide at the page's top left. */
+  function carrying(kind: "chart" | "filter" | "text" | "image") {
+    const onPlaced = vi.fn(), onCancel = vi.fn();
+    render(
+      <DashboardBuilder spec={objectDashboard()} onChange={vi.fn()} connectionId="thelook" schema="thelook" bar={<span />}
+        placing={{ kind, box: null, onPlaced, onCancel, onBox: vi.fn() }}>
+        {() => (
+          <section data-key="sec"><div data-columns="12" data-testid="stub-grid" /></section>
+        )}
+      </DashboardBuilder>,
+    );
+    const grid = screen.getByTestId("stub-grid");
+    Object.defineProperty(grid, "offsetWidth", { value: 1192, configurable: true });
+    grid.getBoundingClientRect = () => ({ left: 0, top: 0, right: 1192, bottom: 400, width: 1192, height: 400, x: 0, y: 0, toJSON: () => ({}) });
+    return { onPlaced, onCancel, layer: screen.getByTestId("place-layer") };
+  }
+
+  it("sets a box of the tool's size down in the cell under the pointer, in the section there", () => {
+    const { onPlaced, layer } = carrying("filter");
+    fireEvent.click(layer, { clientX: 250, clientY: 85 });
+    expect(onPlaced).toHaveBeenCalledWith(expect.objectContaining({ kind: "filter", section: "sec", x: 3, y: 3, w: 4, h: 2 }));
+  });
+
+  it("below a section's last row, sets it in that section further down; Esc lets the box go", () => {
+    const { onPlaced, onCancel, layer } = carrying("chart");
+    fireEvent.click(layer, { clientX: 20, clientY: 600 });
+    expect(onPlaced).toHaveBeenCalledWith(expect.objectContaining({ kind: "chart", section: "sec", x: 1, y: 16, w: 6, h: 8 }));
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(onCancel).toHaveBeenCalled();
+  });
+
+  it("chooses the piece just made in a box, so its own setup opens in the panel", () => {
+    render(
+      <DashboardBuilder spec={objectDashboard()} onChange={vi.fn()} connectionId="thelook" schema="thelook" bar={<span />}
+        placing={{ kind: null, box: null, chosen: "note", onPlaced: vi.fn(), onCancel: vi.fn(), onBox: vi.fn() }}>
+        {() => <div />}
+      </DashboardBuilder>,
+    );
+    expect(screen.getByTestId("piece-setup")).toHaveAttribute("data-kind", "Note");
   });
 });

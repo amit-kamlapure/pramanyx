@@ -19,7 +19,7 @@ import { validateSpec, type Spec } from "@json-render/core";
 import type { z } from "zod";
 
 import { MAX_GLOBAL_FILTERS,
-  CHOOSERS, DASHBOARD_VOCABULARY_VERSION, COMPONENT_NAMES, GRADE, GRID, LIMITS, MAX_DEPTH, MAX_SETS, MAX_VALUES, MAY_BE_CONDITIONAL, MAY_HOLD,
+  CHOOSERS, DASHBOARD_VOCABULARY_VERSION, DATASET_NAME, COMPONENT_NAMES, GRADE, GRID, LIMITS, MAX_DEPTH, MAX_SETS, MAX_VALUES, MAY_BE_CONDITIONAL, MAY_HOLD,
   ISO_DAY, MAX_LIST, PLACED, READER_TEXT, SET_READERS, SPLIT_AGGS, SIZES, SWITCHED, TONES, VALUE_OPS, dashboardCatalog, dashboardSet, dashboardValue,
   type ActionButtonDef,
   type ComponentName, type GridKind, type Layout, type PieceName,
@@ -201,6 +201,22 @@ function checkBreakdown(key: string, props: Obj, out: DashboardIssue[]): void {
       refuse(`The breakdown ${q(key)} groups by ${q(String(props.by))} and also measures it. A group's measure reads another property.`);
     }
   });
+}
+
+/** The datasets a dashboard's charts are built on (2026-11-19): a map of names, each a label and the statement it reads. */
+function checkDatasets(raw: unknown, issues: DashboardIssue[]): void {
+  if (raw == null) return;
+  if (!isObj(raw)) { issues.push({ code: "bad_prop", message: "The spec's \"datasets\" is not a map of named datasets." }); return; }
+  const entries = Object.entries(raw as Record<string, unknown>);
+  if (entries.length > 24) issues.push({ code: "too_large", message: `The dashboard holds ${entries.length} datasets. It holds at most 24.` });
+  for (const [name, d] of entries) {
+    const ok = DATASET_NAME.test(name) && isObj(d)
+      && typeof (d as Obj).label === "string" && ((d as Obj).label as string).trim().length > 0 && ((d as Obj).label as string).length <= 120
+      && typeof (d as Obj).sql === "string" && ((d as Obj).sql as string).trim().length > 0 && ((d as Obj).sql as string).length <= 20000
+      && ((d as Obj).table == null || (typeof (d as Obj).table === "string" && ((d as Obj).table as string).length <= 200))
+      && Object.keys(d as Obj).every(k => ["label", "sql", "table"].includes(k));
+    if (!ok) issues.push({ code: "bad_prop", message: `The dataset ${q(name)} is not a label and the statement it reads.` });
+  }
 }
 
 /** Arc AP-2 and AP-3 — the wiring, by name: every set, value and choice a piece names is one the dashboard holds, sets
@@ -569,12 +585,21 @@ export function checkDashboardSpec(spec: unknown): DashboardCheck {
       message: "A dashboard spec is an object with a \"root\" and a map of \"elements\"." });
     return done();
   }
-  const extra = Object.keys(spec).filter(k => !["root", "elements", "state", "sets", "values"].includes(k));
+  const extra = Object.keys(spec).filter(k => !["root", "elements", "state", "sets", "values", "datasets"].includes(k));
   if (extra.length) {
     issues.push({ code: "not_a_spec",
-      message: `The spec carries ${list(extra.map(q))}. It holds "root", "elements", "state", and the "sets" and "values" its pieces read.` });
+      message: `The spec carries ${list(extra.map(q))}. It holds "root", "elements", "state", the "sets" and "values" its pieces read, and the "datasets" its charts are built on.` });
   }
+  checkDatasets(spec.datasets, issues);
   const elements = spec.elements as Record<string, unknown>;
+  // v21 — a chart is built on a dataset the dashboard holds
+  const heldData = isObj(spec.datasets) ? Object.keys(spec.datasets as Obj) : [];
+  for (const [key, el] of Object.entries(elements)) {
+    const on = isObj(el) && (el as Obj).type === "Card" && isObj((el as Obj).props) ? ((el as Obj).props as Obj).dataset : null;
+    if (typeof on === "string" && !heldData.includes(on)) {
+      issues.push({ code: "bad_prop", message: `${q(key)} is built on the dataset ${q(on)}, which the dashboard does not hold.` });
+    }
+  }
   const keys = Object.keys(elements);
   if (keys.length > MAX_ELEMENTS) {
     issues.push({ code: "too_large",

@@ -7,7 +7,7 @@
  * a reader; the builder's split, copy and width, one twelfth at a time; and the piece picker, which places every piece
  * by hand with a first setup the rules accept — or says why it cannot. Every read is mocked.
  */
-import { act, choose, fireEvent, optionsOf, render, screen, waitFor, within } from "@/lib/testing";
+import { act, change, choose, fireEvent, optionsOf, render, screen, waitFor, within } from "@/lib/testing";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DashboardBuilder } from "@/components/dashboards/DashboardBuilder";
@@ -156,8 +156,12 @@ describe("the piece picker", () => {
   function pick(spec: DashboardSpec, section: string | null = "right", only?: "chart" | "filter") {
     const onPlace = vi.fn(), onHandOff = vi.fn(), onClose = vi.fn();
     render(<PiecePicker spec={spec} section={section} connectionId="thelook" onPlace={onPlace} onHandOff={onHandOff} onClose={onClose} only={only} />);
-    const entry = (kind: string) => screen.getAllByTestId("piece-picker-entry").find(e => e.dataset.kind === kind)!;
-    return { onPlace, onHandOff, onClose, entry };
+    // a box's setup (2026-11-19): one dropdown of what it is, a line saying what it does or why it cannot go here, and Place it here
+    const kind = (k: string) => change(screen.getByLabelText("What it is"), { target: { value: k } });
+    const button = (k: string) => { kind(k); return screen.getByTestId("piece-picker-place"); };
+    const says = (k: string) => { kind(k); return screen.getByTestId("piece-picker-says"); };
+    const place = (k: string) => fireEvent.click(button(k));
+    return { onPlace, onHandOff, onClose, button, says, place };
   }
 
   it("offers under each entity only its own sets — the customers a set of orders reaches are offered under Customer (Arc AP-8b)", async () => {
@@ -173,9 +177,9 @@ describe("the piece picker", () => {
   });
 
   it("places a figure of the set chosen in the section, filling it, and names the section by it", async () => {
-    const { onPlace, entry } = pick(desk());
+    const { onPlace, button, says, place } = pick(desk());
     await choose(screen.getByLabelText("Which of them"), "late");
-    fireEvent.click(entry("ObjectFigure"));
+    place("ObjectFigure");
     const [next, note] = onPlace.mock.calls[0];
     expect(note).toBe("figure placed by hand");
     const key = next.elements.right.children[0];
@@ -185,9 +189,9 @@ describe("the piece picker", () => {
   });
 
   it("places a chart across the entity's own date, and a table with its first properties", async () => {
-    const { onPlace, entry } = pick(desk());
-    await waitFor(() => expect(entry("ObjectChart")).not.toBeDisabled());
-    fireEvent.click(entry("ObjectChart"));
+    const { onPlace, button, says, place } = pick(desk());
+    await waitFor(() => expect(button("ObjectChart")).not.toBeDisabled());
+    place("ObjectChart");
     const chart = onPlace.mock.calls[0][0];
     const key = chart.elements.right.children[0];
     expect(chart.elements[key].props).toMatchObject({ entity: "order", time: "created_at", days: 14, label: "Customer Orders, by created at" });
@@ -198,19 +202,19 @@ describe("the piece picker", () => {
     const filtered = desk();
     filtered.elements.cockpit.children = ["filters", "body"];
     filtered.elements.filters = { type: "ObjectFilters", props: { entity: "order", properties: [{ path: "status", label: "Status" }] }, children: [] };
-    const { onPlace, entry } = pick(filtered);
-    expect(entry("ObjectFilters")).toBeDisabled();
-    expect(entry("ObjectFilters")).toHaveTextContent("The dashboard has its filter column. It holds one.");
-    expect(entry("ObjectDetail")).toHaveTextContent("A detail follows a table, a list, a map or a timeline. Place one first.");
-    fireEvent.click(entry("ObjectDetail"));
+    const { onPlace, button, says, place } = pick(filtered);
+    expect(button("ObjectFilters")).toBeDisabled();
+    expect(says("ObjectFilters")).toHaveTextContent("The dashboard has its filter column. It holds one.");
+    expect(says("ObjectDetail")).toHaveTextContent("A detail follows a table, a list, a map or a timeline. Place one first.");
+    place("ObjectDetail");
     expect(onPlace).not.toHaveBeenCalled();
   });
 
   it("places the filter column as the dashboard's first child, counting within the set chosen", async () => {
-    const { onPlace, entry } = pick(desk());
+    const { onPlace, button, says, place } = pick(desk());
     await choose(screen.getByLabelText("Which of them"), "late");
-    await waitFor(() => expect(entry("ObjectFilters")).not.toBeDisabled());
-    fireEvent.click(entry("ObjectFilters"));
+    await waitFor(() => expect(button("ObjectFilters")).not.toBeDisabled());
+    place("ObjectFilters");
     const next = onPlace.mock.calls[0][0];
     const first = next.elements.cockpit.children[0];
     expect(next.elements[first]).toMatchObject({ type: "ObjectFilters", props: { entity: "order", set: "late", properties: [{ path: "status", label: "Status" }, { path: "num_of_item", label: "Num of item" }] } });
@@ -243,10 +247,10 @@ describe("the piece picker", () => {
 
   it("places a map of what holds a latitude and a longitude — whatever role the ontology gives them — named by its name", async () => {
     byName();
-    const { onPlace, entry } = pick(desk());
+    const { onPlace, button, says, place } = pick(desk());
     await reads("distribution_center");
-    await waitFor(() => expect(entry("ObjectMap")).not.toBeDisabled());
-    fireEvent.click(entry("ObjectMap"));
+    await waitFor(() => expect(button("ObjectMap")).not.toBeDisabled());
+    place("ObjectMap");
     const { next, el } = placed(onPlace);
     expect(el).toMatchObject({ type: "ObjectMap", props: { entity: "distribution_center", lat: "latitude", lng: "longitude", label: "name" } });
     expect(next.elements.right.props.title).toBe("Distribution centers");
@@ -255,17 +259,17 @@ describe("the piece picker", () => {
 
   it("says why an order has no map, no timeline and no choose-one, and places its list and its search called by what it holds", async () => {
     byName();
-    const { onPlace, entry } = pick(desk());
-    await waitFor(() => expect(entry("ObjectList")).not.toBeDisabled());
-    expect(entry("ObjectMap")).toHaveTextContent("Customer Order holds no latitude and longitude to place it by.");
-    expect(entry("ObjectTimeline")).toHaveTextContent("Customer Order holds fewer than two moments to draw a bar between.");
-    expect(entry("ChooseOne")).toHaveTextContent("Customer Order holds no name to find one by.");
-    fireEvent.click(entry("ObjectList"));
+    const { onPlace, button, says, place } = pick(desk());
+    await waitFor(() => expect(button("ObjectList")).not.toBeDisabled());
+    expect(says("ObjectMap")).toHaveTextContent("Customer Order holds no latitude and longitude to place it by.");
+    expect(says("ObjectTimeline")).toHaveTextContent("Customer Order holds fewer than two moments to draw a bar between.");
+    expect(says("ChooseOne")).toHaveTextContent("Customer Order holds no name to find one by.");
+    place("ObjectList");
     const list = placed(onPlace);
     // no name: its cards are called by their key; the newest first
     expect(list.el.props).toEqual({ entity: "order", figure: "num_of_item", mark: "status", sort: "created_at", descending: true, w: 12, h: 8 });
     expect(checkDashboardSpec(list.next).issues).toEqual([]);
-    fireEvent.click(entry("ObjectSearch"));
+    place("ObjectSearch");
     const search = placed(onPlace, 1);
     expect(search.el.props).toMatchObject({ entity: "order", path: "status", label: "Find customer orders" });
     expect(search.next.elements.right.props.title).toBe("Search");
@@ -276,13 +280,13 @@ describe("the piece picker", () => {
     byName();
     const first = pick(desk());
     await reads("order_item");
-    await waitFor(() => expect(first.entry("ObjectTimeline")).not.toBeDisabled());
-    fireEvent.click(first.entry("ObjectTimeline"));
+    await waitFor(() => expect(first.button("ObjectTimeline")).not.toBeDisabled());
+    first.place("ObjectTimeline");
     expect(placed(first.onPlace).el.props).toMatchObject({ entity: "order_item", start: "created_at", end: "shipped_at" });
     expect(checkDashboardSpec(placed(first.onPlace).next).issues).toEqual([]);
     await reads("distribution_center");
-    await waitFor(() => expect(first.entry("ChooseOne")).not.toBeDisabled());
-    fireEvent.click(first.entry("ChooseOne"));
+    await waitFor(() => expect(first.button("ChooseOne")).not.toBeDisabled());
+    first.place("ChooseOne");
     const chooser = placed(first.onPlace, 1);
     expect(chooser.el.props).toMatchObject({ entity: "distribution_center", chooses: "chosen-distribution-center", label: "name" });
     expect(chooser.next.elements.right.props.title).toBe("Choose a distribution center");
@@ -294,11 +298,11 @@ describe("the piece picker", () => {
     const chosen = desk();
     chosen.elements.left.children.push("orders");
     chosen.elements.orders = { type: "ObjectTable", props: { entity: "order", chooses: "chosen-order", w: 6, h: 8 }, children: [] };
-    const { onPlace, entry } = pick(chosen);
-    expect(entry("Linked")).toBeDisabled();
+    const { onPlace, button, says, place } = pick(chosen);
+    expect(button("Linked")).toBeDisabled();
     await reads("order_item");
-    await waitFor(() => expect(entry("Linked")).not.toBeDisabled());
-    fireEvent.click(entry("Linked"));
+    await waitFor(() => expect(button("Linked")).not.toBeDisabled());
+    place("Linked");
     const { next, el } = placed(onPlace);
     expect(next.sets!["order-items-of-the-chosen-order"]).toEqual({ label: "Order items of the chosen order", entity: "order_item",
       linked_to: { choice: "chosen-order", path: "order_id" } });
@@ -318,10 +322,10 @@ describe("the piece picker", () => {
     const s = desk();
     s.elements.left.children.push("centres");
     s.elements.centres = { type: "ObjectTable", props: { entity: "distribution_center", chooses: "chosen-distribution-center", w: 6, h: 8 }, children: [] };
-    const { onPlace, entry } = pick(s);
+    const { onPlace, button, says, place } = pick(s);
     await reads("product");
-    await waitFor(() => expect(entry("Linked")).not.toBeDisabled());
-    fireEvent.click(entry("Linked"));
+    await waitFor(() => expect(button("Linked")).not.toBeDisabled());
+    place("Linked");
     const next = onPlace.mock.calls[0][0] as DashboardSpec;
     expect(Object.values(next.sets!).map(x => x.label)).toContain("Products of the distribution center");
     expect(checkDashboardSpec(next).issues).toEqual([]);
@@ -332,8 +336,8 @@ describe("the piece picker", () => {
     const listed = desk();
     listed.elements.left.children.push("queue");
     listed.elements.queue = { type: "ObjectList", props: { entity: "order", w: 6, h: 8 }, children: [] };
-    const { onPlace, entry } = pick(listed);
-    fireEvent.click(entry("ObjectDetail"));
+    const { onPlace, button, says, place } = pick(listed);
+    place("ObjectDetail");
     const { next, el } = placed(onPlace);
     expect(el).toMatchObject({ type: "ObjectDetail", props: { follows: "queue" } });
     expect(checkDashboardSpec(next).issues).toEqual([]);
@@ -348,8 +352,8 @@ describe("the piece picker", () => {
 
   it("opens the chosen one in a drawer beside the page, holding its detail", async () => {
     byName();
-    const { onPlace, entry } = pick(ordersChosen());
-    fireEvent.click(entry("Drawer"));
+    const { onPlace, button, says, place } = pick(ordersChosen());
+    place("Drawer");
     const next = onPlace.mock.calls[0][0] as DashboardSpec;
     const key = next.elements.cockpit.children.at(-1)!;
     expect(next.elements[key]).toMatchObject({ type: "Drawer", props: { title: "The order", opens_on: "chosen-order" } });
@@ -362,9 +366,9 @@ describe("the piece picker", () => {
     const s = ordersChosen();
     s.elements.cockpit.children.push("drawer");
     s.elements.drawer = { type: "Drawer", props: { title: "The order", opens_on: "chosen-order" }, children: [] };
-    const { entry } = pick(s, "drawer");
-    expect(entry("Drawer")).toHaveTextContent("A drawer opens beside the page. It holds pieces, not a drawer.");
-    expect(entry("ObjectTable")).not.toHaveTextContent("There is no section");
+    const { button, says, place } = pick(s, "drawer");
+    expect(says("Drawer")).toHaveTextContent("A drawer opens beside the page. It holds pieces, not a drawer.");
+    expect(says("ObjectTable")).not.toHaveTextContent("There is no section");
   });
 
   it("offers no second drawer on a choice that opens one already", async () => {
@@ -372,47 +376,50 @@ describe("the piece picker", () => {
     const s = ordersChosen();
     s.elements.cockpit.children.push("drawer");
     s.elements.drawer = { type: "Drawer", props: { title: "The order", opens_on: "chosen-order" }, children: [] };
-    const { entry } = pick(s);
-    expect(entry("Drawer")).toHaveTextContent("Each chosen object opens its drawer already.");
+    const { button, says, place } = pick(s);
+    expect(says("Drawer")).toHaveTextContent("Each chosen object opens its drawer already.");
   });
 
-  it("drawn in the panel, lists only what the toolbar asked for — a chart's pieces, or a filter's — and every piece on asking (2026-11-18)", async () => {
-    const kinds = () => screen.getAllByTestId("piece-picker-entry").map(e => e.dataset.kind);
-    const { onHandOff, onClose } = pick(desk(), "right", "chart");
-    expect(screen.getByRole("region", { name: "Add a chart" })).toBeInTheDocument();
-    expect(kinds()).toEqual(expect.arrayContaining(["ObjectChart", "ObjectFigure", "card", "query", "finding", "question", "ObjectTable", "ontology"]));
-    expect(kinds()[0]).toBe("ObjectFigure");                                  // what measures comes first
-    expect(kinds()).not.toContain("ObjectFilters");
-    expect(kinds()).not.toContain("note");
-    fireEvent.click(screen.getAllByTestId("piece-picker-entry").find(e => e.dataset.kind === "question")!);
+  it("offers in one dropdown only what the box may be — a chart's pieces, what measures first — and hands a composer's to the page (2026-11-19)", async () => {
+    const { onHandOff, onClose, place } = pick(desk(), "right", "chart");
+    expect(screen.getByRole("region", { name: "What this box is" })).toBeInTheDocument();
+    const kinds = optionsOf(screen.getByLabelText("What it is")).map(o => o.value);
+    expect(kinds).toEqual(expect.arrayContaining(["ObjectChart", "ObjectFigure", "card", "query", "finding", "question", "ObjectTable", "ontology"]));
+    expect(kinds[0]).toBe("ObjectFigure");                                    // what measures comes first
+    expect(kinds).not.toContain("ObjectFilters");
+    expect(kinds).not.toContain("note");
+    place("question");
     expect(onHandOff).toHaveBeenCalledWith("question", "right");
-    fireEvent.click(screen.getByTestId("piece-picker-every"));
-    expect(kinds()).toEqual(expect.arrayContaining(["ObjectFilters", "note", "image", "ActionButtons"]));
-    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    fireEvent.click(screen.getByTestId("piece-picker-close"));
     expect(onClose).toHaveBeenCalled();
     await act(async () => {});
   });
 
-  it("for a filter, lists the filters", async () => {
-    pick(desk(), "right", "filter");
-    expect(screen.getByRole("region", { name: "Add a filter" })).toBeInTheDocument();
+  it("for a filter box, offers each kind of global filter by its type, then the other filters, and places one in the box's section", async () => {
+    const { onPlace, place } = pick(desk(), "right", "filter");
     // no Period: a dashboard's dates are its date filter's (the user, 2026-11-19)
-    expect(screen.getAllByTestId("piece-picker-entry").map(e => e.dataset.kind)).toEqual(["GlobalFilter", "ObjectFilters", "ObjectSearch", "ChooseOne"]);
+    const kinds = optionsOf(screen.getByLabelText("What it is")).map(o => o.value);
+    expect(kinds.filter(k => k.startsWith("GlobalFilter:")).length).toBeGreaterThan(3);
+    expect(kinds.slice(-3)).toEqual(["ObjectFilters", "ObjectSearch", "ChooseOne"]);
+    place("GlobalFilter:single");
+    const next = onPlace.mock.calls[0][0];
+    const key = next.elements.right.children.at(-1);
+    expect(next.elements[key]).toMatchObject({ type: "GlobalFilter", props: { kind: "single", title: "Filter" } });
+    expect(checkDashboardSpec(next).issues).toEqual([]);
     await act(async () => {});
   });
 
   it("offers a query of your own, and hands it to the page for the same section (Arc AP-7)", async () => {
-    const { onHandOff } = pick(desk());
-    const query = screen.getAllByTestId("piece-picker-entry").find(e => e.dataset.kind === "query")!;
-    expect(query).toHaveTextContent("Your own query");
-    fireEvent.click(query);
+    const { onHandOff, place } = pick(desk());
+    expect(optionsOf(screen.getByLabelText("What it is")).find(o => o.value === "query")?.text).toContain("Your own query");
+    place("query");
     expect(onHandOff).toHaveBeenCalledWith("query", "right");
     await act(async () => {});
   });
 
   it("hands a note, a card, an image or a finding to the page's own composer, for the same section", async () => {
-    const { onHandOff, entry } = pick(desk());
-    fireEvent.click(entry("note"));
+    const { onHandOff, place } = pick(desk());
+    place("note");
     expect(onHandOff).toHaveBeenCalledWith("note", "right");
     await act(async () => {});
   });

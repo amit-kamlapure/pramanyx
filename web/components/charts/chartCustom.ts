@@ -32,6 +32,8 @@ export interface ChartCustom {
  */
 export interface ChartOptions {
   lineShape?: "straight" | "smooth" | "step" | null;
+  /** A line's width in pixels; unset, 2. */
+  lineWidth?: number | null;
   /** false draws a line without its points. */
   markers?: boolean | null;
   yMin?: number | null;

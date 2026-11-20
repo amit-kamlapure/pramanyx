@@ -30,6 +30,9 @@ export const READS = [
   // and whether it is on, muted, ended or gone. The card under the turn that made a schedule reads this every time
   // it is drawn, because where a schedule stands is a fact about the schedule and not about the page that made it.
   /^\/automations\/[A-Za-z0-9_-]{1,64}\/schedule$/,
+  // A change the platform staged, in the person's words (2026-11-20): the card under the step that staged it reads where
+  // it stands every time it is drawn, and Allow or Reject goes through this page's own door (`stagedDoor`), never here.
+  /^\/kinetic-actions\/inbox\/[A-Za-z0-9_-]{1,64}\/said$/,
 ];
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -447,37 +450,49 @@ export function refusalFor(name, args, held, also = []) {
  * WHAT THE COWORKER DOES ON ITS OWN, AND WHAT IT ASKS FIRST (2026-11-18; the user: "be more autonomous.. it must ask
  * permission explicitly for tasks that may be risky or critical"). There is one way of working and no mode to pick.
  *
- * On its own: whatever reads, or works a question through, and leaves nothing behind: reading what the platform holds,
- * asking the governed path, a deep analysis, a draft that only the person can send. Everything else waits for the
- * person's own Allow, once, in the conversation: whatever changes what the platform holds or does unattended, stops
- * work, runs an automation, or starts a long crawl of the warehouse. The list below is of what may go ahead, so a tool
- * nobody has thought about is asked about. What is asked is written here from the call, in the platform's words.
+ * ONE RULE FOR BOTH PLACES (2026-11-20, "one coworker, two places"): how each of the platform's abilities is allowed is
+ * the platform's to say, the same in the Ask panel and here (`pramanyx/abilities.py`, served at `GET /abilities`). A read
+ * goes ahead; a change the platform stages goes ahead to the staging, which changes nothing, and the person allows it once
+ * on its card in the conversation (the user's choice: "Staged card in chat"); anything else that spends or changes asks
+ * once, here, unless the platform says why it does not. A tool the rows do not name is asked about, and so is everything
+ * of the platform's while its rows cannot be read. What is asked is written here from the call, in the platform's words.
  */
-const OWN_WORK = new Set([
-  // what the platform holds
-  "list_connections", "get_metric", "get_definitions", "read_learned", "my_memories", "list_findings", "get_investigation",
-  "search_graph", "describe_entity", "list_objects", "get_table_health", "list_trusted_queries", "list_jobs", "get_job",
-  "list_runs", "inspect_run", "read_run_span", "read_contract", "read_claims", "read_restatements", "ground_agent",
-  // the platform's own account of itself
-  "list_platform_connections", "platform_usage", "platform_limits", "review_missed_move", "platform_runs",
-  "investigation_cadence", "answer_accuracy", "table_popularity", "platform_traces", "platform_premortem", "platform_audit",
-  "get_object", "explain", "platform_guide",
-  // working a question through
-  "ask", "deep_analysis", "get_briefing",
-  // what stays the person's: their own Drive by file name, a deck of their answers, a draft only they can send, a file they attached
-  "search_my_drive", "search_the_web", "deck_of_answers", "draft_email", "bring_in_file",
-]);
+const ABILITIES_FOR = 30_000;
+/** The platform's rows, as name → how it is allowed, read at most every half minute; null when they cannot be read. */
+export function abilitiesReader(api, send = fetch) {
+  let known = { at: -ABILITIES_FOR, how: null };
+  return async (now = Date.now()) => {
+    if (now - known.at < ABILITIES_FOR) return known.how;
+    let how = null;
+    try {
+      const answer = await send(`${api}/abilities`, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(3000) });
+      if (answer.ok) how = abilitiesOf(await answer.json());
+    } catch { /* not known: everything of the platform's is asked about until it is */ }
+    known = { at: now, how };
+    return how;
+  };
+}
+/** The rows of `GET /abilities` as name → how each is allowed ("goes_ahead", "staged" or "asks_once"). */
+export function abilitiesOf(body) {
+  const rows = Array.isArray(body?.abilities) ? body.abilities : [];
+  return new Map(rows.filter((row) => row?.name && row?.allowed).map((row) => [String(row.name), String(row.allowed)]));
+}
 /** A person's custom agent is asked a question as the governed path is. An automation may be called the same: see `automations`. */
 const AGENT = /^ask_[a-z0-9_]+$/;
 const bareName = (name) => (String(name).startsWith(OURS) ? String(name).slice(OURS.length) : "");
 
-/** Whether a call goes ahead without asking. `automations` is the automations offered as tools, or null when not known. */
-export function mayGoAhead(name, automations = null) {
+/** Whether a call goes ahead without asking. `automations` is the automations offered as tools, and `abilities` the
+ *  platform's rows (`abilitiesOf`); each is null when not known, which asks about more. */
+export function mayGoAhead(name, automations = null, abilities = null) {
   const bare = bareName(name);
   if (!bare) return true;                                     // the shell's own tools: the profile mounts only harmless ones
   if (automations?.has(bare)) return false;
-  return OWN_WORK.has(bare) || (AGENT.test(bare) && automations !== null);
+  const how = abilities?.get(bare);
+  if (how) return how !== "asks_once";
+  return AGENT.test(bare) && automations !== null;
 }
+/** Whether a call stages a change for the person's Allow on its card, rather than doing it. */
+export const stagesAChange = (name, abilities = null) => abilities?.get(bareName(name)) === "staged";
 
 const clipped = (value, most = 240) => {
   const text = String(value ?? "").trim();
@@ -499,15 +514,8 @@ export const ASKED_FIRST = {
   cancel_job: (args) => `Stop the work in progress${given(args)}?`,
   explore: (args) => `Start a full exploration of ${clipped(args.connection, 80)}? It runs many queries in the background and can take a while.`,
   post_claim: (args) => `Record this in the ledger: “${clipped(args.text)}”?`,
-  set_preference: (args) => `Change a preference${given(args)}?`,
-  draft_agent: (args) => `Draft a new agent${given(args)}?`,
-  draft_automation: (args) => `Draft a new automation${given(args)}?`,
-  edit_automation: (args) => `Change an automation${given(args)}?`,
-  draft_monitor: (args) => `Draft a new monitor${given(args)}?`,
-  draft_brief: (args) => `Draft a new scheduled brief${given(args)}?`,
-  pause_or_resume_automation: (args) => `Pause or resume an automation${given(args)}?`,
-  set_agent_limit: (args) => `Change an agent's limit${given(args)}?`,
-  propose_agent_grant: (args) => `Propose giving an agent more access${given(args)}?`,
+  // a change the platform stages (a new agent, automation, monitor or brief, an agent's limit or access) is asked about on
+  // its card, after it is staged, line by line (2026-11-20): it has no question before the call
 };
 
 /** Each memory in a list of a person's memories, as its id and its words, so that forgetting one can say which. */
@@ -519,8 +527,8 @@ export function memoriesRead(text) {
 }
 
 /** The approval to ask for before a call, or undefined when it goes ahead. */
-export function askFor(name, args, automations = null) {
-  if (mayGoAhead(name, automations)) return undefined;
+export function askFor(name, args, automations = null, abilities = null) {
+  if (mayGoAhead(name, automations, abilities)) return undefined;
   const bare = bareName(name);
   const held = args && typeof args === "object" ? args : {};
   const words = automations?.has(bare)
@@ -554,9 +562,9 @@ function automationsReader(api) {
  * declines is not asked again until they next write — on any connection — and the agent is told why. The key is the
  * tool, and for a draft the word: a draft of another word is still asked about.
  */
-export function declinedKey(name, args) {
+export function declinedKey(name, args, abilities = null) {
   const bare = bareName(name);
-  if (!bare || OWN_WORK.has(bare)) return "";
+  if (!bare || (abilities?.get(bare) ?? "asks_once") !== "asks_once") return "";
   if (String(name) === "mcp__pramanyx__draft_definition") {
     return `${name}:${String(argsOf(args).term ?? "").trim().toLowerCase()}`;
   }
@@ -603,7 +611,9 @@ export function timingRefusal(personSaid, request) {
     `“${said}”. Call schedule again with that sentence as \`request\`, copied exactly — not reworded or shortened.`;
 }
 
-export function askBeforeActing(ctx, readAutomations = automationsReader((process.env.PRAMANYX_API_URL || "http://127.0.0.1:8000").replace(/\/$/, ""))) {
+export function askBeforeActing(ctx, readAutomations = automationsReader((process.env.PRAMANYX_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "")),
+                                readAbilities = abilitiesReader((process.env.PRAMANYX_API_URL || "http://127.0.0.1:8000").replace(/\/$/, ""))) {
+  let abilities = null;              // the platform's rows as last read, for what a call is declined as
   // A conversation kept from before there was one way of working may still say "never ask": what is asked would be refused unseen.
   let approval = null;
   ctx.inject?.(["approval"], (at) => { approval = at.approval; at.effect?.(() => () => { approval = null; }); });
@@ -623,7 +633,7 @@ export function askBeforeActing(ctx, readAutomations = automationsReader((proces
       }
       if (event?.type === "tool/call" && data.callId) {
         if (String(data.name) === "mcp__pramanyx__my_memories") listing.add(data.callId);
-        const key = declinedKey(data.name, data.arguments);
+        const key = declinedKey(data.name, data.arguments, abilities);
         if (key) asked.set(data.callId, key);
       }
       if (event?.type === "tool/result") {
@@ -641,7 +651,8 @@ export function askBeforeActing(ctx, readAutomations = automationsReader((proces
     if (!decided || decided.kind !== "allow") return decided;      // a denial or a cancel stands
     const session = call?.agent?.session;
     const id = String((session && typeof session === "object" ? session.id : session) ?? "");
-    const key = declinedKey(call?.name, call?.arguments);
+    if (bareName(call?.name)) abilities = await readAbilities();
+    const key = declinedKey(call?.name, call?.arguments, abilities);
     if (key && declined.get(id)?.has(key)) return { kind: "deny", reason: NO_STANDS };
     if (SCHEDULES_CALL.test(String(call?.name))) {
       // A helper's call answers what was said in the conversation that started it.
@@ -651,7 +662,7 @@ export function askBeforeActing(ctx, readAutomations = automationsReader((proces
     }
     const args = argsOf(call?.arguments);
     const words = memories.get(String(args.memory_id ?? ""));
-    const asked = askFor(call?.name, words ? { ...args, words } : args, bareName(call?.name) ? await readAutomations() : null);
+    const asked = askFor(call?.name, words ? { ...args, words } : args, bareName(call?.name) ? await readAutomations() : null, abilities);
     if (!asked) return decided;
     try { if (call?.agent) approval?.setPolicy?.(call.agent, "ask"); } catch { /* it is refused unseen, and nothing is done */ }
     return asked;
@@ -804,9 +815,10 @@ export function turnEvents(record, sessionId, held, event, header = {}) {
     const kind = data.source?.kind;
     if (kind === "user") {
       now.asked = true;
+      const asked = clip(textOf(data.content), 2000);
       questions.set(sessionId, { trace: now.trace, started: now.started, running: questions.get(sessionId)?.running ?? new Set(),
-                                 answers: new Set(), spawns: [], replies: [], ended: false, checked: "" });
-      return [{ kind: "user_request", name: "coworker", conn_id, payload: { question: clip(textOf(data.content), 2000), turn: now.turn, ...where } }];
+                                 answers: new Set(), spawns: [], replies: [], ended: false, checked: "", asked });
+      return [{ kind: "user_request", name: "coworker", conn_id, payload: { question: asked, turn: now.turn, ...where } }];
     }
     if (REPORTS.has(kind)) {
       now.asked = true;
@@ -816,10 +828,12 @@ export function turnEvents(record, sessionId, held, event, header = {}) {
       return [];
     }
   }
-  if (event.type === "assistant/message" && now.report && !now.helper) {
-    // What the main agent says after its helpers report: where the question's one answer is.
+  if (event.type === "assistant/message" && !now.helper) {
     const said = (data.message?.content ?? []).filter((part) => part?.type === "text").map((part) => String(part.text ?? "")).join("");
-    if (said.trim()) questions.get(sessionId)?.replies.push(said);
+    // What the main agent last said in this turn: its reply, filed with the question at its end (2026-11-20).
+    if (said.trim()) now.reply = said;
+    // What the main agent says after its helpers report: where the question's one answer is.
+    if (now.report && said.trim()) questions.get(sessionId)?.replies.push(said);
     return [];
   }
   if (event.type === "tool/call" && data.callId) {
@@ -888,8 +902,12 @@ export function turnEvents(record, sessionId, held, event, header = {}) {
     if (ours && question.ended) return [];
     if (ours) question.ended = true;
     const started = ours ? question.started : now.started;
+    // ONE RECORD FOR BOTH PLACES (2026-11-20): the question and the coworker's own reply go with its end, and the platform
+    // files the turn in its conversation store, where the Ask panel's history lists it.
+    const reply = (ours && question.spawns.length ? closeOf(question.replies) : "") || now.reply || "";
+    const filed = ours && question.asked && reply.trim() ? { question: question.asked, answer: clip(reply, 4000) } : {};
     return [{ kind: "final_response", name: "coworker", ok: reason === "completed", duration_ms: Math.max(0, at - started), conn_id,
-              payload: { ...(now.headline ? { headline: now.headline } : {}), reason, calls: now.tools, turn: now.turn, ...where } }];
+              payload: { ...(now.headline ? { headline: now.headline } : {}), reason, calls: now.tools, turn: now.turn, ...filed, ...where } }];
   }
   return [];
 }
@@ -1233,6 +1251,40 @@ export async function scheduleDoor(req, res, api, { send = fetch, person = perso
 }
 
 /**
+ * ALLOW OR REJECT A STAGED CHANGE, AS THE PERSON (2026-11-20; the user's choice for the coworker: "Staged card in chat").
+ * A change the platform stages — a new monitor, automation, agent or brief, an agent's limit or access — waits for the
+ * person's Allow on its card in the conversation, once, after they have read what it changes. Each is the person's own
+ * click on this page: the door takes a call from this page only (`sec-fetch-site`) and asks the platform as the person,
+ * who is then the one recorded as deciding. A model never reaches it: the agent has no way to call a page's address.
+ */
+export async function stagedDoor(req, res, api, { send = fetch, person = personHeader } = {}) {
+  const reply = (status, body) => { res.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" }); res.end(JSON.stringify(body)); };
+  if (req.method !== "POST") return reply(405, { detail: "POST only" });
+  const from = req.headers["sec-fetch-site"];
+  if (from && from !== "same-origin") return reply(403, { detail: "Only this page may do this" });
+  let body = "";
+  for await (const chunk of req) { body += chunk; if (body.length > 2000) return reply(413, { detail: "Too long" }); }
+  let asked = {};
+  try { asked = JSON.parse(body || "{}"); } catch { return reply(400, { detail: "Not JSON" }); }
+  const id = String(asked.proposal || "");
+  const action = String(asked.action || "");
+  if (!AUTOMATION_ID.test(id) || !["allow", "reject"].includes(action)) return reply(422, { detail: "Which change, and allow or reject" });
+  const url = `${api}/kinetic-actions/inbox/${encodeURIComponent(id)}/${action === "allow" ? "accept" : "reject"}`;
+  try {
+    const answer = await send(url, { method: "POST", body: action === "allow" ? JSON.stringify({ mint_grant: false }) : "{}",
+      headers: { "content-type": "application/json", accept: "application/json", ...(await person()) } });
+    const got = await answer.json().catch(() => ({}));
+    if (!answer.ok) {
+      const said = typeof got?.detail === "string" ? got.detail : typeof got?.detail?.message === "string" ? got.detail.message : "";
+      return reply(answer.status, { detail: said || `The platform said ${answer.status}` });
+    }
+    return reply(200, action === "allow" ? { allowed: true, status: String(got?.status || "") } : { rejected: Boolean(got?.rejected) });
+  } catch {
+    return reply(502, { detail: "The platform is not answering" });
+  }
+}
+
+/**
  * ANSWER NOW (punch list 89, 2026-11-18): the person stops a running deep analysis and has it answer from what it has
  * found. The card offers it on the running analysis; this door takes it from this page only and asks the platform as
  * the person (`POST /investigations/<id>/answer-now`), which refuses an agent and a run that is not running.
@@ -1318,6 +1370,11 @@ export function apply(ctx) {
     path: "/pramanyx-schedule",
     handler: (req, res) => scheduleDoor(req, res, api),
   }), "pramanyx-home: a schedule's Run now and Switch off, as the person");
+  ctx.effect(() => ctx.webServer.register({
+    kind: "exact",
+    path: "/pramanyx-staged",
+    handler: (req, res) => stagedDoor(req, res, api),
+  }), "pramanyx-home: a staged change allowed or rejected, as the person");
   ctx.effect(() => ctx.webServer.register({
     kind: "exact",
     path: "/pramanyx-answer-now",

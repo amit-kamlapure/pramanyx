@@ -139,6 +139,32 @@ describe("quick-path parity (the reducer's ask-mode fields)", () => {
     expect(plain.route).not.toHaveProperty("conversationDecided");
   });
 
+  it("marks a step that said no apart from one that failed, and offers Keep going only when the steps ran out (2026-11-20)", async () => {
+    const stopped = projectTurn("write the months as YYYY-MM", await messageFrom([
+      { event: "converse_step", data: { index: 1, tool: "change_chart", ok: true, refused: true, detail: "“monthFormat” is not something the chart editor sets." } },
+      { event: "converse_step", data: { index: 2, tool: "run_sql", ok: false, detail: "timeout" } },
+      { event: "headline", data: { headline: "I used all 8 steps this turn before finishing." } },
+      { event: "keep_going", data: { steps: 8 } },
+      { event: "done", data: {} },
+    ]));
+    expect(stopped.converseSteps.map(s => [s.tool, s.ok, s.refused ?? false])).toEqual([["change_chart", true, true], ["run_sql", false, false]]);
+    expect(stopped.keepGoing).toBe(true);
+    const finished = projectTurn("q", await messageFrom([{ event: "headline", data: { headline: "Done." } }, { event: "done", data: {} }]));
+    expect(finished.keepGoing).toBe(false);
+  });
+
+  it("keeps the plan of a request with several parts as its last call left it (Stage 4, 2026-11-20)", async () => {
+    const t = projectTurn("investigate, build, alert", await messageFrom([
+      { event: "plan", data: { steps: [{ text: "Find out why revenue dropped" }, { text: "Draft a dashboard" }] } },
+      { event: "plan", data: { steps: [{ text: "Find out why revenue dropped", done: true }, { text: "Draft a dashboard" }, { nope: 1 }] } },
+      { event: "headline", data: { headline: "Revenue fell in São Paulo." } },
+      { event: "done", data: {} },
+    ]));
+    expect(t.plan).toEqual([{ text: "Find out why revenue dropped", done: true }, { text: "Draft a dashboard", done: false }]);
+    const plain = projectTurn("q", await messageFrom([{ event: "headline", data: { headline: "x" } }, { event: "done", data: {} }]));
+    expect(plain.plan).toEqual([]);
+  });
+
   it("reads back how long a restored turn took and the steps it ran, so its line says so again", () => {
     const msg = {
       id: "a1", role: "assistant", metadata: { took_ms: 12400 },

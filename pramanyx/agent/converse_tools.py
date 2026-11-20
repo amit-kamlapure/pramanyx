@@ -658,7 +658,7 @@ def converse_tools(connection_id: str, *, emit: Optional[Emit] = None,
                    session_id: str = "", canvas_id: Optional[str] = None,
                    user_question: str = "", agent: Any = None,
                    schema_scope: Optional[str] = None, sheet: str = "",
-                   dashboard: Optional[tuple[str, str]] = None, person: str = "") -> list[ToolSpec]:
+                   dashboard: Optional[tuple[str, ...]] = None, person: str = "") -> list[ToolSpec]:
     """The tool set for one connection.
 
     Bound to the connection by closure rather than taking it as a model-supplied
@@ -698,7 +698,8 @@ def converse_tools(connection_id: str, *, emit: Optional[Emit] = None,
     from pramanyx.agent.platform_tools import platform_tools
     from pramanyx.agent.present_tool import present_tools
     from pramanyx.agent.spotlight_roster import spotlight_roster
-    from pramanyx.dashboards.chat_change import change_tools
+    from pramanyx.agent.orchestrate import helpers_tool, plan_tool
+    from pramanyx.dashboards.chat_change import change_tools, new_dashboard_tools
     from pramanyx.sheets.answer import sheet_tools
 
     return [
@@ -772,8 +773,12 @@ def converse_tools(connection_id: str, *, emit: Optional[Emit] = None,
         ),
     ] + action_tools(connection_id, agent=agent) + platform_tools(connection_id, session_id=session_id) + spotlight_roster(
         connection_id, session_id=session_id, emit=emit) + origin_tools(connection_id, person=person) + present_tools(
-        emit=emit) + delegation_tools(connection_id, emit=emit, session_id=session_id) + sheet_tools(sheet, emit=emit) + change_tools(
-        connection_id, dashboard, emit=emit, schema=schema_scope)
+        emit=emit) + delegation_tools(connection_id, emit=emit, session_id=session_id) + [
+        # Stage 4 (2026-11-20): a request of several parts is planned and worked step by step, and questions that do not
+        # depend on each other are answered by helpers side by side (`agent/orchestrate.py`)
+        plan_tool(emit), helpers_tool(connection_id, session_id=session_id, canvas_id=canvas_id, schema_scope=schema_scope),
+    ] + sheet_tools(sheet, emit=emit) + change_tools(connection_id, dashboard, emit=emit, schema=schema_scope) + new_dashboard_tools(
+        connection_id, person, emit=emit, schema=schema_scope)
 
 
 class _Regrounded(BaseModel):
@@ -960,7 +965,7 @@ def converse(connection_id: str, question: str, *, extra_context: Optional[str] 
              on_step=None, tool_emit: Optional[Emit] = None,
              session_id: str = "", canvas_id: Optional[str] = None, agent: Any = None,
              trace_id: str = "", schema_scope: Optional[str] = None,
-             shape: Optional[str] = None, sheet: str = "", dashboard: Optional[tuple[str, str]] = None,
+             shape: Optional[str] = None, sheet: str = "", dashboard: Optional[tuple[str, ...]] = None,
              person: str = ""):
     """Answer one question as a conversation rather than a compiled query spec.
 
@@ -994,8 +999,15 @@ def converse(connection_id: str, question: str, *, extra_context: Optional[str] 
     def _not_yet(answer: str) -> Optional[str]:
         return working_notes(answer) or breakdown_where_one_figure_was_asked(question, results, answer)
 
+    provider = provider or get_provider("coder")
+    if max_steps is None:
+        # Stage 4 (2026-11-20): a request of several parts has room for each — the model's own budget, and four steps more
+        # for every part after the first (seen live: three parts spent eight steps before the second was reached)
+        from pramanyx.agent.orchestrate import steps_for
+        max_steps = steps_for(question, provider)
+
     return run_tool_loop(
-        provider or get_provider("coder"),
+        provider,
         converse_system_prompt(connection_id, extra_context, question=question, agent=agent, shape=shape),
         question,
         converse_tools(connection_id, emit=tool_emit, session_id=session_id,
@@ -1055,11 +1067,12 @@ def _engine_and_clock(connection_id: str) -> str:
 
 
 #: The tools are the platform's way of working, not the reader's words (seen live 2026-11-19: an answer said
-#: "get_table_health returns 'No quality checks have run for this table'"). Said once, in the prompt every conversation reads.
+#: "get_table_health returns 'No quality checks have run for this table'"; 2026-11-20, a chart's answer offered
+#: "lineWidth: 6" through "change_chart"). Said once, in the prompt every conversation reads.
 TOOLS_UNNAMED = (
     "The tools are how you work, not words the reader knows. Never name one, nor quote what a tool returned as a tool's "
     "message: say what you found in plain words (\"no quality checks have run on this table\", not the name of the "
-    "tool that said so).")
+    "tool that said so). A setting is named as the screen names it, never by its field (\"line width\", not lineWidth).")
 
 
 def converse_system_prompt(connection_id: str, extra: Optional[str] = None,
@@ -1202,6 +1215,16 @@ def converse_system_prompt(connection_id: str, extra: Optional[str] = None,
             from pramanyx.kernel.errors import tolerate
             tolerate(exc, "the question frame is additive; the conversation stands without it",
                      counter="converse.question_frame")
+    # One record for both places (2026-11-20): what the person asked to be remembered, read into the conversation as the
+    # governed answer reads it (`grounding.person_memory`) — the coworker's "remember for me" holds in the Ask panel too,
+    # where the conversation answers without that path. '' when they asked for nothing: the prompt is byte-identical.
+    try:
+        from pramanyx.agent.grounding import person_memory
+        remembered = person_memory().strip()
+        if remembered:
+            lines += ["", remembered]
+    except Exception:                       # never let a person's memory break the prompt
+        logger.debug("the person's memory was not read into the conversation", exc_info=True)
     if extra:
         lines += ["", extra]
     # AO-1a — the agent's brief LEADS the prompt, as it leads the quick body's SQL prompt

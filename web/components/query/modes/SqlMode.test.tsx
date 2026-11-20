@@ -127,7 +127,8 @@ describe("with no query tab open, the editor area is the start page", () => {
     fireEvent.click(screen.getByTestId("query-start-new"));
     expect(screen.queryByTestId("query-start")).toBeNull();
     expect(screen.queryByRole("tab", { name: "New tab" })).toBeNull();
-    expect(screen.getAllByRole("tab").map(t => t.getAttribute("aria-label"))).toEqual(["Query"]);
+    // named by when it was made, as a new query is (the user, 2026-11-19: "New Query 2026-11-19 19:47:23", never "Query")
+    expect(screen.getAllByRole("tab").map(t => t.getAttribute("aria-label"))).toEqual([expect.stringMatching(/^New Query \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)]);
     expect(column()).toBeVisible();
     expect(editor().value).toBe("");
   });
@@ -313,7 +314,7 @@ describe("with a tab open, nothing of history is under the editor", () => {
     expect(screen.queryByText("Brasil")).toBeNull();          // the closed tab's result went with it
     expect(screen.getByTestId("sql-output-rest")).toBeVisible();
 
-    fireEvent.click(screen.getByRole("button", { name: "Close Query" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Close New Query / }));
     first.unmount();
     mount();
     expect(screen.queryByDisplayValue("SELECT legacy")).toBeNull();          // the old key brings nothing back

@@ -9,7 +9,7 @@
  *   - SQL: the statement as it RAN — after the guards translated and hardened it, cut to the range, around a person's
  *     own query — its values beside it, never pasted in. A card that has not run here says so, with its statement as kept.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import type { CardState } from "@/components/brief/PinnedCardBody";
 import { CHART_TYPE_LABEL, availableChartTypes, type ChartType } from "@/components/charts/chartTypeInference";
@@ -24,6 +24,7 @@ import { SqlView } from "@/components/query/SqlView";
 import { updateCard, type QueryAgg, type QueryBucket, type QuerySegments, type QueryShown, type QueryShownAs, type TypedColumn } from "@/lib/api";
 import { SERIES_SLOTS } from "@/lib/dashboards/catalog";
 import { seriesColours } from "@/lib/dashboards/queryChart";
+import { DATE_FORMATS, DATE_FORMAT_WORDS, type DateFormat } from "@/lib/format";
 
 const NOTE = { padding: "12px 14px", color: "var(--t2)", lineHeight: 1.5 } as const;
 
@@ -109,7 +110,11 @@ export interface KeptValueColors {
   choose: (field: string, value: string, slot: number | null) => void;
 }
 
-export function QueryChartEditor({ cs, onKept, colors = null }: { cs: CardState; onKept: () => void; colors?: KeptValueColors | null }) {
+export function QueryChartEditor({ cs, onKept, colors = null, dataset }: {
+  cs: CardState; onKept: () => void; colors?: KeptValueColors | null;
+  /** The dataset it is built on, and the way to another, said under its Visualization (2026-11-19). */
+  dataset?: ReactNode;
+}) {
   const render = (cs.card.render ?? {}) as { shown?: QueryShown; viz?: VizConfig; columns?: TypedColumn[] };
   const kept = JSON.stringify({ shown: render.shown ?? null, viz: render.viz ?? {} });
   const fromCard = (): Draft => ({ shown: { ...QUERY_DEFAULT, ...render.shown }, viz: render.viz ?? {} });
@@ -226,6 +231,7 @@ export function QueryChartEditor({ cs, onKept, colors = null }: { cs: CardState;
 
   const model: VizEditorModel = {
     title: cs.card.title,
+    vizBelow: dataset,
     view: chart ? "chart" : "table", setView: () => {}, chartAvailable: true, canPivot: false,
     chartTypeValue: kind, chartTypeOptions: [], setChartType: setViz,
     vizValue: kind, vizOptions, setViz,
@@ -257,6 +263,14 @@ export function QueryChartEditor({ cs, onKept, colors = null }: { cs: CardState;
     lineAvailable: lined,
     markersAvailable: other ? true : shown.as === "line",
     lineShapeValue: viz.lineShape ?? "", setLineShape: v => style({ lineShape: v || undefined }),
+    // how its dates are written (2026-11-20: "put the month format as YYYY-MM"), wherever it has dates to write
+    ...((chart ? dated : columns.some(c => ["date", "time"].includes(kindOf(c.type)))) ? {
+      dateFormatValue: viz.dateFormat ?? "",
+      dateFormatOptions: [{ v: "", t: "As the card chooses" }, ...DATE_FORMATS.map(f => ({ v: f, t: `${f} · ${DATE_FORMAT_WORDS[f]}` }))],
+      setDateFormat: (v: string) => style({ dateFormat: (v || undefined) as DateFormat | undefined }),
+    } : {}),
+    // a query card's line width (2026-11-19): 2 is the default and is kept as nothing
+    ...(!other && shown.as === "line" ? { lineWidthValue: String(viz.lineWidth ?? 2), setLineWidth: (v: string) => style({ lineWidth: v === "2" ? undefined : Number(v) }) } : {}),
     // a query card's line hides its points unless they are asked for; an answer's chart shows them unless they are not
     markersOn: other ? viz.markers !== false : viz.markers === true,
     setMarkersOn: b => style({ markers: other ? (b ? undefined : false) : (b ? true : undefined) }),

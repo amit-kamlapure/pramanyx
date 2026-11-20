@@ -29,3 +29,12 @@ describe("what a drafted change would do", () => {
     expect(card.asks).toBe("Apply 1 change?");
   });
 });
+
+describe("a change that only stands in for what was asked (2026-11-20)", () => {
+  it("carries the platform's sentence saying so, and a change as asked carries none", () => {
+    const said = "Not possible here: a neon glow. This is the closest the chart can do.";
+    expect(changeCardOf({ title: "Olist orders", lines: ["Line width: 4 → 6"], stand_in: said }, "chart_look").standIn).toBe(said);
+    expect(changeCardOf({ title: "Olist orders", lines: ["Line width: 4 → 6"] }, "chart_look")).not.toHaveProperty("standIn");
+    expect(changeCardOf({ title: "Olist orders", lines: [], stand_in: "  " }, "chart_look")).not.toHaveProperty("standIn");
+  });
+});

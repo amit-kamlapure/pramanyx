@@ -34,7 +34,7 @@ import { NewCardComposer } from "@/components/brief/NewCardComposer";
 import type { RangeChoice } from "@/components/brief/BriefRange";
 import type { CardState } from "@/components/brief/PinnedCardBody";
 import { DashboardArrange, type CardLine } from "@/components/dashboards/DashboardArrange";
-import { DashboardBuilder, EditBar, type AddWhat, type CanvasTools } from "@/components/dashboards/DashboardBuilder";
+import { DashboardBuilder, EditBar, type CanvasTools } from "@/components/dashboards/DashboardBuilder";
 import { cardHolds as holdsOf } from "@/lib/dashboards/cardHolds";
 import type { QueryShown } from "@/lib/api";
 import { ComposedDashboard, type DashboardDoors, type PeriodDoor, type ReadState } from "@/components/dashboards/ComposedDashboard";
@@ -42,7 +42,8 @@ import { FindingPicker } from "@/components/dashboards/FindingPicker";
 import { ObjectDashboardStarter } from "@/components/dashboards/ObjectDashboardStarter";
 import { PackTemplatePicker } from "@/components/dashboards/PackTemplatePicker";
 import { OntologyPieceComposer } from "@/components/dashboards/OntologyPieceComposer";
-import { PiecePicker } from "@/components/dashboards/PiecePicker";
+import { PiecePicker, type HandOff } from "@/components/dashboards/PiecePicker";
+import { PLACE_SIZE, PLACE_WORDS, intoBox, madeIn, type PlaceKind, type PlacedBox } from "@/lib/dashboards/placing";
 import { QuerySetup } from "@/components/dashboards/QuerySetup";
 import { PinStrip, numberOf } from "@/components/dashboards/PinStrip";
 import { DashboardHome } from "@/components/dashboards/DashboardHome";
@@ -68,6 +69,7 @@ import { finishedWatch, heardFrame, startWatch, type DraftWatch } from "@/lib/da
 import { askAbout, dashboardSubject, useOnPage } from "@/lib/askSubject";
 import { ImportDashboard } from "@/components/dashboards/ImportDashboard";
 import { SubscribeDashboard } from "@/components/dashboards/SubscribeDashboard";
+import { BuiltOnDataset, ChartFromData, DatasetLine, followDataset, moveToDataset, withFollowed } from "@/components/dashboards/Datasets";
 import { FromSql, FromTables } from "@/components/dashboards/StartFromData";
 import { downloadText } from "@/lib/query/csv";
 import { Chip } from "@/components/clarity/kit";
@@ -93,7 +95,7 @@ import { appWords } from "@/lib/dashboards/appVersion";
 import { MAX_CAPTION, MAX_NOTE, type Layout } from "@/lib/dashboards/catalog";
 import {
   addGlobalFilter, addPage, duplicatePage, removePage, rename, setProps,
-  cardsPlaced, editNote, layOut, moveTo, placeCard, placeImage, placeNote, placePiece, placeQuestion, recaption, regrid, sectionsOf, setFilterWidth, swapCard, takeOff, takeOffCard,
+  builtOn, cardsPlaced, datasetOfCard, editNote, layOut, moveTo, placeCard, placeImage, placeNote, placePiece, placeQuestion, recaption, regrid, sectionsOf, setFilterWidth, swapCard, takeOff, takeOffCard,
   type DashboardSpec,
   type Box,
 } from "@/lib/dashboards/edit";
@@ -183,6 +185,61 @@ function Refused({ outcome }: { outcome: DashboardKept }) {
           </ul>
         }
       />
+    </div>
+  );
+}
+
+/** A box set down on the canvas (the user, 2026-11-19): what it is, chosen here — a chart's or a filter's kind in one dropdown,
+ *  the words of a note, a picture's upload — and the piece made is drawn in the box, where it was set down. */
+function BoxSetup({ box, spec, connectionId, schema, busy, onCancel, onPlace, onNote, onImage, onHandOff, onChart }: {
+  box: PlacedBox; spec: DashboardSpec; connectionId: string; schema?: string; busy: boolean; onCancel: () => void;
+  onPlace: (next: DashboardSpec, note: string) => void; onNote: (text: string) => void; onImage: (objectId: string, caption: string) => void;
+  onHandOff: (kind: HandOff, section: string | null) => void;
+  /** A chart built on one of the dashboard's datasets, its card kept: placed in the box, built on that dataset. */
+  onChart: (cardId: string, title: string, dataset: string) => void;
+}) {
+  // a chart is built on the dashboard's data (the user, 2026-11-19); every other piece a chart box may be is one click away
+  const [others, setOthers] = useState(false);
+  return (
+    <div data-testid="place-setup" data-kind={box.kind} style={{ display: "flex", flexDirection: "column" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "12px 14px 4px" }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="aug-fs-xs" style={{ color: "var(--accent-11)", textTransform: "uppercase", letterSpacing: ".06em" }}>{PLACE_WORDS[box.kind]}</div>
+          <div className="aug-fs-xs" style={{ color: "var(--t3)", marginTop: 2 }}>
+            Set down at column {box.x}, row {box.y}: {box.w} columns by {box.h} rows. Choose what it is.
+          </div>
+        </div>
+        <Button size="icon-sm" variant="ghost" aria-label="Take the box away" data-testid="place-setup-cancel" onClick={onCancel}><Icon name="close" size={14} /></Button>
+      </div>
+      {box.kind === "chart" && !others ? (
+        <>
+          <ChartFromData key={`${box.section}:${box.x}:${box.y}`} spec={spec} connectionId={connectionId} busy={busy}
+            onChange={onPlace} onMade={onChart} onCancel={onCancel} />
+          <div style={{ padding: "4px 14px 12px", borderTop: "1px solid var(--b1)" }}>
+            <Button size="xs" variant="ghost" data-testid="place-other-pieces" onClick={() => setOthers(true)} style={{ marginTop: 8 }}>
+              Other pieces: objects, cards, findings, questions <Icon name="chevr" size={12} />
+            </Button>
+          </div>
+        </>
+      ) : box.kind === "chart" || box.kind === "filter" ? (
+        <>
+          {box.kind === "chart" && (
+            <div style={{ padding: "4px 14px 0" }}>
+              <Button size="xs" variant="ghost" data-testid="place-from-data" onClick={() => setOthers(false)}>
+                <Icon name="chevl" size={12} /> A chart of the dashboard&rsquo;s data
+              </Button>
+            </div>
+          )}
+          <PiecePicker key={`${box.section}:${box.x}:${box.y}:${box.kind}`} spec={spec} section={box.section} only={box.kind}
+            connectionId={connectionId} schema={schema} onPlace={onPlace} onHandOff={onHandOff} onClose={onCancel} />
+        </>
+      ) : (
+        <div style={{ padding: "8px 14px" }}>
+          {box.kind === "text"
+            ? <NoteComposer busy={busy} onPlace={onNote} onClose={onCancel} />
+            : <ImageComposer connectionId={connectionId} busy={busy} onPlace={onImage} onClose={onCancel} />}
+        </div>
+      )}
     </div>
   );
 }
@@ -360,7 +417,9 @@ const WAYS: { way: Exclude<NewWay, "draft">; label: string; icon: IconName }[] =
 
 /** A new dashboard opens as a blank page of its own (the user, 2026-11-18): describe it, or start another way. */
 function NewDashboard({ connectionId, schema, sym, onKept, onClose, onBusy }: {
-  connectionId: string; schema?: string; onKept: (dashboardId: string) => void; onClose: () => void;
+  connectionId: string; schema?: string; onClose: () => void;
+  /** The dashboard made, opened; in the editor when it starts with nothing on it but its data. */
+  onKept: (dashboardId: string, edit?: boolean) => void;
   sym: string;
   /** Told while a draft or a start is in flight, so the dialog around it is held open with its Close disabled. */
   onBusy?: (busy: boolean) => void;
@@ -485,8 +544,8 @@ function NewDashboard({ connectionId, schema, sym, onKept, onClose, onBusy }: {
             </Button>
             <span className="aug-fs-ui" style={{ color: "var(--t1)", fontWeight: 600 }}>{WAYS.find(w => w.way === way)?.label}</span>
           </div>
-      {way === "tables" && <FromTables connectionId={connectionId} onKept={onKept} onBusy={onBusy} />}
-      {way === "sql" && <FromSql connectionId={connectionId} onKept={onKept} />}
+      {way === "tables" && <FromTables connectionId={connectionId} onKept={id => onKept(id, true)} onBusy={onBusy} />}
+      {way === "sql" && <FromSql connectionId={connectionId} onKept={id => onKept(id, true)} />}
       {way === "file" && (
         <FromFile onKept={(id, connection) => {
           // a file's dashboard lives on the Sheets connection: opened there, whichever connection this page was on
@@ -913,7 +972,24 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
   const [writing, setWriting] = useState<{ section: string | null } | null>(null);
   // the picker open, for a section (none: the first that holds pieces); and where a card, a note, an image or a finding
   // handed off from it lands
-  const [adding, setAdding] = useState<{ section: string | null; only?: AddWhat } | null>(null);
+  // the user, 2026-11-19: the strip's chart, filter, words or picture is placed as a box first, then chosen in the panel
+  const [placeKind, setPlaceKind] = useState<PlaceKind | null>(null);
+  const [box, setBox] = useState<PlacedBox | null>(null);
+  const [justPlaced, setJustPlaced] = useState<string | null>(null);
+  const boxRef = useRef<PlacedBox | null>(null);
+  boxRef.current = box;
+  /** The piece a change made, set where the box waiting for it was set down — whichever door made it; the box is then done. */
+  const boxed = useCallback((before: DashboardSpec, after: DashboardSpec): DashboardSpec => {
+    const b = boxRef.current;
+    if (!b) return after;
+    const placed = intoBox(before, after, b);
+    if (!placed) return after;
+    boxRef.current = null;
+    setBox(null);
+    // the piece made is chosen, so its own setup — a filter's field, a chart's look — opens in the panel at once
+    setJustPlaced(madeIn(before, after, b.section));
+    return placed;
+  }, []);
   // the canvas toolbar's Ask (2026-11-18): the change asked in words, drawn above the canvas while it is open
   const [asking, setAsking] = useState(false);
   const target = useRef<string | null>(null);
@@ -1082,8 +1158,8 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
     const base = (b.spec && b.cockpit === data.cockpit_id ? b.spec : data.cockpit.spec) as DashboardSpec;
     if (b.timer) { clearTimeout(b.timer); b.timer = null; }
     if (b.spec) { b.spec = null; setDraft(null); setPending(false); }
-    b.chain = b.chain.then(() => write(() => keepDashboard(connectionId, data.cockpit_id, change(base), note), () => said).then(() => undefined));
-  }, [connectionId, data, write]);
+    b.chain = b.chain.then(() => write(() => keepDashboard(connectionId, data.cockpit_id, boxed(base, change(base)), note), () => said).then(() => undefined));
+  }, [connectionId, data, write, boxed]);
 
   // Arc AP-1 — a resize is drawn at once and kept as ONE version per burst of steps, a moment after the last. The cards
   // are not read again: the room changed, and nothing measured did. Keeps go one after another, never two at once, and
@@ -1113,12 +1189,13 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
     if (!data?.cockpit.spec) return;
     const b = burst.current;
     const same = b.spec && b.cockpit === data.cockpit_id;
-    const next = change((same ? b.spec : data.cockpit.spec) as DashboardSpec);
+    const prev = (same ? b.spec : data.cockpit.spec) as DashboardSpec;
+    const next = boxed(prev, change(prev));
     b.spec = next; b.cockpit = data.cockpit_id; b.note = note;
     setDraft(next); setPending(true);
     if (b.timer) clearTimeout(b.timer);
     b.timer = setTimeout(sendBurst, KEEP_AFTER_MS);
-  }, [data, sendBurst]);
+  }, [data, sendBurst, boxed]);
   // a burst still waiting is kept before the page leaves it
   useEffect(() => () => { if (burst.current.timer) sendBurst(); }, [sendBurst]);
 
@@ -1177,9 +1254,13 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
       // the board study — a piece dragged by its header, or Alt+Shift+arrows, lands beside another
       onMove: (key: string, target: string, place: "before" | "after") => on(s => moveTo(s, key, target, place), "moved by hand"),
       onFilterWidth: (grades: number) => on(s => setFilterWidth(s, grades), "the filter column resized by hand"),
+      // as the peer product does: the filters panel open or put away when the dashboard is edited is what readers first see
+      onFiltersShut: (shut: boolean) => on(s => setProps(s, s.root, { filters_shut: shut || null }),
+        shut ? "the filters panel put away by hand" : "the filters panel opened by hand"),
       onAddGlobalFilter: () => { if (!current) return null; const made = addGlobalFilter(current); if (made.key) change(made.spec, "a global filter added by hand"); return made.key; },
       // Arc AP-4 — an empty section's offer: the piece picker for it, or sections of its own
-      onAddPiece: (section: string) => setAdding({ section }),
+      // an empty section's "Add a piece": a chart's box set down across its top, chosen in the panel
+      onAddPiece: (section: string) => { setPlaceKind(null); setBox({ kind: "chart", section, x: 1, y: 1, w: 12, h: PLACE_SIZE.chart.h, measured: {} }); },
       onLayOut: (section: string, layout: Layout) => on(s => layOut(s, section, layout), `laid out in ${layout} by hand`),
       // the study's R18 — pages, made and changed on the canvas
       pages: {
@@ -1356,7 +1437,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
       : `saved ${Number.isNaN(at) ? "" : new Date(at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })} · version ${kept.version}`;
     const shut = () => { setComposing(false); setNoting(false); setImaging(false); setPicking(false); setPlacing(false); setQuestioning(false); };
     // every door of the canvas toolbar puts away what another opened, so one thing is open at a time
-    const only = (open: () => void) => () => { shut(); setAdding(null); setAsking(false); open(); };
+    const only = (open: () => void) => () => { shut(); setPlaceKind(null); setBox(null); setAsking(false); open(); };
     const placeButtons = async () => {
       try {
         const declared = Object.values(await getDeclaredActions(connectionId, schema));
@@ -1368,20 +1449,30 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
       }
     };
     const tools: CanvasTools = {
-      active: asking ? "ask" : adding ? (adding.only === "filter" ? "filter" : "chart")
-        : noting ? "text" : imaging ? "image" : composing || picking || placing || questioning ? "chart" : null,
+      active: asking ? "ask" : placeKind ?? box?.kind
+        ?? (noting ? "text" : imaging ? "image" : composing || picking || placing || questioning ? "chart" : null),
       onChoose: only(() => {}),
       onAsk: asking ? only(() => {}) : only(() => setAsking(true)),
-      onText: only(() => setNoting(true)),
-      onImage: only(() => setImaging(true)),
+      onText: only(() => setPlaceKind("text")),
+      onImage: only(() => setPlaceKind("image")),
       onButtons: only(() => { void placeButtons(); }),
       busy,
     };
     return (
       <div data-testid="briefing-dashboards" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
         <DashboardBuilder spec={current} onChange={change} cardTitle={id => lines.get(id)?.title} connectionId={connectionId} schema={schema}
+          onFollow={async (name, def) => {
+            // a dataset's statement changed (the user, 2026-11-19: "link them"): every chart built on it follows, or none does
+            const out = await followDataset(connectionId, current, name, def, id => data.cards.find(c => c.id === id));
+            if ("refused" in out) return out.refused;
+            edit(s => withFollowed(s, name, def, out.swaps), "a dataset's statement changed by hand, and the charts built on it",
+              `Kept. ${out.charts} ${out.charts === 1 ? "chart reads" : "charts read"} the new statement.`);
+            return [];
+          }}
           release={data.ontology?.current && data.ontology.pinned === data.ontology.current ? numberOf(data.ontology.current) : null}
-          onAddPiece={(section, what) => { shut(); setAsking(false); setAdding({ section, only: what }); }} checks={checks} tools={tools}
+          onAddPiece={(_section, what) => { shut(); setAsking(false); setBox(null); setPlaceKind(what === "filter" ? "filter" : "chart"); }}
+          placing={{ kind: placeKind, box, chosen: justPlaced, onPlaced: b => { setPlaceKind(null); setBox(b); }, onCancel: () => setPlaceKind(null), onBox: () => {} }}
+          checks={checks} tools={tools}
           cardReads={id => valuesRead(data.cards.find(c => c.id === id)?.sql)}
           queryCards={placedQueries(current, data.cards)}
           cardDates={() => {
@@ -1457,7 +1548,18 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
                     slot ? "a value's colour kept on the dashboard by hand" : "a value's colour let go by hand");
                 },
               };
-              return <QueryChartEditor key={cardId} cs={cs} onKept={reload} colors={colors} />;
+              // what it is built on, under its Visualization: the dataset, opened in the Data pane, and the way to another
+              const dataset = (
+                <DatasetLine spec={current} cardId={cardId} onMove={async to => {
+                  const out = await moveToDataset(connectionId, current, cs.card, to);
+                  if ("refused" in out) return out.refused;
+                  const label = current.datasets?.[to]?.label ?? to;
+                  edit(s => builtOn(swapCard(s, cardId, out.cardId), out.cardId, to), "a chart built on another dataset by hand",
+                    out.reset ? `Now built on ${label}. Its fields were set again from the columns of ${label}.` : `Now built on ${label}.`);
+                  return [];
+                }} />
+              );
+              return <QueryChartEditor key={cardId} cs={cs} onKept={reload} colors={colors} dataset={dataset} />;
             }
             return <ChartDock key={cardId} cardKey={cardId} charted={!!cs && tileShape(cs) === "rows"} />;
           }}
@@ -1469,6 +1571,13 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
             // Arc AP-7 — a card of the person's own query is set up here: its SQL, how it is shown, and Keep
             const held = data.cards.find(c => c.id === cardId);
             if (!held || !held.own || !(held.render as { shown?: unknown })?.shown) return null;
+            // a chart built on a dataset reads the dataset's statement: changed in the Data pane, for every chart on it
+            const on = datasetOfCard(current, cardId);
+            const dataset = on ? current.datasets?.[on] : undefined;
+            if (on && dataset) {
+              return <BuiltOnDataset label={dataset.label} table={dataset.table ?? null}
+                onOwnSql={() => change(builtOn(current, cardId, null), "a chart given its own query by hand, on no dataset now")} />;
+            }
             return (
               <QuerySetup key={held.id} connectionId={connectionId} card={held} values={current.values ?? {}} shapeElsewhere
                 onKept={(kept, replaced) => replaced
@@ -1489,12 +1598,18 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
                 target.current = writing.section; adopt.current = true; adoptNote.current = "a query of your own placed by hand";
                 setWriting(null); reload();
               }} />
-          ) : adding ? (
-            // the toolbar's Chart and Filter, and an empty section's "Add a piece", list their pieces here, in the panel
-            <PiecePicker key={`${adding.section ?? ""}:${adding.only ?? "all"}`} spec={current} section={adding.section} only={adding.only}
-              connectionId={connectionId} schema={schema} onPlace={change} onClose={() => setAdding(null)}
+          ) : box ? (
+            // a box set down on the canvas, waiting for what it is: chosen here, and the piece made is drawn in the box
+            <BoxSetup box={box} spec={current} connectionId={connectionId} schema={schema} busy={busy}
+              onCancel={() => setBox(null)}
+              onPlace={change}
+              onChart={(cardId, title, dataset) => edit(s => builtOn(placeCard(s, cardId, box.section), cardId, dataset), "a chart built on a dataset by hand",
+                `Placed “${title}”. Set its X axis, Y axis and colour in the panel.`)}
+              onNote={text => edit(s => placeNote(s, text, box.section), "a note written by hand", "Placed. Its author and date are stamped as it is kept.")}
+              onImage={(objectId, caption) => edit(s => placeImage(s, objectId, caption, box.section), "an image uploaded by hand",
+                "Placed. The upload is stamped with your name and the date.")}
               onHandOff={(kind, section) => {
-                setAdding(null); shut(); target.current = section;
+                shut(); target.current = section;
                 if (kind === "query") { setShowHistory(false); setWriting({ section }); return; }
                 if (kind === "card") setComposing(true); else if (kind === "note") setNoting(true);
                 else if (kind === "image") setImaging(true); else if (kind === "question") setQuestioning(true);
@@ -1624,13 +1739,13 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
         )}
         <NewDashboard connectionId={connectionId} schema={schema} onClose={() => setNewOpen(false)} onBusy={setNewBusy}
           sym={data?.currency_symbol || "$"}
-          onKept={id => { setNewOpen(false); choose(id); reload(); }} />
+          onKept={(id, edit) => { setNewOpen(false); choose(id, !!edit); reload(); }} />
       </div>
     );
   }
 
   return (
-    <div data-testid="briefing-dashboards" data-dashboard-ground="" style={{ flex: 1, minHeight: 0, overflow: "auto", padding: "14px 32px 32px", background: "var(--bg-0)" }}>
+    <div data-testid="briefing-dashboards" data-dashboard-ground="" style={{ flex: 1, minHeight: 0, overflow: "auto", padding: "8px 16px 24px", background: "var(--bg-0)" }}>
       {/* On the home, the page's one action. Inside the app it sits in the title row; outside it, above the list. */}
       {data && subscribing && (
         <SubscribeDashboard open onClose={() => setSubscribing(false)} connectionId={connectionId} dashboardId={openId} title={heldTitle} />

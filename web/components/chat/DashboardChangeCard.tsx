@@ -73,7 +73,7 @@ export function DashboardChangeCard({ proposalId }: { proposalId: string }) {
   if (decision === "gone" || !proposal) {
     return <p className="aug-fs-sm" data-testid="dashboard-change-gone" style={{ color: "var(--t3)", margin: "6px 0" }}>This change could not be read. Nothing was changed by it.</p>;
   }
-  const card = changeCardOf(proposal.detail);
+  const card = changeCardOf(proposal.detail, proposal.kind);
   const allow = async () => {
     setDecision("allowing");
     setProblem("");
@@ -104,6 +104,10 @@ export function DashboardChangeCard({ proposalId }: { proposalId: string }) {
   return (
     <div data-testid="dashboard-change-card" style={{ margin: "6px 0", border: "1px solid var(--blue3)", borderRadius: "var(--r3)", overflow: "hidden" }}>
       <div className="aug-fs-ui" style={{ padding: "10px 12px 6px", color: "var(--t1)", fontWeight: 600 }}>{card.asks}</div>
+      {card.standIn && (
+        // not what was asked, but the closest the chart can do: said before the lines, never implied (2026-11-20)
+        <p data-testid="dashboard-change-stand-in" className="aug-fs-sm" style={{ margin: 0, padding: "0 12px 6px", color: "var(--t2)" }}>{card.standIn}</p>
+      )}
       {card.lines.length > 0 && (
         <ul style={{ listStyle: "none", margin: 0, padding: "2px 12px 10px", display: "flex", flexDirection: "column", gap: 5 }}>
           {card.lines.map((line, i) => (

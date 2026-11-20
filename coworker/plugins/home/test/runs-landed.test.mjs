@@ -148,3 +148,32 @@ test("a running deep analysis answers now at the person's word, from this page o
   assert.equal((await ask({ investigation: "../x" })).status, 422);
   assert.equal(sent.length, 1);
 });
+
+test("a staged change is allowed or rejected as the person, from this page only (2026-11-20)", async () => {
+  const { stagedDoor, READS } = await import("../lib/index.js");
+  const sent = [];
+  const send = async (url, init) => {
+    sent.push({ url, init });
+    if (url.endsWith("/accept")) return new Response(JSON.stringify({ status: "executed" }));
+    if (url.includes("/p-refused/")) return new Response(JSON.stringify({ detail: { message: "The channel is still to choose" } }), { status: 422 });
+    return new Response(JSON.stringify({ rejected: true }));
+  };
+  const ask = async (body, headers = { "sec-fetch-site": "same-origin" }) => {
+    const res = resOf();
+    await stagedDoor(reqOf("POST", JSON.stringify(body), headers), res, "http://api", { send, person: async () => ({ "x-pramanyx-delegation": "d" }) });
+    return { status: res.out.status || 200, body: res.out.body ? JSON.parse(res.out.body) : {} };
+  };
+  assert.deepEqual((await ask({ proposal: "p-1", action: "allow" })).body, { allowed: true, status: "executed" });
+  assert.equal(sent[0].url, "http://api/kinetic-actions/inbox/p-1/accept");
+  assert.equal(sent[0].init.headers["x-pramanyx-delegation"], "d", "as the person the coworker acts for");
+  assert.deepEqual((await ask({ proposal: "p-1", action: "reject" })).body, { rejected: true });
+  assert.equal(sent[1].url, "http://api/kinetic-actions/inbox/p-1/reject");
+  assert.deepEqual(await ask({ proposal: "p-refused", action: "reject" }), { status: 422, body: { detail: "The channel is still to choose" } });
+  assert.equal((await ask({ proposal: "p-1", action: "allow" }, { "sec-fetch-site": "cross-site" })).status, 403);
+  assert.equal((await ask({ proposal: "../x", action: "allow" })).status, 422);
+  assert.equal((await ask({ proposal: "p-1", action: "execute" })).status, 422);
+  assert.equal(sent.length, 3, "a refused call reaches nothing");
+  // the card reads what the change is through the read-only relay, and only that
+  assert.ok(READS.some((r) => r.test("/kinetic-actions/inbox/p-1/said")));
+  assert.ok(!READS.some((r) => r.test("/kinetic-actions/inbox/p-1/accept")));
+});

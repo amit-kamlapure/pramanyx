@@ -33,7 +33,22 @@ export interface DashboardSpec {
   /** Arc AP-2 — the sets and values a wired dashboard's pieces read, by name. */
   sets?: Record<string, DashboardSetDef>;
   values?: Record<string, DashboardValueDef>;
+  /** The data the dashboard's charts are built on, by name (the user, 2026-11-19, of a peer product's Data section). */
+  datasets?: Record<string, DashboardDataset>;
 }
+
+/** A dataset a dashboard holds: a table of the connection, or a person's own statement. A chart set up on it reads it,
+ *  summed and split as its setup says; the dataset itself is never a piece of the page. */
+export interface DashboardDataset {
+  label: string;
+  /** What it reads: `SELECT * FROM <table>` for a table, else the person's own statement. */
+  sql: string;
+  /** The table, when it is one, as the schema names it. */
+  table?: string | null;
+}
+
+/** The most datasets a dashboard holds. */
+export const MAX_DATASETS = 24;
 
 export interface SectionRef {
   key: string; title: string; tabKey: string | null; tabLabel: string | null;
@@ -70,13 +85,13 @@ const DEFAULT_SIZE: Record<GridKind, Size> = {
   Card: "small", Note: "small", Image: "small", ProcessBoard: "full", ObjectTable: "wide", ObjectDetail: "small",
   ObjectFigure: "small", ObjectChart: "full", ObjectBreakdown: "wide", ActionButtons: "small",
   ObjectList: "wide", ObjectMap: "wide", ObjectTimeline: "full", ChooseOne: "wide", ObjectSearch: "wide", Question: "wide", ScenarioInputs: "full", AddRow: "full",
-  Period: "small",
+  Period: "small", GlobalFilter: "small",
 };
 /** The rows a kind takes on the grid when nothing measured it: about the room one row of its size gave it. */
 const ROWS: Record<GridKind, number> = {
   Card: 4, Note: 3, Image: 5, ProcessBoard: 7, ObjectTable: 8, ObjectDetail: 7, ObjectFigure: 3, ObjectChart: 6, ObjectBreakdown: 8,
   ActionButtons: 2, ObjectList: 8, ObjectMap: 9, ObjectTimeline: 7, ChooseOne: 7, ObjectSearch: 3, Question: 14, ScenarioInputs: 4, AddRow: 2,
-  Period: 2,
+  Period: 2, GlobalFilter: 2,
 };
 
 const clamp = (lo: number, hi: number, v: number) => Math.max(lo, Math.min(hi, v));
@@ -742,6 +757,58 @@ export function freshWireName(spec: unknown, label: string): string {
   for (let i = 2; ; i++) if (!used.has(`${base}-${i}`)) return `${base}-${i}`;
 }
 
+/** The dataset `name` added, or changed to `def`. */
+export function putDataset(spec: unknown, name: string, def: DashboardDataset): DashboardSpec {
+  const s = copy(spec);
+  s.datasets = { ...(s.datasets ?? {}), [name]: def };
+  return s;
+}
+
+/** The dataset `name` taken off; the charts already built on it keep reading what they read, no longer built on it. */
+export function dropDataset(spec: unknown, name: string): DashboardSpec {
+  const s = copy(spec);
+  const rest = { ...(s.datasets ?? {}) };
+  delete rest[name];
+  if (Object.keys(rest).length) s.datasets = rest; else delete s.datasets;
+  for (const el of Object.values(s.elements)) {
+    if (el.type === "Card" && el.props?.dataset === name) { const { dataset: _gone, ...props } = el.props; el.props = props; }
+  }
+  return s;
+}
+
+/** The cards placed as charts built on the dataset `name`, each once. */
+export function cardsBuiltOn(spec: DashboardSpec, name: string): string[] {
+  return [...new Set(Object.values(spec.elements).filter(el => el.type === "Card" && el.props?.dataset === name)
+    .map(el => String(el.props.card ?? "")).filter(Boolean))];
+}
+
+/** The dataset the card `cardId` is built on where it is placed, if any. */
+export function datasetOfCard(spec: DashboardSpec, cardId: string): string | null {
+  const el = Object.values(spec.elements).find(e => e.type === "Card" && e.props?.card === cardId && typeof e.props?.dataset === "string");
+  return el ? String(el.props.dataset) : null;
+}
+
+/** The card `cardId` built on the dataset `name` wherever it is placed — or, with none, on no dataset: its own query. */
+export function builtOn(spec: unknown, cardId: string, name: string | null): DashboardSpec {
+  const s = copy(spec);
+  for (const el of Object.values(s.elements)) {
+    if (el.type !== "Card" || el.props?.card !== cardId) continue;
+    const { dataset: _was, ...props } = el.props;
+    el.props = name ? { ...props, dataset: name } : props;
+  }
+  return s;
+}
+
+/** A name for a new dataset from its label, not one the dashboard holds: "order_items", "order_items_2". */
+export function freshDatasetName(spec: DashboardSpec, label: string): string {
+  const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40) || "data";
+  const base = /^[a-z_]/.test(slug) ? slug : `d_${slug}`;
+  const held = new Set(Object.keys(spec.datasets ?? {}));
+  let name = base;
+  for (let i = 2; held.has(name); i++) name = `${base}_${i}`;
+  return name;
+}
+
 /** The set `name` added, or changed to `def`. */
 export function putSet(spec: unknown, name: string, def: DashboardSetDef): DashboardSpec {
   const s = copy(spec);
@@ -919,6 +986,20 @@ export function addGlobalFilter(spec: unknown): { spec: DashboardSpec; key: stri
   const key = freshKey(s, "filter");
   s.elements[key] = { type: "GlobalFilter", props: { title: "Filter", kind: "multi" }, children: [] };
   s.elements[holder].children.push(key);
+  return { spec: s, key };
+}
+
+/** A global filter placed on the canvas in a section, as a box of its own (the user, 2026-11-19), of the type chosen: it cuts
+ *  the cards as one in the filters column does. Its field is chosen in its setup; until then a reader is not shown it. */
+export function placeGlobalFilterIn(spec: unknown, sectionKey: string, props: Record<string, unknown> = {}): { spec: DashboardSpec; key: string | null } {
+  const s = copy(spec);
+  if (!holdsPieces(s, sectionKey)) return { spec: s, key: null };
+  const placed = Object.values(s.elements).filter(e => e.type === "GlobalFilter").length;
+  if (placed >= MAX_GLOBAL_FILTERS) return { spec: s, key: null };
+  const key = freshKey(s, "filter");
+  s.elements[key] = { type: "GlobalFilter", props: { title: "Filter", kind: "multi", ...props }, children: [] };
+  s.elements[sectionKey].children.push(key);
+  fitTo(s, sectionKey, key);
   return { spec: s, key };
 }
 

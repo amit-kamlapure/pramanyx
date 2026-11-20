@@ -115,8 +115,21 @@ def test_a_change_naming_the_dashboard_reaches_the_conversation_on_the_persons_o
     ask = "Add a revenue card to this dashboard"
     _ask(client, ask, OWN, depth="quick")
     assert served["body"] == "converse"
-    # with no dashboard of theirs open, the same words are still told where dashboards are made
+    # with no dashboard of theirs open, the conversation drafts a new one since Stage 4 (2026-11-20): a quick turn reaches it
     served.clear()
-    evs = _ask(client, ask, None, depth="quick")
-    assert not served
+    _ask(client, "Create a revenue dashboard", None, depth="quick")
+    assert served["body"] == "converse" and served["person"] == "ana"
+    # a deep run holds no dashboard drafting: it is still told where dashboards are made
+    served.clear()
+    evs = _ask(client, ask, None, depth="deep")
+    assert served.get("body") != "converse"
     assert next(e["headline"] for e in evs if e["type"] == "headline").startswith("Dashboards are drafted in the Briefing")
+
+
+def test_keep_going_from_the_panel_reaches_the_conversation(door):
+    # Keep going (2026-11-20): the panel sends the stopped turn's steps; the door hands them to the conversation
+    client, served = door
+    body = {"question": "Write the months as YYYY-MM", "connection_id": "sheets", "history": [], "session_id": "s1",
+            "depth": "quick", "focus": OWN, "keep_going": "1. change_chart — said no: not a setting"}
+    assert client.post("/ask", json=body).status_code == 200
+    assert served["body"] == "converse" and served["keep_going"] == "1. change_chart — said no: not a setting"

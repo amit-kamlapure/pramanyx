@@ -810,3 +810,40 @@ export const RESULT_NUMBER_FORMATS: readonly { id: NumberFormat; label: string; 
 export function namesAThing(column: string): boolean {
   return /(^|_)(id|key|year|yr|zip|code|number|no)$/i.test(column) || /[a-z]Id$/.test(column);
 }
+
+// ── how a chart or a table writes its dates (2026-11-20: "put the month format as YYYY-MM") ────────────────────────────
+
+/** The ways a person may have a card's dates written, each by the pattern it follows. */
+export const DATE_FORMATS = ["YYYY-MM-DD", "YYYY-MM", "MMM YYYY", "DD MMM YYYY", "MMM D, YYYY", "YYYY-QQ", "YYYY"] as const;
+export type DateFormat = (typeof DATE_FORMATS)[number];
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** A date or a moment as `fmt` writes it — or null when `v` is not one. Read in UTC, as the warehouse returned it. */
+export function formatDateAs(v: unknown, fmt: DateFormat): string | null {
+  if (v === null || v === undefined || v === "") return null;
+  const s = String(v);
+  if (!/^\d{4}-\d{2}(-\d{2})?/.test(s)) return null;
+  const d = new Date(/^\d{4}-\d{2}$/.test(s) ? `${s}-01T00:00:00Z` : /^\d{4}-\d{2}-\d{2}$/.test(s) ? `${s}T00:00:00Z`
+    : s.replace(" ", "T").replace(/\+00(:00)?$/, "Z"));
+  if (Number.isNaN(d.getTime())) return null;
+  const y = String(d.getUTCFullYear());
+  const m = d.getUTCMonth();
+  const mm = String(m + 1).padStart(2, "0");
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  switch (fmt) {
+    case "YYYY-MM-DD": return `${y}-${mm}-${dd}`;
+    case "YYYY-MM": return `${y}-${mm}`;
+    case "MMM YYYY": return `${MONTHS[m]} ${y}`;
+    case "DD MMM YYYY": return `${dd} ${MONTHS[m]} ${y}`;
+    case "MMM D, YYYY": return `${MONTHS[m]} ${d.getUTCDate()}, ${y}`;
+    case "YYYY-QQ": return `${y} Q${Math.floor(m / 3) + 1}`;
+    case "YYYY": return y;
+  }
+}
+
+/** What each way of writing dates looks like, for a person choosing one. */
+export const DATE_FORMAT_WORDS: Record<DateFormat, string> = {
+  "YYYY-MM-DD": "2026-11-20", "YYYY-MM": "2026-11", "MMM YYYY": "Nov 2026", "DD MMM YYYY": "20 Nov 2026",
+  "MMM D, YYYY": "Nov 20, 2026", "YYYY-QQ": "2026 Q4", YYYY: "2026",
+};

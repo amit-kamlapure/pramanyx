@@ -85,7 +85,8 @@ export function SheetGrounding({ doors }: { doors: SheetDoors }) {
 
 /** A proposal in the conversation: what was asked, the proposal (or why there is none), and the other way to ask it. */
 export function SheetEntryView({ entry: en, doors, onSettle, onAsk }: {
-  entry: SheetEntry; doors: SheetDoors | null; onSettle: (id: string, patch: Partial<SheetEntry>) => void;
+  /** The sheet's own doors — or, on the Spreadsheets home, the one that opens the sheet a file was made into. */
+  entry: SheetEntry; doors: Pick<SheetDoors, "applied" | "openView" | "openSheet"> | null; onSettle: (id: string, patch: Partial<SheetEntry>) => void;
   onAsk: (words: string) => void;
 }) {
   const applied = (picks: number[], p: Proposal, sheetId: string) => {

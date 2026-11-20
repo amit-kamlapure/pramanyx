@@ -9,9 +9,10 @@ import { doorFor, isPlainSend } from "@/lib/chatDoors";
 import { uploadAttachment, type AttachmentResult } from "@/lib/attachments";
 import { answersDeep, projectThread, newSessionId, type PramanyxUIMessage, type ChatTurn } from "@/lib/chatTurn";
 import { usePramanyxChat } from "@/lib/usePramanyxChat";
+import { takeQueuedAsk, useQueuedAsk } from "@/lib/askPanel";
 import { changeable, focusOf, setAskSubject, subjectKey, subjectWords, useAskSubject, usePageSubject } from "@/lib/askSubject";
 import { SHEET_FILES, SheetEntryView, SheetGrounding, SheetTurnFoot, useSheetEntries } from "@/components/ask/SheetAssist";
-import { useSheetDoors } from "@/lib/sheetBridge";
+import { useSheetDoors, useSheetsHome } from "@/lib/sheetBridge";
 import { asksForAChange } from "@/lib/sheets";
 import { useStickToBottom } from "@/lib/useStickToBottom";
 import { brandEdge } from "@/components/ui/brand";
@@ -82,10 +83,15 @@ interface Props {
   address?: string;
   /** The coworker's layout for the conversation (`chat/harnessLook.ts`): the Ask panel's. */
   harness?: boolean;
+  /** The one coworker's conversation at full size (a Data Canvas, 2026-11-20): with `harness`, the Ask panel's composer
+   *  and conversation, as beside the work. */
+  oneConversation?: boolean;
   /** Told the conversation's id and its first question once it has one: the Ask panel names its tab by it. */
   onSession?: (session: string, title: string) => void;
   /** A new conversation, beside this one: what the composer's /new does. Absent, /new is not offered. */
   onNew?: () => void;
+  /** The Ask panel's conversation in front: it sends a question asked from outside the panel, on a chart (2026-11-19). */
+  takesQueued?: boolean;
 }
 
 /** The modes a person can PICK in the composer. `auto` is deliberately absent: the
@@ -153,11 +159,16 @@ interface InputBoxProps {
   changes?: boolean;
   /** The coworker's composer: its edge wears the brand's colours at rest, as the coworker's does. */
   harness?: boolean;
+  /** The Ask panel's composer (the user, 2026-11-20: "Do we need Quick/Agent, Agent selection dropdown here? I dont think
+   *  so"): no way to choose how it answers or as whom — the conversation decides, a deep analysis being one of its tools. */
+  plain?: boolean;
   /** What the composer offers while a person writes (`lib/composerAssist.ts`): @ objects, / commands, ↑↓ history. */
   assist?: ComposerAssistSources;
   /** Beside a sheet: what the composer says it takes, the files it takes (a sheet is made of one), and that a file alone
    *  may be sent. */
   sheet?: boolean;
+  /** On the Spreadsheets home: a file it takes is made into a new sheet, said so. */
+  newSheets?: boolean;
 }
 
 interface ComposerAssistSources {
@@ -170,7 +181,7 @@ interface ComposerAssistSources {
   onWantObjects: () => void;
 }
 
-function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, setMode, onSend, onStop, onClear, attachedFile, onAttach, agents, agentId, setAgentId, subject, onDropSubject, changes = false, harness = false, assist, sheet = false }: InputBoxProps) {
+function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, setMode, onSend, onStop, onClear, attachedFile, onAttach, agents, agentId, setAgentId, subject, onDropSubject, changes = false, harness = false, plain = false, assist, sheet = false, newSheets = false }: InputBoxProps) {
   const [focused, setFocused] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // what the composer offers at the caret, and where a walk through the questions already asked stands
@@ -323,7 +334,7 @@ function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, se
            at its next checkpoint). Disabling here made the product argue with the user
            about whose turn it was. */
         placeholder={harness
-          ? `${sheet ? "Ask about this sheet, drop a file, or ask for a change" : changes ? "Ask anything, or describe a change" : "Ask anything"}${assist ? " · @ for objects, / for commands, ↑↓ for history" : ""}`
+          ? `${sheet ? "Ask about this sheet, drop a file, or ask for a change" : newSheets ? "Drop a file and say what it is for, or ask anything" : changes ? "Ask anything, or describe a change" : "Ask anything"}${assist ? " · @ for objects, / for commands, ↑↓ for history" : ""}`
           : multiline ? "Ask anything about your data…" : "Ask your question…"}
         className="aug-focus-frame w-full bg-transparent aug-fs-sm text-zinc-100 placeholder:text-[var(--t3)] px-4 pt-3 pb-2 resize-none focus:outline-none disabled:opacity-50"
         // the frame around it says it is being written in: the field draws no second one inside
@@ -332,16 +343,29 @@ function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, se
 
       {/* Toggle row — mode buttons left, actions right */}
       <div className="flex items-center justify-between px-3 pb-2">
-        {/* Mode toggle — Quick answers, Agent investigates. Agent is the default. */}
-        <Segmented label="How to answer" value={mode} onChange={setMode}
-          options={[
-            { value: "ask", label: <><Icon name="chat" size={14} /> Quick</> },
-            { value: "investigate", label: <><Icon name="spark" size={14} /> Agent</> },
-          ]} />
+        {/* Mode toggle — Quick answers, Agent investigates. Agent is the default. The Ask panel's composer has none. */}
+        {plain ? <span /> : (
+          <Segmented label="How to answer" value={mode} onChange={setMode}
+            options={[
+              { value: "ask", label: <><Icon name="chat" size={14} /> Quick</> },
+              { value: "investigate", label: <><Icon name="spark" size={14} /> Agent</> },
+            ]} />
+        )}
+
+        {/* The one conversation (2026-11-20) has no agent picker: a saved agent is asked by name in the conversation. One
+            the person arrived talking to (an agent's own Chat door) is still said here, and can be let go. */}
+        {plain && agentId && setAgentId && (
+          <span data-testid="composer-agent" className="aug-fs-xs" style={{ marginRight: "auto", display: "inline-flex", alignItems: "center", gap: 6, color: "var(--t2)" }}>
+            Talking to {agents?.find(a => a.id === agentId)?.name ?? "a saved agent"}
+            <Button variant="ghost" size="icon-xs" aria-label="Stop talking to this agent" title="Stop talking to this agent" onClick={() => setAgentId("")}>
+              <Icon name="close" size={12} />
+            </Button>
+          </span>
+        )}
 
         {/* Agent picker — answer AS a saved user-defined persona.
-            Hidden when the roster is empty (flag off → the list endpoint 404s → []). */}
-        {(agents?.length ?? 0) > 0 && setAgentId && (
+            Hidden when the roster is empty (flag off → the list endpoint 404s → []), and in the one conversation. */}
+        {!plain && (agents?.length ?? 0) > 0 && setAgentId && (
           <SelectField bespoke
             value={agentId ?? ""}
             onChange={(e) => setAgentId(e.target.value)}
@@ -380,7 +404,7 @@ function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, se
           <input
             ref={fileInputRef}
             type="file"
-            accept={sheet ? SHEET_FILES : ".pdf,.csv,.txt,.md"}
+            accept={sheet || newSheets ? SHEET_FILES : ".pdf,.csv,.txt,.md"}
             style={{ display: "none" }}
             onChange={handleFileChange}
           />
@@ -389,7 +413,7 @@ function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, se
           <Button
             variant="ghost" size="icon-sm"
             onClick={() => fileInputRef.current?.click()}
-            title={sheet ? "Make a sheet from a file" : "Attach file (PDF, CSV)"}
+            title={sheet || newSheets ? "Make a sheet from a file" : "Attach file (PDF, CSV)"}
             style={{ color: attachedFile ? "var(--blue4)" : "var(--t3)" }}
           >
             <Icon name="attach" size={15} label="Attach a file" />
@@ -504,6 +528,13 @@ function DebugLogDrawer({ eventLogRef, onClose }: { eventLogRef: React.RefObject
       </div>
     </div>
   );
+}
+
+/** A turn's steps as lines, for the conversation to continue from: each tool, and what it said when it said no. */
+function stepsSaid(steps: { index: number; tool: string; ok: boolean; detail: string; refused?: boolean }[], found: string[] = []): string {
+  const said = steps.map(s => `${s.index}. ${s.tool}${s.refused ? ` — said no: ${s.detail}` : !s.ok ? ` — failed: ${s.detail}` : ""}`).join("\n");
+  // what the queries found, so the next turn starts from it rather than running them again (2026-11-20)
+  return found.length ? `${said}\nWhat the queries found:\n${found.join("\n")}` : said;
 }
 
 /* ── Depth banner — the auto+transparency receipt on each /ask turn ──
@@ -772,7 +803,7 @@ function AgentLandingBlock({ agent, connectionName }: { agent: UserAgent; connec
   );
 }
 
-export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQuestion, initialMode, initialInsightId, capabilities, initialAgentId, beside = false, address, harness = false, onSession, onNew }: Props) {
+export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQuestion, initialMode, initialInsightId, capabilities, initialAgentId, beside = false, address, harness = false, oneConversation = false, onSession, onNew, takesQueued = false }: Props) {
   // Read during the first render, into a ref, because both this component and page.tsx's
   // URL-sync effect rewrite the query string — whichever ran first would erase the id
   // before the restore below could read it. A ref initializer is safe here specifically
@@ -880,7 +911,12 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
   }, [busy, turns, timings]);
 
   const [input, setInput]           = useState("");
-  const [mode, setMode]             = useState<ChatMode>("investigate");
+  // the Ask panel beside a page sends every question to the conversation, which decides how far to go
+  // The one coworker's conversation (2026-11-20): the Ask panel beside the work, and a Data Canvas — its page and an
+  // opened canvas, scoped to the canvas's tables. One composer with no Quick/Agent picker (/agent goes deep), the same
+  // abilities and one Allow rule, staged cards, Keep going, plans and helpers.
+  const inPanel = harness && (beside || oneConversation);
+  const [mode, setMode]             = useState<ChatMode>(inPanel ? "ask" : "investigate");
   // User-defined agents: the roster + the picked persona.
   const [agents, setAgents]         = useState<UserAgent[]>([]);
   const [agentId, setAgentId]       = useState<string>(initialAgentId ?? "");
@@ -1049,6 +1085,8 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
     depth?: "quick" | "deep"; skipClarify?: boolean; clarifyReading?: string;
     clarifySubject?: string; clarifySource?: string;
     requestMode?: "investigate" | "explore"; purpose?: string;
+    /** Keep going (2026-11-20): the steps the turn before took, for the conversation to continue from. */
+    keepGoing?: string;
   }
 
   // Arc FA-2 — what a dashboard handed over as the question's subject
@@ -1063,6 +1101,13 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
   // asked for here, and which turns were asked about it
   const sheetHere = subject?.kind === "sheet" ? subject : null;
   const sheetDoors = useSheetDoors(sheetHere?.id);
+  // on the Spreadsheets home (2026-11-20, its "In the chat"): a file dropped or attached becomes a proposal for a new sheet,
+  // and the sheet made opens there
+  const homeDoors = useSheetsHome();
+  const sheetsHome = !sheetHere && !subject && homeDoors ? homeDoors : null;
+  const makesSheets = !!sheetHere || !!sheetsHome;
+  const entryDoors = useMemo(() => sheetDoors
+    ?? (sheetsHome ? { applied: () => {}, openView: () => {}, openSheet: sheetsHome.openSheet } : null), [sheetDoors, sheetsHome]);
   const sheetAssist = useSheetEntries(sheetHere?.id ?? null);
   const [sheetAsked, setSheetAsked] = useState<ReadonlySet<number>>(() => new Set());
 
@@ -1103,6 +1148,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
         skip_cache: opts.skipCache ?? false,
         request_mode: opts.requestMode ?? null,
         purpose: opts.purpose ?? "",
+        ...(opts.keepGoing ? { keep_going: opts.keepGoing.slice(0, 3900) } : {}),
         ...(about ? { focus: focusOf(about) } : {}),
       } },
     );
@@ -1206,6 +1252,15 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialQuestion, connectionId]);
 
+  // A question asked on a chart (2026-11-19): the conversation in front sends it once the chart is its subject — a quick
+  // turn, the conversation itself, which holds the change to that one chart
+  const queued = useQueuedAsk();
+  useEffect(() => {
+    if (!takesQueued || !queued || queued.connectionId !== connectionId || !subject || subjectKey(subject) !== queued.subject) return;
+    takeQueuedAsk(queued.n);
+    sendQuestionRef.current(queued.text, "ask");
+  }, [takesQueued, queued, connectionId, subject]);
+
   /** Upload one attachment through the door its kind names, and SHOW the outcome. */
   const takeFile = useCallback(async (file: File) => {
     setAttachedFile(null);
@@ -1220,9 +1275,9 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
     setDragging(false);
     const files = Array.from(e.dataTransfer?.files ?? []);
     // beside a sheet, a file dropped becomes one proposal for a new sheet, said with what was written
-    if (sheetHere && files[0]) { sheetAssist.proposeFile(files[0], input.trim(), turns.length); setInput(""); return; }
+    if (makesSheets && files[0]) { sheetAssist.proposeFile(files[0], input.trim(), turns.length); setInput(""); return; }
     for (const f of files) void takeFile(f);
-  }, [takeFile, sheetHere, sheetAssist, input, turns.length]);
+  }, [takeFile, makesSheets, sheetAssist, input, turns.length]);
 
   const handleSend = useCallback(async (q?: string, m?: RouteMode, opts?: { skipCache?: boolean; requestMode?: "investigate" | "explore"; purpose?: string }) => {
     const question = (q ?? input).trim();
@@ -1247,6 +1302,9 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
   /** The composer's send. Beside a sheet, a file goes to a proposal for a new sheet and a change asked for to a proposal on
    *  the sheet; a question is asked, and remembered as asked about the sheet. */
   const sendFromComposer = useCallback(() => {
+    if (sheetsHome && attachedFile) {
+      const f = attachedFile; setAttachedFile(null); setInput(""); sheetAssist.proposeFile(f, input.trim(), turns.length); return;
+    }
     if (sheetHere) {
       const words = input.trim();
       if (attachedFile) { const f = attachedFile; setAttachedFile(null); setInput(""); sheetAssist.proposeFile(f, words, turns.length); return; }
@@ -1254,11 +1312,11 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
       if (words) setSheetAsked(s => new Set(s).add(turns.length));
     }
     void handleSend();
-  }, [sheetHere, input, attachedFile, sheetAssist, turns.length, handleSend]);
+  }, [sheetHere, sheetsHome, input, attachedFile, sheetAssist, turns.length, handleSend]);
   const askOnSheet = (words: string) => { setSheetAsked(s => new Set(s).add(turns.length)); void handleSend(words); };
   const proposeOnSheet = (words: string) => sheetAssist.proposeChange(words, turns.length);
   const sheetEntriesAfter = (n: number) => sheetAssist.entries.filter(en => en.after === n).map(en => (
-    <SheetEntryView key={en.id} entry={en} doors={sheetDoors} onSettle={sheetAssist.settle} onAsk={askOnSheet} />
+    <SheetEntryView key={en.id} entry={en} doors={entryDoors} onSettle={sheetAssist.settle} onAsk={askOnSheet} />
   ));
 
   const isEmpty = messages.length === 0 && sheetAssist.entries.length === 0;
@@ -1305,6 +1363,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
 
   const inputBoxProps: InputBoxProps = {
     harness,
+    plain: inPanel,
     textareaRef,
     input,
     setInput,
@@ -1321,6 +1380,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
     agentId,
     setAgentId,
     sheet: !!sheetHere,
+    newSheets: !!sheetsHome,
     ...(subject ? { subject: subjectWords(subject), changes: changeable(subject),
       onDropSubject: () => (subject === pageHere ? setDroppedPage(subjectKey(pageHere)) : setAskSubject(null)) } : {}),
   };
@@ -1434,10 +1494,18 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
             {!capabilities && !activeAgent && (
               <div className="text-center">
                 <p className="aug-fs-sm font-bold text-zinc-200">Ask your data anything</p>
-                <p className="aug-fs-sm text-zinc-500 mt-1.5">
-                  <span className="text-violet-400/90 font-bold">Agent</span> investigates in depth —
-                  switch to <span className="text-zinc-400 font-bold">Quick</span> for a straight answer.
-                </p>
+                {inPanel ? (
+                  // the Ask panel has no Quick/Agent picker (2026-11-20): it answers straight away, and /agent goes deep
+                  <p data-testid="chat-empty-how" className="aug-fs-sm mt-1.5" style={{ color: "var(--t3)" }}>
+                    {inputBoxProps.changes ? "Ask a question or describe a change: nothing changes until you allow it. " : "Answers straight away. "}
+                    Type <span className="font-bold" style={{ color: "var(--t2)" }}>/agent</span> to investigate in depth.
+                  </p>
+                ) : (
+                  <p data-testid="chat-empty-how" className="aug-fs-sm text-zinc-500 mt-1.5">
+                    <span className="text-violet-400/90 font-bold">Agent</span> investigates in depth —
+                    switch to <span className="text-zinc-400 font-bold">Quick</span> for a straight answer.
+                  </p>
+                )}
               </div>
             )}
 
@@ -1566,6 +1634,13 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                     </ErrorBoundary>
                     <SheetTurnFoot turn={turn} doors={sheetDoors} asked={sheetAsked.has(i)} onPropose={proposeOnSheet} />
                     {answerableRun(turn) && <AnswerNow key={answerableRun(turn)} runId={answerableRun(turn) as string} />}
+                    {turn.keepGoing && turn.status !== "loading" && i === turns.length - 1 && (
+                      // the turn spent every step: it goes on from where it stopped, with what it already did
+                      <Button size="xs" variant="outline" data-testid="keep-going" style={{ marginTop: 8 }}
+                        onClick={() => sendQuestion(turn.question, mode, { keepGoing: stepsSaid(turn.converseSteps, turn.keepGoingFound) })}>
+                        <Icon name="run" size={13} /> Keep going
+                      </Button>
+                    )}
                     {turn.answeredEarly && (
                       <p data-testid="answered-early" className="aug-fs-sm" style={{ margin: "6px 0 0", color: "var(--t2)" }}>{turn.answeredEarly}</p>
                     )}
