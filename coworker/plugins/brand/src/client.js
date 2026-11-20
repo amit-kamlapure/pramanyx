@@ -91,6 +91,10 @@ body[data-ds-dark-theme] [class*="_newSession"][class*="_newSession"] { backgrou
 body[data-ds-dark-theme] [class*="_newSession"][class*="_newSession"]:hover { background: #2e3d49 !important; }
 /* A badge is its tint and its words, no edge. */
 [class*="_previewBadge"] { border-color: transparent !important; }
+/* The conversation list is a list: its rows at 13 and their times at 11, as every list on the platform (2026-11-20; it
+   drew 14 and 10). Matched by the parts of the class names the shell writes by hand. */
+[class*="_sidebarCol"] [class*="_title"] { font-size: 13px !important; }
+[class*="_sidebarCol"] [class*="_time"] { font-size: 11px !important; }
 body {
   --dsw-radius-xs: 2px; --dsw-radius-sm: 3px; --dsw-radius-md: 4px; --dsw-radius-lg: 6px; --dsw-radius-xl: 6px;
   --dsw-radius-panel: 6px;

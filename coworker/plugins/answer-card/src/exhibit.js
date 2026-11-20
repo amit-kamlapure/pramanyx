@@ -192,7 +192,8 @@ export function ResultGrid({ answer, compact = false }) {
   };
   const csv = () => downloadCsv(answer);
   const cell = { padding: compact ? "6px 10px" : "8px 12px", whiteSpace: "nowrap", borderTop: `1px solid ${line}` };
-  const mono = { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 12.5, fontVariantNumeric: "tabular-nums" };
+  // A cell is 13, as every table's on the platform (2026-11-20).
+  const mono = { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 13, fontVariantNumeric: "tabular-nums" };
   const mark = (at) => (by?.at === at ? (by.down ? "↓" : "↑") : "↕");
   return h("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
     h("div", { style: { display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" } },
@@ -237,7 +238,7 @@ function SqlAndResult({ answer }) {
       h("span", { style: heading }, "SQL"), h("span", { style: { flex: "1 1 auto" } }),
       answer.sql ? h("button", { type: "button", style: button(false), onClick: copy }, copied ? "Copied" : "Copy SQL") : null),
     h("pre", {
-      style: { margin: 0, padding: 12, borderRadius: 6, background: code, fontSize: 12.5,
+      style: { margin: 0, padding: 12, borderRadius: 6, background: code, fontSize: 12,
                lineHeight: 1.55, overflowX: "auto", whiteSpace: "pre-wrap", overflowWrap: "anywhere" },
     }, answer.sql || "No SQL came back with this answer."));
 }
@@ -276,7 +277,7 @@ function Editor({ id, answer }) {
   return h("div", { style: page },
     h("div", null,
       h("div", { style: { fontSize: 15, fontWeight: 600 } }, "Edit visualization"),
-      h("div", { style: { ...quiet, fontSize: 12.5, paddingTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
+      h("div", { style: { ...quiet, fontSize: 12, paddingTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
         answer.answer || answer.question || "")),
     h(Choice, { id: `viz-type-${id}`, label: "Visualization", value: now.type || "", onChange: (v) => set({ type: v }),
                 options: [{ v: "", t: "As answered" }, ...offered.types] }),
@@ -422,7 +423,7 @@ function AppPage({ path }) {
 
 const isScalar = (v) => v === null || ["string", "number", "boolean"].includes(typeof v);
 const isCode = (key, v) => typeof v === "string" && (/sql|formula|expression|query/i.test(key) || /\bSELECT\b[\s\S]*\bFROM\b/i.test(v));
-const pre = { margin: 0, padding: 10, borderRadius: 6, background: code, fontSize: 12.5, lineHeight: 1.55,
+const pre = { margin: 0, padding: 10, borderRadius: 6, background: code, fontSize: 12, lineHeight: 1.55,
               whiteSpace: "pre-wrap", overflowWrap: "anywhere", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" };
 
 /**

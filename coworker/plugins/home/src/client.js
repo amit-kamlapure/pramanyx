@@ -105,7 +105,7 @@ const Asked = () => h("svg", drawn, h("path", { d: "M3 4.5h12v8H8.5L5.5 15v-2.5H
 
 /** A suggested question: one plain line that writes itself into the box. */
 function Row({ text, onPick }) {
-  return h("button", { type: "button", className: "pramanyx-home-row", onMouseDown: (e) => e.preventDefault(), onClick: onPick, title: text, style: { fontSize: 14.5 } },
+  return h("button", { type: "button", className: "pramanyx-home-row", onMouseDown: (e) => e.preventDefault(), onClick: onPick, title: text, style: { fontSize: 13 } },
     h(Spark),
     h("span", { style: { flex: "1 1 auto", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, text));
 }
@@ -116,8 +116,8 @@ function Item({ icon, text, note, onPick }) {
   return h("button", { type: "button", className: "pramanyx-home-row", onClick: onPick, title: text, style: { alignItems: "flex-start" } },
     h("span", { style: { paddingTop: 1, display: "inline-flex" } }, icon),
     h("span", { style: { flex: "1 1 auto", minWidth: 0, display: "flex", flexDirection: "column", gap: 2 } },
-      h("span", { style: { ...one, fontSize: 14, fontWeight: 600 } }, text),
-      note ? h("span", { style: { ...one, ...quiet, fontSize: 12.5 } }, note) : null));
+      h("span", { style: { ...one, fontSize: 13, fontWeight: 600 } }, text),
+      note ? h("span", { style: { ...one, ...quiet, fontSize: 12 } }, note) : null));
 }
 
 function Card({ title, empty, children }) {
@@ -214,7 +214,7 @@ function Block({ inputActions, here }) {
   }, [asked]);
 
   if (down) {
-    return h("div", { style: { ...quiet, fontSize: 12.5, paddingTop: 14 } },
+    return h("div", { style: { ...quiet, fontSize: 12, paddingTop: 14 } },
       "Suggestions could not be read just now. You can still ask.");
   }
   if (!connections) return null;
@@ -248,7 +248,7 @@ function Block({ inputActions, here }) {
                flexDirection: "column", gap: 4, borderRadius: 10, background: `var(--dsw-alias-bg-layer-2, ${surface})`,
                boxShadow: "0 16px 40px rgba(0, 0, 0, 0.35)" },
     },
-    settled ? h("div", { style: { ...quiet, fontSize: 12.5, padding: "0 10px 2px" } }, `Questions for ${named(settled)}. Choose another connection above the box.`)
+    settled ? h("div", { style: { ...quiet, fontSize: 12, padding: "0 10px 2px" } }, `Questions for ${named(settled)}. Choose another connection above the box.`)
     : h("div", { style: { display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", padding: "0 10px 2px" } },
       h("label", { htmlFor: "pramanyx-connection", style: quiet }, "Questions for"),
       h("select", {
@@ -329,10 +329,10 @@ function AgentsPage({ ask }) {
     return () => { live = false; };
   }, []);
   const named = (id) => connections.find((c) => c.id === id)?.name || id || "";
-  const page = { height: "100%", overflow: "auto", boxSizing: "border-box", padding: "28px 32px", fontSize: 13.5,
+  const page = { height: "100%", overflow: "auto", boxSizing: "border-box", padding: "28px 32px", fontSize: 13,
                  color: "var(--dsw-alias-label-primary)", background: "var(--dsw-alias-bg-base)" };
   return h("div", { style: page },
-    h("h1", { style: { margin: 0, fontSize: 20, fontWeight: 600 } }, "Agents"),
+    h("h1", { style: { margin: 0, fontSize: 18, fontWeight: 600 } }, "Agents"),
     h("p", { style: { ...quiet, margin: "4px 0 20px" } }, "Each agent answers the way it was set up."),
     down ? h("p", { style: quiet }, "The agents could not be read just now.")
       : agents === null ? h("p", { style: quiet }, "Reading your agents…")
@@ -347,7 +347,7 @@ function AgentsPage({ ask }) {
                 h("div", { style: { flex: "1 1 auto", lineHeight: 1.5 } }, purpose(agent) || "No description."),
                 h("div", null, h("button", {
                   type: "button", onClick: () => ask(agent), className: "pramanyx-home-soft",
-                  style: { font: "inherit", fontSize: 12.5, color: "inherit", cursor: "pointer", padding: "5px 12px", background: soft, border: 0, borderRadius: 4 },
+                  style: { font: "inherit", fontSize: 12, color: "inherit", cursor: "pointer", padding: "5px 12px", background: soft, border: 0, borderRadius: 4 },
                 }, "Ask this agent"))))));
 }
 
@@ -409,7 +409,7 @@ function AppThreadsPage({ pick, heading, note, empty, back, rowOf }) {
   if (open) {
     const conn = /^[A-Za-z0-9_-]{1,64}$/.test(open.connection || "") ? `&conn=${encodeURIComponent(open.connection)}` : "";
     return h("div", { style: { display: "flex", flexDirection: "column", height: "100%" } },
-      h("div", { style: { padding: "8px 14px", fontSize: 12.5, display: "flex", gap: 10, alignItems: "center" } },
+      h("div", { style: { padding: "8px 14px", fontSize: 12, display: "flex", gap: 10, alignItems: "center" } },
         h("button", { type: "button", onClick: () => setOpen(null), className: "pramanyx-home-soft",
                       style: { font: "inherit", color: "inherit", background: soft, border: 0, borderRadius: 4, padding: "2px 10px", cursor: "pointer" } },
           back),
@@ -531,7 +531,7 @@ function Switcher() {
   const row = { display: "flex", gap: 10, alignItems: "center", padding: "8px 9px", borderRadius: 6, color: "inherit", textDecoration: "none" };
   const tile = { width: 32, height: 32, flex: "none", borderRadius: 6, background: soft, display: "inline-flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 13 };
   const words = (name, note) => h("span", { style: { display: "flex", flexDirection: "column", gap: 1, minWidth: 0 } },
-    h("span", { style: { fontSize: 13.5, fontWeight: 600 } }, name), h("span", { style: { ...quiet, fontSize: 12 } }, note));
+    h("span", { style: { fontSize: 13, fontWeight: 600 } }, name), h("span", { style: { ...quiet, fontSize: 12 } }, note));
   return h("div", { ref: host, style: { position: "relative", display: "inline-flex" } },
     h("button", {
       type: "button", "aria-label": "Switch to", "aria-expanded": open, onClick: () => setOpen((was) => !was),

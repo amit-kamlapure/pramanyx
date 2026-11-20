@@ -321,7 +321,8 @@ export function Fold({ title, meta, right, open, onOpenChange, height, children,
  *  owner, tags, …): the Catalog's table page and a metric's Overview (2026-11-10). */
 export function Facts({ rows, testId }: { rows: [string, ReactNode][]; testId?: string }) {
   return (
-    <div className="aug-fs-sm" data-testid={testId} style={{ display: "grid", gridTemplateColumns: "minmax(110px, 160px) minmax(0, 1fr)" }}>
+    // A value is a row's content, 13 as every row and cell is (2026-11-20); its label is meta, 11.
+    <div className="aug-fs-chrome" data-testid={testId} style={{ display: "grid", gridTemplateColumns: "minmax(110px, 160px) minmax(0, 1fr)" }}>
       {rows.map(([label, value], i) => (
         <div key={label} style={{ display: "contents" }}>
           <span className="aug-fs-xs" style={{ ...MUTED, padding: "7px 12px 7px 0", ...(i ? RULE : {}) }}>{label}</span>
@@ -397,7 +398,7 @@ export function HBars({ bars, testId }: { bars: HBar[]; testId?: string }) {
       gap: "8px 10px", alignItems: "center" }}>
       {bars.map(b => (
         <div key={b.key} style={{ display: "contents" }}>
-          <div className="aug-fs-sm" style={{ minWidth: 0 }}>
+          <div className="aug-fs-chrome" style={{ minWidth: 0 }}>
             <div style={{ ...ONE_LINE, color: "var(--t1)" }}>{b.name}</div>
             {b.meta != null && <div className="aug-fs-xs" style={{ ...MUTED, ...ONE_LINE }}>{b.meta}</div>}
           </div>
@@ -407,7 +408,7 @@ export function HBars({ bars, testId }: { bars: HBar[]; testId?: string }) {
                 background: "var(--chart-1)" }} />
             </div>
           </Tooltip>
-          <div className="aug-fs-sm" style={{ textAlign: "right", color: "var(--t2)", ...NUM }}>{b.shown}</div>
+          <div className="aug-fs-chrome" style={{ textAlign: "right", color: "var(--t2)", ...NUM }}>{b.shown}</div>
         </div>
       ))}
     </div>
