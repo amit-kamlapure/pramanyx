@@ -204,7 +204,7 @@ export function IntelligenceWorkspace({ connectionId, onInvestigate, layer, onLa
       {showConnPicker && (
         <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span className="aug-label">Connection</span>
-          <SelectField
+          <SelectField variant="soft"
             value={connectionId}
             onChange={e => onConnectionChange?.(e.target.value)}
             aria-label="Connection"

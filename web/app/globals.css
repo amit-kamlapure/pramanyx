@@ -128,6 +128,9 @@ a:hover { color: var(--blue4); }
 /* The page is a surface set into the frame (2026-11-20): its own ground, and a rounded corner where the top bar and the
    rail meet it — the frame and the work told apart by surface, not by a rule. */
 .aug-page-surface { background: var(--bg-0); border-top-left-radius: 10px; }
+/* A secondary button — filled, or the pressed one of a set — is the soft fill a step stronger, never an edge (2026-11-20). */
+.rt-BaseButton.aug-btn-on { background-color: var(--gray-a5); }
+.rt-BaseButton.aug-btn-on:where(:hover) { background-color: var(--gray-a6); }
 .aug-screen { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
 
 /* ── Shell · topbar 48 ───────────────────────────────────────────────────── */

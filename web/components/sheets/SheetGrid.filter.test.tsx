@@ -76,7 +76,7 @@ describe("a column's arrow", () => {
   it("stays drawn on a filtered column — the funnel in the accent, saying what it is filtered by — and while its menu is open", () => {
     header([{ column: "c1", op: "in", value: ["delivered"] }]);
     const filtered = screen.getByRole("button", { name: "The order_status column's menu — filtered" });
-    expect(filtered.className).toMatch(/rt-variant-(surface|outline)/);
+    expect(filtered.className).toMatch(/rt-variant-soft/);                 // a button at rest: a fill, no edge (2026-11-20)
     expect(filtered.className).not.toMatch(/opacity-0/);
     expect(filtered.querySelector("svg")?.getAttribute("class")).toContain("tabler-icon-filter");
     expect(filtered.style.color).toBe("var(--accent-text)");

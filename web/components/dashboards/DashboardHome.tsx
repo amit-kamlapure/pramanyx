@@ -219,7 +219,7 @@ export function DashboardHome({ connectionId, items, onOpen, children }: {
   const Drawn = view === "grid" ? GridView : view === "detail" ? DetailView : ListView;
   return (
     <div data-testid="dashboards-home" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <Input type="search" aria-label="Search dashboards" placeholder="Search dashboards…" data-testid="dashboards-search"
+      <Input variant="soft" type="search" aria-label="Search dashboards" placeholder="Search dashboards…" data-testid="dashboards-search"
         leading={<Icon name="search" size={15} />} value={filters.words} onChange={e => setFilters(f => ({ ...f, words: e.target.value }))} />
       <div role="group" aria-label="Filters" style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
         {CHIPS.map(c => (
@@ -235,7 +235,7 @@ export function DashboardHome({ connectionId, items, onOpen, children }: {
           {filtering ? `${shown.length} of ${items.length}` : items.length}
         </span>
         <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 8 }}>
-          <SelectField aria-label="Sort dashboards" data-testid="dashboards-sort" value={sort} onChange={e => setSort(e.target.value as HomeSort)} style={{ width: 170 }}>
+          <SelectField variant="soft" aria-label="Sort dashboards" data-testid="dashboards-sort" value={sort} onChange={e => setSort(e.target.value as HomeSort)} style={{ width: 170 }}>
             <option value="modified">Recently modified</option>
             <option value="name">Name</option>
           </SelectField>

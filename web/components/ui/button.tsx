@@ -11,7 +11,8 @@ import { cn } from "@/lib/utils"
  * so the Theme's accent, grey, radius and scaling move every button at once.
  *
  *   default      solid, accent        the one Primary per view
- *   secondary    surface, grey        a filled secondary with an edge: the pressed or chosen state beside soft ones
+ *   secondary    soft, grey, stronger  a filled secondary, and the pressed or chosen state beside soft ones: the same
+ *                                     fill a step stronger (`.aug-btn-on`), no edge (2026-11-20)
  *   soft         soft, grey           a quiet secondary: a faint fill and no outline — still a button at rest (the user,
  *                                     2026-11-20: "Surfaces define structure. Spacing defines groups. Typography defines
  *                                     hierarchy. Borders are the exception.")
@@ -38,7 +39,7 @@ type Size = "default" | "lg" | "sm" | "xs" | "icon" | "icon-lg" | "icon-sm" | "i
 
 const LOOK: Record<Variant, { variant: "solid" | "surface" | "soft" | "outline" | "ghost"; color?: "gray" | "red"; highContrast?: boolean }> = {
   default: { variant: "solid" },
-  secondary: { variant: "surface", color: "gray", highContrast: true },
+  secondary: { variant: "soft", color: "gray", highContrast: true },
   soft: { variant: "soft", color: "gray", highContrast: true },
   outline: { variant: "soft", color: "gray", highContrast: true },
   minimal: { variant: "soft", color: "gray", highContrast: true },
@@ -64,7 +65,7 @@ function Button({
   color?: string
 }) {
   const look = LOOK[variant ?? "default"]
-  const cls = cn((variant ?? "default") === "default" && !isStatic && "aug-press", className)
+  const cls = cn((variant ?? "default") === "default" && !isStatic && "aug-press", variant === "secondary" && "aug-btn-on", className)
   if (String(size).startsWith("icon")) {
     const iconLook = variant === "ghost" ? LOOK.plain : look
     return <ThemesIconButton data-slot="button" size="1" {...iconLook} className={cls} {...props}>{children}</ThemesIconButton>
