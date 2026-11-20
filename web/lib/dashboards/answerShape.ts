@@ -13,7 +13,7 @@ import type { ChartType } from "@/components/charts/chartTypeInference";
 import { classifyColumns } from "@/components/charts/columnRoles";
 import { cleanLabel } from "@/lib/format";
 import { isNumberPeriod } from "@/components/charts/columnRoles";
-import { QUERY_DEFAULT, kindOf } from "@/components/dashboards/QuerySetup";
+import { QUERY_DEFAULT, kindOf } from "@/lib/dashboards/queryShown";
 import type { DrawnFields } from "@/components/charts/drawn";
 
 /** The most points drawn from an answer's rows — the server's own limit for a chart drawn as it returns. */

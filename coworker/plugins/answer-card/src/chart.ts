@@ -8,51 +8,43 @@ import * as vl from "vega-lite";
 import { Handler } from "vega-tooltip";
 import { resolveVegaSpec } from "@/components/charts/vega/resolveSpec";
 import { resolveTier3Spec, TIER3_TYPES } from "@/components/charts/vega/tier3";
-import { availableChartTypes, classifyColumns, inferChartType, CHART_TYPE_LABEL, TYPE_TO_HINT } from "@/components/charts/chartTypeInference";
+import { classifyColumns, inferChartType, TYPE_TO_HINT } from "@/components/charts/chartTypeInference";
 import { buildVegaConfig, buildVegaRuntimeConfig, readVegaTokens } from "@/components/charts/vega/config";
 import { namesOf } from "@/components/charts/vega/names";
 import { cleanLabel } from "@/lib/format";
 import { drawMap } from "./map";
+import type { VizConfig } from "@/components/charts/vizConfig";
+import { chartOptionsOf } from "@/components/charts/vizConfig";
+import { rowsOnly, shapeAnswer, typedColumns } from "@/lib/dashboards/answerShape";
+import { queryChartSpec, queryLookOf, type QueryChart } from "@/lib/dashboards/queryChart";
+import { QUERY_DEFAULT } from "@/lib/dashboards/queryShown";
 
 /** What a person chose in "Edit visualization". Every field is optional: none set is the chart as it was answered. */
-export interface Viz {
-  type?: string;
-  x?: string;
-  y?: string;
-  color?: string;
-  labels?: boolean;
-  tooltip?: boolean;
-  orient?: "vertical" | "horizontal" | "";
-}
+/** A person's chart choices for an answer: the platform's own (`VizConfig`), kept by the platform's editor opened beside
+ *  the conversation (`/chart/<answer id>`, 2026-11-20: one chart editor). `shown` is set once a person has edited it. */
+export type Viz = VizConfig & { x?: string; y?: string; color?: string; labels?: boolean; tooltip?: boolean };
+
+const OWN_KINDS = new Set(["bar", "line", "area", "scatter"]);
 
 /**
- * What the editor may offer for a grid, from the app's own vocabulary (`chartTypeInference`): the chart types this
- * grid can honestly be drawn as, the columns that can be an axis, and the ones that can be measured.
+ * An edited answer, drawn as the platform draws it (`ResultChartCard`'s own kinds): its rows shaped by what was chosen
+ * (`shapeAnswer`, rows only — nothing is asked again) and charted by the dashboard's `queryChartSpec`. Null when the
+ * choice is a table, a figure or another kind, which the card draws its own way.
  */
-export function vizChoices(columns: string[], rows: unknown[][]) {
-  const { dateIdxs, numericIdxs, catIdxs } = classifyColumns(columns, rows);
-  const labels = CHART_TYPE_LABEL as Record<string, string>;
-  return {
-    types: availableChartTypes(columns, rows).map((v) => ({ v: String(v), t: labels[v] ?? String(v) })),
-    dimensions: [...dateIdxs, ...catIdxs].map((i) => columns[i]),
-    measures: numericIdxs.map((i) => columns[i]),
-  };
-}
-
-/**
- * What a chart was drawn as when nothing was chosen: its type, the field along its axis and the field it measures — by
- * the route `drawChart` takes. The editor shows these, never "As answered" (the user, 2026-11-20: "always a specific
- * field.. always").
- */
-export function drawnAs(columns: string[], rows: unknown[][], chartType?: string | null): { type: string; x: string; y: string } {
-  const inferred = inferChartType(columns, rows);
-  const hints = TYPE_TO_HINT as Record<string, string>;
-  const fromHint = Object.keys(hints).find((t) => hints[t] === chartType) ?? (chartType && chartType !== "auto" ? chartType : "");
-  const resolved = resolveVegaSpec({ columns, rows, chartType: chartType || "auto", names: undefined, exhibit: null } as Parameters<typeof resolveVegaSpec>[0]);
-  const type = String((resolved as { resolved?: string } | null)?.resolved || fromHint || inferred?.type || "");
-  const x = inferred && inferred.xCol >= 0 ? columns[inferred.xCol] ?? "" : "";
-  const y = inferred && inferred.yCols?.length ? columns[inferred.yCols[0]] ?? "" : "";
-  return { type, x, y };
+function editedSpec(el: HTMLElement, req: ChartRequest, width: number) {
+  const viz = req.viz;
+  if (!viz?.shown) return null;
+  const shown = rowsOnly({ ...QUERY_DEFAULT, ...viz.shown });
+  if (!OWN_KINDS.has(shown.as) || (viz.type && !OWN_KINDS.has(String(viz.type)))) return null;
+  const columns = req.columns ?? [], rows = req.rows ?? [];
+  const shaped = shapeAnswer(typedColumns(columns, rows), rows, shown, { transform: viz.transform, units: req.column_units ?? undefined });
+  if (!shaped || !("points" in shaped)) return null;
+  const tokens = tokensFor(el);
+  const spec = queryChartSpec(shaped as QueryChart, shown, { palette: tokens.palette, other: tokens.deemph }, null, undefined,
+    chartOptionsOf(viz), queryLookOf(viz));
+  const places = new Set((shaped as QueryChart).points.map((p) => p.x)).size;
+  const height = shown.across && shown.as === "bar" ? Math.min(Math.max(300, places * 24 + 60), 600) : 300;
+  return vl.compile({ ...spec, width, height } as Parameters<typeof vl.compile>[0], { config: buildVegaConfig(tokens) }).spec;
 }
 
 /** Which columns are numbers, as the app's chart classifies them: a warehouse hands a decimal back as text. */
@@ -121,6 +113,13 @@ function tokensFor(el: Element) {
  */
 export function drawChart(el: HTMLElement, req: ChartRequest): (() => void) | null {
   const viz = req.viz ?? null;
+  const edited = editedSpec(el, req, Math.max(320, Math.floor(el.clientWidth || 640)));
+  if (edited) {
+    const view = new vega.View(vega.parse(edited), { renderer: "svg", container: el, hover: true });
+    if (!viz?.tooltipOff) view.tooltip(new Handler().call);
+    void view.runAsync();
+    return () => view.finalize();
+  }
   const { columns, rows } = arranged(req.columns ?? [], req.rows ?? [], viz);
   const hints = TYPE_TO_HINT as Record<string, string>;
   let chartType = viz?.type ? (hints[viz.type] ?? viz.type) : String(req.chart_type ?? "auto");
@@ -152,9 +151,9 @@ export function drawChart(el: HTMLElement, req: ChartRequest): (() => void) | nu
       names: namesOf(req.chart_config ?? undefined),
       exhibit: null,
       columnUnits: req.column_units ?? null,
-      showLabels: viz?.labels !== false,
+      showLabels: viz?.showLabels ?? viz?.labels !== false,
       orient: viz?.orient ? viz.orient : null,
-      measure: viz?.y && columns.includes(viz.y) ? viz.y : null,
+      measure: (() => { const m = viz?.metric ?? viz?.y; return m && columns.includes(m) ? m : null; })(),
       title: req.title ?? null,
     });
     if (!resolved) return null;
@@ -165,7 +164,7 @@ export function drawChart(el: HTMLElement, req: ChartRequest): (() => void) | nu
   }
 
   const view = new vega.View(runtime, { renderer: "svg", container: el, hover: true });
-  if (viz?.tooltip !== false) view.tooltip(new Handler().call);
+  if (viz?.tooltip !== false && !viz?.tooltipOff) view.tooltip(new Handler().call);
   void view.runAsync();
   return () => view.finalize();
 }

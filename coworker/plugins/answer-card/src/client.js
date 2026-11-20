@@ -1407,7 +1407,8 @@ export function headlineOf(text) {
 
 function Exhibit({ answer, whole, asked }) {
   const id = idOf(answer, asked);
-  const viz = useChosen(id);
+  // The chart as the person set it up in the platform's editor (by the answer's stored id), or as answered.
+  const viz = useChosen(answer.investigation_id ? String(answer.investigation_id) : "");
   const [open, setOpen] = useState("");
   const [allObjects, setAllObjects] = useState(false);
   const [sheets, setSheets] = useState(null);
@@ -1504,9 +1505,13 @@ function Exhibit({ answer, whole, asked }) {
       h("div", { style: { display: "flex", alignItems: "center", gap: 2, minHeight: 30 } },
         h("div", { style: { flex: "1 1 auto", minWidth: 0, fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, title),
         h("button", { type: "button", className: "pramanyx-icon", "aria-label": "Show as a table", title: "Show as a table", "aria-expanded": open === "table", onClick: () => toggle("table") }, h(Glyph, { d: GLYPH.table })),
-        hasPane() ? h("button", { type: "button", className: "pramanyx-icon", "aria-label": "Edit visualization", title: "Edit visualization", onClick: () => openBeside("viz", id) }, h(Glyph, { d: GLYPH.edit })) : null),
+        // The platform's one chart editor, beside the conversation (2026-11-20): an answer never stored has nothing it
+        // can keep a choice against, so it offers none.
+        hasPane() && answer.investigation_id ? h("button", { type: "button", className: "pramanyx-icon", "aria-label": "Edit visualization", title: "Edit visualization",
+          onClick: () => openBeside("page", `/chart/${encodeURIComponent(String(answer.investigation_id))}`) }, h(Glyph, { d: GLYPH.edit })) : null),
       h("div", { style: { paddingRight: 6 } },
-        open === "table" ? h("div", { style: { padding: "6px 0 8px" } }, h(ResultGrid, { answer })) : h(Chart, { answer, viz })),
+        open === "table" || viz?.shown?.as === "table" ? h("div", { style: { padding: "6px 0 8px" } }, h(ResultGrid, { answer }))
+          : h(Chart, { answer, viz })),
       h("div", { style: { ...quiet, fontSize: 12, textAlign: "right", padding: "2px 6px 4px 0" } }, `${count} ${count === 1 ? "row" : "rows"}`)),
     standsOut.length ? h("div", { style: { display: "flex", flexDirection: "column", gap: 6 } },
       h("div", { role: "heading", "aria-level": 4, style: { ...quiet, fontSize: 12, fontWeight: 600 } }, "What stands out"),
