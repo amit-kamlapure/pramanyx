@@ -1,6 +1,6 @@
 /**
- * The coworker's first screen, its Agents page and its Schedules page. Under the question box: questions worth asking of one connection, the questions
- * asked lately, and a person's own agents. Everything on it is read from Pramanyx through this plugin's relay
+ * The coworker's first screen, its Agents page and its Schedules page. Out of the question box, while a person is in it
+ * and it is empty: questions worth asking of one connection. Under it: the questions asked lately, and a person's own agents. Everything on it is read from Pramanyx through this plugin's relay
  * (`lib/index.js`), and every item does one thing: it writes a question into the box. The connection is the one
  * the conversation is filed under — the shell's own picker above the box — and the agent already knows it. Nothing here asks anything
  * by itself — a person reads the question and sends it.
@@ -13,6 +13,7 @@
 import { createElement as h, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { NAME_BAR_STOPS } from "../../../../web/components/ui/brandArt";
+import { nextOpen } from "./opens.js";
 import { unstick, workspaceOf } from "./stuck.js";
 import { inTheApp, withOthers } from "./threads.js";
 
@@ -51,8 +52,8 @@ function ago(stamp) {
 }
 
 /**
- * The first screen's look: the mark on a tile over a large headline, a roomier question box, and under it plain
- * rows and two cards with space in them. The headline, the tile and the box are the shell's, found by the names
+ * The first screen's look: the mark on a tile over a large headline, a roomier question box, the questions that
+ * drop out of it, and under it two cards with space in them. The headline, the tile and the box are the shell's, found by the names
  * its stylesheet gives them; if it renames them they keep the shell's own look and nothing breaks.
  */
 const HOME_LOOK = `
@@ -104,7 +105,7 @@ const Asked = () => h("svg", drawn, h("path", { d: "M3 4.5h12v8H8.5L5.5 15v-2.5H
 
 /** A suggested question: one plain line that writes itself into the box. */
 function Row({ text, onPick }) {
-  return h("button", { type: "button", className: "pramanyx-home-row", onClick: onPick, title: text, style: { fontSize: 14.5 } },
+  return h("button", { type: "button", className: "pramanyx-home-row", onMouseDown: (e) => e.preventDefault(), onClick: onPick, title: text, style: { fontSize: 14.5 } },
     h(Spark),
     h("span", { style: { flex: "1 1 auto", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, text));
 }
@@ -134,6 +135,46 @@ function Block({ inputActions, here }) {
   const [recent, setRecent] = useState(null);
   const [agents, setAgents] = useState(null);
   const [down, setDown] = useState(false);
+  // The questions drop out of the box while a person is in it and it is empty (2026-11-20, `opens.js`).
+  const [open, setOpen] = useState(false);
+  const list = useRef(null);
+  const openNow = useRef(false);
+  openNow.current = open;
+
+  useEffect(() => {
+    const box = () => document.querySelector("[data-composer-card] [role='textbox']");
+    const inBox = (node) => Boolean(node && box()?.contains(node));
+    const inList = (node) => Boolean(node && list.current?.contains(node));
+    const empty = () => !(box()?.textContent || "").trim();
+    const turn = (event) => setOpen((was) => nextOpen(was, event));
+    const enter = (e) => { if (inBox(e.target)) turn({ kind: "enter", empty: empty() }); };
+    const input = (e) => { if (inBox(e.target)) turn({ kind: "input", empty: empty() }); };
+    const leave = (e) => {
+      if (inBox(e.target) || inList(e.target)) turn({ kind: "leave", staysNear: inBox(e.relatedTarget) || inList(e.relatedTarget) });
+    };
+    const key = (e) => {
+      if (!openNow.current) return;
+      if (e.key === "Escape" && (inBox(e.target) || inList(e.target))) {
+        if (inList(e.target)) box()?.focus();
+        turn({ kind: "escape" });
+      } else if (e.key === "ArrowDown" && inBox(e.target) && empty()) {
+        const first = list.current?.querySelector("button.pramanyx-home-row");
+        if (first) { e.preventDefault(); first.focus(); }
+      }
+    };
+    document.addEventListener("focusin", enter);
+    document.addEventListener("pointerdown", enter);
+    document.addEventListener("input", input, true);
+    document.addEventListener("focusout", leave);
+    document.addEventListener("keydown", key, true);
+    return () => {
+      document.removeEventListener("focusin", enter);
+      document.removeEventListener("pointerdown", enter);
+      document.removeEventListener("input", input, true);
+      document.removeEventListener("focusout", leave);
+      document.removeEventListener("keydown", key, true);
+    };
+  }, []);
 
   useEffect(() => {
     let live = true;
@@ -173,12 +214,29 @@ function Block({ inputActions, here }) {
   const shown = settled || chosen;
   const ask = (question, id) =>
     inputActions?.setDraft?.(id === settled ? question : `${question} (on ${named(id)}, connection ${id})`);
+  const pick = (question, id) => { setOpen(false); ask(question, id); };
+  // Up and down move along the list; up from its first question goes back into the box.
+  const move = (e) => {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    const rows = [...(list.current?.querySelectorAll("button.pramanyx-home-row") ?? [])];
+    const at = rows.indexOf(document.activeElement);
+    if (at < 0) return;
+    e.preventDefault();
+    if (e.key === "ArrowUp" && at === 0) document.querySelector("[data-composer-card] [role='textbox']")?.focus();
+    else rows[Math.max(0, Math.min(rows.length - 1, at + (e.key === "ArrowDown" ? 1 : -1)))]?.focus();
+  };
 
   // Inset as the box above it is, so the block's edges meet the box's.
   const inset = "var(--dsh-composer-side-clearance, 14px)";
-  return h("div", { style: { display: "flex", flexDirection: "column", gap: 14, padding: `10px ${inset} 0`, fontSize: 13 } },
-    settled ? h("div", { style: { ...quiet, fontSize: 12.5, padding: "0 10px" } }, `Questions for ${named(settled)}. Choose another connection above the box.`)
-    : h("div", { style: { display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" } },
+  return h("div", { style: { position: "relative", display: "flex", flexDirection: "column", gap: 14, padding: `10px ${inset} 0`, fontSize: 13 } },
+    open ? h("div", {
+      ref: list, "data-pramanyx-questions": "", role: "group", "aria-label": `Questions for ${named(shown)}`, onKeyDown: move,
+      style: { position: "absolute", zIndex: 30, top: 6, left: inset, right: inset, padding: "8px 6px 6px", display: "flex",
+               flexDirection: "column", gap: 4, borderRadius: 10, background: `var(--dsw-alias-bg-layer-2, ${surface})`,
+               boxShadow: "0 16px 40px rgba(0, 0, 0, 0.35)" },
+    },
+    settled ? h("div", { style: { ...quiet, fontSize: 12.5, padding: "0 10px 2px" } }, `Questions for ${named(settled)}. Choose another connection above the box.`)
+    : h("div", { style: { display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", padding: "0 10px 2px" } },
       h("label", { htmlFor: "pramanyx-connection", style: quiet }, "Questions for"),
       h("select", {
         id: "pramanyx-connection", value: chosen,
@@ -187,9 +245,9 @@ function Block({ inputActions, here }) {
       }, connections.map((c) => h("option", { key: c.id, value: c.id }, c.name)))),
     h("div", { style: { display: "flex", flexDirection: "column", gap: 2 } },
       questions === null ? h("div", { style: { ...quiet, padding: "9px 10px" } }, "Reading the questions worth asking…")
-        : questions.length ? questions.slice(0, QUESTIONS_SHOWN).map((q) => h(Row, { key: q.text, text: q.text, onPick: () => ask(q.text, shown) }))
-          : h("div", { style: { ...quiet, padding: "9px 10px" } }, "No suggested questions for this connection yet.")),
-    h("div", { style: { display: "flex", flexWrap: "wrap", gap: 16, paddingTop: 10 } },
+        : questions.length ? questions.slice(0, QUESTIONS_SHOWN).map((q) => h(Row, { key: q.text, text: q.text, onPick: () => pick(q.text, shown) }))
+          : h("div", { style: { ...quiet, padding: "9px 10px" } }, "No suggested questions for this connection yet."))) : null,
+    h("div", { style: { display: "flex", flexWrap: "wrap", gap: 16, paddingTop: 14 } },
       h(Card, { title: "Asked lately", empty: "Nothing has been asked yet." },
         (recent ?? []).slice(0, 4).map((r) => h(Item, {
           key: r.id, icon: h(Asked), text: r.question, note: [named(r.connection_id), ago(r.started_at)].filter(Boolean).join(" · "),
