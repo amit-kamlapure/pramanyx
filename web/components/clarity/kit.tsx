@@ -10,7 +10,7 @@
  * Inbox share them from here, so they read as one product and like Home (two kits were made the same day and are
  * one here). Nothing here fetches or decides — it only lays out.
  */
-import { Children, createContext, type CSSProperties, type ReactNode, type Ref, useContext, useState } from "react";
+import { Children, createContext, type CSSProperties, isValidElement, type ReactNode, type Ref, useContext, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
@@ -199,11 +199,70 @@ export function Figure({ label, value, sub, tone, title, onOpen, testId }: {
  */
 export const NEEDS_EDGE = "inset 2px 0 0 var(--amb3)";
 
+/** How long a dismissed "Needs you" stays folded when nothing new arrives: a day, then it is said again. */
+export const NEEDS_HIDDEN_FOR_MS = 24 * 60 * 60 * 1000;
+const NEEDS_HIDDEN_KEY = "pramanyx.needs-hidden.";
+
+/** What is waiting, as one string: the rows' keys and the heading's words. A new row — or a count that moves — is a
+ *  different string, so a dismissed section comes back the moment something new needs the person. */
+function needsPrint(items: ReactNode[], right: ReactNode): string {
+  const keys = items.map((r, i) => (isValidElement(r) && r.key != null ? String(r.key) : `#${i}`)).join("|");
+  return `${items.length}:${keys}:${typeof right === "string" || typeof right === "number" ? right : ""}`;
+}
+
+/** Dismissed on this page, in this browser (a convenience, never a record): until what waits changes, or a day. */
+function useNeedsHidden(testId: string | undefined, print: string): [boolean, (hide: boolean) => void] {
+  const key = testId ? NEEDS_HIDDEN_KEY + testId : null;
+  const [kept, setKept] = useState<{ print: string; at: number } | null>(null);
+  useEffect(() => {
+    if (!key) return;
+    try {
+      const raw = window.localStorage.getItem(key);
+      const read = raw ? (JSON.parse(raw) as { print: string; at: number }) : null;
+      // a day old, it is said again: the fold is forgotten as it is read
+      setKept(read && Date.now() - read.at < NEEDS_HIDDEN_FOR_MS ? read : null);   // eslint-disable-line react-hooks/set-state-in-effect -- read once after mount
+    } catch { setKept(null); }
+  }, [key]);
+  const hidden = kept !== null && kept.print === print;
+  const set = (hide: boolean) => {
+    const next = hide ? { print, at: Date.now() } : null;
+    setKept(next);
+    if (!key) return;
+    try {
+      if (next) window.localStorage.setItem(key, JSON.stringify(next)); else window.localStorage.removeItem(key);
+    } catch { /* the page still folds it for now */ }
+  };
+  return [hidden, set];
+}
+
 export function NeedsYou({ right, children, testId, waiting, empty }: {
   right?: ReactNode; children: ReactNode; testId?: string; waiting?: boolean; empty?: ReactNode;
 }) {
   const rows = empty !== undefined ? Children.toArray(children).filter(Boolean) : null;
   const on = rows ? rows.length > 0 : waiting ?? true;
+  // Dismiss (the user, 2026-11-20: "Add dismiss button to 'Needs you'"): folds the section to one line that says what it
+  // holds and Show — withheld is said, never implied — until something new waits, or a day passes.
+  const [hidden, setHidden] = useNeedsHidden(testId, needsPrint(rows ?? Children.toArray(children), right));
+  if (on && hidden) {
+    return (
+      <section aria-label="Needs you" data-testid={testId} data-waiting="true" data-dismissed="true" className="aug-section"
+        style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 10 }}>
+        <span className="aug-fs-sm" style={{ color: "var(--amb4)", display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <Icon name="warning" size={13} />Needs you
+        </span>
+        <span className="aug-fs-sm" style={MUTED}>
+          {rows ? `${rows.length} ${rows.length === 1 ? "item" : "items"} hidden` : "hidden"} · back when something new waits
+        </span>
+        <Button variant="ghost" size="xs" data-testid={testId ? `${testId}-show` : undefined} onClick={() => setHidden(false)}>Show</Button>
+      </section>
+    );
+  }
+  const dismiss = (
+    <Button variant="ghost" size="xs" data-testid={testId ? `${testId}-dismiss` : undefined}
+      title="Fold this away until something new needs you, or for a day" onClick={() => setHidden(true)}>
+      Dismiss
+    </Button>
+  );
   // An amber heading with its mark, never a fill (the user, 2026-11-03): a warning is not the brightest thing on the
   // page. Since 2026-11-20 not a card either — a section like the rest, set apart by space and a quiet rule.
   if (rows && !on) {
@@ -213,7 +272,7 @@ export function NeedsYou({ right, children, testId, waiting, empty }: {
   }
   return (
     <section aria-label="Needs you" data-testid={testId} data-waiting={on ? "true" : "false"} className="aug-section" style={{ minWidth: 0 }}>
-      <SectionHead tone={on ? "amber" : undefined} right={right}>Needs you</SectionHead>
+      <SectionHead tone={on ? "amber" : undefined} right={on ? <>{right}{dismiss}</> : right}>Needs you</SectionHead>
       {rows ? (rows.length ? rows : <Empty>{empty}</Empty>) : children}
     </section>
   );
