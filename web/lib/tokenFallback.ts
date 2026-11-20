@@ -1,5 +1,6 @@
 /**
- * The colour tokens script reads, as hexes at the DEFAULT look — blue, slate (both since 2026-11-10) — per skin.
+ * The colour tokens script reads, as hexes at the DEFAULT look — blue, slate (both since 2026-11-10; in dark, the
+ * reference palette's scale since 2026-11-20) — per skin.
  *
  * Only for where there is no stylesheet to read: the server's render, a headless print, a
  * test. In a browser `lib/tokenColor.ts` reads the live value, so a person's own accent and
@@ -12,12 +13,12 @@ export const TOKEN_FALLBACK = {
   // 2026-10-25, the surface grammar: a card one step above the ground, a control a step under the card,
   // lines a step stronger in dark; in light a grey ground under white cards.
   dark: {
-    "--bg-0": "#111113", "--bg-1": "#18191B", "--bg-2": "#212225", "--bg-3": "#111113", "--bg-4": "#2E3135",
-    "--bg-hover": "#272A2D", "--bg-sel": "#003362",
-    "--b0": "#363A3F", "--b1": "#43484E", "--b2": "#43484E",
-    "--t1": "#EDEEF0", "--t2": "#B0B4BA", "--t3": "#999DA4", "--t4": "#696E77",
-    "--blue3": "#70B8FF", "--blue4": "#70B8FF",
-    "--chart-axis": "#43484E", "--chart-grid": "#363A3F", "--chart-tick": "#696E77",
+    "--bg-0": "#11171D", "--bg-1": "#171E24", "--bg-2": "#1F272D", "--bg-3": "#11171D", "--bg-4": "#27343E",
+    "--bg-hover": "#232E36", "--bg-sel": "#003362",
+    "--b0": "#2E3D49", "--b1": "#3A4A57", "--b2": "#3A4A57",
+    "--t1": "#E8ECF0", "--t2": "#92A4B3", "--t3": "#92A4B3", "--t4": "#637584",
+    "--blue3": "#4399E0", "--blue4": "#70B8FF",
+    "--chart-axis": "#3A4A57", "--chart-grid": "#2E3D49", "--chart-tick": "#637584",
   },
   light: {
     "--bg-0": "#F0F0F3", "--bg-1": "#F9F9FB", "--bg-2": "#FFFFFF", "--bg-3": "#F0F0F3", "--bg-4": "#E0E1E6",

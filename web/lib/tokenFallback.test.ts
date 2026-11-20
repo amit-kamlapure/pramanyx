@@ -25,10 +25,15 @@ function declared(name: string, mode: "light" | "dark"): string | null {
 /** A step of the default accent's scale that our sheet re-declares while that accent is the Theme's — the
  *  cascade on <html data-theme data-accent-color> reads it before Radix's (tokens-v2.css, "Blue, held to AA"). */
 function accentOverride(radixName: string, mode: "light" | "dark"): string | null {
-  const head = `:root[data-theme="${mode}"][data-accent-color="${DEFAULT_LOOK.accent}"] {`;
-  const at = SHEET.indexOf(head);
-  if (at < 0) return null;
-  return declaredIn(SHEET.slice(at, SHEET.indexOf("\n}", at) + 2), radixName);
+  // the default accent's steps, and — since the reference palette (2026-11-20) — the default grey's, both re-declared
+  for (const head of [`:root[data-theme="${mode}"][data-accent-color="${DEFAULT_LOOK.accent}"] {`,
+                      `:root[data-theme="${mode}"][data-gray-color="${DEFAULT_LOOK.grey}"] {`]) {
+    const at = SHEET.indexOf(head);
+    if (at < 0) continue;
+    const found = declaredIn(SHEET.slice(at, SHEET.indexOf("\n}", at) + 2), radixName);
+    if (found) return found;
+  }
+  return null;
 }
 
 function mixHex(a: string, b: string, share: number): string {

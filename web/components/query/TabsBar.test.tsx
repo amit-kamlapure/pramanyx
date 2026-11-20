@@ -25,7 +25,7 @@ describe("SQL editor tabs", () => {
     expect(screen.getByRole("tablist", { name: "Open queries" })).toBeInTheDocument();
     const tabs = screen.getAllByRole("tab");
     expect(tabs.map(t => t.getAttribute("aria-selected"))).toEqual(["true", "false", "false"]);
-    expect(tabs[0].style.background).toBe("var(--bg-0)");
+    expect(tabs[0].style.background).toBe("var(--tab-on)");   // the palette's active tab highlight
     expect(tabs[0].style.boxShadow).toBe("");                // no line at its foot
     for (const t of tabs) expect(t.style.borderRight).toBe(""); // and no rule between tabs
     expect(tabs[1].style.background).toBe("");               // the others sit on the strip
@@ -58,7 +58,7 @@ describe("SQL editor tabs", () => {
     rerender(<TabsBar tabs={[]} activeId="" {...on} startLabel="New tab" />);
     const start = screen.getByRole("tab", { name: "New tab" });
     expect(start).toHaveAttribute("aria-selected", "true");
-    expect(start.style.background).toBe("var(--bg-0)");                     // it joins the start page beneath it
+    expect(start.style.background).toBe("var(--tab-on)");                   // the open tab, highlighted as the palette draws it
     expect(screen.queryByRole("button", { name: /^Close/ })).toBeNull();
     fireEvent.doubleClick(start);
     expect(screen.queryByRole("textbox")).toBeNull();

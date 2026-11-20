@@ -93,10 +93,11 @@ export function newTab(name = queryTabName()): EditorTab {
 }
 
 /** The open tab's look: cut from the editor's own surface, over the strip's foot line, with its own line beneath it. */
-// The open tab is the editor's own surface reaching up into the strip — its selection is the background, not a line
-// (2026-11-20, "borders are the exception"); the others sit on the strip with no rule between them, only space.
+// The open tab is told by its background, not a line (2026-11-20, "borders are the exception"): the reference
+// palette's active tab highlight (--tab-on), the user's setup that day; the others sit on the strip with no rule
+// between them, only space.
 const OPEN_TAB: React.CSSProperties = {
-  background: "var(--bg-0)", color: "var(--t1)", fontWeight: 500, borderRadius: "var(--r2) var(--r2) 0 0",
+  background: "var(--tab-on)", color: "var(--t1)", fontWeight: 500, borderRadius: "var(--r2) var(--r2) 0 0",
 };
 /** The longest a tab's name is drawn before it is cut; the whole of it is its accessible name and its hover. */
 const TAB_NAME_MAX = 200;

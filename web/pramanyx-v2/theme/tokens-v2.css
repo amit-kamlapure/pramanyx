@@ -114,10 +114,11 @@
   /* text — Radix has two text steps; t2 and t3 share the quieter one. t4 is never text */
   --t1: var(--gray-12);
   --t2: var(--gray-11);
-  /* the quietest words — hints, meta, captions — a step under t2 (2026-11-20): the reference palette's secondary text
-     reads 7.0:1 on its ground; this reads 6.9:1 on the page and still 4.7:1 on a selected row, so hierarchy comes
-     from the type and AA holds everywhere */
-  --t3: color-mix(in srgb, var(--gray-11) 60%, var(--gray-10));
+  /* the quieter words — hints, meta, captions, icons. The reference palette the user took on 2026-11-20 has two text
+     steps (primary #E8ECF0, secondary #92A4B3), so t2 and t3 are its secondary again: gray 11 */
+  --t3: var(--gray-11);
+  /* the open query tab: the accent through the frame's step — the palette's own #355475 where its scale is on */
+  --tab-on: color-mix(in srgb, var(--accent-9) 30%, var(--gray-4));
   --t4: var(--gray-9);
 
   /* intent — 1 tint · 2 border · 3 the colour · 4 text · 5 aliases 4
@@ -225,7 +226,7 @@
   --divide: var(--gray-5);       /* a pane's rule on the light ground: --b0's step, as a softer one is not seen on gray 3 */
   --bg-frame: var(--gray-1);     /* the frame in light: near white around the gray-3 page */
   --bg-nav-sel: var(--gray-4);
-  --t3: var(--gray-11);          /* light keeps its one quiet step: a softer one falls under 4.5:1 on gray 3 */
+  --tab-on: var(--accent-4);     /* the open query tab in light: the accent's tint */
 
   --chart-1: #0F6CBD;
   --chart-2: #1E7B45;
@@ -252,6 +253,29 @@
   --bg-2: var(--gray-1);
   --bg-3: var(--gray-2);
   --card-edge: transparent;
+}
+
+/* ── The reference palette (the user, 2026-11-20: "Lets do other screens as well.. and lets use this setup"), as the slate
+   scale in dark. Its anchors are its own: 1 the main workspace (SQL editor, output, canvas) #11171D · 3 the sidebar and
+   the surfaces around the page #1F272D · 5 the selected navigation #27343E · 11 secondary text #92A4B3 · 12 primary
+   text #E8ECF0; the steps between are drawn on the same blue-slate line, each lighter than the last. Measured that day:
+   primary text 15.2:1 on the workspace and 10.7:1 on the selected nav item; secondary 7.0:1 and 5.0:1; a row rule
+   (6) 1.6:1, a border (7) 2.0:1; frame on workspace and selected nav on frame each 1.19:1. A person who picks another
+   grey gets Radix's own. ── */
+:root[data-theme="dark"][data-gray-color="slate"] {
+  --slate-1: #11171D;
+  --slate-2: #171E24;
+  --slate-3: #1F272D;
+  --slate-4: #232E36;
+  --slate-5: #27343E;
+  --slate-6: #2E3D49;
+  --slate-7: #3A4A57;
+  --slate-8: #4E606E;
+  --slate-9: #637584;
+  --slate-10: #718392;
+  --slate-11: #92A4B3;
+  --slate-12: #E8ECF0;
+  --tab-on: #355475;               /* the palette's active tab highlight: the selected query tab */
 }
 
 /* ── The look's two knobs of our own (2026-10-25, ROADMAP §6 item 53). Each is an attribute on
@@ -290,7 +314,9 @@
   --blue-contrast: #FFFFFF;
 }
 :root[data-theme="dark"][data-accent-color="blue"] {
-  --blue-9: #70B8FF;
-  --blue-10: #C2E6FF;
-  --blue-contrast: #111113;
+  /* the reference palette's primary blue (2026-11-20) — the Run button and the interactive controls — under a dark
+     label, 5.9:1 (a white one would be 3.1:1); its hover a step lighter */
+  --blue-9: #4399E0;
+  --blue-10: #5AA8EA;
+  --blue-contrast: #11171D;
 }
