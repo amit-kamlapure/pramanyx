@@ -47,7 +47,7 @@ export function AnswerFoot({ turn, onSource }: { turn: ChatTurn; onSource?: () =
           <Icon name="download" size={13} />
         </Button>
         {sources > 0 && onSource && (
-          <Button variant="ghost" size="xs" data-testid="answer-source" onClick={onSource}>
+          <Button variant="ghost" size="xs" data-testid="answer-foot-source" onClick={onSource}>
             {sources} {sources === 1 ? "source" : "sources"}
           </Button>
         )}

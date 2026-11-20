@@ -37,7 +37,7 @@ describe("an answer's foot", () => {
     expect(foot).not.toHaveTextContent(/Why this number|How it was answered|More/);
     fireEvent.click(screen.getByTestId("answer-pdf"));
     expect(api.downloadAnswerPdf).toHaveBeenCalledWith("r1");
-    fireEvent.click(screen.getByTestId("answer-source"));
+    fireEvent.click(screen.getByTestId("answer-foot-source"));
     expect(onSource).toHaveBeenCalledTimes(1);
   });
 
@@ -51,7 +51,7 @@ describe("an answer's foot", () => {
 
   it("offers no source for an answer that read no rows", () => {
     render(<AnswerFoot turn={{ ...TURN, columns: [], rows: [] } as unknown as ChatTurn} onSource={vi.fn()} />);
-    expect(screen.queryByTestId("answer-source")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("answer-foot-source")).not.toBeInTheDocument();
   });
 });
 
