@@ -416,7 +416,19 @@ export function openedBy(name, resultText) {
   } catch { return []; }
 }
 
-export function refusalFor(name, args, held, also = []) {
+/** The tool name an agent is offered under: `ask_<slug>` as `pramanyx/custom_agents/reach.py` writes it. Keep the two alike. */
+export function agentToolName(agentName) {
+  const slug = String(agentName ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40) || "agent";
+  return `${OURS}ask_${slug}`;
+}
+/** Each agent's own connection, by the tool it is asked through (`GET /agents/custom`). */
+export function agentHomesOf(rows) {
+  return new Map((Array.isArray(rows) ? rows : [])
+    .filter((row) => row?.name && row?.connection_id)
+    .map((row) => [agentToolName(row.name), String(row.connection_id)]));
+}
+
+export function refusalFor(name, args, held, also = [], homes = new Map()) {
   if (typeof name === "string" && SPAWNS.test(name)) {
     // EVERY HELPER IS HELD TO ONE SOURCE. A helper of a held conversation is held to its connection; started in
     // another connection's folder it would read that one. A helper of a conversation held to none (All sources) is
@@ -441,6 +453,10 @@ export function refusalFor(name, args, held, also = []) {
     return `${here}. It cannot read \`${named}\`. Tell the person so: to ask about another connection they start a conversation on it.`;
   }
   if (!named && /^mcp__pramanyx__ask_[a-z0-9_]+$/.test(name)) {
+    // An agent that lives on this connection is asked as it is (2026-11-20: the KPI Analyst, on dcc63d83, was refused four
+    // times in a conversation held to dcc63d83, and the turn lost a round to it). One that lives elsewhere, or whose home
+    // is not known yet, is told to name the connection.
+    if (homes.get(name) === held) return undefined;
     return `${here}. An agent answers on its own connection unless told otherwise: pass connection \`${held}\`, or tell the person this agent cannot be asked here.`;
   }
   return undefined;
@@ -669,7 +685,19 @@ export function askBeforeActing(ctx, readAutomations = automationsReader((proces
   });
 }
 
-function holdToConnection(ctx, holds) {
+function holdToConnection(ctx, holds, send = fetch) {
+  // Each agent's own connection, read now and every half minute; until it is read every agent ask names its connection.
+  const api = (process.env.PRAMANYX_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
+  let homes = new Map();
+  const readHomes = async () => {
+    try {
+      const answer = await send(`${api}/agents/custom`, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(3000) });
+      if (answer.ok) homes = agentHomesOf(await answer.json());
+    } catch { /* not known: an agent ask names its connection until it is */ }
+  };
+  void readHomes();
+  const every = setInterval(() => { void readHomes(); }, 30_000);
+  every.unref?.();
   // The connections a conversation's own brought-in files opened to it, by conversation.
   const opened = new Map();
   const names = new Map();
@@ -696,8 +724,8 @@ function holdToConnection(ctx, holds) {
       let folder = "";
       try { folder = call.agent ? String(at.workingDirectory.get(call.agent.session) || "") : ""; } catch { folder = ""; }
       const also = opened.get(id) ?? [];
-      if (id && holds.has(id)) return refusalFor(call.name, call.arguments, holdOf(holds, id, {}, folder), also);
-      return refusalFor(call.name, call.arguments, HELD_FOLDER.exec(folder)?.[1] ?? "", also);
+      if (id && holds.has(id)) return refusalFor(call.name, call.arguments, holdOf(holds, id, {}, folder), also, homes);
+      return refusalFor(call.name, call.arguments, HELD_FOLDER.exec(folder)?.[1] ?? "", also, homes);
     }), "pramanyx-home: a conversation is held to its connection");
   });
 }

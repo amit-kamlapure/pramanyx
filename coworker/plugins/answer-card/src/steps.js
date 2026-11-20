@@ -121,6 +121,13 @@ const NOT_CARRIED_OUT = [
   [/The person declined this a moment ago/, "you said no"],
   [/approval for tool .* was cancelled/, "not answered"],
   [/requires approval, but no approval channel/, "could not be asked"],
+  // A call the conversation's hold turned away (`home/lib/index.js` refusalFor) was never asked of the data, and one the
+  // turn's stop cut off was never answered: a row in the work says so, not a "could not be answered" card among the
+  // answers (2026-11-20, an FY2027 overview: four refusals and three stopped asks drew seven empty cards).
+  [/This conversation is held to the connection/, "not asked here"],
+  [/tool call aborted before dispatch/, "stopped before it was asked"],
+  // The call in flight when a turn is stopped: the shell flattens its abort reason to "[object Object]".
+  [/^(Error: )?(\[object Object\]|(The|This) operation was aborted\.?|AbortError\b.*)$/, "stopped"],
 ];
 
 export function turnedDown(text) {

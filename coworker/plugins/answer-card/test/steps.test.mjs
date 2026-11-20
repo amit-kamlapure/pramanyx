@@ -54,3 +54,11 @@ test("a staging tool's answer is read through the platform's door: staged, with 
   assert.deepEqual(refused, { staged: false, id: "", said: "Nothing staged: no metric." });
   assert.equal(stagedOf("the platform is down").said, "the platform is down");
 });
+
+test("a call the hold turned away, or the stop cut off, is not an answer that is missing (2026-11-20)", () => {
+  assert.equal(turnedDown("Error: This conversation is held to the connection `dcc63d83`. An agent answers on its own connection unless told otherwise: pass connection `dcc63d83`, or tell the person this agent cannot be asked here."), "not asked here");
+  assert.equal(turnedDown("Error: tool call aborted before dispatch"), "stopped before it was asked");
+  assert.equal(turnedDown("Error: [object Object]"), "stopped");
+  // A real failure stays one, even one that names a cancelled order.
+  assert.equal(turnedDown("Binder Error: column \"cancelled_at\" not found; status 'cancelled' has no rows"), null);
+});

@@ -99,3 +99,15 @@ test("where a conversation is held is decided once: a later folder is no way rou
   assert.equal(holdOf(holds, "t", { cwd: "/home/someone/.pramanyx/coworker/all-sources" }), "");
   assert.equal(holdOf(holds, "t", { cwd: FOLDER("c1") }), "", "a header read again is not a move");
 });
+
+test("an agent that lives on the held connection is asked as it is; one elsewhere, or not yet known, names its connection (2026-11-20)", async () => {
+  const { agentHomesOf, agentToolName } = await import("../lib/index.js");
+  // The platform's rule for the tool name (pramanyx/custom_agents/reach.py): ask_ and the name in lowercase snake case.
+  assert.equal(agentToolName("KPI Analyst"), "mcp__pramanyx__ask_kpi_analyst");
+  assert.equal(agentToolName("The Look Analyst"), "mcp__pramanyx__ask_the_look_analyst");
+  const homes = agentHomesOf([{ name: "KPI Analyst", connection_id: "dcc63d83" }, { name: "Anomaly Scout", connection_id: "8233e4fd" }]);
+  const ask = (tool) => refusalFor(tool, { question: "What is GMV by platform?" }, "dcc63d83", [], homes);
+  assert.equal(ask("mcp__pramanyx__ask_kpi_analyst"), undefined);
+  assert.match(ask("mcp__pramanyx__ask_anomaly_scout"), /pass connection `dcc63d83`/);
+  assert.match(refusalFor("mcp__pramanyx__ask_kpi_analyst", { question: "q" }, "dcc63d83"), /pass connection/);   // homes not read yet
+});

@@ -991,7 +991,7 @@ function AnswerStep(props) {
     return h(Step, { kind: "rows", title: asked || answer.answer || "A question", note: "no query run" }, h(Words, { answer }));
   }
   const count = typeof answer.row_count === "number" ? answer.row_count : (answer.rows ?? []).length;
-  return h(Step, { kind: "rows", title: answer.answer || asked || "An answer", note: `${count} ${count === 1 ? "row" : "rows"}` },
+  return h(Step, { kind: "rows", title: headlineOf(answer.answer).head || asked || "An answer", note: `${count} ${count === 1 ? "row" : "rows"}` },
     h(Sql, { answer }), h(ResultGrid, { answer, compact: true }));
 }
 
@@ -1317,6 +1317,28 @@ function draft(question) {
 }
 
 /** Words the platform wrote, with what it marked `**decisive**` set bold. Nothing else in them is read as markup. */
+/** Text written as markdown, as blocks: a run of "- " lines is a list, a blank line ends a paragraph; bold inside both. */
+function prose(text) {
+  const blocks = [];
+  let para = [], items = [];
+  const flush = () => {
+    if (para.length) blocks.push(h("p", { key: blocks.length, style: { margin: 0 } }, rich(para.join(" "))));
+    if (items.length) blocks.push(h("ul", { key: blocks.length, style: { margin: 0, paddingLeft: 20, display: "flex", flexDirection: "column", gap: 2 } },
+      items.map((item, i) => h("li", { key: i }, rich(item)))));
+    para = []; items = [];
+  };
+  for (const raw of String(text || "").split("\n")) {
+    const line = raw.trim();
+    const bullet = /^[-*•]\s+(.*)$/.exec(line);
+    if (!line) { flush(); continue; }
+    if (bullet) { if (para.length) flush(); items.push(bullet[1]); continue; }
+    if (items.length) flush();
+    para.push(line);
+  }
+  flush();
+  return h("div", { style: { display: "flex", flexDirection: "column", gap: 8 } }, blocks);
+}
+
 function rich(text) {
   return String(text || "").split(/(\*\*[^*]+\*\*)/g).filter(Boolean).map((piece, i) =>
     (piece.startsWith("**") && piece.endsWith("**") && piece.length > 4
@@ -1372,7 +1394,12 @@ function unsaidOf(answer, words) {
  */
 export function headlineOf(text) {
   const said = String(text || "").trim();
-  if (said.length <= 220) return { head: said, rest: "" };
+  // An agent's answer can be written as markdown — a sentence, then paragraphs and a list (2026-11-20, the KPI Analyst:
+  // "…€3,217,143.16 across four platforms.\n\n- Mytheresa: …"). Its first line is the headline, without the bold marks a
+  // heading has no use for; the rest is drawn as paragraphs and a list (`prose`), never run together.
+  const lineAt = said.indexOf("\n");
+  if (lineAt > 0 && lineAt <= 220) return { head: said.slice(0, lineAt).replace(/\*\*/g, "").trim(), rest: said.slice(lineAt + 1).trim() };
+  if (said.length <= 220) return { head: said.replace(/\*\*/g, ""), rest: "" };
   const cut = said.slice(0, 220).search(/[.!?](\s|$)(?![\s\S]*[.!?](\s|$))/);
   const at = cut > 40 ? cut + 1 : said.slice(0, 220).lastIndexOf(" ");
   return { head: said.slice(0, at > 0 ? at : 220).trim(), rest: said.slice(at > 0 ? at : 220).trim() };
@@ -1465,7 +1492,7 @@ function Exhibit({ answer, whole, asked }) {
   // read at 14, a section's label is 12, a figure 22, and a row or a cell 13.
   return h("div", { style: { display: "flex", flexDirection: "column", gap: 14, margin: "10px 0 6px", fontSize: 14, lineHeight: 1.6 } },
     h("div", { role: "heading", "aria-level": 3, style: { fontSize: 18, fontWeight: 600, lineHeight: 1.35 } }, lead.head),
-    lead.rest ? h("div", null, rich(lead.rest)) : null,
+    lead.rest ? prose(lead.rest) : null,
     // What the platform itself says is wrong with this answer, said under the headline where a finding would be.
     wrong.length ? h("div", { role: "alert", style: { display: "flex", gap: 8, alignItems: "baseline", padding: "8px 10px", borderRadius: 6,
                                                       background: "color-mix(in srgb, #e5a50a 14%, transparent)" } },
