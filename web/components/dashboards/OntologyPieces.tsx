@@ -488,7 +488,7 @@ export function NotFiltered({ why }: { why?: string } = {}) {
   return (
     <span className="aug-fs-xs" data-testid="not-filtered" title={why ?? "The filters narrow the objects' own pieces; this one reads everything"}
       style={{ position: "absolute", top: 10, right: 12, zIndex: 1, color: "var(--t3)", background: "var(--bg-3)",
-        border: "1px solid var(--b1)", borderRadius: "var(--r-chip)", padding: "1px 7px", pointerEvents: "auto" }}>
+        borderRadius: "var(--r-chip)", padding: "1px 7px", pointerEvents: "auto" }}>
       Not filtered
     </span>
   );
@@ -1067,17 +1067,17 @@ function useObjectQuery(body: ObjectQueryRequest | null): Read {
 
 const COUNT = { name: "n", agg: "count" };
 
-/** The small uppercase label a column or a card is headed by. */
+/** The section label (12px semibold sentence case) a column or a card is headed by. */
 export function Label({ children, right }: { children: ReactNode; right?: ReactNode }) {
   return (
-    <div className="aug-fs-xs" style={{ display: "flex", alignItems: "baseline", gap: 6, color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em" }}>
+    <div className="aug-label" style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
       {children}{right}
     </div>
   );
 }
 
 const Via = ({ what }: { what: string }) => (
-  <span style={{ color: "var(--vio4)", textTransform: "none", letterSpacing: 0 }}>via {what}</span>
+  <span style={{ color: "var(--vio4)", fontWeight: 400 }}>via {what}</span>
 );
 
 export interface FilterProperty { path: string; label: string; via?: string | null }
@@ -1744,7 +1744,7 @@ export function ObjectChartPiece({ entity, set, label, time, days, agg, path, fo
           {axis.map(t => (
             <g key={t}>
               <line x1={LEFT} x2={RIGHT} y1={y(t)} y2={y(t)} stroke="var(--chart-grid)" />
-              <text x={LEFT - 6} y={y(t) + 3} textAnchor="end" fill="var(--chart-tick)" style={{ font: "10px Inter, system-ui, sans-serif" }}>{tick(t)}</text>
+              <text x={LEFT - 6} y={y(t) + 3} textAnchor="end" fill="var(--chart-tick)" style={{ font: "10px var(--font-ui)" }}>{tick(t)}</text>
             </g>
           ))}
           {stacks.map((st, i) => {
@@ -1760,7 +1760,7 @@ export function ObjectChartPiece({ entity, set, label, time, days, agg, path, fo
                     return d ? <path key={j} d={d} fill={colours[j]} data-testid="object-chart-segment" /> : null;
                   })}
                 </g>
-                {i % 7 === 0 && <text x={mid(i)} y={height - 8} textAnchor="middle" fill="var(--chart-tick)" style={{ font: "10px Inter, system-ui, sans-serif" }}>{dayLabel(window[i])}</text>}
+                {i % 7 === 0 && <text x={mid(i)} y={height - 8} textAnchor="middle" fill="var(--chart-tick)" style={{ font: "10px var(--font-ui)" }}>{dayLabel(window[i])}</text>}
                 <rect data-testid="object-chart-hit" x={LEFT + i * slot} y={TOP - 10} width={slot} height={BASE - TOP + 10} fill="transparent"
                   onMouseEnter={() => setHover(i)}><title>{said(i)}</title></rect>
               </g>
@@ -1771,7 +1771,7 @@ export function ObjectChartPiece({ entity, set, label, time, days, agg, path, fo
               strokeWidth={2} strokeLinejoin="round" pointerEvents="none" />
           )}
           <circle cx={mid(endI)} cy={y(lineEnd)} r={4} fill={narrowed.length || split ? "var(--chart-deemph)" : "var(--chart-1)"} stroke="var(--bg-2)" strokeWidth={2} pointerEvents="none" />
-          <text x={mid(endI) - 6} y={y(lineEnd) - 8} textAnchor="end" fill="var(--t2)" data-testid="object-chart-end" style={{ font: "10.5px Inter, system-ui, sans-serif" }}>
+          <text x={mid(endI) - 6} y={y(lineEnd) - 8} textAnchor="end" fill="var(--t2)" data-testid="object-chart-end" style={{ font: "10.5px var(--font-ui)" }}>
             {endSaid}
           </text>
         </svg>

@@ -25,7 +25,7 @@ const ROW = "18px 18px minmax(0, 1fr) 150px 230px";
 function Group({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div style={{ marginBottom: 10 }}>
-      <div className="aug-fs-xs" style={{ color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em", margin: "4px 0" }}>{label}</div>
+      <div className="aug-label" style={{ margin: "4px 0" }}>{label}</div>
       {children}
     </div>
   );
@@ -36,7 +36,7 @@ function Row({ on, onChange, icon, name, via, code, preview, testid }: {
   preview: ReactNode; testid: string;
 }) {
   return (
-    <label data-testid={testid} className="aug-fs-sm" style={{
+    <label data-testid={testid} className="aug-fs-chrome" style={{
       display: "grid", gridTemplateColumns: ROW, alignItems: "center", gap: 8, padding: "6px 8px", marginBottom: 3,
       borderRadius: "var(--r2)", background: "var(--bg-0)", cursor: "pointer", color: "var(--t1)" }}>
       <Checkbox checked={on} aria-label={name} onChange={e => onChange(e.target.checked)} />
@@ -140,7 +140,7 @@ export function ObjectDashboardStarter({ connectionId, schema, entity, sym = "$"
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <div className="aug-fs-h2" style={{ fontWeight: 600, color: "var(--t1)" }}>New dashboard from {p.name}</div>
         {p.total != null && (
-          <span className="aug-fs-xs" style={{ color: "var(--t2)", background: "var(--bg-3)", border: "1px solid var(--b1)",
+          <span className="aug-fs-xs" style={{ color: "var(--t2)", background: "var(--gray-a3)",
             borderRadius: "var(--r-chip)", padding: "2px 7px" }}>{formatCount(p.total)} {noun}</span>
         )}
       </div>
@@ -157,13 +157,13 @@ export function ObjectDashboardStarter({ connectionId, schema, entity, sym = "$"
               <Button key={k} variant="outline" role="radio" aria-checked={shape === o.shape} data-testid="object-starter-shape" data-shape={o.shape}
                 onClick={() => setShape(o.shape)}
                 style={{ height: "auto", justifyContent: "flex-start", textAlign: "left", whiteSpace: "normal", padding: "10px 12px",
-                  background: shape === o.shape ? "var(--bg-sel)" : undefined, borderColor: shape === o.shape ? "var(--accent)" : undefined }}>
+                  background: shape === o.shape ? "var(--bg-sel)" : undefined }}>
                 <span style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
                   <span style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-                    <span className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: 600 }}>{SHAPES[o.shape].label}</span>
+                    <span className="aug-fs-chrome" style={{ color: "var(--t1)", fontWeight: 600 }}>{SHAPES[o.shape].label}</span>
                     {i === 0 && <span className="aug-fs-xs" style={{ color: "var(--accent-11)" }}>fits best</span>}
                   </span>
-                  <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>{SHAPES[o.shape].says}</span>
+                  <span className="aug-fs-sm" style={{ color: "var(--t3)" }}>{SHAPES[o.shape].says}</span>
                 </span>
               </Button>
             ))}
@@ -189,7 +189,7 @@ export function ObjectDashboardStarter({ connectionId, schema, entity, sym = "$"
         <Group label="It holds">
           <ul data-testid="object-starter-holds" style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 3 }}>
             {withUniqueKeys(holds, line => line).map(([k, line]) => (
-              <li key={k} className="aug-fs-sm" style={{ display: "flex", gap: 8, alignItems: "baseline", padding: "6px 8px",
+              <li key={k} className="aug-fs-chrome" style={{ display: "flex", gap: 8, alignItems: "baseline", padding: "6px 8px",
                 borderRadius: "var(--r2)", background: "var(--bg-0)", color: "var(--t1)" }}>
                 <Icon name="check" size={13} />{line}
               </li>

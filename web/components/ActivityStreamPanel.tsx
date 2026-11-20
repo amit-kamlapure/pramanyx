@@ -142,8 +142,8 @@ export function ActivityStreamPanel({ onOpenTrace, filter, range }: {
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
       {/* ── filter bar: kinds come from the data ── */}
-      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "12px 20px",
-        borderBottom: "1px solid var(--b1)", flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "12px 20px 14px",
+        flexWrap: "wrap" }}>
         <Button variant={kindFilter === null ? "secondary" : "ghost"} size="xs"
           onClick={() => setKindFilter(null)}>all</Button>
         {Object.entries(kinds).map(([k, n]) => (
@@ -186,9 +186,9 @@ export function ActivityStreamPanel({ onOpenTrace, filter, range }: {
           </div>
         ) : (
           shown.map(e => (
-            <div key={e.seq} style={{ display: "flex", alignItems: "center", gap: 10,
-              padding: "5px 0", borderBottom: "1px solid var(--b0)", fontSize: 12 }}>
-              <span style={{ color: "var(--t2)", fontSize: 12, width: 34, flexShrink: 0 }}
+            <div key={e.seq} className="aug-fs-chrome" style={{ display: "flex", alignItems: "center", gap: 10,
+              padding: "5px 0", borderBottom: "1px solid var(--b0)" }}>
+              <span className="aug-fs-xs" style={{ color: "var(--t2)", width: 34, flexShrink: 0 }}
                 title={e.at}>{relTime(e.at)}</span>
               <span style={{ width: 118, flexShrink: 0 }}>
                 <StatusChip hue={KIND_HUE[e.kind] ?? "muted"} strength="soft">{e.kind}</StatusChip>
@@ -201,12 +201,12 @@ export function ActivityStreamPanel({ onOpenTrace, filter, range }: {
               </span>
               {e.ok === false && <StatusChip hue="negative" strength="soft">failed</StatusChip>}
               {e.total_tokens != null && (
-                <span style={{ color: "var(--t3)", fontVariantNumeric: "tabular-nums", fontSize: 12 }}>
+                <span className="aug-fs-xs" style={{ color: "var(--t3)", fontVariantNumeric: "tabular-nums" }}>
                   {compactNumber(e.total_tokens)} tok
                 </span>
               )}
               {e.duration_ms != null && (
-                <span style={{ color: "var(--t3)", fontVariantNumeric: "tabular-nums", fontSize: 12 }}>
+                <span className="aug-fs-xs" style={{ color: "var(--t3)", fontVariantNumeric: "tabular-nums" }}>
                   {fmtMs(e.duration_ms)}
                 </span>
               )}

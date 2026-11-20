@@ -133,7 +133,7 @@ export function DeveloperPanel({ onOpenPacks, onOpenIntegrations, onOpenDeclared
               <p className="aug-fs-ui" style={{ color: "var(--t1)", margin: "0 0 8px", maxWidth: "72ch" }}>{k.principle}</p>
               {k.anatomy.map(a => (
                 <div className="aug-item" key={a.file}>
-                  <div className="aug-fs-ui" style={{ color: "var(--t1)" }}>
+                  <div className="aug-fs-chrome" style={{ color: "var(--t1)" }}>
                     <span className="aug-mono">{a.file}</span>{a.required ? " — required" : ""}
                   </div>
                   <div className="aug-item-foot aug-fs-sm"><span>{a.declares}</span></div>
@@ -301,13 +301,13 @@ export function Methods({ builtin, registered, rule, onChanged }: {
   return (
     <>
       <div className="aug-item">
-        <div className="aug-fs-ui" style={{ color: "var(--t1)" }}>Built in: {builtin.join(", ")}.</div>
+        <div className="aug-fs-chrome" style={{ color: "var(--t1)" }}>Built in: {builtin.join(", ")}.</div>
         <div className="aug-item-foot aug-fs-sm"><span>{rule.charAt(0).toUpperCase() + rule.slice(1)}.</span></div>
       </div>
       {registered.length === 0 ? <Absent>No method is registered from outside.</Absent> : withUniqueKeys(registered, m => m.name).map(([key, m]) => (
         <div className="aug-item" key={key}>
           <div style={{ display: "flex", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
-            <span className="aug-fs-ui aug-mono" style={{ color: "var(--t1)" }}>{m.name}</span>
+            <span className="aug-fs-chrome aug-mono" style={{ color: "var(--t1)" }}>{m.name}</span>
             <StatusChip hue="muted">{m.kind}</StatusChip>
           </div>
           <div className="aug-item-foot aug-fs-sm">
@@ -365,13 +365,13 @@ function Doors({ contract }: { contract: AgentContract }) {
   return (
     <>
       <div className="aug-item">
-        <div className="aug-fs-ui" style={{ color: "var(--t1)" }}>The ledger API, under <span className="aug-mono">{doors.ledger_api?.prefix}</span></div>
+        <div className="aug-fs-chrome" style={{ color: "var(--t1)" }}>The ledger API, under <span className="aug-mono">{doors.ledger_api?.prefix}</span></div>
         <ul className="aug-fs-sm" style={{ margin: "4px 0 0", paddingLeft: 18, color: "var(--t2)", lineHeight: 1.6 }}>
           {(doors.ledger_api?.routes ?? []).map(r => <li key={r}><span className="aug-mono">{r.split(" — ")[0]}</span>{r.includes(" — ") ? ` — ${r.split(" — ").slice(1).join(" — ")}` : ""}</li>)}
         </ul>
       </div>
       <div className="aug-item">
-        <div className="aug-fs-ui" style={{ color: "var(--t1)" }}>The tool server&apos;s contract tools: {(doors.mcp?.tools ?? []).map(keyToWords).join(", ")}</div>
+        <div className="aug-fs-chrome" style={{ color: "var(--t1)" }}>The tool server&apos;s contract tools: {(doors.mcp?.tools ?? []).map(keyToWords).join(", ")}</div>
         <div className="aug-item-foot aug-fs-sm"><span>{doors.mcp?.note}</span></div>
       </div>
       {(doors.never ?? []).length > 0 && (
@@ -394,7 +394,7 @@ function ContractRest({ contract }: { contract: AgentContract }) {
       <div className="aug-fs-sm" style={{ color: "var(--t3)", marginBottom: 4 }}>What a door refuses, by name</div>
       {Object.entries(refusals).map(([code, why]) => (
         <div className="aug-item" key={code}>
-          <div className="aug-fs-ui" style={{ color: "var(--t1)" }}>{why}</div>
+          <div className="aug-fs-chrome" style={{ color: "var(--t1)" }}>{why}</div>
           <div className="aug-item-foot aug-fs-sm"><span className="aug-mono">{code}</span></div>
         </div>
       ))}
@@ -453,7 +453,7 @@ export function Principals({ principals, onChanged }: { principals: ServicePrinc
         <Absent>No outside agent has a principal. One is minted by a person; it is then held to the organisation&apos;s agent policy and scored in the same rows as the built-in agents.</Absent>
       ) : withUniqueKeys(principals, p => p.name).map(([key, p]) => (
         <div className="aug-item" key={key}>
-          <div className="aug-fs-ui" style={{ color: "var(--t1)" }}>{p.name}{p.note ? ` — ${String(p.note)}` : ""}</div>
+          <div className="aug-fs-chrome" style={{ color: "var(--t1)" }}>{p.name}{p.note ? ` — ${String(p.note)}` : ""}</div>
           <div className="aug-fs-sm" style={{ color: "var(--t3)" }}>
             {grantWords(p) ? `Held to its grant: ${grantWords(p)}` : "Held to the agent policy alone"}
           </div>

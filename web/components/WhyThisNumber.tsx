@@ -116,7 +116,7 @@ function GroundingWalk({ trace }: { trace: AnswerTrace }) {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      <div className="aug-fs-xs" style={{ color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em" }}>{title}</div>
+      <div className="aug-label">{title}</div>
       {children}
     </div>
   );
@@ -131,7 +131,7 @@ function SqlBlock({ q }: { q: PublicReceipt["executed_sql"][number] }) {
     });
   };
   return (
-    <div style={{ border: "1px solid var(--b1)", borderRadius: "var(--r2)", overflow: "hidden" }}>
+    <div style={{ borderRadius: "var(--r2)", overflow: "hidden" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 8px", background: "var(--bg-2)" }}>
         <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>{q.label}</span>
         <Button size="xs" variant="ghost" onClick={copy}>{copied ? "copied ✓" : "copy"}</Button>
@@ -218,11 +218,12 @@ function Drawer({ receiptId, preloaded, onClose, asPage = false }: {
     >
       <div style={{
         width: "100%", maxWidth: asPage ? 720 : 460, height: asPage ? "auto" : "100%", background: "var(--bg-1)",
-        borderLeft: "1px solid var(--b2)", ...(asPage ? { borderRight: "1px solid var(--b2)", minHeight: "100vh" } : {}),
+        // the drawer keeps its edge over the page; as a page it is its surface on the ground (2026-11-20)
+        ...(asPage ? { minHeight: "100vh" } : { borderLeft: "1px solid var(--b2)" }),
         display: "flex", flexDirection: "column",
       }}>
         {/* Header */}
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "14px 16px", borderBottom: "1px solid var(--b1)" }}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "14px 16px" }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <span style={{ fontSize: 13, fontWeight: 650, color: "var(--t1)" }}>Why this number</span>
@@ -482,7 +483,7 @@ function Drawer({ receiptId, preloaded, onClose, asPage = false }: {
               )}
 
               {/* Footer facts — connection · model · cost · recorded-at */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 4, paddingTop: 8, borderTop: "1px solid var(--b1)" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, paddingTop: 14 }}>
                 {rec.connection.name && (
                   <div className="aug-fs-xs" style={{ color: "var(--t3)" }}>
                     Connection: {rec.connection.name}{rec.connection.dialect ? ` · ${rec.connection.dialect}` : ""}

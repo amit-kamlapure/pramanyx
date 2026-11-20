@@ -63,7 +63,7 @@ export default function EmbedAgentPage({ params }: { params: Promise<{ agentId: 
       <div className="aug-fs-h2" style={{ fontWeight: 500 }}>Ask this agent</div>
       {!key ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 14,
-          border: "1px solid var(--b1)", borderRadius: "var(--r3)" }}>
+          background: "var(--bg-2)", borderRadius: "var(--r3)" }}>
           <span className="aug-fs-sm" style={{ color: "var(--t2)" }}>
             Paste the agent&apos;s key (issued on its Doors tab). It stays in this tab&apos;s session
             only — not in the address bar, not on this page&apos;s server.
@@ -94,7 +94,7 @@ export default function EmbedAgentPage({ params }: { params: Promise<{ agentId: 
           </div>
           {error && <div className="aug-fs-sm" style={{ color: "var(--red4)" }}>{error}</div>}
           {turns.map((t, i) => (
-            <div key={`${t.receipt_id || "turn"}-${i}`} style={{ padding: 14, border: "1px solid var(--b1)",
+            <div key={`${t.receipt_id || "turn"}-${i}`} style={{ padding: 14, background: "var(--bg-2)",
               borderRadius: "var(--r3)", display: "flex", flexDirection: "column", gap: 8 }}>
               <div className="aug-fs-xs" style={{ color: "var(--t3)" }}>{t.question}</div>
               <div className="aug-fs-ui" style={{ fontWeight: 500, color: t.error ? "var(--red4)" : "var(--t1)" }}>
@@ -119,7 +119,7 @@ export default function EmbedAgentPage({ params }: { params: Promise<{ agentId: 
               )}
               {t.sql && (
                 <pre className="aug-fs-xs" style={{ margin: 0, padding: 10, background: "var(--bg-1)",
-                  border: "1px solid var(--b1)", borderRadius: "var(--r3)", color: "var(--t2)",
+                  borderRadius: "var(--r3)", color: "var(--t2)",
                   fontFamily: "var(--font-mono)", whiteSpace: "pre-wrap" }}>{t.sql}</pre>
               )}
               {t.receipt_id && (

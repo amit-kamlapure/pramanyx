@@ -116,7 +116,7 @@ export function TraceExplorerPanel({ focusInvestigationId, focusTraceId }: {
       {!indexOpen && (
         // The collapsed rail. It states the count it is hiding, so reopening is a
         // decision rather than a guess about what is behind the tab.
-        <div style={{ width: 30, flexShrink: 0, borderRight: "1px solid var(--b1)",
+        <div style={{ width: 30, flexShrink: 0, borderRight: "1px solid var(--divide)",
                       display: "flex", flexDirection: "column", alignItems: "center",
                       paddingTop: 8, gap: 6 }}>
           <Button variant="ghost" size="icon-sm" aria-label="Show the runs index"
@@ -126,9 +126,8 @@ export function TraceExplorerPanel({ focusInvestigationId, focusTraceId }: {
           {/* `--t2`, not `--t4`. This is the only thing on a 30px rail, so it is content
               rather than a de-emphasised label, and `--t4` is 2.76:1 — below AA even for
               large text. The Agent Ops readability guard catches exactly this. */}
-          <span className="aug-fs-xs" style={{ color: "var(--t2)", writingMode: "vertical-rl",
-            letterSpacing: "0.1em", textTransform: "uppercase" }}>
-            {total === 0 ? "runs" : `${total} runs`}
+          <span className="aug-fs-xs" style={{ color: "var(--t2)", writingMode: "vertical-rl" }}>
+            {total === 0 ? "Runs" : `${total} runs`}
           </span>
         </div>
       )}
@@ -147,10 +146,11 @@ export function TraceExplorerPanel({ focusInvestigationId, focusTraceId }: {
         collapsed={!indexOpen}
         style={{ flex: 1, minWidth: 0 }}
         left={
-      <div style={{ height: "100%", borderRight: "1px solid var(--b1)",
+      // no edge of its own: the split's divider is the one rule between the two panes (2026-11-20)
+      <div style={{ height: "100%",
                     display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
-        <div style={{ padding: 10, borderBottom: "1px solid var(--b1)",
+        <div style={{ padding: "10px 10px 12px",
                       display: "flex", flexDirection: "column", gap: 6 }}>
           <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
             <Input
@@ -247,12 +247,12 @@ export function TraceExplorerPanel({ focusInvestigationId, focusTraceId }: {
                 padding: "8px 10px", marginBottom: 2, whiteSpace: "normal",
                 background: selected === t.trace_id ? "var(--bg-sel)" : undefined,
               }}>
-              <span className="aug-fs-sm" style={{ display: "block", lineHeight: 1.35,
+              <span className="aug-fs-chrome" style={{ display: "block", lineHeight: 1.35,
                 overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {t.question || t.trace_id}
               </span>
               {t.answer && (
-                <span className="aug-fs-xs" style={{ display: "block", color: "var(--t3)",
+                <span className="aug-fs-sm" style={{ display: "block", color: "var(--t3)",
                   marginTop: 1, overflow: "hidden", textOverflow: "ellipsis",
                   whiteSpace: "nowrap" }}>
                   → {t.answer}
@@ -282,7 +282,7 @@ export function TraceExplorerPanel({ focusInvestigationId, focusTraceId }: {
 
         {/* Paging over what MATCHED, with the window it was counted in stated rather
             than implied — a total with no window is a claim about all of history. */}
-        <div style={{ borderTop: "1px solid var(--b1)", padding: "6px 10px",
+        <div style={{ padding: "10px 10px 8px",
                       display: "flex", alignItems: "center", gap: 6 }}>
           <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>
             {total === 0 ? "0 runs" : `${offset + 1}–${Math.min(offset + pageSize, total)} of ${total}`}
@@ -456,9 +456,9 @@ export function TraceView({ traceId, answer = "" }: {
         {readError ? (
           <ReadFailed what="this trace" error={readError} onRetry={loadDetail} style={{ padding: 32 }} />
         ) : !detail || !detail.measured ? (
-          <div style={{ padding: 32, fontSize: 12, color: "var(--t3)" }}>
+          <div className="aug-fs-sm" style={{ padding: 32, color: "var(--t3)" }}>
             {detail && !detail.measured
-              ? <>Not recorded — enable <code style={{ fontSize: 11 }}>obs.session_log</code>.</>
+              ? <>Not recorded — enable <code className="aug-fs-xs">obs.session_log</code>.</>
               : missing ? "The log holds no trace under this id."
               : selected ? "Loading the trace…" : "Select a trace."}
           </div>
@@ -468,7 +468,7 @@ export function TraceView({ traceId, answer = "" }: {
                 one row of eight controls competing for the same horizontal space, and the
                 title — the only part that is unique to the run — was the piece that got
                 truncated. */}
-            <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--b1)",
+            <div style={{ padding: "10px 16px 14px",
               display: "flex", flexDirection: "column", gap: 7 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -500,7 +500,7 @@ export function TraceView({ traceId, answer = "" }: {
               {/* A segmented group rather than five loose buttons: these are five readings
                   of ONE run, and loose buttons read as five unrelated actions. */}
               <div style={{ display: "inline-flex", gap: 2, padding: 2, alignSelf: "flex-start",
-                border: "1px solid var(--b1)", borderRadius: "var(--r-chip)",
+                borderRadius: "var(--r-chip)",
                 background: "var(--bg-1)" }}>
                 {([["flow", "Flow"], ["timeline", "Waterfall"], ["events", "Events"],
                    ["logs", "Logs"], ["feedback", "Feedback"]] as const).map(([key, label]) => (
@@ -578,10 +578,10 @@ export function TraceView({ traceId, answer = "" }: {
                         style={{ display: "flex", width: "100%", height: "auto",
                           alignItems: "center", gap: 8, padding: "4px 6px",
                           marginLeft: depth * 18, textAlign: "left" }}>
-                        <span style={{ fontSize: 11, color: "var(--t2)", width: 110,
+                        <span className="aug-fs-xs" style={{ color: "var(--t2)", width: 110,
                           flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis",
                           whiteSpace: "nowrap" }}>{e.kind}</span>
-                        <span style={{ fontSize: 12, minWidth: 90, flexShrink: 0,
+                        <span className="aug-fs-chrome" style={{ minWidth: 90, flexShrink: 0,
                           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                           {e.name || "—"}
                         </span>
@@ -593,30 +593,30 @@ export function TraceView({ traceId, answer = "" }: {
                                 : e.kind === "llm_call" ? "var(--vio3)" : "var(--blue3)" }} />
                           )}
                           {e.kind === "tool_call" && !resultSpans.has(e.span_id || "") && (
-                            <span style={{ fontSize: 11, color: "var(--amb4)" }}>
+                            <span className="aug-fs-xs" style={{ color: "var(--amb4)" }}>
                               no result recorded — entry-side evidence of a hang or cancel
                             </span>
                           )}
                         </span>
                         {e.ok === false && <StatusChip hue="negative" strength="soft">
                           {e.error_class || "failed"}</StatusChip>}
-                        {e.retries ? <span style={{ fontSize: 11, color: "var(--amb4)" }}>
+                        {e.retries ? <span className="aug-fs-xs" style={{ color: "var(--amb4)" }}>
                           ×{e.retries + 1}</span> : null}
                         {e.total_tokens != null && (
-                          <span style={{ fontSize: 11, color: "var(--t3)",
+                          <span className="aug-fs-xs" style={{ color: "var(--t3)",
                             fontVariantNumeric: "tabular-nums" }}>
                             {compactNumber(e.total_tokens)} tok</span>
                         )}
                         {e.duration_ms != null && (
-                          <span style={{ fontSize: 11, color: "var(--t3)", width: 64,
+                          <span className="aug-fs-xs" style={{ color: "var(--t3)", width: 64,
                             textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
                             {fmtMs(e.duration_ms)}</span>
                         )}
                       </Button>
                       {isOpen && (
-                        <div style={{ margin: `2px 0 8px ${depth * 18 + 14}px`, padding: 10,
-                          background: "var(--bg-2)", border: "1px solid var(--b1)",
-                          borderRadius: "var(--r2)", fontSize: 11 }}>
+                        <div className="aug-fs-xs" style={{ margin: `2px 0 8px ${depth * 18 + 14}px`, padding: 10,
+                          background: "var(--bg-2)",
+                          borderRadius: "var(--r2)" }}>
                           <DetailGrid e={e} />
                           {e.content_captured && (
                             <div style={{ color: "var(--amb4)", margin: "6px 0 4px" }}>
@@ -626,7 +626,7 @@ export function TraceView({ traceId, answer = "" }: {
                           {e.payload != null && (
                             <pre style={{ margin: "6px 0 0", whiteSpace: "pre-wrap",
                               wordBreak: "break-word", maxHeight: 220, overflowY: "auto",
-                              color: "var(--t2)", fontSize: 11 }}>
+                              color: "var(--t2)" }}>
                               {JSON.stringify(e.payload, null, 1)}
                             </pre>
                           )}
@@ -660,7 +660,7 @@ export function TraceView({ traceId, answer = "" }: {
                       )}
                     </div>
                     {logs.lines.map(line => (
-                      <div key={`${line.seq}-${line.kind}`} className="aug-fs-sm"
+                      <div key={`${line.seq}-${line.kind}`} className="aug-fs-chrome"
                         style={{ padding: "6px 4px", borderBottom: "1px solid var(--b0)" }}>
                         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                           <StatusChip strength="soft" hue={line.tolerated ? "negative" : "info"}>
@@ -675,7 +675,7 @@ export function TraceView({ traceId, answer = "" }: {
                             <div style={{ color: "var(--red4)" }}>{line.error}</div>
                             {/* The reason is what separates a designed degradation from
                                 a bug nobody noticed. Without it the error is unreadable. */}
-                            <div className="aug-fs-xs" style={{ color: "var(--t2)", marginTop: 2 }}>
+                            <div className="aug-fs-sm" style={{ color: "var(--t2)", marginTop: 2 }}>
                               tolerated because: {line.reason}
                               {line.counter ? ` · ${line.counter}` : ""}
                             </div>
@@ -716,7 +716,7 @@ export function TraceView({ traceId, answer = "" }: {
                 {runFeedback && runFeedback.items.length > 0 && (
                   <div style={{ marginBottom: 18 }}>
                     {runFeedback.items.map((f, i) => (
-                      <div key={`${f.at}-${i}`} className="aug-fs-sm" style={{ display: "flex",
+                      <div key={`${f.at}-${i}`} className="aug-fs-chrome" style={{ display: "flex",
                         gap: 8, alignItems: "center", padding: "6px 0",
                         borderBottom: "1px solid var(--b0)" }}>
                         <StatusChip strength="soft"
@@ -733,14 +733,14 @@ export function TraceView({ traceId, answer = "" }: {
                   </div>
                 )}
                 {!invId ? (
-                  <div style={{ fontSize: 12, color: "var(--t3)" }}>
+                  <div className="aug-fs-sm" style={{ color: "var(--t3)" }}>
                     This trace recorded no deep analysis id (a quick turn), so there is no
                     finding to accept or reject — the run judgement above is the one that
                     applies here.
                   </div>
                 ) : (
                   <>
-                    <div style={{ fontSize: 12, marginBottom: 8 }}>
+                    <div className="aug-fs-sm" style={{ marginBottom: 8 }}>
                       Record a verdict on this run&apos;s finding — it lands in the
                       verify store and feeds the closed loop. Uses the note above.
                     </div>
@@ -769,10 +769,10 @@ export function TraceView({ traceId, answer = "" }: {
                       Verdicts on record{connId ? ` · ${connId}` : ""}
                     </div>
                     {verdicts.length === 0 ? (
-                      <div style={{ fontSize: 12, color: "var(--t2)" }}>None yet.</div>
+                      <div className="aug-fs-sm" style={{ color: "var(--t2)" }}>None yet.</div>
                     ) : verdicts.map(v => (
-                      <div key={v.id} style={{ display: "flex", gap: 8, alignItems: "center",
-                        padding: "6px 0", borderBottom: "1px solid var(--b0)", fontSize: 12 }}>
+                      <div key={v.id} className="aug-fs-chrome" style={{ display: "flex", gap: 8, alignItems: "center",
+                        padding: "6px 0", borderBottom: "1px solid var(--b0)" }}>
                         <StatusChip strength="soft"
                           hue={v.verdict === "accept" ? "positive"
                             : v.verdict === "reject" ? "negative" : "caution"}>
@@ -785,7 +785,7 @@ export function TraceView({ traceId, answer = "" }: {
                         {v.investigation_id === invId && (
                           <StatusChip hue="info" strength="soft">this run</StatusChip>
                         )}
-                        <span style={{ color: "var(--t2)", fontSize: 11 }}>{relTime(v.created_at)}</span>
+                        <span className="aug-fs-xs" style={{ color: "var(--t2)" }}>{relTime(v.created_at)}</span>
                       </div>
                     ))}
                   </>
@@ -820,7 +820,7 @@ function DetailGrid({ e }: { e: SessionEvent }) {
       {rows.map(([k, v]) => (
         <span key={k} style={{ display: "contents" }}>
           <span style={{ color: "var(--t2)" }}>{k}</span>
-          <span style={{ fontVariantNumeric: "tabular-nums" }}>{v}</span>
+          <span className="aug-fs-chrome" style={{ fontVariantNumeric: "tabular-nums" }}>{v}</span>
         </span>
       ))}
     </div>

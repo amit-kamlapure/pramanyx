@@ -30,7 +30,7 @@ const report: Report = {
 
 const open = async () => {
   render(<ReportView report={report} queryCount={0} invId="r1" />);
-  fireEvent.click(screen.getByRole("button", { name: /Recommended Actions/ }));
+  fireEvent.click(screen.getByRole("button", { name: /Recommended actions/ }));
   return screen.findByText("Re-check the delivery promise.");
 };
 

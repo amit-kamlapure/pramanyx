@@ -33,7 +33,7 @@ export function RowsCard({ rows: r, sheet, onShow, onKeep }: {
   const [busy, setBusy] = useState(false);
   const said = filterWords(r.conditions, sheet.columns, sheet.rules) || r.said;
   return (
-    <div style={{ border: "1px solid var(--b1)", borderRadius: "var(--r3)", background: "var(--bg-2)", padding: "10px 12px",
+    <div style={{ borderRadius: "var(--r3)", background: "var(--bg-2)", padding: "10px 12px",
       display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
         <Icon name="table" size={14} />
@@ -86,7 +86,7 @@ export function ProposalCard({ proposal, applied, appliedSheet, onApplied, onUnd
   };
   const n = picks.size;
   return (
-    <div style={{ border: "1px solid var(--b1)", borderRadius: "var(--r3)", background: "var(--bg-2)", padding: "10px 12px",
+    <div style={{ borderRadius: "var(--r3)", background: "var(--bg-2)", padding: "10px 12px",
       display: "flex", flexDirection: "column", gap: 8 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <span className="aug-fs-sm" style={{ fontWeight: 600 }}>

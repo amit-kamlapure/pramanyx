@@ -27,7 +27,7 @@ const RUN_COLOR: Record<string, string> = {
 
 function Mono({ children, tint }: { children: React.ReactNode; tint?: string }) {
   return (
-    <span className="aug-fs-xs" style={{
+    <span className="aug-fs-chrome" style={{
       fontFamily: "var(--font-mono, monospace)",
       color: tint || "var(--t2)", whiteSpace: "nowrap",
     }}>{children}</span>
@@ -103,8 +103,7 @@ export function HubMapPanel({ connId, onOpenAgent, onOpenAutomation }: {
       {/* What the layer is, its totals and Refresh. Inside the app the totals stand beside the title and Refresh is one of
           the page's actions (2026-11-10, ROADMAP §6 item 64); the line saying what the layer is stays its first line. */}
       <div style={{
-        display: "flex", alignItems: "baseline", gap: 14, padding: "12px 16px 8px",
-        borderBottom: "1px solid var(--b1)",
+        display: "flex", alignItems: "baseline", gap: 14, padding: "12px 16px 12px",
       }}>
         <span className="aug-fs-ui" style={{ fontWeight: 600, color: "var(--t1)" }}>Every automation and monitor, one screen</span>
         {inShell ? (
@@ -171,28 +170,28 @@ function MapRow({ row, onOpenAgent, onOpenAutomation }: {
               {row.name}
             </Button>
           ) : (
-            <span className="aug-fs-sm" style={{ color: "var(--t1)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+            <span className="aug-fs-chrome" style={{ color: "var(--t1)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                   title={row.description || row.name}>
               {row.name}
             </span>
           )}
         </div>
-        <div className="aug-fs-xs" style={{ color: "var(--t3)", paddingLeft: 15 }}>
+        <div className="aug-fs-sm" style={{ color: "var(--t3)", paddingLeft: 15 }}>
           {row.kind === "monitor" ? "monitor · " : ""}{row.conn_id}{row.state !== "live" ? ` · ${row.state}` : ""}
         </div>
       </TableCell>
       <TableCell>
         {row.last_run.status ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-            <span className="aug-fs-sm aug-num" style={{ color: "var(--t1)", whiteSpace: "nowrap" }}
+            <span className="aug-fs-chrome aug-num" style={{ color: "var(--t1)", whiteSpace: "nowrap" }}
                   title={row.last_run.at || undefined}>{lastAt}</span>
-            <span className="aug-fs-xs" style={{ color: RUN_COLOR[row.last_run.status] || "var(--t3)" }}>
+            <span className="aug-fs-sm" style={{ color: RUN_COLOR[row.last_run.status] || "var(--t3)" }}>
               ● {row.last_run.status}
             </span>
           </div>
         ) : <Mono tint="var(--t3)">never</Mono>}
         {row.failure_rate && (
-          <div className="aug-fs-xs" data-testid="hub-failure-rate" title={failureDetail(row.failure_rate)}
+          <div className="aug-fs-sm" data-testid="hub-failure-rate" title={failureDetail(row.failure_rate)}
                style={{ color: failureColor(row.failure_rate), whiteSpace: "nowrap" }}>
             {failureText(row.failure_rate)}
           </div>
@@ -236,7 +235,7 @@ function MapRow({ row, onOpenAgent, onOpenAutomation }: {
           {ownerText(row.owner)}
         </Mono>
         {row.owner.agent_id && (
-          <div className="aug-fs-xs" style={{ color: "var(--t3)" }}>
+          <div className="aug-fs-sm" style={{ color: "var(--t3)" }}>
             runs as{" "}
             {onOpenAgent ? (
               <Button variant="link" size="xs" onClick={() => onOpenAgent(row.owner.agent_id)}
@@ -249,13 +248,13 @@ function MapRow({ row, onOpenAgent, onOpenAutomation }: {
       </TableCell>
       <TableCell className="num">
         <span title={caveat || `${row.cost.runs} runs · ${row.cost.deep_runs} deep runs in ${row.cost.window_days}d`}
-              className="aug-fs-xs" style={{ color: "var(--t2)" }}>
+              className="aug-fs-chrome" style={{ color: "var(--t2)" }}>
           {costText(row.cost)}{caveat ? "*" : ""}
         </span>
       </TableCell>
       <TableCell>
         <span title={probationDetail(row.probation)}
-              className="aug-fs-xs" style={{ color: row.probation.on ? "var(--amb3)" : "var(--t3)" }}>
+              className="aug-fs-chrome" style={{ color: row.probation.on ? "var(--amb3)" : "var(--t3)" }}>
           {probationText(row.probation)}
         </span>
       </TableCell>

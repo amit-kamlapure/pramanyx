@@ -119,11 +119,11 @@ export function AgentPolicySection() {
           In force: <strong>{describeEffective(view)}</strong>
         </span>
       )}>
-      <div className="aug-fs-xs" style={{ color: "var(--t3)", marginBottom: 10 }}>
+      <div className="aug-fs-sm" style={{ color: "var(--t3)", marginBottom: 10 }}>
         What an MCP client acting for this organisation may do; every call is checked and audited.
       </div>
       {envPins && (
-        <div className="aug-fs-xs" data-testid="agent-policy-environment" style={{ color: "var(--amb4)", marginBottom: 10 }}>
+        <div className="aug-fs-sm" data-testid="agent-policy-environment" style={{ color: "var(--amb4)", marginBottom: 10 }}>
           The server's environment pins {[
             env.level ? `the level at ${env.level}` : "",
             env.connections ? `${env.connections.length} connection${env.connections.length === 1 ? "" : "s"}` : "",
@@ -135,12 +135,12 @@ export function AgentPolicySection() {
       <div role="radiogroup" aria-label="Agent level" style={{ display: "grid", gap: 10, marginBottom: 12,
         gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 200px), 1fr))" }}>
         {LEVELS.map(l => (
-          <label key={l.key} className="aug-fs-sm" style={{ display: "flex", alignItems: "flex-start", gap: 8, color: "var(--t2)", cursor: canManage ? "pointer" : "default" }}>
+          <label key={l.key} className="aug-fs-chrome" style={{ display: "flex", alignItems: "flex-start", gap: 8, color: "var(--t2)", cursor: canManage ? "pointer" : "default" }}>
             <Radio name="agent-level" value={l.key} checked={level === l.key}
               disabled={!canManage || saving} onChange={() => setLevel(l.key)} />
             <span>
               <strong style={{ color: "var(--t1)" }}>{l.label}</strong>{" "}
-              <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>— {l.hint}</span>
+              <span className="aug-fs-sm" style={{ color: "var(--t3)" }}>— {l.hint}</span>
             </span>
           </label>
         ))}

@@ -52,7 +52,7 @@ export function CopyChip({ text }: { text: string }) {
       }}
       className="font-mono aug-text-sm rounded px-1 py-px align-baseline cursor-pointer"
       style={{
-        background: "var(--bg-3)", border: "1px solid var(--b1)",
+        background: "var(--gray-a3)", // a chip on a faint fill, no outline (2026-11-20, borders are the exception)
         color: copied ? "var(--grn4)" : "var(--t2)",
       }}
     >
@@ -139,7 +139,7 @@ const COMPONENTS = {
   pre: ({ children }: ElProps) => (
     <pre
       className="font-mono aug-text-sm overflow-x-auto rounded p-2 my-1"
-      style={{ background: "var(--bg-2)", border: "1px solid var(--b1)", color: "var(--t1)" }}
+      style={{ background: "var(--bg-2)", color: "var(--t1)" }}
     >
       {children}
     </pre>

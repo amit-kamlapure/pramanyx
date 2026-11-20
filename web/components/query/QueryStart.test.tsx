@@ -44,14 +44,14 @@ beforeEach(() => {
 });
 
 describe("the start page", () => {
-  it("opens with Create new — one card with an edge that opens an empty query tab — then Quick access", async () => {
+  it("opens with Create new — one tile with a soft fill that opens an empty query tab — then Quick access", async () => {
     api.getQueryHistory.mockResolvedValue([]);
     const p = mount();
     expect(screen.getByRole("heading", { name: "Create new" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Quick access" })).toBeInTheDocument();
     const card = screen.getByTestId("query-start-new");
     expect(card).toHaveTextContent("SQL query");
-    expect(card.className).toContain("rt-variant-outline");               // a button at rest, with an edge
+    expect(card.className).toContain("rt-variant-soft");                  // a button at rest: a fill, no outline (2026-11-20)
     fireEvent.click(card);
     expect(p.onNewQuery).toHaveBeenCalledTimes(1);
     expect(pill(/^Recent/)).toHaveAttribute("aria-checked", "true");       // Recent first, as the reference does

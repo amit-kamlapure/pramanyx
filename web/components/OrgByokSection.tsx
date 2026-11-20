@@ -146,7 +146,7 @@ export function OrgByokSection() {
         ))}
       </div>
       {backend === "openrouter" && (
-        <label className="aug-fs-xs" style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer",
+        <label className="aug-fs-chrome" style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer",
           color: "var(--t3)", marginTop: 8 }}>
           <Checkbox
             checked={allowPaid}

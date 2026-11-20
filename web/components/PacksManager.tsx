@@ -26,7 +26,7 @@ export function PacksManager() {
 
   return (
     <div className="mb-5">
-      <p className="aug-fs-xs uppercase tracking-widest text-zinc-500 mb-2">
+      <p className="aug-label mb-2">
         Packs{enabled ? "" : " · flag off (gated)"}
       </p>
       <div className="bg-white/[0.03] rounded-[var(--r3)] divide-y divide-white/5">
@@ -35,7 +35,7 @@ export function PacksManager() {
             <Button variant="plain" size="xs" onClick={() => setSel(sel === p.id ? null : p.id)}
               className="w-full flex items-center justify-between gap-3 text-left">
               <span className="flex items-center gap-2">
-                <span className="text-xs text-zinc-200">{p.name || p.id}</span>
+                <span className="aug-fs-chrome text-zinc-200">{p.name || p.id}</span>
                 <Badge color={p.status === "active" ? "#46b06a" : p.status === "deprecated" ? "#888" : "#d4a72c"}>
                   {p.status || "draft"}
                 </Badge>
@@ -51,7 +51,7 @@ export function PacksManager() {
             {sel === p.id && (p.layer
               // IP-1 — a knowledge package is reference every connection reads: there is
               // nothing to bind or evaluate, so it says what it carries instead.
-              ? <p className="aug-fs-xs text-zinc-400 mt-2">{p.description || "Reference knowledge every connection reads."}</p>
+              ? <p className="aug-fs-sm text-zinc-400 mt-2">{p.description || "Reference knowledge every connection reads."}</p>
               : <PackDeploy packId={p.id} onStatus={status => setPacks(ps => ps.map(x => x.id === p.id ? { ...x, status } : x))} />)}
             {/* Arc FA, FA-6 — where the pack is installed and what upgrading it brings */}
             {sel === p.id && <PackInstalls packId={p.id} />}
@@ -79,7 +79,7 @@ function scopeLabel(scope?: string[]): string {
 
 function Badge({ children, color }: { children: React.ReactNode; color: string }) {
   return (
-    <span className="text-[11px] font-mono px-1 py-0.5 rounded"
+    <span className="aug-fs-xs font-mono px-1 py-0.5 rounded"
       style={{ background: "var(--bg-1)", color }}>{children}</span>
   );
 }
@@ -154,7 +154,7 @@ function PackDeploy({ packId, onStatus }: { packId: string; onStatus: (status: s
   };
 
   const inp = "aug-fs-xs bg-[var(--bg-2)] border border-[var(--b1)] rounded px-2 py-1 text-zinc-300";
-  const btn = "aug-fs-xs px-2 py-1 rounded border border-zinc-700 text-zinc-300 hover:bg-white/5 disabled:opacity-40";
+  const btn = "aug-fs-xs px-2 py-1 rounded text-zinc-300 hover:bg-white/5 disabled:opacity-40";
 
   return (
     <div className="mt-2 pl-1 space-y-3">
@@ -182,15 +182,15 @@ function PackDeploy({ packId, onStatus }: { packId: string; onStatus: (status: s
           {busy === "activate" ? "Activating…" : activated ? "Active ✓" : "4 · Activate"}
         </Button>
       </div>
-      <p className="aug-fs-xs text-zinc-600">Deploy a package: propose → bind + verify → evaluate → activate. A package that is a map of entities and nothing else has no roles to bind and no questions to ask: it is evaluated by measuring its claims on the connection.</p>
-      {err && <p className="aug-fs-xs text-rose-400">{err}</p>}
+      <p className="aug-fs-sm text-zinc-600">Deploy a package: propose → bind + verify → evaluate → activate. A package that is a map of entities and nothing else has no roles to bind and no questions to ask: it is evaluated by measuring its claims on the connection.</p>
+      {err && <p className="aug-fs-sm text-rose-400">{err}</p>}
 
       {/* Step 1 — groundability (a PROPOSAL, not a deployment) */}
       {proposals && (() => {
         const total = Object.keys(proposals).length;
         const groundable = Object.values(proposals).filter(c => c.bound).length;
         return (
-          <div className="aug-fs-xs">
+          <div className="aug-fs-sm">
             <div className="text-zinc-500 mb-1">
               Proposed bindings — {fullyGroundable
                 ? <span className="text-emerald-400">all {total} roles groundable</span>
@@ -199,7 +199,7 @@ function PackDeploy({ packId, onStatus }: { packId: string; onStatus: (status: s
                 ? <span className="text-emerald-400"> · deployed ✓ verified</span>
                 : <span className="text-rose-400"> · pinned but not verified</span>)}
             </div>
-            <div className="font-mono space-y-0.5">
+            <div className="aug-fs-chrome font-mono space-y-0.5">
               {Object.entries(proposals).map(([role, c]) => (
                 <div key={role} className="flex justify-between gap-3">
                   <span className="text-zinc-300">{role}</span>
@@ -215,7 +215,7 @@ function PackDeploy({ packId, onStatus }: { packId: string; onStatus: (status: s
 
       {/* Step 3 — evals (pass/fail) shown SEPARATELY from activation readiness */}
       {evalRes && (
-        <div className="aug-fs-xs space-y-1">
+        <div className="aug-fs-sm space-y-1">
           <div className="text-zinc-500">
             {evalRes.measured === "claims" ? "Claims measured" : "Evals"} — {evalRes.pass_rate != null
               ? <span className={evalRes.pass_rate === 1 ? "text-emerald-400" : "text-amber-400"}>{Math.round(evalRes.pass_rate * 100)}% {evalRes.measured === "claims" ? "held" : "pass"}</span>
@@ -224,7 +224,7 @@ function PackDeploy({ packId, onStatus }: { packId: string; onStatus: (status: s
               ? <span className="text-zinc-600"> · {evalRes.by_tier.expected} could not be measured here</span> : null}
           </div>
           {evalRes.results.map((r, i) => (
-            <div key={i} className="flex gap-2">
+            <div key={i} className="aug-fs-chrome flex gap-2">
               <span className={r.passed ? "text-emerald-400" : "text-rose-400"}>{r.passed ? "✓" : "✗"}</span>
               <span className="text-zinc-400">{r.question}</span>
             </div>
@@ -240,10 +240,10 @@ function PackDeploy({ packId, onStatus }: { packId: string; onStatus: (status: s
 
       {/* Flywheel changelog */}
       {deltas.length > 0 && (
-        <div className="aug-fs-xs">
+        <div className="aug-fs-sm">
           <div className="text-zinc-500 mb-1">Pack changelog — {deltas.length} proposed learning(s)</div>
           {deltas.map(d => (
-            <div key={d.id} className="flex items-start justify-between gap-2 py-1 border-b border-white/5 last:border-0">
+            <div key={d.id} className="aug-fs-chrome flex items-start justify-between gap-2 py-1 border-b border-white/5 last:border-0">
               <span className="text-zinc-400">
                 <span className="text-zinc-500">[{d.kind}{d.target ? ` ${d.target}` : ""}]</span> {d.content}
               </span>

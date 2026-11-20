@@ -105,7 +105,7 @@ describe("the guards' verdict as a chip", () => {
 
 describe("Tools ▾ holds every action that left the toolbar", () => {
   const act = {
-    explain: vi.fn(), runAll: vi.fn(), format: vi.fn(), formatPrefs: vi.fn(), openExisting: vi.fn(),
+    explain: vi.fn(), runAll: vi.fn(), format: vi.fn(), formatPrefs: vi.fn(),
     toggleHistory: vi.fn(), shortcuts: vi.fn(),
   };
   const editor = (over: Partial<Parameters<typeof editorTools>[0]> = {}) => editorTools({
@@ -117,15 +117,15 @@ describe("Tools ▾ holds every action that left the toolbar", () => {
     act: { versions: vi.fn(), share: vi.fn(), catalog: vi.fn() }, ...over,
   });
 
-  it("the editor's: Explain, Run all, Format and its preferences, Open, Recent runs, the keys", () => {
+  it("the editor's: Explain, Run all, Format and its preferences, Recent runs (its search finds saved ones), the keys", () => {
     expect(shown(editor())).toEqual([
       "Explain plan", "Run all 3 statements", "Format SQL", "Formatting preferences…",
-      "Open a saved or recent query…", "Recent runs", "Keyboard shortcuts",
+      "Recent runs", "Keyboard shortcuts",
     ]);
     // Each calls the action it names.
     const byTest = Object.fromEntries(editor().map(i => [i.testId, i]));
     byTest["sql-explain"].onSelect(); byTest["sql-run-all"].onSelect(); byTest["sql-format"].onSelect();
-    byTest["sql-format-prefs"].onSelect(); byTest["sql-open-existing"].onSelect();
+    byTest["sql-format-prefs"].onSelect();
     byTest["sql-history-toggle"].onSelect(); byTest["sql-shortcuts"].onSelect();
     for (const fn of Object.values(act)) expect(fn).toHaveBeenCalledTimes(1);
   });
@@ -137,7 +137,7 @@ describe("Tools ▾ holds every action that left the toolbar", () => {
     expect(shown(editor({ runAllPref: true })).some(l => l.startsWith("Run all"))).toBe(false);
     expect(shown(editor({ hasSql: false }))).not.toContain("Format SQL");
     expect(shown(editor({ connected: false }))).toEqual([
-      "Format SQL", "Formatting preferences…", "Open a saved or recent query…", "Recent runs", "Keyboard shortcuts",
+      "Format SQL", "Formatting preferences…", "Recent runs", "Keyboard shortcuts",
     ]);
     expect(shown(editor({ historyOpen: true }))).toContain("Hide recent runs");
   });

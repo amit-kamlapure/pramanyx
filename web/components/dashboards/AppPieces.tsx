@@ -149,7 +149,7 @@ export function ObjectListPiece({ elementKey, entity, set, setFrom, chooses, tic
             <div key={key} data-testid="object-list-card" aria-pressed={on} role="button" tabIndex={0} data-marked={isMarked || undefined}
               onClick={() => choice && pick(choice, on ? null : object)} onKeyDown={e => { if (e.key === "Enter" && choice) pick(choice, on ? null : object); }}
               style={{ display: "grid", gridTemplateColumns: `${ticks ? "20px " : ""}minmax(0, 1fr) auto`, alignItems: "center", gap: 8,
-                padding: "8px 10px", borderRadius: "var(--r2)", border: "1px solid var(--b1)", cursor: choice ? "pointer" : undefined,
+                padding: "8px 10px", borderRadius: "var(--r2)", cursor: choice ? "pointer" : undefined,
                 background: on ? "var(--bg-sel)" : "var(--bg-1)",
                 boxShadow: isMarked && marked ? `inset 3px 0 0 ${MARK_TONE[marked.tone]}` : undefined }}>
               {ticks && <span onClick={e => e.stopPropagation()}><Checkbox checked={isTicked} disabled={!isTicked && full} aria-label={`Tick ${pk}`} onChange={e => tickOne(ticks, object, e.target.checked)} /></span>}
@@ -306,7 +306,7 @@ export function ObjectTimelinePiece({ elementKey, entity, set, setFrom, chooses,
               <g key={key} data-testid="object-timeline-lane" data-open={open || undefined} style={{ cursor: choice ? "pointer" : undefined }}
                 onClick={() => choice && pick(choice, on ? null : { objectType: page.object_type, typeId: page.type_id, pk: l.pk })}>
                 <rect x={0} y={y - 2} width={width} height={LANE_PX - 2} fill={on ? "var(--bg-sel)" : "transparent"} />
-                <text x={4} y={y + 13} fill="var(--t1)" style={{ font: "12px Inter, system-ui, sans-serif" }}>{l.name.length > 22 ? `${l.name.slice(0, 21)}…` : l.name}</text>
+                <text x={4} y={y + 13} fill="var(--t1)" style={{ font: "12px var(--font-ui)" }}>{l.name.length > 22 ? `${l.name.slice(0, 21)}…` : l.name}</text>
                 {l.from !== null && (
                   <rect x={x(l.from)} y={y + 3} width={Math.max(3, x(l.to ?? now) - x(l.from))} height={LANE_PX - 12} rx={3}
                     fill={open ? "var(--chart-deemph)" : "var(--chart-1)"} strokeDasharray={open ? "3 2" : undefined} stroke={open ? "var(--chart-1)" : undefined}>

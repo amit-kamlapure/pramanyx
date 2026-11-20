@@ -247,7 +247,7 @@ export function AgenticOpsWorkspace({
           color: "var(--t2)" }}
           title="Scopes Automations and the Action centre; the Hub and Departures stay hub-wide">
           Connection
-          <SelectField value={connId ?? ""} aria-label="Connection"
+          <SelectField variant="soft" value={connId ?? ""} aria-label="Connection"
             onChange={e => onSelectConnection(e.target.value)}>
             {!connId && <option value="">choose…</option>}
             {connections.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}

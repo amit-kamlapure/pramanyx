@@ -182,7 +182,8 @@ export interface VizEditorModel {
 
 // ── primitives ────────────────────────────────────────────────────────────────
 
-const ROW: React.CSSProperties = { padding: "12px 16px", borderBottom: "1px solid var(--b1)", display: "flex", flexDirection: "column", gap: 8 };
+// a row reads apart from the next by its space, no rule under it (2026-11-20, borders are the exception)
+const ROW: React.CSSProperties = { padding: "12px 16px", display: "flex", flexDirection: "column", gap: 8 };
 const TITLE: React.CSSProperties = { fontWeight: 600, color: "var(--t1)" };
 
 /** The app's design-system dropdown (Base UI), wrapped to the panel's {value, options, onChange}
@@ -255,7 +256,7 @@ function Channel({ title, props, add, children, testid }: {
       </div>
       {children}
       {props && open && (
-        <div data-testid="viz-props" style={{ display: "flex", flexDirection: "column", gap: 9, padding: "10px 10px", border: "1px solid var(--b1)", borderRadius: "var(--r2)", background: "var(--bg-1)" }}>
+        <div data-testid="viz-props" style={{ display: "flex", flexDirection: "column", gap: 9, padding: "10px 10px", borderRadius: "var(--r2)", background: "var(--bg-1)" }}>
           {props}
         </div>
       )}
@@ -276,7 +277,7 @@ function ToggleRow({ title, on, onChange }: { title: string; on: boolean; onChan
 /** A segmented control (Categorical | Continuous). */
 function SegToggle<T extends string>({ value, onChange, options, label }: { value: T; onChange: (v: T) => void; options: [T, string][]; label?: string }) {
   return (
-    <div role="radiogroup" aria-label={label} style={{ display: "inline-flex", alignItems: "center", gap: 3, border: "1px solid var(--b2)", borderRadius: "var(--r2)", padding: 3, alignSelf: "flex-start", background: "var(--bg-1)", flexWrap: "wrap" }}>
+    <div role="radiogroup" aria-label={label} style={{ display: "inline-flex", alignItems: "center", gap: 3, borderRadius: "var(--r2)", padding: 3, alignSelf: "flex-start", background: "var(--bg-1)", flexWrap: "wrap" }}>
       {options.map(([v, text]) => {
         const on = value === v;
         return (
@@ -339,7 +340,7 @@ function FieldPicker({ options, value, onPick, aggs, agg, onAgg, trigger, label 
       <Popover.Content size="1" align="end" data-testid="viz-field-picker" aria-label={label}
         style={{ width: 260, maxWidth: "calc(100vw - 32px)", padding: 6 }}>
         {aggs && aggs.length > 0 && onAgg && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 4, padding: "4px 4px 8px", borderBottom: "1px solid var(--b1)", marginBottom: 6 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, padding: "4px 4px 8px", marginBottom: 6 }}>
             <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>Calculation</span>
             <div role="radiogroup" aria-label="Calculation" style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
               {aggs.map((a) => (
@@ -407,8 +408,9 @@ function ValueSwatch({ v, slots }: { v: VizValueColor; slots: number }) {
       <span className="aug-fs-sm" title={v.value} style={{ flex: 1, minWidth: 0, color: "var(--t1)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.value}</span>
       <Popover.Root open={open} onOpenChange={setOpen}>
         <Popover.Trigger>
-          <Button variant="ghost" size="icon-sm" aria-label={`${v.value}: its colour`} data-testid="viz-value-color" title={v.slot ? "Kept on the dashboard" : "The next free colour"}>
-            <span aria-hidden style={{ width: 16, height: 16, borderRadius: 4, background: v.color, outline: v.slot ? "1.5px solid var(--t1)" : undefined, outlineOffset: 1 }} />
+          <Button variant="ghost" size="icon-sm" aria-label={`${v.value}: its colour`} data-testid="viz-value-color" title={v.slot ? "Kept on the dashboard" : "The next free colour"}
+            style={{ background: v.slot ? "var(--gray-a5)" : undefined }}>
+            <span aria-hidden style={{ width: 16, height: 16, borderRadius: 4, background: v.color }} />
           </Button>
         </Popover.Trigger>
         <Popover.Content size="1" align="end" style={{ padding: 6 }}>
@@ -416,7 +418,7 @@ function ValueSwatch({ v, slots }: { v: VizValueColor; slots: number }) {
             {Array.from({ length: slots }, (_, i) => i + 1).map((n) => (
               <Button key={n} size="icon-xs" variant="ghost" role="radio" aria-checked={v.slot === n} aria-label={`Colour ${n}`}
                 data-testid={`kept-color-${n}`} onClick={() => { v.choose(v.slot === n ? null : n); setOpen(false); }}
-                style={{ outline: v.slot === n ? "2px solid var(--t1)" : undefined, outlineOffset: 1 }}>
+                style={{ background: v.slot === n ? "var(--gray-a5)" : undefined }}>
                 <span aria-hidden style={{ width: 14, height: 14, borderRadius: 3, background: `var(--chart-${n})` }} />
               </Button>
             ))}
@@ -595,7 +597,7 @@ export function VizEditorPanel({ model, onClose, docked = false }: { model: VizE
     >
       {/* Header — the drawer's own; docked, the panel holding it is titled already */}
       {!docked && (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "13px 16px", borderBottom: "1px solid var(--b1)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "13px 16px" }}>
           <div style={{ minWidth: 0 }}>
             <div className="aug-fs-chrome" style={TITLE}>Edit visualization</div>
             {model.title && (
@@ -655,13 +657,13 @@ export function VizEditorPanel({ model, onClose, docked = false }: { model: VizE
         {chartMode && model.orientAvailable && model.dimOptions.length > 0 && measures.length > 0 && (
           // swap the axes (⇅): the bars run the other way
           <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 16px", marginTop: -1, marginBottom: -1, position: "relative" }}>
-            <span style={{ flex: 1, borderTop: "1px solid var(--b1)" }} />
+            <span style={{ flex: 1 }} />
             <Button variant="ghost" size="icon-sm" data-testid="viz-swap-axes" aria-label="Swap the axes"
               title={model.orientValue === "horizontal" ? "The bars run sideways: swap them upright" : "Swap the axes: the bars run sideways"}
               onClick={() => model.setOrient(model.orientValue === "horizontal" ? "vertical" : "horizontal")} style={{ color: "var(--t3)" }}>
               <Icon name="sort" size={14} />
             </Button>
-            <span style={{ flex: 1, borderTop: "1px solid var(--b1)" }} />
+            <span style={{ flex: 1 }} />
           </div>
         )}
 

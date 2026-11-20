@@ -1,6 +1,6 @@
 /**
- * The coworker's first screen, its Agents page and its Schedules page. Under the question box: questions worth asking of one connection, the questions
- * asked lately, and a person's own agents. Everything on it is read from Pramanyx through this plugin's relay
+ * The coworker's first screen, its Agents page and its Schedules page. Out of the question box, while a person is in it
+ * and it is empty: questions worth asking of one connection. Under it: the questions asked lately, and a person's own agents. Everything on it is read from Pramanyx through this plugin's relay
  * (`lib/index.js`), and every item does one thing: it writes a question into the box. The connection is the one
  * the conversation is filed under — the shell's own picker above the box — and the agent already knows it. Nothing here asks anything
  * by itself — a person reads the question and sends it.
@@ -13,14 +13,18 @@
 import { createElement as h, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { NAME_BAR_STOPS } from "../../../../web/components/ui/brandArt";
+import { nextOpen } from "./opens.js";
+import { unstick, workspaceOf } from "./stuck.js";
 import { inTheApp, withOthers } from "./threads.js";
 
 const CHOSEN = "pramanyx.coworker.connection";
 const QUESTIONS_SHOWN = 4;
 
-const line = "color-mix(in srgb, currentColor 16%, transparent)";
+/* Borders are the exception (the platform's rule, 2026-11-20): a card is a surface, an action a soft fill. */
+const soft = "color-mix(in srgb, currentColor 9%, transparent)";
 const faint = "color-mix(in srgb, currentColor 5%, transparent)";
 const quiet = { opacity: 0.66 };
+const surface = `var(--dsw-alias-bg-layer-1, ${faint})`;
 
 async function read(path) {
   const answer = await fetch(`/pramanyx${path}`, { headers: { accept: "application/json" } });
@@ -48,8 +52,8 @@ function ago(stamp) {
 }
 
 /**
- * The first screen's look: the mark on a tile over a large headline, a roomier question box, and under it plain
- * rows and two cards with space in them. The headline, the tile and the box are the shell's, found by the names
+ * The first screen's look: the mark on a tile over a large headline, a roomier question box, the questions that
+ * drop out of it, and under it two cards with space in them. The headline, the tile and the box are the shell's, found by the names
  * its stylesheet gives them; if it renames them they keep the shell's own look and nothing breaks.
  */
 const HOME_LOOK = `
@@ -65,8 +69,8 @@ const HOME_LOOK = `
 [class*="composerHero"] [class*="_fishHitbox"] {
   width: 72px; height: 72px; border-radius: 14px; display: grid; place-items: center;
   color: var(--dsw-alias-brand-primary, #46a0c4);
-  background: color-mix(in srgb, currentColor 9%, var(--dsw-alias-bg-base, #111113));
-  box-shadow: 0 0 0 1px color-mix(in srgb, currentColor 22%, transparent), 0 12px 32px rgba(0, 0, 0, 0.28);
+  background: var(--dsw-alias-bg-layer-2, color-mix(in srgb, currentColor 9%, var(--dsw-alias-bg-base, #111113)));
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
 }
 [class*="composerHero"] [class*="_titleGroup"] { font-size: 34px; line-height: 1.15; font-weight: 400; letter-spacing: -0.01em; align-items: center; }
 [class*="composerHero"] [data-composer-card] { border-radius: 10px; }
@@ -77,6 +81,7 @@ const HOME_LOOK = `
 .pramanyx-home-row:hover, .pramanyx-home-row:focus-visible { background: color-mix(in srgb, currentColor 7%, transparent); }
 .pramanyx-home-row:focus-visible { outline: 1px solid color-mix(in srgb, currentColor 40%, transparent); }
 .pramanyx-home-row svg { flex: none; opacity: 0.62; }
+.pramanyx-home-soft:hover, .pramanyx-home-soft:focus-visible { background: color-mix(in srgb, currentColor 15%, transparent) !important; }
 `;
 
 function wearHomeLook() {
@@ -100,7 +105,7 @@ const Asked = () => h("svg", drawn, h("path", { d: "M3 4.5h12v8H8.5L5.5 15v-2.5H
 
 /** A suggested question: one plain line that writes itself into the box. */
 function Row({ text, onPick }) {
-  return h("button", { type: "button", className: "pramanyx-home-row", onClick: onPick, title: text, style: { fontSize: 14.5 } },
+  return h("button", { type: "button", className: "pramanyx-home-row", onMouseDown: (e) => e.preventDefault(), onClick: onPick, title: text, style: { fontSize: 13 } },
     h(Spark),
     h("span", { style: { flex: "1 1 auto", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, text));
 }
@@ -111,13 +116,13 @@ function Item({ icon, text, note, onPick }) {
   return h("button", { type: "button", className: "pramanyx-home-row", onClick: onPick, title: text, style: { alignItems: "flex-start" } },
     h("span", { style: { paddingTop: 1, display: "inline-flex" } }, icon),
     h("span", { style: { flex: "1 1 auto", minWidth: 0, display: "flex", flexDirection: "column", gap: 2 } },
-      h("span", { style: { ...one, fontSize: 14, fontWeight: 600 } }, text),
-      note ? h("span", { style: { ...one, ...quiet, fontSize: 12.5 } }, note) : null));
+      h("span", { style: { ...one, fontSize: 13, fontWeight: 600 } }, text),
+      note ? h("span", { style: { ...one, ...quiet, fontSize: 12 } }, note) : null));
 }
 
 function Card({ title, empty, children }) {
   const rows = Array.isArray(children) ? children.filter(Boolean) : children;
-  return h("section", { style: { flex: "1 1 300px", minWidth: 0, border: `1px solid ${line}`, borderRadius: 10, padding: "16px 12px 10px", minHeight: 150, display: "flex", flexDirection: "column" } },
+  return h("section", { style: { flex: "1 1 300px", minWidth: 0, background: surface, borderRadius: 10, padding: "16px 12px 10px", minHeight: 150, display: "flex", flexDirection: "column" } },
     h("div", { style: { ...quiet, fontSize: 13, padding: "0 10px 8px" } }, title),
     rows && rows.length ? h("div", { style: { display: "flex", flexDirection: "column", gap: 2 } }, rows)
       : h("div", { style: { ...quiet, flex: "1 1 auto", display: "grid", placeItems: "center", fontSize: 13, padding: "18px 10px" } }, empty));
@@ -130,6 +135,59 @@ function Block({ inputActions, here }) {
   const [recent, setRecent] = useState(null);
   const [agents, setAgents] = useState(null);
   const [down, setDown] = useState(false);
+  // The questions drop out of the box while a person is in it and it is empty (2026-11-20, `opens.js`).
+  const [open, setOpen] = useState(false);
+  const list = useRef(null);
+  const openNow = useRef(false);
+  openNow.current = open;
+
+  useEffect(() => {
+    const box = () => document.querySelector("[data-composer-card] [role='textbox']");
+    const inBox = (node) => Boolean(node && box()?.contains(node));
+    const inList = (node) => Boolean(node && list.current?.contains(node));
+    const empty = () => !(box()?.textContent || "").trim();
+    const turn = (event) => setOpen((was) => nextOpen(was, event));
+    // The shell's editor writes the box itself, so typing, pasting or dictating need not fire `input`: what the box
+    // holds is watched instead, and what counts is it going from empty to written in, or back.
+    let wasEmpty = true;
+    const written = () => {
+      if (empty() === wasEmpty) return;
+      wasEmpty = !wasEmpty;
+      turn({ kind: "input", empty: wasEmpty });
+    };
+    const watcher = new MutationObserver(written);
+    const enter = (e) => {
+      if (!inBox(e.target)) return;
+      watcher.disconnect();
+      watcher.observe(box(), { childList: true, characterData: true, subtree: true });
+      wasEmpty = empty();
+      turn({ kind: "enter", empty: wasEmpty });
+    };
+    const leave = (e) => {
+      if (inBox(e.target) || inList(e.target)) turn({ kind: "leave", staysNear: inBox(e.relatedTarget) || inList(e.relatedTarget) });
+    };
+    const key = (e) => {
+      if (!openNow.current) return;
+      if (e.key === "Escape" && (inBox(e.target) || inList(e.target))) {
+        if (inList(e.target)) box()?.focus();
+        turn({ kind: "escape" });
+      } else if (e.key === "ArrowDown" && inBox(e.target) && empty()) {
+        const first = list.current?.querySelector("button.pramanyx-home-row");
+        if (first) { e.preventDefault(); first.focus(); }
+      }
+    };
+    document.addEventListener("focusin", enter);
+    document.addEventListener("pointerdown", enter);
+    document.addEventListener("focusout", leave);
+    document.addEventListener("keydown", key, true);
+    return () => {
+      document.removeEventListener("focusin", enter);
+      document.removeEventListener("pointerdown", enter);
+      document.removeEventListener("focusout", leave);
+      watcher.disconnect();
+      document.removeEventListener("keydown", key, true);
+    };
+  }, []);
 
   useEffect(() => {
     let live = true;
@@ -156,7 +214,7 @@ function Block({ inputActions, here }) {
   }, [asked]);
 
   if (down) {
-    return h("div", { style: { ...quiet, fontSize: 12.5, paddingTop: 14 } },
+    return h("div", { style: { ...quiet, fontSize: 12, paddingTop: 14 } },
       "Suggestions could not be read just now. You can still ask.");
   }
   if (!connections) return null;
@@ -169,23 +227,40 @@ function Block({ inputActions, here }) {
   const shown = settled || chosen;
   const ask = (question, id) =>
     inputActions?.setDraft?.(id === settled ? question : `${question} (on ${named(id)}, connection ${id})`);
+  const pick = (question, id) => { setOpen(false); ask(question, id); };
+  // Up and down move along the list; up from its first question goes back into the box.
+  const move = (e) => {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    const rows = [...(list.current?.querySelectorAll("button.pramanyx-home-row") ?? [])];
+    const at = rows.indexOf(document.activeElement);
+    if (at < 0) return;
+    e.preventDefault();
+    if (e.key === "ArrowUp" && at === 0) document.querySelector("[data-composer-card] [role='textbox']")?.focus();
+    else rows[Math.max(0, Math.min(rows.length - 1, at + (e.key === "ArrowDown" ? 1 : -1)))]?.focus();
+  };
 
   // Inset as the box above it is, so the block's edges meet the box's.
   const inset = "var(--dsh-composer-side-clearance, 14px)";
-  return h("div", { style: { display: "flex", flexDirection: "column", gap: 14, padding: `10px ${inset} 0`, fontSize: 13 } },
-    settled ? h("div", { style: { ...quiet, fontSize: 12.5, padding: "0 10px" } }, `Questions for ${named(settled)}. Choose another connection above the box.`)
-    : h("div", { style: { display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" } },
+  return h("div", { style: { position: "relative", display: "flex", flexDirection: "column", gap: 14, padding: `10px ${inset} 0`, fontSize: 13 } },
+    open ? h("div", {
+      ref: list, "data-pramanyx-questions": "", role: "group", "aria-label": `Questions for ${named(shown)}`, onKeyDown: move,
+      style: { position: "absolute", zIndex: 30, top: 6, left: inset, right: inset, padding: "8px 6px 6px", display: "flex",
+               flexDirection: "column", gap: 4, borderRadius: 10, background: `var(--dsw-alias-bg-layer-2, ${surface})`,
+               boxShadow: "0 16px 40px rgba(0, 0, 0, 0.35)" },
+    },
+    settled ? h("div", { style: { ...quiet, fontSize: 12, padding: "0 10px 2px" } }, `Questions for ${named(settled)}. Choose another connection above the box.`)
+    : h("div", { style: { display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", padding: "0 10px 2px" } },
       h("label", { htmlFor: "pramanyx-connection", style: quiet }, "Questions for"),
       h("select", {
         id: "pramanyx-connection", value: chosen,
         onChange: (e) => { remember(e.target.value); setChosen(e.target.value); },
-        style: { font: "inherit", color: "inherit", background: "transparent", border: `1px solid ${line}`, borderRadius: 4, padding: "3px 8px" },
+        style: { font: "inherit", color: "inherit", background: soft, border: 0, borderRadius: 4, padding: "3px 8px" },
       }, connections.map((c) => h("option", { key: c.id, value: c.id }, c.name)))),
     h("div", { style: { display: "flex", flexDirection: "column", gap: 2 } },
       questions === null ? h("div", { style: { ...quiet, padding: "9px 10px" } }, "Reading the questions worth asking…")
-        : questions.length ? questions.slice(0, QUESTIONS_SHOWN).map((q) => h(Row, { key: q.text, text: q.text, onPick: () => ask(q.text, shown) }))
-          : h("div", { style: { ...quiet, padding: "9px 10px" } }, "No suggested questions for this connection yet.")),
-    h("div", { style: { display: "flex", flexWrap: "wrap", gap: 16, paddingTop: 10 } },
+        : questions.length ? questions.slice(0, QUESTIONS_SHOWN).map((q) => h(Row, { key: q.text, text: q.text, onPick: () => pick(q.text, shown) }))
+          : h("div", { style: { ...quiet, padding: "9px 10px" } }, "No suggested questions for this connection yet."))) : null,
+    h("div", { style: { display: "flex", flexWrap: "wrap", gap: 16, paddingTop: 14 } },
       h(Card, { title: "Asked lately", empty: "Nothing has been asked yet." },
         (recent ?? []).slice(0, 4).map((r) => h(Item, {
           key: r.id, icon: h(Asked), text: r.question, note: [named(r.connection_id), ago(r.started_at)].filter(Boolean).join(" · "),
@@ -254,10 +329,10 @@ function AgentsPage({ ask }) {
     return () => { live = false; };
   }, []);
   const named = (id) => connections.find((c) => c.id === id)?.name || id || "";
-  const page = { height: "100%", overflow: "auto", boxSizing: "border-box", padding: "28px 32px", fontSize: 13.5,
+  const page = { height: "100%", overflow: "auto", boxSizing: "border-box", padding: "28px 32px", fontSize: 13,
                  color: "var(--dsw-alias-label-primary)", background: "var(--dsw-alias-bg-base)" };
   return h("div", { style: page },
-    h("h1", { style: { margin: 0, fontSize: 20, fontWeight: 600 } }, "Agents"),
+    h("h1", { style: { margin: 0, fontSize: 18, fontWeight: 600 } }, "Agents"),
     h("p", { style: { ...quiet, margin: "4px 0 20px" } }, "Each agent answers the way it was set up."),
     down ? h("p", { style: quiet }, "The agents could not be read just now.")
       : agents === null ? h("p", { style: quiet }, "Reading your agents…")
@@ -265,14 +340,14 @@ function AgentsPage({ ask }) {
           : h("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 12 } },
               agents.map((agent) => h("section", {
                 key: agent.id,
-                style: { display: "flex", flexDirection: "column", gap: 8, border: `1px solid ${line}`, borderRadius: 6, padding: 14, background: faint },
+                style: { display: "flex", flexDirection: "column", gap: 8, borderRadius: 10, padding: 14, background: surface },
               },
                 h("div", { style: { fontSize: 15, fontWeight: 600 } }, agent.name),
                 agent.connection_id ? h("div", { style: { ...quiet, fontSize: 12 } }, `Answers on ${named(agent.connection_id)}`) : null,
                 h("div", { style: { flex: "1 1 auto", lineHeight: 1.5 } }, purpose(agent) || "No description."),
                 h("div", null, h("button", {
-                  type: "button", onClick: () => ask(agent),
-                  style: { font: "inherit", fontSize: 12.5, color: "inherit", cursor: "pointer", padding: "5px 12px", background: "transparent", border: `1px solid ${line}`, borderRadius: 4 },
+                  type: "button", onClick: () => ask(agent), className: "pramanyx-home-soft",
+                  style: { font: "inherit", fontSize: 12, color: "inherit", cursor: "pointer", padding: "5px 12px", background: soft, border: 0, borderRadius: 4 },
                 }, "Ask this agent"))))));
 }
 
@@ -334,9 +409,9 @@ function AppThreadsPage({ pick, heading, note, empty, back, rowOf }) {
   if (open) {
     const conn = /^[A-Za-z0-9_-]{1,64}$/.test(open.connection || "") ? `&conn=${encodeURIComponent(open.connection)}` : "";
     return h("div", { style: { display: "flex", flexDirection: "column", height: "100%" } },
-      h("div", { style: { padding: "8px 14px", fontSize: 12.5, display: "flex", gap: 10, alignItems: "center" } },
-        h("button", { type: "button", onClick: () => setOpen(null),
-                      style: { font: "inherit", color: "inherit", background: "transparent", border: `1px solid ${line}`, borderRadius: 4, padding: "2px 10px", cursor: "pointer" } },
+      h("div", { style: { padding: "8px 14px", fontSize: 12, display: "flex", gap: 10, alignItems: "center" } },
+        h("button", { type: "button", onClick: () => setOpen(null), className: "pramanyx-home-soft",
+                      style: { font: "inherit", color: "inherit", background: soft, border: 0, borderRadius: 4, padding: "2px 10px", cursor: "pointer" } },
           back),
         h("span", { style: quiet }, open.title)),
       h("iframe", {
@@ -454,9 +529,9 @@ function Switcher() {
   }, [open]);
   if (!back) return null;
   const row = { display: "flex", gap: 10, alignItems: "center", padding: "8px 9px", borderRadius: 6, color: "inherit", textDecoration: "none" };
-  const tile = { width: 32, height: 32, flex: "none", borderRadius: 6, border: `1px solid ${line}`, display: "inline-flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 13 };
+  const tile = { width: 32, height: 32, flex: "none", borderRadius: 6, background: soft, display: "inline-flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 13 };
   const words = (name, note) => h("span", { style: { display: "flex", flexDirection: "column", gap: 1, minWidth: 0 } },
-    h("span", { style: { fontSize: 13.5, fontWeight: 600 } }, name), h("span", { style: { ...quiet, fontSize: 12 } }, note));
+    h("span", { style: { fontSize: 13, fontWeight: 600 } }, name), h("span", { style: { ...quiet, fontSize: 12 } }, note));
   return h("div", { ref: host, style: { position: "relative", display: "inline-flex" } },
     h("button", {
       type: "button", "aria-label": "Switch to", "aria-expanded": open, onClick: () => setOpen((was) => !was),
@@ -467,7 +542,7 @@ function Switcher() {
       role: "menu", "aria-label": "Switch to",
       style: { position: "absolute", right: 0, top: 32, zIndex: 60, width: 300, boxSizing: "border-box", padding: 8, display: "flex",
                flexDirection: "column", gap: 2, fontSize: 13, color: "var(--dsw-alias-label-primary)",
-               background: "color-mix(in srgb, currentColor 8%, var(--dsw-alias-bg-base, #111113))", border: `1px solid ${line}`, borderRadius: 8,
+               background: "var(--dsw-alias-bg-layer-2, color-mix(in srgb, currentColor 8%, var(--dsw-alias-bg-base, #111113)))", borderRadius: 8,
                boxShadow: "0 16px 40px rgba(0, 0, 0, 0.35)" },
     },
       h("span", { style: { ...quiet, fontSize: 12, padding: "2px 9px 6px" } }, "Switch to"),
@@ -575,6 +650,39 @@ export function SeenWhenOpen({ sessionId }) {
   return null;
 }
 
+/**
+ * NO CONVERSATION STAYS STUCK (2026-11-20; see `./stuck.js`). Mounted with each conversation as it opens: read once,
+ * when its page has settled, a conversation the shell lists as blank but draws as begun is archived through the shell's
+ * own Archive and a fresh one is opened in its place, on the same connection. Set by `apply`.
+ */
+let uiWorkspaceOf = () => null;
+const decidedThisPage = new Set();
+
+export function Unstick({ sessionId }) {
+  const here = useRef(null);
+  useEffect(() => {
+    const id = String(sessionId || "");
+    const ui = uiWorkspaceOf();
+    if (!id || !ui) return undefined;
+    let live = true;
+    unstick(id, {
+      decided: decidedThisPage,
+      read: () => ({
+        summary: ui.sessions?.list?.getSnapshot?.()?.byId?.[id],
+        phase: here.current?.closest?.("[data-phase]")?.getAttribute("data-phase") || "",
+      }),
+      retire: async (stuck) => {
+        if (!live) return;
+        const workspace = workspaceOf(ui.workspaces?.list?.getSnapshot?.()?.items, stuck);
+        try { await ui.archiveSession(stuck); } catch { return; }      // not archived: it is read again on the next load
+        if (workspace !== undefined) ui.startSession(workspace);
+      },
+    }).catch(() => { /* the conversation stays as the shell drew it */ });
+    return () => { live = false; };
+  }, [sessionId]);
+  return h("span", { ref: here, "data-pramanyx-unstick": "", hidden: true });
+}
+
 export const inject = ["slots", "uiWorkspace"];
 
 /** The zone this page's browser is in, told to the coworker's server once per load (`keepTheClock`, 2026-11-17): the
@@ -629,4 +737,8 @@ export function apply(ctx) {
     ctx.slots.register({ name: "sidebar.session.row.trailing", id: "pramanyx-run-landed", order: 50 }, RunLanded));
   ctx.slots.inject("conversation.session.header.utilities", () =>
     ctx.slots.register({ name: "conversation.session.header.utilities", id: "pramanyx-run-seen", order: 99 }, SeenWhenOpen));
+  // A conversation the shell lists as blank but draws as begun is retired as it opens (2026-11-20, `./stuck.js`).
+  uiWorkspaceOf = () => ctx.uiWorkspace ?? null;
+  ctx.slots.inject("conversation.session.header.utilities", () =>
+    ctx.slots.register({ name: "conversation.session.header.utilities", id: "pramanyx-unstick", order: 100 }, Unstick));
 }

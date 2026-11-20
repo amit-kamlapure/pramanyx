@@ -85,7 +85,7 @@ function MapCard({ data }: { data: MapNodeData }) {
         <span style={{ color: meta.color, display: "flex" }}>
           <Icon name={meta.icon} size={12} />
         </span>
-        <span className={isAgent ? "aug-fs-sm" : "aug-fs-xs"}
+        <span className="aug-fs-chrome"
           style={{ color: "var(--t1)", fontWeight: 600, overflow: "hidden",
                    textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {node.title}
@@ -97,7 +97,7 @@ function MapCard({ data }: { data: MapNodeData }) {
       {/* A fact the reader must not have to infer — carried from the record, not coined
           here (Create Agent says the same thing in the same words on its own step). */}
       {node.warn && (
-        <div className="aug-fs-xs" style={{ color: "var(--amb5)", padding: "1px 9px 2px",
+        <div className="aug-fs-sm" style={{ color: "var(--amb5)", padding: "1px 9px 2px",
           lineHeight: 1.4 }}>
           {node.warn}
         </div>
@@ -195,7 +195,7 @@ export function AgentMap({
   }, [agent, bots, automations, alerts, connections, open]);
 
   return (
-    <div style={{ height: 460, border: "1px solid var(--b1)", borderRadius: 8,
+    <div style={{ height: 460, background: "var(--bg-1)", borderRadius: 8,
                   overflow: "hidden", position: "relative" }}>
       <ReactFlow
         nodes={flow.nodes}
@@ -213,7 +213,7 @@ export function AgentMap({
       </ReactFlow>
       {unread.length > 0 && (
         <div className="aug-fs-xs" style={{ position: "absolute", left: 8, bottom: 8,
-          color: "var(--amb5)", background: "var(--amb1)", border: "1px solid var(--amb2)",
+          color: "var(--amb5)", background: "var(--amb1)",
           borderRadius: "var(--r-chip)", padding: "3px 10px" }}>
           could not read {unread.join(", ")} — this map is missing what they hold
         </div>

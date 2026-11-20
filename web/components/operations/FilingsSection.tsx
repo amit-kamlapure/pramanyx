@@ -96,7 +96,7 @@ export function FilingsSection() {
               empty="Nothing is filed and open. A ticket, a thread or a document filed against a promise, a process or a finding is listed here until it is closed with what happened." />
             {closing && (
               <div className="aug-item" data-testid="filing-close">
-                <div className="aug-fs-ui" style={{ color: "var(--t1)" }}>Close “{filingName(closing)}” — what happened?</div>
+                <div className="aug-fs-chrome" style={{ color: "var(--t1)" }}>Close “{filingName(closing)}” — what happened?</div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
                   <Input aria-label="What happened" placeholder="what happened, in a sentence" value={outcome}
                     onChange={e => setOutcome(e.target.value)} style={{ flex: "1 1 320px" }} />
@@ -132,7 +132,7 @@ export function ProbationSection({ onOpenHub }: { onOpenHub: () => void }) {
                 : `None of ${countNoun(h.totals.automations, "automation")} is on probation.`}</Absent>
             : (
               <div className="aug-item">
-                <div className="aug-fs-ui" style={{ color: "var(--t1)" }}>
+                <div className="aug-fs-chrome" style={{ color: "var(--t1)" }}>
                   <span className="aug-num" style={{ marginRight: 10 }}>{h.totals.probation}</span>
                   of {countNoun(h.totals.automations, "automation")} on probation
                 </div>

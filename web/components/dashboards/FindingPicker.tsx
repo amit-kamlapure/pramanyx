@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Loading } from "@/components/ui/states";
 import { toast } from "@/components/ui/toast";
 import { listFindingsByDomain, pinFinding, type RecordedFinding } from "@/lib/api";
+import { sentenceCase } from "@/lib/format";
 
 const SHOWN = 60;
 
@@ -65,7 +66,7 @@ export function FindingPicker({ connectionId, schema, placed, busy, onPlaced, on
   };
 
   return (
-    <div data-testid="dashboard-finding-picker" style={{ border: "1px solid var(--b1)", borderRadius: "var(--r3)", padding: 14, marginBottom: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+    <div data-testid="dashboard-finding-picker" style={{ background: "var(--bg-2)", borderRadius: "var(--r3)", padding: 14, marginBottom: 16, display: "flex", flexDirection: "column", gap: 10 }}>
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <span className="aug-label">From the findings ledger</span>
         <span className="aug-fs-sm" style={{ color: "var(--t3)" }}>
@@ -85,14 +86,14 @@ export function FindingPicker({ connectionId, schema, placed, busy, onPlaced, on
           {shown.map(g => (
             // Keyed by the first finding's id: a domain is a kind, and the key ratchet refuses a kind as a key.
             <div key={g.findings[0].id} data-testid="finding-domain" data-domain={g.domain}>
-              <div className="aug-fs-xs" style={{ color: "var(--t3)", letterSpacing: ".06em", textTransform: "uppercase", margin: "4px 0" }}>{g.domain}</div>
+              <div className="aug-label" style={{ margin: "4px 0" }}>{sentenceCase(g.domain)}</div>
               <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
                 {g.findings.map(f => {
                   const measured = !!(f.sql || "").trim();
                   const on = placed.has(f.id);
                   return (
-                    <li key={f.id} data-testid="finding-row" data-finding={f.id} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "5px 0", borderTop: "1px solid var(--b1)" }}>
-                      <span className="aug-fs-sm" style={{ flex: 1, minWidth: 0, color: measured ? "var(--t1)" : "var(--t3)" }}>
+                    <li key={f.id} data-testid="finding-row" data-finding={f.id} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "5px 0", borderTop: "1px solid var(--b0)" }}>
+                      <span className="aug-fs-chrome" style={{ flex: 1, minWidth: 0, color: measured ? "var(--t1)" : "var(--t3)" }}>
                         {f.finding}
                         {!measured && <span style={{ color: "var(--t3)" }}> · no query — nothing to measure</span>}
                         {on && <span style={{ color: "var(--t3)" }}> · on this dashboard</span>}

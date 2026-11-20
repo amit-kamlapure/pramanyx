@@ -101,7 +101,7 @@ function ClaimBlock({ title, claim }: { title: string; claim: DefinitionClaim })
   return (
     <div style={{ ...RULE, padding: "8px 0" }}>
       <div style={ROW}>
-        <span className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: 500 }}>{title}</span>
+        <span className="aug-fs-chrome" style={{ color: "var(--t1)", fontWeight: 500 }}>{title}</span>
         <Chip tone={tone}>{claim.outcome.replace("_", " ")}</Chip>
       </div>
       <p className="aug-fs-sm" style={{ ...SUPPORT, marginTop: 2 }}>{claim.summary}</p>
@@ -540,7 +540,7 @@ function GovernanceSection({ metric, onChanged }: { metric: Metric; onChanged: (
           {showAudit && (
             <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 2 }}>
               {audit.map((a, i) => (
-                <div key={i} className="aug-fs-xs" style={{ ...MUTED, ...NUM }}>
+                <div key={i} className="aug-fs-chrome" style={{ ...MUTED, ...NUM }}>
                   {formatDateTime(a.at)} · <span style={{ color: "var(--t1)" }}>{a.actor}</span>{" "}
                   {a.action} <span style={{ fontFamily: "var(--font-mono)" }}>{a.from}→{a.to}</span>{a.version ? ` v${a.version}` : ""}
                 </div>
@@ -1345,7 +1345,7 @@ export function MetricsPanel({ connId, schema, datasets = [] }: {
               {/* The register, as the Evidence → Action study draws it (§11.2: "a precise table, not cards"): what each
                   metric is, where it stands, its grain and date, unit, owner, the tables it reads, its tests and when it
                   was last approved. A row still opens in place to read and edit (the user, 2026-09-18). */}
-              <div className="aug-fs-xs" style={{ ...LIST_GRID, ...MUTED, textTransform: "uppercase", letterSpacing: ".06em", padding: "0 6px 6px" }}
+              <div className="aug-fs-xs" style={{ ...LIST_GRID, ...MUTED, padding: "0 6px 6px" }}
                 data-testid="metrics-register-head">
                 <span>Metric</span><span>State</span><span>Grain · dated by</span><span>Unit</span><span>Owner</span>
                 <span>Reads</span><span style={{ textAlign: "right" }}>Tests</span><span>Verified</span><span />
@@ -1435,25 +1435,25 @@ function MetricRow({ p, every, open, onToggle, children }: {
         <span style={{ minWidth: 0 }} title={r.name}>
           <span className="aug-fs-chrome" style={{ ...ONE_LINE, display: "block", color: "var(--t1)", fontWeight: 500 }}>{r.label}</span>
           {meta && (
-            <span className="aug-fs-xs" style={{ ...MUTED, ...ONE_LINE, display: "block" }} title={meta}>{meta}</span>
+            <span className="aug-fs-sm" style={{ ...MUTED, ...ONE_LINE, display: "block" }} title={meta}>{meta}</span>
           )}
         </span>
         <span style={{ ...ROW, gap: 6 }}>
           <Chip tone={chip.tone} title={chip.title}>{chip.text}</Chip>
           {p.duplicate && <Chip tone="amber" title="Two definitions share this name in this dataset; the newer one is read.">defined twice</Chip>}
         </span>
-        <span className="aug-fs-xs" title={m?.time_column ?? undefined} style={{ ...ONE_LINE, color: col || grain ? "var(--t2)" : "var(--t3)" }}>
+        <span className="aug-fs-chrome" title={m?.time_column ?? undefined} style={{ ...ONE_LINE, color: col || grain ? "var(--t2)" : "var(--t3)" }}>
           {col ? <>{`${grain || "month"} · `}<span style={{ fontFamily: "var(--font-mono)" }}>{col}</span></> : grain || "—"}
         </span>
-        <span className="aug-fs-xs" style={{ ...ONE_LINE, color: "var(--t2)" }} title={m?.unit ?? r.unit ?? undefined}>{unit || none}</span>
-        <span className="aug-fs-xs" style={{ ...ONE_LINE, color: "var(--t2)" }} title={owner || "No owner recorded"}>{owner || none}</span>
-        <span className="aug-fs-xs" style={{ ...ONE_LINE, color: "var(--t2)", fontFamily: reads.length ? "var(--font-mono)" : undefined }}
+        <span className="aug-fs-chrome" style={{ ...ONE_LINE, color: "var(--t2)" }} title={m?.unit ?? r.unit ?? undefined}>{unit || none}</span>
+        <span className="aug-fs-chrome" style={{ ...ONE_LINE, color: "var(--t2)" }} title={owner || "No owner recorded"}>{owner || none}</span>
+        <span className="aug-fs-chrome" style={{ ...ONE_LINE, color: "var(--t2)", fontFamily: reads.length ? "var(--font-mono)" : undefined }}
           title={reads.join(", ") || "No table declared"}>{reads.length ? reads.join(", ") : none}</span>
-        <span className="aug-fs-xs" style={{ ...NUM, textAlign: "right", color: tests ? "var(--t2)" : "var(--t3)" }}
+        <span className="aug-fs-chrome" style={{ ...NUM, textAlign: "right", color: tests ? "var(--t2)" : "var(--t3)" }}
           title={tests ? `${countNoun(tests, "quality test")} — Validate now runs them` : "No quality test written"}>
           {tests ? formatCount(tests) : "—"}
         </span>
-        <span className="aug-fs-xs" style={{ ...ONE_LINE, color: m?.approved_at ? "var(--t2)" : "var(--t3)" }}
+        <span className="aug-fs-chrome" style={{ ...ONE_LINE, color: m?.approved_at ? "var(--t2)" : "var(--t3)" }}
           title={m?.approved_at ? `Approved ${formatTimestamp(m.approved_at)}${m.approved_by ? ` by ${m.approved_by}` : ""}` : "Not approved"}>
           {m?.approved_at ? dayWords(m.approved_at) : "—"}
         </span>
@@ -1569,10 +1569,10 @@ function RemovedList({ removed, onRestore }: { removed: RemovedProposal[]; onRes
       {open && (
         <div style={{ marginTop: 4 }}>
           {removed.map((r, i) => (
-            <div key={`${r.schema_name}:${r.name}`} className="aug-fs-sm"
+            <div key={`${r.schema_name}:${r.name}`} className="aug-fs-chrome"
               style={{ ...ROW, padding: "6px 6px", ...(i ? RULE : {}) }}>
               <span style={{ color: "var(--t1)" }}>{r.label || r.name}</span>
-              <span style={MUTED}>· {datasetWords(r.schema_name)} · removed by {byWho(r.by, me?.actor)} on {r.at.slice(0, 10)}</span>
+              <span className="aug-fs-sm" style={MUTED}>· {datasetWords(r.schema_name)} · removed by {byWho(r.by, me?.actor)} on {r.at.slice(0, 10)}</span>
               <Button size="xs" variant="ghost" onClick={() => onRestore(r)} style={{ marginLeft: "auto" }}>Restore</Button>
             </div>
           ))}
@@ -1592,7 +1592,7 @@ function ValidationResultBlock({ result }: { result: MetricValidationResult }) {
         <span className="aug-fs-sm" style={SUPPORT}>{result.message}</span>
       </div>
       {result.results.map((r, i) => (
-        <div key={i} className="aug-fs-xs">
+        <div key={i} className="aug-fs-chrome">
           <span style={{ color: r.passed ? "var(--grn4)" : "var(--red4)" }}>{r.passed ? "✓" : "✕"}</span>
           <span style={{ fontFamily: "var(--font-mono)", color: "var(--t2)", marginLeft: 6, wordBreak: "break-all" }}>{r.test_sql}</span>
           {r.error && <p style={{ ...ERROR, margin: "2px 0 0 16px" }}>{r.error}</p>}
@@ -1683,7 +1683,7 @@ function MetricProvenance({ row, onCustomise, onRemove, onBind, busy, error }: {
       {row.anti_patterns.length > 0 && (
         <div>
           <Label>Never</Label>
-          <ul className="aug-fs-xs" style={{ margin: 0, paddingLeft: 16, color: "var(--t2)", display: "flex", flexDirection: "column", gap: 4 }}>
+          <ul className="aug-fs-chrome" style={{ margin: 0, paddingLeft: 16, color: "var(--t2)", display: "flex", flexDirection: "column", gap: 4 }}>
             {row.anti_patterns.map((a, i) => <li key={i}>{a}</li>)}
           </ul>
         </div>

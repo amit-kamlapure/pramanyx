@@ -1,7 +1,8 @@
 "use client";
 
 /**
- * The topbar's LIVE activity strip (INSTRUMENT.md §6) — the only always-on motion in the app,
+ * The topbar's activity strip (INSTRUMENT.md §6): "Agent runs", a day of them as ticks, and how many are running now —
+ * the only always-on motion in the app,
  * so the warehouse is visibly thinking from every screen.
  *
  * Ticks: the query the Agent Ops "Runs by agent" chart draws (`/obs/timeseries`, source `jobs`,
@@ -98,7 +99,8 @@ export function ActivityStrip({ connectionId, onOpen }: {
 
   if (!ticks) return null;
   const running = (live ?? 0) > 0 || phase != null;
-  const status = [phase ? "exploring" : null, live != null ? `${formatCount(live)} live` : null]
+  // "running", not "live": the label already names what the bars are (the user, 2026-11-20: "Two times LIVE?").
+  const status = [phase ? "exploring" : null, live != null ? `${formatCount(live)} running` : null]
     .filter(Boolean).join(" · ") || "idle";
 
   const door = onOpen ? {
@@ -111,7 +113,9 @@ export function ActivityStrip({ connectionId, onOpen }: {
 
   return (
     <div className="aug-activity-strip" title="Agent runs, last 24 hours — open Agent Ops" {...door}>
-      <span className="aug-activity-label">LIVE</span>
+      {/* What the bars are — the last 24 hours of agent runs. It said LIVE, beside "0 live": the word twice, and the bars
+          are a day's history, not what is live. What runs now is the status at the end. */}
+      <span className="aug-activity-label">Agent runs</span>
       <div className="aug-activity-ticks" role="img" aria-label={`Agent runs per hour over the last ${ticks.length} hours`}>
         {ticks.map((t, i) => (
           <span

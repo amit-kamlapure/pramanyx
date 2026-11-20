@@ -100,7 +100,7 @@ function FindingRow({ finding, ctx, first }: { finding: RecordedFinding; ctx: Ac
   if (dismissed) return null;   // gone at once; the store leaves it out of the next read
   return (
     <div style={first ? undefined : RULE}>
-      <Button variant="plain" aria-expanded={open} onClick={() => setOpen(o => !o)} className="aug-fs-ui select-text"
+      <Button variant="plain" aria-expanded={open} onClick={() => setOpen(o => !o)} className="aug-fs-chrome select-text"
         style={{ ...ROW_BUTTON, background: open ? "var(--bg-sel)" : undefined }}>
         <span style={open ? undefined : CLAMP_2}>{finding.finding}</span>
         <span style={{ color: "var(--t3)", paddingTop: 3 }}><Icon name={open ? "chevd" : "chevr"} size={12} /></span>
@@ -167,11 +167,11 @@ function PatternRow({ pattern, domain, first, showKind }: { pattern: Pattern; do
         style={{ ...ROW_BUTTON, gridTemplateColumns: "minmax(0, 1fr) auto auto", alignItems: "center",
           background: open ? "var(--bg-sel)" : undefined }}>
         <span style={{ minWidth: 0 }}>
-          <span className="aug-fs-ui" style={{ ...ROW, gap: 8 }}>
+          <span className="aug-fs-chrome" style={{ ...ROW, gap: 8 }}>
             <span style={{ fontWeight: 500 }}>{pattern.title}</span>
             {showKind && <Chip>{PATTERN_KIND[pattern.type] ?? pattern.type}</Chip>}
           </span>
-          <span className="aug-fs-xs" title={pattern.description} style={{ ...MUTED, ...ONE_LINE, display: "block" }}>
+          <span className="aug-fs-sm" title={pattern.description} style={{ ...MUTED, ...ONE_LINE, display: "block" }}>
             {pattern.description}
           </span>
         </span>
@@ -204,8 +204,9 @@ function PatternRow({ pattern, domain, first, showKind }: { pattern: Pattern; do
             </div>
           )}
           {examples.map(([key, item]) => (
-            <div key={key} className="aug-fs-sm" style={{ color: "var(--t2)", lineHeight: 1.55, paddingLeft: 10,
-              borderLeft: "2px solid var(--b2)" }}>{item}</div>
+            // A soft surface, not a rule down its side (2026-11-20, borders are the exception).
+            <div key={key} className="aug-fs-sm" style={{ color: "var(--t2)", lineHeight: 1.55, padding: "6px 10px",
+              background: "var(--gray-a3)", borderRadius: "var(--r2)" }}>{item}</div>
           ))}
         </div>
       )}
@@ -285,7 +286,7 @@ function DomainOrgKnowledge({ entries, failed, onRetry }: { entries: Promoted[];
     <div data-testid="domain-org">
       {entries.map((o, i) => (
         <div key={o.id} style={{ padding: "8px 6px", ...(i ? RULE : {}) }}>
-          <div className="aug-fs-ui" style={{ color: "var(--t1)", lineHeight: 1.55 }}>{o.text}</div>
+          <div className="aug-fs-chrome" style={{ color: "var(--t1)", lineHeight: 1.55 }}>{o.text}</div>
           <div className="aug-fs-xs" style={{ ...MUTED, ...NUM }}>
             {[o.angle, `${bandWord(o.novelty)} novelty`, `promoted ${relTime(o.promoted_at)} ago`].filter(Boolean).join(" · ")}
           </div>
@@ -358,13 +359,13 @@ function ColumnRow({ name, count, max, on, meta, title, onClick }: {
   name: string; count?: number; max?: number; on: boolean; meta?: string; title?: string; onClick: () => void;
 }) {
   return (
-    <Button variant="plain" aria-current={on ? "true" : undefined} title={title} onClick={onClick} className="aug-fs-sm"
+    <Button variant="plain" aria-current={on ? "true" : undefined} title={title} onClick={onClick} className="aug-fs-chrome"
       style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: "2px 8px", alignItems: "center", width: "100%",
         height: "auto", margin: 0, padding: "5px 8px", borderRadius: "var(--r2)", textAlign: "left", whiteSpace: "normal",
         fontWeight: on ? 500 : 400, color: "var(--t1)", background: on ? "var(--bg-sel)" : undefined }}>
       <span style={{ ...ONE_LINE, textTransform: "capitalize" }}>{name}</span>
       <span style={{ color: "var(--t2)", ...NUM }}>{count != null ? formatCount(count) : ""}</span>
-      {meta && <span className="aug-fs-xs" style={{ ...MUTED, gridColumn: "1 / span 2" }}>{meta}</span>}
+      {meta && <span className="aug-fs-sm" style={{ ...MUTED, gridColumn: "1 / span 2" }}>{meta}</span>}
       {count != null && max != null && (
         <span aria-hidden style={{ gridColumn: "1 / span 2", height: 6, borderRadius: 3, background: "var(--bg-3)", overflow: "hidden" }}>
           <span style={{ display: "block", height: "100%", width: `${max > 0 ? (count / max) * 100 : 0}%`,

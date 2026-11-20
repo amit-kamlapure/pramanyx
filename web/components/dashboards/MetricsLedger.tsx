@@ -147,12 +147,12 @@ function Reasons({ m, trend, work, meaning, expected, block, briefing }: {
   const askWhy = useAskWhy();
   const item = expected?.items.find(i => i.metric === m.metric);
   const u = trend?.usual;
-  const label: CSSProperties = { ...MUTED, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 5 };
+  const label: CSSProperties = { marginBottom: 5 };
   const para: CSSProperties = { margin: "0 0 7px", color: "var(--t2)", lineHeight: 1.5, maxWidth: "62ch" };
   return (
     <div data-testid="ledger-reasons" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "14px 26px" }}>
       <div>
-        <div className="aug-fs-xs" style={label}>How it is reading</div>
+        <div className="aug-label" style={label}>How it is reading</div>
         {trend && !trend.why && <Trend m={m} trend={trend} period={block.period} />}
         <p className="aug-fs-sm" style={para}>
           {!trend ? "Reading its earlier ranges…"
@@ -166,7 +166,7 @@ function Reasons({ m, trend, work, meaning, expected, block, briefing }: {
         {unequal(m) && <p className="aug-fs-sm" data-testid="ledger-compare-caveat" style={para}>{COMPARE_CAVEAT}</p>}
       </div>
       <div>
-        <div className="aug-fs-xs" style={label}>What the platform knows</div>
+        <div className="aug-label" style={label}>What the platform knows</div>
         {work.length === 0 ? (
           <p className="aug-fs-sm" style={para}>
             {briefing.loading ? "Reading what the Briefing wrote…"
@@ -188,7 +188,7 @@ function Reasons({ m, trend, work, meaning, expected, block, briefing }: {
         ))}
       </div>
       <div>
-        <div className="aug-fs-xs" style={label}>How it is measured</div>
+        <div className="aug-label" style={label}>How it is measured</div>
         {meaning && <p className="aug-fs-sm" style={para}>{meaning}</p>}
         {trend && trend.tables?.length > 0 && <p className="aug-fs-xs" style={{ ...para, ...MUTED }}>{`Reads ${trend.tables.join(", ")}`}</p>}
         {item?.expected ? (
@@ -384,7 +384,7 @@ export function MetricsLedger({ connectionId, schema, block: measuredBlock }: {
           options={[{ value: "all", label: `All ${formatCount(block.measured.length)}` },
             { value: "key", label: `Key movements${done ? ` ${formatCount(key.length)}` : ""}`, title: "Metrics outside their usual range, what needs watching first" }]} />
         <div style={{ width: 220 }}>
-          <Input value={term} onChange={e => setTerm(e.target.value)} placeholder="Find a metric" aria-label="Find a metric" />
+          <Input variant="soft" value={term} onChange={e => setTerm(e.target.value)} placeholder="Find a metric" aria-label="Find a metric" />
         </div>
         {q && <span data-testid="ledger-found" className="aug-fs-xs" style={MUTED}>{`${formatCount(found)} of ${formatCount(total)}`}</span>}
         {filter === "unmeasured" && (

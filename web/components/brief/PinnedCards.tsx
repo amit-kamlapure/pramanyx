@@ -122,11 +122,11 @@ export function PinnedCards({ connectionId, schema, refreshKey, suggestions, onP
 
   // Empty state (Direction B) — teach the dashboard instead of vanishing. The suggested pins are
   // REAL movers from this cycle, so the first pin is one grounded click. The "Your dashboard"
-  // eyebrow + violet rule are owned by the standing-layer wrapper above.
+  // eyebrow (and the space above it) are owned by the standing-layer wrapper above.
   if (cards.length === 0) {
     return (
       <div style={{ marginBottom: 20 }}>
-        <div style={{ border: "1px dashed var(--vio2)", background: "var(--vio1)", borderRadius: "var(--r3)", padding: "20px 22px" }}>
+        <div style={{ background: "var(--vio1)", borderRadius: "var(--r3)", padding: "20px 22px" }}>
           <h3 style={{ margin: "0 0 6px", fontSize: 15, fontWeight: 600, color: "var(--t1)" }}>Nothing pinned yet</h3>
           <p style={{ margin: 0, fontSize: 13, lineHeight: 1.5, color: "var(--t2)", maxWidth: "56ch" }}>
             Pin any number or chart from a finding and it lives here permanently — refreshed every cycle,
@@ -137,7 +137,7 @@ export function PinnedCards({ connectionId, schema, refreshKey, suggestions, onP
               <div className="aug-label" style={{ color: "var(--vio4)", margin: "16px 0 8px" }}>From this cycle&apos;s findings</div>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                 {suggestions.map(s => (
-                  <div key={s.insightId} style={{ display: "flex", alignItems: "center", gap: 9, background: "var(--bg-2)", border: "1px solid var(--b2)", borderRadius: "var(--r2)", padding: "8px 12px", fontSize: 12, color: "var(--t2)" }}>
+                  <div key={s.insightId} style={{ display: "flex", alignItems: "center", gap: 9, background: "var(--bg-2)", borderRadius: "var(--r2)", padding: "8px 12px", fontSize: 12, color: "var(--t2)" }}>
                     <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600, color: "var(--t1)" }}>{s.value}</span>
                     <span style={{ color: "var(--t3)", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.label}</span>
                     <Button variant="ghost" size="xs" onClick={() => pinSuggestion(s.insightId)} title="Pin this figure to your dashboard"

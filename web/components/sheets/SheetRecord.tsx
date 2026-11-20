@@ -22,14 +22,16 @@ import { comment, readRecord, showValue, who, type Sheet, type SheetRecord } fro
 
 export const PANEL_WIDTH = 420;
 
+// The grid | panel split is two panes worked side by side: the one rule kept, in --divide (2026-11-20, borders are
+// the exception); the panel's head needs none.
 export const PANEL: CSSProperties = {
   width: PANEL_WIDTH, flex: "0 0 auto", display: "flex", flexDirection: "column", minHeight: 0,
-  borderLeft: "1px solid var(--b1)", background: "var(--bg-1)",
+  borderLeft: "1px solid var(--divide)", background: "var(--bg-1)",
 };
 
 export function PanelHead({ title, chip, onClose }: { title: string; chip?: string; onClose: () => void }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderBottom: "1px solid var(--b1)",
+    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px 6px",
       flex: "0 0 auto" }}>
       <span className="aug-label">{title}</span>
       {chip && <span className="aug-fs-xs" style={{ ...MUTED, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{chip}</span>}
@@ -88,11 +90,12 @@ export function SheetRecordPanel({ sheet, row, editable, onClose, onOpenSheet, o
   return (
     <aside aria-label={`Row ${row} of ${sheet.name}`} style={PANEL}>
       <PanelHead title={head} chip={`row ${formatCount(row)} of ${sheet.name}`} onClose={onClose} />
-      <div role="tablist" style={{ display: "flex", gap: 2, padding: "0 10px", borderBottom: "1px solid var(--b0)" }}>
+      {/* the open tab is told by its background, not an underline over a rule (2026-11-20, borders are the exception) */}
+      <div role="tablist" style={{ display: "flex", gap: 4, padding: "2px 10px 4px" }}>
         {([["fields", "Fields"], ["linked", `Linked · ${linked}`], ["history", "History"],
           ["comments", `Comments${rec?.comments.length ? ` · ${rec.comments.length}` : ""}`]] as [Tab, string][]).map(([t, label]) => (
           <Button key={t} role="tab" aria-selected={tab === t} variant="plain" size="sm" onClick={() => go(t)}
-            style={{ borderRadius: 0, borderBottom: tab === t ? "2px solid var(--blue3)" : "2px solid transparent" }}>{label}</Button>
+            style={{ borderRadius: "var(--r2)", background: tab === t ? "var(--gray-a5)" : "transparent" }}>{label}</Button>
         ))}
       </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "10px 14px", display: "flex", flexDirection: "column", gap: 16 }}>
@@ -115,7 +118,7 @@ export function SheetRecordPanel({ sheet, row, editable, onClose, onOpenSheet, o
                   <div key={f.column} title={f.description || undefined} style={{ display: "grid",
                     gridTemplateColumns: "140px 1fr", gap: 8, padding: "6px 0", borderBottom: "1px solid var(--b0)" }}>
                     <span className="aug-mono aug-fs-xs" style={{ ...MUTED, overflow: "hidden", textOverflow: "ellipsis" }}>{f.name}</span>
-                    <span className="aug-fs-sm" style={{ minWidth: 0 }}>
+                    <span className="aug-fs-chrome" style={{ minWidth: 0 }}>
                       <span style={{ display: "block", overflowWrap: "anywhere" }}>
                         {f.value === null || f.value === undefined || f.value === "" ? <span style={MUTED}>empty</span>
                           : col ? showValue(f.value, col) : String(f.value)}
@@ -153,10 +156,10 @@ export function SheetRecordPanel({ sheet, row, editable, onClose, onOpenSheet, o
                   </Button>
                 )}
               </div>
-              <div className="aug-fs-sm" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <div className="aug-fs-chrome" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 <span style={MUTED}>{rec.came_from.replace(/^imported/, "Imported")}{rec.history.length ? "" : " · not changed since."}</span>
                 {rec.history.map(h => (
-                  <span key={`${h.at}-${h.column}-${h.event}`} className="aug-fs-xs">
+                  <span key={`${h.at}-${h.column}-${h.event}`}>
                     {h.column ? <b>{h.column}</b> : "the row"}{" "}
                     {h.event === "set" ? (h.column ? `set to ${String(h.value ?? "empty")}` : String(h.value ?? "")) : "back to its source's value"}
                     {" "}· {who(h.by)} · {formatTimestamp(h.at, "short")}
@@ -173,7 +176,7 @@ export function SheetRecordPanel({ sheet, row, editable, onClose, onOpenSheet, o
                   readable by whoever can read this row.</div>
               )}
               {rec.comments.map(c => (
-                <div key={c.id || c.at} className="aug-fs-sm" style={{ padding: "6px 0", borderBottom: "1px solid var(--b0)" }}>
+                <div key={c.id || c.at} className="aug-fs-chrome" style={{ padding: "6px 0", borderBottom: "1px solid var(--b0)" }}>
                   <div>{c.text}</div>
                   <div className="aug-fs-xs" style={MUTED}>{who(c.by)} · {formatTimestamp(c.at, "short")} · a said claim in the Record</div>
                 </div>
@@ -209,14 +212,14 @@ function LinkedCard({ row, columns, kinds, values }: {
     <div style={{ background: "var(--bg-2)", border: "1px solid var(--card-edge)", borderRadius: "var(--r2)", padding: "8px 10px",
       display: "flex", flexDirection: "column", gap: 4 }}>
       <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
-        <b className="aug-fs-sm aug-mono" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{show(0) || "—"}</b>
+        <b className="aug-fs-chrome aug-mono" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{show(0) || "—"}</b>
         <span className="aug-fs-xs" style={{ ...MUTED, ...NUM, marginLeft: "auto" }}>row {formatCount(row)}</span>
       </div>
       <div className="aug-fs-xs" style={{ display: "grid", gridTemplateColumns: "max-content 1fr", gap: "2px 10px" }}>
         {columns.slice(1).map((name, j) => show(j + 1) && (
           <span key={name} style={{ display: "contents" }}>
             <span style={MUTED}>{name}</span>
-            <span style={{ overflowWrap: "anywhere" }}>{show(j + 1)}</span>
+            <span className="aug-fs-chrome" style={{ overflowWrap: "anywhere" }}>{show(j + 1)}</span>
           </span>
         ))}
       </div>

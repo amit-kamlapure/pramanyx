@@ -4658,6 +4658,15 @@ export interface Canvas {
    *  agent's `doc_ids` are the other shape — those fence it in.) */
   doc_ids?: string[];
   is_legacy: boolean;
+  /** Who made it (`user:<id>`); "" for a canvas made before makers were kept (2026-11-20), the workspace's. */
+  created_by?: string;
+  /** "workspace" — everyone in it opens and changes it — or "chosen": only the people and groups it is shared with. */
+  sharing?: "workspace" | "chosen";
+  shared_with?: { kind: "person" | "group" | "role"; id: string; level: "view" | "edit" }[];
+  /** What the person asking may do: "own" (share it, remove it), "edit", "view" (open it and ask in it), or "" —
+   *  not shared with them, when `refusal` says who to ask. */
+  access?: "own" | "edit" | "view" | "";
+  refusal?: string;
   created_at: string;
   updated_at: string;
   /** Most recent investigation/chat timestamp for this canvas (null if never used). */
@@ -5024,6 +5033,16 @@ export async function putConnectionInstructions(connId: string, text: string): P
 
 /** Throws with the server's reason when it refuses — it answered nothing before, so a refused delete closed the
  *  confirm as if the canvas were gone. */
+/** A copy of a canvas as a new one, made by the person asking: its tables, description, pinned documents and
+ *  instructions — not its conversations, runs or saved artifacts (2026-11-20). */
+export async function cloneCanvas(id: string, name = ""): Promise<Canvas> {
+  const res = await fetch(`${getApiBase()}/canvases/${encodeURIComponent(id)}/clone`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }),
+  });
+  if (!res.ok) throw await refused(res, "Cloning the canvas");
+  return res.json();
+}
+
 export async function deleteCanvas(id: string): Promise<void> {
   const res = await fetch(`${getApiBase()}/canvases/${encodeURIComponent(id)}`, { method: "DELETE" });
   if (!res.ok) throw await refused(res, "Deleting the canvas");
@@ -9126,6 +9145,17 @@ export function downloadInvestigationExport(invId: string, fmt: ExportFormat, na
   document.body.appendChild(a);
   a.click();
   a.remove();
+}
+
+/** The stored report an answer's PDF is built from: its run, or a quick answer's receipt (as Export always read it).
+ *  None when the answer was never stored. Spelled here, beside the wire it mirrors. */
+export function storedReportOf(turn: { investigationId?: string | null; receiptId?: string | null }): string | null {
+  return turn.investigationId ?? turn.receiptId ?? null;
+}
+
+/** An answer as a PDF, the one download at an answer's foot (2026-11-20). */
+export function downloadAnswerPdf(stored: string): void {
+  downloadInvestigationExport(stored, "pdf", false);
 }
 
 // ── LLM inference provider config (Settings → Inference) ────────────────────────

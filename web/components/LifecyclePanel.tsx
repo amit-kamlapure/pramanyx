@@ -41,12 +41,16 @@ export function LifecyclePanel({
   kind,
   naturalKey,
   connectionId,
+  empty,
 }: {
   kind: string;
   /** e.g. `canvas:<id>` — the artifact's stable lifecycle key. */
   naturalKey: string;
   /** Needed only to freeze (the pin records the data behind the version). */
   connectionId?: string;
+  /** Said when there is no version yet — for a place that is only versions (a canvas's Configure ▸ Versions); without
+   *  it, nothing is drawn. */
+  empty?: string;
 }) {
   const [revisions, setRevisions] = useState<Revision[]>([]);
   const [published, setPublished] = useState<number | null>(null);
@@ -98,7 +102,9 @@ export function LifecyclePanel({
     }));
   const unpin = () => act(() => fetch(`${base}/lifecycle/${kind}/freeze?${qk}`, { method: "DELETE" }));
 
-  if (!revisions.length && !error) return null;
+  if (!revisions.length && !error) {
+    return empty ? <p data-testid="lifecycle-empty" className="aug-fs-sm" style={{ margin: 0, color: "var(--t3)" }}>{empty}</p> : null;
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -106,7 +112,7 @@ export function LifecyclePanel({
 
       {freeze?.frozen && (
         <div style={{ fontSize: 11, padding: "4px 8px", borderRadius: "var(--r2)",
-                      background: "var(--bg-2)", border: "1px solid var(--b2)",
+                      background: "var(--bg-2)",
                       color: freeze.status === "ok" ? "var(--t2)" : "var(--amb4, var(--t2))" }}>
           {freeze.status === "ok"
             ? `Pinned to v${freeze.version}`

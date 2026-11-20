@@ -60,7 +60,7 @@ export function EditionCovers({ connectionId, schema, workspaceId, current }: {
       ) },
   ];
   return (
-    <div id={COVERS_ANCHOR} data-testid="edition-covers" style={{ padding: "16px 0", borderBottom: "1px solid var(--b1)" }}>
+    <div id={COVERS_ANCHOR} data-testid="edition-covers" style={{ padding: "16px 0", borderBottom: "1px solid var(--divide)" }}>
       <h3 className="aug-fs-h1" style={{ fontFamily: "var(--font-serif)", fontWeight: 600, margin: "0 0 8px" }}>
         What each edition covers
       </h3>

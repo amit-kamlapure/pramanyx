@@ -78,7 +78,7 @@ export function DraftBuilding({ asked, watch, onStop, children }: { asked: strin
         )}
       </section>
 
-      <aside aria-label="What is happening" data-testid="dashboard-draft-panel" style={{ flex: "1 1 320px", minWidth: 0, display: "flex", flexDirection: "column", gap: 14, padding: 16, background: "var(--bg-1)", borderLeft: "1px solid var(--b1)" }}>
+      <aside aria-label="What is happening" data-testid="dashboard-draft-panel" style={{ flex: "1 1 320px", minWidth: 0, display: "flex", flexDirection: "column", gap: 14, padding: 16, background: "var(--bg-1)", borderLeft: "1px solid var(--divide)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span className="aug-fs-ui" style={{ flex: 1, minWidth: 0, color: "var(--t1)", fontWeight: 600 }}>{heading}</span>
           <span className="aug-fs-sm" data-testid="dashboard-draft-elapsed" style={{ color: "var(--t3)", fontVariantNumeric: "tabular-nums" }}>{elapsedWords(seconds)}</span>

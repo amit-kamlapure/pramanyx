@@ -246,7 +246,7 @@ def get_governed_tags(key: str | None = None, securable_prefix: str | None = Non
 # ── certified and deprecated (the ontology study, Phase 1, 2026-11-17) ───────────────────────────────────────────────
 
 class CertificationIn(BaseModel):
-    kind: str = Field(min_length=1, max_length=20)      # table · document · dashboard
+    kind: str = Field(min_length=1, max_length=20)      # table · document · dashboard · canvas
     ref: str = Field(min_length=1, max_length=300)      # the table's name, or the asset's id
     connection_id: str = Field("", max_length=80)
     schema_name: str = Field("", alias="schema", max_length=120)

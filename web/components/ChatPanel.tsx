@@ -18,7 +18,8 @@ import { useStickToBottom } from "@/lib/useStickToBottom";
 import { brandEdge } from "@/components/ui/brand";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/brief/StatusChip";
-import { SourcePanel, type SourcePanelData } from "./ChatMessage";
+import { SourcePanel, sourceOf, type SourcePanelData } from "./ChatMessage";
+import { AnswerFoot, SourceFoot } from "@/components/chat/AnswerFoot";
 import { PartsMessage } from "./chat/PartsMessage";
 import { ThreadPeople } from "./chat/ThreadPeople";
 import { isShared, readThreadPeople, type ThreadPeople as People } from "@/lib/threads";
@@ -61,7 +62,8 @@ const OVERVIEW_STARTER: Starter = {
 
 // requestMode/purpose (R13): a named research starter's declared route — sent on
 // /ask so the router pins investigate|explore deterministically; chips style deep.
-type Starter = { text: string; mode: "ask" | "investigate"; requestMode?: "investigate" | "explore"; purpose?: string };
+// label: the few words a named starter is listed by, when its question is a whole brief (the full text is what is asked).
+type Starter = { text: string; mode: "ask" | "investigate"; requestMode?: "investigate" | "explore"; purpose?: string; label?: string };
 
 interface Props {
   connectionId: string;
@@ -236,7 +238,7 @@ function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, se
           <div data-testid="chat-subject" className="aug-fs-xs" style={{
             display: "flex", alignItems: "center", gap: 5, minWidth: 0,
             padding: "2px 8px", borderRadius: "var(--r2)",
-            background: "var(--blue1)", border: "1px solid var(--blue2)",
+            background: "var(--blue1)",
             color: "var(--blue5)", maxWidth: "100%",
           }}>
             <Icon name="table" size={11} className="shrink-0" />
@@ -254,7 +256,7 @@ function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, se
           <div style={{
             display: "flex", alignItems: "center", gap: 5,
             padding: "2px 8px", borderRadius: "var(--r2)",
-            background: "var(--blue1)", border: "1px solid var(--blue2)",
+            background: "var(--blue1)",
             fontSize: 11, color: "var(--blue5)", maxWidth: 320,
           }}>
             <Icon name="attach" size={11} className="shrink-0" />
@@ -373,8 +375,7 @@ function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, se
             style={{
               marginLeft: 8, marginRight: "auto", padding: "3px 8px", fontSize: 11, fontWeight: 500,
               fontFamily: "var(--font-ui)", borderRadius: "var(--r1)",
-              background: agentId ? "var(--grn1)" : "var(--bg-0)",
-              border: `1px solid ${agentId ? "var(--grn2)" : "var(--b1)"}`,
+              background: agentId ? "var(--grn1)" : "var(--gray-a3)",
               color: agentId ? "var(--grn5)" : "var(--t3)", cursor: "pointer",
             }}
           >
@@ -496,7 +497,7 @@ function DebugLogDrawer({ eventLogRef, onClose }: { eventLogRef: React.RefObject
 
   return (
     <div className="fixed bottom-0 right-0 z-50 flex flex-col bg-zinc-950 border border-zinc-700/80 rounded-tl-[var(--r3)] shadow-[var(--shadow-md)]" style={{ width: 520, height: 380 }}>
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-zinc-800 shrink-0">
+      <div className="flex items-center gap-2 px-3 py-2 shrink-0">
         <span className="text-emerald-400"><Icon name="sql" size={16} label="Debug log" /></span>
         <span className="aug-fs-xs font-mono text-zinc-300 flex-1">SSE Event Log · {events.length} events</span>
         <span className="aug-fs-xs text-zinc-500 mr-2">⌘⇧L to close</span>
@@ -640,7 +641,7 @@ function ClarifyCard({ turn, onClarify, onAnswerAnyway }: {
   if (!c) return null;
   const submit = () => { const v = val.trim(); if (v) { onClarify(v); setVal(""); } };
   return (
-    <div style={{ marginTop: 8, padding: "12px 14px", borderRadius: "var(--r2)", background: "var(--blue1)", border: "1px solid var(--blue2)" }}>
+    <div style={{ marginTop: 8, padding: "12px 14px", borderRadius: "var(--r2)", background: "var(--blue1)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: c.reason ? 4 : 8 }}>
         <span style={{ color: "var(--blue5)", display: "inline-flex" }}><Icon name="chat" size={16} /></span>
         <span style={{ fontSize: 13, fontWeight: 500, color: "var(--blue5)" }}>{c.question}</span>
@@ -651,7 +652,7 @@ function ClarifyCard({ turn, onClarify, onAnswerAnyway }: {
           {c.options.map((o, i) => (
             <Button key={`${i}:${o}`} variant="outline" size="xs" onClick={() => onClarify(o)}
               className="h-auto flex-col items-start gap-px whitespace-normal text-left"
-              style={{ fontSize: 12, fontWeight: 500, padding: "4px 10px", background: "var(--bg-1)", borderColor: "var(--blue2)", color: "var(--blue5)" }}>
+              style={{ fontSize: 12, fontWeight: 500, padding: "4px 10px", background: "var(--bg-1)", color: "var(--blue5)" }}>
               <span>{o}</span>
               {c.previews?.[i] && <span style={{ fontSize: 11, fontWeight: 400, color: "var(--t3)" }}>{c.previews[i]}</span>}
             </Button>
@@ -689,7 +690,7 @@ function EscalateBar({ turn, onEscalate }: { turn: ChatTurn; onEscalate: () => v
   if (!e || turn.status === "loading") return null;
   return (
     <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, marginTop: 8,
-                  padding: "8px 12px", borderRadius: "var(--r2)", background: "var(--vio1)", border: "1px solid var(--vio2)" }}>
+                  padding: "8px 12px", borderRadius: "var(--r2)", background: "var(--vio1)" }}>
       <span style={{ color: "var(--vio5)", display: "inline-flex" }}><Icon name="spark" size={16} /></span>
       <span style={{ fontSize: 12, color: "var(--t2)", flex: 1, minWidth: 180 }}>{e.reason}</span>
       <Button
@@ -777,7 +778,6 @@ function AgentLandingBlock({ agent, connectionName }: { agent: UserAgent; connec
           width: 44, height: 44, borderRadius: "var(--r2)", flexShrink: 0,
           display: "flex", alignItems: "center", justifyContent: "center",
           background: "color-mix(in srgb, var(--grn3) 14%, transparent)",
-          border: "1px solid color-mix(in srgb, var(--grn3) 34%, transparent)",
         }}>
           <Icon name="spark" size={22} />
         </div>
@@ -1026,11 +1026,14 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
         }));
         // R13 — named research-starter playbooks: lead the
         // grid, styled as deep chips, carrying their declared route + purpose tag.
-        const library: Starter[] = (data.starters ?? []).map((s: { text: string; mode: string; purpose?: string }) => ({
+        const library: Starter[] = (data.starters ?? []).map((s: { text: string; mode: string; purpose?: string; title?: string; source?: string }) => ({
           text: s.text,
           mode: "investigate" as const,
           requestMode: (s.mode === "explore" ? "explore" : "investigate") as "investigate" | "explore",
           purpose: s.purpose,
+          // a named starter's question is a brief of several lines; it is listed by its title (a curated one's title
+          // is its table's name, so it is listed by its question)
+          label: s.source === "curated" ? undefined : s.title || undefined,
         }));
         const merged = [...library, ...suggestions].slice(0, 9);
         if (merged.length > 0) setStarters(merged);
@@ -1385,6 +1388,15 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
       onDropSubject: () => (subject === pageHere ? setDroppedPage(subjectKey(pageHere)) : setAskSubject(null)) } : {}),
   };
 
+  // How the one conversation answers (2026-11-20): straight away, and /agent goes deep — there is no Quick/Agent picker.
+  // Said under the generic greeting, and under a landing a page brings (a Data Canvas's).
+  const howInPanel = (
+    <p data-testid="chat-empty-how" className="aug-fs-sm text-center" style={{ color: "var(--t3)" }}>
+      {inputBoxProps.changes ? "Ask a question or describe a change: nothing changes until you allow it. " : "Answers straight away. "}
+      Type <span className="font-bold" style={{ color: "var(--t2)" }}>/agent</span> to investigate in depth.
+    </p>
+  );
+
   return (
     <HarnessContext.Provider value={harnessLook}>
     {harness && wantsObjects && <MentionObjects connectionId={connectionId} onObjects={setObjects} />}
@@ -1442,8 +1454,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
               style={{
                 display: "inline-flex", alignItems: "center", gap: 5,
                 padding: "2px 8px", borderRadius: "var(--r2)",
-                background: u.error ? "var(--red1)" : "var(--bg-2)",
-                border: `1px solid ${u.error ? "var(--red3)" : "var(--b1)"}`,
+                background: u.error ? "var(--red1)" : "var(--gray-a3)",
                 color: u.error ? "var(--red5)" : "var(--t2)",
                 maxWidth: 460,
               }}
@@ -1483,6 +1494,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
           <div className="w-full max-w-[var(--measure-chat)] px-[var(--chat-gutter)] my-auto flex flex-col gap-5">
 
             {capabilities}
+            {capabilities && inPanel && howInPanel}
 
             {/* Order matters: a canvas's own landing block wins (you are IN that
                 canvas), then the agent you came here to talk to, and only then the
@@ -1494,13 +1506,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
             {!capabilities && !activeAgent && (
               <div className="text-center">
                 <p className="aug-fs-sm font-bold text-zinc-200">Ask your data anything</p>
-                {inPanel ? (
-                  // the Ask panel has no Quick/Agent picker (2026-11-20): it answers straight away, and /agent goes deep
-                  <p data-testid="chat-empty-how" className="aug-fs-sm mt-1.5" style={{ color: "var(--t3)" }}>
-                    {inputBoxProps.changes ? "Ask a question or describe a change: nothing changes until you allow it. " : "Answers straight away. "}
-                    Type <span className="font-bold" style={{ color: "var(--t2)" }}>/agent</span> to investigate in depth.
-                  </p>
-                ) : (
+                {inPanel ? <div className="mt-1.5">{howInPanel}</div> : (
                   <p data-testid="chat-empty-how" className="aug-fs-sm text-zinc-500 mt-1.5">
                     <span className="text-violet-400/90 font-bold">Agent</span> investigates in depth —
                     switch to <span className="text-zinc-400 font-bold">Quick</span> for a straight answer.
@@ -1520,7 +1526,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                 overview starter, green for investigate, grey otherwise), which made a list
                 of questions read as a control panel. A question is a line of text. */}
             {!beside && <div className="pt-1">
-              <p className="text-[11px] uppercase tracking-[0.08em] mb-2" style={{ color: "var(--b3)" }}>Suggested questions</p>
+              <p className="aug-label mb-1">Suggested questions</p>
               {suggestionsMissing && !loadingStarters && (
                 <p className="aug-fs-xs mb-1" style={{ color: "var(--t3)" }}>{suggestionsMissing}</p>
               )}
@@ -1548,12 +1554,15 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                           isOverview || s.requestMode ? "auto" : s.mode,
                           s.requestMode ? { requestMode: s.requestMode, purpose: s.purpose } : undefined,
                         )}
-                        className="aug-pressable w-full text-left aug-fs-ui leading-snug py-3 transition-colors"
-                        style={{ color: "var(--t2)", borderBottom: "1px solid var(--b1)", background: "transparent" }}
+                        data-testid="chat-starter"
+                        className="aug-pressable w-full text-left aug-fs-ui leading-snug py-3 transition-colors flex items-center gap-3"
+                        style={{ color: "var(--t2)", borderBottom: "1px solid var(--b0)", background: "transparent" }}
                         onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--t1)"; }}
                         onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--t2)"; }}
                       >
-                        {s.text}
+                        <span className="min-w-0 flex-1">{s.label ?? s.text}</span>
+                        {/* a starter that runs a deep analysis says so before it is clicked: it takes minutes and spends more */}
+                        {s.requestMode && <span className="aug-fs-xs shrink-0" style={{ color: "var(--t3)" }}>Deep analysis</span>}
                       </button>
                     );
                   })}
@@ -1585,7 +1594,8 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                       else turnTopRefs.current.delete(turn.id);
                     }}
                   >
-                    {i > 0 && <div className="border-t border-zinc-800 my-8" />}
+                    {/* turns read apart by the space between them, no rule (2026-11-20, borders are the exception) */}
+                    {i > 0 && <div aria-hidden className="h-16" />}
                     {shared && (
                       <div className="aug-fs-xs" data-testid="turn-asked-by" style={{ color: "var(--t3)", marginBottom: 6 }}>
                         {askedByWords((userMsg?.metadata as { asked_by?: string } | undefined)?.asked_by, people)}
@@ -1611,6 +1621,8 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                         // the existing starter-provenance column (investigations.purpose),
                         // so this needs no new store.
                         onFollowUp={(q) => handleSend(q, undefined, { purpose: "followup" })}
+                        onRegenerate={harness && i === turns.length - 1 && turn.status !== "loading" && assistantMsg
+                          ? () => { if (busy) sdkStop(); void regenerate(); } : undefined}
                         onRunFresh={(q) => handleSend(q, "investigate", { skipCache: true })}
                         onShowSource={data => { setSourcePage(null); setSourcePanel(data); }}
                         onDeeper={(q, insightId) => sendQuestion(q, "investigate", { insightId: insightId ?? undefined, deep: true })}
@@ -1675,14 +1687,19 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                     {turn.status === "done" && turn.receiptId && (
                       <AnswerFeedback turn={turn} connectionId={connectionId} />
                     )}
+                    {/* The coworker's layout ends an answer on its thumbs, copy, its PDF and its source (2026-11-20,
+                        `chat/AnswerFoot`); why the number is under the source's SQL, Ask again in the folded follow-ups. */}
+                    {harness && turn.status === "done" && (
+                      <AnswerFoot turn={turn} onSource={() => { const src = sourceOf(turn); if (src) { setSourcePage(null); setSourcePanel(src); } }} />
+                    )}
                     {/* WP-10 — "Why this number": opens the unified signed receipt (GET /receipt/{id}). */}
-                    {turn.status === "done" && turn.publicReceiptId && (
+                    {!harness && turn.status === "done" && turn.publicReceiptId && (
                       <WhyThisNumber receiptId={turn.publicReceiptId} />
                     )}
                     {/* CA-1 — regenerate: re-run the LAST turn's question as a fresh
                         answer (the SDK re-sends the same user message). Last turn only —
                         regenerating an earlier turn would truncate the thread below it. */}
-                    {i === turns.length - 1 && turn.status !== "loading" && assistantMsg && (
+                    {!harness && i === turns.length - 1 && turn.status !== "loading" && assistantMsg && (
                       <div style={{ display: "inline-flex" }}>
                         <Button
                           variant="ghost"
@@ -1774,7 +1791,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
           {/* ── Source panel drawer (right side, pushes chat left) ── */}
           {sourcePanel && (
             <div
-              className="flex-shrink-0 flex flex-col border-l border-zinc-700/60"
+              className="flex-shrink-0 flex flex-col border-l border-[var(--divide)]"
               style={harness && beside ? { position: "absolute", inset: 0, zIndex: 30, background: "var(--blue1)" } : { width: 380, background: "var(--blue1)" }}
             >
               <SourcePanel
@@ -1784,6 +1801,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                 title={sourcePanel.title}
                 connectionId={connectionId}
                 onClose={() => setSourcePanel(null)}
+                foot={sourcePanel.turn ? <SourceFoot turn={sourcePanel.turn} connectionId={connectionId} /> : undefined}
               />
             </div>
           )}

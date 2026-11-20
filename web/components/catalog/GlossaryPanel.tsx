@@ -27,10 +27,8 @@ import { Button } from "@/components/ui/button";
 import { Loading } from "@/components/ui/states";
 import { Textarea } from "@/components/ui/textarea";
 
-const LABEL: React.CSSProperties = {
-  fontSize: 11, color: "var(--t3)", textTransform: "uppercase",
-  letterSpacing: "0.07em", fontWeight: 600, marginBottom: 6,
-};
+/** Spacing only: the type is the section label's own (.aug-label). */
+const LABEL: React.CSSProperties = { marginBottom: 6 };
 
 /** Inline click-to-edit field (single value). Reused for every annotation. */
 function EditableField({ value, placeholder, multiline = true, onSave }: {
@@ -45,9 +43,9 @@ function EditableField({ value, placeholder, multiline = true, onSave }: {
     return (
       <div onClick={() => setEditing(true)}
         style={{ fontSize: 12, lineHeight: 1.5, cursor: "text", padding: "4px 6px", borderRadius: 4,
-          color: value ? "var(--t2)" : "var(--t3)", border: "1px solid transparent", whiteSpace: "pre-wrap" }}
-        onMouseEnter={e => (e.currentTarget.style.border = "1px solid var(--b1)")}
-        onMouseLeave={e => (e.currentTarget.style.border = "1px solid transparent")}>
+          color: value ? "var(--t2)" : "var(--t3)", whiteSpace: "pre-wrap" }}
+        onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-hover)")}
+        onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
         {value || placeholder}
       </div>
     );
@@ -125,7 +123,7 @@ export function GlossaryPanel({ table, columns, schema, connectionId }: {
       {/* Why this matters — the agent reads everything below at query time. */}
       <div style={{
         fontSize: 11, color: "var(--t3)", lineHeight: 1.5, marginBottom: 16,
-        padding: "8px 11px", background: "var(--bg-1)", border: "1px solid var(--b1)",
+        padding: "8px 11px", background: "var(--bg-2)",
         borderRadius: 6,
       }}>
         These notes are read by the agent <b style={{ color: "var(--t2)" }}>at query time</b> — descriptions,
@@ -134,7 +132,7 @@ export function GlossaryPanel({ table, columns, schema, connectionId }: {
 
       {/* ── Table level ── */}
       <div style={{ marginBottom: 22 }}>
-        <div style={LABEL}>Table comment</div>
+        <div className="aug-label" style={LABEL}>Table comment</div>
         <EditableField value={entry.description ?? ""} placeholder="Describe what this table represents…"
           onSave={async v => { await updateTableGlossary(table, { description: v }, schema); load(); }} />
 
@@ -159,14 +157,14 @@ export function GlossaryPanel({ table, columns, schema, connectionId }: {
       </div>
 
       {/* ── Column level ── */}
-      <div style={LABEL}>Columns</div>
+      <div className="aug-label" style={LABEL}>Columns</div>
       {columns.length === 0 && <p style={{ fontSize: 12, color: "var(--t3)" }}>No columns.</p>}
       {columns.map(c => {
         const ce = colEntry(c);
         return (
           <div key={c} style={{ display: "grid", gridTemplateColumns: "180px 1fr", gap: 12, padding: "10px 0", borderBottom: "0.5px solid var(--b0)", alignItems: "start" }}>
             <div style={{ minWidth: 0 }}>
-              <span style={{ fontSize: 12, color: "var(--t1)", fontWeight: 500, fontFamily: "var(--font-mono)" }}>{c}</span>
+              <span className="aug-fs-chrome" style={{ color: "var(--t1)", fontWeight: 500, fontFamily: "var(--font-mono)" }}>{c}</span>
             </div>
             <div>
               <EditableField value={ce.description ?? ""} placeholder="Add a comment…"

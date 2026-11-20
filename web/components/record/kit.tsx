@@ -19,7 +19,7 @@ import { ChromeActions, ChromeFacts, useChromeBack, useInShell, usePageChrome } 
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Loading, ReadFailed } from "@/components/ui/states";
-import { formatCount, pct } from "@/lib/format";
+import { formatCount, pct, sentenceCase } from "@/lib/format";
 import type { CsvCell } from "@/lib/query/csv";
 import { confirmClaim, confirmable, markClaimWrong, type Claim, type MarkedWrong } from "@/lib/record";
 import { useMe } from "@/lib/useMe";
@@ -148,7 +148,7 @@ export function Section({ label, meta, action, children, id }: {
   return (
     <section className="aug-section" id={id} aria-label={label}>
       <div className="aug-section-head">
-        <h2 className="aug-label" style={{ margin: 0 }}>{label}</h2>
+        <h2 className="aug-section-title">{label}</h2>
         {meta != null && <span className="aug-fs-sm" style={{ color: "var(--t3)" }}>{meta}</span>}
         <span style={{ flex: 1 }} />
         {action}
@@ -316,8 +316,9 @@ export function ListCard<T>({ label, tools, rows, exportRows, rowKey, columns, n
               {heads && (
                 <div data-list-group="" className="aug-fs-xs" style={{ display: "flex", alignItems: "baseline", gap: 8,
                   padding: i === 0 ? "0 2px 2px" : "14px 2px 2px", color: "var(--t3)" }}>
-                  <span style={{ textTransform: "uppercase", letterSpacing: ".06em", whiteSpace: "nowrap" }}>
-                    {group.head(k, members.get(k) ?? [])}
+                  {/* A group's head is a section label: 12px semibold, sentence case (2026-11-20). */}
+                  <span className="aug-label" style={{ whiteSpace: "nowrap" }}>
+                    {firstUp(group.head(k, members.get(k) ?? []))}
                   </span>
                   {group.meta && <span style={{ ...ONE_LINE, marginLeft: "auto" }}>{group.meta(k, members.get(k) ?? [])}</span>}
                 </div>
@@ -344,6 +345,9 @@ export function ListCard<T>({ label, tools, rows, exportRows, rowKey, columns, n
  * One row of a list: a mark, the name (its full text on hover; a click opens it), the chips only this row carries,
  * the figure at the right, and one muted line under the name.
  */
+/** A head said in words reads as a sentence: its first letter capital (a day's words may begin "today"). */
+const firstUp = (head: React.ReactNode): React.ReactNode => (typeof head === "string" ? sentenceCase(head) : head);
+
 export function ListRow({ first, mark, title, full, onOpen, chips, figure, figureTitle, meta, metaTitle, actions, testId }: {
   first: boolean;
   mark?: React.ReactNode;
@@ -515,7 +519,8 @@ export function ClaimLine({ claim, onOpen, note, action }: {
 }) {
   return (
     <div className="aug-claim-line">
-      <div className="aug-fs-ui" style={{ color: "var(--t1)", minWidth: 0 }}>
+      {/* A claim in a list is a row, 13 as every row is (2026-11-20). */}
+      <div className="aug-fs-chrome" style={{ color: "var(--t1)", minWidth: 0 }}>
         {onOpen
           ? <Button variant="link" size="xs" className="aug-ledger-open" onClick={() => onOpen(claim.id)}>{claim.statement.text}</Button>
           : claim.statement.text}

@@ -20,8 +20,10 @@ import {
 import type { PaperNumber } from "@/components/brief/BriefPaper";
 
 const SERIF = "var(--font-serif)";
-const RULE = "1px solid var(--b1)";
-const KICKER = { letterSpacing: "0.08em", textTransform: "uppercase" as const, fontWeight: 600 };
+// A rule between the paper's parts in --divide, the hairline between a list's rows in --b0 (2026-11-20, borders are
+// the exception); an area's name heads its rows with no rule of its own.
+const RULE = "1px solid var(--divide)";
+const ROW = "1px solid var(--b0)";
 
 /** The front box's last line: how many figures read below, and the door to choosing them. */
 export function FrontFooter({ arranged, onChoose }: { arranged: Arranged; onChoose: () => void }) {
@@ -69,8 +71,8 @@ export function EveryFigure({ arranged, connectionId, comparedWith, onChoose }: 
             const movers = g.rows.filter(r => r.moved).length;
             return (
               <div key={key} data-testid="paper-area-card">
-                <div style={{ display: "flex", alignItems: "baseline", gap: 8, paddingBottom: 4, borderBottom: "1px solid var(--b2)" }}>
-                  <span className="aug-fs-xs" style={{ ...KICKER, color: "var(--t2)" }}>{g.area}</span>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 8, paddingBottom: 4 }}>
+                  <span className="aug-label">{g.area}</span>
                   <span className="aug-fs-xs" style={{ marginLeft: "auto", color: "var(--t3)" }}>
                     {`${g.rows.length}${movers ? ` · ${movers} moved 10%+` : ""}`}
                   </span>
@@ -97,7 +99,7 @@ export function EveryFigure({ arranged, connectionId, comparedWith, onChoose }: 
       {arranged.stopped.length > 0 && (
         <div data-testid="paper-every-stopped" style={{ marginTop: 14 }}>
           {withUniqueKeys(arranged.stopped, g => `stopped:${g.day}`).map(([key, g]) => (
-            <div key={key} className="aug-fs-sm" style={{ padding: "6px 0", borderTop: RULE, color: "var(--t2)" }}>
+            <div key={key} className="aug-fs-sm" style={{ padding: "6px 0", borderTop: ROW, color: "var(--t2)" }}>
               <span style={{ color: "var(--amb4)" }}>{`${g.rows.length} stopped ${g.day ? endsWords([g.day]) : "before this edition"}`}</span>
               {` — ${g.rows.map(r => r.label).join(", ")}`}
             </div>
@@ -113,7 +115,7 @@ export function EveryFigure({ arranged, connectionId, comparedWith, onChoose }: 
 
 function FigureRow({ r }: { r: PaperNumber }) {
   return (
-    <div style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "5px 0", borderTop: RULE }}>
+    <div style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "5px 0", borderTop: ROW }}>
       <span className="aug-fs-sm" style={{ color: r.moved ? "var(--t1)" : "var(--t2)", minWidth: 0, flex: 1 }}>
         {r.label}
         {r.note && <span className="aug-fs-xs" style={{ display: "block", color: "var(--amb4)" }}>{r.note}</span>}
@@ -143,7 +145,7 @@ export function ChooseFigures({ rows, choice, onChange, onClose, busy }: {
   const words: Record<Place, string> = { front: "on the front", below: "below, by area", hidden: "hidden" };
   return (
     <section data-testid="paper-choose" aria-label="Choose figures" style={{ margin: "14px 0", padding: "14px 16px",
-      border: "1px solid var(--b2)", borderRadius: "var(--r3)", background: "var(--bg-1)" }}>
+      borderRadius: "var(--r3)", background: "var(--bg-2)" }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
         <h3 className="aug-fs-h2" style={{ fontFamily: SERIF, fontWeight: 600, margin: 0 }}>Choose figures</h3>
         <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>{`${onFront} of ${FRONT_MAX} on the front`}</span>
@@ -163,7 +165,7 @@ export function ChooseFigures({ rows, choice, onChange, onClose, busy }: {
       </p>
       {withUniqueKeys(groups, g => `choose:${g.area}`).map(([key, g]) => (
         <Fragment key={key}>
-          <div className="aug-fs-xs" style={{ ...KICKER, color: "var(--t3)", padding: "8px 0 4px" }}>{g.area}</div>
+          <div className="aug-label" style={{ padding: "8px 0 4px" }}>{g.area}</div>
           {withUniqueKeys(g.rows, r => `choose-row:${idOf(r)}`).map(([rk, r]) => {
             const id = idOf(r);
             const place = placeOf(rows, choice, id);
@@ -175,7 +177,7 @@ export function ChooseFigures({ rows, choice, onChange, onClose, busy }: {
             ]);
             return (
               <div key={rk} data-testid="paper-choose-row" style={{ display: "flex", alignItems: "center", gap: 10,
-                padding: "5px 0", borderTop: RULE }}>
+                padding: "5px 0", borderTop: ROW }}>
                 <span className="aug-fs-sm" style={{ flex: 1, minWidth: 0, color: "var(--t1)" }}>{r.label}</span>
                 <Segmented<Place> label={`Where ${r.label} reads`} value={place} disabled={busy} options={options}
                   onChange={to => onChange(movedChoice(rows, choice, id, to), `${r.label}: ${words[to]}.`)} />

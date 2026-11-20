@@ -57,11 +57,11 @@ export function ExportButton({ invId }: { invId: string }) {
         style={{
           display: "inline-flex", alignItems: "center", gap: 6,
           padding: "4px 10px", borderRadius: "var(--r2)", fontSize: 12,
-          background: "var(--bg-2)", border: "1px solid var(--b1)",
-          color: "var(--t2)", cursor: "pointer", transition: "border-color .1s, color .1s",
+          background: "var(--gray-a3)",
+          color: "var(--t2)", cursor: "pointer", transition: "background-color .1s, color .1s",
         }}
-        onMouseEnter={e => { e.currentTarget.style.color = "var(--t1)"; e.currentTarget.style.borderColor = "var(--b2)"; }}
-        onMouseLeave={e => { e.currentTarget.style.color = "var(--t2)"; e.currentTarget.style.borderColor = "var(--b1)"; }}
+        onMouseEnter={e => { e.currentTarget.style.color = "var(--t1)"; e.currentTarget.style.background = "var(--gray-a4)"; }}
+        onMouseLeave={e => { e.currentTarget.style.color = "var(--t2)"; e.currentTarget.style.background = "var(--gray-a3)"; }}
       >
         <Icon name="download" size={13} />
         Export
@@ -86,7 +86,7 @@ export function ExportButton({ invId }: { invId: string }) {
           ))}
           <label style={{
             display: "flex", alignItems: "center", gap: 8, padding: "8px 10px 4px",
-            marginTop: 4, borderTop: "1px solid var(--b1)", fontSize: 11,
+            marginTop: 8, fontSize: 11,
             color: "var(--t3)", cursor: "pointer",
           }}>
             <Checkbox checked={narrate} onChange={e => setNarrate(e.target.checked)} />

@@ -237,7 +237,7 @@ export function NowPanel({ connections, contextReady, doors }: {
                   gap: 12, alignItems: "center", padding: "7px 0", ...(i ? RULE : {}) }}>
                   <div style={{ minWidth: 0 }}>
                     <div className="aug-fs-chrome" style={{ ...ONE_LINE, color: "var(--t1)" }}>{j.title ? runDisplayTitle(j.title).title : j.kind}</div>
-                    <div className="aug-fs-xs" style={{ ...ONE_LINE, color: "var(--t2)" }}>
+                    <div className="aug-fs-sm" style={{ ...ONE_LINE, color: "var(--t2)" }}>
                       {j.agent?.agent || j.kind} · {connectionLabel(j.conn_id ?? "", connections)}
                       {j.started_at || j.created_at ? ` · started ${relTime(j.started_at || j.created_at || "")} ago` : ""}
                     </div>
@@ -411,7 +411,7 @@ function WaitRow({ testId, title, onTitle, meta, buttons, below, first }: {
           ) : (
             <div className="aug-fs-chrome" style={{ ...ONE_LINE, color: "var(--t1)", fontWeight: 500 }}>{title}</div>
           )}
-          <div className="aug-fs-xs" style={{ ...ROW, gap: 6, color: "var(--t2)" }}>{meta}</div>
+          <div className="aug-fs-sm" style={{ ...ROW, gap: 6, color: "var(--t2)" }}>{meta}</div>
         </div>
         <span style={{ display: "inline-flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>{buttons}</span>
       </div>
@@ -620,7 +620,7 @@ function Place({ budget, first, onChanged }: { budget: AttentionBudget; first: b
           {destinationLabel(budget.addressee).label}
         </span>
         <Bar value={budget.used} max={budget.slots} color={full ? "var(--amb3)" : "var(--chart-1)"} />
-        <span className="aug-fs-sm" style={{ ...NUM, color: full ? "var(--amb4)" : "var(--t2)", whiteSpace: "nowrap" }}>
+        <span className="aug-fs-chrome" style={{ ...NUM, color: full ? "var(--amb4)" : "var(--t2)", whiteSpace: "nowrap" }}>
           {budget.used} of {budget.slots}
           {budget.held_count > 0 && <span style={MUTED}> · {budget.held_count} held</span>}
         </span>
@@ -672,7 +672,7 @@ function Held({ held, doors }: { held: HeldItem[]; doors: NowDoors }) {
           gap: 12, alignItems: "center", padding: "8px 0", ...(i ? RULE : {}) }}>
           <div style={{ minWidth: 0 }}>
             <div className="aug-fs-chrome" style={{ ...ONE_LINE, color: "var(--t1)" }} title={h.text}>{firstLine(h.text)}</div>
-            <div className="aug-fs-xs" style={{ ...ONE_LINE, color: "var(--t2)" }} title={`${h.why} — ${h.triage}`}>
+            <div className="aug-fs-sm" style={{ ...ONE_LINE, color: "var(--t2)" }} title={`${h.why} — ${h.triage}`}>
               {h.why} · {triageWords(h.triage)} · from {h.by || "an automation"}
             </div>
           </div>
@@ -744,7 +744,7 @@ function Sent({ week, missions, connections, doors }: {
                   <span className="aug-fs-chrome" style={ONE_LINE}>{g.source}</span>
                   <Icon name={expanded ? "chevu" : "chevd"} size={12} />
                 </Button>
-                <div className="aug-fs-xs" style={{ ...ROW, gap: 6, color: "var(--t2)" }}>
+                <div className="aug-fs-sm" style={{ ...ROW, gap: 6, color: "var(--t2)" }}>
                   {place ? <span>→ {place}</span>
                     : <Chip title="It left without a place recorded, so it used no place's slot">no place · used no slot</Chip>}
                   {bearing && <span>· {bearing}</span>}
@@ -759,15 +759,15 @@ function Sent({ week, missions, connections, doors }: {
                 title="Every check it passed, and the analysis behind it">Receipt</Button>
             </div>
             {expanded && (
-              <div style={{ marginTop: 6, paddingLeft: 12, borderLeft: "2px solid var(--b1)" }}>
+              <div style={{ marginTop: 6, paddingLeft: 14 }}>
                 {g.sends.map(d => (
                   <div key={d.id} style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 10, alignItems: "center",
                     padding: "4px 0" }}>
                     <div style={{ minWidth: 0 }}>
-                      <div className="aug-fs-sm" style={{ ...ONE_LINE, color: "var(--t1)" }} title={d.text_preview}>
+                      <div className="aug-fs-chrome" style={{ ...ONE_LINE, color: "var(--t1)" }} title={d.text_preview}>
                         {firstLine(d.text_preview)}
                       </div>
-                      <div className="aug-fs-xs" style={{ ...ONE_LINE, color: "var(--t3)" }}>
+                      <div className="aug-fs-sm" style={{ ...ONE_LINE, color: "var(--t3)" }}>
                         {whenText(d.ts)}{d.conn_id ? ` · ${connectionLabel(d.conn_id, connections)}` : ""} · {summaryLine(d)}
                       </div>
                     </div>
@@ -848,7 +848,7 @@ function Restated({ split, labels, inspect }: {
             gap: 12, alignItems: "center", padding: "8px 0", ...(i ? RULE : {}) }}>
             <div style={{ minWidth: 0 }}>
               <div className="aug-fs-chrome" style={{ ...ONE_LINE, color: "var(--t1)" }}>{labels[kind] ?? kind}</div>
-              <div className="aug-fs-xs" style={{ ...ROW, gap: 5, color: "var(--t2)", marginTop: 2 }}>
+              <div className="aug-fs-sm" style={{ ...ROW, gap: 5, color: "var(--t2)", marginTop: 2 }}>
                 {metrics.slice(0, 4).map(m => <Chip key={m}>{m}</Chip>)}
                 {metrics.length > 4 && <Chip title={metrics.slice(4).join(", ")}>+{metrics.length - 4}</Chip>}
                 <span>{metrics.length ? "· " : ""}latest {dayWords(entries[0].at)}</span>
@@ -874,10 +874,10 @@ function Restated({ split, labels, inspect }: {
               const what = `${metricOf(e) ? `${metricOf(e)}: ` : ""}${normalizeNumberPrecision(e.replaced_by)}`;
               return (
                 <div key={`${e.kind}:${e.ref}:${e.at}`} style={{ padding: "4px 0" }}>
-                  <div className="aug-fs-sm" style={{ ...ONE_LINE, color: "var(--t1)" }} title={what}>
+                  <div className="aug-fs-chrome" style={{ ...ONE_LINE, color: "var(--t1)" }} title={what}>
                     {t ? <Button variant="link" size="xs" className="aug-ledger-open" onClick={() => inspect(...t)}>{what}</Button> : what}
                   </div>
-                  <div className="aug-fs-xs" style={{ ...ONE_LINE, color: "var(--t3)" }} title={e.believed}>
+                  <div className="aug-fs-sm" style={{ ...ONE_LINE, color: "var(--t3)" }} title={e.believed}>
                     was: {normalizeNumberPrecision(e.believed)} · {whenText(e.at)}
                   </div>
                 </div>
@@ -915,7 +915,7 @@ function BriefingLines({ fold, doors }: { fold: OrgBriefing; doors: NowDoors }) 
           gap: 12, alignItems: "center", padding: "8px 0", ...(i ? RULE : {}) }}>
           <div style={{ minWidth: 0 }} title={k!.lede || k!.headline}>
             <div className="aug-fs-chrome" style={{ ...ONE_LINE, color: "var(--t1)", fontWeight: 500 }}>{k!.headline || firstLine(k!.lede)}</div>
-            <div className="aug-fs-xs" style={{ ...ONE_LINE, color: "var(--t2)" }}>
+            <div className="aug-fs-sm" style={{ ...ONE_LINE, color: "var(--t2)" }}>
               {b.connection_name}
               {/* An edition about data that ENDED names its days and where the data ended, so it is not
                   read as this week's news: "Olist · September 2018 · data ended Wed 17 Oct 2018". */}

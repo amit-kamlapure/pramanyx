@@ -54,7 +54,10 @@ function SelectTrigger({
   style,
   ...props
 }: React.ComponentProps<typeof ThemesSelect.Trigger> & { size?: "sm" | "default"; bespoke?: boolean }) {
-  return <ThemesSelect.Trigger data-slot="select-trigger" {...props}
+  // A picker that is not a form field — a toolbar's connection, a sort — is a soft fill with no outline (2026-11-20,
+  // borders are the exception); a form field keeps its edge, where the eye goes looking for what to fill in.
+  const quiet = bespoke && props.variant === undefined ? { variant: "soft" as const, color: "gray" as const } : {}
+  return <ThemesSelect.Trigger data-slot="select-trigger" {...quiet} {...props}
     className={bespoke ? className : fieldClass(className)} style={bespoke ? style : fieldStyle(style)} />
 }
 
@@ -120,6 +123,7 @@ function SelectField({
   "aria-labelledby": ariaLabelledBy,
   "data-testid": testId,
   bespoke,
+  variant,
   ...rest
 }: {
   value?: string | number
@@ -143,6 +147,8 @@ function SelectField({
   autoFocus?: boolean
   /** A select that draws itself and is not a form field — see `ui/field.ts`. */
   bespoke?: boolean
+  /** "soft": a faint fill and no outline, on a surface where borders are the exception (2026-11-20). */
+  variant?: "surface" | "soft"
 }) {
   const opts = optionsOf(children)
   const all = flat(opts)
@@ -161,7 +167,8 @@ function SelectField({
       items={items} disabled={disabled} name={name} bespoke={bespoke}>
       {/* `data-value` on the trigger is the native select's `.value`, for whatever reads it. */}
       <SelectTrigger id={id} className={className} style={style} bespoke={bespoke} title={title} aria-label={ariaLabel}
-        aria-labelledby={ariaLabelledBy} data-testid={testId} data-value={shown ?? String(defaultValue ?? first ?? "")} {...rest} />
+        aria-labelledby={ariaLabelledBy} data-testid={testId} data-value={shown ?? String(defaultValue ?? first ?? "")}
+        {...(variant === "soft" ? { variant: "soft" as const, color: "gray" as const } : {})} {...rest} />
       <SelectContent>
         {opts.map((o, i) => ("options" in o
           ? <ThemesSelect.Group key={`g${i}`}><ThemesSelect.Label>{o.label}</ThemesSelect.Label>{o.options.map(item)}</ThemesSelect.Group>

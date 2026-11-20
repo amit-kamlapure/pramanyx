@@ -37,16 +37,14 @@ import { Input } from "@/components/ui/input";
 
 /** Sizes come from the type scale via `aug-fs-*` classes on the elements, never as a
  *  literal here — a `fontSize` inside a style object is exactly what the design-token
- *  gate ratchets, and it is right to: a number here sits on no scale anyone can read. */
+ *  gate ratchets, and it is right to: a number here sits on no scale anyone can read.
+ *  The field's edge is the field's own (ui/field.ts), kept: this is a form (2026-11-20). */
 const inputStyle: React.CSSProperties = {
   width: "100%", padding: "7px 10px", borderRadius: "var(--r3)",
-  border: "1px solid var(--b1)", background: "var(--bg-1)", color: "var(--t1)",
+  background: "var(--bg-1)", color: "var(--t1)",
 };
 
-const labelStyle: React.CSSProperties = {
-  fontWeight: 600, color: "var(--t3)", marginBottom: 4, display: "block",
-  textTransform: "uppercase",
-};
+const labelStyle: React.CSSProperties = { marginBottom: 4, display: "block" };
 
 /**
  * `**bold**` → a real <strong>, because this app has no markdown renderer.
@@ -226,7 +224,7 @@ export function AgentSlackDoor({
 
       {/* ── the one-token path (AO-2d) ── */}
       {!byHand && (
-        <div style={{ border: "1px solid var(--b1)", borderRadius: "var(--r3)", padding: 14 }}>
+        <div style={{ background: "var(--bg-2)", borderRadius: "var(--r3)", padding: 14 }}>
           <div className="aug-fs-sm" style={{ fontWeight: 500, marginBottom: 8 }}>
             1 · Let Pramanyx create the app
           </div>
@@ -239,12 +237,12 @@ export function AgentSlackDoor({
               </div>
               <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
                 <div style={{ flex: "1 1 220px", minWidth: 0 }}>
-                  <label className="aug-fs-xs" style={labelStyle}>App name — what Slack will show</label>
+                  <label className="aug-label" style={labelStyle}>App name — what Slack will show</label>
                   <Input style={inputStyle} value={appName}
                     onChange={e => setAppName(e.target.value)} placeholder="Pramanyx" />
                 </div>
                 <div style={{ flex: "2 1 320px", minWidth: 0 }}>
-                  <label className="aug-fs-xs" style={labelStyle}>Configuration token</label>
+                  <label className="aug-label" style={labelStyle}>Configuration token</label>
                   <Input style={inputStyle} value={configToken} autoComplete="off"
                     spellCheck={false} onChange={e => setConfigToken(e.target.value)} placeholder="xoxe.xoxp-…" />
                 </div>
@@ -321,13 +319,13 @@ export function AgentSlackDoor({
 
       {/* ── 1 · the manifest ── */}
       {byHand && (<>
-      <div style={{ border: "1px solid var(--b1)", borderRadius: "var(--r3)", padding: 14 }}>
+      <div style={{ background: "var(--bg-2)", borderRadius: "var(--r3)", padding: 14 }}>
         <div className="aug-fs-sm" style={{ fontWeight: 500, marginBottom: 8 }}>
           1 · Generate the app manifest
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <label className="aug-fs-xs" style={labelStyle}>App name — what Slack will show</label>
+            <label className="aug-label" style={labelStyle}>App name — what Slack will show</label>
             <Input style={inputStyle} value={appName}
               onChange={e => setAppName(e.target.value)} placeholder="Pramanyx" />
           </div>
@@ -349,7 +347,7 @@ export function AgentSlackDoor({
             </div>
             <pre ref={preRef} className="aug-fs-xs nowheel" style={{
               margin: 0, maxHeight: 260, overflow: "auto", padding: 10,
-              background: "var(--bg-1)", border: "1px solid var(--b1)",
+              background: "var(--bg-1)",
               borderRadius: "var(--r3)", color: "var(--t2)",
               fontFamily: "var(--font-mono)", whiteSpace: "pre",
             }}>{json}</pre>
@@ -365,7 +363,7 @@ export function AgentSlackDoor({
       </div>
 
       {/* ── 2 · the credentials ── */}
-      <div style={{ border: "1px solid var(--b1)", borderRadius: "var(--r3)", padding: 14,
+      <div style={{ background: "var(--bg-2)", borderRadius: "var(--r3)", padding: 14,
                     opacity: manifest ? 1 : 0.55 }}>
         <div className="aug-fs-sm" style={{ fontWeight: 500, marginBottom: 8 }}>
           2 · Paste the three values back
@@ -380,17 +378,17 @@ export function AgentSlackDoor({
           <>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <div>
-                <label className="aug-fs-xs" style={labelStyle}>Bot user OAuth token — OAuth &amp; Permissions</label>
+                <label className="aug-label" style={labelStyle}>Bot user OAuth token — OAuth &amp; Permissions</label>
                 <Input style={inputStyle} value={botToken} autoComplete="off" spellCheck={false}
                   onChange={e => setBotToken(e.target.value)} placeholder="xoxb-…" />
               </div>
               <div>
-                <label className="aug-fs-xs" style={labelStyle}>App-level token — Basic Information, scope connections:write</label>
+                <label className="aug-label" style={labelStyle}>App-level token — Basic Information, scope connections:write</label>
                 <Input style={inputStyle} value={appToken} autoComplete="off" spellCheck={false}
                   onChange={e => setAppToken(e.target.value)} placeholder="xapp-…" />
               </div>
               <div>
-                <label className="aug-fs-xs" style={labelStyle}>Signing secret — Basic Information</label>
+                <label className="aug-label" style={labelStyle}>Signing secret — Basic Information</label>
                 <Input style={inputStyle} value={signingSecret} autoComplete="off" spellCheck={false}
                   onChange={e => setSigningSecret(e.target.value)} placeholder="the signing secret" />
               </div>

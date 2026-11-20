@@ -92,7 +92,7 @@ function Facet({ connectionId, table, column }: { connectionId: string; table: s
   const top = Math.max(1, ...shown.map(r => r.n));
   return (
     <div data-testid="query-facet" role="group" aria-label={column.label}>
-      <div className="aug-fs-xs" style={{ color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em" }}>{column.label}</div>
+      <div className="aug-label">{column.label}</div>
       {problem ? <div className="aug-fs-sm" style={{ color: "var(--t3)", marginTop: 5 }}>{problem}</div>
         : !rows ? <div className="aug-fs-sm" style={{ color: "var(--t3)", marginTop: 5 }}>Reading…</div>
           : (

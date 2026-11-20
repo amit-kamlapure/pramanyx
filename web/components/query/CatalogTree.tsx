@@ -293,8 +293,8 @@ export function CatalogTree({
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: 0, flex: 1 }}>
       {/* The Catalog screen's search, as it draws it; its clear at the right end, and Escape clears it too. */}
-      <div style={{ padding: "8px 10px", borderBottom: "0.5px solid var(--b1)", flexShrink: 0 }}>
-        <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search tables &amp; columns…"
+      <div style={{ padding: "6px 12px 10px", flexShrink: 0 }}>
+        <Input variant="soft" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search tables &amp; columns…"
           aria-label="Search tables and columns"
           onKeyDown={e => { if (e.key === "Escape" && search) { e.preventDefault(); setSearch(""); } }}
           leading={<Icon name="search" size={11} />}
@@ -365,13 +365,13 @@ export function CatalogTree({
                   className="group/sch" testId="rail-schema"
                   badge={isDefault ? (
                     <span className="aug-fs-xs" title="Tables here complete and resolve without naming the schema"
-                      style={{ color: "var(--t3)", border: "0.5px solid var(--b2)", padding: "0 4px", flexShrink: 0 }}>default</span>
+                      style={{ color: "var(--t3)", flexShrink: 0 }}>default</span>
                   ) : undefined}
                   count={schemaTables.length} hasChildren isOpen={sOpen}
                   onClick={() => toggle(openSchemas, sKey, sFallback, setOpenSchemas)}
                   onToggle={() => toggle(openSchemas, sKey, sFallback, setOpenSchemas)}
                   trailing={onDefaultSchema && queried ? (
-                    <Button variant="outline" size="xs" data-testid="rail-default-schema"
+                    <Button variant="soft" size="xs" data-testid="rail-default-schema"
                       className="hidden group-hover/sch:inline-flex group-focus-within/sch:inline-flex"
                       title={isDefault
                         ? "Stop resolving bare table names in this schema"
@@ -432,8 +432,8 @@ export function CatalogTree({
                           : `${c.name}${c.type ? ` (${c.type})` : ""}`}
                         // the type, said at the row's right as the mockup's rail says it (2026-11-10) — not only on hover
                         badge={(c.type || c.is_fk) ? (
-                          <span className="aug-fs-xs" style={{ color: "var(--t3)", flexShrink: 0, textTransform: "uppercase" }}>
-                            {c.type ? c.type.split(" ")[0].slice(0, 10) : ""}{c.is_fk ? `${c.type ? " · " : ""}FK` : ""}
+                          <span className="aug-fs-xs" style={{ color: "var(--t3)", flexShrink: 0 }}>
+                            {c.type ? c.type.split(" ")[0].slice(0, 10).toUpperCase() : ""}{c.is_fk ? `${c.type ? " · " : ""}FK` : ""}
                           </span>
                         ) : undefined}
                         onClick={onSelectColumn ? () => onSelectColumn(c.name, t.name) : undefined}

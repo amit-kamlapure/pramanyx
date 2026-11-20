@@ -25,7 +25,7 @@ import { OrgSettingsPanel } from "@/components/OrgSettingsPanel";
 import { OwnersPanel } from "@/components/OwnersPanel";
 import { registerCurrencyLoader, setCurrentDataset, setDataCurrency, setOrgSettingsCache } from "@/lib/orgSettings";
 import { rememberedSchema } from "@/lib/schemaChoice";
-import { formatCount } from "@/lib/format";
+import { formatCount, sentenceCase } from "@/lib/format";
 import { ExplorationBadge } from "@/components/ExplorationBadge";
 import { SchemaProvider } from "@/lib/schema-context";
 import { OpenInQueryProvider, type OpenInQueryRequest } from "@/lib/openInQuery";
@@ -522,7 +522,7 @@ function HomeScreen({
 
         {/* First-run funnel — shown until the user runs their first investigation */}
         {recentInvs.length === 0 && (
-          <div style={{ background: "var(--bg-2)", border: "1px solid var(--b1)", borderRadius: "var(--r3)", padding: "22px 24px" }}>
+          <div style={{ background: "var(--bg-2)", borderRadius: "var(--r3)", padding: "22px 24px" }}>
             <div style={{ fontSize: 15, fontWeight: 650, color: "var(--t1)", marginBottom: 4 }}>Welcome to Pramanyx</div>
             <div style={{ fontSize: 12, color: "var(--t3)", marginBottom: 18, lineHeight: 1.5 }}>
               Autonomous analysis of your data — ask in plain English, get investigated answers. Get started in three steps:
@@ -533,13 +533,13 @@ function HomeScreen({
                 { n: 2, icon: "brief",   title: "Explore the demo",  desc: "No data handy? Load a synthetic dataset — 90 days of SaaS revenue with a real outage to find.", cta: demoLoading ? "Loading…" : "Load the demo", accent: "var(--vio3)", action: onTryDemo, busy: demoLoading },
                 { n: 3, icon: "home",    title: "Ask a question",    desc: "Ask anything — Pramanyx writes the SQL and runs the Agent for you.", cta: "Ask now",          accent: "var(--grn3)", action: () => onGoToChat() },
               ].map(s => (
-                <div key={s.n} style={{ border: "1px solid var(--b1)", borderRadius: "var(--r2)", padding: 14, background: "var(--bg-3)", display: "flex", flexDirection: "column" }}>
+                <div key={s.n} style={{ borderRadius: "var(--r2)", padding: 14, background: "var(--bg-3)", display: "flex", flexDirection: "column" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                     <div style={{ width: 22, height: 22, borderRadius: "50%", background: s.accent + "22", border: `1px solid ${s.accent}55`, color: s.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700 }}>{s.n}</div>
                     <NavIcon name={s.icon} size={13} color={s.accent} />
                     <div style={{ fontSize: 13, fontWeight: 600, color: "var(--t1)" }}>{s.title}</div>
                   </div>
-                  <div style={{ fontSize: 11, color: "var(--t3)", lineHeight: 1.5, flex: 1, marginBottom: 12 }}>{s.desc}</div>
+                  <div className="aug-fs-sm" style={{ color: "var(--t3)", lineHeight: 1.5, flex: 1, marginBottom: 12 }}>{s.desc}</div>
                   <button onClick={s.action} disabled={!!s.busy} style={{ alignSelf: "flex-start", fontSize: 11, fontWeight: 600, color: s.accent, background: s.accent + "14", border: `1px solid ${s.accent}44`, borderRadius: "var(--r2)", padding: "6px 12px", cursor: s.busy ? "progress" : "pointer", opacity: s.busy ? 0.6 : 1 }}>{s.cta} →</button>
                 </div>
               ))}
@@ -730,7 +730,7 @@ function AddConnectionForm({
                     }}
                   >
                     <div style={{ fontWeight: 500 }}>{ct.label}</div>
-                    <div style={{ fontSize: 11, color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".04em", marginTop: 2 }}>{ct.category}</div>
+                    <div className="aug-fs-xs" style={{ color: "var(--t3)", marginTop: 2 }}>{sentenceCase(ct.category)}</div>
                   </Button>
                 ))
               ))}
@@ -739,7 +739,7 @@ function AddConnectionForm({
 
           {/* Dynamic fields */}
           {(type === "local_upload" || type === "federated") ? (
-            <div style={{ padding: "12px", background: "var(--bg-2)", border: "1px solid var(--b1)", borderRadius: "var(--r2)", fontSize: 12, color: "var(--t3)", lineHeight: 1.5 }}>
+            <div style={{ padding: "12px", background: "var(--bg-2)", borderRadius: "var(--r2)", fontSize: 12, color: "var(--t3)", lineHeight: 1.5 }}>
               {type === "local_upload"
                 ? <>Local Files: create the connection, then upload CSV/Parquet/Excel files to it via the Files tab.</>
                 // PX-6 (the PX-1 language law, applied late): this used to print a curl
@@ -817,7 +817,7 @@ function DeleteConnModal({
           </div>
           <div>
             <div style={{ fontSize: 15, fontWeight: 600, color: "var(--t1)" }}>Remove connection</div>
-            <div style={{ fontSize: 11, color: "var(--t3)", marginTop: 3, lineHeight: 1.5 }}>
+            <div className="aug-fs-sm" style={{ color: "var(--t3)", marginTop: 3, lineHeight: 1.5 }}>
               This removes <span style={{ color: "var(--t2)" }}>{conn.name}</span> from Pramanyx. The database is not affected.
             </div>
           </div>
@@ -1995,6 +1995,7 @@ export default function Home() {
             {tab === "canvas-workspace" && activeCanvas && (
               <ErrorBoundary label="The Canvas workspace hit an error.">
                 <CanvasWorkspace
+                  key={activeCanvas.id}
                   canvas={activeCanvas}
                   connections={wsConnections}
                   allConnections={connections}
@@ -2004,6 +2005,7 @@ export default function Home() {
                   initialOpenInvId={initialCanvasInvId}
                   initialRestoreSessionId={initialCanvasChatId}
                   workspaceId={selectedWorkspace}
+                  onOpenCanvas={handleCanvasSelect}
                 />
               </ErrorBoundary>
             )}
@@ -2355,7 +2357,7 @@ export default function Home() {
             borderRadius: "var(--r3)", display: "flex", flexDirection: "column",
             overflow: "hidden", boxShadow: "var(--shadow-md)",
           }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px", borderBottom: "1px solid var(--b1)", height: 44, flexShrink: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px", height: 48, flexShrink: 0 }}>
               <span style={{ fontSize: 13, fontWeight: 500, color: "var(--t1)" }}>History</span>
               <Button variant="plain" size="xs" onClick={() => setShowHistory(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--t3)" }}>
                 <NavIcon name="close" size={13} />

@@ -133,8 +133,8 @@ export function DeparturesPanel({ onOpenAutomation, onOpenTrace }: Doors = {}) {
   return (
     <div style={{ flex: 1, background: "var(--bg-0)", display: "flex", flexDirection: "column", minHeight: 0 }}>
       <div style={{
-        display: "flex", alignItems: "center", gap: 14, padding: "10px 16px 8px",
-        borderBottom: "1px solid var(--b1)", flexWrap: "wrap",
+        display: "flex", alignItems: "center", gap: 14, padding: "10px 16px 12px",
+        flexWrap: "wrap",
       }}>
         <span className="aug-fs-ui" style={{ fontWeight: 600, color: "var(--t1)" }}>
           What left the platform, and what was held
@@ -206,15 +206,15 @@ function DepartureRow({ departure: d, open, focused, onToggle, onChanged, doors 
     <Fragment>
       <TableRow data-departure={d.id} aria-selected={focused || undefined}>
         <TableCell>
-          <span className="aug-fs-xs" style={{ fontFamily: "var(--font-mono, monospace)", color: "var(--t2)", whiteSpace: "nowrap" }}>
+          <span className="aug-fs-chrome" style={{ fontFamily: "var(--font-mono, monospace)", color: "var(--t2)", whiteSpace: "nowrap" }}>
             {whenText(d.ts)}
           </span>
         </TableCell>
         <TableCell>
-          <div className="aug-fs-sm" title={sourceName(d)} style={{ color: "var(--t1)", overflow: "hidden", textOverflow: "ellipsis" }}>
+          <div className="aug-fs-chrome" title={sourceName(d)} style={{ color: "var(--t1)", overflow: "hidden", textOverflow: "ellipsis" }}>
             {sourceName(d)}
           </div>
-          <div className="aug-fs-xs" style={{ color: "var(--t3)", overflow: "hidden", textOverflow: "ellipsis" }}>
+          <div className="aug-fs-sm" style={{ color: "var(--t3)", overflow: "hidden", textOverflow: "ellipsis" }}>
             {kindLabel(d.kind)}{d.target ? <> → <span title={d.target}>{destinationLabel(d.target).label}</span></> : ""}
           </div>
         </TableCell>
@@ -222,7 +222,7 @@ function DepartureRow({ departure: d, open, focused, onToggle, onChanged, doors 
           <StatusChip hue={stateHue(d)}>{stateLabel(d)}</StatusChip>
         </TableCell>
         <TableCell>
-          <div className="aug-fs-xs" title={summaryLine(d)} style={{
+          <div className="aug-fs-chrome" title={summaryLine(d)} style={{
             color: d.state === "departed" ? "var(--t3)" : "var(--t2)", whiteSpace: "normal",
             overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2,
             WebkitBoxOrient: "vertical", padding: "3px 0",
@@ -378,7 +378,7 @@ function DepartureDetail({ departure: d, onChanged, doors }: {
           <div className="aug-label" style={{ marginBottom: 4 }}>Why</div>
           <ul style={{ margin: 0, paddingLeft: 16, display: "flex", flexDirection: "column", gap: 4 }}>
             {d.reasons.map((r, i) => (
-              <li key={i} className="aug-fs-sm" style={{ color: "var(--t1)" }}>{r}</li>
+              <li key={i} className="aug-fs-chrome" style={{ color: "var(--t1)" }}>{r}</li>
             ))}
           </ul>
         </section>
@@ -393,7 +393,7 @@ function DepartureDetail({ departure: d, onChanged, doors }: {
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {remedies.map(g => (
               <div key={g.guard}>
-                <div className="aug-fs-sm" style={{ color: "var(--t1)" }}>
+                <div className="aug-fs-chrome" style={{ color: "var(--t1)" }}>
                   <span style={{ fontWeight: 500 }}>{GUARD_LABEL[g.guard] ?? g.label}</span> — {g.meaning}
                 </div>
                 <div className="aug-fs-sm" style={{ color: "var(--t2)", marginTop: 2 }}>{g.action}</div>
@@ -410,8 +410,8 @@ function DepartureDetail({ departure: d, onChanged, doors }: {
         <section aria-label="The message">
           <div className="aug-label" style={{ marginBottom: 4 }}>The message</div>
           <div className="aug-fs-sm" style={{
-            color: "var(--t2)", whiteSpace: "pre-wrap", borderLeft: "2px solid var(--b2)",
-            paddingLeft: 10,
+            color: "var(--t2)", whiteSpace: "pre-wrap", background: "var(--bg-2)",
+            padding: "8px 10px", borderRadius: "var(--r2)",
           }}>{d.text_preview}</div>
         </section>
       )}
@@ -422,9 +422,9 @@ function DepartureDetail({ departure: d, onChanged, doors }: {
           <div style={{ display: "grid", gridTemplateColumns: "max-content max-content 1fr", columnGap: 14, rowGap: 3 }}>
             {guards.map(g => (
               <Fragment key={g.guard}>
-                <span className="aug-fs-xs" style={{ color: "var(--t2)" }}>{g.label}</span>
-                <span className="aug-fs-xs" style={{ color: outcomeColor(g.outcome) }}>{outcomeWord(g.outcome)}</span>
-                <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>{g.summary}</span>
+                <span className="aug-fs-chrome" style={{ color: "var(--t2)" }}>{g.label}</span>
+                <span className="aug-fs-chrome" style={{ color: outcomeColor(g.outcome) }}>{outcomeWord(g.outcome)}</span>
+                <span className="aug-fs-sm" style={{ color: "var(--t3)" }}>{g.summary}</span>
               </Fragment>
             ))}
           </div>

@@ -350,8 +350,8 @@ function Coverage({ view }: { view: Onboarding }) {
         <Empty title={view.shopping_note || undefined}>Nothing is listed as missing{why ? ` · ${why}` : ""}</Empty>
       ) : withUniqueKeys(list.slice(0, 12), item => String(item.what ?? item.missing ?? "gap")).map(([k, item], i) => (
         <div key={k} style={{ padding: "6px 0", ...(i ? RULE : {}) }}>
-          <div className="aug-fs-sm" style={{ color: "var(--t1)" }}>{String(item.what ?? item.missing ?? "A gap")}</div>
-          <div className="aug-fs-xs" style={{ ...MUTED, ...ONE_LINE }}>
+          <div className="aug-fs-chrome" style={{ color: "var(--t1)" }}>{String(item.what ?? item.missing ?? "A gap")}</div>
+          <div className="aug-fs-sm" style={{ ...MUTED, ...ONE_LINE }}>
             {[Array.isArray(item.unlocks) && item.unlocks.length ? `would unlock: ${item.unlocks.join(", ")}` : "",
               typeof item.why === "string" ? item.why : ""].filter(Boolean).join(" · ")}
           </div>

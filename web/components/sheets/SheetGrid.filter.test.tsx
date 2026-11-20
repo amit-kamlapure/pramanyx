@@ -58,10 +58,10 @@ const box = (name: string) => screen.getByRole("checkbox", { name });
 const ok = () => fireEvent.click(screen.getByRole("button", { name: "OK" }));
 
 describe("a column's arrow", () => {
-  it("is drawn on hover or keyboard focus within its header, with its edge, never at rest", () => {
+  it("is drawn on hover or keyboard focus within its header, as a button, never at rest", () => {
     header([{ column: "c1", op: "in", value: ["delivered"] }]);
     const plain = screen.getByRole("button", { name: "The order_id column's menu" });
-    expect(plain.className).toContain("rt-variant-outline");
+    expect(plain.className).toContain("rt-variant-soft");
     // jsdom draws no hover: what is asserted is the rule that draws it — hidden, shown by its header's hover or focus
     expect(plain.className.split(" ")).toEqual(expect.arrayContaining(
       ["opacity-0", "group-hover:opacity-100", "group-focus-within:opacity-100"]));
@@ -76,7 +76,7 @@ describe("a column's arrow", () => {
   it("stays drawn on a filtered column — the funnel in the accent, saying what it is filtered by — and while its menu is open", () => {
     header([{ column: "c1", op: "in", value: ["delivered"] }]);
     const filtered = screen.getByRole("button", { name: "The order_status column's menu — filtered" });
-    expect(filtered.className).toMatch(/rt-variant-(surface|outline)/);
+    expect(filtered.className).toMatch(/rt-variant-soft/);                 // a button at rest: a fill, no edge (2026-11-20)
     expect(filtered.className).not.toMatch(/opacity-0/);
     expect(filtered.querySelector("svg")?.getAttribute("class")).toContain("tabler-icon-filter");
     expect(filtered.style.color).toBe("var(--accent-text)");

@@ -2958,6 +2958,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/canvases/{canvas_id}/clone": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Clone Canvas Endpoint
+         * @description A copy of a canvas as a new one, made by the person asking: its tables, description, pinned documents and
+         *     instructions — not its conversations, runs or saved artifacts. Anyone who may open it may clone it.
+         */
+        post: operations["clone_canvas_endpoint_canvases__canvas_id__clone_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/canvases/{canvas_id}/documents": {
         parameters: {
             query?: never;
@@ -3046,6 +3067,32 @@ export interface paths {
         /** Get Canvas Schema */
         get: operations["get_canvas_schema_canvases__canvas_id__schema_get"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/canvases/{canvas_id}/sharing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Canvas Sharing
+         * @description Who a canvas is shared with — everyone in the workspace, or each person and group chosen with what they may do —
+         *     what the person asking may do, whether they may change it, and who they may choose from (a sheet's shape).
+         */
+        get: operations["read_canvas_sharing_canvases__canvas_id__sharing_get"];
+        /**
+         * Change Canvas Sharing
+         * @description Share a canvas with everyone in the workspace or with the people and groups chosen — its owner's choice, never
+         *     an agent's.
+         */
+        put: operations["change_canvas_sharing_canvases__canvas_id__sharing_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -20774,6 +20821,15 @@ export interface components {
              */
             text: string;
         };
+        /** CanvasSharingRequest */
+        CanvasSharingRequest: {
+            /** Shared With */
+            shared_with?: {
+                [key: string]: unknown;
+            }[];
+            /** Sharing */
+            sharing: string;
+        };
         /** CapIn */
         CapIn: {
             /**
@@ -21221,6 +21277,14 @@ export interface components {
             valid_until: string;
             /** Warrants */
             warrants?: components["schemas"]["WarrantIn"][];
+        };
+        /** CloneCanvasRequest */
+        CloneCanvasRequest: {
+            /**
+             * Name
+             * @default
+             */
+            name: string;
         };
         /** CloseBody */
         CloseBody: {
@@ -33354,6 +33418,41 @@ export interface operations {
             };
         };
     };
+    clone_canvas_endpoint_canvases__canvas_id__clone_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                canvas_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CloneCanvasRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     canvas_documents_canvases__canvas_id__documents_get: {
         parameters: {
             query?: never;
@@ -33527,6 +33626,72 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_canvas_sharing_canvases__canvas_id__sharing_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                canvas_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    change_canvas_sharing_canvases__canvas_id__sharing_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                canvas_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CanvasSharingRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

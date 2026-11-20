@@ -90,7 +90,7 @@ export function CellMenu({
   const [copyAsOpen, setCopyAsOpen] = useState(false);
   const item = (label: string, onClick: () => void, icon?: Parameters<typeof Icon>[0]["name"], testid?: string,
     opts: { disabled?: string; hint?: string } = {}) => (
-    <Button variant="plain" size="xs" className="aug-fs-ui" data-testid={testid} disabled={!!opts.disabled}
+    <Button variant="plain" size="xs" className="aug-fs-chrome" data-testid={testid} disabled={!!opts.disabled}
       title={opts.disabled || undefined}
       style={{ width: "100%", justifyContent: "flex-start" }} onClick={onClick}>
       {icon && <Icon name={icon} size={12} />}{label}
@@ -108,7 +108,7 @@ export function CellMenu({
   return (
     <>
       <div style={{ position: "fixed", inset: 0, zIndex: 30 }} onClick={onClose} onContextMenu={e => { e.preventDefault(); onClose(); }} />
-      <div role="menu" data-testid="cell-menu" className="aug-fs-ui" style={{
+      <div role="menu" data-testid="cell-menu" className="aug-fs-chrome" style={{
         position: "fixed", left, top, zIndex: 31, minWidth: 240, padding: 5,
         background: "var(--bg-2)", border: "1px solid var(--b2)", borderRadius: "var(--r2)",
         boxShadow: "var(--shadow-md)",

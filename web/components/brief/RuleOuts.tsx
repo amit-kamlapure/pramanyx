@@ -13,7 +13,7 @@ import type { RuleOuts } from "@/lib/types";
 export function RuleOutsSection({ ruleOuts }: { ruleOuts?: RuleOuts | null }) {
   if (!ruleOuts?.items?.length) return null;
   return (
-    <BriefSection label="Rule out first" className="border-t border-zinc-800/60 pt-4">
+    <BriefSection label="Rule out first" className="pt-4">
       <p className="aug-fs-ui text-zinc-500 leading-relaxed">
         {ruleOuts.lead || ruleOuts.note || "Not checked against your data."}
       </p>

@@ -133,7 +133,7 @@ export function DeployMenu({ automationId, onChanged }: DeployMenuProps) {
             {doors.map(d => (
               <div key={d.kind} style={{
                 display: "flex", gap: 10, alignItems: "flex-start", padding: "10px 12px",
-                border: "1px solid var(--b1)", borderRadius: "var(--r2)",
+                borderRadius: "var(--r2)",
                 background: "var(--bg-1)",
               }}>
                 <span style={{ color: STATE[d.state].color, paddingTop: 2 }}>
@@ -141,17 +141,17 @@ export function DeployMenu({ automationId, onChanged }: DeployMenuProps) {
                 </span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                    <span className="aug-fs-ui" style={{ fontWeight: 600 }}>{d.label}</span>
+                    <span className="aug-fs-chrome" style={{ fontWeight: 600 }}>{d.label}</span>
                     <span className="aug-fs-xs" style={{ color: STATE[d.state].color }}>
                       ● {STATE[d.state].label}
                     </span>
                     {d.detail && (
-                      <span className="aug-fs-xs" style={{ color: "var(--t3)", overflow: "hidden",
+                      <span className="aug-fs-sm" style={{ color: "var(--t3)", overflow: "hidden",
                         textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.detail}</span>
                     )}
                   </div>
                   {/* The server's sentence, verbatim — see this file's header. */}
-                  <div className="aug-fs-xs" style={{ color: "var(--t3)", marginTop: 2 }}>
+                  <div className="aug-fs-sm" style={{ color: "var(--t3)", marginTop: 2 }}>
                     {d.reason}
                   </div>
                   {d.kind === "webhook" && issued && (
@@ -232,7 +232,7 @@ function IssuedUrl({ url, token }: { url: string; token: string }) {
       <div style={{ display: "flex", gap: 6, alignItems: "flex-start" }}>
         <code className="aug-fs-xs" style={{
           flex: 1, minWidth: 0, wordBreak: "break-all", color: "var(--t2)",
-          background: "var(--bg-2)", border: "1px solid var(--b1)",
+          background: "var(--bg-2)",
           borderRadius: "var(--r2)", padding: "6px 8px",
         }}>{curl}</code>
         <Button variant="ghost" size="xs" className="aug-fs-xs" style={{ flexShrink: 0 }}

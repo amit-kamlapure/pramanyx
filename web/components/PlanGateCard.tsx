@@ -43,10 +43,10 @@ export function PlanGateCard({
   return (
     <div
       className="flex flex-col gap-2 rounded-md p-3 my-1"
-      style={{ border: "1px solid var(--b1)", background: "var(--bg-2)" }}
+      style={{ background: "var(--bg-2)" }}
     >
       <div className="flex items-center justify-between">
-        <span className="aug-text-xs uppercase tracking-wide" style={{ color: "var(--t3)" }}>
+        <span className="aug-label">
           Review plan before running
         </span>
         <span className="aug-text-xs font-mono" style={{ color: "var(--t3)" }}>

@@ -126,7 +126,7 @@ export function SheetBoard({ sheet, query, column, card, editable, tick, onOpenR
               onDragLeave={() => setOver(o => (o === k ? null : o))}
               onDrop={e => { if (movable) drop(e, l.value); }}
               style={{ width: LANE_WIDTH, minWidth: LANE_WIDTH, display: "flex", flexDirection: "column", gap: 6,
-                background: over === k ? "var(--bg-sel)" : "var(--bg-1)", border: "1px solid var(--b1)",
+                background: over === k ? "var(--bg-sel)" : "var(--bg-1)",
                 borderRadius: "var(--r3)", padding: 8, maxHeight: "100%", overflowY: "auto" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "2px 2px 4px" }}>
                 {l.value === null ? <span style={MUTED}>empty</span> : <CellValue column={lane} value={l.value} />}
@@ -167,7 +167,7 @@ export function SheetBoard({ sheet, query, column, card, editable, tick, onOpenR
                     </div>
                     {moving === rowNo && (
                       <div role="group" aria-label={`Move row ${rowNo} to`} style={{ display: "flex", flexWrap: "wrap", gap: 4,
-                        padding: "4px 0", borderTop: "1px solid var(--b0)", borderBottom: "1px solid var(--b0)" }}>
+                        padding: "6px 0" }}>
                         <span className="aug-fs-xs" style={{ ...MUTED, width: "100%" }}>Move to</span>
                         {page.lanes.filter(o => o !== l).map(o => (
                           <Button key={JSON.stringify(o.value)} variant="outline" size="xs" onClick={() => move(rowNo, o.value, true)}>
@@ -179,10 +179,11 @@ export function SheetBoard({ sheet, query, column, card, editable, tick, onOpenR
                     {fields.map(c => {
                       const v = r[index[c.id]];
                       return (
-                        <span key={c.id} className="aug-fs-xs" style={{ display: "flex", gap: 6, minWidth: 0 }}>
+                        // the field's name a label at 11, its value at 13 — a value in a label/value list (2026-11-20)
+                        <span key={c.id} className="aug-fs-xs" style={{ display: "flex", gap: 6, minWidth: 0, alignItems: "baseline" }}>
                           <span style={{ ...MUTED, flex: "0 0 auto", maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis",
                             whiteSpace: "nowrap" }}>{c.name}</span>
-                          <span style={{ ...NUM, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          <span className="aug-fs-chrome" style={{ ...NUM, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                             {v === null || v === undefined || v === "" ? "—" : showValue(v, c)}
                           </span>
                         </span>
@@ -203,7 +204,7 @@ export function SheetBoard({ sheet, query, column, card, editable, tick, onOpenR
           );
         })}
       </div>
-      <div className="aug-fs-xs" style={{ ...MUTED, ...NUM, padding: "4px 12px", borderTop: "1px solid var(--b0)",
+      <div className="aug-fs-xs" style={{ ...MUTED, ...NUM, padding: "4px 12px",
         background: "var(--bg-1)" }}>
         {rowsWord(page.total, sheet.name)} in {formatCount(lanesWithRows)} lane{lanesWithRows === 1 ? "" : "s"} by {lane.name}
         {page.not_shown.length > 0 && ` · not in this view: ${page.not_shown.map(x =>

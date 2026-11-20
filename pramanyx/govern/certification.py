@@ -2,7 +2,7 @@
 2026-11-17).
 
 One governed tag, ``certification`` = ``certified`` | ``deprecated``, on the assets that carry no lifecycle of their
-own: a TABLE, a DOCUMENT, a DASHBOARD. A metric and a trusted query are approved or deprecated through their own
+own: a TABLE, a DOCUMENT, a DASHBOARD, a DATA CANVAS (2026-11-20). A metric and a trusted query are approved or deprecated through their own
 lifecycle and a Definition published by its owner, so none takes a second word for the same thing. Why it was certified or
 deprecated rides beside it (``certification_why``), with who set it and when — a tag records its author, and a model
 never authors one (`govern/tag_store.py`).
@@ -22,7 +22,7 @@ KEY = "certification"
 WHY_KEY = "certification_why"
 STATUSES = ("certified", "deprecated")
 #: The assets this word is said of, and how each is named as a securable.
-KINDS = ("table", "document", "dashboard")
+KINDS = ("table", "document", "dashboard", "canvas")
 
 
 def securable_for(kind: str, ref: str, *, connection_id: str = "", schema: str = "") -> str:

@@ -61,7 +61,9 @@ export function BriefHeadline({
     enabled: animate && isString,
   });
   return (
-    <h2 className={`aug-text-h2 leading-snug ${className}`}>
+    // The verdict sentence, 18 (aug-fs-h1), as the coworker's answers draw it (2026-11-20: one size for an answer's
+    // headline wherever the answer is).
+    <h2 className={`aug-text-h2 aug-fs-h1 leading-snug ${className}`}>
       {isString ? (
         <>
           {renderEmphasis(safePartial(shown))}
@@ -79,7 +81,7 @@ export function BriefHeadline({
   );
 }
 
-// ── Section — an optional uppercase label + children. No box, no border. ────────
+// ── Section — an optional label (12px semibold, sentence case) + children. No box, no border. ────────
 export function BriefSection({
   label,
   children,
@@ -200,7 +202,7 @@ export function FigureCaption({ source }: { source: FigureSource }) {
   if (source.dateRange) parts.push(source.dateRange);
   if (!parts.length) return null;
   return (
-    <figcaption className="aug-fs-xs text-zinc-500 mt-2 pt-2 border-t border-zinc-700/40 flex flex-wrap gap-x-1.5">
+    <figcaption className="aug-fs-xs text-zinc-500 mt-3 flex flex-wrap gap-x-1.5">
       {parts.map((p, i) => (
         <span key={i} className="whitespace-nowrap">
           {i > 0 && <span className="text-zinc-600 mr-1.5">·</span>}
@@ -226,9 +228,10 @@ export function BriefFigure({
   className?: string;
 }) {
   return (
+    // framed by its surface on the ground, not an edge (2026-11-20, borders are the exception)
     <figure
-      className={`rounded-md border border-zinc-700/50 overflow-hidden p-3 m-0 ${className}`}
-      style={{ background: "var(--bg-0)" }}
+      className={`rounded-md overflow-hidden p-3 m-0 ${className}`}
+      style={{ background: "var(--bg-2)" }}
     >
       {caption && (
         <figcaption className={`aug-fs-xs ${subcaption ? "text-zinc-300" : "text-zinc-500"} ${subcaption ? "mb-0.5" : "mb-2"}`}>
@@ -258,7 +261,7 @@ export function BriefDetails({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className={`border-t border-zinc-800/60 pt-2.5 ${className}`}>
+    <div className={`pt-3 ${className}`}>
       <Button
         variant="ghost" size="xs"
         onClick={() => setOpen((v) => !v)}

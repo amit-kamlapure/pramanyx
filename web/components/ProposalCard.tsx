@@ -145,7 +145,7 @@ function ChainStrip({ chain, openKeys }: {
     <div className="flex flex-wrap items-center gap-1.5">
       {conditions.map((c, i) => (
         <span key={`c${i}`} className="aug-text-xs font-mono rounded px-1.5 py-0.5"
-          style={{ background: "var(--bg-3)", border: "1px solid var(--b1)", color: "var(--t2)" }}>
+          style={{ background: "var(--gray-a3)", color: "var(--t2)" }}>
           {triggerWords(c)}
         </span>
       ))}
@@ -156,8 +156,7 @@ function ChainStrip({ chain, openKeys }: {
             <span aria-hidden style={{ color: "var(--t3)" }}>›</span>
             <span className="aug-text-xs font-mono rounded px-1.5 py-0.5"
               style={{
-                background: "var(--bg-3)", color: waits ? "var(--amb4)" : "var(--t2)",
-                border: `1px solid ${waits ? "var(--amb4)" : "var(--b1)"}`,
+                background: waits ? "var(--amb1)" : "var(--gray-a3)", color: waits ? "var(--amb4)" : "var(--t2)",
               }}>
               {stepWords(e)}{waits ? " · a choice is open" : ""}
             </span>
@@ -305,7 +304,7 @@ function DashboardBody({ p }: { p: StagedProposal }) {
             )}
             {tab.sections.map((s, j) => (
               <div key={`section-${i}-${j}`} className="flex flex-col gap-0.5 rounded px-2 py-1.5"
-                style={{ background: "var(--bg-3)", border: "1px solid var(--b1)" }}>
+                style={{ background: "var(--bg-3)" }}>
                 <span className="aug-text-sm" style={{ color: "var(--t1)" }}>
                   {s.title}
                   <Moved change={s.change} />
@@ -430,7 +429,7 @@ export function ProposalCard({ proposal, actor, onResolved, onOpenInEditor, inbo
 
   return (
     <div className="flex flex-col gap-2 rounded-md p-3"
-      style={{ border: "1px solid var(--b1)", background: "var(--bg-2)" }}>
+      style={{ background: "var(--bg-2)" }}>
       <div className="flex items-center gap-2 flex-wrap">
         <StatusChip hue={chip.hue} strength="soft">{chip.label}</StatusChip>
         {p.kind === "integration" && p.grant_id && (

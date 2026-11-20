@@ -6,7 +6,7 @@
 import { fastApiError } from "@/lib/api";
 import { getApiBase } from "@/lib/config";
 
-export type CertKind = "table" | "document" | "dashboard";
+export type CertKind = "table" | "document" | "dashboard" | "canvas";
 export type CertStatus = "certified" | "deprecated";
 export interface Certification { securable: string; status: CertStatus; why: string; by: string; at: string }
 

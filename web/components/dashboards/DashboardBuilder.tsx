@@ -42,6 +42,7 @@ import {
 import { lineOf, nameOf, setTitles } from "@/lib/dashboards/names";
 import { checkDashboardSpec } from "@/lib/dashboards/rules";
 import { withUniqueKeys } from "@/lib/listKeys";
+import { sentenceCase } from "@/lib/format";
 import { cachedObjectCatalog } from "@/lib/objects";
 
 /** The name the ontology gives each entity, by its id and its api name — "Customer Order" for `order` — read once a
@@ -71,10 +72,10 @@ const ICON: Record<string, IconName> = {
   ObjectTable: "table", ObjectDetail: "list", ActionButton: "bolt", ObjectFilters: "filter", GlobalFilters: "filter", GlobalFilter: "filter", ObjectFigure: "num", ObjectChart: "chart", ObjectBreakdown: "column",
 };
 
-/** The pane's small uppercase heading. */
+/** The pane's section label (12px semibold sentence case). */
 function PaneLabel({ children }: { children: ReactNode }) {
   return (
-    <div className="aug-fs-xs" style={{ color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em", padding: "12px 12px 6px" }}>
+    <div className="aug-label" style={{ padding: "12px 12px 6px" }}>
       {children}
     </div>
   );
@@ -95,7 +96,7 @@ export function LayoutTree({ spec, selected, onSelect, cardTitle, entityTitle }:
         const on = selected === line.key;
         return (
           <button key={line.key} type="button" role="treeitem" aria-selected={on} data-testid="builder-line" data-key={line.key}
-            onClick={() => onSelect(line.key)} className="aug-fs-sm"
+            onClick={() => onSelect(line.key)} className="aug-fs-chrome"
             style={{ display: "flex", alignItems: "center", gap: 7, width: "100%", padding: `4px 6px 4px ${6 + line.depth * 14}px`,
               border: 0, borderRadius: "var(--r2)", background: on ? "var(--accent-a3, var(--bg-3))" : "transparent", cursor: "pointer",
               color: on ? "var(--t1)" : "var(--t2)", textAlign: "left", font: "inherit" }}>
@@ -131,7 +132,7 @@ function Steps({ label, value, least, most, onStep }: { label: string; value: nu
 const Rule = () => <span aria-hidden="true" style={{ width: 1, height: 16, background: "var(--b2)", margin: "0 6px" }} />;
 
 export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words, aside, above, connectionId, schema,
-  onAddPiece, checks, cardSetup, cardChart, cardSql, cardReads, queryCards, onUndo, onRedo, cardDates, cardHolds, release, askPiece, placing, onFollow, children }: {
+  onAddPiece, checks, cardSetup, cardChart, cardSql, cardReads, queryCards, onUndo, onRedo, cardDates, cardHolds, release, placing, onFollow, children }: {
   spec: DashboardSpec;
   /** A box being placed (the user, 2026-11-19): the kind the strip picked up, the box set down and waiting for what it is,
    *  and where a box set down, let go, or clicked goes. */
@@ -144,9 +145,8 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
   cardDates?: () => CardDate[];
   /** v17 — what a placed card holds that its panel offers to draw: number columns, and fields whose values it colours. */
   cardHolds?: (cardId: string) => CardHolds;
-  /** Undo and Redo, on the canvas toolbar and the editing keys (the dashboards study, R2 and R3, 2026-11-18). */
-  /** The study's R19 — the door to change the piece chosen in words, drawn above its setup. */
-  askPiece?: (key: string, type: string | undefined) => ReactNode;
+  /** Undo and Redo, on the canvas toolbar and the editing keys (the dashboards study, R2 and R3, 2026-11-18). The door to
+   *  change a piece in words (R19) is the piece's own prompt on the canvas since 2026-11-20, not a block in this panel. */
   onUndo?: () => void;
   onRedo?: () => void;
   /** The canvas toolbar's doors the page keeps — words, a picture, buttons, asking in words — and which one is open. */
@@ -364,14 +364,15 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
       <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: `${paneOpen ? 232 : 44}px minmax(0, 1fr) 304px` }}>
         {!paneOpen ? (
           <aside aria-label="Layout, folded" data-testid="builder-pane-folded"
-            style={{ minHeight: 0, borderRight: "1px solid var(--b1)", background: "var(--bg-1)", display: "flex", flexDirection: "column", alignItems: "center", gap: 6, paddingTop: 10 }}>
+            style={{ minHeight: 0, borderRight: "1px solid var(--divide)", background: "var(--bg-1)", display: "flex", flexDirection: "column", alignItems: "center", gap: 6, paddingTop: 10 }}>
             <Button size="icon-sm" variant="outline" aria-label="Open the layout" title={`Open the layout · ${lines} ${lines === 1 ? "line" : "lines"}`}
               data-testid="builder-open-layout" onClick={() => openPane("layout")}><Icon name="unfold" size={16} /></Button>
             <Button size="icon-sm" variant="outline" aria-label="Open the variables" title="Open the variables: values, sets and choices"
               data-testid="builder-open-variables" onClick={() => openPane("data")}><Icon name="json" size={16} /></Button>
           </aside>
         ) : (
-        <aside aria-label="Layout" style={{ minHeight: 0, overflow: "auto", borderRight: "1px solid var(--b1)", background: "var(--bg-1)", display: "flex", flexDirection: "column" }}>
+        // layout | canvas | setup are panes worked side by side: a --divide rule between them, none inside (2026-11-20)
+        <aside aria-label="Layout" style={{ minHeight: 0, overflow: "auto", borderRight: "1px solid var(--divide)", background: "var(--bg-1)", display: "flex", flexDirection: "column" }}>
           <div style={{ padding: "10px 10px 0", display: "flex", alignItems: "center", gap: 6 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <Segmented label="The left pane" value={tab} options={[{ value: "layout", label: "Layout" }, { value: "data", label: "Variables" }]}
@@ -390,16 +391,16 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
             </>
           )}
           <div style={{ flex: 1 }} />
-          {words && <div style={{ borderTop: "1px solid var(--b1)", padding: "10px 12px" }}>{words}</div>}
+          {words && <div style={{ padding: "12px 12px 10px" }}>{words}</div>}
         </aside>
         )}
 
         <div style={{ minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column", background: "var(--bg-0)", position: "relative" }}>
           <div data-testid="builder-selection" className="aug-fs-sm"
-            style={{ display: "flex", alignItems: "center", gap: 4, padding: "6px 12px", borderBottom: "1px solid var(--b1)", minHeight: 40, flexWrap: "wrap" }}>
+            style={{ display: "flex", alignItems: "center", gap: 4, padding: "6px 12px", minHeight: 40, flexWrap: "wrap" }}>
             {wire ? (
               <>
-                <span className="aug-fs-xs" style={{ color: "var(--accent-11)", textTransform: "uppercase", letterSpacing: ".06em", marginRight: 6 }}>
+                <span className="aug-fs-xs" style={{ color: "var(--accent-11)", marginRight: 6 }}>
                   {wireKind === "set" ? "Set" : wireKind === "value" ? "Variable" : "Chosen"}
                 </span>
                 <span style={{ color: "var(--t1)" }}>{wireKind === "set" ? spec.sets?.[wireName]?.label : wireKind === "value" ? spec.values?.[wireName]?.label : wireName.replace(/[-_]/g, " ")}</span>
@@ -409,7 +410,7 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
               </>
             ) : named ? (
               <>
-                <span className="aug-fs-xs" style={{ color: "var(--accent-11)", textTransform: "uppercase", letterSpacing: ".06em", marginRight: 6 }}>{named.kind}</span>
+                <span className="aug-fs-xs" style={{ color: "var(--accent-11)", marginRight: 6 }}>{sentenceCase(named.kind)}</span>
                 <span style={{ color: "var(--t1)", minWidth: 0, maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{named.title}</span>
                 <span style={{ flex: 1 }} />
                 {movable && (
@@ -421,7 +422,7 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
                     <Rule />
                     {section && (
                       <>
-                        <span className="aug-fs-xs" style={{ color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em", margin: "0 4px" }}>Split</span>
+                        <span className="aug-label" style={{ margin: "0 4px" }}>Split</span>
                         {(["above", "below", "left", "right"] as const).map(side => (
                           <Button key={side} size="xs" variant="ghost" aria-label={`Split it: a new section ${side === "left" || side === "right" ? `to the ${side}` : side}`}
                             data-testid={`builder-split-${side}`} onClick={() => split(side)}>
@@ -530,13 +531,13 @@ export function DashboardBuilder({ spec, onChange, cardTitle, bar, tools, words,
         </div>
 
         <aside aria-label="Setup" data-testid="builder-setup"
-          style={{ minHeight: 0, overflow: "auto", borderLeft: "1px solid var(--b1)", background: "var(--bg-1)" }}>
+          style={{ minHeight: 0, overflow: "auto", borderLeft: "1px solid var(--divide)", background: "var(--bg-1)" }}>
           {aside ?? (wireKind === "set" ? <SetSetup spec={spec} name={wireName} onChange={apply} onGone={() => setWire(null)} connectionId={connectionId} schema={schema} />
             : wireKind === "value" ? <ValueSetup spec={spec} name={wireName} onChange={apply} onGone={() => setWire(null)}
               connectionId={connectionId} schema={schema} cardReads={cardReads} cardTitle={cardTitle}
               onRenamed={n => setWire(`value:${n}`)} queryCards={queryCards} />
               : wireKind === "choice" ? <ChoiceSetup spec={spec} name={wireName} />
-                : <>{selected && movable && askPiece?.(selected, el?.type)}<PieceSetup spec={spec} selected={selected} onChange={apply} connectionId={connectionId} schema={schema} cardTitle={cardTitle}
+                : <><PieceSetup spec={spec} selected={selected} onChange={apply} connectionId={connectionId} schema={schema} cardTitle={cardTitle}
                   entityTitle={entityTitle} cardSetup={cardSetup} cardChart={cardChart} cardSql={cardSql}
                   onOpenLayout={() => openPane("layout")} cardDates={cardDates} cardHolds={cardHolds} release={release} /></>)}
         </aside>
@@ -574,8 +575,8 @@ function ChecksChip({ spec, checks, onChoose, cardTitle, entityTitle }: {
             <Button key={id} role="listitem" variant="plain" data-testid="builder-checks-item" onClick={() => { setOpen(false); onChoose(key); }}
               style={{ height: "auto", justifyContent: "flex-start", textAlign: "left", whiteSpace: "normal", padding: "6px 8px" }}>
               <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
-                <span className="aug-fs-sm" style={{ color: "var(--t1)" }}>{lineOf(spec.elements, key, cardTitle, entityTitle, setTitles(spec))}</span>
-                <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>{c.reason || "It could not be read."}</span>
+                <span className="aug-fs-chrome" style={{ color: "var(--t1)" }}>{lineOf(spec.elements, key, cardTitle, entityTitle, setTitles(spec))}</span>
+                <span className="aug-fs-sm" style={{ color: "var(--t3)" }}>{c.reason || "It could not be read."}</span>
               </span>
             </Button>
           ))}
@@ -657,7 +658,7 @@ export function EditBar({ picker, saved, actions, onDone }: EditBarProps) {
   const doneDoor = <Button size="sm" data-testid="builder-done" onClick={onDone}>Done</Button>;
   return (
     <div data-testid="builder-bar" className="aug-fs-sm"
-      style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 14px", borderBottom: "1px solid var(--b1)", background: "var(--bg-1)", flexWrap: "wrap" }}>
+      style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 14px", background: "var(--bg-1)", flexWrap: "wrap" }}>
       {picker}
       <span className="aug-tag" style={{ color: "var(--accent-11)" }}>Editing</span>
       <span data-testid="builder-saved" style={{ color: "var(--t3)" }}>{saved}</span>

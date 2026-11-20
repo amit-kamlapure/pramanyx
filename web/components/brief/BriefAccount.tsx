@@ -34,10 +34,12 @@ import { countNoun, formatCount, utcDayWords } from "@/lib/format";
 import { withUniqueKeys } from "@/lib/listKeys";
 import { requestTab } from "@/lib/navigate";
 
-const RULE = "1px solid var(--b1)";
-const LABEL: React.CSSProperties = { color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 600 };
+// Lines kept on purpose (2026-11-20, borders are the exception): a list's row rule in --b0, and the rule between
+// columns or cells worked side by side in --divide. A panel is its surface on the ground, no edge.
+const RULE = "1px solid var(--b0)";
+const DIVIDE = "1px solid var(--divide)";
 const NUM: React.CSSProperties = { fontVariantNumeric: "tabular-nums" };
-const PANEL: React.CSSProperties = { background: "var(--bg-1)", border: RULE, borderRadius: "var(--r3)" };
+const PANEL: React.CSSProperties = { background: "var(--bg-2)", borderRadius: "var(--r3)" };
 const STATE: Record<EditionStoryline["state"], { label: string; tone: Tone }> = {
   new: { label: "New", tone: "accent" }, developing: { label: "Developing", tone: "amber" }, decided: { label: "Decided", tone: "up" },
 };
@@ -58,7 +60,7 @@ export function Info({ children }: { children: string }) {
 export function SectionHead({ title, info, right }: { title: string; info?: string; right?: ReactNode }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", margin: "22px 0 8px" }}>
-      <h2 className="aug-fs-xs" style={{ ...LABEL, margin: 0 }}>{title}</h2>
+      <h2 className="aug-label" style={{ margin: 0 }}>{title}</h2>
       {info && <Info>{info}</Info>}
       {right && <span style={{ marginLeft: "auto", display: "inline-flex", gap: 8, alignItems: "center" }}>{right}</span>}
     </div>
@@ -119,26 +121,26 @@ export function BusinessLine({ stages, figures, chosen, onChoose }: {
   const key = (stage: string) => (e: KeyboardEvent) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onChoose(stage); } };
   return (
     <>
-      <div data-testid="business-line" style={{ ...PANEL, display: "grid", gridTemplateColumns: `repeat(auto-fit, minmax(210px, 1fr))` }}>
+      <div data-testid="business-line" style={{ ...PANEL, overflow: "hidden", display: "grid", gridTemplateColumns: `repeat(auto-fit, minmax(210px, 1fr))` }}>
         {stages.map(s => {
           const figs = s.figures.map(id => byId[id]).filter(Boolean);
           const out = figs.filter(f => sideOf(f) !== 0).length;
           return (
             <div key={s.id} role="button" tabIndex={0} data-testid="business-stage" aria-pressed={chosen === s.id}
               onClick={() => onChoose(chosen === s.id ? "" : s.id)} onKeyDown={key(chosen === s.id ? "" : s.id)}
-              style={{ padding: "12px 14px 10px", borderRight: RULE, borderBottom: RULE, marginRight: -1, marginBottom: -1, cursor: "pointer",
+              style={{ padding: "12px 14px 10px", borderRight: DIVIDE, borderBottom: DIVIDE, marginRight: -1, marginBottom: -1, cursor: "pointer",
                        background: chosen === s.id ? "var(--blue1)" : undefined }}>
               <div className="aug-fs-ui" style={{ color: "var(--t1)", fontWeight: 600 }}>{s.name}</div>
               <div className="aug-fs-xs" style={{ ...NUM, color: "var(--t3)", margin: "0 0 8px" }}>
                 {out ? `${out} of ${figs.length} outside usual` : "all inside usual"}
               </div>
               {figs.map(f => (
-                <div key={f.id} data-testid="line-figure" className="aug-fs-sm"
+                <div key={f.id} data-testid="line-figure" className="aug-fs-chrome"
                   style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "2px 8px", padding: "5px 0", borderTop: RULE }}>
                   <span style={{ color: "var(--t2)" }} title={f.why || undefined}>{f.label}</span>
                   <span style={{ ...NUM, color: "var(--t1)", fontWeight: 600, textAlign: "right" }}>{f.current_text ?? "—"}</span>
                   <Track figure={f} />
-                  <span className="aug-fs-xs" style={{ ...NUM, gridColumn: "1 / 3", color: "var(--t3)" }}
+                  <span className="aug-fs-sm" style={{ ...NUM, gridColumn: "1 / 3", color: "var(--t3)" }}
                     title={f.equal_age && !f.equal_age.equal ? f.equal_age.why : undefined}>
                     {f.usual ? `usual ${usualWords(f)}${sideOf(f) && !f.outside ? " · not called" : ""}` : "no usual range"}
                     {f.status !== "final" ? ` · ${f.status.replace("_", " ")}` : ""}
@@ -155,8 +157,8 @@ export function BusinessLine({ stages, figures, chosen, onChoose }: {
 
 function Cell({ label, info, big, tone, children }: { label: string; info?: string; big: ReactNode; tone?: "none" | "done"; children?: ReactNode }) {
   return (
-    <div style={{ padding: "10px 14px", borderRight: RULE, minWidth: 0 }}>
-      <div className="aug-fs-xs" style={{ ...LABEL, display: "flex", gap: 6, alignItems: "center" }}>{label}{info && <Info>{info}</Info>}</div>
+    <div style={{ padding: "10px 14px", borderRight: DIVIDE, marginRight: -1, minWidth: 0 }}>
+      <div className="aug-label" style={{ display: "flex", gap: 6, alignItems: "center" }}>{label}{info && <Info>{info}</Info>}</div>
       <div className="aug-fs-ui" style={{ ...NUM, fontWeight: 600, margin: "3px 0 0",
         color: tone === "none" ? "var(--amb4)" : tone === "done" ? "var(--grn4)" : "var(--t1)" }}>{big}</div>
       {children}
@@ -168,7 +170,7 @@ function Trail({ trail, onCite }: { trail: StorylineTrail[]; onCite: (source: st
   return (
     <ol data-testid="storyline-trail" style={{ listStyle: "none", margin: 0, padding: 0, marginLeft: 4, borderLeft: "2px solid var(--b1)" }}>
       {trail.map((t, i) => (
-        <li key={i} className="aug-fs-sm" style={{ position: "relative", padding: "0 0 10px 14px", color: "var(--t2)" }}>
+        <li key={i} className="aug-fs-chrome" style={{ position: "relative", padding: "0 0 10px 14px", color: "var(--t2)" }}>
           <span aria-hidden style={{ position: "absolute", left: -6, top: 5, width: 8, height: 8, boxSizing: "content-box",
             background: t.now ? "var(--blue4)" : "var(--bg-1)",
             border: `2px ${t.open ? "dashed var(--amb4)" : `solid ${t.now ? "var(--blue4)" : "var(--t3)"}`}` }} />
@@ -241,13 +243,13 @@ export function Storylines({ stories, figures, period, readerName, teams, open, 
                 {!s.called && <>{" "}<Chip title="Read outside its usual range, but the platform does not call it a move">not called</Chip></>}
                 {s.status !== "final" && <>{" "}<Chip tone="amber" title="Its range is still filling, so the figure may yet change">{s.status.replace("_", " ")}</Chip></>}
               </span>
-              <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>
-                <b className="aug-fs-sm" data-testid="storyline-owner" style={{ display: "block", fontWeight: 600, color: s.owner ? "var(--t1)" : "var(--amb4)" }}>
+              <span className="aug-fs-sm" style={{ color: "var(--t3)" }}>
+                <b className="aug-fs-chrome" data-testid="storyline-owner" style={{ display: "block", fontWeight: 600, color: s.owner ? "var(--t1)" : "var(--amb4)" }}>
                   {s.owner || "No owner"}</b>
                 {s.stage_name || (s.decision?.decided ? `decided ${day(s.decision.decided)}` : "")}
               </span>
-              <span className="aug-fs-xs" style={{ ...NUM, color: "var(--t3)" }}>
-                <b className="aug-fs-sm" style={{ display: "block", fontWeight: 600, color: "var(--t1)" }}>{worthWords(s)}</b>
+              <span className="aug-fs-sm" style={{ ...NUM, color: "var(--t3)" }}>
+                <b className="aug-fs-chrome" style={{ display: "block", fontWeight: 600, color: "var(--t1)" }}>{worthWords(s)}</b>
                 {s.worth.value != null ? (s.worth.value > 0 ? "above its usual top" : "below its usual bottom") : ""}
               </span>
               <span>{next && <Button size="sm" variant="outline" disabled={busy === s.id} data-testid="storyline-step"
@@ -255,9 +257,9 @@ export function Storylines({ stories, figures, period, readerName, teams, open, 
               <span aria-hidden>{anchor && <VegaChart spec={figureSpec(anchor, true)} tier={2} height={30} />}</span>
             </div>
             {isOpen && (
-              <div data-testid="storyline-open" style={{ borderTop: RULE, padding: "14px 14px 16px" }}>
+              <div data-testid="storyline-open" style={{ padding: "14px 14px 16px" }}>
                 <div data-testid="storyline-four" style={{ display: "grid", gridTemplateColumns: "2fr 2fr 4fr 3fr", background: "var(--bg-0, transparent)",
-                                                           border: RULE, borderRadius: "var(--r3)", marginBottom: 16, overflow: "hidden" }}>
+                                                           borderRadius: "var(--r3)", marginBottom: 16, overflow: "hidden" }}>
                   <Cell label="Owner" big={s.owner || "No owner"} tone={s.owner ? undefined : "none"}
                     info={s.owner_from === "decision" ? "The Record names them owner of its decision."
                       : s.owner_from === "metric" ? `Owns ${anchor?.label ?? s.metric}, the metric this storyline stands on.`
@@ -309,7 +311,7 @@ export function Storylines({ stories, figures, period, readerName, teams, open, 
                     </figure>
                   )}
                   <div>
-                    <div className="aug-fs-xs" style={{ ...LABEL, marginBottom: 8 }}>The trail</div>
+                    <div className="aug-label" style={{ marginBottom: 8 }}>The trail</div>
                     <Trail trail={s.trail} onCite={onCite} />
                   </div>
                 </div>
@@ -332,7 +334,7 @@ const CLAMP: React.CSSProperties = { display: "-webkit-box", WebkitLineClamp: 2,
 function Ledger({ title, info, testid, children }: { title: string; info: string; testid: string; children: ReactNode }) {
   return (
     <section data-testid={testid} style={{ ...PANEL, padding: "12px 14px", minWidth: 0 }}>
-      <h3 className="aug-fs-xs" style={{ ...LABEL, margin: "0 0 2px", display: "flex", gap: 6, alignItems: "center" }}>{title}<Info>{info}</Info></h3>
+      <h3 className="aug-label" style={{ margin: "0 0 2px", display: "flex", gap: 6, alignItems: "center" }}>{title}<Info>{info}</Info></h3>
       {children}
     </section>
   );
@@ -343,9 +345,9 @@ function Ledger({ title, info, testid, children }: { title: string; info: string
 function Entry({ title, sub, action }: { title: string; sub?: string; action?: ReactNode }) {
   return (
     <div data-testid="ledger-entry" style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) auto", gap: "2px 10px", padding: "7px 0", borderTop: RULE }}>
-      <span className="aug-fs-sm" title={title} style={{ ...CLAMP, color: "var(--t1)" }}>{title}</span>
+      <span className="aug-fs-chrome" title={title} style={{ ...CLAMP, color: "var(--t1)" }}>{title}</span>
       {action && <span style={{ gridRow: "1 / 3", gridColumn: 2 }}>{action}</span>}
-      {sub && <span className="aug-fs-xs" title={sub} style={{ ...CLAMP, ...NUM, gridColumn: 1, color: "var(--t3)" }}>{sub}</span>}
+      {sub && <span className="aug-fs-sm" title={sub} style={{ ...CLAMP, ...NUM, gridColumn: 1, color: "var(--t3)" }}>{sub}</span>}
     </div>
   );
 }

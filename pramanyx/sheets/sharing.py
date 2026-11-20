@@ -206,10 +206,20 @@ def set_sharing(sheet: Sheet, sharing: str, shared_with: list[dict], *, by: str)
     """Share a sheet with everyone in the workspace, or with the people and groups chosen — kept as a version of its
     definition, saying who it is shared with now. Only its maker may (`require` ``own``)."""
     require(sheet, by, OWN)
-    if sharing not in ("workspace", "chosen"):
-        raise Refused(f'a sheet is shared with "workspace" or "chosen" people, not {sharing!r}')
     names = _group_names()
-    maker = sheet.created_by.removeprefix("user:")
+    sheet.sharing, sheet.shared_with = chosen_shares(sharing, shared_with, sheet.created_by, names, what="a sheet")
+    return model.save(sheet, what=words(sheet, names), by=by)
+
+
+def chosen_shares(sharing: str, shared_with: list[dict], made_by: str, names: Optional[dict] = None, *,
+                  what: str = "it") -> tuple[str, list[Share]]:
+    """What an owner chose, checked: ``"workspace"`` and no shares, or ``"chosen"`` and each person, group or role named
+    once with what they may do — the maker left out, as they own it. `Refused` names what was wrong. Shared by every
+    asset that is shared this way (a sheet, a Data Canvas)."""
+    if sharing not in ("workspace", "chosen"):
+        raise Refused(f'{what} is shared with "workspace" or "chosen" people, not {sharing!r}')
+    names = _group_names() if names is None else names
+    maker = (made_by or "").removeprefix("user:")
     kept: dict[tuple[str, str], Share] = {}
     for raw in shared_with if sharing == "chosen" else []:
         try:
@@ -229,9 +239,7 @@ def set_sharing(sheet: Sheet, sharing: str, shared_with: list[dict], *, by: str)
         kept[(share.kind, share.id)] = share                # the last word on each person or group stands
     if sharing == "chosen" and not kept:
         raise Refused("choose at least one person or group, or share it with everyone in the workspace")
-    sheet.sharing = "chosen" if sharing == "chosen" else "workspace"
-    sheet.shared_with = list(kept.values())
-    return model.save(sheet, what=words(sheet, names), by=by)
+    return ("chosen" if sharing == "chosen" else "workspace"), list(kept.values())
 
 
 def words(sheet: Sheet, names: Optional[dict] = None) -> str:

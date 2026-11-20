@@ -48,9 +48,9 @@ export function EditionEvidence({ source, used, onPick, onClose }: {
         </p>
         {used.map((s, i) => (
           <div key={s.id} style={{ padding: "8px 0", borderTop: RULE }}>
-            <span role="button" tabIndex={0} className="aug-fs-sm" style={{ color: "var(--t1)", cursor: "pointer" }}
+            <span role="button" tabIndex={0} className="aug-fs-chrome" style={{ color: "var(--t1)", cursor: "pointer" }}
               onClick={() => onPick(s.id)} onKeyDown={e => { if (e.key === "Enter") onPick(s.id); }}>{i + 1}. {s.label}</span>
-            <div className="aug-fs-xs" style={{ color: "var(--t3)" }}>{KIND[s.kind] ?? s.kind} · {s.rows.length} rows</div>
+            <div className="aug-fs-sm" style={{ color: "var(--t3)" }}>{KIND[s.kind] ?? s.kind} · {s.rows.length} rows</div>
           </div>
         ))}
       </div>
@@ -75,7 +75,7 @@ export function EditionEvidence({ source, used, onPick, onClose }: {
         </div>
       )}
       {source.sql && <pre className="aug-fs-xs" style={{ whiteSpace: "pre-wrap", fontFamily: "var(--font-mono)", margin: "6px 0",
-                                                         padding: 8, border: RULE, borderRadius: "var(--r2)", color: "var(--t2)" }}>{source.sql}</pre>}
+                                                         padding: 8, background: "var(--code-bg)", borderRadius: "var(--r2)", color: "var(--t2)" }}>{source.sql}</pre>}
       {source.columns.length > 0 && (
         <>
           <div style={{ display: "flex", justifyContent: "flex-end" }}>
@@ -147,7 +147,8 @@ export function EditionAsk({ connectionId, schema, canvasId, periodKey, reader, 
   return (
     <section ref={box} data-testid="edition-ask" style={{ marginTop: 22 }}>
       {turns.map(({ turn, assistantMsg }) => (
-        <div key={turn.id} style={{ margin: "14px 0", padding: "14px 16px", border: "1px dashed var(--blue4)", borderRadius: "var(--r3)" }}>
+        // an answer asked of the edition, on its own surface rather than in a dashed outline (2026-11-20, borders are the exception)
+        <div key={turn.id} style={{ margin: "14px 0", padding: "14px 16px", background: "var(--bg-2)", borderRadius: "var(--r3)" }}>
           {/* what the turn was about, as the server read it — and said when the body answering did not read it */}
           {turn.route?.subject && (
             <p data-testid="edition-ask-answered-about" className="aug-fs-xs" style={{ color: "var(--t3)", margin: "0 0 8px" }}>
@@ -162,7 +163,7 @@ export function EditionAsk({ connectionId, schema, canvasId, periodKey, reader, 
         <div style={{ display: "flex", padding: "0 0 6px" }}>
           <div data-testid="edition-ask-part" className="aug-fs-xs" style={{
             display: "flex", alignItems: "center", gap: 5, minWidth: 0, maxWidth: "100%", padding: "2px 8px",
-            borderRadius: "var(--r2)", background: "var(--blue1)", border: "1px solid var(--blue2)", color: "var(--blue5)",
+            borderRadius: "var(--r2)", background: "var(--blue1)", color: "var(--blue5)",
           }}>
             <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Asking about “{about.words}”</span>
             <Button variant="ghost" size="icon-xs" onClick={() => onClearAbout?.()} title="Ask about the whole edition"

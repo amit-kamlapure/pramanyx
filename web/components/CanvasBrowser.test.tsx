@@ -106,3 +106,18 @@ describe("the list is this workspace's", () => {
     expect(await screen.findByText("Orders")).toBeInTheDocument();
   });
 });
+
+describe("a canvas not shared with the person (2026-11-20)", () => {
+  it("is listed and said, never opened: choosing it says who to ask", async () => {
+    const onSelect = vi.fn();
+    const locked: Canvas = { ...ORDERS, access: "", refusal: '"Orders" is not shared with you. Ask ana to share it with you.' };
+    api.getCanvases.mockResolvedValue([RETURNS, locked]);
+    render(<CanvasBrowser connections={[]} workspaceId="ws1" onSelect={onSelect} onNew={vi.fn()} />);
+    expect(await screen.findByText(/not shared with you$/)).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Orders"));
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(screen.getByTestId("canvas-not-shared")).toHaveTextContent("Ask ana to share it with you.");
+    fireEvent.click(screen.getByText("Returns"));
+    expect(onSelect).toHaveBeenCalledWith(RETURNS);
+  });
+});

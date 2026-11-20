@@ -43,20 +43,19 @@ const today = () => new Date().toISOString().slice(0, 10);
 /** How much of the lead's metric the line shows, a day at a time. */
 const TREND_DAYS = 60;
 
-/** A section's small uppercase label, with what it says at its right end. */
+/** A section's label (12px semibold sentence case), with what it says at its right end. */
 function Label({ children, right, amber }: { children: ReactNode; right?: ReactNode; amber?: boolean }) {
   return (
-    <div className="aug-fs-xs" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, color: amber ? "var(--amb4)" : "var(--t3)",
-      textTransform: "uppercase", letterSpacing: ".06em" }}>
+    <div className="aug-label" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, color: amber ? "var(--amb4)" : undefined }}>
       {children}
-      {right && <span style={{ marginLeft: "auto", textTransform: "none", letterSpacing: 0 }}>{right}</span>}
+      {right && <span style={{ marginLeft: "auto", fontWeight: 400 }}>{right}</span>}
     </div>
   );
 }
 
 type Tone = "plain" | "up" | "down" | "amber";
 const TONE: Record<Tone, CSSProperties> = {
-  plain: { background: "var(--bg-3)", color: "var(--t2)", border: "1px solid var(--b1)" },
+  plain: { background: "var(--gray-a3)", color: "var(--t2)", border: "1px solid transparent" }, // a faint fill, no outline (2026-11-20)
   up: { background: "var(--grn1)", color: "var(--grn4)", border: "1px solid transparent" },
   down: { background: "var(--red1)", color: "var(--red4)", border: "1px solid transparent" },
   amber: { background: "var(--amb1)", color: "var(--amb4)", border: "1px solid transparent" },
@@ -160,12 +159,12 @@ export function HomeDesk({ connectionId, analyses, onOpenAnalysis, onDraft }: {
           <Button key={s.latest.id} variant="plain" title={s.question} onClick={() => onOpenAnalysis(s.latest.id, s.latest.kind)}
             style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 32px", alignItems: "center", gap: 14,
               width: "100%", height: "auto", padding: "8px 2px", borderRadius: 0, textAlign: "left", whiteSpace: "normal",
-              borderTop: i ? "1px solid var(--b1)" : undefined }}>
+              borderTop: i ? "1px solid var(--b0)" : undefined }}>
             <span style={{ minWidth: 0 }}>
               <span className="aug-fs-chrome" title={s.latest.headline ?? ""} style={{ ...oneLine, display: "block", color: "var(--t1)", fontWeight: 500 }}>
                 {readableFigures(s.latest.headline)}
               </span>
-              <span className="aug-fs-xs" style={{ ...oneLine, ...muted, display: "block" }}>{s.question}</span>
+              <span className="aug-fs-sm" style={{ ...oneLine, ...muted, display: "block" }}>{s.question}</span>
             </span>
             <span className="aug-fs-xs" style={{ ...muted, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{s.count}×</span>
           </Button>
@@ -437,13 +436,13 @@ function WeekCard({ due }: { due: Due[] }) {
       {days.length === 0 ? (
         <div className="aug-fs-sm" style={muted}>Nothing lands in the next seven days.</div>
       ) : days.map((d, i) => (
-        <div key={d.on} style={{ padding: i ? "8px 0 0" : 0, borderTop: i ? "1px solid var(--b1)" : undefined, marginTop: i ? 8 : 0 }}>
+        <div key={d.on} style={{ padding: i ? "8px 0 0" : 0, borderTop: i ? "1px solid var(--b0)" : undefined, marginTop: i ? 8 : 0 }}>
           {i > 0 && <div className="aug-fs-sm" style={{ color: "var(--t1)", marginBottom: 4 }}>{dayWords(d.on)}</div>}
           {d.reviews.map(r => (
-            <div key={r.what} className="aug-fs-sm" style={{ ...oneLine, color: "var(--t2)" }} title={r.what}>{r.what}</div>
+            <div key={r.what} className="aug-fs-chrome" style={{ ...oneLine, color: "var(--t2)" }} title={r.what}>{r.what}</div>
           ))}
           {i === 0 ? (
-            <div className="aug-fs-sm" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: "3px 16px" }}>
+            <div className="aug-fs-chrome" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: "3px 16px" }}>
               {d.forecasts.slice(0, 4).map(f => (
                 <div key={f.what} style={{ display: "contents" }}>
                   <span style={{ ...oneLine, color: "var(--t2)" }}>{metricWords(f.metric)}</span>

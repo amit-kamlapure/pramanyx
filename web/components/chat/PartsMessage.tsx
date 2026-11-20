@@ -40,7 +40,7 @@ function DataBlock({ label, value }: { label: string; value: unknown }) {
       <pre
         style={{
           margin: "3px 0 0", padding: "6px 8px", overflowX: "auto",
-          background: "var(--bg-2)", border: "1px solid var(--b1)",
+          background: "var(--bg-2)",
           borderRadius: 4, color: "var(--t1)",
         }}
         className="aug-fs-ui"

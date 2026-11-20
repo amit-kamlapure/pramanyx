@@ -60,7 +60,7 @@ function StepDot({ n, state }: { n: number; state: "todo" | "now" | "done" }) {
     ? { background: "var(--accent)", color: "var(--on-primary)" }
     : state === "done"
       ? { background: "var(--blue1)", color: "var(--blue4)" }
-      : { border: "1px solid var(--b2)", color: "var(--t3)" };
+      : { background: "var(--gray-a3)", color: "var(--t3)" };
   return (
     <span className="aug-fs-xs" style={{ ...look, ...NUM, display: "inline-flex", alignItems: "center", justifyContent: "center",
       width: 18, height: 18, borderRadius: "var(--r-pill)", flexShrink: 0, fontWeight: 600 }}>
@@ -314,7 +314,7 @@ export function DocumentUploader({ formats, onAdded, onClose }: {
                       style={{ flex: 1, minWidth: 0, justifyContent: "flex-start", height: "auto", padding: "2px 4px", fontWeight: 400 }}>
                       <Chip>{formatLabel({ filename: f.name })}</Chip>
                       <span style={{ minWidth: 0, textAlign: "left" }}>
-                        <span className="aug-fs-sm" style={{ ...ONE_LINE, display: "block", color: "var(--t1)" }}>{f.name}</span>
+                        <span className="aug-fs-chrome" style={{ ...ONE_LINE, display: "block", color: "var(--t1)" }}>{f.name}</span>
                         <span className="aug-fs-xs" style={{ ...MUTED, ...NUM, display: "block" }}>
                           {sizeLabel(f.size)}
                           {reviews[f.name] ? ` · ${countNoun(reviews[f.name].would_index_chunks, "chunk")} to index` : " · not read yet"}
@@ -480,7 +480,7 @@ export function DocumentUploader({ formats, onAdded, onClose }: {
                 BROWSER_RENDERABLE.has(ext(file.name)) && originalUrl ? (
                   <>
                     <iframe src={originalUrl} title={file.name}
-                      style={{ width: "100%", height: "26rem", border: "1px solid var(--b1)", borderRadius: "var(--r2)", background: "var(--bg-0)" }} />
+                      style={{ width: "100%", height: "26rem", border: "none", borderRadius: "var(--r2)", background: "var(--bg-0)" }} />
                     {/* An embedded PDF renders only where the viewer's browser has a PDF plugin; elsewhere the frame
                         is simply BLANK with nothing to explain it. */}
                     <Hint>Blank? Some browsers cannot show a file inline — the Markdown view always works, and it is what gets indexed.</Hint>
@@ -492,7 +492,7 @@ export function DocumentUploader({ formats, onAdded, onClose }: {
                 review ? (
                   <>
                     <Hint>This is exactly what will be indexed and what every agent, canvas and prompt will see.</Hint>
-                    <pre className="aug-fs-xs" style={{ margin: "6px 0 0", padding: "8px 10px", borderRadius: "var(--r2)",
+                    <pre className="aug-fs-sm" style={{ margin: "6px 0 0", padding: "8px 10px", borderRadius: "var(--r2)",
                       background: "var(--code-bg)", color: "var(--t2)", fontFamily: "var(--font-mono)", whiteSpace: "pre-wrap",
                       wordBreak: "break-word", maxHeight: "26rem", overflow: "auto" }}>
                       {review.markdown}
@@ -508,7 +508,7 @@ export function DocumentUploader({ formats, onAdded, onClose }: {
                         <span style={{ color: "var(--t1)" }}>Chunk {c.index + 1}</span>
                         {" · "}{formatCount(c.characters)} characters · ~{formatCount(c.tokens_estimate)} tokens
                       </div>
-                      <div className="aug-fs-xs line-clamp-6" style={{ color: "var(--t2)", whiteSpace: "pre-wrap" }}>{c.text}</div>
+                      <div className="aug-fs-sm line-clamp-6" style={{ color: "var(--t2)", whiteSpace: "pre-wrap" }}>{c.text}</div>
                     </div>
                   ))}
                 </div>

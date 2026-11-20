@@ -89,7 +89,7 @@ function Picture({ layout }: { layout: MapLayout }) {
       <div data-testid="brain-picture" style={{ position: "relative", height: layout.height, minWidth: 820 }}>
         {layout.columns.map((c) => (
           <div key={c.id} className="aug-fs-xs" style={{ position: "absolute", left: `${c.x0}%`, width: `${c.x1 - c.x0}%`,
-            top: 0, color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em", ...ONE_LINE }}>
+            top: 0, color: "var(--t3)", ...ONE_LINE }}>
             {c.title}
           </div>
         ))}
@@ -191,17 +191,17 @@ function ChangedFacts({ map }: { map: BrainMap }) {
               padding: "8px 2px", ...(i ? RULE : {}) }}>
             <div style={{ minWidth: 0 }}>
               <div className="aug-fs-chrome" style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-                <span className={name.mono ? "aug-fs-sm" : undefined} style={{ color: "var(--t1)", fontWeight: 500, ...ONE_LINE,
+                <span style={{ color: "var(--t1)", fontWeight: 500, ...ONE_LINE,
                   ...(name.mono ? { fontFamily: "var(--font-mono)" } : {}) }}>{name.text}</span>
                 <span className="aug-fs-xs" style={MUTED}>{KIND_WORDS[f.kind] ?? keyToWords(f.kind)}</span>
                 {f.reason && f.reason !== "changed" && <Chip>{f.reason}</Chip>}
               </div>
-              <div className="aug-fs-xs" title={f.replaced || undefined}
+              <div className="aug-fs-sm" title={f.replaced || undefined}
                 style={{ ...MUTED, ...ONE_LINE, fontFamily: f.replaced ? "var(--font-mono)" : undefined }}>
                 {f.replaced ? <>was {f.replaced}</> : "what it replaced was not kept"}
               </div>
             </div>
-            <span className="aug-fs-sm" title={formatTimestamp(f.changed)} style={{ color: "var(--t2)", ...NUM }}>
+            <span className="aug-fs-xs" title={formatTimestamp(f.changed)} style={{ color: "var(--t2)", ...NUM }}>
               {f.changed ? dayMonth(f.changed) : "—"}
             </span>
           </div>

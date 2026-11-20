@@ -64,7 +64,7 @@ export function QuestionComposer({ connectionId, schema, question = "", firstRun
   };
 
   return (
-    <div data-testid="question-composer" style={{ border: "1px solid var(--b1)", borderRadius: "var(--r3)", padding: 14, marginBottom: 16,
+    <div data-testid="question-composer" style={{ background: "var(--bg-2)", borderRadius: "var(--r3)", padding: 14, marginBottom: 16,
       display: "flex", flexDirection: "column", gap: 10 }}>
       {from && <div className="aug-fs-xs" style={{ color: "var(--t3)" }}>{from}</div>}
       <div className="aug-fs-sm" style={{ color: "var(--t3)" }}>

@@ -228,6 +228,8 @@ export class PramanyxToUIMessage {
   private seq = 0;
   private started = false;
   private done = false;
+  /** The turn is the conversation's (its route said `body: "converse"`): a report inside it is one part of the turn. */
+  private conversing = false;
   private invId: string | undefined;
   private messageId: string | undefined;
 
@@ -339,12 +341,18 @@ export class PramanyxToUIMessage {
       return { chunks, investigationId: this.invId, terminal: false };
     }
 
+    if (event === "route" && data["body"] === "converse") this.conversing = true;
+
     if (REPORT_FRAMES.has(event as never)) {
       // A terminal report REPLACES the partial stream (delta frames are
       // advisory) — close every open text block, hand the whole payload over as
       // data, then close the message.
       chunks.push(...this.closeAll());
       chunks.push(this.data(event, data));
+      // In a conversation a report is ONE part of the turn (2026-11-20): a deep analysis handed the "why" of a request
+      // of several parts sends its report midway, and the plan's progress, the staged dashboard and alert and the
+      // conversation's own answer follow it. Closing the message here dropped them all; the turn's `done` ends it.
+      if (this.conversing) return { chunks, investigationId: this.invId, terminal: false };
       chunks.push(...this.finish());
       return { chunks, investigationId: this.invId, terminal: true };
     }

@@ -17,7 +17,8 @@ import { SkeletonRows } from "@/components/ui/motion";
 import { countNoun, formatCount, utcDayWords } from "@/lib/format";
 import { getEntitiesByReads, type EntitiesByReads, type EntityReadsRow } from "@/lib/objectTypes";
 
-const RULE = "1px solid var(--b1)";
+/** The hairline between the rows of its list (--b0); the drawer's side is a pane rule (--divide), its header has none. */
+const RULE = "1px solid var(--b0)";
 
 function errorText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -52,11 +53,10 @@ export function ReadsDrawer({ connectionId, schema, onClose }: {
 
   return (
     <aside aria-label="Reads by entity" data-testid="ontology-reads-drawer"
-      style={{ width: 400, flexShrink: 0, borderLeft: RULE, display: "flex", flexDirection: "column", minHeight: 0,
+      style={{ width: 400, flexShrink: 0, borderLeft: "1px solid var(--divide)", display: "flex", flexDirection: "column", minHeight: 0,
                background: "var(--bg-0)" }}>
-      <header style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px", borderBottom: RULE }}>
-        <h3 className="aug-fs-xs"
-          style={{ margin: 0, color: "var(--t2)", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em" }}>
+      <header style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px 6px" }}>
+        <h3 className="aug-label" style={{ margin: 0 }}>
           Reads · {state?.days ?? 30} days
         </h3>
         <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>least read first</span>
@@ -77,20 +77,20 @@ export function ReadsDrawer({ connectionId, schema, onClose }: {
               <li key={`reads:${row.entity}`} data-testid="ontology-reads-row"
                 style={{ listStyle: "none", padding: "8px 0", borderTop: RULE }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                  <span className="aug-fs-sm" style={{ color: "var(--t1)", overflow: "hidden", textOverflow: "ellipsis",
+                  <span className="aug-fs-chrome" style={{ color: "var(--t1)", overflow: "hidden", textOverflow: "ellipsis",
                                                        whiteSpace: "nowrap" }} title={row.object_type}>
                     {row.display_name}
                   </span>
                   {row.part_of && <span className="aug-tag aug-tag-gray">part</span>}
-                  <span className="aug-fs-sm" style={{ marginLeft: "auto", fontVariantNumeric: "tabular-nums",
+                  <span className="aug-fs-chrome" style={{ marginLeft: "auto", fontVariantNumeric: "tabular-nums",
                                                        color: row.reads == null ? "var(--t3)" : "var(--t1)" }}
                     data-testid="ontology-reads-count">
                     {row.reads == null ? "not counted" : countNoun(row.reads, "read")}
                   </span>
                 </div>
-                <div className="aug-fs-xs" style={{ color: "var(--t3)", marginTop: 2 }}>{metaOf(row, state.days)}</div>
+                <div className="aug-fs-sm" style={{ color: "var(--t3)", marginTop: 2 }}>{metaOf(row, state.days)}</div>
                 {row.shared_said && (
-                  <div className="aug-fs-xs" style={{ color: "var(--t3)", marginTop: 2 }}>Shared table: {row.shared_said}</div>
+                  <div className="aug-fs-sm" style={{ color: "var(--t3)", marginTop: 2 }}>Shared table: {row.shared_said}</div>
                 )}
               </li>
             ))}

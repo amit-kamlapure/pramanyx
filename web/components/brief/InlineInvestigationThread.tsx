@@ -97,7 +97,6 @@ export function InlineInvestigationThread({
     <div
       style={{
         marginTop: 10,
-        border: "1px solid var(--b1)",
         borderRadius: "var(--r3)",
         background: "var(--bg-1)",
         padding: "12px 14px",

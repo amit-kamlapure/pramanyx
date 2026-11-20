@@ -43,8 +43,8 @@ function fmtRate(r: number): string {
 function StatusChip({ status }: { status: string }) {
   const s = STATUS_CHIP[status] ?? STATUS_CHIP.draft;
   return (
-    <span className="text-[11px] font-mono px-1.5 py-0.5 rounded-[3px]"
-      style={{ background: s.bg, color: s.color, border: `0.5px solid color-mix(in srgb, ${s.color} 25%, transparent)` }}>
+    <span className="aug-fs-xs font-mono px-1.5 py-0.5 rounded-[3px]"
+      style={{ background: s.bg, color: s.color }}>
       {s.label}
     </span>
   );
@@ -130,18 +130,18 @@ export function PlaybookPanel() {
   return (
     <div className="flex h-full gap-0" style={{ background: "var(--bg-0)" }}>
 
-      {/* ── Left list ── */}
-      <div className="flex flex-col border-r" style={{ width: "340px", flexShrink: 0, borderColor: "var(--b2)" }}>
+      {/* ── Left list ── the one rule kept is between the list and the entry, worked side by side (--divide) */}
+      <div className="flex flex-col border-r" style={{ width: "340px", flexShrink: 0, borderColor: "var(--divide)" }}>
 
         {/* Header */}
-        <div className="px-4 pt-4 pb-3 shrink-0" style={{ borderBottom: "0.5px solid var(--b2)" }}>
+        <div className="px-4 pt-4 pb-3 shrink-0">
           <div className="flex items-center justify-between mb-2">
-            <h2 className="text-[13px] font-medium" style={{ color: "var(--t1)" }}>Playbook</h2>
+            <h2 className="aug-fs-chrome font-medium" style={{ color: "var(--t1)" }}>Playbook</h2>
             <Button variant="plain" size="xs"
               onClick={handleReseed}
               disabled={seeding}
               className="aug-fs-xs px-2 py-1 rounded-[4px] transition-colors"
-              style={{ border: "0.5px solid var(--b2)", background: "var(--bg-1)", color: "var(--t3)" }}
+              style={{ background: "var(--gray-a3)", color: "var(--t3)" }}
               onMouseEnter={e => e.currentTarget.style.color = "var(--t2)"}
               onMouseLeave={e => e.currentTarget.style.color = "var(--t3)"}
             >
@@ -166,7 +166,7 @@ export function PlaybookPanel() {
                 : `${ruleOutCount} data-quality rule-outs run in the Verifier — not listed`}
             </Button>
           )}
-          <Input
+          <Input variant="soft"
             value={filter}
             onChange={e => setFilter(e.target.value)}
             placeholder="Search recommendations…"
@@ -177,10 +177,9 @@ export function PlaybookPanel() {
               <Button variant="plain" size="xs"
                 key={s}
                 onClick={() => setStatusFilter(s)}
-                className="text-[11px] px-2 py-0.5 rounded-[var(--r-chip)] font-mono transition-colors"
+                className="aug-fs-xs px-2 py-0.5 rounded-[var(--r-chip)] font-mono transition-colors"
                 style={{
-                  background: statusFilter === s ? "var(--blue1)" : "transparent",
-                  border: `0.5px solid ${statusFilter === s ? "#3d6bff55" : "var(--b2)"}`,
+                  background: statusFilter === s ? "var(--blue1)" : "var(--gray-a3)",
                   color: statusFilter === s ? "var(--blue4)" : "var(--t3)",
                 }}
               >
@@ -200,7 +199,7 @@ export function PlaybookPanel() {
             </div>
           )}
           {!loading && filtered.length === 0 && (
-            <p className="aug-fs-xs text-center py-8" style={{ color: "var(--t3)" }}>
+            <p className="aug-fs-sm text-center py-8" style={{ color: "var(--t3)" }}>
               {entries.length === 0 ? "No playbook entries yet. Click \"Re-seed from KB\" to generate." : "No entries match."}
             </p>
           )}
@@ -221,11 +220,11 @@ export function PlaybookPanel() {
                   {/* PX-1 — the human sentence is the title; the machine key is
                       metadata. 392 rows titled `air_load_factor` read as a config
                       dump, not a playbook. */}
-                  <p className="aug-fs-sm leading-snug" style={{ color: "var(--t1)" }}
+                  <p className="aug-fs-chrome leading-snug" style={{ color: "var(--t1)" }}
                     title={e.recommendation}>
                     {e.recommendation.length > 80 ? e.recommendation.slice(0, 78) + "…" : e.recommendation}
                   </p>
-                  <p className="aug-fs-xs font-mono truncate mt-0.5" style={{ color: "var(--t3)" }}>{e.trigger_metric}</p>
+                  <p className="aug-fs-sm font-mono truncate mt-0.5" style={{ color: "var(--t3)" }}>{e.trigger_metric}</p>
                 </div>
                 <div className="flex flex-col items-end gap-1 shrink-0 mt-0.5">
                   <StatusChip status={e.status} />
@@ -271,22 +270,22 @@ function PlaybookDetail({
       <div>
         <div className="flex items-center gap-2 mb-1">
           <span className="aug-fs-xs font-mono px-2 py-0.5 rounded-[3px]"
-            style={{ background: "var(--bg-1)", border: "0.5px solid var(--b2)", color: "var(--t3)" }}>
+            style={{ background: "var(--gray-a3)", color: "var(--t3)" }}>
             {entry.trigger_metric}
           </span>
           <StatusChip status={entry.status} />
           {entry.source_kb_id && (
-            <span className="text-[11px] font-mono" style={{ color: "var(--t3)" }}>
+            <span className="aug-fs-xs font-mono" style={{ color: "var(--t3)" }}>
               from KB: {entry.source_kb_id}
             </span>
           )}
         </div>
-        <p className="text-[12px] italic" style={{ color: "var(--t3)" }}>{entry.trigger_condition}</p>
+        <p className="aug-fs-sm italic" style={{ color: "var(--t3)" }}>{entry.trigger_condition}</p>
       </div>
 
       {/* Recommendation */}
       <div>
-        <p className="aug-fs-xs uppercase tracking-wider mb-1.5" style={{ color: "var(--t3)" }}>Recommendation</p>
+        <p className="aug-label mb-1.5">Recommendation</p>
         <p className="aug-fs-ui leading-relaxed" style={{ color: "var(--t1)" }}>{entry.recommendation}</p>
       </div>
 
@@ -298,8 +297,8 @@ function PlaybookDetail({
           { label: "Owner",           value: entry.owner_role },
         ].map(({ label, value }) => value ? (
           <div key={label}>
-            <p className="aug-fs-xs uppercase tracking-wider mb-1" style={{ color: "var(--t3)" }}>{label}</p>
-            <p className="aug-fs-sm" style={{ color: "var(--t2)" }}>{value}</p>
+            <p className="aug-label mb-1">{label}</p>
+            <p className="aug-fs-chrome" style={{ color: "var(--t2)" }}>{value}</p>
           </div>
         ) : null)}
       </div>
@@ -307,7 +306,7 @@ function PlaybookDetail({
       {/* Success rate */}
       <div className="flex items-center gap-4">
         <div>
-          <p className="aug-fs-xs uppercase tracking-wider mb-1" style={{ color: "var(--t3)" }}>Historical success rate</p>
+          <p className="aug-label mb-1">Historical success rate</p>
           <p className="aug-fs-h1 font-semibold font-mono"
             style={{ color: entry.historical_success_rate > 0 ? "var(--grn4)" : "var(--t3)" }}>
             {entry.historical_success_rate > 0 ? fmtRate(entry.historical_success_rate) : "No data yet"}
@@ -325,7 +324,7 @@ function PlaybookDetail({
         <div className="flex flex-wrap gap-1.5">
           {entry.tags.map(t => (
             <span key={t} className="aug-fs-xs px-2 py-0.5 rounded-[var(--r-chip)] font-mono"
-              style={{ background: "var(--bg-1)", border: "0.5px solid var(--b2)", color: "var(--t3)" }}>
+              style={{ background: "var(--gray-a3)", color: "var(--t3)" }}>
               {t}
             </span>
           ))}
@@ -336,14 +335,14 @@ function PlaybookDetail({
       <VersionHistory entryId={entry.id} currentVersion={entry.version} />
 
       {/* Promote / deprecate */}
-      <div className="flex gap-2 pt-2" style={{ borderTop: "0.5px solid var(--b2)" }}>
+      <div className="flex gap-2 pt-2">
         {entry.status !== "active" && (
           <Button variant="plain" size="xs"
             onClick={() => onStatusChange("active")}
             className="aug-fs-xs px-3 py-1.5 rounded-[5px] transition-colors"
-            style={{ background: "var(--grn1)", border: "0.5px solid var(--grn2)", color: "var(--grn4)" }}
-            onMouseEnter={e => e.currentTarget.style.borderColor = "var(--grn4)"}
-            onMouseLeave={e => e.currentTarget.style.borderColor = "var(--grn2)"}
+            style={{ background: "var(--grn1)", color: "var(--grn4)" }}
+            onMouseEnter={e => e.currentTarget.style.background = "var(--grn2)"}
+            onMouseLeave={e => e.currentTarget.style.background = "var(--grn1)"}
           >
             Promote to active
           </Button>
@@ -352,9 +351,9 @@ function PlaybookDetail({
           <Button variant="plain" size="xs"
             onClick={() => onStatusChange("deprecated")}
             className="aug-fs-xs px-3 py-1.5 rounded-[5px] transition-colors"
-            style={{ background: "var(--bg-1)", border: "0.5px solid var(--b2)", color: "var(--t3)" }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--red4)"; e.currentTarget.style.color = "var(--red4)"; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--b2)"; e.currentTarget.style.color = "var(--t3)"; }}
+            style={{ background: "var(--gray-a3)", color: "var(--t3)" }}
+            onMouseEnter={e => { e.currentTarget.style.background = "var(--gray-a4)"; e.currentTarget.style.color = "var(--red4)"; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "var(--gray-a3)"; e.currentTarget.style.color = "var(--t3)"; }}
           >
             Deprecate
           </Button>
@@ -363,7 +362,7 @@ function PlaybookDetail({
           <Button variant="plain" size="xs"
             onClick={() => onStatusChange("draft")}
             className="aug-fs-xs px-3 py-1.5 rounded-[5px] transition-colors"
-            style={{ background: "var(--bg-1)", border: "0.5px solid var(--b2)", color: "var(--t3)" }}
+            style={{ background: "var(--gray-a3)", color: "var(--t3)" }}
           >
             Restore to draft
           </Button>
@@ -384,28 +383,28 @@ function VersionHistory({ entryId, currentVersion }: { entryId: string; currentV
   };
 
   return (
-    <div style={{ borderTop: "0.5px solid var(--b1)", paddingTop: 12 }}>
+    <div>
       <Button variant="ghost" size="xs" onClick={toggle} className="flex items-center gap-2 aug-fs-xs" style={{ color: "var(--t3)" }}>
         <span style={{ transform: open ? "rotate(90deg)" : "none", transition: "transform .12s" }}>▸</span>
         Version history
         {currentVersion != null && (
           <span className="aug-fs-xs px-1.5 py-0.5 rounded-[3px] font-mono"
-            style={{ background: "var(--bg-1)", border: "0.5px solid var(--b2)", color: "var(--t3)" }}>v{currentVersion}</span>
+            style={{ background: "var(--gray-a3)", color: "var(--t3)" }}>v{currentVersion}</span>
         )}
       </Button>
       {open && (
         <div className="mt-2 space-y-1.5">
           {versions === null && <Loading what="versions" />}
-          {versions?.length === 0 && <p className="aug-fs-xs" style={{ color: "var(--t3)" }}>No frozen versions yet.</p>}
+          {versions?.length === 0 && <p className="aug-fs-sm" style={{ color: "var(--t3)" }}>No frozen versions yet.</p>}
           {versions?.slice().reverse().map(v => (
             <div key={v.version} className="flex items-center gap-3 aug-fs-xs" style={{ color: "var(--t3)" }}>
               <span className="font-mono px-1.5 py-0.5 rounded-[3px]"
-                style={{ background: "var(--bg-1)", border: "0.5px solid var(--b2)", color: "var(--t2)" }}>v{v.version}</span>
+                style={{ background: "var(--gray-a3)", color: "var(--t2)" }}>v{v.version}</span>
               <span style={{ color: "var(--t3)" }}>{v.saved_at ? formatTimestamp(v.saved_at) : ""}</span>
               <span className="font-mono truncate" style={{ color: "var(--t3)" }} title={v.receipt}>{v.receipt ? v.receipt.slice(0, 16) + "…" : ""}</span>
             </div>
           ))}
-          <p className="aug-fs-xs mt-1" style={{ color: "var(--t3)" }}>
+          <p className="aug-fs-sm mt-1" style={{ color: "var(--t3)" }}>
             Immutable, receipt-pinned versions — a finding that cited an older version resolves against the exact content it relied on.
           </p>
         </div>

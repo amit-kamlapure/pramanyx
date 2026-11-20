@@ -174,7 +174,7 @@ function PlaceForm({ sheetId, known, editable, onPlaced, onClose }: {
         <legend className="aug-fs-sm" style={{ marginBottom: 4 }}>Columns it keeps</legend>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 16px" }}>
           {known.columns.map(c => (
-            <label key={c.id} className="aug-fs-sm" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <label key={c.id} className="aug-fs-chrome" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
               <Checkbox checked={c.id === key || kept.includes(c.id)} disabled={c.id === key} onChange={() => toggle(c.id)}
                 aria-label={`Keep ${c.name}`} />
               {c.name}

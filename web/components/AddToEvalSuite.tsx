@@ -105,8 +105,8 @@ export function AddToEvalSuite({ connectionId, sql, question }: {
           aria-label="New suite name"
         />
       )}
-      <Button variant="plain" size="xs" onClick={add} disabled={busy}
-        className="h-auto px-2 py-0.5 aug-text-xs font-normal border border-zinc-700 rounded-md text-zinc-300 hover:text-zinc-100 hover:bg-transparent dark:hover:bg-transparent">
+      <Button variant="soft" size="xs" onClick={add} disabled={busy}
+        className="h-auto px-2 py-0.5 aug-text-xs font-normal">
         {busy ? "Adding…" : "Add"}
       </Button>
       <Button variant="ghost" size="xs" onClick={() => { setOpen(false); setError(null); }}

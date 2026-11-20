@@ -49,7 +49,7 @@ export function OrgIndustriesSection({ onChoice, id }: { onChoice?: (c: Industry
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load the industry choice"));
   }, []);
 
-  if (!choice) return error ? <div className="aug-fs-xs" style={{ color: "var(--red4)" }}>{error}</div> : null;
+  if (!choice) return error ? <div className="aug-fs-sm" style={{ color: "var(--red4)" }}>{error}</div> : null;
   if (!choice.shipped.length) return null;
 
   const wanted = every ? null : [...kept].sort();
@@ -81,11 +81,11 @@ export function OrgIndustriesSection({ onChoice, id }: { onChoice?: (c: Industry
     <div id={id} style={{ minWidth: 0 }}>
       <Card label="Industries" testId="org-industries">
         <div role="radiogroup" aria-label="Industries" style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
-          <label className="aug-fs-sm" style={optionStyle}>
+          <label className="aug-fs-chrome" style={optionStyle}>
             <Radio name="industries" checked={every} onChange={() => pick(true)} style={{ cursor: "pointer" }} />
             Every industry
           </label>
-          <label className="aug-fs-sm" style={optionStyle}>
+          <label className="aug-fs-chrome" style={optionStyle}>
             <Radio name="industries" checked={!every} onChange={() => pick(false)} style={{ cursor: "pointer" }} />
             Only these
           </label>
@@ -93,7 +93,7 @@ export function OrgIndustriesSection({ onChoice, id }: { onChoice?: (c: Industry
         {!every && (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 8, marginTop: 10 }}>
             {choice.shipped.map((industry) => (
-              <label key={industry.id} className="aug-fs-sm" style={optionStyle} title={industry.description || undefined}>
+              <label key={industry.id} className="aug-fs-chrome" style={optionStyle} title={industry.description || undefined}>
                 <Checkbox
                   checked={kept.includes(industry.id)}
                   onChange={(e) => toggle(industry.id, e.target.checked)}

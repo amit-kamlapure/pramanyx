@@ -132,7 +132,7 @@ export function TraceWaterfall({ timeline, onSelect }: {
                             paddingLeft: Math.min(n.depth, 6) * 12 }}>
                 <span aria-hidden style={{ width: 6, height: 6, flexShrink: 0,
                                            borderRadius: "var(--r-pill)", background: colour }} />
-                <span className="aug-fs-sm" style={{ overflow: "hidden",
+                <span className="aug-fs-chrome" style={{ overflow: "hidden",
                       textOverflow: "ellipsis", whiteSpace: "nowrap",
                       color: n.ok === false ? "var(--red4)" : "var(--t1)" }}>
                   {n.name}
@@ -170,7 +170,7 @@ export function TraceWaterfall({ timeline, onSelect }: {
                     +{ms(n.gap_ms)}
                   </span>
                 )}
-                <span className="aug-fs-sm" style={{ fontVariantNumeric: "tabular-nums",
+                <span className="aug-fs-chrome" style={{ fontVariantNumeric: "tabular-nums",
                       color: "var(--t2)", minWidth: 54, textAlign: "right" }}>
                   {ms(n.duration_ms)}
                 </span>

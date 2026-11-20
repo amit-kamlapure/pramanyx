@@ -71,9 +71,9 @@ describe("who is offered it", () => {
     expect([...cells].reduce((n, c) => n + c.colSpan, 0)).toBe(7);
   });
 
-  it("the button has an edge at rest: an action, never a word", async () => {
+  it("the button is a button at rest: an action, never a word", async () => {
     await home();
-    expect(screen.getByRole("button", { name: "Remove Olist orders" })).toHaveClass("rt-variant-outline");
+    expect(screen.getByRole("button", { name: "Remove Olist orders" })).toHaveClass("rt-variant-soft");
   });
 });
 

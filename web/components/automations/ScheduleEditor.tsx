@@ -212,10 +212,8 @@ export function nextFireUtc(cron: string, now = new Date()): Date | null {
   return t;
 }
 
-const fieldLabel: React.CSSProperties = {
-  fontSize: 11, fontWeight: 600, color: "var(--t3)", textTransform: "uppercase",
-  letterSpacing: "0.04em", display: "block", marginBottom: 3,
-};
+/** With `className="aug-label"`: 12px semibold sentence case. */
+const fieldLabel: React.CSSProperties = { display: "block", marginBottom: 3 };
 
 function DayChips({ value, onChange }: { value: number[]; onChange: (d: number[]) => void }) {
   const toggle = (d: number) => {
@@ -271,7 +269,7 @@ export function ScheduleEditor({ cron, onCron, timezone = "" }: {
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <div style={{ display: "flex", gap: 8 }}>
         <div style={{ flex: 1 }}>
-          <label style={fieldLabel}>Repeats</label>
+          <label className="aug-label" style={fieldLabel}>Repeats</label>
           <SelectField value={s.occurrence} aria-label="How often"
             onChange={e => {
               const occurrence = e.target.value as Occurrence;
@@ -294,13 +292,13 @@ export function ScheduleEditor({ cron, onCron, timezone = "" }: {
         {s.occurrence === "every" && (
           <>
             <div>
-              <label style={fieldLabel}>Every</label>
+              <label className="aug-label" style={fieldLabel}>Every</label>
               <Input type="number" min={1} max={10000} value={s.every} aria-label="How many"
                 onChange={e => put({ every: Math.max(1, Math.floor(Number(e.target.value)) || 1) })}
                 style={{ ...inputStyle, width: 72 }} />
             </div>
             <div>
-              <label style={fieldLabel}>Of</label>
+              <label className="aug-label" style={fieldLabel}>Of</label>
               <SelectField value={s.unit} aria-label="Minutes, hours, days or weeks"
                 onChange={e => put({ unit: e.target.value as EveryUnit })} style={{ ...inputStyle, width: 104 }}>
                 <option value="minutes">Minutes</option>
@@ -314,13 +312,13 @@ export function ScheduleEditor({ cron, onCron, timezone = "" }: {
         {(s.occurrence === "once" || s.occurrence === "every") && (
           <>
             <div>
-              <label style={fieldLabel}>{s.occurrence === "once" ? "On" : "Starting"}</label>
+              <label className="aug-label" style={fieldLabel}>{s.occurrence === "once" ? "On" : "Starting"}</label>
               <Input type="date" value={s.date} aria-label={s.occurrence === "once" ? "The day it runs" : "The day it starts"}
                 onChange={e => e.target.value && put({ date: e.target.value })}
                 style={{ ...inputStyle, width: 140 }} />
             </div>
             <div>
-              <label style={fieldLabel}>At ({clock})</label>
+              <label className="aug-label" style={fieldLabel}>At ({clock})</label>
               <Input type="time" value={s.time} aria-label={`Time of day, ${clock}`}
                 onChange={e => e.target.value && put({ time: e.target.value })}
                 style={{ ...inputStyle, width: 96 }} />
@@ -329,7 +327,7 @@ export function ScheduleEditor({ cron, onCron, timezone = "" }: {
         )}
         {(s.occurrence === "daily" || s.occurrence === "weekly" || s.occurrence === "monthly") && (
           <div>
-            <label style={fieldLabel}>At ({clock})</label>
+            <label className="aug-label" style={fieldLabel}>At ({clock})</label>
             <Input type="time" value={s.time} aria-label={`Time of day, ${clock}`}
               onChange={e => e.target.value && put({ time: e.target.value })}
               style={{ ...inputStyle, width: 96 }} />
@@ -337,7 +335,7 @@ export function ScheduleEditor({ cron, onCron, timezone = "" }: {
         )}
         {s.occurrence === "hourly" && (
           <div>
-            <label style={fieldLabel}>At minute</label>
+            <label className="aug-label" style={fieldLabel}>At minute</label>
             <Input type="number" min={0} max={59} value={s.minute} aria-label="Minute of the hour"
               onChange={e => put({ minute: Math.min(59, Math.max(0, Number(e.target.value) || 0)) })}
               style={{ ...inputStyle, width: 72 }} />
@@ -345,7 +343,7 @@ export function ScheduleEditor({ cron, onCron, timezone = "" }: {
         )}
         {s.occurrence === "monthly" && (
           <div>
-            <label style={fieldLabel}>On day</label>
+            <label className="aug-label" style={fieldLabel}>On day</label>
             <SelectField value={s.dayOfMonth} aria-label="Day of the month"
               onChange={e => put({ dayOfMonth: Number(e.target.value) })}
               style={{ ...inputStyle, width: 72 }}>
@@ -358,14 +356,14 @@ export function ScheduleEditor({ cron, onCron, timezone = "" }: {
 
       {s.occurrence === "weekly" && (
         <div>
-          <label style={fieldLabel}>On</label>
+          <label className="aug-label" style={fieldLabel}>On</label>
           <DayChips value={s.weekdays} onChange={weekdays => put({ weekdays })} />
         </div>
       )}
 
       {s.occurrence === "custom" && (
         <div>
-          <label style={fieldLabel}>Cron expression, or a recurrence ({clock})</label>
+          <label className="aug-label" style={fieldLabel}>Cron expression, or a recurrence ({clock})</label>
           {/* Two rows: a cron is one line, a recurrence is two (its start, then the recurrence). */}
           <Textarea rows={2} style={{ ...inputStyle, resize: "vertical", fontFamily: "var(--font-mono)" }}
             value={cron} aria-label="Cron expression, or a recurrence"

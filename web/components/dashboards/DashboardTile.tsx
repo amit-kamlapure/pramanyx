@@ -639,7 +639,7 @@ function QueryTile({ cs, doors, place, focus }: { cs: CardState & { card: Dashbo
   const explained = details && (
     <div data-testid="query-tile-explained" className="aug-fs-xs" style={{ display: "flex", flexDirection: "column", gap: 4, color: "var(--t2)" }}>
       <div>{definition || "This query is too involved to say in words. Read it below."}</div>
-      <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word", fontFamily: "var(--font-mono)", background: "var(--bg-3)", border: "1px solid var(--b0)", borderRadius: "var(--r2)", padding: "6px 8px" }}>{card.sql}</pre>
+      <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word", fontFamily: "var(--font-mono)", background: "var(--bg-3)", borderRadius: "var(--r2)", padding: "6px 8px" }}>{card.sql}</pre>
     </div>
   );
   const beside = shaped?.as === "figure" && shaped.beside && shaped.beside.value !== null ? shaped.beside : null;

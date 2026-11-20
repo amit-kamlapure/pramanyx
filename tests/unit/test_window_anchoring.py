@@ -59,6 +59,24 @@ class TestAPeriodCountedFromTodayIsNeverMoved:
         assert (it.observation_start, it.observation_end) == ("2025-11-17", "2026-11-16")   # counted from today
         assert note and "holds no rows" in note and "do not answer for another period" in note
         assert "most recent in data" not in (it.observation_label or "")
+        # a typed verdict the router reads: nothing in an empty period is measured (2026-11-20)
+        assert it.period_without_rows is True
+
+    def test_yesterday_after_the_data_ended_is_empty_and_the_run_goes_straight_to_its_report(self):
+        from pramanyx.agent.investigate import route_after_intake
+        it = FakeIntake("2018-10-17", "2018-10-17", label="Yesterday")      # the model anchored on the data's last day
+        note = _clamp_intake_to_coverage(it, "2016-09-04", "2018-10-17", question="Our revenue dropped yesterday. Why?",
+                                         today="2026-11-20")
+        assert (it.observation_start, it.observation_end) == ("2026-11-19", "2026-11-19")
+        assert "holds no rows" in note and it.period_without_rows is True
+        # seen live 2026-11-20: such a run went on through 28 queries and spent the turn's budget
+        assert route_after_intake({"_ada_intake": {"period_without_rows": True, "descriptive_only": True}}) == "ada_synthesize"
+        assert route_after_intake({"_ada_intake": {"cross_sectional": False}}) == "ada_baseline"
+
+    def test_a_period_the_data_holds_is_not_empty(self):
+        it = FakeIntake("2024-11-01", "2024-11-30", label="November 2024")
+        _clamp_intake_to_coverage(it, *TWO_YR, question="why did AOV change in November 2024?", today=TODAY)
+        assert getattr(it, "period_without_rows", False) is False
 
     def test_a_question_that_names_no_period_still_reads_the_data_when_the_model_missed_it(self):
         it = FakeIntake("2019-01-01", "2019-12-31")                               # the model's mistake

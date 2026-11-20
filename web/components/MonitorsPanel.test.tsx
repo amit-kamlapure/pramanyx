@@ -81,7 +81,7 @@ describe("MonitorsPanel", () => {
     panel();
     await waitFor(() => expect(screen.getByTestId("fig-proven")).toHaveTextContent("1 of 2"));
     expect(screen.getByTestId("monitor-figures").children).toHaveLength(4);
-    expect(screen.getByTestId("fig-monitors")).toHaveTextContent("2all on");
+    expect(screen.getByTestId("fig-monitors")).toHaveTextContent("2Monitorsall on");   // the number, its words, its line (2026-11-20)
     expect(screen.getByTestId("fig-open")).toHaveTextContent("3");
     expect(screen.getByTestId("fig-proven")).toHaveTextContent("none delivered end to end");
     // one hourly (24) and one daily (1)

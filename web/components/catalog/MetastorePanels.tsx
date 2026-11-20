@@ -70,9 +70,9 @@ export function VolumesPanel({ catalogId }: { catalogId: string }) {
 
   return (
     <div style={{ flex: 1, display: "flex", minHeight: 0, overflow: "hidden" }}>
-      {/* volume list */}
-      <div style={{ width: 220, borderRight: "0.5px solid var(--b1)", display: "flex", flexDirection: "column", minHeight: 0 }}>
-        <div style={{ padding: "10px 12px", borderBottom: "0.5px solid var(--b1)" }}>
+      {/* volume list — the one rule kept is between it and the objects, worked side by side (--divide, 2026-11-20) */}
+      <div style={{ width: 220, borderRight: "0.5px solid var(--divide)", display: "flex", flexDirection: "column", minHeight: 0 }}>
+        <div style={{ padding: "10px 12px 12px" }}>
           <div style={{ display: "flex", gap: 6 }}>
             <Input value={newName} onChange={e => setNewName(e.target.value)}
               onKeyDown={e => e.key === "Enter" && create()} placeholder="New volume…"
@@ -87,7 +87,7 @@ export function VolumesPanel({ catalogId }: { catalogId: string }) {
               style={{ padding: "9px 12px", cursor: "pointer", borderBottom: "0.5px solid var(--b0)",
                 background: v.id === selected ? "var(--bg-1)" : "transparent", display: "flex", alignItems: "center", gap: 8 }}>
               <IcoVolume />
-              <span style={{ fontSize: 12, color: "var(--t1)", fontWeight: v.id === selected ? 600 : 400 }}>{v.name}</span>
+              <span className="aug-fs-chrome" style={{ color: "var(--t1)", fontWeight: v.id === selected ? 600 : 400 }}>{v.name}</span>
             </div>
           ))}
         </div>
@@ -99,7 +99,7 @@ export function VolumesPanel({ catalogId }: { catalogId: string }) {
           <p style={{ padding: 20, fontSize: 12, color: "var(--t3)" }}>Select or create a volume to manage its objects.</p>
         ) : (
           <>
-            <div style={{ padding: "10px 16px", borderBottom: "0.5px solid var(--b1)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ padding: "10px 16px 12px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <span style={{ fontSize: 12, color: "var(--t2)" }}>{objects.length} object{objects.length !== 1 ? "s" : ""}</span>
               <label className="aug-btn aug-btn-sm aug-btn-primary" style={{ cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1 }}>
                 {busy ? "Uploading…" : "Upload object"}
@@ -112,9 +112,9 @@ export function VolumesPanel({ catalogId }: { catalogId: string }) {
               {objects.length === 0 && <p style={{ padding: 20, fontSize: 12, color: "var(--t3)" }}>No objects. Upload a file to get started.</p>}
               {objects.map(o => (
                 <div key={o.id} style={{ display: "grid", gridTemplateColumns: "1fr 90px 130px 120px", padding: "10px 16px", borderBottom: "0.5px solid var(--b0)", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontSize: 12, color: "var(--t1)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.name}</span>
-                  <span style={{ fontSize: 11, color: "var(--t3)", textAlign: "right" }}>{fmtBytes(o.size_bytes)}</span>
-                  <span style={{ fontSize: 11, color: "var(--t3)" }}>{o.mime_type}</span>
+                  <span className="aug-fs-chrome" style={{ color: "var(--t1)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.name}</span>
+                  <span className="aug-fs-xs" style={{ color: "var(--t3)", textAlign: "right" }}>{fmtBytes(o.size_bytes)}</span>
+                  <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>{o.mime_type}</span>
                   <span style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
                     <a href={volumeObjectContentUrl(selected, o.id)} target="_blank" rel="noreferrer"
                       style={{ fontSize: 11, color: "var(--blue4)", textDecoration: "none" }}>Download</a>
@@ -166,12 +166,12 @@ export function PermissionsPanel({ catalogId }: { catalogId: string }) {
       </p>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 160px 110px", padding: "5px 4px", borderBottom: "0.5px solid var(--b1)" }}>
         {["Workspace", "Access", ""].map(h => (
-          <span key={h} style={{ fontSize: 11, color: "var(--t3)", textTransform: "uppercase", letterSpacing: "0.07em", fontWeight: 600 }}>{h}</span>
+          <span key={h} style={{ fontSize: 11, color: "var(--t3)", fontWeight: 600 }}>{h}</span>
         ))}
       </div>
       {rows.map(({ ws, member, granted }) => (
         <div key={ws.id} style={{ display: "grid", gridTemplateColumns: "1fr 160px 110px", padding: "11px 4px", borderBottom: "0.5px solid var(--b0)", alignItems: "center" }}>
-          <span style={{ fontSize: 12, color: "var(--t1)" }}>{ws.name}{ws.is_default ? " (default)" : ""}</span>
+          <span className="aug-fs-chrome" style={{ color: "var(--t1)" }}>{ws.name}{ws.is_default ? " (default)" : ""}</span>
           <span style={{ display: "flex", gap: 6 }}>
             {member && <span className="aug-tag aug-tag-blue" style={{ fontSize: 11 }}>Member</span>}
             {granted && <span className="aug-tag aug-tag-green" style={{ fontSize: 11 }}>Granted</span>}

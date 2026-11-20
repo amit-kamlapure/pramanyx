@@ -41,7 +41,7 @@ export function SharePop({ name, sheetId, views, me, onDone, onChanged }: {
       top: "100%", zIndex: 20, width: 360, background: "var(--bg-2)", border: "1px solid var(--b1)",
       borderRadius: "var(--r3)", padding: "10px 12px", display: "flex", flexDirection: "column", gap: 6 }}>
       <span className="aug-fs-xs" style={MUTED}>Share · {name}</span>
-      <Chooser sheetId={sheetId} me={me} onChanged={onChanged} />
+      <ShareChooser id={sheetId} me={me} onChanged={onChanged} />
       {views && (
         <span className="aug-fs-xs">Views: <b>{shared} shared</b>{mine ? <> · <b>{mine} your own</b> (only you see {mine === 1 ? "it" : "them"})</> : ""}</span>
       )}
@@ -58,7 +58,14 @@ export function SharePop({ name, sheetId, views, me, onDone, onChanged }: {
   );
 }
 
-function Chooser({ sheetId, me, onChanged }: { sheetId: string; me?: string; onChanged?: (s: SheetSharing) => void }) {
+/** Who something is shared with, and — for its owner — the choosing: a sheet's, and a Data Canvas's by the same rule
+ *  (2026-11-20). `read` and `save` are the asset's own doors; `noun` is what the sentences call it. */
+export function ShareChooser({ id, me, onChanged, read = readSharing, save: keep = saveSharing, noun = "sheet" }: {
+  id: string; me?: string; onChanged?: (s: SheetSharing) => void;
+  read?: (id: string) => Promise<SheetSharing>;
+  save?: (id: string, sharing: SheetSharing["sharing"], shares: SheetShare[]) => Promise<SheetSharing>;
+  noun?: string;
+}) {
   const [got, setGot] = useState<SheetSharing | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const [mode, setMode] = useState<"workspace" | "chosen">("workspace");
@@ -67,13 +74,13 @@ function Chooser({ sheetId, me, onChanged }: { sheetId: string; me?: string; onC
   const [level, setLevel] = useState<"view" | "edit">("view");
   const [said, setSaid] = useState<{ text: string; tone: "ok" | "bad" } | null>(null);
   const [saving, setSaving] = useState(false);
-  const listId = `share-${sheetId}`;
+  const listId = `share-${id}`;
 
   const take = (s: SheetSharing) => { setGot(s); setMode(s.sharing); setShares(s.shared_with); };
   useEffect(() => {
-    readSharing(sheetId).then(s => { take(s); setFailed(null); })
+    read(id).then(s => { take(s); setFailed(null); })
       .catch(e => setFailed(e instanceof Error ? e.message : String(e)));
-  }, [sheetId]);
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps -- `read` is the asset's door, fixed for its life
 
   const dirty = useMemo(() => !!got && (mode !== got.sharing || JSON.stringify(shares.map(s => [s.kind, s.id, s.level]))
     !== JSON.stringify(got.shared_with.map(s => [s.kind, s.id, s.level]))), [got, mode, shares]);
@@ -97,7 +104,7 @@ function Chooser({ sheetId, me, onChanged }: { sheetId: string; me?: string; onC
   const save = async () => {
     setSaving(true);
     try {
-      const s = await saveSharing(sheetId, mode, mode === "chosen" ? shares : []);
+      const s = await keep(id, mode, mode === "chosen" ? shares : []);
       take(s);
       setSaid({ text: s.sharing === "chosen" ? "Shared with the people and groups chosen" : "Shared with everyone in Workspace", tone: "ok" });
       onChanged?.(s);
@@ -115,7 +122,7 @@ function Chooser({ sheetId, me, onChanged }: { sheetId: string; me?: string; onC
           options={[{ value: "workspace", label: "Everyone in Workspace" }, { value: "chosen", label: "Only people chosen" }]} />
       ) : null}
       {mode === "workspace" ? (
-        <span><b>Everyone in Workspace</b> can read and edit this sheet.</span>
+        <span><b>Everyone in Workspace</b> can read and edit this {noun}.</span>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <span className="aug-fs-xs" style={MUTED}>
@@ -124,7 +131,7 @@ function Chooser({ sheetId, me, onChanged }: { sheetId: string; me?: string; onC
           {shares.length === 0 && <span className="aug-fs-xs" style={MUTED}>No one is chosen yet.</span>}
           {shares.map(s => (
             <div key={`${s.kind}:${s.id}`} style={{ display: "flex", alignItems: "center", gap: 6, minHeight: 26 }}>
-              <span style={{ flex: "1 1 auto", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+              <span className="aug-fs-chrome" style={{ flex: "1 1 auto", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                 title={s.id}>
                 {s.name ?? s.id}{KIND_WORDS[s.kind] && <span className="aug-fs-xs" style={MUTED}> · {KIND_WORDS[s.kind]}</span>}
               </span>

@@ -7,7 +7,7 @@ describe("the look", () => {
   afterEach(() => { window.localStorage.clear(); forgetLook(); });
 
   it("defaults to what the user chose for everyone: the Evidence → Action mockups' look (2026-11-10)", () => {
-    expect(getLook()).toEqual({ accent: "blue", grey: "slate", radius: "small", scaling: "100%", edges: "on", typeface: "inter", rows: "default" });
+    expect(getLook()).toEqual({ accent: "blue", grey: "slate", radius: "small", scaling: "100%", edges: "off", typeface: "inter", rows: "default" });
   });
 
   it("offers presets that are every knob, each a value the knob admits", () => {
@@ -18,9 +18,10 @@ describe("the look", () => {
       }
     }
     // the second preset is the denser one: since the default took the mockups' look (2026-11-10: blue, slate, small
-    // corners) it differs in what makes it dense and narrow — scaling, typeface and rows — and in nothing else
+    // corners) it differs in what makes it dense and narrow — scaling, typeface and rows — and, since edges went off by
+    // default (2026-11-20, borders the exception), in boxing every card
     const moved = Object.keys(LOOK_VALUES).filter(key => PRESETS.workbench[key as keyof typeof PRESETS.workbench] !== DEFAULT_LOOK[key as keyof typeof DEFAULT_LOOK]);
-    expect(moved.sort()).toEqual(["rows", "scaling", "typeface"]);
+    expect(moved.sort()).toEqual(["edges", "rows", "scaling", "typeface"]);
   });
 
   it("never hands the Theme a value that is not one of a knob's own", () => {

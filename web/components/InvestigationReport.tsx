@@ -457,13 +457,13 @@ function StreamingPhaseCard({ phase }: { phase: InvestigationPhase }) {
   const findings = phase.findings.filter(f => f.columns.length > 0 || f.is_significant || f.interpretation);
 
   return (
-    <div className="space-y-2 pl-3 border-l border-zinc-800">
+    <div className="space-y-2 pl-3">
       <div className="flex items-center gap-2">
         <span className="text-base leading-none">{phase.phase_icon}</span>
         {isRunning && (
           <Pending label="Loading" className="aug-fs-xs text-zinc-400" />
         )}
-        <span className={`aug-fs-xs font-medium uppercase tracking-wide ${isSkipped ? "text-zinc-500" : "text-zinc-400"}`}>
+        <span className="aug-label" style={isSkipped ? { color: "var(--t3)" } : undefined}>
           {phase.phase_name}
         </span>
         {isSkipped && <span className="aug-fs-xs text-zinc-500 italic">{phase.skipped_reason}</span>}
@@ -488,7 +488,7 @@ function StreamingPhaseCard({ phase }: { phase: InvestigationPhase }) {
         return (
           <div key={f.finding_id} className="space-y-1.5 pl-2">
             {hasChart && (
-              <div className="rounded-md border border-zinc-800/60 overflow-hidden p-2" style={{ background: "var(--bg-0)" }}>
+              <div className="rounded-md overflow-hidden p-2" style={{ background: "var(--bg-2)" }}>
                 <Chart columns={f.columns} rows={f.rows as unknown[][]} title={f.title} chrome={false} columnUnits={f.column_units} exhibit={f.exhibit} showLabels />
               </div>
             )}
@@ -641,14 +641,14 @@ function ConcludedBody({ report, onShowSource, frame }: { report: AnswerReport; 
       <RuleOutsSection ruleOuts={report.rule_outs} />
 
       {!isCheck && report.recommendations && report.recommendations.length > 0 && (
-        <BriefSection className="border-t border-zinc-800/60 pt-4">
+        <BriefSection className="pt-4">
           <Label>Next</Label>
           <RecommendationsList recs={report.recommendations} />
         </BriefSection>
       )}
 
       {uncited.length > 0 && (
-        <BriefSection className="border-t border-zinc-800/60 pt-4">
+        <BriefSection className="pt-4">
           <Label right={`${results.length} results`}>Sources</Label>
           <div className="aug-fs-xs text-zinc-500" style={{ ...ROW, gap: 4 }} data-testid="uncited-results">
             <span>{uncited.length} not drawn:</span>
@@ -738,7 +738,7 @@ export function InvestigationReportView({
       {/* Degraded-report banner FIRST: when synthesis failed, the reader learns it where
           they start reading — not from confidence_justification on the last page. */}
       {report.degraded && (
-        <div className="rounded-md border border-amber-700/30 px-3 py-2 aug-fs-xs text-zinc-300"
+        <div className="rounded-md px-3 py-2 aug-fs-xs text-zinc-300"
              style={{ background: "color-mix(in srgb, var(--amb3) 5%, var(--bg-0))" }}>
           ⚠ Narrative synthesis was unavailable — this report is assembled directly from the
           phase findings below.{" "}
@@ -788,7 +788,7 @@ export function InvestigationReportView({
           report, before the actions (the exec summary opens it; this closes it). Backend-
           authored (`closing_summary`); older reports without the field simply omit it. */}
       {report.closing_summary && report.closing_summary.trim() && (
-        <BriefSection label="Bottom line" className="border-t border-zinc-800/60 pt-4">
+        <BriefSection label="Bottom line" className="pt-4">
           <BriefProse text={report.closing_summary} />
         </BriefSection>
       )}
@@ -804,7 +804,7 @@ export function InvestigationReportView({
           carry the data/SQL one click away. Only the decision — Recommended actions —
           stays in the flow, visible (uncollapsed), not behind a disclosure. */}
       {report.recommendations && report.recommendations.length > 0 && (
-        <BriefSection label="Recommended actions" className="border-t border-zinc-800/60 pt-4">
+        <BriefSection label="Recommended actions" className="pt-4">
           <RecommendationsList recs={report.recommendations} />
         </BriefSection>
       )}

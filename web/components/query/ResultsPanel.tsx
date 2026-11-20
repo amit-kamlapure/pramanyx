@@ -510,7 +510,7 @@ export function ResultsPanel({
   const filtersVisible = showFilters || filters.length > 0;
   const headerIcon = (name: Parameters<typeof Icon>[0]["name"], title: string,
     onClick: () => void, active = false, testid?: string) => (
-    <Button variant={active ? "secondary" : "ghost"} size="xs" title={title} aria-label={title}
+    <Button variant={active ? "secondary" : "soft"} size="xs" title={title} aria-label={title}
       onClick={onClick} data-testid={testid}>
       <Icon name={name} size={14} />
     </Button>
@@ -536,7 +536,7 @@ export function ResultsPanel({
               through the same door as the query. The count's as-of rides with the number. */}
           {connId && (
             <Button
-              variant="ghost" size="xs" className="aug-fs-ui" data-testid="count-all"
+              variant="soft" size="xs" className="aug-fs-ui" data-testid="count-all"
               disabled={count.status === "busy"}
               title="Count every row this statement returns — run through the same door as the query"
               onClick={countAll}
@@ -546,7 +546,7 @@ export function ResultsPanel({
           )}
           {connId && onAppendRows && (
             <Button
-              variant="ghost" size="xs" className="aug-fs-ui" data-testid="load-more"
+              variant="soft" size="xs" className="aug-fs-ui" data-testid="load-more"
               disabled={moreBusy}
               title={`Fetch the next ${formatCount(nextPage)} rows through the same door, after the ${formatCount(rawRows.length)} shown`}
               onClick={loadMore}
@@ -581,11 +581,11 @@ export function ResultsPanel({
       {!empty && (
         // Copy and CSV of the rows ON SCREEN — filtered, when filters are on: exporting what is not on screen
         // would be a different result set wearing the same button.
-        <TableActions name="result" read={() => ({ columns, rows: rawCells(rows) })}
+        <TableActions quiet name="result" read={() => ({ columns, rows: rawCells(rows) })}
           shown={filters.length > 0 ? { rows: rows.length, of: rawRows.length } : undefined} />
       )}
       <span style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
-        <ToolsMenu items={tools} testId="results-tools" />
+        <ToolsMenu items={tools} testId="results-tools" quiet />
         {copyState && (
           <span className="aug-fs-xs" style={{
             position: "absolute", bottom: "100%", right: 0, marginBottom: 2, whiteSpace: "nowrap",
@@ -608,9 +608,9 @@ export function ResultsPanel({
               {EXTRACTORS.map(x => (
                 <div key={x.id} style={{ display: "flex", alignItems: "center", gap: 4 }}>
                   <span style={{ flex: 1, padding: "3px 7px", color: "var(--t2)" }}>{x.label}</span>
-                  <Button variant="ghost" size="xs" title={`Copy as ${x.label}`}
+                  <Button variant="soft" size="xs" title={`Copy as ${x.label}`}
                     onClick={() => { copyAs(x.id); setShowExport(false); }}>Copy</Button>
-                  <Button variant="ghost" size="xs" title={`Download as ${x.label}`}
+                  <Button variant="soft" size="xs" title={`Download as ${x.label}`}
                     onClick={() => { downloadAs(x.id); setShowExport(false); }}>File</Button>
                 </div>
               ))}
@@ -645,14 +645,14 @@ export function ResultsPanel({
       <div className="aug-rtabs" data-testid="results-views">
           {results.length > 1 && (
             <span style={{ display: "flex", alignItems: "center", gap: 2, marginRight: 6, flexShrink: 0 }}>
-              <Button variant="ghost" size="xs" title="Previous statement's result" aria-label="Previous result"
+              <Button variant="soft" size="xs" title="Previous statement's result" aria-label="Previous result"
                 disabled={resultIdx === 0} onClick={() => onResultIdx(resultIdx - 1)}>
                 <Icon name="chevl" size={13} />
               </Button>
               <span className="aug-fs-chrome" data-testid="results-pager" style={{ color: "var(--t3)", whiteSpace: "nowrap", ...NUM }}>
                 Results {resultIdx + 1} of {results.length}{result?.label ? ` · ${result.label}` : ""}
               </span>
-              <Button variant="ghost" size="xs" title="Next statement's result" aria-label="Next result"
+              <Button variant="soft" size="xs" title="Next statement's result" aria-label="Next result"
                 disabled={resultIdx >= results.length - 1} onClick={() => onResultIdx(resultIdx + 1)}>
                 <Icon name="chevr" size={13} />
               </Button>
@@ -677,7 +677,7 @@ export function ResultsPanel({
                   style={{ width: 120 }}
                 />
               ) : (
-                <Button variant="ghost" size="xs" aria-pressed={activeView === v.id}
+                <Button variant="soft" size="xs" aria-pressed={activeView === v.id}
                   className="aug-fs-ui aug-rtab"
                   onClick={() => setActiveView(v.id)}
                   onDoubleClick={() => { setRenaming(v.id); setRenameDraft(v.name); }}
@@ -686,7 +686,7 @@ export function ResultsPanel({
                 </Button>
               )}
               {activeView === v.id && renaming !== v.id && (
-                <Button variant="ghost" size="xs" title="Chart options"
+                <Button variant="soft" size="xs" title="Chart options"
                   aria-label="Chart options"
                   onClick={() => setVizMenu(m => m === v.id ? "" : v.id)}
                   style={{ paddingLeft: 2, paddingRight: 2 }}>
@@ -734,10 +734,12 @@ export function ResultsPanel({
             </Button>
           ))}
           <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 8 }}>
-            <Badge variant={result.error ? "destructive" : "green"} data-testid="results-status">
+            {/* the outcome in its colour, as words — not a boxed badge (2026-11-20, borders are the exception) */}
+            <span data-testid="results-status" className="aug-fs-sm"
+              style={{ display: "inline-flex", alignItems: "center", gap: 5, color: result.error ? "var(--red4)" : "var(--grn4)", ...NUM }}>
               <Icon name={result.error ? "warning" : "check"} size={12} />
               {result.error ? "Failed" : "Succeeded"} · {formatSeconds(result.duration_ms)}
-            </Badge>
+            </span>
             {result.receipt_id && (
               <a href={`/receipt/${encodeURIComponent(result.receipt_id)}`} target="_blank" rel="noreferrer"
                 className="aug-fs-xs aug-mono" style={{ color: "var(--t3)" }} title="The signed provenance record for this run">
@@ -751,8 +753,7 @@ export function ResultsPanel({
       {/* Caveats are said, never hidden — each once, in amber, under the figures they qualify. */}
       {caveats.length > 0 && (
         <div data-testid="results-caveats" className="aug-fs-sm" style={{
-          display: "flex", flexDirection: "column", gap: 2, padding: "5px 14px", color: "var(--amb4)",
-          borderBottom: "1px solid var(--b0)", flexShrink: 0,
+          display: "flex", flexDirection: "column", gap: 2, padding: "5px 14px", color: "var(--amb4)", flexShrink: 0,
         }}>
           {caveats.map((c, i) => <div key={`caveat-${i}`}>{c}</div>)}
         </div>
@@ -812,13 +813,13 @@ export function ResultsPanel({
           </>
         )}
         {activeView === "profile" && (
-          <div className="aug-rview aug-fs-sm" data-testid="results-profile">
-            <p style={{ margin: "0 0 8px", color: "var(--t3)" }}>
+          <div className="aug-rview aug-fs-chrome" data-testid="results-profile">
+            <p className="aug-fs-sm" style={{ margin: "0 0 8px", color: "var(--t3)" }}>
               Every column of the {countNoun(rawRows.length, "loaded row")}{result.truncated ? " — the result was cut, so this is the loaded rows, not the whole result" : ""}.
               A row opens its column in the inspector.
             </p>
             <table>
-              <thead><tr>
+              <thead className="aug-fs-xs"><tr>
                 <th>Column</th><th>Type</th><th className="num">Empty</th><th className="num">Distinct</th>
                 <th className="num">Lowest</th><th className="num">Highest</th><th>Most common</th>
               </tr></thead>
@@ -844,35 +845,35 @@ export function ResultsPanel({
           </div>
         )}
         {activeView === "execution" && (
-          <div className="aug-rview aug-fs-sm" data-testid="results-execution">
+          <div className="aug-rview aug-fs-chrome" data-testid="results-execution">
             <table>
               <tbody>
-                <tr><th>Outcome</th><td>{result.error ? `Failed — ${result.error}` : "Succeeded"}</td></tr>
-                <tr><th>Took</th><td>{formatSeconds(result.duration_ms)}</td></tr>
-                <tr><th>Rows</th><td>{formatCount(result.row_count)}{result.truncated
+                <tr><th className="aug-fs-xs">Outcome</th><td>{result.error ? `Failed — ${result.error}` : "Succeeded"}</td></tr>
+                <tr><th className="aug-fs-xs">Took</th><td>{formatSeconds(result.duration_ms)}</td></tr>
+                <tr><th className="aug-fs-xs">Rows</th><td>{formatCount(result.row_count)}{result.truncated
                   ? ` — cut by ${result.cut_by === "budget" ? "the connection's row budget" : result.cut_by === "cap" ? "the connector's per-call cap" : "the row limit"}`
                   : " — the whole result"}</td></tr>
-                <tr><th>Served</th><td>{result.cached
+                <tr><th className="aug-fs-xs">Served</th><td>{result.cached
                   ? "From the result cache — not run again; when it was measured is not kept"
                   : `Run on the warehouse${readAt ? `, read ${utcDayWords(readAt, true)}` : ""}`}</td></tr>
-                <tr><th>Guards</th><td>{verdict ? <span title={verdict.title}>{verdict.text}</span> : "Not checked for this run"}</td></tr>
-                <tr><th>Receipt</th><td>{result.receipt_id
+                <tr><th className="aug-fs-xs">Guards</th><td>{verdict ? <span title={verdict.title}>{verdict.text}</span> : "Not checked for this run"}</td></tr>
+                <tr><th className="aug-fs-xs">Receipt</th><td>{result.receipt_id
                   ? <a href={`/receipt/${encodeURIComponent(result.receipt_id)}`} target="_blank" rel="noreferrer" className="aug-mono">{result.receipt_id}</a>
                   : "This run left no receipt"}</td></tr>
                 {result.params && Object.keys(result.params).length > 0 && (
-                  <tr><th>Bound values</th><td className="aug-mono">{Object.entries(result.params).map(([k2, v2]) => `${k2} = ${String(v2)}`).join(" · ")}</td></tr>
+                  <tr><th className="aug-fs-xs">Bound values</th><td className="aug-mono">{Object.entries(result.params).map(([k2, v2]) => `${k2} = ${String(v2)}`).join(" · ")}</td></tr>
                 )}
               </tbody>
             </table>
-            <div style={{ margin: "12px 0 4px", color: "var(--t3)" }}>The statement as it ran</div>
-            <pre className="aug-mono aug-fs-xs" style={{ margin: 0, padding: 10, background: "var(--bg-1)", border: "1px solid var(--b0)",
+            <div className="aug-fs-sm" style={{ margin: "12px 0 4px", color: "var(--t3)" }}>The statement as it ran</div>
+            <pre className="aug-mono aug-fs-sm" style={{ margin: 0, padding: 10, background: "var(--bg-1)", border: "1px solid var(--b0)",
               borderRadius: "var(--r2)", whiteSpace: "pre-wrap", color: "var(--t1)" }}>{result.sql}</pre>
           </div>
         )}
         {activeView === "logs" && (
-          <div className="aug-rview aug-fs-sm" data-testid="results-logs">
+          <div className="aug-rview aug-fs-chrome" data-testid="results-logs">
             <table>
-              <thead><tr><th>#</th><th>Statement</th><th className="num">Rows</th><th className="num">Took</th><th>Outcome</th></tr></thead>
+              <thead className="aug-fs-xs"><tr><th>#</th><th>Statement</th><th className="num">Rows</th><th className="num">Took</th><th>Outcome</th></tr></thead>
               <tbody>
                 {results.map((r, i) => (
                   <tr key={`log-${i}`} data-testid="results-log-row" onClick={() => onResultIdx(i)}
@@ -890,14 +891,14 @@ export function ResultsPanel({
               </tbody>
             </table>
             {caveats.length > 0 && (
-              <div style={{ marginTop: 10, color: "var(--amb4)" }}>{caveats.map((c, i) => <div key={`lc-${i}`}>{c}</div>)}</div>
+              <div className="aug-fs-sm" style={{ marginTop: 10, color: "var(--amb4)" }}>{caveats.map((c, i) => <div key={`lc-${i}`}>{c}</div>)}</div>
             )}
           </div>
         )}
       </div>
       {!gridShown && (
         <div data-testid="results-foot" style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", flexShrink: 0,
-          padding: "4px 10px", minHeight: 33, borderTop: "1px solid var(--b0)", background: "var(--bg-1)", position: "relative" }}>
+          padding: "4px 12px", minHeight: 33, position: "relative" }}>
           {figuresLead}
           <span style={{ flex: 1 }} />
           {figuresTail}

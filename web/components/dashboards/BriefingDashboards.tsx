@@ -62,7 +62,6 @@ import { FormDialog } from "@/components/ui/dialog";
 import type { IconName } from "@/components/ui/icon";
 import { EmptyState } from "@/components/ui/empty-state";
 import { DropdownMenu } from "@radix-ui/themes";
-import { ASKS_OF_A_PIECE, AskPiece } from "@/components/dashboards/AskPiece";
 import { brandEdge } from "@/components/ui/brand";
 import { DraftBuilding } from "@/components/dashboards/DraftBuilding";
 import { finishedWatch, heardFrame, startWatch, type DraftWatch } from "@/lib/dashboards/draftProgress";
@@ -204,7 +203,7 @@ function BoxSetup({ box, spec, connectionId, schema, busy, onCancel, onPlace, on
     <div data-testid="place-setup" data-kind={box.kind} style={{ display: "flex", flexDirection: "column" }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "12px 14px 4px" }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div className="aug-fs-xs" style={{ color: "var(--accent-11)", textTransform: "uppercase", letterSpacing: ".06em" }}>{PLACE_WORDS[box.kind]}</div>
+          <div className="aug-fs-xs" style={{ color: "var(--accent-11)" }}>{PLACE_WORDS[box.kind]}</div>
           <div className="aug-fs-xs" style={{ color: "var(--t3)", marginTop: 2 }}>
             Set down at column {box.x}, row {box.y}: {box.w} columns by {box.h} rows. Choose what it is.
           </div>
@@ -215,7 +214,7 @@ function BoxSetup({ box, spec, connectionId, schema, busy, onCancel, onPlace, on
         <>
           <ChartFromData key={`${box.section}:${box.x}:${box.y}`} spec={spec} connectionId={connectionId} busy={busy}
             onChange={onPlace} onMade={onChart} onCancel={onCancel} />
-          <div style={{ padding: "4px 14px 12px", borderTop: "1px solid var(--b1)" }}>
+          <div style={{ padding: "8px 14px 12px" }}>
             <Button size="xs" variant="ghost" data-testid="place-other-pieces" onClick={() => setOthers(true)} style={{ marginTop: 8 }}>
               Other pieces: objects, cards, findings, questions <Icon name="chevr" size={12} />
             </Button>
@@ -249,7 +248,7 @@ function BoxSetup({ box, spec, connectionId, schema, busy, onCancel, onPlace, on
 function NoteComposer({ busy, onPlace, onClose }: { busy: boolean; onPlace: (text: string) => void; onClose: () => void }) {
   const [text, setText] = useState("");
   return (
-    <div data-testid="dashboard-note-composer" style={{ border: "1px solid var(--b1)", borderRadius: "var(--r3)", padding: 14, marginBottom: 16, display: "flex", flexDirection: "column", gap: 8 }}>
+    <div data-testid="dashboard-note-composer" style={{ background: "var(--bg-2)", borderRadius: "var(--r3)", padding: 14, marginBottom: 16, display: "flex", flexDirection: "column", gap: 8 }}>
       <div className="aug-fs-sm" style={{ color: "var(--t3)" }}>
         Your words, as a reminder to yourself or your readers: bold, italics, lists and links, up to {MAX_NOTE} characters.
         Pramanyx never reads a note, cites it or learns from it; a model may move it, never write it.
@@ -284,7 +283,7 @@ function ImageComposer({ connectionId, busy, onPlace, onClose }: {
     } finally { setUploading(false); }
   };
   return (
-    <div data-testid="dashboard-image-composer" style={{ border: "1px solid var(--b1)", borderRadius: "var(--r3)", padding: 14, marginBottom: 16, display: "flex", flexDirection: "column", gap: 8 }}>
+    <div data-testid="dashboard-image-composer" style={{ background: "var(--bg-2)", borderRadius: "var(--r3)", padding: 14, marginBottom: 16, display: "flex", flexDirection: "column", gap: 8 }}>
       <div className="aug-fs-sm" style={{ color: "var(--t3)" }}>
         PNG, JPEG, GIF, WebP or SVG, up to 5 MB, into this connection's dashboard volume. It shows who uploaded it and when,
         and no period or comparison: a static thing says it is static.
@@ -587,17 +586,17 @@ function NewDashboard({ connectionId, schema, sym, onKept, onClose, onBusy }: {
             )}
           {!entity && suggested && suggested.length > 0 && (
             <div data-testid="dashboard-new-suggested">
-              <div className="aug-fs-xs" style={{ color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em", margin: "2px 0 6px" }}>What each object suggests</div>
+              <div className="aug-label" style={{ margin: "2px 0 6px" }}>What each object suggests</div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 6 }}>
                 {withUniqueKeys(suggested, x => x.entity).map(([k, x]) => (
                   <Button key={k} variant="outline" data-testid="dashboard-new-suggestion" data-shape={x.shape} onClick={() => setEntity(x.entity)}
                     style={{ height: "auto", justifyContent: "flex-start", textAlign: "left", whiteSpace: "normal", padding: "8px 10px" }}>
                     <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
                       <span style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-                        <span className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: 500 }}>{x.name}</span>
+                        <span className="aug-fs-chrome" style={{ color: "var(--t1)", fontWeight: 500 }}>{x.name}</span>
                         <span className="aug-fs-xs" style={{ color: "var(--accent-11)" }}>{SHAPES[x.shape].label}</span>
                       </span>
-                      <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>{x.short}</span>
+                      <span className="aug-fs-sm" style={{ color: "var(--t3)" }}>{x.short}</span>
                     </span>
                   </Button>
                 ))}
@@ -655,7 +654,7 @@ function NewDashboard({ connectionId, schema, sym, onKept, onClose, onBusy }: {
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, maxWidth: "100%" }}>
-        <span className="aug-fs-xs" style={{ color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em" }}>Or start another way</span>
+        <span className="aug-label">Or start another way</span>
         <div role="group" aria-label="Other ways to start" data-testid="dashboard-new-ways"
           style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 2, padding: 6, background: "var(--bg-2)", border: "1px solid var(--card-edge)", borderRadius: "var(--r3)", boxShadow: "var(--shadow-lg)" }}>
           {WAYS.map(w => (
@@ -746,7 +745,7 @@ function PublishPanel({ connectionId, dashboardId, publishedTo, draft = false, r
     setChosen(cs => (on ? [...cs.filter(c => !(c.kind === a.kind && c.id === a.id)), a] : cs.filter(c => !(c.kind === a.kind && c.id === a.id))));
   const all = [...(audiences?.groups ?? []), ...(audiences?.roles ?? [])];
   return (
-    <div data-testid="dashboard-publish" style={{ border: "1px solid var(--b1)", borderRadius: "var(--r3)", padding: 14, marginBottom: 16, display: "flex", flexDirection: "column", gap: 8 }}>
+    <div data-testid="dashboard-publish" style={{ background: "var(--bg-2)", borderRadius: "var(--r3)", padding: 14, marginBottom: 16, display: "flex", flexDirection: "column", gap: 8 }}>
       <div className="aug-label">Publish as an App to</div>
       {problem ? <div className="aug-fs-sm" style={{ color: "var(--t2)" }}>Who you may publish to could not be read: {problem}</div>
         : !audiences ? <Loading what="who you may publish to" style={{ padding: "4px 0" }} />
@@ -754,7 +753,7 @@ function PublishPanel({ connectionId, dashboardId, publishedTo, draft = false, r
         : (
           <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 4 }}>
             {all.map(a => (
-              <li key={`${a.kind}:${a.id}`} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <li key={`${a.kind}:${a.id}`} className="aug-fs-chrome" style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <Checkbox checked={chosen.some(c => c.kind === a.kind && c.id === a.id)} disabled={busy}
                   aria-label={`Publish to ${a.name}`} onChange={e => toggle(a, e.target.checked)} />
                 <span>{a.name}</span>
@@ -1344,11 +1343,11 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
           Version {kept.version} · {kept.written_by_model ? "drafted, kept" : "kept"} by {person(kept.approved_by)} · {formatDateTime(kept.kept_at)}
         </span>
       </div>
-      <ol data-testid="dashboard-history" style={{ listStyle: "none", margin: 0, padding: 0, borderTop: "1px solid var(--b1)" }}>
+      <ol data-testid="dashboard-history" style={{ listStyle: "none", margin: 0, padding: 0 }}>
         {data.history.map(v => (
-          <li key={v.artifact_id} className="aug-fs-sm" style={{ display: "flex", alignItems: "baseline", gap: 12, padding: "7px 0", borderBottom: "1px solid var(--b1)", color: "var(--t2)", flexWrap: "wrap" }}>
+          <li key={v.artifact_id} className="aug-fs-chrome" style={{ display: "flex", alignItems: "baseline", gap: 12, padding: "7px 0", borderBottom: "1px solid var(--b0)", color: "var(--t2)", flexWrap: "wrap" }}>
             <span style={{ color: "var(--t1)", fontWeight: 500, minWidth: 74 }}>Version {v.version}</span>
-            <span style={{ flex: 1, minWidth: 0 }}>
+            <span className="aug-fs-sm" style={{ flex: 1, minWidth: 0 }}>
               {/* Arc AP-6 — what it changed, in words; a server before the words says its counts, as before */}
               {v.said ? (v.said.length > 0 && (
                 <span data-testid="dashboard-history-said" style={{ display: "block", color: "var(--t1)" }}>{v.said.join(" · ")}</span>
@@ -1493,11 +1492,6 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
             return render.shown && !isOtherKind(render.viz?.type) ? { ...holds, fields: [] } : holds;
           }}
           onUndo={stacks.past.length > 0 ? undo : undefined} onRedo={stacks.future.length > 0 ? redo : undefined}
-          askPiece={(key, type) => (ASKS_OF_A_PIECE(type) ? (
-            <AskPiece key={key} connectionId={connectionId} dashboardId={openId} schema={schema} pieceKey={key} actor={ACTOR}
-              beforeAsk={async () => { sendBurst(); await burst.current.chain; }}
-              onKept={() => { setStacks(st => ({ past: [...st.past.slice(-49), current], future: [] })); reload(); }} />
-          ) : null)}
           bar={(
             <EditBar saved={saved} onDone={done}
               picker={(
@@ -1587,7 +1581,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
           aside={showHistory ? (
             <div data-testid="builder-history-panel" style={{ padding: "4px 14px" }}>
               <div style={{ display: "flex", alignItems: "center", padding: "8px 0" }}>
-                <span className="aug-fs-xs" style={{ color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em" }}>History</span>
+                <span className="aug-label">History</span>
                 <Button size="xs" variant="ghost" style={{ marginLeft: "auto" }} onClick={() => setShowHistory(false)}>Back to the setup</Button>
               </div>
               {historyPanel}

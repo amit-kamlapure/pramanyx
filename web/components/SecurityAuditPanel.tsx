@@ -155,7 +155,7 @@ function AgentCell({ hypothesisId }: { hypothesisId: string }) {
   return (
     <span title={hypothesisId} style={{ whiteSpace: "nowrap" }}>
       <span style={{ color: "var(--t2)", fontWeight: 500 }}>{agent}</span>
-      {detail && <span className="aug-fs-xs" style={{ color: "var(--t3)", marginLeft: 5 }}>{detail}</span>}
+      {detail && <span className="aug-fs-sm" style={{ color: "var(--t3)", marginLeft: 5 }}>{detail}</span>}
     </span>
   );
 }
@@ -220,15 +220,15 @@ function AuditTable({ records, connections, testId }: { records: AuditRecord[]; 
   };
   return (
     <div data-testid={testId} style={{ overflow: "auto", maxHeight: 420, marginTop: 6 }}>
-      <div role="table" aria-label="Query checks" className="aug-fs-xs" style={{ minWidth: 1040 }}>
-        <div role="row" style={{ ...LOG_GRID, padding: "0 0 6px 8px", position: "sticky", top: 0, background: "var(--bg-2)", zIndex: 1 }}>
+      <div role="table" aria-label="Query checks" className="aug-fs-chrome" style={{ minWidth: 1040 }}>
+        <div role="row" className="aug-fs-xs" style={{ ...LOG_GRID, padding: "0 0 6px 8px", position: "sticky", top: 0, background: "var(--bg-2)", zIndex: 1 }}>
           {LOG_HEAD.map(h => {
             const active = h.col != null && sortCol === h.col;
             return (
               <span key={h.label} role="columnheader" aria-sort={active ? (sortDir === "asc" ? "ascending" : "descending") : undefined}
                 onClick={h.col ? () => sortBy(h.col!) : undefined}
                 style={{ textAlign: h.right ? "right" : "left", color: active ? "var(--blue3)" : "var(--t3)", whiteSpace: "nowrap",
-                  textTransform: "uppercase", letterSpacing: ".06em", cursor: h.col ? "pointer" : "default", userSelect: "none" }}>
+                  cursor: h.col ? "pointer" : "default", userSelect: "none" }}>
                 {h.label}{h.col && <SortMark active={active} dir={sortDir} />}
               </span>
             );
@@ -260,8 +260,8 @@ function AuditTable({ records, connections, testId }: { records: AuditRecord[]; 
               </div>
               {!inShell && openRow === rec.id && (
                 <div data-testid="audit-row-detail" style={{ padding: "4px 0 8px 8px", display: "flex", flexDirection: "column", gap: 6 }}>
-                  <pre style={{ ...PRE, color: "var(--t1)" }}>{rec.sql_full}</pre>
-                  {rec.error && <pre style={{ ...PRE, color: "var(--red4)" }}>{rec.error}</pre>}
+                  <pre className="aug-fs-xs" style={{ ...PRE, color: "var(--t1)" }}>{rec.sql_full}</pre>
+                  {rec.error && <pre className="aug-fs-xs" style={{ ...PRE, color: "var(--red4)" }}>{rec.error}</pre>}
                 </div>
               )}
             </React.Fragment>
@@ -386,12 +386,12 @@ function GroupRow({ g, open, onToggle, connections }: {
           <Dot hue={g.outcome === "flagged" && g.own ? "grey" : HUE[g.outcome]} title={word} />{word}
         </span>
         <span className="aug-fs-chrome" data-testid="check-group-who" style={{ ...ONE_LINE, color: "var(--t2)" }} title={g.name}>{g.name}</span>
-        <span className="aug-fs-xs" title={g.reason ?? meta} style={{ ...MUTED, ...ONE_LINE }}>{meta}</span>
+        <span className="aug-fs-chrome" title={g.reason ?? meta} style={{ ...MUTED, ...ONE_LINE }}>{meta}</span>
         <span className="aug-fs-chrome" data-testid="check-group-count"
           style={{ color: "var(--t2)", fontVariantNumeric: "tabular-nums", textAlign: "right" }}>
           {formatCount(g.rows.length)}
         </span>
-        <span className="aug-fs-xs" style={{ ...MUTED, ...ONE_LINE, fontVariantNumeric: "tabular-nums" }}>{span(g.earliest, g.latest)}</span>
+        <span className="aug-fs-chrome" style={{ ...MUTED, ...ONE_LINE, fontVariantNumeric: "tabular-nums" }}>{span(g.earliest, g.latest)}</span>
         <span style={{ justifySelf: "end" }}>
           <Button size="xs" variant="ghost" aria-expanded={open} onClick={onToggle}>
             {open ? "Hide" : "Show"} <Icon name={open ? "chevu" : "chevd"} size={12} />
@@ -455,7 +455,7 @@ function BudgetEditor({ connId, budget, onDone }: { connId: string; budget: Quer
   ];
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      {budget.is_default && <div className="aug-fs-xs" style={{ color: "var(--amb4)" }}>These are the defaults — saving sets this connection&apos;s own.</div>}
+      {budget.is_default && <div className="aug-fs-sm" style={{ color: "var(--amb4)" }}>These are the defaults — saving sets this connection&apos;s own.</div>}
       {FIELDS.map(f => (
         <label key={f.key} className="aug-fs-sm" style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{ color: "var(--t2)", width: 110, flexShrink: 0 }}>{f.label}</span>
@@ -467,7 +467,7 @@ function BudgetEditor({ connId, budget, onDone }: { connId: string; budget: Quer
         <Button size="xs" onClick={save} disabled={saving}>{saving ? "Saving…" : "Save limits"}</Button>
         <Button size="xs" variant="ghost" onClick={() => onDone(null)} disabled={saving}>Cancel</Button>
       </div>
-      {failed && <div role="alert" className="aug-fs-xs" style={{ color: "var(--red4)" }}>Not saved — {failed}</div>}
+      {failed && <div role="alert" className="aug-fs-sm" style={{ color: "var(--red4)" }}>Not saved — {failed}</div>}
     </div>
   );
 }
@@ -569,7 +569,7 @@ function QueriesLens({ connId, connections, reloadKey, onLoading }: {
     <>
       <Segmented label="Verdict" value={verdict} onChange={v => setVerdict(v)}
         options={VERDICT_FILTERS.map(f => ({ value: f.value, label: f.label }))} />
-      <SelectField aria-label="Connection" value={filterConnId || ""} onChange={e => setFilterConnId(e.target.value || undefined)}>
+      <SelectField variant="soft" aria-label="Connection" value={filterConnId || ""} onChange={e => setFilterConnId(e.target.value || undefined)}>
         <option value="">All connections</option>
         {connections.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
       </SelectField>
@@ -635,7 +635,7 @@ function QueriesLens({ connId, connections, reloadKey, onLoading }: {
         ) : (
           <div style={{ overflowX: "auto" }}>
             <div style={{ minWidth: 690 }}>
-              <div className="aug-fs-xs" style={{ ...GROUP_GRID, ...MUTED, textTransform: "uppercase", letterSpacing: ".06em", padding: "0 0 6px 8px" }}>
+              <div className="aug-fs-xs" style={{ ...GROUP_GRID, ...MUTED, padding: "0 0 6px 8px" }}>
                 <span>Outcome</span><span>Who</span><span>What happened</span><span style={{ textAlign: "right" }}>Checks</span><span>When</span><span />
               </div>
               {groups.map(g => (
@@ -776,7 +776,7 @@ function ActionApprovalsSection() {
                   <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto auto", gap: 10, alignItems: "center" }}>
                     <div style={{ minWidth: 0 }}>
                       <div className="aug-fs-chrome" title={action} style={{ ...ONE_LINE, color: "var(--t1)" }}>{actionWords(action)}</div>
-                      <div className="aug-fs-xs" title={entries.map(e => e.scope || "everywhere").join(", ")} style={{ ...MUTED, ...ONE_LINE }}>
+                      <div className="aug-fs-sm" title={entries.map(e => e.scope || "everywhere").join(", ")} style={{ ...MUTED, ...ONE_LINE }}>
                         {entries.slice(0, 2).map(e => e.scope || "everywhere").join(" · ")}{entries.length > 2 ? ` · +${entries.length - 2} more` : ""}
                       </div>
                     </div>
@@ -787,9 +787,9 @@ function ActionApprovalsSection() {
                     </Button>
                   </div>
                   {isOpen && entries.map(e => (
-                    <div key={`${e.action}@${e.scope}`} className="aug-fs-sm"
+                    <div key={`${e.action}@${e.scope}`} className="aug-fs-chrome"
                       style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0 0 12px" }}>
-                      <code className="aug-fs-xs" style={{ color: "var(--t2)", ...ONE_LINE }}>{e.scope || "*"}</code>
+                      <code className="aug-fs-chrome" style={{ color: "var(--t2)", ...ONE_LINE }}>{e.scope || "*"}</code>
                       <span className="aug-fs-xs" style={MUTED}>{[e.by, e.at ? dayOf(e.at) : ""].filter(Boolean).join(" · ")}</span>
                       <span style={{ flex: 1 }} />
                       <Button size="xs" variant="outline" onClick={() => handleRevoke(e)}>Revoke</Button>
@@ -817,7 +817,7 @@ function ActionApprovalsSection() {
                     <Dot hue={d.refused ? "red" : "green"} title={d.refused ? "something was refused" : "nothing refused"} />
                     <div style={{ minWidth: 0 }}>
                       <div className="aug-fs-chrome" title={d.action} style={{ ...ONE_LINE, color: "var(--t1)" }}>{actionWords(d.action)}</div>
-                      <div className="aug-fs-xs" title={d.said} style={{ ...MUTED, ...ONE_LINE }}>
+                      <div className="aug-fs-sm" title={d.said} style={{ ...MUTED, ...ONE_LINE }}>
                         {d.said}{d.last ? ` · last ${dayOf(d.last)}, ${d.actor}` : ""}
                       </div>
                     </div>
@@ -829,9 +829,9 @@ function ActionApprovalsSection() {
                     {trail ? "Hide the trail" : "Full trail"} <Icon name={trail ? "chevu" : "chevd"} size={12} />
                   </Button>
                   {trail && (
-                    <div data-testid="approval-trail" role="table" aria-label="The approval trail" className="aug-fs-xs"
+                    <div data-testid="approval-trail" role="table" aria-label="The approval trail" className="aug-fs-chrome"
                       style={{ maxHeight: 260, overflow: "auto", marginTop: 4 }}>
-                      <div role="row" style={{ ...TRAIL_GRID, ...MUTED, textTransform: "uppercase", letterSpacing: ".06em", padding: "0 0 4px",
+                      <div role="row" className="aug-fs-xs" style={{ ...TRAIL_GRID, ...MUTED, padding: "0 0 4px",
                         position: "sticky", top: 0, background: "var(--bg-2)" }}>
                         <span role="columnheader">When</span><span role="columnheader">Decision</span><span role="columnheader">Action</span>
                         <span role="columnheader">Scope</span><span role="columnheader">Who</span>

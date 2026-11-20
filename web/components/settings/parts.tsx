@@ -55,7 +55,7 @@ export function Field({ label, htmlFor, children, meta }: {
 /** One muted line under a card's controls. */
 export function Note({ children, tone, testId }: { children: ReactNode; tone?: "amber" | "red" | "green"; testId?: string }) {
   const color = tone === "amber" ? "var(--amb4)" : tone === "red" ? "var(--red4)" : tone === "green" ? "var(--grn4)" : "var(--t3)";
-  return <div className="aug-fs-xs" data-testid={testId} style={{ color, lineHeight: 1.5, marginTop: 8 }}>{children}</div>;
+  return <div className="aug-fs-sm" data-testid={testId} style={{ color, lineHeight: 1.5, marginTop: 8 }}>{children}</div>;
 }
 
 /** Long help behind *Details*: a quiet button that opens what most readers do not need. */
@@ -68,8 +68,9 @@ export function Details({ children, label = "Details", testId }: { children: Rea
         {label} <Icon name={open ? "chevu" : "chevd"} size={12} />
       </Button>
       {open && (
-        <div className="aug-fs-xs" style={{ color: "var(--t2)", lineHeight: 1.55, marginTop: 4, paddingLeft: 8,
-          borderLeft: "1px solid var(--b1)" }}>
+        // A soft surface, not a rule down its side (2026-11-20, borders are the exception).
+        <div className="aug-fs-sm" style={{ color: "var(--t2)", lineHeight: 1.55, marginTop: 4, padding: "6px 8px",
+          background: "var(--gray-a3)", borderRadius: "var(--r2)" }}>
           {children}
         </div>
       )}
@@ -85,7 +86,7 @@ export function SaveLine({ children, saved, error, savedText = "Saved ✓", test
     <div data-testid={testId} style={{ ...ROW, gap: 10, marginTop: 12 }}>
       {children}
       {saved && <span className="aug-fs-xs" style={{ color: "var(--grn4)" }}>{savedText}</span>}
-      {error && <span className="aug-fs-xs" role="alert" data-testid={errorTestId} style={{ color: "var(--red4)" }}>{error}</span>}
+      {error && <span className="aug-fs-sm" role="alert" data-testid={errorTestId} style={{ color: "var(--red4)" }}>{error}</span>}
     </div>
   );
 }

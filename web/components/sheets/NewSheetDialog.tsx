@@ -139,7 +139,7 @@ export function NewSheetDialog({ start, onClose, onMade }: {
 
         {source === "file" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", border: "1px solid var(--b1)",
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px",
               borderRadius: "var(--r3)", background: "var(--bg-1)" }}>
               <Icon name="table" size={18} />
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -168,8 +168,8 @@ export function NewSheetDialog({ start, onClose, onMade }: {
                     aria-label={`Name of the sheet${t.tab ? ` from tab ${t.tab}` : ""}`} style={{ flex: 1 }} />
                   {t.tab && <span className="aug-fs-xs" style={{ ...MUTED, ...NUM }}>{formatCount(t.rows)} rows</span>}
                 </label>
-                <div style={{ maxHeight: 320, overflowY: "auto", border: "1px solid var(--b0)", borderRadius: "var(--r2)" }}>
-                  <table className="aug-fs-sm" style={{ width: "100%", borderCollapse: "collapse" }}>
+                <div style={{ maxHeight: 320, overflowY: "auto", borderRadius: "var(--r2)" }}>
+                  <table className="aug-fs-chrome" style={{ width: "100%", borderCollapse: "collapse" }}>
                     <thead>
                       <tr className="aug-fs-xs" style={{ ...MUTED, textAlign: "left", position: "sticky", top: 0,
                         background: "var(--bg-2)" }}>
@@ -192,7 +192,7 @@ export function NewSheetDialog({ start, onClose, onMade }: {
                                 {c.offered.map(k => <SelectItem key={k} value={k}>{KIND_LABEL[k]}</SelectItem>)}
                               </SelectContent>
                             </Select>
-                            {c.note && <div className="aug-fs-xs" style={{ ...MUTED, marginTop: 4 }}>{c.note}</div>}
+                            {c.note && <div className="aug-fs-sm" style={{ ...MUTED, marginTop: 4 }}>{c.note}</div>}
                             {(kinds[t.tab]?.[c.name] ?? c.suggested) === "choice" && c.values.length > 0 && (
                               <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
                                 {c.values.map(([v, n]) => (
@@ -201,7 +201,7 @@ export function NewSheetDialog({ start, onClose, onMade }: {
                               </div>
                             )}
                           </td>
-                          <td className="aug-fs-xs" style={{ padding: "5px 8px", ...MUTED, maxWidth: 220,
+                          <td style={{ padding: "5px 8px", ...MUTED, maxWidth: 220,
                             overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={c.first ?? undefined}>
                             {firstAs(c, kinds[t.tab]?.[c.name] ?? c.suggested)}
                           </td>

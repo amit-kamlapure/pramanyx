@@ -85,7 +85,13 @@
   --bg-3: var(--gray-1);             /* inset, input: a step under the card in dark; gray 3 in light */
   --bg-4: var(--gray-5);             /* pressed, the active segment */
   --bg-hover: var(--gray-4);         /* row and nav hover */
-  --bg-nav: var(--bg-1);             /* the rail sits on chrome */
+  /* The frame — the top bar, the rail and the status strip, one surface the page sits in (2026-11-20). With the rules
+     between them gone the step from page to frame carries the structure, so it is the reference palette's own step,
+     1.19:1 (gray 3 on gray 1), where chrome on --bg-1 was 1.07:1 — in our slate, not its blue (the user: "see what
+     makes sense"). */
+  --bg-frame: var(--gray-3);
+  --bg-nav: var(--bg-frame);         /* the rail is the frame */
+  --bg-nav-sel: var(--gray-5);       /* the rail's open page: a neutral step above the frame, with the accent's bar */
   --bg-sel: var(--accent-4);         /* selected row, active nav: a tint of the accent */
   --bg-canvas: var(--bg-0);          /* the Data Canvas ground: no tinted ground on chrome */
   --scrim: var(--color-overlay);
@@ -97,6 +103,9 @@
   --b1: var(--gray-7);
   --b2: var(--gray-7);
   --b3: var(--gray-8);
+  /* The few rules kept between panes (catalog | editor, editor | results): a step under --b0, as quiet as a line can be
+     and still be seen (the user, 2026-11-20: "Surfaces define structure. … Borders are the exception."). */
+  --divide: var(--gray-4);
   --bfocus: var(--focus-8);
   /* a card's edge, in both skins since 2026-10-25 ("fine grey lines at the right places"); the `edges` knob
      turned off takes it away. Before: none in dark (the 2026-10-10 "cards on the ground"). */
@@ -105,7 +114,11 @@
   /* text — Radix has two text steps; t2 and t3 share the quieter one. t4 is never text */
   --t1: var(--gray-12);
   --t2: var(--gray-11);
+  /* the quieter words — hints, meta, captions, icons. The reference palette the user took on 2026-11-20 has two text
+     steps (primary #E8ECF0, secondary #92A4B3), so t2 and t3 are its secondary again: gray 11 */
   --t3: var(--gray-11);
+  /* the open query tab: the accent through the frame's step — the palette's own #355475 where its scale is on */
+  --tab-on: color-mix(in srgb, var(--accent-9) 30%, var(--gray-4));
   --t4: var(--gray-9);
 
   /* intent — 1 tint · 2 border · 3 the colour · 4 text · 5 aliases 4
@@ -164,7 +177,7 @@
   --r3: var(--radius-4);    /* frames, panels, overlays: a Radix card's own corner */
   --r-pill: 9999px;         /* only what IS round: avatars and status dots */
   --r-chip: var(--r1);      /* a text-bearing chip is a rectangle */
-  --r-composer: var(--r2);  /* the chat composer is a field */
+  --r-composer: 12px;       /* the box a person writes to the model in: curved, as the coworker's is (the user, 2026-11-20) */
 
   /* shell */
   --sidebar: 198px;            /* 20% narrower than its 248px (the user, 2026-11-19: "This width needs be to cut down by 20%") */
@@ -210,6 +223,10 @@
   --code-bg: var(--gray-4);
   --b0: var(--gray-5);
   --b1: var(--gray-6);
+  --divide: var(--gray-5);       /* a pane's rule on the light ground: --b0's step, as a softer one is not seen on gray 3 */
+  --bg-frame: var(--gray-1);     /* the frame in light: near white around the gray-3 page */
+  --bg-nav-sel: var(--gray-4);
+  --tab-on: var(--accent-4);     /* the open query tab in light: the accent's tint */
 
   --chart-1: #0F6CBD;
   --chart-2: #1E7B45;
@@ -236,6 +253,29 @@
   --bg-2: var(--gray-1);
   --bg-3: var(--gray-2);
   --card-edge: transparent;
+}
+
+/* ── The reference palette (the user, 2026-11-20: "Lets do other screens as well.. and lets use this setup"), as the slate
+   scale in dark. Its anchors are its own: 1 the main workspace (SQL editor, output, canvas) #11171D · 3 the sidebar and
+   the surfaces around the page #1F272D · 5 the selected navigation #27343E · 11 secondary text #92A4B3 · 12 primary
+   text #E8ECF0; the steps between are drawn on the same blue-slate line, each lighter than the last. Measured that day:
+   primary text 15.2:1 on the workspace and 10.7:1 on the selected nav item; secondary 7.0:1 and 5.0:1; a row rule
+   (6) 1.6:1, a border (7) 2.0:1; frame on workspace and selected nav on frame each 1.19:1. A person who picks another
+   grey gets Radix's own. ── */
+:root[data-theme="dark"][data-gray-color="slate"] {
+  --slate-1: #11171D;
+  --slate-2: #171E24;
+  --slate-3: #1F272D;
+  --slate-4: #232E36;
+  --slate-5: #27343E;
+  --slate-6: #2E3D49;
+  --slate-7: #3A4A57;
+  --slate-8: #4E606E;
+  --slate-9: #637584;
+  --slate-10: #718392;
+  --slate-11: #92A4B3;
+  --slate-12: #E8ECF0;
+  --tab-on: #355475;               /* the palette's active tab highlight: the selected query tab */
 }
 
 /* ── The look's two knobs of our own (2026-10-25, ROADMAP §6 item 53). Each is an attribute on
@@ -274,7 +314,9 @@
   --blue-contrast: #FFFFFF;
 }
 :root[data-theme="dark"][data-accent-color="blue"] {
-  --blue-9: #70B8FF;
-  --blue-10: #C2E6FF;
-  --blue-contrast: #111113;
+  /* the reference palette's primary blue (2026-11-20) — the Run button and the interactive controls — under a dark
+     label, 5.9:1 (a white one would be 3.1:1); its hover a step lighter */
+  --blue-9: #4399E0;
+  --blue-10: #5AA8EA;
+  --blue-contrast: #11171D;
 }

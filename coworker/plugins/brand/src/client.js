@@ -44,11 +44,15 @@ function Name() {
 }
 
 /**
- * The look. Values are the app's dark theme as its page computes them (read from the running app, 2026-11-12):
- * the charcoal ground and its two steps up, the three text greys, the accent and its tint, and corners of a few
- * pixels where the shell's are 8 to 28. The light theme keeps the shell's own greys and takes only the accent,
- * the corners and the type — the app's light values were not measured, and a guess would be a second palette.
- * The attribute is written twice so these outrank the shell's own rule for it, whichever loads last.
+ * The look: the platform's, so the coworker and the app read as one product (the user, 2026-11-20: "Copy the style to
+ * the harness as well.. as well as the Colours.. let it match the theory as the platform"). Since that day the dark
+ * theme is the reference palette the platform took the same day — the workspace #11171D, the sidebar and the surfaces
+ * around the page #1F272D, the selected row #27343E, primary text #E8ECF0, secondary #92A4B3, primary blue #4399E0
+ * under a dark label — and the platform's rule: surfaces define structure, borders are the exception (the sidebar is
+ * told from the page by its fill, not a line; a control by a soft fill, not an outline). Corners stay small, as the
+ * platform's. The light theme keeps the shell's own greys and takes only the accent, the corners and the type — the
+ * app's light values were not measured, and a guess would be a second palette. The attribute is written twice so these
+ * outrank the shell's own rule for it, whichever loads last.
  */
 const STOPS = NAME_BAR_STOPS.map(([at, colour]) => `${colour} ${at * 100}%`).join(", ");
 
@@ -64,9 +68,11 @@ const LOOK = `
   background: linear-gradient(var(--pramanyx-ground), var(--pramanyx-ground)) padding-box, linear-gradient(115deg, ${STOPS}) border-box !important;
   box-shadow: none !important;
 }
-body[data-ds-dark-theme] [data-composer-card][data-composer-card] { --pramanyx-ground: #18191b; }
+body[data-ds-dark-theme] [data-composer-card][data-composer-card] { --pramanyx-ground: #171e24; }
 [data-composer-card] [class*="_primary"] { background: #46a0c4 !important; color: #ffffff !important; }
+body[data-ds-dark-theme] [data-composer-card] [class*="_primary"] { background: #4399e0 !important; color: #11171d !important; }
 [data-composer-card] [class*="_primary"]:disabled { background: #2e3135 !important; color: #8b9099 !important; opacity: 1 !important; }
+body[data-ds-dark-theme] [data-composer-card] [class*="_primary"]:disabled { background: #27343e !important; color: #718392 !important; }
 body:not([data-ds-dark-theme]) [data-composer-card] [class*="_primary"]:disabled { background: #e8e9eb !important; color: #8b9099 !important; }
 /* The shell's strip of turns, tokens and cache under the box: its own accounting, of no use to a person asking about a business. */
 [class*="_dock"]:has(> [data-slot="conversation.composer.dock"]) { display: none !important; }
@@ -75,7 +81,20 @@ body:not([data-ds-dark-theme]) [data-composer-card] [class*="_primary"]:disabled
   content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; z-index: 1;
   background: linear-gradient(180deg, ${STOPS});
 }
-body[data-ds-dark-theme] [class*="_sessionRow"][class*="_selected"] { background: #0f3747; }
+body[data-ds-dark-theme] [class*="_sessionRow"][class*="_selected"] { background: #27343e; }
+/* The sidebar is the frame's surface: told from the page by its fill, no line at its edge and no macOS tint over it. */
+body[data-ds-dark-theme] [class*="_sidebarCol"][class*="_sidebarCol"] { background: #1f272d !important; border-right: none !important; }
+body:not([data-ds-dark-theme]) [class*="_sidebarCol"][class*="_sidebarCol"] { border-right: none !important; }
+/* New conversation: a soft fill, not an outline — the platform's button at rest. */
+[class*="_newSession"][class*="_newSession"] { border-color: transparent !important; box-shadow: none !important; }
+body[data-ds-dark-theme] [class*="_newSession"][class*="_newSession"] { background: #27343e !important; }
+body[data-ds-dark-theme] [class*="_newSession"][class*="_newSession"]:hover { background: #2e3d49 !important; }
+/* A badge is its tint and its words, no edge. */
+[class*="_previewBadge"] { border-color: transparent !important; }
+/* The conversation list is a list: its rows at 13 and their times at 11, as every list on the platform (2026-11-20; it
+   drew 14 and 10). Matched by the parts of the class names the shell writes by hand. */
+[class*="_sidebarCol"] [class*="_title"] { font-size: 13px !important; }
+[class*="_sidebarCol"] [class*="_time"] { font-size: 11px !important; }
 body {
   --dsw-radius-xs: 2px; --dsw-radius-sm: 3px; --dsw-radius-md: 4px; --dsw-radius-lg: 6px; --dsw-radius-xl: 6px;
   --dsw-radius-panel: 6px;
@@ -85,21 +104,35 @@ body {
   --dsw-alias-state-business-primary: #2b7fa3;
 }
 body[data-ds-dark-theme][data-ds-dark-theme] {
-  --dsw-alias-bg-base: #111113;
-  --dsw-alias-bg-layer-1: #18191b;
-  --dsw-alias-bg-layer-2: #212225;
-  --dsw-alias-bg-layer-3: #2e3135;
-  --dsw-alias-settings-card-fill: #212225;
-  --dsw-alias-markdown-code-block: #18191b;
-  --dsw-alias-markdown-inline-code: #212225;
-  --dsw-alias-label-primary: #edeef0;
-  --dsw-alias-label-secondary: #b0b4ba;
-  --dsw-alias-label-tertiary: #8b9099;
-  --dsw-alias-brand-primary: #edeef0;
-  --dsw-alias-brand-text: #edeef0;
-  --dsw-alias-link: #70c9e3;
-  --dsw-alias-state-business-primary: #46a0c4;
-  --dsw-alias-state-business-tertiary: #0f3747;
+  /* the platform's dark scale: 1 the workspace · 2 · 3 the sidebar and surfaces · 4 hover · 5 selected · 6-7 rules */
+  --dsw-alias-bg-base: #11171d;
+  --dsw-alias-bg-layer-1: #171e24;
+  --dsw-alias-bg-layer-2: #1f272d;
+  --dsw-alias-bg-layer-3: #27343e;
+  --dsw-specific-sidebar-fill: #1f272d;
+  --dsw-alias-settings-card-fill: #1f272d;
+  --dsw-alias-settings-card-stroke: transparent;
+  --dsw-alias-markdown-code-block: #171e24;
+  --dsw-alias-markdown-inline-code: #1f272d;
+  --dsw-alias-interactive-bg-hover-solid: #232e36;
+  --dsw-alias-button-floating-fill: #1f272d;
+  --dsw-alias-button-floating-hover: #27343e;
+  --dsw-alias-tooltip-bg: #27343e;
+  --dsw-alias-toast-bg: #27343e;
+  --dsw-alias-label-primary: #e8ecf0;
+  --dsw-alias-label-primary-dimmed: #e8ecf0;
+  --dsw-alias-label-secondary: #92a4b3;
+  --dsw-alias-label-tertiary: #92a4b3;
+  --dsw-alias-label-caption: #718392;
+  --dsw-alias-brand-primary: #e8ecf0;
+  --dsw-alias-brand-text: #e8ecf0;
+  --dsw-alias-link: #70b8ff;
+  --dsw-alias-state-business-primary: #4399e0;
+  --dsw-alias-state-business-tertiary: #27343e;
+  /* rules: the few that stay, quiet (the platform's --divide); the shell's l3 edge is what drew the sidebar's line */
+  --dsw-alias-border-l1: #232e36;
+  --dsw-alias-border-l2: #27343e;
+  --dsw-alias-border-l3: #2e3d49;
 }
 /*
  * The mark beside "…for 19s" while an answer is being worked on. The shell draws its own animal there and offers

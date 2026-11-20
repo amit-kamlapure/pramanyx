@@ -13,7 +13,7 @@ import uuid
 from pathlib import Path
 from typing import List, Optional
 
-from pramanyx.canvas.models import Canvas, CanvasScope, CanvasArtifact
+from pramanyx.canvas.models import Canvas, CanvasArtifact, CanvasScope, CanvasShare
 from pramanyx.db.migrations import add_column_if_missing
 from pramanyx.db.sqlite_util import resolve_db_path
 from pramanyx.db.backend import connect_store
@@ -48,6 +48,10 @@ def _ensure_schema(c: sqlite3.Connection) -> None:
     # `add_column_if_missing` is the same helper the numbered path calls, minus the
     # numbering there is nothing here to number against.
     add_column_if_missing(c, "canvases", "doc_ids_json", "TEXT NOT NULL DEFAULT '[]'")
+    # Who made it, and who it is shared with (2026-11-20): a canvas made before is the workspace's, as it always was.
+    add_column_if_missing(c, "canvases", "created_by", "TEXT NOT NULL DEFAULT ''")
+    add_column_if_missing(c, "canvases", "sharing", "TEXT NOT NULL DEFAULT 'workspace'")
+    add_column_if_missing(c, "canvases", "shared_with_json", "TEXT NOT NULL DEFAULT '[]'")
     c.commit()
 
 
@@ -58,6 +62,8 @@ def _row_to_canvas(row: sqlite3.Row) -> Canvas:
     # predates the column would raise, and a canvas must still load.
     doc_ids = (json.loads(row["doc_ids_json"] or "[]")
                if "doc_ids_json" in row.keys() else [])
+    keys = row.keys()
+    shares = [CanvasShare(**x) for x in json.loads(row["shared_with_json"] or "[]")] if "shared_with_json" in keys else []
     return Canvas(
         id=row["id"],
         name=row["name"],
@@ -65,6 +71,9 @@ def _row_to_canvas(row: sqlite3.Row) -> Canvas:
         scopes=scopes,
         doc_ids=doc_ids,
         is_legacy=bool(row["is_legacy"]),
+        created_by=(row["created_by"] or "") if "created_by" in keys else "",
+        sharing=("chosen" if "sharing" in keys and row["sharing"] == "chosen" else "workspace"),
+        shared_with=shares,
         created_at=row["created_at"],
         updated_at=row["updated_at"],
     )
@@ -79,6 +88,7 @@ def create_canvas(
     is_legacy: bool = False,
     canvas_id: Optional[str] = None,
     doc_ids: Optional[List[str]] = None,
+    created_by: str = "",
 ) -> Canvas:
     """Create and persist a new Canvas. Returns the created Canvas."""
     if len(scopes) > 1:
@@ -94,13 +104,13 @@ def create_canvas(
     ensure_once(c, _ensure_schema)
     c.execute(
         "INSERT INTO canvases (id, name, description, scopes_json, doc_ids_json, "
-        "is_legacy, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        (cid, name, description, scopes_json, json.dumps(docs), int(is_legacy), now, now),
+        "is_legacy, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (cid, name, description, scopes_json, json.dumps(docs), int(is_legacy), created_by or "", now, now),
     )
     c.commit()
     return Canvas(
         id=cid, name=name, description=description, scopes=scopes, doc_ids=docs,
-        is_legacy=is_legacy, created_at=now, updated_at=now,
+        is_legacy=is_legacy, created_by=created_by or "", created_at=now, updated_at=now,
     )
 
 
@@ -155,6 +165,35 @@ def update_canvas(
     updated = get_canvas(canvas_id)
     _record_revision(updated)
     return updated
+
+
+def set_sharing(canvas_id: str, sharing: str, shared_with: List[CanvasShare], *,
+                created_by: Optional[str] = None) -> Optional[Canvas]:
+    """Who a canvas is shared with, kept (`canvas.sharing.set_sharing` checks who may and what was chosen). A canvas
+    with no maker takes ``created_by`` — the curator who first chose for it — so they are not shut out of it."""
+    existing = get_canvas(canvas_id)
+    if not existing:
+        return None
+    c = _conn()
+    ensure_once(c, _ensure_schema)
+    c.execute(
+        "UPDATE canvases SET sharing=?, shared_with_json=?, created_by=?, updated_at=? WHERE id=?",
+        ("chosen" if sharing == "chosen" else "workspace", json.dumps([x.model_dump() for x in shared_with]),
+         existing.created_by or (created_by or ""), _now(), canvas_id),
+    )
+    c.commit()
+    return get_canvas(canvas_id)
+
+
+def clone_canvas(canvas_id: str, *, by: str, name: Optional[str] = None) -> Optional[Canvas]:
+    """A copy of a canvas as a new one, made by ``by``: its tables, description and pinned documents (its instructions
+    are the semantic layer's, copied by the door — the platform does not import the agent). Its conversations, runs and
+    saved artifacts stay with the original, and the copy is the workspace's until its maker shares it otherwise."""
+    src = get_canvas(canvas_id)
+    if not src:
+        return None
+    return create_canvas(name=(name or "").strip() or f"{src.name} (copy)", scopes=[s.model_copy() for s in src.scopes],
+                         description=src.description, doc_ids=list(src.doc_ids), created_by=by)
 
 
 def _record_revision(cv: Optional[Canvas]) -> None:

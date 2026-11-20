@@ -20,13 +20,14 @@ function setup(activeId = "a") {
 }
 
 describe("SQL editor tabs", () => {
-  it("are a tablist whose open tab is the editor's surface with a line at its foot", () => {
+  it("are a tablist whose open tab is the editor's surface — selected by its background, not a line (2026-11-20)", () => {
     setup("a");
     expect(screen.getByRole("tablist", { name: "Open queries" })).toBeInTheDocument();
     const tabs = screen.getAllByRole("tab");
     expect(tabs.map(t => t.getAttribute("aria-selected"))).toEqual(["true", "false", "false"]);
-    expect(tabs[0].style.background).toBe("var(--bg-0)");
-    expect(tabs[0].style.boxShadow).toContain("var(--t1)");
+    expect(tabs[0].style.background).toBe("var(--tab-on)");   // the palette's active tab highlight
+    expect(tabs[0].style.boxShadow).toBe("");                // no line at its foot
+    for (const t of tabs) expect(t.style.borderRight).toBe(""); // and no rule between tabs
     expect(tabs[1].style.background).toBe("");               // the others sit on the strip
     expect(tabs[0].tabIndex).toBe(0);
     expect(tabs[1].tabIndex).toBe(-1);
@@ -57,11 +58,11 @@ describe("SQL editor tabs", () => {
     rerender(<TabsBar tabs={[]} activeId="" {...on} startLabel="New tab" />);
     const start = screen.getByRole("tab", { name: "New tab" });
     expect(start).toHaveAttribute("aria-selected", "true");
-    expect(start.style.background).toBe("var(--bg-0)");                     // it joins the start page beneath it
+    expect(start.style.background).toBe("var(--tab-on)");                   // the open tab, highlighted as the palette draws it
     expect(screen.queryByRole("button", { name: /^Close/ })).toBeNull();
     fireEvent.doubleClick(start);
     expect(screen.queryByRole("textbox")).toBeNull();
-    fireEvent.click(screen.getByTitle("New tab"));                          // the + beside it stays
+    fireEvent.click(screen.getByTitle("New query"));                          // the + beside it stays
     expect(on.onNew).toHaveBeenCalledTimes(1);
   });
 
@@ -84,5 +85,12 @@ describe("SQL editor tabs", () => {
     const strip = screen.getByTestId("sql-tabs");
     expect(strip.style.overflowX).toBe("auto");
     expect(["0", "0px"]).toContain(strip.style.minWidth);                       // it may shrink below its tabs
+  });
+
+  it("opens a new query tab on one click of +, with no menu between (2026-11-20)", () => {
+    const on = setup();
+    fireEvent.click(screen.getByTestId("sql-new-tab"));
+    expect(on.onNew).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("Open existing…")).toBeNull();
   });
 });

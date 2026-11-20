@@ -39,6 +39,22 @@ export function vizChoices(columns: string[], rows: unknown[][]) {
   };
 }
 
+/**
+ * What a chart was drawn as when nothing was chosen: its type, the field along its axis and the field it measures — by
+ * the route `drawChart` takes. The editor shows these, never "As answered" (the user, 2026-11-20: "always a specific
+ * field.. always").
+ */
+export function drawnAs(columns: string[], rows: unknown[][], chartType?: string | null): { type: string; x: string; y: string } {
+  const inferred = inferChartType(columns, rows);
+  const hints = TYPE_TO_HINT as Record<string, string>;
+  const fromHint = Object.keys(hints).find((t) => hints[t] === chartType) ?? (chartType && chartType !== "auto" ? chartType : "");
+  const resolved = resolveVegaSpec({ columns, rows, chartType: chartType || "auto", names: undefined, exhibit: null } as Parameters<typeof resolveVegaSpec>[0]);
+  const type = String((resolved as { resolved?: string } | null)?.resolved || fromHint || inferred?.type || "");
+  const x = inferred && inferred.xCol >= 0 ? columns[inferred.xCol] ?? "" : "";
+  const y = inferred && inferred.yCols?.length ? columns[inferred.yCols[0]] ?? "" : "";
+  return { type, x, y };
+}
+
 /** Which columns are numbers, as the app's chart classifies them: a warehouse hands a decimal back as text. */
 export function numericColumns(columns: string[], rows: unknown[][]): boolean[] {
   const numeric = new Set(classifyColumns(columns, rows).numericIdxs);

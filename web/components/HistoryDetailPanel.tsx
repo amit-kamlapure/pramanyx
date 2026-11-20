@@ -188,7 +188,7 @@ export function HistoryDetailPanel({ invId, onBack, onContinue }: Props) {
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 0 }}>
 
       {/* ── Tab bar: ← Back · Report / Evidence (Back folded in — was its own bar above) ── */}
-      <div style={{ display: "flex", alignItems: "center", borderBottom: "1px solid var(--b1)", flexShrink: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", paddingBottom: 4, flexShrink: 0 }}>
         {onBack && (
           <Button
             variant="ghost" size="xs"
@@ -246,12 +246,12 @@ export function HistoryDetailPanel({ invId, onBack, onContinue }: Props) {
           {/* Question */}
           <div>
             <div className="flex items-center gap-2 mb-2">
-              <p className="text-xs uppercase tracking-wide" style={{ color: "var(--t3)" }}>Question</p>
+              <p className="aug-label">Question</p>
                 {(reportType === "investigate" || reportType === "explore") && (
-                <span style={{ fontSize: 11, color: "var(--vio5)", border: "1px solid var(--vio2)", background: "var(--vio1)", borderRadius: "var(--r1)", padding: "1px 8px", fontWeight: 500 }}>Agentic</span>
+                <span style={{ fontSize: 11, color: "var(--vio5)", background: "var(--vio1)", borderRadius: "var(--r1)", padding: "1px 8px", fontWeight: 500 }}>Agentic</span>
               )}
               {reportType === "direct" && (
-                <span style={{ fontSize: 11, color: "var(--blue5)", border: "1px solid var(--blue2)", background: "var(--blue1)", borderRadius: "var(--r1)", padding: "1px 8px", fontWeight: 500 }}>Quick</span>
+                <span style={{ fontSize: 11, color: "var(--blue5)", background: "var(--blue1)", borderRadius: "var(--r1)", padding: "1px 8px", fontWeight: 500 }}>Quick</span>
               )}
               {invId && reportRaw && (
                 <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
@@ -318,8 +318,8 @@ export function HistoryDetailPanel({ invId, onBack, onContinue }: Props) {
 
               {(reportType === "direct" || reportType === "legacy") && (
                 <>
-                  <p className="text-xs uppercase tracking-wide" style={{ color: "var(--t3)" }}>
-                    {reportType === "direct" ? "Query Report" : "Agent report"}
+                  <p className="aug-label">
+                    {reportType === "direct" ? "Query report" : "Agent report"}
                   </p>
                   <ReportView
                     report={inv.report as Report}
@@ -335,7 +335,7 @@ export function HistoryDetailPanel({ invId, onBack, onContinue }: Props) {
           )}
 
           {!reportRaw && (
-            <div style={{ border: "1px solid var(--b2)", borderRadius: "var(--r3)", padding: "16px", fontSize: 13, color: "var(--t3)" }}>
+            <div style={{ background: "var(--bg-2)", borderRadius: "var(--r3)", padding: "16px", fontSize: 13, color: "var(--t3)" }}>
               This deep analysis did not complete — no report available.
             </div>
           )}
@@ -408,7 +408,7 @@ export function HistoryDetailPanel({ invId, onBack, onContinue }: Props) {
           per-exhibit icon and the trace's query nodes; the same panel the live chat
           uses, restored to the history view (item 6). ── */}
       {sourcePanel && (
-        <div style={{ flexShrink: 0, width: 380, display: "flex", flexDirection: "column", borderLeft: "1px solid var(--b1)", background: "var(--blue1)" }}>
+        <div style={{ flexShrink: 0, width: 380, display: "flex", flexDirection: "column", borderLeft: "1px solid var(--divide)", background: "var(--blue1)" }}>
           <SourcePanel
             columns={sourcePanel.columns}
             rows={sourcePanel.rows}
@@ -429,9 +429,9 @@ export function HistoryDetailPanel({ invId, onBack, onContinue }: Props) {
 // ── EvidenceClaimCard ─────────────────────────────────────────────────────────
 
 const FEEDBACK_STYLES = {
-  validated:    { label: "Validated",     color: "var(--grn4)",  bg: "var(--grn1)",  border: "var(--grn2)" },
-  disputed:     { label: "Disputed",      color: "var(--red4)",  bg: "var(--red1)",  border: "var(--red2)" },
-  needs_context:{ label: "Needs context", color: "var(--amb4)",  bg: "var(--amb1)",  border: "var(--amb2)" },
+  validated:    { label: "Validated",     color: "var(--grn4)",  bg: "var(--grn1)" },
+  disputed:     { label: "Disputed",      color: "var(--red4)",  bg: "var(--red1)" },
+  needs_context:{ label: "Needs context", color: "var(--amb4)",  bg: "var(--amb1)" },
 };
 
 // A confidence tier's hue — the same three steps ui/trust's <Confidence> draws.
@@ -451,7 +451,7 @@ function EvidenceClaimCard({
 
   return (
     <div style={{
-      background: "var(--bg-2)", border: "1px solid var(--b1)", borderRadius: "var(--r2)",
+      background: "var(--bg-2)", borderRadius: "var(--r2)",
       padding: "12px 14px", display: "flex", flexDirection: "column", gap: 8,
     }}>
       {/* Claim text + feedback badge */}
@@ -464,7 +464,7 @@ function EvidenceClaimCard({
           {claim.claim_text}
         </p>
         {fb && (
-          <span style={{ fontSize: 11, padding: "1px 8px", borderRadius: "var(--r1)", background: fb.bg, border: `1px solid ${fb.border}`, color: fb.color, flexShrink: 0 }}>
+          <span style={{ fontSize: 11, padding: "1px 8px", borderRadius: "var(--r1)", background: fb.bg, color: fb.color, flexShrink: 0 }}>
             {fb.label}
           </span>
         )}
@@ -484,7 +484,7 @@ function EvidenceClaimCard({
           </span>
         )}
         {claim.metric_used && (
-          <span style={{ fontSize: 11, padding: "1px 7px", borderRadius: "var(--r1)", background: "var(--blue1)", border: "1px solid var(--blue2)", color: "var(--blue5)" }}>
+          <span style={{ fontSize: 11, padding: "1px 7px", borderRadius: "var(--r1)", background: "var(--blue1)", color: "var(--blue5)" }}>
             {claim.metric_used}
           </span>
         )}
@@ -508,7 +508,7 @@ function EvidenceClaimCard({
           {sqlOpen && (
             <pre style={{
               marginTop: 6, fontSize: 11, fontFamily: "var(--font-code)", lineHeight: 1.6,
-              background: "var(--code-bg)", border: "1px solid var(--b1)", borderRadius: "var(--r2)",
+              background: "var(--code-bg)", borderRadius: "var(--r2)",
               padding: "8px 12px", overflowX: "auto", color: "var(--t2)", whiteSpace: "pre-wrap",
             }}>
               {claim.sql_source}

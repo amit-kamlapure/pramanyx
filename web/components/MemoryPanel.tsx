@@ -325,11 +325,11 @@ export function MemoryPanel() {
                       <span style={{ color: "var(--t2)" }}>{r.subject}</span>
                       <span style={MUTED}> → </span>{r.resolved_reading}
                     </div>
-                    <div className="aug-fs-xs" style={{ ...MUTED, ...ONE_LINE }} title={formatTimestamp(r.created_at)}>
+                    <div className="aug-fs-sm" style={{ ...MUTED, ...ONE_LINE }} title={formatTimestamp(r.created_at)}>
                       settled by {settledBy(r.resolution_source)} · {connectionLabel(r.connection_id, conns) || "no connection"} · {dayWords(r.created_at)}
                     </div>
                     {r.resolved_sql && (
-                      <div className="aug-fs-xs" title={r.resolved_sql}
+                      <div className="aug-fs-sm" title={r.resolved_sql}
                         style={{ ...MUTED, ...ONE_LINE, fontFamily: "var(--font-mono)" }}>{r.resolved_sql}</div>
                     )}
                   </Line>
@@ -381,7 +381,7 @@ export function MemoryPanel() {
                     <span className="aug-fs-chrome" title={q.question} style={{ ...ONE_LINE, color: "var(--t1)" }}>{q.question}</span>
                     {q.status !== "approved" && <Chip>{q.status}</Chip>}
                   </div>
-                  <div className="aug-fs-xs" title={q.note || undefined} style={{ ...MUTED, ...ONE_LINE, paddingLeft: 15 }}>
+                  <div className="aug-fs-sm" title={q.note || undefined} style={{ ...MUTED, ...ONE_LINE, paddingLeft: 15 }}>
                     {where(q)}{q.note ? ` · ${q.note}` : ""}
                   </div>
                 </Line>
@@ -598,16 +598,16 @@ function DatasetInspector({ kinds }: { kinds: string[] }) {
         <Empty>No exported version of “{DATASET_OF[kind]}” yet — press Export now once the corpus has rows.</Empty>
       )}
       {kind && detail && (
-        <div className="aug-fs-xs" style={{ marginTop: 8, background: "var(--bg-1)", borderRadius: "var(--r2)", padding: 10,
+        <div className="aug-fs-chrome" style={{ marginTop: 8, background: "var(--bg-1)", borderRadius: "var(--r2)", padding: 10,
           color: "var(--t2)" }} title={`id ${String(node.id ?? "")} · data ${String(node.data_id ?? "")}`}>
           <span style={{ fontFamily: "var(--font-mono)", color: "var(--t1)" }}>{String(node.name ?? DATASET_OF[kind])}</span>
           {" · "}version {String(node.version ?? "—")}
           {" · "}{countNoun(Number(node.row_count ?? 0), "example")}
           {node.created_at ? ` · exported ${dayWords(String(node.created_at))}` : ""}
-          <div style={{ ...MUTED, marginTop: 4 }}>
+          <div className="aug-fs-sm" style={{ ...MUTED, marginTop: 4 }}>
             {countNoun(lineage, "lineage record")} — the verdicts and trusted queries that fed this version.
           </div>
-          {detail.note && <div style={{ color: "var(--amb4)", marginTop: 4 }}>{detail.note}</div>}
+          {detail.note && <div className="aug-fs-sm" style={{ color: "var(--amb4)", marginTop: 4 }}>{detail.note}</div>}
         </div>
       )}
     </div>

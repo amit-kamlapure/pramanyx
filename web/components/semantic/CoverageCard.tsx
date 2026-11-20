@@ -8,9 +8,10 @@
  * Opened on the figures read within the hour, then — when an approved metric's figures were not read yet — read again
  * with them, so no area reads covered before its figures are known. Adopting is per area, through the door that exists.
  */
+import { DropdownMenu } from "@radix-ui/themes";
 import { useEffect, useState, type CSSProperties } from "react";
 
-import { Card, Chip, Empty, MUTED, NUM, ONE_LINE, ROW, RULE, type Tone } from "@/components/clarity/kit";
+import { Bar, Card, Chip, Dot, Empty, MUTED, NUM, ONE_LINE, ROW, RULE, type Tone } from "@/components/clarity/kit";
 import { AdoptProposals } from "@/components/semantic/AdoptProposals";
 import { AreaOwnersEditor, DeclareArea, SuggestedAreas } from "@/components/semantic/AreaControls";
 import { rowButtonStyle } from "@/components/semantic/parts";
@@ -30,6 +31,13 @@ const STATE: Record<CoverageArea["state"], { tone: Tone; text: string; title: st
   unchecked: { tone: "plain", text: "not checked", title: "Its approved metrics' figures have not been read yet." },
   uncovered: { tone: "amber", text: "no working metric", title: "It has data, and no approved metric that moves reads on it." },
   no_data: { tone: "plain", text: "no data", title: "No table placed in this area holds rows." },
+};
+
+const DOT_HUE: Record<Tone, "green" | "amber" | "red" | "grey" | "blue"> = {
+  up: "green", amber: "amber", down: "red", plain: "grey", violet: "blue", accent: "blue",
+};
+const DOT_TEXT: Record<Tone, string> = {
+  up: "var(--grn4)", amber: "var(--amb4)", down: "var(--red4)", plain: "var(--t3)", violet: "var(--vio4)", accent: "var(--blue4)",
 };
 
 const GRID: CSSProperties = {
@@ -73,6 +81,7 @@ export function CoverageCard({ connId, schema, rows, onAdopted }: {
   const [reading, setReading] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   const [busy, setBusy] = useState<"" | "run" | "write">("");
+  const [declaring, setDeclaring] = useState(false);
   const [note, setNote] = useState("");
   // The organisation's word on its areas — owners, places, its own areas (2026-11-17); unread, the map stands alone.
   const [declared, setDeclared] = useState<BusinessArea[]>([]);
@@ -122,20 +131,40 @@ export function CoverageCard({ connId, schema, rows, onAdopted }: {
     } catch (e) { setNote(e instanceof Error ? e.message : String(e)); } finally { setBusy(""); }
   }
 
+  // The section's actions in one ⋯ menu, its reading under its name with a bar (the user's inspiration, 2026-11-20:
+  // "fewer containers, clearer reading order").
+  const actions = (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger>
+        <Button variant="ghost" size="icon-xs" aria-label="Coverage actions" title="Propose, declare an area, write from the knowledge base"
+          data-testid="coverage-actions" disabled={!!busy}>
+          <Icon name="more" size={15} />
+        </Button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content size="1" align="end">
+        <DropdownMenu.Item onSelect={() => void run()} title="Proposes by code — no model call">
+          {busy === "run" ? "Proposing…" : "Propose by code"}
+        </DropdownMenu.Item>
+        <DropdownMenu.Item onSelect={() => setDeclaring(true)}>Declare an area</DropdownMenu.Item>
+        {toWrite > 0 && (
+          <DropdownMenu.Item onSelect={() => void write()}
+            title={`One model call for each of the ${toWrite} areas whose data has patterns no metric computes yet`}>
+            {busy === "write" ? "Starting…" : `Write from the knowledge base · ${countNoun(toWrite, "call")}`}
+          </DropdownMenu.Item>
+        )}
+      </DropdownMenu.Content>
+    </DropdownMenu.Root>
+  );
+
   return (
-    <Card label="Coverage" testId="metric-coverage" right={<span style={{ ...ROW, gap: 6 }}>
-      <span className="aug-fs-sm" style={{ ...MUTED, ...NUM }}>
-        {`${formatCount(c.covered)} of ${formatCount(c.with_data)} areas with data covered`}
-      </span>
-      <Button size="xs" variant="ghost" disabled={!!busy} onClick={() => void run()} title="Proposes by code — no model call">
-        {busy === "run" ? "Proposing…" : "Propose by code"}
-      </Button>
-      <DeclareArea connId={connId} schema={schema} areas={declared} onSaved={savedAreas} />
-      {toWrite > 0 && <Button size="xs" variant="ghost" disabled={!!busy} onClick={() => void write()}
-        title={`One model call for each of the ${toWrite} areas whose data has patterns no metric computes yet`}>
-        {busy === "write" ? "Starting…" : `Write from the knowledge base · ${countNoun(toWrite, "call")}`}
-      </Button>}
-    </span>}>
+    <Card label="Coverage" testId="metric-coverage" right={actions}>
+      <div data-testid="coverage-reading" style={{ display: "flex", flexDirection: "column", gap: 8, margin: "-4px 0 14px" }}>
+        <span className="aug-fs-ui" style={{ color: "var(--t2)", ...NUM }}>
+          {`${formatCount(c.covered)} of ${formatCount(c.with_data)} areas with data covered`}
+        </span>
+        <Bar value={c.covered} max={Math.max(1, c.with_data)} color="var(--grn3)" />
+      </div>
+      <DeclareArea connId={connId} schema={schema} areas={declared} onSaved={savedAreas} open={declaring} onOpenChange={setDeclaring} />
       <p className="aug-fs-sm" style={{ ...MUTED, margin: "0 0 10px" }}>
         The areas a business like this one is read by, in the order it reads them. An area is covered by an approved
         metric whose figures move{c.open_patterns ? `; ${countNoun(c.open_patterns, "pattern")} of the knowledge base no metric computes yet` : ""}.
@@ -144,7 +173,7 @@ export function CoverageCard({ connId, schema, rows, onAdopted }: {
       <SuggestedAreas connId={connId} schema={schema} areas={declared} onSaved={savedAreas} />
       <div style={{ overflowX: "auto" }}>
         <div style={{ minWidth: 640 }}>
-          <div className="aug-fs-xs" style={{ ...GRID, ...MUTED, textTransform: "uppercase", letterSpacing: ".06em", padding: "0 6px 6px" }}>
+          <div className="aug-fs-xs" style={{ ...GRID, ...MUTED, padding: "0 6px 6px" }}>
             <span>Area</span><span>Data</span><span>Metrics</span><span>Proposals</span><span />
           </div>
           {coverage.areas.map(a => {
@@ -156,21 +185,25 @@ export function CoverageCard({ connId, schema, rows, onAdopted }: {
                 <Button variant="plain" aria-expanded={isOpen} onClick={() => setOpen(isOpen ? null : a.id)} style={rowButtonStyle(isOpen, GRID)}>
                   <span style={{ minWidth: 0 }}>
                     <span className="aug-fs-chrome" style={{ ...ONE_LINE, display: "block", color: "var(--t1)", fontWeight: 500 }}>{a.name}</span>
-                    <span className="aug-fs-xs" style={{ ...MUTED, ...ONE_LINE, display: "block" }}>{a.question}</span>
+                    <span className="aug-fs-sm" style={{ ...MUTED, ...ONE_LINE, display: "block" }}>{a.question}</span>
                     {ownersOf(a.id) && ownersWords(ownersOf(a.id)!) && (
-                      <span className="aug-fs-xs" data-testid="coverage-area-owners" style={{ ...MUTED, ...ONE_LINE, display: "block" }}>
+                      <span className="aug-fs-sm" data-testid="coverage-area-owners" style={{ ...MUTED, ...ONE_LINE, display: "block" }}>
                         {ownersWords(ownersOf(a.id)!)}
                       </span>
                     )}
                   </span>
-                  <span className="aug-fs-sm" style={{ ...NUM, color: a.has_data ? "var(--t2)" : "var(--t3)" }}>
+                  <span className="aug-fs-chrome" style={{ ...NUM, color: a.has_data ? "var(--t2)" : "var(--t3)" }}>
                     {a.has_data ? `${formatCount(a.rows)} rows · ${countNoun(a.tables.length, "table")}` : "—"}
                   </span>
                   <span style={{ ...ROW, gap: 6 }}>
-                    <Chip tone={state.tone} title={state.title} testId="coverage-state">{state.text}</Chip>
+                    {/* its state as a mark and a word, not a filled chip (2026-11-20) */}
+                    <span data-testid="coverage-state" title={state.title} className="aug-fs-chrome"
+                      style={{ display: "inline-flex", alignItems: "center", gap: 6, color: DOT_TEXT[state.tone] }}>
+                      <Dot hue={DOT_HUE[state.tone]} />{state.text}
+                    </span>
                     {a.metrics.length > 0 && <span className="aug-fs-xs" style={{ ...MUTED, ...NUM }}>{`${working}/${a.metrics.length}`}</span>}
                   </span>
-                  <span className="aug-fs-sm" style={{ ...NUM, color: a.adoptable ? "var(--t1)" : "var(--t3)" }}
+                  <span className="aug-fs-chrome" style={{ ...NUM, color: a.adoptable ? "var(--t1)" : "var(--t3)" }}
                     title={a.open_patterns?.length ? `${countNoun(a.open_patterns.length, "pattern")} no metric here computes yet` : undefined}>
                     {a.proposals ? `${formatCount(a.adoptable)} ready${a.failed ? ` · ${formatCount(a.failed)} failed` : ""}`
                       : a.open_patterns?.length && a.has_data ? `${countNoun(a.open_patterns.length, "open pattern")}` : "—"}
@@ -223,28 +256,28 @@ function AreaDetail({ coverage, area, connId, schema, rows, onAdopted }: {
         <p key={key} className="aug-fs-sm" style={{ margin: 0, color: "var(--amb4)" }}>{s}</p>
       ))}
       <section>
-        <div className="aug-fs-xs" style={{ ...MUTED, textTransform: "uppercase", letterSpacing: ".06em" }}>Data</div>
+        <div className="aug-label">Data</div>
         {area.tables.length === 0 ? <Empty>No table is placed here.</Empty> : withUniqueKeys(area.tables, t => `table:${t.name}`).map(([key, t]) => (
-          <div key={key} className="aug-fs-sm" style={{ ...ROW, ...RULE, padding: "4px 0" }}>
+          <div key={key} className="aug-fs-chrome" style={{ ...ROW, ...RULE, padding: "4px 0" }}>
             <span style={{ fontFamily: "var(--font-mono)", color: "var(--t1)" }}>{t.name}</span>
-            <span style={{ ...MUTED, ...NUM }}>{t.rows != null ? `${formatCount(t.rows)} rows` : "rows not read"}</span>
-            <span style={MUTED}>{t.why}</span>
+            <span className="aug-fs-sm" style={{ ...MUTED, ...NUM }}>{t.rows != null ? `${formatCount(t.rows)} rows` : "rows not read"}</span>
+            <span className="aug-fs-sm" style={MUTED}>{t.why}</span>
           </div>
         ))}
       </section>
       <section>
-        <div className="aug-fs-xs" style={{ ...MUTED, textTransform: "uppercase", letterSpacing: ".06em" }}>Metrics</div>
+        <div className="aug-label">Metrics</div>
         {area.metrics.length === 0 ? <Empty>No metric reads on this area.</Empty> : withUniqueKeys(area.metrics, m => `metric:${m.name}`).map(([key, m]) => (
-          <div key={key} className="aug-fs-sm" style={{ ...ROW, ...RULE, padding: "4px 0" }}>
+          <div key={key} className="aug-fs-chrome" style={{ ...ROW, ...RULE, padding: "4px 0" }}>
             <span style={{ color: "var(--t1)" }}>{m.label}</span>
             <Chip>{m.status}</Chip>
             {m.moves?.ok === false && <Chip tone="amber" title={m.moves.why}>never moves</Chip>}
-            <span style={MUTED}>{m.why}</span>
+            <span className="aug-fs-sm" style={MUTED}>{m.why}</span>
           </div>
         ))}
       </section>
       <section>
-        <div className="aug-fs-xs" style={{ ...MUTED, textTransform: "uppercase", letterSpacing: ".06em" }}>
+        <div className="aug-label">
           {`The knowledge base · ${countNoun(area.patterns.length, "pattern")}`}
         </div>
         {area.patterns.length === 0 ? <Empty>No pattern covers this area yet.</Empty> : (
@@ -257,19 +290,19 @@ function AreaDetail({ coverage, area, connId, schema, rows, onAdopted }: {
         )}
       </section>
       <section>
-        <div className="aug-fs-xs" style={{ ...MUTED, textTransform: "uppercase", letterSpacing: ".06em" }}>
+        <div className="aug-label">
           {`Proposals · ${countNoun(proposals.length, "proposal")}`}
         </div>
         {proposals.length === 0 ? <Empty>Nothing is proposed for this area.</Empty>
           : withUniqueKeys(proposals, p => `proposal:${p.name}`).map(([key, p]) => (
-            <div key={key} className="aug-fs-sm" style={{ ...RULE, padding: "6px 0" }} data-testid="coverage-proposal">
+            <div key={key} className="aug-fs-chrome" style={{ ...RULE, padding: "6px 0" }} data-testid="coverage-proposal">
               <div style={{ ...ROW, gap: 6 }}>
                 <span style={{ color: "var(--t1)", fontWeight: 500 }}>{p.label}</span>
                 <Chip tone="violet">{ORIGIN_WORDS[p.source] ?? p.source}</Chip>
                 <Chip tone={p.state === "proposed" ? "up" : "amber"}>{p.state === "proposed" ? "passed every check" : "failed a check"}</Chip>
-                {p.pattern_title && <span style={MUTED}>{p.pattern_title}</span>}
+                {p.pattern_title && <span className="aug-fs-sm" style={MUTED}>{p.pattern_title}</span>}
               </div>
-              <div className="aug-fs-xs" style={{ ...MUTED, marginTop: 2 }}>{gateLine(p.gates)}</div>
+              <div className="aug-fs-sm" style={{ ...MUTED, marginTop: 2 }}>{gateLine(p.gates)}</div>
             </div>
           ))}
       </section>

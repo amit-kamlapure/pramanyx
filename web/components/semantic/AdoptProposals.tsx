@@ -90,10 +90,10 @@ export function AdoptProposals({ connId, schema, rows, onDone, label = "Adopt th
             const d = dates[r.name];
             return (
               <div key={`${r.schema}:${r.name}`} data-testid="adopt-row"
-                style={{ ...ROW, gap: 10, padding: "6px 0", borderTop: "1px solid var(--b1)", flexWrap: "wrap" }}>
+                style={{ ...ROW, gap: 10, padding: "6px 0", borderTop: "1px solid var(--b0)", flexWrap: "wrap" }}>
                 <Checkbox checked={isTicked(r.name)} aria-label={`Adopt ${r.label}`}
                   onChange={e => setTicked(t => ({ ...t, [r.name]: e.target.checked }))} />
-                <span className="aug-fs-sm" style={{ color: "var(--t1)", minWidth: 200, flex: "1 1 200px" }}>{r.label}</span>
+                <span className="aug-fs-chrome" style={{ color: "var(--t1)", minWidth: 200, flex: "1 1 200px" }}>{r.label}</span>
                 <span className="aug-fs-xs" style={MUTED}>dated by</span>
                 {!d ? <span className="aug-fs-xs" style={MUTED}>reading its dates…</span>
                   : d.options.length === 0 ? <span className="aug-fs-xs" style={{ color: "var(--amb4)" }}>{d.error || "no date on the tables it reads"}</span>

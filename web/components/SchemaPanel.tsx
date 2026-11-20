@@ -14,16 +14,17 @@ export function SchemaPanel({ connId, connName }: Props) {
 
   if (!connId) {
     return (
-      <div className="flex-1 flex items-center justify-center border-l border-zinc-600">
+      <div className="flex-1 flex items-center justify-center border-l border-[var(--divide)]">
         <p className="text-xs text-zinc-500">Select a connection to view its schema</p>
       </div>
     );
   }
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 min-h-0 border-l border-zinc-600">
+    // The one rule kept is between this pane and the one beside it, in --divide; none under the header (2026-11-20).
+    <div className="flex-1 flex flex-col min-w-0 min-h-0 border-l border-[var(--divide)]">
       {/* Header */}
-      <div className="px-4 h-10 flex items-center border-b border-zinc-600 shrink-0">
+      <div className="px-4 h-10 flex items-center shrink-0">
         <span className="text-xs font-medium text-zinc-400">Schema</span>
         {loading && <Loading what="the schema" inline className="ml-auto" />}
       </div>

@@ -79,13 +79,15 @@ export const inputStyle: React.CSSProperties = {
   border: "1px solid var(--b1)", background: "var(--bg-1, var(--bg-2))", color: "var(--t1)",
 };
 
+/** A field's label: `.aug-label`'s values (12px semibold, --t2, sentence case — never tracked caps, 2026-11-20),
+ *  as a style object because AutomationAuthor spreads it onto bare labels. */
 export const labelStyle: React.CSSProperties = {
-  fontSize: 11, fontWeight: 600, color: "var(--t3)", marginBottom: 5, display: "block",
-  textTransform: "uppercase",
+  fontSize: 12, fontWeight: 600, lineHeight: 1.45, color: "var(--t2)", marginBottom: 5, display: "block",
 };
 
+// The button's own soft fill stays (2026-11-20): an action reads as a button at rest; this only quiets its words.
 export const ghostBtn: React.CSSProperties = {
-  background: "none", border: "none", color: "var(--t3)", cursor: "pointer", fontSize: 11,
+  color: "var(--t3)", cursor: "pointer", fontSize: 11,
 };
 
 /**
@@ -411,7 +413,7 @@ export function GuardRows({ e, siblings, index, onChange }: {
     put(clauses.map((c, n) => (n === i ? { ...c, ...p } : c)));
 
   return (
-    <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px dashed var(--b1)" }}>
+    <div style={{ marginTop: 12 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
         <span style={{ ...labelStyle, marginBottom: 0 }}>Only if</span>
         {clauses.length > 1 && (
@@ -486,7 +488,7 @@ export function OtherwiseRows({ e, siblings, index, onChange }: {
   if (eligible.length === 0 && !current) return null;
 
   return (
-    <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px dashed var(--b1)" }}>
+    <div style={{ marginTop: 12 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <span style={{ ...labelStyle, marginBottom: 0 }}>Otherwise</span>
         <SelectField value={current} aria-label="Otherwise of"
@@ -542,9 +544,9 @@ export function ForEachRows({ e, onChange }: {
   // delete a working design on first render.
   if (bound || !editable) {
     return (
-      <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px dashed var(--b1)" }}>
+      <div style={{ marginTop: 12 }}>
         <div style={{ ...labelStyle, marginBottom: 3 }}>For each</div>
-        <div className="aug-fs-xs" style={{ fontFamily: "var(--font-mono)",
+        <div className="aug-fs-chrome" style={{ fontFamily: "var(--font-mono)",
           color: "var(--chart-2)" }}>
           {bound ? refOf(source) : `${items.length} items · edited on the canvas`}
         </div>
@@ -553,7 +555,7 @@ export function ForEachRows({ e, onChange }: {
   }
 
   return (
-    <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px dashed var(--b1)" }}>
+    <div style={{ marginTop: 12 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
         <span style={{ ...labelStyle, marginBottom: 0 }}>For each</span>
         <span style={{ flex: 1 }} />
@@ -608,7 +610,7 @@ export function ConditionRow({ c, onChange, onRemove, timezone }: {
     // A column, not a squeeze: the schedule editor needs the drawer's full width, and
     // the old side-by-side layout is what clipped a time down to a bare "0 9".
     <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12,
-      paddingBottom: 10, borderBottom: "1px solid var(--b1)" }}>
+      paddingBottom: 10, borderBottom: "1px solid var(--b0)" }}>
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
         <SelectField value={c.kind} onChange={e => onChange({ kind: e.target.value as ConditionKind, config: {} })}
           aria-label="Trigger kind"

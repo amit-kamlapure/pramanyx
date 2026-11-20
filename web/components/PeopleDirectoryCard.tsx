@@ -83,11 +83,11 @@ export function PeopleDirectoryCard({ canManage, onImported }: { canManage: bool
           <Empty>No one is in the directory yet. Import a CSV with an email column, and optionally name, title, team and manager.</Empty>
         ) : (
           <>
-            {done && <div className="aug-fs-xs" style={{ ...MUTED, marginBottom: 6 }}>{done}</div>}
+            {done && <div className="aug-fs-sm" style={{ ...MUTED, marginBottom: 6 }}>{done}</div>}
             {people.map(p => (
               <div key={p.email} style={LIST_ROW}>
-                <span className="aug-fs-sm" style={{ color: "var(--t1)", ...ONE_LINE, minWidth: 0, flex: "0 1 220px" }} title={p.email}>{p.name || p.email}</span>
-                <span className="aug-fs-xs" style={{ ...MUTED, ...ONE_LINE, flex: 1, minWidth: 0 }}>
+                <span className="aug-fs-chrome" style={{ color: "var(--t1)", ...ONE_LINE, minWidth: 0, flex: "0 1 220px" }} title={p.email}>{p.name || p.email}</span>
+                <span className="aug-fs-sm" style={{ ...MUTED, ...ONE_LINE, flex: 1, minWidth: 0 }}>
                   {[p.title, p.manager && `reports to ${p.manager}`].filter(Boolean).join(" · ") || p.email}
                 </span>
                 {p.team && <Chip>{p.team}</Chip>}
@@ -101,13 +101,13 @@ export function PeopleDirectoryCard({ canManage, onImported }: { canManage: bool
       <FormDialog open={open} onOpenChange={o => { if (!o) close(); }} busy={busy} title="Import people from a CSV" width={720}
         description="Columns: email (required), name, title, team, manager. A team becomes the function group of that name."
         testId="directory-import">
-        {err && <div role="alert" className="aug-fs-xs" style={{ color: "var(--red4)" }}>{err}</div>}
+        {err && <div role="alert" className="aug-fs-sm" style={{ color: "var(--red4)" }}>{err}</div>}
         <input id="directory-file" type="file" accept=".csv,text/csv" aria-label="Choose a CSV file"
           onChange={e => void pick(e.target.files?.[0])} />
         <Textarea id="directory-csv" rows={8} value={csv} aria-label="The CSV"
           placeholder={"email,name,title,team,manager\nana@acme.com,Ana Rao,CFO,Finance,"}
           onChange={e => { setCsv(e.target.value); setPlan(null); }} style={{ fontFamily: "var(--font-mono)" }} />
-        <label className="aug-fs-sm" style={{ ...ROW, gap: 8, color: "var(--t2)" }}>
+        <label className="aug-fs-chrome" style={{ ...ROW, gap: 8, color: "var(--t2)" }}>
           <input id="directory-full" type="checkbox" checked={full} onChange={e => { setFull(e.target.checked); setPlan(null); }} />
           This file is the whole directory: deactivate anyone it leaves out
         </label>

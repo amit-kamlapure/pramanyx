@@ -60,7 +60,7 @@ export function SelectionMenu({ at, boxRef, what, single, filterWhy, onCopy, onC
   const width = typeof window !== "undefined" ? window.innerWidth : 1e9;
   const height = typeof window !== "undefined" ? window.innerHeight : 1e9;
   return (
-    <div ref={boxRef} role="menu" aria-label={`The selection — ${what}`} className="aug-fs-sm" onKeyDown={keys}
+    <div ref={boxRef} role="menu" aria-label={`The selection — ${what}`} className="aug-fs-chrome" onKeyDown={keys}
       onContextMenu={e => e.preventDefault()}
       style={{ position: "fixed", left: Math.max(4, Math.min(at.x, width - SELECTION_MENU_WIDTH - 4)),
         top: Math.max(4, Math.min(at.y, height - ROOM_BELOW)), zIndex: 30, width: SELECTION_MENU_WIDTH,

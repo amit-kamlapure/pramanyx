@@ -906,14 +906,14 @@ export function InquirySection({ id, version }: { id: string; version: number })
             {t.backwards.map(l => <LinkRow key={`b:${l.decision}`} l={l} />)}
             {withUniqueKeys(t.stages, st => st.stage).map(([k, st]) => (
               <div key={k} style={{ display: "grid", gridTemplateColumns: "150px minmax(0, 1fr)", gap: 12, padding: "8px 0",
-                borderTop: "1px solid var(--b1)" }}>
+                borderTop: "1px solid var(--b0)" }}>
                 <span className="aug-fs-sm" style={{ color: "var(--t3)" }}>{st.words}</span>
                 <div>{st.steps.map((s, i) => <StepRow key={`${st.stage}:${s.ref || s.kind}:${i}`} s={s} />)}</div>
               </div>
             ))}
             {t.loops.length > 0 && (
               <div style={{ display: "grid", gridTemplateColumns: "150px minmax(0, 1fr)", gap: 12, padding: "8px 0",
-                borderTop: "1px solid var(--b1)" }}>
+                borderTop: "1px solid var(--b0)" }}>
                 <span className="aug-fs-sm" style={{ color: "var(--amb4)" }}>Loops</span>
                 <div>{t.loops.map((s, i) => <StepRow key={`loop:${i}`} s={s} />)}</div>
               </div>

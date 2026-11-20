@@ -93,12 +93,17 @@ export function newTab(name = queryTabName()): EditorTab {
 }
 
 /** The open tab's look: cut from the editor's own surface, over the strip's foot line, with its own line beneath it. */
+// The open tab is told by its background, not a line (2026-11-20, "borders are the exception"): the reference
+// palette's active tab highlight (--tab-on), the user's setup that day; the others sit on the strip with no rule
+// between them, only space.
 const OPEN_TAB: React.CSSProperties = {
-  background: "var(--bg-0)", marginBottom: -1, boxShadow: "inset 0 -2px 0 var(--t1)", color: "var(--t1)", fontWeight: 500,
+  background: "var(--tab-on)", color: "var(--t1)", fontWeight: 500, borderRadius: "var(--r2) var(--r2) 0 0",
 };
+/** The longest a tab's name is drawn before it is cut; the whole of it is its accessible name and its hover. */
+const TAB_NAME_MAX = 200;
 
 export function TabsBar({
-  tabs, activeId, onSelect, onNew, onClose, onRename, trailing, onOpenExisting, startLabel,
+  tabs, activeId, onSelect, onNew, onClose, onRename, trailing, startLabel,
 }: {
   tabs: EditorTab[];
   activeId: string;
@@ -111,9 +116,6 @@ export function TabsBar({
    *  console has two, and the difference was rows that each carried three controls.
    *  Anything a tab does not own — the connection, the saved state — comes in here. */
   trailing?: React.ReactNode;
-  /** SE-8F — when present, "+" opens a two-option menu (new / open existing)
-   *  instead of creating immediately. */
-  onOpenExisting?: () => void;
   /** With no query tab open, the strip still has its open tab: the start page's, under this name — never closed or
    *  renamed, and gone when a query tab opens (the user, 2026-11-09, choosing a reference console's start page). */
   startLabel?: string;
@@ -125,7 +127,6 @@ export function TabsBar({
     strip.current?.querySelector<HTMLElement>(`[data-tab-id="${activeId}"]`)?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
   }, [activeId, tabs.length]);
   const [draftName, setDraftName] = useState("");
-  const [plusMenu, setPlusMenu] = useState(false);
 
   const commit = useCallback(() => {
     if (editing && draftName.trim()) onRename(editing, draftName.trim());
@@ -146,18 +147,17 @@ export function TabsBar({
   return (
     <div
       style={{
-        display: "flex", alignItems: "stretch", minHeight: 36, background: "var(--bg-1)",
-        borderBottom: "1px solid var(--b1)", flexShrink: 0,
+        display: "flex", alignItems: "stretch", minHeight: 36, background: "var(--bg-1)", flexShrink: 0,
+        paddingTop: 4, paddingLeft: 4,
       }}
     >
       {/* the open queries scroll sideways — the wheel too — and never run under the controls at the row's right end */}
       <div role="tablist" aria-label="Open queries" data-testid="sql-tabs" ref={strip}
         onWheel={e => { if (strip.current && Math.abs(e.deltaY) > Math.abs(e.deltaX)) strip.current.scrollLeft += e.deltaY; }}
-        style={{ display: "flex", alignItems: "stretch", flex: "0 1 auto", minWidth: 0, overflowX: "auto", overflowY: "hidden", scrollbarWidth: "thin" }}>
+        style={{ display: "flex", alignItems: "stretch", gap: 2, flex: "0 1 auto", minWidth: 0, overflowX: "auto", overflowY: "hidden", scrollbarWidth: "thin" }}>
       {tabs.length === 0 && startLabel && (
-        <div role="tab" aria-selected tabIndex={0} data-testid="sql-start-tab" className="aug-folder-tab aug-fs-ui"
-          style={{ display: "flex", alignItems: "center", flexShrink: 0, padding: "0 12px",
-            borderRight: "1px solid var(--b1)", ...OPEN_TAB }}>
+        <div role="tab" aria-selected tabIndex={0} data-testid="sql-start-tab" className="aug-folder-tab aug-fs-chrome"
+          style={{ display: "flex", alignItems: "center", flexShrink: 0, padding: "0 12px", ...OPEN_TAB }}>
           {startLabel}
         </div>
       )}
@@ -172,8 +172,8 @@ export function TabsBar({
             // its name, and a failed last run — never the × beside it or the dot's title read as part of the name
             aria-label={t.status === "error" ? `${t.name}, the last run failed` : t.name}
             tabIndex={active ? 0 : -1}
-            title="Double-click to rename"
-            className="aug-folder-tab aug-fs-ui"
+            title={`${t.name} — double-click to rename`}
+            className="aug-folder-tab aug-fs-chrome"
             onClick={() => { if (editing !== t.id) onSelect(t.id); }}
             onDoubleClick={() => { setEditing(t.id); setDraftName(t.name); }}
             onKeyDown={e => {
@@ -186,7 +186,7 @@ export function TabsBar({
             }}
             style={{
               display: "flex", alignItems: "center", gap: 6, flexShrink: 0, cursor: "pointer",
-              padding: "0 4px 0 12px", borderRight: "1px solid var(--b1)",
+              padding: "0 4px 0 12px", borderRadius: "var(--r2) var(--r2) 0 0",
               ...(active ? OPEN_TAB : { color: "var(--t3)", fontWeight: 400 }),
             }}
           >
@@ -204,11 +204,10 @@ export function TabsBar({
                 style={{ fontSize: 13, width: 110 }}
               />
             ) : (
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
-                {/* The last run's outcome as a mark — colour carries it, the title names it. */}
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap", minWidth: 0 }}>
+                {/* A failed last run is the one mark a tab carries (a success needs none: 2026-11-20, less on each tab). */}
                 {t.status === "error" && <Dot hue="red" title="The last run failed" />}
-                {t.status === "ok" && <Dot hue="green" title="The last run succeeded" />}
-                {t.name}
+                <span data-testid="sql-tab-name" style={{ maxWidth: TAB_NAME_MAX, overflow: "hidden", textOverflow: "ellipsis" }}>{t.name}</span>
               </span>
             )}
             {/* Every tab closes, the last one too: with none open, the editor area is the start page. */}
@@ -229,39 +228,12 @@ export function TabsBar({
       })}
       </div>
       <div style={{ display: "flex", alignItems: "center", padding: "0 6px", flexShrink: 0 }}>
-      {onOpenExisting ? (
-        <div style={{ position: "relative", flexShrink: 0 }}>
-          <Button variant="plain" size="xs" className="aug-fs-ui"
-            onClick={() => setPlusMenu(v => !v)} title="New tab" style={{ color: "var(--t3)" }}>
-            <Icon name="plus" size={13} />
-          </Button>
-          {plusMenu && (
-            <>
-              <div style={{ position: "fixed", inset: 0, zIndex: 40 }} onClick={() => setPlusMenu(false)} />
-              <div className="aug-fs-ui" style={{
-                position: "absolute", top: "100%", left: 0, zIndex: 41, marginTop: 4,
-                minWidth: 170, padding: 5, background: "var(--bg-2)",
-                border: "1px solid var(--b2)", borderRadius: "var(--r2)", boxShadow: "var(--shadow-md)",
-              }}>
-                <Button variant="plain" size="xs" className="aug-fs-ui"
-                  style={{ width: "100%", justifyContent: "flex-start" }}
-                  onClick={() => { setPlusMenu(false); onNew(); }}>
-                  New query
-                </Button>
-                <Button variant="plain" size="xs" className="aug-fs-ui"
-                  style={{ width: "100%", justifyContent: "flex-start" }}
-                  onClick={() => { setPlusMenu(false); onOpenExisting(); }}>
-                  Open existing…
-                </Button>
-              </div>
-            </>
-          )}
-        </div>
-      ) : (
-        <Button variant="plain" size="xs" className="aug-fs-ui" onClick={onNew} title="New tab" style={{ color: "var(--t3)" }}>
-          <Icon name="plus" size={13} />
-        </Button>
-      )}
+      {/* One click opens a new query tab (the user, 2026-11-20: "'+' will directly create a new Query tab"); what was
+          "Open existing" is the search in the recent-runs panel now. */}
+      <Button variant="plain" size="xs" className="aug-fs-ui" onClick={onNew} title="New query" aria-label="New query"
+        data-testid="sql-new-tab" style={{ color: "var(--t3)" }}>
+        <Icon name="plus" size={13} />
+      </Button>
       </div>
       {trailing && (
         <>

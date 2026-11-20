@@ -80,7 +80,7 @@ function AddConnForm({ onSave, onCancel }: { onSave: () => void; onCancel: () =>
   };
 
   return (
-    <form onSubmit={handle} style={{ padding: "10px 12px", background: "var(--bg-0)", borderBottom: "0.5px solid var(--b1)", display: "flex", flexDirection: "column", gap: 8 }}>
+    <form onSubmit={handle} style={{ padding: "10px 12px", background: "var(--bg-0)", display: "flex", flexDirection: "column", gap: 8 }}>
       <p style={{ fontSize: 11, fontWeight: 500, color: "var(--t2)" }}>New connection</p>
       <div><label style={L}>Name</label><Input style={S} placeholder="My database" value={name} onChange={e => setName(e.target.value)} required /></div>
       <div>
@@ -100,10 +100,10 @@ function AddConnForm({ onSave, onCancel }: { onSave: () => void; onCancel: () =>
       </div>
       {err && <p style={{ fontSize: 11, color: "var(--red4)" }}>{err}</p>}
       <div style={{ display: "flex", gap: 6 }}>
-        <Button variant="plain" type="submit" disabled={loading} className="h-auto p-0 font-normal" style={{ flex: 1, fontSize: 11, padding: "5px 0", borderRadius: 4, cursor: "pointer", background: "var(--blue1)", color: "var(--blue4)", border: "0.5px solid var(--blue2)", opacity: loading ? .5 : 1 }}>
+        <Button variant="plain" type="submit" disabled={loading} className="h-auto p-0 font-normal" style={{ flex: 1, fontSize: 11, padding: "5px 0", borderRadius: 4, cursor: "pointer", background: "var(--blue1)", color: "var(--blue4)", opacity: loading ? .5 : 1 }}>
           {loading ? "Saving…" : "Save"}
         </Button>
-        <Button variant="plain" type="button" onClick={onCancel} className="h-auto p-0 font-normal" style={{ fontSize: 11, padding: "5px 10px", borderRadius: 4, cursor: "pointer", background: "transparent", color: "var(--t3)", border: "0.5px solid var(--b1)" }}>Cancel</Button>
+        <Button variant="plain" type="button" onClick={onCancel} className="h-auto p-0 font-normal" style={{ fontSize: 11, padding: "5px 10px", borderRadius: 4, cursor: "pointer", background: "var(--gray-a3)", color: "var(--t3)" }}>Cancel</Button>
       </div>
     </form>
   );
@@ -114,7 +114,7 @@ function AddConnForm({ onSave, onCancel }: { onSave: () => void; onCancel: () =>
 /** "off" said beside a name — a schema or table a person turned off for analysis. */
 function OffMark() {
   return <span className="aug-fs-xs" title="Turned off for analysis — never explored, never queried by Investigation or Quick analysis"
-    style={{ color: "var(--t3)", border: "0.5px solid var(--b2)", padding: "0 4px", flexShrink: 0 }}>off</span>;
+    style={{ color: "var(--t3)", background: "var(--gray-a3)", borderRadius: "var(--r-chip)", padding: "0 4px", flexShrink: 0 }}>off</span>;
 }
 
 /** A schema's maturity bars and number, or "off". */
@@ -281,14 +281,14 @@ export function CatalogScreen({ connections, selectedConn, onSelect, onDeleteCon
       nodes.push(
         <div key={`sec-${section.id}`} style={{ padding: "14px 12px 5px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ fontSize: 11, fontWeight: 600, color: "var(--t3)", textTransform: "uppercase", letterSpacing: "0.09em" }}>
+            <span className="aug-label">
               {section.label}
             </span>
           </div>
           {section.id === "connections" && (
             <Button variant="plain" onClick={() => setShowAddData(true)}
               className={`h-auto p-0 font-normal ${SVG_SIZE_AUTO}`}
-              style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 11, padding: "2px 6px", borderRadius: 3, cursor: "pointer", background: "transparent", color: "var(--t3)", border: "0.5px solid var(--b1)" }}
+              style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 11, padding: "2px 6px", borderRadius: 3, cursor: "pointer", background: "var(--gray-a3)", color: "var(--t3)" }}
               onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--t2)"; }}
               onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--t3)"; }}
             >
@@ -300,7 +300,7 @@ export function CatalogScreen({ connections, selectedConn, onSelect, onDeleteCon
       );
 
       if (section.entries.length === 0 && section.id === "connections") {
-        nodes.push(<p key="empty" style={{ fontSize: 11, color: "var(--t3)", padding: "6px 12px 10px" }}>No connections yet.</p>);
+        nodes.push(<p key="empty" className="aug-fs-chrome" style={{ color: "var(--t3)", padding: "6px 12px 10px" }}>No connections yet.</p>);
       }
 
       section.entries.forEach(entry => {
@@ -473,19 +473,20 @@ export function CatalogScreen({ connections, selectedConn, onSelect, onDeleteCon
     <div style={{ position: "relative", display: "flex", height: "100%", overflow: "hidden", background: "var(--bg-0)" }}>
       <ResizableSplit storageKey="catalog" initial={340} min={240} max={560} style={{ flex: 1, height: "100%" }}
         left={
-      /* ── Left: Tree navigator ── */
-      <div style={{ borderRight: "0.5px solid var(--b1)", display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--bg-1)", height: "100%", width: "100%" }}>
+      /* ── Left: Tree navigator ── one continuous surface: title, search and tree on one ground; the split draws the
+         one rule between the panes (2026-11-20, borders are the exception) */
+      <div style={{ display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--bg-1)", height: "100%", width: "100%" }}>
         {/* Top bar */}
-        <div style={{ display: "flex", alignItems: "center", padding: "10px 12px 8px", borderBottom: "0.5px solid var(--b1)", flexShrink: 0, gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", padding: "10px 12px 4px", flexShrink: 0, gap: 8 }}>
           <Button variant="plain" onClick={() => setSel(null)} title="Catalog home"
             className="h-auto p-0 justify-start"
-            style={{ fontSize: 12, fontWeight: 600, color: sel ? "var(--t3)" : "var(--t1)", textTransform: "uppercase", letterSpacing: "0.06em", flex: 1, textAlign: "left", background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit" }}
+            style={{ fontSize: 12, fontWeight: 600, color: sel ? "var(--t3)" : "var(--t1)", flex: 1, textAlign: "left", background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit" }}
             onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "var(--t1)"}
             onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = sel ? "var(--t3)" : "var(--t1)"}
           >Catalog</Button>
           <Button variant="plain" onClick={() => setShowAddData(true)} title="Add data"
             className={`h-auto p-0 ${SVG_SIZE_AUTO}`}
-            style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 22, height: 22, borderRadius: 4, cursor: "pointer", background: "var(--blue1)", color: "var(--blue5)", border: "0.5px solid var(--blue2)", padding: 0 }}
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 22, height: 22, borderRadius: 4, cursor: "pointer", background: "var(--blue1)", color: "var(--blue5)", padding: 0 }}
             onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--blue2)"}
             onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "var(--blue1)"}
           >
@@ -493,7 +494,7 @@ export function CatalogScreen({ connections, selectedConn, onSelect, onDeleteCon
           </Button>
           <Button variant="plain" onClick={() => { loadTree(); refreshSchema(); }} title="Refresh schema"
             className={`h-auto p-0 ${SVG_SIZE_AUTO}`}
-            style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 22, height: 22, borderRadius: 4, cursor: "pointer", background: "transparent", color: "var(--t3)", border: "0.5px solid var(--b1)", padding: 0 }}
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 22, height: 22, borderRadius: 4, cursor: "pointer", background: "var(--gray-a3)", color: "var(--t3)", padding: 0 }}
             onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "var(--t2)"}
             onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "var(--t3)"}
           >
@@ -502,8 +503,8 @@ export function CatalogScreen({ connections, selectedConn, onSelect, onDeleteCon
         </div>
 
         {/* Search */}
-        <div style={{ padding: "8px 10px", borderBottom: "0.5px solid var(--b1)", flexShrink: 0 }}>
-          <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search catalog…"
+        <div style={{ padding: "6px 10px 8px", flexShrink: 0 }}>
+          <Input variant="soft" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search catalog…"
             leading={<Icon name="search" size={11} />} style={{ width: "100%" }} />
         </div>
 

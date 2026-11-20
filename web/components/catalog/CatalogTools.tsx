@@ -78,13 +78,15 @@ export interface ToolItem {
 }
 
 /** Every tool a selection has, in one menu (CLARITY §3: "Tools in one menu"). */
-export function ToolsMenu({ items, testId }: { items: ToolItem[]; testId?: string }) {
+export function ToolsMenu({ items, testId, quiet = false }: { items: ToolItem[]; testId?: string;
+  /** A soft fill instead of an outline, on a surface where borders are the exception (the SQL Editor, 2026-11-20). */
+  quiet?: boolean }) {
   const shown = items.filter(i => !i.hidden);
   if (!shown.length) return null;
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger>
-        <Button variant="ghost" size="xs" data-testid={testId ?? "catalog-tools"}>
+        <Button variant={quiet ? "soft" : "ghost"} size="xs" data-testid={testId ?? "catalog-tools"}>
           Tools <Icon name="chevd" size={12} />
         </Button>
       </DropdownMenu.Trigger>
@@ -126,7 +128,7 @@ export function PanelHead({ crumbs, name, mono, what, chips, actions, testId }: 
     );
   }
   return (
-    <div data-testid={testId} style={{ ...ROW, flexWrap: "nowrap", gap: 10, padding: "10px 22px", borderBottom: "1px solid var(--b0)",
+    <div data-testid={testId} style={{ ...ROW, flexWrap: "nowrap", gap: 10, padding: "10px 22px",
       background: "var(--bg-0)", flexShrink: 0, minWidth: 0 }}>
       {crumbs?.map(c => (
         <span key={`crumb-${c}`} className="aug-fs-sm" style={{ ...MUTED, whiteSpace: "nowrap" }}>{c} ›</span>
@@ -154,7 +156,7 @@ const STATE_COLOR: Record<StateWord["tone"], string> = {
 /** A state as its mark and word, coloured by what it means: ✓ watched daily, ● exploring, listed twice. */
 export function StateMark({ s, title }: { s: StateWord; title?: string }) {
   return (
-    <span className="aug-fs-sm" title={title} style={{ color: STATE_COLOR[s.tone], whiteSpace: "nowrap" }}>
+    <span className="aug-fs-chrome" title={title} style={{ color: STATE_COLOR[s.tone], whiteSpace: "nowrap" }}>
       {s.mark ? `${s.mark} ` : ""}{s.word}
     </span>
   );
@@ -180,14 +182,14 @@ export function ShareBars({ rows, testId }: { rows: Know[]; testId?: string }) {
         const shown = counted && !r.short ? `${formatCount(r.n)} of ${formatCount(r.of)}` : r.short;
         return (
           <div key={r.key} style={{ display: "contents" }}>
-            <div className="aug-fs-sm" style={{ minWidth: 0 }}>
+            <div className="aug-fs-chrome" style={{ minWidth: 0 }}>
               <div style={{ ...ONE_LINE, color: "var(--t1)" }}>{r.label}</div>
-              <div className="aug-fs-xs" style={{ ...MUTED, ...ONE_LINE }}>{r.meta}</div>
+              <div className="aug-fs-sm" style={{ ...MUTED, ...ONE_LINE }}>{r.meta}</div>
             </div>
             <span role="img" aria-label={`${r.label}: ${shown}${r.note ? ` — ${r.note}` : ""}`} title={r.note || undefined}>
               <Bar value={r.share ?? 1} max={1} color={r.share === 1 ? "var(--grn3)" : "var(--chart-1)"} hatched={r.share == null} />
             </span>
-            <span className="aug-fs-sm" title={r.note || undefined}
+            <span className="aug-fs-chrome" title={r.note || undefined}
               style={{ textAlign: "right", color: r.share != null ? "var(--t2)" : "var(--t3)", whiteSpace: "nowrap", ...NUM }}>
               {shown}
             </span>
@@ -206,7 +208,7 @@ const GRID: CSSProperties = {
 };
 /** A list's column heading and cell. No gap between columns — the space is the cell's padding — so the rule under each
  *  row runs the whole width instead of breaking at every column. */
-export const LIST_HEAD: CSSProperties = { ...MUTED, textTransform: "uppercase", letterSpacing: ".06em", padding: "2px 12px 6px 2px",
+export const LIST_HEAD: CSSProperties = { ...MUTED, padding: "2px 12px 6px 2px",
   whiteSpace: "nowrap" };
 export const LIST_CELL: CSSProperties = { ...RULE, padding: "8px 12px 8px 2px", minWidth: 0, display: "flex",
   flexDirection: "column", justifyContent: "center" };
@@ -222,7 +224,7 @@ export function TablesList({ tables, onOpen, showSchema, testId }: {
   if (!tables.length) return <Empty>No tables.</Empty>;
   return (
     <div data-testid={testId} style={{ overflowX: "auto" }}>
-      <div className="aug-fs-sm" style={{ ...GRID, minWidth: 640 }}>
+      <div className="aug-fs-chrome" style={{ ...GRID, minWidth: 640 }}>
         <span className="aug-fs-xs" style={HEAD}>Table</span>
         <span className="aug-fs-xs" style={HEAD}>Business object</span>
         <span className="aug-fs-xs" style={{ ...HEAD, ...RIGHT }}>Rows</span>
@@ -234,9 +236,9 @@ export function TablesList({ tables, onOpen, showSchema, testId }: {
             <div style={CELL}>
               <Button variant="link" size="xs" onClick={() => onOpen(t)} title={`Open ${t.schema}.${t.name}`}
                 style={{ fontFamily: "var(--font-mono)", padding: 0, height: "auto", maxWidth: "100%", alignSelf: "flex-start" }}>
-                <span style={ONE_LINE}>{t.name}</span>
+                <span className="aug-fs-chrome" style={ONE_LINE}>{t.name}</span>
               </Button>
-              {showSchema && <div className="aug-fs-xs" style={{ ...MUTED, ...ONE_LINE }}>{t.schema}</div>}
+              {showSchema && <div className="aug-fs-sm" style={{ ...MUTED, ...ONE_LINE }}>{t.schema}</div>}
             </div>
             <div style={{ ...CELL, ...ONE_LINE, color: t.object ? "var(--t1)" : "var(--t3)" }}>
               {t.object?.words ?? "—"}
@@ -405,9 +407,9 @@ export function ConnectorActions({ connId, connType }: { connId: string; connTyp
               disabled={uploading} onChange={e => { const f = e.target.files?.[0]; if (f) handleFileUpload(f); }} />
           </label>
           {files.map(f => (
-            <div key={f.filename} className="aug-fs-xs" style={{ ...ROW, flexWrap: "nowrap", color: "var(--t2)" }}>
+            <div key={f.filename} className="aug-fs-chrome" style={{ ...ROW, flexWrap: "nowrap", color: "var(--t2)" }}>
               <span style={{ fontFamily: "var(--font-mono)", flex: 1, ...ONE_LINE }}>{f.filename}</span>
-              <span style={MUTED}>{Math.round(f.size_bytes / 1024)}KB</span>
+              <span className="aug-fs-xs" style={MUTED}>{Math.round(f.size_bytes / 1024)}KB</span>
               <Button variant="ghost" size="xs" onClick={() => handleDelete(f.filename)} title="Remove">
                 <Icon name="close" size={11} />
               </Button>
@@ -467,7 +469,7 @@ export function SchemaDocs({ connId, name, schema, onOpenDocuments }: {
         ) : docs.map((d, i) => {
           const drift = status?.consistency.mismatched_documents?.[d.doc_id];
           return (
-            <div key={d.doc_id} className="aug-fs-sm" style={{ ...ROW, flexWrap: "nowrap", justifyContent: "space-between",
+            <div key={d.doc_id} className="aug-fs-chrome" style={{ ...ROW, flexWrap: "nowrap", justifyContent: "space-between",
               padding: "7px 0", ...(i ? RULE : {}) }}>
               <span style={{ color: "var(--t1)", ...ONE_LINE }}>{d.title}</span>
               {drift
@@ -565,13 +567,13 @@ export function ColumnDistribution({ d }: { d: DistributionProfile }) {
       {([["p25", d.p25], ["median", d.p50], ["p75", d.p75], ["mean", d.mean]] as const).map(([label, value]) => (
         <span key={label} style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", ...NUM }}>
           <span style={MUTED}>{label}</span>
-          <span style={{ color: "var(--t1)" }}>{fmt(value)}</span>
+          <span className="aug-fs-chrome" style={{ color: "var(--t1)" }}>{fmt(value)}</span>
         </span>
       ))}
       {d.min != null && d.max != null && (
         <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", ...NUM }}>
           <span style={MUTED}>range</span>
-          <span style={{ color: "var(--t2)" }}>{fmt(d.min)}–{fmt(d.max)}</span>
+          <span className="aug-fs-chrome" style={{ color: "var(--t2)" }}>{fmt(d.min)}–{fmt(d.max)}</span>
         </span>
       )}
       <Chip>{DIST_LABEL[d.shape] ?? d.shape}</Chip>

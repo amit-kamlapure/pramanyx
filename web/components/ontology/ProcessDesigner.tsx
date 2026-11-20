@@ -64,9 +64,11 @@ import {
   type StageDraft,
 } from "@/lib/processDraft";
 
+/** The sample table's header rule — the one line kept here. A step is its surface on the ground, a tile a soft fill
+ *  inside it, no edge on either (2026-11-20, borders are the exception). */
 const RULE = "1px solid var(--b1)";
-const CARD: React.CSSProperties = { border: RULE, borderRadius: "var(--r3)", padding: "12px 14px", marginBottom: 12 };
-const TILE: React.CSSProperties = { background: "var(--bg-2)", borderRadius: "var(--r2)", padding: "8px 10px", minWidth: 0 };
+const CARD: React.CSSProperties = { background: "var(--bg-2)", borderRadius: "var(--r3)", padding: "12px 14px", marginBottom: 12 };
+const TILE: React.CSSProperties = { background: "var(--gray-a3)", borderRadius: "var(--r2)", padding: "8px 10px", minWidth: 0 };
 const HINT: React.CSSProperties = { color: "var(--t3)" };
 const LABEL: React.CSSProperties = { color: "var(--t2)", margin: "0 0 4px" };
 const BIG: React.CSSProperties = { fontSize: 18, fontWeight: 500, color: "var(--t1)", lineHeight: 1.3 };
@@ -705,10 +707,10 @@ function CheckRow({ check, late, disabled, sample, onShow, onLeft, onLate, onUnd
 function Sample({ page }: { page: ObjectListingPage }) {
   return (
     <div style={{ overflowX: "auto" }} data-testid="designer-sample">
-      <table className="aug-fs-xs" style={{ borderCollapse: "collapse", width: "100%" }}>
+      <table className="aug-fs-chrome" style={{ borderCollapse: "collapse", width: "100%" }}>
         <thead>
           <tr>{withUniqueKeys(page.names, n => n).map(([k, n]) => (
-            <th key={k} style={{ textAlign: "left", padding: "2px 8px", color: "var(--t2)", borderBottom: RULE }}>{n}</th>
+            <th key={k} className="aug-fs-xs" style={{ textAlign: "left", padding: "2px 8px", color: "var(--t2)", borderBottom: RULE }}>{n}</th>
           ))}</tr>
         </thead>
         <tbody>
@@ -719,7 +721,7 @@ function Sample({ page }: { page: ObjectListingPage }) {
           ))}
         </tbody>
       </table>
-      {page.total != null && <span style={HINT}>{formatCount(page.total)} in all</span>}
+      {page.total != null && <span className="aug-fs-xs" style={HINT}>{formatCount(page.total)} in all</span>}
     </div>
   );
 }
@@ -755,7 +757,7 @@ function MovesSection({ draft, preview, disabled, onMark }: {
           {withUniqueKeys(observed, m => `${m.from_stage}>${m.to_stage}`).map(([k, m]) => {
             const expected = draft.moves ? draft.moves.some(x => x.from === m.from_stage && x.to === m.to_stage) : m.declared;
             return (
-            <label key={k} className="aug-fs-sm" data-testid="designer-move"
+            <label key={k} className="aug-fs-chrome" data-testid="designer-move"
               style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--t1)" }}>
               <Checkbox checked={expected} disabled={disabled}
                 aria-label={`Expect ${label(m.from_stage)} to ${label(m.to_stage)}`}

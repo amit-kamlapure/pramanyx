@@ -33,7 +33,7 @@ export function FixItForm({
   return (
     <div
       className="flex flex-col gap-1.5 rounded-[var(--r2)] p-2 my-1"
-      style={{ background: "var(--bg-2)", border: "1px solid var(--b1)" }}
+      style={{ background: "var(--bg-2)" }}
     >
       <Textarea
         autoFocus
@@ -68,7 +68,7 @@ export function FixItForm({
           size="xs"
           disabled={busy || !note.trim()}
           onClick={() => onSubmit(note.trim(), sql.trim())}
-          className="h-auto px-2 py-0.5 aug-fs-xs border rounded-[var(--r1)] border-amber-500/40 text-amber-300 hover:bg-amber-500/10 dark:hover:bg-amber-500/10"
+          className="h-auto px-2 py-0.5 aug-fs-xs rounded-[var(--r1)] bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 dark:hover:bg-amber-500/20"
         >
           {busy ? "Recording…" : "Record correction"}
         </Button>

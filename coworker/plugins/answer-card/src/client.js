@@ -19,8 +19,10 @@ import { deckOf } from "./deck.js";
 import { driveFilesOf } from "./drive.js";
 import { ABOUT_TO, DOES, PREFIX, STAGED, saidOf, stagedOf, turnedDown } from "./steps.js";
 import { drawChart, labelOf, numericColumns } from "./chart";
+import { unstatedFigures } from "../../../../web/lib/statedFigures";
 import {
-  PANE, PANE_PATTERN, PaneBody, downloadCsv, groundingOf, pageFor, PaneTitle, ResultGrid, button, faint, hasPane, idOf, line,
+  PANE, PANE_PATTERN, PaneBody, groundingOf, pageFor, PaneTitle, ResultGrid, button, code, faint, hasPane, idOf, line,
+  primary, soft, surface,
   openBeside, quiet, remember, rememberThing, setOpener, shown, unitsOf, sheetsByTable, thingId, useChosen,
 } from "./exhibit";
 
@@ -114,7 +116,7 @@ function Chart({ answer, viz }) {
 
 function Sql({ answer }) {
   return h("pre", {
-    style: { margin: 0, padding: 10, border: `1px solid ${line}`, borderRadius: 4, background: faint, fontSize: 12,
+    style: { margin: 0, padding: 10, borderRadius: 6, background: code, fontSize: 12,
              overflowX: "auto", whiteSpace: "pre" },
   }, answer.sql || "No SQL came back with this answer.");
 }
@@ -123,9 +125,9 @@ function How({ answer, whole }) {
   const steps = answer.analysis?.steps ?? [];
   const trusted = Array.isArray(answer.trusted_metrics) ? answer.trusted_metrics : [];
   const cost = answer.receipt?.artifact?.payload?.cost;
-  const row = (label, value) => h("div", { style: { display: "flex", gap: 12, padding: "5px 0", borderTop: `1px solid ${line}` } },
+  const row = (label, value) => h("div", { style: { display: "flex", gap: 12, padding: "5px 0" } },
     h("span", { style: { ...quiet, flex: "0 0 150px" } }, label), h("span", { style: { minWidth: 0 } }, value));
-  return h("div", { style: { fontSize: 12.5 } },
+  return h("div", { style: { fontSize: 12 } },
     answer.analysis?.intent ? h("div", { style: { paddingBottom: 8 } }, answer.analysis.intent) : null,
     steps.length ? h("ol", { style: { margin: "0 0 8px", paddingLeft: 18 } }, steps.map((s, i) => h("li", { key: i }, s))) : null,
     row("Approved definitions", trusted.length
@@ -148,8 +150,8 @@ function Words({ answer, asked }) {
   const question = asked || answer.question || "";
   return h("div", { style: { display: "flex", flexDirection: "column", gap: 6 } },
     h("div", { style: { overflowWrap: "anywhere", whiteSpace: "pre-wrap", maxHeight: 220, overflow: "auto" } }, answer.answer || "Nothing came back."),
-    question ? h("div", { style: { ...quiet, fontSize: 12.5 } }, `Asked: ${question}`) : null,
-    h("div", { style: { ...quiet, fontSize: 12.5 } }, "No query was run for this, so there is no chart, table or SQL."));
+    question ? h("div", { style: { ...quiet, fontSize: 12 } }, `Asked: ${question}`) : null,
+    h("div", { style: { ...quiet, fontSize: 12 } }, "No query was run for this, so there is no chart, table or SQL."));
 }
 
 const TAIL = "data-pramanyx-answers";
@@ -190,7 +192,7 @@ function AnswerTail(props) {
     checkCall ? h(AnswerCheck, { call: checkCall }) : null,
     h("div", { [TAIL]: "" }),
     helpers.length ? h("div", { "data-pramanyx-helpers": "" },
-      h("div", { style: { ...quiet, fontSize: 12.5, padding: "6px 0 2px" } }, `Worked by ${helpers.length} helper${helpers.length === 1 ? "" : "s"}`),
+      h("div", { style: { ...quiet, fontSize: 12, padding: "6px 0 2px" } }, `Worked by ${helpers.length} helper${helpers.length === 1 ? "" : "s"}`),
       helpers.map((helper) => h(Helper, { key: helper.call, ...helper }))) : null);
 }
 
@@ -280,7 +282,7 @@ function AnswerCheck({ call }) {
     look();
     return () => { live = false; if (timer !== null) clearTimeout(timer); };
   }, [call]);
-  const box = { fontSize: 12.5, padding: "8px 0 2px", display: "flex", flexDirection: "column", gap: 4 };
+  const box = { fontSize: 12, padding: "8px 0 2px", display: "flex", flexDirection: "column", gap: 4 };
   if (!said) return null;
   if (said.state === "pending") return h("div", { "data-pramanyx-check": "pending", style: { ...box, ...quiet } }, "Checking its figures against the answers it was gathered from…");
   if (said.state !== "checked") return h("div", { "data-pramanyx-check": "unchecked", style: { ...box, ...quiet } }, `Its figures were not checked. ${said.detail || ""}`.trim());
@@ -311,7 +313,7 @@ function Analysis({ text }) {
   const report = typeof got?.report === "string" ? got.report : (typeof got?.report?.summary === "string" ? got.report.summary : "");
   const frame = { margin: "8px 0", fontSize: 13 };
   return h("div", { style: frame },
-    h("div", { style: { ...quiet, fontSize: 12.5, paddingBottom: 6 } }, "Deep analysis"),
+    h("div", { style: { ...quiet, fontSize: 12, paddingBottom: 6 } }, "Deep analysis"),
     h("div", { style: { whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight: 1.5, maxHeight: 420, overflow: "auto" } },
       report || (got?.status === "running" ? "Still running when the helper last looked." : "The report could not be read here.")),
     h(SkillDoor, { text }));
@@ -359,9 +361,9 @@ function AnswerNow({ question }) {
       setState(error instanceof Error ? error.message : String(error));
     }
   };
-  if (state === "asked") return h("div", { "data-pramanyx-answer-now": "asked", style: { ...quiet, fontSize: 12.5, padding: "2px 0 6px" } },
+  if (state === "asked") return h("div", { "data-pramanyx-answer-now": "asked", style: { ...quiet, fontSize: 12, padding: "2px 0 6px" } },
     "Answering now, from what it has found so far.");
-  return h("div", { "data-pramanyx-answer-now": "", style: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "2px 0 6px", fontSize: 12.5 } },
+  return h("div", { "data-pramanyx-answer-now": "", style: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "2px 0 6px", fontSize: 12 } },
     h("button", { type: "button", style: button(false), disabled: state === "asking", onClick: () => { void ask(); },
                   title: "Stop it here and have it answer from what it has found — some planned steps will not run" },
       state === "asking" ? "Asking…" : "Answer now"),
@@ -372,7 +374,7 @@ function AnswerNow({ question }) {
 function AnsweredEarly({ text }) {
   let got = null;
   try { got = JSON.parse(text); } catch { got = null; }
-  return got?.answered_early ? h("div", { "data-pramanyx-answered-early": "", style: { ...quiet, fontSize: 12.5, paddingTop: 4 } },
+  return got?.answered_early ? h("div", { "data-pramanyx-answered-early": "", style: { ...quiet, fontSize: 12, paddingTop: 4 } },
     String(got.answered_early)) : null;
 }
 
@@ -549,9 +551,9 @@ export function Draft({ draft }) {
       .catch(() => { if (live) { setSends([]); setUnread(true); } });
     return () => { live = false; };
   }, [name]);
-  const field = { width: "100%", boxSizing: "border-box", font: "inherit", fontSize: 13.5, padding: "6px 8px",
-                  border: `1px solid ${line}`, borderRadius: 6, background: "transparent", color: "inherit" };
-  const frame = { margin: "12px 0", display: "flex", flexDirection: "column", gap: 8, fontSize: 13.5 };
+  const field = { width: "100%", boxSizing: "border-box", font: "inherit", fontSize: 13, padding: "6px 8px",
+                  border: 0, borderRadius: 6, background: soft, color: "inherit" };
+  const frame = { margin: "12px 0", display: "flex", flexDirection: "column", gap: 8, fontSize: 13 };
   const send = async () => {
     setState({ busy: true, said: "" });
     try {
@@ -607,7 +609,7 @@ export function Draft({ draft }) {
       h("select", { value: attach, style: field, onChange: (e) => setAttach(e.target.value) },
         ATTACH.map(([value, label]) => h("option", { key: value || "none", value }, label)))) : null,
     h("div", { style: { display: "flex", alignItems: "center", gap: 10 } },
-      h("button", { type: "button", style: button(true), disabled: !ready, onClick: send }, state.busy ? "Sending…" : "Send"),
+      h("button", { type: "button", style: primary(!ready), disabled: !ready, onClick: send }, state.busy ? "Sending…" : "Send"),
       state.said ? h("span", { role: "status", style: { color: "#c2410c" } }, `Not sent: ${state.said}`)
         : h("span", { style: quiet }, "Nothing is sent until you press Send.")));
 }
@@ -677,17 +679,16 @@ function ShellButton({ children, onClick, disabled, label, title }) {
 }
 
 const SCHEDULE_LOOK = `
-.pramanyx-sched { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; font-size: 13.5px; }
+.pramanyx-sched { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; font-size: 13px; }
 .pramanyx-sched-card {
   --card-fill: var(--dsw-static-neutral-50, color-mix(in srgb, currentColor 4%, transparent));
   --card-hover: var(--dsw-static-neutral-100, color-mix(in srgb, currentColor 7%, transparent));
-  box-sizing: border-box; position: relative; width: 100%; padding: 8px 10px; background: var(--card-fill);
-  border: .5px solid var(--dsw-alias-border-l1, color-mix(in srgb, currentColor 18%, transparent));
+  box-sizing: border-box; position: relative; width: 100%; padding: 8px 10px; background: var(--card-fill); border: 0;
   border-radius: var(--dsw-radius-lg, 12px); transition: background-color .12s;
 }
 body[data-ds-dark-theme] .pramanyx-sched-card {
-  --card-fill: var(--dsw-static-neutral-850, color-mix(in srgb, currentColor 5%, transparent));
-  --card-hover: var(--dsw-static-neutral-800, color-mix(in srgb, currentColor 8%, transparent));
+  --card-fill: var(--dsw-alias-bg-layer-1, color-mix(in srgb, currentColor 5%, transparent));
+  --card-hover: var(--dsw-alias-bg-layer-2, color-mix(in srgb, currentColor 8%, transparent));
 }
 @media (hover: hover) { .pramanyx-sched-card:has(.pramanyx-sched-open):hover { background: var(--card-hover); } }
 .pramanyx-sched-open { position: absolute; inset: 0; z-index: 1; padding: 0; border: 0; border-radius: inherit;
@@ -697,7 +698,7 @@ body[data-ds-dark-theme] .pramanyx-sched-card {
 .pramanyx-sched-row { position: relative; z-index: 2; pointer-events: none; display: flex; align-items: center; gap: 10px;
   min-width: 0; min-height: 44px; }
 .pramanyx-sched-leading { box-sizing: border-box; flex: none; width: 40px; height: 40px; display: grid; place-items: center;
-  border-radius: 10px; border: .5px solid var(--dsw-alias-border-l1, color-mix(in srgb, currentColor 18%, transparent));
+  border-radius: 10px; border: 0;
   background: color-mix(in srgb, var(--dsw-static-neutral-00, #fff) 50%, transparent);
   color: var(--dsw-alias-label-secondary, currentColor); }
 body[data-ds-dark-theme] .pramanyx-sched-leading { background: color-mix(in srgb, var(--dsw-static-neutral-00, #fff) 5%, transparent); }
@@ -711,14 +712,13 @@ body[data-ds-dark-theme] .pramanyx-sched-leading { background: color-mix(in srgb
 .pramanyx-sched-actions { pointer-events: auto; flex: none; position: relative; display: flex; align-items: center; gap: 6px; }
 .pramanyx-sched-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 5; min-width: 190px; padding: 4px;
   display: flex; flex-direction: column; border-radius: var(--dsw-radius-lg, 10px);
-  border: .5px solid var(--dsw-alias-border-l2, color-mix(in srgb, currentColor 22%, transparent));
-  background: var(--dsw-alias-bg-base, Canvas); box-shadow: 0 8px 24px rgba(0, 0, 0, .18); }
+  border: 0; background: var(--dsw-alias-bg-layer-2, Canvas); box-shadow: 0 8px 24px rgba(0, 0, 0, .28); }
 .pramanyx-sched-menu button { font: inherit; font-size: 13px; text-align: left; padding: 6px 10px; border: 0;
   border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
 .pramanyx-sched-menu button:hover, .pramanyx-sched-menu button:focus-visible { outline: none;
   background: var(--dsw-alias-interactive-bg-hover, color-mix(in srgb, currentColor 8%, transparent)); }
 .pramanyx-sched-what { font-size: 13px; line-height: 1.5; color: var(--dsw-alias-label-secondary, currentColor); }
-.pramanyx-sched-earlier { font: inherit; font-size: 12.5px; text-align: left; padding: 4px 0; border: 0; background: transparent;
+.pramanyx-sched-earlier { font: inherit; font-size: 12px; text-align: left; padding: 4px 0; border: 0; background: transparent;
   color: var(--dsw-alias-label-tertiary, currentColor); cursor: pointer; white-space: nowrap; overflow: hidden;
   text-overflow: ellipsis; }
 .pramanyx-sched-earlier:hover { color: var(--dsw-alias-label-secondary, currentColor); }
@@ -870,17 +870,18 @@ function RunAnswer({ answer, provisional }) {
   const [table, setTable] = useState(false);
   const one = (answer.rows ?? []).length === 1;
   const count = typeof answer.row_count === "number" ? answer.row_count : (answer.rows ?? []).length;
+  const unsaid = one ? unsaidOf(answer, [answer.headline]) : [];
   return h("div", { "data-pramanyx-run-answer": "", style: { display: "flex", flexDirection: "column", gap: 6 } },
     answer.headline ? h("div", { style: { fontSize: 15, fontWeight: 600, lineHeight: 1.4 } }, answer.headline) : null,
-    h("div", { style: { border: `1px solid ${line}`, borderRadius: 6, padding: "6px 8px 4px 12px" } },
-      one ? h(Figures, { answer }) : table ? h("div", { style: { padding: "4px 0 6px" } }, h(ResultGrid, { answer, compact: true }))
-        : h(Chart, { answer }),
-      one ? null : h("div", { style: { display: "flex", alignItems: "center", gap: 12, borderTop: `1px solid ${line}`, marginTop: 4 } },
+    one ? (unsaid.length ? h(Figures, { answer, only: unsaid }) : null)
+    : h("div", { style: { background: surface, borderRadius: 10, padding: "8px 10px 4px 14px" } },
+      table ? h("div", { style: { padding: "4px 0 6px" } }, h(ResultGrid, { answer, compact: true })) : h(Chart, { answer }),
+      h("div", { style: { display: "flex", alignItems: "center", gap: 12, marginTop: 4 } },
         h("button", { type: "button", className: "pramanyx-link", "aria-expanded": table, onClick: () => setTable((was) => !was) },
           table ? "Show the chart" : "Show as a table"),
         h("span", { style: { flex: "1 1 auto" } }),
-        h("span", { style: { ...quiet, fontSize: 12.5 } }, `${count} ${count === 1 ? "row" : "rows"}`))),
-    provisional ? h("div", { style: { ...quiet, fontSize: 12.5 } }, provisional) : null);
+        h("span", { style: { ...quiet, fontSize: 12 } }, `${count} ${count === 1 ? "row" : "rows"}`))),
+    provisional ? h("div", { style: { ...quiet, fontSize: 12 } }, provisional) : null);
 }
 
 /** One run of a schedule: when, and what its steps found — an answer as an answer, a write-up as its text, with the
@@ -892,7 +893,7 @@ function RunFound({ run, provisional = "" }) {
   // A step that handed its analysis to the platform's queue: the run is recorded before the answer exists.
   const answering = (run.steps ?? []).some((step) => step.answering);
   return h("div", { style: { borderTop: `1px solid ${line}`, paddingTop: 6, display: "flex", flexDirection: "column", gap: 6 } },
-    h("div", { style: { ...quiet, fontSize: 12.5 } },
+    h("div", { style: { ...quiet, fontSize: 12 } },
       `Ran ${whenNext(run.at)}`, run.outcome === "paused" ? " · waiting for a person" : run.outcome === "error" ? " · did not run" : ""),
     found.length ? found.map((step, i) => (step.answer ? h(RunAnswer, { key: i, answer: step.answer, provisional })
       : h("div", { key: i, style: { whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight: 1.5 } }, step.said)))
@@ -962,16 +963,16 @@ function Icon({ kind, busy }) {
 function Step({ kind, title, note, busy, failed, children }) {
   const [open, setOpen] = useState(false);
   const opens = Boolean(children);
-  return h("div", { className: "pramanyx-step", style: { borderRadius: 4, margin: "1px 0", fontSize: 13 } },
+  return h("div", { className: "pramanyx-step", style: { borderRadius: 6, margin: "1px 0", fontSize: 13, background: open && opens ? faint : undefined } },
     h("button", {
       type: "button", disabled: !opens, "aria-expanded": opens ? open : undefined, onClick: () => setOpen((was) => !was),
       style: { display: "flex", gap: 8, alignItems: "center", width: "100%", textAlign: "left", font: "inherit", color: "inherit",
-               background: open ? faint : "transparent", border: 0, padding: "7px 10px", cursor: opens ? "pointer" : "default" },
+               background: "transparent", border: 0, padding: "7px 10px", cursor: opens ? "pointer" : "default" },
     },
       h(Icon, { kind, busy }),
       h("span", { style: { flex: "1 1 auto", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", ...(busy ? quiet : {}) } }, title),
       failed ? h("span", { style: { flex: "none", fontSize: 12 } }, "did not work") : note ? h("span", { style: { ...quiet, flex: "none", fontSize: 12 } }, note) : null),
-    open && opens ? h("div", { style: { padding: 10, borderTop: `1px solid ${line}`, display: "flex", flexDirection: "column", gap: 10 } }, children) : null);
+    open && opens ? h("div", { style: { padding: "2px 10px 10px", display: "flex", flexDirection: "column", gap: 10 } }, children) : null);
 }
 
 /** An answer in the list of steps: named by what Pramanyx found, opening to the SQL and the rows. */
@@ -990,7 +991,7 @@ function AnswerStep(props) {
     return h(Step, { kind: "rows", title: asked || answer.answer || "A question", note: "no query run" }, h(Words, { answer }));
   }
   const count = typeof answer.row_count === "number" ? answer.row_count : (answer.rows ?? []).length;
-  return h(Step, { kind: "rows", title: answer.answer || asked || "An answer", note: `${count} ${count === 1 ? "row" : "rows"}` },
+  return h(Step, { kind: "rows", title: headlineOf(answer.answer).head || asked || "An answer", note: `${count} ${count === 1 ? "row" : "rows"}` },
     h(Sql, { answer }), h(ResultGrid, { answer, compact: true }));
 }
 
@@ -1078,8 +1079,8 @@ const STEPS_LOOK = `
 }
 .pramanyx-live-work {
   position: absolute; right: 0; top: 2px; font: inherit; font-size: 12px; padding: 2px 10px; border-radius: 4px;
-  cursor: pointer; color: inherit; background: transparent;
-  border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+  cursor: pointer; color: inherit; border: 0;
+  background: color-mix(in srgb, currentColor 9%, transparent);
 }
 /*
  * When a turn has an answer to show, the answer is the output: the headline and the words are the platform's, and
@@ -1118,19 +1119,29 @@ const STEPS_LOOK = `
 .pramanyx-mark {
   font: inherit; font-size: 12px; line-height: 18px; height: 20px; padding: 0 6px; margin: 0 0 0 4px; border-radius: 4px;
   cursor: pointer; color: inherit; vertical-align: 1px; white-space: nowrap;
-  background: color-mix(in srgb, currentColor 6%, transparent); border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  background: color-mix(in srgb, currentColor 9%, transparent); border: 0;
 }
-.pramanyx-mark:hover, .pramanyx-mark:focus-visible { border-color: color-mix(in srgb, currentColor 55%, transparent); }
+.pramanyx-mark:hover, .pramanyx-mark:focus-visible { background: color-mix(in srgb, currentColor 16%, transparent); }
 .pramanyx-ask {
-  font: inherit; font-size: 14px; color: inherit; text-align: left; background: transparent; border: 0; cursor: pointer;
-  border-top: 1px solid color-mix(in srgb, currentColor 14%, transparent); padding: 8px 0; opacity: 0.86;
+  font: inherit; font-size: 13px; color: inherit; text-align: left; background: transparent; border: 0; cursor: pointer;
+  border-radius: 6px; padding: 8px 10px; margin: 0 -10px; opacity: 0.86;
 }
 .pramanyx-ask:hover, .pramanyx-ask:focus-visible { opacity: 1; background: color-mix(in srgb, currentColor 5%, transparent); }
 .pramanyx-link {
-  font: inherit; font-size: 12.5px; color: inherit; opacity: 0.68; background: transparent; border: 0; padding: 4px 0; cursor: pointer;
+  font: inherit; font-size: 12px; color: inherit; opacity: 0.68; background: transparent; border: 0; padding: 4px 0; cursor: pointer;
   text-decoration: underline dotted color-mix(in srgb, currentColor 45%, transparent); text-underline-offset: 3px;
 }
 .pramanyx-link:hover, .pramanyx-link:focus-visible, .pramanyx-link[aria-expanded="true"] { opacity: 1; }
+.pramanyx-fold {
+  align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 12px; color: inherit;
+  opacity: 0.68; background: transparent; border: 0; padding: 4px 0; cursor: pointer;
+}
+.pramanyx-fold:hover, .pramanyx-fold:focus-visible, .pramanyx-fold[aria-expanded="true"] { opacity: 1; }
+.pramanyx-source {
+  font: inherit; font-size: 13px; color: inherit; height: 30px; padding: 0 8px; margin-left: 4px; border: 0; border-radius: 4px;
+  background: transparent; cursor: pointer; opacity: 0.8;
+}
+.pramanyx-source:hover, .pramanyx-source:focus-visible, .pramanyx-source[aria-expanded="true"] { opacity: 1; background: color-mix(in srgb, currentColor 8%, transparent); }
 .pramanyx-step-busy {
   flex: none; width: 12px; height: 12px; border-radius: 50%; box-sizing: border-box;
   border: 1.5px solid currentColor; border-right-color: transparent; opacity: 0.7;
@@ -1152,8 +1163,8 @@ const STEPS_LOOK = `
 }
 .pramanyx-live-work {
   position: absolute; right: 0; top: 2px; font: inherit; font-size: 12px; padding: 2px 10px; border-radius: 4px;
-  cursor: pointer; color: inherit; background: transparent;
-  border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+  cursor: pointer; color: inherit; border: 0;
+  background: color-mix(in srgb, currentColor 9%, transparent);
 }
 .pramanyx-step-busy { animation: none; } }
 `;
@@ -1250,10 +1261,10 @@ function Feedback({ answer, extras = null }) {
     "explained": "You said this was wrong, and why. Later answers on this connection are given it.",
     "corrected": "You gave the SQL that would have been right. Later answers on this connection are given it.",
   };
-  const field = { font: "inherit", fontSize: 12.5, color: "inherit", background: "transparent", border: `1px solid ${line}`,
+  const field = { font: "inherit", fontSize: 12, color: "inherit", background: soft, border: 0,
                   borderRadius: 4, padding: "6px 8px", width: "100%", boxSizing: "border-box", resize: "vertical" };
   const canJudge = Boolean(id && connection);
-  return h("div", { style: { fontSize: 12.5, display: "flex", flexDirection: "column", gap: 8 } },
+  return h("div", { style: { fontSize: 12, display: "flex", flexDirection: "column", gap: 8 } },
     h("div", { style: { display: "flex", flexWrap: "wrap", gap: 2, alignItems: "center" } },
       canJudge && !said ? h("button", { type: "button", className: "pramanyx-icon", disabled: busy, "aria-label": "This was right", title: "This was right", onClick: () => judge("helpful") }, h(Glyph, { d: GLYPH.right })) : null,
       canJudge && !said ? h("button", { type: "button", className: "pramanyx-icon", disabled: busy, "aria-label": "This was wrong", title: "This was wrong", onClick: () => judge("unhelpful") }, h(Glyph, { d: GLYPH.wrong })) : null,
@@ -1306,6 +1317,28 @@ function draft(question) {
 }
 
 /** Words the platform wrote, with what it marked `**decisive**` set bold. Nothing else in them is read as markup. */
+/** Text written as markdown, as blocks: a run of "- " lines is a list, a blank line ends a paragraph; bold inside both. */
+function prose(text) {
+  const blocks = [];
+  let para = [], items = [];
+  const flush = () => {
+    if (para.length) blocks.push(h("p", { key: blocks.length, style: { margin: 0 } }, rich(para.join(" "))));
+    if (items.length) blocks.push(h("ul", { key: blocks.length, style: { margin: 0, paddingLeft: 20, display: "flex", flexDirection: "column", gap: 2 } },
+      items.map((item, i) => h("li", { key: i }, rich(item)))));
+    para = []; items = [];
+  };
+  for (const raw of String(text || "").split("\n")) {
+    const line = raw.trim();
+    const bullet = /^[-*•]\s+(.*)$/.exec(line);
+    if (!line) { flush(); continue; }
+    if (bullet) { if (para.length) flush(); items.push(bullet[1]); continue; }
+    if (items.length) flush();
+    para.push(line);
+  }
+  flush();
+  return h("div", { style: { display: "flex", flexDirection: "column", gap: 8 } }, blocks);
+}
+
 function rich(text) {
   return String(text || "").split(/(\*\*[^*]+\*\*)/g).filter(Boolean).map((piece, i) =>
     (piece.startsWith("**") && piece.endsWith("**") && piece.length > 4
@@ -1326,19 +1359,30 @@ function titleOf(answer) {
 
 /**
  * One row of numbers is a figure, not a chart and not a one-line table: each number set large under its name, and
- * what is not a number said beside it. The Data Canvas shows a single-row answer this way.
+ * what is not a number said beside it. The Data Canvas shows a single-row answer this way. Set out plainly, never in
+ * a box, and only the figures the answer's words leave out (`only`): one its headline states is not said twice.
  */
-function Figures({ answer }) {
+function Figures({ answer, only = null }) {
   const columns = answer.columns ?? [], row = (answer.rows ?? [])[0] ?? [];
   const numeric = numericColumns(columns, answer.rows ?? []);
   const units = unitsOf(answer);
-  return h("div", { style: { display: "flex", flexWrap: "wrap", gap: "14px 36px", padding: "6px 0 10px" } },
-    columns.map((c, i) => h("div", { key: c, style: { minWidth: 0 } },
-      h("div", { style: { ...quiet, fontSize: 12.5 } }, labelOf(c)),
+  return h("div", { style: { display: "flex", flexWrap: "wrap", gap: "14px 36px", padding: "2px 0 4px" } },
+    columns.map((c, i) => (only && !only.includes(i) ? null : h("div", { key: c, style: { minWidth: 0 } },
+      h("div", { style: { ...quiet, fontSize: 12 } }, labelOf(c)),
       // The short form to read, the whole figure on hover: €56.93m, and 56,931,850.61 behind it.
       h("div", { title: numeric[i] ? shown(row[i], true, units[c]) : undefined,
-                 style: { fontSize: numeric[i] ? 26 : 15, fontWeight: 600, lineHeight: 1.3, fontVariantNumeric: "tabular-nums", overflowWrap: "anywhere" } },
-        shown(row[i], numeric[i], units[c], true)))));
+                 style: { fontSize: numeric[i] ? 22 : 15, fontWeight: 600, lineHeight: 1.3, fontVariantNumeric: "tabular-nums", overflowWrap: "anywhere" } },
+        shown(row[i], numeric[i], units[c], true))))));
+}
+
+/**
+ * The figures of a one-row answer its words do not already state (the user, 2026-11-20, of "Netflix titles sheet
+ * contains 8,807 rows" over a box saying 8,807 again: "Do you think its neccessary to have a block for a single
+ * figure? We must some logic here.."). The platform's own rule (`web/lib/statedFigures.ts`): none when the words
+ * state every measure.
+ */
+function unsaidOf(answer, words) {
+  return unstatedFigures(answer.columns ?? [], (answer.rows ?? [])[0] ?? [], words.filter(Boolean).join(" "));
 }
 
 /**
@@ -1350,7 +1394,12 @@ function Figures({ answer }) {
  */
 export function headlineOf(text) {
   const said = String(text || "").trim();
-  if (said.length <= 220) return { head: said, rest: "" };
+  // An agent's answer can be written as markdown — a sentence, then paragraphs and a list (2026-11-20, the KPI Analyst:
+  // "…€3,217,143.16 across four platforms.\n\n- Mytheresa: …"). Its first line is the headline, without the bold marks a
+  // heading has no use for; the rest is drawn as paragraphs and a list (`prose`), never run together.
+  const lineAt = said.indexOf("\n");
+  if (lineAt > 0 && lineAt <= 220) return { head: said.slice(0, lineAt).replace(/\*\*/g, "").trim(), rest: said.slice(lineAt + 1).trim() };
+  if (said.length <= 220) return { head: said.replace(/\*\*/g, ""), rest: "" };
   const cut = said.slice(0, 220).search(/[.!?](\s|$)(?![\s\S]*[.!?](\s|$))/);
   const at = cut > 40 ? cut + 1 : said.slice(0, 220).lastIndexOf(" ");
   return { head: said.slice(0, at > 0 ? at : 220).trim(), rest: said.slice(at > 0 ? at : 220).trim() };
@@ -1363,6 +1412,10 @@ function Exhibit({ answer, whole, asked }) {
   const [allObjects, setAllObjects] = useState(false);
   const [sheets, setSheets] = useState(null);
   const [copied, setCopied] = useState(false);
+  // Follow-ups are folded until opened (the user, 2026-11-20); the fold holds the next questions and the next steps.
+  const [onward, setOnward] = useState(false);
+  const [emailing, setEmailing] = useState(false);
+  const [how, setHow] = useState(false);
   // An answer over the Sheets connection read spreadsheets: each opens as itself, beside the conversation.
   const overSheets = String(answer.connection || answer.receipt?.artifact?.conn_id || "") === "sheets";
   useEffect(() => { if (overSheets) sheetsByTable().then(setSheets); }, [overSheets]);
@@ -1400,6 +1453,12 @@ function Exhibit({ answer, whole, asked }) {
   const checked = answer.warning?.kind === "not_what_was_asked";
   const asks = Array.isArray(answer.followups) ? answer.followups.filter((x) => typeof x === "string" && x.trim()).slice(0, 3) : [];
   const figure = rows.length === 1;
+  const stored = answer.investigation_id ? String(answer.investigation_id) : "";
+  // An answer's source is the query it ran: the rows it read and the SQL that read them.
+  const sources = answer.sql || rows.length ? 1 : 0;
+  // A one-row answer is no exhibit: no box, only the figures its words leave out; its SQL and download join the
+  // links at its foot.
+  const unsaid = figure ? unsaidOf(answer, [answer.answer, words]) : [];
   const title = titleOf(answer);
   const marks = hasPane() && connection;
   const sheetsRead = (overSheets && sheets ? (answer.tables_used ?? []) : []).map((t) => sheets.get(String(t).split(".").pop().toLowerCase())).filter(Boolean);
@@ -1429,64 +1488,74 @@ function Exhibit({ answer, whole, asked }) {
     tables.length > OBJECTS_SHOWN ? h("button", { key: "more", type: "button", className: "pramanyx-mark", "aria-expanded": allObjects, onClick: () => setAllObjects((was) => !was) },
       allObjects ? "fewer" : `+${tables.length - OBJECTS_SHOWN}`) : null,
   ] : [];
-  return h("div", { style: { display: "flex", flexDirection: "column", gap: 14, margin: "10px 0 6px", fontSize: 14.5, lineHeight: 1.6 } },
-    h("div", { role: "heading", "aria-level": 3, style: { fontSize: 20, fontWeight: 600, lineHeight: 1.3 } }, lead.head),
-    lead.rest ? h("div", null, rich(lead.rest)) : null,
+  // On the platform's scale, as its answers are (2026-11-20): the headline is the verdict sentence (18), the words are
+  // read at 14, a section's label is 12, a figure 22, and a row or a cell 13.
+  return h("div", { style: { display: "flex", flexDirection: "column", gap: 14, margin: "10px 0 6px", fontSize: 14, lineHeight: 1.6 } },
+    h("div", { role: "heading", "aria-level": 3, style: { fontSize: 18, fontWeight: 600, lineHeight: 1.35 } }, lead.head),
+    lead.rest ? prose(lead.rest) : null,
     // What the platform itself says is wrong with this answer, said under the headline where a finding would be.
     wrong.length ? h("div", { role: "alert", style: { display: "flex", gap: 8, alignItems: "baseline", padding: "8px 10px", borderRadius: 6,
-                                                      border: "1px solid color-mix(in srgb, #e5a50a 55%, transparent)", background: "color-mix(in srgb, #e5a50a 9%, transparent)" } },
+                                                      background: "color-mix(in srgb, #e5a50a 14%, transparent)" } },
       h("span", { "aria-hidden": "true", style: { fontWeight: 600 } }, "!"),
       h("span", null, checked ? wrong.join(" ") : `This may not be right: ${wrong.join("; ")}`)) : null,
     words || stoodOn.length ? h("div", null, rich(words), stoodOn) : null,
-    h("div", { style: { border: `1px solid ${line}`, borderRadius: 6, padding: "8px 8px 4px 14px" } },
+    figure ? (unsaid.length ? h(Figures, { answer, only: unsaid }) : null)
+    : h("div", { style: { background: surface, borderRadius: 10, padding: "10px 10px 6px 16px" } },
       h("div", { style: { display: "flex", alignItems: "center", gap: 2, minHeight: 30 } },
-        h("div", { style: { flex: "1 1 auto", minWidth: 0, fontSize: 14, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, title),
-        h("button", { type: "button", className: "pramanyx-icon", "aria-label": "Download", title: "Download: the rows, or the answer as a file", "aria-expanded": open === "files", onClick: () => toggle("files") }, h(Glyph, { d: GLYPH.download })),
-        figure ? null : h("button", { type: "button", className: "pramanyx-icon", "aria-label": "Show as a table", title: "Show as a table", "aria-expanded": open === "table", onClick: () => toggle("table") }, h(Glyph, { d: GLYPH.table })),
-        !figure && hasPane() ? h("button", { type: "button", className: "pramanyx-icon", "aria-label": "Edit visualization", title: "Edit visualization", onClick: () => openBeside("viz", id) }, h(Glyph, { d: GLYPH.edit })) : null),
-      open === "files" ? h(Files, { answer, id: answer.investigation_id ? String(answer.investigation_id) : "" }) : null,
+        h("div", { style: { flex: "1 1 auto", minWidth: 0, fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, title),
+        h("button", { type: "button", className: "pramanyx-icon", "aria-label": "Show as a table", title: "Show as a table", "aria-expanded": open === "table", onClick: () => toggle("table") }, h(Glyph, { d: GLYPH.table })),
+        hasPane() ? h("button", { type: "button", className: "pramanyx-icon", "aria-label": "Edit visualization", title: "Edit visualization", onClick: () => openBeside("viz", id) }, h(Glyph, { d: GLYPH.edit })) : null),
       h("div", { style: { paddingRight: 6 } },
-        figure ? h(Figures, { answer }) : open === "table" ? h("div", { style: { padding: "6px 0 8px" } }, h(ResultGrid, { answer })) : h(Chart, { answer, viz })),
-      h("div", { style: { display: "flex", alignItems: "center", gap: 12, borderTop: `1px solid ${line}`, marginTop: 6, paddingRight: 6 } },
-        h("button", { type: "button", className: "pramanyx-link", "aria-expanded": open === "sql", onClick: () => { if (!openBeside("sql", id)) toggle("sql"); } }, "Show the SQL"),
-        h("span", { style: { flex: "1 1 auto" } }),
-        h("span", { style: { ...quiet, fontSize: 12.5 } }, `${count} ${count === 1 ? "row" : "rows"}`)),
-      open === "sql" ? h("div", { style: { padding: "4px 6px 8px 0" } }, h(Sql, { answer })) : null),
+        open === "table" ? h("div", { style: { padding: "6px 0 8px" } }, h(ResultGrid, { answer })) : h(Chart, { answer, viz })),
+      h("div", { style: { ...quiet, fontSize: 12, textAlign: "right", padding: "2px 6px 4px 0" } }, `${count} ${count === 1 ? "row" : "rows"}`)),
     standsOut.length ? h("div", { style: { display: "flex", flexDirection: "column", gap: 6 } },
-      h("div", { role: "heading", "aria-level": 4, style: { fontSize: 16, fontWeight: 600 } }, "What stands out"),
+      h("div", { role: "heading", "aria-level": 4, style: { ...quiet, fontSize: 12, fontWeight: 600 } }, "What stands out"),
       standsOut.map((point, i) => h("div", { key: i }, rich(point)))) : null,
-    asks.length ? h("div", { style: { display: "flex", flexDirection: "column" } },
-      h("div", { style: { ...quiet, fontSize: 12.5, paddingBottom: 2 } }, "Follow-ups"),
-      asks.map((question, i) => h("button", {
-        key: i, type: "button", className: "pramanyx-ask", title: "Writes this question into the box. Nothing is asked until you send it.",
-        onClick: () => { if (!draft(question)) navigator.clipboard?.writeText(question); },
-      }, question))) : null,
+    // Follow-ups, folded: the questions to ask next, and under them what this answer can become.
+    h("div", { "data-pramanyx-onward": "", style: { display: "flex", flexDirection: "column" } },
+      h("button", { type: "button", className: "pramanyx-fold", "aria-expanded": onward, onClick: () => setOnward((was) => !was) },
+        asks.length ? `Follow-ups · ${asks.length}` : "Follow-ups", h(Fold, { open: onward })),
+      onward ? [
+        ...asks.map((question, i) => h("button", {
+          key: `q-${i}`, type: "button", className: "pramanyx-ask", title: "Writes this question into the box. Nothing is asked until you send it.",
+          onClick: () => { if (!draft(question)) navigator.clipboard?.writeText(question); },
+        }, question)),
+        h("div", { key: "next", role: "group", "aria-label": "What this answer can become",
+                   style: { display: "flex", flexWrap: "wrap", gap: 14, padding: asks.length ? "8px 0 2px" : "4px 0 2px", fontSize: 13 } },
+          h("button", { type: "button", className: "pramanyx-link", "aria-expanded": emailing, onClick: () => setEmailing((was) => !was) }, "Email this"),
+          becomes.map(([label, path, hint]) => h("button", { key: label, type: "button", className: "pramanyx-link", title: hint,
+            onClick: () => openBeside("page", path) }, label))),
+        emailing ? h(Draft, { key: "email", draft: emailOf(answer) }) : null,
+      ] : null),
+    // The answer's foot (the user, 2026-11-20: "except thumbs up/down and copy, I dont [want] anything here. Keep the
+    // download option as PDF.. Let Source show both data + SQL.."): right, wrong, copy, the PDF, and its source.
     h(Feedback, { answer, extras: [
       h("button", { key: "copy", type: "button", className: "pramanyx-icon", "aria-label": copied ? "Copied" : "Copy the answer", title: copied ? "Copied" : "Copy the answer", onClick: copy }, h(Glyph, { d: GLYPH.copy })),
-      h("span", { key: "gap", style: { width: 8 } }),
-      receipt && hasPane() ? h("button", { key: "why", type: "button", className: "pramanyx-link", title: "The app's own page for how this number was produced",
-        onClick: () => openBeside("page", pageFor.receipt(receipt)) }, "Why this number") : null,
-      h("span", { key: "gap2", style: { width: 12 } }),
-      h("button", { key: "how", type: "button", className: "pramanyx-link", "aria-expanded": open === "how", onClick: () => toggle("how") }, "How it was answered"),
-      becomes.length ? h("span", { key: "gap3", style: { width: 12 } }) : null,
-      becomes.length ? h("button", { key: "more", type: "button", className: "pramanyx-link", "aria-expanded": open === "more",
-        title: "What this answer can become: on a schedule, on a dashboard, an agent", onClick: () => toggle("more") }, "More") : null,
+      stored ? h("a", { key: "pdf", className: "pramanyx-icon", download: "", "aria-label": "Download as PDF", title: "Download as PDF",
+                        href: `/pramanyx/investigations/${encodeURIComponent(stored)}/export?format=pdf` }, h(Glyph, { d: GLYPH.download }))
+        : h("button", { key: "pdf", type: "button", className: "pramanyx-icon", "aria-label": "Download as PDF", title: "Download as PDF",
+                        "aria-expanded": open === "nopdf", onClick: () => toggle("nopdf") }, h(Glyph, { d: GLYPH.download })),
+      sources ? h("button", { key: "source", type: "button", className: "pramanyx-source", "aria-expanded": open === "source",
+                              onClick: () => toggle("source") }, `${sources} ${sources === 1 ? "source" : "sources"}`) : null,
     ] }),
-    open === "more" ? h("div", { role: "group", "aria-label": "What this answer can become",
-      style: { display: "flex", flexWrap: "wrap", gap: 14, padding: "2px 6px 6px 0", fontSize: 13 } },
-      becomes.map(([label, path, hint]) => h("button", { key: label, type: "button", className: "pramanyx-link", title: hint,
-        onClick: () => openBeside("page", path) }, label))) : null,
-    open === "how" ? h("div", { style: { padding: "4px 0" } }, h(How, { answer, whole })) : null);
+    open === "nopdf" ? h("div", { style: { ...quiet, fontSize: 12 } },
+      "This answer was not stored, so there is no PDF of it. Its rows download as CSV under its source.") : null,
+    open === "source" ? h("div", { "data-pramanyx-source": "", style: { display: "flex", flexDirection: "column", gap: 10, paddingBottom: 4 } },
+      rows.length ? h(ResultGrid, { answer }) : null,
+      h(Sql, { answer }),
+      h("div", { style: { display: "flex", flexWrap: "wrap", gap: 14 } },
+        receipt && hasPane() ? h("button", { type: "button", className: "pramanyx-link", title: "The app's own page for how this number was produced",
+          onClick: () => openBeside("page", pageFor.receipt(receipt)) }, "Why this number") : null,
+        h("button", { type: "button", className: "pramanyx-link", "aria-expanded": how, onClick: () => setHow((was) => !was) }, "How it was answered")),
+      how ? h(How, { answer, whole }) : null) : null);
 }
 
-/**
- * Download: the rows as CSV, kept on this page; and the answer as a file Pramanyx builds from its stored report —
- * Excel with every stored row, PowerPoint, Word, PDF (`pramanyx/export`). Never a file the model's own code made: a
- * figure does not pass through code a model wrote. An answer with no record of its own (nothing was stored) offers
- * the rows only, and says so.
- */
-const FILES = [["xlsx", "Excel, every row"], ["pptx", "PowerPoint"], ["docx", "Word"], ["pdf", "PDF"]];
+/** The fold's mark: pointing right while folded, down while open. */
+const Fold = ({ open }) => h("svg", { width: 12, height: 12, viewBox: "0 0 12 12", fill: "none", stroke: "currentColor", strokeWidth: 1.4,
+  strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true", style: { transform: open ? "rotate(90deg)" : "none", transition: "transform .12s" } },
+  h("path", { d: "M4.5 2.5 8 6l-3.5 3.5" }));
 
+/** "Email this": the answer as a draft, its analysis attachable — under the answer's follow-ups. */
 function emailOf(answer) {
   const told = answer.narrative && typeof answer.narrative === "object" ? String(answer.narrative.narrative || "").replace(/\*\*/g, "") : "";
   const rows = (answer.rows ?? []).slice(0, 20).map((r) => r.join(" · "));
@@ -1496,18 +1565,6 @@ function emailOf(answer) {
            // so an answer that was emailed says so whenever it is opened.
            attach_answer: answer.investigation_id ? String(answer.investigation_id) : "", attach_format: "",
            ...(answer.investigation_id ? { name: `a-${answer.investigation_id}` } : {}) };
-}
-
-function Files({ answer, id }) {
-  const link = { fontSize: 13, color: "inherit", textDecoration: "underline", textUnderlineOffset: 2 };
-  const [emailing, setEmailing] = useState(false);
-  return h("div", null, h("div", { role: "group", "aria-label": "Download", style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 14, padding: "2px 6px 8px 0", fontSize: 13 } },
-    h("button", { type: "button", className: "pramanyx-link", "aria-expanded": emailing, onClick: () => setEmailing((was) => !was) }, "Email this"),
-    h("button", { type: "button", className: "pramanyx-link", onClick: () => downloadCsv(answer) }, "Rows as CSV"),
-    id ? FILES.map(([fmt, label]) => h("a", { key: fmt, style: link, download: "",
-      href: `/pramanyx/investigations/${encodeURIComponent(id)}/export?format=${fmt}` }, label))
-      : h("span", { style: quiet }, "This answer was not stored, so only its rows can be taken.")),
-    emailing ? h(Draft, { draft: emailOf(answer) }) : null);
 }
 
 /**
@@ -1574,7 +1631,7 @@ function DriveCard(props) {
   }
   const n = got.files.length;
   return h(Step, { kind: "read", title: n ? `Found ${n} file${n === 1 ? "" : "s"} in your Drive${words ? `: ${words}` : ""}` : `Nothing in your Drive is named ${words || "that"}` },
-    n ? h("ul", { style: { margin: "4px 0 0", paddingLeft: 20, fontSize: 13.5 } },
+    n ? h("ul", { style: { margin: "4px 0 0", paddingLeft: 20, fontSize: 13 } },
       got.files.map((f, i) => h("li", { key: `${f.link || f.name}-${i}` },
         f.link ? h("a", { href: f.link, target: "_blank", rel: "noopener noreferrer", className: "pramanyx-link" }, f.name) : f.name,
         h("span", { style: quiet }, [f.type, f.modified].filter(Boolean).map((x) => ` · ${x}`).join(""))))) : null);
@@ -1644,7 +1701,7 @@ function StagedDecision({ id, title }) {
   if (said.gone) return h(Step, { kind: "read", title, note: "this change could not be read" });
   if (said.status !== "pending") return h(Step, { kind: "read", title, note: ENDED[said.status] || String(said.status || "") });
   const lines = Array.isArray(said.lines) ? said.lines : [];
-  return h("div", { "data-pramanyx-staged": id, style: { margin: "6px 0", border: `1px solid ${line}`, borderRadius: 6, fontSize: 13.5 } },
+  return h("div", { "data-pramanyx-staged": id, style: { margin: "6px 0", background: surface, borderRadius: 10, fontSize: 13 } },
     h("div", { style: { padding: "10px 12px 4px", fontWeight: 600 } }, String(said.asks || "Allow this change?")),
     lines.length ? h("ul", { style: { margin: 0, padding: "2px 12px 8px 30px", display: "flex", flexDirection: "column", gap: 4 } },
       lines.map((l, i) => h("li", { key: `${i}-${l}`, style: { overflowWrap: "anywhere" } }, String(l)))) : null,
@@ -1652,14 +1709,14 @@ function StagedDecision({ id, title }) {
     said.needs_choices ? h("div", { style: { ...quiet, padding: "0 12px 8px" } },
       "A choice is still open, such as where it posts. Make it on the full card, in Automations under Inbox.") : null,
     problem ? h("div", { role: "alert", style: { padding: "0 12px 8px" } }, problem) : null,
-    h("div", { style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, padding: "8px 12px", borderTop: `1px solid ${line}` } },
-      h("span", { style: { ...quiet, flex: "1 1 200px", fontSize: 12.5 } }, "Nothing changes until you allow it."),
+    h("div", { style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, padding: "6px 12px 10px" } },
+      h("span", { style: { ...quiet, flex: "1 1 200px", fontSize: 12 } }, "Nothing changes until you allow it."),
       said.needs_choices && said.connection_id
         ? h("button", { type: "button", style: button(false), onClick: () => openBeside("page", `/automations?conn=${encodeURIComponent(said.connection_id)}`) }, "Open Automations")
         : null,
       h("button", { type: "button", style: button(false), disabled: busy, onClick: () => decide("reject") }, "Reject"),
       said.needs_choices ? null
-        : h("button", { type: "button", style: { ...button(true), fontWeight: 600 }, disabled: busy, onClick: () => decide("allow") },
+        : h("button", { type: "button", style: primary(busy), disabled: busy, onClick: () => decide("allow") },
           busy ? "Applying…" : "Allow")));
 }
 
@@ -1737,11 +1794,11 @@ export function Decision({ approval }) {
     Promise.resolve(approval.answer(outcome)).catch(() => setBusy(false));
   };
   return h("div", { "data-pramanyx-decision": String(approval.callId || ""),
-                    style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 12px", padding: "6px 0 10px", fontSize: 13.5 } },
+                    style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 12px", padding: "6px 0 10px", fontSize: 13 } },
     h("span", { style: { flex: "1 1 260px", minWidth: 0, lineHeight: 1.45 } }, reasonOf(approval)),
     h("span", { style: { display: "flex", gap: 8, flex: "none" } },
       h("button", { type: "button", disabled: busy, style: button(false), onClick: () => answer("rejected") }, "Reject"),
-      h("button", { type: "button", disabled: busy, style: { ...button(true), fontWeight: 600 }, onClick: () => answer("allowed-once") }, "Allow once")));
+      h("button", { type: "button", disabled: busy, style: primary(busy), onClick: () => answer("allowed-once") }, "Allow once")));
 }
 
 /** A Pramanyx step, with the question it waits on under it while it waits. */
@@ -1764,7 +1821,7 @@ function WaitingAbove(props) {
   if (!approval) return null;
   return h("div", { "data-pramanyx-waiting-above": "", style: { padding: "10px 16px" } },
     inPlace
-      ? h("div", { style: { display: "flex", alignItems: "center", gap: 10, fontSize: 13.5 } },
+      ? h("div", { style: { display: "flex", alignItems: "center", gap: 10, fontSize: 13 } },
           h("span", { style: quiet }, "Waiting for your answer in the conversation: Allow once or Reject."),
           h("button", { type: "button", className: "pramanyx-link",
             onClick: () => document.querySelector(`[data-pramanyx-decision="${CSS.escape(String(approval.callId || ""))}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" }) }, "Show it"))

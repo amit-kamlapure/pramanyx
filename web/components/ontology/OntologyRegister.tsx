@@ -76,7 +76,7 @@ const REGISTER: React.CSSProperties = {
   display: "grid", alignItems: "center", columnGap: 14,
   gridTemplateColumns: "minmax(200px, 2fr) minmax(90px, .8fr) 90px minmax(110px, 1fr) minmax(120px, 1fr) 50px minmax(120px, 1.1fr) minmax(110px, 1fr) minmax(150px, 1.2fr)",
 };
-const HEAD: React.CSSProperties = { ...MUTED, textTransform: "uppercase", letterSpacing: ".06em" };
+const HEAD: React.CSSProperties = MUTED;
 
 // ── The register ───────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -132,14 +132,14 @@ export function OntologyRegister({ map, lead, sources, onOpen, onOpenProcess, de
               if (!rows.length) return null;
               return (
                 <div key={g.id} role="rowgroup" data-testid={`ontology-group-${g.id}`}>
-                  <div className="aug-fs-xs" style={{ ...HEAD, padding: "12px 0 4px 8px" }}>{g.label}</div>
+                  <div className="aug-label" style={{ padding: "12px 0 4px 8px" }}>{g.label}</div>
                   {rows.map(t => <TypeRow key={t.object_type} t={t} processes={processesOf(t.object_type)} sources={sources} onOpen={onOpen} />)}
                 </div>
               );
             })}
             {parts.length > 0 && (
               <div role="rowgroup" data-testid="ontology-group-parts">
-                <div className="aug-fs-xs" style={{ ...HEAD, padding: "12px 0 4px 8px" }}>Parts</div>
+                <div className="aug-label" style={{ padding: "12px 0 4px 8px" }}>Parts</div>
                 {parts.map(t => (
                   <TypeRow key={t.object_type} t={t} processes={processesOf(t.object_type)} sources={sources} onOpen={onOpen}
                     partOf={name(t.absorbed_into ?? "")} />
@@ -160,7 +160,7 @@ export function OntologyRegister({ map, lead, sources, onOpen, onOpenProcess, de
         </span>}>
         <div style={{ padding: "12px 14px" }}>
         {processes.length + rules.length === 0 ? <Empty>No process or rule is declared yet.</Empty> : (
-          <table className="aug-fs-sm" style={{ width: "100%", borderCollapse: "collapse" }}>
+          <table className="aug-fs-chrome" style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead><tr>{["Process / rule", "On", "Stages / test", "Objects", "Promises", "Stands"].map(h => (
               <th key={h} className="aug-fs-xs" style={{ ...HEAD, textAlign: h === "Objects" ? "right" : "left", fontWeight: 500, padding: "0 12px 6px 0" }}>{h}</th>
             ))}</tr></thead>
@@ -203,27 +203,27 @@ function TypeRow({ t, processes, sources, onOpen, partOf }: {
       onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}>
       <span role="cell" style={{ minWidth: 0 }}>
         <span className="aug-fs-chrome" style={{ ...ONE_LINE, display: "block", color: "var(--t1)", fontWeight: 600 }}>{t.display_name}</span>
-        <span className="aug-fs-xs" style={{ ...ONE_LINE, display: "block", ...MUTED }}>
+        <span className="aug-fs-sm" style={{ ...ONE_LINE, display: "block", ...MUTED }}>
           {partOf ? `part of ${partOf}` : roleWord(t.role)}
         </span>
       </span>
-      <span role="cell" className="aug-fs-xs" style={{ ...ONE_LINE, color: "var(--t2)" }}>{t.domain || none}</span>
-      <span role="cell" className="aug-fs-xs" style={{ ...NUM, textAlign: "right", color: t.rows == null ? "var(--t3)" : "var(--t1)" }}>
+      <span role="cell" className="aug-fs-chrome" style={{ ...ONE_LINE, color: "var(--t2)" }}>{t.domain || none}</span>
+      <span role="cell" className="aug-fs-chrome" style={{ ...NUM, textAlign: "right", color: t.rows == null ? "var(--t3)" : "var(--t1)" }}>
         {t.rows == null ? "not counted" : formatCount(t.rows)}
       </span>
-      <span role="cell" className="aug-fs-xs" style={{ ...ONE_LINE }} title={t.key || undefined}>
+      <span role="cell" className="aug-fs-chrome" style={{ ...ONE_LINE }} title={t.key || undefined}>
         {t.key_verified === true ? <><span style={{ color: "var(--grn4)" }}>✓ </span><span style={{ fontFamily: "var(--font-mono)", color: "var(--t2)" }}>{t.key}</span></>
           : t.key_verified === false ? <span style={{ color: "var(--amb4)" }}>{`${t.key} · not unique`}</span>
           : <span style={{ color: "var(--amb4)" }}>{t.key ? `${t.key} · not counted` : "no key"}</span>}
       </span>
-      <span role="cell" className="aug-fs-xs" style={{ ...ONE_LINE, fontFamily: from ? "var(--font-mono)" : undefined, color: "var(--t2)" }} title={from || undefined}>
+      <span role="cell" className="aug-fs-chrome" style={{ ...ONE_LINE, fontFamily: from ? "var(--font-mono)" : undefined, color: "var(--t2)" }} title={from || undefined}>
         {from || <span style={MUTED}>kept by the platform</span>}
       </span>
-      <span role="cell" className="aug-fs-xs" style={{ ...NUM, textAlign: "right", color: "var(--t2)" }}>{formatCount(t.links)}</span>
-      <span role="cell" className="aug-fs-xs" style={{ ...ONE_LINE, color: "var(--t2)" }}>
+      <span role="cell" className="aug-fs-chrome" style={{ ...NUM, textAlign: "right", color: "var(--t2)" }}>{formatCount(t.links)}</span>
+      <span role="cell" className="aug-fs-chrome" style={{ ...ONE_LINE, color: "var(--t2)" }}>
         {processes.length ? processes.map(p => `${p.display_name} · ${countNoun(p.stages.length, "stage")}`).join(", ") : none}
       </span>
-      <span role="cell" className="aug-fs-xs" style={{ ...ONE_LINE, color: "var(--t2)" }}>{used || none}</span>
+      <span role="cell" className="aug-fs-chrome" style={{ ...ONE_LINE, color: "var(--t2)" }}>{used || none}</span>
       <span role="cell" style={{ ...ROW, gap: 6, flexWrap: "nowrap", minWidth: 0 }}>
         {(t.unconfirmed ?? 0) > 0 && <Chip tone="violet" title="What the explorer proposed on this type that no person has confirmed">{`${t.unconfirmed} proposed`}</Chip>}
         <span className="aug-fs-xs" style={{ ...ONE_LINE, ...MUTED }}>{ORIGIN_WORD[t.origin ?? ""] ?? ""}</span>
@@ -334,7 +334,7 @@ export function OntologyReview({ map, draft, explore, confirm, onOpen }: {
         {!draft ? <Empty>No explorer has drafted this business yet — Draft the business reads its tables and proposes.</Empty>
           : shown.length === 0 ? <Empty>{which === "proposed" ? "Nothing waits — every proposal is decided." : "None."}</Empty>
           : (
-            <table className="aug-fs-sm" style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
+            <table className="aug-fs-chrome" style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
               <colgroup><col style={{ width: "34%" }} /><col style={{ width: "13%" }} /><col style={{ width: "24%" }} /><col style={{ width: "19%" }} /><col style={{ width: "10%" }} /></colgroup>
               <thead><tr>{["Proposal", "On", "What the data says", "Why", ""].map(h => (
                 <th key={h || "act"} className="aug-fs-xs" style={{ ...HEAD, textAlign: "left", fontWeight: 500, padding: "0 12px 6px 0" }}>{h}</th>
@@ -350,8 +350,8 @@ export function OntologyReview({ map, draft, explore, confirm, onOpen }: {
                       <div style={{ fontFamily: "var(--font-mono)", color: "var(--t1)", overflowWrap: "anywhere", marginTop: 3 }}>{p.sentence}</div>
                     </td>
                     <td style={{ ...cell, color: "var(--t2)" }}>{p.object_type ? name(p.object_type) : "—"}</td>
-                    <td className="aug-fs-xs" style={{ ...cell, ...MUTED, overflowWrap: "anywhere" }}>{p.note || "—"}</td>
-                    <td className="aug-fs-xs" style={{ ...cell, ...MUTED, overflowWrap: "anywhere" }}>{p.tier === "refused" ? "—" : p.reason || "—"}</td>
+                    <td className="aug-fs-chrome" style={{ ...cell, ...MUTED, overflowWrap: "anywhere" }}>{p.note || "—"}</td>
+                    <td className="aug-fs-chrome" style={{ ...cell, ...MUTED, overflowWrap: "anywhere" }}>{p.tier === "refused" ? "—" : p.reason || "—"}</td>
                     <td style={{ ...cell, textAlign: "right", paddingRight: 0 }}>
                       <span style={{ display: "inline-flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
                         {p.tier === "proposed" && confirm && (
@@ -377,7 +377,7 @@ export function OntologyReview({ map, draft, explore, confirm, onOpen }: {
         {keys.length + twice.length === 0 ? <Empty>Nothing else — every key is counted and no link is said twice.</Empty> : (
           <>
             {keys.map((t, i) => (
-              <div key={t.object_type} data-testid="ontology-review-key" style={{ ...ROW, flexWrap: "nowrap", padding: "8px 0", ...(i ? RULE : {}) }}>
+              <div key={t.object_type} data-testid="ontology-review-key" className="aug-fs-chrome" style={{ ...ROW, flexWrap: "nowrap", padding: "8px 0", ...(i ? RULE : {}) }}>
                 <span className="aug-tag aug-tag-gray">key</span>
                 <span style={{ color: "var(--t1)" }}>{`What identifies one ${t.display_name}?`}</span>
                 <span className="aug-fs-xs" style={MUTED}>
@@ -387,7 +387,7 @@ export function OntologyReview({ map, draft, explore, confirm, onOpen }: {
               </div>
             ))}
             {twice.map((d, i) => (
-              <div key={`${d.from}-${d.to}-${d.verb}`} data-testid="ontology-review-twice"
+              <div key={`${d.from}-${d.to}-${d.verb}`} data-testid="ontology-review-twice" className="aug-fs-chrome"
                 style={{ ...ROW, flexWrap: "nowrap", padding: "8px 0", ...(keys.length || i ? RULE : {}) }}>
                 <span className="aug-tag aug-tag-amber">said twice</span>
                 <span style={{ color: "var(--t1)" }}>{`${name(d.from)} — ${d.verb} → ${name(d.to)}`}</span>

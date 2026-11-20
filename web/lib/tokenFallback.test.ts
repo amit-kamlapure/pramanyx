@@ -25,10 +25,20 @@ function declared(name: string, mode: "light" | "dark"): string | null {
 /** A step of the default accent's scale that our sheet re-declares while that accent is the Theme's — the
  *  cascade on <html data-theme data-accent-color> reads it before Radix's (tokens-v2.css, "Blue, held to AA"). */
 function accentOverride(radixName: string, mode: "light" | "dark"): string | null {
-  const head = `:root[data-theme="${mode}"][data-accent-color="${DEFAULT_LOOK.accent}"] {`;
-  const at = SHEET.indexOf(head);
-  if (at < 0) return null;
-  return declaredIn(SHEET.slice(at, SHEET.indexOf("\n}", at) + 2), radixName);
+  // the default accent's steps, and — since the reference palette (2026-11-20) — the default grey's, both re-declared
+  for (const head of [`:root[data-theme="${mode}"][data-accent-color="${DEFAULT_LOOK.accent}"] {`,
+                      `:root[data-theme="${mode}"][data-gray-color="${DEFAULT_LOOK.grey}"] {`]) {
+    const at = SHEET.indexOf(head);
+    if (at < 0) continue;
+    const found = declaredIn(SHEET.slice(at, SHEET.indexOf("\n}", at) + 2), radixName);
+    if (found) return found;
+  }
+  return null;
+}
+
+function mixHex(a: string, b: string, share: number): string {
+  const ch = (h: string, i: number) => parseInt(h.replace("#", "").slice(i, i + 2), 16);
+  return "#" + [0, 2, 4].map(i => Math.round(ch(a, i) * share + ch(b, i) * (1 - share)).toString(16).padStart(2, "0")).join("");
 }
 
 /** A token's value in one skin at the default look: through our sheet's aliases, then into Radix's. */
@@ -37,7 +47,11 @@ function resolve(name: string, mode: "light" | "dark", depth = 0): string {
   const ours = declared(name, mode);
   if (ours) {
     const alias = ours.match(/^var\(\s*(--[a-zA-Z0-9-]+)\s*\)$/);
-    return alias ? resolve(alias[1], mode, depth + 1) : ours;
+    if (alias) return resolve(alias[1], mode, depth + 1);
+    // two steps mixed in sRGB, as the browser does: a color-mix of two named steps at a share (--t3, 2026-11-20)
+    const mixed = ours.match(/^color-mix\(in srgb,\s*var\((--[a-zA-Z0-9-]+)\)\s+(\d+)%,\s*var\((--[a-zA-Z0-9-]+)\)\s*\)$/);
+    if (mixed) return mixHex(resolve(mixed[1], mode, depth + 1), resolve(mixed[3], mode, depth + 1), Number(mixed[2]) / 100);
+    return ours;
   }
   // The accent and the grey are the Theme's props, not declarations at the root: the default look names them (the grey
   // read through, too, since 2026-11-10 made slate the default — before, gray was both the default and Radix's base).

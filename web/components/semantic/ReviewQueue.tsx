@@ -33,8 +33,8 @@ function Row({ item, areaName, onSettle }: {
     <div data-testid={`review-row-${item.source}`} style={{ ...RULE, display: "flex", gap: 12, padding: "10px 0", alignItems: "flex-start" }}>
       <div style={{ width: 82, flexShrink: 0, paddingTop: 1 }}><Chip tone={KIND[item.kind].tone}>{KIND[item.kind].word}</Chip></div>
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
-        <span className="aug-fs-sm" style={{ color: "var(--t1)", wordBreak: "break-word" }}>{item.title}</span>
-        {item.detail && <span className="aug-fs-xs" style={{ ...MUTED, wordBreak: "break-word" }}>{item.detail}</span>}
+        <span className="aug-fs-chrome" style={{ color: "var(--t1)", wordBreak: "break-word" }}>{item.title}</span>
+        {item.detail && <span className="aug-fs-sm" style={{ ...MUTED, wordBreak: "break-word" }}>{item.detail}</span>}
         <span className="aug-fs-xs" style={MUTED}>
           {[busy, areas, forWhom(item)].filter(Boolean).join(" · ")}
         </span>

@@ -78,9 +78,9 @@
 html, body {
   height: 100%;
   font-family: var(--font-ui);
-  /* The reading size (2026-09-25); chrome stays 13. It follows the Theme's scaling — the one
-     knob for size since 2026-10-06 (90% reads as the old compact density did). */
-  font-size: calc(14px * var(--scaling));
+  /* The reading size (2026-09-25); chrome, rows and cells are 13. A fixed step since 2026-11-20: the look's size knob
+     sets space and control heights, never text (`.radix-themes` below says why). */
+  font-size: 14px;
   background: var(--bg-0);
   color: var(--t1);
   line-height: 1.5;
@@ -121,10 +121,28 @@ a:hover { color: var(--blue4); }
 @supports not selector(::-webkit-scrollbar) {
   * { scrollbar-width: thin; scrollbar-color: var(--b3) transparent; }
 }
+/* The rail's list keeps its thumb out of sight until the rail is in use — the pointer over it, or a key's focus in it —
+   so a still rail draws no line at its edge (the user, 2026-11-20: "hide the scroll bar for the left panel when not
+   active or in use"). A click's focus does not count, or the thumb would stay after every page opened from the rail. */
+/* The thumb's colour rides a variable the list itself sets: Blink does not restyle a scrollbar part on its scroller's
+   :hover, but it does when an inherited value on the scroller changes. */
+.aug-nav-dests { --nav-thumb: transparent; }
+.aug-nav-dests:hover, .aug-nav-dests:has(:focus-visible) { --nav-thumb: var(--b3); }
+.aug-nav-dests::-webkit-scrollbar-thumb { background: var(--nav-thumb); }
+@supports not selector(::-webkit-scrollbar) {
+  .aug-nav-dests { scrollbar-color: transparent transparent; }
+  .aug-nav-dests:hover, .aug-nav-dests:has(:focus-visible) { scrollbar-color: var(--b3) transparent; }
+}
 
 /* ── Layout ─────────────────────────────────────────────────────────────── */
 .aug-app { height: 100vh; overflow: hidden; display: flex; flex-direction: column; background: var(--bg-0); color: var(--t1); }
-.aug-body { flex: 1; display: flex; overflow: hidden; min-height: 0; }
+.aug-body { flex: 1; display: flex; overflow: hidden; min-height: 0; background: var(--bg-frame); }
+/* The page is a surface set into the frame (2026-11-20): its own ground, and a rounded corner where the top bar and the
+   rail meet it — the frame and the work told apart by surface, not by a rule. */
+.aug-page-surface { background: var(--bg-0); border-top-left-radius: 10px; }
+/* A secondary button — filled, or the pressed one of a set — is the soft fill a step stronger, never an edge (2026-11-20). */
+.rt-BaseButton.aug-btn-on { background-color: var(--gray-a5); }
+.rt-BaseButton.aug-btn-on:where(:hover) { background-color: var(--gray-a6); }
 .aug-screen { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
 
 /* ── Shell · topbar 48 ───────────────────────────────────────────────────── */
@@ -135,8 +153,10 @@ a:hover { color: var(--blue4); }
   align-items: center;
   gap: 12px;
   padding: 0 14px;
-  background: var(--bg-1);
-  border-bottom: 1px solid var(--b1);
+  background: var(--bg-frame);
+  /* No rule under it (the user, 2026-11-20: "Surfaces define structure. Spacing defines groups. Typography defines
+     hierarchy. Borders are the exception."): the top bar, the rail and the status strip are one frame on --bg-1, and
+     the page sits inside it on --bg-0 — the contrast is the edge. */
   /* Above the rail (z 60): the workspace switcher and the user menu open from here and
      must float over it. The topbar is only 48px tall, so nothing below is covered. */
   position: relative;
@@ -158,17 +178,18 @@ a:hover { color: var(--blue4); }
   max-width: 260px;
   padding: 3px 9px;
   border-radius: var(--r2);
-  background: var(--bg-3);
-  border: 1px solid var(--b2);
+  /* a soft fill and no outline: still a button at rest, quieter than an edged one (2026-11-20) */
+  background: var(--bg-hover);
+  border: none;
   font-size: 12px;
   font-weight: 500;
   line-height: 1.45;
   color: var(--t1);
   cursor: pointer;
-  transition: border-color var(--dur-1) var(--ease-out), background var(--dur-1) var(--ease-out);
+  transition: background var(--dur-1) var(--ease-out);
 }
-.aug-workspace-switcher:hover { border-color: var(--b3); }
-.aug-workspace-switcher[aria-expanded="true"] { background: var(--bg-4); border-color: var(--b3); }
+.aug-workspace-switcher:hover { background: var(--bg-4); }
+.aug-workspace-switcher[aria-expanded="true"] { background: var(--bg-4); }
 .aug-command {
   display: flex;
   align-items: center;
@@ -176,16 +197,17 @@ a:hover { color: var(--blue4); }
   width: 236px;
   height: 26px;
   padding: 0 9px;
+  /* a field set into the frame: a darker fill, no outline */
   background: var(--bg-3);
-  border: 1px solid var(--b2);
+  border: none;
   border-radius: var(--r2);
   font-size: 12px;
   color: var(--t3);
   text-align: left;
   cursor: text;
-  transition: border-color var(--dur-1) var(--ease-out);
+  transition: background var(--dur-1) var(--ease-out);
 }
-.aug-command:hover { border-color: var(--b3); }
+.aug-command:hover { background: var(--bg-0); color: var(--t2); }
 .aug-command kbd { margin-left: auto; font-size: 11px; color: var(--t3); }
 .aug-user-menu {
   display: inline-flex;
@@ -193,7 +215,7 @@ a:hover { color: var(--blue4); }
   gap: 7px;
   padding: 2px 7px 2px 3px;
   border-radius: var(--r2);
-  border: 1px solid var(--b2);
+  background: var(--bg-hover);
   font-size: 12px;
   color: var(--t2);
 }
@@ -220,7 +242,7 @@ a:hover { color: var(--blue4); }
   flex-direction: column;
   overflow: hidden;
   background: var(--bg-nav);
-  border-right: 1px solid var(--b1);
+  /* No rule at its edge (2026-11-20): the rail is the frame's own surface, the page's ground beside it is the edge. */
   /* Above any fixed content-area overlay (history backdrop z-40, etc.) so the rail
      stays clickable whatever a panel is doing. */
   position: relative;
@@ -271,7 +293,7 @@ a:hover { color: var(--blue4); }
 .aug-nav-item:hover { background: var(--bg-hover); color: var(--t1); }
 /* Active: one item in the whole rail — --bg-sel, weight 500, a 2px --accent bar at the edge. */
 .aug-nav-item[aria-current="page"],
-.aug-nav-item.active { background: var(--bg-sel); color: var(--t1); font-weight: 500; }
+.aug-nav-item.active { background: var(--bg-nav-sel); color: var(--t1); font-weight: 500; }
 .aug-nav-item[aria-current="page"]::before,
 .aug-nav-item.active::before {
   content: "";
@@ -306,7 +328,7 @@ a:hover { color: var(--blue4); }
 /* Icon only: this is the one row whose meaning IS the rail, so a word for it is a
    word about the furniture. The button keeps its aria-label and its tooltip. */
 .aug-nav-head .aug-nav-label { display: none; }
-.aug-nav-foot { margin-top: auto; display: flex; flex-direction: column; gap: 2px; padding: 8px 0 10px; border-top: 1px solid var(--b1); }
+.aug-nav-foot { margin-top: auto; display: flex; flex-direction: column; gap: 2px; padding: 12px 0 10px; }  /* set apart by space, not a rule (2026-11-20) */
 /* Settings and the version on one line — the version said beside the row, not under it. */
 .aug-nav-foot-row { display: flex; align-items: center; }
 .aug-nav-foot-row .aug-nav-item { flex: 1; width: auto; min-width: 0; }
@@ -352,9 +374,7 @@ a:hover { color: var(--blue4); }
   align-items: center;
   gap: 9px;
   min-width: 0;
-  margin-left: 6px;
-  padding-left: 12px;
-  border-left: 1px solid var(--b1);
+  margin-left: 14px;
 }
 .aug-activity-label { font-size: 12px; font-weight: 600; color: var(--t3); }
 .aug-activity-ticks { display: flex; align-items: flex-end; gap: 3px; height: 16px; flex: none; }
@@ -599,7 +619,7 @@ textarea.aug-input, .aug-textarea { min-height: 56px; padding: 7px 9px; line-hei
   color: inherit;   /* the callout's own hue: red for an error or a refusal, amber for a partial */
 }
 .aug-state-meta { margin-left: auto; font-size: 12px; color: var(--t3); white-space: nowrap; }
-.aug-state-claim { font-size: calc(14px * var(--scaling)); line-height: 1.6; color: var(--t1); }
+.aug-state-claim { font-size: 13px; line-height: 1.6; color: var(--t1); }
 .aug-state-what { font-size: 12px; line-height: 1.6; color: var(--t1); }
 .aug-state-detail { font-size: 12px; line-height: 1.6; color: var(--t2); }
 .aug-state-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 2px; }
@@ -926,7 +946,10 @@ textarea.aug-input, .aug-textarea { min-height: 56px; padding: 7px 9px; line-hei
 .aug-page { max-width: 920px; margin: 0 auto; padding: 20px 28px 48px; }
 .aug-page-wide { max-width: 1240px; }
 .aug-section { padding: 0 0 24px; }
-.aug-section + .aug-section { border-top: 1px solid var(--b0); padding-top: 20px; }
+/* One quiet rule between whole sections, space around it (2026-11-20: a page is sections, not a stack of cards). */
+.aug-section + .aug-section { border-top: 1px solid var(--divide); padding-top: 24px; }
+/* A section's name: a heading at the section's size, above its content (typography defines the hierarchy). */
+.aug-section-title { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.35; color: var(--t1); }
 .aug-section-head { display: flex; align-items: baseline; gap: 10px; min-height: 28px; margin-bottom: 8px; }
 /* A section's name never shrinks or breaks: a long note beside it takes the room left and wraps there instead
    ("The inquiry" broke onto two lines in a narrow pane, 2026-10-27). */
@@ -990,11 +1013,21 @@ textarea.aug-input, .aug-textarea { min-height: 56px; padding: 7px 9px; line-hei
 .radix-themes {
   --default-font-family: var(--font-sans);
   --code-font-family: var(--font-mono);
+  /* Text on the scale at any density (the user, 2026-11-20: "make sure that Font and Font size are not changing much
+     across the platform"). Themes multiplies each of its steps by --scaling while ours are plain pixels, so a 95% look
+     drew 11.4 beside 11 and 13.3 beside 13 on one screen. The look's size knob now sets space and control heights; text
+     stays on 11 · 12 · 13 · 14 · 15 · 18 · 22. Themes' steps map onto ours: 1 is secondary (12); 2 is chrome and content —
+     buttons, tabs, inputs, a table's cells (13); 3 a subheading (15); 4 and 5 a heading (18); 6 a figure (22). */
+  --font-size-1: 12px; --font-size-2: 13px; --font-size-3: 15px; --font-size-4: 18px; --font-size-5: 18px;
+  --font-size-6: 22px; --font-size-7: 28px; --font-size-8: 34px; --font-size-9: 40px;
   --cursor-button: pointer;
   font-size: inherit;
   line-height: inherit;
   color: inherit;
 }
+/* A table's cells are content, 13 on every page (the user's choice, 2026-11-20): a Themes table reads --font-size-2
+   above; a plain one and a grid of cells read this. Column heads keep their own, smaller label size. */
+td, [role="gridcell"][role="gridcell"], [role="cell"][role="cell"] { font-size: var(--aug-fs-chrome); }
 /* The page, as one layer under everything Radix portals into <body> (app/layout.tsx). */
 .aug-root { isolation: isolate; display: flex; flex-direction: column; flex: 1 1 0%; min-height: 100%; }
 /* A Themes ghost button bleeds into its neighbours by design (negative margins, to line its
@@ -1052,18 +1085,20 @@ textarea.aug-input, .aug-textarea { min-height: 56px; padding: 7px 9px; line-hei
    pickers, a status strip at the app's foot, and one inspector at the right that opens on selection
    (components/shell/). A page's own top rows fold into these — its actions into the title row, its filters and
    pickers into the toolbar — and nothing is lost. */
-.aug-page-chrome { flex-shrink: 0; background: var(--bg-2); }
+/* On the page's own ground, not a band of the frame's colour (2026-11-20): the frame is --bg-frame, the page and its
+   title row are the work, set apart from the frame by the step and from what follows by space. */
+.aug-page-chrome { flex-shrink: 0; background: var(--bg-0); }
 /* The title row WRAPS rather than clips: a page's facts that do not fit beside its title take a second line under it,
    whole, so nothing a page says is cut off at a narrow width. */
-.aug-titlebar { min-height: 44px; display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; padding: 6px 16px;
-  border-bottom: 1px solid var(--b0); }
+/* No rules between the page's rows (2026-11-20): its chrome is a band on --bg-2, the page under it --bg-0. */
+.aug-titlebar { min-height: 44px; display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; padding: 6px 16px; }
 .aug-page-title { margin: 0; font-size: 18px; font-weight: 600; line-height: 1.25; color: var(--t1); white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
 .aug-title-facts { font-size: 12px; color: var(--t3); min-width: 0; flex: 0 1 auto; display: flex; align-items: center;
   flex-wrap: wrap; gap: 6px 12px; }
 .aug-title-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .aug-page-toolbar { min-height: 44px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 4px 16px;
-  border-bottom: 1px solid var(--b0); font-size: 12px; color: var(--t2); }
+  font-size: 12px; color: var(--t2); }
 /* A title that is a control (a name renamed in place) stands in for the title's words. */
 .aug-title-slot { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; }
 .aug-title-slot:empty { display: none; }
@@ -1073,23 +1108,25 @@ textarea.aug-input, .aug-textarea { min-height: 56px; padding: 7px 9px; line-hei
 .aug-page-toolbar > * { flex-shrink: 0; }
 .aug-page-toolbar .aug-toolbar-fill { flex: 1 1 auto; min-width: 8px; }
 
+/* One quiet strip (2026-11-20): the frame's surface, no rule over it, its items set apart by space, not by bars. */
 .aug-status-strip { height: 28px; flex-shrink: 0; display: flex; align-items: center; gap: 0; padding: 0 12px;
-  background: var(--bg-1); border-top: 1px solid var(--b1); font-size: 12px; color: var(--t2); white-space: nowrap; overflow: hidden; }
+  background: var(--bg-frame); font-size: 12px; color: var(--t2); white-space: nowrap; overflow: hidden; }
 .aug-status-item { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
-.aug-status-sep { color: var(--b2); margin: 0 10px; }
+/* A badge in the strip keeps its colour and drops its ring: the strip is quiet, its words carry it. */
+.aug-status-strip .rt-Badge { box-shadow: none; background: transparent; padding-inline: 0; }
+.aug-status-sep { visibility: hidden; margin: 0 6px; }
 .aug-status-dot { display: inline-block; width: 7px; height: 7px; border-radius: var(--r-pill); background: var(--grn3); margin-right: 6px; }
 .aug-status-quiet { color: var(--t3); }
 .aug-status-page { display: inline-flex; align-items: center; min-width: 0; }
 .aug-status-page > * { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
-.aug-status-page > *::before { content: "│"; color: var(--b2); margin: 0 10px; }
+.aug-status-page > *::before { content: ""; margin: 0 10px; }
 
-.aug-inspector { position: relative; flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; background: var(--bg-2);
-  border-left: 1px solid var(--b1); }
+.aug-inspector { position: relative; flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; background: var(--bg-2); }
 .aug-inspector-grip { position: absolute; left: -3px; top: 0; bottom: 0; width: 6px; cursor: col-resize; z-index: 2; }
 .aug-inspector-grip::after { content: ""; position: absolute; left: 2px; top: 50%; width: 2px; height: 28px; margin-top: -14px;
   border-radius: var(--r1); background: var(--b2); }
 .aug-inspector-grip:focus-visible { outline-offset: 0; }
-.aug-inspector-head { padding: 10px 12px 8px 14px; border-bottom: 1px solid var(--b0); }
+.aug-inspector-head { padding: 10px 12px 8px 14px; }
 .aug-inspector-row1 { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .aug-inspector-glyph { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: var(--r2);
   background: var(--bg-sel); color: var(--accent-text); flex-shrink: 0; }
@@ -1102,9 +1139,11 @@ textarea.aug-input, .aug-textarea { min-height: 56px; padding: 7px 9px; line-hei
   font-size: 13px; color: var(--t1); }
 .aug-inspector-facts { margin: 0; display: grid; border-top: 1px solid var(--b0); }
 .aug-inspector-fact { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--b0); }
-.aug-inspector-fact dt { font-size: 12px; color: var(--t3); }
-.aug-inspector-fact dd { margin: 0; min-width: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
-.aug-inspector-note { font-size: 11px; color: var(--t3); margin-top: 2px; }
+/* A label · value row as the kit's Facts draws one (2026-11-20): the label is meta (11), the value the row's content (13),
+   a note under it a second line (12). */
+.aug-inspector-fact dt { font-size: 11px; color: var(--t3); }
+.aug-inspector-fact dd { margin: 0; min-width: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; font-size: 13px; }
+.aug-inspector-note { font-size: 12px; color: var(--t3); margin-top: 2px; }
 
 .aug-freshness { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .aug-freshness-receipt { font-size: 11px; color: var(--accent-text); }
@@ -1117,14 +1156,13 @@ textarea.aug-input, .aug-textarea { min-height: 56px; padding: 7px 9px; line-hei
 
 /* ── The SQL Editor as its mockup draws it (2026-11-10, design-mockups/evidence-to-action/sql-editor.html) ── */
 /* A key's name on a control: Run ⌘↵. */
-.aug-kbd { font-family: var(--font-mono); font-size: 11px; line-height: 16px; padding: 0 4px; margin-left: 4px;
-  border: 1px solid currentColor; border-radius: var(--r1); opacity: .7; }
+.aug-kbd { font-family: var(--font-mono); font-size: 11px; line-height: 16px; padding: 0 2px; margin-left: 4px; opacity: .7; }
 /* The editor's foot: the cursor, the dialect, the statements, what ⌘↵ runs, the problems. */
-.aug-editor-foot { display: flex; align-items: center; gap: 14px; padding: 3px 12px; min-height: 24px; flex-shrink: 0;
-  border-top: 1px solid var(--b0); background: var(--bg-1); color: var(--t3); white-space: nowrap; overflow: hidden; }
+/* A quiet line on the editor's own surface, not a toolbar of its own (2026-11-20). */
+.aug-editor-foot { display: flex; align-items: center; gap: 16px; padding: 4px 14px; min-height: 24px; flex-shrink: 0;
+  color: var(--t3); white-space: nowrap; overflow: hidden; }
 /* The results' views: Results · Chart · Profile · Execution · Logs, underlined when open. */
-.aug-rtabs { display: flex; align-items: center; gap: 4px; padding: 0 10px; min-height: 36px; flex-shrink: 0;
-  border-bottom: 1px solid var(--b0); flex-wrap: wrap; }
+.aug-rtabs { display: flex; align-items: center; gap: 4px; padding: 0 10px; min-height: 36px; flex-shrink: 0; flex-wrap: wrap; }
 /* Tabs, not buttons: no edge at rest (the outline every other action wears), an underline under the open one. */
 .aug-rtabs .rt-BaseButton.aug-rtab { box-shadow: none; background: transparent; border-radius: 0; height: 36px; color: var(--t2); }
 .aug-rtabs .rt-BaseButton.aug-rtab:hover { color: var(--t1); background: transparent; }
@@ -1144,7 +1182,7 @@ textarea.aug-input, .aug-textarea { min-height: 56px; padding: 7px 9px; line-hei
 .aug-topbar .rt-BaseButton.aug-nav-toggle:hover { background: var(--bg-hover); color: var(--t1); }
 /* A work surface's chrome (bare): no title row — only the toolbar row, and only when something is
    in it, the page's actions at its right end. */
-.aug-bare-row { display: flex; align-items: center; border-bottom: 1px solid var(--b0); }
+.aug-bare-row { display: flex; align-items: center; }
 .aug-bare-row > .aug-page-toolbar { flex: 1 1 auto; border-bottom: none; }
 .aug-bare-row > .aug-title-actions { padding-right: 16px; }
 .aug-bare-row:has(> .aug-page-toolbar:empty):has(> .aug-title-actions:empty) { display: none; }

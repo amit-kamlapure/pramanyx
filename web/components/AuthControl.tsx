@@ -139,7 +139,7 @@ export function AuthControl() {
           <span className="aug-fs-sm" style={{ color: "var(--t1)", overflowWrap: "anywhere" }}>{email}</span>
           <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>verified by the server on every call</span>
           <Button variant="plain" size="xs" className="h-auto px-2 py-1 aug-fs-xs font-normal"
-            style={{ border: "1px solid var(--b1)", alignSelf: "flex-start" }}
+            style={{ background: "var(--gray-a3)", alignSelf: "flex-start" }}
             onClick={() => { setMenuOpen(false); signOut(getApiBase()).then(() => { setWho(null); window.location.reload(); }); }}>
             Sign out
           </Button>

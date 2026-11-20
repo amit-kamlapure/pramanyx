@@ -331,14 +331,14 @@ export function StepInspector({ draft, onDraft, selection, logicLabel, onClose,
           </>
         ) : (
           <>
-            <label style={{ ...labelStyle }}>{posting ? "where it posts" : "everything this step takes"}</label>
+            <label style={{ ...labelStyle }}>{posting ? "Where it posts" : "Everything this step takes"}</label>
             <EffectRow e={draft.effects[index]} agents={agents} bots={bots}
               siblings={draft.effects} index={index} wordsElsewhere={posting} connectionId={connectionId}
               onChange={ee => setEff(index, ee)}
               onRemove={undefined /* removal lives on the node face — one door */} />
             {posting && (
               <div style={{ marginTop: 14 }}>
-                <label style={{ ...labelStyle }}>what gets posted</label>
+                <label style={{ ...labelStyle }}>What gets posted</label>
                 <WhatGetsPosted automationId={automationId} index={index} e={draft.effects[index]}
                   siblings={draft.effects} onChange={ee => setEff(index, ee)} onOpenStep={onSelect} />
               </div>

@@ -47,8 +47,8 @@ const OP_WORDS: Record<SetOp, string> = {
 
 function Label({ children, right }: { children: ReactNode; right?: ReactNode }) {
   return (
-    <div className="aug-fs-xs" style={{ display: "flex", alignItems: "baseline", gap: 6, color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em", padding: "12px 12px 6px" }}>
-      {children}{right && <span style={{ marginLeft: "auto", textTransform: "none", letterSpacing: 0 }}>{right}</span>}
+    <div className="aug-label" style={{ display: "flex", alignItems: "baseline", gap: 6, padding: "12px 12px 6px" }}>
+      {children}{right && <span style={{ marginLeft: "auto", fontWeight: 400 }}>{right}</span>}
     </div>
   );
 }
@@ -56,7 +56,7 @@ function Label({ children, right }: { children: ReactNode; right?: ReactNode }) 
 function Row({ label, hint, children, testid }: { label: string; hint?: ReactNode; children: ReactNode; testid?: string }) {
   return (
     <div data-testid={testid} style={{ display: "flex", flexDirection: "column", gap: 6, padding: "10px 14px" }}>
-      <div className="aug-fs-xs" style={{ color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em" }}>{label}</div>
+      <div className="aug-label">{label}</div>
       {children}
       {hint && <div className="aug-fs-xs" style={{ color: "var(--t3)", lineHeight: 1.45 }}>{hint}</div>}
     </div>
@@ -377,8 +377,8 @@ export function SetSetup({ spec, name, onChange, onGone, connectionId, schema }:
   const startsFrom = set.from ? `set:${set.from}` : `entity:${set.entity ?? ""}`;
   return (
     <div data-testid="set-setup" data-name={name}>
-      <div style={{ padding: "12px 14px 8px", borderBottom: "1px solid var(--b1)" }}>
-        <div className="aug-fs-xs" style={{ color: "var(--accent-11)", textTransform: "uppercase", letterSpacing: ".06em" }}>Set</div>
+      <div style={{ padding: "12px 14px 10px" }}>
+        <div className="aug-fs-xs" style={{ color: "var(--accent-11)" }}>Set</div>
         <div className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: 600, marginTop: 2 }}>{set.label}</div>
       </div>
       <Row label="Name">
@@ -647,7 +647,7 @@ function Condition({ spec, c, fields, onChange, onDrop }: {
     }
   };
   return (
-    <div data-testid="set-condition" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 4, padding: "4px 0", borderBottom: "1px solid var(--b1)" }}>
+    <div data-testid="set-condition" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 4, padding: "4px 0", borderBottom: "1px solid var(--b0)" }}>
       <span className="aug-fs-sm" style={{ color: "var(--t1)", alignSelf: "center" }}>{f ? (f.via ? `${f.label} via ${f.via}` : f.label) : words(c.path)}</span>
       <Button size="xs" variant="plain" aria-label={`Take the condition on ${words(c.path)} off`} onClick={onDrop}><Icon name="close" size={12} /></Button>
       <Pick label="Is" value={op} options={ops.map(o => ({ value: o, label: OP_WORDS[o] }))} onPick={pickOp} />
@@ -786,8 +786,8 @@ export function ValueSetup({ spec, name, onChange, onGone, connectionId = "", sc
   const direct = (fields?.fields ?? []).filter(f => !f.via && /^[A-Za-z_][A-Za-z0-9_]*$/.test(f.path));
   return (
     <div data-testid="value-setup" data-name={name}>
-      <div style={{ padding: "12px 14px 8px", borderBottom: "1px solid var(--b1)" }}>
-        <div className="aug-fs-xs" style={{ color: "var(--accent-11)", textTransform: "uppercase", letterSpacing: ".06em" }}>
+      <div style={{ padding: "12px 14px 10px" }}>
+        <div className="aug-fs-xs" style={{ color: "var(--accent-11)" }}>
           Variable · {KIND_SAID[v.kind] ?? v.kind}
         </div>
         <div className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: 600, marginTop: 2 }}>{v.label}</div>
@@ -903,8 +903,8 @@ export function ChoiceSetup({ spec, name }: { spec: DashboardSpec; name: string 
   if (!c) return null;
   return (
     <div data-testid="choice-setup" data-name={name}>
-      <div style={{ padding: "12px 14px 8px", borderBottom: "1px solid var(--b1)" }}>
-        <div className="aug-fs-xs" style={{ color: "var(--accent-11)", textTransform: "uppercase", letterSpacing: ".06em" }}>Chosen by the reader</div>
+      <div style={{ padding: "12px 14px 10px" }}>
+        <div className="aug-fs-xs" style={{ color: "var(--accent-11)" }}>Chosen by the reader</div>
         <div className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: 600, marginTop: 2 }}>{words(name)}</div>
       </div>
       <Row label="Made by" hint="Each reader's own, in their browser, for as long as the dashboard is open — never the kept dashboard.">

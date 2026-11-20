@@ -2,7 +2,7 @@
 
 /**
  * The one kit a screen redone to CLARITY is built from (`pramanyx-v2/CLARITY.md`): the page, a card on the ground, a
- * small uppercase section label with its meta at the right, a fact as a chip, a figure (label · value · one muted
+ * section label (12px semibold, sentence case) with its meta at the right, a fact as a chip, a figure (label · value · one muted
  * line), the amber "Needs you" card and its rows, a bar, bars by category, columns over time, a section folded shut,
  * and the one muted line an empty section is.
  *
@@ -10,7 +10,7 @@
  * Inbox share them from here, so they read as one product and like Home (two kits were made the same day and are
  * one here). Nothing here fetches or decides — it only lays out.
  */
-import { Children, createContext, type CSSProperties, type ReactNode, type Ref, useContext, useState } from "react";
+import { Children, createContext, type CSSProperties, isValidElement, type ReactNode, type Ref, useContext, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
@@ -27,12 +27,14 @@ export const ONE_LINE: CSSProperties = { whiteSpace: "nowrap", overflow: "hidden
 export const ROW: CSSProperties = { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" };
 export const NUM: CSSProperties = { fontVariantNumeric: "tabular-nums" };
 
-/** The page a redone screen sits on: a column of cards, 14px apart, across the whole width the screen has (the user,
- *  2026-10-12: the pages use the full page width — no column capped at the mockups' 1180). */
+/** The page a redone screen sits on: its sections one under the other across the whole width the screen has (the user,
+ *  2026-10-12: the pages use the full page width — no column capped at the mockups' 1180). Since 2026-11-20 a section
+ *  is not a card: its heading, its content on the page, and one quiet rule between whole sections (the user's
+ *  inspiration that day: "fewer containers, clearer reading order"). */
 export function Page({ children, testId }: { children: ReactNode; testId?: string }) {
   return (
     <div style={{ flex: 1, minHeight: 0, overflowY: "auto", background: "var(--bg-0)" }}>
-      <div data-testid={testId} style={{ display: "flex", flexDirection: "column", gap: 14, padding: "16px 22px 28px",
+      <div data-testid={testId} style={{ display: "flex", flexDirection: "column", gap: 4, padding: "20px 28px 32px",
         width: "100%" }}>
         {children}
       </div>
@@ -40,28 +42,46 @@ export function Page({ children, testId }: { children: ReactNode; testId?: strin
   );
 }
 
-/** A section's small uppercase label, with what it counts (or its one tool) at its right end. */
+/** A section's label, with what it counts (or its one tool) at its right end. 12px semibold in sentence case, as
+ *  `.aug-label` and every section label on the platform (the user, 2026-11-20: "Yes, unify them" — it was 11px tracked
+ *  caps beside sentence-case labels elsewhere). Its meta at the right is meta: 11px, regular. */
 export function Label({ children, right, tone }: { children: ReactNode; right?: ReactNode; tone?: "amber" }) {
   return (
-    <div className="aug-fs-xs" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, minHeight: 20,
-      color: tone === "amber" ? "var(--amb4)" : "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em" }}>
+    <div className="aug-label" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, minHeight: 20,
+      ...(tone === "amber" ? { color: "var(--amb4)" } : {}) }}>
       {children}
       {right != null && right !== false && (
-        <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 8, textTransform: "none",
-          letterSpacing: 0, color: "var(--t3)" }}>{right}</span>
+        <span className="aug-fs-xs" style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 8,
+          fontWeight: 400, color: "var(--t3)" }}>{right}</span>
       )}
     </div>
   );
 }
 
-/** A card with its label — the shape nearly every section takes. */
+/** A section's heading: its name at the section's size, what it counts or its tools at the right end. */
+function SectionHead({ children, right, tone }: { children: ReactNode; right?: ReactNode; tone?: "amber" }) {
+  return (
+    <div className="aug-section-head">
+      <h2 className="aug-section-title" style={tone === "amber" ? { color: "var(--amb4)", display: "inline-flex", alignItems: "center", gap: 6 } : undefined}>
+        {tone === "amber" && <Icon name="warning" size={14} />}{children}
+      </h2>
+      <span style={{ flex: 1 }} />
+      {right != null && right !== false && (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 8, color: "var(--t3)" }}>{right}</span>
+      )}
+    </div>
+  );
+}
+
+/** A section with its heading — the shape nearly every part of a page takes. Since 2026-11-20 not a card: no fill, no
+ *  edge, no box; the page's ground, space around it, and a quiet rule from the section before (`.aug-section`). */
 export function Card({ label, right, children, testId, style, ariaLabel }: {
   label: ReactNode; right?: ReactNode; children: ReactNode; testId?: string; style?: CSSProperties; ariaLabel?: string;
 }) {
   return (
-    <section aria-label={ariaLabel ?? (typeof label === "string" ? label : undefined)} data-testid={testId}
-      style={{ ...CARD, ...style }}>
-      <Label right={right}>{label}</Label>
+    <section className="aug-section" aria-label={ariaLabel ?? (typeof label === "string" ? label : undefined)} data-testid={testId}
+      style={{ minWidth: 0, ...style }}>
+      <SectionHead right={right}>{label}</SectionHead>
       {children}
     </section>
   );
@@ -69,7 +89,8 @@ export function Card({ label, right, children, testId, style, ariaLabel }: {
 
 export type Tone = "plain" | "up" | "down" | "amber" | "violet" | "accent";
 const TONE: Record<Tone, CSSProperties> = {
-  plain: { background: "var(--bg-3)", color: "var(--t2)", border: "1px solid var(--b1)" },
+  // a fact on a faint fill, no outline (2026-11-20, borders are the exception): see-through, so it reads on any surface
+  plain: { background: "var(--gray-a3)", color: "var(--t2)", border: "1px solid transparent" },
   up: { background: "var(--grn1)", color: "var(--grn4)", border: "1px solid transparent" },
   down: { background: "var(--red1)", color: "var(--red4)", border: "1px solid transparent" },
   amber: { background: "var(--amb1)", color: "var(--amb4)", border: "1px solid transparent" },
@@ -104,11 +125,11 @@ export function Dot({ color, hue, title }: { color?: string; hue?: keyof typeof 
   );
 }
 
-/** The row of three or four figures a screen opens on. */
+/** The row of three or four figures a screen opens on: numbers first, each with its few words under it, no cards. */
 export function Figures({ children, testId }: { children: ReactNode; testId?: string }) {
   return (
-    <div data-testid={testId} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
-      gap: 14 }}>
+    <div data-testid={testId} className="aug-section" style={{ display: "grid",
+      gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: "16px 32px" }}>
       {children}
     </div>
   );
@@ -150,21 +171,24 @@ export function Figure({ label, value, sub, tone, title, onOpen, testId }: {
       </span>
     );
   }
+  // The number first, its few words under it, the muted line after — on the page, not in a card (2026-11-20).
   const body = (
     <>
-      <span className="aug-fs-xs" style={{ ...MUTED, display: "block" }}>{label}</span>
       <span className="aug-fs-display" data-slot="figure-value" data-testid={testId ? `${testId}-value` : undefined} style={{ display: "block",
-        color, fontWeight: 600, lineHeight: 1.25, margin: "2px 0", ...NUM }}>{value}</span>
+        color, fontWeight: 600, lineHeight: 1.2, ...NUM }}>{value}</span>
+      <span className="aug-fs-sm" style={{ color: "var(--t2)", display: "block", marginTop: 4 }}>
+        {label}{onOpen && <span aria-hidden style={{ marginLeft: 4, display: "inline-flex", verticalAlign: "-1px", opacity: .7 }}><Icon name="chevr" size={11} /></span>}
+      </span>
       {sub != null && sub !== false && (
-        <span className="aug-fs-xs" style={{ ...MUTED, ...ROW, gap: 6, lineHeight: 1.5 }}>{sub}</span>
+        <span className="aug-fs-xs" style={{ ...MUTED, ...ROW, gap: 6, lineHeight: 1.5, marginTop: 2 }}>{sub}</span>
       )}
     </>
   );
-  if (!onOpen) return <div data-testid={testId} title={title} style={CARD}>{body}</div>;
+  if (!onOpen) return <div data-testid={testId} title={title} style={{ minWidth: 0 }}>{body}</div>;
   return (
     <Button variant="plain" data-testid={testId} title={title} onClick={onOpen}
-      style={{ ...CARD, display: "block", height: "auto", margin: 0, textAlign: "left", whiteSpace: "normal",
-        width: "100%", fontWeight: 400, cursor: "pointer" }}>
+      style={{ display: "block", height: "auto", margin: "-6px -8px", padding: "6px 8px", textAlign: "left", whiteSpace: "normal",
+        width: "calc(100% + 16px)", fontWeight: 400, cursor: "pointer", borderRadius: "var(--r2)" }}>
       {body}
     </Button>
   );
@@ -177,22 +201,84 @@ export function Figure({ label, value, sub, tone, title, onOpen, testId }: {
  */
 export const NEEDS_EDGE = "inset 2px 0 0 var(--amb3)";
 
+/** How long a dismissed "Needs you" stays folded when nothing new arrives: a day, then it is said again. */
+export const NEEDS_HIDDEN_FOR_MS = 24 * 60 * 60 * 1000;
+const NEEDS_HIDDEN_KEY = "pramanyx.needs-hidden.";
+
+/** What is waiting, as one string: the rows' keys and the heading's words. A new row — or a count that moves — is a
+ *  different string, so a dismissed section comes back the moment something new needs the person. */
+function needsPrint(items: ReactNode[], right: ReactNode): string {
+  const keys = items.map((r, i) => (isValidElement(r) && r.key != null ? String(r.key) : `#${i}`)).join("|");
+  return `${items.length}:${keys}:${typeof right === "string" || typeof right === "number" ? right : ""}`;
+}
+
+/** Dismissed on this page, in this browser (a convenience, never a record): until what waits changes, or a day. */
+function useNeedsHidden(testId: string | undefined, print: string): [boolean, (hide: boolean) => void] {
+  const key = testId ? NEEDS_HIDDEN_KEY + testId : null;
+  const [kept, setKept] = useState<{ print: string; at: number } | null>(null);
+  useEffect(() => {
+    if (!key) return;
+    try {
+      const raw = window.localStorage.getItem(key);
+      const read = raw ? (JSON.parse(raw) as { print: string; at: number }) : null;
+      // a day old, it is said again: the fold is forgotten as it is read
+      setKept(read && Date.now() - read.at < NEEDS_HIDDEN_FOR_MS ? read : null);   // eslint-disable-line react-hooks/set-state-in-effect -- read once after mount
+    } catch { setKept(null); }
+  }, [key]);
+  const hidden = kept !== null && kept.print === print;
+  const set = (hide: boolean) => {
+    const next = hide ? { print, at: Date.now() } : null;
+    setKept(next);
+    if (!key) return;
+    try {
+      if (next) window.localStorage.setItem(key, JSON.stringify(next)); else window.localStorage.removeItem(key);
+    } catch { /* the page still folds it for now */ }
+  };
+  return [hidden, set];
+}
+
 export function NeedsYou({ right, children, testId, waiting, empty }: {
   right?: ReactNode; children: ReactNode; testId?: string; waiting?: boolean; empty?: ReactNode;
 }) {
   const rows = empty !== undefined ? Children.toArray(children).filter(Boolean) : null;
   const on = rows ? rows.length > 0 : waiting ?? true;
-  // An edge and an amber label, never a fill (the user, 2026-11-03): a warning is not the brightest thing on the page.
-  // Inset, so the edge never touches CARD's `border` shorthand (React warns when a longhand beside it is removed).
+  // Dismiss (the user, 2026-11-20: "Add dismiss button to 'Needs you'"): folds the section to one line that says what it
+  // holds and Show — withheld is said, never implied — until something new waits, or a day passes.
+  const [hidden, setHidden] = useNeedsHidden(testId, needsPrint(rows ?? Children.toArray(children), right));
+  if (on && hidden) {
+    return (
+      <section aria-label="Needs you" data-testid={testId} data-waiting="true" data-dismissed="true" className="aug-section"
+        style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 10 }}>
+        <span className="aug-fs-sm" style={{ color: "var(--amb4)", display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <Icon name="warning" size={13} />Needs you
+        </span>
+        {/* what is hidden is said: the count of its rows, or — handed a body — its own heading's words ("5 items waiting") */}
+        {!rows && right != null && right !== false && (
+          <span className="aug-fs-sm" style={{ display: "inline-flex", alignItems: "center", gap: 8, color: "var(--t2)" }}>{right}</span>
+        )}
+        <span className="aug-fs-sm" style={MUTED}>
+          {rows ? `${rows.length} ${rows.length === 1 ? "item" : "items"} hidden` : "hidden"} · back when something new waits
+        </span>
+        <Button variant="ghost" size="xs" data-testid={testId ? `${testId}-show` : undefined} onClick={() => setHidden(false)}>Show</Button>
+      </section>
+    );
+  }
+  const dismiss = (
+    <Button variant="ghost" size="xs" data-testid={testId ? `${testId}-dismiss` : undefined}
+      title="Fold this away until something new needs you, or for a day" onClick={() => setHidden(true)}>
+      Dismiss
+    </Button>
+  );
+  // An amber heading with its mark, never a fill (the user, 2026-11-03): a warning is not the brightest thing on the
+  // page. Since 2026-11-20 not a card either — a section like the rest, set apart by space and a quiet rule.
   if (rows && !on) {
     return (
-      <section aria-label="Needs you" data-testid={testId} data-waiting="false" className="aug-fs-sm" style={MUTED}>{empty}</section>
+      <section aria-label="Needs you" data-testid={testId} data-waiting="false" className="aug-fs-sm aug-section" style={MUTED}>{empty}</section>
     );
   }
   return (
-    <section aria-label="Needs you" data-testid={testId} data-waiting={on ? "true" : "false"}
-      style={on ? { ...CARD, boxShadow: NEEDS_EDGE } : CARD}>
-      <Label tone={on ? "amber" : undefined} right={right}>Needs you</Label>
+    <section aria-label="Needs you" data-testid={testId} data-waiting={on ? "true" : "false"} className="aug-section" style={{ minWidth: 0 }}>
+      <SectionHead tone={on ? "amber" : undefined} right={on ? <>{right}{dismiss}</> : right}>Needs you</SectionHead>
       {rows ? (rows.length ? rows : <Empty>{empty}</Empty>) : children}
     </section>
   );
@@ -212,9 +298,10 @@ export function Fold({ title, meta, right, open, onOpenChange, height, children,
   if (open && !mounted) setMounted(true);
   return (
     <section ref={sectionRef} aria-label={title} data-testid={testId} data-open={open ? "true" : "false"}
-      style={{ ...CARD, padding: 0, scrollMarginTop: 12 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", minWidth: 0 }}>
-        <span className="aug-fs-chrome" style={{ color: "var(--t1)", fontWeight: 500, whiteSpace: "nowrap" }}>{title}</span>
+      className="aug-section" style={{ minWidth: 0, scrollMarginTop: 12 }}>
+      {/* a section folded shut: its heading, what it holds, Show — on the page, not in a card (2026-11-20) */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+        <span className="aug-section-title" style={{ whiteSpace: "nowrap" }}>{title}</span>
         <span className="aug-fs-sm" style={{ ...MUTED, ...ONE_LINE, flex: "1 1 auto", ...NUM }}>{meta}</span>
         {right}
         <Button variant="ghost" size="xs" aria-expanded={open} onClick={() => onOpenChange(!open)}>
@@ -223,8 +310,7 @@ export function Fold({ title, meta, right, open, onOpenChange, height, children,
       </div>
       {mounted && (
         <div data-testid={testId ? `${testId}-body` : undefined} inert={!open} aria-hidden={!open || undefined}
-          style={{ display: open ? "flex" : "none", flexDirection: "column", height, overflow: "hidden",
-            borderTop: "1px solid var(--b0)" }}>
+          style={{ display: open ? "flex" : "none", flexDirection: "column", height, overflow: "hidden", marginTop: 12 }}>
           {children}
         </div>
       )}
@@ -237,7 +323,8 @@ export function Fold({ title, meta, right, open, onOpenChange, height, children,
  *  owner, tags, …): the Catalog's table page and a metric's Overview (2026-11-10). */
 export function Facts({ rows, testId }: { rows: [string, ReactNode][]; testId?: string }) {
   return (
-    <div className="aug-fs-sm" data-testid={testId} style={{ display: "grid", gridTemplateColumns: "minmax(110px, 160px) minmax(0, 1fr)" }}>
+    // A value is a row's content, 13 as every row and cell is (2026-11-20); its label is meta, 11.
+    <div className="aug-fs-chrome" data-testid={testId} style={{ display: "grid", gridTemplateColumns: "minmax(110px, 160px) minmax(0, 1fr)" }}>
       {rows.map(([label, value], i) => (
         <div key={label} style={{ display: "contents" }}>
           <span className="aug-fs-xs" style={{ ...MUTED, padding: "7px 12px 7px 0", ...(i ? RULE : {}) }}>{label}</span>
@@ -313,9 +400,9 @@ export function HBars({ bars, testId }: { bars: HBar[]; testId?: string }) {
       gap: "8px 10px", alignItems: "center" }}>
       {bars.map(b => (
         <div key={b.key} style={{ display: "contents" }}>
-          <div className="aug-fs-sm" style={{ minWidth: 0 }}>
+          <div className="aug-fs-chrome" style={{ minWidth: 0 }}>
             <div style={{ ...ONE_LINE, color: "var(--t1)" }}>{b.name}</div>
-            {b.meta != null && <div className="aug-fs-xs" style={{ ...MUTED, ...ONE_LINE }}>{b.meta}</div>}
+            {b.meta != null && <div className="aug-fs-sm" style={{ ...MUTED, ...ONE_LINE }}>{b.meta}</div>}
           </div>
           <Tooltip content={b.tip}>
             <div role="img" aria-label={b.tip} style={{ height: 10, borderRadius: 5, background: "var(--bg-3)", overflow: "hidden" }}>
@@ -323,7 +410,7 @@ export function HBars({ bars, testId }: { bars: HBar[]; testId?: string }) {
                 background: "var(--chart-1)" }} />
             </div>
           </Tooltip>
-          <div className="aug-fs-sm" style={{ textAlign: "right", color: "var(--t2)", ...NUM }}>{b.shown}</div>
+          <div className="aug-fs-chrome" style={{ textAlign: "right", color: "var(--t2)", ...NUM }}>{b.shown}</div>
         </div>
       ))}
     </div>

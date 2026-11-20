@@ -133,12 +133,11 @@ function ContextBody({ block, src, ctx }: BodyProps) {
     : undefined;
   return (
     <div data-testid="edition-context" data-kind={src.kind}>
-      <div className="aug-fs-xs" style={{ textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 6,
-                                          color: running ? "var(--amb4)" : "var(--t3)" }}>{kicker}</div>
+      <div className="aug-label" style={{ marginBottom: 6, color: running ? "var(--amb4)" : undefined }}>{kicker}</div>
       <p className="aug-fs-h2" style={{ color: "var(--t1)", margin: 0 }}>{head}</p>
       {/* the work's own summary only when the edition wrote nothing of its own about it: both said the same thing twice */}
-      {more && (src.kind !== "analysis" || !block.text) && <p className="aug-fs-sm" style={{ color: "var(--t2)", margin: "6px 0 0" }}>{more}</p>}
-      {block.text && <p className="aug-fs-sm" style={{ margin: "8px 0 0" }}><CitedText text={block.text} onCite={ctx.onCite} /></p>}
+      {more && (src.kind !== "analysis" || !block.text) && <p className="aug-fs-ui" style={{ color: "var(--t2)", margin: "6px 0 0" }}>{more}</p>}
+      {block.text && <p className="aug-fs-ui" style={{ margin: "8px 0 0" }}><CitedText text={block.text} onCite={ctx.onCite} /></p>}
       {measuredBeforeWords(src) && (
         <p data-testid="edition-measured-before" className="aug-fs-sm" style={{ color: "var(--amb4)", margin: "8px 0 0" }}>{measuredBeforeWords(src)}</p>
       )}
@@ -231,7 +230,7 @@ const BODY: Record<BlockType, (p: BodyProps) => React.ReactNode> = {
           <div className="aug-fs-display" style={{ color: "var(--t1)", fontWeight: 600 }}>{fig.current_text}</div>
           {u && <div className="aug-fs-sm" style={{ color: "var(--t3)" }}>usual {u.low_text}–{u.high_text}</div>}
           {fig.previous_text && <div className="aug-fs-sm" style={{ color: "var(--t3)" }}>the range before {fig.previous_text}</div>}
-          {block.text && <p className="aug-fs-sm" style={{ margin: "8px 0 0" }}><CitedText text={block.text} onCite={ctx.onCite} /></p>}
+          {block.text && <p className="aug-fs-ui" style={{ margin: "8px 0 0" }}><CitedText text={block.text} onCite={ctx.onCite} /></p>}
         </div>
         <RangeBars figure={fig} period="week" />
       </div>
@@ -367,7 +366,7 @@ const BODY: Record<BlockType, (p: BodyProps) => React.ReactNode> = {
   },
   decision: p => <DecisionBody {...p} />,
   context: p => <ContextBody {...p} />,
-  quiet: ({ block, ctx }) => <p className="aug-fs-sm" style={{ color: "var(--t3)", margin: 0 }}><CitedText text={block.text} onCite={ctx.onCite} /></p>,
+  quiet: ({ block, ctx }) => <p className="aug-fs-ui" style={{ color: "var(--t3)", margin: 0 }}><CitedText text={block.text} onCite={ctx.onCite} /></p>,
 };
 
 /** The way back on a card a reader has drilled: each earlier version a button, back to the one the model wrote. */
@@ -412,13 +411,14 @@ function BlockCard({ block: written, ctx }: { block: EditionBlock; ctx: Ctx }) {
   return (
     <section ref={card} data-testid="edition-block" data-type={block.type}
       style={{ margin: "16px 0", padding: bare ? "4px 0" : "16px 18px", borderRadius: "var(--r3)",
-               background: bare ? "transparent" : decision ? "var(--amb1)" : "var(--bg-1)",
-               border: bare ? "none" : `1px solid ${block.kicker === "Drill" ? "var(--blue4)" : "var(--b1)"}` }}>
+               // a block is its surface on the ground; a drill keeps one mark, the accent's stripe (2026-11-20, borders are
+               // the exception)
+               background: bare ? "transparent" : decision ? "var(--amb1)" : "var(--bg-2)",
+               borderLeft: !bare && block.kicker === "Drill" ? "3px solid var(--blue4)" : undefined }}>
       {(block.kicker || title) && block.type !== "control" && (
         <>
           {trail.length > 0 ? <DrillTrail card={written.id} trail={trail} ctx={ctx} />
-            : block.kicker && <div className="aug-fs-xs" style={{ letterSpacing: "0.08em", textTransform: "uppercase",
-                                                                  color: decision ? "var(--amb4)" : "var(--t3)", marginBottom: 6 }}>{block.kicker}</div>}
+            : block.kicker && <div className="aug-label" style={{ color: decision ? "var(--amb4)" : undefined, marginBottom: 6 }}>{block.kicker}</div>}
           {title && <h3 className="aug-fs-h1" style={{ color: "var(--t1)", fontWeight: 600, margin: "0 0 8px", lineHeight: 1.3 }}>{title}</h3>}
         </>
       )}

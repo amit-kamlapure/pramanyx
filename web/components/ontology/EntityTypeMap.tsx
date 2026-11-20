@@ -76,7 +76,10 @@ import {
 import { SelectField } from "@/components/ui/select";
 
 const MONO: React.CSSProperties = { fontFamily: "var(--font-mono)" };
+/** A field's edge and the hairline between a list's rows; the rail's side is the one pane rule (--divide), and its
+ *  draft and New entity part from the list by spacing (2026-11-20, borders are the exception). */
 const RULE = "1px solid var(--b1)";
+const PANE_RULE = "1px solid var(--divide)";
 /** How far a card or a link the picked type does not touch falls back. */
 const UNLIT = 0.38;
 const FIELD: React.CSSProperties = {
@@ -488,7 +491,7 @@ function TypeRail({ types, parts, selected, query, onQuery, onPick, processes, r
         <span style={{ display: "grid", gridTemplateColumns: "auto minmax(0, 1fr) auto", columnGap: 8, rowGap: 1, width: "100%",
                        textAlign: "left", alignItems: "center" }}>
           <IconSquare name={part ? "layers" : "node"} title={part ? "a part of another type" : "an entity type"} />
-          <span className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: current ? 600 : 500, overflow: "hidden",
+          <span className="aug-fs-chrome" style={{ color: "var(--t1)", fontWeight: current ? 600 : 500, overflow: "hidden",
                                                 textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {t.display_name}
           </span>
@@ -499,12 +502,12 @@ function TypeRail({ types, parts, selected, query, onQuery, onPick, processes, r
           {/* ON-8 — the connection on a line of its own: a name like "LuxExperience (explorer draft)" would push the key
               and the links off the rail's edge. */}
           {sources && t.connection_id && (
-            <span className="aug-fs-xs" data-testid="entity-rail-connection" title={`read from ${nameOf(sources, t.connection_id)}`}
+            <span className="aug-fs-sm" data-testid="entity-rail-connection" title={`read from ${nameOf(sources, t.connection_id)}`}
               style={{ gridColumn: "2 / -1", color: "var(--t3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               on {nameOf(sources, t.connection_id)}
             </span>
           )}
-          <span className="aug-fs-xs" style={{ gridColumn: "2 / -1", color: "var(--t3)" }}>
+          <span className="aug-fs-sm" style={{ gridColumn: "2 / -1", color: "var(--t3)" }}>
             {part ? `part of ${t.absorbed_into}` : (
               <>
                 <KeyMark verified={t.key_verified} />
@@ -524,10 +527,10 @@ function TypeRail({ types, parts, selected, query, onQuery, onPick, processes, r
   };
   return (
     <nav aria-label="Entity types"
-      style={{ width: 212, flexShrink: 0, borderRight: RULE, display: "flex", flexDirection: "column", minHeight: 0,
+      style={{ width: 212, flexShrink: 0, borderRight: PANE_RULE, display: "flex", flexDirection: "column", minHeight: 0,
                background: "var(--bg-0)" }}>
       <div style={{ padding: "10px 10px 6px" }}>
-        <Input value={query} onChange={(e) => onQuery(e.target.value)} placeholder="Find an entity type"
+        <Input variant="soft" value={query} onChange={(e) => onQuery(e.target.value)} placeholder="Find an entity type"
           aria-label="Find an entity type" data-testid="entity-rail-search" />
         <div className="aug-fs-xs" style={{ color: "var(--t3)", marginTop: 6 }}>
           {shown.length === types.length ? `${types.length} types` : `${shown.length} of ${types.length} types`}
@@ -538,8 +541,7 @@ function TypeRail({ types, parts, selected, query, onQuery, onPick, processes, r
         {shown.length === 0 && shownParts.length === 0 && <EmptyState variant="inline" title={`No type matches “${query.trim()}”.`} />}
         {shown.map((t) => row(t, false))}
         {shownParts.length > 0 && (
-          <div className="aug-fs-xs" style={{ color: "var(--t3)", padding: "8px 8px 2px", textTransform: "uppercase",
-                                              letterSpacing: ".06em", fontWeight: 600 }}>
+          <div className="aug-label" style={RAIL_HEADING}>
             Parts
           </div>
         )}
@@ -553,9 +555,8 @@ function TypeRail({ types, parts, selected, query, onQuery, onPick, processes, r
   );
 }
 
-const RAIL_HEADING: React.CSSProperties = {
-  color: "var(--t3)", padding: "8px 8px 2px", textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 600,
-};
+/** A rail's section heading, with `className="aug-label"`. */
+const RAIL_HEADING: React.CSSProperties = { padding: "8px 8px 2px" };
 
 function breachWords(rate: number | null): string {
   return rate == null ? "not counted" : `${(rate * 100).toFixed(2)}% broken`;
@@ -575,7 +576,7 @@ function DeclarationRows({ processes, rules, openProcess, onPickProcess, onPickT
   if (!processes.length && !rules.length && !onNewProcess && !onNewAction) return null;
   return (
     <>
-      {(processes.length > 0 || onNewProcess) && <div className="aug-fs-xs" style={RAIL_HEADING}>Processes</div>}
+      {(processes.length > 0 || onNewProcess) && <div className="aug-label" style={RAIL_HEADING}>Processes</div>}
       {processes.map((p) => {
         const current = p.id === openProcess;
         return (
@@ -584,8 +585,8 @@ function DeclarationRows({ processes, rules, openProcess, onPickProcess, onPickT
             title={`Open the ${p.display_name} process — its stages, timings and promises`}
             style={current ? { background: "var(--bg-hover)" } : undefined}>
             <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", minWidth: 0, gap: 1 }}>
-              <span className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: current ? 600 : 500 }}>{p.display_name}</span>
-              <span className="aug-fs-xs" style={{ color: p.verified === false ? "var(--red5)" : "var(--t3)" }}>
+              <span className="aug-fs-chrome" style={{ color: "var(--t1)", fontWeight: current ? 600 : 500 }}>{p.display_name}</span>
+              <span className="aug-fs-sm" style={{ color: p.verified === false ? "var(--red5)" : "var(--t3)" }}>
                 {p.entity} · {p.stages.length} stages
                 {p.promises.map((promise) => ` · ${promise.name} ${breachWords(promise.breach_rate)}`).join("")}
               </span>
@@ -599,20 +600,20 @@ function DeclarationRows({ processes, rules, openProcess, onPickProcess, onPickT
           <Icon name="plus" size={12} /> New process
         </Button>
       )}
-      {onNewAction && <div className="aug-fs-xs" style={RAIL_HEADING}>Actions</div>}
+      {onNewAction && <div className="aug-label" style={RAIL_HEADING}>Actions</div>}
       {onNewAction && (
         <Button variant="ghost" size="sm" onClick={onNewAction} data-testid="entity-rail-new-action"
           className="justify-start py-1.5" title="Decide an action people can press on an object — what it does, when it is allowed, who approves">
           <Icon name="plus" size={12} /> New action
         </Button>
       )}
-      {rules.length > 0 && <div className="aug-fs-xs" style={RAIL_HEADING}>Rules</div>}
+      {rules.length > 0 && <div className="aug-label" style={RAIL_HEADING}>Rules</div>}
       {rules.map((r) => (
         <Button key={r.id} variant="plain" size="sm" onClick={() => onPickType(r.entity)} data-testid="entity-rail-rule"
           className="h-auto w-full justify-start py-1.5" title={`Open ${r.entity}, where ${r.display_name} reads as a segment`}>
           <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", minWidth: 0, gap: 1 }}>
-            <span className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: 500 }}>{r.display_name}</span>
-            <span className="aug-fs-xs" style={{ color: r.verified === false ? "var(--red5)" : "var(--t3)" }}>
+            <span className="aug-fs-chrome" style={{ color: "var(--t1)", fontWeight: 500 }}>{r.display_name}</span>
+            <span className="aug-fs-sm" style={{ color: r.verified === false ? "var(--red5)" : "var(--t3)" }}>
               {r.entity} · {r.admitted == null ? "not counted" : `admits ${formatCount(r.admitted)}`}
               {r.scopes?.length ? ` · scopes ${r.scopes.join(", ")}` : ""}
               {r.flags ? ` · ${r.flags} flagged` : ""}
@@ -659,9 +660,9 @@ function ExplorerDraft({ draft, explore, confirm, onOpen, reviewSignal = 0 }: {
   };
   const gone = counts ? counts.withdrawn + counts.released : 0;
   return (
-    <div ref={box} style={{ padding: "8px 10px", borderTop: RULE, display: "flex", flexDirection: "column", gap: 6 }}
+    <div ref={box} style={{ padding: "12px 10px 8px", display: "flex", flexDirection: "column", gap: 6 }}
       data-testid="explorer-draft">
-      <div className="aug-fs-xs" style={{ color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 600 }}>
+      <div className="aug-label">
         Explorer draft
       </div>
       {run && counts ? (
@@ -711,10 +712,10 @@ function ExplorerDraft({ draft, explore, confirm, onOpen, reviewSignal = 0 }: {
                   <Button variant="minimal" size="xs" onClick={() => onOpen(p.object_type)}>Open</Button>
                 )}
               </div>
-              <div className="aug-fs-xs" style={{ ...MONO, color: "var(--t1)", overflowWrap: "anywhere", marginTop: 2 }}>
+              <div className="aug-fs-chrome" style={{ ...MONO, color: "var(--t1)", overflowWrap: "anywhere", marginTop: 2 }}>
                 {p.sentence}
               </div>
-              <div className="aug-fs-xs" style={{ color: "var(--t3)", lineHeight: 1.45, overflowWrap: "anywhere" }}
+              <div className="aug-fs-sm" style={{ color: "var(--t3)", lineHeight: 1.45, overflowWrap: "anywhere" }}
                 title={p.note}>
                 {p.tier === "refused" || !p.reason ? p.note : p.reason}
               </div>
@@ -814,7 +815,7 @@ function DeclareEntity({ declare, sources, bare = false, connectionId, schema, a
     }
   };
   return (
-    <div style={headless ? { display: "contents" } : bare ? { paddingTop: 10 } : { padding: "6px 10px 10px", borderTop: RULE }}>
+    <div style={headless ? { display: "contents" } : bare ? { paddingTop: 10 } : { padding: "10px 10px" }}>
       <Door open={open} onOpenChange={setOpen} busy={busy} label={headless ? undefined : "New entity"} testId="entity-declare" title="New entity"
         hint="A thing the business keeps — what it reads, what one row is, and what tells two apart"
         description={sources

@@ -41,7 +41,9 @@ import {
 } from "@/lib/objectTypes";
 
 const MONO: React.CSSProperties = { fontFamily: "var(--font-mono)" };
-const RULE = "1px solid var(--b1)";
+/** The one rule this panel keeps: its side, between it and the map worked beside it (2026-11-20, borders are the
+ *  exception) — sections part by spacing, stages by their number and name. */
+const PANE_RULE = "1px solid var(--divide)";
 
 function errorText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -62,10 +64,9 @@ function days(n: number | null | undefined): string {
 
 function Section({ title, aside, children }: { title: string; aside?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <section style={{ padding: "12px 16px", borderTop: RULE }}>
+    <section style={{ padding: "14px 16px" }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 8 }}>
-        <h3 className="aug-fs-xs"
-          style={{ margin: 0, color: "var(--t2)", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em" }}>
+        <h3 className="aug-label" style={{ margin: 0 }}>
           {title}
         </h3>
         {aside && <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>{aside}</span>}
@@ -130,7 +131,7 @@ export function ProcessPanel({ connectionId, schema, processId, version, onOpenT
   return (
     // As wide as the entity panel it takes the place of, so opening a process does not move the map.
     <aside aria-label="Process" data-testid="process-panel" data-full={full || undefined}
-      style={{ ...(full ? { flex: 1, minWidth: 0 } : { width: 470, flexShrink: 0, borderLeft: RULE }),
+      style={{ ...(full ? { flex: 1, minWidth: 0 } : { width: 470, flexShrink: 0, borderLeft: PANE_RULE }),
                display: "flex", flexDirection: "column", minHeight: 0, background: "var(--bg-0)" }}>
       <div style={{ flex: 1, overflowY: "auto" }}>{body}</div>
     </aside>
@@ -257,19 +258,19 @@ function StageRow({ stage, index, onOpenType, process, scope, connectionId, sche
 }) {
   const before = Object.entries(stage.precedes ?? {}).filter(([name]) => name !== stage.transition?.from);
   return (
-    <div data-testid="process-stage" style={{ borderLeft: RULE, paddingLeft: 10 }}>
+    <div data-testid="process-stage">
       <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
         <span className="aug-fs-xs" style={{ ...MONO, color: "var(--t3)" }}>{index + 1}</span>
-        <span className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: 600 }}>{stage.display_name}</span>
+        <span className="aug-fs-chrome" style={{ color: "var(--t1)", fontWeight: 600 }}>{stage.display_name}</span>
         {stage.verified === false && <span className="aug-tag aug-tag-red">no object reaches it</span>}
       </div>
-      <div className="aug-fs-xs" style={{ ...MONO, color: "var(--t3)", overflowWrap: "anywhere" }}>{anchorWords(stage)}</div>
-      <div className="aug-fs-xs" style={{ color: "var(--t2)" }} title={stage.note}>
+      <div className="aug-fs-sm" style={{ ...MONO, color: "var(--t3)", overflowWrap: "anywhere" }}>{anchorWords(stage)}</div>
+      <div className="aug-fs-sm" style={{ color: "var(--t2)" }} title={stage.note}>
         {count(stage.reached)} reached{stage.share != null ? ` · ${share(stage.share)}` : ""}
       </div>
       {stage.transition && <TransitionLine transition={stage.transition} />}
       {before.map(([name, n]) => (
-        <div key={name} className="aug-fs-xs" style={{ color: "var(--red5)" }} data-testid="process-stage-precedes">
+        <div key={name} className="aug-fs-sm" style={{ color: "var(--red5)" }} data-testid="process-stage-precedes">
           {count(n)} reached {stage.display_name} before {name}
         </div>
       ))}
@@ -310,7 +311,7 @@ function MovesView({ process }: { process: ProcessDetail }) {
     <Section title="How objects move" aside={process.transitions?.length ? "the moves declared are marked" : "each stage to the next is expected"}>
       <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
         {observed.map((m) => (
-          <div key={`${m.from_stage}>${m.to_stage}`} className="aug-fs-xs" data-testid="process-move"
+          <div key={`${m.from_stage}>${m.to_stage}`} className="aug-fs-chrome" data-testid="process-move"
             style={{ display: "flex", alignItems: "center", gap: 6, color: m.declared ? "var(--t1)" : "var(--t2)" }}>
             <span>{name(m.from_stage)} → {name(m.to_stage)}</span>
             <span style={{ color: "var(--t3)" }}>{count(m.objects)}</span>
@@ -381,12 +382,12 @@ function ImpactLine({ impact: i, side, connectionId, schema, onChanged }: {
             remove={() => deleteImpact(connectionId, i.id, schema)} onRemoved={() => { savedToDraft("Removed"); onChanged(); }} />
         </span>
       </div>
-      <div className="aug-fs-xs" style={{ color: "var(--t1)", lineHeight: 1.45 }} data-testid="impact-reading">{i.reading}</div>
+      <div className="aug-fs-chrome" style={{ color: "var(--t1)", lineHeight: 1.45 }} data-testid="impact-reading">{i.reading}</div>
       {/* a reading that did not hold already ends with what was measured — said once */}
       {i.verified !== true && i.note && !i.reading.includes(i.note) && (
-        <div className="aug-fs-xs" style={{ color: "var(--t3)" }}>{i.note}</div>
+        <div className="aug-fs-sm" style={{ color: "var(--t3)" }}>{i.note}</div>
       )}
-      {i.flags.map((f) => <div key={f} className="aug-fs-xs" style={{ color: "var(--t3)" }}>{f}</div>)}
+      {i.flags.map((f) => <div key={f} className="aug-fs-sm" style={{ color: "var(--t3)" }}>{f}</div>)}
       {i.window && <div className="aug-fs-xs" style={{ color: "var(--t3)" }}>read over {i.window}</div>}
     </div>
   );
@@ -476,7 +477,7 @@ function ImpactForm({ downstream, scope, connectionId, schema, onDone }: {
 
 function TransitionLine({ transition: t }: { transition: ProcessTransition }) {
   return (
-    <div className="aug-fs-xs" style={{ color: "var(--t2)", marginTop: 2 }} data-testid="process-transition"
+    <div className="aug-fs-sm" style={{ color: "var(--t2)", marginTop: 2 }} data-testid="process-transition"
       title={`the per-object lag reads as ${t.lag}`}>
       from {t.from}: p50 {days(t.p50_days)} · p90 {days(t.p90_days)} · p95 {days(t.p95_days)} days
       {t.out_of_order ? <span style={{ color: "var(--red5)" }}> · {count(t.out_of_order)} before {t.from}</span> : null}
@@ -497,8 +498,8 @@ function PromiseBlock({ promise: p, stage, onOpenType }: {
       : `within ${p.within_days} calendar day${p.within_days === 1 ? "" : "s"} of the stage before`;
   return (
     <div className="aug-panel" data-testid="process-promise" style={{ marginTop: 6, padding: "6px 8px" }}>
-      <div className="aug-fs-xs" style={{ color: "var(--t1)", fontWeight: 600 }}>The {p.name} promise — {terms}</div>
-      <div className="aug-fs-xs" style={{ color: "var(--t3)", display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+      <div className="aug-fs-chrome" style={{ color: "var(--t1)", fontWeight: 600 }}>The {p.name} promise — {terms}</div>
+      <div className="aug-fs-sm" style={{ color: "var(--t3)", display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
         <span>kept per</span>
         <Button variant="minimal" size="xs" onClick={() => onOpenType(p.grain)}>{p.grain}</Button>
         {p.via && <span style={MONO}>via {p.via}</span>}
@@ -508,14 +509,14 @@ function PromiseBlock({ promise: p, stage, onOpenType }: {
         <div className="aug-fs-xs" style={{ color: "var(--t3)" }}>not counted yet</div>
       ) : (
         <>
-          <div className="aug-fs-sm" style={{ color: "var(--t1)" }} data-testid="process-promise-rate">
+          <div className="aug-fs-chrome" style={{ color: "var(--t1)" }} data-testid="process-promise-rate">
             {share(p.breach_rate)} broken
           </div>
-          <div className="aug-fs-xs" style={{ color: "var(--t2)" }}>
+          <div className="aug-fs-sm" style={{ color: "var(--t2)" }}>
             {count(p.breached)} of {count(p.reached)} that reached {stage} broke it
           </div>
           {!!p.open && (
-            <div className="aug-fs-xs" style={{ color: "var(--t3)" }}>
+            <div className="aug-fs-sm" style={{ color: "var(--t3)" }}>
               {count(p.open)} not {stage} yet
               {p.open_overdue != null ? ` · ${count(p.open_overdue)} already past it as of ${p.as_of}` : ""}
             </div>
@@ -523,7 +524,7 @@ function PromiseBlock({ promise: p, stage, onOpenType }: {
         </>
       )}
       {p.flags.map((flag) => (
-        <div key={flag} className="aug-fs-xs" style={{ color: "var(--red5)", lineHeight: 1.45 }} data-testid="process-promise-flag">
+        <div key={flag} className="aug-fs-sm" style={{ color: "var(--red5)", lineHeight: 1.45 }} data-testid="process-promise-flag">
           {flag}
         </div>
       ))}
@@ -540,11 +541,11 @@ export function DerivedList({ rows }: { rows: DerivedRow[] }) {
       {rows.map((d) => (
         <div key={`${d.kind}:${d.name}`} data-testid="derived-row" title={d.source}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
-            <span className="aug-fs-xs" style={{ ...MONO, color: d.usable ? "var(--t1)" : "var(--t3)" }}>{d.name}</span>
+            <span className="aug-fs-chrome" style={{ ...MONO, color: d.usable ? "var(--t1)" : "var(--t3)" }}>{d.name}</span>
             <span className="aug-tag aug-tag-gray">{d.kind}</span>
             {!d.usable && <span className="aug-tag aug-tag-red">refused</span>}
           </div>
-          <div className="aug-fs-xs" style={{ color: "var(--t3)", lineHeight: 1.45 }}>{d.usable ? d.description : d.why_not}</div>
+          <div className="aug-fs-sm" style={{ color: "var(--t3)", lineHeight: 1.45 }}>{d.usable ? d.description : d.why_not}</div>
         </div>
       ))}
     </div>

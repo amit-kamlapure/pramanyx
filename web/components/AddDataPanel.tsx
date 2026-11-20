@@ -113,10 +113,10 @@ function FileTile({ info, onClick }: { info: ConnectorTypeInfo; onClick: () => v
     <Button variant="plain" onClick={onClick} disabled={off} title={off ? missingNote(info) : undefined}
       className={`h-auto p-0 font-normal whitespace-normal items-stretch justify-start ${SVG_SIZE_AUTO}`}
       style={{ display: "flex", flexDirection: "column", gap: 10, padding: 16, borderRadius: 10, cursor: off ? "not-allowed" : "pointer",
-        background: "var(--bg-1)", border: "1px solid var(--b1)", textAlign: "left", width: "100%",
+        background: "var(--gray-a3)", textAlign: "left", width: "100%",
         opacity: off ? 0.55 : 1 }}
-      onMouseEnter={e => { if (off) return; (e.currentTarget as HTMLElement).style.borderColor = brandColor(info.type); (e.currentTarget as HTMLElement).style.background = "var(--bg-2)"; }}
-      onMouseLeave={e => { if (off) return; (e.currentTarget as HTMLElement).style.borderColor = "var(--b1)"; (e.currentTarget as HTMLElement).style.background = "var(--bg-1)"; }}
+      onMouseEnter={e => { if (off) return; (e.currentTarget as HTMLElement).style.background = "var(--gray-a4)"; }}
+      onMouseLeave={e => { if (off) return; (e.currentTarget as HTMLElement).style.background = "var(--gray-a3)"; }}
     >
       <LogoBox type={info.type} size={34} />
       <span style={{ fontSize: 13, fontWeight: 600, color: "var(--t1)" }}>{m.label}</span>
@@ -132,10 +132,10 @@ function ConnectorCard({ info, onClick }: { info: ConnectorTypeInfo; onClick: ()
     <Button variant="plain" onClick={onClick} disabled={off} title={off ? missingNote(info) : undefined}
       className={`h-auto p-0 font-normal justify-start ${SVG_SIZE_AUTO}`}
       style={{ display: "flex", alignItems: "center", gap: 11, padding: "11px 13px", borderRadius: 9, cursor: off ? "not-allowed" : "pointer",
-        background: "var(--bg-1)", border: "1px solid var(--b1)", textAlign: "left", width: "100%",
+        background: "var(--gray-a3)", textAlign: "left", width: "100%",
         opacity: off ? 0.55 : 1 }}
-      onMouseEnter={e => { if (off) return; (e.currentTarget as HTMLElement).style.borderColor = brandColor(info.type); (e.currentTarget as HTMLElement).style.background = "var(--bg-2)"; }}
-      onMouseLeave={e => { if (off) return; (e.currentTarget as HTMLElement).style.borderColor = "var(--b1)"; (e.currentTarget as HTMLElement).style.background = "var(--bg-1)"; }}
+      onMouseEnter={e => { if (off) return; (e.currentTarget as HTMLElement).style.background = "var(--gray-a4)"; }}
+      onMouseLeave={e => { if (off) return; (e.currentTarget as HTMLElement).style.background = "var(--gray-a3)"; }}
     >
       <LogoBox type={info.type} size={34} />
       <span style={{ minWidth: 0, flex: 1 }}>
@@ -145,7 +145,7 @@ function ConnectorCard({ info, onClick }: { info: ConnectorTypeInfo; onClick: ()
             ? <span style={{ fontSize: 11, fontWeight: 600, padding: "1px 6px", borderRadius: 4, background: "color-mix(in srgb, var(--t3) 16%, transparent)", color: "var(--t3)", whiteSpace: "nowrap" }}>NOT INSTALLED</span>
             : m.badge && <span style={{ fontSize: 11, fontWeight: 600, padding: "1px 6px", borderRadius: 4, background: "color-mix(in srgb, var(--blue4,#60a5fa) 16%, transparent)", color: "var(--blue4,#60a5fa)", whiteSpace: "nowrap" }}>{m.badge}</span>}
         </span>
-        <span style={{ display: "block", fontSize: 11, color: "var(--t3)", marginTop: 1, lineHeight: 1.35 }}>{off ? missingNote(info) : m.blurb}</span>
+        <span className="aug-fs-sm" style={{ display: "block", color: "var(--t3)", marginTop: 1, lineHeight: 1.35 }}>{off ? missingNote(info) : m.blurb}</span>
       </span>
     </Button>
   );
@@ -153,7 +153,8 @@ function ConnectorCard({ info, onClick }: { info: ConnectorTypeInfo; onClick: ()
 
 const S: React.CSSProperties = { width: "100%", fontSize: 12, padding: "8px 10px", borderRadius: 6, background: "var(--bg-0)", border: "1px solid var(--b1)", color: "var(--t1)", outline: "none", fontFamily: "inherit" };
 const L: React.CSSProperties = { fontSize: 11, color: "var(--t3)", marginBottom: 5, display: "block", fontWeight: 500 };
-const sectionLabel: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: "var(--t2)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 12, display: "flex", alignItems: "center", gap: 7 };
+/** Layout only: the type is the section label's own (.aug-label — 12px semibold sentence case). */
+const sectionLabel: React.CSSProperties = { marginBottom: 12, display: "flex", alignItems: "center", gap: 7 };
 
 // ── Workspace file-upload view ──────────────────────────────────────────────────
 
@@ -365,24 +366,24 @@ function WorkspaceUploader({ onAdded, workspaceId }: {
             placeholder="New schema name…" onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addSchema(); } }} />
           <Button variant="plain" type="button" onClick={addSchema} disabled={!newSchema.trim() || addingSchema}
             className="h-auto p-0 font-normal"
-            style={{ fontSize: 12, padding: "8px 12px", borderRadius: 6, cursor: newSchema.trim() ? "pointer" : "not-allowed", background: "transparent", color: "var(--t2)", border: "1px solid var(--b1)", whiteSpace: "nowrap" }}>
+            style={{ fontSize: 12, padding: "8px 12px", borderRadius: 6, cursor: newSchema.trim() ? "pointer" : "not-allowed", background: "var(--gray-a3)", color: "var(--t2)", whiteSpace: "nowrap" }}>
             + Add schema
           </Button>
         </div>
 
         {conflict && (
-          <div style={{ fontSize: 12, color: "var(--amb4)", padding: "9px 12px", borderRadius: 6, background: "color-mix(in srgb, var(--amb4) 10%, var(--bg-1))", border: "1px solid color-mix(in srgb, var(--amb4) 35%, transparent)" }}>
+          <div style={{ fontSize: 12, color: "var(--amb4)", padding: "9px 12px", borderRadius: 6, background: "color-mix(in srgb, var(--amb4) 10%, var(--bg-1))" }}>
             A table <strong style={{ fontFamily: "var(--font-mono)" }}>{schema}.{conflict.table_name}</strong> already exists — importing will <strong>replace</strong> it. Rename above to keep both.
           </div>
         )}
 
         {/* Columns + types */}
         <div>
-          <p style={sectionLabel}>
+          <p className="aug-label" style={sectionLabel}>
             Columns · {a.columns.length}
-            {mismatches > 0 && <span style={{ fontSize: 11, fontWeight: 600, padding: "1px 7px", borderRadius: 4, background: "color-mix(in srgb, var(--amb4) 16%, transparent)", color: "var(--amb4)", textTransform: "none", letterSpacing: 0 }}>{mismatches} type suggestion{mismatches > 1 ? "s" : ""}</span>}
+            {mismatches > 0 && <span style={{ fontSize: 11, fontWeight: 600, padding: "1px 7px", borderRadius: 4, background: "color-mix(in srgb, var(--amb4) 16%, transparent)", color: "var(--amb4)" }}>{mismatches} type suggestion{mismatches > 1 ? "s" : ""}</span>}
           </p>
-          <div style={{ border: "1px solid var(--b1)", borderRadius: 8, overflow: "hidden" }}>
+          <div style={{ borderRadius: 8, overflow: "hidden" }}>
             {a.columns.map((c, i) => {
               const detected = baseType(c.detected_type);
               const suggest = c.suggested_type && c.suggested_type !== detected ? c.suggested_type : null;
@@ -394,7 +395,7 @@ function WorkspaceUploader({ onAdded, workspaceId }: {
                       the moment you override the select beside it — which is the only
                       confirmation this screen gives that a cast took. */}
                   <ColumnTypeIcon type={chosen[c.name] ?? detected} size={13} />
-                  <span style={{ flex: "1 1 0", minWidth: 0, fontSize: 12, fontWeight: 500, color: "var(--t1)", fontFamily: "var(--font-mono)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</span>
+                  <span className="aug-fs-chrome" style={{ flex: "1 1 0", minWidth: 0, fontWeight: 500, color: "var(--t1)", fontFamily: "var(--font-mono)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</span>
                   <span className="aug-fs-xs" style={{ color: "var(--t3)", fontFamily: "var(--font-mono)", flexShrink: 0 }}>{c.detected_type}</span>
                   {/* DE-5's hygiene: the reader would have made this column a number and changed its
                       values, so it is text — and the row SAYS so, rather than showing VARCHAR where
@@ -419,7 +420,7 @@ function WorkspaceUploader({ onAdded, workspaceId }: {
                       className="h-auto p-0"
                       style={{ fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: 5, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
                         background: chosen[c.name] === suggest ? "transparent" : "color-mix(in srgb, var(--amb4) 16%, transparent)",
-                        color: "var(--amb4)", border: "1px solid color-mix(in srgb, var(--amb4) 35%, transparent)" }}>
+                        color: "var(--amb4)" }}>
                       {chosen[c.name] === suggest ? "✓ " : "→ "}{suggest}
                     </Button>
                   )}
@@ -435,8 +436,8 @@ function WorkspaceUploader({ onAdded, workspaceId }: {
         {/* Preview */}
         {a.preview.columns.length > 0 && (
           <div>
-            <p style={sectionLabel}>Preview · first {a.preview.rows.length} rows</p>
-            <div style={{ overflowX: "auto", border: "1px solid var(--b1)", borderRadius: 8 }}>
+            <p className="aug-label" style={sectionLabel}>Preview · first {a.preview.rows.length} rows</p>
+            <div style={{ overflowX: "auto", borderRadius: 8 }}>
               <Table style={{ fontSize: 11 }}>
                 <TableHeader>
                   <TableRow>
@@ -468,11 +469,11 @@ function WorkspaceUploader({ onAdded, workspaceId }: {
           {queue.length > 0 && (
             <Button variant="plain" type="button" onClick={() => analyzeNext(queue)} disabled={committing}
               className="h-auto p-0 font-normal"
-              style={{ fontSize: 13, padding: "9px 16px", borderRadius: 6, cursor: "pointer", background: "transparent", color: "var(--t3)", border: "1px solid var(--b1)" }}>Skip</Button>
+              style={{ fontSize: 13, padding: "9px 16px", borderRadius: 6, cursor: "pointer", background: "var(--gray-a3)", color: "var(--t3)" }}>Skip</Button>
           )}
           <Button variant="plain" type="button" onClick={cancelReview}
             className="h-auto p-0 font-normal"
-            style={{ fontSize: 13, padding: "9px 16px", borderRadius: 6, cursor: "pointer", background: "transparent", color: "var(--t3)", border: "1px solid var(--b1)" }}>Cancel</Button>
+            style={{ fontSize: 13, padding: "9px 16px", borderRadius: 6, cursor: "pointer", background: "var(--gray-a3)", color: "var(--t3)" }}>Cancel</Button>
         </div>
       </div>
     );
@@ -496,7 +497,7 @@ function WorkspaceUploader({ onAdded, workspaceId }: {
       </div>
 
       {/* Mode toggle: review each file vs. bulk import into one schema */}
-      <div style={{ display: "inline-flex", gap: 2, padding: 3, borderRadius: 8, background: "var(--bg-2)", border: "1px solid var(--b1)", alignSelf: "flex-start" }}>
+      <div style={{ display: "inline-flex", gap: 2, padding: 3, borderRadius: 8, background: "var(--bg-2)", alignSelf: "flex-start" }}>
         {(["review", "bulk"] as const).map(m => (
           <Button variant="plain" key={m} type="button" onClick={() => { setMode(m); setError(""); setBulkResults(null); }}
             className="h-auto p-0"
@@ -550,7 +551,7 @@ function WorkspaceUploader({ onAdded, workspaceId }: {
               placeholder="New schema name…" onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); bulkAddSchema(); } }} />
             <Button variant="plain" type="button" onClick={bulkAddSchema} disabled={!newSchema.trim() || addingSchema}
               className="h-auto p-0 font-normal"
-              style={{ fontSize: 12, padding: "8px 12px", borderRadius: 6, cursor: newSchema.trim() ? "pointer" : "not-allowed", background: "transparent", color: "var(--t2)", border: "1px solid var(--b1)", whiteSpace: "nowrap" }}>
+              style={{ fontSize: 12, padding: "8px 12px", borderRadius: 6, cursor: newSchema.trim() ? "pointer" : "not-allowed", background: "var(--gray-a3)", color: "var(--t2)", whiteSpace: "nowrap" }}>
               + Add schema
             </Button>
           </div>
@@ -580,17 +581,17 @@ function WorkspaceUploader({ onAdded, workspaceId }: {
         </div>
 
         {bulkResults && (
-          <div style={{ border: "1px solid var(--b1)", borderRadius: 8, overflow: "hidden" }}>
-            <p style={{ fontSize: 11, fontWeight: 600, color: "var(--t2)", padding: "8px 12px", background: "var(--bg-2)", borderBottom: "1px solid var(--b1)" }}>
+          <div style={{ borderRadius: 8, overflow: "hidden" }}>
+            <p style={{ fontSize: 11, fontWeight: 600, color: "var(--t2)", padding: "8px 12px", background: "var(--bg-2)" }}>
               {bulkResults.filter(r => r.status === "ok").length} added{bulkResults.some(r => r.status === "error") ? ` · ${bulkResults.filter(r => r.status === "error").length} failed` : ""} → {bulkSchema}
             </p>
             {bulkResults.map((r, i) => (
-              <div key={`${r.filename}-${i}`} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderTop: i ? "1px solid var(--b0)" : "none", fontSize: 12 }}>
+              <div key={`${r.filename}-${i}`} className="aug-fs-chrome" style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderTop: i ? "1px solid var(--b0)" : "none" }}>
                 <span style={{ color: r.status === "ok" ? "var(--grn4,#34d399)" : "var(--red4)", fontWeight: 700, flexShrink: 0 }}>{r.status === "ok" ? "✓" : "✕"}</span>
                 <span style={{ flex: 1, minWidth: 0, color: "var(--t2)", fontFamily: "var(--font-mono)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {r.filename}{r.status === "ok" && r.table_name ? ` → ${r.table_name}` : ""}
                 </span>
-                {r.status === "error" && <span style={{ color: "var(--red4)", fontSize: 11, flexShrink: 0 }}>{r.error}</span>}
+                {r.status === "error" && <span className="aug-fs-sm" style={{ color: "var(--red4)", flexShrink: 0 }}>{r.error}</span>}
               </div>
             ))}
           </div>
@@ -602,7 +603,7 @@ function WorkspaceUploader({ onAdded, workspaceId }: {
 
       {/* Existing tables, grouped by schema */}
       <div>
-        <p style={sectionLabel}>Tables in {label}{files.length ? ` · ${files.length}` : ""}</p>
+        <p className="aug-label" style={sectionLabel}>Tables in {label}{files.length ? ` · ${files.length}` : ""}</p>
         {files.length === 0 ? (
           <p style={{ fontSize: 12, color: "var(--t3)" }}>No tables yet. Upload a file to create your first one.</p>
         ) : (
@@ -612,19 +613,19 @@ function WorkspaceUploader({ onAdded, workspaceId }: {
                 <p style={{ fontSize: 11, fontWeight: 700, color: "var(--t3)", fontFamily: "var(--font-mono)", marginBottom: 7 }}>{g.schema}</p>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   {g.items.map(f => (
-                    <div key={`${f.schema}.${f.filename}`} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 13px", borderRadius: 8, background: "var(--bg-1)", border: "1px solid var(--b1)" }}>
-                      <span style={{ width: 30, height: 30, borderRadius: 6, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg-2)", border: "1px solid var(--b1)", fontSize: 11, fontWeight: 700, color: "var(--t3)", textTransform: "uppercase" }}>
+                    <div key={`${f.schema}.${f.filename}`} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 13px", borderRadius: 8, background: "var(--bg-2)" }}>
+                      <span style={{ width: 30, height: 30, borderRadius: 6, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--gray-a3)", fontSize: 11, fontWeight: 700, color: "var(--t3)" }}>
                         {f.extension.replace(".", "")}
                       </span>
                       <span style={{ minWidth: 0, flex: 1 }}>
-                        <span style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--t1)", fontFamily: "var(--font-mono)" }}>{f.table_name}</span>
-                        <span style={{ display: "block", fontSize: 11, color: "var(--t3)", marginTop: 1 }}>{f.filename} · {fmtBytes(f.size_bytes)}{f.column_types && Object.keys(f.column_types).length > 0 ? ` · ${Object.keys(f.column_types).length} typed` : ""}</span>
+                        <span className="aug-fs-chrome" style={{ display: "block", fontWeight: 600, color: "var(--t1)", fontFamily: "var(--font-mono)" }}>{f.table_name}</span>
+                        <span className="aug-fs-sm" style={{ display: "block", color: "var(--t3)", marginTop: 1 }}>{f.filename} · {fmtBytes(f.size_bytes)}{f.column_types && Object.keys(f.column_types).length > 0 ? ` · ${Object.keys(f.column_types).length} typed` : ""}</span>
                       </span>
                       <Button variant="plain" onClick={() => remove(f)} title="Remove table"
                         className={`h-auto p-0 ${SVG_SIZE_AUTO}`}
-                        style={{ width: 26, height: 26, borderRadius: 6, cursor: "pointer", background: "transparent", border: "1px solid var(--b1)", color: "var(--t3)", display: "flex", alignItems: "center", justifyContent: "center" }}
-                        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--red4)"; (e.currentTarget as HTMLElement).style.borderColor = "var(--red4)"; }}
-                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--t3)"; (e.currentTarget as HTMLElement).style.borderColor = "var(--b1)"; }}
+                        style={{ width: 26, height: 26, borderRadius: 6, cursor: "pointer", background: "var(--gray-a3)", color: "var(--t3)", display: "flex", alignItems: "center", justifyContent: "center" }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--red4)"; (e.currentTarget as HTMLElement).style.background = "var(--gray-a4)"; }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--t3)"; (e.currentTarget as HTMLElement).style.background = "var(--gray-a3)"; }}
                       >
                         <Icon name="trash" size={13} />
                       </Button>
@@ -817,7 +818,7 @@ export function AddDataPanel({ onClose, onAdded, workspaceId }: {
   return (
     <div style={{ height: "100%", overflowY: "auto", background: "var(--bg-0)" }}>
       {/* Header bar */}
-      <div style={{ position: "sticky", top: 0, zIndex: 5, display: "flex", alignItems: "center", gap: 14, padding: "16px 28px", borderBottom: "1px solid var(--b1)", background: "var(--bg-0)" }}>
+      <div style={{ position: "sticky", top: 0, zIndex: 5, display: "flex", alignItems: "center", gap: 14, padding: "16px 28px", background: "var(--bg-0)" }}>
         {picked ? (
           <Button variant="plain" onClick={() => setPicked(null)}
             className={`h-auto p-0 font-normal ${SVG_SIZE_AUTO}`}
@@ -835,7 +836,7 @@ export function AddDataPanel({ onClose, onAdded, workspaceId }: {
         )}
         <Button variant="plain" onClick={onClose} title="Close (Esc)"
           className={`h-auto p-0 font-normal ${SVG_SIZE_AUTO}`}
-          style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, fontSize: 12, padding: "6px 12px", borderRadius: 6, cursor: "pointer", background: "transparent", border: "1px solid var(--b1)", color: "var(--t3)", fontFamily: "inherit" }}
+          style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, fontSize: 12, padding: "6px 12px", borderRadius: 6, cursor: "pointer", background: "var(--gray-a3)", color: "var(--t3)", fontFamily: "inherit" }}
           onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "var(--t1)"}
           onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "var(--t3)"}>
           <Icon name="close" size={13} />
@@ -853,7 +854,7 @@ export function AddDataPanel({ onClose, onAdded, workspaceId }: {
             {/* Files */}
             {fileSources.length > 0 && (
               <div style={{ marginBottom: 30 }}>
-                <p style={sectionLabel}>Files</p>
+                <p className="aug-label" style={sectionLabel}>Files</p>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 12 }}>
                   {fileSources.map(info => <FileTile key={info.type} info={info} onClick={() => pick(info)} />)}
                 </div>
@@ -863,7 +864,7 @@ export function AddDataPanel({ onClose, onAdded, workspaceId }: {
             {/* Connectors */}
             {grouped.map(g => (
               <div key={g.id} style={{ marginBottom: 28 }}>
-                <p style={sectionLabel}>{g.label}</p>
+                <p className="aug-label" style={sectionLabel}>{g.label}</p>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: 10 }}>
                   {g.items.map(info => <ConnectorCard key={info.type} info={info} onClick={() => pick(info)} />)}
                 </div>
@@ -892,7 +893,7 @@ export function AddDataPanel({ onClose, onAdded, workspaceId }: {
             </div>
 
             {picked.fields.length === 0 && (
-              <p style={{ fontSize: 12, color: "var(--t3)", lineHeight: 1.5, padding: "10px 12px", background: "var(--bg-1)", border: "1px solid var(--b1)", borderRadius: 6 }}>
+              <p style={{ fontSize: 12, color: "var(--t3)", lineHeight: 1.5, padding: "10px 12px", background: "var(--bg-2)", borderRadius: 6 }}>
                 No configuration needed — create the connection, then manage it from the catalog.
               </p>
             )}
@@ -919,7 +920,7 @@ export function AddDataPanel({ onClose, onAdded, workspaceId }: {
               </Button>
               <Button variant="plain" type="button" onClick={() => setPicked(null)}
                 className="h-auto p-0 font-normal"
-                style={{ fontSize: 13, padding: "9px 16px", borderRadius: 6, cursor: "pointer", background: "transparent", color: "var(--t3)", border: "1px solid var(--b1)" }}>Back</Button>
+                style={{ fontSize: 13, padding: "9px 16px", borderRadius: 6, cursor: "pointer", background: "var(--gray-a3)", color: "var(--t3)" }}>Back</Button>
             </div>
           </form>
         )}

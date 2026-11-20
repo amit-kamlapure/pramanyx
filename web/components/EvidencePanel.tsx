@@ -250,7 +250,7 @@ export function EvidencePanel({ connectionId, canvasId, onInvestigate: reexamine
       ) : (
         <div style={{ overflowX: "auto" }}>
           <div role="table" aria-label="Claims" style={{ minWidth: 660 }}>
-            <div role="row" className="aug-fs-xs" style={{ ...CLAIM_GRID, ...MUTED, textTransform: "uppercase", letterSpacing: ".06em", padding: "0 0 6px 8px" }}>
+            <div role="row" className="aug-fs-xs" style={{ ...CLAIM_GRID, ...MUTED, padding: "0 0 6px 8px" }}>
               <span role="columnheader">Claim</span><span role="columnheader">Review</span>
               <span role="columnheader">Mentions</span><span role="columnheader">Reads</span>
               <span role="columnheader" style={{ textAlign: "right" }}>Recorded</span>
@@ -259,7 +259,7 @@ export function EvidencePanel({ connectionId, canvasId, onInvestigate: reexamine
               const name = nameOf(g.run);
               return (
                 <div key={g.run} role="rowgroup" data-testid="evidence-run">
-                  <div role="row" className="aug-fs-xs" style={{ display: "flex", alignItems: "baseline", gap: 8,
+                  <div role="row" className="aug-fs-sm" style={{ display: "flex", alignItems: "baseline", gap: 8,
                     padding: "10px 0 4px 8px", borderTop: "1px solid var(--b1)" }}>
                     <span role="cell" title={name.full || undefined} style={{ ...ONE_LINE, color: "var(--t2)", fontWeight: 600 }}>{name.title}</span>
                     {name.scheduled && <Chip>scheduled</Chip>}
@@ -368,19 +368,19 @@ function ClaimRow({ claim: c, picked, onPick }: { claim: EvidenceClaim; picked: 
         background: picked ? "var(--bg-hover)" : undefined, boxShadow: picked ? "inset 2px 0 0 var(--blue3)" : undefined }}>
       <span role="cell" style={{ minWidth: 0 }} title={c.claim_text}>
         <span className="aug-fs-chrome" style={{ ...ONE_LINE, display: "block", color: "var(--t1)" }}>{head}</span>
-        {rest && <span className="aug-fs-xs" style={{ ...MUTED, ...ONE_LINE, display: "block" }}>{rest}</span>}
+        {rest && <span className="aug-fs-sm" style={{ ...MUTED, ...ONE_LINE, display: "block" }}>{rest}</span>}
       </span>
-      <span role="cell" className="aug-fs-xs" style={{ ...ROW, gap: 6, flexWrap: "nowrap", color: fb ? "var(--t1)" : "var(--t3)" }}>
+      <span role="cell" className="aug-fs-chrome" style={{ ...ROW, gap: 6, flexWrap: "nowrap", color: fb ? "var(--t1)" : "var(--t3)" }}>
         <Dot hue={fb?.hue ?? "grey"} />{fb?.word ?? "not reviewed"}
       </span>
-      <span role="cell" className="aug-fs-xs" style={{ ...ONE_LINE, color: c.metric_used ? "var(--t2)" : "var(--t3)" }}
+      <span role="cell" className="aug-fs-chrome" style={{ ...ONE_LINE, color: c.metric_used ? "var(--t2)" : "var(--t3)" }}
         title={c.metric_used ? "A keyword found in the claim, not a link to the metric." : undefined}>
         {c.metric_used ?? "none"}
       </span>
-      <span role="cell" className="aug-fs-xs" style={{ ...ONE_LINE, color: "var(--t2)" }} title={reads.join(", ") || undefined}>
+      <span role="cell" className="aug-fs-chrome" style={{ ...ONE_LINE, color: "var(--t2)" }} title={reads.join(", ") || undefined}>
         {c.sql_source ? (reads.length ? reads.join(", ") : "its query") : <Chip title="No query was recorded for this claim.">no query</Chip>}
       </span>
-      <span role="cell" className="aug-fs-xs" title={formatTimestamp(c.created_at)} style={{ ...MUTED, ...NUM, textAlign: "right", whiteSpace: "nowrap" }}>
+      <span role="cell" className="aug-fs-chrome" title={formatTimestamp(c.created_at)} style={{ ...MUTED, ...NUM, textAlign: "right", whiteSpace: "nowrap" }}>
         {ago(c.created_at)}
       </span>
     </div>
@@ -429,7 +429,7 @@ function ClaimReader({ claim, run, saving, notSaved, onFeedback, onReexamine }: 
       <Label right={<span title={formatTimestamp(claim.created_at)} style={NUM}>recorded {ago(claim.created_at)}</span>}>Claim</Label>
       <div>
         <div className="aug-fs-xs" style={{ ...ROW, gap: 6, color: "var(--t3)", marginBottom: 4 }}>
-          <span style={{ border: "1px solid var(--b2)", borderRadius: "var(--r-chip)", padding: "0 6px", color: "var(--t2)", lineHeight: "16px" }}>
+          <span style={{ background: "var(--gray-a3)", borderRadius: "var(--r-chip)", padding: "0 6px", color: "var(--t2)", lineHeight: "16px" }}>
             Narrative
           </span>
           the deep analysis’s reading of its query’s result

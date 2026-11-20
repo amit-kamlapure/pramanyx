@@ -56,7 +56,6 @@ import { cmDialect, engineFamily, engineWord, explainPrefix, quoteIdentifier, ty
 import {
   DEFAULT_FORMAT_PREFS, formatSql, readFormatPrefs, writeFormatPrefs, type FormatPrefs,
 } from "@/lib/query/format";
-import { OpenQueryDialog } from "@/components/query/OpenQueryDialog";
 import { QueryStart } from "@/components/query/QueryStart";
 import { resolveParamValue, type ParamDef, type ParamValue } from "@/lib/query/paramDefs";
 import {
@@ -265,8 +264,7 @@ export function SqlMode({
   const runAllPref = !!active?.runAll;
   const [showRunMenu, setShowRunMenu] = useState(false);
 
-  // SE-8F — "+ → Open existing", Format's preferences and the keyboard sheet: each opened from Tools ▾ now.
-  const [showOpenDialog, setShowOpenDialog] = useState(false);
+  // Format's preferences and the keyboard sheet, each opened from Tools ▾ ("Open existing" became the recent-runs search).
   const [showFormatMenu, setShowFormatMenu] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   // Storage read in an EFFECT, never a useState initializer (hydration rule).
@@ -724,7 +722,6 @@ export function SqlMode({
         runAll: () => void runAll(),
         format: () => setSql(formatSql(sqlText, engine, fmtPrefs)),
         formatPrefs: () => setShowFormatMenu(true),
-        openExisting: () => setShowOpenDialog(true),
         toggleHistory: () => setRail(r => r === "history" ? "" : "history"),
         shortcuts: () => setShowShortcuts(true),
       },
@@ -781,16 +778,9 @@ export function SqlMode({
           onClose={closeTab}
           onRename={(id, name) => setTabs(prev => prev.map(t => t.id === id ? { ...t, name } : t))}
           trailing={toolbar}
-          onOpenExisting={() => setShowOpenDialog(true)}
           startLabel="New tab"
         />
 
-        <OpenQueryDialog
-          connId={connId}
-          open={showOpenDialog}
-          onClose={() => setShowOpenDialog(false)}
-          onOpen={(sql, name) => openInNewTab(sql, name)}
-        />
 
         {noTabs && (
           <QueryStart
@@ -815,8 +805,9 @@ export function SqlMode({
         <div
           data-testid="sql-toolbar"
           style={{
+            // no rule under it: space sets it apart from the statement (2026-11-20, "borders are the exception")
             display: "flex", alignItems: "center", gap: 6,
-            padding: "5px 10px", borderBottom: "1px solid var(--b0)", flexShrink: 0,
+            padding: "8px 12px 6px", flexShrink: 0,
           }}
         >
           {/* Run and Cancel side by side, as the mockup draws them (the user, 2026-11-10: "both always" — this
@@ -833,7 +824,8 @@ export function SqlMode({
                 onClick={() => runPreferred()} disabled={!connId || running}>
                 <Icon name="run" size={12} /> {running ? "Running…" : "Run"} <kbd className="aug-kbd">⌘↵</kbd>
               </Button>
-              <Button variant="outline" size="xs" className="aug-fs-ui"
+              {/* Run is the one solid action; what sits beside it is quiet — a soft fill, no outline (the user, 2026-11-20) */}
+              <Button variant="soft" size="xs" className="aug-fs-ui"
                 title="Run settings — the row limit, and whether ⌘↵ runs every statement"
                 aria-label="Run settings"
                 onClick={() => setShowRunMenu(v => !v)} disabled={!connId || running}
@@ -842,7 +834,7 @@ export function SqlMode({
                 {runAllPref ? <span style={{ color: "var(--t3)" }}>· all statements</span> : null}
                 <Icon name="chevd" size={12} />
               </Button>
-              <Button variant="outline" size="xs" className="aug-fs-ui" data-testid="sql-cancel"
+              <Button variant="soft" size="xs" className="aug-fs-ui" data-testid="sql-cancel"
                 disabled={!running}
                 title={running ? "Stop this query — the engine is interrupted, not just the wait" : "Nothing is running"}
                 onClick={cancel}>
@@ -892,7 +884,7 @@ export function SqlMode({
             </Chip>
           )}
           {/* Format, on the row as the mockup draws it (it stays in Tools ▾ too, with its preferences). */}
-          <Button variant="outline" size="xs" className="aug-fs-ui" data-testid="sql-format"
+          <Button variant="soft" size="xs" className="aug-fs-ui" data-testid="sql-format"
             disabled={!sqlText.trim()} title="Format the SQL (⌘⇧F) — its preferences are in Tools ▾"
             onClick={() => setSql(formatSql(sqlText, engine, fmtPrefs))}>
             Format
@@ -904,13 +896,13 @@ export function SqlMode({
           )}
           {/* The two side panes, as the mockup's toggles: the catalog at the left, the recent runs at the right. */}
           {onToggleCatalog && (
-            <Button variant={catalogOpen ? "secondary" : "ghost"} size="icon-xs" aria-pressed={!!catalogOpen}
+            <Button variant={catalogOpen ? "soft" : "ghost"} size="icon-xs" aria-pressed={!!catalogOpen}
               aria-label={catalogOpen ? "Hide the catalog" : "Show the catalog"} title={catalogOpen ? "Hide the catalog" : "Show the catalog"}
               data-testid="sql-toggle-catalog" onClick={onToggleCatalog}>
               <Icon name="catalog" size={13} />
             </Button>
           )}
-          <Button variant={rail === "history" ? "secondary" : "ghost"} size="icon-xs" aria-pressed={rail === "history"}
+          <Button variant={rail === "history" ? "soft" : "ghost"} size="icon-xs" aria-pressed={rail === "history"}
             aria-label={rail === "history" ? "Hide recent runs" : "Show recent runs"}
             title={rail === "history" ? "Hide recent runs" : "Show recent runs"}
             data-testid="sql-toggle-history" onClick={() => setRail(r => r === "history" ? "" : "history")}>
@@ -920,7 +912,7 @@ export function SqlMode({
               Explain, Run all, Format and its preferences, Open, Recent runs, the keys — and the workbench's
               own (version history, the share link, the catalog). Format's preferences open beneath it. */}
           <div style={{ position: "relative", display: "flex", alignItems: "center", flexShrink: 0 }}>
-            <ToolsMenu items={tools} testId="sql-tools" />
+            <ToolsMenu items={tools} testId="sql-tools" quiet />
             {showFormatMenu && (
               <>
                 <div style={{ position: "fixed", inset: 0, zIndex: 40 }} onClick={() => setShowFormatMenu(false)} />
@@ -1077,7 +1069,7 @@ export function SqlMode({
         {/* The results pane, folded to one quiet line until a statement runs — nothing of history, ever. */}
         {!outputOpen && (
           <div data-testid="sql-output-rest" className="aug-fs-sm"
-            style={{ ...MUTED, padding: "6px 14px", borderTop: "1px solid var(--b0)", flexShrink: 0 }}>
+            style={{ ...MUTED, padding: "6px 14px", flexShrink: 0 }}>
             Results open here when a statement runs.
           </div>
         )}
@@ -1108,6 +1100,8 @@ export function SqlMode({
           connId={connId}
           refreshKey={historyKey}
           onRestore={sql => openInNewTab(sql, "History")}
+          saved={saved ?? undefined}
+          onOpenSaved={q => onOpenSaved?.(q)}
         />
       }
     />

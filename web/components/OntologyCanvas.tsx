@@ -438,8 +438,8 @@ function EntityNode({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-      {/* Header — avatar + name */}
-      <div className="px-3.5 pt-3.5 pb-3 border-b border-zinc-700/40">
+      {/* Header — avatar + name; no rule under it, spacing parts it from the states (2026-11-20, borders are the exception) */}
+      <div className="px-3.5 pt-3.5 pb-3">
         <div className="flex items-center gap-3">
           {/* Avatar */}
           <div className={cn("w-10 h-10 rounded-md flex items-center justify-center shrink-0 font-bold aug-fs-h2", typeTheme.ring)}>
@@ -474,9 +474,9 @@ function EntityNode({
 
       {/* Lifecycle states */}
       {entity.has_lifecycle && entity.lifecycle_states.length > 0 && (
-        <div className="px-3.5 py-2 border-b border-zinc-700/40">
-          <p className="aug-fs-xs text-zinc-500 uppercase tracking-widest mb-1.5 font-semibold">
-            {entity.lifecycle_column ?? "status"}
+        <div className="px-3.5 py-2">
+          <p className="aug-label mb-1.5">
+            {entity.lifecycle_column ?? "Status"}
           </p>
           <div className="flex flex-wrap gap-1">
             {entity.lifecycle_states.map(s => {
@@ -485,10 +485,10 @@ function EntityNode({
                 <span
                   key={s}
                   className={cn(
-                    "aug-fs-xs font-mono rounded-md px-1.5 py-0.5 border",
+                    "aug-fs-xs font-mono rounded-md px-1.5 py-0.5",
                     isTerminal
-                      ? "text-zinc-500 border-zinc-700/60 bg-zinc-800/40"
-                      : "text-sky-300 border-sky-500/20 bg-sky-500/8",
+                      ? "text-zinc-500 bg-[var(--gray-a3)]"
+                      : "text-sky-300 bg-sky-500/10",
                   )}
                 >
                   {s}
@@ -695,7 +695,7 @@ function FlowEdges({
                     textAnchor="middle"
                     dominantBaseline="central"
                     fontSize={9}
-                    fontFamily="system-ui, sans-serif"
+                    style={{ fontFamily: "var(--font-ui)" }}
                     fill={isHovered ? hoverColor : baseColor}
                     fontStyle="italic"
                   >
@@ -716,7 +716,7 @@ function FlowEdges({
                   textAnchor="middle"
                   dominantBaseline="central"
                   fontSize={8}
-                  fontFamily="monospace"
+                  style={{ fontFamily: "var(--font-mono)" }}
                   fill={hoverColor}
                   opacity={0.75}
                 >
@@ -737,7 +737,7 @@ function CanvasLegend() {
   return (
     <div className="flex items-center gap-4 bg-zinc-900/80 backdrop-blur-sm border border-zinc-700/50 rounded-[var(--r3)] px-4 py-2.5 pointer-events-none flex-wrap">
       {/* Entity types */}
-      <span className="aug-fs-xs text-zinc-500 uppercase tracking-wider font-semibold">Objects</span>
+      <span className="aug-label">Objects</span>
       <div className="flex items-center gap-1.5">
         <span className="w-3 h-3 rounded-md bg-emerald-700/25 border border-emerald-600/30" />
         <span className="aug-fs-xs text-zinc-500">reference data</span>
@@ -753,7 +753,7 @@ function CanvasLegend() {
       {/* Divider */}
       <span className="text-zinc-500 aug-fs-xs">|</span>
       {/* Relationships */}
-      <span className="aug-fs-xs text-zinc-500 uppercase tracking-wider font-semibold">Links</span>
+      <span className="aug-label">Links</span>
       <div className="flex items-center gap-1.5">
         <svg width="28" height="8" className="shrink-0">
           <line x1="0" y1="4" x2="28" y2="4" stroke="var(--blue4)" strokeWidth="1.5"
@@ -789,7 +789,7 @@ function ColLabels({ labels }: { labels: { x: number; label: string }[] }) {
         <div
           key={x}
           className={cn(
-            "absolute aug-fs-xs uppercase tracking-widest font-semibold pointer-events-none",
+            "absolute aug-fs-xs font-semibold pointer-events-none",
             COL_LABEL_STYLE[label] ?? "text-zinc-500",
           )}
           style={{ left: x, top: 20 }}

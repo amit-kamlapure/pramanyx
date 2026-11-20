@@ -123,7 +123,7 @@ function AuthorityLedger({ connectionId, connections, onOpen, onOpenDeclared, on
               ? <Absent>No action has been demoted on this connection. A failed verification demotes its action by itself and withdraws its standing grants; a person can do the same with a reason.</Absent>
               : <>{demoted.map(r => (
                 <div className="aug-item" key={r.action_id}>
-                  <div className="aug-fs-ui" style={{ color: "var(--t1)" }}>{keyToWords(r.action_id)}</div>
+                  <div className="aug-fs-chrome" style={{ color: "var(--t1)" }}>{keyToWords(r.action_id)}</div>
                   <div className="aug-item-foot aug-fs-sm">
                     <span>{r.why.split("; demoted").slice(1).map(x => `demoted${x}`).join("; ") || r.why}</span>
                     <span style={{ flex: 1 }} />
@@ -141,7 +141,7 @@ function AuthorityLedger({ connectionId, connections, onOpen, onOpenDeclared, on
             <>
               {w.writes.slice(0, 20).map((x, i) => (
                 <div className="aug-item" key={String(x.id ?? i)}>
-                  <div className="aug-fs-ui" style={{ color: "var(--t1)" }}>{keyToWords(String(x.action_id ?? "a write"))}</div>
+                  <div className="aug-fs-chrome" style={{ color: "var(--t1)" }}>{keyToWords(String(x.action_id ?? "a write"))}</div>
                   <div className="aug-item-foot aug-fs-sm">
                     <span>through {String(x.door ?? "a door")}</span><span>{String(x.status ?? "")}</span>
                     <span>by {whoLabel(String(x.actor ?? ""))}</span><span>{day(String(x.at ?? x.recorded_at ?? ""))}</span>
@@ -267,7 +267,7 @@ function ActionRecord({ actionId, connectionId, connections, onBack }: {
                 )}>
                 {check.can_graduate
                   ? <Absent>The record earns L4. Booking the graduation writes the receipt that grants it.</Absent>
-                  : check.reasons.map(x => <div className="aug-item aug-fs-ui" key={x} style={{ color: "var(--t1)" }}>{plainRule(x)}</div>)}
+                  : check.reasons.map(x => <div className="aug-item aug-fs-chrome" key={x} style={{ color: "var(--t1)" }}>{plainRule(x)}</div>)}
               </Section>
 
               <Section label="Executions" meta={countNoun(rec.executions.length, "execution")}>
@@ -370,7 +370,7 @@ function Execution({ x, busy, onUndo }: { x: ActionExecution; busy: boolean; onU
   return (
     <div className="aug-item">
       <div style={{ display: "flex", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
-        <span className="aug-fs-ui" style={{ color: "var(--t1)" }}>{params || "no parameters"}</span>
+        <span className="aug-fs-chrome" style={{ color: "var(--t1)" }}>{params || "no parameters"}</span>
         <StatusChip hue={VERIFY_HUE[status] ?? "muted"}>{VERIFY_WORDS[status] ?? status}</StatusChip>
         {undone && <StatusChip hue="muted">undone</StatusChip>}
       </div>

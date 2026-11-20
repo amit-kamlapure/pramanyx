@@ -104,7 +104,7 @@ export function DashboardArrange({ spec, lines, onChange, disabled }: {
     }));
     return (
       <li key={key} data-testid="arrange-card" data-card={what.id || undefined} data-kind={what.kind} style={{
-        display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid var(--b1)",
+        display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid var(--b0)",
       }}>
         <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {what.title}
@@ -177,7 +177,7 @@ export function DashboardArrange({ spec, lines, onChange, disabled }: {
       </div>
       {tabsKey
         ? spec.elements[tabsKey].children.map((t, ti, all) => (
-          <div key={t} data-testid="arrange-tab" style={{ borderTop: "1px solid var(--b1)", paddingTop: 10, marginTop: 10 }}>
+          <div key={t} data-testid="arrange-tab" style={{ paddingTop: 10, marginTop: 14 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span className="aug-label">Tab</span>
               <NameField label="Tab name" value={String(spec.elements[t].props.label ?? "")} testId="arrange-tab-name"

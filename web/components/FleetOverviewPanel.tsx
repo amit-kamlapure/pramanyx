@@ -563,11 +563,11 @@ export function FleetOverviewPanel({ onOpenAgent, onOpenAttention, onOpenInvesti
                         <div className="aug-fs-chrome" style={{ ...ONE_LINE, color: "var(--t1)", fontWeight: 500 }}>
                           {t.subject ?? t.body}
                         </div>
-                        <div className="aug-fs-xs" style={{ ...ONE_LINE, color: "var(--t2)" }}>
+                        <div className="aug-fs-sm" style={{ ...ONE_LINE, color: "var(--t2)" }}>
                           {SOURCE_LABEL[row.source]}{t.subject && t.body ? ` · ${t.body}` : ""}
                         </div>
                       </div>
-                      <span className="aug-fs-sm" style={{ ...NUM, color: row.source === "paused_run" ? "var(--red4)" : "var(--amb4)" }}
+                      <span className="aug-fs-chrome" style={{ ...NUM, color: row.source === "paused_run" ? "var(--red4)" : "var(--amb4)" }}
                         title={row.since_basis === "started_at"
                           ? "waiting since the run started — the pause itself aged out of the journal" : "waiting for"}>
                         {waitedFor(row.waiting_ms, tick)}{row.since_basis === "started_at" && " *"}
@@ -673,10 +673,9 @@ export function FleetOverviewPanel({ onOpenAgent, onOpenAttention, onOpenInvesti
 
           {/* ── the runs behind the figures ───────────────────────────────────────── */}
           <section ref={runsRef} aria-label="Runs" data-testid="ao-runs" style={CARD}>
-            <div className="aug-fs-xs" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8,
-              color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em" }}>
+            <div className="aug-label" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
               Runs
-              <span style={{ marginLeft: "auto", textTransform: "none", letterSpacing: 0 }}>
+              <span className="aug-fs-xs" style={{ marginLeft: "auto", fontWeight: 400, color: "var(--t3)" }}>
                 <Segmented label="Which runs" value={runFilter} onChange={setRunFilter}
                   options={RUN_FILTERS.map(f => ({ value: f.value, label: f.label, title: f.title }))} />
               </span>
@@ -772,7 +771,7 @@ function AgentRow({ row, first, live, expanded, onToggle, onPause, busy, onOpen,
             <span className="aug-fs-chrome" style={ONE_LINE}>{row.name}</span>
             <Icon name={expanded ? "chevu" : "chevd"} size={12} />
           </Button>
-          <div className="aug-fs-xs" style={{ ...ROW, gap: 6, color: "var(--t2)", marginTop: 2 }}>
+          <div className="aug-fs-sm" style={{ ...ROW, gap: 6, color: "var(--t2)", marginTop: 2 }}>
             {!row.enabled ? <Chip tone="amber">paused</Chip>
               : live > 0 ? <Chip tone="accent"><Dot color="var(--blue4)" />{live} running</Chip> : null}
             <span style={ONE_LINE}>{role}</span>
@@ -784,7 +783,7 @@ function AgentRow({ row, first, live, expanded, onToggle, onPause, busy, onOpen,
           </div>
         </div>
         <span>{spark.some(v => v > 0) && <Sparkline values={spark} width={92} height={16} color={hue} />}</span>
-        <span className="aug-fs-sm" style={{ ...NUM, textAlign: "right", color: runs ? "var(--t1)" : "var(--t3)" }}>
+        <span className="aug-fs-chrome" style={{ ...NUM, textAlign: "right", color: runs ? "var(--t1)" : "var(--t3)" }}>
           {noKinds ? "—" : <><b style={{ fontWeight: 600 }}>{formatCount(runs)}</b> {runs === 1 ? "run" : "runs"}</>}
         </span>
         <span className="aug-fs-xs" style={{ ...MUTED, ...NUM, textAlign: "right" }}
@@ -828,11 +827,11 @@ function RunnerRow({ row }: { row: FleetRunnerRow }) {
             background: "repeating-linear-gradient(135deg, var(--t3) 0 2px, transparent 2px 4px)" }} />
           <span className="aug-fs-chrome" style={{ color: "var(--t2)", fontWeight: 600 }}>{row.name}</span>
         </div>
-        <div className="aug-fs-xs" style={{ color: "var(--t2)", marginTop: 2 }}>background · never in the agents&apos; totals</div>
+        <div className="aug-fs-sm" style={{ color: "var(--t2)", marginTop: 2 }}>background · never in the agents&apos; totals</div>
       </div>
       <span>{row.spark.some(v => v > 0) && <Sparkline values={row.spark} width={92} height={16} color="var(--t3)" showDot={false} />}</span>
-      <span className="aug-fs-sm" style={{ ...NUM, textAlign: "right", color: "var(--t2)", whiteSpace: "nowrap" }}>
-        {compactNumber(row.runs)} <span className="aug-fs-xs">checks</span>
+      <span className="aug-fs-chrome" style={{ ...NUM, textAlign: "right", color: "var(--t2)", whiteSpace: "nowrap" }}>
+        {compactNumber(row.runs)} checks
       </span>
       <span className="aug-fs-xs" style={{ ...MUTED, ...NUM, textAlign: "right" }}>
         {row.last_run_at ? `${relTime(row.last_run_at)} ago` : "—"}
@@ -849,7 +848,7 @@ function RunnerRow({ row }: { row: FleetRunnerRow }) {
 function StateMark({ state }: { state: string }) {
   const m = STATE_MARK[state] ?? { word: state.toLowerCase(), color: "var(--t3)" };
   return (
-    <span className="aug-fs-xs" style={{ display: "inline-flex", alignItems: "center", gap: 5, color: m.color }}>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: m.color }}>
       <Dot color={m.color} />{m.word}
     </span>
   );
@@ -874,7 +873,7 @@ function ActiveRuns({ runs, error, onRetry, onKill, connections }: {
               <div className="aug-fs-chrome" style={{ ...ONE_LINE, color: "var(--t1)" }} title={t.raw}>
                 {t.title}
               </div>
-              <div className="aug-fs-xs" style={{ ...ROW, gap: 6, color: "var(--t2)" }}>
+              <div className="aug-fs-sm" style={{ ...ROW, gap: 6, color: "var(--t2)" }}>
                 <StateMark state={saidState(j.state, j.error)} /><span>· {j.agent?.agent || j.kind} · started {relTime(j.created_at)} ago</span>
               </div>
             </div>
@@ -922,7 +921,7 @@ function RangedRuns({ filter, ranged, error, onRetry, rangeWords, connections }:
             gridTemplateColumns: "minmax(0, 1fr) auto", ...(i ? RULE : {}) }}>
             <div style={{ minWidth: 0 }} title={errors.length ? errors.join("\n") : g.raw}>
               <div className="aug-fs-chrome" style={{ ...ONE_LINE, color: "var(--t1)" }}>{g.title}</div>
-              <div className="aug-fs-xs" style={{ ...ROW, gap: 6, color: "var(--t2)" }}>
+              <div className="aug-fs-sm" style={{ ...ROW, gap: 6, color: "var(--t2)" }}>
                 <StateMark state={g.state} />
                 <span>· {g.agent} · latest {relTime(latest.created_at)} ago{typical != null ? ` · typical ${duration(typical)}` : ""}</span>
               </div>

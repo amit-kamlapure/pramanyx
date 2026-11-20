@@ -176,7 +176,7 @@ export function OrgIntelPanel() {
                 return (
                   <div key={f.id} data-testid="org-finding">
                     <p className="aug-fs-ui" style={{ margin: 0, color: "var(--t1)", lineHeight: 1.55 }}>{plain(f.text)}</p>
-                    <div className="aug-fs-xs" style={{ ...MUTED, display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, marginTop: 2 }}>
+                    <div className="aug-fs-sm" style={{ ...MUTED, display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, marginTop: 2 }}>
                       <span style={{ minWidth: 0 }}>
                         {facts.map((x, i) => <span key={i} title={x.title}>{i ? " · " : ""}{x.text}</span>)}
                       </span>
@@ -192,7 +192,7 @@ export function OrgIntelPanel() {
           </section>
         ))}
 
-        <p className="aug-fs-xs" style={{ ...MUTED, margin: "18px 0 0" }}>
+        <p className="aug-fs-sm" style={{ ...MUTED, margin: "18px 0 0" }}>
           Not recorded yet: people and owners, who to ask, and disagreements over what a term means.
         </p>
       </article>

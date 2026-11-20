@@ -18,7 +18,7 @@ import {
   importOntologyTree, listOntologyOverrides, listRoutingProposals,
   type OntologyOverrideRow, type RoutingProposal,
 } from "@/lib/api";
-import { countNoun } from "@/lib/format";
+import { countNoun, sentenceCase } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 
@@ -76,9 +76,9 @@ export function OverridesDrawer({ connId, schema, onClose, onChanged }: {
             const id = String(p.entity_id ?? p.target_id ?? "");
             const bindOk = (p as { bind?: { ok?: boolean } }).bind?.ok !== false;
             return (
-              <div key={i} className="border border-zinc-700/50 rounded-[var(--r2)] p-2 space-y-1">
+              <div key={i} className="bg-[var(--gray-a3)] rounded-[var(--r2)] p-2 space-y-1">
                 <div className="flex items-center gap-2">
-                  <span className="aug-fs-sm text-zinc-200">{id}</span>
+                  <span className="aug-fs-chrome text-zinc-200">{id}</span>
                   {!bindOk && (
                     <span className="aug-fs-xs text-amber-300">
                       did not bind — the table it names is unreadable
@@ -109,10 +109,10 @@ export function OverridesDrawer({ connId, schema, onClose, onChanged }: {
           </EmptyState>
         )}
         {overrides.map((o, i) => (
-          <div key={i} className="border border-zinc-700/50 rounded-[var(--r2)] p-2">
+          <div key={i} className="bg-[var(--gray-a3)] rounded-[var(--r2)] p-2">
             <div className="flex items-center gap-2">
-              <span className="aug-fs-xs text-zinc-500 uppercase">{o.target_kind}</span>
-              <span className="aug-fs-sm text-zinc-200 truncate">{o.target_id}</span>
+              <span className="aug-fs-xs text-zinc-500">{sentenceCase(o.target_kind.replace(/_/g, " "))}</span>
+              <span className="aug-fs-chrome text-zinc-200 truncate">{o.target_id}</span>
               <Button size="xs" variant="ghost" className="ml-auto text-zinc-500 hover:text-red-400"
                 disabled={busy}
                 onClick={() => run(
@@ -121,14 +121,14 @@ export function OverridesDrawer({ connId, schema, onClose, onChanged }: {
                 Revert
               </Button>
             </div>
-            <p className="aug-fs-xs text-zinc-500 mt-1 truncate">
+            <p className="aug-fs-sm text-zinc-500 mt-1 truncate">
               overrides: {Object.keys(o.fields ?? {}).join(", ") || "—"}
             </p>
           </div>
         ))}
       </div>
 
-      <div className="space-y-1 border-t border-zinc-800 pt-3">
+      <div className="space-y-1 pt-3">
         <p className="aug-fs-xs text-zinc-400 font-semibold">Version control</p>
         <p className="aug-fs-xs text-zinc-500">
           Export writes the live ontology as a readable YAML tree; edit it in your

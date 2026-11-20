@@ -380,13 +380,13 @@ function SuiteRow({ suite, first, state, runsRead, cases, conn, ran, runButton, 
               <Chip title={suite.description}>consistency, not correctness</Chip>
             )}
           </div>
-          <div className="aug-fs-xs" title={meta} style={{ ...MUTED, ...ONE_LINE }}>{meta}</div>
+          <div className="aug-fs-sm" title={meta} style={{ ...MUTED, ...ONE_LINE }}>{meta}</div>
         </div>
         <Chip tone={chip.tone} title={chip.title} testId="suite-result">{chip.text}</Chip>
         {block ? <Chip title={block.why}>{block.chip}</Chip> : runButton}
         <Button size="xs" variant="ghost" onClick={onOpen}>Open</Button>
       </div>
-      {ran && <div role="status" className="aug-fs-xs" style={{ ...MUTED, marginTop: 4 }}>{ran}</div>}
+      {ran && <div role="status" className="aug-fs-sm" style={{ ...MUTED, marginTop: 4 }}>{ran}</div>}
     </div>
   );
 }
@@ -533,7 +533,7 @@ function SuiteDetail({ suite, runs, connName, evaluators, onBack, onChanged, onR
               <Button size="xs" onClick={run} disabled={running || suite.cases.length === 0}>
                 {running ? "Running…" : "Run suite"}
               </Button>
-              {!summary && <span className="aug-fs-xs" style={MUTED}>
+              {!summary && <span className="aug-fs-sm" style={MUTED}>
                 A case that passes only some iterations counts as flaky — never rounded into the pass rate.
               </span>}
             </div>
@@ -650,11 +650,11 @@ function CasesCard({ suite, onChanged, setError }: {
             <div key={c.id} data-testid="case-row" style={{ ...(i === 0 ? {} : RULE), padding: "7px 2px",
               display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 12, alignItems: "center" }}>
               <div style={{ minWidth: 0 }}>
-                <div className="aug-fs-sm" title={c.question} style={{ ...ONE_LINE, color: "var(--t1)" }}>
+                <div className="aug-fs-chrome" title={c.question} style={{ ...ONE_LINE, color: "var(--t1)" }}>
                   {c.question || <span style={MUTED}>No question</span>}
                 </div>
                 {c.artifact.trim() ? (
-                  <code className="aug-fs-xs" title={c.artifact} style={{ ...ONE_LINE, display: "block", ...MUTED,
+                  <code className="aug-fs-sm" title={c.artifact} style={{ ...ONE_LINE, display: "block", ...MUTED,
                     fontFamily: "var(--font-code)" }}>{c.artifact.replace(/\s+/g, " ")}</code>
                 ) : suite.target === "reference" && <Chip>no SQL</Chip>}
               </div>
@@ -679,7 +679,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
     <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
       <span className="aug-fs-xs" style={MUTED}>{label}</span>
       {children}
-      {hint && <span className="aug-fs-xs" style={MUTED}>{hint}</span>}
+      {hint && <span className="aug-fs-sm" style={MUTED}>{hint}</span>}
     </div>
   );
 }

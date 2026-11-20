@@ -76,8 +76,8 @@ export function TreeRow({
 
       <span style={{ color: isSelected ? "var(--blue4)" : "var(--t3)", display: "flex", alignItems: "center" }}>{icon}</span>
 
-      <span style={{
-        fontSize: 13, flex: 1, minWidth: 0,
+      <span className="aug-fs-chrome" style={{
+        flex: 1, minWidth: 0,
         overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
         color: isSelected ? "var(--t1)" : "var(--t2)", fontWeight: isSelected ? 500 : 400,
       }}>
@@ -87,7 +87,7 @@ export function TreeRow({
       {badge}
 
       {count != null && count !== "" && (
-        <span style={{ fontSize: 11, color: "var(--t3)", flexShrink: 0 }}>
+        <span className="aug-fs-xs" style={{ color: "var(--t3)", flexShrink: 0 }}>
           {count}
         </span>
       )}

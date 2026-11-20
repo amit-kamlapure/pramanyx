@@ -83,7 +83,7 @@ function VerdictChip({ verdict }: { verdict: IntakeVerdict }) {
   const v = VERDICT_STYLE[verdict] ?? VERDICT_STYLE.new;
   return (
     <span className="aug-fs-xs" style={{
-      color: v.color, border: `1px solid color-mix(in srgb, ${v.color} 45%, transparent)`,
+      color: v.color, background: `color-mix(in srgb, ${v.color} 14%, transparent)`,
       borderRadius: "var(--r-chip)", padding: "1px 8px", whiteSpace: "nowrap",
     }}>{v.word}</span>
   );
@@ -102,14 +102,14 @@ function PayloadView({ payload }: { payload: Record<string, unknown> }) {
         <React.Fragment key={k}>
           <span className="aug-fs-xs" style={{ color: "var(--t3)", paddingTop: 1 }}>{k}</span>
           {LONG_FIELDS.has(k) && typeof v === "string" ? (
-            <pre className="aug-fs-xs" style={{
+            <pre className="aug-fs-chrome" style={{
               margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word",
               fontFamily: "var(--font-mono)", color: "var(--t2)",
-              background: "var(--bg-1)", border: "1px solid var(--b0)",
+              background: "var(--bg-1)",
               borderRadius: "var(--r2)", padding: "6px 8px", maxHeight: 180, overflow: "auto",
             }}>{v}</pre>
           ) : (
-            <span className="aug-fs-sm" style={{ color: "var(--t2)", wordBreak: "break-word" }}>
+            <span className="aug-fs-chrome" style={{ color: "var(--t2)", wordBreak: "break-word" }}>
               {typeof v === "string" ? v : JSON.stringify(v)}
             </span>
           )}
@@ -140,13 +140,13 @@ function CandidateRow({ cand, decision, onDecide, edit, onEdit, applyError }: {
   }
   return (
     <div data-testid={`intake-cand-${cand.id}`} style={{
-      border: "1px solid var(--b0)", borderRadius: "var(--r2)", padding: "8px 12px",
+      borderRadius: "var(--r2)", padding: "8px 12px",
       background: decision === "accept" ? "color-mix(in srgb, var(--grn4) 6%, transparent)"
         : decision === "dismiss" ? "color-mix(in srgb, var(--t4) 8%, transparent)" : "var(--bg-2)",
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <Button variant="plain" onClick={() => setOpen(o => !o)} data-testid={`intake-open-${cand.id}`}
-          className="aug-fs-sm h-auto min-w-0 flex-1 justify-start gap-2 border-none p-0 text-left font-normal hover:bg-transparent"
+          className="aug-fs-chrome h-auto min-w-0 flex-1 justify-start gap-2 border-none p-0 text-left font-normal hover:bg-transparent"
           style={{ color: "var(--t1)" }}>
           <Icon name={open ? "chevd" : "chevr"} size={14} />
           <span className="aug-fs-xs" style={{ color: "var(--t3)", whiteSpace: "nowrap" }}>
@@ -177,7 +177,7 @@ function CandidateRow({ cand, decision, onDecide, edit, onEdit, applyError }: {
         )}
       </div>
       {cand.detail && (
-        <p className="aug-fs-xs" style={{ color: cand.verdict === "conflict" ? "var(--amb4)" : "var(--t3)",
+        <p className="aug-fs-sm" style={{ color: cand.verdict === "conflict" ? "var(--amb4)" : "var(--t3)",
           margin: "6px 0 0 22px" }}>{cand.detail}</p>
       )}
       {applyError && (
@@ -286,11 +286,11 @@ function MetricFileColumns() {
           <TableBody>
             {cols.map(c => (
               <TableRow key={c.column}>
-                <TableCell className="aug-fs-xs" style={{ fontFamily: "var(--font-mono)", whiteSpace: "nowrap" }}>
+                <TableCell className="aug-fs-chrome" style={{ fontFamily: "var(--font-mono)", whiteSpace: "nowrap" }}>
                   {c.column}{c.required ? " *" : ""}
                 </TableCell>
-                <TableCell className="aug-fs-xs">{c.meaning}</TableCell>
-                <TableCell className="aug-fs-xs" style={{ fontFamily: "var(--font-mono)", color: "var(--t3)" }}>{c.example}</TableCell>
+                <TableCell className="aug-fs-chrome">{c.meaning}</TableCell>
+                <TableCell className="aug-fs-chrome" style={{ fontFamily: "var(--font-mono)", color: "var(--t3)" }}>{c.example}</TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -346,7 +346,7 @@ function Doors({ connId, schema, onStaged, knowledgeConns }: {
   };
 
   return (
-    <div style={{ border: "1px solid var(--b0)", borderRadius: "var(--r3)",
+    <div style={{ borderRadius: "var(--r3)",
       background: "var(--bg-2)", padding: 12 }}>
       <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 10 }}>
         {DOORS.filter(d => d.id !== "wiki" || knowledgeConns.length > 0).map(d => (
@@ -594,7 +594,7 @@ export function IntakePanel({ connId, schema }: { connId: string; schema?: strin
       <Doors connId={connId} schema={schema} onStaged={onStaged} knowledgeConns={knowledgeConns} />
 
       {refused.length > 0 && (
-        <div className="aug-fs-xs" style={{ border: "1px solid color-mix(in srgb, var(--amb4) 40%, transparent)",
+        <div className="aug-fs-xs" style={{ background: "color-mix(in srgb, var(--amb4) 10%, transparent)",
           borderRadius: "var(--r2)", padding: "8px 12px", color: "var(--amb4)" }}>
           {refused.length} row{refused.length === 1 ? "" : "s"} could not be taken and {refused.length === 1 ? "was" : "were"} refused at the door:
           <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
@@ -608,7 +608,7 @@ export function IntakePanel({ connId, schema }: { connId: string; schema?: strin
           as the Definition of its word, quoting the formula — not refused, and not guessed into SQL. */}
       {notTranslated.length > 0 && (
         <div className="aug-fs-xs" data-testid="intake-not-translated"
-          style={{ border: "1px solid var(--b2)", borderRadius: "var(--r2)", padding: "8px 12px", color: "var(--t2)" }}>
+          style={{ background: "var(--gray-a3)", borderRadius: "var(--r2)", padding: "8px 12px", color: "var(--t2)" }}>
           {notTranslated.length === 1 ? "One formula was" : `${notTranslated.length} formulas were`} not turned into SQL,
           so {notTranslated.length === 1 ? "it comes" : "they come"} in as Definitions quoting the tool&rsquo;s own formula:
           <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
@@ -622,8 +622,7 @@ export function IntakePanel({ connId, schema }: { connId: string; schema?: strin
         {/* Imports rail */}
         <div style={{ width: 260, flexShrink: 0, display: "flex", flexDirection: "column", gap: 8 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span className="aug-fs-xs" style={{ color: "var(--t3)", fontWeight: 600,
-              textTransform: "uppercase", letterSpacing: "0.06em" }}>Imports</span>
+            <span className="aug-label">Imports</span>
             <Button size="xs" variant="ghost" onClick={doExport} disabled={busy}>
               <Icon name="download" size={12} /> Export
             </Button>
@@ -638,9 +637,8 @@ export function IntakePanel({ connId, schema }: { connId: string; schema?: strin
               data-testid={`intake-bundle-${b.id}`}
               className="h-auto w-full flex-col items-start gap-0.5 whitespace-normal p-2 text-left font-normal"
               style={{ background: selected === b.id ? "var(--bg-sel)" : "var(--bg-2)",
-                border: `1px solid ${selected === b.id ? "var(--b2)" : "var(--b0)"}`,
                 borderRadius: "var(--r2)" }}>
-              <span className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: 500, maxWidth: "100%",
+              <span className="aug-fs-chrome" style={{ color: "var(--t1)", fontWeight: 500, maxWidth: "100%",
                 overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {b.source || "bundle"}
               </span>
@@ -715,7 +713,7 @@ export function IntakePanel({ connId, schema }: { connId: string; schema?: strin
               {settled.length > 0 && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   {settled.map(c => (
-                    <div key={c.id} className="aug-fs-sm" style={{ display: "flex", gap: 8,
+                    <div key={c.id} className="aug-fs-chrome" style={{ display: "flex", gap: 8,
                       alignItems: "baseline", flexWrap: "wrap", color: "var(--t3)",
                       padding: "4px 12px", borderLeft: "2px solid var(--b1)" }}>
                       <span style={{ color: "var(--t2)" }}>{candidateLabel(c.kind, (c.edited_payload ?? c.payload))}</span>
@@ -735,7 +733,7 @@ export function IntakePanel({ connId, schema }: { connId: string; schema?: strin
                     {noops.length} already declared — nothing to decide
                   </Button>
                   {showNoop && (
-                    <ul className="aug-fs-sm" style={{ color: "var(--t3)", margin: "6px 0 0", paddingLeft: 26 }}>
+                    <ul className="aug-fs-chrome" style={{ color: "var(--t3)", margin: "6px 0 0", paddingLeft: 26 }}>
                       {noops.map(c => <li key={c.id}>{KIND_WORD[c.kind] ?? c.kind}: {candidateLabel(c.kind, c.payload)}</li>)}
                     </ul>
                   )}
@@ -745,7 +743,7 @@ export function IntakePanel({ connId, schema }: { connId: string; schema?: strin
               {(acceptIds.length > 0 || dismissIds.length > 0) && (
                 <div style={{ position: "sticky", bottom: 0, display: "flex", gap: 10,
                   alignItems: "center", padding: "10px 12px", background: "var(--bg-1)",
-                  border: "1px solid var(--b1)", borderRadius: "var(--r3)" }}>
+                  borderRadius: "var(--r3)" }}>
                   <span className="aug-fs-sm" style={{ color: "var(--t2)" }}>
                     {acceptIds.length} to accept · {dismissIds.length} to dismiss
                   </span>
@@ -772,7 +770,7 @@ export function IntakePanel({ connId, schema }: { connId: string; schema?: strin
           </div>
           <pre className="aug-fs-xs" style={{ margin: 0, maxHeight: 260, overflow: "auto",
             fontFamily: "var(--font-mono)", color: "var(--t2)", background: "var(--bg-1)",
-            border: "1px solid var(--b0)", borderRadius: "var(--r2)", padding: 10 }}>{exportText}</pre>
+            borderRadius: "var(--r2)", padding: 10 }}>{exportText}</pre>
           <p className="aug-fs-xs" style={{ color: "var(--t3)", margin: 0 }}>
             Import it on another deployment and an identical re-import plans zero changes.
           </p>

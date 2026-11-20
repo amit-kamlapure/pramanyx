@@ -53,8 +53,9 @@ const COPY_MOST = 2000;
 /** Below this width the toolbar's buttons say their names on hover only. */
 const NARROW = 860;
 
+// a bar is its surface (--bg-1) over the grid, no rule under it (2026-11-20, borders are the exception)
 const BAR: CSSProperties = {
-  display: "flex", alignItems: "center", gap: 10, padding: "8px 16px", borderBottom: "1px solid var(--b1)",
+  display: "flex", alignItems: "center", gap: 10, padding: "8px 16px",
   background: "var(--bg-1)", flexWrap: "nowrap", minWidth: 0,
 };
 
@@ -518,8 +519,8 @@ export function SheetView({ sheetId, onBack, onOpen, asReference = false }: {
       {/* the plain chip's look, shrinking to "…" where the bar is narrow: it counts as its narrowest when the bar
           decides whether the buttons fit beside it (width 0), and grows into what is left, up to its own text */}
       <span className="aug-fs-xs" title={sheet.source.sql || sheet.came_from} style={{ display: "flex", width: 0,
-        flex: "1 1 auto", minWidth: 40, maxWidth: "max-content", overflow: "hidden", background: "var(--bg-3)",
-        color: "var(--t2)", border: "1px solid var(--b1)", borderRadius: "var(--r-pill)", padding: "1px 8px" }}>
+        flex: "1 1 auto", minWidth: 40, maxWidth: "max-content", overflow: "hidden", background: "var(--gray-a3)",
+        color: "var(--t2)", border: "1px solid transparent", borderRadius: "var(--r-pill)", padding: "1px 8px" }}>
         <span style={{ maxWidth: 260, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {sheet.came_from}
         </span>
@@ -556,11 +557,12 @@ export function SheetView({ sheetId, onBack, onOpen, asReference = false }: {
     </span>
   );
 
-  // The views as a spreadsheet's sheet tabs: under the grid, the open one joined to it by its top edge (the user,
-  // 2026-11-10: "The tabs should be visible in the bottom not in the top").
+  // The views as a spreadsheet's sheet tabs: under the grid, the open one joined to it by its surface (the user,
+  // 2026-11-10: "The tabs should be visible in the bottom not in the top"); no rule and no edge mark since 2026-11-20 —
+  // the open tab is the grid's own ground, the others sit on the strip.
   const viewsBar = (
     <div data-testid="sheet-views" style={{ ...BAR, gap: 2, padding: "0 12px", background: "var(--bg-1)",
-      borderBottom: "none", borderTop: "1px solid var(--b1)", flexShrink: 0 }}>
+      flexShrink: 0 }}>
       {/* the tabs scroll on their own, so what opens beside them is never clipped by the scroll */}
       <span role="tablist" aria-label="Views" style={{ display: "flex", gap: 2, overflowX: "auto", minWidth: 0, flex: "0 1 auto" }}>
       {sheet.views.map(v => {
@@ -569,7 +571,6 @@ export function SheetView({ sheetId, onBack, onOpen, asReference = false }: {
         const on = v.id === query.view;
         return (
           <span key={v.id} style={{ display: "inline-flex", alignItems: "center", flex: "0 0 auto",
-            borderTop: on ? "2px solid var(--blue3)" : "2px solid transparent",
             background: on ? "var(--bg-0)" : undefined }}>
             <Button role="tab" aria-selected={on} variant="plain" size="sm"
               onClick={() => setQuery(fromView(sheet, v.id))}
@@ -719,8 +720,8 @@ export function SheetView({ sheetId, onBack, onOpen, asReference = false }: {
           )}
         </div>
         {(query.filter.length > 0 || said) && (
-          <div className="aug-fs-xs" style={{ padding: "4px 16px", display: "flex", gap: 10, alignItems: "center",
-            borderBottom: "1px solid var(--b0)", ...MUTED }}>
+          <div className="aug-fs-xs" style={{ padding: "6px 16px", display: "flex", gap: 10, alignItems: "center",
+            ...MUTED }}>
             {query.filter.length > 0 && <span>Filter: {filterWords(query.filter, sheet.columns, sheet.rules)}</span>}
             {said && (
               <span role={said.tone === "bad" ? "alert" : "status"} style={{ marginLeft: "auto", display: "flex", gap: 6,
@@ -807,7 +808,8 @@ export function Popover({ children, onClose, left = 0, width = 360, up = false }
   const ref = useRef<HTMLDivElement>(null);
   useCloseOutside(ref, onClose);
   return (
-    <div ref={ref} role="dialog" className="aug-fs-sm" style={{ position: "absolute", ...(up ? { bottom: "100%" } : { top: "100%" }), left, zIndex: 30, width,
+    // its rows — a column, a rule — at 13px, as every list row is (the user, 2026-11-20); captions say themselves at 11
+    <div ref={ref} role="dialog" className="aug-fs-chrome" style={{ position: "absolute", ...(up ? { bottom: "100%" } : { top: "100%" }), left, zIndex: 30, width,
       background: "var(--bg-2)", border: "1px solid var(--b1)", borderRadius: "var(--r3)",
       padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8, boxShadow: "var(--shadow-md)" }}>
       {children}
@@ -847,7 +849,7 @@ function CardPop({ sheet, card, onApply, onClose }: {
       <span className="aug-fs-xs" style={MUTED}>A card shows, under its title — at most four</span>
       <div style={{ maxHeight: 280, overflowY: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
         {sheet.columns.map(c => (
-          <label key={c.id} className="aug-fs-sm" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <label key={c.id} className="aug-fs-chrome" style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <Checkbox checked={card.includes(c.id)} onChange={() => toggle(c.id)} aria-label={`Show ${c.name} on a card`} />
             <span style={{ flex: 1 }}>{c.name}</span>
             <span className="aug-fs-xs" style={MUTED}>{KIND_LABEL[c.kind]}</span>
@@ -917,7 +919,7 @@ function RulesPop({ sheet, run, onShow, onClose, editable = true }: {
         <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 0", borderTop: "1px solid var(--b0)" }}>
           <Dot color={RULE_COLOR[r.tone]} title={r.tone} />
           <b>{r.name}</b>
-          <span className="aug-fs-xs" style={{ ...MUTED, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+          <span className="aug-fs-sm" style={{ ...MUTED, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
             title={filterWords(r.conditions, sheet.columns)}>{filterWords(r.conditions, sheet.columns)}</span>
           <span className="aug-fs-xs" style={NUM}>{formatCount(sheet.rule_rows?.[r.id] ?? 0)} rows</span>
           <Button variant="ghost" size="xs" onClick={() => onShow(r.id)}>Show these</Button>
@@ -928,7 +930,7 @@ function RulesPop({ sheet, run, onShow, onClose, editable = true }: {
           )}
         </div>
       ))}
-      {editable && <div style={{ display: "flex", flexDirection: "column", gap: 6, borderTop: "1px solid var(--b1)", paddingTop: 8 }}>
+      {editable && <div style={{ display: "flex", flexDirection: "column", gap: 6, paddingTop: 8 }}>
         <div style={{ display: "flex", gap: 6 }}>
           <Input value={name} onChange={e => setName(e.target.value)} placeholder="A new rule — e.g. Late and still open"
             aria-label="The rule's name" style={{ flex: 1 }} />
@@ -1008,7 +1010,7 @@ function FieldsPop({ sheet, hidden, editable, onHidden, onClose, run }: {
         ))}
       </div>
       {editable && (
-        <div style={{ display: "flex", gap: 6, alignItems: "center", borderTop: "1px solid var(--b1)", paddingTop: 8 }}>
+        <div style={{ display: "flex", gap: 6, alignItems: "center", paddingTop: 8 }}>
           <Input value={newName} onChange={e => setNewName(e.target.value)} placeholder="A new column" aria-label="New column" style={{ flex: 1 }} />
           {!modelWrites && (
             <div style={{ width: 130 }}>
@@ -1039,7 +1041,7 @@ function FieldsPop({ sheet, hidden, editable, onHidden, onClose, run }: {
               <span className="aug-fs-xs" style={MUTED}>It reads, for each row:</span>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px" }}>
                 {readable.map(c => (
-                  <label key={c.id} className="aug-fs-xs" style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <label key={c.id} className="aug-fs-chrome" style={{ display: "flex", alignItems: "center", gap: 4 }}>
                     <Checkbox checked={reads.includes(c.id)} aria-label={`It reads ${c.name}`}
                       onChange={e => setReads(e.target.checked ? [...reads, c.id] : reads.filter(x => x !== c.id))} />
                     {c.name}

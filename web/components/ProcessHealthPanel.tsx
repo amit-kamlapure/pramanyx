@@ -166,14 +166,14 @@ function MetricRow({ m, first, action }: { m: ScorecardItem; first: boolean; act
       <Dot hue={mark.hue} title={mark.word} />
       <div style={{ minWidth: 0 }}>
         <div className="aug-fs-chrome" style={{ ...ONE_LINE, color: "var(--t1)", fontWeight: 500 }} title={m.label}>{m.label}</div>
-        {meta && <div className="aug-fs-xs" style={{ ...MUTED, ...ONE_LINE }} title={meta}>{meta}</div>}
+        {meta && <div className="aug-fs-sm" style={{ ...MUTED, ...ONE_LINE }} title={meta}>{meta}</div>}
       </div>
       <div style={{ ...ROW, flexWrap: "nowrap", gap: 8, justifyContent: "flex-end" }}>
         {m.current !== null
           ? <span className="aug-fs-chrome" style={{ ...NUM, color: "var(--t1)", fontWeight: 600 }}>{valueText(m.current, m.unit)}</span>
           : <Chip title="The metric's query failed or returned no value, so it was not scored">no value</Chip>}
         {m.target !== null && (
-          <span className="aug-fs-xs" data-testid="health-aim" style={{ ...MUTED, ...NUM, whiteSpace: "nowrap" }}>{aimText(m)}</span>
+          <span className="aug-fs-sm" data-testid="health-aim" style={{ ...MUTED, ...NUM, whiteSpace: "nowrap" }}>{aimText(m)}</span>
         )}
         {m.variance !== null && (
           <Chip tone={mark.tone} title={`${formatVariance(m.variance)} against its target`}>{formatVariance(m.variance)}</Chip>

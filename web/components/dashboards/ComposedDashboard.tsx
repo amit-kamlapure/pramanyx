@@ -281,14 +281,14 @@ const PINNED: CSSProperties = { position: "relative", zIndex: 3, transform: "tra
 const capitalized = (w: string) => w.charAt(0).toUpperCase() + w.slice(1);
 
 /** A dashboard's own column, drawn as part of the one Filters panel (2026-11-20; before, it stood beside the global filters
- *  as a second column, and its ground painted over their right edge): below a rule, named by what it filters. In the
- *  builder a click chooses it, as it chose the column. */
+ *  as a second column, and its ground painted over their right edge): set apart by space, not a rule (2026-11-20, borders
+ *  are the exception), named by what it filters. In the builder a click chooses it, as it chose the column. */
 function PanelPart({ title, chosen = false, onChoose, children }: { title: string; chosen?: boolean; onChoose?: () => void; children: ReactNode }) {
   return (
     <section data-testid="dashboard-filter-column" aria-label={title} data-selected={chosen || undefined} onPointerDownCapture={onChoose}
-      style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 0, paddingTop: 10, borderTop: "1px solid var(--b1)", borderRadius: chosen ? "var(--r2)" : undefined,
+      style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 0, paddingTop: 14, borderRadius: chosen ? "var(--r2)" : undefined,
         outline: chosen ? "2px solid var(--accent)" : undefined, outlineOffset: 2 }}>
-      <span className="aug-fs-xs" style={{ color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em" }}>{title}</span>
+      <span className="aug-label">{title}</span>
       {children}
     </section>
   );
@@ -744,10 +744,11 @@ function LaidOutSection({ element, children }: ComponentRenderProps<SectionProps
       {element.props.title && <div className="aug-fs-h2" style={{ fontWeight: 600, color: "var(--t1)", marginBottom: 10 }}>{element.props.title}</div>}
       {layout === "tabs" ? (
         <>
-          <div role="tablist" aria-label={element.props.title ?? "Sections"} style={{ display: "flex", gap: 4, borderBottom: "1px solid var(--b1)", marginBottom: 12 }}>
+          {/* a tab is chosen by its fill, not an underline over a rule (2026-11-20, borders are the exception) */}
+          <div role="tablist" aria-label={element.props.title ?? "Sections"} style={{ display: "flex", gap: 4, marginBottom: 12 }}>
             {held.map((k, i) => (
               <Button key={k} size="sm" variant="plain" role="tab" aria-selected={i === tab} data-testid="dashboard-layout-tab" onClick={() => setTab(i)}
-                style={{ borderRadius: 0, color: i === tab ? "var(--t1)" : "var(--t3)", borderBottom: i === tab ? "2px solid var(--accent)" : "2px solid transparent" }}>
+                style={{ borderRadius: "var(--r2)", color: i === tab ? "var(--t1)" : "var(--t3)", background: i === tab ? "var(--gray-a5)" : undefined }}>
                 {String(elements[k]?.props?.title ?? `Tab ${i + 1}`)}
               </Button>
             ))}
@@ -782,7 +783,7 @@ function EmptySection({ element }: ComponentRenderProps<SectionProps>) {
     <section data-testid="dashboard-empty-section" data-key={key ?? undefined} aria-label={element.props.title ?? "Section"} {...chosen}
       style={{ ...chosen.style, minHeight: 160, display: "flex", flexDirection: "column", border: "1.5px dashed var(--b2)",
         borderColor: key !== null && chosen["data-selected"] ? "var(--accent)" : "var(--b2)" }}>
-      <div className="aug-fs-sm" style={{ padding: "8px 12px", color: "var(--t2)", borderBottom: "1px dashed var(--b1)" }}>{element.props.title ?? "Section"}</div>
+      <div className="aug-fs-sm" style={{ padding: "8px 12px", color: "var(--t2)" }}>{element.props.title ?? "Section"}</div>
       <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, padding: 16 }}>
         {doors.onAddPiece && key && (
           <Button size="sm" variant="outline" data-testid="empty-section-add" onClick={() => doors.onAddPiece?.(key)} style={{ minWidth: 180 }}>
@@ -1030,7 +1031,7 @@ function GridHandles({ cell, kind, from, gridded, chosen = false, onPreview, onD
       {bar("sw", { left: out, bottom: out, width: 10, height: 10 }, "nesw-resize", both, true)}
       {said && (
         <span data-testid="grid-size-said" className="aug-fs-sm" style={{ position: "absolute", right: 12, bottom: 10, zIndex: 4,
-          background: "var(--bg-3)", border: "1px solid var(--b2)", color: "var(--t1)", borderRadius: "var(--r2)", padding: "1px 8px",
+          background: "var(--bg-3)", color: "var(--t1)", borderRadius: "var(--r2)", padding: "1px 8px",
           fontVariantNumeric: "tabular-nums", pointerEvents: "none" }}>
           {said.w} × {said.h}
         </span>
@@ -1073,7 +1074,7 @@ function WidthHandle({ from, onPreview, onDone }: { from: number; onPreview: (g:
           cursor: "ew-resize", touchAction: "none" }} />
       {said !== null && (
         <span data-testid="filter-width-said" className="aug-fs-sm" style={{ position: "absolute", right: 4, top: 8, zIndex: 4,
-          background: "var(--bg-3)", border: "1px solid var(--b2)", color: "var(--t1)", borderRadius: "var(--r2)", padding: "1px 8px",
+          background: "var(--bg-3)", color: "var(--t1)", borderRadius: "var(--r2)", padding: "1px 8px",
           fontVariantNumeric: "tabular-nums", pointerEvents: "none" }}>{said * GRADE} px</span>
       )}
     </>
@@ -1800,7 +1801,7 @@ function DashboardDrawer({ element, children }: ComponentRenderProps<{ title: st
     <aside role="dialog" aria-label={element.props.title} data-testid="dashboard-drawer" data-key={key ?? undefined}
       style={{ position: "fixed", top: "var(--topbar)", right: 0, bottom: 0, width: "min(460px, 100vw)", zIndex: 40, display: "flex", flexDirection: "column",
         background: "var(--bg-1)", borderLeft: "1px solid var(--b1)", boxShadow: "var(--shadow-lg)" }}>
-      <header style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px", borderBottom: "1px solid var(--b1)" }}>
+      <header style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px" }}>
         <span className="aug-fs-ui" style={{ flex: 1, minWidth: 0, color: "var(--t1)", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {element.props.title}
         </span>

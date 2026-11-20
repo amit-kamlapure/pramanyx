@@ -25,13 +25,12 @@ import { NEEDS_EDGE } from "@/components/clarity/kit";
 const muted: React.CSSProperties = { color: "var(--t3)" };
 const tabular: React.CSSProperties = { fontVariantNumeric: "tabular-nums" };
 
-/** A section's small uppercase label, with what it says at its right end. */
+/** A section's label (12px semibold, sentence case), with what it says at its right end. */
 export function Label({ children, right }: { children: React.ReactNode; right?: React.ReactNode }) {
   return (
-    <div className="aug-fs-xs" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, color: "var(--t3)",
-                                        textTransform: "uppercase", letterSpacing: ".06em" }}>
+    <div className="aug-label" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
       {children}
-      {right && <span style={{ marginLeft: "auto", textTransform: "none", letterSpacing: 0 }}>{right}</span>}
+      {right && <span className="aug-fs-xs" style={{ marginLeft: "auto", fontWeight: 400, color: "var(--t3)" }}>{right}</span>}
     </div>
   );
 }
@@ -107,8 +106,8 @@ export function NeedsRow({ title, detail, children, testid }: {
       style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 10px", borderRadius: "var(--r2)",
                background: "var(--bg-3)", boxShadow: NEEDS_EDGE }}>
       <span style={{ flex: "1 1 160px", minWidth: 0 }}>
-        <span className="aug-fs-sm" style={{ display: "block", color: "var(--t1)" }}>{title}</span>
-        {detail && <span className="aug-fs-xs" style={{ display: "block", color: "var(--t2)" }}>{detail}</span>}
+        <span className="aug-fs-chrome" style={{ display: "block", color: "var(--t1)" }}>{title}</span>
+        {detail && <span className="aug-fs-sm" style={{ display: "block", color: "var(--t2)" }}>{detail}</span>}
       </span>
       {children}
     </div>
@@ -185,8 +184,8 @@ function PromiseLine({ promise: p, processId, onOpenProcess }: {
     <div data-testid="process-flow-promise" title={p.note}
       style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto auto", gap: "8px 12px", alignItems: "center",
                padding: "7px 10px", background: "var(--bg-2)", borderRadius: "var(--r2)" }}>
-      <span className="aug-fs-sm" style={{ color: "var(--t1)" }}>{promiseWords(p)}</span>
-      <span className="aug-fs-sm" style={{ ...tabular, color: counted ? "var(--amb4)" : "var(--t3)" }}>
+      <span className="aug-fs-chrome" style={{ color: "var(--t1)" }}>{promiseWords(p)}</span>
+      <span className="aug-fs-chrome" style={{ ...tabular, color: counted ? "var(--amb4)" : "var(--t3)" }}>
         {counted ? `broken ${pct(p.breach_rate, 1)}` : "not counted yet"}
       </span>
       {p.open_overdue != null && p.open_overdue > 0 ? (
@@ -233,7 +232,7 @@ export function SetChips({ detail, scope }: { detail: ObjectTypeDetail; scope: P
             <span key={`set:${name}`} className="aug-fs-xs" data-testid="entity-set"
               title={d ? (d.usable ? d.description : `refused: ${d.why_not ?? ""}`) : `a segment of ${detail.display_name}`}
               style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "2px 8px", borderRadius: "var(--r-pill)",
-                       background: "var(--bg-3)", border: "1px solid var(--b1)", whiteSpace: "nowrap",
+                       background: "var(--gray-a3)", whiteSpace: "nowrap",
                        color: d && !d.usable ? "var(--t3)" : "var(--t2)" }}>
               {humanName(name)}
               {n != null && <span style={{ ...tabular, color: "var(--t1)" }}>{formatCount(n)}</span>}

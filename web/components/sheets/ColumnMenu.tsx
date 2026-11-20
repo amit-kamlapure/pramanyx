@@ -177,15 +177,15 @@ function ValueList({ sheet, column, filter, search, onApply, onCancel }: {
         : !read ? <span className="aug-fs-xs" style={{ ...ROW, ...MUTED }}>Reading the values…</span> : (
           <div role="group" aria-label={`The values of ${column.name}`}
             style={{ maxHeight: 200, overflowY: "auto", display: "flex", flexDirection: "column", flex: "0 1 auto",
-              borderTop: "1px solid var(--b0)", borderBottom: "1px solid var(--b0)", margin: "4px 0" }}>
-            <label className="aug-fs-sm" style={ROW}>
+              margin: "6px 0" }}>
+            <label className="aug-fs-chrome" style={ROW}>
               <Checkbox checked={allState} onChange={toggleAll}
                 aria-label={searching ? "(Select all search results)" : "(Select all)"} />
               <span style={ELLIPSIS}>{searching ? "(Select all search results)" : "(Select all)"}</span>
               {!searching && <span className="aug-fs-xs" style={{ ...MUTED, ...NUM }}>{formatCount(read.rows)}</span>}
             </label>
             {!searching && read.blanks > 0 && (
-              <label className="aug-fs-sm" style={ROW}>
+              <label className="aug-fs-chrome" style={ROW}>
                 <Checkbox checked={list.blanks} onChange={e => setList({ ...list, blanks: e.target.checked })}
                   aria-label="(Blanks)" />
                 <span style={ELLIPSIS}>(Blanks)</span>

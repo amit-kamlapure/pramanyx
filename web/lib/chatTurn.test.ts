@@ -165,6 +165,31 @@ describe("quick-path parity (the reducer's ask-mode fields)", () => {
     expect(plain.plan).toEqual([]);
   });
 
+  it("keeps a conversation's turn going past a deep analysis's report: the plan, the staged changes and the answer follow (2026-11-20)", async () => {
+    // seen live on the acceptance test: the report closed the turn, and what the conversation did after it never arrived
+    const t = projectTurn("investigate, build, alert", await messageFrom([
+      { event: "route", data: { depth: "quick", why: "", body: "converse" } },
+      { event: "plan", data: { steps: [{ text: "Investigate why" }, { text: "Draft a dashboard" }, { text: "Set an alert" }] } },
+      { event: "converse_step", data: { index: 2, tool: "deep_analysis", ok: true, detail: "" } },
+      { event: "answer_report", data: { answer_report: { headline: "No rows for 2026-11-19", sections: [] } } },
+      { event: "plan", data: { steps: [{ text: "Investigate why", done: true }, { text: "Draft a dashboard", done: true }, { text: "Set an alert", done: true }] } },
+      { event: "proposal_staged", data: { proposal_id: "p-dash", kind: "chart_look", connection_id: "sheets", action_id: "dashboard:revenue" } },
+      { event: "proposal_staged", data: { proposal_id: "p-alert", kind: "monitor_bundle", connection_id: "sheets", action_id: "monitor:revenue" } },
+      { event: "headline", data: { headline: "All three parts are staged and wait for your Allow." } },
+      { event: "done", data: {} },
+    ]));
+    expect(t.plan.map(s => s.done)).toEqual([true, true, true]);
+    expect(t.stagedProposals.map(p => p.proposalId)).toEqual(["p-dash", "p-alert"]);
+    expect(t.status).toBe("done");
+    // a deep analysis asked on its own still ends at its report
+    const alone = projectTurn("why?", await messageFrom([
+      { event: "route", data: { depth: "deep", why: "" } },
+      { event: "answer_report", data: { answer_report: { headline: "x", sections: [] } } },
+      { event: "proposal_staged", data: { proposal_id: "late", kind: "x", connection_id: "c", action_id: "a" } },
+    ]));
+    expect(alone.stagedProposals).toEqual([]);
+  });
+
   it("reads back how long a restored turn took and the steps it ran, so its line says so again", () => {
     const msg = {
       id: "a1", role: "assistant", metadata: { took_ms: 12400 },

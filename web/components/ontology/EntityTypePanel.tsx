@@ -94,7 +94,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 
 const MONO: React.CSSProperties = { fontFamily: "var(--font-mono)" };
+/** A field's edge and the hairline between a list's rows. Sections part by spacing, not a rule; the panel's side is
+ *  the one pane rule (--divide, 2026-11-20, borders are the exception). */
 const RULE = "1px solid var(--b1)";
+const PANE_RULE = "1px solid var(--divide)";
 const ROLE: Record<string, string> = {
   reference_data: "reference", business_object: "business object", event: "event", standalone: "standalone",
 };
@@ -141,10 +144,9 @@ function Section({ title, aside, count, action, children }: {
     );
   }
   return (
-    <section style={{ padding: "12px 16px", borderTop: RULE }}>
+    <section style={{ padding: "14px 16px" }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 8 }}>
-        <h3 className="aug-fs-xs"
-          style={{ margin: 0, color: "var(--t2)", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em" }}>
+        <h3 className="aug-label" style={{ margin: 0 }}>
           {title}
         </h3>
         {aside && <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>{aside}</span>}
@@ -213,7 +215,7 @@ export function EntityTypePanel({ connectionId, schema, objectType, types, versi
   }
   return (
     <aside aria-label="Entity type" data-testid="entity-type-panel" data-full={full || undefined}
-      style={{ ...(full ? { flex: 1, minWidth: 0 } : { width: PANEL_WIDTH, flexShrink: 0, borderLeft: RULE }),
+      style={{ ...(full ? { flex: 1, minWidth: 0 } : { width: PANEL_WIDTH, flexShrink: 0, borderLeft: PANE_RULE }),
                display: "flex", flexDirection: "column", minHeight: 0, background: "var(--bg-0)" }}>
       <div style={{ flex: 1, overflowY: "auto" }}>{body}</div>
     </aside>
@@ -629,7 +631,7 @@ function ProcessesSection({ detail, connectionId, schema, onOpenProcess, onChang
           {processes.map((p) => (
             <div key={p.id} className="aug-entity-row" data-testid="type-process">
               <span style={{ color: "var(--t1)" }}>{p.display_name}</span>
-              <span style={{ color: "var(--t3)" }}>{p.roles.join(" · ")}</span>
+              <span className="aug-fs-sm" style={{ color: "var(--t3)" }}>{p.roles.join(" · ")}</span>
               {p.verified === false && <span className="aug-tag aug-tag-red">measured false</span>}
               <span className="acts">
                 <Button variant="outline" size="xs" disabled={!onOpenProcess} onClick={() => onOpenProcess?.(p.id)}
@@ -650,7 +652,7 @@ function ProcessesSection({ detail, connectionId, schema, onOpenProcess, onChang
           <Button variant="minimal" size="xs" disabled={!onOpenProcess} onClick={() => onOpenProcess?.(p.id)}>
             {p.display_name}
           </Button>
-          <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>{p.roles.join(" · ")}</span>
+          <span className="aug-fs-sm" style={{ color: "var(--t3)" }}>{p.roles.join(" · ")}</span>
           {p.verified === false && <span className="aug-tag aug-tag-red">measured false</span>}
         </div>
       ))}
@@ -727,7 +729,7 @@ function DeclareProcess({ detail, connectionId, schema, onOpenProcess, onChanged
       hint={moments.length < 2 ? "A process runs between two moments of this entity, and it has fewer"
         : "The stages this entity goes through, and the promises about reaching them"}
       title={`New process for ${detail.display_name}`}>
-    <div style={{ flexBasis: "100%", display: "flex", flexDirection: "column", gap: 6, padding: "8px 0", borderTop: RULE }}
+    <div style={{ flexBasis: "100%", display: "flex", flexDirection: "column", gap: 6, padding: "8px 0" }}
       data-testid="process-declare">
       <p className="aug-fs-xs" style={{ margin: 0, color: "var(--t3)", lineHeight: 1.45 }}>
         A process {detail.display_name} goes through: its stages in order, each at the moment an object reaches it. Every
@@ -981,7 +983,7 @@ function KeySection({ detail, connectionId, schema, onChanged, readOnly }: {
     <Section title="Key" aside={key.rows == null ? undefined : `measured over ${formatCount(key.rows)} rows`}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <span style={{ color: "var(--t3)", display: "inline-flex" }}><Icon name="key" size={14} /></span>
-        <span className="aug-fs-sm" style={{ ...MONO, color: "var(--t1)" }}>{key.property}</span>
+        <span className="aug-fs-chrome" style={{ ...MONO, color: "var(--t1)" }}>{key.property}</span>
         <span className={`aug-tag ${verdict[0]}`} data-testid="entity-key-verdict">{verdict[1]}</span>
       </div>
       {key.note && <p className="aug-fs-xs" style={{ margin: "6px 0 0", color: "var(--t3)", lineHeight: 1.45 }}>{key.note}</p>}
@@ -1153,7 +1155,7 @@ function PartsSection({ detail, types, connectionId, schema, onOpen, onChanged }
           <Button variant="ghost" size="xs" onClick={() => onOpen(part.object_type)} title={`Open ${part.display_name}`}>
             {part.display_name}
           </Button>
-          <span className="aug-fs-xs" style={{ ...MONO, color: "var(--t3)" }}>through {part.binding} · {part.kind}</span>
+          <span className="aug-fs-sm" style={{ ...MONO, color: "var(--t3)" }}>through {part.binding} · {part.kind}</span>
           {part.origin === "model" && (
             <>
               <span className="aug-tag aug-tag-violet" title={`proposed by ${part.provenance || "an explorer"} — confirm it, or release it`}>
@@ -1217,7 +1219,7 @@ function DisplaySection({ detail, connectionId, schema, onChanged, readOnly }: {
   return (
     <Section title="Named by" aside={warrant}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }} data-testid="entity-display-property">
-        <span className="aug-fs-sm" style={{ ...MONO, color: "var(--t1)" }}>{shown.property}</span>
+        <span className="aug-fs-chrome" style={{ ...MONO, color: "var(--t1)" }}>{shown.property}</span>
         {verdict}
       </div>
       {shown.note && <p className="aug-fs-xs" style={{ margin: "6px 0 0", color: "var(--t3)", lineHeight: 1.45 }}>{shown.note}</p>}
@@ -1331,7 +1333,7 @@ function ExpressionsSection({ detail, connectionId, schema, onChanged }: {
   return (
     <Section title="Calculated properties" count={rows.length} aside="computed from the row, in SQL a person wrote" action={door}>
       {rows.map((e) => (
-        <div key={e.name} className="aug-fs-xs" data-testid="entity-expression"
+        <div key={e.name} className="aug-fs-chrome" data-testid="entity-expression"
           style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", flexWrap: "wrap" }}>
           <span style={{ ...MONO, color: "var(--t1)" }}>{e.name}</span>
           <span style={{ ...MONO, color: "var(--t3)" }}>= {e.expression}</span>
@@ -1406,7 +1408,7 @@ function FrameLines({ binding }: { binding: TypeBinding }) {
   const frames = Object.entries(binding.frames ?? {});
   if (frames.length === 0) return null;
   return (
-    <div className="aug-fs-xs" style={{ color: "var(--t3)", marginTop: 3 }}>
+    <div className="aug-fs-sm" style={{ color: "var(--t3)", marginTop: 3 }}>
       {frames.map(([name, said]) => (
         <div key={name} style={{ overflowWrap: "anywhere" }}>
           <span style={MONO}>{name}</span> — {said}
@@ -1421,7 +1423,7 @@ function RollupLines({ binding }: { binding: TypeBinding }) {
   const rollups = Object.entries(binding.rollups ?? {});
   if (rollups.length === 0) return null;
   return (
-    <div className="aug-fs-xs" style={{ color: "var(--t3)", marginTop: 3 }}>
+    <div className="aug-fs-sm" style={{ color: "var(--t3)", marginTop: 3 }}>
       {rollups.map(([name, said]) => (
         <div key={name} style={{ overflowWrap: "anywhere" }}>
           <span style={MONO}>{name}</span> — {said}
@@ -1458,7 +1460,7 @@ function BindingRow({ binding: b, first, busy, onRemove, confirm, source }: {
   return (
     <div style={{ padding: "8px 0", borderTop: first ? undefined : RULE }} data-testid="entity-binding">
       <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-        <span className="aug-fs-sm" style={{ ...MONO, color: "var(--t1)" }}>{b.name}</span>
+        <span className="aug-fs-chrome" style={{ ...MONO, color: "var(--t1)" }}>{b.name}</span>
         <span className="aug-tag aug-tag-gray">{b.primary ? "backing" : b.kind}</span>
         {verdict && <span className={`aug-tag ${verdict[0]}`}>{verdict[1]}</span>}
         {b.source === "model" && (
@@ -1474,45 +1476,45 @@ function BindingRow({ binding: b, first, busy, onRemove, confirm, source }: {
           </span>
         )}
       </div>
-      <dl className="aug-fs-xs"
+      <dl className="aug-fs-chrome"
         style={{ display: "grid", gridTemplateColumns: "max-content minmax(0, 1fr)", columnGap: 12, rowGap: 3, margin: "6px 0 0" }}>
-        <dt style={term}>{b.reads === "table" ? "Table" : "Query"}</dt>
+        <dt className="aug-fs-xs" style={term}>{b.reads === "table" ? "Table" : "Query"}</dt>
         <dd style={{ ...value, ...MONO, overflowWrap: "anywhere" }}>{b.reads === "table" ? b.table : b.sql}</dd>
         {source && (
           <>
-            <dt style={term}>Connection</dt>
+            <dt className="aug-fs-xs" style={term}>Connection</dt>
             <dd style={value} data-testid="entity-binding-connection">{source}</dd>
           </>
         )}
-        <dt style={term}>Key</dt>
+        <dt className="aug-fs-xs" style={term}>Key</dt>
         <dd style={{ ...value, ...MONO }}>{b.primary ? b.key : `${b.key} → ${b.object_key}`}</dd>
         {b.time_column && (
           <>
-            <dt style={term}>Time</dt>
+            <dt className="aug-fs-xs" style={term}>Time</dt>
             <dd style={{ ...value, ...MONO }}>{b.time_column}</dd>
           </>
         )}
-        <dt style={term}>Rows</dt>
+        <dt className="aug-fs-xs" style={term}>Rows</dt>
         <dd style={value}>{b.rows == null ? "not yet measured" : formatCount(b.rows)}</dd>
         {!b.primary && b.covered != null && b.objects != null && (
           <>
-            <dt style={term}>Covers</dt>
+            <dt className="aug-fs-xs" style={term}>Covers</dt>
             <dd style={value}>
               {formatCount(b.covered)} of {formatCount(b.objects)} objects
               {b.orphans ? ` · ${countNoun(b.orphans, "key")} reach no object` : ""}
             </dd>
           </>
         )}
-        <dt style={term}>Supplies</dt>
+        <dt className="aug-fs-xs" style={term}>Supplies</dt>
         <dd style={value}>{countNoun(b.supplies, "property", "properties")}</dd>
       </dl>
       <FrameLines binding={b} />
       <RollupLines binding={b} />
       {!b.primary && (b.why_not || b.note) && (
-        <p className="aug-fs-xs" style={{ margin: "4px 0 0", color: "var(--t3)", lineHeight: 1.45 }}>{b.why_not || b.note}</p>
+        <p className="aug-fs-sm" style={{ margin: "4px 0 0", color: "var(--t3)", lineHeight: 1.45 }}>{b.why_not || b.note}</p>
       )}
       {skipped.length > 0 && (
-        <p className="aug-fs-xs" style={{ margin: "4px 0 0", color: "var(--t3)", lineHeight: 1.45 }}>
+        <p className="aug-fs-sm" style={{ margin: "4px 0 0", color: "var(--t3)", lineHeight: 1.45 }}>
           Not supplied: {skipped.map(([column, why]) => `${column} (${why})`).join("; ")}
         </p>
       )}
@@ -1531,17 +1533,17 @@ function ProposalRow({ proposal: p, busy, onBind }: { proposal: ProposedBinding;
   return (
     <div style={{ padding: "7px 0", borderTop: RULE }} data-testid="entity-binding-proposal">
       <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-        <span className="aug-fs-sm" style={{ ...MONO, color: "var(--t1)" }}>{p.table}</span>
+        <span className="aug-fs-chrome" style={{ ...MONO, color: "var(--t1)" }}>{p.table}</span>
         <span className="aug-tag aug-tag-violet">proposed · {p.kind}</span>
         <Button variant="outline" size="xs" disabled={busy} onClick={onBind} style={{ marginLeft: "auto" }}
           title={`Bind ${p.table} on ${p.key} — its columns are checked and it is counted against the objects first`}>
           {busy ? "Confirming…" : "Confirm"}
         </Button>
       </div>
-      <p className="aug-fs-xs" style={{ margin: "3px 0 0", color: "var(--t3)", lineHeight: 1.45 }}>
+      <p className="aug-fs-sm" style={{ margin: "3px 0 0", color: "var(--t3)", lineHeight: 1.45 }}>
         <span style={MONO}>{p.key} → {p.object_key}</span> · {p.note}
       </p>
-      <p className="aug-fs-xs" style={{ ...MONO, margin: "3px 0 0", color: "var(--t2)", overflowWrap: "anywhere" }}>
+      <p className="aug-fs-sm" style={{ ...MONO, margin: "3px 0 0", color: "var(--t2)", overflowWrap: "anywhere" }}>
         would supply {p.supplies.join(", ")}{proposalShape(p)}
       </p>
     </div>
@@ -1592,7 +1594,7 @@ function BackingEditor({ detail, busy, onPreview, onSet, onWithdraw, problem: re
     <Door open={open} onOpenChange={setOpen} busy={busy} icon="edit" testId="backing-door" width={760}
       label={readsQuery ? "Change its SELECT" : "Change what it reads"}
       hint={`Read ${detail.display_name} from a keyed SELECT instead of its table`} title={`Change what ${detail.display_name} reads`}>
-    <div style={{ marginTop: 10, paddingTop: 8, borderTop: RULE }} data-testid="backing-editor">
+    <div style={{ marginTop: 10, paddingTop: 8 }} data-testid="backing-editor">
       <p className="aug-fs-xs" style={{ margin: "0 0 6px", color: "var(--t3)", lineHeight: 1.45 }}>
         Read {detail.display_name} from a keyed SELECT: its rows are the objects, and every property is read from it.
         Nothing is written until it is set.
@@ -1613,28 +1615,28 @@ function BackingEditor({ detail, busy, onPreview, onSet, onWithdraw, problem: re
         </Button>
       </div>
       {preview && preview.readable && (
-        <dl className="aug-fs-xs" data-testid="backing-preview"
+        <dl className="aug-fs-chrome" data-testid="backing-preview"
           style={{ display: "grid", gridTemplateColumns: "max-content minmax(0, 1fr)", columnGap: 12, rowGap: 3, margin: "6px 0 0" }}>
-          <dt style={term}>Now</dt>
+          <dt className="aug-fs-xs" style={term}>Now</dt>
           <dd style={{ margin: 0, ...MONO, overflowWrap: "anywhere" }}>
             {preview.current.source} · {preview.current.rows == null ? "rows not yet measured" : `${formatCount(preview.current.rows)} rows`}
           </dd>
-          <dt style={term}>Rows</dt>
+          <dt className="aug-fs-xs" style={term}>Rows</dt>
           <dd style={{ margin: 0 }}>
             {preview.rows == null ? "not counted" : formatCount(preview.rows)} · key{" "}
             {preview.unique === true ? "unique" : preview.unique === false ? "NOT unique" : "not counted"}
           </dd>
-          <dt style={term}>Keeps</dt>
+          <dt className="aug-fs-xs" style={term}>Keeps</dt>
           <dd style={{ margin: 0 }}>{countNoun(preview.kept.length, "property", "properties")}</dd>
           {preview.dropped.length > 0 && (
             <>
-              <dt style={term}>Drops</dt>
+              <dt className="aug-fs-xs" style={term}>Drops</dt>
               <dd style={{ margin: 0, ...MONO, color: "var(--red5)" }}>{preview.dropped.join(", ")}</dd>
             </>
           )}
           {preview.added.length > 0 && (
             <>
-              <dt style={term}>Adds</dt>
+              <dt className="aug-fs-xs" style={term}>Adds</dt>
               <dd style={{ margin: 0, ...MONO }}>{preview.added.join(", ")}</dd>
             </>
           )}
@@ -1800,7 +1802,7 @@ function DeclareBinding({ detail, busy, onDeclare, sources, problem = "" }: {
     <Door open={open} onOpenChange={setOpen} busy={busy} label="New source" testId="binding-door" width={760}
       hint="A further table or SELECT joined to this entity on its key"
       title={`New source for ${detail.display_name}`}>
-    <div style={{ marginTop: 10, paddingTop: 8, borderTop: RULE }} data-testid="declare-binding">
+    <div style={{ marginTop: 10, paddingTop: 8 }} data-testid="declare-binding">
       <p className="aug-fs-xs" style={{ margin: "0 0 6px", color: "var(--t3)", lineHeight: 1.45 }}>
         A source joined to {detail.display_name} on its key. A <strong>static</strong> binding must hold one row per
         object; a <strong>timeseries</strong> holds many over a time column and is read as each object&rsquo;s latest
@@ -2239,10 +2241,10 @@ function WithdrawnSection({ detail, connectionId, schema, onChanged }: {
   return (
     <Section title="Removed" aside="left out of the served ontology by a person">
       {gone.bindings.map((name) => (
-        <div key={`b:${name}`} className="aug-fs-xs" data-testid="entity-withdrawn"
+        <div key={`b:${name}`} className="aug-fs-chrome" data-testid="entity-withdrawn"
           style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0" }}>
           <span style={{ ...MONO, color: "var(--t2)" }}>{name}</span>
-          <span style={{ color: "var(--t3)" }}>binding</span>
+          <span className="aug-fs-sm" style={{ color: "var(--t3)" }}>binding</span>
           {editing && (
             <Button variant="ghost" size="xs" disabled={busy === `b:${name}`} style={{ marginLeft: "auto" }}
               onClick={() => act(`b:${name}`, () => restoreBinding(connectionId, detail.id, name, schema))}>
@@ -2252,10 +2254,10 @@ function WithdrawnSection({ detail, connectionId, schema, onChanged }: {
         </div>
       ))}
       {gone.links.map((l) => (
-        <div key={`l:${l.relationship}`} className="aug-fs-xs" data-testid="entity-withdrawn"
+        <div key={`l:${l.relationship}`} className="aug-fs-chrome" data-testid="entity-withdrawn"
           style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0" }}>
           <span style={{ ...MONO, color: "var(--t2)" }}>{l.relationship}</span>
-          <span style={{ color: "var(--t3)" }}>link · {l.from_entity} → {l.to_entity}</span>
+          <span className="aug-fs-sm" style={{ color: "var(--t3)" }}>link · {l.from_entity} → {l.to_entity}</span>
           {editing && (
             <Button variant="ghost" size="xs" disabled={busy === `l:${l.relationship}`} style={{ marginLeft: "auto" }}
               onClick={() => act(`l:${l.relationship}`, () => restoreLink(connectionId, l.relationship, schema))}>
@@ -2332,7 +2334,7 @@ function VersionsSection({ kind, targetId, name, stamp, connectionId, schema, on
               <li key={`v:${v.version ?? "kept"}:${i}`} data-testid="entity-version"
                 style={{ listStyle: "none", padding: "7px 0", borderTop: i ? RULE : undefined }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
-                  <span className="aug-fs-sm" style={{ ...MONO, color: "var(--t1)" }}>
+                  <span className="aug-fs-chrome" style={{ ...MONO, color: "var(--t1)" }}>
                     {v.version == null ? "as found" : `v${v.version}`}
                   </span>
                   <span className={`aug-tag ${VERSION_TAG[v.state] ?? "aug-tag-gray"}`}>{v.state}</span>
@@ -2347,14 +2349,14 @@ function VersionsSection({ kind, targetId, name, stamp, connectionId, schema, on
                     </Button>
                   )}
                 </div>
-                {note && <p className="aug-fs-xs" style={{ margin: "3px 0 0", color: "var(--t2)" }}>{note}</p>}
+                {note && <p className="aug-fs-sm" style={{ margin: "3px 0 0", color: "var(--t2)" }}>{note}</p>}
                 {v.changes.length > 0 && (
                   <ul style={{ margin: "3px 0 0", padding: 0 }}>
                     {v.changes.slice(0, 6).map((c, j) => (
-                      <li key={`c:${j}`} className="aug-fs-xs" style={{ ...MONO, listStyle: "none", color: "var(--t3)" }}>{c}</li>
+                      <li key={`c:${j}`} className="aug-fs-sm" style={{ ...MONO, listStyle: "none", color: "var(--t3)" }}>{c}</li>
                     ))}
                     {v.changes.length > 6 && (
-                      <li className="aug-fs-xs" style={{ listStyle: "none", color: "var(--t3)" }}>
+                      <li className="aug-fs-sm" style={{ listStyle: "none", color: "var(--t3)" }}>
                         and {countNoun(v.changes.length - 6, "more change")}
                       </li>
                     )}
@@ -2510,7 +2512,7 @@ function LinksSection({ detail, types, connectionId, schema, onOpen, onChanged, 
       {detail.links.map((link, i) => (
         <div key={`${link.relationship}:${link.name}`} style={{ padding: "7px 0", borderTop: i ? RULE : undefined }}
           data-testid="entity-link">
-          <div className="aug-fs-xs" style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
+          <div className="aug-fs-chrome" style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
             <LinkSentence detail={detail} link={link} onOpen={onOpen} />
             <span className="aug-tag aug-tag-gray" style={MONO}>{link.cardinality}</span>
             <span className={`aug-tag ${link.traversable ? "aug-tag-green" : "aug-tag-amber"}`}>
@@ -2545,13 +2547,13 @@ function LinksSection({ detail, types, connectionId, schema, onOpen, onChanged, 
               )}
             </span>
           </div>
-          <div className="aug-fs-xs" style={{ ...MONO, color: "var(--t3)", marginTop: 3, overflowWrap: "anywhere" }}>
+          <div className="aug-fs-sm" style={{ ...MONO, color: "var(--t3)", marginTop: 3, overflowWrap: "anywhere" }}>
             {link.business_name && <>{link.business_name}{link.business_name_source === "human" ? " (declared)" : ""} · </>}
             {link.name} · {link.on}
           </div>
-          {link.why_not && <p className="aug-fs-xs" style={{ margin: "3px 0 0", color: "var(--t3)", lineHeight: 1.45 }}>{link.why_not}</p>}
+          {link.why_not && <p className="aug-fs-sm" style={{ margin: "3px 0 0", color: "var(--t3)", lineHeight: 1.45 }}>{link.why_not}</p>}
           {!!link.carries?.length && (
-            <div className="aug-fs-xs" data-testid="link-carries" style={{ marginTop: 3, color: "var(--t2)", lineHeight: 1.45 }}>
+            <div className="aug-fs-sm" data-testid="link-carries" style={{ marginTop: 3, color: "var(--t2)", lineHeight: 1.45 }}>
               {link.carries.map((c) => (
                 <div key={`${c.process}:${c.stage ?? c.promise ?? c.impact}`} title={c.how}>
                   carries {c.promise ? `the ${c.promise} promise of ${c.process_label}`
@@ -2593,12 +2595,12 @@ function ActionsSection({ detail, connectionId, onDesignAction }: {
         <div key={a.id} style={{ padding: "7px 0", borderTop: i ? RULE : undefined }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
             <span style={{ color: "var(--t3)", display: "inline-flex" }}><Icon name="bolt" size={13} /></span>
-            <span className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: 600 }}>{a.display_name}</span>
+            <span className="aug-fs-chrome" style={{ color: "var(--t1)", fontWeight: 600 }}>{a.display_name}</span>
             <span className="aug-tag aug-tag-gray">{a.kind}</span>
             {a.risk && <span className={`aug-tag ${RISK_TAG[a.risk] ?? "aug-tag-gray"}`}>{a.risk}</span>}
           </div>
-          <div className="aug-fs-xs" style={{ color: "var(--t3)", marginTop: 2 }}>{a.why}</div>
-          <div className="aug-fs-xs" style={{ ...MONO, color: "var(--t2)", marginTop: 3, overflowWrap: "anywhere" }}>
+          <div className="aug-fs-sm" style={{ color: "var(--t3)", marginTop: 2 }}>{a.why}</div>
+          <div className="aug-fs-sm" style={{ ...MONO, color: "var(--t2)", marginTop: 3, overflowWrap: "anywhere" }}>
             ({a.params.map((p) => `${p.name}${p.kind === "object" ? `: ${p.object_type}` : ""}${p.required ? "" : "?"}`).join(", ")})
             {a.edits.length > 0 && <> → sets {a.edits.map((e) => `${e.object}.${e.property}`).join(", ")}</>}
           </div>
@@ -2666,7 +2668,7 @@ function EditStatesSection({ detail, connectionId, schema, onChanged }: {
   return (
     <Section title="Moves the edit layer allows" aside={declared.length ? countNoun(declared.length, "property") : undefined} action={door}>
       {declared.map(([prop, spec]) => (
-        <div key={prop} data-testid="edit-states-row" className="aug-fs-xs" style={{ padding: "4px 0", color: "var(--t2)" }}>
+        <div key={prop} data-testid="edit-states-row" className="aug-fs-chrome" style={{ padding: "4px 0", color: "var(--t2)" }}>
           <span style={{ color: "var(--t1)", fontWeight: 600 }}>{prop}</span>
           {": "}{spec.moves.map(([a, b]) => `${word(a)} → ${b}`).join(" · ")}
           {editing && (
@@ -2718,7 +2720,7 @@ function WordsSection({ detail, connectionId, schema }: { detail: ObjectTypeDeta
         <EmptyState variant="inline" title={`No word people use is recorded for ${detail.display_name.toLowerCase()} yet.`} />
       )}
       {mine.map((r, i) => (
-        <div key={`${r.subject_kind}:${r.subject_id}:${r.synonym}`} data-testid="type-word" className="aug-fs-xs"
+        <div key={`${r.subject_kind}:${r.subject_id}:${r.synonym}`} data-testid="type-word" className="aug-fs-chrome"
           style={{ padding: "6px 0", borderTop: i ? RULE : undefined, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
           <span style={{ color: "var(--t1)" }}>&ldquo;{r.synonym}&rdquo;</span>
           {r.keyed ? (
@@ -2749,9 +2751,9 @@ function MetricsSection({ detail }: { detail: ObjectTypeDetail }) {
       {detail.metrics.length === 0 && <EmptyState variant="inline" title="No verified metric is defined on this type." />}
       {detail.metrics.map((m) => (
         <div key={m.id} style={{ padding: "5px 0" }} title={m.formula_sql}>
-          <span className="aug-fs-sm" style={{ color: "var(--t1)" }}>{m.display_name}</span>
+          <span className="aug-fs-chrome" style={{ color: "var(--t1)" }}>{m.display_name}</span>
           {m.unit && <span className="aug-fs-xs" style={{ color: "var(--t3)" }}> {m.unit}</span>}
-          <div className="aug-fs-xs" style={{ ...MONO, color: "var(--t3)", overflowWrap: "anywhere" }}>{m.formula_sql}</div>
+          <div className="aug-fs-sm" style={{ ...MONO, color: "var(--t3)", overflowWrap: "anywhere" }}>{m.formula_sql}</div>
         </div>
       ))}
       {detail.unverified_metrics.length > 0 && (
@@ -2839,7 +2841,7 @@ function PathRow({ path, onOpen }: { path: TypePath; onOpen: (objectType: string
       </div>
       <ol style={{ listStyle: "none", margin: "6px 0 0", padding: 0 }}>
         {path.hops.map((hop, i) => (
-          <li key={`${hop.link}:${i}`} className="aug-fs-xs" style={{ padding: "2px 0" }}>
+          <li key={`${hop.link}:${i}`} className="aug-fs-chrome" style={{ padding: "2px 0" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
               <span style={{ color: hop.traversable ? "var(--grn4)" : "var(--amb4)", display: "inline-flex" }}>
                 <Icon name={hop.traversable ? "check" : "close"} size={12} label={hop.traversable ? "Followed" : "Refused"} />
@@ -2853,8 +2855,8 @@ function PathRow({ path, onOpen }: { path: TypePath; onOpen: (objectType: string
               </Button>
               <span style={{ ...MONO, color: "var(--t3)" }}>{hop.cardinality}</span>
             </div>
-            <div style={{ ...MONO, color: "var(--t3)", paddingLeft: 17 }}>{hop.link}</div>
-            {hop.why_not && <div style={{ color: "var(--t3)", paddingLeft: 17, lineHeight: 1.45 }}>{hop.why_not}</div>}
+            <div className="aug-fs-sm" style={{ ...MONO, color: "var(--t3)", paddingLeft: 17 }}>{hop.link}</div>
+            {hop.why_not && <div className="aug-fs-sm" style={{ color: "var(--t3)", paddingLeft: 17, lineHeight: 1.45 }}>{hop.why_not}</div>}
           </li>
         ))}
       </ol>

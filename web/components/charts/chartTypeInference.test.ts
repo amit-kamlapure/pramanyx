@@ -8,6 +8,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { mapHintFor, inferChartType } from "./chartTypeInference";
+import { classifyColumns } from "./columnRoles";
 
 const COLUMNS = ["ep", "ap", "records", "ev", "mn", "mx"];
 const ROWS = [
@@ -60,5 +61,19 @@ describe("the map an answer is drawn as", () => {
   it("offers no map the rows cannot draw, and does not read a mapping table as a map", () => {
     expect(mapHintFor("Show regions on a map", ["region", "orders"], [["North", 1], ["South", 2], ["East", 3]], "auto")).toBeNull();
     expect(mapHintFor("Check the mapping table by country", COUNTRIES.columns, COUNTRIES.rows, "auto")).toBeNull();
+  });
+});
+
+describe("a date that is the same on every row (2026-11-20)", () => {
+  it("is not the axis: GMV by platform as of one day is bars by platform", () => {
+    const columns = ["platform", "last_day", "gmv_eur"];
+    const rows = [["Mytheresa", "2026-11-20", 1245485.1], ["NET-A-PORTER", "2026-11-20", 1022318.86],
+      ["YOOX", "2026-11-20", 503028.21], ["MR PORTER", "2026-11-20", 446310.99]];
+    expect(classifyColumns(columns, rows).dateIdxs).toEqual([]);
+    expect(inferChartType(columns, rows)?.type).toBe("bar");
+  });
+  it("a date that moves is still the axis", () => {
+    const rows = [["2026-09-01", 10], ["2026-10-01", 12], ["2026-11-01", 9]];
+    expect(classifyColumns(["month", "orders"], rows).dateIdxs).toEqual([0]);
   });
 });

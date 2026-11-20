@@ -26,10 +26,10 @@ const header = (over: Partial<Parameters<typeof GridHeader>[0]> = {}) => {
 };
 
 describe("a column's header", () => {
-  it("draws its kind's icon before its name, at the reading size the SQL editor's results use", () => {
+  it("draws its kind's icon before its name, at the 13px the SQL editor's results use", () => {
     header();
     const head = screen.getByRole("columnheader", { name: "order_id · Text" });
-    expect(head.closest("[role=row]")).toHaveClass("aug-fs-ui");
+    expect(head.closest("[role=row]")).toHaveClass("aug-fs-chrome");
     const icon = head.querySelector("svg") as SVGElement;
     expect(icon.getAttribute("width")).toBe("14");
     expect(icon.compareDocumentPosition(screen.getByText("order_id")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

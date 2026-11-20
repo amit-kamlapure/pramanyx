@@ -125,8 +125,7 @@ export function QuickFixPanel({
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px" }}>
-        <span className="aug-fs-xs" style={{ color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em",
-          whiteSpace: "nowrap" }}>Proposed fix</span>
+        <span className="aug-label" style={{ whiteSpace: "nowrap" }}>Proposed fix</span>
         <span className="aug-fs-ui" style={{ color: "var(--t3)" }}>{fix?.rationale}</span>
         <div style={{ flex: 1 }} />
         <Button

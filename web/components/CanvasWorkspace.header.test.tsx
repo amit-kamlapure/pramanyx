@@ -22,6 +22,7 @@ const api = vi.hoisted(() => ({
   getCanvasHistory: vi.fn(),
   getCanvasArtifacts: vi.fn(),
   getCanvasDocuments: vi.fn(),
+  cloneCanvas: vi.fn(),
 }));
 
 vi.mock("@/lib/api", async (original) => ({
@@ -30,6 +31,7 @@ vi.mock("@/lib/api", async (original) => ({
   getCanvasHistory: api.getCanvasHistory,
   getCanvasArtifacts: api.getCanvasArtifacts,
   getCanvasDocuments: api.getCanvasDocuments,
+  cloneCanvas: api.cloneCanvas,
   listDocuments: vi.fn().mockResolvedValue([]),
   deleteCanvasArtifact: vi.fn().mockResolvedValue(undefined),
   updateCanvas: vi.fn(),
@@ -47,7 +49,16 @@ vi.mock("@/components/brief/BriefingEdition", () => ({
   ),
 }));
 vi.mock("@/components/HistoryDetailPanel", () => ({ HistoryDetailPanel: () => null }));
-vi.mock("@/components/ConfigurePanel", () => ({ ConfigurePanel: () => null }));
+vi.mock("@/components/ConfigurePanel", () => ({ ConfigurePanel: () => <div data-testid="configure" /> }));
+vi.mock("@/lib/canvasSharing", () => ({
+  readCanvasSharing: vi.fn().mockResolvedValue({ sharing: "workspace", shared_with: [], maker: "ana", access: "own", why: "made it",
+    may_change: true, people: ["bo"], groups: [] }),
+  saveCanvasSharing: vi.fn(),
+}));
+vi.mock("@/lib/certification", async (original) => ({
+  ...(await original<typeof import("@/lib/certification")>()),
+  readCertification: vi.fn().mockResolvedValue(null),
+}));
 vi.mock("@/components/LifecyclePanel", () => ({ LifecyclePanel: () => null }));
 
 const CANVAS: Canvas = {
@@ -62,37 +73,86 @@ beforeEach(() => {
   api.getCanvasDocuments.mockReset().mockResolvedValue([]);
 });
 
-const show = (canvas: Canvas = CANVAS, connections: Connection[] = CONNECTIONS) =>
-  render(<Theme><CanvasWorkspace canvas={canvas} connections={connections} onClose={vi.fn()} onCanvasUpdate={vi.fn()} workspaceId="default" /></Theme>);
-const tabs = () => screen.getAllByRole("button").map(b => b.textContent?.trim()).filter(t => ["Chat", "Briefing", "History", "Artifacts", "Cockpit"].includes(t ?? ""));
+const show = (canvas: Canvas = CANVAS, connections: Connection[] = CONNECTIONS, onOpenCanvas = vi.fn()) =>
+  render(<Theme><CanvasWorkspace canvas={canvas} connections={connections} onClose={vi.fn()} onCanvasUpdate={vi.fn()} workspaceId="default"
+    onOpenCanvas={onOpenCanvas} /></Theme>);
+const more = async () => {
+  fireEvent.keyDown(screen.getByTestId("canvas-more"), { key: "Enter" });
+  return screen.findAllByRole("menuitem");
+};
 const settle = () => new Promise(r => setTimeout(r, 10));
 
 describe("the Data Canvas", () => {
-  it("has its four views, the Briefing after Chat, and no dashboard", async () => {
+  // The user, 2026-11-20, beside another product's data space: one click to Configure, Settings folded into it with the
+  // artifacts, no Briefing at the top left, Clone, Share and Certify, History as an icon, a new chat as a pencil.
+  it("opens on the conversation, its doors on the header: a new conversation, History, Configure, Share and ⋮", async () => {
     show();
     await settle();
-    expect(tabs()).toEqual(["Chat", "Briefing", "History", "Artifacts"]);
-    expect(screen.getByRole("button", { name: "Chat" }).getAttribute("aria-pressed")).toBe("true");   // still opens on Chat
-    expect(api.getSystemFlags).not.toHaveBeenCalled();      // it no longer asks
+    for (const door of ["canvas-new-chat", "canvas-history-door", "canvas-configure", "canvas-share", "canvas-more"]) {
+      expect(screen.getByTestId(door)).toBeInTheDocument();
+    }
+    expect(screen.getByTestId("canvas-new-chat")).toHaveAttribute("aria-label", "New conversation");
+    for (const gone of ["Chat", "Briefing", "Artifacts", "Tools", "Settings…"]) {
+      expect(screen.queryByRole("button", { name: gone })).toBeNull();          // no row of views, no Tools menu
+    }
+    expect(screen.queryByTestId("canvas-to-chat")).toBeNull();                   // it is in the conversation already
+    expect((await more()).map(i => i.textContent)).toEqual(["Briefing", "Clone", "Certify or deprecate…"]);
+    expect(api.getSystemFlags).not.toHaveBeenCalled();
   });
 
-  it("reads the canvas's Briefing only once the tab is opened, and takes a question from it into deep analysis", async () => {
+  it("reads the canvas's Briefing only once it is opened from ⋮, and takes a question from it into deep analysis", async () => {
     show();
     await settle();
     expect(screen.queryByTestId("edition")).toBeNull();                                    // opening a canvas reads none
-    fireEvent.click(screen.getByRole("button", { name: "Briefing" }));
+    fireEvent.click((await more()).find(i => i.textContent === "Briefing")!);
     const edition = await screen.findByTestId("edition");
     expect(edition.dataset).toMatchObject({ canvas: "cv1", conn: "thelook", workspace: "default" });
+    expect(screen.getByTestId("canvas-to-chat")).toHaveTextContent("Conversation");       // the way back
     fireEvent.click(screen.getByRole("button", { name: "Take it deeper" }));
-    expect(screen.getByRole("button", { name: "Chat" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.queryByTestId("canvas-to-chat")).toBeNull();
     expect(screen.getByTestId("chat").dataset).toMatchObject({ question: "Why did returns fall?", mode: DEEP_ANALYSIS_MODE });
   });
 
-  it("keeps every tool in one menu, and a way back before the name", () => {
+  it("opens Configure on one click, and History is a door that toggles back to the conversation", () => {
     show();
-    expect(screen.getByTestId("canvas-tools")).toHaveTextContent("Tools");
-    expect(screen.queryByRole("button", { name: /^Configure$/ })).toBeNull();     // no longer a button of its own
+    expect(screen.queryByTestId("configure")).toBeNull();
+    fireEvent.click(screen.getByTestId("canvas-configure"));
+    expect(screen.getByTestId("configure")).toBeInTheDocument();
+    const history = screen.getByRole("button", { name: "History" });
+    fireEvent.click(history);
+    expect(history).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(history);
+    expect(history).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByTestId("canvas-back")).toHaveAttribute("title", "Back to all canvases");
+  });
+
+  it("clones it from ⋮ and opens the copy; a clone that fails says so", async () => {
+    const onOpen = vi.fn();
+    api.cloneCanvas.mockResolvedValueOnce({ ...CANVAS, id: "cv2", name: "Returns (copy)" });
+    show(CANVAS, CONNECTIONS, onOpen);
+    fireEvent.click((await more()).find(i => i.textContent === "Clone")!);
+    await settle();
+    expect(api.cloneCanvas).toHaveBeenCalledWith("cv1");
+    expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: "cv2" }));
+    api.cloneCanvas.mockRejectedValueOnce(new Error('"Returns" is not shared with you.'));
+    fireEvent.click((await more()).find(i => i.textContent === "Clone")!);
+    expect(await screen.findByRole("alert")).toHaveTextContent('Not cloned — "Returns" is not shared with you.');
+  });
+
+  it("shares it from Share: who it is shared with, and its owner's choice", async () => {
+    show({ ...CANVAS, created_by: "user:ana", access: "own" });
+    fireEvent.click(screen.getByTestId("canvas-share"));
+    const pop = await screen.findByTestId("canvas-share-pop");
+    expect(pop).toHaveAttribute("aria-label", "Share · Returns");
+    expect(await screen.findByText(/can read and edit this canvas/)).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Only people chosen" })).toBeInTheDocument();     // its owner may choose
+  });
+
+  it("certifies it from ⋮, the form opening beside its name", async () => {
+    show();
+    fireEvent.click((await more()).find(i => i.textContent === "Certify or deprecate…")!);
+    expect(await screen.findByRole("button", { name: "Certified" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Deprecated" })).toBeInTheDocument();
   });
 });
 
@@ -102,6 +162,8 @@ describe("the header, when the row is short of room", () => {
   // box and the workspace slid sideways under the sidebar.
   it("lets the description give way first, then the connection's chip, then the name — and nothing else", () => {
     show({ ...CANVAS, name: "E-Commerce Operations Overview", description: "Orders, items and returns for the online shop." });
+    // on the landing the description is the landing's; in any other view it stands beside the name
+    fireEvent.click(screen.getByRole("button", { name: "History" }));
 
     const name = screen.getByTestId("canvas-name");
     expect(name).toHaveTextContent("E-Commerce Operations Overview");
@@ -118,7 +180,7 @@ describe("the header, when the row is short of room", () => {
     expect(chip).toHaveStyle({ flexShrink: "3", minWidth: "56px", overflow: "hidden" });
     expect(chip).toHaveAttribute("title", "theLook · BigQuery");
     expect(chip).toHaveTextContent("theLook");
-    expect(screen.getByTestId("canvas-tabs")).toHaveStyle({ flexShrink: "0" });
+    expect(screen.getByTestId("canvas-doors")).toHaveStyle({ flexShrink: "0" });
   });
 
   it("says a canvas's connection is gone, in amber, once the connections are known", () => {
@@ -148,17 +210,36 @@ describe("the header, when the row is short of room", () => {
 });
 
 describe("the landing", () => {
-  it("invites a question about what the canvas reads, without repeating the header's name or description", () => {
+  // The user, 2026-11-20, beside another product's data space: "Are we in 1990?" … "DBX does so grand!" — it opened on a line
+  // counting tables, with their names in a hover, over two chips naming a Quick/Agent choice the conversation no longer has.
+  it("opens on the canvas itself: its name large, what it is for, and the tables it reads, named", () => {
     show({ ...CANVAS, description: "Orders, items and returns." });
+    expect(screen.getByTestId("canvas-landing-name")).toHaveTextContent("Returns");
+    expect(screen.getByTestId("canvas-landing-name")).toHaveClass("aug-fs-hero");
+    expect(screen.getByTestId("canvas-landing-what")).toHaveTextContent("Orders, items and returns.");
+    expect(screen.getByTestId("canvas-landing-reads")).toHaveTextContent("Reads 1 table · order_items");
     const landing = screen.getByTestId("canvas-landing");
-    expect(landing).toHaveTextContent("What do you want to know about thelook.order_items?");
-    expect(landing).not.toHaveTextContent("Returns");
-    expect(landing).not.toHaveTextContent("Orders, items and returns.");
+    expect(landing).not.toHaveTextContent("Quick");
+    expect(landing).not.toHaveTextContent("What do you want to know");
+    expect(landing.querySelector("[title]")).toBeNull();                 // nothing it says hides in a hover
+    // said once: while the landing says what the canvas is for, the header does not
+    expect(screen.queryByTestId("canvas-what")).toBeNull();
   });
 
-  it("names the connection for a canvas over all of it", () => {
+  it("names a table by its own name, with its schema only where two schemas share it, and shows the rest on asking", () => {
+    const tables = ["luxexperience.customers", "main.customers", ...Array.from({ length: 12 }, (_, i) => `main.t${i + 1}`)];
+    show({ ...CANVAS, scopes: [{ connection_id: "thelook", schema_name: null, tables }] });
+    const reads = screen.getByTestId("canvas-landing-reads");
+    expect(reads).toHaveTextContent("Reads 14 tables · luxexperience.customers · main.customers · t1 ·");
+    expect(reads).not.toHaveTextContent("t9");
+    fireEvent.click(screen.getByTestId("canvas-landing-all"));
+    expect(reads).toHaveTextContent("t12");
+    expect(screen.getByTestId("canvas-landing-all")).toHaveTextContent("Show fewer");
+  });
+
+  it("says a canvas over all of a connection reads every table of it", () => {
     show({ ...CANVAS, scopes: [{ connection_id: "thelook", schema_name: null, tables: [] }] });
-    expect(screen.getByTestId("canvas-landing")).toHaveTextContent("What do you want to know about theLook?");
+    expect(screen.getByTestId("canvas-landing-reads")).toHaveTextContent("Reads every table of theLook.");
   });
 });
 
@@ -187,10 +268,11 @@ describe("the history", () => {
   });
 });
 
-describe("the artifacts", () => {
+describe("the artifacts, Configure's tab now", () => {
   it("says a failed read failed — never that nothing was saved", async () => {
+    const { CanvasArtifacts } = await import("@/components/canvas/CanvasParts");
     api.getCanvasArtifacts.mockRejectedValue(new Error("Failed to fetch artifacts"));
-    show();
+    render(<Theme><CanvasArtifacts canvasId="cv1" /></Theme>);
     expect(await screen.findByText(/Could not read this canvas's artifacts/)).toBeInTheDocument();
     expect(screen.queryByText("Nothing saved on this canvas yet.")).toBeNull();
   });
@@ -212,13 +294,14 @@ describe("inside the app's shell (2026-11-10)", () => {
     );
     await settle();
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Returns");
-    expect(screen.getByTestId("canvas-what").closest(".aug-title-facts")).toBeTruthy();
-    expect(screen.getByTestId("canvas-tabs").closest(".aug-page-toolbar")).toBeTruthy();
-    expect(screen.getByTestId("canvas-tools").closest(".aug-title-actions")).toBeTruthy();
+    expect(screen.queryByTestId("canvas-what")).toBeNull();            // the landing says what it is for…
+    expect(screen.getByTestId("canvas-doors").closest(".aug-title-actions")).toBeTruthy();   // the doors, with the page's actions
+    expect(document.querySelector(".aug-page-toolbar [data-testid='canvas-doors']")).toBeNull(); // no row of views under it
     expect(screen.queryByTestId("canvas-back")).toBeNull();            // the breadcrumb is the way back now
     fireEvent.click(screen.getByRole("button", { name: "Back to Data Canvas" }));
     expect(onClose).toHaveBeenCalledTimes(1);                           // as "← Data Canvas" did: the canvas is closed
-    fireEvent.click(screen.getByRole("button", { name: "Briefing" }));  // the views still switch from the toolbar row
-    expect(screen.getByRole("button", { name: "Briefing" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "History" }));   // History is a door on the title row
+    expect(screen.getByRole("button", { name: "History" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByTestId("canvas-what").closest(".aug-title-facts")).toBeTruthy();   // …away from it, the header
   });
 });

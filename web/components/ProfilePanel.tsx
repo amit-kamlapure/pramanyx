@@ -215,11 +215,11 @@ export function ProfilePanel({ connectionId, canvasId, schema, workspaceId }: {
                   </>
                 )}
               </div>
-              <dl className="aug-fs-sm" data-testid="profile-facts" style={{ flex: "0 1 340px", minWidth: 240, margin: 0,
+              <dl className="aug-fs-chrome" data-testid="profile-facts" style={{ flex: "0 1 340px", minWidth: 240, margin: 0,
                 display: "grid", gridTemplateColumns: "88px minmax(0, 1fr)", gap: "8px 12px" }}>
                 {p.business_model && (
                   <>
-                    <dt style={TERM}>Model</dt>
+                    <dt className="aug-fs-xs" style={TERM}>Model</dt>
                     <dd style={{ margin: 0, minWidth: 0 }} title={`${p.business_model}\n\nInferred; no confidence is recorded for it.`}>
                       <div style={{ color: "var(--t1)", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical",
                         overflow: "hidden" }}>{p.business_model}</div>
@@ -232,7 +232,7 @@ export function ProfilePanel({ connectionId, canvasId, schema, workspaceId }: {
                 {/* A January start is also what an unset setting reads as, so only another month is a human decision. */}
                 {org && org.fiscal_year_start_month > 1 && (
                   <>
-                    <dt style={TERM}>Fiscal year</dt>
+                    <dt className="aug-fs-xs" style={TERM}>Fiscal year</dt>
                     <dd style={{ margin: 0, ...ROW }}>
                       <span style={{ color: "var(--t1)" }}>starts {MONTHS[org.fiscal_year_start_month - 1]}</span>
                       <Chip title="Set in org settings">org setting</Chip>
@@ -241,7 +241,7 @@ export function ProfilePanel({ connectionId, canvasId, schema, workspaceId }: {
                 )}
                 {settings.state === "failed" && (
                   <>
-                    <dt style={TERM}>Org settings</dt>
+                    <dt className="aug-fs-xs" style={TERM}>Org settings</dt>
                     <dd style={{ margin: 0 }}>
                       <ReadFailed what="them — a setting a person made may be missing here" onRetry={reSettings} />
                     </dd>
@@ -320,7 +320,7 @@ export function ProfilePanel({ connectionId, canvasId, schema, workspaceId }: {
               const transitions = (lc.transitions ?? []).length;
               return (
                 <div key={table} style={{ padding: "7px 0", ...(i ? RULE : {}) }}>
-                  <div className="aug-fs-sm" style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
+                  <div className="aug-fs-chrome" style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
                     <span style={{ fontFamily: "var(--font-mono)", color: "var(--t1)", ...ONE_LINE }}>{table}.{lc.status_column}</span>
                     {!noOrder && (
                       <span className="aug-fs-xs" style={{ ...MUTED, marginLeft: "auto" }}>
@@ -359,12 +359,12 @@ export function ProfilePanel({ connectionId, canvasId, schema, workspaceId }: {
                     <div key={key} style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 12, alignItems: "center",
                       padding: "5px 0", ...(i ? RULE : {}) }}>
                       <div style={{ minWidth: 0 }}>
-                        <div className="aug-fs-sm" style={{ fontFamily: "var(--font-mono)", color: "var(--t1)", ...ONE_LINE }}>{table}.{column}</div>
+                        <div className="aug-fs-chrome" style={{ fontFamily: "var(--font-mono)", color: "var(--t1)", ...ONE_LINE }}>{table}.{column}</div>
                         {nm.business_rule && (
-                          <div className="aug-fs-xs" title={nm.business_rule} style={{ ...MUTED, ...ONE_LINE }}>{nm.business_rule}</div>
+                          <div className="aug-fs-sm" title={nm.business_rule} style={{ ...MUTED, ...ONE_LINE }}>{nm.business_rule}</div>
                         )}
                       </div>
-                      <span className="aug-fs-sm" title="null rate" style={{ color: "var(--t2)", ...NUM }}>
+                      <span className="aug-fs-chrome" title="null rate" style={{ color: "var(--t2)", ...NUM }}>
                         {nm.null_rate == null ? "—" : pct(nm.null_rate, 1)}
                       </span>
                     </div>
@@ -468,7 +468,7 @@ export function CurrencyFact({ connectionId, schema }: { connectionId: string; s
   const who = `Confirmed by ${c.confirmed_by || "a person"}${c.confirmed_at ? ` on ${dateWords(c.confirmed_at, Date.now())}` : ""}`;
   return (
     <>
-      <dt style={TERM}>Currency</dt>
+      <dt className="aug-fs-xs" style={TERM}>Currency</dt>
       <dd data-testid="profile-currency" style={{ margin: 0, ...ROW, flexWrap: "wrap" }}>
         {c.code ? (
           <>
@@ -520,12 +520,12 @@ function MetricRow({ m }: { m: Metric }) {
   return (
     <div style={{ padding: "7px 0", ...RULE, minWidth: 0 }}
       title={(m.connection ?? "*") === "*" ? `${m.name} · applies to every connection` : m.name}>
-      <div className="aug-fs-sm" style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+      <div className="aug-fs-chrome" style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
         <span style={{ color: "var(--t1)", fontWeight: 500, ...ONE_LINE }}>{m.label || keyToWords(m.name)}</span>
         <span className="aug-fs-xs" style={{ ...MUTED, ...NUM }}>v{m.version ?? 0}</span>
         {state && <Chip tone={state.tone} title={state.title}>{m.status}</Chip>}
       </div>
-      <div className="aug-fs-xs" title={m.sql || undefined}
+      <div className="aug-fs-sm" title={m.sql || undefined}
         style={{ ...MUTED, ...ONE_LINE, fontFamily: m.sql ? "var(--font-mono)" : undefined }}>
         {m.sql || "no formula recorded"}
       </div>

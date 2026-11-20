@@ -509,7 +509,7 @@ function FaceBody({ data }: { data: CardData }) {
       ?.depth ?? "");
     return (
       <>
-        <div style={{ borderTop: "1px solid var(--b1)", padding: "2px 0" }}>
+        <div style={{ padding: "3px 0 2px" }}>
           {data.origin?.service && <FieldRow label="Service" value={data.origin.service} />}
           <FieldRow label="At" value={clockOf(node.at)} />
           {depth && <FieldRow label="Depth" value={depth} />}
@@ -523,7 +523,7 @@ function FaceBody({ data }: { data: CardData }) {
     const u = data.runUsage;
     return (
       <>
-        <div style={{ borderTop: "1px solid var(--b1)", padding: "2px 0" }}>
+        <div style={{ padding: "3px 0 2px" }}>
           <FieldRow
             label="Status"
             value={node.ok === false ? (node.error_class || "failed") : "ok"}
@@ -547,7 +547,7 @@ function FaceBody({ data }: { data: CardData }) {
     // found. All three were already in the payload and none of them was on screen.
     const v = guardVerdict(event);
     return (
-      <div style={{ borderTop: "1px solid var(--b1)", padding: "2px 0" }}>
+      <div style={{ padding: "3px 0 2px" }}>
         <FieldRow
           label={v.blocked ? "Blocked" : "Allowed"}
           value={[v.action, v.found ? `${formatCount(v.found)} found` : ""]
@@ -561,7 +561,7 @@ function FaceBody({ data }: { data: CardData }) {
   if (face === "model") {
     return (
       <>
-        <div style={{ borderTop: "1px solid var(--b1)", padding: "2px 0" }}>
+        <div style={{ padding: "3px 0 2px" }}>
           {node.role && <FieldRow label="Role" value={node.role} />}
           {node.provider && <FieldRow label="Provider" value={node.provider} />}
           {node.fallback === true && (
@@ -576,7 +576,7 @@ function FaceBody({ data }: { data: CardData }) {
 
   if (face === "delegation" && node.delegation) {
     return (
-      <div style={{ borderTop: "1px solid var(--b1)", padding: "2px 0" }}
+      <div style={{ padding: "3px 0 2px" }}
            title={`delegation path: ${node.delegation.path}`}>
         <FieldRow label="Agent" value={node.delegation.agent_name} tone="var(--chart-4)" />
         {node.delegation.depth != null && (
@@ -597,7 +597,7 @@ function FaceBody({ data }: { data: CardData }) {
   }
   if (!rows.length) return null;
   return (
-    <div style={{ borderTop: "1px solid var(--b1)", padding: "2px 0" }}>{rows}</div>
+    <div style={{ padding: "3px 0 2px" }}>{rows}</div>
   );
 }
 
@@ -642,7 +642,7 @@ function NodeCard({ data }: { data: CardData }) {
           aria-label={`Collapse these ${data.regroup.reps} repeats`}
           onClick={e => { e.stopPropagation(); data.regroup!.onCollapse(); }}
           style={{ justifyContent: "flex-start", gap: 5, padding: "3px 9px", color: "var(--chart-3)",
-                   borderBottom: "1px solid var(--b1)", borderRadius: 0 }}>
+                   borderRadius: 0 }}>
           <Icon name="layers" size={11} />
           collapse ×{data.regroup.reps}
         </Button>
@@ -653,8 +653,7 @@ function NodeCard({ data }: { data: CardData }) {
       <FaceBody data={data} />
 
       {failed && (
-        <div className="aug-fs-xs" style={{ padding: "3px 9px", color: "var(--red4)",
-                      borderTop: "1px solid var(--b1)" }}>
+        <div className="aug-fs-xs" style={{ padding: "3px 9px", color: "var(--red4)" }}>
           {node.error_class || "failed"}
         </div>
       )}
@@ -670,7 +669,7 @@ function NodeCard({ data }: { data: CardData }) {
         style={{
           display: "flex", justifyContent: "space-between",
           alignItems: "center", padding: "0 9px", borderRadius: 0,
-          borderTop: "1px solid var(--b1)", color: "var(--t3)",
+          color: "var(--t3)",
         }}
       >
         <span>{open ? "Hide details" : "Details"}</span>
@@ -681,7 +680,7 @@ function NodeCard({ data }: { data: CardData }) {
         <div
           className="nodrag nowheel aug-fs-xs"
           style={{
-            borderTop: "1px solid var(--b1)", padding: "6px 9px",
+            padding: "6px 9px",
             maxHeight: 260, overflowY: "auto", background: "var(--bg-1)",
           }}
         >
@@ -786,7 +785,7 @@ function BandCard({ data }: { data: BandData }) {
           style={{
             position: "absolute", top: -7, right: -7,
             padding: "1px 7px", borderRadius: "var(--r-chip)",
-            background: "var(--bg-1)", border: `1px solid ${accent}`, color: accent,
+            background: `color-mix(in srgb, ${accent} 16%, var(--bg-1))`, color: accent,
           }}
           className="aug-fs-xs">
           ×{band.reps}
@@ -802,9 +801,8 @@ const NODE_TYPES = { traceNode: NodeCard, bandNode: BandCard };
 
 function RailSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div style={{ borderTop: "1px solid var(--b1)", padding: "7px 10px" }}>
-      <div className="aug-fs-xs" style={{ color: "var(--t3)", letterSpacing: "0.06em",
-        textTransform: "uppercase", marginBottom: 3 }}>{title}</div>
+    <div style={{ padding: "8px 10px 6px" }}>
+      <div className="aug-label" style={{ marginBottom: 3 }}>{title}</div>
       {children}
     </div>
   );
@@ -829,7 +827,7 @@ function TimelineRail({ timeline, nodes, origin, selectedId, onSelect }: {
   return (
     <div data-testid="timeline-rail" style={{
       width: 208, flexShrink: 0, display: "flex", flexDirection: "column",
-      border: "1px solid var(--b1)", borderRadius: "var(--r-chip)",
+      borderRadius: "var(--r-chip)",
       background: "var(--bg-1)", overflow: "hidden",
     }}>
       <div style={{ padding: "8px 10px" }}>
@@ -870,8 +868,8 @@ function TimelineRail({ timeline, nodes, origin, selectedId, onSelect }: {
         )}
       </RailSection>
 
-      <div style={{ borderTop: "1px solid var(--b1)", flex: 1, overflowY: "auto",
-        padding: "4px 0" }}>
+      <div style={{ flex: 1, overflowY: "auto",
+        padding: "6px 0 4px" }}>
         {nodes.map(n => {
           const face = faceOf(n);
           const active = selectedId === n.id;
@@ -892,7 +890,7 @@ function TimelineRail({ timeline, nodes, origin, selectedId, onSelect }: {
                 flexShrink: 0, display: "flex" }}>
                 <Icon name={FACE_META[face].icon} size={11} />
               </span>
-              <span style={{ flex: 1, minWidth: 0, overflow: "hidden",
+              <span className="aug-fs-chrome" style={{ flex: 1, minWidth: 0, overflow: "hidden",
                 textOverflow: "ellipsis", whiteSpace: "nowrap",
                 color: active ? "var(--t1)" : "var(--t2)" }}>{n.name}</span>
               <span style={{ color: "var(--t3)", flexShrink: 0,
@@ -1252,7 +1250,7 @@ export function TraceFlow({
         </Button>
       </div>
       <div style={{ flex: 1, minHeight: 320, display: "flex", gap: 8 }}>
-        <div style={{ flex: 1, minWidth: 0, border: "1px solid var(--b1)",
+        <div style={{ flex: 1, minWidth: 0, background: "var(--bg-1)",
                       borderRadius: "var(--r-chip)" }}>
           <ReactFlow
             nodes={rfNodes}

@@ -40,7 +40,9 @@ import { countNoun, formatTimestamp, utcDayWords } from "@/lib/format";
 import { ORGANISATION, drillLabel, fromServerReader, partWords, readerOptions, toServerReader, writeLabel, type DrillStep } from "@/lib/briefingEdition";
 
 const PRESETS = ["last_week", "last_month", "last_year"] as const;
-const RULE = "1px solid var(--b1)";
+// the one rule kept: the edition | side panel split, two panes worked side by side, in --divide (2026-11-20, borders
+// are the exception); the panel's head and the withheld note part by space
+const RULE = "1px solid var(--divide)";
 const NO_TRAILS: Record<string, DrillStep[]> = {};
 
 const when = (iso?: string): string => (iso ? formatTimestamp(iso, "short") : "");
@@ -469,7 +471,7 @@ export function BriefingEdition({ connectionId, schema, workspaceId, canvasId, o
                 </>
               )}
               {!account && (!!edition.withheld?.length || !!edition.left_out?.length || notRead.length > 0) && (
-                <section data-testid="edition-withheld" className="aug-fs-xs" style={{ color: "var(--t3)", borderTop: RULE, paddingTop: 10, marginTop: 18 }}>
+                <section data-testid="edition-withheld" className="aug-fs-xs" style={{ color: "var(--t3)", marginTop: 24 }}>
                   {edition.withheld?.map((w, i) => (
                     <div key={`w-${i}`}>Held back{w.sentence ? `: “${w.sentence}”` : " a block"} — {w.why}</div>
                   ))}
@@ -502,7 +504,7 @@ export function BriefingEdition({ connectionId, schema, workspaceId, canvasId, o
       {side && (
         <aside aria-label="Sources and guide" style={{ borderLeft: RULE, background: "var(--bg-1)", height: "100%", minHeight: 0,
                                                        display: "flex", flexDirection: "column" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderBottom: RULE }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px 6px" }}>
             <Segmented label="Side panel" value={side} onChange={v => setSide(v as "sources" | "guide")}
               options={[{ value: "sources", label: "Sources" }, ...(hasGuide ? [{ value: "guide", label: "Guide" }] : [])]} />
             <Button size="xs" variant="ghost" style={{ marginLeft: "auto" }} onClick={() => setSide("")}>Hide</Button>

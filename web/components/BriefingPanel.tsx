@@ -327,8 +327,9 @@ export function NarrativeCard({
   const paras = paper ? narrative.narrative.split(/\n\s*\n/).map(p => p.trim()).filter(Boolean) : [];
   return (
     // Flat panel in the shared card language (was a blue-gradient card). The section's .aug-label
-    // header outside already frames it; the prose carries the analysis.
-    <div style={paper ? undefined : { background: "var(--bg-2)", border: "1px solid var(--b1)", borderRadius: "var(--r3)", padding: "18px 22px" }}>
+    // header outside already frames it; the prose carries the analysis. No edge: its surface on the
+    // ground (2026-11-20, borders are the exception).
+    <div style={paper ? undefined : { background: "var(--bg-2)", borderRadius: "var(--r3)", padding: "18px 22px" }}>
       {paper && (
         <div data-testid="paper-lead-body">
           {/* Each paragraph is a <div>, never a <p>: a citation's hover card and a figure's receipt are blocks,
@@ -537,7 +538,7 @@ function CitationActionsPopover({
             onClick={() => { ctx.onInvestigate(`Investigate: ${citation.finding}`, citation.insight_id); onClose(); }}
             style={{
               alignSelf: "flex-start", fontSize: 11, color: "var(--blue5)",
-              background: "var(--bg-sel)", border: "1px solid var(--b1)",
+              background: "var(--bg-sel)", border: "1px solid transparent",
               borderRadius: "var(--r2)", padding: "4px 10px", cursor: "pointer",
             }}
             title="Open in the Ask workspace"
@@ -788,7 +789,6 @@ function DomainTag({ domain }: { domain: string }) {
       display: "inline-flex", alignItems: "center",
       padding: "2px 8px", borderRadius: "var(--r2)",
       background:  `color-mix(in srgb, ${color} 12%, transparent)`,
-      border:      `1px solid color-mix(in srgb, ${color} 28%, transparent)`,
       color, fontWeight: 500, textTransform: "capitalize" as const,
       letterSpacing: ".02em", flexShrink: 0,
     }}>
@@ -813,8 +813,8 @@ function ScopeChip({ label, dot, count, active, onClick }: {
       aria-pressed={active}
       style={{
         borderRadius: "var(--r-chip)", gap: 6, height: 26,
-        background: active ? "color-mix(in srgb, var(--blue4) 12%, var(--bg-2))" : "var(--bg-2)",
-        border: `1px solid ${active ? "var(--blue4)" : "var(--b1)"}`,
+        // chosen by its tint, the rest a soft fill — no outline (2026-11-20, borders are the exception)
+        background: active ? "color-mix(in srgb, var(--blue4) 12%, var(--bg-2))" : "var(--gray-a3)",
         color: active ? "var(--blue4)" : "var(--t2)",
         fontWeight: active ? 500 : 400,
       }}
@@ -1199,7 +1199,7 @@ export function FindingActions({ insight, domain, connectionId, canvasId, schema
           )}
         </div>
         {degenerate && (
-          <span title={noData} className="aug-label" style={{ padding: "2px 6px", borderRadius: "var(--r1)", color: "var(--t3)", background: "var(--bg-3)", border: "1px solid var(--b1)" }}>no data</span>
+          <span title={noData} className="aug-label" style={{ padding: "2px 6px", borderRadius: "var(--r1)", color: "var(--t3)", background: "var(--gray-a3)" }}>no data</span>
         )}
         {shareMsg && (
           <span className="aug-fs-xs" style={{ color: shareMsg.includes("✓") ? "var(--grn4)" : "var(--t3)" }}>{shareMsg}</span>
@@ -1229,7 +1229,7 @@ export function FindingActions({ insight, domain, connectionId, canvasId, schema
             background: "var(--bg-1)", border: "1px solid var(--b2)", borderRadius: "var(--r2)",
             boxShadow: "var(--shadow-lg)", minWidth: 160, overflow: "hidden",
           }}>
-            <div className="aug-label" style={{ padding: "6px 10px", borderBottom: "1px solid var(--b1)" }}>
+            <div className="aug-label" style={{ padding: "8px 10px 4px" }}>
               Send to channel
             </div>
             {triggers.map(t => (
@@ -1255,7 +1255,7 @@ export function FindingActions({ insight, domain, connectionId, canvasId, schema
       {degenerate && (
         <span title={noData} className="aug-label" style={{
           padding: "2px 6px", borderRadius: "var(--r1)", color: "var(--t3)",
-          background: "var(--bg-3)", border: "1px solid var(--b1)",
+          background: "var(--gray-a3)",
         }}>no data</span>
       )}
       {shareMsg && (
@@ -1319,7 +1319,7 @@ export function DossierTrace({ dossier }: { dossier: FindingDossier }) {
           </Label>
           <div style={{
             display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", borderRadius: "var(--r2)",
-            background: "var(--bg-2)", border: "1px solid var(--b1)",
+            background: "var(--bg-2)",
           }}>
             {g && (
               <span style={{ flexShrink: 0, fontSize: 12, color: g.grounded ? "var(--grn4)" : "var(--amb4)" }}>
@@ -1336,7 +1336,7 @@ export function DossierTrace({ dossier }: { dossier: FindingDossier }) {
       {hasStructural && (
         <div>
           <Label>Structural ground — facts this claim stands on</Label>
-          <div style={{ display: "flex", flexDirection: "column" as const, gap: 5, padding: "10px 12px", borderRadius: "var(--r2)", background: "var(--bg-2)", border: "1px solid var(--b1)" }}>
+          <div style={{ display: "flex", flexDirection: "column" as const, gap: 5, padding: "10px 12px", borderRadius: "var(--r2)", background: "var(--bg-2)" }}>
             {joins.map((j, i) => (
               <div key={`j${i}`} style={{ fontSize: 11, color: j.verified ? "var(--grn4)" : "var(--amb4)" }}>
                 {j.verified ? "✓" : "⚠"} {j.from_table} → {j.to_table} ({j.cardinality}
@@ -1442,7 +1442,7 @@ export function EvidenceDrawer({ insight, domain, onClose, connectionId }: {
         borderLeft: "1px solid var(--b2)", boxShadow: "-8px 0 28px rgba(0,0,0,.22)",
         display: "flex", flexDirection: "column" as const, overflow: "hidden",
       }}>
-        <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--b1)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ padding: "16px 20px 6px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span className="aug-label">Evidence</span>
             <DomainTag domain={domain} />
@@ -1465,7 +1465,7 @@ export function EvidenceDrawer({ insight, domain, onClose, connectionId }: {
                   <div className="aug-label" style={{ marginBottom: 5 }}>Entities</div>
                   <div style={{ display: "flex", gap: 4, flexWrap: "wrap" as const }}>
                     {insight.entities_involved.map(e => (
-                      <span key={e} className="aug-fs-xs" style={{ padding: "2px 7px", borderRadius: "var(--r1)", background: "var(--bg-3)", border: "1px solid var(--b1)", color: "var(--t3)", fontFamily: "var(--font-mono)" }}>{e.replace(/_/g, " ")}</span>
+                      <span key={e} className="aug-fs-xs" style={{ padding: "2px 7px", borderRadius: "var(--r1)", background: "var(--gray-a3)", color: "var(--t3)", fontFamily: "var(--font-mono)" }}>{e.replace(/_/g, " ")}</span>
                     ))}
                   </div>
                 </div>
@@ -1475,7 +1475,7 @@ export function EvidenceDrawer({ insight, domain, onClose, connectionId }: {
                   <div className="aug-label" style={{ marginBottom: 5 }}>Measures</div>
                   <div style={{ display: "flex", gap: 4, flexWrap: "wrap" as const }}>
                     {insight.measures.map(m => (
-                      <span key={m} className="aug-fs-xs" style={{ padding: "2px 7px", borderRadius: "var(--r1)", background: "var(--bg-3)", border: "1px solid var(--b1)", color: "var(--t3)", fontFamily: "var(--font-mono)" }}>{m}</span>
+                      <span key={m} className="aug-fs-xs" style={{ padding: "2px 7px", borderRadius: "var(--r1)", background: "var(--gray-a3)", color: "var(--t3)", fontFamily: "var(--font-mono)" }}>{m}</span>
                     ))}
                   </div>
                 </div>
@@ -1506,7 +1506,7 @@ export function EvidenceDrawer({ insight, domain, onClose, connectionId }: {
             </div>
             <pre style={{
               margin: 0, padding: "12px 14px", borderRadius: "var(--r2)",
-              background: "var(--bg-2)", border: "1px solid var(--b1)",
+              background: "var(--bg-2)",
               fontSize: 12, fontFamily: "var(--font-code)", color: "var(--t2)",
               whiteSpace: "pre-wrap" as const, wordBreak: "break-word" as const, lineHeight: 1.55,
             }}>{insight.sql || "— no query recorded —"}</pre>
@@ -1517,7 +1517,7 @@ export function EvidenceDrawer({ insight, domain, onClose, connectionId }: {
               <div className="aug-label" style={{ marginBottom: 6 }}>
                 Trust receipt — how this finding was produced
               </div>
-              <div style={{ display: "flex", flexDirection: "column" as const, gap: 6, padding: "10px 12px", borderRadius: "var(--r2)", background: "var(--bg-2)", border: "1px solid var(--b1)" }}>
+              <div style={{ display: "flex", flexDirection: "column" as const, gap: 6, padding: "10px 12px", borderRadius: "var(--r2)", background: "var(--bg-2)" }}>
                 {receipt.job && (
                   <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--t2)" }}>
                     <span style={{ width: 7, height: 7, borderRadius: "50%", background: receipt.job.state === "SUCCEEDED" ? "var(--grn4)" : "var(--amb4)", flexShrink: 0 }} />
@@ -1532,7 +1532,7 @@ export function EvidenceDrawer({ insight, domain, onClose, connectionId }: {
                   <div style={{ display: "flex", gap: 4, flexWrap: "wrap" as const, alignItems: "center" }}>
                     <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>Inputs:</span>
                     {receipt.lineage.filter(l => l.relation === "input").map(l => (
-                      <span key={l.ref} className="aug-fs-xs" style={{ padding: "1px 6px", borderRadius: "var(--r1)", background: "var(--bg-3)", border: "1px solid var(--b1)", color: "var(--t3)" }}>{l.ref.replace("table:", "")}</span>
+                      <span key={l.ref} className="aug-fs-xs" style={{ padding: "1px 6px", borderRadius: "var(--r1)", background: "var(--gray-a3)", color: "var(--t3)" }}>{l.ref.replace("table:", "")}</span>
                     ))}
                   </div>
                 )}
@@ -1558,8 +1558,9 @@ function HeadlineCard({ signal, onInvestigate, actions }: {
   const { insight, domain } = signal;
 
   return (
-    // Flat card — the novelty is carried by the label + meter, not a colour-coded border.
-    <div style={{ background: "var(--bg-2)", border: "1px solid var(--b1)", borderRadius: "var(--r3)", padding: "20px 24px" }}>
+    // Flat card — the novelty is carried by the label + meter, not a colour-coded border; no edge
+    // either: its surface on the ground (2026-11-20, borders are the exception).
+    <div style={{ background: "var(--bg-2)", borderRadius: "var(--r3)", padding: "20px 24px" }}>
       {/* Badge row */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" as const }}>
         <span className="aug-label">{noveltyLabel(insight.novelty)}</span>
@@ -1582,7 +1583,7 @@ function HeadlineCard({ signal, onInvestigate, actions }: {
             {insight.entities_involved.slice(0, 4).map(e => (
               <span key={e} className="aug-fs-xs" style={{
                 padding: "1px 6px", borderRadius: "var(--r1)",
-                background: "var(--bg-3)", border: "1px solid var(--b1)",
+                background: "var(--gray-a3)",
                 color: "var(--t3)", fontFamily: "var(--font-mono)",
               }}>{e.replace(/_/g, " ")}</span>
             ))}
@@ -1597,7 +1598,7 @@ function HeadlineCard({ signal, onInvestigate, actions }: {
         </Button>
       </div>
       {actions && (
-        <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--b1)" }}>{actions}</div>
+        <div style={{ marginTop: 20 }}>{actions}</div>
       )}
     </div>
   );
@@ -1687,7 +1688,7 @@ function VerdictHero({
   return (
     // Flat panel in the shared card language (was a gradient + glow + shadow hero). Prominence now
     // comes from position, the display-size verdict, and the primary action — not chrome.
-    <div data-brief-hero style={{ background: "var(--bg-2)", border: "1px solid var(--b1)", borderRadius: "var(--r3)" }}>
+    <div data-brief-hero style={{ background: "var(--bg-2)", borderRadius: "var(--r3)" }}>
       <div style={{ padding: "18px 26px 17px" }}>
         {/* eyebrow (context) + controls */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 13, flexWrap: "wrap" as const }}>
@@ -1792,9 +1793,9 @@ function VerdictHero({
                 grid, not inside it, so it spans the full width regardless of column count. */}
             {openTile && connectionId && (
               <div className="aug-anim-up" style={{
+                // the accent stripe stays (it marks the tile's state); no box round it (2026-11-20)
                 marginTop: 12, padding: "12px 14px", borderRadius: "var(--r3)", background: "var(--bg-2)",
-                borderTop: "1px solid var(--b1)", borderRight: "1px solid var(--b1)",
-                borderBottom: "1px solid var(--b1)", borderLeft: `3px solid ${openTile.accent}`,
+                borderLeft: `3px solid ${openTile.accent}`,
               }}>
                 <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 10 }}>
                   <div style={{ fontSize: 13, lineHeight: 1.5, color: "var(--t1)" }}>
@@ -1914,7 +1915,7 @@ export function FindingDetail({
     ? Number(run.rows[0][0]) : null;
 
   return (
-    <div style={{ background: "var(--bg-1)", border: "1px solid var(--b0)", borderRadius: "var(--r2)", padding: 12 }}>
+    <div style={{ background: "var(--bg-1)", borderRadius: "var(--r2)", padding: 12 }}>
       {range && (
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10, flexWrap: "wrap" as const }}>
           <Segmented<FindingView> label="Which rows the chart draws" value={view} onChange={setView}
@@ -2124,7 +2125,7 @@ function FindingsLedger({ signals: given, filter, connectionId, onInvestigate, o
           )}
         </div>
       ) : (
-        <div style={{ background: "var(--bg-2)", border: "1px solid var(--b1)", borderRadius: "var(--r3)", overflow: "hidden" }}>
+        <div style={{ background: "var(--bg-2)", borderRadius: "var(--r3)", overflow: "hidden" }}>
           {top.map(sig => {
             const ident = signalIdentity(findingOf(sig));
             return (
@@ -2197,7 +2198,7 @@ function SignalCard({ signal, onInvestigate, actions }: {
 
   return (
     <div style={{
-      background: "var(--bg-2)", border: "1px solid var(--b1)",
+      background: "var(--bg-2)",
       borderRadius: "var(--r3)", padding: "14px 16px",
       display: "flex", flexDirection: "column" as const, gap: 10,
     }}>
@@ -2240,7 +2241,7 @@ function PatternRow({ pattern, onInvestigate }: {
       style={{
         display: "flex", alignItems: "flex-start", gap: 10,
         padding: "10px 12px", borderRadius: "var(--r2)",
-        background: "var(--bg-2)", border: "1px solid var(--b1)",
+        background: "var(--bg-2)",
         cursor: "pointer", transition: "background .1s",
       }}
       onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = "var(--bg-3)"; }}
@@ -2273,7 +2274,7 @@ function OrgSignalRow({ insight }: { insight: OrgInsight }) {
   return (
     <div style={{
       padding: "10px 12px", borderRadius: "var(--r2)",
-      background: "var(--bg-2)", border: "1px solid var(--b1)",
+      background: "var(--bg-2)",
     }}>
       <div style={{ display: "flex", gap: 6, marginBottom: 6, alignItems: "center", flexWrap: "wrap" as const }}>
         <DomainTag domain={insight.domain} />
@@ -2359,7 +2360,7 @@ function RunningNotice({ run }: { run: NonNullable<ReturnType<typeof runningNow>
   return (
     <div data-testid="briefing-running" role="status"
       style={{ display: "flex", alignItems: "center", gap: 10, margin: "0 0 16px", padding: "10px 14px",
-               background: "var(--bg-2)", border: "1px solid var(--b1)", borderRadius: "var(--r3)" }}>
+               background: "var(--bg-2)", borderRadius: "var(--r3)" }}>
       <span aria-hidden className="aug-dot aug-dot-live" style={{ width: 7, height: 7, flex: "none" }} />
       <span className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: 500 }}>Exploring now</span>
       <span className="aug-fs-sm" style={{ color: "var(--t2)", minWidth: 0 }}>
@@ -2450,7 +2451,7 @@ function BriefingEmpty({
     }}>
       <div style={{
         width: 56, height: 56, borderRadius: "var(--r3)",
-        background: "var(--bg-2)", border: "1px solid var(--b1)",
+        background: "var(--bg-2)",
         display: "flex", alignItems: "center", justifyContent: "center",
       }}>
         {spinning ? (
@@ -2501,7 +2502,7 @@ function Shimmer({ w = "100%", h = 12, r = "var(--r1)", mt = 0 }: { w?: number |
   return <div className="aug-skeleton" style={{ width: w, height: h, marginTop: mt, borderRadius: r }} />;
 }
 
-const skelCard: React.CSSProperties = { background: "var(--bg-2)", border: "1px solid var(--b1)", borderRadius: "var(--r3)" };
+const skelCard: React.CSSProperties = { background: "var(--bg-2)", borderRadius: "var(--r3)" };
 
 /** The full-synthesis prose block while the narrative streams — mirrors NarrativeCard's shape. */
 function SynthesisSkeleton() {
@@ -3667,8 +3668,9 @@ export function BriefingPanel({
       );
       case "cockpit": return (
         <>
-      {/* ── Standing layer ── the cockpit, marked off from this cycle's narrative by a
-            single violet rule (violet = user/pinned, already the system's semantic). The layer
+      {/* ── Standing layer ── the cockpit, marked off from this cycle's narrative by space and its
+            violet label (violet = user/pinned, already the system's semantic) — no rule since
+            2026-11-20, borders are the exception. The layer
             is ALWAYS present now — even with no pins — so the cockpit teaches itself (empty
             state) instead of vanishing. The cycle's findings read above in the ledger; the
             cockpit is the surface the user curates, not a dump of the brief. */}
@@ -3677,18 +3679,18 @@ export function BriefingPanel({
           The canvas (B1): on, the cockpit of theirs they chose under Sections rides here, read for
           the Briefing's range and arranged in its own tab. */}
       {dashboardsOn && sections.strip && (
-        <div style={{ marginTop: 16, paddingTop: 20, borderTop: "1px solid var(--vio2)" }}>
+        <div style={{ marginTop: 36 }}>
           <BriefingStrip connectionId={connectionId} schema={schema} dashboardId={sections.strip}
             range={rangeSelected ? range : null} />
         </div>
       )}
       {dashboardsOn && !sections.strip && (
-        <div className="aug-fs-sm" data-testid="briefing-strip-none" style={{ color: "var(--t3)", borderTop: "1px solid var(--vio2)", paddingTop: 12 }}>
+        <div className="aug-fs-sm" data-testid="briefing-strip-none" style={{ color: "var(--t3)", marginTop: 28 }}>
           No dashboard rides with your Briefing. Choose one of yours under Sections; it is arranged in the Dashboards tab.
         </div>
       )}
       {!dashboardsOn && (
-        <div style={{ marginTop: 16, paddingTop: 20, borderTop: "1px solid var(--vio2)" }}>
+        <div style={{ marginTop: 36 }}>
           <div className="aug-label" style={{ color: "var(--vio4)", marginBottom: 12 }}>
             Your dashboard
             {/* BR-9 — under a range each card runs cut to it and says what it covers (or that it

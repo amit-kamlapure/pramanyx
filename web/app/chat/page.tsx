@@ -44,7 +44,7 @@ function ModelChip() {
     <span
       className="aug-fs-xs"
       style={{
-        color: "var(--t3)", border: "1px solid var(--b1)",
+        color: "var(--t3)", background: "var(--gray-a3)",
         borderRadius: "var(--r-chip)", padding: "2px 10px",
         whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
         maxWidth: 260,
@@ -106,7 +106,7 @@ export default function ChatHome() {
                   background: "var(--bg-0)", overflow: "hidden" }}>
       {/* ── header: identity, connection, model chip, the way back ── */}
       <div style={{ display: "flex", alignItems: "center", gap: 10,
-                    padding: "10px 16px", borderBottom: "1px solid var(--b1)",
+                    padding: "10px 16px",
                     flexShrink: 0 }}>
         <span className="aug-fs-md" style={{ color: "var(--t1)", fontWeight: 600 }}>
           Pramanyx

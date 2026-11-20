@@ -105,9 +105,10 @@ export function SourceBeside({ source, onClose, cover = false }: {
   const narrow = useNarrowScreen();
   return (
     <aside aria-label={`${source.label}, beside the conversation`} data-testid="source-beside"
-      style={{ display: "flex", flexDirection: "column", minHeight: 0, background: "var(--bg-1)", borderLeft: "1px solid var(--b1)",
+      // the conversation | source split: the one rule kept, in --divide; the head parts by space (2026-11-20)
+      style={{ display: "flex", flexDirection: "column", minHeight: 0, background: "var(--bg-1)", borderLeft: "1px solid var(--divide)",
         ...(cover ? { position: "absolute", inset: 0, zIndex: 30 } : narrow ? { position: "fixed", inset: 0, zIndex: 40 } : { flex: "0 0 clamp(380px, 46%, 820px)" }) }}>
-      <div style={{ flex: "none", display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderBottom: "1px solid var(--b1)" }}>
+      <div style={{ flex: "none", display: "flex", alignItems: "center", gap: 8, padding: "8px 10px 6px" }}>
         <span className="aug-fs-ui" title={source.label} style={{ flex: 1, minWidth: 0, color: "var(--t1)", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{source.label}</span>
         <Button size="icon-sm" variant="ghost" aria-label="Close" title="Close" data-testid="source-beside-close" onClick={onClose}><Icon name="close" size={15} /></Button>
       </div>

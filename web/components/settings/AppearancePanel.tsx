@@ -38,8 +38,8 @@ export function AppearancePanel({ theme, setTheme }: { theme: ThemeChoice; setTh
                     <Icon name={m.icon} size={14} />
                   </span>
                   <span style={{ display: "flex", flexDirection: "column", minWidth: 0, flex: 1 }}>
-                    <span className="aug-fs-sm" style={{ fontWeight: 600, color: on ? "var(--blue4)" : "var(--t1)" }}>{m.label}</span>
-                    <span className="aug-fs-xs" style={{ color: "var(--t3)", fontWeight: 400 }}>{m.desc}</span>
+                    <span className="aug-fs-chrome" style={{ fontWeight: 600, color: on ? "var(--blue4)" : "var(--t1)" }}>{m.label}</span>
+                    <span className="aug-fs-sm" style={{ color: "var(--t3)", fontWeight: 400 }}>{m.desc}</span>
                   </span>
                   {on && <span aria-hidden style={{ color: "var(--blue3)", display: "inline-flex" }}><Icon name="check" size={13} /></span>}
                 </Button>

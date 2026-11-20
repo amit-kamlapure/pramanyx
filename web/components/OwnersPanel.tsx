@@ -90,17 +90,17 @@ export function OwnersPanel({ connectionId }: { connectionId?: string }) {
     <div id="settings-owners" style={{ minWidth: 0 }}>
       <Card label="Owners" ariaLabel="Owners the platform can reach" testId="settings-owners-card"
         right={!loading && `${owners.length} owner${owners.length === 1 ? "" : "s"} in use`}>
-        <div className="aug-fs-xs" style={{ ...MUTED, marginBottom: 6 }}>
+        <div className="aug-fs-sm" style={{ ...MUTED, marginBottom: 6 }}>
           Link a name once to user:…, group:… or agent:… so a question for it reaches someone.
         </div>
-        {error && <p role="alert" className="aug-fs-xs" style={{ color: "var(--red4)", margin: "4px 0" }}>{error}</p>}
+        {error && <p role="alert" className="aug-fs-sm" style={{ color: "var(--red4)", margin: "4px 0" }}>{error}</p>}
         {loading && owners.length === 0 && <Empty>Reading the declarations…</Empty>}
         {shown.map(e => (
           <div key={e.owner_key} data-owner-unlinked={e.how === "unresolved" ? "true" : undefined}
             style={{ ...ROW, ...RULE, gap: 10, padding: "8px 0", flexWrap: "wrap" }}>
             <div style={{ flex: "1 1 200px", minWidth: 0 }}>
-              <div className="aug-fs-sm" style={{ color: "var(--t1)", ...ONE_LINE }}>{e.owner_text}</div>
-              <div className="aug-fs-xs" style={MUTED}>{usesLabel(e)}</div>
+              <div className="aug-fs-chrome" style={{ color: "var(--t1)", ...ONE_LINE }}>{e.owner_text}</div>
+              <div className="aug-fs-sm" style={MUTED}>{usesLabel(e)}</div>
             </div>
             {e.how === "unresolved" ? (
               <div style={{ ...ROW, flexWrap: "nowrap" }}>

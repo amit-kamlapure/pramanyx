@@ -241,8 +241,8 @@ export function CanvasCreator({ connections, onCreated, onCancel }: Props) {
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <div style={{
               flex: 1, display: "flex", alignItems: "center", gap: 8,
-              border: "1px solid var(--b2)", borderRadius: "var(--r2)",
-              padding: "0 12px", height: 40, background: "var(--bg-0)",
+              borderRadius: "var(--r2)",
+              padding: "0 12px", height: 40, background: "var(--gray-a3)",
             }}>
               <Icon name={SEARCH_ICON} size={14} color="var(--t3)" />
               <Input
@@ -256,8 +256,8 @@ export function CanvasCreator({ connections, onCreated, onCancel }: Props) {
               onClick={() => { if (connId) openConnection(connId); }}
               title="Refresh"
               style={{
-                width: 40, height: 40, borderRadius: "var(--r2)", border: "1px solid var(--b2)",
-                background: "var(--bg-0)", color: "var(--t3)", cursor: "pointer",
+                width: 40, height: 40, borderRadius: "var(--r2)",
+                background: "var(--gray-a3)", color: "var(--t3)", cursor: "pointer",
                 display: "flex", alignItems: "center", justifyContent: "center",
               }}
             >
@@ -321,7 +321,7 @@ export function CanvasCreator({ connections, onCreated, onCancel }: Props) {
             // ── Table list with multi-select ──
             <>
               {/* Start by describing it; the list below stays the way to choose by hand */}
-              <div data-testid="canvas-describe" style={{ display: "flex", flexDirection: "column", gap: 8, padding: "6px 8px 12px", borderBottom: "1px solid var(--b0)" }}>
+              <div data-testid="canvas-describe" style={{ display: "flex", flexDirection: "column", gap: 8, padding: "6px 8px 18px" }}>
                 <label htmlFor="canvas-describe-words" className="aug-fs-ui" style={{ color: "var(--t1)", fontWeight: 600 }}>What should this canvas do?</label>
                 <Textarea id="canvas-describe-words" rows={2} maxLength={600} value={described} onChange={e => setDescribed(e.target.value)}
                   placeholder="Help the sales team see which products and regions drive returns" />
@@ -410,7 +410,7 @@ export function CanvasCreator({ connections, onCreated, onCancel }: Props) {
 
         {/* Footer */}
         <div style={{
-          flexShrink: 0, borderTop: "1px solid var(--b1)", padding: "12px 24px",
+          flexShrink: 0, padding: "16px 24px 12px",
           display: "flex", alignItems: "center", gap: 12,
         }}>
           {/* Selected chips */}
@@ -466,7 +466,7 @@ function Chip({ label, onRemove, mono }: { label: string; onRemove: () => void; 
     <span style={{
       display: "inline-flex", alignItems: "center", gap: 6,
       padding: "3px 6px 3px 10px", borderRadius: "var(--r2)",
-      background: "var(--bg-3)", border: "1px solid var(--b1)",
+      background: "var(--gray-a3)",
       fontSize: 12, color: "var(--t1)",
       fontFamily: mono ? "var(--font-mono)" : "var(--font-ui)", maxWidth: 180,
     }}>

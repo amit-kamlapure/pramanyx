@@ -97,8 +97,8 @@ export function missingColumns(s: QueryShown, columns: TypedColumn[]): string[] 
 function Row({ label, hint, right, children, testid }: { label: string; hint?: ReactNode; right?: ReactNode; children: ReactNode; testid?: string }) {
   return (
     <div data-testid={testid} style={{ display: "flex", flexDirection: "column", gap: 6, padding: "10px 14px" }}>
-      <div className="aug-fs-xs" style={{ display: "flex", alignItems: "baseline", gap: 6, color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em" }}>
-        {label}{right && <span style={{ marginLeft: "auto", textTransform: "none", letterSpacing: 0 }}>{right}</span>}
+      <div className="aug-label" style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+        {label}{right && <span style={{ marginLeft: "auto", fontWeight: 400 }}>{right}</span>}
       </div>
       {children}
       {hint && <div className="aug-fs-xs" style={{ color: "var(--t3)", lineHeight: 1.45 }}>{hint}</div>}
@@ -219,7 +219,7 @@ export function QuerySetup({ connectionId, card, onKept, onClose, values = NO_VA
     <div data-testid="query-setup" style={{ display: "flex", flexDirection: "column", paddingBottom: 14 }}>
       <div style={{ display: "flex", alignItems: "center", padding: "12px 14px 4px", gap: 8 }}>
         <div style={{ display: "flex", flexDirection: "column", minWidth: 0, flex: 1 }}>
-          <span className="aug-fs-xs" style={{ color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em" }}>Card · your own query</span>
+          <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>Card · your own query</span>
           <span className="aug-fs-chrome" style={{ color: "var(--t1)", fontWeight: 600 }}>{card?.title || "A new query"}</span>
         </div>
         {onClose && <Button size="xs" variant="ghost" onClick={onClose}>Close</Button>}
@@ -246,7 +246,7 @@ export function QuerySetup({ connectionId, card, onKept, onClose, values = NO_VA
           </Button>
         </div>
         {showTables && (
-          <div data-testid="query-tables" role="list" style={{ display: "flex", flexDirection: "column", maxHeight: 160, overflow: "auto", border: "1px solid var(--b1)", borderRadius: "var(--r2)" }}>
+          <div data-testid="query-tables" role="list" style={{ display: "flex", flexDirection: "column", maxHeight: 160, overflow: "auto", background: "var(--bg-3)", borderRadius: "var(--r2)" }}>
             {tables === null ? <span className="aug-fs-xs" style={{ padding: 6, color: "var(--t3)" }}>Reading the tables…</span>
               : tables.length === 0 ? <span className="aug-fs-xs" style={{ padding: 6, color: "var(--t3)" }}>No tables are listed for this connection.</span>
                 : withUniqueKeys(tables, t => t).map(([k, t]) => (
@@ -255,7 +255,7 @@ export function QuerySetup({ connectionId, card, onKept, onClose, values = NO_VA
           </div>
         )}
         {showValues && (
-          <div data-testid="query-values" role="list" style={{ display: "flex", flexDirection: "column", maxHeight: 160, overflow: "auto", border: "1px solid var(--b1)", borderRadius: "var(--r2)" }}>
+          <div data-testid="query-values" role="list" style={{ display: "flex", flexDirection: "column", maxHeight: 160, overflow: "auto", background: "var(--bg-3)", borderRadius: "var(--r2)" }}>
             {Object.keys(values).length === 0
               ? <span className="aug-fs-xs" style={{ padding: 6, color: "var(--t3)" }}>This dashboard holds no value yet: add one in Variables.</span>
               : Object.entries(values).map(([name, def]) => (
@@ -301,8 +301,8 @@ export function QuerySetup({ connectionId, card, onKept, onClose, values = NO_VA
               {!ranThis && <span style={{ color: "var(--t3)" }}> · the SQL changed since</span>}
             </span>
             <div style={{ overflow: "auto" }}>
-              <table className="aug-fs-xs" style={{ width: "100%", borderCollapse: "collapse", fontVariantNumeric: "tabular-nums" }}>
-                <thead><tr>{preview.got.columns.map((c, j) => <th key={`${c.name}-${j}`} style={{ textAlign: "left", color: "var(--t3)", fontWeight: 500, padding: "3px 5px", whiteSpace: "nowrap" }}>{c.name}</th>)}</tr></thead>
+              <table className="aug-fs-chrome" style={{ width: "100%", borderCollapse: "collapse", fontVariantNumeric: "tabular-nums" }}>
+                <thead className="aug-fs-xs"><tr>{preview.got.columns.map((c, j) => <th key={`${c.name}-${j}`} style={{ textAlign: "left", color: "var(--t3)", fontWeight: 500, padding: "3px 5px", whiteSpace: "nowrap" }}>{c.name}</th>)}</tr></thead>
                 <tbody>{(preview.got.rows ?? []).slice(0, PREVIEW_SHOWN).map((r, i) => (
                   <tr key={i}>{r.map((v, j) => <td key={j} style={{ padding: "3px 5px", whiteSpace: "nowrap", borderTop: "1px solid var(--b1)" }}>{cellText(v, preview.got.columns?.[j]?.type, undefined, "", "", preview.got.columns?.[j]?.name)}</td>)}</tr>
                 ))}</tbody>
@@ -433,7 +433,7 @@ export function QuerySetup({ connectionId, card, onKept, onClose, values = NO_VA
         </>
       )}
       </>}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 14px 0", borderTop: "1px solid var(--b1)", marginTop: 6 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 14px 0", marginTop: 12 }}>
         <span className="aug-fs-xs" style={{ color: "var(--t3)", flex: 1 }}>
           {card ? "A change is kept as a new version of this card; History keeps the one before." : "Kept as a card of yours, in this section."}
         </span>

@@ -359,9 +359,9 @@ describe("the ▾ at each column's head (2026-11-09) — a spreadsheet's AutoFil
   const cells = (col: number) => Array.from(document.querySelectorAll<HTMLElement>("[data-index]"))
     .map(row => row.children[col + 1]?.textContent ?? "");   // after the row number
 
-  it("is there at rest with an edge; OK makes one chip, the rows narrow, the figures say so, the funnel shows", () => {
+  it("is there at rest as a button; OK makes one chip, the rows narrow, the figures say so, the funnel shows", () => {
     mount(orders());
-    expect(arrow(0).className).toContain("rt-variant-outline");
+    expect(arrow(0).className).toContain("rt-variant-soft");
     expect(arrow(0).querySelector(".tabler-icon-chevron-down")).not.toBeNull();
     fireEvent.click(arrow(0));
     fireEvent.click(screen.getByRole("checkbox", { name: "Shipped" }));

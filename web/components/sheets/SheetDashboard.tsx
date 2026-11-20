@@ -110,7 +110,7 @@ export function SheetDashboard({ sheet, viewId, onClose }: { sheet: Sheet; viewI
               {offer.pieces.map(p => {
                 const no = !!p.refused?.length;
                 return (
-                  <label key={p.key} className="aug-fs-sm" style={{ display: "grid", gap: 10, alignItems: "center",
+                  <label key={p.key} className="aug-fs-chrome" style={{ display: "grid", gap: 10, alignItems: "center",
                     gridTemplateColumns: "18px 16px minmax(0, 1fr) minmax(0, 1.1fr)", padding: "6px 8px",
                     borderRadius: "var(--r2)", background: "var(--bg-1)", opacity: no ? 0.6 : 1 }}>
                     <Checkbox checked={picked.has(p.key)} disabled={no} aria-label={p.title}
@@ -118,9 +118,9 @@ export function SheetDashboard({ sheet, viewId, onClose }: { sheet: Sheet; viewI
                     <Icon name={KIND_ICON[p.kind]} size={14} />
                     <span style={{ minWidth: 0 }}>
                       <span style={{ display: "block", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.title}</span>
-                      <span className="aug-fs-xs" style={MUTED}>{p.why}</span>
+                      <span className="aug-fs-sm" style={MUTED}>{p.why}</span>
                     </span>
-                    <span className="aug-fs-xs" style={{ ...NUM, color: no ? "var(--red4)" : "var(--t2)", textAlign: "right",
+                    <span className="aug-fs-sm" style={{ ...NUM, color: no ? "var(--red4)" : "var(--t2)", textAlign: "right",
                       overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                       title={no ? p.refused!.join(" ") : pieceWords(p)}>
                       {no ? p.refused![0] : pieceWords(p)}

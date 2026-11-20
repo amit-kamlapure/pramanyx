@@ -174,8 +174,8 @@ export function NeedsHumanPanel({ onOpenInvestigation, onOpenAutomations }: {
       )}
 
       {data.rows.length === 0 ? (
-        <div style={{ padding: 32, textAlign: "center", color: "var(--t3)", fontSize: 12,
-          background: "var(--bg-2)", border: "1px solid var(--b1)", borderRadius: "var(--r3)" }}>
+        <div className="aug-fs-sm" style={{ padding: 32, textAlign: "center", color: "var(--t3)",
+          background: "var(--bg-2)", borderRadius: "var(--r3)" }}>
           {unread.length > 0 ? "Nothing waits in the sources that could be read."
             : "Nothing needs a human. Every source is empty right now."}
         </div>
@@ -193,13 +193,13 @@ export function NeedsHumanPanel({ onOpenInvestigation, onOpenAutomations }: {
             return (
               <div key={`${row.source}:${row.id}`}
                 style={{ display: "flex", alignItems: "flex-start", gap: 12,
-                  background: "var(--bg-2)", border: "1px solid var(--b1)",
+                  background: "var(--bg-2)",
                   borderRadius: "var(--r3)", padding: "10px 14px" }}>
                 <StatusChip hue={chip.hue} strength="soft">{chip.label}</StatusChip>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis",
+                  <div className="aug-fs-chrome" style={{ overflow: "hidden", textOverflow: "ellipsis",
                     whiteSpace: "nowrap" }} title={row.title}>{needsYouTitle(row.title).display}</div>
-                  <div style={{ fontSize: 12, color: "var(--t2)", marginTop: 2 }}>
+                  <div className="aug-fs-sm" style={{ color: "var(--t2)", marginTop: 2 }}>
                     waiting {relTime(row.since)}
                     {row.since_basis === "started_at" && " (since start — pause event aged out)"}
                     {row.connection_id ? ` · ${connectionLabel(row.connection_id, conns)}` : ""}

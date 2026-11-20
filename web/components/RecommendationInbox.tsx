@@ -247,13 +247,12 @@ export function RecommendationInbox({ onOpenInvestigation: openRun, workspaceId 
       {/* the queue's search and filters: inside the app, the page's toolbar row; on its own, the card's head */}
       {inShell && <ChromeToolbar>{tools}</ChromeToolbar>}
       <section aria-label="Recommendations" data-testid="inbox-list" style={CARD}>
-        <div className="aug-fs-xs" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, color: "var(--t3)",
-          textTransform: "uppercase", letterSpacing: ".06em" }}>
+        <div className="aug-label" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
           Recommendations
-          <span style={{ textTransform: "none", letterSpacing: 0 }}>
+          <span className="aug-fs-xs" style={{ fontWeight: 400, color: "var(--t3)" }}>
             {narrowed ? `${formatCount(visible.length)} shown` : null}
           </span>
-          {!inShell && <span style={{ marginLeft: "auto", textTransform: "none", letterSpacing: 0, ...ROW }}>{tools}</span>}
+          {!inShell && <span className="aug-fs-xs" style={{ marginLeft: "auto", fontWeight: 400, color: "var(--t3)", ...ROW }}>{tools}</span>}
         </div>
         {visible.length === 0 ? (
           <Empty title="Recommendations arrive from deep analyses; one needing your decision lands here">
@@ -264,7 +263,7 @@ export function RecommendationInbox({ onOpenInvestigation: openRun, workspaceId 
         ) : (
           <div style={{ overflowX: "auto" }}>
             <div style={{ minWidth: 1100 }} role="table" aria-label="Recommendations">
-              <div role="row" className="aug-fs-xs" style={{ ...QUEUE_GRID, ...MUTED, textTransform: "uppercase", letterSpacing: ".06em", padding: "0 0 6px 8px" }}>
+              <div role="row" className="aug-fs-xs" style={{ ...QUEUE_GRID, ...MUTED, padding: "0 0 6px 8px" }}>
                 <span role="columnheader">Recommendation</span><span role="columnheader">Expected impact</span>
                 <span role="columnheader">Owner</span><span role="columnheader">Status</span><span role="columnheader">Due</span>
                 <span role="columnheader">Evidence</span><span role="columnheader">Read</span><span role="columnheader" />
@@ -313,9 +312,9 @@ function Funnel({ rows }: { rows: (RecOutcome | undefined)[] }) {
       <div style={{ display: "grid", gridTemplateColumns: "96px minmax(0, 1fr) 40px", gap: "7px 10px", alignItems: "center" }}>
         {stages.map(([stage, n], i) => (
           <div key={stage} style={{ display: "contents" }}>
-            <span className="aug-fs-sm" style={{ color: "var(--t2)" }}>{stage}</span>
+            <span className="aug-fs-chrome" style={{ color: "var(--t2)" }}>{stage}</span>
             <Bar value={n} max={rows.length} color={i === 0 ? "var(--chart-3)" : "var(--chart-1)"} />
-            <span className="aug-fs-sm" style={{ ...NUM, textAlign: "right", color: "var(--t1)" }}>{formatCount(n)}</span>
+            <span className="aug-fs-chrome" style={{ ...NUM, textAlign: "right", color: "var(--t1)" }}>{formatCount(n)}</span>
           </div>
         ))}
       </div>
@@ -336,9 +335,9 @@ function Owners({ recs }: { recs: Rec[] }) {
       <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 190px) minmax(0, 1fr) 40px", gap: "7px 10px", alignItems: "center" }}>
         {top.map(([owner, n]) => (
           <div key={owner} style={{ display: "contents" }}>
-            <span className="aug-fs-sm" style={{ ...ONE_LINE, color: owner === "no owner named" ? "var(--t3)" : "var(--t2)" }} title={owner}>{owner}</span>
+            <span className="aug-fs-chrome" style={{ ...ONE_LINE, color: owner === "no owner named" ? "var(--t3)" : "var(--t2)" }} title={owner}>{owner}</span>
             <Bar value={n} max={max} />
-            <span className="aug-fs-sm" style={{ ...NUM, textAlign: "right", color: "var(--t1)" }}>{formatCount(n)}</span>
+            <span className="aug-fs-chrome" style={{ ...NUM, textAlign: "right", color: "var(--t1)" }}>{formatCount(n)}</span>
           </div>
         ))}
       </div>
@@ -424,7 +423,7 @@ function RecRow({ first, run, index, rec, outcome, today, onOutcome, onOpen, pic
           <div className="aug-fs-chrome" data-testid="inbox-rec-open" style={{ ...ONE_LINE, color: "var(--t1)" }}>{rec.action}</div>
           {/* What acceptance decided: the baseline measured then, and the review date. */}
           {outcome?.baseline_at && (
-            <div className="aug-fs-xs" style={{ ...MUTED, ...ONE_LINE }}>
+            <div className="aug-fs-sm" style={{ ...MUTED, ...ONE_LINE }}>
               {outcome.baseline_value != null
                 ? `baseline ${outcome.metric_name ?? "metric"} ${outcome.baseline_value} (${outcome.baseline_window})`
                 : `baseline not measured${outcome.review_note ? `: ${outcome.review_note}` : ""}`}
@@ -432,20 +431,20 @@ function RecRow({ first, run, index, rec, outcome, today, onOutcome, onOpen, pic
             </div>
           )}
         </span>
-        <span role="cell" className="aug-fs-xs" style={{ ...ONE_LINE, color: "var(--t2)" }} title={rec.impact || undefined}>{rec.impact || none}</span>
-        <span role="cell" className="aug-fs-xs" style={{ ...ONE_LINE, color: "var(--t2)" }} title={rec.owner || undefined}>{rec.owner || none}</span>
-        <span role="cell" className="aug-fs-xs">
+        <span role="cell" className="aug-fs-chrome" style={{ ...ONE_LINE, color: "var(--t2)" }} title={rec.impact || undefined}>{rec.impact || none}</span>
+        <span role="cell" className="aug-fs-chrome" style={{ ...ONE_LINE, color: "var(--t2)" }} title={rec.owner || undefined}>{rec.owner || none}</span>
+        <span role="cell" className="aug-fs-chrome">
           {/* Every open row is "proposed" until someone decides (violet). */}
           <StatusMark status={outcome?.status ?? "proposed"} />
         </span>
-        <span role="cell" className="aug-fs-xs" style={{ ...ONE_LINE, color: "var(--t2)" }} title={rec.timeline ? timelineWords(rec.timeline) : undefined}>
+        <span role="cell" className="aug-fs-chrome" style={{ ...ONE_LINE, color: "var(--t2)" }} title={rec.timeline ? timelineWords(rec.timeline) : undefined}>
           {!rec.timeline ? none : late
             ? <Chip tone="amber" title="The date the report set has passed and it is still open">was due {dayWords(rec.timeline)}</Chip>
             : timelineWords(rec.timeline)}
         </span>
         {/* The analysis it came from, cut to one line; its question on hover. An ellipsis cannot cut a button,
             so the words inside it are what is cut. */}
-        <span role="cell" className="aug-fs-xs" style={{ minWidth: 0, display: "flex" }} onClick={e => e.stopPropagation()}
+        <span role="cell" className="aug-fs-chrome" style={{ minWidth: 0, display: "flex" }} onClick={e => e.stopPropagation()}
           title={`${runDisplayTitle(run.question).title} · ${dayWords(run.completed_at ?? run.started_at)}`}>
           {onOpen
             ? <Button variant="link" size="xs" onClick={() => onOpen(run.id)}
@@ -454,7 +453,7 @@ function RecRow({ first, run, index, rec, outcome, today, onOutcome, onOpen, pic
               </Button>
             : <span style={{ ...ONE_LINE, color: "var(--t2)" }}>{source}</span>}
         </span>
-        <span role="cell" className="aug-fs-xs" style={{ ...MUTED, whiteSpace: "nowrap" }}
+        <span role="cell" className="aug-fs-chrome" style={{ ...MUTED, whiteSpace: "nowrap" }}
           title="When the deep analysis it came from finished">{dayWords(run.completed_at ?? run.started_at)}</span>
         <span role="cell" style={{ display: "inline-flex", gap: 6, alignItems: "center", justifyContent: "flex-end" }}
           onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
@@ -533,7 +532,7 @@ function DueRow({ first, runId, index, rec, outcome, onOutcome }: {
       <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 12, alignItems: "center" }}>
         <div style={{ minWidth: 0 }}>
           <div className="aug-fs-chrome" style={{ ...ONE_LINE, color: "var(--t1)", fontWeight: 500 }} title={rec.action}>{rec.action}</div>
-          <div className="aug-fs-xs" style={{ ...ONE_LINE, color: "var(--t2)" }} title={outcome.review_question}>
+          <div className="aug-fs-sm" style={{ ...ONE_LINE, color: "var(--t2)" }} title={outcome.review_question}>
             {outcome.review_question}{outcome.review_asked_to ? ` · asked to ${outcome.review_asked_to}` : ""}
           </div>
         </div>
