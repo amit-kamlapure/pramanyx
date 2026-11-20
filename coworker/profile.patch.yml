@@ -534,6 +534,11 @@
       config:
         serverName: pramanyx
         transport: stdio
+        # A deep analysis takes minutes. The shell gave every tool call 60 seconds and reported "Request timed out"
+        # while the platform went on and finished (2026-11-20, an FY2027 overview: six asks lost, every run complete).
+        # Six minutes outlasts the client's own deep wait (PRAMANYX_MCP_DEEP_TIMEOUT, 300s in pramanyx/mcp/client.py),
+        # so a run that is too slow fails with our message, not the shell's.
+        toolCallTimeoutMs: 360000
         command: !!js process.env.PRAMANYX_PYTHON || 'python'
         args: ['-m', 'pramanyx.mcp']
         cwd: !!js process.cwd()
