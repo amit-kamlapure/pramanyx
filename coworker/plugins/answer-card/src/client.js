@@ -21,7 +21,7 @@ import { ABOUT_TO, DOES, PREFIX, STAGED, saidOf, stagedOf, turnedDown } from "./
 import { drawChart, labelOf, numericColumns } from "./chart";
 import { unstatedFigures } from "../../../../web/lib/statedFigures";
 import {
-  PANE, PANE_PATTERN, PaneBody, downloadCsv, groundingOf, pageFor, PaneTitle, ResultGrid, button, code, faint, hasPane, idOf, line,
+  PANE, PANE_PATTERN, PaneBody, groundingOf, pageFor, PaneTitle, ResultGrid, button, code, faint, hasPane, idOf, line,
   primary, soft, surface,
   openBeside, quiet, remember, rememberThing, setOpener, shown, unitsOf, sheetsByTable, thingId, useChosen,
 } from "./exhibit";
@@ -1132,6 +1132,16 @@ const STEPS_LOOK = `
   text-decoration: underline dotted color-mix(in srgb, currentColor 45%, transparent); text-underline-offset: 3px;
 }
 .pramanyx-link:hover, .pramanyx-link:focus-visible, .pramanyx-link[aria-expanded="true"] { opacity: 1; }
+.pramanyx-fold {
+  align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 12.5px; color: inherit;
+  opacity: 0.68; background: transparent; border: 0; padding: 4px 0; cursor: pointer;
+}
+.pramanyx-fold:hover, .pramanyx-fold:focus-visible, .pramanyx-fold[aria-expanded="true"] { opacity: 1; }
+.pramanyx-source {
+  font: inherit; font-size: 13px; color: inherit; height: 30px; padding: 0 8px; margin-left: 4px; border: 0; border-radius: 4px;
+  background: transparent; cursor: pointer; opacity: 0.8;
+}
+.pramanyx-source:hover, .pramanyx-source:focus-visible, .pramanyx-source[aria-expanded="true"] { opacity: 1; background: color-mix(in srgb, currentColor 8%, transparent); }
 .pramanyx-step-busy {
   flex: none; width: 12px; height: 12px; border-radius: 50%; box-sizing: border-box;
   border: 1.5px solid currentColor; border-right-color: transparent; opacity: 0.7;
@@ -1375,6 +1385,10 @@ function Exhibit({ answer, whole, asked }) {
   const [allObjects, setAllObjects] = useState(false);
   const [sheets, setSheets] = useState(null);
   const [copied, setCopied] = useState(false);
+  // Follow-ups are folded until opened (the user, 2026-11-20); the fold holds the next questions and the next steps.
+  const [onward, setOnward] = useState(false);
+  const [emailing, setEmailing] = useState(false);
+  const [how, setHow] = useState(false);
   // An answer over the Sheets connection read spreadsheets: each opens as itself, beside the conversation.
   const overSheets = String(answer.connection || answer.receipt?.artifact?.conn_id || "") === "sheets";
   useEffect(() => { if (overSheets) sheetsByTable().then(setSheets); }, [overSheets]);
@@ -1412,6 +1426,9 @@ function Exhibit({ answer, whole, asked }) {
   const checked = answer.warning?.kind === "not_what_was_asked";
   const asks = Array.isArray(answer.followups) ? answer.followups.filter((x) => typeof x === "string" && x.trim()).slice(0, 3) : [];
   const figure = rows.length === 1;
+  const stored = answer.investigation_id ? String(answer.investigation_id) : "";
+  // An answer's source is the query it ran: the rows it read and the SQL that read them.
+  const sources = answer.sql || rows.length ? 1 : 0;
   // A one-row answer is no exhibit: no box, only the figures its words leave out; its SQL and download join the
   // links at its foot.
   const unsaid = figure ? unsaidOf(answer, [answer.answer, words]) : [];
@@ -1457,57 +1474,59 @@ function Exhibit({ answer, whole, asked }) {
     : h("div", { style: { background: surface, borderRadius: 10, padding: "10px 10px 6px 16px" } },
       h("div", { style: { display: "flex", alignItems: "center", gap: 2, minHeight: 30 } },
         h("div", { style: { flex: "1 1 auto", minWidth: 0, fontSize: 14, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, title),
-        h("button", { type: "button", className: "pramanyx-icon", "aria-label": "Download", title: "Download: the rows, or the answer as a file", "aria-expanded": open === "files", onClick: () => toggle("files") }, h(Glyph, { d: GLYPH.download })),
         h("button", { type: "button", className: "pramanyx-icon", "aria-label": "Show as a table", title: "Show as a table", "aria-expanded": open === "table", onClick: () => toggle("table") }, h(Glyph, { d: GLYPH.table })),
         hasPane() ? h("button", { type: "button", className: "pramanyx-icon", "aria-label": "Edit visualization", title: "Edit visualization", onClick: () => openBeside("viz", id) }, h(Glyph, { d: GLYPH.edit })) : null),
-      open === "files" ? h(Files, { answer, id: answer.investigation_id ? String(answer.investigation_id) : "" }) : null,
       h("div", { style: { paddingRight: 6 } },
         open === "table" ? h("div", { style: { padding: "6px 0 8px" } }, h(ResultGrid, { answer })) : h(Chart, { answer, viz })),
-      h("div", { style: { display: "flex", alignItems: "center", gap: 12, marginTop: 6, paddingRight: 6 } },
-        h("button", { type: "button", className: "pramanyx-link", "aria-expanded": open === "sql", onClick: () => { if (!openBeside("sql", id)) toggle("sql"); } }, "Show the SQL"),
-        h("span", { style: { flex: "1 1 auto" } }),
-        h("span", { style: { ...quiet, fontSize: 12.5 } }, `${count} ${count === 1 ? "row" : "rows"}`)),
-      open === "sql" ? h("div", { style: { padding: "4px 6px 8px 0" } }, h(Sql, { answer })) : null),
+      h("div", { style: { ...quiet, fontSize: 12.5, textAlign: "right", padding: "2px 6px 4px 0" } }, `${count} ${count === 1 ? "row" : "rows"}`)),
     standsOut.length ? h("div", { style: { display: "flex", flexDirection: "column", gap: 6 } },
       h("div", { role: "heading", "aria-level": 4, style: { fontSize: 16, fontWeight: 600 } }, "What stands out"),
       standsOut.map((point, i) => h("div", { key: i }, rich(point)))) : null,
-    asks.length ? h("div", { style: { display: "flex", flexDirection: "column" } },
-      h("div", { style: { ...quiet, fontSize: 12.5, paddingBottom: 2 } }, "Follow-ups"),
-      asks.map((question, i) => h("button", {
-        key: i, type: "button", className: "pramanyx-ask", title: "Writes this question into the box. Nothing is asked until you send it.",
-        onClick: () => { if (!draft(question)) navigator.clipboard?.writeText(question); },
-      }, question))) : null,
+    // The answer's foot (the user, 2026-11-20: "except thumbs up/down and copy, I dont [want] anything here. Keep the
+    // download option as PDF.. Let Source show both data + SQL.."): right, wrong, copy, the PDF, and its source.
     h(Feedback, { answer, extras: [
       h("button", { key: "copy", type: "button", className: "pramanyx-icon", "aria-label": copied ? "Copied" : "Copy the answer", title: copied ? "Copied" : "Copy the answer", onClick: copy }, h(Glyph, { d: GLYPH.copy })),
-      figure ? h("button", { key: "files", type: "button", className: "pramanyx-icon", "aria-label": "Download", title: "Download: the rows, or the answer as a file", "aria-expanded": open === "files", onClick: () => toggle("files") }, h(Glyph, { d: GLYPH.download })) : null,
-      h("span", { key: "gap", style: { width: 8 } }),
-      figure ? h("button", { key: "sql", type: "button", className: "pramanyx-link", "aria-expanded": open === "sql", onClick: () => { if (!openBeside("sql", id)) toggle("sql"); } }, "Show the SQL") : null,
-      figure ? h("span", { key: "gap-sql", style: { width: 12 } }) : null,
-      receipt && hasPane() ? h("button", { key: "why", type: "button", className: "pramanyx-link", title: "The app's own page for how this number was produced",
-        onClick: () => openBeside("page", pageFor.receipt(receipt)) }, "Why this number") : null,
-      h("span", { key: "gap2", style: { width: 12 } }),
-      h("button", { key: "how", type: "button", className: "pramanyx-link", "aria-expanded": open === "how", onClick: () => toggle("how") }, "How it was answered"),
-      becomes.length ? h("span", { key: "gap3", style: { width: 12 } }) : null,
-      becomes.length ? h("button", { key: "more", type: "button", className: "pramanyx-link", "aria-expanded": open === "more",
-        title: "What this answer can become: on a schedule, on a dashboard, an agent", onClick: () => toggle("more") }, "More") : null,
+      stored ? h("a", { key: "pdf", className: "pramanyx-icon", download: "", "aria-label": "Download as PDF", title: "Download as PDF",
+                        href: `/pramanyx/investigations/${encodeURIComponent(stored)}/export?format=pdf` }, h(Glyph, { d: GLYPH.download }))
+        : h("button", { key: "pdf", type: "button", className: "pramanyx-icon", "aria-label": "Download as PDF", title: "Download as PDF",
+                        "aria-expanded": open === "nopdf", onClick: () => toggle("nopdf") }, h(Glyph, { d: GLYPH.download })),
+      sources ? h("button", { key: "source", type: "button", className: "pramanyx-source", "aria-expanded": open === "source",
+                              onClick: () => toggle("source") }, `${sources} ${sources === 1 ? "source" : "sources"}`) : null,
     ] }),
-    open === "more" ? h("div", { role: "group", "aria-label": "What this answer can become",
-      style: { display: "flex", flexWrap: "wrap", gap: 14, padding: "2px 6px 6px 0", fontSize: 13 } },
-      becomes.map(([label, path, hint]) => h("button", { key: label, type: "button", className: "pramanyx-link", title: hint,
-        onClick: () => openBeside("page", path) }, label))) : null,
-    open === "how" ? h("div", { style: { padding: "4px 0" } }, h(How, { answer, whole })) : null,
-    figure && open === "files" ? h(Files, { answer, id: answer.investigation_id ? String(answer.investigation_id) : "" }) : null,
-    figure && open === "sql" ? h("div", { style: { padding: "4px 0" } }, h(Sql, { answer })) : null);
+    open === "nopdf" ? h("div", { style: { ...quiet, fontSize: 12.5 } },
+      "This answer was not stored, so there is no PDF of it. Its rows download as CSV under its source.") : null,
+    open === "source" ? h("div", { "data-pramanyx-source": "", style: { display: "flex", flexDirection: "column", gap: 10, paddingBottom: 4 } },
+      rows.length ? h(ResultGrid, { answer }) : null,
+      h(Sql, { answer }),
+      h("div", { style: { display: "flex", flexWrap: "wrap", gap: 14 } },
+        receipt && hasPane() ? h("button", { type: "button", className: "pramanyx-link", title: "The app's own page for how this number was produced",
+          onClick: () => openBeside("page", pageFor.receipt(receipt)) }, "Why this number") : null,
+        h("button", { type: "button", className: "pramanyx-link", "aria-expanded": how, onClick: () => setHow((was) => !was) }, "How it was answered")),
+      how ? h(How, { answer, whole }) : null) : null,
+    // Follow-ups, folded: the questions to ask next, and under them what this answer can become.
+    h("div", { "data-pramanyx-onward": "", style: { display: "flex", flexDirection: "column" } },
+      h("button", { type: "button", className: "pramanyx-fold", "aria-expanded": onward, onClick: () => setOnward((was) => !was) },
+        asks.length ? `Follow-ups · ${asks.length}` : "Follow-ups", h(Fold, { open: onward })),
+      onward ? [
+        ...asks.map((question, i) => h("button", {
+          key: `q-${i}`, type: "button", className: "pramanyx-ask", title: "Writes this question into the box. Nothing is asked until you send it.",
+          onClick: () => { if (!draft(question)) navigator.clipboard?.writeText(question); },
+        }, question)),
+        h("div", { key: "next", role: "group", "aria-label": "What this answer can become",
+                   style: { display: "flex", flexWrap: "wrap", gap: 14, padding: asks.length ? "8px 0 2px" : "4px 0 2px", fontSize: 13 } },
+          h("button", { type: "button", className: "pramanyx-link", "aria-expanded": emailing, onClick: () => setEmailing((was) => !was) }, "Email this"),
+          becomes.map(([label, path, hint]) => h("button", { key: label, type: "button", className: "pramanyx-link", title: hint,
+            onClick: () => openBeside("page", path) }, label))),
+        emailing ? h(Draft, { key: "email", draft: emailOf(answer) }) : null,
+      ] : null));
 }
 
-/**
- * Download: the rows as CSV, kept on this page; and the answer as a file Pramanyx builds from its stored report —
- * Excel with every stored row, PowerPoint, Word, PDF (`pramanyx/export`). Never a file the model's own code made: a
- * figure does not pass through code a model wrote. An answer with no record of its own (nothing was stored) offers
- * the rows only, and says so.
- */
-const FILES = [["xlsx", "Excel, every row"], ["pptx", "PowerPoint"], ["docx", "Word"], ["pdf", "PDF"]];
+/** The fold's mark: pointing right while folded, down while open. */
+const Fold = ({ open }) => h("svg", { width: 12, height: 12, viewBox: "0 0 12 12", fill: "none", stroke: "currentColor", strokeWidth: 1.4,
+  strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true", style: { transform: open ? "rotate(90deg)" : "none", transition: "transform .12s" } },
+  h("path", { d: "M4.5 2.5 8 6l-3.5 3.5" }));
 
+/** "Email this": the answer as a draft, its analysis attachable — under the answer's follow-ups. */
 function emailOf(answer) {
   const told = answer.narrative && typeof answer.narrative === "object" ? String(answer.narrative.narrative || "").replace(/\*\*/g, "") : "";
   const rows = (answer.rows ?? []).slice(0, 20).map((r) => r.join(" · "));
@@ -1517,18 +1536,6 @@ function emailOf(answer) {
            // so an answer that was emailed says so whenever it is opened.
            attach_answer: answer.investigation_id ? String(answer.investigation_id) : "", attach_format: "",
            ...(answer.investigation_id ? { name: `a-${answer.investigation_id}` } : {}) };
-}
-
-function Files({ answer, id }) {
-  const link = { fontSize: 13, color: "inherit", textDecoration: "underline", textUnderlineOffset: 2 };
-  const [emailing, setEmailing] = useState(false);
-  return h("div", null, h("div", { role: "group", "aria-label": "Download", style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 14, padding: "2px 6px 8px 0", fontSize: 13 } },
-    h("button", { type: "button", className: "pramanyx-link", "aria-expanded": emailing, onClick: () => setEmailing((was) => !was) }, "Email this"),
-    h("button", { type: "button", className: "pramanyx-link", onClick: () => downloadCsv(answer) }, "Rows as CSV"),
-    id ? FILES.map(([fmt, label]) => h("a", { key: fmt, style: link, download: "",
-      href: `/pramanyx/investigations/${encodeURIComponent(id)}/export?format=${fmt}` }, label))
-      : h("span", { style: quiet }, "This answer was not stored, so only its rows can be taken.")),
-    emailing ? h(Draft, { draft: emailOf(answer) }) : null);
 }
 
 /**
