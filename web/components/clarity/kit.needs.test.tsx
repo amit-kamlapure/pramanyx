@@ -57,6 +57,12 @@ describe("dismissing Needs you", () => {
     expect(screen.getByTestId("row-a")).toBeInTheDocument();
   });
 
+  it("handed a body, says its heading's words when folded", () => {
+    render(<Theme><NeedsYou testId="body-needs" waiting right="5 items waiting"><div>rows</div></NeedsYou></Theme>);
+    fireEvent.click(screen.getByTestId("body-needs-dismiss"));
+    expect(screen.getByTestId("body-needs")).toHaveTextContent("Needs you5 items waitinghidden · back when something new waits");
+  });
+
   it("offers no Dismiss when nothing waits", () => {
     show([]);
     expect(screen.getByTestId("page-needs")).toHaveTextContent("Nothing needs you");

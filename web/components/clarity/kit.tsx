@@ -250,6 +250,10 @@ export function NeedsYou({ right, children, testId, waiting, empty }: {
         <span className="aug-fs-sm" style={{ color: "var(--amb4)", display: "inline-flex", alignItems: "center", gap: 6 }}>
           <Icon name="warning" size={13} />Needs you
         </span>
+        {/* what is hidden is said: the count of its rows, or — handed a body — its own heading's words ("5 items waiting") */}
+        {!rows && right != null && right !== false && (
+          <span className="aug-fs-sm" style={{ display: "inline-flex", alignItems: "center", gap: 8, color: "var(--t2)" }}>{right}</span>
+        )}
         <span className="aug-fs-sm" style={MUTED}>
           {rows ? `${rows.length} ${rows.length === 1 ? "item" : "items"} hidden` : "hidden"} · back when something new waits
         </span>
