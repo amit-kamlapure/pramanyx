@@ -41,7 +41,7 @@ import { SqlView } from "@/components/query/SqlView";
 import { formatSql } from "@/lib/query/format";
 import { csvFilename, downloadCsv, toCsv } from "@/lib/query/csv";
 import { fileSlug, rawCells } from "@/components/TableActions";
-import { figureValue } from "@/components/FindingFigures";
+import { FindingFigures, figureValue, isOneRecord } from "@/components/FindingFigures";
 import { PlanList } from "@/components/chat/PlanList";
 import { ToolTrail } from "@/components/ToolTrail";
 import { isDashboardProposal, ProposalCardById } from "@/components/ProposalCard";
@@ -112,6 +112,9 @@ export interface SourcePanelData {
   rows: unknown[][];        // already sorted for display
   sql: string | null;
   title: string;
+  /** The answer it is the source of, when opened from an answer's foot: the panel then says why the number and how it
+   *  was answered under the SQL. */
+  turn?: ChatTurn;
 }
 
 // Column-role classification (DATE_COL / SHARE_COL / ORDINAL_COL / isNumeric /
@@ -151,6 +154,14 @@ export function inferSourceTitle(columns: string[], rows: unknown[][]): string {
 }
 
 // ── Sort rows: date dims first (ISO-sort = chronological), then text dims A→Z ─
+/** An answer's source as the Source panel shows it: its rows, sorted for reading, and the SQL that read them. None when it
+ *  read no rows. The answer's foot opens it ("1 source", 2026-11-20). */
+export function sourceOf(turn: ChatTurn): SourcePanelData | null {
+  if (!turn.columns.length) return null;
+  return { columns: turn.columns, rows: sortRowsForDisplay(turn.columns, turn.rows), sql: turn.sql,
+           title: inferSourceTitle(turn.columns, turn.rows), turn };
+}
+
 function sortRowsForDisplay(columns: string[], rows: unknown[][]): unknown[][] {
   const dimIdxs = columns
     .map((_, i) => i)
@@ -538,9 +549,11 @@ function SqlBlock({ sql }: { sql: string }) {
 // ── Source panel (a table + expandable SQL) — exported so ───────────────────
 // ChatPanel can render it as a top-level right-side drawer.             ────────
 export function SourcePanel({
-  columns, rows, sql, title, onClose, connectionId,
+  columns, rows, sql, title, onClose, connectionId, foot,
 }: {
   columns: string[]; rows: unknown[][]; sql: string | null; title: string; onClose: () => void;
+  /** Under the SQL, for a source opened from an answer's foot: why the number and how it was answered. */
+  foot?: React.ReactNode;
   /** ON-3 — a column that names an object links to its page, as in the answer's own table. */
   connectionId?: string;
 }) {
@@ -668,6 +681,7 @@ export function SourcePanel({
           </div>
         </div>
       )}
+      {foot && <div className="flex-shrink-0 overflow-auto px-3 py-2" style={{ maxHeight: "45%" }}>{foot}</div>}
     </div>
   );
 }
@@ -1199,24 +1213,15 @@ function NarrativeBrief({
         {!streaming && turn.publicReceiptId && harness.openSource && connectionId && (
           <AnswerSources receiptId={turn.publicReceiptId} connectionId={connectionId} onOpen={harness.openSource} />
         )}
-        {showFigure && (turn.columns.length > 0 || streaming) && (
-          <HarnessExhibit turn={turn} onShowSource={onShowSource} streaming={streaming} connectionId={connectionId} />
-        )}
+        {/* One record is no exhibit (the user, 2026-11-20: "Do you think its neccessary to have a block for a single
+            figure?"): the figures its words leave out, in a line, and nothing when they state them all. */}
+        {showFigure && !streaming && isOneRecord(turn.columns, turn.rows)
+          ? <FindingFigures columns={turn.columns} row={turn.rows[0] ?? []} answer={[turn.headline, prose].filter(Boolean).join(" ")} />
+          : showFigure && (turn.columns.length > 0 || streaming) && (
+            <HarnessExhibit turn={turn} streaming={streaming} connectionId={connectionId} />
+          )}
         {!streaming && anomalies.length > 0 && (
           <BriefSection className={fadeCls} label="What stands out"><BriefBullets items={anomalies} /></BriefSection>
-        )}
-        {!streaming && turn.followups.length > 0 && (
-          <BriefSection className={fadeCls} label="Follow-ups">
-            <div className="flex flex-col gap-1">
-              {turn.followups.map((q, i) => (
-                <Button key={i} variant="ghost" size="xs" onClick={() => onFollowUp?.(q)}
-                  className="h-auto items-start justify-start gap-1.5 p-0 text-left whitespace-normal aug-text-sm font-normal text-zinc-500 hover:text-zinc-300 hover:bg-transparent dark:hover:bg-transparent">
-                  <span className="shrink-0 text-zinc-500 mt-0.5"><Icon name="next" size={16} /></span>
-                  <span>{q}</span>
-                </Button>
-              ))}
-            </div>
-          </BriefSection>
         )}
       </Brief>
     );
@@ -1388,49 +1393,47 @@ function NarrativeBrief({
 
 /** The coworker's exhibit: the result framed, with its statement and its evidence one click away, and how many rows it
  *  read. The evidence is the classic layout's Evidence view, kept: the panel arranges an answer, it drops nothing. */
-function HarnessExhibit({ turn, onShowSource, streaming, connectionId }: {
-  turn: ChatTurn; onShowSource?: (data: SourcePanelData) => void; streaming: boolean; connectionId?: string;
-}) {
-  const [open, setOpen] = useState<"sql" | "evidence" | null>(null);
-  const flip = (what: "sql" | "evidence") => setOpen(o => (o === what ? null : what));
+function HarnessExhibit({ turn, streaming, connectionId }: { turn: ChatTurn; streaming: boolean; connectionId?: string }) {
+  // The rows, the SQL and how it was answered are the answer's source, opened from its foot (2026-11-20): the exhibit is
+  // its picture and its row count, with no "Source data" of its own beside the foot's.
   const rows = turn.rows.length;
-  const evidence = hasEvidence(turn, connectionId);
   return (
     <div data-testid="answer-exhibit" style={{ border: "1px solid var(--card-edge)", borderRadius: "var(--r3)", padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8, minWidth: 0 }}>
-      <ResultFigure turn={turn} onShowSource={onShowSource} streaming={streaming} connectionId={connectionId} />
+      <ResultFigure turn={turn} streaming={streaming} connectionId={connectionId} />
       {!streaming && turn.columns.length > 0 && (
-        <div className="aug-fs-xs" style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--t3)" }}>
-          {turn.sql?.trim() && (
-            <Button variant="ghost" size="xs" aria-expanded={open === "sql"} data-testid="answer-show-sql" onClick={() => flip("sql")}>
-              {open === "sql" ? "Hide the SQL" : "Show the SQL"}
-            </Button>
-          )}
-          {evidence && (
-            <Button variant="ghost" size="xs" aria-expanded={open === "evidence"} data-testid="answer-show-evidence" onClick={() => flip("evidence")}>
-              {open === "evidence" ? "Hide the evidence" : "Evidence"}
-            </Button>
-          )}
-          <span style={{ marginLeft: "auto" }}>{formatCount(rows)} {rows === 1 ? "row" : "rows"} from the query</span>
-        </div>
-      )}
-      {open === "sql" && turn.sql && <SqlBlock sql={turn.sql} />}
-      {open === "evidence" && (
-        <div data-testid="answer-evidence"><AnswerEvidence turn={turn} connectionId={connectionId} onShowSource={onShowSource} bare /></div>
+        <span className="aug-fs-xs" style={{ alignSelf: "flex-end", color: "var(--t3)" }}>{formatCount(rows)} {rows === 1 ? "row" : "rows"} from the query</span>
       )}
     </div>
   );
 }
 
-/** What an answer can become, under one quiet More, as the coworker keeps it. */
-function HarnessMore({ children }: { children: React.ReactNode }) {
+/** Follow-ups, folded until opened (the user, 2026-11-20: "Lets follow-ups be default collapsed"), as the coworker folds
+ *  them: the questions to ask next, and under them what this answer can become. */
+function HarnessOnward({ followups, onFollowUp, children }: {
+  followups: string[]; onFollowUp?: (q: string) => void; children: React.ReactNode;
+}) {
   const [open, setOpen] = useState(false);
   return (
-    <div data-testid="answer-more" className="flex flex-col gap-2 mt-1">
-      <Button variant="ghost" size="xs" aria-expanded={open} onClick={() => setOpen(o => !o)} className="self-start gap-1"
-        title="What this answer can become: open it in the SQL Editor, a deep analysis, a pin, kept on a dashboard, exported">
-        More <Chevron open={open} />
+    <div data-testid="answer-onward" className="flex flex-col gap-2 mt-1">
+      <Button variant="ghost" size="xs" aria-expanded={open} onClick={() => setOpen(o => !o)} className="self-start gap-1">
+        {followups.length ? `Follow-ups · ${followups.length}` : "Follow-ups"} <Chevron open={open} />
       </Button>
-      {open && children}
+      {open && (
+        <>
+          {followups.length > 0 && (
+            <div className="flex flex-col gap-1">
+              {followups.map((q, i) => (
+                <Button key={i} variant="ghost" size="xs" onClick={() => onFollowUp?.(q)}
+                  className="h-auto items-start justify-start gap-1.5 p-0 text-left whitespace-normal aug-text-sm font-normal text-zinc-500 hover:text-zinc-300 hover:bg-transparent dark:hover:bg-transparent">
+                  <span className="shrink-0 text-zinc-500 mt-0.5"><Icon name="next" size={16} /></span>
+                  <span>{q}</span>
+                </Button>
+              ))}
+            </div>
+          )}
+          <div role="group" aria-label="What this answer can become" className="flex flex-col gap-2">{children}</div>
+        </>
+      )}
     </div>
   );
 }
@@ -1614,7 +1617,7 @@ function hasEvidence(turn: ChatTurn, connectionId?: string): boolean {
   );
 }
 
-function AnswerEvidence({
+export function AnswerEvidence({
   turn, connectionId, onShowSource, bare = false,
 }: {
   turn: ChatTurn;
@@ -1722,6 +1725,9 @@ export interface ChatMessageProps {
   onRetry?: (question: string) => void;
   /** CA-1 — replace this turn's question and re-send from here (edit-and-resend). */
   onEdit?: (newQuestion: string) => void;
+  /** Ask this, the conversation's last question, again: a fresh answer replaces this one. In the coworker's layout it is a
+   *  next step in the folded follow-ups; elsewhere the panel draws its own Regenerate. */
+  onRegenerate?: () => void;
   /** A chat beside one object — a sheet (Arc SH) — where the object on screen is the table: the answer and the steps
    *  it took, and nothing of the general chat's template under it — no result figure (it repeated the answer's own
    *  numbers under raw column names), no actions, no details, no export. Shown anyway: the result an answer the
@@ -1742,6 +1748,7 @@ export function ChatMessage({
   onChooseClarify,
   onRetry,
   onEdit,
+  onRegenerate,
   lean = false,
 }: ChatMessageProps) {
   const [collapsed, setCollapsed] = useState(false);
@@ -2045,7 +2052,7 @@ export function ChatMessage({
             <InvestigateBody turn={turn} onShowSource={onShowSource} onDeeper={onDeeper} connectionId={connectionId} />
           </div>
           {turn.playbookRefs.length > 0 && <PlaybookRefs refs={turn.playbookRefs} />}
-          {turn.followups.length > 0 && (
+          {!harness.on && turn.followups.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mt-4">
               {turn.followups.map((q, i) => (
                 <Button
@@ -2067,18 +2074,21 @@ export function ChatMessage({
         </>
       )}
 
-      {/* ── Export this response as PDF / PowerPoint (Insight or Deep Analysis) ── In the coworker's layout what an
-           answer can become sits under one quiet More, as the coworker's does. */}
+      {/* ── In the coworker's layout, what an answer can become sits in its folded follow-ups, as the coworker's does; its
+           copy, its PDF and its source are the answer's foot (`chat/AnswerFoot`). ── */}
       {harness.on && isDone && !lean && !collapsed && (
-        <HarnessMore>
+        <HarnessOnward followups={turn.followups} onFollowUp={onFollowUp}>
           <TurnActions turn={turn} connectionId={connectionId}
             onDrill={!deep && onDeeper ? () => onDeeper(turn.question, null) : undefined}
             onOpenInEditor={!deep && openInQuery && turn.sql?.trim()
               ? () => openInQuery({ sql: turn.sql!, connId: connectionId, mode: "sql", name: (turn.question || "Answer").slice(0, 40) })
               : undefined} />
-          <RunFoot turn={turn} connectionId={connectionId} className="flex flex-wrap items-center gap-2" />
-          {!deep && turn.headline && <CopyAnswerButton text={[turn.headline, turn.narrative?.narrative?.trim()].filter(Boolean).join("\n\n")} />}
-        </HarnessMore>
+          <RunFoot turn={turn} connectionId={connectionId} className="flex flex-wrap items-center gap-2" exported={false} />
+          {onRegenerate && (
+            <Button variant="ghost" size="xs" className="self-start" onClick={onRegenerate}
+              title="Ask this again — a fresh answer replaces this one">↺ Ask again</Button>
+          )}
+        </HarnessOnward>
       )}
       {!harness.on && isDone && !lean && (
         <RunFoot turn={turn} connectionId={connectionId} className="flex flex-wrap justify-end items-center gap-2 mt-3" />
@@ -2087,15 +2097,18 @@ export function ChatMessage({
   );
 }
 
-/** Under a finished answer: what its run may become, and its export. Nothing when there is no run or receipt. */
-function RunFoot({ turn, connectionId, className }: { turn: ChatTurn; connectionId?: string; className: string }) {
+/** Under a finished answer: what its run may become, and its export. Nothing when there is no run or receipt. In the
+ *  coworker's layout the export is the foot's PDF, so the doors come without it (`exported={false}`). */
+function RunFoot({ turn, connectionId, className, exported = true }: {
+  turn: ChatTurn; connectionId?: string; className: string; exported?: boolean;
+}) {
   const run = turn.investigationId;
   const handle = run ?? turn.receiptId;
-  if (!handle) return null;
+  if (!handle || (!exported && !(run && connectionId))) return null;
   return (
     <div className={className}>
       {run && connectionId && <RunDoors invId={run} connectionId={connectionId} question={turn.question} />}
-      <ExportButton invId={handle} />
+      {exported && <ExportButton invId={handle} />}
     </div>
   );
 }

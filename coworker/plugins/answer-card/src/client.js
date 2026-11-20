@@ -1482,6 +1482,22 @@ function Exhibit({ answer, whole, asked }) {
     standsOut.length ? h("div", { style: { display: "flex", flexDirection: "column", gap: 6 } },
       h("div", { role: "heading", "aria-level": 4, style: { fontSize: 16, fontWeight: 600 } }, "What stands out"),
       standsOut.map((point, i) => h("div", { key: i }, rich(point)))) : null,
+    // Follow-ups, folded: the questions to ask next, and under them what this answer can become.
+    h("div", { "data-pramanyx-onward": "", style: { display: "flex", flexDirection: "column" } },
+      h("button", { type: "button", className: "pramanyx-fold", "aria-expanded": onward, onClick: () => setOnward((was) => !was) },
+        asks.length ? `Follow-ups · ${asks.length}` : "Follow-ups", h(Fold, { open: onward })),
+      onward ? [
+        ...asks.map((question, i) => h("button", {
+          key: `q-${i}`, type: "button", className: "pramanyx-ask", title: "Writes this question into the box. Nothing is asked until you send it.",
+          onClick: () => { if (!draft(question)) navigator.clipboard?.writeText(question); },
+        }, question)),
+        h("div", { key: "next", role: "group", "aria-label": "What this answer can become",
+                   style: { display: "flex", flexWrap: "wrap", gap: 14, padding: asks.length ? "8px 0 2px" : "4px 0 2px", fontSize: 13 } },
+          h("button", { type: "button", className: "pramanyx-link", "aria-expanded": emailing, onClick: () => setEmailing((was) => !was) }, "Email this"),
+          becomes.map(([label, path, hint]) => h("button", { key: label, type: "button", className: "pramanyx-link", title: hint,
+            onClick: () => openBeside("page", path) }, label))),
+        emailing ? h(Draft, { key: "email", draft: emailOf(answer) }) : null,
+      ] : null),
     // The answer's foot (the user, 2026-11-20: "except thumbs up/down and copy, I dont [want] anything here. Keep the
     // download option as PDF.. Let Source show both data + SQL.."): right, wrong, copy, the PDF, and its source.
     h(Feedback, { answer, extras: [
@@ -1502,23 +1518,7 @@ function Exhibit({ answer, whole, asked }) {
         receipt && hasPane() ? h("button", { type: "button", className: "pramanyx-link", title: "The app's own page for how this number was produced",
           onClick: () => openBeside("page", pageFor.receipt(receipt)) }, "Why this number") : null,
         h("button", { type: "button", className: "pramanyx-link", "aria-expanded": how, onClick: () => setHow((was) => !was) }, "How it was answered")),
-      how ? h(How, { answer, whole }) : null) : null,
-    // Follow-ups, folded: the questions to ask next, and under them what this answer can become.
-    h("div", { "data-pramanyx-onward": "", style: { display: "flex", flexDirection: "column" } },
-      h("button", { type: "button", className: "pramanyx-fold", "aria-expanded": onward, onClick: () => setOnward((was) => !was) },
-        asks.length ? `Follow-ups · ${asks.length}` : "Follow-ups", h(Fold, { open: onward })),
-      onward ? [
-        ...asks.map((question, i) => h("button", {
-          key: `q-${i}`, type: "button", className: "pramanyx-ask", title: "Writes this question into the box. Nothing is asked until you send it.",
-          onClick: () => { if (!draft(question)) navigator.clipboard?.writeText(question); },
-        }, question)),
-        h("div", { key: "next", role: "group", "aria-label": "What this answer can become",
-                   style: { display: "flex", flexWrap: "wrap", gap: 14, padding: asks.length ? "8px 0 2px" : "4px 0 2px", fontSize: 13 } },
-          h("button", { type: "button", className: "pramanyx-link", "aria-expanded": emailing, onClick: () => setEmailing((was) => !was) }, "Email this"),
-          becomes.map(([label, path, hint]) => h("button", { key: label, type: "button", className: "pramanyx-link", title: hint,
-            onClick: () => openBeside("page", path) }, label))),
-        emailing ? h(Draft, { key: "email", draft: emailOf(answer) }) : null,
-      ] : null));
+      how ? h(How, { answer, whole }) : null) : null);
 }
 
 /** The fold's mark: pointing right while folded, down while open. */

@@ -18,7 +18,8 @@ import { useStickToBottom } from "@/lib/useStickToBottom";
 import { brandEdge } from "@/components/ui/brand";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/brief/StatusChip";
-import { SourcePanel, type SourcePanelData } from "./ChatMessage";
+import { SourcePanel, sourceOf, type SourcePanelData } from "./ChatMessage";
+import { AnswerFoot, SourceFoot } from "@/components/chat/AnswerFoot";
 import { PartsMessage } from "./chat/PartsMessage";
 import { ThreadPeople } from "./chat/ThreadPeople";
 import { isShared, readThreadPeople, type ThreadPeople as People } from "@/lib/threads";
@@ -1620,6 +1621,8 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                         // the existing starter-provenance column (investigations.purpose),
                         // so this needs no new store.
                         onFollowUp={(q) => handleSend(q, undefined, { purpose: "followup" })}
+                        onRegenerate={harness && i === turns.length - 1 && turn.status !== "loading" && assistantMsg
+                          ? () => { if (busy) sdkStop(); void regenerate(); } : undefined}
                         onRunFresh={(q) => handleSend(q, "investigate", { skipCache: true })}
                         onShowSource={data => { setSourcePage(null); setSourcePanel(data); }}
                         onDeeper={(q, insightId) => sendQuestion(q, "investigate", { insightId: insightId ?? undefined, deep: true })}
@@ -1684,14 +1687,19 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                     {turn.status === "done" && turn.receiptId && (
                       <AnswerFeedback turn={turn} connectionId={connectionId} />
                     )}
+                    {/* The coworker's layout ends an answer on its thumbs, copy, its PDF and its source (2026-11-20,
+                        `chat/AnswerFoot`); why the number is under the source's SQL, Ask again in the folded follow-ups. */}
+                    {harness && turn.status === "done" && (
+                      <AnswerFoot turn={turn} onSource={() => { const src = sourceOf(turn); if (src) { setSourcePage(null); setSourcePanel(src); } }} />
+                    )}
                     {/* WP-10 — "Why this number": opens the unified signed receipt (GET /receipt/{id}). */}
-                    {turn.status === "done" && turn.publicReceiptId && (
+                    {!harness && turn.status === "done" && turn.publicReceiptId && (
                       <WhyThisNumber receiptId={turn.publicReceiptId} />
                     )}
                     {/* CA-1 — regenerate: re-run the LAST turn's question as a fresh
                         answer (the SDK re-sends the same user message). Last turn only —
                         regenerating an earlier turn would truncate the thread below it. */}
-                    {i === turns.length - 1 && turn.status !== "loading" && assistantMsg && (
+                    {!harness && i === turns.length - 1 && turn.status !== "loading" && assistantMsg && (
                       <div style={{ display: "inline-flex" }}>
                         <Button
                           variant="ghost"
@@ -1793,6 +1801,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                 title={sourcePanel.title}
                 connectionId={connectionId}
                 onClose={() => setSourcePanel(null)}
+                foot={sourcePanel.turn ? <SourceFoot turn={sourcePanel.turn} connectionId={connectionId} /> : undefined}
               />
             </div>
           )}

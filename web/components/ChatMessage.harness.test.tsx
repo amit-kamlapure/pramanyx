@@ -5,7 +5,7 @@
  * restored "How many rows does netflix_titles have?" read "…contains 8,807 rows", then "Row Count: 8.8K", then 8.8K.
  */
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 import { ChatMessage } from "@/components/ChatMessage";
 import { HarnessContext } from "@/components/chat/harnessLook";
@@ -42,14 +42,44 @@ describe("an answer in the Ask panel", () => {
     expect(screen.getByText(/Each row is one title on Netflix/)).toBeInTheDocument();
   });
 
-  it("keeps the classic layout's Evidence, one click away beside the SQL", () => {
+  // Was: "keeps the classic layout's Evidence, one click away beside the SQL" — Show the SQL and Evidence under the
+  // exhibit. Since 2026-11-20 the SQL and how it was answered are the answer's source, opened from its foot
+  // (`chat/AnswerFoot.test.tsx`), and a one-record answer draws no exhibit at all.
+  it("draws no box for one record whose words state its figure, and says a figure they leave out in a line (2026-11-20)", () => {
     inPanel(TURN);
-    expect(screen.queryByTestId("answer-evidence")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByTestId("answer-show-evidence"));
-    expect(screen.getByTestId("answer-evidence")).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId("answer-show-sql"));          // one open at a time
-    expect(screen.queryByTestId("answer-evidence")).not.toBeInTheDocument();
-    expect(screen.getByText(/SELECT COUNT/)).toBeInTheDocument();
+    expect(screen.queryByTestId("answer-exhibit")).not.toBeInTheDocument();
+    expect(screen.getAllByText(/8,807/)).toHaveLength(1);                        // the headline, once
+    cleanup();
+    inPanel({ ...TURN, headline: "The Netflix titles sheet was counted" } as ChatTurn);
+    expect(screen.queryByTestId("answer-exhibit")).not.toBeInTheDocument();
+    expect(screen.getByText("8,807")).toBeInTheDocument();                        // what the words left out
+  });
+
+  it("keeps a chart's exhibit, with no SQL or evidence of its own beside the foot's source", () => {
+    inPanel({ ...TURN, columns: ["type", "titles"], rows: [["Movie", 6131], ["TV Show", 2676]],
+      headline: "Movies outnumber TV shows" } as ChatTurn);
+    expect(screen.getByTestId("answer-exhibit")).toHaveTextContent("2 rows from the query");
+    expect(screen.queryByText("Show the SQL")).not.toBeInTheDocument();
+    expect(screen.queryByText("Evidence")).not.toBeInTheDocument();
+  });
+
+  it("folds its follow-ups until opened; open, they hold the questions and what the answer can become", () => {
+    const onFollowUp = vi.fn(), onRegenerate = vi.fn();
+    render(<HarnessContext.Provider value={{ on: true }}>
+      <ChatMessage turn={{ ...TURN, followups: ["Break this out by type"] } as ChatTurn} connectionId="sheets"
+        onFollowUp={onFollowUp} onRegenerate={onRegenerate} />
+    </HarnessContext.Provider>);
+    const fold = screen.getByRole("button", { name: /Follow-ups · 1/ });
+    expect(fold).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("Break this out by type")).not.toBeInTheDocument();
+    fireEvent.click(fold);
+    fireEvent.click(screen.getByText("Break this out by type"));
+    expect(onFollowUp).toHaveBeenCalledWith("Break this out by type");
+    const next = screen.getByRole("group", { name: "What this answer can become" });
+    expect(next).toHaveTextContent("Pin to dashboard");
+    fireEvent.click(screen.getByText("↺ Ask again"));
+    expect(onRegenerate).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/^More/)).not.toBeInTheDocument();
   });
 
   it("draws the deep analysis a conversation ran, though the turn was not asked as one (Agent on the person's dashboard)", () => {

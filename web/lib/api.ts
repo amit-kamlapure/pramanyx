@@ -9147,6 +9147,17 @@ export function downloadInvestigationExport(invId: string, fmt: ExportFormat, na
   a.remove();
 }
 
+/** The stored report an answer's PDF is built from: its run, or a quick answer's receipt (as Export always read it).
+ *  None when the answer was never stored. Spelled here, beside the wire it mirrors. */
+export function storedReportOf(turn: { investigationId?: string | null; receiptId?: string | null }): string | null {
+  return turn.investigationId ?? turn.receiptId ?? null;
+}
+
+/** An answer as a PDF, the one download at an answer's foot (2026-11-20). */
+export function downloadAnswerPdf(stored: string): void {
+  downloadInvestigationExport(stored, "pdf", false);
+}
+
 // ── LLM inference provider config (Settings → Inference) ────────────────────────
 
 /** The vended capability profile for one role's bound model (PLATFORM_ARCHITECTURE.md §5b). */
