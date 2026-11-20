@@ -124,9 +124,11 @@ a:hover { color: var(--blue4); }
 /* The rail's list keeps its thumb out of sight until the rail is in use — the pointer over it, or a key's focus in it —
    so a still rail draws no line at its edge (the user, 2026-11-20: "hide the scroll bar for the left panel when not
    active or in use"). A click's focus does not count, or the thumb would stay after every page opened from the rail. */
-.aug-nav-dests::-webkit-scrollbar-thumb { background: transparent; }
-.aug-nav-dests:hover::-webkit-scrollbar-thumb,
-.aug-nav-dests:has(:focus-visible)::-webkit-scrollbar-thumb { background: var(--b3); }
+/* The thumb's colour rides a variable the list itself sets: Blink does not restyle a scrollbar part on its scroller's
+   :hover, but it does when an inherited value on the scroller changes. */
+.aug-nav-dests { --nav-thumb: transparent; }
+.aug-nav-dests:hover, .aug-nav-dests:has(:focus-visible) { --nav-thumb: var(--b3); }
+.aug-nav-dests::-webkit-scrollbar-thumb { background: var(--nav-thumb); }
 @supports not selector(::-webkit-scrollbar) {
   .aug-nav-dests { scrollbar-color: transparent transparent; }
   .aug-nav-dests:hover, .aug-nav-dests:has(:focus-visible) { scrollbar-color: var(--b3) transparent; }
