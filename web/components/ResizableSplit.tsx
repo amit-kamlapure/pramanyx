@@ -139,8 +139,8 @@ export function ResizableSplit({
       </div>
       {/* folded away, a slim strip that brings it back */}
       {collapsible && collapsed && !vertical && !sizeSecond && (
-        <div data-testid="split-unfold-strip" style={{ width: 14, flexShrink: 0, position: "relative", borderRight: "1px solid var(--b0)" }}>
-          <Button variant="secondary" size="icon-xs" aria-label={`Show ${collapsible.name}`} title={`Show ${collapsible.name}`}
+        <div data-testid="split-unfold-strip" style={{ width: 14, flexShrink: 0, position: "relative" }}>
+          <Button variant="soft" size="icon-xs" aria-label={`Show ${collapsible.name}`} title={`Show ${collapsible.name}`}
             data-testid="split-unfold" onClick={collapsible.onToggle}
             style={{ position: "absolute", top: "50%", left: 7, transform: "translate(-50%, -50%)", borderRadius: "var(--r-pill)", zIndex: 6 }}>
             <Icon name="chevr" size={13} />
@@ -167,13 +167,14 @@ export function ResizableSplit({
       >
         <span
           style={vertical
-            ? { height: 1, width: "100%", background: "var(--b0)", transition: "background .1s" }
-            : { width: 1, background: "var(--b0)", transition: "background .1s" }}
+            // one of the few rules kept (between panes), and a quiet one: --divide, a step under the --b0 edge (2026-11-20)
+            ? { height: 1, width: "100%", background: "var(--divide)", transition: "background .1s" }
+            : { width: 1, background: "var(--divide)", transition: "background .1s" }}
           onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "var(--blue4, #60a5fa)"; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "var(--b0)"; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "var(--divide)"; }}
         />
         {collapsible && !vertical && !sizeSecond && (
-          <Button variant="secondary" size="icon-xs" aria-label={`Hide ${collapsible.name}`} title={`Hide ${collapsible.name}`}
+          <Button variant="soft" size="icon-xs" aria-label={`Hide ${collapsible.name}`} title={`Hide ${collapsible.name}`}
             data-testid="split-fold" onMouseDown={e => e.stopPropagation()} onClick={collapsible.onToggle}
             style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", borderRadius: "var(--r-pill)", cursor: "pointer" }}>
             <Icon name="chevl" size={13} />

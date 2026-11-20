@@ -12,6 +12,8 @@ import { cn } from "@/lib/utils"
  *
  *   default      solid, accent        the one Primary per view
  *   secondary    surface, grey        a filled secondary
+ *   soft         soft, grey           a quiet secondary: a faint fill and no outline — still a button at rest (the user,
+ *                                     2026-11-20: "borders are the exception"; Run stays the one solid action)
  *   outline      outline, grey        (and `minimal` and `ghost`, older names for the same look)
  *   destructive  outline, red
  *   link         ghost, accent        the "show source" affordance
@@ -28,12 +30,13 @@ import { cn } from "@/lib/utils"
  * One thing is ours still: the one Primary per view scales to 0.96 while pressed (.aug-press;
  * decided 2026-09-14 — a single main action is worth feeling). `static` opts a Primary out.
  */
-type Variant = "default" | "secondary" | "outline" | "minimal" | "ghost" | "destructive" | "link" | "plain"
+type Variant = "default" | "secondary" | "soft" | "outline" | "minimal" | "ghost" | "destructive" | "link" | "plain"
 type Size = "default" | "lg" | "sm" | "xs" | "icon" | "icon-lg" | "icon-sm" | "icon-xs"
 
-const LOOK: Record<Variant, { variant: "solid" | "surface" | "outline" | "ghost"; color?: "gray" | "red"; highContrast?: boolean }> = {
+const LOOK: Record<Variant, { variant: "solid" | "surface" | "soft" | "outline" | "ghost"; color?: "gray" | "red"; highContrast?: boolean }> = {
   default: { variant: "solid" },
   secondary: { variant: "surface", color: "gray", highContrast: true },
+  soft: { variant: "soft", color: "gray", highContrast: true },
   outline: { variant: "outline", color: "gray" },
   minimal: { variant: "outline", color: "gray" },
   ghost: { variant: "outline", color: "gray" },

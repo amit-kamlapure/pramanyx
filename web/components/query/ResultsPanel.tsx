@@ -510,7 +510,7 @@ export function ResultsPanel({
   const filtersVisible = showFilters || filters.length > 0;
   const headerIcon = (name: Parameters<typeof Icon>[0]["name"], title: string,
     onClick: () => void, active = false, testid?: string) => (
-    <Button variant={active ? "secondary" : "ghost"} size="xs" title={title} aria-label={title}
+    <Button variant={active ? "secondary" : "soft"} size="xs" title={title} aria-label={title}
       onClick={onClick} data-testid={testid}>
       <Icon name={name} size={14} />
     </Button>
@@ -536,7 +536,7 @@ export function ResultsPanel({
               through the same door as the query. The count's as-of rides with the number. */}
           {connId && (
             <Button
-              variant="ghost" size="xs" className="aug-fs-ui" data-testid="count-all"
+              variant="soft" size="xs" className="aug-fs-ui" data-testid="count-all"
               disabled={count.status === "busy"}
               title="Count every row this statement returns — run through the same door as the query"
               onClick={countAll}
@@ -546,7 +546,7 @@ export function ResultsPanel({
           )}
           {connId && onAppendRows && (
             <Button
-              variant="ghost" size="xs" className="aug-fs-ui" data-testid="load-more"
+              variant="soft" size="xs" className="aug-fs-ui" data-testid="load-more"
               disabled={moreBusy}
               title={`Fetch the next ${formatCount(nextPage)} rows through the same door, after the ${formatCount(rawRows.length)} shown`}
               onClick={loadMore}
@@ -585,7 +585,7 @@ export function ResultsPanel({
           shown={filters.length > 0 ? { rows: rows.length, of: rawRows.length } : undefined} />
       )}
       <span style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
-        <ToolsMenu items={tools} testId="results-tools" />
+        <ToolsMenu items={tools} testId="results-tools" quiet />
         {copyState && (
           <span className="aug-fs-xs" style={{
             position: "absolute", bottom: "100%", right: 0, marginBottom: 2, whiteSpace: "nowrap",
@@ -608,9 +608,9 @@ export function ResultsPanel({
               {EXTRACTORS.map(x => (
                 <div key={x.id} style={{ display: "flex", alignItems: "center", gap: 4 }}>
                   <span style={{ flex: 1, padding: "3px 7px", color: "var(--t2)" }}>{x.label}</span>
-                  <Button variant="ghost" size="xs" title={`Copy as ${x.label}`}
+                  <Button variant="soft" size="xs" title={`Copy as ${x.label}`}
                     onClick={() => { copyAs(x.id); setShowExport(false); }}>Copy</Button>
-                  <Button variant="ghost" size="xs" title={`Download as ${x.label}`}
+                  <Button variant="soft" size="xs" title={`Download as ${x.label}`}
                     onClick={() => { downloadAs(x.id); setShowExport(false); }}>File</Button>
                 </div>
               ))}
@@ -645,14 +645,14 @@ export function ResultsPanel({
       <div className="aug-rtabs" data-testid="results-views">
           {results.length > 1 && (
             <span style={{ display: "flex", alignItems: "center", gap: 2, marginRight: 6, flexShrink: 0 }}>
-              <Button variant="ghost" size="xs" title="Previous statement's result" aria-label="Previous result"
+              <Button variant="soft" size="xs" title="Previous statement's result" aria-label="Previous result"
                 disabled={resultIdx === 0} onClick={() => onResultIdx(resultIdx - 1)}>
                 <Icon name="chevl" size={13} />
               </Button>
               <span className="aug-fs-chrome" data-testid="results-pager" style={{ color: "var(--t3)", whiteSpace: "nowrap", ...NUM }}>
                 Results {resultIdx + 1} of {results.length}{result?.label ? ` · ${result.label}` : ""}
               </span>
-              <Button variant="ghost" size="xs" title="Next statement's result" aria-label="Next result"
+              <Button variant="soft" size="xs" title="Next statement's result" aria-label="Next result"
                 disabled={resultIdx >= results.length - 1} onClick={() => onResultIdx(resultIdx + 1)}>
                 <Icon name="chevr" size={13} />
               </Button>
@@ -677,7 +677,7 @@ export function ResultsPanel({
                   style={{ width: 120 }}
                 />
               ) : (
-                <Button variant="ghost" size="xs" aria-pressed={activeView === v.id}
+                <Button variant="soft" size="xs" aria-pressed={activeView === v.id}
                   className="aug-fs-ui aug-rtab"
                   onClick={() => setActiveView(v.id)}
                   onDoubleClick={() => { setRenaming(v.id); setRenameDraft(v.name); }}
@@ -686,7 +686,7 @@ export function ResultsPanel({
                 </Button>
               )}
               {activeView === v.id && renaming !== v.id && (
-                <Button variant="ghost" size="xs" title="Chart options"
+                <Button variant="soft" size="xs" title="Chart options"
                   aria-label="Chart options"
                   onClick={() => setVizMenu(m => m === v.id ? "" : v.id)}
                   style={{ paddingLeft: 2, paddingRight: 2 }}>
@@ -734,10 +734,12 @@ export function ResultsPanel({
             </Button>
           ))}
           <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 8 }}>
-            <Badge variant={result.error ? "destructive" : "green"} data-testid="results-status">
+            {/* the outcome in its colour, as words — not a boxed badge (2026-11-20, borders are the exception) */}
+            <span data-testid="results-status" className="aug-fs-sm"
+              style={{ display: "inline-flex", alignItems: "center", gap: 5, color: result.error ? "var(--red4)" : "var(--grn4)", ...NUM }}>
               <Icon name={result.error ? "warning" : "check"} size={12} />
               {result.error ? "Failed" : "Succeeded"} · {formatSeconds(result.duration_ms)}
-            </Badge>
+            </span>
             {result.receipt_id && (
               <a href={`/receipt/${encodeURIComponent(result.receipt_id)}`} target="_blank" rel="noreferrer"
                 className="aug-fs-xs aug-mono" style={{ color: "var(--t3)" }} title="The signed provenance record for this run">
@@ -751,8 +753,7 @@ export function ResultsPanel({
       {/* Caveats are said, never hidden — each once, in amber, under the figures they qualify. */}
       {caveats.length > 0 && (
         <div data-testid="results-caveats" className="aug-fs-sm" style={{
-          display: "flex", flexDirection: "column", gap: 2, padding: "5px 14px", color: "var(--amb4)",
-          borderBottom: "1px solid var(--b0)", flexShrink: 0,
+          display: "flex", flexDirection: "column", gap: 2, padding: "5px 14px", color: "var(--amb4)", flexShrink: 0,
         }}>
           {caveats.map((c, i) => <div key={`caveat-${i}`}>{c}</div>)}
         </div>
@@ -897,7 +898,7 @@ export function ResultsPanel({
       </div>
       {!gridShown && (
         <div data-testid="results-foot" style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", flexShrink: 0,
-          padding: "4px 10px", minHeight: 33, borderTop: "1px solid var(--b0)", background: "var(--bg-1)", position: "relative" }}>
+          padding: "4px 12px", minHeight: 33, position: "relative" }}>
           {figuresLead}
           <span style={{ flex: 1 }} />
           {figuresTail}

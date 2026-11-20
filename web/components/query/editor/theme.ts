@@ -42,8 +42,8 @@ export const pramanyxEditorTheme = EditorView.theme({
   ".cm-gutters": {
     backgroundColor: "var(--bg-0)",
     color: "var(--t3)",
+    // no rule beside the line numbers: their muted colour and the space are the edge (2026-11-20)
     border: "none",
-    borderRight: "1px solid var(--b0)",
   },
   // See-through, and it has to be: the selection is drawn in a layer UNDER the lines, so
   // an opaque band on the cursor's line hides whatever is selected on it — which, for a

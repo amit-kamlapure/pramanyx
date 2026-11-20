@@ -78,12 +78,13 @@ export function CatalogRail({
     <div
       style={{
         flex: 1, minWidth: 0, display: "flex", flexDirection: "column",
-        borderRight: "0.5px solid var(--b1)", background: "var(--bg-1)", overflow: "hidden",
+        // one continuous surface on the page's ground, the split's one divider at its right (2026-11-20): no box, no rules
+        background: "var(--bg-0)", overflow: "hidden",
       }}
     >
       {/* The Catalog screen's head, as it draws it: CATALOG, and here what it counts at the right; the connection
           picker under it in SQL mode; the mode's one line of affordance only where a row's hover does not say it. */}
-      <div style={{ padding: "10px 12px 8px", borderBottom: "0.5px solid var(--b1)", flexShrink: 0 }}>
+      <div style={{ padding: "12px 14px 6px", flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span className="aug-fs-sm" style={{ flex: 1, fontWeight: 600, color: "var(--t1)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
             Catalog

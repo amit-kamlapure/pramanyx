@@ -213,8 +213,9 @@ export function SavedQueryBar({
 
   return (
     <div className="relative flex items-center gap-1.5">
+      {/* quiet beside Run, which is the editor's one solid action (2026-11-20) */}
       <Button
-        variant="ghost" size="xs" className="aug-fs-ui gap-1"
+        variant="soft" size="xs" className="aug-fs-ui gap-1"
         title="Saved queries for this connection"
         onClick={() => { setOpen(v => !v); if (!open) refresh(); }}
       >
@@ -226,7 +227,7 @@ export function SavedQueryBar({
       </Button>
 
       <Button
-        variant="default" size="xs" className="aug-fs-ui"
+        variant="soft" size="xs" className="aug-fs-ui"
         data-testid="saved-save"
         onClick={onSave}
         disabled={!savable || state === "saving"}

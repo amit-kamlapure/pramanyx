@@ -78,13 +78,15 @@ export interface ToolItem {
 }
 
 /** Every tool a selection has, in one menu (CLARITY §3: "Tools in one menu"). */
-export function ToolsMenu({ items, testId }: { items: ToolItem[]; testId?: string }) {
+export function ToolsMenu({ items, testId, quiet = false }: { items: ToolItem[]; testId?: string;
+  /** A soft fill instead of an outline, on a surface where borders are the exception (the SQL Editor, 2026-11-20). */
+  quiet?: boolean }) {
   const shown = items.filter(i => !i.hidden);
   if (!shown.length) return null;
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger>
-        <Button variant="ghost" size="xs" data-testid={testId ?? "catalog-tools"}>
+        <Button variant={quiet ? "soft" : "ghost"} size="xs" data-testid={testId ?? "catalog-tools"}>
           Tools <Icon name="chevd" size={12} />
         </Button>
       </DropdownMenu.Trigger>

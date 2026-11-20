@@ -97,6 +97,9 @@
   --b1: var(--gray-7);
   --b2: var(--gray-7);
   --b3: var(--gray-8);
+  /* The few rules kept between panes (catalog | editor, editor | results): a step under --b0, as quiet as a line can be
+     and still be seen (the user, 2026-11-20: "Surfaces define structure. … Borders are the exception."). */
+  --divide: var(--gray-4);
   --bfocus: var(--focus-8);
   /* a card's edge, in both skins since 2026-10-25 ("fine grey lines at the right places"); the `edges` knob
      turned off takes it away. Before: none in dark (the 2026-10-10 "cards on the ground"). */
@@ -210,6 +213,7 @@
   --code-bg: var(--gray-4);
   --b0: var(--gray-5);
   --b1: var(--gray-6);
+  --divide: var(--gray-5);       /* a pane's rule on the light ground: --b0's step, as a softer one is not seen on gray 3 */
 
   --chart-1: #0F6CBD;
   --chart-2: #1E7B45;

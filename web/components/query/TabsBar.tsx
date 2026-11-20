@@ -93,9 +93,13 @@ export function newTab(name = queryTabName()): EditorTab {
 }
 
 /** The open tab's look: cut from the editor's own surface, over the strip's foot line, with its own line beneath it. */
+// The open tab is the editor's own surface reaching up into the strip — its selection is the background, not a line
+// (2026-11-20, "borders are the exception"); the others sit on the strip with no rule between them, only space.
 const OPEN_TAB: React.CSSProperties = {
-  background: "var(--bg-0)", marginBottom: -1, boxShadow: "inset 0 -2px 0 var(--t1)", color: "var(--t1)", fontWeight: 500,
+  background: "var(--bg-0)", color: "var(--t1)", fontWeight: 500, borderRadius: "var(--r2) var(--r2) 0 0",
 };
+/** The longest a tab's name is drawn before it is cut; the whole of it is its accessible name and its hover. */
+const TAB_NAME_MAX = 200;
 
 export function TabsBar({
   tabs, activeId, onSelect, onNew, onClose, onRename, trailing, onOpenExisting, startLabel,
@@ -146,18 +150,17 @@ export function TabsBar({
   return (
     <div
       style={{
-        display: "flex", alignItems: "stretch", minHeight: 36, background: "var(--bg-1)",
-        borderBottom: "1px solid var(--b1)", flexShrink: 0,
+        display: "flex", alignItems: "stretch", minHeight: 36, background: "var(--bg-1)", flexShrink: 0,
+        paddingTop: 4, paddingLeft: 4,
       }}
     >
       {/* the open queries scroll sideways — the wheel too — and never run under the controls at the row's right end */}
       <div role="tablist" aria-label="Open queries" data-testid="sql-tabs" ref={strip}
         onWheel={e => { if (strip.current && Math.abs(e.deltaY) > Math.abs(e.deltaX)) strip.current.scrollLeft += e.deltaY; }}
-        style={{ display: "flex", alignItems: "stretch", flex: "0 1 auto", minWidth: 0, overflowX: "auto", overflowY: "hidden", scrollbarWidth: "thin" }}>
+        style={{ display: "flex", alignItems: "stretch", gap: 2, flex: "0 1 auto", minWidth: 0, overflowX: "auto", overflowY: "hidden", scrollbarWidth: "thin" }}>
       {tabs.length === 0 && startLabel && (
         <div role="tab" aria-selected tabIndex={0} data-testid="sql-start-tab" className="aug-folder-tab aug-fs-ui"
-          style={{ display: "flex", alignItems: "center", flexShrink: 0, padding: "0 12px",
-            borderRight: "1px solid var(--b1)", ...OPEN_TAB }}>
+          style={{ display: "flex", alignItems: "center", flexShrink: 0, padding: "0 12px", ...OPEN_TAB }}>
           {startLabel}
         </div>
       )}
@@ -172,7 +175,7 @@ export function TabsBar({
             // its name, and a failed last run — never the × beside it or the dot's title read as part of the name
             aria-label={t.status === "error" ? `${t.name}, the last run failed` : t.name}
             tabIndex={active ? 0 : -1}
-            title="Double-click to rename"
+            title={`${t.name} — double-click to rename`}
             className="aug-folder-tab aug-fs-ui"
             onClick={() => { if (editing !== t.id) onSelect(t.id); }}
             onDoubleClick={() => { setEditing(t.id); setDraftName(t.name); }}
@@ -186,7 +189,7 @@ export function TabsBar({
             }}
             style={{
               display: "flex", alignItems: "center", gap: 6, flexShrink: 0, cursor: "pointer",
-              padding: "0 4px 0 12px", borderRight: "1px solid var(--b1)",
+              padding: "0 4px 0 12px", borderRadius: "var(--r2) var(--r2) 0 0",
               ...(active ? OPEN_TAB : { color: "var(--t3)", fontWeight: 400 }),
             }}
           >
@@ -204,11 +207,10 @@ export function TabsBar({
                 style={{ fontSize: 13, width: 110 }}
               />
             ) : (
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
-                {/* The last run's outcome as a mark — colour carries it, the title names it. */}
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap", minWidth: 0 }}>
+                {/* A failed last run is the one mark a tab carries (a success needs none: 2026-11-20, less on each tab). */}
                 {t.status === "error" && <Dot hue="red" title="The last run failed" />}
-                {t.status === "ok" && <Dot hue="green" title="The last run succeeded" />}
-                {t.name}
+                <span data-testid="sql-tab-name" style={{ maxWidth: TAB_NAME_MAX, overflow: "hidden", textOverflow: "ellipsis" }}>{t.name}</span>
               </span>
             )}
             {/* Every tab closes, the last one too: with none open, the editor area is the start page. */}

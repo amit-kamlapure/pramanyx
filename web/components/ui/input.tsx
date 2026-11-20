@@ -11,6 +11,8 @@ function Input({ className, style, size: _size, color: _color, bespoke, leading,
     size?: number; color?: string; bespoke?: boolean; leading?: React.ReactNode;
     /** At the field's right end, inside it — a search's clear. */
     trailing?: React.ReactNode;
+    /** "soft": a faint fill and no outline, for a field on a quiet surface (the SQL Editor's catalog search, 2026-11-20). */
+    variant?: "surface" | "soft";
   }) {
   return (
     <TextField.Root data-slot="input" data-field={bespoke ? undefined : "form"} size={bespoke ? "1" : "2"}

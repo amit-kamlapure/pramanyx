@@ -459,10 +459,11 @@ export function ResultsGrid({
   const atFoot = footLead !== undefined || footTail !== undefined;
   const controlBar = (
     <div data-testid={atFoot ? "grid-foot" : undefined} style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0,
-      padding: "4px 10px", background: "var(--bg-1)", position: "relative", flexWrap: atFoot ? "wrap" : undefined,
-      ...(atFoot ? { borderTop: "1px solid var(--b0)", minHeight: 33 } : { borderBottom: "1px solid var(--b0)" }) }}>
+      // one quiet line under the rows, on the panel's own ground — not a toolbar of its own (2026-11-20)
+      padding: "4px 12px", position: "relative", flexWrap: atFoot ? "wrap" : undefined,
+      ...(atFoot ? { minHeight: 33 } : {}) }}>
       {footLead}
-      <Button size="xs" variant={transposed ? "secondary" : "ghost"}
+      <Button size="xs" variant={transposed ? "secondary" : "soft"}
         // `hidden` is keyed by column INDEX, and transposing changes what an index
         // means — keeping it would hide a different column than the one the user
         // ticked. Cleared with the selection, for the same reason.
@@ -471,7 +472,7 @@ export function ResultsGrid({
         data-testid="grid-transpose">
         <Icon name="flow" size={12} /> Transpose
       </Button>
-      <Button size="xs" variant={hidden.size ? "secondary" : "ghost"}
+      <Button size="xs" variant={hidden.size ? "secondary" : "soft"}
         onClick={() => setShowColumnMenu(m => !m)} data-testid="grid-columns">
         <Icon name="column" size={12} />
         {hidden.size ? `Columns · ${hidden.size} hidden` : "Columns"}
@@ -498,20 +499,20 @@ export function ResultsGrid({
               </label>
             ))}
             {hidden.size > 0 && (
-              <Button size="xs" variant="ghost" onClick={() => setHidden(new Set())}
+              <Button size="xs" variant="soft" onClick={() => setHidden(new Set())}
                 style={{ marginTop: 4 }}>Show all</Button>
             )}
           </div>
         </>
       )}
       {sel && (
-        <Button size="xs" variant={showValue ? "secondary" : "ghost"}
+        <Button size="xs" variant={showValue ? "secondary" : "soft"}
           onClick={() => setShowValue(v => !v)}
           title="Show this cell in full — ⇧↵" data-testid="grid-value-viewer">
           <Icon name="text" size={12} /> Value
         </Button>
       )}
-      <Button size="xs" variant={find !== null ? "secondary" : "ghost"}
+      <Button size="xs" variant={find !== null ? "secondary" : "soft"}
         onClick={() => { setFind(f => (f === null ? "" : null)); setTimeout(() => findRef.current?.focus(), 0); }}
         title="Find a value in these rows — ⌘F" data-testid="grid-find-toggle">
         <Icon name="search" size={12} /> Find
@@ -587,7 +588,7 @@ export function ResultsGrid({
         </span>
       )}
       {sel && (
-        <Button size="xs" variant="ghost" onClick={copySelection} title="Copy the selection as TSV — ⌘C">
+        <Button size="xs" variant="soft" onClick={copySelection} title="Copy the selection as TSV — ⌘C">
           <Icon name="copy" size={12} /> {copied ? "Copied" : "Copy"}
         </Button>
       )}

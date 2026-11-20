@@ -534,7 +534,7 @@ function WorkbenchInner({
   const stateChip = !somethingOpen || !syncWords ? null
     : <Chip testId="saved-sync" tone="up" title={syncWords.title}>Saved · {syncWords.label}</Chip>;
   const shareControl = (
-    <Button variant="outline" size="xs" data-testid="workbench-share" onClick={shareQuery}
+    <Button variant="soft" size="xs" data-testid="workbench-share" onClick={shareQuery}
       title={activeSaved ? "Copy a link that opens this saved query" : "Save the query first — a share link points at a saved query"}>
       <Icon name="link" size={12} /> Share
     </Button>
@@ -570,7 +570,7 @@ function WorkbenchInner({
         <div
           style={{
             display: "flex", alignItems: "center", gap: 6,
-            padding: "4px 10px", borderBottom: "1px solid var(--b0)", flexShrink: 0,
+            padding: "4px 10px", flexShrink: 0,
             minHeight: 33,
           }}
         >
