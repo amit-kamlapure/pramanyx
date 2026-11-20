@@ -85,7 +85,13 @@
   --bg-3: var(--gray-1);             /* inset, input: a step under the card in dark; gray 3 in light */
   --bg-4: var(--gray-5);             /* pressed, the active segment */
   --bg-hover: var(--gray-4);         /* row and nav hover */
-  --bg-nav: var(--bg-1);             /* the rail sits on chrome */
+  /* The frame — the top bar, the rail and the status strip, one surface the page sits in (2026-11-20). With the rules
+     between them gone the step from page to frame carries the structure, so it is the reference palette's own step,
+     1.19:1 (gray 3 on gray 1), where chrome on --bg-1 was 1.07:1 — in our slate, not its blue (the user: "see what
+     makes sense"). */
+  --bg-frame: var(--gray-3);
+  --bg-nav: var(--bg-frame);         /* the rail is the frame */
+  --bg-nav-sel: var(--gray-5);       /* the rail's open page: a neutral step above the frame, with the accent's bar */
   --bg-sel: var(--accent-4);         /* selected row, active nav: a tint of the accent */
   --bg-canvas: var(--bg-0);          /* the Data Canvas ground: no tinted ground on chrome */
   --scrim: var(--color-overlay);
@@ -108,7 +114,10 @@
   /* text — Radix has two text steps; t2 and t3 share the quieter one. t4 is never text */
   --t1: var(--gray-12);
   --t2: var(--gray-11);
-  --t3: var(--gray-11);
+  /* the quietest words — hints, meta, captions — a step under t2 (2026-11-20): the reference palette's secondary text
+     reads 7.0:1 on its ground; this reads 6.9:1 on the page and still 4.7:1 on a selected row, so hierarchy comes
+     from the type and AA holds everywhere */
+  --t3: color-mix(in srgb, var(--gray-11) 60%, var(--gray-10));
   --t4: var(--gray-9);
 
   /* intent — 1 tint · 2 border · 3 the colour · 4 text · 5 aliases 4
@@ -214,6 +223,9 @@
   --b0: var(--gray-5);
   --b1: var(--gray-6);
   --divide: var(--gray-5);       /* a pane's rule on the light ground: --b0's step, as a softer one is not seen on gray 3 */
+  --bg-frame: var(--gray-1);     /* the frame in light: near white around the gray-3 page */
+  --bg-nav-sel: var(--gray-4);
+  --t3: var(--gray-11);          /* light keeps its one quiet step: a softer one falls under 4.5:1 on gray 3 */
 
   --chart-1: #0F6CBD;
   --chart-2: #1E7B45;

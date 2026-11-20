@@ -135,7 +135,7 @@ a:hover { color: var(--blue4); }
   align-items: center;
   gap: 12px;
   padding: 0 14px;
-  background: var(--bg-1);
+  background: var(--bg-frame);
   /* No rule under it (the user, 2026-11-20: "Surfaces define structure. Spacing defines groups. Typography defines
      hierarchy. Borders are the exception."): the top bar, the rail and the status strip are one frame on --bg-1, and
      the page sits inside it on --bg-0 — the contrast is the edge. */
@@ -275,7 +275,7 @@ a:hover { color: var(--blue4); }
 .aug-nav-item:hover { background: var(--bg-hover); color: var(--t1); }
 /* Active: one item in the whole rail — --bg-sel, weight 500, a 2px --accent bar at the edge. */
 .aug-nav-item[aria-current="page"],
-.aug-nav-item.active { background: var(--bg-sel); color: var(--t1); font-weight: 500; }
+.aug-nav-item.active { background: var(--bg-nav-sel); color: var(--t1); font-weight: 500; }
 .aug-nav-item[aria-current="page"]::before,
 .aug-nav-item.active::before {
   content: "";
@@ -1054,7 +1054,9 @@ textarea.aug-input, .aug-textarea { min-height: 56px; padding: 7px 9px; line-hei
    pickers, a status strip at the app's foot, and one inspector at the right that opens on selection
    (components/shell/). A page's own top rows fold into these — its actions into the title row, its filters and
    pickers into the toolbar — and nothing is lost. */
-.aug-page-chrome { flex-shrink: 0; background: var(--bg-2); }
+/* On the page's own ground, not a band of the frame's colour (2026-11-20): the frame is --bg-frame, the page and its
+   title row are the work, set apart from the frame by the step and from what follows by space. */
+.aug-page-chrome { flex-shrink: 0; background: var(--bg-0); }
 /* The title row WRAPS rather than clips: a page's facts that do not fit beside its title take a second line under it,
    whole, so nothing a page says is cut off at a narrow width. */
 /* No rules between the page's rows (2026-11-20): its chrome is a band on --bg-2, the page under it --bg-0. */
@@ -1077,7 +1079,7 @@ textarea.aug-input, .aug-textarea { min-height: 56px; padding: 7px 9px; line-hei
 
 /* One quiet strip (2026-11-20): the frame's surface, no rule over it, its items set apart by space, not by bars. */
 .aug-status-strip { height: 28px; flex-shrink: 0; display: flex; align-items: center; gap: 0; padding: 0 12px;
-  background: var(--bg-1); font-size: 12px; color: var(--t2); white-space: nowrap; overflow: hidden; }
+  background: var(--bg-frame); font-size: 12px; color: var(--t2); white-space: nowrap; overflow: hidden; }
 .aug-status-item { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
 /* A badge in the strip keeps its colour and drops its ring: the strip is quiet, its words carry it. */
 .aug-status-strip .rt-Badge { box-shadow: none; background: transparent; padding-inline: 0; }
