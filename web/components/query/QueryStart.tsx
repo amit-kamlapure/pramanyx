@@ -20,6 +20,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Bar, CARD, Chip, Empty, MUTED, NUM, ONE_LINE, RULE } from "@/components/clarity/kit";
+
+/** A panel on the start page: the card's surface without its edge — its fill on the ground is the edge (2026-11-20). */
+const SURFACE: React.CSSProperties = { ...CARD, border: "none" };
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
@@ -260,8 +263,9 @@ export function QueryStart({
     <div data-testid="query-start" style={{ flex: 1, minHeight: 0, overflowY: "auto", background: "var(--bg-0)",
       padding: "20px 22px 28px" }}>
       <h2 className="aug-fs-h2" style={HEADING}>Create new</h2>
-      {/* A card with an edge, at rest: the one way to begin, as the strip's + ▸ New query begins. */}
-      <Button variant="outline" data-testid="query-start-new" onClick={onNewQuery} disabled={!connId}
+      {/* A tile with a soft fill, at rest: the one way to begin, as the strip's + ▸ New query begins (2026-11-20: a fill,
+          not an outline — borders are the exception). */}
+      <Button variant="soft" data-testid="query-start-new" onClick={onNewQuery} disabled={!connId}
         title={connId ? "Opens an empty query tab" : "Choose a connection first"}
         className="aug-fs-ui h-auto justify-start"
         style={{ gap: 10, padding: "14px 18px", minWidth: 220, borderRadius: "var(--r3)" }}>
@@ -285,7 +289,7 @@ export function QueryStart({
               ]} />
               <section aria-label={view === "recent" ? "Recent runs" : "Saved queries"}
                 data-testid={view === "recent" ? "query-start-runs" : "query-start-saved"}
-                style={{ ...CARD, marginTop: 12 }}>
+                style={{ ...SURFACE, marginTop: 12 }}>
                 {view === "recent" ? recentList : savedList}
               </section>
             </>
@@ -294,7 +298,7 @@ export function QueryStart({
         {connId && onOpenTable && (
           <section aria-label="Catalog" data-testid="query-start-catalog" style={{ flex: "1 1 400px", minWidth: 0 }}>
             <h2 className="aug-fs-h2" style={HEADING}>Catalog</h2>
-            <div style={CARD}>
+            <div style={SURFACE}>
               <CatalogFigures tables={tables} joins={joins} loading={tablesLoading} where={where} onOpenTable={onOpenTable} />
             </div>
           </section>
