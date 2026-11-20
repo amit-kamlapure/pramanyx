@@ -83,7 +83,7 @@ function Select({ value, onChange, options, label }: {
   value: string; onChange: (v: string) => void; options: { value: string; label: string }[]; label?: string;
 }) {
   return (
-    <SelectField value={value} onChange={e => onChange(e.target.value)} aria-label={label}>
+    <SelectField variant="soft" value={value} onChange={e => onChange(e.target.value)} aria-label={label}>
       {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
     </SelectField>
   );

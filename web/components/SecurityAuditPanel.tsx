@@ -569,7 +569,7 @@ function QueriesLens({ connId, connections, reloadKey, onLoading }: {
     <>
       <Segmented label="Verdict" value={verdict} onChange={v => setVerdict(v)}
         options={VERDICT_FILTERS.map(f => ({ value: f.value, label: f.label }))} />
-      <SelectField aria-label="Connection" value={filterConnId || ""} onChange={e => setFilterConnId(e.target.value || undefined)}>
+      <SelectField variant="soft" aria-label="Connection" value={filterConnId || ""} onChange={e => setFilterConnId(e.target.value || undefined)}>
         <option value="">All connections</option>
         {connections.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
       </SelectField>
