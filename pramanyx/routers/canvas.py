@@ -234,9 +234,12 @@ def clone_canvas_endpoint(canvas_id: str, request: Request, req: Optional[CloneC
     """A copy of a canvas as a new one, made by the person asking: its tables, description, pinned documents and
     instructions — not its conversations, runs or saved artifacts. Anyone who may open it may clone it."""
     from pramanyx.canvas.store import clone_canvas
+    from pramanyx.semantic.instructions import canvas_instructions, set_canvas_instructions
     copy = clone_canvas(canvas_id, by=_who(request), name=(req.name if req else ""))
     if copy is None:
         raise HTTPException(status_code=404, detail="Canvas not found")
+    if text := canvas_instructions(canvas_id):
+        set_canvas_instructions(copy.id, text)
     return _seen_as(copy, request)
 
 

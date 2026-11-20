@@ -186,19 +186,14 @@ def set_sharing(canvas_id: str, sharing: str, shared_with: List[CanvasShare], *,
 
 
 def clone_canvas(canvas_id: str, *, by: str, name: Optional[str] = None) -> Optional[Canvas]:
-    """A copy of a canvas as a new one, made by ``by``: its tables, description, pinned documents and instructions.
-    Its conversations, runs and saved artifacts stay with the original, and the copy is the workspace's until its
-    maker shares it otherwise."""
+    """A copy of a canvas as a new one, made by ``by``: its tables, description and pinned documents (its instructions
+    are the semantic layer's, copied by the door — the platform does not import the agent). Its conversations, runs and
+    saved artifacts stay with the original, and the copy is the workspace's until its maker shares it otherwise."""
     src = get_canvas(canvas_id)
     if not src:
         return None
-    copy = create_canvas(name=(name or "").strip() or f"{src.name} (copy)", scopes=[s.model_copy() for s in src.scopes],
+    return create_canvas(name=(name or "").strip() or f"{src.name} (copy)", scopes=[s.model_copy() for s in src.scopes],
                          description=src.description, doc_ids=list(src.doc_ids), created_by=by)
-    from pramanyx.semantic.instructions import canvas_instructions, set_canvas_instructions
-    text = canvas_instructions(canvas_id)
-    if text:
-        set_canvas_instructions(copy.id, text)
-    return copy
 
 
 def _record_revision(cv: Optional[Canvas]) -> None:
