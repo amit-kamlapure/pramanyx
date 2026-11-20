@@ -24,14 +24,15 @@ interface Props {
 }
 
 // ── Purpose chip (the one allowed accent) ─────────────────────────────────────
+// Its hue's tint and text, no border (2026-11-20, borders are the exception).
 
 const PURPOSE_STYLE: Record<string, { label: string; chip: string; icon: string }> = {
-  landscape:    { label: "Landscape",    icon: "◎", chip: "border-blue-500/30 text-blue-400"     },
-  relationship: { label: "Relationship", icon: "⟺", chip: "border-violet-500/30 text-violet-400" },
-  threshold:    { label: "Threshold",    icon: "↯", chip: "border-amber-500/30 text-amber-400"    },
-  drill_down:   { label: "Drill-down",   icon: "⇣", chip: "border-rose-500/30 text-rose-400"      },
-  confounder:   { label: "Confounder",   icon: "⊕", chip: "border-emerald-500/30 text-emerald-400"},
-  synthesis:    { label: "Synthesis",    icon: "✦", chip: "border-zinc-500/30 text-zinc-400"      },
+  landscape:    { label: "Landscape",    icon: "◎", chip: "bg-blue-500/10 text-blue-400"     },
+  relationship: { label: "Relationship", icon: "⟺", chip: "bg-violet-500/10 text-violet-400" },
+  threshold:    { label: "Threshold",    icon: "↯", chip: "bg-amber-500/10 text-amber-400"    },
+  drill_down:   { label: "Drill-down",   icon: "⇣", chip: "bg-rose-500/10 text-rose-400"      },
+  confounder:   { label: "Confounder",   icon: "⊕", chip: "bg-emerald-500/10 text-emerald-400"},
+  synthesis:    { label: "Synthesis",    icon: "✦", chip: "bg-[var(--gray-a3)] text-zinc-400"   },
 };
 
 // One small uppercase section label, used everywhere for a consistent rhythm.
@@ -62,7 +63,7 @@ function SubQuestionCard({
       <div className="flex gap-3 pb-6">
         {/* Step number */}
         <div className="shrink-0 z-10">
-          <div className="h-8 w-8 rounded-[var(--r-pill)] border border-zinc-700 bg-zinc-900 flex items-center justify-center aug-fs-sm font-mono text-zinc-400">
+          <div className="h-8 w-8 rounded-[var(--r-pill)] bg-[var(--bg-3)] flex items-center justify-center aug-fs-sm font-mono text-zinc-400">
             {index + 1}
           </div>
         </div>
@@ -71,7 +72,7 @@ function SubQuestionCard({
         <div className="flex-1 min-w-0 space-y-2.5">
           {/* Question + purpose chip */}
           <div className="flex items-start gap-2 flex-wrap">
-            <span className={`aug-fs-xs font-mono px-1.5 py-0.5 rounded border shrink-0 ${ps.chip}`}>
+            <span className={`aug-fs-xs font-mono px-1.5 py-0.5 rounded shrink-0 ${ps.chip}`}>
               {ps.icon} {ps.label}
             </span>
             <p className="aug-fs-ui text-zinc-300 leading-snug flex-1 min-w-0">{answer.question}</p>
@@ -89,14 +90,14 @@ function SubQuestionCard({
           )}
 
           {answer.error && (
-            <pre className="aug-fs-sm text-red-400/90 rounded border border-red-500/20 p-2.5 overflow-x-auto whitespace-pre-wrap font-code" style={{ background: "var(--bg-0)" }}>
+            <pre className="aug-fs-sm text-red-400/90 rounded bg-red-500/5 p-2.5 overflow-x-auto whitespace-pre-wrap font-code">
               {answer.error}
             </pre>
           )}
 
           {/* Insight */}
           {answer.insight && answer.insight !== answer.answer && stripPlannerNotes(answer.insight) && (
-            <p className="aug-fs-sm text-zinc-400 leading-relaxed border-t border-zinc-800/60 pt-2">
+            <p className="aug-fs-sm text-zinc-400 leading-relaxed pt-2">
               <span className="text-zinc-500 uppercase tracking-wide aug-fs-xs mr-1.5">Takeaway</span>
               {renderEmphasis(stripPlannerNotes(answer.insight))}
             </p>
@@ -116,7 +117,7 @@ function SubQuestionCard({
                 <span className="inline-block w-2">{sqlOpen ? "▼" : "▶"}</span> SQL
               </Button>
               {sqlOpen && (
-                <pre className="mt-1.5 aug-fs-sm text-zinc-400 rounded border border-zinc-800 p-2.5 overflow-x-auto whitespace-pre-wrap font-code leading-relaxed" style={{ background: "var(--bg-0)" }}>
+                <pre className="mt-1.5 aug-fs-sm text-zinc-400 rounded p-2.5 overflow-x-auto whitespace-pre-wrap font-code leading-relaxed" style={{ background: "var(--bg-2)" }}>
                   {answer.sql}
                 </pre>
               )}
@@ -131,14 +132,14 @@ function SubQuestionCard({
 // ── Main component ────────────────────────────────────────────────────────────
 
 const BAND_STYLE: Record<string, string> = {
-  high:   "border-emerald-500/40 bg-emerald-500/10 text-emerald-300",
-  medium: "border-amber-500/40 bg-amber-500/10 text-amber-300",
-  low:    "border-rose-500/40 bg-rose-500/10 text-rose-300",
+  high:   "bg-emerald-500/10 text-emerald-300",
+  medium: "bg-amber-500/10 text-amber-300",
+  low:    "bg-rose-500/10 text-rose-300",
 };
 
 function ConfidenceChip({ band, earned }: { band: string; earned: number }) {
   return (
-    <span className={`shrink-0 aug-fs-xs font-mono uppercase tracking-wide px-2 py-0.5 rounded border ${BAND_STYLE[band] ?? BAND_STYLE.low}`}
+    <span className={`shrink-0 aug-fs-xs font-mono uppercase tracking-wide px-2 py-0.5 rounded ${BAND_STYLE[band] ?? BAND_STYLE.low}`}
       title="Computed from guard coverage × chain completeness × data trust — not asserted by the model.">
       {band} confidence · {Math.round(earned * 100)}%
     </span>
@@ -220,21 +221,22 @@ function FindingVerdict({ headline, connectionId, investigationId, sqlSource }: 
   };
   if (done) {
     return (
-      <div className="border-t border-zinc-800/60 pt-4 aug-fs-xs text-zinc-500">
+      <div className="pt-4 aug-fs-xs text-zinc-500">
         Thanks — recorded as <span className="text-zinc-300">{done}</span>. This calibrates future confidence.
       </div>
     );
   }
-  const btn = "aug-fs-xs px-2.5 py-1 rounded border transition-colors disabled:opacity-50";
+  // a soft fill at rest, the verdict's hue in the words and on hover — no outline (2026-11-20, borders are the exception)
+  const btn = "aug-fs-xs px-2.5 py-1 rounded transition-colors disabled:opacity-50";
   return (
-    <div className="border-t border-zinc-800/60 pt-4 flex items-center gap-2 flex-wrap">
+    <div className="pt-4 flex items-center gap-2 flex-wrap">
       <span className="aug-fs-xs text-zinc-500 mr-1">Was this finding right?</span>
       <Button variant="ghost" size="xs" disabled={busy} onClick={() => send("accept")}
-        className={`${btn} border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10`}>Accept</Button>
+        className={`${btn} text-emerald-300 hover:bg-emerald-500/10`}>Accept</Button>
       <Button variant="ghost" size="xs" disabled={busy} onClick={() => setFixIt("correct")}
-        className={`${btn} border-amber-500/40 text-amber-300 hover:bg-amber-500/10`}>Partly</Button>
+        className={`${btn} text-amber-300 hover:bg-amber-500/10`}>Partly</Button>
       <Button variant="ghost" size="xs" disabled={busy} onClick={() => setFixIt("reject")}
-        className={`${btn} border-rose-500/40 text-rose-300 hover:bg-rose-500/10`}>Reject</Button>
+        className={`${btn} text-rose-300 hover:bg-rose-500/10`}>Reject</Button>
       {fixIt && (
         <div className="w-full">
           <FixItForm busy={busy}
@@ -274,7 +276,7 @@ export function ExplorationReportView({ report, subqAnswers, queryCount, connect
           the chain below already shows each step with its evidence; it moves into
           Details ("How the exploration ran") instead of doubling the page. */}
       {report.conclusion && (
-        <div className="border-t border-zinc-800/60 pt-4 space-y-2">
+        <div className="pt-4 space-y-2">
           <SectionLabel>Summary</SectionLabel>
           <p className="leading-relaxed">{renderEmphasis(report.conclusion)}</p>
         </div>
@@ -282,7 +284,7 @@ export function ExplorationReportView({ report, subqAnswers, queryCount, connect
 
       {/* Investigative chain */}
       {subqAnswers.length > 0 && (
-        <div className="border-t border-zinc-800/60 pt-4 space-y-3">
+        <div className="pt-4 space-y-3">
           <SectionLabel>Investigative chain · {subqAnswers.length} step{subqAnswers.length !== 1 ? "s" : ""}</SectionLabel>
           <div>
             {subqAnswers.map((a, i) => (
@@ -307,7 +309,7 @@ export function ExplorationReportView({ report, subqAnswers, queryCount, connect
               <ol className="space-y-2">
                 {report.recommended_actions.map((action, i) => (
                   <li key={i} className="flex items-start gap-2.5">
-                    <span className="shrink-0 mt-0.5 w-5 h-5 rounded-[var(--r-pill)] border border-zinc-700 text-zinc-400 aug-fs-xs font-mono flex items-center justify-center">
+                    <span className="shrink-0 mt-0.5 w-5 h-5 rounded-[var(--r-pill)] bg-[var(--gray-a3)] text-zinc-400 aug-fs-xs font-mono flex items-center justify-center">
                       {i + 1}
                     </span>
                     <p className="leading-relaxed">{action}</p>

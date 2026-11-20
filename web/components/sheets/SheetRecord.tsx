@@ -22,14 +22,16 @@ import { comment, readRecord, showValue, who, type Sheet, type SheetRecord } fro
 
 export const PANEL_WIDTH = 420;
 
+// The grid | panel split is two panes worked side by side: the one rule kept, in --divide (2026-11-20, borders are
+// the exception); the panel's head needs none.
 export const PANEL: CSSProperties = {
   width: PANEL_WIDTH, flex: "0 0 auto", display: "flex", flexDirection: "column", minHeight: 0,
-  borderLeft: "1px solid var(--b1)", background: "var(--bg-1)",
+  borderLeft: "1px solid var(--divide)", background: "var(--bg-1)",
 };
 
 export function PanelHead({ title, chip, onClose }: { title: string; chip?: string; onClose: () => void }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderBottom: "1px solid var(--b1)",
+    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px 6px",
       flex: "0 0 auto" }}>
       <span className="aug-label">{title}</span>
       {chip && <span className="aug-fs-xs" style={{ ...MUTED, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{chip}</span>}
@@ -88,11 +90,12 @@ export function SheetRecordPanel({ sheet, row, editable, onClose, onOpenSheet, o
   return (
     <aside aria-label={`Row ${row} of ${sheet.name}`} style={PANEL}>
       <PanelHead title={head} chip={`row ${formatCount(row)} of ${sheet.name}`} onClose={onClose} />
-      <div role="tablist" style={{ display: "flex", gap: 2, padding: "0 10px", borderBottom: "1px solid var(--b0)" }}>
+      {/* the open tab is told by its background, not an underline over a rule (2026-11-20, borders are the exception) */}
+      <div role="tablist" style={{ display: "flex", gap: 4, padding: "2px 10px 4px" }}>
         {([["fields", "Fields"], ["linked", `Linked · ${linked}`], ["history", "History"],
           ["comments", `Comments${rec?.comments.length ? ` · ${rec.comments.length}` : ""}`]] as [Tab, string][]).map(([t, label]) => (
           <Button key={t} role="tab" aria-selected={tab === t} variant="plain" size="sm" onClick={() => go(t)}
-            style={{ borderRadius: 0, borderBottom: tab === t ? "2px solid var(--blue3)" : "2px solid transparent" }}>{label}</Button>
+            style={{ borderRadius: "var(--r2)", background: tab === t ? "var(--gray-a5)" : "transparent" }}>{label}</Button>
         ))}
       </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "10px 14px", display: "flex", flexDirection: "column", gap: 16 }}>

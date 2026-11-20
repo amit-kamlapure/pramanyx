@@ -175,7 +175,6 @@ function PaletteRow({ entry, onAdd }: RowProps) {
         display: "flex", alignItems: "center", gap: 7,
         padding: "5px 6px", marginBottom: 3,
         borderRadius: "var(--r2)",
-        border: "1px solid var(--b1)",
         background: usable ? "var(--bg-2)" : "var(--bg-1)",
         opacity: usable ? 1 : 0.62,
         cursor: usable ? "grab" : "not-allowed",
@@ -281,7 +280,7 @@ export function AutomationPalette({ connId, only, bindFilter, onClearBindFilter,
     <div
       style={{
         width: PALETTE_W, flexShrink: 0, display: "flex", flexDirection: "column",
-        border: "1px solid var(--b1)", borderRadius: 8,
+        borderRadius: 8,
         background: "var(--bg-1)", overflow: "hidden",
       }}
       data-testid="automation-palette"
@@ -307,7 +306,6 @@ export function AutomationPalette({ connId, only, bindFilter, onClearBindFilter,
           data-testid="palette-bind-banner"
           style={{ display: "flex", alignItems: "center", gap: 6, margin: "0 6px 4px",
             padding: "4px 7px", borderRadius: "var(--r2)",
-            border: "1px solid color-mix(in srgb, var(--chart-2) 45%, transparent)",
             background: "color-mix(in srgb, var(--chart-2) 9%, var(--bg-1))",
             color: "var(--t2)" }}>
           <Icon name="link" size={11} />
@@ -378,8 +376,8 @@ export function AutomationPalette({ connId, only, bindFilter, onClearBindFilter,
                       style={{
                         display: "flex", alignItems: "center", gap: 6, width: "100%",
                         padding: "5px 6px", marginTop: 2, marginBottom: 3,
-                        borderRadius: "var(--r2)", border: "1px dashed var(--b1)",
-                        background: "transparent", color: "var(--t3)", cursor: "pointer",
+                        borderRadius: "var(--r2)", border: "none",
+                        background: "var(--gray-a3)", color: "var(--t3)", cursor: "pointer",
                         textAlign: "left",
                       }}
                     >

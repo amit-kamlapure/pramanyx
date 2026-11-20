@@ -44,7 +44,7 @@ function StatusChip({ status }: { status: string }) {
   const s = STATUS_CHIP[status] ?? STATUS_CHIP.draft;
   return (
     <span className="text-[11px] font-mono px-1.5 py-0.5 rounded-[3px]"
-      style={{ background: s.bg, color: s.color, border: `0.5px solid color-mix(in srgb, ${s.color} 25%, transparent)` }}>
+      style={{ background: s.bg, color: s.color }}>
       {s.label}
     </span>
   );
@@ -130,18 +130,18 @@ export function PlaybookPanel() {
   return (
     <div className="flex h-full gap-0" style={{ background: "var(--bg-0)" }}>
 
-      {/* ── Left list ── */}
-      <div className="flex flex-col border-r" style={{ width: "340px", flexShrink: 0, borderColor: "var(--b2)" }}>
+      {/* ── Left list ── the one rule kept is between the list and the entry, worked side by side (--divide) */}
+      <div className="flex flex-col border-r" style={{ width: "340px", flexShrink: 0, borderColor: "var(--divide)" }}>
 
         {/* Header */}
-        <div className="px-4 pt-4 pb-3 shrink-0" style={{ borderBottom: "0.5px solid var(--b2)" }}>
+        <div className="px-4 pt-4 pb-3 shrink-0">
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-[13px] font-medium" style={{ color: "var(--t1)" }}>Playbook</h2>
             <Button variant="plain" size="xs"
               onClick={handleReseed}
               disabled={seeding}
               className="aug-fs-xs px-2 py-1 rounded-[4px] transition-colors"
-              style={{ border: "0.5px solid var(--b2)", background: "var(--bg-1)", color: "var(--t3)" }}
+              style={{ background: "var(--gray-a3)", color: "var(--t3)" }}
               onMouseEnter={e => e.currentTarget.style.color = "var(--t2)"}
               onMouseLeave={e => e.currentTarget.style.color = "var(--t3)"}
             >
@@ -166,7 +166,7 @@ export function PlaybookPanel() {
                 : `${ruleOutCount} data-quality rule-outs run in the Verifier — not listed`}
             </Button>
           )}
-          <Input
+          <Input variant="soft"
             value={filter}
             onChange={e => setFilter(e.target.value)}
             placeholder="Search recommendations…"
@@ -179,8 +179,7 @@ export function PlaybookPanel() {
                 onClick={() => setStatusFilter(s)}
                 className="text-[11px] px-2 py-0.5 rounded-[var(--r-chip)] font-mono transition-colors"
                 style={{
-                  background: statusFilter === s ? "var(--blue1)" : "transparent",
-                  border: `0.5px solid ${statusFilter === s ? "#3d6bff55" : "var(--b2)"}`,
+                  background: statusFilter === s ? "var(--blue1)" : "var(--gray-a3)",
                   color: statusFilter === s ? "var(--blue4)" : "var(--t3)",
                 }}
               >
@@ -271,7 +270,7 @@ function PlaybookDetail({
       <div>
         <div className="flex items-center gap-2 mb-1">
           <span className="aug-fs-xs font-mono px-2 py-0.5 rounded-[3px]"
-            style={{ background: "var(--bg-1)", border: "0.5px solid var(--b2)", color: "var(--t3)" }}>
+            style={{ background: "var(--gray-a3)", color: "var(--t3)" }}>
             {entry.trigger_metric}
           </span>
           <StatusChip status={entry.status} />
@@ -325,7 +324,7 @@ function PlaybookDetail({
         <div className="flex flex-wrap gap-1.5">
           {entry.tags.map(t => (
             <span key={t} className="aug-fs-xs px-2 py-0.5 rounded-[var(--r-chip)] font-mono"
-              style={{ background: "var(--bg-1)", border: "0.5px solid var(--b2)", color: "var(--t3)" }}>
+              style={{ background: "var(--gray-a3)", color: "var(--t3)" }}>
               {t}
             </span>
           ))}
@@ -336,14 +335,14 @@ function PlaybookDetail({
       <VersionHistory entryId={entry.id} currentVersion={entry.version} />
 
       {/* Promote / deprecate */}
-      <div className="flex gap-2 pt-2" style={{ borderTop: "0.5px solid var(--b2)" }}>
+      <div className="flex gap-2 pt-2">
         {entry.status !== "active" && (
           <Button variant="plain" size="xs"
             onClick={() => onStatusChange("active")}
             className="aug-fs-xs px-3 py-1.5 rounded-[5px] transition-colors"
-            style={{ background: "var(--grn1)", border: "0.5px solid var(--grn2)", color: "var(--grn4)" }}
-            onMouseEnter={e => e.currentTarget.style.borderColor = "var(--grn4)"}
-            onMouseLeave={e => e.currentTarget.style.borderColor = "var(--grn2)"}
+            style={{ background: "var(--grn1)", color: "var(--grn4)" }}
+            onMouseEnter={e => e.currentTarget.style.background = "var(--grn2)"}
+            onMouseLeave={e => e.currentTarget.style.background = "var(--grn1)"}
           >
             Promote to active
           </Button>
@@ -352,9 +351,9 @@ function PlaybookDetail({
           <Button variant="plain" size="xs"
             onClick={() => onStatusChange("deprecated")}
             className="aug-fs-xs px-3 py-1.5 rounded-[5px] transition-colors"
-            style={{ background: "var(--bg-1)", border: "0.5px solid var(--b2)", color: "var(--t3)" }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--red4)"; e.currentTarget.style.color = "var(--red4)"; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--b2)"; e.currentTarget.style.color = "var(--t3)"; }}
+            style={{ background: "var(--gray-a3)", color: "var(--t3)" }}
+            onMouseEnter={e => { e.currentTarget.style.background = "var(--gray-a4)"; e.currentTarget.style.color = "var(--red4)"; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "var(--gray-a3)"; e.currentTarget.style.color = "var(--t3)"; }}
           >
             Deprecate
           </Button>
@@ -363,7 +362,7 @@ function PlaybookDetail({
           <Button variant="plain" size="xs"
             onClick={() => onStatusChange("draft")}
             className="aug-fs-xs px-3 py-1.5 rounded-[5px] transition-colors"
-            style={{ background: "var(--bg-1)", border: "0.5px solid var(--b2)", color: "var(--t3)" }}
+            style={{ background: "var(--gray-a3)", color: "var(--t3)" }}
           >
             Restore to draft
           </Button>
@@ -384,13 +383,13 @@ function VersionHistory({ entryId, currentVersion }: { entryId: string; currentV
   };
 
   return (
-    <div style={{ borderTop: "0.5px solid var(--b1)", paddingTop: 12 }}>
+    <div>
       <Button variant="ghost" size="xs" onClick={toggle} className="flex items-center gap-2 aug-fs-xs" style={{ color: "var(--t3)" }}>
         <span style={{ transform: open ? "rotate(90deg)" : "none", transition: "transform .12s" }}>▸</span>
         Version history
         {currentVersion != null && (
           <span className="aug-fs-xs px-1.5 py-0.5 rounded-[3px] font-mono"
-            style={{ background: "var(--bg-1)", border: "0.5px solid var(--b2)", color: "var(--t3)" }}>v{currentVersion}</span>
+            style={{ background: "var(--gray-a3)", color: "var(--t3)" }}>v{currentVersion}</span>
         )}
       </Button>
       {open && (
@@ -400,7 +399,7 @@ function VersionHistory({ entryId, currentVersion }: { entryId: string; currentV
           {versions?.slice().reverse().map(v => (
             <div key={v.version} className="flex items-center gap-3 aug-fs-xs" style={{ color: "var(--t3)" }}>
               <span className="font-mono px-1.5 py-0.5 rounded-[3px]"
-                style={{ background: "var(--bg-1)", border: "0.5px solid var(--b2)", color: "var(--t2)" }}>v{v.version}</span>
+                style={{ background: "var(--gray-a3)", color: "var(--t2)" }}>v{v.version}</span>
               <span style={{ color: "var(--t3)" }}>{v.saved_at ? formatTimestamp(v.saved_at) : ""}</span>
               <span className="font-mono truncate" style={{ color: "var(--t3)" }} title={v.receipt}>{v.receipt ? v.receipt.slice(0, 16) + "…" : ""}</span>
             </div>

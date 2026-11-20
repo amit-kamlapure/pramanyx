@@ -429,7 +429,7 @@ function ClaimReader({ claim, run, saving, notSaved, onFeedback, onReexamine }: 
       <Label right={<span title={formatTimestamp(claim.created_at)} style={NUM}>recorded {ago(claim.created_at)}</span>}>Claim</Label>
       <div>
         <div className="aug-fs-xs" style={{ ...ROW, gap: 6, color: "var(--t3)", marginBottom: 4 }}>
-          <span style={{ border: "1px solid var(--b2)", borderRadius: "var(--r-chip)", padding: "0 6px", color: "var(--t2)", lineHeight: "16px" }}>
+          <span style={{ background: "var(--gray-a3)", borderRadius: "var(--r-chip)", padding: "0 6px", color: "var(--t2)", lineHeight: "16px" }}>
             Narrative
           </span>
           the deep analysis’s reading of its query’s result

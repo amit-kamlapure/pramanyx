@@ -133,7 +133,7 @@ export function DeployMenu({ automationId, onChanged }: DeployMenuProps) {
             {doors.map(d => (
               <div key={d.kind} style={{
                 display: "flex", gap: 10, alignItems: "flex-start", padding: "10px 12px",
-                border: "1px solid var(--b1)", borderRadius: "var(--r2)",
+                borderRadius: "var(--r2)",
                 background: "var(--bg-1)",
               }}>
                 <span style={{ color: STATE[d.state].color, paddingTop: 2 }}>
@@ -232,7 +232,7 @@ function IssuedUrl({ url, token }: { url: string; token: string }) {
       <div style={{ display: "flex", gap: 6, alignItems: "flex-start" }}>
         <code className="aug-fs-xs" style={{
           flex: 1, minWidth: 0, wordBreak: "break-all", color: "var(--t2)",
-          background: "var(--bg-2)", border: "1px solid var(--b1)",
+          background: "var(--bg-2)",
           borderRadius: "var(--r2)", padding: "6px 8px",
         }}>{curl}</code>
         <Button variant="ghost" size="xs" className="aug-fs-xs" style={{ flexShrink: 0 }}

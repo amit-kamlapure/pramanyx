@@ -296,7 +296,8 @@ export function DeclaredActionsPanel({ connectionId }: { connectionId: string })
         <Ledger read={actions} nameOf={nameOf} />
         {proposing && <ProposeForm connectionId={connectionId} nameOf={nameOf} onClose={() => setProposing(false)} onStaged={pending.reload} />}
         {designing && (
-          <div style={{ display: "flex", border: "1px solid var(--b1)", borderRadius: "var(--r3)", marginTop: 10 }}>
+          // No box: the designer sits on a ground of its own, its steps the surfaces on it (2026-11-20, borders are the exception).
+          <div style={{ display: "flex", background: "var(--bg-0)", borderRadius: "var(--r3)", marginTop: 10 }}>
             <ActionDesigner connectionId={connectionId} within=""
               onClose={() => { setDesigning(false); actions.reload(); }} onDeclared={() => actions.reload()} />
           </div>
@@ -467,7 +468,7 @@ function ProposeForm({ connectionId, nameOf, onClose, onStaged }: {
   };
 
   return (
-    <div data-testid="actions-propose" style={{ ...RULE, marginTop: 6, paddingTop: 10 }}>
+    <div data-testid="actions-propose" style={{ marginTop: 6, paddingTop: 10 }}>
       <div className="aug-fs-sm" style={{ ...ROW, color: "var(--t2)", marginBottom: 6 }}>
         <span>The agent stages any declared action the finding warrants; nothing runs until a person approves it.</span>
         <Chip title="Proposing asks the model once">1 model call</Chip>

@@ -40,7 +40,7 @@ function Pick({ value, onChange, items, label }: {
 function Kept({ title, lines }: { title: ReactNode; lines: ReactNode[] }) {
   return (
     <div className="aug-fs-sm" style={{ display: "flex", flexDirection: "column", gap: 2, padding: "6px 8px",
-      border: "1px solid var(--b0)", borderRadius: "var(--r2)", background: "var(--bg-1)" }}>
+      borderRadius: "var(--r2)", background: "var(--bg-1)" }}>
       <span>{title}</span>
       {lines.map((l, i) => (
         // the lines of one kept item, in their order
@@ -52,7 +52,7 @@ function Kept({ title, lines }: { title: ReactNode; lines: ReactNode[] }) {
 
 function Step({ n, title, done, children }: { n: number; title: string; done?: string; children: ReactNode }) {
   return (
-    <section style={{ border: "1px solid var(--b1)", borderRadius: "var(--r3)", background: "var(--bg-2)", padding: "10px 12px",
+    <section style={{ borderRadius: "var(--r3)", background: "var(--bg-2)", padding: "10px 12px",
       display: "flex", flexDirection: "column", gap: 8 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <span className="aug-fs-xs" style={{ width: 18, height: 18, borderRadius: "var(--r-pill)", background: "var(--bg-3)",
@@ -278,7 +278,7 @@ function MergeStep({ sheet, stored, onFail, onKept }: {
           {seen.file_columns_not_in_sheet.length > 0 && <span className="aug-fs-xs" style={MUTED}>Not in the sheet, not added:{" "}
             {seen.file_columns_not_in_sheet.join(", ")}</span>}
           {seen.changes.length > 0 && (
-            <div className="aug-fs-xs" style={{ maxHeight: 180, overflowY: "auto", border: "1px solid var(--b0)", borderRadius: "var(--r2)" }}>
+            <div className="aug-fs-xs" style={{ maxHeight: 180, overflowY: "auto", background: "var(--bg-3)", borderRadius: "var(--r2)" }}>
               {seen.changes.map(c => (
                 <div key={`${c.row}-${c.column}`} style={{ padding: "3px 6px", borderBottom: "1px solid var(--b0)" }}>
                   <span style={MUTED}>{seen.key ? nameOf(seen.key) : "key"} {c.key} · {c.name}:</span>{" "}

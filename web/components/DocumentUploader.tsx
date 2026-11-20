@@ -60,7 +60,7 @@ function StepDot({ n, state }: { n: number; state: "todo" | "now" | "done" }) {
     ? { background: "var(--accent)", color: "var(--on-primary)" }
     : state === "done"
       ? { background: "var(--blue1)", color: "var(--blue4)" }
-      : { border: "1px solid var(--b2)", color: "var(--t3)" };
+      : { background: "var(--gray-a3)", color: "var(--t3)" };
   return (
     <span className="aug-fs-xs" style={{ ...look, ...NUM, display: "inline-flex", alignItems: "center", justifyContent: "center",
       width: 18, height: 18, borderRadius: "var(--r-pill)", flexShrink: 0, fontWeight: 600 }}>
@@ -480,7 +480,7 @@ export function DocumentUploader({ formats, onAdded, onClose }: {
                 BROWSER_RENDERABLE.has(ext(file.name)) && originalUrl ? (
                   <>
                     <iframe src={originalUrl} title={file.name}
-                      style={{ width: "100%", height: "26rem", border: "1px solid var(--b1)", borderRadius: "var(--r2)", background: "var(--bg-0)" }} />
+                      style={{ width: "100%", height: "26rem", border: "none", borderRadius: "var(--r2)", background: "var(--bg-0)" }} />
                     {/* An embedded PDF renders only where the viewer's browser has a PDF plugin; elsewhere the frame
                         is simply BLANK with nothing to explain it. */}
                     <Hint>Blank? Some browsers cannot show a file inline — the Markdown view always works, and it is what gets indexed.</Hint>

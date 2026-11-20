@@ -104,7 +104,7 @@ export function HistoryPanel({ selectedId, onSelect }: Props) {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="px-3 py-2.5 border-b border-zinc-600 shrink-0 space-y-2">
+      <div className="px-3 pt-2.5 pb-3 shrink-0 space-y-2">
         <div className="flex items-center justify-between">
           <p className="aug-label">History</p>
           <div className="flex items-center gap-2">
@@ -145,7 +145,7 @@ export function HistoryPanel({ selectedId, onSelect }: Props) {
                   "w-full text-left px-4 py-3 transition group border-l-2 pr-10",
                   isSelected
                     ? "bg-violet-500/5 border-violet-500"
-                    : "border-transparent hover:bg-zinc-700/50 hover:border-zinc-600"
+                    : "border-transparent hover:bg-zinc-700/50"
                 )}
               >
                 <div className="flex items-start justify-between gap-2">
@@ -154,8 +154,8 @@ export function HistoryPanel({ selectedId, onSelect }: Props) {
                     <span className={cn(
                       "inline-flex shrink-0 items-center px-1 py-0.5 rounded aug-fs-xs font-semibold uppercase tracking-wider",
                       isChat
-                        ? "bg-sky-500/10 text-sky-400 border border-sky-500/20"
-                        : "bg-violet-500/10 text-violet-400 border border-violet-500/20"
+                        ? "bg-sky-500/10 text-sky-400"
+                        : "bg-violet-500/10 text-violet-400"
                     )}>
                       {isChat ? "Ask" : "Inv"}
                     </span>
@@ -190,19 +190,19 @@ export function HistoryPanel({ selectedId, onSelect }: Props) {
                   {inv.status === "timed_out" && (
                     <>
                       <span>·</span>
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded border border-amber-500/20 bg-amber-500/10 text-amber-400 aug-fs-xs font-medium" title="The Agent run exceeded the time limit">⏱ timed out</span>
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 aug-fs-xs font-medium" title="The Agent run exceeded the time limit">⏱ timed out</span>
                     </>
                   )}
                   {inv.status === "failed" && (
                     <>
                       <span>·</span>
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded border border-red-500/20 bg-red-500/10 text-red-400 aug-fs-xs font-medium">✕ failed</span>
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 aug-fs-xs font-medium">✕ failed</span>
                     </>
                   )}
                   {inv.status === "running" && (
                     <>
                       <span>·</span>
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded border border-emerald-500/20 bg-emerald-500/10 text-emerald-400 aug-fs-xs font-medium">● running</span>
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 aug-fs-xs font-medium">● running</span>
                     </>
                   )}
                 </div>

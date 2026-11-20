@@ -24,7 +24,8 @@ import {
   type ReleaseState,
 } from "@/lib/objectTypes";
 
-const RULE = "1px solid var(--b1)";
+/** The hairline between the changes in the list (a list's row rule, --b0); the strip itself has none (2026-11-20). */
+const RULE = "1px solid var(--b0)";
 
 /** The class as a person reads it, and its tag colour. */
 export const CLASS_LOOK: Record<ChangeClass, { label: string; tag: string }> = {
@@ -156,7 +157,7 @@ export function ReleaseStrip({ connectionId, schema, onChanged, version = 0 }: {
       {said && !shown && <span className="aug-fs-xs" role="status" style={{ color: "var(--t2)" }}>{said}</span>}
       {shown && (
         // Its own line under the bar's row: the changes are read, not squeezed between chips.
-        <section style={{ flexBasis: "100%", padding: "8px 0 4px", borderTop: RULE }} aria-label="Ontology release"
+        <section style={{ flexBasis: "100%", padding: "8px 0 4px" }} aria-label="Ontology release"
           data-testid="release-strip">
           <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
             <span className="aug-fs-sm" style={{ color: "var(--t2)" }}>{readsWords}</span>

@@ -143,7 +143,8 @@ export function AskPanelHost({ connectionId, hidden = false }: { connectionId: s
     <aside aria-label="Ask" data-testid="ask-panel" hidden={!shown}
       style={{ display: shown ? "flex" : "none", flexDirection: "column", minHeight: 0, position: narrow ? "fixed" : "relative",
         ...(narrow ? { inset: 0, zIndex: 40 } : { width, flexShrink: 0 }),
-        background: "var(--bg-3)", borderLeft: "1px solid var(--b1)" }}>
+        // the page | Ask split: the one rule kept, in --divide; its tab strip parts by space (2026-11-20, borders are the exception)
+        background: "var(--bg-3)", borderLeft: "1px solid var(--divide)" }}>
       {!narrow && (
         <div className="aug-inspector-grip" role="separator" aria-orientation="vertical" aria-label="Resize Ask"
           aria-valuemin={PANEL_MIN_W} aria-valuemax={PANEL_MAX_W} aria-valuenow={width} tabIndex={0} onPointerDown={startDrag}
@@ -152,7 +153,7 @@ export function AskPanelHost({ connectionId, hidden = false }: { connectionId: s
             if (e.key === "ArrowRight") { e.preventDefault(); keep(width - 16); }
           }} />
       )}
-      <div style={{ flex: "none", display: "flex", alignItems: "center", gap: 4, padding: "6px 8px", borderBottom: "1px solid var(--b1)", minWidth: 0 }}>
+      <div style={{ flex: "none", display: "flex", alignItems: "center", gap: 4, padding: "6px 8px 4px", minWidth: 0 }}>
         <Button variant="ghost" size="icon-xs" aria-label="Open at full size" title="Open at full size" data-testid="ask-panel-full" onClick={fullPage}>
           <Icon name="expand" size={14} />
         </Button>

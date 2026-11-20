@@ -45,8 +45,9 @@ import { Input } from "@/components/ui/input";
 import { csvFilename, downloadCsv, toCsv } from "@/lib/query/csv";
 import { CARD, NEEDS_EDGE } from "@/components/clarity/kit";
 
+/** No edge: the card is its surface on the ground (2026-11-20, borders are the exception). */
 const card: CSSProperties = {
-  background: "var(--bg-2)", border: "1px solid var(--card-edge)", borderRadius: "var(--r3)", padding: "12px 14px", minWidth: 0,
+  background: "var(--bg-2)", borderRadius: "var(--r3)", padding: "12px 14px", minWidth: 0,
 };
 const muted: CSSProperties = { color: "var(--t3)" };
 const oneLine: CSSProperties = { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 };
@@ -54,8 +55,9 @@ const tabular: CSSProperties = { fontVariantNumeric: "tabular-nums" };
 const row: CSSProperties = { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" };
 /** Unknown, not zero: the de-emphasis grey, hatched (CLARITY §4). */
 const HATCH = "repeating-linear-gradient(135deg, var(--chart-deemph) 0 4px, color-mix(in srgb, var(--chart-deemph) 45%, transparent) 4px 7px)";
-/** The form-control look, shared by the caps form and the feed's filter bar. */
-const field: CSSProperties = { background: "var(--bg-1)", border: "1px solid var(--b1)",
+/** The form-control look, shared by the caps form and the feed's filter bar. A field's edge is its own
+ *  (ui/field.ts): the caps form keeps it, the feed's filter bar is `variant="soft"` (2026-11-20). */
+const field: CSSProperties = { background: "var(--bg-1)",
   borderRadius: "var(--r2)", color: "var(--t1)", padding: "5px 8px" };
 /** How many events one read pulls. The server filters by CATEGORY only, so every other control
  *  narrows this window in memory — and the screen says how far back it reaches. */
@@ -364,7 +366,7 @@ function CapsEditor({ data, onChanged, onClose }: {
       <Label right={<Button size="xs" variant="ghost" onClick={onClose}>Close</Button>}>Spend caps</Label>
       {data.caps.map((c, i) => (
         <div key={`${c.scope}:${c.subject}:${c.metric}:${c.window_hours}`} className="aug-fs-sm"
-          style={{ ...row, flexWrap: "nowrap", gap: 12, padding: "8px 2px", borderTop: i ? "1px solid var(--b1)" : undefined }}>
+          style={{ ...row, flexWrap: "nowrap", gap: 12, padding: "8px 2px", borderTop: i ? "1px solid var(--b0)" : undefined }}>
           <span style={{ color: "var(--t1)", fontWeight: 500, ...tabular }}>{capAmount(c.metric, c.limit)}</span>
           <span className="aug-fs-xs" style={muted}>per {c.window_hours}h · {c.scope === "user" ? `user ${c.subject}` : "whole org"}</span>
           <span className="aug-fs-xs" style={{ color: c.action === "block" ? "var(--red4)" : "var(--amb4)" }}>
@@ -476,7 +478,7 @@ function GovernanceCard() {
         : folds.map((f, i) => (
           <div key={f.key} data-testid="governance-fold" className="aug-fs-sm"
             style={{ display: "grid", gridTemplateColumns: "18px minmax(0, 1fr) auto auto", gap: 10, alignItems: "center",
-              padding: "8px 2px", borderTop: i ? "1px solid var(--b1)" : undefined }}>
+              padding: "8px 2px", borderTop: i ? "1px solid var(--b0)" : undefined }}>
             <span style={{ display: "inline-flex", color: FOLD_ICON[f.tone].color }}><Icon name={FOLD_ICON[f.tone].name} size={14} /></span>
             <span style={oneLine} title={f.sub ? `${f.title} · ${f.sub}` : f.title}>
               <span style={{ color: "var(--t1)" }}>{f.title}</span>
@@ -627,28 +629,28 @@ function FullFeed({ base, categories, focus, windowed = false, onClearFocus, onR
   const toggleSort = (key: FeedSort["key"]) => setSort(s => (s.key === key ? { key, desc: !s.desc } : { key, desc: true }));
 
   return (
-    <div style={{ marginTop: 10, borderTop: "1px solid var(--b1)", paddingTop: 10 }}>
+    <div style={{ marginTop: 18 }}>
       <div style={{ ...row, marginBottom: 8 }}>
-        <SelectField style={field} value={category} onChange={e => setCategory(e.target.value)}
+        <SelectField variant="soft" style={field} value={category} onChange={e => setCategory(e.target.value)}
           aria-label="Category" data-testid="feed-category">
           <option value="">All categories</option>
           {categories.map(c => <option key={c} value={c}>{c.replace(/_/g, " ")}</option>)}
         </SelectField>
-        <SelectField style={field} value={kind} onChange={e => setKind(e.target.value)} aria-label="Event" data-testid="feed-kind">
+        <SelectField variant="soft" style={field} value={kind} onChange={e => setKind(e.target.value)} aria-label="Event" data-testid="feed-kind">
           <option value="">All events</option>
           {kinds.map(k => <option key={k} value={k}>{k}</option>)}
         </SelectField>
-        <SelectField style={field} value={actor} onChange={e => setActor(e.target.value)} aria-label="Actor" data-testid="feed-actor">
+        <SelectField variant="soft" style={field} value={actor} onChange={e => setActor(e.target.value)} aria-label="Actor" data-testid="feed-actor">
           <option value="">All actors</option>
           {actors.map(a => <option key={a} value={a}>{a}</option>)}
         </SelectField>
-        <Input style={{ ...field, width: 220 }} value={q} onChange={e => setQ(e.target.value)}
+        <Input variant="soft" style={{ ...field, width: 220 }} value={q} onChange={e => setQ(e.target.value)}
           placeholder="Search summary, event, actor…" aria-label="Search the feed" data-testid="feed-search" />
         {windowed && (
           <>
-            <Input type="date" style={{ ...field, width: 150 }} value={from} max={to || undefined}
+            <Input type="date" variant="soft" style={{ ...field, width: 150 }} value={from} max={to || undefined}
               onChange={e => setFrom(e.target.value)} aria-label="From" title="From this day" data-testid="feed-since" />
-            <Input type="date" style={{ ...field, width: 150 }} value={to} min={from || undefined}
+            <Input type="date" variant="soft" style={{ ...field, width: 150 }} value={to} min={from || undefined}
               onChange={e => setTo(e.target.value)} aria-label="To" title="To this day, inclusive" data-testid="feed-until" />
           </>
         )}
@@ -686,7 +688,7 @@ function FullFeed({ base, categories, focus, windowed = false, onClearFocus, onR
           title={events.length === 0 ? "Nothing recorded in this category yet." : "No event in the window matches these filters."} />
       )}
       {!err && rows.length > 0 && (
-        <div style={{ overflow: "auto", maxHeight: "58vh", border: "1px solid var(--b0)", borderRadius: "var(--r3)" }}>
+        <div style={{ overflow: "auto", maxHeight: "58vh", borderRadius: "var(--r3)" }}>
           <Table className="aug-fs-sm" style={{ color: "var(--t2)" }}>
             <TableHeader>
               <TableRow className="aug-fs-xs" style={{ textAlign: "left" }}>
@@ -730,7 +732,7 @@ function Details() {
           The cost query
         </Label>
         <pre className="aug-fs-xs" style={{ margin: 0, maxHeight: 220, overflow: "auto", fontFamily: "var(--font-mono)",
-          color: "var(--t2)", background: "var(--bg-1)", border: "1px solid var(--b0)", borderRadius: "var(--r2)", padding: 10 }}>
+          color: "var(--t2)", background: "var(--bg-1)", borderRadius: "var(--r2)", padding: 10 }}>
           {sql || "…"}
         </pre>
       </div>

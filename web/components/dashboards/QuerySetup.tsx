@@ -246,7 +246,7 @@ export function QuerySetup({ connectionId, card, onKept, onClose, values = NO_VA
           </Button>
         </div>
         {showTables && (
-          <div data-testid="query-tables" role="list" style={{ display: "flex", flexDirection: "column", maxHeight: 160, overflow: "auto", border: "1px solid var(--b1)", borderRadius: "var(--r2)" }}>
+          <div data-testid="query-tables" role="list" style={{ display: "flex", flexDirection: "column", maxHeight: 160, overflow: "auto", background: "var(--bg-3)", borderRadius: "var(--r2)" }}>
             {tables === null ? <span className="aug-fs-xs" style={{ padding: 6, color: "var(--t3)" }}>Reading the tables…</span>
               : tables.length === 0 ? <span className="aug-fs-xs" style={{ padding: 6, color: "var(--t3)" }}>No tables are listed for this connection.</span>
                 : withUniqueKeys(tables, t => t).map(([k, t]) => (
@@ -255,7 +255,7 @@ export function QuerySetup({ connectionId, card, onKept, onClose, values = NO_VA
           </div>
         )}
         {showValues && (
-          <div data-testid="query-values" role="list" style={{ display: "flex", flexDirection: "column", maxHeight: 160, overflow: "auto", border: "1px solid var(--b1)", borderRadius: "var(--r2)" }}>
+          <div data-testid="query-values" role="list" style={{ display: "flex", flexDirection: "column", maxHeight: 160, overflow: "auto", background: "var(--bg-3)", borderRadius: "var(--r2)" }}>
             {Object.keys(values).length === 0
               ? <span className="aug-fs-xs" style={{ padding: 6, color: "var(--t3)" }}>This dashboard holds no value yet: add one in Variables.</span>
               : Object.entries(values).map(([name, def]) => (
@@ -433,7 +433,7 @@ export function QuerySetup({ connectionId, card, onKept, onClose, values = NO_VA
         </>
       )}
       </>}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 14px 0", borderTop: "1px solid var(--b1)", marginTop: 6 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 14px 0", marginTop: 12 }}>
         <span className="aug-fs-xs" style={{ color: "var(--t3)", flex: 1 }}>
           {card ? "A change is kept as a new version of this card; History keeps the one before." : "Kept as a card of yours, in this section."}
         </span>

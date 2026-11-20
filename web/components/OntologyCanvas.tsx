@@ -438,8 +438,8 @@ function EntityNode({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-      {/* Header — avatar + name */}
-      <div className="px-3.5 pt-3.5 pb-3 border-b border-zinc-700/40">
+      {/* Header — avatar + name; no rule under it, spacing parts it from the states (2026-11-20, borders are the exception) */}
+      <div className="px-3.5 pt-3.5 pb-3">
         <div className="flex items-center gap-3">
           {/* Avatar */}
           <div className={cn("w-10 h-10 rounded-md flex items-center justify-center shrink-0 font-bold aug-fs-h2", typeTheme.ring)}>
@@ -474,7 +474,7 @@ function EntityNode({
 
       {/* Lifecycle states */}
       {entity.has_lifecycle && entity.lifecycle_states.length > 0 && (
-        <div className="px-3.5 py-2 border-b border-zinc-700/40">
+        <div className="px-3.5 py-2">
           <p className="aug-fs-xs text-zinc-500 uppercase tracking-widest mb-1.5 font-semibold">
             {entity.lifecycle_column ?? "status"}
           </p>
@@ -485,10 +485,10 @@ function EntityNode({
                 <span
                   key={s}
                   className={cn(
-                    "aug-fs-xs font-mono rounded-md px-1.5 py-0.5 border",
+                    "aug-fs-xs font-mono rounded-md px-1.5 py-0.5",
                     isTerminal
-                      ? "text-zinc-500 border-zinc-700/60 bg-zinc-800/40"
-                      : "text-sky-300 border-sky-500/20 bg-sky-500/8",
+                      ? "text-zinc-500 bg-[var(--gray-a3)]"
+                      : "text-sky-300 bg-sky-500/10",
                   )}
                 >
                   {s}

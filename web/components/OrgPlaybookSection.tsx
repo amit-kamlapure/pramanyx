@@ -79,7 +79,8 @@ export function OrgPlaybookSection() {
           {open ? "Hide the plays" : "Show the plays"} <Icon name={open ? "chevu" : "chevd"} size={12} />
         </Button>
         {open && (
-          <div style={{ marginTop: 8, height: 460, border: "1px solid var(--b1)",
+          // The plays are a fixed-height tool with its own ground: a quiet bound keeps where it ends (--divide, 2026-11-20).
+          <div style={{ marginTop: 8, height: 460, border: "1px solid var(--divide)",
                         borderRadius: "var(--r2)", overflow: "hidden" }}>
             <PlaybookPanel />
           </div>

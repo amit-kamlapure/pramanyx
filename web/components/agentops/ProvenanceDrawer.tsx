@@ -72,7 +72,7 @@ export function ProvenanceDrawer({ open, data, onClose }: {
         <>
           <div style={{
             display: "flex", justifyContent: "space-between", alignItems: "flex-start",
-            gap: 10, padding: "14px 16px 10px", borderBottom: "1px solid var(--b1)",
+            gap: 10, padding: "14px 16px 6px",
           }}>
             <div style={{ minWidth: 0 }}>
               <div className="aug-label" style={{ color: "var(--t2)", marginBottom: 3 }}>{data.eyebrow}</div>
@@ -104,7 +104,7 @@ export function ProvenanceDrawer({ open, data, onClose }: {
               <Button variant="plain" onClick={data.open.onOpen}
                 style={{
                   display: "block", width: "100%", height: "auto", textAlign: "left",
-                  background: "var(--blue1)", border: "1px solid var(--blue2)",
+                  background: "var(--blue1)",
                   borderRadius: "var(--r3)", padding: "9px 11px", color: "var(--blue5)",
                   whiteSpace: "normal",
                 }}>

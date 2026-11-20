@@ -83,7 +83,7 @@ function VerdictChip({ verdict }: { verdict: IntakeVerdict }) {
   const v = VERDICT_STYLE[verdict] ?? VERDICT_STYLE.new;
   return (
     <span className="aug-fs-xs" style={{
-      color: v.color, border: `1px solid color-mix(in srgb, ${v.color} 45%, transparent)`,
+      color: v.color, background: `color-mix(in srgb, ${v.color} 14%, transparent)`,
       borderRadius: "var(--r-chip)", padding: "1px 8px", whiteSpace: "nowrap",
     }}>{v.word}</span>
   );
@@ -105,7 +105,7 @@ function PayloadView({ payload }: { payload: Record<string, unknown> }) {
             <pre className="aug-fs-xs" style={{
               margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word",
               fontFamily: "var(--font-mono)", color: "var(--t2)",
-              background: "var(--bg-1)", border: "1px solid var(--b0)",
+              background: "var(--bg-1)",
               borderRadius: "var(--r2)", padding: "6px 8px", maxHeight: 180, overflow: "auto",
             }}>{v}</pre>
           ) : (
@@ -140,7 +140,7 @@ function CandidateRow({ cand, decision, onDecide, edit, onEdit, applyError }: {
   }
   return (
     <div data-testid={`intake-cand-${cand.id}`} style={{
-      border: "1px solid var(--b0)", borderRadius: "var(--r2)", padding: "8px 12px",
+      borderRadius: "var(--r2)", padding: "8px 12px",
       background: decision === "accept" ? "color-mix(in srgb, var(--grn4) 6%, transparent)"
         : decision === "dismiss" ? "color-mix(in srgb, var(--t4) 8%, transparent)" : "var(--bg-2)",
     }}>
@@ -346,7 +346,7 @@ function Doors({ connId, schema, onStaged, knowledgeConns }: {
   };
 
   return (
-    <div style={{ border: "1px solid var(--b0)", borderRadius: "var(--r3)",
+    <div style={{ borderRadius: "var(--r3)",
       background: "var(--bg-2)", padding: 12 }}>
       <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 10 }}>
         {DOORS.filter(d => d.id !== "wiki" || knowledgeConns.length > 0).map(d => (
@@ -594,7 +594,7 @@ export function IntakePanel({ connId, schema }: { connId: string; schema?: strin
       <Doors connId={connId} schema={schema} onStaged={onStaged} knowledgeConns={knowledgeConns} />
 
       {refused.length > 0 && (
-        <div className="aug-fs-xs" style={{ border: "1px solid color-mix(in srgb, var(--amb4) 40%, transparent)",
+        <div className="aug-fs-xs" style={{ background: "color-mix(in srgb, var(--amb4) 10%, transparent)",
           borderRadius: "var(--r2)", padding: "8px 12px", color: "var(--amb4)" }}>
           {refused.length} row{refused.length === 1 ? "" : "s"} could not be taken and {refused.length === 1 ? "was" : "were"} refused at the door:
           <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
@@ -608,7 +608,7 @@ export function IntakePanel({ connId, schema }: { connId: string; schema?: strin
           as the Definition of its word, quoting the formula — not refused, and not guessed into SQL. */}
       {notTranslated.length > 0 && (
         <div className="aug-fs-xs" data-testid="intake-not-translated"
-          style={{ border: "1px solid var(--b2)", borderRadius: "var(--r2)", padding: "8px 12px", color: "var(--t2)" }}>
+          style={{ background: "var(--gray-a3)", borderRadius: "var(--r2)", padding: "8px 12px", color: "var(--t2)" }}>
           {notTranslated.length === 1 ? "One formula was" : `${notTranslated.length} formulas were`} not turned into SQL,
           so {notTranslated.length === 1 ? "it comes" : "they come"} in as Definitions quoting the tool&rsquo;s own formula:
           <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
@@ -638,7 +638,6 @@ export function IntakePanel({ connId, schema }: { connId: string; schema?: strin
               data-testid={`intake-bundle-${b.id}`}
               className="h-auto w-full flex-col items-start gap-0.5 whitespace-normal p-2 text-left font-normal"
               style={{ background: selected === b.id ? "var(--bg-sel)" : "var(--bg-2)",
-                border: `1px solid ${selected === b.id ? "var(--b2)" : "var(--b0)"}`,
                 borderRadius: "var(--r2)" }}>
               <span className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: 500, maxWidth: "100%",
                 overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -745,7 +744,7 @@ export function IntakePanel({ connId, schema }: { connId: string; schema?: strin
               {(acceptIds.length > 0 || dismissIds.length > 0) && (
                 <div style={{ position: "sticky", bottom: 0, display: "flex", gap: 10,
                   alignItems: "center", padding: "10px 12px", background: "var(--bg-1)",
-                  border: "1px solid var(--b1)", borderRadius: "var(--r3)" }}>
+                  borderRadius: "var(--r3)" }}>
                   <span className="aug-fs-sm" style={{ color: "var(--t2)" }}>
                     {acceptIds.length} to accept · {dismissIds.length} to dismiss
                   </span>
@@ -772,7 +771,7 @@ export function IntakePanel({ connId, schema }: { connId: string; schema?: strin
           </div>
           <pre className="aug-fs-xs" style={{ margin: 0, maxHeight: 260, overflow: "auto",
             fontFamily: "var(--font-mono)", color: "var(--t2)", background: "var(--bg-1)",
-            border: "1px solid var(--b0)", borderRadius: "var(--r2)", padding: 10 }}>{exportText}</pre>
+            borderRadius: "var(--r2)", padding: 10 }}>{exportText}</pre>
           <p className="aug-fs-xs" style={{ color: "var(--t3)", margin: 0 }}>
             Import it on another deployment and an identical re-import plans zero changes.
           </p>

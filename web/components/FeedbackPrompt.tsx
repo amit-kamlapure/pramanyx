@@ -14,10 +14,10 @@ interface Props {
 }
 
 const VERDICT_COLOR: Record<string, string> = {
-  confirmed: "text-emerald-400 border-emerald-500/30 bg-emerald-500/10",
-  refuted: "text-red-400 border-red-500/30 bg-red-500/10",
-  inconclusive: "text-amber-400 border-amber-500/30 bg-amber-500/10",
-  untested: "text-zinc-500 border-zinc-600 bg-zinc-800/50",
+  confirmed: "text-emerald-400 bg-emerald-500/10",
+  refuted: "text-red-400 bg-red-500/10",
+  inconclusive: "text-amber-400 bg-amber-500/10",
+  untested: "text-zinc-500 bg-zinc-800/50",
 };
 
 export function FeedbackPrompt({ investigationId, hypotheses, onSubmit, postCompletion = false }: Props) {
@@ -35,7 +35,7 @@ export function FeedbackPrompt({ investigationId, hypotheses, onSubmit, postComp
   };
 
   return (
-    <div className="rounded-md border border-violet-500/30 bg-violet-500/5 p-5 space-y-4">
+    <div className="rounded-md bg-violet-500/[0.07] p-5 space-y-4">
       {/* Header */}
       <div className="flex items-start gap-3">
         <span className="text-violet-400 text-base mt-0.5">⏸</span>
@@ -56,7 +56,7 @@ export function FeedbackPrompt({ investigationId, hypotheses, onSubmit, postComp
         {hypotheses.map((h, i) => (
           <div
             key={h.id}
-            className={`rounded-[var(--r3)] border px-3 py-2 flex items-start gap-3 ${VERDICT_COLOR[h.verdict] ?? VERDICT_COLOR.untested}`}
+            className={`rounded-[var(--r3)] px-3 py-2 flex items-start gap-3 ${VERDICT_COLOR[h.verdict] ?? VERDICT_COLOR.untested}`}
           >
             <span className="text-xs font-mono shrink-0 mt-0.5">H{i + 1}</span>
             <div className="flex-1 min-w-0">

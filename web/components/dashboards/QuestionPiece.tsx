@@ -20,7 +20,8 @@ import { withUniqueKeys } from "@/lib/listKeys";
 import { requestTab } from "@/lib/navigate";
 
 const SERIF = "var(--font-serif)";
-const RULE = "1px solid var(--b1)";
+// the hairline between repeated rows of a list, the one rule this piece keeps (2026-11-20, borders are the exception)
+const RULE = "1px solid var(--b0)";
 /** How many earlier answers show before "Show all". */
 const SHOWN = 4;
 const RUNS_A_MONTH: Record<string, string> = {
@@ -85,7 +86,7 @@ function Answer({ a }: { a: QuestionAnswer }) {
       {a.figures.length > 0 && (
         <div data-testid="question-figures" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 10, marginBottom: 14 }}>
           {withUniqueKeys(a.figures, f => f.label).map(([k, f]) => (
-            <div key={k} style={{ border: RULE, borderRadius: "var(--r2)", padding: "8px 10px", minWidth: 0 }}>
+            <div key={k} style={{ borderRadius: "var(--r2)", padding: "8px 10px", minWidth: 0 }}>
               <div className="aug-fs-xs" style={MUTED}>{f.label}</div>
               <div className="aug-fs-h1" style={{ fontWeight: 600, margin: "2px 0", ...NUM }}>{f.value}</div>
               {f.note && <div className="aug-fs-xs" style={{ color: "var(--t2)" }}>{f.note}</div>}
@@ -113,7 +114,7 @@ function Earlier({ q }: { q: DashboardQuestion }) {
   if (!rows.length) return null;
   const shown = all ? rows : rows.slice(0, SHOWN);
   return (
-    <div data-testid="question-earlier" style={{ marginTop: 14, borderTop: RULE, paddingTop: 10 }}>
+    <div data-testid="question-earlier" style={{ marginTop: 14, paddingTop: 10 }}>
       <Label>Earlier answers</Label>
       {shown.map(a => (
         <div key={a.id} style={{ padding: "6px 0", borderTop: RULE }}>
@@ -186,7 +187,7 @@ export function QuestionPiece({ automation, first, connectionId = "" }: {
               </p>
             )}
             <Earlier q={q} />
-            <div style={{ ...ROW, marginTop: 14, paddingTop: 10, borderTop: RULE }}>
+            <div style={{ ...ROW, marginTop: 14, paddingTop: 10 }}>
               {q.latest && (
                 <Button size="xs" variant="secondary" onClick={() => requestTab("chat", { run: q.latest!.id })}>Open in Data Canvas</Button>
               )}

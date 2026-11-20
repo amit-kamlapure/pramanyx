@@ -111,7 +111,7 @@ export function SubscribeDashboard({ open, onClose, connectionId, dashboardId, t
         {problem && <span className="aug-fs-sm" role="alert" data-testid="dashboard-subscribe-problem" style={{ color: "var(--t1)" }}>{problem}</span>}
         <div><Button size="sm" data-testid="dashboard-subscribe-save" disabled={!ready || busy} onClick={() => void subscribe()}>Subscribe</Button></div>
         {held.length > 0 && (
-          <div data-testid="dashboard-subscriptions" style={{ display: "flex", flexDirection: "column", gap: 6, borderTop: "1px solid var(--b1)", paddingTop: 10 }}>
+          <div data-testid="dashboard-subscriptions" style={{ display: "flex", flexDirection: "column", gap: 6, paddingTop: 14 }}>
             {held.map(s => (
               <div key={s.id} data-testid="dashboard-subscription" className="aug-fs-sm" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 <span style={{ flex: 1, minWidth: 0, color: "var(--t1)" }}>{RHYTHM_WORDS[s.period]} · {destinationWords(s, bots, triggers)}</span>

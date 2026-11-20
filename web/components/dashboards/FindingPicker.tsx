@@ -65,7 +65,7 @@ export function FindingPicker({ connectionId, schema, placed, busy, onPlaced, on
   };
 
   return (
-    <div data-testid="dashboard-finding-picker" style={{ border: "1px solid var(--b1)", borderRadius: "var(--r3)", padding: 14, marginBottom: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+    <div data-testid="dashboard-finding-picker" style={{ background: "var(--bg-2)", borderRadius: "var(--r3)", padding: 14, marginBottom: 16, display: "flex", flexDirection: "column", gap: 10 }}>
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <span className="aug-label">From the findings ledger</span>
         <span className="aug-fs-sm" style={{ color: "var(--t3)" }}>
@@ -91,7 +91,7 @@ export function FindingPicker({ connectionId, schema, placed, busy, onPlaced, on
                   const measured = !!(f.sql || "").trim();
                   const on = placed.has(f.id);
                   return (
-                    <li key={f.id} data-testid="finding-row" data-finding={f.id} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "5px 0", borderTop: "1px solid var(--b1)" }}>
+                    <li key={f.id} data-testid="finding-row" data-finding={f.id} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "5px 0", borderTop: "1px solid var(--b0)" }}>
                       <span className="aug-fs-sm" style={{ flex: 1, minWidth: 0, color: measured ? "var(--t1)" : "var(--t3)" }}>
                         {f.finding}
                         {!measured && <span style={{ color: "var(--t3)" }}> · no query — nothing to measure</span>}

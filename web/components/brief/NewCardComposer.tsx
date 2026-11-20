@@ -190,7 +190,7 @@ export function NewCardComposer({ connectionId, schema, onCreated, keptFor, star
       <div style={{ marginBottom: 12 }}>
         <Button variant="plain" size="xs" onClick={() => setOpen(true)}
           title="Author a new dashboard card from a grounded metric"
-          style={{ fontSize: 11, color: "var(--vio4)", padding: "3px 8px", border: "1px dashed color-mix(in srgb, var(--vio4) 40%, var(--b1))", borderRadius: "var(--r2)" }}>
+          style={{ fontSize: 11, color: "var(--vio4)", padding: "3px 8px", background: "var(--gray-a3)", borderRadius: "var(--r2)" }}>
           ＋ New card
         </Button>
       </div>
@@ -204,18 +204,19 @@ export function NewCardComposer({ connectionId, schema, onCreated, keptFor, star
   return (
     <div style={{
       marginBottom: 14, padding: "12px 14px", borderRadius: "var(--r3)",
-      background: "var(--bg-2)", border: "1px solid var(--b1)",
+      background: "var(--bg-2)",
       display: "flex", flexDirection: "column", gap: 9,
     }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
         <div className="aug-label">New card</div>
-        {/* Door picker: curated metric vs free-form build. */}
-        <div style={{ display: "inline-flex", borderRadius: "var(--r2)", border: "1px solid var(--b1)", overflow: "hidden" }}>
+        {/* Door picker: curated metric vs free-form build — a soft track, the chosen door a stronger fill, no outline
+            (2026-11-20, borders are the exception). */}
+        <div style={{ display: "inline-flex", borderRadius: "var(--r2)", background: "var(--gray-a3)", overflow: "hidden" }}>
           {([["metric", "From metric"], ["build", "Build"]] as const).map(([m, label]) => (
             <Button key={m} variant="ghost" size="xs" onClick={() => setMode(m)} className="aug-fs-xs"
               style={{
                 padding: "4px 10px", height: "auto", borderRadius: 0,
-                background: mode === m ? "var(--bg-1)" : "transparent",
+                background: mode === m ? "var(--gray-a5)" : "transparent",
                 color: mode === m ? "var(--vio4)" : "var(--t3)",
               }}>{label}</Button>
           ))}
@@ -230,12 +231,12 @@ export function NewCardComposer({ connectionId, schema, onCreated, keptFor, star
             {metrics.map(m => <option key={m.name} value={m.name}>{m.name}</option>)}
           </SelectField>
           {metric && (
-            <div style={{ display: "inline-flex", borderRadius: "var(--r2)", border: "1px solid var(--b1)", overflow: "hidden" }}>
+            <div style={{ display: "inline-flex", borderRadius: "var(--r2)", background: "var(--gray-a3)", overflow: "hidden" }}>
               {([["value", "Value", !!metric.value_sql], ["trend", "Trend", !!metric.chart_sql]] as const).map(([s, label, avail]) => (
                 <Button key={s} variant="ghost" size="xs" disabled={!avail} onClick={() => setShape(s)} className="aug-fs-xs"
                   style={{
                     padding: "4px 9px", height: "auto", borderRadius: 0, cursor: avail ? "pointer" : "not-allowed",
-                    background: shape === s ? "var(--bg-1)" : "transparent",
+                    background: shape === s ? "var(--gray-a5)" : "transparent",
                     color: !avail ? "var(--t3)" : shape === s ? "var(--vio4)" : "var(--t3)",
                   }}>{label}</Button>
               ))}
@@ -282,7 +283,7 @@ export function NewCardComposer({ connectionId, schema, onCreated, keptFor, star
       {sql && (
         <div style={{
           padding: "9px 11px", borderRadius: "var(--r2)", background: "var(--bg-1)",
-          border: "1px solid var(--b1)", minHeight: 44, display: "flex", alignItems: "center", gap: 10,
+          minHeight: 44, display: "flex", alignItems: "center", gap: 10,
         }}>
           {previewing ? (
             <span style={{ fontSize: 11, color: "var(--t3)" }}>Running preview…</span>

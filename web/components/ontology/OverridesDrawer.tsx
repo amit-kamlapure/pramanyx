@@ -76,7 +76,7 @@ export function OverridesDrawer({ connId, schema, onClose, onChanged }: {
             const id = String(p.entity_id ?? p.target_id ?? "");
             const bindOk = (p as { bind?: { ok?: boolean } }).bind?.ok !== false;
             return (
-              <div key={i} className="border border-zinc-700/50 rounded-[var(--r2)] p-2 space-y-1">
+              <div key={i} className="bg-[var(--gray-a3)] rounded-[var(--r2)] p-2 space-y-1">
                 <div className="flex items-center gap-2">
                   <span className="aug-fs-sm text-zinc-200">{id}</span>
                   {!bindOk && (
@@ -109,7 +109,7 @@ export function OverridesDrawer({ connId, schema, onClose, onChanged }: {
           </EmptyState>
         )}
         {overrides.map((o, i) => (
-          <div key={i} className="border border-zinc-700/50 rounded-[var(--r2)] p-2">
+          <div key={i} className="bg-[var(--gray-a3)] rounded-[var(--r2)] p-2">
             <div className="flex items-center gap-2">
               <span className="aug-fs-xs text-zinc-500 uppercase">{o.target_kind}</span>
               <span className="aug-fs-sm text-zinc-200 truncate">{o.target_id}</span>
@@ -128,7 +128,7 @@ export function OverridesDrawer({ connId, schema, onClose, onChanged }: {
         ))}
       </div>
 
-      <div className="space-y-1 border-t border-zinc-800 pt-3">
+      <div className="space-y-1 pt-3">
         <p className="aug-fs-xs text-zinc-400 font-semibold">Version control</p>
         <p className="aug-fs-xs text-zinc-500">
           Export writes the live ontology as a readable YAML tree; edit it in your

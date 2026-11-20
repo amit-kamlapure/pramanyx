@@ -16,7 +16,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 
-import { Card, Chip, Empty, Figure, Figures, HBars, MUTED, NUM, NeedsRow, NeedsYou, ONE_LINE, Page, ROW, RULE } from "@/components/clarity/kit";
+import { Card, Chip, Empty, Figure, Figures, HBars, MUTED, NUM, NeedsRow, NeedsYou, ONE_LINE, Page, ROW } from "@/components/clarity/kit";
 import {
   BriefingsToggle, ConnectorActions, FilterBox, PAIR, PanelHead, SchemaDocs, ShareBars, StateChip, TablesList, ToolsMenu,
   hasConnectorActions, useFavorite, type ToolItem,
@@ -381,7 +381,7 @@ function TablesTab({ summary, schemas, onOpen, onOpenSchema }: {
             );
           })}
         {chosen && (
-          <div style={{ ...RULE, paddingTop: 8, marginTop: 6 }}>
+          <div style={{ paddingTop: 8, marginTop: 6 }}>
             <Button variant="secondary" size="xs" onClick={() => onOpenSchema(chosen)}>{`Open ${chosen.name}`}</Button>
           </div>
         )}

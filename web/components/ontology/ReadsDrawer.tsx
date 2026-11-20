@@ -17,7 +17,8 @@ import { SkeletonRows } from "@/components/ui/motion";
 import { countNoun, formatCount, utcDayWords } from "@/lib/format";
 import { getEntitiesByReads, type EntitiesByReads, type EntityReadsRow } from "@/lib/objectTypes";
 
-const RULE = "1px solid var(--b1)";
+/** The hairline between the rows of its list (--b0); the drawer's side is a pane rule (--divide), its header has none. */
+const RULE = "1px solid var(--b0)";
 
 function errorText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -52,9 +53,9 @@ export function ReadsDrawer({ connectionId, schema, onClose }: {
 
   return (
     <aside aria-label="Reads by entity" data-testid="ontology-reads-drawer"
-      style={{ width: 400, flexShrink: 0, borderLeft: RULE, display: "flex", flexDirection: "column", minHeight: 0,
+      style={{ width: 400, flexShrink: 0, borderLeft: "1px solid var(--divide)", display: "flex", flexDirection: "column", minHeight: 0,
                background: "var(--bg-0)" }}>
-      <header style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px", borderBottom: RULE }}>
+      <header style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px 6px" }}>
         <h3 className="aug-fs-xs"
           style={{ margin: 0, color: "var(--t2)", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em" }}>
           Reads · {state?.days ?? 30} days

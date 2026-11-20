@@ -133,8 +133,8 @@ export function DeparturesPanel({ onOpenAutomation, onOpenTrace }: Doors = {}) {
   return (
     <div style={{ flex: 1, background: "var(--bg-0)", display: "flex", flexDirection: "column", minHeight: 0 }}>
       <div style={{
-        display: "flex", alignItems: "center", gap: 14, padding: "10px 16px 8px",
-        borderBottom: "1px solid var(--b1)", flexWrap: "wrap",
+        display: "flex", alignItems: "center", gap: 14, padding: "10px 16px 12px",
+        flexWrap: "wrap",
       }}>
         <span className="aug-fs-ui" style={{ fontWeight: 600, color: "var(--t1)" }}>
           What left the platform, and what was held
@@ -410,8 +410,8 @@ function DepartureDetail({ departure: d, onChanged, doors }: {
         <section aria-label="The message">
           <div className="aug-label" style={{ marginBottom: 4 }}>The message</div>
           <div className="aug-fs-sm" style={{
-            color: "var(--t2)", whiteSpace: "pre-wrap", borderLeft: "2px solid var(--b2)",
-            paddingLeft: 10,
+            color: "var(--t2)", whiteSpace: "pre-wrap", background: "var(--bg-2)",
+            padding: "8px 10px", borderRadius: "var(--r2)",
           }}>{d.text_preview}</div>
         </section>
       )}

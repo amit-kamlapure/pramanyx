@@ -568,7 +568,7 @@ export function SourcePanel({
   return (
     <div className="flex flex-col h-full" style={{ background: "var(--bg-1)" }}>
       {/* ── Header ── */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-700/60 flex-shrink-0">
+      <div className="flex items-center justify-between px-3 pt-2 pb-2.5 flex-shrink-0">
         <div className="flex items-center gap-1.5 min-w-0">
           <span className="shrink-0 text-zinc-400">
             <Icon name="table" size={16} label="Table" />
@@ -643,8 +643,10 @@ export function SourcePanel({
       {/* SQL — bottom ~50% of the panel, always visible for easy reading, with a Query Builder
           hand-off. (Was a collapsed "Show code" strip; the SQL is the point, so it stays open.) */}
       {sql && (
-        <div className="flex-1 min-h-0 flex flex-col border-t border-zinc-700/60">
-          <div className="flex items-center justify-between gap-2 px-3 py-1.5 flex-shrink-0 border-b border-zinc-700/40">
+        // the table | SQL split is two panes worked one over the other: a rule in --divide; the SQL's own head
+        // needs none, its code sits on another ground (2026-11-20, borders are the exception)
+        <div className="flex-1 min-h-0 flex flex-col border-t border-[var(--divide)]">
+          <div className="flex items-center justify-between gap-2 px-3 pt-2 pb-2 flex-shrink-0">
             <span className="flex items-center gap-1.5 aug-fs-sm font-medium text-zinc-300">
               <Icon name="sql" size={16} label="SQL" /> SQL
             </span>
@@ -706,12 +708,12 @@ function DossierReportView({ dossier, onDeeper }: { dossier: FindingDossier; onD
       {dossier.sql && (
         <div>
           <div style={{ fontSize: 11, color: "var(--t3)", textTransform: "uppercase" as const, letterSpacing: ".06em", marginBottom: 6 }}>Source query</div>
-          <pre style={{ margin: 0, padding: "12px 14px", borderRadius: "var(--r2)", background: "var(--bg-2)", border: "1px solid var(--b1)", fontSize: 12, fontFamily: "var(--font-code)", color: "var(--t2)", whiteSpace: "pre-wrap" as const, wordBreak: "break-word" as const, lineHeight: 1.55 }}>{dossier.sql}</pre>
+          <pre style={{ margin: 0, padding: "12px 14px", borderRadius: "var(--r2)", background: "var(--bg-2)", fontSize: 12, fontFamily: "var(--font-code)", color: "var(--t2)", whiteSpace: "pre-wrap" as const, wordBreak: "break-word" as const, lineHeight: 1.55 }}>{dossier.sql}</pre>
         </div>
       )}
       {onDeeper && (
         <div style={{ display: "flex", alignItems: "center", gap: 10, paddingTop: 2 }}>
-          <Button variant="secondary" size="sm" onClick={onDeeper} className="aug-fs-sm border-[var(--b2)]">Investigate deeper →</Button>
+          <Button variant="secondary" size="sm" onClick={onDeeper} className="aug-fs-sm">Investigate deeper →</Button>
           <span style={{ fontSize: 11, color: "var(--t3)" }}>Runs a fresh analysis, seeded with this trace.</span>
         </div>
       )}
@@ -855,11 +857,11 @@ function PlaybookRefs({ refs }: { refs: PlaybookRef[] }) {
   };
 
   return (
-    <div className="mt-4 rounded-md border border-amber-700/30" style={{ background: "color-mix(in srgb, var(--amb3) 5%, var(--bg-0))" }}>
+    <div className="mt-4 rounded-md" style={{ background: "color-mix(in srgb, var(--amb3) 5%, var(--bg-0))" }}>
       <Button
         variant="plain"
         onClick={() => setOpen(v => !v)}
-        className="w-full h-auto justify-start gap-2 px-3 py-2 border-b border-amber-700/20 rounded-none text-left font-normal hover:bg-transparent dark:hover:bg-transparent"
+        className="w-full h-auto justify-start gap-2 px-3 pt-2.5 pb-1.5 rounded-none text-left font-normal hover:bg-transparent dark:hover:bg-transparent"
       >
         <span className="shrink-0 text-amber-400/90">
           <Icon name="warning" size={16} label="Playbook" />
@@ -885,9 +887,9 @@ function PlaybookRefs({ refs }: { refs: PlaybookRef[] }) {
                     />
                     <div className="flex gap-2">
                       <Button variant="ghost" size="xs" onClick={() => saveEdit(item.id)} disabled={busy === item.id}
-                        className="h-auto px-2 py-0.5 aug-fs-xs rounded bg-amber-600/20 border-amber-600/40 text-amber-300 hover:text-amber-300 hover:bg-amber-600/30 dark:hover:bg-amber-600/30">Save</Button>
+                        className="h-auto px-2 py-0.5 aug-fs-xs rounded bg-amber-600/20 text-amber-300 hover:text-amber-300 hover:bg-amber-600/30 dark:hover:bg-amber-600/30">Save</Button>
                       <Button variant="ghost" size="xs" onClick={() => setEditing(null)}
-                        className="h-auto px-2 py-0.5 aug-fs-xs rounded border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:bg-transparent dark:hover:bg-transparent">Cancel</Button>
+                        className="h-auto px-2 py-0.5 aug-fs-xs rounded text-zinc-400 hover:text-zinc-200 hover:bg-transparent dark:hover:bg-transparent">Cancel</Button>
                     </div>
                   </div>
                 ) : (
@@ -897,7 +899,7 @@ function PlaybookRefs({ refs }: { refs: PlaybookRef[] }) {
                       {item.trigger_condition && (
                         <span className="text-[11px] text-zinc-500">when {item.trigger_condition}</span>
                       )}
-                      <span className="aug-fs-xs px-1.5 py-px rounded-[var(--r-chip)] border border-zinc-700 text-zinc-500">
+                      <span className="aug-fs-xs px-1.5 py-px rounded-[var(--r-chip)] bg-[var(--gray-a3)] text-zinc-500">
                         {item.historical_success_rate > 0 ? `${Math.round(item.historical_success_rate * 100)}% success` : "no outcome data"}
                       </span>
                     </div>
@@ -1055,7 +1057,7 @@ function TurnActions({
           onClick={onOpenInEditor}
           data-testid="answer-open-in-editor"
           title="Open this answer's statement, as it ran, in a new SQL Editor tab — it is not run"
-          className="aug-pressable h-auto gap-1 px-2.5 py-[3px] aug-fs-sm font-normal text-zinc-400 hover:text-zinc-200 border-zinc-700/50 hover:border-zinc-600 rounded-[var(--r-chip)] hover:bg-transparent dark:hover:bg-transparent"
+          className="aug-pressable h-auto gap-1 px-2.5 py-[3px] aug-fs-sm font-normal text-zinc-400 hover:text-zinc-200 rounded-[var(--r-chip)] hover:bg-transparent dark:hover:bg-transparent"
         >
           <Icon name="sql" size={13} className="shrink-0 text-zinc-500" />
           Open in SQL Editor
@@ -1067,7 +1069,7 @@ function TurnActions({
           size="xs"
           onClick={onDrill}
           title="Re-run this question as a full deep analysis"
-          className="aug-pressable h-auto gap-1 px-2.5 py-[3px] aug-fs-sm font-normal text-zinc-400 hover:text-zinc-200 border-zinc-700/50 hover:border-zinc-600 rounded-[var(--r-chip)] hover:bg-transparent dark:hover:bg-transparent"
+          className="aug-pressable h-auto gap-1 px-2.5 py-[3px] aug-fs-sm font-normal text-zinc-400 hover:text-zinc-200 rounded-[var(--r-chip)] hover:bg-transparent dark:hover:bg-transparent"
         >
           {/* The same glyph the Deep analyses nav item wears, so the action and the
               destination read as the same thing. */}
@@ -1082,7 +1084,7 @@ function TurnActions({
           onClick={doPin}
           disabled={pin === "pinning"}
           title={pinMsg || "Pin this result to the dashboard (re-run through the guard battery first)"}
-          className="aug-pressable h-auto gap-1 px-2.5 py-[3px] aug-fs-sm font-normal text-zinc-400 hover:text-zinc-200 border-zinc-700/50 hover:border-zinc-600 rounded-[var(--r-chip)] hover:bg-transparent dark:hover:bg-transparent"
+          className="aug-pressable h-auto gap-1 px-2.5 py-[3px] aug-fs-sm font-normal text-zinc-400 hover:text-zinc-200 rounded-[var(--r-chip)] hover:bg-transparent dark:hover:bg-transparent"
         >
           <Icon name="pin" size={13} className="shrink-0 text-zinc-500" />
           {pin === "pinning" ? "Pinning…" : pin === "error" ? "Retry pin" : "Pin to dashboard"}
@@ -1104,10 +1106,11 @@ function TurnActions({
 type AnswerView = "results" | "explanation" | "sql" | "evidence";
 
 /** "Computed" or "Narrative" — what a part of an answer is (the study, §12.3: every number labelled Computed when it
- *  comes from the executed query, Narrative when the model wrote it). A word in a hairline, not a chip row. */
+ *  comes from the executed query, Narrative when the model wrote it). A word on a faint fill, not a chip row — no
+ *  hairline since 2026-11-20 (borders are the exception). */
 function AnswerLabel({ children }: { children: React.ReactNode }) {
   return (
-    <span style={{ border: "1px solid var(--b2)", borderRadius: "var(--r-chip)", padding: "0 6px", color: "var(--t2)", lineHeight: "16px" }}>
+    <span style={{ background: "var(--gray-a3)", borderRadius: "var(--r-chip)", padding: "0 6px", color: "var(--t2)", lineHeight: "16px" }}>
       {children}
     </span>
   );
@@ -1488,7 +1491,7 @@ function InsightActions({ turn, connectionId }: { turn: ChatTurn; connectionId?:
     <div className="flex flex-col gap-1.5 pt-1">
       <div className="flex items-center gap-2 aug-text-xs text-zinc-500">
         <Button variant="ghost" size="xs" onClick={runValidate} disabled={busy}
-          className="h-auto px-2 py-0.5 aug-text-xs font-normal border-zinc-700 rounded-md text-zinc-400 hover:text-zinc-200 hover:bg-transparent dark:hover:bg-transparent">
+          className="h-auto px-2 py-0.5 aug-text-xs font-normal rounded-md text-zinc-400 hover:text-zinc-200 hover:bg-transparent dark:hover:bg-transparent">
           {busy ? "Validating…" : "Validate"}
         </Button>
         <span className="text-zinc-700">·</span>
@@ -1506,7 +1509,7 @@ function InsightActions({ turn, connectionId }: { turn: ChatTurn; connectionId?:
       </div>
       {annotateOpen && (
         <div className="flex flex-col gap-1.5 rounded-[var(--r2)] p-2 my-1"
-             style={{ background: "var(--bg-2)", border: "1px solid var(--b1)" }}>
+             style={{ background: "var(--bg-2)" }}>
           <Textarea autoFocus rows={2} value={annotateText}
             onChange={(e) => setAnnotateText(e.target.value)}
             placeholder={`Note on ${annotateTarget} (e.g. 'March data is a partial load — totals run low')`}
@@ -1514,7 +1517,7 @@ function InsightActions({ turn, connectionId }: { turn: ChatTurn; connectionId?:
           <div className="flex items-center gap-2">
             <Button variant="plain" size="xs" disabled={annotateBusy || !annotateText.trim()}
               onClick={submitAnnotation}
-              className="h-auto px-2 py-0.5 aug-fs-xs border rounded-[var(--r1)] border-zinc-600 text-zinc-300 hover:bg-transparent dark:hover:bg-transparent">
+              className="h-auto px-2 py-0.5 aug-fs-xs rounded-[var(--r1)] bg-[var(--gray-a3)] text-zinc-300 hover:bg-[var(--gray-a4)] dark:hover:bg-[var(--gray-a4)]">
               {annotateBusy ? "Pinning…" : "Pin note"}
             </Button>
             <Button variant="ghost" size="xs" disabled={annotateBusy} onClick={() => setAnnotateOpen(false)}
@@ -2016,7 +2019,7 @@ export function ChatMessage({
       {!collapsed && isDone && deep && !turn.overviewReport && (
         <>
           {turn.fromCache && (
-            <div className="flex items-start gap-2 mb-4 px-3 py-2 rounded-[var(--r3)] bg-amber-950/30 border border-amber-800/40 aug-fs-xs text-amber-400 leading-snug">
+            <div className="flex items-start gap-2 mb-4 px-3 py-2 rounded-[var(--r3)] bg-amber-950/30 aug-fs-xs text-amber-400 leading-snug">
               <span className="shrink-0 mt-0.5 text-amber-500">
                 <Icon name="info" size={16} label="Info" />
               </span>
@@ -2050,7 +2053,7 @@ export function ChatMessage({
                   variant="plain"
                   size="xs"
                   onClick={() => onFollowUp?.(q)}
-                  className="h-auto gap-1 px-2.5 py-[3px] aug-fs-sm font-normal text-zinc-500 hover:text-zinc-200 border-zinc-700/50 hover:border-zinc-600 rounded-[var(--r-chip)] whitespace-normal text-left hover:bg-transparent dark:hover:bg-transparent"
+                  className="h-auto gap-1 px-2.5 py-[3px] aug-fs-sm font-normal text-zinc-500 hover:text-zinc-200 bg-[var(--gray-a3)] rounded-[var(--r-chip)] whitespace-normal text-left hover:bg-[var(--gray-a4)] dark:hover:bg-[var(--gray-a4)]"
                 >
                   <span className="text-zinc-500 shrink-0">
                     <Icon name="next" size={16} />
@@ -2133,7 +2136,7 @@ function SaveAsSkillButton({ invId, connectionId }: { invId: string; connectionI
       onClick={save}
       disabled={state === "saving"}
       title={msg || "Crystallize this deep analysis into a reusable, governed skill (Ontology ▸ Learned skills)"}
-      className="h-auto px-2.5 py-1 aug-fs-xs font-normal text-violet-400 hover:text-violet-300 border-violet-500/30 rounded hover:bg-transparent dark:hover:bg-transparent"
+      className="h-auto px-2.5 py-1 aug-fs-xs font-normal text-violet-400 hover:text-violet-300 rounded hover:bg-transparent dark:hover:bg-transparent"
     >
       {state === "saving" ? "Saving…" : state === "error" ? "Retry — not skill-worthy?" : "Save as skill"}
     </Button>

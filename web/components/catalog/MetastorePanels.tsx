@@ -70,9 +70,9 @@ export function VolumesPanel({ catalogId }: { catalogId: string }) {
 
   return (
     <div style={{ flex: 1, display: "flex", minHeight: 0, overflow: "hidden" }}>
-      {/* volume list */}
-      <div style={{ width: 220, borderRight: "0.5px solid var(--b1)", display: "flex", flexDirection: "column", minHeight: 0 }}>
-        <div style={{ padding: "10px 12px", borderBottom: "0.5px solid var(--b1)" }}>
+      {/* volume list — the one rule kept is between it and the objects, worked side by side (--divide, 2026-11-20) */}
+      <div style={{ width: 220, borderRight: "0.5px solid var(--divide)", display: "flex", flexDirection: "column", minHeight: 0 }}>
+        <div style={{ padding: "10px 12px 12px" }}>
           <div style={{ display: "flex", gap: 6 }}>
             <Input value={newName} onChange={e => setNewName(e.target.value)}
               onKeyDown={e => e.key === "Enter" && create()} placeholder="New volume…"
@@ -99,7 +99,7 @@ export function VolumesPanel({ catalogId }: { catalogId: string }) {
           <p style={{ padding: 20, fontSize: 12, color: "var(--t3)" }}>Select or create a volume to manage its objects.</p>
         ) : (
           <>
-            <div style={{ padding: "10px 16px", borderBottom: "0.5px solid var(--b1)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ padding: "10px 16px 12px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <span style={{ fontSize: 12, color: "var(--t2)" }}>{objects.length} object{objects.length !== 1 ? "s" : ""}</span>
               <label className="aug-btn aug-btn-sm aug-btn-primary" style={{ cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1 }}>
                 {busy ? "Uploading…" : "Upload object"}

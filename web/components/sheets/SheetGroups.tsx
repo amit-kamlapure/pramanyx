@@ -193,7 +193,7 @@ export function SheetGroups({ sheet, query, group, hidden, editable, tick, onEdi
         </div>
       </div>
       {work.menu}
-      <div className="aug-fs-xs" style={{ ...MUTED, ...NUM, padding: "4px 12px", borderTop: "1px solid var(--b0)",
+      <div className="aug-fs-xs" style={{ ...MUTED, ...NUM, padding: "4px 12px",
         background: "var(--bg-1)" }}>
         {rowsWord(page.total, sheet.name)} in {formatCount(page.groups_total)} group{page.groups_total === 1 ? "" : "s"} ·
         grouped by {gcol.name}{Object.values(page.groups[0]?.totals ?? {}).length ? " · a group's totals are over its own rows" : ""}

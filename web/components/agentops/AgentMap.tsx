@@ -195,7 +195,7 @@ export function AgentMap({
   }, [agent, bots, automations, alerts, connections, open]);
 
   return (
-    <div style={{ height: 460, border: "1px solid var(--b1)", borderRadius: 8,
+    <div style={{ height: 460, background: "var(--bg-1)", borderRadius: 8,
                   overflow: "hidden", position: "relative" }}>
       <ReactFlow
         nodes={flow.nodes}
@@ -213,7 +213,7 @@ export function AgentMap({
       </ReactFlow>
       {unread.length > 0 && (
         <div className="aug-fs-xs" style={{ position: "absolute", left: 8, bottom: 8,
-          color: "var(--amb5)", background: "var(--amb1)", border: "1px solid var(--amb2)",
+          color: "var(--amb5)", background: "var(--amb1)",
           borderRadius: "var(--r-chip)", padding: "3px 10px" }}>
           could not read {unread.join(", ")} — this map is missing what they hold
         </div>

@@ -260,12 +260,13 @@ const TableNode = memo(function TableNode({ data }: { data: TableNodeData }) {
       </span>
 
       <div className="rounded-[var(--r3)] border border-zinc-600 overflow-hidden">
-        {/* Header */}
+        {/* Header — its surface parts it from the rows, no rule (2026-11-20, borders are the exception); the node's
+            outline and the rows' lines stay, they are the diagram */}
         <div
-          className="flex items-center gap-2.5 px-3 bg-zinc-900 border-b border-zinc-700/80"
+          className="flex items-center gap-2.5 px-3 bg-zinc-900"
           style={{ height: HEADER_H }}
         >
-          <div className="w-7 h-7 rounded bg-indigo-950/80 border border-indigo-800/50 flex items-center justify-center text-indigo-300 shrink-0">
+          <div className="w-7 h-7 rounded bg-indigo-950/80 flex items-center justify-center text-indigo-300 shrink-0">
             <Icon name="table" size={16} label="Table" />
           </div>
           <div className="min-w-0 flex-1">
@@ -318,11 +319,11 @@ const TableNode = memo(function TableNode({ data }: { data: TableNodeData }) {
                 />
                 <div className="w-7 flex items-center justify-center shrink-0">
                   {isPk ? (
-                    <span className="aug-fs-xs font-bold text-amber-400 border border-amber-400/50 rounded px-[3px] py-px leading-tight">
+                    <span className="aug-fs-xs font-bold text-amber-400 bg-amber-400/15 rounded px-[3px] py-px leading-tight">
                       PK
                     </span>
                   ) : col.is_fk ? (
-                    <span className="aug-fs-xs font-bold text-violet-400 border border-violet-400/50 rounded px-[3px] py-px leading-tight">
+                    <span className="aug-fs-xs font-bold text-violet-400 bg-violet-400/15 rounded px-[3px] py-px leading-tight">
                       FK
                     </span>
                   ) : null}
@@ -345,7 +346,7 @@ const TableNode = memo(function TableNode({ data }: { data: TableNodeData }) {
         {(hiddenCount > 0 || expanded) && (
           <button
             onClick={() => onExpand(table.name)}
-            className="w-full bg-zinc-800 aug-fs-xs text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700/50 transition-colors border-t border-zinc-700/50 text-center"
+            className="w-full bg-zinc-900 aug-fs-xs text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700/50 transition-colors text-center"
             style={{ height: FOOTER_H, lineHeight: `${FOOTER_H}px` }}
           >
             {expanded

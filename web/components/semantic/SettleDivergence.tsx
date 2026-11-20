@@ -113,7 +113,7 @@ export function SettleDivergence({ connId, questionKey, onClose, onSettled }: {
           const r = results?.get(v.key);
           return (
             <div key={v.key} data-testid="settle-variant"
-              style={{ border: "1px solid var(--b1)", borderRadius: "var(--r2)", padding: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+              style={{ background: "var(--bg-3)", borderRadius: "var(--r2)", padding: 10, display: "flex", flexDirection: "column", gap: 6 }}>
               <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                 <Chip tone={i === 0 ? "accent" : "plain"}>{v.run_count === 1 ? "used once" : `used ${v.run_count} times`}</Chip>
                 <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>

@@ -94,7 +94,7 @@ function SemanticStepPanel({
     : false
   ));
   return (
-    <div className="rounded border border-violet-500/25 bg-violet-500/[0.04]">
+    <div className="rounded bg-violet-500/[0.06]">
       <Button variant="plain" onClick={() => setOpen(!open)}
         className={`w-full h-auto justify-start font-normal gap-1.5 px-2.5 py-1.5 aug-fs-xs text-violet-300 hover:text-violet-200 hover:bg-transparent dark:hover:bg-transparent transition ${SVG_SIZE_AUTO}`}>
         <Icon name="spark" size={11} />
@@ -157,13 +157,13 @@ function SemanticStepPanel({
 
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="xs" onClick={onApply} disabled={!canApply || applying}
-              className="h-auto font-normal aug-fs-xs px-3 py-1 rounded border-violet-500/40 bg-violet-500/15 text-violet-200 hover:text-violet-200 hover:bg-violet-500/25 dark:hover:bg-violet-500/25 transition disabled:opacity-40 gap-1.5">
+              className="h-auto font-normal aug-fs-xs px-3 py-1 rounded bg-violet-500/15 text-violet-200 hover:text-violet-200 hover:bg-violet-500/25 dark:hover:bg-violet-500/25 transition disabled:opacity-40 gap-1.5">
               {applying && <Pending />}
               {applying ? "Applying…" : "Apply"}
             </Button>
             {result && (
               <Button variant="ghost" size="xs" onClick={onRevert}
-                className="h-auto font-normal aug-fs-xs px-2 py-1 rounded border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:bg-transparent dark:hover:bg-transparent transition">Revert</Button>
+                className="h-auto font-normal aug-fs-xs px-2 py-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-transparent dark:hover:bg-transparent transition">Revert</Button>
             )}
             {result && !result.error && (
               <span className="aug-fs-xs text-zinc-400">{result.input_rows} → {result.output_rows} rows · {result.llm_calls} call{result.llm_calls === 1 ? "" : "s"}</span>
@@ -187,16 +187,16 @@ function SemanticStepPanel({
 // `hover:*` duplicates pin each chip's resting palette under the cursor — the ghost
 // <Button> variant would otherwise repaint a selected chip with hover:bg-muted/text-foreground.
 const AGG_OPTIONS = [
-  { fn: "SUM",            label: "SUM",    hint: "Sum of values",            cls: "text-emerald-400 border-emerald-500/30 bg-emerald-500/10 hover:text-emerald-400 hover:bg-emerald-500/10 dark:hover:bg-emerald-500/10" },
-  { fn: "AVG",            label: "AVG",    hint: "Average value",            cls: "text-blue-400 border-blue-500/30 bg-blue-500/10 hover:text-blue-400 hover:bg-blue-500/10 dark:hover:bg-blue-500/10" },
-  { fn: "COUNT",          label: "COUNT",  hint: "Row count",                cls: "text-violet-400 border-violet-500/30 bg-violet-500/10 hover:text-violet-400 hover:bg-violet-500/10 dark:hover:bg-violet-500/10" },
-  { fn: "COUNT DISTINCT", label: "C.DIST", hint: "Count unique values",      cls: "text-purple-400 border-purple-500/30 bg-purple-500/10 hover:text-purple-400 hover:bg-purple-500/10 dark:hover:bg-purple-500/10" },
-  { fn: "MIN",            label: "MIN",    hint: "Minimum value",            cls: "text-amber-400 border-amber-500/30 bg-amber-500/10 hover:text-amber-400 hover:bg-amber-500/10 dark:hover:bg-amber-500/10" },
-  { fn: "MAX",            label: "MAX",    hint: "Maximum value",            cls: "text-orange-400 border-orange-500/30 bg-orange-500/10 hover:text-orange-400 hover:bg-orange-500/10 dark:hover:bg-orange-500/10" },
-  { fn: "MEDIAN",         label: "MEDIAN", hint: "50th percentile",          cls: "text-cyan-400 border-cyan-500/30 bg-cyan-500/10 hover:text-cyan-400 hover:bg-cyan-500/10 dark:hover:bg-cyan-500/10" },
-  { fn: "STDDEV",         label: "STDDEV", hint: "Standard deviation",       cls: "text-rose-400 border-rose-500/30 bg-rose-500/10 hover:text-rose-400 hover:bg-rose-500/10 dark:hover:bg-rose-500/10" },
-  { fn: "VARIANCE",       label: "VAR",    hint: "Statistical variance",     cls: "text-pink-400 border-pink-500/30 bg-pink-500/10 hover:text-pink-400 hover:bg-pink-500/10 dark:hover:bg-pink-500/10" },
-  { fn: "CUSTOM",         label: "Custom", hint: "Write your own expression",cls: "text-zinc-400 border-zinc-600 bg-zinc-700/30 hover:text-zinc-400 hover:bg-zinc-700/30 dark:hover:bg-zinc-700/30" },
+  { fn: "SUM",            label: "SUM",    hint: "Sum of values",            cls: "text-emerald-400 bg-emerald-500/10 hover:text-emerald-400 hover:bg-emerald-500/10 dark:hover:bg-emerald-500/10" },
+  { fn: "AVG",            label: "AVG",    hint: "Average value",            cls: "text-blue-400 bg-blue-500/10 hover:text-blue-400 hover:bg-blue-500/10 dark:hover:bg-blue-500/10" },
+  { fn: "COUNT",          label: "COUNT",  hint: "Row count",                cls: "text-violet-400 bg-violet-500/10 hover:text-violet-400 hover:bg-violet-500/10 dark:hover:bg-violet-500/10" },
+  { fn: "COUNT DISTINCT", label: "C.DIST", hint: "Count unique values",      cls: "text-purple-400 bg-purple-500/10 hover:text-purple-400 hover:bg-purple-500/10 dark:hover:bg-purple-500/10" },
+  { fn: "MIN",            label: "MIN",    hint: "Minimum value",            cls: "text-amber-400 bg-amber-500/10 hover:text-amber-400 hover:bg-amber-500/10 dark:hover:bg-amber-500/10" },
+  { fn: "MAX",            label: "MAX",    hint: "Maximum value",            cls: "text-orange-400 bg-orange-500/10 hover:text-orange-400 hover:bg-orange-500/10 dark:hover:bg-orange-500/10" },
+  { fn: "MEDIAN",         label: "MEDIAN", hint: "50th percentile",          cls: "text-cyan-400 bg-cyan-500/10 hover:text-cyan-400 hover:bg-cyan-500/10 dark:hover:bg-cyan-500/10" },
+  { fn: "STDDEV",         label: "STDDEV", hint: "Standard deviation",       cls: "text-rose-400 bg-rose-500/10 hover:text-rose-400 hover:bg-rose-500/10 dark:hover:bg-rose-500/10" },
+  { fn: "VARIANCE",       label: "VAR",    hint: "Statistical variance",     cls: "text-pink-400 bg-pink-500/10 hover:text-pink-400 hover:bg-pink-500/10 dark:hover:bg-pink-500/10" },
+  { fn: "CUSTOM",         label: "Custom", hint: "Write your own expression",cls: "text-zinc-400 bg-zinc-700/30 hover:text-zinc-400 hover:bg-zinc-700/30 dark:hover:bg-zinc-700/30" },
 ] as const;
 type AggFn = typeof AGG_OPTIONS[number]["fn"];
 
@@ -660,7 +660,7 @@ function AggPicker({ col, table, onAdd, onCancel }: {
           {AGG_OPTIONS.map(o => (
             <Button variant="plain" size="xs" key={o.fn} onClick={() => changeAgg(o.fn as AggFn)} title={o.hint}
               className={`h-auto px-0 py-2 aug-fs-xs font-medium rounded-[var(--r3)] transition ${
-                agg === o.fn ? `${o.cls} ring-2 ring-current/40` : "text-zinc-500 border-zinc-700 bg-zinc-800/50 hover:border-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50 dark:hover:bg-zinc-800/50"
+                agg === o.fn ? `${o.cls} ring-2 ring-current/40` : "text-zinc-500 bg-zinc-800/50 hover:text-zinc-300 hover:bg-zinc-800/50 dark:hover:bg-zinc-800/50"
               }`}>
               {o.label}
             </Button>
@@ -683,7 +683,7 @@ function AggPicker({ col, table, onAdd, onCancel }: {
             className="w-full" />
         </div>
 
-        <div className="mb-6 px-4 py-3 rounded-md bg-zinc-800/70 border border-zinc-700/60">
+        <div className="mb-6 px-4 py-3 rounded-md bg-zinc-800/70">
           <p className="aug-fs-xs text-zinc-500 uppercase tracking-wider mb-1.5">SQL preview</p>
           <p className="aug-fs-ui font-mono text-emerald-400 break-all">
             {preview} <span className="text-zinc-500">AS</span> {alias || "alias"}
@@ -692,7 +692,7 @@ function AggPicker({ col, table, onAdd, onCancel }: {
 
         <div className="flex gap-3 justify-end">
           <Button variant="ghost" onClick={onCancel}
-            className="h-auto px-4 py-2 font-normal aug-fs-ui text-zinc-400 hover:text-zinc-200 border-zinc-700 rounded-md hover:bg-transparent dark:hover:bg-transparent transition">
+            className="h-auto px-4 py-2 font-normal aug-fs-ui text-zinc-400 hover:text-zinc-200 rounded-md hover:bg-transparent dark:hover:bg-transparent transition">
             Cancel
           </Button>
           <Button
@@ -719,7 +719,7 @@ function AcDropdown({ items, active, setActive, onSelect, onClose, pos }: {
       <div className="fixed inset-0 z-30" onMouseDown={onClose} />
       <div className="fixed z-50 min-w-[220px] max-w-[320px] rounded-md border border-zinc-600/90 bg-zinc-900 shadow-[var(--shadow-sm)] overflow-hidden"
         style={{ top: flipUp ? pos.top - items.length * 28 - 40 : pos.top, left: pos.left }}>
-        <div className="px-3 py-1.5 border-b border-zinc-700/50 flex items-center justify-between">
+        <div className="px-3 pt-2 pb-1 flex items-center justify-between">
           <span className="aug-fs-xs text-zinc-500 font-medium">Suggestions</span>
           <span className="aug-fs-xs text-zinc-500">↑↓  ↵ insert  Esc</span>
         </div>
@@ -886,7 +886,7 @@ function ResultsPane({
           {/* WP-10 — "Why this number": the signed receipt for exactly this query run. */}
           {!semResult && result.receipt_id && <WhyThisNumber receiptId={result.receipt_id} />}
           <Button variant="ghost" size="xs" onClick={exportCsv} title="Download results as CSV"
-            className={`h-auto font-normal aug-fs-xs px-2 py-0.5 rounded border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 hover:bg-transparent dark:hover:bg-transparent transition gap-1 ${SVG_SIZE_AUTO}`}>
+            className={`h-auto font-normal aug-fs-xs px-2 py-0.5 rounded text-zinc-400 hover:text-zinc-200 hover:bg-transparent dark:hover:bg-transparent transition gap-1 ${SVG_SIZE_AUTO}`}>
             <Icon name="download" size={10} />
             CSV
           </Button>
@@ -934,7 +934,7 @@ function ResultsPane({
             size="xs"
             onClick={handleCreateCanvas}
             disabled={creatingCanvas}
-            className={`h-auto font-normal aug-fs-xs px-3 py-1.5 rounded border-violet-500/40 bg-violet-500/10 text-violet-300 hover:text-violet-300 hover:bg-violet-500/20 dark:hover:bg-violet-500/20 transition gap-1.5 ${SVG_SIZE_AUTO}`}
+            className={`h-auto font-normal aug-fs-xs px-3 py-1.5 rounded bg-violet-500/10 text-violet-300 hover:text-violet-300 hover:bg-violet-500/20 dark:hover:bg-violet-500/20 transition gap-1.5 ${SVG_SIZE_AUTO}`}
           >
             {creatingCanvas ? (
               <>
@@ -1667,7 +1667,7 @@ export function QueryBuilder({
     <div className="flex flex-col h-full overflow-hidden" style={{ background: "var(--bg-0)" }}>
 
       {/* ══ HEADER ═══════════════════════════════════════════════════════════ */}
-      <div className="flex items-center gap-3 px-5 h-14 border-b border-zinc-700/50 shrink-0 bg-zinc-900/50">
+      <div className="flex items-center gap-3 px-5 h-14 shrink-0 bg-zinc-900/50">
         <span style={{ color: "var(--t3)", display: "inline-flex" }} className="shrink-0"><Icon name="builder" size={16} /></span>
         {/* No mode label here: the workbench's toggle says "Visual" 40px above this row,
             and the same word twice is furniture, not information. */}
@@ -1685,10 +1685,10 @@ export function QueryBuilder({
               const found = isPrimary || !!js?.join;
               return (
                 <span key={t} title={js?.join ? `${js.join.t1}.${js.join.c1} = ${js.join.t2}.${js.join.c2}` : undefined}
-                  className={`flex items-center gap-1.5 aug-fs-xs font-mono px-2.5 py-0.5 rounded-[var(--r-chip)] border shrink-0 ${
-                    isPrimary ? "bg-blue-500/10 border-blue-500/30 text-blue-300"
-                    : found ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
-                            : "bg-amber-500/10  border-amber-500/30  text-amber-300"
+                  className={`flex items-center gap-1.5 aug-fs-xs font-mono px-2.5 py-0.5 rounded-[var(--r-chip)] shrink-0 ${
+                    isPrimary ? "bg-blue-500/10 text-blue-300"
+                    : found ? "bg-emerald-500/10 text-emerald-300"
+                            : "bg-amber-500/10 text-amber-300"
                 }`}>
                   <span className={`w-1.5 h-1.5 rounded-[var(--r-pill)] ${isPrimary ? "bg-blue-400" : found ? "bg-emerald-400" : "bg-amber-400"}`} />
                   {t}
@@ -1698,7 +1698,7 @@ export function QueryBuilder({
             })}
           </div>
         ) : result ? (
-          <span className="flex items-center gap-1.5 aug-fs-xs font-mono px-2.5 py-0.5 rounded-[var(--r-chip)] border shrink-0 bg-violet-500/10 border-violet-500/30 text-violet-300 ml-1">
+          <span className="flex items-center gap-1.5 aug-fs-xs font-mono px-2.5 py-0.5 rounded-[var(--r-chip)] shrink-0 bg-violet-500/10 text-violet-300 ml-1">
             <span className="w-1.5 h-1.5 rounded-[var(--r-pill)] bg-violet-400" />
             imported query · edit SQL below
           </span>
@@ -1717,8 +1717,8 @@ export function QueryBuilder({
             <Button variant="ghost" size="xs" onClick={onPinClick} disabled={!sql.trim() || pinState === "pinning"}
               title="Pin this query to the briefing dashboard — re-guarded on save"
               className={`h-auto font-normal aug-fs-xs rounded-[var(--r3)] px-2.5 py-1 transition disabled:opacity-40 gap-1 ${SVG_SIZE_AUTO} ${
-                pinState === "pinned" ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:text-emerald-300 hover:bg-emerald-500/10 dark:hover:bg-emerald-500/10"
-                  : "border-violet-500/40 bg-violet-500/10 text-violet-300 hover:text-violet-300 hover:bg-violet-500/20 dark:hover:bg-violet-500/20"
+                pinState === "pinned" ? "bg-emerald-500/10 text-emerald-300 hover:text-emerald-300 hover:bg-emerald-500/10 dark:hover:bg-emerald-500/10"
+                  : "bg-violet-500/10 text-violet-300 hover:text-violet-300 hover:bg-violet-500/20 dark:hover:bg-violet-500/20"
               }`}>
               <Icon name="pin" size={11} className="shrink-0" />
               {pinState === "pinning" ? "Pinning…" : pinState === "pinned" ? "Pinned ✓" : "Pin"}
@@ -1752,7 +1752,7 @@ export function QueryBuilder({
               variant="ghost"
               size="xs"
               onClick={() => { setAutoSql(true); if (primaryTable) setSql(buildSql(primaryTable,joinedTables,schemaJoins,dims,measures,filters,orderBy,limit,tableSchemas,timeSpec,having)); }}
-              className="h-auto font-normal aug-fs-xs text-zinc-500 hover:text-zinc-300 hover:bg-transparent dark:hover:bg-transparent border-zinc-700 rounded-[var(--r3)] px-2.5 py-1 transition">
+              className="h-auto font-normal aug-fs-xs text-zinc-500 hover:text-zinc-300 hover:bg-transparent dark:hover:bg-transparent rounded-[var(--r3)] px-2.5 py-1 transition">
               ↺ Regenerate SQL
             </Button>
           )}
@@ -1763,7 +1763,6 @@ export function QueryBuilder({
                 display: "inline-flex", alignItems: "center", gap: 5,
                 fontSize: 11, fontWeight: 600, padding: "2px 9px", borderRadius: "var(--r-chip)",
                 background: ok ? "var(--grn1)" : "var(--red1)",
-                border: `1px solid ${ok ? "var(--grn2)" : "var(--red2)"}`,
                 color: ok ? "var(--grn4)" : "var(--red4)",
               }}>
                 <span style={{ width: 6, height: 6, borderRadius: "50%", background: ok ? "var(--grn4)" : "var(--red4)" }} />
@@ -1794,12 +1793,13 @@ export function QueryBuilder({
         <div className="flex-1 flex flex-col overflow-hidden h-full">
 
           {/* ── CONTROL PANEL (bottom): DATA / CUSTOMIZE — resizable + collapsible ── */}
-          <div className="order-3 shrink-0 flex flex-col border-t border-zinc-700/40 bg-zinc-900/20 overflow-hidden"
+          {/* A rule between the results and the controls worked beside them, in --divide (2026-11-20, borders are the exception) */}
+          <div className="order-3 shrink-0 flex flex-col border-t border-[var(--divide)] bg-zinc-900/20 overflow-hidden"
             style={controlsCollapsed ? undefined : { height: controlsH }}>
-            <div className="flex items-center gap-1 px-4 pt-2 border-b border-zinc-700/40 shrink-0">
+            <div className="flex items-center gap-1 px-4 py-1.5 shrink-0">
               {(["data","customize"] as const).map(tab => (
                 <Button variant="plain" key={tab} onClick={()=>{ setRailTab(tab); if (controlsCollapsed) setControlsCollapsed(false); }}
-                  className={`h-auto aug-fs-sm font-semibold uppercase tracking-wide px-3 py-2 -mb-px rounded-none border-0 border-b-2 hover:bg-transparent dark:hover:bg-transparent transition ${railTab===tab ? "border-blue-500 text-zinc-100 hover:text-zinc-100" : "border-transparent text-zinc-500 hover:text-zinc-300"}`}>
+                  className={`h-auto aug-fs-sm font-semibold uppercase tracking-wide px-3 py-1.5 rounded-[var(--r3)] transition ${railTab===tab ? "bg-[var(--gray-a5)] hover:bg-[var(--gray-a5)] dark:hover:bg-[var(--gray-a5)] text-zinc-100 hover:text-zinc-100" : "text-zinc-500 hover:text-zinc-300 hover:bg-[var(--gray-a3)] dark:hover:bg-[var(--gray-a3)]"}`}>
                   {tab}
                 </Button>
               ))}
@@ -1836,7 +1836,7 @@ export function QueryBuilder({
               {/* Onboarding prompt — until the first field is dropped (hidden once a query has run,
                   e.g. an imported query from Insights / Deep Analysis) */}
               {!primaryTable && !result && (
-                <div className="flex items-center gap-3 rounded-md border border-zinc-700/50 bg-zinc-800/30 px-4 py-3">
+                <div className="flex items-center gap-3 rounded-md bg-[var(--gray-a3)] px-4 py-3">
                   <span style={{ color: "var(--t3)", display: "inline-flex" }} className="shrink-0"><Icon name="builder" size={18} /></span>
                   <div className="min-w-0">
                     <p className="aug-fs-ui font-medium text-zinc-300">Drag a field from the catalog to begin</p>
@@ -1847,7 +1847,7 @@ export function QueryBuilder({
 
               {/* Auto-join hint */}
               {joinHint && (
-                <div className="flex items-center gap-2 rounded-md border border-blue-500/30 bg-blue-500/10 px-3 py-2 aug-fs-sm text-blue-200">
+                <div className="flex items-center gap-2 rounded-md bg-blue-500/10 px-3 py-2 aug-fs-sm text-blue-200">
                   <Icon name="link" size={13} className="shrink-0" />
                   <span className="font-mono">{joinHint}</span>
                   <Button variant="plain" size="xs" onClick={()=>setJoinHint(null)} className="h-auto p-0 font-normal ml-auto opacity-60 hover:opacity-100 leading-none hover:text-current hover:bg-transparent dark:hover:bg-transparent">×</Button>
@@ -1875,7 +1875,7 @@ export function QueryBuilder({
                       <p className={`w-full px-1 aug-fs-xs italic ${overDims?"text-blue-400":"text-zinc-500"}`}>{overDims ? "Release to add dimension" : "Drop a column or click D"}</p>
                     )}
                     {dims.map(d => (
-                      <span key={d.id} className="inline-flex flex-wrap items-center gap-1 max-w-full aug-fs-sm font-mono px-2 py-1 rounded-[var(--r3)] border bg-blue-500/10 border-blue-500/30 text-blue-300">
+                      <span key={d.id} className="inline-flex flex-wrap items-center gap-1 max-w-full aug-fs-sm font-mono px-2 py-1 rounded-[var(--r3)] bg-blue-500/10 text-blue-300">
                         <span className="truncate max-w-[150px]" title={isMulti ? `${d.table}.${d.col}` : d.col}>{isMulti ? `${d.table}.${d.col}` : d.col}</span>
                         {/* Date dims: grain (DATE_TRUNC) + relative range (WHERE) inline on the chip */}
                         {(tableCols[d.table]?.find(c=>c.name===d.col)?.type?.toLowerCase().includes("date") ||
@@ -1900,7 +1900,7 @@ export function QueryBuilder({
                           <SelectField
                             value={d.range || "all"}
                             onChange={e=> { const r=e.target.value; setDims(p => p.map(x => x.id === d.id ? { ...x, range: r==="all"?undefined:r } : x)); }}
-                            className={`aug-fs-xs bg-zinc-800 border rounded px-1 py-0.5 outline-none ${d.range ? "border-blue-500/50 text-blue-300" : "border-zinc-700 text-zinc-300"}`}
+                            className={`aug-fs-xs bg-zinc-800 rounded px-1 py-0.5 outline-none ${d.range ? "text-blue-300" : "text-zinc-300"}`}
                             onClick={e=> e.stopPropagation()}
                             title="Relative time range (WHERE)"
                           >
@@ -1922,20 +1922,20 @@ export function QueryBuilder({
                     {metrics.length > 0 && (
                       <div className="relative">
                         <Button variant="ghost" size="xs" onClick={()=>setShowMetricsCatalog(v=>!v)}
-                          className="h-auto font-normal aug-fs-xs px-2.5 py-1 rounded-[var(--r3)] border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-300 hover:bg-transparent dark:hover:bg-transparent transition whitespace-nowrap">
+                          className="h-auto font-normal aug-fs-xs px-2.5 py-1 rounded-[var(--r3)] text-zinc-400 hover:text-zinc-300 hover:bg-transparent dark:hover:bg-transparent transition whitespace-nowrap">
                           <Icon name="metric" size={11} /> Catalog
                         </Button>
                         {showMetricsCatalog && (
                           <>
                             <div className="fixed inset-0 z-30" onClick={()=>setShowMetricsCatalog(false)}/>
                             <div className="absolute right-0 top-full mt-2 z-40 w-68 rounded-md border border-zinc-700 bg-zinc-900 shadow-[var(--shadow-sm)] overflow-hidden min-w-[260px]">
-                              <div className="px-4 py-2.5 border-b border-zinc-700/50">
+                              <div className="px-4 pt-3 pb-1.5">
                                 <p className="aug-fs-xs font-semibold text-zinc-400">Metrics Catalog</p>
                               </div>
                               {metrics.map(m => (
                                 <Button variant="plain" key={m.name}
                                   onClick={()=>{setMeasures(p=>[...p,{id:uid(),col:"",table:primaryTable??"",agg:"CUSTOM",customExpr:m.sql,alias:m.name,fromMetric:m.name}]);setShowMetricsCatalog(false);}}
-                                  className="w-full h-auto flex-col items-start justify-start rounded-none font-normal whitespace-normal text-left px-4 py-3 hover:bg-zinc-800/70 dark:hover:bg-zinc-800/70 transition border-0 border-b border-zinc-700/30 last:border-0">
+                                  className="w-full h-auto flex-col items-start justify-start rounded-none font-normal whitespace-normal text-left px-4 py-3 hover:bg-zinc-800/70 dark:hover:bg-zinc-800/70 transition">
                                   <p className="aug-fs-sm font-semibold text-zinc-200">{m.label}</p>
                                   <p className="aug-fs-xs font-mono text-zinc-500 truncate mt-0.5 max-w-full">{m.sql}</p>
                                 </Button>
@@ -1963,9 +1963,9 @@ export function QueryBuilder({
                       const warn = grainWarning(m, measureGrains, grainQtyCols);
                       return (
                         <span key={m.id} title={warn || `${measureExpr(m,isMulti)} AS ${m.alias}`}
-                          className={`inline-flex items-center gap-1.5 aug-fs-sm font-mono px-2.5 py-1 rounded-[var(--r3)] border ${
-                            warn ? "text-amber-200 border-amber-500/50 bg-amber-500/10"
-                                 : (ao?.cls ?? "text-violet-300 border-violet-500/30 bg-violet-500/10")}`}>
+                          className={`inline-flex items-center gap-1.5 aug-fs-sm font-mono px-2.5 py-1 rounded-[var(--r3)] ${
+                            warn ? "text-amber-200 bg-amber-500/10"
+                                 : (ao?.cls ?? "text-violet-300 bg-violet-500/10")}`}>
                           <span className="aug-fs-xs font-sans opacity-70">{m.fromMetric?<Icon name="metric" size={11} />:m.agg==="CUSTOM"?"fx":m.agg}</span>
                           <span className="max-w-[120px] truncate">{m.alias||measureExpr(m,isMulti)}</span>
                           {warn && (
@@ -1987,13 +1987,13 @@ export function QueryBuilder({
 
               {/* Resolved joins — below metrics, collapsed by default */}
               {joinStatuses.length > 0 && (
-                <div className="rounded-md border border-zinc-700/50 bg-zinc-800/20">
+                <div className="rounded-md bg-[var(--gray-a3)]">
                   <Button variant="plain" onClick={()=>setJoinsOpen(o=>!o)} className={`w-full h-auto justify-start rounded-none font-normal gap-2 px-3 py-2 text-left hover:bg-transparent dark:hover:bg-transparent ${SVG_SIZE_AUTO}`}>
                     <Icon name="chevr" size={11} className={`shrink-0 text-zinc-500 transition-transform ${joinsOpen?"rotate-90":""}`} />
                     <span className="aug-fs-xs font-semibold uppercase tracking-wider text-zinc-500">Resolved joins · {allTables.length} tables</span>
                     {fanOutRisk && (
                       <span title="One-to-many joins can repeat rows from the parent table, inflating SUM/COUNT. Verify the aggregation grain."
-                        className="ml-auto flex items-center gap-1 aug-fs-xs text-amber-400/90 border border-amber-500/30 bg-amber-500/5 rounded px-1.5 py-0.5">⚠ fan-out</span>
+                        className="ml-auto flex items-center gap-1 aug-fs-xs text-amber-400/90 bg-amber-500/10 rounded px-1.5 py-0.5">⚠ fan-out</span>
                     )}
                   </Button>
                   {joinsOpen && (
@@ -2008,7 +2008,7 @@ export function QueryBuilder({
                             <>
                               <span className="text-zinc-500 mx-1">ON</span>
                               <span className="text-emerald-400 truncate">{join.t1}.{join.c1} = {join.t2}.{join.c2}</span>
-                              <span className={`ml-auto shrink-0 aug-fs-xs px-1.5 py-0.5 rounded border ${join.match==="exact" ? "text-emerald-600 border-emerald-700/50 bg-emerald-500/5" : "text-amber-600 border-amber-700/50 bg-amber-500/5"}`}>{join.match}</span>
+                              <span className={`ml-auto shrink-0 aug-fs-xs px-1.5 py-0.5 rounded ${join.match==="exact" ? "text-emerald-600 bg-emerald-500/10" : "text-amber-600 bg-amber-500/10"}`}>{join.match}</span>
                             </>
                           ) : <span className="text-red-400 ml-2 italic">no join — wire in SQL</span>}
                         </div>
@@ -2022,18 +2022,18 @@ export function QueryBuilder({
               {primaryTable && (<>
 
               {/* FILTERS */}
-              <div className="border-t border-zinc-700/30 pt-4">
+              <div className="pt-4">
                 <p className="aug-fs-ui font-semibold text-zinc-300 mb-1">Filters</p>
                 <p className="aug-fs-xs text-zinc-500 mb-3">WHERE — narrow down your results</p>
                 <div className="flex flex-wrap gap-2 items-center min-h-[36px]">
                   {filters.map(f => (
-                    <span key={f.id} className="inline-flex items-center gap-1.5 aug-fs-sm font-mono px-3 py-1 rounded-[var(--r3)] border bg-amber-500/10 border-amber-500/30 text-amber-300">
+                    <span key={f.id} className="inline-flex items-center gap-1.5 aug-fs-sm font-mono px-3 py-1 rounded-[var(--r3)] bg-amber-500/10 text-amber-300">
                       {NO_VAL_OPS.includes(f.op) ? `${qualify(f.col,f.table,isMulti)} ${f.op}` : `${qualify(f.col,f.table,isMulti)} ${f.op} ${f.val}`}
                       <Button variant="plain" size="xs" onClick={()=>setFilters(p=>p.filter(x=>x.id!==f.id))} className="h-auto p-0 font-normal opacity-50 hover:opacity-100 text-sm leading-none hover:text-current hover:bg-transparent dark:hover:bg-transparent">×</Button>
                     </span>
                   ))}
                   {showAddFilter ? (
-                    <div className="flex items-center gap-2 flex-wrap p-3 rounded-md border border-zinc-700/60 bg-zinc-800/30">
+                    <div className="flex items-center gap-2 flex-wrap p-3 rounded-md bg-[var(--gray-a3)]">
                       {isMulti && (
                         <SelectField value={nfTable} onChange={e=>{ setNfTable(e.target.value); setNfCol(""); setNfDistinct([]); }}>
                           <option value="">table</option>
@@ -2066,7 +2066,7 @@ export function QueryBuilder({
                     </div>
                   ) : (
                     <Button variant="ghost" size="xs" onClick={()=>setShowAddFilter(true)}
-                      className={`h-auto font-normal gap-1.5 aug-fs-sm border-dashed border-zinc-700 rounded-[var(--r3)] px-3 py-1.5 text-zinc-500 hover:border-zinc-500 hover:text-zinc-300 hover:bg-transparent dark:hover:bg-transparent transition ${SVG_SIZE_AUTO}`}>
+                      className={`h-auto font-normal gap-1.5 aug-fs-sm rounded-[var(--r3)] px-3 py-1.5 text-zinc-500 hover:text-zinc-300 hover:bg-transparent dark:hover:bg-transparent transition ${SVG_SIZE_AUTO}`}>
                       <Icon name="plus" size={11} />
                       Add filter
                     </Button>
@@ -2076,7 +2076,7 @@ export function QueryBuilder({
 
               {/* HAVING — filter on aggregated metrics */}
               {measures.length > 0 && (
-                <div className="border-t border-zinc-700/30 pt-4">
+                <div className="pt-4">
                   <p className="aug-fs-ui font-semibold text-zinc-300 mb-1">Having</p>
                   <p className="aug-fs-xs text-zinc-500 mb-3">HAVING — filter on aggregated metrics (e.g. total &gt; 1000)</p>
                   <div className="flex flex-col gap-2 items-start">
@@ -2095,7 +2095,7 @@ export function QueryBuilder({
                       </div>
                     ))}
                     <Button variant="ghost" size="xs" onClick={()=>setHaving(p=>[...p,{id:uid(),measureId:measures[0].id,op:">",val:""}])}
-                      className={`h-auto font-normal gap-1.5 aug-fs-sm border-dashed border-zinc-700 rounded-[var(--r3)] px-3 py-1.5 text-zinc-500 hover:border-zinc-500 hover:text-zinc-300 hover:bg-transparent dark:hover:bg-transparent transition ${SVG_SIZE_AUTO}`}>
+                      className={`h-auto font-normal gap-1.5 aug-fs-sm rounded-[var(--r3)] px-3 py-1.5 text-zinc-500 hover:text-zinc-300 hover:bg-transparent dark:hover:bg-transparent transition ${SVG_SIZE_AUTO}`}>
                       <Icon name="plus" size={11} />
                       Add having
                     </Button>
@@ -2104,7 +2104,7 @@ export function QueryBuilder({
               )}
 
               {/* ORDER BY + LIMIT */}
-              <div className="border-t border-zinc-700/30 pt-4 flex items-end gap-6">
+              <div className="pt-4 flex items-end gap-6">
                 <div>
                   <p className="aug-fs-sm text-zinc-500 mb-2">ORDER BY</p>
                   <Input value={orderBy} onChange={e=>setOrderBy(e.target.value)}
@@ -2128,14 +2128,14 @@ export function QueryBuilder({
 
               {/* SQL EDITOR — shows for a built query OR an imported/manual one (no table needed) */}
               {(primaryTable || sql.trim()) && (
-              <div className="border-t border-zinc-700/30 pt-4">
+              <div className="pt-4">
                 <div className="flex items-center gap-2 mb-2">
                   <Button variant="plain" onClick={()=>setSqlOpen(o=>!o)} className={`h-auto p-0 font-normal gap-2 hover:bg-transparent dark:hover:bg-transparent ${SVG_SIZE_AUTO}`}>
                     <Icon name="chevr" size={11} className={`shrink-0 text-zinc-500 transition-transform ${sqlOpen?"rotate-90":""}`} />
                     <p className="aug-fs-ui font-semibold text-zinc-300">SQL</p>
                   </Button>
                   {!autoSql && (
-                    <span className="aug-fs-xs text-amber-500/80 border border-amber-500/20 bg-amber-500/5 rounded-md px-1.5 py-0.5">
+                    <span className="aug-fs-xs text-amber-500/80 bg-amber-500/10 rounded-md px-1.5 py-0.5">
                       manually edited
                     </span>
                   )}
@@ -2144,15 +2144,15 @@ export function QueryBuilder({
                       {importMsg && <span className="aug-fs-xs text-zinc-500 italic max-w-[220px] truncate" title={importMsg}>{importMsg}</span>}
                       <span className="aug-fs-xs text-zinc-500">⌘↵ to run</span>
                       <Button variant="ghost" size="xs" onClick={importSqlToBuilder} title="Reverse-compile this SQL into the visual builder's chips"
-                        className="h-auto font-normal aug-fs-xs text-zinc-400 hover:text-zinc-200 hover:bg-transparent dark:hover:bg-transparent border-zinc-700 rounded-[var(--r3)] px-2.5 py-1 transition">
+                        className="h-auto font-normal aug-fs-xs text-zinc-400 hover:text-zinc-200 hover:bg-transparent dark:hover:bg-transparent rounded-[var(--r3)] px-2.5 py-1 transition">
                         Import → builder
                       </Button>
                       <Button variant="ghost" size="xs" onClick={()=>{ if (sql.trim()) { setSql(formatSql(sql)); setAutoSql(false); } }}
-                        className="h-auto font-normal aug-fs-xs text-zinc-500 hover:text-zinc-300 hover:bg-transparent dark:hover:bg-transparent border-zinc-700 rounded-[var(--r3)] px-2.5 py-1 transition">
+                        className="h-auto font-normal aug-fs-xs text-zinc-500 hover:text-zinc-300 hover:bg-transparent dark:hover:bg-transparent rounded-[var(--r3)] px-2.5 py-1 transition">
                         Format
                       </Button>
                       <Button variant="ghost" size="xs" onClick={()=>navigator.clipboard.writeText(sql).catch(()=>{})}
-                        className="h-auto font-normal aug-fs-xs text-zinc-500 hover:text-zinc-300 hover:bg-transparent dark:hover:bg-transparent border-zinc-700 rounded-[var(--r3)] px-2.5 py-1 transition">
+                        className="h-auto font-normal aug-fs-xs text-zinc-500 hover:text-zinc-300 hover:bg-transparent dark:hover:bg-transparent rounded-[var(--r3)] px-2.5 py-1 transition">
                         Copy
                       </Button>
                     </div>
@@ -2248,7 +2248,7 @@ export function QueryBuilder({
                   {result && !result.error && (
                     <span className="aug-fs-sm text-zinc-400">
                       {fmtN(result.row_count)} rows · {fmtMs(result.duration_ms)}
-                      {result.cached && <span className="ml-2 aug-fs-xs text-violet-400 border border-violet-500/30 rounded-md px-1.5 py-0.5">cached</span>}
+                      {result.cached && <span className="ml-2 aug-fs-xs text-violet-400 bg-violet-500/10 rounded-md px-1.5 py-0.5">cached</span>}
                     </span>
                   )}
                 </div>
@@ -2282,7 +2282,7 @@ export function QueryBuilder({
             ) : (
               <div className="h-full flex flex-col items-center justify-center text-center gap-2 text-zinc-500">
                 <Icon name="chart" size={28} className="opacity-50" />
-                <p className="aug-fs-sm italic">Configure your query in the panel, then <strong className="text-zinc-400 font-normal not-italic">Run</strong> or press <kbd className="text-zinc-400 bg-zinc-800 border border-zinc-700 rounded px-1 py-0.5 aug-fs-xs">⌘↵</kbd></p>
+                <p className="aug-fs-sm italic">Configure your query in the panel, then <strong className="text-zinc-400 font-normal not-italic">Run</strong> or press <kbd className="text-zinc-400 bg-zinc-800 rounded px-1 py-0.5 aug-fs-xs">⌘↵</kbd></p>
               </div>
             )}
           </main>

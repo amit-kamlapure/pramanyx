@@ -361,7 +361,7 @@ export function CreateAgentFlow({ onCreated, onCancel, onSaved, inDialog = false
               <Field label="Stance">
                 <p className="aug-fs-sm" style={{
                   color: "var(--t1)", margin: 0, whiteSpace: "pre-wrap",
-                  background: "var(--bg-1)", border: "1px solid var(--b1)",
+                  background: "var(--bg-1)",
                   borderRadius: "var(--r2)", padding: "8px 11px", maxWidth: 640,
                 }}>{proposal.draft.instructions}</p>
               </Field>
@@ -405,7 +405,7 @@ export function CreateAgentFlow({ onCreated, onCancel, onSaved, inDialog = false
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 10 }}>
               {templates.map(t => (
                 <div key={t.pack_id} style={{
-                  background: "var(--bg-2)", border: "1px solid var(--b1)",
+                  background: "var(--bg-2)",
                   borderRadius: "var(--r3)", padding: "12px 14px",
                   display: "flex", flexDirection: "column", gap: 7,
                 }}>
@@ -580,7 +580,7 @@ export function CreateAgentFlow({ onCreated, onCancel, onSaved, inDialog = false
                   {seeds.map(s => (
                     <div key={s.question} style={{
                       display: "flex", alignItems: "center", gap: 10, padding: "7px 10px",
-                      background: "var(--bg-1)", border: "1px solid var(--b1)",
+                      background: "var(--bg-1)",
                       borderRadius: "var(--r2)",
                     }}>
                       <span className="aug-fs-sm" style={{ flex: 1, color: "var(--t1)" }}>
@@ -625,7 +625,7 @@ export function CreateAgentFlow({ onCreated, onCancel, onSaved, inDialog = false
                 {goldens.map((g, i) => (
                   <div key={i} style={{ display: "flex", alignItems: "center", gap: 10,
                     padding: "7px 10px", background: "var(--bg-2)",
-                    border: "1px solid var(--b1)", borderRadius: "var(--r2)" }}>
+                    borderRadius: "var(--r2)" }}>
                     <StatusChip hue="positive" strength="soft">ground truth</StatusChip>
                     <span className="aug-fs-sm" style={{ flex: 1, color: "var(--t1)" }}>
                       {g.question}
@@ -707,7 +707,7 @@ function Note({ children }: { children: React.ReactNode }) {
   return (
     <p className="aug-fs-sm" style={{
       color: "var(--t2)", margin: 0, padding: "8px 11px", background: "var(--bg-1)",
-      border: "1px solid var(--b1)", borderRadius: "var(--r2)", maxWidth: 640,
+      borderRadius: "var(--r2)", maxWidth: 640,
     }}>{children}</p>
   );
 }

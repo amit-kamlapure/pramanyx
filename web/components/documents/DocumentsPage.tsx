@@ -619,7 +619,7 @@ function StoredDocument({ doc }: { doc: DocumentEntry }) {
       {view === "original" && !error && (doc.has_original ? (renderable ? (
         <>
           <iframe src={documentOriginalUrl(doc.doc_id)} title={doc.title}
-            style={{ width: "100%", height: "28rem", border: "1px solid var(--b1)", borderRadius: "var(--r2)", background: "var(--bg-0)" }} />
+            style={{ width: "100%", height: "28rem", border: 0, borderRadius: "var(--r2)", background: "var(--bg-2)" }} />
           {/* An embedded PDF renders only where the browser has a PDF plugin; elsewhere the frame is simply BLANK.
               A frame that can fail silently needs a way out beside it. */}
           <span className="aug-fs-xs" style={MUTED}>Blank? {original} — some browsers cannot show it inline. The Markdown view always works.</span>

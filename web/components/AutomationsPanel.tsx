@@ -370,7 +370,6 @@ export function AutomationsPanel({ connId, focusId, sentence = "", beside = fals
           margin: "10px 20px 0", padding: "8px 12px", borderRadius: "var(--r3)", fontSize: 12,
           background: banner.tone === "ok" ? "var(--grn1)" : "var(--red1)",
           color: banner.tone === "ok" ? "var(--grn5)" : "var(--red5)",
-          border: "1px solid var(--bg-3)",
         }}>{banner.text}</div>
       )}
 
@@ -410,7 +409,7 @@ export function AutomationsPanel({ connId, focusId, sentence = "", beside = fals
             )}
             {importReport.suggested_agent && (
               <div className="aug-fs-sm" style={{ padding: "8px 10px",
-                border: "1px solid var(--b1)", borderRadius: "var(--r2)",
+                background: "var(--bg-2)", borderRadius: "var(--r2)",
                 color: "var(--t2)" }}>
                 The flow&rsquo;s agent proposes a NEW agent record (nothing created):{" "}
                 <b>{importReport.suggested_agent.name}</b> —{" "}
@@ -425,7 +424,7 @@ export function AutomationsPanel({ connId, focusId, sentence = "", beside = fals
               flexDirection: "column", gap: 4 }}>
               {importReport.report.map(row => (
                 <div key={row.node_id} className="aug-fs-sm" style={{ display: "flex",
-                  gap: 8, padding: "6px 9px", border: "1px solid var(--b1)",
+                  gap: 8, padding: "6px 9px", background: "var(--bg-2)",
                   borderRadius: "var(--r2)", alignItems: "baseline" }}>
                   <span style={{ flexShrink: 0, fontWeight: 600, color:
                     row.disposition === "mapped" ? "var(--grn4)"
@@ -449,7 +448,7 @@ export function AutomationsPanel({ connId, focusId, sentence = "", beside = fals
             nothing is saved until the person presses Create there. Designing by hand stays: "+ Design it yourself". */}
         {view === "list" && !showSpinner && (
           <div data-testid="say-it" style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16,
-            padding: 14, border: "1px solid var(--b1)", borderRadius: "var(--r3)", background: "var(--bg-1, var(--bg-2))" }}>
+            padding: 14, borderRadius: "var(--r3)", background: "var(--bg-1, var(--bg-2))" }}>
             <label htmlFor="say-it" className="aug-fs-sm" style={{ fontWeight: 600 }}>What should happen, and when?</label>
             <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
               <Textarea id="say-it" rows={2} value={outcome} style={{ flex: "1 1 auto", resize: "vertical" }}
@@ -597,7 +596,7 @@ function AutomationCard({ a, onToggle, onPause, onRun, onEdit, onDelete, onRuns,
   // open, so a page of automations does not fetch a graph per row.
   return (
     <div style={{
-      background: "var(--bg-1, var(--bg-2))", border: "1px solid var(--b1)", borderRadius: "var(--r3)",
+      background: "var(--bg-1, var(--bg-2))", borderRadius: "var(--r3)",
       padding: "12px 16px", opacity: a.enabled ? 1 : 0.6,
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -739,10 +738,10 @@ function RunsView({ automations, runsFor, runs, versions, onPick }: {
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {collapseQuietTicks(runs).map(row => row.kind === "quiet" ? (
           // A run of ticks that did nothing, as ONE row. The count and the span are exact:
-          // this collapses, it does not hide.
+          // this collapses, it does not hide. No surface and no edge: the quiet row is the ground (2026-11-20).
           <div key={`quiet:${row.newest}`} style={{
             display: "flex", alignItems: "center", gap: 8, padding: "6px 14px",
-            border: "1px dashed var(--b1)", borderRadius: 6, color: "var(--t3)",
+            borderRadius: 6, color: "var(--t3)",
           }}>
             <span className="aug-fs-xs" style={{ fontWeight: 700, padding: "2px 7px",
               borderRadius: 4, textTransform: "uppercase", background: "var(--bg-2)",
@@ -758,7 +757,7 @@ function RunsView({ automations, runsFor, runs, versions, onPick }: {
             </span>
           </div>
         ) : (() => { const r = row.run; return (
-          <div key={r.id} style={{ background: "var(--bg-2)", border: "1px solid var(--b1)", borderRadius: 6, padding: "10px 14px" }}>
+          <div key={r.id} style={{ background: "var(--bg-2)", borderRadius: 6, padding: "10px 14px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <Badge variant={OUTCOME_BADGE[r.outcome] ?? "secondary"} style={{ textTransform: "uppercase" }}>{r.outcome.replace("_", " ")}</Badge>
               <span style={{ fontSize: 12, color: "var(--t2)" }}>{r.reason}</span>
@@ -841,7 +840,7 @@ function InboxView({ conn, proposals, grants, onReload, flash, onOpenInEditor }:
         <>
           <div style={{ fontSize: 11, fontWeight: 600, color: "var(--t3)", textTransform: "uppercase", margin: "16px 0 8px" }}>Standing grants</div>
           {grants.map(g => (
-            <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 10, background: "var(--bg-2)", border: "1px solid var(--b1)", borderRadius: 6, padding: "8px 12px", marginBottom: 6 }}>
+            <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 10, background: "var(--bg-2)", borderRadius: 6, padding: "8px 12px", marginBottom: 6 }}>
               <span style={{ fontSize: 12 }}><b>{g.action_id}</b> → {g.target_arg}=<code>{g.target_value}</code></span>
               <span style={{ fontSize: 11, color: "var(--t3)" }}>used {g.use_count}× · by {g.created_by || g.owner_kind}</span>
               <div style={{ flex: 1 }} />

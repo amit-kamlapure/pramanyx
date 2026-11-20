@@ -520,7 +520,7 @@ function HoldsLine({ graph, audit, auditError, review, mode, onMode, onRefresh, 
     );
   }
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 22px", borderBottom: "1px solid var(--b0)",
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 22px",
       flexWrap: "wrap", minHeight: 44 }}>
       {counts}
       {joinChip}

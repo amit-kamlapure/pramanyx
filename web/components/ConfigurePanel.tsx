@@ -52,15 +52,16 @@ function TabBar({
   onChange: (id: string) => void;
 }) {
   return (
-    <div className="flex border-b border-[var(--b1)] shrink-0">
+    // Tabs selected by their background, no underline or rule (2026-11-20, borders are the exception)
+    <div className="flex gap-1 px-3 py-1.5 shrink-0">
       {tabs.map((t) => (
         <Button variant="ghost" size="xs"
           key={t.id}
           onClick={() => onChange(t.id)}
-          className={`px-4 py-2.5 aug-fs-sm font-medium transition-colors border-b-2 -mb-px ${
+          className={`px-3 py-1.5 aug-fs-sm font-medium transition-colors ${
             active === t.id
-              ? "border-[var(--blue3)] text-[var(--t1)]"
-              : "border-transparent text-[var(--t3)] hover:text-[var(--t1)]"
+              ? "bg-[var(--gray-a5)] text-[var(--t1)]"
+              : "bg-transparent text-[var(--t3)] hover:bg-[var(--gray-a3)] hover:text-[var(--t1)]"
           }`}
         >
           {t.label}
@@ -151,7 +152,7 @@ function AboutTab({
 
       <div>
         <p className="aug-label mb-3">Scope</p>
-        <div className="rounded-md border border-[var(--b1)] overflow-hidden" style={{ background: "var(--bg-3)" }}>
+        <div className="rounded-md overflow-hidden" style={{ background: "var(--bg-3)" }}>
           {scopeRows.map((r, i) => (
             <div key={r.label} className={`flex items-start px-3 py-2.5 gap-4 aug-fs-sm ${i > 0 ? "border-t border-[var(--b0)]" : ""}`}>
               <span className="w-20 shrink-0 text-[var(--t3)]">{r.label}</span>
@@ -199,7 +200,7 @@ function TableDetail({
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--b1)] shrink-0">
+      <div className="flex items-center justify-between px-4 py-2.5 shrink-0">
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="xs" onClick={onClose} className="text-[var(--t3)] hover:text-[var(--t1)]">
             <span className="rotate-180 inline-block"><Icon name="chevr" size={16} label="Back" /></span>
@@ -340,7 +341,7 @@ function DataTab({
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Scope note + filter */}
-      <div className="px-3 py-2 border-b border-[var(--b1)] shrink-0 space-y-2">
+      <div className="px-3 pt-2 pb-3 shrink-0 space-y-2">
         <div className="flex items-center justify-between gap-2">
           <p className="aug-fs-xs text-[var(--t3)]">
             {isAll
@@ -595,7 +596,7 @@ export function ConfigurePanel({ canvas, connections, onClose, onCanvasUpdate, o
         style={{ top: "100px", width: "460px", maxWidth: "100vw", background: "var(--bg-0)" }}
       >
         {/* Panel header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--b1)] shrink-0">
+        <div className="flex items-center justify-between px-4 py-3 shrink-0">
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-[var(--t3)]"><Icon name="settings" size={16} label="Configure" /></span>
             <span className="aug-fs-sm font-semibold text-[var(--t1)]">Configure</span>
@@ -632,7 +633,7 @@ export function ConfigurePanel({ canvas, connections, onClose, onCanvasUpdate, o
                 <Button variant="plain" size="xs"
                   type="button"
                   onClick={onOpenDocuments}
-                  className="mt-3 aug-fs-xs px-2 py-1 rounded border border-zinc-600 hover:bg-zinc-800"
+                  className="mt-3 aug-fs-xs px-2 py-1 rounded bg-[var(--gray-a3)] hover:bg-[var(--gray-a4)]"
                 >
                   Open Documents
                 </Button>

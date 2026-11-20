@@ -217,7 +217,7 @@ export default function DefinitionRoute({ params, searchParams }: {
         <section data-testid="definition-suggestions">
           <h2 className="aug-fs-h2" style={{ margin: "8px 0 4px", color: "var(--t1)" }}>Suggested edits</h2>
           {found.suggestions.map((s) => (
-            <div key={s.id} style={{ borderTop: "1px solid var(--b2)", padding: "8px 0", display: "flex", flexDirection: "column", gap: 4 }}>
+            <div key={s.id} style={{ borderTop: "1px solid var(--b0)", padding: "8px 0", display: "flex", flexDirection: "column", gap: 4 }}>
               <div className="aug-fs-xs" style={MUTED}>
                 {who(s.by)}{s.by_agent ? " (drafted by the coworker for them)" : ""} · {fmtDate(s.at, "day")}{s.why ? ` · ${s.why}` : ""}
               </div>
@@ -241,7 +241,7 @@ export default function DefinitionRoute({ params, searchParams }: {
         <section>
           <h2 className="aug-fs-h2" style={{ margin: "8px 0 4px", color: "var(--t1)" }}>Earlier wordings</h2>
           {earlierWordings(found.versions).map((v) => (
-            <div key={v.id} style={{ borderTop: "1px solid var(--b2)", padding: "8px 0" }}>
+            <div key={v.id} style={{ borderTop: "1px solid var(--b0)", padding: "8px 0" }}>
               <div className="aug-fs-xs" style={MUTED}>{fmtDate(v.recorded_at, "day")} · {v.tier} · {who(v.author)}</div>
               <div className="aug-fs-sm" style={{ color: "var(--t2)", whiteSpace: "pre-wrap" }}>{v.text}</div>
             </div>

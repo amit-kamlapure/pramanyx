@@ -155,7 +155,7 @@ export function OntologyPieceComposer({ connectionId, schema, spec, busy, onPlac
       : actionsOn(actions, entityOf(String(spec.elements[detail]?.props.follows ?? "")));
 
   return (
-    <div data-testid="dashboard-piece-composer" style={{ border: "1px solid var(--b1)", borderRadius: "var(--r3)", padding: 14, marginBottom: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+    <div data-testid="dashboard-piece-composer" style={{ background: "var(--bg-2)", borderRadius: "var(--r3)", padding: 14, marginBottom: 16, display: "flex", flexDirection: "column", gap: 10 }}>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }} role="radiogroup" aria-label="What to place">
         {withUniqueKeys(KINDS, x => x.kind).map(([key, k]) => (
           <Button key={key} size="xs" variant={kind === k.kind ? "secondary" : "ghost"} role="radio" aria-checked={kind === k.kind}

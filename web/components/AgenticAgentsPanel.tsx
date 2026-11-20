@@ -161,7 +161,7 @@ export function AgenticAgentsPanel({ workspaceId, workspaceName, onOpenTrace, fo
       )}
       {notice && (
         <div className="aug-fs-sm" role="status" style={{ margin: "12px 20px 0", padding: "8px 10px",
-          border: "1px solid var(--b1)", borderRadius: "var(--r2)", color: "var(--t2)",
+          background: "var(--bg-2)", borderRadius: "var(--r2)", color: "var(--t2)",
           display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ flex: 1 }}>{notice}</span>
           <Button variant="ghost" size="xs" onClick={() => setNotice(null)}>Dismiss</Button>
@@ -604,7 +604,7 @@ function AgentRail({ agent, grounding, connName, onSetup }: {
       <Row k="History" v={`created ${formatTimestamp(agent.created_at, "short")} · updated ${formatTimestamp(agent.updated_at, "short")}`} />
       <div className="aug-label" style={{ margin: "14px 0 6px" }}>Instructions</div>
       {agent.instructions ? (
-        <div style={{ padding: "10px 12px", background: "var(--code-bg)", border: "1px solid var(--b1)",
+        <div style={{ padding: "10px 12px", background: "var(--code-bg)",
           borderRadius: "var(--r2)", fontSize: 13, color: "var(--t2)", lineHeight: 1.5,
           whiteSpace: "pre-wrap" }}>
           {agent.instructions}
@@ -713,7 +713,7 @@ function BuiltInMap({ charter }: { charter: AgentRosterEntry }) {
     <div style={{ marginBottom: 18 }}>
       <div className="aug-label" style={{ color: "var(--t2)", marginBottom: 6 }}>Map</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "10px 12px",
-        border: "1px solid var(--b1)", borderRadius: "var(--r2)", background: "var(--bg-1)" }}>
+        borderRadius: "var(--r2)", background: "var(--bg-1)" }}>
         <Row label="door">
           {charter.lane === "interactive"
             ? "answers inline, inside the conversation that asks — no socket, no schedule"
@@ -838,7 +838,7 @@ export function CustomAgentOverview({ agent, onOpenTrace, range }: {
           {runs.map(r => (
             <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 10,
               padding: "8px 10px", background: "var(--bg-1)",
-              border: "1px solid var(--b1)", borderRadius: "var(--r2)" }}>
+              borderRadius: "var(--r2)" }}>
               <span style={{ flex: 1, fontSize: 12, color: "var(--t1)", overflow: "hidden",
                 textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {r.headline || r.question}
@@ -936,7 +936,7 @@ function AgentBenchmark({ agent, onChanged, onError }: {
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       {learning && (
         <div className="aug-fs-sm" style={{ color: "var(--t2)", padding: "8px 11px",
-          background: "var(--bg-1)", border: "1px solid var(--b1)", borderRadius: "var(--r2)" }}>
+          background: "var(--bg-1)", borderRadius: "var(--r2)" }}>
           {learning.loop_on ? (
             <>
               Learned <strong>{formatCount(learning.corrections)}</strong> correction{learning.corrections === 1 ? "" : "s"}
@@ -965,7 +965,7 @@ function AgentBenchmark({ agent, onChanged, onError }: {
           </span>
           {candidates.map(c => (
             <div key={c.id} className="aug-fs-sm" style={{ display: "flex", flexDirection: "column", gap: 4,
-              color: "var(--t2)", paddingTop: 6, borderTop: "1px solid var(--b1)" }}>
+              color: "var(--t2)", paddingTop: 6, borderTop: "1px solid var(--b0)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <StatusChip hue={c.source === "use" ? "accent" : "muted"} strength="soft">
                   {c.source === "use" ? "from use" : "drafted"}
@@ -1003,7 +1003,7 @@ function AgentBenchmark({ agent, onChanged, onError }: {
       {goldens.length === 0 && (
         <p className="aug-fs-sm" style={{
           color: "var(--t2)", margin: 0, padding: "8px 11px", background: "var(--bg-1)",
-          border: "1px solid var(--b1)", borderRadius: "var(--r2)",
+          borderRadius: "var(--r2)",
         }}>
           This agent has no golden questions, so it ships unmeasured — every answer it
           gives is unfalsifiable. Add the questions where being wrong would matter.
@@ -1011,7 +1011,7 @@ function AgentBenchmark({ agent, onChanged, onError }: {
       )}
       {/* the agent's own regression suite */}
       <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "12px 14px",
-        border: "1px solid var(--b1)", borderRadius: "var(--r2)" }}>
+        background: "var(--bg-2)", borderRadius: "var(--r2)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span className="aug-label"><Term id="goldens">Golden questions</Term></span>
           <span style={{ fontSize: 11, color: "var(--t3)" }}>
@@ -1213,7 +1213,7 @@ function PersonaConfigure({ agent, onChanged, onDeleted, onError }: {
           </span>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 160,
-            overflowY: "auto", padding: "8px 10px", border: "1px solid var(--b1)",
+            overflowY: "auto", padding: "8px 10px", background: "var(--bg-3)",
             borderRadius: "var(--r2)" }}>
             {documents.map(d => (
               <label key={d.doc_id} style={{ display: "flex", alignItems: "center", gap: 8,
@@ -1231,7 +1231,7 @@ function PersonaConfigure({ agent, onChanged, onDeleted, onError }: {
         <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
           <span className="aug-label">Packs</span>
           <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 130,
-            overflowY: "auto", padding: "8px 10px", border: "1px solid var(--b1)",
+            overflowY: "auto", padding: "8px 10px", background: "var(--bg-3)",
             borderRadius: "var(--r2)" }}>
             {packs.map(p => (
               <label key={p.id} style={{ display: "flex", alignItems: "center", gap: 8,
@@ -1270,7 +1270,7 @@ function PersonaConfigure({ agent, onChanged, onDeleted, onError }: {
             </span>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 130,
-              overflowY: "auto", padding: "8px 10px", border: "1px solid var(--b1)",
+              overflowY: "auto", padding: "8px 10px", background: "var(--bg-3)",
               borderRadius: "var(--r2)" }}
               data-testid="agent-grants">
               {ids.map(id => (
@@ -1349,14 +1349,14 @@ function FieldDiff({ field, before, after }: {
       <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
         <div className="aug-fs-xs"
              style={{ flex: 1, minWidth: 0, color: "var(--t3)",
-                      background: "var(--bg-1)", border: "1px solid var(--b1)",
+                      background: "var(--bg-1)",
                       borderRadius: "var(--r-chip)", padding: "4px 6px",
                       whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
           {valueText(field, before)}
         </div>
         <div className="aug-fs-xs"
              style={{ flex: 1, minWidth: 0, color: "var(--t2)",
-                      background: "var(--bg-1)", border: "1px solid var(--b1)",
+                      background: "var(--bg-1)",
                       borderRadius: "var(--r-chip)", padding: "4px 6px",
                       whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
           {valueText(field, after)}
@@ -1520,7 +1520,7 @@ export function AgentConfigHistory({ agent, onChanged, onError }: {
         return (
           <div key={r.version} style={{
             display: "flex", flexDirection: "column",
-            padding: "5px 0", borderTop: "1px solid var(--b1)",
+            padding: "5px 0", borderTop: "1px solid var(--b0)",
           }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
               <span style={{ color: "var(--t3)", minWidth: 28 }}>v{r.version}</span>
@@ -1694,7 +1694,7 @@ function CharterDetail({ charter, workspaceId, onBack, onChanged, onError, range
 
       {!charter.reserved && (
         <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "12px 14px",
-          border: "1px solid var(--b1)", borderRadius: "var(--r3)", background: "var(--bg-2)" }}>
+          borderRadius: "var(--r3)", background: "var(--bg-2)" }}>
           <span className="aug-label">
             Governance {workspaceId ? "· this workspace" : "· Org (all workspaces)"}
           </span>
@@ -1967,7 +1967,7 @@ export function AgentModelPin({ pinned, busy, onPin }: {
 function Tile({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div style={{ flex: "1 1 130px", minWidth: 130, background: "var(--bg-2)",
-      border: "1px solid var(--b1)", borderRadius: "var(--r3)", padding: "10px 14px" }}>
+      borderRadius: "var(--r3)", padding: "10px 14px" }}>
       <div style={{ fontSize: 18, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{value}</div>
       <div style={{ fontSize: 11, color: "var(--t3)", marginTop: 3 }}>{label}</div>
       {sub && <div style={{ fontSize: 11, color: "var(--t2)", marginTop: 2 }}>{sub}</div>}

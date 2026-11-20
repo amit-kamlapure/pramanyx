@@ -1299,7 +1299,7 @@ export function SheetGrid({ sheet, rows, hidden, editable, onEdit, onEditMany, o
         </div>
       </div>
       {work.menu}
-      <div className="aug-fs-xs" style={{ ...MUTED, ...NUM, padding: "4px 12px", borderTop: "1px solid var(--b0)",
+      <div className="aug-fs-xs" style={{ ...MUTED, ...NUM, padding: "4px 12px",
         background: "var(--bg-1)" }}>
         Rows {formatCount(total === 0 ? 0 : (sight?.startIndex ?? 0) + 1)}–{formatCount(Math.min(total, (sight?.endIndex ?? 0) + 1))} of{" "}
         {formatCount(total)}{footer ? ` · ${footer}` : ""}
@@ -1376,7 +1376,7 @@ function CellBar({ sheet, selected, column, value, set, editable, error, said, r
   return (
     <div role="status" aria-live="polite" aria-label="The selected cell" className="aug-fs-xs" style={{ height: 30,
       flex: "0 0 auto", display: "flex", alignItems: "center", gap: 10, padding: "0 12px", minWidth: 0,
-      borderBottom: "1px solid var(--b0)", background: "var(--bg-1)", color: "var(--t3)" }}>
+      background: "var(--bg-1)", color: "var(--t3)" }}>
       {!selected || !column ? (
         // what was just done with nothing selected — a column's name copied from its menu
         said ? <span style={{ ...ELLIPSIS, color: "var(--grn4)" }}>{said}</span> : editable ? (

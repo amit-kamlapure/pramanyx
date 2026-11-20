@@ -116,7 +116,7 @@ export function TraceExplorerPanel({ focusInvestigationId, focusTraceId }: {
       {!indexOpen && (
         // The collapsed rail. It states the count it is hiding, so reopening is a
         // decision rather than a guess about what is behind the tab.
-        <div style={{ width: 30, flexShrink: 0, borderRight: "1px solid var(--b1)",
+        <div style={{ width: 30, flexShrink: 0, borderRight: "1px solid var(--divide)",
                       display: "flex", flexDirection: "column", alignItems: "center",
                       paddingTop: 8, gap: 6 }}>
           <Button variant="ghost" size="icon-sm" aria-label="Show the runs index"
@@ -147,10 +147,11 @@ export function TraceExplorerPanel({ focusInvestigationId, focusTraceId }: {
         collapsed={!indexOpen}
         style={{ flex: 1, minWidth: 0 }}
         left={
-      <div style={{ height: "100%", borderRight: "1px solid var(--b1)",
+      // no edge of its own: the split's divider is the one rule between the two panes (2026-11-20)
+      <div style={{ height: "100%",
                     display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
-        <div style={{ padding: 10, borderBottom: "1px solid var(--b1)",
+        <div style={{ padding: "10px 10px 12px",
                       display: "flex", flexDirection: "column", gap: 6 }}>
           <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
             <Input
@@ -282,7 +283,7 @@ export function TraceExplorerPanel({ focusInvestigationId, focusTraceId }: {
 
         {/* Paging over what MATCHED, with the window it was counted in stated rather
             than implied — a total with no window is a claim about all of history. */}
-        <div style={{ borderTop: "1px solid var(--b1)", padding: "6px 10px",
+        <div style={{ padding: "10px 10px 8px",
                       display: "flex", alignItems: "center", gap: 6 }}>
           <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>
             {total === 0 ? "0 runs" : `${offset + 1}–${Math.min(offset + pageSize, total)} of ${total}`}
@@ -468,7 +469,7 @@ export function TraceView({ traceId, answer = "" }: {
                 one row of eight controls competing for the same horizontal space, and the
                 title — the only part that is unique to the run — was the piece that got
                 truncated. */}
-            <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--b1)",
+            <div style={{ padding: "10px 16px 14px",
               display: "flex", flexDirection: "column", gap: 7 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -500,7 +501,7 @@ export function TraceView({ traceId, answer = "" }: {
               {/* A segmented group rather than five loose buttons: these are five readings
                   of ONE run, and loose buttons read as five unrelated actions. */}
               <div style={{ display: "inline-flex", gap: 2, padding: 2, alignSelf: "flex-start",
-                border: "1px solid var(--b1)", borderRadius: "var(--r-chip)",
+                borderRadius: "var(--r-chip)",
                 background: "var(--bg-1)" }}>
                 {([["flow", "Flow"], ["timeline", "Waterfall"], ["events", "Events"],
                    ["logs", "Logs"], ["feedback", "Feedback"]] as const).map(([key, label]) => (
@@ -615,7 +616,7 @@ export function TraceView({ traceId, answer = "" }: {
                       </Button>
                       {isOpen && (
                         <div style={{ margin: `2px 0 8px ${depth * 18 + 14}px`, padding: 10,
-                          background: "var(--bg-2)", border: "1px solid var(--b1)",
+                          background: "var(--bg-2)",
                           borderRadius: "var(--r2)", fontSize: 11 }}>
                           <DetailGrid e={e} />
                           {e.content_captured && (

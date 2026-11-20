@@ -114,8 +114,8 @@ function OntologySettings({
   const currentHours = settings?.ontology_refresh_hours ?? null;
 
   return (
-    <div className="w-72 shrink-0 border-l border-zinc-700/70 flex flex-col bg-zinc-900 overflow-hidden">
-      <div className="px-4 pt-4 pb-3 border-b border-zinc-700/60 flex items-center justify-between">
+    <div className="w-72 shrink-0 border-l border-[var(--divide)] flex flex-col bg-zinc-900 overflow-hidden">
+      <div className="px-4 pt-4 pb-1 flex items-center justify-between">
         <p className="text-xs font-semibold text-zinc-200">Ontology Settings</p>
         <Button variant="ghost" size="xs" onClick={onClose}>
           <Icon name="close" size={16} label="Close" />
@@ -139,10 +139,10 @@ function OntologySettings({
                 onClick={() => saveRefresh(opt.value)}
                 disabled={saving}
                 className={cn(
-                  "py-2 aug-fs-xs rounded-[var(--r3)] border transition font-medium",
+                  "py-2 aug-fs-xs rounded-[var(--r3)] transition-colors font-medium",
                   currentHours === opt.value
-                    ? "bg-violet-500/15 border-violet-500/40 text-violet-300"
-                    : "bg-zinc-800/60 border-zinc-700/50 hover:border-zinc-500",
+                    ? "bg-violet-500/20 text-violet-300"
+                    : "bg-[var(--gray-a3)] hover:bg-[var(--gray-a4)]",
                 )}
               >
                 {opt.label}
@@ -177,10 +177,10 @@ function OntologySettings({
             onClick={handleRebuild}
             disabled={rebuilding}
             className={cn(
-              "w-full py-2 aug-fs-xs rounded-[var(--r3)] border",
+              "w-full py-2 aug-fs-xs rounded-[var(--r3)]",
               rebuilding
-                ? "border-zinc-700 cursor-not-allowed"
-                : "border-violet-500/30 text-violet-400 hover:bg-violet-500/10 hover:border-violet-400/50",
+                ? "bg-[var(--gray-a3)] cursor-not-allowed"
+                : "bg-violet-500/10 text-violet-400 hover:bg-violet-500/20",
             )}
           >
             {rebuilding ? "Rebuilding…" : "Rebuild ontology now"}
@@ -256,8 +256,8 @@ function DuplicatesDrawer({ connId, schema, onClose, onMerged }: {
   };
 
   return (
-    <div className="w-[340px] shrink-0 border-l border-zinc-700/70 bg-zinc-900/40 flex flex-col overflow-hidden">
-      <div className="flex items-center gap-2 px-3 py-2.5 border-b border-zinc-700/70">
+    <div className="w-[340px] shrink-0 border-l border-[var(--divide)] bg-zinc-900/40 flex flex-col overflow-hidden">
+      <div className="flex items-center gap-2 px-3 pt-2.5 pb-1">
         <p className="text-xs font-semibold text-zinc-300">Possible duplicate entities</p>
         <Button variant="ghost" size="xs" onClick={onClose} className="ml-auto">
           <Icon name="close" size={16} label="Close" />
@@ -274,7 +274,7 @@ function DuplicatesDrawer({ connId, schema, onClose, onMerged }: {
           </p>
         )}
         {clusters?.map((c, i) => (
-          <div key={i} className="rounded border border-violet-500/25 bg-violet-500/[0.04] p-2.5 space-y-2">
+          <div key={i} className="rounded bg-violet-500/[0.07] p-2.5 space-y-2">
             <div className="flex items-center justify-between">
               <span className="aug-fs-xs text-violet-300">{countNoun(c.entities.length, "entity", "entities")}</span>
               <span className="aug-fs-xs text-zinc-500">similarity {Math.round(c.similarity * 100)}%</span>
@@ -318,7 +318,7 @@ function DuplicatesDrawer({ connId, schema, onClose, onMerged }: {
           </div>
         ))}
         {rejected.length > 0 && (
-          <div className="pt-2 border-t border-zinc-700/40 space-y-1">
+          <div className="pt-3 space-y-1">
             <p className="aug-fs-xs text-zinc-500">Judged different earlier</p>
             {rejected.map(r => (
               <div key={r.pair.join("|")} className="flex items-center gap-2">
@@ -344,9 +344,9 @@ function DuplicatesDrawer({ connId, schema, onClose, onMerged }: {
 const _AUTONOMY_TONE = ["text-zinc-400", "text-sky-300", "text-violet-300", "text-emerald-300"];
 
 const _PROPOSAL_KIND: Record<string, { label: string; tone: string }> = {
-  metric:      { label: "metric gap",  tone: "text-amber-300 border-amber-500/30 bg-amber-500/10" },
-  column_note: { label: "column note", tone: "text-sky-300 border-sky-500/30 bg-sky-500/10" },
-  table_note:  { label: "table note",  tone: "text-violet-300 border-violet-500/30 bg-violet-500/10" },
+  metric:      { label: "metric gap",  tone: "text-amber-300 bg-amber-500/10" },
+  column_note: { label: "column note", tone: "text-sky-300 bg-sky-500/10" },
+  table_note:  { label: "table note",  tone: "text-violet-300 bg-violet-500/10" },
 };
 
 /** The review inbox for what the engine and the conversation PROPOSE about this connection's
@@ -385,8 +385,8 @@ function ProposalsDrawer({ connId, schema, onClose }: { connId: string; schema?:
   const pending = (items ?? []).filter(p => p.status === "pending");
 
   return (
-    <div className="w-[340px] shrink-0 border-l border-zinc-700/70 bg-zinc-900/40 flex flex-col overflow-hidden" data-testid="ontology-proposals-drawer">
-      <div className="flex items-center gap-2 px-3 py-2.5 border-b border-zinc-700/70">
+    <div className="w-[340px] shrink-0 border-l border-[var(--divide)] bg-zinc-900/40 flex flex-col overflow-hidden" data-testid="ontology-proposals-drawer">
+      <div className="flex items-center gap-2 px-3 pt-2.5 pb-1">
         <p className="text-xs font-semibold text-zinc-300">Proposals</p>
         {pending.length > 0 && (
           <span className="aug-fs-xs text-zinc-500">{pending.length} awaiting review</span>
@@ -406,16 +406,16 @@ function ProposalsDrawer({ connId, schema, onClose }: { connId: string; schema?:
           </p>
         )}
         {pending.map(pr => {
-          const kind = _PROPOSAL_KIND[pr.kind] ?? { label: pr.kind, tone: "text-zinc-300 border-zinc-600 bg-zinc-800/50" };
+          const kind = _PROPOSAL_KIND[pr.kind] ?? { label: pr.kind, tone: "text-zinc-300 bg-[var(--gray-a3)]" };
           const note = typeof pr.proposed_fields?.note === "string" ? (pr.proposed_fields.note as string) : "";
           const column = typeof pr.proposed_fields?.column === "string" ? (pr.proposed_fields.column as string) : "";
           const confidence = typeof pr.proposed_fields?.confidence === "string" ? (pr.proposed_fields.confidence as string) : "";
           const lastEvidence = pr.evidence?.length ? pr.evidence[pr.evidence.length - 1] : null;
           const evidenceText = lastEvidence && typeof lastEvidence.evidence === "string" ? (lastEvidence.evidence as string) : "";
           return (
-            <div key={pr.id} className="rounded border border-zinc-700/70 bg-zinc-900/60 p-2.5 space-y-1.5" data-testid="ontology-proposal">
+            <div key={pr.id} className="rounded bg-[var(--gray-a3)] p-2.5 space-y-1.5" data-testid="ontology-proposal">
               <div className="flex items-center gap-2">
-                <span className={cn("aug-fs-xs border rounded-[var(--r-chip)] px-1.5 py-0.5", kind.tone)}>{kind.label}</span>
+                <span className={cn("aug-fs-xs rounded-[var(--r-chip)] px-1.5 py-0.5", kind.tone)}>{kind.label}</span>
                 <span className="aug-fs-xs font-mono text-zinc-300 truncate" title={pr.target_id}>
                   {pr.entity}{column ? `.${column}` : ""}
                 </span>
@@ -434,7 +434,7 @@ function ProposalsDrawer({ connId, schema, onClose }: { connId: string; schema?:
                   variant="outline" size="xs"
                   onClick={() => doAccept(pr.id)}
                   disabled={busy === pr.id}
-                  className="aug-fs-xs border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20"
+                  className="aug-fs-xs bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20"
                   data-testid="ontology-proposal-accept"
                 >
                   Confirm
@@ -488,15 +488,15 @@ function SkillsDrawer({ connId, schema, onClose }: { connId: string; schema?: st
   };
 
   return (
-    <div className="w-[340px] shrink-0 border-l border-zinc-700/70 bg-zinc-900/40 flex flex-col overflow-hidden">
-      <div className="flex items-center gap-2 px-3 py-2.5 border-b border-zinc-700/70">
+    <div className="w-[340px] shrink-0 border-l border-[var(--divide)] bg-zinc-900/40 flex flex-col overflow-hidden">
+      <div className="flex items-center gap-2 px-3 pt-2.5 pb-1">
         <p className="text-xs font-semibold text-zinc-300">Learned skills</p>
         <Button variant="ghost" size="xs" onClick={onClose} className="ml-auto">
           <Icon name="close" size={16} label="Close" />
         </Button>
       </div>
       {autonomy && (
-        <div className="px-3 py-2 border-b border-zinc-800/70 aug-fs-xs text-zinc-500">
+        <div className="px-3 py-2 aug-fs-xs text-zinc-500">
           autonomy{" "}
           <span className={cn("font-medium", _AUTONOMY_TONE[autonomy.level] ?? "text-zinc-400")}>
             L{autonomy.level} · {autonomy.label}
@@ -514,7 +514,7 @@ function SkillsDrawer({ connId, schema, onClose }: { connId: string; schema?: st
           </p>
         )}
         {skills?.map(sk => (
-          <div key={sk.id} className="rounded border border-violet-500/25 bg-violet-500/[0.04] p-2.5 space-y-1.5">
+          <div key={sk.id} className="rounded bg-violet-500/[0.07] p-2.5 space-y-1.5">
             <div className="flex items-center justify-between gap-2">
               <span className="aug-fs-xs text-violet-200 truncate" title={sk.display_name}>{sk.display_name}</span>
               <span className="aug-fs-xs text-zinc-500 shrink-0">{sk.action_type} · used {sk.usage_count ?? 0}×</span>
@@ -530,7 +530,7 @@ function SkillsDrawer({ connId, schema, onClose }: { connId: string; schema?: st
             )}
             <div className="flex gap-1 pt-0.5">
               <Button variant="plain" size="xs" onClick={() => doUse(sk.id)} disabled={busy !== null}
-                className="aug-fs-xs px-2 py-0.5 rounded border border-violet-500/40 bg-violet-500/15 text-violet-200 hover:bg-violet-500/25 transition disabled:opacity-40">
+                className="aug-fs-xs px-2 py-0.5 rounded bg-violet-500/15 text-violet-200 hover:bg-violet-500/25 transition-colors disabled:opacity-40">
                 {busy === sk.id ? "…" : "Use"}
               </Button>
               <RemoveAsk what="this learned skill" testId="skill-remove" back="A removed skill does not come back."
@@ -784,7 +784,8 @@ export function OntologyPanel({ connectionId, onInvestigate, schema }: Props) {
   ) : (
     // It wraps: on a narrower window its controls used to overflow a container that hides overflow, and focusing a
     // field in the type panel scrolled the whole layer sideways with no way back (seen at 1440px, 2026-10-10).
-    <div className="flex flex-wrap items-center gap-3 px-4 py-2 border-b shrink-0" style={{ borderColor: "var(--b1)" }}
+    // No rule under it: the bar's controls sit on the page's ground, spaced from the map (2026-11-20, borders are the exception).
+    <div className="flex flex-wrap items-center gap-3 px-4 py-2 shrink-0"
       data-testid="ontology-bar">
       {barWhich}
       {barView}
@@ -888,7 +889,7 @@ export function OntologyPanel({ connectionId, onInvestigate, schema }: Props) {
               <Button
                 variant="outline" size="xs"
                 onClick={() => { setShowSettings(true); setError(null); }}
-                className="aug-fs-xs border-zinc-700 text-zinc-300"
+                className="aug-fs-xs text-zinc-300"
                 data-testid="ontology-build-door"
               >
                 {schema ? `Build the ontology for ${schema}` : "Build the ontology"}

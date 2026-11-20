@@ -64,9 +64,11 @@ import {
   type StageDraft,
 } from "@/lib/processDraft";
 
+/** The sample table's header rule — the one line kept here. A step is its surface on the ground, a tile a soft fill
+ *  inside it, no edge on either (2026-11-20, borders are the exception). */
 const RULE = "1px solid var(--b1)";
-const CARD: React.CSSProperties = { border: RULE, borderRadius: "var(--r3)", padding: "12px 14px", marginBottom: 12 };
-const TILE: React.CSSProperties = { background: "var(--bg-2)", borderRadius: "var(--r2)", padding: "8px 10px", minWidth: 0 };
+const CARD: React.CSSProperties = { background: "var(--bg-2)", borderRadius: "var(--r3)", padding: "12px 14px", marginBottom: 12 };
+const TILE: React.CSSProperties = { background: "var(--gray-a3)", borderRadius: "var(--r2)", padding: "8px 10px", minWidth: 0 };
 const HINT: React.CSSProperties = { color: "var(--t3)" };
 const LABEL: React.CSSProperties = { color: "var(--t2)", margin: "0 0 4px" };
 const BIG: React.CSSProperties = { fontSize: 18, fontWeight: 500, color: "var(--t1)", lineHeight: 1.3 };

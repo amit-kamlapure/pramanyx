@@ -148,7 +148,7 @@ function DerivedQuantities({ tp }: { tp: TableProfileData | undefined }) {
   // and `flights` has six of them — expanded, that is a wall of prose above the first
   // column, which buries the table the reader came to look at.
   return (
-    <div style={{ background: "var(--bg-2)", borderBottom: "1px solid var(--b0)" }}>
+    <div style={{ background: "var(--bg-2)" }}>
       <button
         onClick={() => setOpen(o => !o)}
         style={{
@@ -218,7 +218,8 @@ function TableCard({
   const dr = tableProfile?.date_range;
 
   return (
-    <div style={{ background: "var(--bg-1)", border: "1px solid var(--b1)", borderRadius: 7, overflow: "hidden", flexShrink: 0 }}>
+    // No box: the table's card is its surface on the ground (2026-11-20, borders are the exception); its grid keeps its lines.
+    <div style={{ background: "var(--bg-1)", borderRadius: 7, overflow: "hidden", flexShrink: 0 }}>
       <button
         onClick={() => setExpanded(e => !e)}
         style={{
@@ -251,7 +252,7 @@ function TableCard({
       </button>
 
       {expanded && (
-        <div style={{ borderTop: "1px solid var(--b0)" }}>
+        <div>
           <DerivedQuantities tp={tableProfile} />
           <div style={{
             display: "grid", gridTemplateColumns: GRID,

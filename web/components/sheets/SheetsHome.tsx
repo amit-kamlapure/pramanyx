@@ -23,8 +23,9 @@ import {
   isWithheld, lastChangeWords, listSheets, sharedWords, type SheetSummary, type UploadedFile, type WithheldSheet, who,
 } from "@/lib/sheets";
 
+// the bar's own ground parts it from the page, no rule under it (2026-11-20, borders are the exception)
 const BAR: CSSProperties = {
-  display: "flex", alignItems: "center", gap: 10, padding: "10px 22px", borderBottom: "1px solid var(--b1)",
+  display: "flex", alignItems: "center", gap: 10, padding: "10px 22px",
   background: "var(--bg-1)", flex: "0 0 auto", flexWrap: "wrap",
 };
 

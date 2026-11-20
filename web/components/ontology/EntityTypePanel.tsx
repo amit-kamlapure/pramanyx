@@ -94,7 +94,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 
 const MONO: React.CSSProperties = { fontFamily: "var(--font-mono)" };
+/** A field's edge and the hairline between a list's rows. Sections part by spacing, not a rule; the panel's side is
+ *  the one pane rule (--divide, 2026-11-20, borders are the exception). */
 const RULE = "1px solid var(--b1)";
+const PANE_RULE = "1px solid var(--divide)";
 const ROLE: Record<string, string> = {
   reference_data: "reference", business_object: "business object", event: "event", standalone: "standalone",
 };
@@ -141,7 +144,7 @@ function Section({ title, aside, count, action, children }: {
     );
   }
   return (
-    <section style={{ padding: "12px 16px", borderTop: RULE }}>
+    <section style={{ padding: "14px 16px" }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 8 }}>
         <h3 className="aug-fs-xs"
           style={{ margin: 0, color: "var(--t2)", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em" }}>
@@ -213,7 +216,7 @@ export function EntityTypePanel({ connectionId, schema, objectType, types, versi
   }
   return (
     <aside aria-label="Entity type" data-testid="entity-type-panel" data-full={full || undefined}
-      style={{ ...(full ? { flex: 1, minWidth: 0 } : { width: PANEL_WIDTH, flexShrink: 0, borderLeft: RULE }),
+      style={{ ...(full ? { flex: 1, minWidth: 0 } : { width: PANEL_WIDTH, flexShrink: 0, borderLeft: PANE_RULE }),
                display: "flex", flexDirection: "column", minHeight: 0, background: "var(--bg-0)" }}>
       <div style={{ flex: 1, overflowY: "auto" }}>{body}</div>
     </aside>
@@ -727,7 +730,7 @@ function DeclareProcess({ detail, connectionId, schema, onOpenProcess, onChanged
       hint={moments.length < 2 ? "A process runs between two moments of this entity, and it has fewer"
         : "The stages this entity goes through, and the promises about reaching them"}
       title={`New process for ${detail.display_name}`}>
-    <div style={{ flexBasis: "100%", display: "flex", flexDirection: "column", gap: 6, padding: "8px 0", borderTop: RULE }}
+    <div style={{ flexBasis: "100%", display: "flex", flexDirection: "column", gap: 6, padding: "8px 0" }}
       data-testid="process-declare">
       <p className="aug-fs-xs" style={{ margin: 0, color: "var(--t3)", lineHeight: 1.45 }}>
         A process {detail.display_name} goes through: its stages in order, each at the moment an object reaches it. Every
@@ -1592,7 +1595,7 @@ function BackingEditor({ detail, busy, onPreview, onSet, onWithdraw, problem: re
     <Door open={open} onOpenChange={setOpen} busy={busy} icon="edit" testId="backing-door" width={760}
       label={readsQuery ? "Change its SELECT" : "Change what it reads"}
       hint={`Read ${detail.display_name} from a keyed SELECT instead of its table`} title={`Change what ${detail.display_name} reads`}>
-    <div style={{ marginTop: 10, paddingTop: 8, borderTop: RULE }} data-testid="backing-editor">
+    <div style={{ marginTop: 10, paddingTop: 8 }} data-testid="backing-editor">
       <p className="aug-fs-xs" style={{ margin: "0 0 6px", color: "var(--t3)", lineHeight: 1.45 }}>
         Read {detail.display_name} from a keyed SELECT: its rows are the objects, and every property is read from it.
         Nothing is written until it is set.
@@ -1800,7 +1803,7 @@ function DeclareBinding({ detail, busy, onDeclare, sources, problem = "" }: {
     <Door open={open} onOpenChange={setOpen} busy={busy} label="New source" testId="binding-door" width={760}
       hint="A further table or SELECT joined to this entity on its key"
       title={`New source for ${detail.display_name}`}>
-    <div style={{ marginTop: 10, paddingTop: 8, borderTop: RULE }} data-testid="declare-binding">
+    <div style={{ marginTop: 10, paddingTop: 8 }} data-testid="declare-binding">
       <p className="aug-fs-xs" style={{ margin: "0 0 6px", color: "var(--t3)", lineHeight: 1.45 }}>
         A source joined to {detail.display_name} on its key. A <strong>static</strong> binding must hold one row per
         object; a <strong>timeseries</strong> holds many over a time column and is read as each object&rsquo;s latest

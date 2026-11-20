@@ -12,7 +12,7 @@ export function PlanList({ steps }: { steps: PlanStep[] }) {
   if (!steps.length) return null;
   const done = steps.filter(s => s.done).length;
   return (
-    <div data-testid="turn-plan" className="aug-fs-sm" style={{ margin: "4px 0 8px", padding: "8px 10px", border: "1px solid var(--card-edge)", borderRadius: "var(--r3)" }}>
+    <div data-testid="turn-plan" className="aug-fs-sm" style={{ margin: "4px 0 8px", padding: "8px 10px", borderRadius: "var(--r3)" }}>
       <div className="aug-fs-xs" style={{ color: "var(--t3)", marginBottom: 4 }}>The plan · {done} of {steps.length} done</div>
       <ol style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 3 }}>
         {withUniqueKeys(steps, s => s.text).map(([key, s]) => (

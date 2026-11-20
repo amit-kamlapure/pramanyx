@@ -154,7 +154,7 @@ function PackDeploy({ packId, onStatus }: { packId: string; onStatus: (status: s
   };
 
   const inp = "aug-fs-xs bg-[var(--bg-2)] border border-[var(--b1)] rounded px-2 py-1 text-zinc-300";
-  const btn = "aug-fs-xs px-2 py-1 rounded border border-zinc-700 text-zinc-300 hover:bg-white/5 disabled:opacity-40";
+  const btn = "aug-fs-xs px-2 py-1 rounded text-zinc-300 hover:bg-white/5 disabled:opacity-40";
 
   return (
     <div className="mt-2 pl-1 space-y-3">

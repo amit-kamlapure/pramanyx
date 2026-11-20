@@ -237,7 +237,7 @@ function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, se
           <div data-testid="chat-subject" className="aug-fs-xs" style={{
             display: "flex", alignItems: "center", gap: 5, minWidth: 0,
             padding: "2px 8px", borderRadius: "var(--r2)",
-            background: "var(--blue1)", border: "1px solid var(--blue2)",
+            background: "var(--blue1)",
             color: "var(--blue5)", maxWidth: "100%",
           }}>
             <Icon name="table" size={11} className="shrink-0" />
@@ -255,7 +255,7 @@ function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, se
           <div style={{
             display: "flex", alignItems: "center", gap: 5,
             padding: "2px 8px", borderRadius: "var(--r2)",
-            background: "var(--blue1)", border: "1px solid var(--blue2)",
+            background: "var(--blue1)",
             fontSize: 11, color: "var(--blue5)", maxWidth: 320,
           }}>
             <Icon name="attach" size={11} className="shrink-0" />
@@ -374,8 +374,7 @@ function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, se
             style={{
               marginLeft: 8, marginRight: "auto", padding: "3px 8px", fontSize: 11, fontWeight: 500,
               fontFamily: "var(--font-ui)", borderRadius: "var(--r1)",
-              background: agentId ? "var(--grn1)" : "var(--bg-0)",
-              border: `1px solid ${agentId ? "var(--grn2)" : "var(--b1)"}`,
+              background: agentId ? "var(--grn1)" : "var(--gray-a3)",
               color: agentId ? "var(--grn5)" : "var(--t3)", cursor: "pointer",
             }}
           >
@@ -497,7 +496,7 @@ function DebugLogDrawer({ eventLogRef, onClose }: { eventLogRef: React.RefObject
 
   return (
     <div className="fixed bottom-0 right-0 z-50 flex flex-col bg-zinc-950 border border-zinc-700/80 rounded-tl-[var(--r3)] shadow-[var(--shadow-md)]" style={{ width: 520, height: 380 }}>
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-zinc-800 shrink-0">
+      <div className="flex items-center gap-2 px-3 py-2 shrink-0">
         <span className="text-emerald-400"><Icon name="sql" size={16} label="Debug log" /></span>
         <span className="aug-fs-xs font-mono text-zinc-300 flex-1">SSE Event Log · {events.length} events</span>
         <span className="aug-fs-xs text-zinc-500 mr-2">⌘⇧L to close</span>
@@ -641,7 +640,7 @@ function ClarifyCard({ turn, onClarify, onAnswerAnyway }: {
   if (!c) return null;
   const submit = () => { const v = val.trim(); if (v) { onClarify(v); setVal(""); } };
   return (
-    <div style={{ marginTop: 8, padding: "12px 14px", borderRadius: "var(--r2)", background: "var(--blue1)", border: "1px solid var(--blue2)" }}>
+    <div style={{ marginTop: 8, padding: "12px 14px", borderRadius: "var(--r2)", background: "var(--blue1)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: c.reason ? 4 : 8 }}>
         <span style={{ color: "var(--blue5)", display: "inline-flex" }}><Icon name="chat" size={16} /></span>
         <span style={{ fontSize: 13, fontWeight: 500, color: "var(--blue5)" }}>{c.question}</span>
@@ -652,7 +651,7 @@ function ClarifyCard({ turn, onClarify, onAnswerAnyway }: {
           {c.options.map((o, i) => (
             <Button key={`${i}:${o}`} variant="outline" size="xs" onClick={() => onClarify(o)}
               className="h-auto flex-col items-start gap-px whitespace-normal text-left"
-              style={{ fontSize: 12, fontWeight: 500, padding: "4px 10px", background: "var(--bg-1)", borderColor: "var(--blue2)", color: "var(--blue5)" }}>
+              style={{ fontSize: 12, fontWeight: 500, padding: "4px 10px", background: "var(--bg-1)", color: "var(--blue5)" }}>
               <span>{o}</span>
               {c.previews?.[i] && <span style={{ fontSize: 11, fontWeight: 400, color: "var(--t3)" }}>{c.previews[i]}</span>}
             </Button>
@@ -690,7 +689,7 @@ function EscalateBar({ turn, onEscalate }: { turn: ChatTurn; onEscalate: () => v
   if (!e || turn.status === "loading") return null;
   return (
     <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, marginTop: 8,
-                  padding: "8px 12px", borderRadius: "var(--r2)", background: "var(--vio1)", border: "1px solid var(--vio2)" }}>
+                  padding: "8px 12px", borderRadius: "var(--r2)", background: "var(--vio1)" }}>
       <span style={{ color: "var(--vio5)", display: "inline-flex" }}><Icon name="spark" size={16} /></span>
       <span style={{ fontSize: 12, color: "var(--t2)", flex: 1, minWidth: 180 }}>{e.reason}</span>
       <Button
@@ -778,7 +777,6 @@ function AgentLandingBlock({ agent, connectionName }: { agent: UserAgent; connec
           width: 44, height: 44, borderRadius: "var(--r2)", flexShrink: 0,
           display: "flex", alignItems: "center", justifyContent: "center",
           background: "color-mix(in srgb, var(--grn3) 14%, transparent)",
-          border: "1px solid color-mix(in srgb, var(--grn3) 34%, transparent)",
         }}>
           <Icon name="spark" size={22} />
         </div>
@@ -1455,8 +1453,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
               style={{
                 display: "inline-flex", alignItems: "center", gap: 5,
                 padding: "2px 8px", borderRadius: "var(--r2)",
-                background: u.error ? "var(--red1)" : "var(--bg-2)",
-                border: `1px solid ${u.error ? "var(--red3)" : "var(--b1)"}`,
+                background: u.error ? "var(--red1)" : "var(--gray-a3)",
                 color: u.error ? "var(--red5)" : "var(--t2)",
                 maxWidth: 460,
               }}
@@ -1558,7 +1555,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                         )}
                         data-testid="chat-starter"
                         className="aug-pressable w-full text-left aug-fs-ui leading-snug py-3 transition-colors flex items-center gap-3"
-                        style={{ color: "var(--t2)", borderBottom: "1px solid var(--b1)", background: "transparent" }}
+                        style={{ color: "var(--t2)", borderBottom: "1px solid var(--b0)", background: "transparent" }}
                         onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--t1)"; }}
                         onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--t2)"; }}
                       >
@@ -1596,7 +1593,8 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                       else turnTopRefs.current.delete(turn.id);
                     }}
                   >
-                    {i > 0 && <div className="border-t border-zinc-800 my-8" />}
+                    {/* turns read apart by the space between them, no rule (2026-11-20, borders are the exception) */}
+                    {i > 0 && <div aria-hidden className="h-16" />}
                     {shared && (
                       <div className="aug-fs-xs" data-testid="turn-asked-by" style={{ color: "var(--t3)", marginBottom: 6 }}>
                         {askedByWords((userMsg?.metadata as { asked_by?: string } | undefined)?.asked_by, people)}
@@ -1785,7 +1783,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
           {/* ── Source panel drawer (right side, pushes chat left) ── */}
           {sourcePanel && (
             <div
-              className="flex-shrink-0 flex flex-col border-l border-zinc-700/60"
+              className="flex-shrink-0 flex flex-col border-l border-[var(--divide)]"
               style={harness && beside ? { position: "absolute", inset: 0, zIndex: 30, background: "var(--blue1)" } : { width: 380, background: "var(--blue1)" }}
             >
               <SourcePanel

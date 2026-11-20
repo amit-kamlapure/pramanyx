@@ -149,7 +149,7 @@ export function ObjectListPiece({ elementKey, entity, set, setFrom, chooses, tic
             <div key={key} data-testid="object-list-card" aria-pressed={on} role="button" tabIndex={0} data-marked={isMarked || undefined}
               onClick={() => choice && pick(choice, on ? null : object)} onKeyDown={e => { if (e.key === "Enter" && choice) pick(choice, on ? null : object); }}
               style={{ display: "grid", gridTemplateColumns: `${ticks ? "20px " : ""}minmax(0, 1fr) auto`, alignItems: "center", gap: 8,
-                padding: "8px 10px", borderRadius: "var(--r2)", border: "1px solid var(--b1)", cursor: choice ? "pointer" : undefined,
+                padding: "8px 10px", borderRadius: "var(--r2)", cursor: choice ? "pointer" : undefined,
                 background: on ? "var(--bg-sel)" : "var(--bg-1)",
                 boxShadow: isMarked && marked ? `inset 3px 0 0 ${MARK_TONE[marked.tone]}` : undefined }}>
               {ticks && <span onClick={e => e.stopPropagation()}><Checkbox checked={isTicked} disabled={!isTicked && full} aria-label={`Tick ${pk}`} onChange={e => tickOne(ticks, object, e.target.checked)} /></span>}

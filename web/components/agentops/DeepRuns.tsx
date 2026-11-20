@@ -163,7 +163,7 @@ function RunDetail({ group, runId, onChoose, onResume }: {
           <RunPhases runId={run.id} onResume={onResume} />
         </div>
         <div data-testid="ao-deep-run-trace" style={{ flex: "2 1 440px", minWidth: 0, height: 560, display: "flex",
-          flexDirection: "column", borderLeft: "1px solid var(--b0)" }}>
+          flexDirection: "column", borderLeft: "1px solid var(--divide)" }}>
           {traceError !== null ? (
             <ReadFailed what="which trace holds this run" error={traceError} style={{ padding: 16 }}
               onRetry={() => { setTraceError(null); setAttempt(a => a + 1); }} />

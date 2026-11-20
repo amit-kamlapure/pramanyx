@@ -71,7 +71,7 @@ export function SheetHistory({ sheet, tick, editable, scope, canUndo, onScope, o
         {failed ? <ReadFailed what="the history" error={failed} onRetry={load} /> : !read ? <Loading what="the history" /> : (
           <div style={{ display: "flex", flexDirection: "column" }}>
             {told && (
-              <div data-testid="history-scope" style={{ display: "flex", flexDirection: "column", gap: 4, paddingBottom: 10, borderBottom: RULE }}>
+              <div data-testid="history-scope" style={{ display: "flex", flexDirection: "column", gap: 4, paddingBottom: 14 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <b className="aug-fs-sm" style={{ minWidth: 0, overflowWrap: "anywhere" }}>
                     {told.name ? `${told.name} · row ${formatCount(told.row)}` : `Row ${formatCount(told.row)}`}

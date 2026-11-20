@@ -204,8 +204,9 @@ function PatternRow({ pattern, domain, first, showKind }: { pattern: Pattern; do
             </div>
           )}
           {examples.map(([key, item]) => (
-            <div key={key} className="aug-fs-sm" style={{ color: "var(--t2)", lineHeight: 1.55, paddingLeft: 10,
-              borderLeft: "2px solid var(--b2)" }}>{item}</div>
+            // A soft surface, not a rule down its side (2026-11-20, borders are the exception).
+            <div key={key} className="aug-fs-sm" style={{ color: "var(--t2)", lineHeight: 1.55, padding: "6px 10px",
+              background: "var(--gray-a3)", borderRadius: "var(--r2)" }}>{item}</div>
           ))}
         </div>
       )}

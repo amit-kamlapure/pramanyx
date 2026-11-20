@@ -37,10 +37,11 @@ import { Input } from "@/components/ui/input";
 
 /** Sizes come from the type scale via `aug-fs-*` classes on the elements, never as a
  *  literal here — a `fontSize` inside a style object is exactly what the design-token
- *  gate ratchets, and it is right to: a number here sits on no scale anyone can read. */
+ *  gate ratchets, and it is right to: a number here sits on no scale anyone can read.
+ *  The field's edge is the field's own (ui/field.ts), kept: this is a form (2026-11-20). */
 const inputStyle: React.CSSProperties = {
   width: "100%", padding: "7px 10px", borderRadius: "var(--r3)",
-  border: "1px solid var(--b1)", background: "var(--bg-1)", color: "var(--t1)",
+  background: "var(--bg-1)", color: "var(--t1)",
 };
 
 const labelStyle: React.CSSProperties = {
@@ -226,7 +227,7 @@ export function AgentSlackDoor({
 
       {/* ── the one-token path (AO-2d) ── */}
       {!byHand && (
-        <div style={{ border: "1px solid var(--b1)", borderRadius: "var(--r3)", padding: 14 }}>
+        <div style={{ background: "var(--bg-2)", borderRadius: "var(--r3)", padding: 14 }}>
           <div className="aug-fs-sm" style={{ fontWeight: 500, marginBottom: 8 }}>
             1 · Let Pramanyx create the app
           </div>
@@ -321,7 +322,7 @@ export function AgentSlackDoor({
 
       {/* ── 1 · the manifest ── */}
       {byHand && (<>
-      <div style={{ border: "1px solid var(--b1)", borderRadius: "var(--r3)", padding: 14 }}>
+      <div style={{ background: "var(--bg-2)", borderRadius: "var(--r3)", padding: 14 }}>
         <div className="aug-fs-sm" style={{ fontWeight: 500, marginBottom: 8 }}>
           1 · Generate the app manifest
         </div>
@@ -349,7 +350,7 @@ export function AgentSlackDoor({
             </div>
             <pre ref={preRef} className="aug-fs-xs nowheel" style={{
               margin: 0, maxHeight: 260, overflow: "auto", padding: 10,
-              background: "var(--bg-1)", border: "1px solid var(--b1)",
+              background: "var(--bg-1)",
               borderRadius: "var(--r3)", color: "var(--t2)",
               fontFamily: "var(--font-mono)", whiteSpace: "pre",
             }}>{json}</pre>
@@ -365,7 +366,7 @@ export function AgentSlackDoor({
       </div>
 
       {/* ── 2 · the credentials ── */}
-      <div style={{ border: "1px solid var(--b1)", borderRadius: "var(--r3)", padding: 14,
+      <div style={{ background: "var(--bg-2)", borderRadius: "var(--r3)", padding: 14,
                     opacity: manifest ? 1 : 0.55 }}>
         <div className="aug-fs-sm" style={{ fontWeight: 500, marginBottom: 8 }}>
           2 · Paste the three values back

@@ -103,8 +103,7 @@ export function HubMapPanel({ connId, onOpenAgent, onOpenAutomation }: {
       {/* What the layer is, its totals and Refresh. Inside the app the totals stand beside the title and Refresh is one of
           the page's actions (2026-11-10, ROADMAP §6 item 64); the line saying what the layer is stays its first line. */}
       <div style={{
-        display: "flex", alignItems: "baseline", gap: 14, padding: "12px 16px 8px",
-        borderBottom: "1px solid var(--b1)",
+        display: "flex", alignItems: "baseline", gap: 14, padding: "12px 16px 12px",
       }}>
         <span className="aug-fs-ui" style={{ fontWeight: 600, color: "var(--t1)" }}>Every automation and monitor, one screen</span>
         {inShell ? (

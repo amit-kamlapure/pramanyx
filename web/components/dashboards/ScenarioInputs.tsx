@@ -59,7 +59,7 @@ function Input({ label, slider, start, value, onSet }: { label: string; slider: 
   const shown = moving ?? value;
   const land = () => { if (moving !== null) { onSet(moving); setMoving(null); } };
   return (
-    <label data-testid="scenario-input" style={{ display: "block", background: "var(--bg-3)", border: "1px solid var(--b0)", borderRadius: "var(--r2)", padding: "10px 12px" }}>
+    <label data-testid="scenario-input" style={{ display: "block", background: "var(--bg-3)", borderRadius: "var(--r2)", padding: "10px 12px" }}>
       <span style={{ display: "flex", justifyContent: "space-between", fontWeight: 500 }}>
         <span>{label}</span><span data-testid="scenario-input-value" style={{ fontVariantNumeric: "tabular-nums" }}>{said(shown, slider.unit)}</span>
       </span>

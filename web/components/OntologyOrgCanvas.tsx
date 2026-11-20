@@ -113,7 +113,7 @@ function ClusterTile({
       </span>
       <span className="text-zinc-500 aug-fs-sm">·</span>
       <span className="aug-fs-sm text-zinc-400 truncate">{schema}</span>
-      <span className="aug-fs-xs uppercase tracking-wider text-zinc-500 border border-zinc-700/60 rounded px-1 py-0.5 shrink-0">
+      <span className="aug-fs-xs uppercase tracking-wider text-zinc-500 bg-[var(--gray-a3)] rounded px-1 py-0.5 shrink-0">
         {connType}
       </span>
       {graph && (

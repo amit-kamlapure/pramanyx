@@ -98,7 +98,8 @@ export function SheetCalendar({ sheet, query, column, card, tick, onOpenRow }: {
                 onClick={() => setDay(chosen ? "" : d)}
                 style={{ minHeight: 64, height: "auto", display: "flex", flexDirection: "column", alignItems: "flex-start",
                   justifyContent: "space-between", padding: "6px 8px", borderRadius: "var(--r2)", fontWeight: 400,
-                  border: `1px solid ${chosen ? "var(--blue3)" : "var(--b0)"}`,
+                  // the chosen day keeps its selection edge, as a grid's chosen cell does; the rest are their fill (2026-11-20)
+                  border: `1px solid ${chosen ? "var(--blue3)" : "transparent"}`,
                   background: n ? `color-mix(in srgb, var(--blue2) ${Math.round(12 + 40 * (n / busiest))}%, var(--bg-1))`
                     : "var(--bg-1)" }}>
                 <span className="aug-fs-xs" style={{ ...MUTED, ...NUM }}>{Number(d.slice(8))}</span>
@@ -140,7 +141,7 @@ export function SheetCalendar({ sheet, query, column, card, tick, onOpenRow }: {
           </section>
         )}
       </div>
-      <div className="aug-fs-xs" style={{ ...MUTED, ...NUM, padding: "4px 12px", borderTop: "1px solid var(--b0)",
+      <div className="aug-fs-xs" style={{ ...MUTED, ...NUM, padding: "4px 12px",
         background: "var(--bg-1)" }}>
         {rowsWord(page.month_rows, sheet.name)} in {monthWords(page.month)} on {formatCount(page.days.length)} day
         {page.days.length === 1 ? "" : "s"} by {dateCol.name}

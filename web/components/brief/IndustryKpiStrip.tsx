@@ -180,8 +180,8 @@ export function KpiStripView({ industry, period, kpis, scopeKey, note }: {
         <div
           className="aug-anim-up"
           style={{
+            // the open KPI's stripe stays (it ties the chart to its tile); no box round it (2026-11-20)
             marginTop: 10, padding: "12px 14px", borderRadius: "var(--r3)", background: "var(--bg-2)",
-            borderTop: "1px solid var(--b1)", borderRight: "1px solid var(--b1)", borderBottom: "1px solid var(--b1)",
             borderLeft: `3px solid ${expanded.color}`,
           }}
         >

@@ -19,7 +19,10 @@ import { requestTab } from "@/lib/navigate";
 import type { BriefingDesk, BriefingRangeBlock, DeskColumn, DeskItem } from "@/lib/api";
 
 const SERIF = "var(--font-serif)";
-const RULE = "1px solid var(--b1)";
+// The paper keeps its rules, quieted (2026-11-20, borders are the exception): one between its parts and between its
+// columns, in --divide; the hairline between a list's rows, in --b0; and the masthead's own. A pill is a fill, no edge.
+const RULE = "1px solid var(--divide)";
+const ROW = "1px solid var(--b0)";
 
 /** Today in words: "Monday 12 October 2026". */
 export function paperDate(d: Date): string {
@@ -71,7 +74,7 @@ export function PaperDateline({ today, covers, lagDays, records, endedOn, stillM
         <>
           {noData && (
             <span className="aug-fs-xs" data-testid="paper-no-data"
-              style={{ padding: "2px 8px", borderRadius: "var(--r-pill)", border: RULE, color: "var(--t2)" }}>
+              style={{ padding: "2px 8px", borderRadius: "var(--r-pill)", background: "var(--gray-a3)", color: "var(--t2)" }}>
               no data
             </span>
           )}
@@ -82,7 +85,7 @@ export function PaperDateline({ today, covers, lagDays, records, endedOn, stillM
             </span>
           )}
           <span className="aug-fs-xs" data-testid="paper-ended"
-            style={{ padding: "2px 8px", borderRadius: "var(--r-pill)", border: RULE, color: "var(--t2)" }}>
+            style={{ padding: "2px 8px", borderRadius: "var(--r-pill)", background: "var(--gray-a3)", color: "var(--t2)" }}>
             data ended {endedDay(endedOn)}
           </span>
         </>
@@ -200,7 +203,7 @@ export function PaperNumbers({ title, rows, note, after, footer, connectionId }:
               letterSpacing: ".06em", padding: i ? "10px 0 2px" : "0 0 2px" }}>{r.area}</div>
           )}
           <div style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "6px 0",
-            borderTop: i && !(r.area && r.area !== rows[i - 1]?.area) ? RULE : "none" }}>
+            borderTop: i && !(r.area && r.area !== rows[i - 1]?.area) ? ROW : "none" }}>
             <span className="aug-fs-sm" style={{ color: "var(--t2)", minWidth: 0, flex: 1 }}>
               {r.label}
               {r.note && <span className="aug-fs-xs" data-testid="paper-number-note" style={{ display: "block", color: "var(--amb4)" }}>{r.note}</span>}
@@ -259,7 +262,7 @@ function Story({ item, n, connectionId }: { item: DeskItem; n?: number; connecti
   // every recorded finding is provisional, so on those it would only repeat itself.
   const provisional = item.status === "Provisional" && item.kind === "answer";
   return (
-    <div data-testid={`desk-${item.kind}`} style={{ padding: "10px 0", borderTop: RULE }} title={item.source.label}>
+    <div data-testid={`desk-${item.kind}`} style={{ padding: "10px 0", borderTop: ROW }} title={item.source.label}>
       <b style={{ display: "block", fontFamily: SERIF, fontSize: 15, fontWeight: 600, lineHeight: 1.3, marginBottom: 4, color: "var(--t1)" }}>
         {item.title.replace(/_/g, " ")}{!item.text && n ? <sup style={{ fontSize: 11, color: "var(--blue4)", marginLeft: 2 }}>{n}</sup> : null}
       </b>
@@ -353,7 +356,7 @@ export function InBrief({ items, total, onAll, allOpen, title, empty, standing, 
           </div>
         : <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", columnGap: 34 }}>
             {items.map(it => (
-              <div key={it.id} className="aug-fs-sm" style={{ lineHeight: 1.5, color: "var(--t2)", padding: "6px 0", borderTop: RULE }}>{it.node}</div>
+              <div key={it.id} className="aug-fs-sm" style={{ lineHeight: 1.5, color: "var(--t2)", padding: "6px 0", borderTop: ROW }}>{it.node}</div>
             ))}
           </div>}
     </div>

@@ -573,9 +573,10 @@ function DesignStepNodeInner({ data, selected }: { data: DesignNodeData; selecte
       <Handle type="source" position={Position.Right} style={{ opacity: 0, top: 20 }} />
 
       {/* header — icon tile · kind · alias · remove. The tile carries the kind's hue,
-          so a chain reads as roles at a glance (the reference frames' trick). */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px",
-        borderBottom: "1px solid var(--b1)" }}>
+          so a chain reads as roles at a glance (the reference frames' trick). No rule
+          under it: the node's outline is the line, spacing parts header from fields
+          (2026-11-20, borders are the exception). */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px" }}>
         <span style={{
           width: 24, height: 24, borderRadius: "var(--r2)", display: "grid",
           placeItems: "center", color: hue,
@@ -585,8 +586,8 @@ function DesignStepNodeInner({ data, selected }: { data: DesignNodeData; selecte
         </span>
         <span className="aug-fs-ui" style={{ fontWeight: 600 }}>{kindLabel}</span>
         <span className="aug-fs-xs" style={{ marginLeft: "auto", color: "var(--t3)",
-          border: "1px solid var(--b1)", borderRadius: "var(--r-chip)",
-          padding: "1px 8px", background: "var(--bg-1)" }}>
+          borderRadius: "var(--r-chip)",
+          padding: "1px 8px", background: "var(--gray-a3)" }}>
           {data.alias}
         </span>
         {handlers && (
@@ -645,7 +646,8 @@ function DesignStepNodeInner({ data, selected }: { data: DesignNodeData; selecte
               {bound ? (
                 <div className="aug-fs-sm" style={{ display: "flex", alignItems: "center",
                   gap: 7, padding: "6px 9px", borderRadius: "var(--r2)",
-                  border: "1px solid color-mix(in srgb, var(--chart-1) 55%, transparent)",
+                  // No edge: the tint says bound; transparent keeps the field's height (2026-11-20).
+                  border: "1px solid transparent",
                   background: "color-mix(in srgb, var(--chart-1) 10%, var(--bg-1))",
                   color: "var(--chart-1)" }}>
                   <Icon name="link" size={12} />
@@ -687,7 +689,7 @@ function DesignStepNodeInner({ data, selected }: { data: DesignNodeData; selecte
           strip is absent when there is no guard: an empty one would say a step is
           conditional when it always runs. */}
       {data.when.length > 0 && (
-        <div style={{ position: "relative", borderTop: "1px solid var(--b1)",
+        <div style={{ position: "relative",
           padding: "7px 12px 8px", background: "var(--bg-1)" }}>
           <Handle
             id={`in:${GUARD_FIELD}`} type="target" position={Position.Left}
@@ -712,7 +714,7 @@ function DesignStepNodeInner({ data, selected }: { data: DesignNodeData; selecte
           Absent on an unrouted step — an empty strip would say a step is an arm when
           it always runs. */}
       {!!data.elseOf && (
-        <div style={{ position: "relative", borderTop: "1px solid var(--b1)",
+        <div style={{ position: "relative",
           padding: "7px 12px 8px", background: "var(--bg-1)" }}>
           <Handle
             id={`in:${ELSE_FIELD}`} type="target" position={Position.Left}
@@ -737,7 +739,7 @@ function DesignStepNodeInner({ data, selected }: { data: DesignNodeData; selecte
           drawn apart from the field rows. Absent when the step runs once — an empty
           strip would say a step repeats when it does not. */}
       {!!data.forEach && (
-        <div style={{ position: "relative", borderTop: "1px solid var(--b1)",
+        <div style={{ position: "relative",
           padding: "7px 12px 8px", background: "var(--bg-1)" }}>
           <Handle
             id={`in:${FAN_FIELD}`} type="target" position={Position.Left}
@@ -757,7 +759,7 @@ function DesignStepNodeInner({ data, selected }: { data: DesignNodeData; selecte
 
       {/* outputs — "gives X", one row per key, its dot half over the right edge */}
       {data.publishes.length > 0 && (
-        <div style={{ borderTop: "1px solid var(--b1)", padding: "7px 12px 9px",
+        <div style={{ padding: "7px 12px 9px",
           display: "flex", flexDirection: "column", gap: 4 }}>
           {data.publishes.map(key => (
             <div key={key} style={{ position: "relative", display: "flex",
@@ -812,8 +814,7 @@ function DesignTriggerNode({ data }: {
       width: 210, borderRadius: "var(--r3)", background: "var(--bg-2)",
       border: "1px dashed var(--b3)",
     }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px",
-        borderBottom: "1px solid var(--b1)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px" }}>
         <span style={{
           width: 24, height: 24, borderRadius: "var(--r2)", display: "grid",
           placeItems: "center", color: "var(--chart-3)",
@@ -1674,8 +1675,8 @@ export function AutomationGraph({ automationId, automation, create, onCreated, h
   );
   const stripMode = (
     <div style={{ display: "inline-flex", gap: 2, padding: 2,
-      border: "1px solid var(--b1)", borderRadius: "var(--r-chip)",
-      background: "var(--bg-1)" }}>
+      borderRadius: "var(--r-chip)",
+      background: "var(--gray-a3)" }}>
       {(["design", "execution"] as const).map((m) => (
         <Button key={m} variant={mode === m ? "secondary" : "ghost"} size="xs"
           // An unsaved chain has no runs; Execution opens there only for a preview.
@@ -1804,7 +1805,7 @@ export function AutomationGraph({ automationId, automation, create, onCreated, h
         )}
         {mode === "execution" && runsOpen && !preview && graph && (
           <div style={{ width: 132, flexShrink: 0, overflowY: "auto",
-                        border: "1px solid var(--b1)", borderRadius: 8, padding: 4 }}>
+                        background: "var(--bg-2)", borderRadius: 8, padding: 4 }}>
             <div className="aug-fs-xs" style={{ color: "var(--t3)", padding: "2px 4px 4px" }}>
               runs
             </div>
@@ -1863,8 +1864,9 @@ export function AutomationGraph({ automationId, automation, create, onCreated, h
                addFromPalette(placement, rf.current?.screenToFlowPosition(
                  { x: e.clientX, y: e.clientY }));
              }}
+             // No box: the canvas is the ground its dot grid draws (2026-11-20, borders are the exception).
              style={{ flex: 1, minWidth: 0, minHeight: 220, position: "relative",
-                      border: "1px solid var(--b1)", borderRadius: 8, overflow: "hidden" }}>
+                      borderRadius: 8, overflow: "hidden" }}>
           {/* §3.8b — the handlers the nodes call, provided ONCE for the whole canvas.
               In `data` they were N closures rebuilt on every memo run, so `memo` on the
               node could never hit; here they are one stable object. */}
@@ -1971,7 +1973,7 @@ export function AutomationGraph({ automationId, automation, create, onCreated, h
               {notice && (
                 <Panel position="top-center">
                   <span className="aug-fs-xs" style={{ color: "var(--amb5)",
-                    background: "var(--amb1)", border: "1px solid var(--amb2)",
+                    background: "var(--amb1)",
                     borderRadius: "var(--r-chip)", padding: "3px 10px" }}>
                     {notice}
                   </span>

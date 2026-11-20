@@ -323,7 +323,7 @@ function PinnedCardsInner({ connectionId, cards, onRemove, onRefresh, onOpenSour
   }, [rfNodes]);
 
   return (
-    <div ref={wrapRef} style={{ height: contentH, borderRadius: "var(--r3)", border: "1px solid var(--b1)", background: "var(--bg-1)", overflow: "hidden", transition: "height var(--dur-fast, .15s)" }}>
+    <div ref={wrapRef} style={{ height: contentH, borderRadius: "var(--r3)", background: "var(--bg-1)", overflow: "hidden", transition: "height var(--dur-fast, .15s)" }}>
       <ReactFlow
         nodes={rfNodes}
         edges={[]}

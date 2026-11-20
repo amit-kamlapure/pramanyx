@@ -95,8 +95,9 @@ export function DecideDialog({ story, figure, connectionId, schema, start, end, 
         <Input data-testid="decide-owner" value={owner} onChange={e => setOwner(e.target.value)} placeholder="A team or a person" />
       </label>
       {story?.metric ? (
-        <fieldset style={{ border: "1px solid var(--b1)", borderRadius: "var(--r3)", padding: "10px 12px", margin: "0 0 12px" }}>
-          <legend className="aug-fs-sm" style={{ padding: "0 6px" }}>What {figure?.label ?? story.metric} is expected to read afterwards</legend>
+        // a group of fields, told by its heading and the space round it — no box (2026-11-20, borders are the exception)
+        <fieldset style={{ border: "none", padding: 0, margin: "4px 0 16px" }}>
+          <legend className="aug-fs-sm" style={{ padding: 0, marginBottom: 4 }}>What {figure?.label ?? story.metric} is expected to read afterwards</legend>
           <p className="aug-fs-xs" style={{ ...HINT, margin: "0 0 10px" }}>
             It read {figure?.current_text ?? "—"}{figure?.usual ? ` against a usual ${usualWords(figure)}` : ""}. The review scores the figure
             against this range. Leave both empty and the decision is booked with nothing to score — said on the page.

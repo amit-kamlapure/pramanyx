@@ -28,7 +28,7 @@ function DoorRow({ kind, title, state, hue, detail, action }: {
 }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px",
-      background: "var(--bg-1)", border: "1px solid var(--b1)", borderRadius: "var(--r2)" }}>
+      background: "var(--bg-1)", borderRadius: "var(--r2)" }}>
       <span className="aug-fs-xs" style={{ color: "var(--t3)", width: 72, flexShrink: 0,
         textTransform: "uppercase", letterSpacing: "0.05em" }}>{kind}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -140,7 +140,7 @@ export function AgentDoors({ agent, onChat, onOpenAutomation, onOpenIntegrations
               onClick: () => act("key", async () => { const k = await issueAgentKey(agent.id); setFreshKey(k); }),
             }} />
           {freshKey && (
-            <div className="aug-fs-xs" style={{ padding: "8px 10px", border: "1px solid var(--b1)",
+            <div className="aug-fs-xs" style={{ padding: "8px 10px",
               borderRadius: "var(--r2)", background: "var(--bg-2)", display: "flex", flexDirection: "column", gap: 6 }}>
               <span style={{ color: "var(--amb4)" }}>
                 Copy this now — it is shown once. Rotating replaces it; revoking closes the door.
@@ -187,7 +187,7 @@ export function AgentDoors({ agent, onChat, onOpenAutomation, onOpenIntegrations
               action={{ label: "Remove", onClick: () => act("teams", async () => { await deleteTeamsBot(b.id); }) }} />
           ))}
           {teamsDraft && (
-            <div className="aug-fs-xs" style={{ padding: "8px 10px", border: "1px solid var(--b1)",
+            <div className="aug-fs-xs" style={{ padding: "8px 10px", background: "var(--bg-2)",
               borderRadius: "var(--r2)", display: "flex", flexDirection: "column", gap: 6 }}>
               <Input value={teamsDraft.name} aria-label="Teams bot name"
                 onChange={e => setTeamsDraft({ ...teamsDraft, name: e.target.value })} />

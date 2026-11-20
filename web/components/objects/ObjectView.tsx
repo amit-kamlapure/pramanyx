@@ -256,7 +256,7 @@ function ObjectBody({ page, scope, reload }: { page: ObjectPage; scope: Scope; r
     <div style={{ padding: "20px 24px 40px" }}>
       {page.caveats.length > 0 && (
         <div className="aug-fs-sm"
-          style={{ marginBottom: 16, padding: "8px 12px", borderRadius: "var(--r3)", border: "1px solid var(--amb2)",
+          style={{ marginBottom: 16, padding: "8px 12px", borderRadius: "var(--r3)",
                    background: "var(--amb1)", color: "var(--amb5)" }}>
           {page.caveats.map((caveat) => <div key={caveat}>{caveat}</div>)}
         </div>

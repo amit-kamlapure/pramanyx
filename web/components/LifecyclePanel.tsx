@@ -112,7 +112,7 @@ export function LifecyclePanel({
 
       {freeze?.frozen && (
         <div style={{ fontSize: 11, padding: "4px 8px", borderRadius: "var(--r2)",
-                      background: "var(--bg-2)", border: "1px solid var(--b2)",
+                      background: "var(--bg-2)",
                       color: freeze.status === "ok" ? "var(--t2)" : "var(--amb4, var(--t2))" }}>
           {freeze.status === "ok"
             ? `Pinned to v${freeze.version}`

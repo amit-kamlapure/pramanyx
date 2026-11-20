@@ -41,7 +41,7 @@ export function UpgradeModal() {
         <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
           <div style={{
             width: 36, height: 36, borderRadius: "var(--r2)", background: "var(--blue1)",
-            border: "1px solid var(--blue2)", display: "flex", alignItems: "center",
+            display: "flex", alignItems: "center",
             justifyContent: "center", flexShrink: 0,
           }}>
             {/* spark / premium glyph */}
@@ -62,7 +62,7 @@ export function UpgradeModal() {
         </div>
 
         <div style={{
-          background: "var(--bg-2)", border: "1px solid var(--b1)", borderRadius: "var(--r2)",
+          background: "var(--bg-2)", borderRadius: "var(--r2)",
           padding: "12px 14px", display: "flex", flexDirection: "column", gap: 8,
         }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: "var(--t3)", letterSpacing: ".04em" }}>
@@ -83,7 +83,7 @@ export function UpgradeModal() {
           <Button
             variant="outline"
             onClick={close}
-            className="gap-1.5 font-semibold bg-[var(--blue1)] border-[var(--blue2)] text-[color:var(--blue4)] hover:bg-[var(--blue1)] hover:text-[color:var(--blue4)] dark:bg-[var(--blue1)] dark:hover:bg-[var(--blue1)]"
+            className="gap-1.5 font-semibold bg-[var(--blue1)] text-[color:var(--blue4)] hover:bg-[var(--blue1)] hover:text-[color:var(--blue4)] dark:bg-[var(--blue1)] dark:hover:bg-[var(--blue1)]"
           >
             See plans →
           </Button>

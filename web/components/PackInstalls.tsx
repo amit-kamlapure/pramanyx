@@ -151,7 +151,7 @@ export function PackInstalls({ packId }: { packId: string }) {
         const id = `${i.connection_id}/${i.schema}`;
         const name = names[i.connection_id] || i.connection_id;
         return (
-          <div key={id} data-testid="pack-install" style={{ padding: "4px 0", borderTop: "1px solid var(--b1)" }}>
+          <div key={id} data-testid="pack-install" style={{ padding: "4px 0", borderTop: "1px solid var(--b0)" }}>
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               <span className="aug-fs-xs" style={{ color: "var(--t1)" }}>{name}{i.schema ? ` · ${i.schema}` : ""}</span>
               <span className="aug-fs-xs" data-testid="pack-install-version"

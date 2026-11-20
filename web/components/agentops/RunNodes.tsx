@@ -195,7 +195,7 @@ export function UsageBlock({ usage }: {
     ["Total", usage.total_tokens],
   ] as const;
   return (
-    <div style={{ borderTop: "1px solid var(--b1)", padding: "2px 0" }}>
+    <div style={{ padding: "3px 0 2px" }}>
       {rows.map(([label, v]) => (
         <div key={label} className="aug-fs-xs"
           style={{ display: "flex", justifyContent: "space-between", padding: "1px 9px" }}>
@@ -219,7 +219,7 @@ export function UsageBlock({ usage }: {
 export function ProseBlock({ text, tone = "var(--t2)" }: { text: string; tone?: string }) {
   return (
     <div className="aug-fs-xs nowheel" style={{
-      borderTop: "1px solid var(--b1)", padding: "5px 9px", color: tone,
+      padding: "6px 9px 5px", color: tone,
       maxHeight: 76, overflowY: "auto", lineHeight: 1.4, overflowWrap: "anywhere",
     }}>
       {text}

@@ -33,7 +33,7 @@ export function VisibilityLine({ connectionId, schema }: { connectionId: string;
     <span
       data-testid="visibility-line"
       title={title}
-      className={`aug-fs-xs border rounded-[var(--r-chip)] px-2 py-0.5 ${band === "red" ? "border-zinc-500 text-zinc-200" : "border-zinc-700 text-zinc-400"}`}
+      className={`aug-fs-xs rounded-[var(--r-chip)] px-2 py-0.5 ${band === "red" ? "bg-[var(--gray-a5)] text-zinc-200" : "bg-[var(--gray-a3)] text-zinc-400"}`}
     >
       {v.line}
     </span>

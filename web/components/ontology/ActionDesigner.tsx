@@ -40,8 +40,10 @@ import {
 } from "@/lib/objectTypes";
 import { idFrom } from "@/lib/processDraft";
 
-const RULE = "1px solid var(--b1)";
-const CARD: React.CSSProperties = { border: RULE, borderRadius: "var(--r3)", padding: "12px 14px", marginBottom: 12 };
+/** The hairline between the conditions in their list (--b0). A step is its surface on the ground, no edge
+ *  (2026-11-20, borders are the exception). */
+const RULE = "1px solid var(--b0)";
+const CARD: React.CSSProperties = { background: "var(--bg-2)", borderRadius: "var(--r3)", padding: "12px 14px", marginBottom: 12 };
 const HINT: React.CSSProperties = { color: "var(--t3)" };
 const LABEL: React.CSSProperties = { color: "var(--t2)", margin: "0 0 4px" };
 const STEP: React.CSSProperties = { color: "var(--t3)", fontWeight: 400, marginRight: 8 };
@@ -696,7 +698,7 @@ function Choice({ on, disabled, icon, title, says, onPick }: {
 }) {
   return (
     <Button variant="plain" size="sm" disabled={disabled} aria-pressed={on} onClick={onPick} className="h-auto w-full justify-start py-1.5"
-      style={{ border: on ? "1px solid var(--accent)" : RULE, marginBottom: 6, textAlign: "left" }}>
+      style={{ background: on ? "var(--gray-a5)" : "var(--gray-a3)", marginBottom: 6, textAlign: "left" }}>
       <span style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
         <Icon name={icon} size={14} />
         <span style={{ display: "flex", flexDirection: "column", gap: 1 }}>

@@ -759,7 +759,7 @@ function Sent({ week, missions, connections, doors }: {
                 title="Every check it passed, and the analysis behind it">Receipt</Button>
             </div>
             {expanded && (
-              <div style={{ marginTop: 6, paddingLeft: 12, borderLeft: "2px solid var(--b1)" }}>
+              <div style={{ marginTop: 6, paddingLeft: 14 }}>
                 {g.sends.map(d => (
                   <div key={d.id} style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 10, alignItems: "center",
                     padding: "4px 0" }}>

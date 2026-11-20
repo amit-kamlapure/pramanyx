@@ -102,7 +102,9 @@ export function DashboardChangeCard({ proposalId }: { proposalId: string }) {
     );
   }
   return (
-    <div data-testid="dashboard-change-card" style={{ margin: "6px 0", border: "1px solid var(--blue3)", borderRadius: "var(--r3)", overflow: "hidden" }}>
+    // waiting on the person: a surface with the accent's stripe, not an outline round it (2026-11-20, borders are the
+    // exception — a stripe that marks something waiting on a person keeps its line)
+    <div data-testid="dashboard-change-card" style={{ margin: "6px 0", background: "var(--bg-2)", borderLeft: "3px solid var(--blue3)", borderRadius: "var(--r3)", overflow: "hidden" }}>
       <div className="aug-fs-ui" style={{ padding: "10px 12px 6px", color: "var(--t1)", fontWeight: 600 }}>{card.asks}</div>
       {card.standIn && (
         // not what was asked, but the closest the chart can do: said before the lines, never implied (2026-11-20)
@@ -119,7 +121,7 @@ export function DashboardChangeCard({ proposalId }: { proposalId: string }) {
         </ul>
       )}
       {problem && <p role="alert" className="aug-fs-sm" style={{ margin: 0, padding: "0 12px 8px", color: "var(--t1)" }}>{problem}</p>}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderTop: "1px solid var(--card-edge)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px" }}>
         <span className="aug-fs-xs" style={{ flex: 1, minWidth: 0, color: "var(--t3)" }}>Nothing changes until you allow it.</span>
         <Button size="xs" variant="secondary" data-testid="dashboard-change-reject" disabled={decision === "allowing"} onClick={() => void reject()}>Reject</Button>
         <Button size="xs" data-testid="dashboard-change-allow" disabled={decision === "allowing"} onClick={() => void allow()}>{decision === "allowing" ? "Applying…" : "Allow"}</Button>

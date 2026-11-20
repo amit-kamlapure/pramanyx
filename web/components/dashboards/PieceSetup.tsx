@@ -256,7 +256,7 @@ function KeptColors({ fields, spec, onChange }: { fields: { field: string; value
                   {Array.from({ length: SERIES_SLOTS }, (_, i) => i + 1).map(n => (
                     <Button key={n} size="icon-xs" variant="ghost" aria-label={`${value}: colour ${n}`} aria-pressed={slot === n}
                       data-testid={`kept-color-${n}`} onClick={() => choose(field, value, slot === n ? null : n)}
-                      style={{ outline: slot === n ? "2px solid var(--t1)" : undefined, outlineOffset: 1 }}>
+                      style={{ background: slot === n ? "var(--gray-a5)" : undefined }}>
                       <span aria-hidden style={{ width: 12, height: 12, borderRadius: 3, background: `var(--chart-${n})` }} />
                     </Button>
                   ))}
@@ -285,7 +285,7 @@ function CardWidget({ p, own, set }: { p: Props; own: string; set: (patch: Props
     </label>
   );
   return (
-    <div data-testid="card-widget" style={{ display: "flex", flexDirection: "column", gap: 8, padding: "12px 16px", borderBottom: "1px solid var(--b1)" }}>
+    <div data-testid="card-widget" style={{ display: "flex", flexDirection: "column", gap: 8, padding: "12px 16px 16px" }}>
       <span className="aug-fs-chrome" style={{ fontWeight: 600, color: "var(--t1)" }}>Widget</span>
       <div data-testid="card-look-title" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {tick(p.show_title !== false, "Title", on => set({ show_title: on ? null : false }, on ? "a card's title shown by hand" : "a card's title hidden by hand"))}
@@ -1069,10 +1069,10 @@ const OPENS_WORDS: Record<(typeof PERIOD_OPENS)[number], string> = {
 function PeriodCuts({ dates }: { dates: CardDate[] }) {
   if (!dates.length) return <span className="aug-fs-sm" style={{ color: "var(--t3)" }}>No card on the dashboard yet.</span>;
   return (
-    <div data-testid="period-cuts" style={{ display: "flex", flexDirection: "column", border: "1px solid var(--b1)", borderRadius: "var(--r2)" }}>
+    <div data-testid="period-cuts" style={{ display: "flex", flexDirection: "column", borderRadius: "var(--r2)" }}>
       {dates.map((d, i) => (
         <div key={d.id} className="aug-fs-sm" style={{ display: "flex", flexDirection: "column", gap: 1, padding: "6px 10px",
-          borderTop: i ? "1px solid var(--b1)" : undefined }}>
+          borderTop: i ? "1px solid var(--b0)" : undefined }}>
           <span style={{ color: "var(--t1)" }}>{d.title}</span>
           <span className="aug-fs-xs" style={{ color: "var(--t3)", fontFamily: d.date ? "var(--font-mono)" : undefined }}>
             {d.standing || !d.date ? "no date: read as written" : d.date}
@@ -1087,7 +1087,7 @@ function PeriodCuts({ dates }: { dates: CardDate[] }) {
 function Fold({ label, testid, children }: { label: string; testid?: string; children: ReactNode }) {
   const [open, setOpen] = useState(false);
   return (
-    <div style={{ borderTop: "1px solid var(--b1)" }}>
+    <div>
       <Button size="sm" variant="plain" data-testid={testid} aria-expanded={open} onClick={() => setOpen(o => !o)}
         style={{ width: "100%", justifyContent: "space-between", padding: "8px 14px", height: "auto", borderRadius: 0 }}>
         <span className="aug-fs-sm" style={{ color: "var(--t1)" }}>{label}</span>
@@ -1115,7 +1115,7 @@ function DashboardSetup({ spec, onChange, onOpenLayout, release }: { spec: Dashb
   const lines = Object.keys(spec.elements).length;
   return (
     <div data-testid="setup-empty">
-      <div style={{ padding: "12px 14px 8px", borderBottom: "1px solid var(--b1)" }}>
+      <div style={{ padding: "12px 14px 10px" }}>
         <div className="aug-fs-xs" style={{ color: "var(--accent-11)", textTransform: "uppercase", letterSpacing: ".06em" }}>Dashboard</div>
         <div className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: 600, marginTop: 2 }}>{String(top?.props.title ?? "") || "This dashboard"}</div>
         <div className="aug-fs-xs" style={{ color: "var(--t3)", marginTop: 4, lineHeight: 1.45 }}>
@@ -1153,10 +1153,10 @@ function DashboardSetup({ spec, onChange, onOpenLayout, release }: { spec: Dashb
         </Row>
       )}
       <Row label="What it holds">
-        <div style={{ display: "flex", flexDirection: "column", border: "1px solid var(--b1)", borderRadius: "var(--r2)" }}>
+        <div style={{ display: "flex", flexDirection: "column", borderRadius: "var(--r2)" }}>
           {holds.map(([what, n], i) => (
             <div key={what} className="aug-fs-sm" style={{ display: "flex", justifyContent: "space-between", padding: "6px 10px",
-              borderTop: i ? "1px solid var(--b1)" : undefined }}>
+              borderTop: i ? "1px solid var(--b0)" : undefined }}>
               <span style={{ color: "var(--t2)" }}>{what}</span><span style={{ fontVariantNumeric: "tabular-nums" }}>{n}</span>
             </div>
           ))}
@@ -1167,7 +1167,7 @@ function DashboardSetup({ spec, onChange, onOpenLayout, release }: { spec: Dashb
           </Button>
         )}
       </Row>
-      <div className="aug-fs-xs" style={{ padding: "10px 14px", color: "var(--t3)", borderTop: "1px solid var(--b1)", lineHeight: 1.5 }}>
+      <div className="aug-fs-xs" style={{ padding: "14px 14px 10px", color: "var(--t3)", lineHeight: 1.5 }}>
         Keys: ⌘Z undo · ⇧⌘Z redo · Delete takes off · ⌘D duplicates · Esc lets go
       </div>
     </div>
@@ -1224,7 +1224,7 @@ export function PieceSetup({ spec, selected, onChange, connectionId, schema, car
   const placed = !["Cockpit", "Tabs", "Tab", "Section", "ObjectFilters", "GlobalFilter", "ActionButton", "Drawer"].includes(el.type);
   return (
     <div data-testid="piece-setup" data-kind={el.type}>
-      <div style={{ padding: "12px 14px 8px", borderBottom: "1px solid var(--b1)" }}>
+      <div style={{ padding: "12px 14px 10px" }}>
         <div className="aug-fs-xs" style={{ color: "var(--accent-11)", textTransform: "uppercase", letterSpacing: ".06em" }}>{kind}</div>
         <div className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: 600, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis" }}>{title || kind}</div>
       </div>

@@ -177,7 +177,7 @@ function ValueList({ sheet, column, filter, search, onApply, onCancel }: {
         : !read ? <span className="aug-fs-xs" style={{ ...ROW, ...MUTED }}>Reading the values…</span> : (
           <div role="group" aria-label={`The values of ${column.name}`}
             style={{ maxHeight: 200, overflowY: "auto", display: "flex", flexDirection: "column", flex: "0 1 auto",
-              borderTop: "1px solid var(--b0)", borderBottom: "1px solid var(--b0)", margin: "4px 0" }}>
+              margin: "6px 0" }}>
             <label className="aug-fs-sm" style={ROW}>
               <Checkbox checked={allState} onChange={toggleAll}
                 aria-label={searching ? "(Select all search results)" : "(Select all)"} />

@@ -239,7 +239,7 @@ export function McpServersSection() {
         value={name} onChange={e => setName(e.target.value)} aria-label="Server name" />
 
       <div style={{ display: "inline-flex", gap: 2, padding: 2, alignSelf: "flex-start",
-        border: "1px solid var(--b1)", borderRadius: "var(--r-chip)" }}>
+        borderRadius: "var(--r-chip)" }}>
         {(["http", "stdio"] as const).map(m => (
           <Button key={m} size="xs" className="aug-fs-xs"
             variant={transport === m ? "secondary" : "ghost"}
@@ -256,7 +256,7 @@ export function McpServersSection() {
             value={url} onChange={e => setUrl(e.target.value)} />
           <div role="group" aria-label="How Pramanyx gets in"
             style={{ display: "inline-flex", gap: 2, padding: 2, alignSelf: "flex-start",
-              border: "1px solid var(--b1)", borderRadius: "var(--r-chip)" }}>
+              borderRadius: "var(--r-chip)" }}>
             {([["signin", "Sign in"], ["key", "API key"], ["none", "None"]] as const).map(([m, label]) => (
               <Button key={m} size="xs" className="aug-fs-xs"
                 variant={access === m ? "secondary" : "plain"}

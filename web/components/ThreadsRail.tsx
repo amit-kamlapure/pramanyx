@@ -119,7 +119,7 @@ export function ThreadsRail({
     <div
       style={{
         width: 208, flexShrink: 0, display: "flex", flexDirection: "column",
-        borderRight: "1px solid var(--b1)", background: "var(--bg-1)",
+        borderRight: "1px solid var(--divide)", background: "var(--bg-1)",
         overflow: "hidden",
       }}
     >

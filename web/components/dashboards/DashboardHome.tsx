@@ -166,7 +166,7 @@ function DetailView({ items, stars, onStar, onOpen }: ViewProps) {
     <div data-testid="dashboards-detail" style={{ display: "flex", flexDirection: "column" }}>
       {items.map(item => (
         <div key={item.id} data-testid="dashboard-row" data-id={item.id} {...lit()} onClick={() => onOpen(item.id)}
-          style={{ display: "grid", gridTemplateColumns: "148px minmax(0, 1fr) auto", gap: 16, alignItems: "center", padding: "12px", borderBottom: "1px solid var(--b1)", cursor: "pointer" }}>
+          style={{ display: "grid", gridTemplateColumns: "148px minmax(0, 1fr) auto", gap: 16, alignItems: "center", padding: "12px", borderBottom: "1px solid var(--b0)", cursor: "pointer" }}>
           <Miniature item={item} height={84} />
           <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
             <Name item={item} onOpen={() => onOpen(item.id)} />

@@ -62,7 +62,6 @@ import { FormDialog } from "@/components/ui/dialog";
 import type { IconName } from "@/components/ui/icon";
 import { EmptyState } from "@/components/ui/empty-state";
 import { DropdownMenu } from "@radix-ui/themes";
-import { ASKS_OF_A_PIECE, AskPiece } from "@/components/dashboards/AskPiece";
 import { brandEdge } from "@/components/ui/brand";
 import { DraftBuilding } from "@/components/dashboards/DraftBuilding";
 import { finishedWatch, heardFrame, startWatch, type DraftWatch } from "@/lib/dashboards/draftProgress";
@@ -215,7 +214,7 @@ function BoxSetup({ box, spec, connectionId, schema, busy, onCancel, onPlace, on
         <>
           <ChartFromData key={`${box.section}:${box.x}:${box.y}`} spec={spec} connectionId={connectionId} busy={busy}
             onChange={onPlace} onMade={onChart} onCancel={onCancel} />
-          <div style={{ padding: "4px 14px 12px", borderTop: "1px solid var(--b1)" }}>
+          <div style={{ padding: "8px 14px 12px" }}>
             <Button size="xs" variant="ghost" data-testid="place-other-pieces" onClick={() => setOthers(true)} style={{ marginTop: 8 }}>
               Other pieces: objects, cards, findings, questions <Icon name="chevr" size={12} />
             </Button>
@@ -249,7 +248,7 @@ function BoxSetup({ box, spec, connectionId, schema, busy, onCancel, onPlace, on
 function NoteComposer({ busy, onPlace, onClose }: { busy: boolean; onPlace: (text: string) => void; onClose: () => void }) {
   const [text, setText] = useState("");
   return (
-    <div data-testid="dashboard-note-composer" style={{ border: "1px solid var(--b1)", borderRadius: "var(--r3)", padding: 14, marginBottom: 16, display: "flex", flexDirection: "column", gap: 8 }}>
+    <div data-testid="dashboard-note-composer" style={{ background: "var(--bg-2)", borderRadius: "var(--r3)", padding: 14, marginBottom: 16, display: "flex", flexDirection: "column", gap: 8 }}>
       <div className="aug-fs-sm" style={{ color: "var(--t3)" }}>
         Your words, as a reminder to yourself or your readers: bold, italics, lists and links, up to {MAX_NOTE} characters.
         Pramanyx never reads a note, cites it or learns from it; a model may move it, never write it.
@@ -284,7 +283,7 @@ function ImageComposer({ connectionId, busy, onPlace, onClose }: {
     } finally { setUploading(false); }
   };
   return (
-    <div data-testid="dashboard-image-composer" style={{ border: "1px solid var(--b1)", borderRadius: "var(--r3)", padding: 14, marginBottom: 16, display: "flex", flexDirection: "column", gap: 8 }}>
+    <div data-testid="dashboard-image-composer" style={{ background: "var(--bg-2)", borderRadius: "var(--r3)", padding: 14, marginBottom: 16, display: "flex", flexDirection: "column", gap: 8 }}>
       <div className="aug-fs-sm" style={{ color: "var(--t3)" }}>
         PNG, JPEG, GIF, WebP or SVG, up to 5 MB, into this connection's dashboard volume. It shows who uploaded it and when,
         and no period or comparison: a static thing says it is static.
@@ -746,7 +745,7 @@ function PublishPanel({ connectionId, dashboardId, publishedTo, draft = false, r
     setChosen(cs => (on ? [...cs.filter(c => !(c.kind === a.kind && c.id === a.id)), a] : cs.filter(c => !(c.kind === a.kind && c.id === a.id))));
   const all = [...(audiences?.groups ?? []), ...(audiences?.roles ?? [])];
   return (
-    <div data-testid="dashboard-publish" style={{ border: "1px solid var(--b1)", borderRadius: "var(--r3)", padding: 14, marginBottom: 16, display: "flex", flexDirection: "column", gap: 8 }}>
+    <div data-testid="dashboard-publish" style={{ background: "var(--bg-2)", borderRadius: "var(--r3)", padding: 14, marginBottom: 16, display: "flex", flexDirection: "column", gap: 8 }}>
       <div className="aug-label">Publish as an App to</div>
       {problem ? <div className="aug-fs-sm" style={{ color: "var(--t2)" }}>Who you may publish to could not be read: {problem}</div>
         : !audiences ? <Loading what="who you may publish to" style={{ padding: "4px 0" }} />
@@ -1344,9 +1343,9 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
           Version {kept.version} · {kept.written_by_model ? "drafted, kept" : "kept"} by {person(kept.approved_by)} · {formatDateTime(kept.kept_at)}
         </span>
       </div>
-      <ol data-testid="dashboard-history" style={{ listStyle: "none", margin: 0, padding: 0, borderTop: "1px solid var(--b1)" }}>
+      <ol data-testid="dashboard-history" style={{ listStyle: "none", margin: 0, padding: 0 }}>
         {data.history.map(v => (
-          <li key={v.artifact_id} className="aug-fs-sm" style={{ display: "flex", alignItems: "baseline", gap: 12, padding: "7px 0", borderBottom: "1px solid var(--b1)", color: "var(--t2)", flexWrap: "wrap" }}>
+          <li key={v.artifact_id} className="aug-fs-sm" style={{ display: "flex", alignItems: "baseline", gap: 12, padding: "7px 0", borderBottom: "1px solid var(--b0)", color: "var(--t2)", flexWrap: "wrap" }}>
             <span style={{ color: "var(--t1)", fontWeight: 500, minWidth: 74 }}>Version {v.version}</span>
             <span style={{ flex: 1, minWidth: 0 }}>
               {/* Arc AP-6 — what it changed, in words; a server before the words says its counts, as before */}
@@ -1493,11 +1492,6 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
             return render.shown && !isOtherKind(render.viz?.type) ? { ...holds, fields: [] } : holds;
           }}
           onUndo={stacks.past.length > 0 ? undo : undefined} onRedo={stacks.future.length > 0 ? redo : undefined}
-          askPiece={(key, type) => (ASKS_OF_A_PIECE(type) ? (
-            <AskPiece key={key} connectionId={connectionId} dashboardId={openId} schema={schema} pieceKey={key} actor={ACTOR}
-              beforeAsk={async () => { sendBurst(); await burst.current.chain; }}
-              onKept={() => { setStacks(st => ({ past: [...st.past.slice(-49), current], future: [] })); reload(); }} />
-          ) : null)}
           bar={(
             <EditBar saved={saved} onDone={done}
               picker={(

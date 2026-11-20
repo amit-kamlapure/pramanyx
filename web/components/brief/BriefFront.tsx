@@ -44,12 +44,12 @@ const NUM: React.CSSProperties = { textAlign: "right", fontVariantNumeric: "tabu
 const HEAD: React.CSSProperties = { display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", margin: "0 0 8px" };
 
 /** One part of the front, framed as the mockup frames its widgets: a head (its name, what it is, its badges at the
- *  right), then what it holds. */
+ *  right), then what it holds. Its surface on the ground frames it, no edge (2026-11-20, borders are the exception). */
 function Part({ title, kind, badges, children, testid }: {
   title: string; kind?: React.ReactNode; badges?: React.ReactNode; children: React.ReactNode; testid?: string;
 }) {
   return (
-    <section data-testid={testid} style={{ border: "1px solid var(--b1)", borderRadius: "var(--r3)", background: "var(--bg-1)",
+    <section data-testid={testid} style={{ borderRadius: "var(--r3)", background: "var(--bg-2)",
       padding: "12px 14px", margin: "12px 0 0" }}>
       <div style={HEAD}>
         <h2 className="aug-fs-ui" style={{ margin: 0, color: "var(--t1)", fontWeight: 600 }}>{title}</h2>
@@ -168,7 +168,7 @@ export function BriefFrontView({ reads, connectionId, leadMetric, parts = EVERY_
       {/* The range's honesty first, as the mockup opens: recent days still being redrawn are said before any figure. */}
       {has("alert") && block && block.lag_days > 1 && (
         <div role="status" data-testid="brief-redrawn" className="aug-fs-sm"
-          style={{ border: "1px solid var(--amb3)", background: "color-mix(in srgb, var(--amb3) 9%, transparent)",
+          style={{ background: "color-mix(in srgb, var(--amb3) 9%, transparent)",
             borderRadius: "var(--r3)", padding: "8px 12px", margin: "12px 0 0", color: "var(--t1)" }}>
           <b style={{ fontWeight: 600 }}>Recent days are still being redrawn.</b>{" "}
           {block.settling?.says || `${block.still_moving.join(", ") || "The data"} still changes for ${block.lag_days - 1} days after a day ends`}
@@ -177,13 +177,13 @@ export function BriefFrontView({ reads, connectionId, leadMetric, parts = EVERY_
       )}
       {has("short") && short && (
         <Part title="In short" testid="brief-short-part"
-          badges={<span className="aug-fs-xs" style={{ color: "var(--t3)", border: "1px solid var(--b1)", borderRadius: "var(--r1)", padding: "0 6px" }}
+          badges={<span className="aug-fs-xs" style={{ color: "var(--t3)", background: "var(--gray-a3)", borderRadius: "var(--r1)", padding: "0 6px" }}
             title="Counted from the measured table and the desk — no model and no person wrote it">Computed</span>}>
           <p className="aug-fs-sm" data-testid="brief-short" style={{ margin: 0, color: "var(--t2)" }}>{short}</p>
         </Part>
       )}
       {/* the lead figure */}
-      {has("lead") && <section data-testid="brief-lead" style={{ border: "1px solid var(--b1)", borderRadius: "var(--r3)", background: "var(--bg-1)",
+      {has("lead") && <section data-testid="brief-lead" style={{ borderRadius: "var(--r3)", background: "var(--bg-2)",
         padding: "12px 14px", margin: "12px 0 0" }}>
         {measures === null ? (
           <p className="aug-fs-sm" style={{ color: "var(--t3)", margin: 0 }}>Measuring the range…</p>

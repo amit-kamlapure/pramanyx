@@ -46,7 +46,7 @@ export function BriefingSections({ pref, onChange, cockpits, dashboardsOn, busy 
   };
 
   return (
-    <div data-testid="briefing-sections" style={{ border: "1px solid var(--b1)", borderRadius: "var(--r3)", padding: "12px 14px", marginBottom: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+    <div data-testid="briefing-sections" style={{ background: "var(--bg-2)", borderRadius: "var(--r3)", padding: "12px 14px", marginBottom: 16, display: "flex", flexDirection: "column", gap: 10 }}>
       <div className="aug-label">Your Briefing</div>
       <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 2 }}>
         {pref.sections.map(s => {
@@ -102,7 +102,7 @@ export function BriefingSections({ pref, onChange, cockpits, dashboardsOn, busy 
         <div className="aug-fs-sm" data-testid="briefing-switch-refused" style={{ color: "var(--t2)" }}>{proposal.why}</div>
       )}
       {proposal?.kind === "proposal" && (
-        <div data-testid="briefing-switch-proposal" style={{ border: "1px solid var(--blue2)", borderRadius: "var(--r2)", padding: "10px 12px", display: "flex", flexDirection: "column", gap: 6 }}>
+        <div data-testid="briefing-switch-proposal" style={{ borderLeft: "3px solid var(--blue3)", borderRadius: "var(--r2)", padding: "10px 12px", display: "flex", flexDirection: "column", gap: 6 }}>
           <div className="aug-fs-sm" style={{ fontWeight: 600 }}>A change to your Briefing — read from your words, not written by them</div>
           <ul style={{ margin: 0, paddingLeft: 18 }}>
             {proposal.lines.map(l => <li key={l} className="aug-fs-sm">{l}</li>)}
@@ -124,7 +124,7 @@ export function BriefingSections({ pref, onChange, cockpits, dashboardsOn, busy 
 export function HiddenSection({ id, onShow }: { id: SectionId; onShow: () => void }) {
   return (
     <div className="aug-fs-sm" data-testid="briefing-section-hidden" data-section={id}
-      style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--t3)", borderTop: "1px dashed var(--b1)", padding: "6px 0" }}>
+      style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--t3)", padding: "6px 0" }}>
       <span>{labelOf(id)} is hidden.</span>
       <Button size="xs" variant="ghost" onClick={onShow}>Show it</Button>
     </div>

@@ -68,8 +68,9 @@ export function Details({ children, label = "Details", testId }: { children: Rea
         {label} <Icon name={open ? "chevu" : "chevd"} size={12} />
       </Button>
       {open && (
-        <div className="aug-fs-xs" style={{ color: "var(--t2)", lineHeight: 1.55, marginTop: 4, paddingLeft: 8,
-          borderLeft: "1px solid var(--b1)" }}>
+        // A soft surface, not a rule down its side (2026-11-20, borders are the exception).
+        <div className="aug-fs-xs" style={{ color: "var(--t2)", lineHeight: 1.55, marginTop: 4, padding: "6px 8px",
+          background: "var(--gray-a3)", borderRadius: "var(--r2)" }}>
           {children}
         </div>
       )}

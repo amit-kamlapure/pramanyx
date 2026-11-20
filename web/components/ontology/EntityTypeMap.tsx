@@ -76,7 +76,10 @@ import {
 import { SelectField } from "@/components/ui/select";
 
 const MONO: React.CSSProperties = { fontFamily: "var(--font-mono)" };
+/** A field's edge and the hairline between a list's rows; the rail's side is the one pane rule (--divide), and its
+ *  draft and New entity part from the list by spacing (2026-11-20, borders are the exception). */
 const RULE = "1px solid var(--b1)";
+const PANE_RULE = "1px solid var(--divide)";
 /** How far a card or a link the picked type does not touch falls back. */
 const UNLIT = 0.38;
 const FIELD: React.CSSProperties = {
@@ -524,10 +527,10 @@ function TypeRail({ types, parts, selected, query, onQuery, onPick, processes, r
   };
   return (
     <nav aria-label="Entity types"
-      style={{ width: 212, flexShrink: 0, borderRight: RULE, display: "flex", flexDirection: "column", minHeight: 0,
+      style={{ width: 212, flexShrink: 0, borderRight: PANE_RULE, display: "flex", flexDirection: "column", minHeight: 0,
                background: "var(--bg-0)" }}>
       <div style={{ padding: "10px 10px 6px" }}>
-        <Input value={query} onChange={(e) => onQuery(e.target.value)} placeholder="Find an entity type"
+        <Input variant="soft" value={query} onChange={(e) => onQuery(e.target.value)} placeholder="Find an entity type"
           aria-label="Find an entity type" data-testid="entity-rail-search" />
         <div className="aug-fs-xs" style={{ color: "var(--t3)", marginTop: 6 }}>
           {shown.length === types.length ? `${types.length} types` : `${shown.length} of ${types.length} types`}
@@ -659,7 +662,7 @@ function ExplorerDraft({ draft, explore, confirm, onOpen, reviewSignal = 0 }: {
   };
   const gone = counts ? counts.withdrawn + counts.released : 0;
   return (
-    <div ref={box} style={{ padding: "8px 10px", borderTop: RULE, display: "flex", flexDirection: "column", gap: 6 }}
+    <div ref={box} style={{ padding: "12px 10px 8px", display: "flex", flexDirection: "column", gap: 6 }}
       data-testid="explorer-draft">
       <div className="aug-fs-xs" style={{ color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 600 }}>
         Explorer draft
@@ -814,7 +817,7 @@ function DeclareEntity({ declare, sources, bare = false, connectionId, schema, a
     }
   };
   return (
-    <div style={headless ? { display: "contents" } : bare ? { paddingTop: 10 } : { padding: "6px 10px 10px", borderTop: RULE }}>
+    <div style={headless ? { display: "contents" } : bare ? { paddingTop: 10 } : { padding: "10px 10px" }}>
       <Door open={open} onOpenChange={setOpen} busy={busy} label={headless ? undefined : "New entity"} testId="entity-declare" title="New entity"
         hint="A thing the business keeps — what it reads, what one row is, and what tells two apart"
         description={sources

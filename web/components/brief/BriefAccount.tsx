@@ -34,10 +34,13 @@ import { countNoun, formatCount, utcDayWords } from "@/lib/format";
 import { withUniqueKeys } from "@/lib/listKeys";
 import { requestTab } from "@/lib/navigate";
 
-const RULE = "1px solid var(--b1)";
+// Lines kept on purpose (2026-11-20, borders are the exception): a list's row rule in --b0, and the rule between
+// columns or cells worked side by side in --divide. A panel is its surface on the ground, no edge.
+const RULE = "1px solid var(--b0)";
+const DIVIDE = "1px solid var(--divide)";
 const LABEL: React.CSSProperties = { color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 600 };
 const NUM: React.CSSProperties = { fontVariantNumeric: "tabular-nums" };
-const PANEL: React.CSSProperties = { background: "var(--bg-1)", border: RULE, borderRadius: "var(--r3)" };
+const PANEL: React.CSSProperties = { background: "var(--bg-2)", borderRadius: "var(--r3)" };
 const STATE: Record<EditionStoryline["state"], { label: string; tone: Tone }> = {
   new: { label: "New", tone: "accent" }, developing: { label: "Developing", tone: "amber" }, decided: { label: "Decided", tone: "up" },
 };
@@ -119,14 +122,14 @@ export function BusinessLine({ stages, figures, chosen, onChoose }: {
   const key = (stage: string) => (e: KeyboardEvent) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onChoose(stage); } };
   return (
     <>
-      <div data-testid="business-line" style={{ ...PANEL, display: "grid", gridTemplateColumns: `repeat(auto-fit, minmax(210px, 1fr))` }}>
+      <div data-testid="business-line" style={{ ...PANEL, overflow: "hidden", display: "grid", gridTemplateColumns: `repeat(auto-fit, minmax(210px, 1fr))` }}>
         {stages.map(s => {
           const figs = s.figures.map(id => byId[id]).filter(Boolean);
           const out = figs.filter(f => sideOf(f) !== 0).length;
           return (
             <div key={s.id} role="button" tabIndex={0} data-testid="business-stage" aria-pressed={chosen === s.id}
               onClick={() => onChoose(chosen === s.id ? "" : s.id)} onKeyDown={key(chosen === s.id ? "" : s.id)}
-              style={{ padding: "12px 14px 10px", borderRight: RULE, borderBottom: RULE, marginRight: -1, marginBottom: -1, cursor: "pointer",
+              style={{ padding: "12px 14px 10px", borderRight: DIVIDE, borderBottom: DIVIDE, marginRight: -1, marginBottom: -1, cursor: "pointer",
                        background: chosen === s.id ? "var(--blue1)" : undefined }}>
               <div className="aug-fs-ui" style={{ color: "var(--t1)", fontWeight: 600 }}>{s.name}</div>
               <div className="aug-fs-xs" style={{ ...NUM, color: "var(--t3)", margin: "0 0 8px" }}>
@@ -155,7 +158,7 @@ export function BusinessLine({ stages, figures, chosen, onChoose }: {
 
 function Cell({ label, info, big, tone, children }: { label: string; info?: string; big: ReactNode; tone?: "none" | "done"; children?: ReactNode }) {
   return (
-    <div style={{ padding: "10px 14px", borderRight: RULE, minWidth: 0 }}>
+    <div style={{ padding: "10px 14px", borderRight: DIVIDE, marginRight: -1, minWidth: 0 }}>
       <div className="aug-fs-xs" style={{ ...LABEL, display: "flex", gap: 6, alignItems: "center" }}>{label}{info && <Info>{info}</Info>}</div>
       <div className="aug-fs-ui" style={{ ...NUM, fontWeight: 600, margin: "3px 0 0",
         color: tone === "none" ? "var(--amb4)" : tone === "done" ? "var(--grn4)" : "var(--t1)" }}>{big}</div>
@@ -255,9 +258,9 @@ export function Storylines({ stories, figures, period, readerName, teams, open, 
               <span aria-hidden>{anchor && <VegaChart spec={figureSpec(anchor, true)} tier={2} height={30} />}</span>
             </div>
             {isOpen && (
-              <div data-testid="storyline-open" style={{ borderTop: RULE, padding: "14px 14px 16px" }}>
+              <div data-testid="storyline-open" style={{ padding: "14px 14px 16px" }}>
                 <div data-testid="storyline-four" style={{ display: "grid", gridTemplateColumns: "2fr 2fr 4fr 3fr", background: "var(--bg-0, transparent)",
-                                                           border: RULE, borderRadius: "var(--r3)", marginBottom: 16, overflow: "hidden" }}>
+                                                           borderRadius: "var(--r3)", marginBottom: 16, overflow: "hidden" }}>
                   <Cell label="Owner" big={s.owner || "No owner"} tone={s.owner ? undefined : "none"}
                     info={s.owner_from === "decision" ? "The Record names them owner of its decision."
                       : s.owner_from === "metric" ? `Owns ${anchor?.label ?? s.metric}, the metric this storyline stands on.`

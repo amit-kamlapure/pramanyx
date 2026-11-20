@@ -128,7 +128,7 @@ export function PanelHead({ crumbs, name, mono, what, chips, actions, testId }: 
     );
   }
   return (
-    <div data-testid={testId} style={{ ...ROW, flexWrap: "nowrap", gap: 10, padding: "10px 22px", borderBottom: "1px solid var(--b0)",
+    <div data-testid={testId} style={{ ...ROW, flexWrap: "nowrap", gap: 10, padding: "10px 22px",
       background: "var(--bg-0)", flexShrink: 0, minWidth: 0 }}>
       {crumbs?.map(c => (
         <span key={`crumb-${c}`} className="aug-fs-sm" style={{ ...MUTED, whiteSpace: "nowrap" }}>{c} ›</span>

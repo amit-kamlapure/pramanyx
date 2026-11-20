@@ -90,10 +90,8 @@ export function ChainOfThoughtContent({
     <Collapsible.Content
       className={cn("overflow-hidden pl-1", className)}
     >
-      <div
-        className="ml-1 flex flex-col gap-0.5 border-l pl-3 py-1"
-        style={{ borderColor: "var(--b1)" }}
-      >
+      {/* the steps held by their indent, no guide line (2026-11-20, borders are the exception) */}
+      <div className="ml-1 flex flex-col gap-0.5 pl-3 py-1">
         {children}
       </div>
     </Collapsible.Content>
@@ -176,7 +174,7 @@ export function ChainOfThoughtSearchResult({
   return (
     <span
       className={cn("inline-flex max-w-full items-center gap-1 truncate rounded-[var(--r2)] px-1.5 py-0.5 aug-fs-xs", className)}
-      style={{ background: "var(--bg-2)", border: "1px solid var(--b1)", color: "var(--t3)" }}
+      style={{ background: "var(--gray-a3)", color: "var(--t3)" }}
     >
       {children}
     </span>

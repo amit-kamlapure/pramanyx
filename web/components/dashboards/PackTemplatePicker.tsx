@@ -52,7 +52,7 @@ export function PackTemplatePicker({ connectionId, schema, disabled, onDrafted }
         const key = `${t.pack}/${t.id}`;
         const left = t.cards.filter(c => !c.ready);
         return (
-          <div key={key} data-testid="dashboard-pack-template" style={{ border: "1px solid var(--b1)", borderRadius: "var(--r3)", padding: "8px 10px" }}>
+          <div key={key} data-testid="dashboard-pack-template" style={{ background: "var(--gray-a3)", borderRadius: "var(--r3)", padding: "8px 10px" }}>
             <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
               <span className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: 500 }}>{t.title}</span>
               <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>{t.pack_name} pack · v{t.version}</span>

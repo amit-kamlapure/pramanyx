@@ -412,8 +412,10 @@ function BlockCard({ block: written, ctx }: { block: EditionBlock; ctx: Ctx }) {
   return (
     <section ref={card} data-testid="edition-block" data-type={block.type}
       style={{ margin: "16px 0", padding: bare ? "4px 0" : "16px 18px", borderRadius: "var(--r3)",
-               background: bare ? "transparent" : decision ? "var(--amb1)" : "var(--bg-1)",
-               border: bare ? "none" : `1px solid ${block.kicker === "Drill" ? "var(--blue4)" : "var(--b1)"}` }}>
+               // a block is its surface on the ground; a drill keeps one mark, the accent's stripe (2026-11-20, borders are
+               // the exception)
+               background: bare ? "transparent" : decision ? "var(--amb1)" : "var(--bg-2)",
+               borderLeft: !bare && block.kicker === "Drill" ? "3px solid var(--blue4)" : undefined }}>
       {(block.kicker || title) && block.type !== "control" && (
         <>
           {trail.length > 0 ? <DrillTrail card={written.id} trail={trail} ctx={ctx} />

@@ -41,7 +41,9 @@ import {
 } from "@/lib/objectTypes";
 
 const MONO: React.CSSProperties = { fontFamily: "var(--font-mono)" };
-const RULE = "1px solid var(--b1)";
+/** The one rule this panel keeps: its side, between it and the map worked beside it (2026-11-20, borders are the
+ *  exception) — sections part by spacing, stages by their number and name. */
+const PANE_RULE = "1px solid var(--divide)";
 
 function errorText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -62,7 +64,7 @@ function days(n: number | null | undefined): string {
 
 function Section({ title, aside, children }: { title: string; aside?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <section style={{ padding: "12px 16px", borderTop: RULE }}>
+    <section style={{ padding: "14px 16px" }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 8 }}>
         <h3 className="aug-fs-xs"
           style={{ margin: 0, color: "var(--t2)", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em" }}>
@@ -130,7 +132,7 @@ export function ProcessPanel({ connectionId, schema, processId, version, onOpenT
   return (
     // As wide as the entity panel it takes the place of, so opening a process does not move the map.
     <aside aria-label="Process" data-testid="process-panel" data-full={full || undefined}
-      style={{ ...(full ? { flex: 1, minWidth: 0 } : { width: 470, flexShrink: 0, borderLeft: RULE }),
+      style={{ ...(full ? { flex: 1, minWidth: 0 } : { width: 470, flexShrink: 0, borderLeft: PANE_RULE }),
                display: "flex", flexDirection: "column", minHeight: 0, background: "var(--bg-0)" }}>
       <div style={{ flex: 1, overflowY: "auto" }}>{body}</div>
     </aside>
@@ -257,7 +259,7 @@ function StageRow({ stage, index, onOpenType, process, scope, connectionId, sche
 }) {
   const before = Object.entries(stage.precedes ?? {}).filter(([name]) => name !== stage.transition?.from);
   return (
-    <div data-testid="process-stage" style={{ borderLeft: RULE, paddingLeft: 10 }}>
+    <div data-testid="process-stage">
       <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
         <span className="aug-fs-xs" style={{ ...MONO, color: "var(--t3)" }}>{index + 1}</span>
         <span className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: 600 }}>{stage.display_name}</span>

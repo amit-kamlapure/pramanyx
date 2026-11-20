@@ -105,12 +105,14 @@ export function BriefAskPanel({
       aria-label="Ask this briefing"
       style={{
         width: BRIEF_ASK_PANEL_WIDTH, flex: "0 0 auto", display: "flex", flexDirection: "column",
-        minHeight: 0, borderLeft: "1px solid var(--b1)", background: "var(--bg-1)",
+        // the briefing | ask split is two panes side by side: the one rule kept, in --divide; its head and foot part
+        // by space (2026-11-20, borders are the exception)
+        minHeight: 0, borderLeft: "1px solid var(--divide)", background: "var(--bg-1)",
       }}
     >
       <div style={{
-        display: "flex", alignItems: "center", gap: 8, padding: "12px 14px",
-        borderBottom: "1px solid var(--b1)", flex: "0 0 auto",
+        display: "flex", alignItems: "center", gap: 8, padding: "12px 14px 6px",
+        flex: "0 0 auto",
       }}>
         <span className="aug-label">Ask this briefing</span>
         <span className="aug-fs-xs" style={{ color: "var(--t3)" }}
@@ -154,7 +156,7 @@ export function BriefAskPanel({
         )}
       </div>
 
-      <div style={{ flex: "0 0 auto", padding: "10px 14px", borderTop: "1px solid var(--b1)", display: "flex", gap: 8 }}>
+      <div style={{ flex: "0 0 auto", padding: "10px 14px 12px", display: "flex", gap: 8 }}>
         <Input
           value={draft}
           onChange={e => setDraft(e.target.value)}

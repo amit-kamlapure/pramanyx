@@ -135,7 +135,7 @@ export function WhatGetsPosted({ automationId, index, e, siblings, onChange, onO
         {question && (
           <section style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <span className="aug-fs-xs" style={sectionLabel}>The question it answers · {sourceAlias}</span>
-            <div className="aug-fs-sm" style={{ color: "var(--t2)", borderLeft: "2px solid var(--b2)", paddingLeft: 10 }}>{question}</div>
+            <div className="aug-fs-sm" style={{ color: "var(--t2)", background: "var(--gray-a3)", padding: "8px 10px", borderRadius: "var(--r2)" }}>{question}</div>
             {onOpenStep && (
               <div><Button size="xs" variant="secondary" onClick={() => onOpenStep(sourceAlias)}>Edit the question</Button></div>
             )}

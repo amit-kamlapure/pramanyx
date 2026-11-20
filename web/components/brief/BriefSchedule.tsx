@@ -89,7 +89,7 @@ export function BriefSchedule({ connId }: { connId: string }) {
   };
 
   return (
-    <div className="aug-fs-sm" style={{ border: "1px solid var(--b0)", borderRadius: "var(--r3)",
+    <div className="aug-fs-sm" style={{ borderRadius: "var(--r3)",
       background: "var(--bg-2)", padding: 12, margin: "0 0 16px" }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 8 }}>
         <span style={{ fontWeight: 600, color: "var(--t1)" }}>Scheduled delivery</span>
@@ -108,7 +108,7 @@ export function BriefSchedule({ connId }: { connId: string }) {
 
       {subs.map(s => (
         <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
-          padding: "6px 10px", border: "1px solid var(--b1)", borderRadius: "var(--r2)",
+          padding: "6px 10px", borderRadius: "var(--r2)",
           background: "var(--bg-1)", marginBottom: 6 }}>
           <span style={{ color: "var(--t1)", fontWeight: 500 }}>{s.name}</span>
           <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>

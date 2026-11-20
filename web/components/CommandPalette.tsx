@@ -604,7 +604,7 @@ export function CommandPalette({ open, onClose, selectedConn, onNavigate, onGoTo
       }}>
         {/* Input row (search) / identity row (spotlight) */}
         {mode === "spotlight" ? (
-          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", borderBottom: "1px solid var(--b1)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px" }}>
             <Button
               variant="ghost" size="xs"
               onClick={() => setMode("search")}
@@ -617,13 +617,13 @@ export function CommandPalette({ open, onClose, selectedConn, onNavigate, onGoTo
             <kbd
               onClick={() => setMode("search")}
               className="aug-fs-xs"
-              style={{ padding: "2px 6px", background: "var(--bg-3)", border: "1px solid var(--b2)", borderRadius: 2, color: "var(--t3)", cursor: "pointer", fontFamily: "var(--font-mono)" }}
+              style={{ padding: "2px 6px", background: "var(--gray-a3)", borderRadius: 2, color: "var(--t3)", cursor: "pointer", fontFamily: "var(--font-mono)" }}
             >
               ESC
             </kbd>
           </div>
         ) : (
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", borderBottom: "1px solid var(--b1)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px" }}>
           <PIcon name="spark" size={13} color="var(--t3)" />
           <Input bespoke
             ref={inputRef}
@@ -635,7 +635,7 @@ export function CommandPalette({ open, onClose, selectedConn, onNavigate, onGoTo
           />
           <kbd
             onClick={onClose}
-            style={{ fontSize: 11, padding: "2px 6px", background: "var(--bg-3)", border: "1px solid var(--b2)", borderRadius: 2, color: "var(--t3)", cursor: "pointer", fontFamily: "var(--font-mono)" }}
+            style={{ fontSize: 11, padding: "2px 6px", background: "var(--gray-a3)", borderRadius: 2, color: "var(--t3)", cursor: "pointer", fontFamily: "var(--font-mono)" }}
           >
             ESC
           </kbd>
@@ -665,7 +665,7 @@ export function CommandPalette({ open, onClose, selectedConn, onNavigate, onGoTo
                 </div>
               )}
             </div>
-            <div style={{ padding: "10px 14px", borderTop: "1px solid var(--b0)", display: "flex", gap: 8 }}>
+            <div style={{ padding: "10px 14px 12px", display: "flex", gap: 8 }}>
               <Input bespoke
                 value={followUp}
                 onChange={e => setFollowUp(e.target.value)}
@@ -691,7 +691,7 @@ export function CommandPalette({ open, onClose, selectedConn, onNavigate, onGoTo
         <div ref={listRef} style={{ maxHeight: 380, overflowY: "auto" }}>
           {runError && (
             <div className="aug-fs-xs" role="alert"
-              style={{ padding: "6px 14px", color: "var(--red4)", borderTop: "1px solid var(--b0)" }}>
+              style={{ padding: "6px 14px", color: "var(--red4)" }}>
               {runError}
             </div>
           )}
@@ -703,7 +703,7 @@ export function CommandPalette({ open, onClose, selectedConn, onNavigate, onGoTo
             grouped.map(({ type, items }) => (
               <div key={type}>
                 {/* Section header */}
-                <div style={{ padding: "8px 14px 4px", fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--t3)", borderTop: "1px solid var(--b0)", ...(type === "object" ? { display: "flex", gap: 8 } : {}) }}>
+                <div style={{ padding: "12px 14px 4px", fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--t3)", ...(type === "object" ? { display: "flex", gap: 8 } : {}) }}>
                   {SECTION_LABELS[type]}
                   {type === "object" && foundNow && (
                     <span data-testid="objects-said" title={findDetail(foundNow)}
@@ -740,7 +740,6 @@ export function CommandPalette({ open, onClose, selectedConn, onNavigate, onGoTo
                       <div style={{
                         width: 28, height: 28, borderRadius: "var(--r1)", flexShrink: 0,
                         background: `color-mix(in srgb, ${item.accent ?? "var(--t3)"} 12%, transparent)`,
-                        border: `1px solid color-mix(in srgb, ${item.accent ?? "var(--t3)"} 25%, transparent)`,
                         display: "flex", alignItems: "center", justifyContent: "center",
                       }}>
                         <PIcon name={item.icon} size={13} color={item.accent ?? "var(--t3)"} />
@@ -761,7 +760,7 @@ export function CommandPalette({ open, onClose, selectedConn, onNavigate, onGoTo
 
                       {/* Enter hint on focused item */}
                       {isFocused && (
-                        <kbd style={{ fontSize: 11, padding: "1px 5px", background: "var(--bg-3)", border: "1px solid var(--b2)", borderRadius: 2, color: "var(--t3)", fontFamily: "var(--font-mono)", flexShrink: 0 }}>
+                        <kbd style={{ fontSize: 11, padding: "1px 5px", background: "var(--gray-a3)", borderRadius: 2, color: "var(--t3)", fontFamily: "var(--font-mono)", flexShrink: 0 }}>
                           ↵
                         </kbd>
                       )}
@@ -773,7 +772,7 @@ export function CommandPalette({ open, onClose, selectedConn, onNavigate, onGoTo
           )}
           {foundNow && foundNow.hits.length === 0 && (
             <div data-testid="objects-none" title={findDetail(foundNow)} className="aug-fs-xs"
-              style={{ padding: "6px 14px", color: "var(--t3)", borderTop: "1px solid var(--b0)" }}>
+              style={{ padding: "6px 14px", color: "var(--t3)" }}>
               No object is named &ldquo;{foundNow.q}&rdquo; — {findSaid(foundNow)}
             </div>
           )}
@@ -781,13 +780,13 @@ export function CommandPalette({ open, onClose, selectedConn, onNavigate, onGoTo
         )}
 
         {/* Footer hints */}
-        <div style={{ padding: "6px 14px", borderTop: "1px solid var(--b0)", display: "flex", gap: 14, alignItems: "center" }}>
+        <div style={{ padding: "8px 14px", display: "flex", gap: 14, alignItems: "center" }}>
           {(mode === "spotlight"
             ? [["ESC", "Back to search"], ["↵", "Ask follow-up"]]
             : [["↑↓", "Navigate"], ["↵", "Select"], ["ESC", "Close"]]
           ).map(([k, l]) => (
             <span key={k} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <kbd style={{ fontSize: 11, padding: "1px 5px", background: "var(--bg-3)", border: "1px solid var(--b2)", borderRadius: 2, color: "var(--t3)", fontFamily: "var(--font-mono)" }}>{k}</kbd>
+              <kbd style={{ fontSize: 11, padding: "1px 5px", background: "var(--gray-a3)", borderRadius: 2, color: "var(--t3)", fontFamily: "var(--font-mono)" }}>{k}</kbd>
               <span style={{ fontSize: 11, color: "var(--t3)" }}>{l}</span>
             </span>
           ))}

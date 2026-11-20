@@ -45,9 +45,9 @@ function EditableField({ value, placeholder, multiline = true, onSave }: {
     return (
       <div onClick={() => setEditing(true)}
         style={{ fontSize: 12, lineHeight: 1.5, cursor: "text", padding: "4px 6px", borderRadius: 4,
-          color: value ? "var(--t2)" : "var(--t3)", border: "1px solid transparent", whiteSpace: "pre-wrap" }}
-        onMouseEnter={e => (e.currentTarget.style.border = "1px solid var(--b1)")}
-        onMouseLeave={e => (e.currentTarget.style.border = "1px solid transparent")}>
+          color: value ? "var(--t2)" : "var(--t3)", whiteSpace: "pre-wrap" }}
+        onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-hover)")}
+        onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
         {value || placeholder}
       </div>
     );
@@ -125,7 +125,7 @@ export function GlossaryPanel({ table, columns, schema, connectionId }: {
       {/* Why this matters — the agent reads everything below at query time. */}
       <div style={{
         fontSize: 11, color: "var(--t3)", lineHeight: 1.5, marginBottom: 16,
-        padding: "8px 11px", background: "var(--bg-1)", border: "1px solid var(--b1)",
+        padding: "8px 11px", background: "var(--bg-2)",
         borderRadius: 6,
       }}>
         These notes are read by the agent <b style={{ color: "var(--t2)" }}>at query time</b> — descriptions,

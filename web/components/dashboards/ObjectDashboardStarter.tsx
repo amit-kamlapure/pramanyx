@@ -140,7 +140,7 @@ export function ObjectDashboardStarter({ connectionId, schema, entity, sym = "$"
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <div className="aug-fs-h2" style={{ fontWeight: 600, color: "var(--t1)" }}>New dashboard from {p.name}</div>
         {p.total != null && (
-          <span className="aug-fs-xs" style={{ color: "var(--t2)", background: "var(--bg-3)", border: "1px solid var(--b1)",
+          <span className="aug-fs-xs" style={{ color: "var(--t2)", background: "var(--gray-a3)",
             borderRadius: "var(--r-chip)", padding: "2px 7px" }}>{formatCount(p.total)} {noun}</span>
         )}
       </div>
@@ -157,7 +157,7 @@ export function ObjectDashboardStarter({ connectionId, schema, entity, sym = "$"
               <Button key={k} variant="outline" role="radio" aria-checked={shape === o.shape} data-testid="object-starter-shape" data-shape={o.shape}
                 onClick={() => setShape(o.shape)}
                 style={{ height: "auto", justifyContent: "flex-start", textAlign: "left", whiteSpace: "normal", padding: "10px 12px",
-                  background: shape === o.shape ? "var(--bg-sel)" : undefined, borderColor: shape === o.shape ? "var(--accent)" : undefined }}>
+                  background: shape === o.shape ? "var(--bg-sel)" : undefined }}>
                 <span style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
                   <span style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
                     <span className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: 600 }}>{SHAPES[o.shape].label}</span>

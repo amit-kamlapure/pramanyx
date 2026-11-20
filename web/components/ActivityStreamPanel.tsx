@@ -142,8 +142,8 @@ export function ActivityStreamPanel({ onOpenTrace, filter, range }: {
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
       {/* ── filter bar: kinds come from the data ── */}
-      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "12px 20px",
-        borderBottom: "1px solid var(--b1)", flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "12px 20px 14px",
+        flexWrap: "wrap" }}>
         <Button variant={kindFilter === null ? "secondary" : "ghost"} size="xs"
           onClick={() => setKindFilter(null)}>all</Button>
         {Object.entries(kinds).map(([k, n]) => (

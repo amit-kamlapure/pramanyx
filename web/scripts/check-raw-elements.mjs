@@ -38,7 +38,7 @@ const RAW_BUTTON = /<button[\s>]/g;
 // The same one-way ratchet for a <Button> with no edge. An action looks like a button before the pointer reaches it (the
 // user, 2026-11-03), so `plain` is only for a whole row, a bare icon, a name that opens what it names, or a button that
 // draws its own edge (components/ui/button.tsx). A new one is a decision: never raise this for an action, give it its edge.
-const PLAIN_BASELINE = 219;  // 230 → 224 (2026-11-10): the SQL Editor's catalog rows became the Catalog's `TreeRow`; 224 → 222: Agent runs' rows became register rows; 222 → 221: Evidence's claims; 221 → 219: Security & Audit's statement and error cells became the log's rows.
+const PLAIN_BASELINE = 218;  // 230 → 224 (2026-11-10): the SQL Editor's catalog rows became the Catalog's `TreeRow`; 224 → 222: Agent runs' rows became register rows; 222 → 221: Evidence's claims; 221 → 219: Security & Audit's statement and error cells became the log's rows.; 219 → 218 (2026-11-20): Add-to-eval-suite's Add, a soft button since borders became the exception.
 const PLAIN_BUTTON = /variant="plain"/g;
 
 function* walk(dir) {

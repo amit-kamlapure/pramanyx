@@ -475,7 +475,7 @@ function GroupRow({ g, grid, showConn, conns, held, onPick, onOpen }: {
         </span>
       </div>
       {expanded && (
-        <div data-testid="run-earlier" style={{ margin: "0 0 6px 28px", paddingLeft: 10, borderLeft: "1px solid var(--b1)" }}>
+        <div data-testid="run-earlier" style={{ margin: "0 0 6px 28px", paddingLeft: 10 }}>
           {earlier.map(r => {
             const on = held === `run:${r.id}`;
             return (
@@ -501,11 +501,11 @@ function GroupRow({ g, grid, showConn, conns, held, onPick, onOpen }: {
 
 // ── A run in the inspector ─────────────────────────────────────────────────────────────────────────────────────────
 
-/** How the study labels a figure's origin (§12.3): a hairline word, and what it means beside it. */
+/** How the study labels a figure's origin (§12.3): a word on a soft fill, no edge (2026-11-20), and what it means beside it. */
 function Origin({ word, says, testId }: { word: string; says: string; testId?: string }) {
   return (
     <div data-testid={testId} className="aug-fs-xs" style={{ ...ROW, gap: 6, color: "var(--t3)", marginBottom: 4 }}>
-      <span style={{ border: "1px solid var(--b2)", borderRadius: "var(--r-chip)", padding: "0 6px", color: "var(--t2)", lineHeight: "16px" }}>
+      <span style={{ background: "var(--gray-a3)", borderRadius: "var(--r-chip)", padding: "0 6px", color: "var(--t2)", lineHeight: "16px" }}>
         {word}
       </span>
       {says}

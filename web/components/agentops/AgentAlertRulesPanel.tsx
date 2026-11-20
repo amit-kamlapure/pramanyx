@@ -147,7 +147,7 @@ export function AgentAlertRulesPanel({ agentId = "", agentName = "" }: {
   };
 
   return (
-    <div style={{ marginBottom: 16, background: "var(--bg-2)", border: "1px solid var(--b1)",
+    <div style={{ marginBottom: 16, background: "var(--bg-2)",
       borderRadius: "var(--r3)", padding: "12px 14px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <div className="aug-fs-ui" style={{ flex: 1, color: "var(--t1)" }}>
@@ -170,7 +170,7 @@ export function AgentAlertRulesPanel({ agentId = "", agentName = "" }: {
 
       {open && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 12,
-          paddingTop: 12, borderTop: "1px solid var(--b1)" }}>
+          paddingTop: 12 }}>
           <Field label="Name" width={200}>
             <Input value={draft.name} placeholder="Error rate across agents"
               onChange={e => setDraft(d => ({ ...d, name: e.target.value }))} />
@@ -240,7 +240,7 @@ export function AgentAlertRulesPanel({ agentId = "", agentName = "" }: {
         <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 12 }}>
           {rules.map(rule => (
             <div key={rule.id} style={{ display: "flex", alignItems: "center", gap: 10,
-              paddingTop: 8, borderTop: "1px solid var(--b1)" }}>
+              paddingTop: 8, borderTop: "1px solid var(--b0)" }}>
               <StatusChip hue={rule.enabled ? "accent" : "muted"} strength="soft">
                 {rule.severity}
               </StatusChip>

@@ -56,7 +56,7 @@ function Label({ children, right, amber }: { children: ReactNode; right?: ReactN
 
 type Tone = "plain" | "up" | "down" | "amber";
 const TONE: Record<Tone, CSSProperties> = {
-  plain: { background: "var(--bg-3)", color: "var(--t2)", border: "1px solid var(--b1)" },
+  plain: { background: "var(--gray-a3)", color: "var(--t2)", border: "1px solid transparent" }, // a faint fill, no outline (2026-11-20)
   up: { background: "var(--grn1)", color: "var(--grn4)", border: "1px solid transparent" },
   down: { background: "var(--red1)", color: "var(--red4)", border: "1px solid transparent" },
   amber: { background: "var(--amb1)", color: "var(--amb4)", border: "1px solid transparent" },
@@ -160,7 +160,7 @@ export function HomeDesk({ connectionId, analyses, onOpenAnalysis, onDraft }: {
           <Button key={s.latest.id} variant="plain" title={s.question} onClick={() => onOpenAnalysis(s.latest.id, s.latest.kind)}
             style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 32px", alignItems: "center", gap: 14,
               width: "100%", height: "auto", padding: "8px 2px", borderRadius: 0, textAlign: "left", whiteSpace: "normal",
-              borderTop: i ? "1px solid var(--b1)" : undefined }}>
+              borderTop: i ? "1px solid var(--b0)" : undefined }}>
             <span style={{ minWidth: 0 }}>
               <span className="aug-fs-chrome" title={s.latest.headline ?? ""} style={{ ...oneLine, display: "block", color: "var(--t1)", fontWeight: 500 }}>
                 {readableFigures(s.latest.headline)}
@@ -437,7 +437,7 @@ function WeekCard({ due }: { due: Due[] }) {
       {days.length === 0 ? (
         <div className="aug-fs-sm" style={muted}>Nothing lands in the next seven days.</div>
       ) : days.map((d, i) => (
-        <div key={d.on} style={{ padding: i ? "8px 0 0" : 0, borderTop: i ? "1px solid var(--b1)" : undefined, marginTop: i ? 8 : 0 }}>
+        <div key={d.on} style={{ padding: i ? "8px 0 0" : 0, borderTop: i ? "1px solid var(--b0)" : undefined, marginTop: i ? 8 : 0 }}>
           {i > 0 && <div className="aug-fs-sm" style={{ color: "var(--t1)", marginBottom: 4 }}>{dayWords(d.on)}</div>}
           {d.reviews.map(r => (
             <div key={r.what} className="aug-fs-sm" style={{ ...oneLine, color: "var(--t2)" }} title={r.what}>{r.what}</div>

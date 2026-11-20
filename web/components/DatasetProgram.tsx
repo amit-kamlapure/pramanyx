@@ -233,7 +233,7 @@ export function SchemaProgram({ connId, ds, view, onChanged }: {
   if (!ds || !view) return null;
   return (
     <div data-testid="schema-program"
-      style={{ display: "flex", gap: 20, flexWrap: "wrap", padding: "10px 16px", borderBottom: "0.5px solid var(--b1)", background: "var(--bg-0)" }}>
+      style={{ display: "flex", gap: 20, flexWrap: "wrap", padding: "12px 16px", background: "var(--bg-0)" }}>
       <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
         <MaturityBars m={ds.maturity} size="md" />
         <MaturityLines m={ds.maturity} />
@@ -257,7 +257,7 @@ export function TableProgram({ connId, schema, t, view, schemaOff, onChanged }: 
   if (!t || !view) return null;
   return (
     <div data-testid="table-program"
-      style={{ display: "flex", gap: 20, flexWrap: "wrap", padding: "10px 16px", borderBottom: "0.5px solid var(--b1)", background: "var(--bg-0)" }}>
+      style={{ display: "flex", gap: 20, flexWrap: "wrap", padding: "12px 16px", background: "var(--bg-0)" }}>
       <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
         <MaturityBars m={t.maturity} size="md" />
         <MaturityLines m={t.maturity} />
@@ -312,7 +312,7 @@ export function ConnectionProgram({ connId, view, onChanged }: { connId: string;
     finally { setBusy(false); }
   };
   return (
-    <div data-testid="connection-program" style={{ padding: "12px 16px", borderTop: "0.5px solid var(--b1)", display: "flex", flexDirection: "column", gap: 8 }}>
+    <div data-testid="connection-program" style={{ padding: "16px 16px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
       <div className="aug-label">Exploration</div>
       {waiting.length > 0 ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>

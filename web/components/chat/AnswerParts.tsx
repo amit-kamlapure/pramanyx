@@ -60,7 +60,7 @@ function FactRows({ part }: { part: Extract<AnswerPart, { kind: "fact_set" }> })
 function Section({ part }: { part: Extract<AnswerPart, { kind: "section" }> }) {
   const [open, setOpen] = useState(!part.collapsed);
   return (
-    <div className="rounded-md" style={{ border: "1px solid var(--b1)" }}>
+    <div className="rounded-md" style={{ background: "var(--bg-2)" }}>
       <Button variant="plain" size="xs" onClick={() => setOpen(o => !o)}
         aria-expanded={open}
         className="w-full h-auto justify-start gap-1.5 px-2 py-1.5 font-normal">

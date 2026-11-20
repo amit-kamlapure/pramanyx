@@ -233,7 +233,7 @@ export function SetChips({ detail, scope }: { detail: ObjectTypeDetail; scope: P
             <span key={`set:${name}`} className="aug-fs-xs" data-testid="entity-set"
               title={d ? (d.usable ? d.description : `refused: ${d.why_not ?? ""}`) : `a segment of ${detail.display_name}`}
               style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "2px 8px", borderRadius: "var(--r-pill)",
-                       background: "var(--bg-3)", border: "1px solid var(--b1)", whiteSpace: "nowrap",
+                       background: "var(--gray-a3)", whiteSpace: "nowrap",
                        color: d && !d.usable ? "var(--t3)" : "var(--t2)" }}>
               {humanName(name)}
               {n != null && <span style={{ ...tabular, color: "var(--t1)" }}>{formatCount(n)}</span>}

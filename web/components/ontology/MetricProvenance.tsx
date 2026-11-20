@@ -20,18 +20,19 @@ import { getMetricProvenance, type DefinitionSource, type MetricProvenance }
   from "@/lib/api";
 
 function Badge({ tone, children }: { tone: "good" | "warn" | "mute"; children: React.ReactNode }) {
-  const cls = tone === "good" ? "text-emerald-300 border-emerald-700/50"
-    : tone === "warn" ? "text-amber-300 border-amber-700/50"
-    : "text-zinc-400 border-zinc-700/50";
+  // A tint and its text, no border (2026-11-20, borders are the exception).
+  const cls = tone === "good" ? "text-emerald-300 bg-emerald-500/10"
+    : tone === "warn" ? "text-amber-300 bg-amber-500/10"
+    : "text-zinc-400 bg-[var(--gray-a3)]";
   return (
-    <span className={`aug-fs-xs border rounded px-1 py-0.5 ${cls}`}>{children}</span>
+    <span className={`aug-fs-xs rounded px-1 py-0.5 ${cls}`}>{children}</span>
   );
 }
 
 function Claim({ d, chosen }: { d: DefinitionSource; chosen: boolean }) {
   return (
-    <div className={`rounded-[var(--r3)] p-2 space-y-1 border ${
-      chosen ? "border-zinc-600 bg-zinc-800/60" : "border-zinc-800 bg-zinc-900/40"}`}>
+    <div className={`rounded-[var(--r3)] p-2 space-y-1 ${
+      chosen ? "bg-[var(--gray-a5)]" : "bg-[var(--gray-a3)]"}`}>
       <div className="flex items-center gap-2 flex-wrap">
         {chosen && <Badge tone="mute">in use</Badge>}
         {/* Verified is the tier, so it reads differently from every other chip. */}
@@ -41,7 +42,7 @@ function Claim({ d, chosen }: { d: DefinitionSource; chosen: boolean }) {
         {d.use_count > 0 && <Badge tone="mute">{d.use_count} uses</Badge>}
       </div>
       <code className="block aug-fs-xs font-code text-emerald-300 bg-zinc-950
-                       border border-zinc-700/40 rounded px-2 py-1.5">
+                       rounded px-2 py-1.5">
         {d.formula_sql}
       </code>
       <p className="aug-fs-xs text-zinc-500">

@@ -70,7 +70,7 @@ export function BriefingGuidePanel({ connectionId, schema, guide, onChange, read
   if (!doc || !ver) return null;
   return (
     <aside data-testid="briefing-guide" aria-label="Briefing guide"
-      style={{ borderLeft: "1px solid var(--b1)", background: "var(--bg-1)", padding: "18px 20px 30px",
+      style={{ borderLeft: "1px solid var(--divide)", background: "var(--bg-1)", padding: "18px 20px 30px",
                height: "100%", overflowY: "auto", minWidth: 0 }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
         <h2 className="aug-fs-h1" style={{ fontFamily: "var(--font-serif)", fontWeight: 600, margin: 0, color: "var(--t1)" }}>
@@ -179,7 +179,7 @@ export function BriefingGuidePanel({ connectionId, schema, guide, onChange, read
         {doc.readers.length === 0 && <span style={{ color: "var(--t3)" }}>No reader added yet — editions are written for the organisation.</span>}
         {doc.readers.map(r => (
           <div key={r.group_id} style={{ display: "grid", gridTemplateColumns: "116px 1fr", gap: 8, padding: "4px 0",
-                                         borderTop: "1px solid var(--b1)" }}>
+                                         borderTop: "1px solid var(--b0)" }}>
             <b style={{ fontWeight: 500, color: r.group_id === readerId ? "var(--blue4)" : "var(--t1)" }}>{r.name}</b>
             <span>{r.watches} <Ev>{r.check_ids.length} checks</Ev></span>
           </div>

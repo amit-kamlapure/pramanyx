@@ -36,7 +36,7 @@ const filterId = (f: DraftedFilter) => `filter:${f.column}`;
 const CARD_STYLE = { background: "var(--bg-2)", border: "1px solid var(--card-edge)", borderRadius: "var(--r3)" } as const;
 const SECTION_LABEL = { color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em" } as const;
 const QUERY_TEXT = { margin: "4px 0 2px", whiteSpace: "pre-wrap", wordBreak: "break-word", fontFamily: "var(--font-mono)", color: "var(--t2)",
-  background: "var(--bg-3)", border: "1px solid var(--b0)", borderRadius: "var(--r2)", padding: "8px 10px" } as const;
+  background: "var(--bg-3)", borderRadius: "var(--r2)", padding: "8px 10px" } as const;
 
 /** A sheet's name, from the file's: its words, without its extension. */
 function nameOf(file: string): string {
@@ -473,7 +473,7 @@ export function FromFile({ onKept }: { onKept: (dashboardId: string, connectionI
         </div>
         {noticed.length > 0 && <Noticed noticed={noticed} />}
 
-        <section aria-label="Let a model explore the file" data-testid="from-file-explore" style={{ borderTop: "1px solid var(--b0)", paddingTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+        <section aria-label="Let a model explore the file" data-testid="from-file-explore" style={{ paddingTop: 16, display: "flex", flexDirection: "column", gap: 8 }}>
           {exploring ? (
             <div data-testid="from-file-exploring" aria-live="polite" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <span className="aug-fs-xs" style={SECTION_LABEL}>{exploring.drafting ? "Drafting the cards from what it found" : "Exploring the file"}</span>

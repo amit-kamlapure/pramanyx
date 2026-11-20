@@ -161,7 +161,7 @@ function StatusBar({ status, stopped, onStop, onResume, onRestart, stopping, res
   // can never masquerade as the run the user just started on another schema.
   const perSchema = Object.entries(status.per_schema ?? {});
   return (
-    <div className="flex items-center gap-3 px-4 py-2 border-b shrink-0 flex-wrap" style={{ borderColor: "var(--b2)", background: "var(--bg-0)" }}>
+    <div className="flex items-center gap-3 px-4 pt-2 pb-3 shrink-0 flex-wrap" style={{ background: "var(--bg-0)" }}>
       {perSchema.length > 0 ? (
         perSchema.map(([sch, ph]) => {
           const m = phaseMeta(ph);
@@ -207,7 +207,7 @@ function StatusBar({ status, stopped, onStop, onResume, onRestart, stopping, res
         {isRunning && (
           <Button variant="plain" size="xs" onClick={onStop} disabled={stopping}
             className="flex items-center gap-1 aug-fs-xs px-2.5 py-1 rounded transition-opacity disabled:opacity-40"
-            style={{ background: "var(--red1)", color: "var(--red4)", border: "0.5px solid var(--red2)" }}>
+            style={{ background: "var(--red1)", color: "var(--red4)" }}>
             <span className="w-2 h-2 rounded-sm inline-block" style={{ background: "var(--red4)" }} />
             {stopping ? "stopping…" : "Stop"}
           </Button>
@@ -215,12 +215,12 @@ function StatusBar({ status, stopped, onStop, onResume, onRestart, stopping, res
         {isStopped && !isRunning && (<>
           <Button variant="plain" size="xs" onClick={onResume} disabled={resuming || restarting}
             className="aug-fs-xs px-2.5 py-1 rounded transition-opacity disabled:opacity-40"
-            style={{ background: "var(--blue1)", color: "var(--blue4)", border: "0.5px solid var(--blue2)" }}>
+            style={{ background: "var(--blue1)", color: "var(--blue4)" }}>
             {resuming ? "resuming…" : interrupted ? "Continue" : "Resume"}
           </Button>
           <Button variant="plain" size="xs" onClick={onRestart} disabled={resuming || restarting}
             className="aug-fs-xs px-2.5 py-1 rounded transition-opacity disabled:opacity-40"
-            style={{ background: "var(--amb1)", color: "var(--amb4)", border: "0.5px solid var(--amb2)" }}>
+            style={{ background: "var(--amb1)", color: "var(--amb4)" }}>
             {restarting ? "restarting…" : "Restart"}
           </Button>
         </>)}
@@ -257,13 +257,13 @@ function RetryPanel({ ep, connectionId, errorMsg, canvasId }: { ep: ExplorationE
 
   if (!open) return (
     <Button variant="plain" size="xs" onClick={() => setOpen(true)} className="aug-fs-xs px-2.5 py-1 rounded mt-2"
-      style={{ background: "var(--blue1)", color: "var(--blue4)", border: "0.5px solid var(--blue2)" }}>
+      style={{ background: "var(--blue1)", color: "var(--blue4)" }}>
       ↺ Retry with fix
     </Button>
   );
 
   return (
-    <div className="rounded-md p-3 space-y-2 mt-2" style={{ background: "var(--bg-0)", border: "0.5px solid var(--b2)" }}>
+    <div className="rounded-md p-3 space-y-2 mt-2" style={{ background: "var(--bg-0)" }}>
       <p className="aug-fs-xs uppercase tracking-widest" style={{ color: "var(--t3)" }}>Guidance (optional)</p>
       <div className="flex gap-2">
         <Input type="text" value={hint} onChange={e => setHint(e.target.value)}
@@ -272,7 +272,7 @@ function RetryPanel({ ep, connectionId, errorMsg, canvasId }: { ep: ExplorationE
           className="flex-1" />
         <Button variant="plain" size="xs" onClick={handleRetry} disabled={loading}
           className="aug-fs-xs px-3 py-1.5 rounded disabled:opacity-40 shrink-0"
-          style={{ background: "var(--blue1)", color: "var(--blue4)", border: "0.5px solid var(--blue2)" }}>
+          style={{ background: "var(--blue1)", color: "var(--blue4)" }}>
           {loading ? "fixing…" : "Run fix"}
         </Button>
         <Button variant="plain" size="xs" onClick={() => { setOpen(false); setResult(null); }}
@@ -304,7 +304,7 @@ function RetryPanel({ ep, connectionId, errorMsg, canvasId }: { ep: ExplorationE
               {!saved ? (
                 <Button variant="plain" size="xs" onClick={handleSave} disabled={saving}
                   className="aug-fs-xs px-3 py-1.5 rounded disabled:opacity-40"
-                  style={{ background: "var(--grn1)", color: "var(--grn4)", border: "0.5px solid var(--grn2)" }}>
+                  style={{ background: "var(--grn1)", color: "var(--grn4)" }}>
                   {saving ? "saving…" : "Save as finding"}
                 </Button>
               ) : (
@@ -326,18 +326,18 @@ function RetryPanel({ ep, connectionId, errorMsg, canvasId }: { ep: ExplorationE
 // ── Save-as-finding feedback ──────────────────────────────────────────────────
 
 function SaveFeedback({ saved }: { saved: FixSaveResult }) {
-  let tone = { bg: "var(--grn1)", fg: "var(--grn4)", bd: "var(--grn2)" };  // saved clean
+  let tone = { bg: "var(--grn1)", fg: "var(--grn4)" };  // saved clean
   let text = "✓ Saved as finding";
-  if (!saved.ok) { tone = { bg: "var(--red1)", fg: "var(--red4)", bd: "var(--red2)" }; text = `✕ ${saved.error ?? "save failed"}`; }
+  if (!saved.ok) { tone = { bg: "var(--red1)", fg: "var(--red4)" }; text = `✕ ${saved.error ?? "save failed"}`; }
   else if (saved.stored && saved.insight?.unverified) {
-    tone = { bg: "var(--amb1)", fg: "var(--amb4)", bd: "var(--amb2)" };
+    tone = { bg: "var(--amb1)", fg: "var(--amb4)" };
     text = `⚠ Saved as unverified — ${saved.insight.verification_note}`;
   } else if (!saved.stored) {
-    tone = { bg: "var(--blue1)", fg: "var(--blue4)", bd: "var(--blue2)" };
+    tone = { bg: "var(--blue1)", fg: "var(--blue4)" };
     text = `✓ Query fixed — ${saved.reason ?? "no finding stored"}`;
   }
   return (
-    <p className="aug-fs-xs px-2.5 py-1.5 rounded" style={{ background: tone.bg, color: tone.fg, border: `0.5px solid ${tone.bd}` }}>
+    <p className="aug-fs-xs px-2.5 py-1.5 rounded" style={{ background: tone.bg, color: tone.fg }}>
       {text}
     </p>
   );
@@ -354,14 +354,14 @@ function ExpandedDetail({ ep, connectionId, canvasId }: { ep: ExplorationEpisode
       {/* SQL */}
       <div>
         <p style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--t3)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 6 }}>SQL</p>
-        <pre style={{ fontSize: 11, fontFamily: "var(--font-code)", color: "var(--t3)", background: "var(--bg-0)", border: "0.5px solid var(--b1)", borderRadius: 4, padding: "8px 10px", overflowX: "auto", whiteSpace: "pre-wrap", wordBreak: "break-all", lineHeight: 1.6, margin: 0 }}>
+        <pre style={{ fontSize: 11, fontFamily: "var(--font-code)", color: "var(--t3)", background: "var(--bg-0)", borderRadius: 4, padding: "8px 10px", overflowX: "auto", whiteSpace: "pre-wrap", wordBreak: "break-all", lineHeight: 1.6, margin: 0 }}>
           {ep.sql || "(no sql)"}
         </pre>
       </div>
       {/* Result */}
       <div>
         <p style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--t3)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 6 }}>Result</p>
-        <pre style={{ fontSize: 11, fontFamily: "var(--font-code)", color: isError ? "var(--red4)" : "var(--t3)", background: isError ? "var(--red1)" : "var(--code-bg)", border: `0.5px solid ${isError ? "var(--red2)" : "var(--b1)"}`, borderRadius: 4, padding: "8px 10px", overflowX: "auto", whiteSpace: "pre-wrap", wordBreak: "break-all", lineHeight: 1.6, margin: 0 }}>
+        <pre style={{ fontSize: 11, fontFamily: "var(--font-code)", color: isError ? "var(--red4)" : "var(--t3)", background: isError ? "var(--red1)" : "var(--code-bg)", borderRadius: 4, padding: "8px 10px", overflowX: "auto", whiteSpace: "pre-wrap", wordBreak: "break-all", lineHeight: 1.6, margin: 0 }}>
           {obsPreview}
         </pre>
       </div>
@@ -491,7 +491,7 @@ function LogTable({ items, connectionId, canvasId, sortCol, sortDir, onSort }: L
                   </TableCell>
                   {/* type */}
                   <TableCell style={{ padding: "7px 8px" }}>
-                    <span style={{ fontSize: 11, padding: "2px 6px", borderRadius: 3, background: pm.bg, color: pm.color, border: `0.5px solid color-mix(in srgb, ${pm.color} 25%, transparent)` }}>
+                    <span style={{ fontSize: 11, padding: "2px 6px", borderRadius: 3, background: pm.bg, color: pm.color }}>
                       {pm.label}
                     </span>
                   </TableCell>
@@ -505,7 +505,6 @@ function LogTable({ items, connectionId, canvasId, sortCol, sortDir, onSort }: L
                       fontSize: 11, padding: "2px 6px", borderRadius: 3, fontWeight: 500,
                       background: meta.isError ? "var(--red1)" : "var(--grn1)",
                       color: meta.isError ? "var(--red4)" : "var(--grn4)",
-                      border: `0.5px solid ${meta.isError ? "var(--red2)" : "var(--grn2)"}`,
                     }}>
                       {meta.isError ? "error" : "success"}
                     </span>
@@ -691,8 +690,8 @@ export function ActivityLog({ connectionId, isActive, canvasId }: Props) {
         {runError && <div className="aug-fs-xs px-4 py-1" data-testid="run-error" style={{ color: "var(--amb4)" }}>{runError}</div>}
 
       {/* Filter + controls bar */}
-      <div className="flex items-center gap-2.5 px-4 py-2 border-b shrink-0 flex-wrap"
-        style={{ borderColor: "var(--b1)", background: "var(--bg-0)" }}>
+      <div className="flex items-center gap-2.5 px-4 pt-2 pb-3 shrink-0 flex-wrap"
+        style={{ background: "var(--bg-0)" }}>
         <Seg<DateFilter>
           value={filterDate} onChange={setFilterDate}
           options={[
@@ -712,7 +711,7 @@ export function ActivityLog({ connectionId, isActive, canvasId }: Props) {
         />
         <div style={{ flex: 1 }} />
         {errorCount > 0 && (
-          <span style={{ fontSize: 11, padding: "2px 7px", borderRadius: 4, background: "var(--red1)", color: "var(--red4)", border: "0.5px solid var(--red2)" }}>
+          <span style={{ fontSize: 11, padding: "2px 7px", borderRadius: 4, background: "var(--red1)", color: "var(--red4)" }}>
             {errorCount} error{errorCount !== 1 ? "s" : ""}
           </span>
         )}
@@ -721,7 +720,7 @@ export function ActivityLog({ connectionId, isActive, canvasId }: Props) {
             title={`Repair the ${errorCount} errored quer${errorCount !== 1 ? "ies" : "y"} visible under the current filter`}
             style={{
               fontSize: 11, padding: "3px 9px", borderRadius: 4, cursor: "pointer",
-              background: "var(--amb1)", color: "var(--amb4)", border: "0.5px solid var(--amb2)",
+              background: "var(--amb1)", color: "var(--amb4)",
               opacity: fixingAll ? 0.5 : 1,
             }}>
             {fixingAll ? "fixing…" : `Fix all (${errorCount})`}
@@ -741,9 +740,8 @@ export function ActivityLog({ connectionId, isActive, canvasId }: Props) {
         {filtered.length > DEFAULT_LIMIT && (
           <Button variant="plain" size="xs" onClick={() => setShowAll(v => !v)} style={{
             fontSize: 11, padding: "3px 8px", borderRadius: 4, cursor: "pointer",
-            background: showAll ? "var(--blue1)" : "var(--bg-1)",
+            background: showAll ? "var(--blue1)" : "var(--gray-a3)",
             color: showAll ? "var(--blue4)" : "var(--t3)",
-            border: `0.5px solid ${showAll ? "var(--blue2)" : "var(--bg-3)"}`,
           }}>
             {showAll ? "Show less" : `Show all ${filtered.length}`}
           </Button>

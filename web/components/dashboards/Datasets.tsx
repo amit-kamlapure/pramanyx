@@ -97,7 +97,7 @@ export function TableChoices({ tables, picked, onFlip, max, disabled = false }: 
   return (
     <>
       <Input type="search" aria-label="Find a table" placeholder="Find a table" leading={<Icon name="search" size={15} />} value={term} onChange={e => setTerm(e.target.value)} />
-      <div role="group" aria-label="Tables" data-testid="dashboard-table-list" style={{ maxHeight: 300, overflowY: "auto", border: "1px solid var(--b1)", borderRadius: "var(--r2)", padding: 4 }}>
+      <div role="group" aria-label="Tables" data-testid="dashboard-table-list" style={{ maxHeight: 300, overflowY: "auto", background: "var(--bg-3)", borderRadius: "var(--r2)", padding: 4 }}>
         {tables === null ? <div className="aug-fs-sm" style={{ color: "var(--t3)", padding: 8 }}>Reading the tables…</div>
           : shown.length === 0 ? <div className="aug-fs-sm" style={{ color: "var(--t3)", padding: 8 }}>{term.trim() ? `No table matches “${term.trim()}”.` : "This connection has no tables to choose yet."}</div>
             : shown.map(t => {
@@ -159,7 +159,7 @@ export function AddData({ spec, connectionId, way, onAdd, onClose, doneWords = "
     );
   }
   return (
-    <div data-testid="add-data" data-way={way} style={{ display: "flex", flexDirection: "column", gap: 8, border: "1px solid var(--b1)", borderRadius: "var(--r3)", padding: 10 }}>
+    <div data-testid="add-data" data-way={way} style={{ display: "flex", flexDirection: "column", gap: 8, background: "var(--bg-2)", borderRadius: "var(--r3)", padding: 10 }}>
       <div className="aug-fs-xs" style={{ color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".06em" }}>{way === "table" ? "Add data" : "Add SQL dataset"}</div>
       {way === "table" ? (
         <>
@@ -428,7 +428,7 @@ function ParameterPicker({ spec, onChange, onPick }: {
     onPick(name);
   };
   return (
-    <div data-testid="data-parameter-picker" style={{ display: "flex", flexDirection: "column", gap: 8, border: "1px solid var(--b1)", borderRadius: "var(--r3)", padding: 10, maxWidth: 520 }}>
+    <div data-testid="data-parameter-picker" style={{ display: "flex", flexDirection: "column", gap: 8, background: "var(--bg-2)", borderRadius: "var(--r3)", padding: 10, maxWidth: 520 }}>
       {held.length > 0 && (
         <div role="list" aria-label="The dashboard's values" style={{ display: "flex", flexDirection: "column" }}>
           {held.map(([n, v]) => (
@@ -506,7 +506,7 @@ function DatasetResult({ connectionId, sql, asked, values = null }: {
           </tbody>
         </table>
       ) : (
-        <div style={{ overflow: "auto", maxHeight: 360, border: "1px solid var(--b1)", borderRadius: "var(--r2)" }}>
+        <div style={{ overflow: "auto", maxHeight: 360, borderRadius: "var(--r2)" }}>
           <table className="aug-fs-sm" data-testid="data-dataset-rows" style={{ borderCollapse: "collapse", minWidth: "100%" }}>
             <thead>
               <tr>{withUniqueKeys(columns, c => c.name).map(([k, c]) => <th key={k} style={{ position: "sticky", top: 0, background: "var(--bg-2)", textAlign: "left", padding: "6px 10px", color: "var(--t2)", fontWeight: 500, whiteSpace: "nowrap" }}>{c.name}</th>)}</tr>
@@ -761,8 +761,9 @@ export function DataView({ spec, connectionId, onChange, onFollow, opened = null
   const add = (way: "table" | "sql") => setAdding(way);
   return (
     <div data-testid="data-view" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-      <div role="tablist" aria-label="Data and pages" style={{ flex: "none", display: "flex", alignItems: "center", gap: 4, padding: "6px 12px", borderBottom: "1px solid var(--b1)" }}>
-        <Button size="xs" variant="ghost" role="tab" aria-selected data-testid="data-view-tab" style={{ boxShadow: "inset 0 -2px 0 var(--accent)", borderRadius: 0 }}>
+      {/* the open tab by its fill, no underline and no rule under the strip (2026-11-20, borders are the exception) */}
+      <div role="tablist" aria-label="Data and pages" style={{ flex: "none", display: "flex", alignItems: "center", gap: 4, padding: "6px 12px" }}>
+        <Button size="xs" variant="ghost" role="tab" aria-selected data-testid="data-view-tab" style={{ background: "var(--gray-a5)" }}>
           <Icon name="table" size={13} /> Data
         </Button>
         <span aria-hidden="true" style={{ width: 1, alignSelf: "stretch", margin: "4px 4px", background: "var(--b1)" }} />
@@ -773,7 +774,7 @@ export function DataView({ spec, connectionId, onChange, onFollow, opened = null
         ))}
       </div>
       <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: "260px minmax(0, 1fr)" }}>
-        <aside aria-label="Datasets" style={{ minHeight: 0, overflow: "auto", borderRight: "1px solid var(--b1)", padding: "10px 8px", display: "flex", flexDirection: "column", gap: 2 }}>
+        <aside aria-label="Datasets" style={{ minHeight: 0, overflow: "auto", borderRight: "1px solid var(--divide)", padding: "10px 8px", display: "flex", flexDirection: "column", gap: 2 }}>
           <div className="aug-fs-xs" style={{ display: "flex", alignItems: "baseline", ...CAPTION, padding: "2px 6px 6px" }}>
             Datasets<span style={{ marginLeft: "auto", textTransform: "none", letterSpacing: 0 }}>{held.length} of {MAX_DATASETS}</span>
           </div>
