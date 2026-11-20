@@ -384,7 +384,7 @@ export function MetricsLedger({ connectionId, schema, block: measuredBlock }: {
           options={[{ value: "all", label: `All ${formatCount(block.measured.length)}` },
             { value: "key", label: `Key movements${done ? ` ${formatCount(key.length)}` : ""}`, title: "Metrics outside their usual range, what needs watching first" }]} />
         <div style={{ width: 220 }}>
-          <Input value={term} onChange={e => setTerm(e.target.value)} placeholder="Find a metric" aria-label="Find a metric" />
+          <Input variant="soft" value={term} onChange={e => setTerm(e.target.value)} placeholder="Find a metric" aria-label="Find a metric" />
         </div>
         {q && <span data-testid="ledger-found" className="aug-fs-xs" style={MUTED}>{`${formatCount(found)} of ${formatCount(total)}`}</span>}
         {filter === "unmeasured" && (

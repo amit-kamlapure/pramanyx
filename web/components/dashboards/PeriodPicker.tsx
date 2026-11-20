@@ -75,7 +75,7 @@ export function PeriodPicker({ value, onChange, showing, disabled, reading = fal
           setCustom(false);
           onChange({ preset: next } as RangeChoice);
         }}>
-        <SelectTrigger aria-label="Dashboard period" style={{ minWidth: 180 }}>
+        <SelectTrigger variant="soft" color="gray" aria-label="Dashboard period" style={{ minWidth: 180 }}>
           <span data-testid="dashboard-range">{custom && value.preset !== "custom" ? "Custom range…" : periodWords(value, showing, reading)}</span>
         </SelectTrigger>
         <SelectContent>
