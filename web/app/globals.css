@@ -121,6 +121,16 @@ a:hover { color: var(--blue4); }
 @supports not selector(::-webkit-scrollbar) {
   * { scrollbar-width: thin; scrollbar-color: var(--b3) transparent; }
 }
+/* The rail's list keeps its thumb out of sight until the rail is in use — the pointer over it, or a key's focus in it —
+   so a still rail draws no line at its edge (the user, 2026-11-20: "hide the scroll bar for the left panel when not
+   active or in use"). A click's focus does not count: the thumb would stay after every page opened from the rail. */
+.aug-nav-dests::-webkit-scrollbar-thumb { background: transparent; }
+.aug-nav-dests:hover::-webkit-scrollbar-thumb,
+.aug-nav-dests:has(:focus-visible)::-webkit-scrollbar-thumb { background: var(--b3); }
+@supports not selector(::-webkit-scrollbar) {
+  .aug-nav-dests { scrollbar-color: transparent transparent; }
+  .aug-nav-dests:hover, .aug-nav-dests:has(:focus-visible) { scrollbar-color: var(--b3) transparent; }
+}
 
 /* ── Layout ─────────────────────────────────────────────────────────────── */
 .aug-app { height: 100vh; overflow: hidden; display: flex; flex-direction: column; background: var(--bg-0); color: var(--t1); }
