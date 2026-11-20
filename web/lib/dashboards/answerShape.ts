@@ -11,6 +11,7 @@ import type { QueryChartPoint, QueryShaped, QueryShown, TypedColumn } from "@/li
 import type { VizConfig } from "@/components/charts/vizConfig";
 import type { ChartType } from "@/components/charts/chartTypeInference";
 import { classifyColumns } from "@/components/charts/columnRoles";
+import { cleanLabel } from "@/lib/format";
 import { isNumberPeriod } from "@/components/charts/columnRoles";
 import { QUERY_DEFAULT, kindOf } from "@/components/dashboards/QuerySetup";
 import type { DrawnFields } from "@/components/charts/drawn";
@@ -119,7 +120,7 @@ export function shapeAnswer(columns: TypedColumn[], rows: unknown[][], s: QueryS
       if (xi < 0 || yi < 0) continue;
       const x = r[xi];
       points.push({ x: x === null || x === undefined ? null : typeof x === "number" ? x : String(x),
-        s: si >= 0 ? String(r[si]) : several ? m.label || m.column : "", v: num(r[yi]) });
+        s: si >= 0 ? String(r[si]) : several ? m.label || cleanLabel(m.column) : "", v: num(r[yi]) });
     }
   }
   let series: string[];
@@ -135,7 +136,8 @@ export function shapeAnswer(columns: TypedColumn[], rows: unknown[][], s: QueryS
       said.push(`The ${rest.size} other values of ${s.split} are not drawn: the answer's own numbers are not added up into Other.`);
     }
   } else {
-    series = several ? s.series.map(m => m.label || m.column) : [""];
+    // a measure is named as its pill is, "Order Count", never its column "order_count" (2026-11-20)
+    series = several ? s.series.map(m => m.label || cleanLabel(m.column)) : [""];
   }
   points.sort((a, b) => order(a.x, b.x) || (a.s < b.s ? -1 : a.s > b.s ? 1 : 0));
   if (s.running) {

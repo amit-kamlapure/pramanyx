@@ -23,7 +23,7 @@ import { readVegaTokens } from "@/components/charts/vega/config";
 import { AGGS, BUCKETS, MAX_SERIES, MAX_TOP, kindOf, setupAs } from "@/components/dashboards/QuerySetup";
 import type { QueryAgg, QueryBucket, QueryShaped, QueryShown, QueryShownAs, QuerySegments, TypedColumn } from "@/lib/api";
 import { SERIES_SLOTS } from "@/lib/dashboards/catalog";
-import { isOtherKind, queryGrid, seriesColours } from "@/lib/dashboards/queryChart";
+import { isOtherKind, queryGrid, seriesColours, xText } from "@/lib/dashboards/queryChart";
 import { NEEDS_ASKING, rowsOnly } from "@/lib/dashboards/answerShape";
 import { DATE_FORMATS, DATE_FORMAT_WORDS, type DateFormat } from "@/lib/format";
 
@@ -83,6 +83,20 @@ export function kindOfDraft(d: QueryDraft): string {
   if (d.viz.view === "pivot") return "pivot";
   const chart = d.shown.as !== "table" && d.shown.as !== "figure";
   return chart && isOtherKind(d.viz.type) ? String(d.viz.type) : d.shown.as;
+}
+
+/** The default way dates are written, said by an example of what the chart draws ("Default · Jul 2026"), never a
+ *  placeholder (the user, 2026-11-20: "always a specific field.. always"). */
+function drawnDateWords(shaped: QueryShaped | null): string {
+  const points = shaped && "points" in shaped ? shaped.points : [];
+  const x = shaped && "x" in shaped ? shaped.x : null;
+  const first = points.find(p => p.x !== null && p.x !== undefined);
+  if (!first || !x) return "Default";
+  const temporal = x.kind === "date" || x.kind === "time";
+  const wholeMonths = temporal && !x.bucket && points.length > 1 && points.every(p => String(p.x ?? "").slice(8, 10) === "01");
+  const manyYears = temporal && new Set(points.map(p => String(p.x ?? "").slice(0, 4))).size > 1;
+  const example = xText(first.x, x.kind, wholeMonths ? "month" : x.bucket, manyYears);
+  return example === null || example === "" ? "Default" : `Default · ${example}`;
 }
 
 export function queryEditorModel(input: QueryEditorInput): VizEditorModel {
@@ -215,7 +229,7 @@ export function queryEditorModel(input: QueryEditorInput): VizEditorModel {
     // how its dates are written (2026-11-20: "put the month format as YYYY-MM"), wherever it has dates to write
     ...((chart ? dated : columns.some(c => ["date", "time"].includes(kindOf(c.type)))) ? {
       dateFormatValue: viz.dateFormat ?? "",
-      dateFormatOptions: [{ v: "", t: "As the card chooses" }, ...DATE_FORMATS.map(f => ({ v: f, t: `${f} · ${DATE_FORMAT_WORDS[f]}` }))],
+      dateFormatOptions: [{ v: "", t: drawnDateWords(shaped) }, ...DATE_FORMATS.map(f => ({ v: f, t: `${f} · ${DATE_FORMAT_WORDS[f]}` }))],
       setDateFormat: (v: string) => style({ dateFormat: (v || undefined) as DateFormat | undefined }),
     } : {}),
     // a query card's line width (2026-11-19): 2 is the default and is kept as nothing
