@@ -1741,6 +1741,9 @@ def _spec_section(intake: dict) -> str:
             intake.get("observation_end") or "", _col))
     else:
         lines.append("  observation: all the data — the question names no period.")
+    if intake.get("period_without_rows"):
+        lines.append("  the period asked holds NO rows in the data (see the coverage note): say so in one sentence, "
+                     "with what the data spans, and conclude — measure nothing else.")
     if intake.get("comparison_asked") is False:
         lines.append("  comparison: none — the question asks to compare no periods; compare none.")
     elif intake.get("no_prior_period"):

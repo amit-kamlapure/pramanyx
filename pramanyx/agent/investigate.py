@@ -252,6 +252,12 @@ def route_after_intake(state: AgentState) -> str:
     if state.get("_intake_failed"):
         return "intake_failed"
     intake = state.get("_ada_intake") or {}
+    # 2026-11-20 — the period asked holds no rows (a typed verdict from the coverage clamp): there is nothing to measure
+    # in it, so no phase runs; the report says the period is empty and what the data spans ("if no data exists, it
+    # should say so"). Seen live: a "why" for a day the data did not hold ran 28 queries and spent the turn's budget.
+    if intake.get("period_without_rows"):
+        from pramanyx.stats import stats as _s; _s.inc("intake_period_without_rows")
+        return "ada_synthesize"
     # Item 4: a question that asks to see the data and compares no periods has no baseline
     # to run — the breakdown is its instrument, as it is for `descriptive_only`.
     if intake.get("descriptive_only") or (intake.get("comparison_asked") is False
@@ -5299,6 +5305,9 @@ def _clamp_intake_to_coverage(intake, dmin, dmax, question: str = "", today: str
     # period with no rows is said to have none, and is answered as such — never swapped for another.
     _os_f, _oe_f = (intake.observation_start or "")[:10], (intake.observation_end or "")[:10]
     if _os_f and _oe_f and (_oe_f < dmin[:10] or _os_f > dmax[:10]):
+        # a typed verdict, read by the router (2026-11-20): nothing in an empty period can be measured, so the run goes
+        # straight to its report — seen live, a "why" for a day with no rows ran 28 queries and spent a turn's budget
+        intake.period_without_rows = True
         notes.append(f"the period asked, {_os_f} → {_oe_f}, holds no rows — the data spans {dmin[:10]} → "
                      f"{dmax[:10]}. Say so plainly; do not answer for another period instead")
     elif _settle > 1 and _oe_f:

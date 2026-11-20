@@ -287,13 +287,13 @@ def _compile(execute_node, scan_node, explore_execute_node, explore_scan_subq_no
         route_after_intake_clarify,
         {"clarify_gate": "clarify_gate", "ada_cross_section": _xsec_target,
          "ada_baseline": _baseline_target, "deep_breakdown": "deep_breakdown",
-         "intake_failed": END},
+         "ada_synthesize": "ada_synthesize", "intake_failed": END},
     )
     graph.add_conditional_edges(
         "clarify_gate",
         route_after_intake,
         {"ada_cross_section": _xsec_target, "ada_baseline": _baseline_target,
-         "deep_breakdown": "deep_breakdown", "intake_failed": END},
+         "deep_breakdown": "deep_breakdown", "ada_synthesize": "ada_synthesize", "intake_failed": END},
     )
 
     graph.add_conditional_edges(

@@ -7,6 +7,7 @@ descriptions and are overwritten immediately after the call returns:
 
   descriptive_only   `intake.descriptive_only = _is_descriptive_question(question)` — unconditional
   no_prior_period    decided by `_clamp_intake_to_coverage` from the real date coverage
+  period_without_rows  the same, when the period the question names holds no rows (added 2026-11-20)
   named_dimensions   resolved from the question against the schema
   metric_filters     copied from the governed metric the question was matched to (added
                      2026-09-29 — the pin carried a formula without the rows it is over)
@@ -37,7 +38,7 @@ from pramanyx.agent.prompts_investigate import (
 
 class TestTheSubsetIsDerived:
     def test_it_excludes_exactly_the_code_set_fields(self):
-        assert _CODE_SET_INTAKE_FIELDS == {"descriptive_only", "no_prior_period",
+        assert _CODE_SET_INTAKE_FIELDS == {"descriptive_only", "no_prior_period", "period_without_rows",
                                            "named_dimensions", "metric_filters",
                                            "period_named", "comparison_asked", "measure_definitions",
                                            "framed_metric", "record"}

@@ -940,6 +940,7 @@ class IntakeOutput(BaseModel):
     period_named: bool = Field(default=True, description="False when a question that asks to SEE the data names no period, so its answer covers all of it (set by code from the question; leave True).")
     comparison_asked: bool = Field(default=True, description="False when a question that asks to SEE the data asks to compare no periods (set by code from the question; leave True).")
     no_prior_period: bool = Field(default=False, description="True when the data holds NO period before the observation window to compare against (set by code from the real date coverage; leave False).")
+    period_without_rows: bool = Field(default=False, description="True when the period the question names holds NO rows in the data (set by code from the real date coverage; leave False).")
     descriptive_only: bool = Field(default=False, description="True when the question asks for a breakdown or a count rather than a change or a cause (set by code from the question; leave False).")
     named_dimensions: list[str] = Field(default_factory=list, description="Dimensions the question named outright, matched to real columns (set by code from the question; leave empty).")
     metric_filters: list[str] = Field(default_factory=list, description="The declared filters of the governed metric this question was matched to — the rows its formula is over (set by code from the metric catalogue; leave empty).")
