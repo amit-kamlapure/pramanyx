@@ -105,7 +105,9 @@ def test_the_conversation_is_told_a_request_has_parts(monkeypatch):
         return [json.loads(c.split("data: ", 1)[1]) async for c in inv._stream_converse(q, "fixture", [], session_id="p-1")
                 if c.startswith("data: ")]
     asyncio.run(go("Investigate why revenue fell and create a dashboard for it"))
-    assert seen["extra_context"].startswith("## This request has several parts")
+    # among the turn's context, wherever the other sections put it (CI, 2026-11-20: what the platform already knows about
+    # the dataset can stand before it, written by an earlier test in the same run)
+    assert "## This request has several parts" in seen["extra_context"]
     asyncio.run(go("How many orders?"))
     assert "several parts" not in (seen["extra_context"] or "")
 

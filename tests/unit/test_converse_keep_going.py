@@ -64,7 +64,8 @@ def test_keeping_going_tells_the_conversation_what_was_done_and_not_to_ask_a_too
     done = "1. change_chart — said no: “monthFormat” is not something the chart editor sets.\n2. explain_dashboard"
     _drive("Write the months as YYYY-MM", keep_going=done)
     ctx = seen["extra_context"]
-    assert ctx.startswith("## Keep going") and done in ctx and "do not call again a tool that said no" in ctx
+    # among the turn's context, wherever the other sections put it (what the platform already knows can stand before it)
+    assert "## Keep going" in ctx and done in ctx and "do not call again a tool that said no" in ctx
     seen.clear()
     _drive("Write the months as YYYY-MM")
     assert "## Keep going" not in (seen["extra_context"] or "")
