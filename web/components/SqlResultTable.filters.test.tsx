@@ -68,14 +68,14 @@ const condition = (op: string, value: string) => {
 };
 
 describe("the arrow at each column's head", () => {
-  it("is a button with an edge at the head's right edge, drawn where the pointer is until its column is filtered", () => {
+  it("is a button, a soft fill, at the head's right edge, drawn where the pointer is until its column is filtered", () => {
     // the user, 2026-11-09, on a results grid: "the dropdown icon should be at the right of the area … appear only when
     // hovered over" — and a filter in force is never hidden (the next test)
     mount();
     expect(arrows()).toHaveLength(3);
     for (const a of arrows()) {
       // Radix Themes' outline variant draws the edge with no pointer over it.
-      expect(a.className).toContain("rt-variant-outline");
+      expect(a.className).toContain("rt-variant-soft");
       expect(a.querySelector(".tabler-icon-chevron-down")).not.toBeNull();
       expect(a).not.toHaveAttribute("data-filtered");
       expect(a.parentElement?.className).toContain("hidden group-hover:inline-flex");

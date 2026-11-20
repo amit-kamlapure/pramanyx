@@ -66,7 +66,7 @@ export function AskPushedPage({ hidden = false, children }: { hidden?: boolean; 
     said();
   }, [pushed, said]);
   return (
-    <div ref={scroller} data-testid="ask-pushed-page" data-pushed={pushed || undefined} onScroll={said}
+    <div ref={scroller} data-testid="ask-pushed-page" className="aug-page-surface" data-pushed={pushed || undefined} onScroll={said}
       style={{ flex: 1, minWidth: 0, display: "flex", overflowX: pushed ? "auto" : "hidden", overflowY: "hidden" }}>
       <div ref={page} style={{ display: "flex", minWidth: 0, ...(pushed ? { flex: "none", width: `calc(100% + ${width}px)` } : { flex: 1 }) }}>
         {children}

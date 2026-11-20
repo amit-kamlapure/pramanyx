@@ -10,13 +10,13 @@ describe("an action looks like a button at rest", () => {
   afterEach(cleanup);
   const variantOf = (name: string) => screen.getByRole("button", { name }).className.match(/rt-variant-\w+/)?.[0];
 
-  it("draws an edge on an action, and none on a row or an icon alone", () => {
+  it("gives an action a soft fill at rest (2026-11-20: a fill, not an outline), and none to a row or an icon alone", () => {
     render(<>
       <Button variant="ghost">Check again</Button>
       <Button variant="plain">A whole row</Button>
       <Button variant="ghost" size="icon-xs" aria-label="Close">×</Button>
     </>);
-    expect(variantOf("Check again")).toBe("rt-variant-outline");
+    expect(variantOf("Check again")).toBe("rt-variant-soft");
     expect(variantOf("A whole row")).toBe("rt-variant-ghost");
     expect(variantOf("Close")).toBe("rt-variant-ghost");
   });

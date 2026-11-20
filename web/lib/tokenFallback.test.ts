@@ -43,7 +43,7 @@ function resolve(name: string, mode: "light" | "dark", depth = 0): string {
   if (ours) {
     const alias = ours.match(/^var\(\s*(--[a-zA-Z0-9-]+)\s*\)$/);
     if (alias) return resolve(alias[1], mode, depth + 1);
-    // two steps mixed in sRGB, as the browser does: `color-mix(in srgb, var(--a) P%, var(--b))` (--t3, 2026-11-20)
+    // two steps mixed in sRGB, as the browser does: a color-mix of two named steps at a share (--t3, 2026-11-20)
     const mixed = ours.match(/^color-mix\(in srgb,\s*var\((--[a-zA-Z0-9-]+)\)\s+(\d+)%,\s*var\((--[a-zA-Z0-9-]+)\)\s*\)$/);
     if (mixed) return mixHex(resolve(mixed[1], mode, depth + 1), resolve(mixed[3], mode, depth + 1), Number(mixed[2]) / 100);
     return ours;

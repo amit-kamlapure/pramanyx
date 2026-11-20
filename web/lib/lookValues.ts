@@ -33,9 +33,11 @@ export interface Look {
 /** What the user chose for everyone who has not chosen for themselves (2026-10-06; typeface, added
  *  2026-10-25, defaults to what the page was; edges defaults to the skin's own grammar, on). On 2026-11-10
  *  the default took the Evidence → Action mockups' look (ROADMAP §6 item 64): a blue accent, held to AA by
- *  `pramanyx-v2/theme/tokens-v2.css`; slate greys; small corners (6px panels); 36px table rows. */
+ *  `pramanyx-v2/theme/tokens-v2.css`; slate greys; small corners (6px panels); 36px table rows. On 2026-11-20 edges
+ *  went off by default — a card is its surface on the ground, borders the exception (the user's rule that day); a person
+ *  who keeps them on, and the workbench preset, still see every card boxed. */
 export const DEFAULT_LOOK: Look = {
-  accent: "blue", grey: "slate", radius: "small", scaling: "100%", edges: "on", typeface: "inter", rows: "default",
+  accent: "blue", grey: "slate", radius: "small", scaling: "100%", edges: "off", typeface: "inter", rows: "default",
 };
 
 /** A preset is every knob at once, named for what it does. `pramanyx` is the default; `workbench`

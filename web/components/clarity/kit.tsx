@@ -69,7 +69,8 @@ export function Card({ label, right, children, testId, style, ariaLabel }: {
 
 export type Tone = "plain" | "up" | "down" | "amber" | "violet" | "accent";
 const TONE: Record<Tone, CSSProperties> = {
-  plain: { background: "var(--bg-3)", color: "var(--t2)", border: "1px solid var(--b1)" },
+  // a fact on a faint fill, no outline (2026-11-20, borders are the exception): see-through, so it reads on any surface
+  plain: { background: "var(--gray-a3)", color: "var(--t2)", border: "1px solid transparent" },
   up: { background: "var(--grn1)", color: "var(--grn4)", border: "1px solid transparent" },
   down: { background: "var(--red1)", color: "var(--red4)", border: "1px solid transparent" },
   amber: { background: "var(--amb1)", color: "var(--amb4)", border: "1px solid transparent" },

@@ -11,18 +11,21 @@ import { cn } from "@/lib/utils"
  * so the Theme's accent, grey, radius and scaling move every button at once.
  *
  *   default      solid, accent        the one Primary per view
- *   secondary    surface, grey        a filled secondary
+ *   secondary    surface, grey        a filled secondary with an edge: the pressed or chosen state beside soft ones
  *   soft         soft, grey           a quiet secondary: a faint fill and no outline — still a button at rest (the user,
- *                                     2026-11-20: "borders are the exception"; Run stays the one solid action)
- *   outline      outline, grey        (and `minimal` and `ghost`, older names for the same look)
- *   destructive  outline, red
+ *                                     2026-11-20: "Surfaces define structure. Spacing defines groups. Typography defines
+ *                                     hierarchy. Borders are the exception.")
+ *   outline      soft, grey           (and `minimal` and `ghost`, older names for the same look) — an outline until
+ *                                     2026-11-20, the soft fill since, platform-wide
+ *   destructive  soft, red
  *   link         ghost, accent        the "show source" affordance
  *   plain        ghost, grey          no chrome: a whole row, a bare icon, a name that opens what it names,
  *                                     or a button drawing its own edge. Never an action. Counted by lint:elements.
  *
  * An action looks like a button before the pointer reaches it (the user, 2026-11-03: "only when a user hovers do they
- * realise it's something clickable"). So `ghost`, which drew nothing until hover on 1,012 call sites, draws an edge, and
- * an icon alone keeps none: a glyph already reads as a control.
+ * realise it's something clickable"). So `ghost`, which drew nothing until hover on 1,012 call sites, drew an edge — and
+ * since 2026-11-20 a soft fill instead, the user's choice over an outline when borders became the exception. An icon
+ * alone keeps none: a glyph already reads as a control.
  *
  * Themes has three heights (24, 32, 40). Ours were 26 and 22; both become 24 — its size 1
  * (the user chose Radix's own density, 2026-10-06).
@@ -37,10 +40,10 @@ const LOOK: Record<Variant, { variant: "solid" | "surface" | "soft" | "outline" 
   default: { variant: "solid" },
   secondary: { variant: "surface", color: "gray", highContrast: true },
   soft: { variant: "soft", color: "gray", highContrast: true },
-  outline: { variant: "outline", color: "gray" },
-  minimal: { variant: "outline", color: "gray" },
-  ghost: { variant: "outline", color: "gray" },
-  destructive: { variant: "outline", color: "red" },
+  outline: { variant: "soft", color: "gray", highContrast: true },
+  minimal: { variant: "soft", color: "gray", highContrast: true },
+  ghost: { variant: "soft", color: "gray", highContrast: true },
+  destructive: { variant: "soft", color: "red" },
   link: { variant: "ghost" },
   plain: { variant: "ghost", color: "gray" },
 }

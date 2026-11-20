@@ -124,7 +124,10 @@ a:hover { color: var(--blue4); }
 
 /* ── Layout ─────────────────────────────────────────────────────────────── */
 .aug-app { height: 100vh; overflow: hidden; display: flex; flex-direction: column; background: var(--bg-0); color: var(--t1); }
-.aug-body { flex: 1; display: flex; overflow: hidden; min-height: 0; }
+.aug-body { flex: 1; display: flex; overflow: hidden; min-height: 0; background: var(--bg-frame); }
+/* The page is a surface set into the frame (2026-11-20): its own ground, and a rounded corner where the top bar and the
+   rail meet it — the frame and the work told apart by surface, not by a rule. */
+.aug-page-surface { background: var(--bg-0); border-top-left-radius: 10px; }
 .aug-screen { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
 
 /* ── Shell · topbar 48 ───────────────────────────────────────────────────── */

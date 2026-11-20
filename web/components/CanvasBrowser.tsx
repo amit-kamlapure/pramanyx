@@ -55,8 +55,9 @@ function FilterChip({ label, icon, active, onClick }: { label: string; icon?: Ic
     <button onClick={onClick} style={{
       display: "inline-flex", alignItems: "center", gap: 6,
       padding: "5px 13px", borderRadius: "var(--r-chip)",
-      background: active ? "color-mix(in srgb, var(--blue4) 12%, var(--bg-2))" : "var(--bg-2)",
-      border: `1px solid ${active ? "var(--blue4)" : "var(--b1)"}`,
+      // a fill, no outline (2026-11-20): the chosen one tinted with the accent
+      background: active ? "color-mix(in srgb, var(--blue4) 16%, var(--bg-2))" : "var(--gray-a3)",
+      border: "1px solid transparent",
       color: active ? "var(--blue4)" : "var(--t2)",
       fontSize: 12, fontWeight: active ? 500 : 400,
       cursor: "pointer", transition: "background-color .1s, border-color .1s, color .1s", whiteSpace: "nowrap",
@@ -83,18 +84,19 @@ function CanvasCard({ row, onSelect, onDelete }: { row: CanvasRow; onSelect: () 
       style={{
         position: "relative", display: "flex", flexDirection: "column", gap: 12,
         padding: 16, minHeight: 148, textAlign: "left", cursor: "pointer",
-        background: "var(--bg-2)", border: "1px solid var(--b1)", borderRadius: "var(--r3)",
+        background: "var(--bg-2)", border: "1px solid transparent", borderRadius: "var(--r3)",
         transition: "border-color .12s, background .12s, box-shadow .12s",
       }}
-      onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--b3)"; e.currentTarget.style.background = "var(--bg-3)"; }}
-      onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--b1)"; e.currentTarget.style.background = "var(--bg-2)"; }}
+      // a surface on the ground, no edge: hover lifts it a step (2026-11-20, borders are the exception)
+      onMouseEnter={e => { e.currentTarget.style.background = "var(--bg-hover)"; }}
+      onMouseLeave={e => { e.currentTarget.style.background = "var(--bg-2)"; }}
     >
       {/* Header — icon + name + type label */}
       <div style={{ display: "flex", alignItems: "flex-start", gap: 11 }}>
         <div style={{
           width: 36, height: 36, borderRadius: "var(--r2)", flexShrink: 0,
           background: canvas.is_legacy ? "var(--bg-4)" : "color-mix(in srgb, var(--blue3) 16%, transparent)",
-          border: `1px solid ${canvas.is_legacy ? "var(--b2)" : "color-mix(in srgb, var(--blue3) 32%, transparent)"}`,
+          border: "1px solid transparent",
           display: "flex", alignItems: "center", justifyContent: "center",
         }}>
           <Icon name={CANVAS_ICON} size={17} color={canvas.is_legacy ? "var(--t3)" : "var(--blue4)"} />
@@ -136,14 +138,14 @@ function CanvasCard({ row, onSelect, onDelete }: { row: CanvasRow; onSelect: () 
       <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
         {connection && (
           <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px",
-            borderRadius: 4, background: "var(--bg-3)", border: "1px solid var(--b1)",
+            borderRadius: 4, background: "var(--gray-a3)", border: "1px solid transparent",
             fontSize: 11, color: "var(--t2)", whiteSpace: "nowrap" }}>
             <Icon name={DB_ICON} size={10} color="var(--t3)" />{connection.name}
           </span>
         )}
         <span style={{ display: "inline-flex", alignItems: "center", padding: "2px 8px", borderRadius: 4,
-          background: n === 0 ? "color-mix(in srgb, var(--grn3) 10%, transparent)" : "var(--bg-3)",
-          border: `1px solid ${n === 0 ? "color-mix(in srgb, var(--grn3) 25%, transparent)" : "var(--b1)"}`,
+          background: n === 0 ? "color-mix(in srgb, var(--grn3) 14%, transparent)" : "var(--gray-a3)",
+          border: "1px solid transparent",
           fontSize: 11, color: n === 0 ? "var(--grn4)" : "var(--t3)", whiteSpace: "nowrap" }}>
           {tableLabel}
         </span>
@@ -274,9 +276,7 @@ export function CanvasBrowser({ connections, onSelect, onNew, workspaceId }: Pro
             background: canvas.is_legacy
               ? "var(--bg-3)"
               : "color-mix(in srgb, var(--blue3) 18%, transparent)",
-            border: `1px solid ${canvas.is_legacy
-              ? "var(--b2)"
-              : "color-mix(in srgb, var(--blue3) 35%, transparent)"}`,
+            border: "1px solid transparent",
             display: "flex", alignItems: "center", justifyContent: "center",
           }}>
             <Icon name={CANVAS_ICON} size={13} color={canvas.is_legacy ? "var(--t3)" : "var(--blue4)"} />
@@ -324,7 +324,7 @@ export function CanvasBrowser({ connections, onSelect, onNew, workspaceId }: Pro
           <span style={{
             display: "inline-flex", alignItems: "center", gap: 5,
             padding: "2px 8px", borderRadius: 3,
-            background: "var(--bg-3)", border: "1px solid var(--b1)",
+            background: "var(--gray-a3)", border: "1px solid transparent",
             fontSize: 11, color: "var(--t2)", whiteSpace: "nowrap",
           }}>
             <Icon name={DB_ICON} size={10} color="var(--t3)" />
@@ -346,10 +346,8 @@ export function CanvasBrowser({ connections, onSelect, onNew, workspaceId }: Pro
             display: "inline-block", padding: "2px 8px", borderRadius: 3,
             background: n === 0
               ? "color-mix(in srgb, var(--grn3) 10%, transparent)"
-              : "var(--bg-3)",
-            border: `1px solid ${n === 0
-              ? "color-mix(in srgb, var(--grn3) 25%, transparent)"
-              : "var(--b1)"}`,
+              : "var(--gray-a3)",
+            border: "1px solid transparent",
             fontSize: 11,
             color: n === 0 ? "var(--grn4)" : "var(--t3)",
           }}>
@@ -391,11 +389,11 @@ export function CanvasBrowser({ connections, onSelect, onNew, workspaceId }: Pro
     <div style={{
       flex: inShell ? "0 1 340px" : 1, display: "flex", alignItems: "center", gap: 10,
       padding: inShell ? "3px 10px" : "8px 14px",
-      background: "var(--bg-2)", border: "1px solid var(--b1)",
+      background: "var(--bg-2)", border: "1px solid transparent",
       borderRadius: "var(--r2)", transition: "border-color .1s",
     }}
       onFocusCapture={e => { (e.currentTarget as HTMLDivElement).style.borderColor = "var(--b2)"; }}
-      onBlurCapture={e => { (e.currentTarget as HTMLDivElement).style.borderColor = "var(--b1)"; }}
+      onBlurCapture={e => { (e.currentTarget as HTMLDivElement).style.borderColor = "transparent"; }}
     >
       <Icon name={SEARCH_ICON} size={14} color="var(--t3)" />
       <Input
@@ -427,7 +425,7 @@ export function CanvasBrowser({ connections, onSelect, onNew, workspaceId }: Pro
       <div style={{
         display: "inline-flex", alignItems: "center", justifyContent: "center",
         width: 30, height: 30, borderRadius: "var(--r2)",
-        background: "var(--bg-2)", border: "1px solid var(--b1)", color: "var(--t3)",
+        background: "var(--bg-2)", border: "1px solid transparent", color: "var(--t3)",
         marginRight: 2,
       }}>
         <Icon name={SLIDERS_ICON} size={14} color="var(--t3)" />
@@ -445,7 +443,7 @@ export function CanvasBrowser({ connections, onSelect, onNew, workspaceId }: Pro
     <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
       {/* Cards ⇄ List view toggle */}
       <div style={{ display: "flex", alignItems: "center", gap: 1, padding: 2,
-        background: "var(--bg-2)", border: "1px solid var(--b1)", borderRadius: "var(--r2)" }}>
+        background: "var(--bg-2)", border: "1px solid transparent", borderRadius: "var(--r2)" }}>
         {([["cards", GRID_ICON, "Card view"], ["list", LIST_ICON, "List view"]] as const).map(([v, ic, tt]) => (
           <div key={v} role="button" tabIndex={0} title={tt} aria-label={tt} aria-pressed={view === v}
             onClick={() => setView(v)}
@@ -466,12 +464,13 @@ export function CanvasBrowser({ connections, onSelect, onNew, workspaceId }: Pro
         style={{
           display: "inline-flex", alignItems: "center", gap: 6,
           padding: "5px 10px", borderRadius: "var(--r2)",
-          background: sortOpen ? "var(--bg-3)" : "transparent",
-          border: "1px solid var(--b2)",
+          // a soft fill, no outline (2026-11-20)
+          background: sortOpen ? "var(--bg-4)" : "var(--gray-a3)",
+          border: "1px solid transparent",
           color: "var(--t2)", fontSize: 12, cursor: "pointer", transition: "background-color .1s, border-color .1s",
         }}
-        onMouseEnter={e => { if (!sortOpen) e.currentTarget.style.background = "var(--bg-2)"; }}
-        onMouseLeave={e => { if (!sortOpen) e.currentTarget.style.background = "transparent"; }}
+        onMouseEnter={e => { if (!sortOpen) e.currentTarget.style.background = "var(--gray-a4)"; }}
+        onMouseLeave={e => { if (!sortOpen) e.currentTarget.style.background = "var(--gray-a3)"; }}
       >
         <span style={{ color: "var(--t3)" }}>Sort:</span>
         {SORT_LABELS[sort]}

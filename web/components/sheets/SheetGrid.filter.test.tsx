@@ -58,10 +58,10 @@ const box = (name: string) => screen.getByRole("checkbox", { name });
 const ok = () => fireEvent.click(screen.getByRole("button", { name: "OK" }));
 
 describe("a column's arrow", () => {
-  it("is drawn on hover or keyboard focus within its header, with its edge, never at rest", () => {
+  it("is drawn on hover or keyboard focus within its header, as a button, never at rest", () => {
     header([{ column: "c1", op: "in", value: ["delivered"] }]);
     const plain = screen.getByRole("button", { name: "The order_id column's menu" });
-    expect(plain.className).toContain("rt-variant-outline");
+    expect(plain.className).toContain("rt-variant-soft");
     // jsdom draws no hover: what is asserted is the rule that draws it — hidden, shown by its header's hover or focus
     expect(plain.className.split(" ")).toEqual(expect.arrayContaining(
       ["opacity-0", "group-hover:opacity-100", "group-focus-within:opacity-100"]));

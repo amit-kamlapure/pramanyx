@@ -426,7 +426,7 @@ describe("asking about one part of the edition", () => {
     fireEvent.keyDown(box, { key: "Enter" });
   };
 
-  it("offers Ask about this on every part that says or draws something, as a button with its edge at rest", async () => {
+  it("offers Ask about this on every part that says or draws something, as a button at rest (a soft fill)", async () => {
     api.readBriefingEdition.mockResolvedValue(WRITTEN);
     render(<BriefingEdition connectionId="dcc63d83" schema="luxexperience" />);
     await screen.findByTestId("edition-lead");
@@ -435,7 +435,7 @@ describe("asking about one part of the edition", () => {
     expect(offered).toEqual(["lead", "bridge", "compare", "table", "map", "decision"]);   // a control chooses; a type the page cannot draw says so
     for (const b of screen.getAllByRole("button", { name: "Ask about this" })) {
       expect(b.tagName).toBe("BUTTON");
-      expect(b).toHaveClass("rt-variant-outline");                                      // an edge before the pointer reaches it
+      expect(b).toHaveClass("rt-variant-soft");                                      // a button before the pointer reaches it
       expect(b).toHaveAttribute("aria-pressed", "false");
     }
     expect(screen.queryByTestId("edition-ask-part")).toBeNull();                         // asking about the whole edition
