@@ -54,7 +54,10 @@ function SelectTrigger({
   style,
   ...props
 }: React.ComponentProps<typeof ThemesSelect.Trigger> & { size?: "sm" | "default"; bespoke?: boolean }) {
-  return <ThemesSelect.Trigger data-slot="select-trigger" {...props}
+  // A picker that is not a form field — a toolbar's connection, a sort — is a soft fill with no outline (2026-11-20,
+  // borders are the exception); a form field keeps its edge, where the eye goes looking for what to fill in.
+  const quiet = bespoke && props.variant === undefined ? { variant: "soft" as const, color: "gray" as const } : {}
+  return <ThemesSelect.Trigger data-slot="select-trigger" {...quiet} {...props}
     className={bespoke ? className : fieldClass(className)} style={bespoke ? style : fieldStyle(style)} />
 }
 

@@ -14,12 +14,14 @@ function Input({ className, style, size: _size, color: _color, bespoke, leading,
     /** "soft": a faint fill and no outline, for a field on a quiet surface (the SQL Editor's catalog search, 2026-11-20). */
     variant?: "surface" | "soft";
   }) {
+  // Soft when asked, and by default for a field that is not a form's — a toolbar's search, a rename in place
+  // (2026-11-20, borders are the exception); a form's field keeps its edge, where the eye looks for what to fill in.
   return (
     <TextField.Root data-slot="input" data-field={bespoke ? undefined : "form"} size={bespoke ? "1" : "2"}
       className={bespoke ? className : fieldClass(className)} style={bespoke ? style : fieldStyle(style)}
       {...(value !== undefined ? { value: value as string | number } : {})}
       {...(defaultValue !== undefined ? { defaultValue: defaultValue as string | number } : {})}
-      {...(variant === "soft" ? { variant: "soft" as const, color: "gray" as const } : {})}
+      {...(variant === "soft" || (bespoke && variant === undefined) ? { variant: "soft" as const, color: "gray" as const } : {})}
       {...(props as Record<string, unknown>)}>
       {leading != null && <TextField.Slot>{leading}</TextField.Slot>}
       {trailing != null && trailing !== false && <TextField.Slot side="right">{trailing}</TextField.Slot>}
