@@ -33,6 +33,9 @@ export const READS = [
   // A change the platform staged, in the person's words (2026-11-20): the card under the step that staged it reads where
   // it stands every time it is drawn, and Allow or Reject goes through this page's own door (`stagedDoor`), never here.
   /^\/kinetic-actions\/inbox\/[A-Za-z0-9_-]{1,64}\/said$/,
+  // A person's chart choices for their answers (2026-11-20, one chart editor): the platform's own editor, opened beside
+  // the conversation at `/chart/<answer id>`, keeps them under scope "coworker"; the answer card reads them to draw.
+  /^\/viz-configs$/,
 ];
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";

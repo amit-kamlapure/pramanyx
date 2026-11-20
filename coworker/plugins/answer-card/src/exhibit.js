@@ -7,7 +7,7 @@
  * editor for each, and the two things drawn in both places (the result grid and the editor).
  */
 import { createElement as h, useEffect, useState, useSyncExternalStore } from "react";
-import { drawnAs, labelOf, numericColumns, vizChoices } from "./chart";
+import { labelOf, numericColumns } from "./chart";
 
 export const line = "color-mix(in srgb, currentColor 18%, transparent)";
 export const faint = "color-mix(in srgb, currentColor 6%, transparent)";
@@ -30,12 +30,10 @@ export const button = (on) => ({
 // ── what this page has seen, and what was chosen for it ──────────────────────────────────────────────────────
 
 const SEEN = new Map();        // answer id → { answer, asked }
-const CHOSEN = new Map();      // answer id → the editor's choices
 const watching = new Set();
 let turn = 0;
 const tell = () => { turn += 1; watching.forEach((heard) => heard()); };
 const watch = (heard) => { watching.add(heard); return () => watching.delete(heard); };
-const KEPT = "pramanyx.coworker.viz.";
 
 /** Re-draw whenever an answer is seen or a choice changes. */
 export const useExhibits = () => useSyncExternalStore(watch, () => turn);
@@ -72,23 +70,32 @@ export function rememberThing(id, title, value) {
   tell();
 }
 
-/** The editor's choices for an answer; what was chosen on an earlier visit is read back once. */
-export function chosen(id) {
-  if (!CHOSEN.has(id)) {
-    let kept = null;
-    try { kept = JSON.parse(localStorage.getItem(KEPT + id) || "null"); } catch { kept = null; }
-    CHOSEN.set(id, kept && typeof kept === "object" ? kept : null);
-  }
-  return CHOSEN.get(id);
+/**
+ * A person's chart choices for their answers are the platform's (2026-11-20, one chart editor: "why do we three
+ * distinct type of viz editors???????? … Dashboard has the best one"). "Edit visualization" opens the platform's own
+ * editor beside the conversation (`/chart/<answer id>`), which keeps them under scope "coworker" (`/viz-configs`); they are
+ * read here and the chart is drawn from them as the platform draws it (`chart.ts`). The coworker's own editor, and the
+ * choices it kept in this browser (`pramanyx.coworker.viz.<id>`), are gone: a chart edited there before is drawn as answered.
+ */
+const SCOPE = "coworker";
+const SAVED_MESSAGE = "pramanyx:chart-saved";
+let saved = null;        // answer id → the platform's chart choices; null until first read
+let reading = null;
+function readSaved() {
+  if (reading) return reading;
+  reading = fetch(`/pramanyx/viz-configs?scope_key=${SCOPE}`, { headers: { accept: "application/json" } })
+    .then((answer) => (answer.ok ? answer.json() : {}))
+    .catch(() => ({}))
+    .then((got) => { saved = new Map(Object.entries(got && typeof got === "object" ? got : {})); reading = null; tell(); });
+  return reading;
 }
-
-function choose(id, change) {
-  const next = change === null ? null : { ...(chosen(id) ?? {}), ...change };
-  CHOSEN.set(id, next);
-  try {
-    if (next) localStorage.setItem(KEPT + id, JSON.stringify(next)); else localStorage.removeItem(KEPT + id);
-  } catch { /* the choice lasts this visit */ }
-  tell();
+let listening = false;
+function listen() {
+  if (listening || typeof window === "undefined") return;
+  listening = true;
+  // the editor beside the conversation says when it kept a choice; coming back to the window reads them again
+  window.addEventListener("message", (e) => { if (e?.data?.type === SAVED_MESSAGE) void readSaved(); });
+  window.addEventListener("focus", () => { void readSaved(); });
 }
 
 // ── the pane: one kind of tab, addressed by what it shows and for which answer ───────────────────────────────
@@ -243,65 +250,6 @@ function SqlAndResult({ answer }) {
     }, answer.sql || "No SQL came back with this answer."));
 }
 
-const field = { font: "inherit", fontSize: 13, color: "inherit", background: soft, border: 0,
-                borderRadius: 4, padding: "7px 10px", width: "100%", boxSizing: "border-box" };
-
-function Choice({ label, value, options, onChange, id }) {
-  return h("div", { style: { display: "flex", flexDirection: "column", gap: 6, paddingBottom: 14, borderBottom: `1px solid ${line}` } },
-    h("label", { htmlFor: id, style: heading }, label),
-    h("select", { id, value, onChange: (e) => onChange(e.target.value), style: field },
-      options.map((o) => h("option", { key: o.v, value: o.v }, o.t))));
-}
-
-function OnOff({ label, on, onChange }) {
-  return h("div", { style: { display: "flex", alignItems: "center", paddingBottom: 14, borderBottom: `1px solid ${line}` } },
-    h("span", { style: { ...heading, flex: "1 1 auto" } }, label),
-    h("button", {
-      type: "button", role: "switch", "aria-checked": on, "aria-label": label, onClick: () => onChange(!on),
-      style: { width: 40, height: 22, borderRadius: 11, border: 0, padding: 3, cursor: "pointer", display: "flex",
-               justifyContent: on ? "flex-end" : "flex-start", background: on ? "var(--dsw-alias-state-business-primary, #46a0c4)" : soft },
-    }, h("span", { style: { width: 16, height: 16, borderRadius: "50%", background: on ? "#0b1a21" : "currentColor", opacity: on ? 1 : 0.55 } })));
-}
-
-/**
- * Edit visualization: what the chart is drawn as, which column is its axis and which is measured, a colour, its
- * labels and tooltip, and which way its bars run. What is offered is what the app's own chart vocabulary says this
- * grid can honestly be; a choice applies to the chart in the conversation as it is made, and is kept for the answer.
- */
-function Editor({ id, answer }) {
-  const now = chosen(id) ?? {};
-  const offered = vizChoices(answer.columns ?? [], answer.rows ?? []);
-  const set = (change) => choose(id, change);
-  const columnsOf = (names) => names.map((c) => ({ v: c, t: labelOf(c) }));
-  // What is drawn now, by name — never "As answered": the chosen value, else what the chart was drawn as.
-  const drawn = drawnAs(answer.columns ?? [], answer.rows ?? [], answer.chart_type ?? null);
-  const types = offered.types.some((o) => o.v === drawn.type) || !drawn.type
-    ? offered.types : [{ v: drawn.type, t: labelOf(drawn.type) }, ...offered.types];
-  const withField = (list, name) => (name && !list.includes(name) ? [name, ...list] : list);
-  const way = now.orient || "";
-  return h("div", { style: page },
-    h("div", null,
-      h("div", { style: { fontSize: 15, fontWeight: 600 } }, "Edit visualization"),
-      h("div", { style: { ...quiet, fontSize: 12, paddingTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
-        answer.answer || answer.question || "")),
-    h(Choice, { id: `viz-type-${id}`, label: "Visualization", value: now.type || drawn.type, onChange: (v) => set({ type: v }),
-                options: types }),
-    h(Choice, { id: `viz-x-${id}`, label: "X axis", value: now.x || drawn.x, onChange: (v) => set({ x: v }),
-                options: columnsOf(withField(offered.dimensions, drawn.x)) }),
-    h(Choice, { id: `viz-y-${id}`, label: "Y axis", value: now.y || drawn.y, onChange: (v) => set({ y: v }),
-                options: columnsOf(withField(offered.measures, drawn.y)) }),
-    h(Choice, { id: `viz-color-${id}`, label: "Color", value: now.color || "", onChange: (v) => set({ color: v }),
-                options: [{ v: "", t: "None" }, ...columnsOf(offered.dimensions)] }),
-    h(OnOff, { label: "Labels", on: now.labels !== false, onChange: (on) => set({ labels: on }) }),
-    h(OnOff, { label: "Tooltip", on: now.tooltip !== false, onChange: (on) => set({ tooltip: on }) }),
-    h("div", { style: { display: "flex", flexDirection: "column", gap: 6, paddingBottom: 14, borderBottom: `1px solid ${line}` } },
-      h("span", { style: heading }, "Orientation"),
-      h("div", { role: "group", "aria-label": "Orientation", style: { display: "flex", gap: 6 } },
-        [["", "Auto"], ["vertical", "Vertical"], ["horizontal", "Horizontal"]].map(([v, t]) =>
-          h("button", { key: t, type: "button", "aria-pressed": way === v, style: button(way === v), onClick: () => set({ orient: v }) }, t)))),
-    h("div", null, h("button", { type: "button", style: button(false), disabled: chosen(id) === null, onClick: () => choose(id, null) }, "Reset to the original chart")));
-}
-
 // ── what an answer's receipt names ───────────────────────────────────────────────────────────────────────────
 
 /**
@@ -377,7 +325,7 @@ export const pageFor = {
 const NAMED = [[/^\/metrics\/([^/?]+)/, "Metric"], [/^\/ontology\/([^/?]+)/, "Ontology"], [/^\/receipt\//, "Why this number"],
                [/^\/sheets\/[^/?]+/, "Sheet"], [/^\/definitions\/([^/?]+)/, "Definition"], [/^\/automations\?/, "Schedule"],
                [/^\/questions\/keep\?/, "Keep on a dashboard"], [/^\/agents\/new\?/, "New agent"],
-               [/^\/skills\/new\?/, "Save as a skill"]];
+               [/^\/skills\/new\?/, "Save as a skill"], [/^\/chart\/[^/?]+/, "Edit visualization"]];
 
 /** A referenced spreadsheet's tab is called by its own name and nothing else — "Olist orders", not "Sheet". */
 function sheetName(path) {
@@ -416,8 +364,28 @@ function pageName(path) {
  * receipt as "Why this number" shows it, a spreadsheet as the asset it is (its name, origin and rows; none of the
  * Spreadsheets page's tools), a schedule on the page every schedule is kept on — because it is the app. Only the app's own paths for those are shown; anything else is refused, since the address arrives in a tab's name.
  */
+/**
+ * The platform's chart editor beside the conversation (`/chart/<answer id>`) reads the answer the platform stored; an
+ * agent's answer is stored without its rows, so the page asks the window that opened it, and this hands it the rows
+ * this page already has — only to the platform's own address, only for an answer it was asked about.
+ */
+let handingRows = false;
+function handRows() {
+  if (handingRows || typeof window === "undefined") return;
+  handingRows = true;
+  window.addEventListener("message", (e) => {
+    if (e?.data?.type !== "pramanyx:chart-ready" || e.origin !== appOrigin() || !e.source) return;
+    const id = String(e.data.id || "");
+    const held = [...SEEN.values()].map((x) => x.answer).find((a) => a && String(a.investigation_id || "") === id);
+    if (!held) return;
+    e.source.postMessage({ type: "pramanyx:chart-data", id, headline: held.answer || held.question || "", columns: held.columns ?? [],
+      rows: held.rows ?? [], chart_type: held.chart_type ?? null }, e.origin);
+  });
+}
+
 function AppPage({ path }) {
   if (!NAMED.some(([shape]) => shape.test(path))) return h("div", { style: { ...page, ...quiet } }, "This tab names a page this pane does not show.");
+  handRows();
   return h("iframe", {
     src: appOrigin() + path, title: pageName(path), referrerPolicy: "no-referrer",
     style: { width: "100%", height: "100%", border: 0, display: "block", background: "transparent" },
@@ -484,7 +452,7 @@ export function PaneBody(props) {
       "This tab shows something from a conversation. Open that conversation and it is filled in; or close the tab.");
   }
   if (at.what === "thing") return h(Thing, { title: known.title, value: known.value });
-  return at.what === "viz" ? h(Editor, { id: at.id, answer: known.answer }) : h(SqlAndResult, { answer: known.answer });
+  return h(SqlAndResult, { answer: known.answer });
 }
 
 /** A tab's name: what it shows, and of which answer. */
@@ -495,13 +463,15 @@ export function PaneTitle(props) {
   const known = at ? seen(at.id) : null;
   if (at?.what === "thing") return h("span", { title: known?.title || "" }, known?.title || "What was read");
   const of = known?.answer ?? null;
-  const what = at?.what === "viz" ? "Edit visualization" : "SQL";
+  const what = "SQL";
   const name = of ? (of.answer || of.question || "") : "";
   return h("span", { title: name ? `${what} — ${name}` : what }, name ? `${what} · ${name}` : what);
 }
 
-/** The choices made for one answer, re-read whenever any choice changes. */
-export function useChosen(id) {
+/** The platform's chart choices for one answer (by its stored id), re-read when the editor beside keeps one. */
+export function useChosen(answerId) {
   useExhibits();
-  return chosen(id);
+  listen();
+  if (saved === null) void readSaved();
+  return answerId && saved ? saved.get(String(answerId)) ?? null : null;
 }

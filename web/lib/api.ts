@@ -3276,6 +3276,19 @@ export async function getVizConfigs(scopeKey: string): Promise<Record<string, Re
   return res.json();
 }
 
+/** An answer's chart as the platform stored it — the report of its run: what it said, its columns, rows and chart hint.
+ *  Null when it cannot be read. An agent's answer is stored without its rows (`app/chart/[id]` asks its opener then). */
+export interface StoredAnswerChart { headline: string; columns: string[]; rows: unknown[][]; chartType: string | null }
+export async function getStoredAnswerChart(id: string): Promise<StoredAnswerChart | null> {
+  const res = await fetch(`${getApiBase()}/investigations/${encodeURIComponent(id)}`);
+  if (!res.ok) return null;
+  const body = await res.json();
+  const report = body?.report ?? {};
+  const columns = Array.isArray(report.columns) ? report.columns.map(String) : [];
+  const rows = Array.isArray(report.rows) ? report.rows : [];
+  return { headline: String(report.headline || body?.headline || ""), columns, rows, chartType: report.chart_type ?? null };
+}
+
 /** Persist one card-less chart's display config. An empty `config` resets it. */
 export async function saveVizConfig(
   scopeKey: string, targetId: string, config: Record<string, unknown>,

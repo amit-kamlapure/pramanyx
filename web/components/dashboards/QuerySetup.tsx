@@ -32,10 +32,11 @@ import { VALUE_KIND_WORDS, startText, triedValues, valuesRead, type ValuesSent }
 import { formatCount, formatSeconds } from "@/lib/format";
 import { withUniqueKeys } from "@/lib/listKeys";
 
-export const QUERY_DEFAULT: QueryShown = {
-  as: "table", summed: true, x: "", bucket: "", series: [{ column: "", agg: "count" }], split: "", top: 5,
-  segments: "stacked", running: false, labels: false, columns: [], sort: "", descending: true, label: "",
-};
+// The setup's default and a column type's kind live in a plain module, so code drawn outside the app (the coworker's
+// answer card) can read them without this screen (2026-11-20).
+import { QUERY_DEFAULT, kindOf } from "@/lib/dashboards/queryShown";
+export { QUERY_DEFAULT, kindOf };
+
 const SHOWN: { value: QueryShownAs; label: string; icon: IconName }[] = [
   { value: "table", label: "Table", icon: "table" }, { value: "figure", label: "Figure", icon: "num" },
   { value: "bar", label: "Bar", icon: "chart" }, { value: "line", label: "Line", icon: "trendup" },
@@ -54,13 +55,6 @@ export const MAX_TOP = 12;
 const PREVIEW_SHOWN = 5;
 
 /** A column's kind as a chart reads it — `pramanyx/dashboards/queries.py` `kind_of`. */
-export function kindOf(type: string): "number" | "date" | "time" | "text" {
-  const t = (type || "").toUpperCase();
-  if (t.startsWith("DATE") && !t.includes("TIME")) return "date";
-  if (t.includes("TIMESTAMP") || t.includes("DATETIME")) return "time";
-  if (/INT|DOUBLE|FLOAT|DECIMAL|NUMERIC|REAL|NUMBER|HUGEINT/.test(t)) return "number";
-  return "text";
-}
 
 /** The setup kept beside a card, else the first one that reads the columns: what a new query starts as. */
 function firstSetup(columns: TypedColumn[], as: QueryShownAs): QueryShown {

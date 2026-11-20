@@ -22,6 +22,7 @@ import { Icon, type IconName } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { withUniqueKeys } from "@/lib/listKeys";
 import { Select as UiSelect, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 /** What a field holds, as its glyph says it and the field list groups it: a measure is a number. */
@@ -81,6 +82,9 @@ export interface VizEditorModel {
   setRunning?: (b: boolean) => void;
   summedValue?: boolean;
   setSummed?: (b: boolean) => void;
+  /** Controls only a new query could honour, said in their channel's properties as not offered here, and why
+   *  ("needs the question asked again") — an answer's chart is drawn from its own rows. Withheld is said, never implied. */
+  withheld?: { at: "x" | "y"; label: string; value: string; why: string }[];
   // Orientation — swap which axis carries the measure. Empty string = let the chart decide.
   orientValue: "" | "vertical" | "horizontal";
   orientAvailable: boolean;
@@ -288,6 +292,16 @@ function SegToggle<T extends string>({ value, onChange, options, label }: { valu
           </Button>
         );
       })}
+    </div>
+  );
+}
+
+/** A control not offered here: what it stays at, and why another needs more than this chart has. */
+function Withheld({ label, value, why }: { label: string; value: string; why: string }) {
+  return (
+    <div data-testid="viz-withheld" aria-disabled="true" style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+      <span className="aug-fs-xs" style={{ fontWeight: 500, color: "var(--t3)" }}>{label}</span>
+      <span className="aug-fs-sm" style={{ color: "var(--t2)" }}>{value}<span style={{ color: "var(--t3)" }}> · {why}</span></span>
     </div>
   );
 }
@@ -542,8 +556,11 @@ export function VizEditorPanel({ model, onClose, docked = false }: { model: VizE
   const table = model.tableColumns !== undefined;
   const yTitle = figure ? "Value" : "Y axis";
 
+  const withheldAt = (at: "x" | "y") => withUniqueKeys((model.withheld ?? []).filter((w) => w.at === at), (w) => `${w.at}:${w.label}`)
+    .map(([k, w]) => <Withheld key={k} label={w.label} value={w.value} why={w.why} />);
   const yProps = (
     <>
+      {withheldAt("y")}
       {model.summedValue !== undefined && model.setSummed && (
         <Field label="Rows">
           <SegToggle label="Rows" value={model.summedValue ? "summed" : "as"} onChange={(v) => model.setSummed?.(v === "summed")}
@@ -575,7 +592,7 @@ export function VizEditorPanel({ model, onClose, docked = false }: { model: VizE
       )}
     </>
   );
-  const hasYProps = !figure || (model.summedValue !== undefined && !!model.setSummed);
+  const hasYProps = !figure || (model.summedValue !== undefined && !!model.setSummed) || (model.withheld ?? []).some((w) => w.at === "y");
 
   return (
     <div
@@ -636,6 +653,7 @@ export function VizEditorPanel({ model, onClose, docked = false }: { model: VizE
           <Channel title="X axis" testid="viz-channel-x"
             props={(
               <>
+                {withheldAt("x")}
                 {model.bucketOptions && model.bucketOptions.length > 0 && model.setBucket && (
                   <Field label="Counted by"><Select label="Counted by" value={model.bucketValue ?? ""} options={model.bucketOptions} onChange={model.setBucket} /></Field>
                 )}

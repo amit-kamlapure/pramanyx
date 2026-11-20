@@ -8,6 +8,7 @@
  * series keeps its colour whatever the reader narrows, and Other never wears a series' colour.
  */
 import type { ChartOptions } from "@/components/charts/chartCustom";
+import { ALL_CHART_TYPES } from "@/components/charts/chartTypeInference";
 import type { VizConfig } from "@/components/charts/vizConfig";
 import type { QueryShaped, QueryShown } from "@/lib/api";
 import { dayLabel } from "@/lib/dashboards/objectView";
@@ -16,7 +17,23 @@ import { emphasisOpacity } from "@/components/charts/vega/emphasis";
 import { HOVER_MARK, type HoverMeta } from "@/components/charts/vega/hoverTooltip";
 import { colorsFor } from "@/lib/dashboards/valueColors";
 
-type QueryChart = Extract<QueryShaped, { as: "bar" | "line" | "area" | "scatter" }>;
+export type QueryChart = Extract<QueryShaped, { as: "bar" | "line" | "area" | "scatter" }>;
+
+/** A kind an answer's chart draws that a query card's own six do not (bar, line, area, scatter, a figure, a table). */
+const OWN_SIX = new Set(["auto", "bar", "line", "area", "scatter", "table", "figure"]);
+export function isOtherKind(type: string | null | undefined): boolean {
+  return !!type && !OWN_SIX.has(type) && (ALL_CHART_TYPES as readonly string[]).includes(type);
+}
+
+/** A query card's chart points as a result grid — the place, its series when split, its measure by its own column name
+ *  (so a money column still reads as money) — for an answer's chart to draw. */
+export function queryGrid(c: QueryChart, setup: Pick<QueryShown, "series" | "split">): { columns: string[]; rows: unknown[][] } {
+  const measure = setup.series?.[0]?.column || "value";
+  const split = c.series.length > 1 || (c.series.length === 1 && c.series[0] !== "");
+  return split
+    ? { columns: [c.x.name, setup.split || "series", measure], rows: c.points.map(p => [p.x, p.s || "", p.v]) }
+    : { columns: [c.x.name, measure], rows: c.points.map(p => [p.x, p.v]) };
+}
 
 export interface ChartColours { palette: string[]; other: string }
 

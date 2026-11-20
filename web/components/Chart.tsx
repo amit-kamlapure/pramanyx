@@ -17,15 +17,11 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useOrgSettings } from "@/lib/useOrgSettings";
 import { barsPerBand } from "@/components/charts/vega/bandFit";
 import { VegaChart } from "@/components/charts/vega/VegaChart";
-import { resolveVegaSpec } from "@/components/charts/vega/resolveSpec";
-import { readVegaTokens } from "@/components/charts/vega/config";
+import { resolveChart } from "@/components/charts/drawn";
 import { useValueColors } from "@/components/dashboards/placementLook";
-import { withValueColors } from "@/lib/dashboards/valueColors";
-import { resolveTier3Spec } from "@/components/charts/vega/tier3";
 import { downloadChartPng, type ChartInstance } from "@/lib/chartExport";
 import type { ChartCustom } from "@/components/charts/chartCustom";
 import type { ExhibitSpec } from "@/components/charts/exhibit";
-import { namesOf } from "@/components/charts/vega/names";
 import { Icon } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 
@@ -149,44 +145,9 @@ export function Chart({
   type Built = { spec: Record<string, unknown>; defaultH: number; xCategories: number; tier: 1 | 3 };
 
   const built = useMemo<Built | null>(() => {
-    // Tier 3 first — the four forms Vega-Lite cannot express are hand-authored Vega.
-    const t3 = resolveTier3Spec({ columns, rows, chartType: String(chartType ?? ""), emphasis: exhibit?.emphasis ?? null });
-    if (t3) return { spec: t3.spec, defaultH: t3.defaultH, xCategories: 0, tier: 3 };
-
-    const v = resolveVegaSpec({
-      columns, rows, chartType, showLabels, exhibit, measure, names: namesOf(chartConfig),
-      format: userFormat ?? custom?.format ?? null,
-      xTitle: custom?.xTitle ?? null,
-      yTitle: custom?.yTitle ?? null,
-      orient: custom?.orient ?? null,
-      transform: custom?.transform ?? null,
-      options: custom?.options ?? null,
-    });
-    // v17 — on a dashboard, a value wears the colour the dashboard keeps for it, on every card (study R11)
-    if (v) return { spec: withValueColors(v.spec, keptColors, keptColors ? readVegaTokens().palette : []), defaultH: v.defaultH, xCategories: v.xCategories, tier: 1 };
-    // A customization must never brick the chart. Saved viz-configs key by POSITION
-    // (pinned__N) and pinned findings reorder across briefing regenerations, so a
-    // stale seed can name columns this finding does not have — the customized
-    // resolve then refuses, and the card used to render NOTHING with no way back.
-    // Retry bare (auto) before giving up; only truly unchartable data renders none.
-    // The retreat drops hint, exhibit and custom alike — a finding's hint (e.g.
-    // scatter) can fit the original frame while refusing the reshaped one a saved
-    // metric selection produced. And "auto" is not the floor: type inference
-    // refuses a plain [dimension, stringified-measure] frame that an explicit bar
-    // charts fine (measured on theLook's category/total_volume), so bar is the
-    // last rung. Truly unchartable data still refuses everything and renders none.
-    for (const retreat of ["auto", "bar"] as const) {
-      if (retreat === String(chartType ?? "auto") && !custom && !userFormat && !exhibit) continue;
-      const bare = resolveVegaSpec({
-        // `measure` survives the retreat: it is the user's intent, not styling.
-        columns, rows, chartType: retreat, showLabels, exhibit: null, measure, names: namesOf(chartConfig),
-        format: null, xTitle: null, yTitle: null, orient: null, transform: null,
-      });
-      if (bare) return { spec: bare.spec, defaultH: bare.defaultH, xCategories: bare.xCategories, tier: 1 };
-    }
-    // null is the honest-refusal verdict: data with no chart in it renders none, and the
-    // surface's table view carries it. There is no second engine to fall back to.
-    return null;
+    // the one resolution (`charts/drawn.ts`): what this chart draws is what its editor names
+    const d = resolveChart({ columns, rows, chartType, chartConfig, showLabels, custom, exhibit, measure, userFormat, keptColors });
+    return d ? { spec: d.spec, defaultH: d.defaultH, xCategories: d.xCategories, tier: d.tier } : null;
     // orgV: currency / palette / relabel settings feed the resolver via module reads.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [columns, rows, chartType, chartConfig, showLabels, custom, userFormat, orgV, columnUnits, exhibit, measure, keptColors]);

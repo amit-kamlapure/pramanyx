@@ -19,7 +19,7 @@
 import type { ChartOptions } from "@/components/charts/chartCustom";
 import type { ChartType } from "@/components/charts/chartTypeInference";
 import type { ExhibitRefLine } from "@/components/charts/exhibit";
-import type { PostprocOp } from "@/lib/api";
+import type { PostprocOp, QueryShown } from "@/lib/api";
 import type { DateFormat } from "@/lib/format";
 
 export type VizAgg = "sum" | "avg" | "count" | "min" | "max";
@@ -64,6 +64,10 @@ export interface VizConfig {
   yLog?:        boolean;
   sortBy?:      "value" | "label";
   top?:         number;
+  /** An answer's chart as a person set it up in the one chart editor (2026-11-20): what runs along the bottom, its
+   *  measures, what splits it — a dashboard card's setup, drawn from the answer's own rows (`answerShape.ts`). Absent:
+   *  the chart is drawn as it was answered, with the fields above. */
+  shown?:       QueryShown;
 }
 
 /** True when the config carries no user intent — nothing to persist, nothing to restore.
@@ -82,7 +86,8 @@ export function isEmptyVizConfig(c: VizConfig | null | undefined): boolean {
     !c.lineShape && c.markers === undefined && c.yMin === undefined && c.yMax === undefined && !c.yLog &&
     !c.sortBy && !c.top &&
     !(c.refLines && c.refLines.length) &&
-    (c.transform === undefined || c.transform === "none")
+    (c.transform === undefined || c.transform === "none") &&
+    !c.shown
   );
 }
 
