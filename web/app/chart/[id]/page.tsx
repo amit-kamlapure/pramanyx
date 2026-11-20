@@ -99,9 +99,15 @@ export default function ChartRoute({ params }: { params: Promise<{ id: string }>
   const key = `answer-${id}`;
   return (
     <div data-testid="chart-page" style={page}>
-      {answer.headline && <div className="aug-fs-h2" style={{ fontWeight: 600 }}>{answer.headline.split("\n")[0].replace(/\*\*/g, "")}</div>}
-      <ResultChartCard columns={answer.columns} rows={answer.rows} chartType={answer.chartType} editorKey={key} pencil={false}
-        config={config} onConfigChange={keep} />
+      {/* Which answer this edits, in one quiet line: the chart itself is in the conversation beside (the user, 2026-11-20:
+          "Viz inside the viz editor?"). */}
+      {answer.headline && <div className="aug-fs-sm" title={answer.headline} style={{ color: "var(--t3)", overflow: "hidden",
+        textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{answer.headline.split("\n")[0].replace(/\*\*/g, "")}</div>}
+      {/* The chart is kept, unseen: the editor is built from it (what is drawn, its fields, its choices). */}
+      <div hidden data-testid="chart-page-chart">
+        <ResultChartCard columns={answer.columns} rows={answer.rows} chartType={answer.chartType} editorKey={key} pencil={false}
+          config={config} onConfigChange={keep} />
+      </div>
       <ChartDock cardKey={key} charted />
     </div>
   );
