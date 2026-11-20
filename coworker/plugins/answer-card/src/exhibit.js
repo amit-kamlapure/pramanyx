@@ -325,7 +325,7 @@ export const pageFor = {
 const NAMED = [[/^\/metrics\/([^/?]+)/, "Metric"], [/^\/ontology\/([^/?]+)/, "Ontology"], [/^\/receipt\//, "Why this number"],
                [/^\/sheets\/[^/?]+/, "Sheet"], [/^\/definitions\/([^/?]+)/, "Definition"], [/^\/automations\?/, "Schedule"],
                [/^\/questions\/keep\?/, "Keep on a dashboard"], [/^\/agents\/new\?/, "New agent"],
-               [/^\/skills\/new\?/, "Save as a skill"]];
+               [/^\/skills\/new\?/, "Save as a skill"], [/^\/chart\/[^/?]+/, "Edit visualization"]];
 
 /** A referenced spreadsheet's tab is called by its own name and nothing else — "Olist orders", not "Sheet". */
 function sheetName(path) {
@@ -364,8 +364,28 @@ function pageName(path) {
  * receipt as "Why this number" shows it, a spreadsheet as the asset it is (its name, origin and rows; none of the
  * Spreadsheets page's tools), a schedule on the page every schedule is kept on — because it is the app. Only the app's own paths for those are shown; anything else is refused, since the address arrives in a tab's name.
  */
+/**
+ * The platform's chart editor beside the conversation (`/chart/<answer id>`) reads the answer the platform stored; an
+ * agent's answer is stored without its rows, so the page asks the window that opened it, and this hands it the rows
+ * this page already has — only to the platform's own address, only for an answer it was asked about.
+ */
+let handingRows = false;
+function handRows() {
+  if (handingRows || typeof window === "undefined") return;
+  handingRows = true;
+  window.addEventListener("message", (e) => {
+    if (e?.data?.type !== "pramanyx:chart-ready" || e.origin !== appOrigin() || !e.source) return;
+    const id = String(e.data.id || "");
+    const held = [...SEEN.values()].map((x) => x.answer).find((a) => a && String(a.investigation_id || "") === id);
+    if (!held) return;
+    e.source.postMessage({ type: "pramanyx:chart-data", id, headline: held.answer || held.question || "", columns: held.columns ?? [],
+      rows: held.rows ?? [], chart_type: held.chart_type ?? null }, e.origin);
+  });
+}
+
 function AppPage({ path }) {
   if (!NAMED.some(([shape]) => shape.test(path))) return h("div", { style: { ...page, ...quiet } }, "This tab names a page this pane does not show.");
+  handRows();
   return h("iframe", {
     src: appOrigin() + path, title: pageName(path), referrerPolicy: "no-referrer",
     style: { width: "100%", height: "100%", border: 0, display: "block", background: "transparent" },

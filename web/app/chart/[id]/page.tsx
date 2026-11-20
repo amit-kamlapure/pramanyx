@@ -54,10 +54,27 @@ export default function ChartRoute({ params }: { params: Promise<{ id: string }>
 
   useEffect(() => {
     let live = true;
+    let handed: Answer | null = null;
+    // An agent's answer is stored without its rows (its report is the agent's own): the window that opened this page —
+    // the coworker — holds them, and is asked for them; only its own frame parent's word is taken.
+    const fromOpener = (e: MessageEvent) => {
+      const d = e.data as { type?: string; id?: string; headline?: string; columns?: unknown[]; rows?: unknown[][]; chart_type?: string | null };
+      if (e.source !== window.parent || d?.type !== "pramanyx:chart-data" || String(d.id) !== id) return;
+      if (!Array.isArray(d.columns) || !d.columns.length) return;
+      handed = { headline: String(d.headline || ""), columns: d.columns.map(String), rows: Array.isArray(d.rows) ? d.rows : [],
+        chartType: d.chart_type ?? null };
+      if (live) setAnswer((now) => (now && now.columns.length ? now : handed));
+    };
+    window.addEventListener("message", fromOpener);
+    try { if (window.parent !== window) window.parent.postMessage({ type: "pramanyx:chart-ready", id }, "*"); } catch { /* not in a frame */ }
     Promise.all([readAnswer(id), getVizConfigs(COWORKER_SCOPE)])
-      .then(([a, kept]) => { if (live) { setAnswer(a); setConfig((kept[id] as VizConfig | undefined) ?? null); } })
-      .catch(() => { if (live) { setAnswer(null); setConfig(null); } });
-    return () => { live = false; if (timer.current) clearTimeout(timer.current); };
+      .then(([a, kept]) => {
+        if (!live) return;
+        setAnswer(a && a.columns.length ? a : handed ?? a);
+        setConfig((kept[id] as VizConfig | undefined) ?? null);
+      })
+      .catch(() => { if (live) { setAnswer(handed); setConfig(null); } });
+    return () => { live = false; window.removeEventListener("message", fromOpener); if (timer.current) clearTimeout(timer.current); };
   }, [id]);
 
   const keep = (next: VizConfig) => {
