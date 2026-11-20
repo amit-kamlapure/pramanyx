@@ -27,12 +27,14 @@ export const ONE_LINE: CSSProperties = { whiteSpace: "nowrap", overflow: "hidden
 export const ROW: CSSProperties = { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" };
 export const NUM: CSSProperties = { fontVariantNumeric: "tabular-nums" };
 
-/** The page a redone screen sits on: a column of cards, 14px apart, across the whole width the screen has (the user,
- *  2026-10-12: the pages use the full page width — no column capped at the mockups' 1180). */
+/** The page a redone screen sits on: its sections one under the other across the whole width the screen has (the user,
+ *  2026-10-12: the pages use the full page width — no column capped at the mockups' 1180). Since 2026-11-20 a section
+ *  is not a card: its heading, its content on the page, and one quiet rule between whole sections (the user's
+ *  inspiration that day: "fewer containers, clearer reading order"). */
 export function Page({ children, testId }: { children: ReactNode; testId?: string }) {
   return (
     <div style={{ flex: 1, minHeight: 0, overflowY: "auto", background: "var(--bg-0)" }}>
-      <div data-testid={testId} style={{ display: "flex", flexDirection: "column", gap: 14, padding: "16px 22px 28px",
+      <div data-testid={testId} style={{ display: "flex", flexDirection: "column", gap: 4, padding: "20px 28px 32px",
         width: "100%" }}>
         {children}
       </div>
@@ -54,14 +56,30 @@ export function Label({ children, right, tone }: { children: ReactNode; right?: 
   );
 }
 
-/** A card with its label — the shape nearly every section takes. */
+/** A section's heading: its name at the section's size, what it counts or its tools at the right end. */
+function SectionHead({ children, right, tone }: { children: ReactNode; right?: ReactNode; tone?: "amber" }) {
+  return (
+    <div className="aug-section-head">
+      <h2 className="aug-section-title" style={tone === "amber" ? { color: "var(--amb4)", display: "inline-flex", alignItems: "center", gap: 6 } : undefined}>
+        {tone === "amber" && <Icon name="warning" size={14} />}{children}
+      </h2>
+      <span style={{ flex: 1 }} />
+      {right != null && right !== false && (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 8, color: "var(--t3)" }}>{right}</span>
+      )}
+    </div>
+  );
+}
+
+/** A section with its heading — the shape nearly every part of a page takes. Since 2026-11-20 not a card: no fill, no
+ *  edge, no box; the page's ground, space around it, and a quiet rule from the section before (`.aug-section`). */
 export function Card({ label, right, children, testId, style, ariaLabel }: {
   label: ReactNode; right?: ReactNode; children: ReactNode; testId?: string; style?: CSSProperties; ariaLabel?: string;
 }) {
   return (
-    <section aria-label={ariaLabel ?? (typeof label === "string" ? label : undefined)} data-testid={testId}
-      style={{ ...CARD, ...style }}>
-      <Label right={right}>{label}</Label>
+    <section className="aug-section" aria-label={ariaLabel ?? (typeof label === "string" ? label : undefined)} data-testid={testId}
+      style={{ minWidth: 0, ...style }}>
+      <SectionHead right={right}>{label}</SectionHead>
       {children}
     </section>
   );
@@ -105,11 +123,11 @@ export function Dot({ color, hue, title }: { color?: string; hue?: keyof typeof 
   );
 }
 
-/** The row of three or four figures a screen opens on. */
+/** The row of three or four figures a screen opens on: numbers first, each with its few words under it, no cards. */
 export function Figures({ children, testId }: { children: ReactNode; testId?: string }) {
   return (
-    <div data-testid={testId} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
-      gap: 14 }}>
+    <div data-testid={testId} className="aug-section" style={{ display: "grid",
+      gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: "16px 32px" }}>
       {children}
     </div>
   );
@@ -151,21 +169,24 @@ export function Figure({ label, value, sub, tone, title, onOpen, testId }: {
       </span>
     );
   }
+  // The number first, its few words under it, the muted line after — on the page, not in a card (2026-11-20).
   const body = (
     <>
-      <span className="aug-fs-xs" style={{ ...MUTED, display: "block" }}>{label}</span>
       <span className="aug-fs-display" data-slot="figure-value" data-testid={testId ? `${testId}-value` : undefined} style={{ display: "block",
-        color, fontWeight: 600, lineHeight: 1.25, margin: "2px 0", ...NUM }}>{value}</span>
+        color, fontWeight: 600, lineHeight: 1.2, ...NUM }}>{value}</span>
+      <span className="aug-fs-sm" style={{ color: "var(--t2)", display: "block", marginTop: 4 }}>
+        {label}{onOpen && <span aria-hidden style={{ marginLeft: 4, display: "inline-flex", verticalAlign: "-1px", opacity: .7 }}><Icon name="chevr" size={11} /></span>}
+      </span>
       {sub != null && sub !== false && (
-        <span className="aug-fs-xs" style={{ ...MUTED, ...ROW, gap: 6, lineHeight: 1.5 }}>{sub}</span>
+        <span className="aug-fs-xs" style={{ ...MUTED, ...ROW, gap: 6, lineHeight: 1.5, marginTop: 2 }}>{sub}</span>
       )}
     </>
   );
-  if (!onOpen) return <div data-testid={testId} title={title} style={CARD}>{body}</div>;
+  if (!onOpen) return <div data-testid={testId} title={title} style={{ minWidth: 0 }}>{body}</div>;
   return (
     <Button variant="plain" data-testid={testId} title={title} onClick={onOpen}
-      style={{ ...CARD, display: "block", height: "auto", margin: 0, textAlign: "left", whiteSpace: "normal",
-        width: "100%", fontWeight: 400, cursor: "pointer" }}>
+      style={{ display: "block", height: "auto", margin: "-6px -8px", padding: "6px 8px", textAlign: "left", whiteSpace: "normal",
+        width: "calc(100% + 16px)", fontWeight: 400, cursor: "pointer", borderRadius: "var(--r2)" }}>
       {body}
     </Button>
   );
@@ -183,17 +204,16 @@ export function NeedsYou({ right, children, testId, waiting, empty }: {
 }) {
   const rows = empty !== undefined ? Children.toArray(children).filter(Boolean) : null;
   const on = rows ? rows.length > 0 : waiting ?? true;
-  // An edge and an amber label, never a fill (the user, 2026-11-03): a warning is not the brightest thing on the page.
-  // Inset, so the edge never touches CARD's `border` shorthand (React warns when a longhand beside it is removed).
+  // An amber heading with its mark, never a fill (the user, 2026-11-03): a warning is not the brightest thing on the
+  // page. Since 2026-11-20 not a card either — a section like the rest, set apart by space and a quiet rule.
   if (rows && !on) {
     return (
-      <section aria-label="Needs you" data-testid={testId} data-waiting="false" className="aug-fs-sm" style={MUTED}>{empty}</section>
+      <section aria-label="Needs you" data-testid={testId} data-waiting="false" className="aug-fs-sm aug-section" style={MUTED}>{empty}</section>
     );
   }
   return (
-    <section aria-label="Needs you" data-testid={testId} data-waiting={on ? "true" : "false"}
-      style={on ? { ...CARD, boxShadow: NEEDS_EDGE } : CARD}>
-      <Label tone={on ? "amber" : undefined} right={right}>Needs you</Label>
+    <section aria-label="Needs you" data-testid={testId} data-waiting={on ? "true" : "false"} className="aug-section" style={{ minWidth: 0 }}>
+      <SectionHead tone={on ? "amber" : undefined} right={right}>Needs you</SectionHead>
       {rows ? (rows.length ? rows : <Empty>{empty}</Empty>) : children}
     </section>
   );
@@ -213,9 +233,10 @@ export function Fold({ title, meta, right, open, onOpenChange, height, children,
   if (open && !mounted) setMounted(true);
   return (
     <section ref={sectionRef} aria-label={title} data-testid={testId} data-open={open ? "true" : "false"}
-      style={{ ...CARD, padding: 0, scrollMarginTop: 12 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", minWidth: 0 }}>
-        <span className="aug-fs-chrome" style={{ color: "var(--t1)", fontWeight: 500, whiteSpace: "nowrap" }}>{title}</span>
+      className="aug-section" style={{ minWidth: 0, scrollMarginTop: 12 }}>
+      {/* a section folded shut: its heading, what it holds, Show — on the page, not in a card (2026-11-20) */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+        <span className="aug-section-title" style={{ whiteSpace: "nowrap" }}>{title}</span>
         <span className="aug-fs-sm" style={{ ...MUTED, ...ONE_LINE, flex: "1 1 auto", ...NUM }}>{meta}</span>
         {right}
         <Button variant="ghost" size="xs" aria-expanded={open} onClick={() => onOpenChange(!open)}>
@@ -224,8 +245,7 @@ export function Fold({ title, meta, right, open, onOpenChange, height, children,
       </div>
       {mounted && (
         <div data-testid={testId ? `${testId}-body` : undefined} inert={!open} aria-hidden={!open || undefined}
-          style={{ display: open ? "flex" : "none", flexDirection: "column", height, overflow: "hidden",
-            borderTop: "1px solid var(--b0)" }}>
+          style={{ display: open ? "flex" : "none", flexDirection: "column", height, overflow: "hidden", marginTop: 12 }}>
           {children}
         </div>
       )}

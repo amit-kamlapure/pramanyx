@@ -100,10 +100,11 @@ describe("CoverageCard", () => {
     await waitFor(() => expect(api.getMetricCoverage).toHaveBeenLastCalledWith("dcc63d83", undefined, true));
   });
 
-  it("proposes by code on a click, on a thread, and says to read it again", async () => {
+  it("proposes by code from the section's ⋯ menu, on a thread, and says to read it again", async () => {
     api.runMetricCoverage.mockResolvedValue({ started: true });
     render(<CoverageCard connId="dcc63d83" rows={[]} onAdopted={() => {}} />);
-    fireEvent.click(await screen.findByText("Propose by code"));
+    fireEvent.keyDown(await screen.findByTestId("coverage-actions"), { key: "Enter" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Propose by code" }));
     expect(await screen.findByTestId("coverage-note")).toHaveTextContent("Proposing — each proposal's figures are read");
   });
 });

@@ -934,7 +934,10 @@ textarea.aug-input, .aug-textarea { min-height: 56px; padding: 7px 9px; line-hei
 .aug-page { max-width: 920px; margin: 0 auto; padding: 20px 28px 48px; }
 .aug-page-wide { max-width: 1240px; }
 .aug-section { padding: 0 0 24px; }
-.aug-section + .aug-section { border-top: 1px solid var(--b0); padding-top: 20px; }
+/* One quiet rule between whole sections, space around it (2026-11-20: a page is sections, not a stack of cards). */
+.aug-section + .aug-section { border-top: 1px solid var(--divide); padding-top: 24px; }
+/* A section's name: a heading at the section's size, above its content (typography defines the hierarchy). */
+.aug-section-title { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.35; color: var(--t1); }
 .aug-section-head { display: flex; align-items: baseline; gap: 10px; min-height: 28px; margin-bottom: 8px; }
 /* A section's name never shrinks or breaks: a long note beside it takes the room left and wraps there instead
    ("The inquiry" broke onto two lines in a narrow pane, 2026-10-27). */

@@ -60,17 +60,21 @@ export function AreaOwnersEditor({ connId, schema, areas, area, onSaved }: {
   );
 }
 
-/** A curator declares an area the industry's map does not have. */
-export function DeclareArea({ connId, schema, areas, onSaved }: {
+/** A curator declares an area the industry's map does not have. Opened by its own button, or — given `open` — by a
+ *  menu elsewhere (the Coverage section's ⋯, 2026-11-20), when it draws nothing until opened. */
+export function DeclareArea({ connId, schema, areas, onSaved, open: given, onOpenChange }: {
   connId: string; schema?: string; areas: BusinessArea[]; onSaved: (areas: BusinessArea[]) => void;
+  open?: boolean; onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [own, setOwn] = useState(false);
+  const open = given ?? own;
+  const setOpen = (v: boolean) => { if (given === undefined) setOwn(v); onOpenChange?.(v); };
   const [name, setName] = useState("");
   const [question, setQuestion] = useState("");
   const [parent, setParent] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  if (!open) return <Button size="xs" variant="ghost" onClick={() => setOpen(true)}>Declare an area</Button>;
+  if (!open) return given === undefined ? <Button size="xs" variant="ghost" onClick={() => setOpen(true)}>Declare an area</Button> : null;
   const id = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 60);
   const save = async () => {
     setBusy(true); setError("");

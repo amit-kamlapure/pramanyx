@@ -148,7 +148,7 @@ export function Section({ label, meta, action, children, id }: {
   return (
     <section className="aug-section" id={id} aria-label={label}>
       <div className="aug-section-head">
-        <h2 className="aug-label" style={{ margin: 0 }}>{label}</h2>
+        <h2 className="aug-section-title">{label}</h2>
         {meta != null && <span className="aug-fs-sm" style={{ color: "var(--t3)" }}>{meta}</span>}
         <span style={{ flex: 1 }} />
         {action}
