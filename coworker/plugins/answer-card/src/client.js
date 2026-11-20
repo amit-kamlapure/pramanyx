@@ -19,6 +19,7 @@ import { deckOf } from "./deck.js";
 import { driveFilesOf } from "./drive.js";
 import { ABOUT_TO, DOES, PREFIX, STAGED, saidOf, stagedOf, turnedDown } from "./steps.js";
 import { drawChart, labelOf, numericColumns } from "./chart";
+import { unstatedFigures } from "../../../../web/lib/statedFigures";
 import {
   PANE, PANE_PATTERN, PaneBody, downloadCsv, groundingOf, pageFor, PaneTitle, ResultGrid, button, code, faint, hasPane, idOf, line,
   primary, soft, surface,
@@ -869,12 +870,13 @@ function RunAnswer({ answer, provisional }) {
   const [table, setTable] = useState(false);
   const one = (answer.rows ?? []).length === 1;
   const count = typeof answer.row_count === "number" ? answer.row_count : (answer.rows ?? []).length;
+  const unsaid = one ? unsaidOf(answer, [answer.headline]) : [];
   return h("div", { "data-pramanyx-run-answer": "", style: { display: "flex", flexDirection: "column", gap: 6 } },
     answer.headline ? h("div", { style: { fontSize: 15, fontWeight: 600, lineHeight: 1.4 } }, answer.headline) : null,
-    h("div", { style: { background: surface, borderRadius: 10, padding: "8px 10px 4px 14px" } },
-      one ? h(Figures, { answer }) : table ? h("div", { style: { padding: "4px 0 6px" } }, h(ResultGrid, { answer, compact: true }))
-        : h(Chart, { answer }),
-      one ? null : h("div", { style: { display: "flex", alignItems: "center", gap: 12, marginTop: 4 } },
+    one ? (unsaid.length ? h(Figures, { answer, only: unsaid }) : null)
+    : h("div", { style: { background: surface, borderRadius: 10, padding: "8px 10px 4px 14px" } },
+      table ? h("div", { style: { padding: "4px 0 6px" } }, h(ResultGrid, { answer, compact: true })) : h(Chart, { answer }),
+      h("div", { style: { display: "flex", alignItems: "center", gap: 12, marginTop: 4 } },
         h("button", { type: "button", className: "pramanyx-link", "aria-expanded": table, onClick: () => setTable((was) => !was) },
           table ? "Show the chart" : "Show as a table"),
         h("span", { style: { flex: "1 1 auto" } }),
@@ -1325,19 +1327,30 @@ function titleOf(answer) {
 
 /**
  * One row of numbers is a figure, not a chart and not a one-line table: each number set large under its name, and
- * what is not a number said beside it. The Data Canvas shows a single-row answer this way.
+ * what is not a number said beside it. The Data Canvas shows a single-row answer this way. Set out plainly, never in
+ * a box, and only the figures the answer's words leave out (`only`): one its headline states is not said twice.
  */
-function Figures({ answer }) {
+function Figures({ answer, only = null }) {
   const columns = answer.columns ?? [], row = (answer.rows ?? [])[0] ?? [];
   const numeric = numericColumns(columns, answer.rows ?? []);
   const units = unitsOf(answer);
-  return h("div", { style: { display: "flex", flexWrap: "wrap", gap: "14px 36px", padding: "6px 0 10px" } },
-    columns.map((c, i) => h("div", { key: c, style: { minWidth: 0 } },
+  return h("div", { style: { display: "flex", flexWrap: "wrap", gap: "14px 36px", padding: "2px 0 4px" } },
+    columns.map((c, i) => (only && !only.includes(i) ? null : h("div", { key: c, style: { minWidth: 0 } },
       h("div", { style: { ...quiet, fontSize: 12.5 } }, labelOf(c)),
       // The short form to read, the whole figure on hover: €56.93m, and 56,931,850.61 behind it.
       h("div", { title: numeric[i] ? shown(row[i], true, units[c]) : undefined,
                  style: { fontSize: numeric[i] ? 26 : 15, fontWeight: 600, lineHeight: 1.3, fontVariantNumeric: "tabular-nums", overflowWrap: "anywhere" } },
-        shown(row[i], numeric[i], units[c], true)))));
+        shown(row[i], numeric[i], units[c], true))))));
+}
+
+/**
+ * The figures of a one-row answer its words do not already state (the user, 2026-11-20, of "Netflix titles sheet
+ * contains 8,807 rows" over a box saying 8,807 again: "Do you think its neccessary to have a block for a single
+ * figure? We must some logic here.."). The platform's own rule (`web/lib/statedFigures.ts`): none when the words
+ * state every measure.
+ */
+function unsaidOf(answer, words) {
+  return unstatedFigures(answer.columns ?? [], (answer.rows ?? [])[0] ?? [], words.filter(Boolean).join(" "));
 }
 
 /**
@@ -1399,6 +1412,9 @@ function Exhibit({ answer, whole, asked }) {
   const checked = answer.warning?.kind === "not_what_was_asked";
   const asks = Array.isArray(answer.followups) ? answer.followups.filter((x) => typeof x === "string" && x.trim()).slice(0, 3) : [];
   const figure = rows.length === 1;
+  // A one-row answer is no exhibit: no box, only the figures its words leave out; its SQL and download join the
+  // links at its foot.
+  const unsaid = figure ? unsaidOf(answer, [answer.answer, words]) : [];
   const title = titleOf(answer);
   const marks = hasPane() && connection;
   const sheetsRead = (overSheets && sheets ? (answer.tables_used ?? []) : []).map((t) => sheets.get(String(t).split(".").pop().toLowerCase())).filter(Boolean);
@@ -1437,15 +1453,16 @@ function Exhibit({ answer, whole, asked }) {
       h("span", { "aria-hidden": "true", style: { fontWeight: 600 } }, "!"),
       h("span", null, checked ? wrong.join(" ") : `This may not be right: ${wrong.join("; ")}`)) : null,
     words || stoodOn.length ? h("div", null, rich(words), stoodOn) : null,
-    h("div", { style: { background: surface, borderRadius: 10, padding: "10px 10px 6px 16px" } },
+    figure ? (unsaid.length ? h(Figures, { answer, only: unsaid }) : null)
+    : h("div", { style: { background: surface, borderRadius: 10, padding: "10px 10px 6px 16px" } },
       h("div", { style: { display: "flex", alignItems: "center", gap: 2, minHeight: 30 } },
         h("div", { style: { flex: "1 1 auto", minWidth: 0, fontSize: 14, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, title),
         h("button", { type: "button", className: "pramanyx-icon", "aria-label": "Download", title: "Download: the rows, or the answer as a file", "aria-expanded": open === "files", onClick: () => toggle("files") }, h(Glyph, { d: GLYPH.download })),
-        figure ? null : h("button", { type: "button", className: "pramanyx-icon", "aria-label": "Show as a table", title: "Show as a table", "aria-expanded": open === "table", onClick: () => toggle("table") }, h(Glyph, { d: GLYPH.table })),
-        !figure && hasPane() ? h("button", { type: "button", className: "pramanyx-icon", "aria-label": "Edit visualization", title: "Edit visualization", onClick: () => openBeside("viz", id) }, h(Glyph, { d: GLYPH.edit })) : null),
+        h("button", { type: "button", className: "pramanyx-icon", "aria-label": "Show as a table", title: "Show as a table", "aria-expanded": open === "table", onClick: () => toggle("table") }, h(Glyph, { d: GLYPH.table })),
+        hasPane() ? h("button", { type: "button", className: "pramanyx-icon", "aria-label": "Edit visualization", title: "Edit visualization", onClick: () => openBeside("viz", id) }, h(Glyph, { d: GLYPH.edit })) : null),
       open === "files" ? h(Files, { answer, id: answer.investigation_id ? String(answer.investigation_id) : "" }) : null,
       h("div", { style: { paddingRight: 6 } },
-        figure ? h(Figures, { answer }) : open === "table" ? h("div", { style: { padding: "6px 0 8px" } }, h(ResultGrid, { answer })) : h(Chart, { answer, viz })),
+        open === "table" ? h("div", { style: { padding: "6px 0 8px" } }, h(ResultGrid, { answer })) : h(Chart, { answer, viz })),
       h("div", { style: { display: "flex", alignItems: "center", gap: 12, marginTop: 6, paddingRight: 6 } },
         h("button", { type: "button", className: "pramanyx-link", "aria-expanded": open === "sql", onClick: () => { if (!openBeside("sql", id)) toggle("sql"); } }, "Show the SQL"),
         h("span", { style: { flex: "1 1 auto" } }),
@@ -1462,7 +1479,10 @@ function Exhibit({ answer, whole, asked }) {
       }, question))) : null,
     h(Feedback, { answer, extras: [
       h("button", { key: "copy", type: "button", className: "pramanyx-icon", "aria-label": copied ? "Copied" : "Copy the answer", title: copied ? "Copied" : "Copy the answer", onClick: copy }, h(Glyph, { d: GLYPH.copy })),
+      figure ? h("button", { key: "files", type: "button", className: "pramanyx-icon", "aria-label": "Download", title: "Download: the rows, or the answer as a file", "aria-expanded": open === "files", onClick: () => toggle("files") }, h(Glyph, { d: GLYPH.download })) : null,
       h("span", { key: "gap", style: { width: 8 } }),
+      figure ? h("button", { key: "sql", type: "button", className: "pramanyx-link", "aria-expanded": open === "sql", onClick: () => { if (!openBeside("sql", id)) toggle("sql"); } }, "Show the SQL") : null,
+      figure ? h("span", { key: "gap-sql", style: { width: 12 } }) : null,
       receipt && hasPane() ? h("button", { key: "why", type: "button", className: "pramanyx-link", title: "The app's own page for how this number was produced",
         onClick: () => openBeside("page", pageFor.receipt(receipt)) }, "Why this number") : null,
       h("span", { key: "gap2", style: { width: 12 } }),
@@ -1475,7 +1495,9 @@ function Exhibit({ answer, whole, asked }) {
       style: { display: "flex", flexWrap: "wrap", gap: 14, padding: "2px 6px 6px 0", fontSize: 13 } },
       becomes.map(([label, path, hint]) => h("button", { key: label, type: "button", className: "pramanyx-link", title: hint,
         onClick: () => openBeside("page", path) }, label))) : null,
-    open === "how" ? h("div", { style: { padding: "4px 0" } }, h(How, { answer, whole })) : null);
+    open === "how" ? h("div", { style: { padding: "4px 0" } }, h(How, { answer, whole })) : null,
+    figure && open === "files" ? h(Files, { answer, id: answer.investigation_id ? String(answer.investigation_id) : "" }) : null,
+    figure && open === "sql" ? h("div", { style: { padding: "4px 0" } }, h(Sql, { answer })) : null);
 }
 
 /**
