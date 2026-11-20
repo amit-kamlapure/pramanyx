@@ -13,6 +13,7 @@
 import { createElement as h, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { NAME_BAR_STOPS } from "../../../../web/components/ui/brandArt";
+import { unstick, workspaceOf } from "./stuck.js";
 import { inTheApp, withOthers } from "./threads.js";
 
 const CHOSEN = "pramanyx.coworker.connection";
@@ -575,6 +576,39 @@ export function SeenWhenOpen({ sessionId }) {
   return null;
 }
 
+/**
+ * NO CONVERSATION STAYS STUCK (2026-11-20; see `./stuck.js`). Mounted with each conversation as it opens: read once,
+ * when its page has settled, a conversation the shell lists as blank but draws as begun is archived through the shell's
+ * own Archive and a fresh one is opened in its place, on the same connection. Set by `apply`.
+ */
+let uiWorkspaceOf = () => null;
+const decidedThisPage = new Set();
+
+export function Unstick({ sessionId }) {
+  const here = useRef(null);
+  useEffect(() => {
+    const id = String(sessionId || "");
+    const ui = uiWorkspaceOf();
+    if (!id || !ui) return undefined;
+    let live = true;
+    unstick(id, {
+      decided: decidedThisPage,
+      read: () => ({
+        summary: ui.sessions?.list?.getSnapshot?.()?.byId?.[id],
+        phase: here.current?.closest?.("[data-phase]")?.getAttribute("data-phase") || "",
+      }),
+      retire: async (stuck) => {
+        if (!live) return;
+        const workspace = workspaceOf(ui.workspaces?.list?.getSnapshot?.()?.items, stuck);
+        try { await ui.archiveSession(stuck); } catch { return; }      // not archived: it is read again on the next load
+        if (workspace !== undefined) ui.startSession(workspace);
+      },
+    }).catch(() => { /* the conversation stays as the shell drew it */ });
+    return () => { live = false; };
+  }, [sessionId]);
+  return h("span", { ref: here, "data-pramanyx-unstick": "", hidden: true });
+}
+
 export const inject = ["slots", "uiWorkspace"];
 
 /** The zone this page's browser is in, told to the coworker's server once per load (`keepTheClock`, 2026-11-17): the
@@ -629,4 +663,8 @@ export function apply(ctx) {
     ctx.slots.register({ name: "sidebar.session.row.trailing", id: "pramanyx-run-landed", order: 50 }, RunLanded));
   ctx.slots.inject("conversation.session.header.utilities", () =>
     ctx.slots.register({ name: "conversation.session.header.utilities", id: "pramanyx-run-seen", order: 99 }, SeenWhenOpen));
+  // A conversation the shell lists as blank but draws as begun is retired as it opens (2026-11-20, `./stuck.js`).
+  uiWorkspaceOf = () => ctx.uiWorkspace ?? null;
+  ctx.slots.inject("conversation.session.header.utilities", () =>
+    ctx.slots.register({ name: "conversation.session.header.utilities", id: "pramanyx-unstick", order: 100 }, Unstick));
 }
