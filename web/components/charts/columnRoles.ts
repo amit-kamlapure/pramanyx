@@ -212,7 +212,11 @@ export function classifyColumns(
     else if (numeric) numericIdxs.push(i);
     else catIdxs.push(i);
   });
-  return { dateIdxs, numericIdxs, catIdxs };
+  // A date that is the same on every row, beside a category to draw by, is when the figures are as of, not an axis: four
+  // platforms' GMV "as of 20 Nov" drew four dots stacked over one day instead of four bars (2026-11-20, an FY2027
+  // overview). With no category beside it — one cohort's retention by month — the date is still the frame, and stays.
+  const asOf = catIdxs.length && rows.length > 1 ? dateIdxs.filter((i) => countUnique(rows, i) === 1) : [];
+  return { dateIdxs: dateIdxs.filter((i) => !asOf.includes(i)), numericIdxs, catIdxs };
 }
 
 /** How far a written value may sit from the number it was rounded from: "6.9" was written to one

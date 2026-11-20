@@ -321,3 +321,13 @@ def test_a_grounded_figure_at_the_END_of_a_sentence_is_not_accused():
     # A genuine decimal keeps its point rather than being truncated into another number.
     assert check_grounding("The rate was 903.5.", evidence) != []
     assert check_grounding("The rate was 903.5.", "the rate was 903.5") == []
+
+
+def test_a_total_across_the_rows_is_grounded():
+    """2026-11-20: "GMV is €3,217,143.16 across four platforms" over the four platform rows was withheld as made up."""
+    from pramanyx.explorer.grounding import verify_finding
+    rows = [["Mytheresa", 1245485.10, 1520], ["NET-A-PORTER", 1022318.86, 1191],
+            ["YOOX", 503028.21, 2360], ["MR PORTER", 446310.99, 518]]
+    assert verify_finding("FY2027 GMV so far is €3,217,143.16 across four platforms, from 5,589 orders.", rows).grounded
+    # A number in no cell and no column's total is still caught.
+    assert verify_finding("FY2027 GMV so far is €4,100,000.00.", rows).ungrounded == ["€4,100,000.00"]

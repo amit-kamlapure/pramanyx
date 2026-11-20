@@ -143,6 +143,26 @@ def cell_values(rows, extra: Optional[Iterable] = None) -> list[float]:
     return out
 
 
+def _column_totals(rows) -> list[float]:
+    """Each numeric column's total, for a result of two rows or more. A total across the rows is read straight off them
+    — "GMV is €3,217,143.16 across four platforms" over four platform rows — and was rejected as made up: the one figure
+    withheld a whole, correct answer behind "I could not ground this answer" (2026-11-20, an FY2027 overview)."""
+    rows = list(rows or [])
+    if len(rows) < 2:
+        return []
+    sums: dict = {}
+    counts: dict = {}
+    for r in rows:
+        items = r.items() if isinstance(r, dict) else enumerate(r)
+        for key, c in items:
+            v = _to_float(c)
+            if v is None:
+                continue
+            sums[key] = sums.get(key, 0.0) + v
+            counts[key] = counts.get(key, 0) + 1
+    return [total for key, total in sums.items() if counts[key] >= 2]
+
+
 def _grounds(n: Numeral, cell: float) -> bool:
     """Does result ``cell`` support numeral ``n``? Compared on absolute value so a
     "loss of 2.4M" grounds against a -2.4M cell. Two acceptors:
@@ -188,8 +208,9 @@ def numeral_matches_measure(n: Numeral, cell: float) -> bool:
 
 def verify_finding(finding: str, rows, extra: Optional[Iterable] = None) -> GroundingResult:
     """Verify that every magnitude-bearing numeral in ``finding`` is grounded in a
-    real cell of ``rows``. Returns which tokens (if any) are ungrounded."""
-    cells = cell_values(rows, extra)
+    real cell of ``rows`` — or in a numeric column's total across them (`_column_totals`). Returns which tokens (if any)
+    are ungrounded."""
+    cells = cell_values(rows, extra) + _column_totals(rows)
     ungrounded: list[str] = []
     checked = 0
     for n in extract_numerals(finding):

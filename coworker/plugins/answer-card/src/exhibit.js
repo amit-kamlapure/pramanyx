@@ -7,7 +7,7 @@
  * editor for each, and the two things drawn in both places (the result grid and the editor).
  */
 import { createElement as h, useEffect, useState, useSyncExternalStore } from "react";
-import { labelOf, numericColumns, vizChoices } from "./chart";
+import { drawnAs, labelOf, numericColumns, vizChoices } from "./chart";
 
 export const line = "color-mix(in srgb, currentColor 18%, transparent)";
 export const faint = "color-mix(in srgb, currentColor 6%, transparent)";
@@ -273,18 +273,23 @@ function Editor({ id, answer }) {
   const offered = vizChoices(answer.columns ?? [], answer.rows ?? []);
   const set = (change) => choose(id, change);
   const columnsOf = (names) => names.map((c) => ({ v: c, t: labelOf(c) }));
+  // What is drawn now, by name — never "As answered": the chosen value, else what the chart was drawn as.
+  const drawn = drawnAs(answer.columns ?? [], answer.rows ?? [], answer.chart_type ?? null);
+  const types = offered.types.some((o) => o.v === drawn.type) || !drawn.type
+    ? offered.types : [{ v: drawn.type, t: labelOf(drawn.type) }, ...offered.types];
+  const withField = (list, name) => (name && !list.includes(name) ? [name, ...list] : list);
   const way = now.orient || "";
   return h("div", { style: page },
     h("div", null,
       h("div", { style: { fontSize: 15, fontWeight: 600 } }, "Edit visualization"),
       h("div", { style: { ...quiet, fontSize: 12, paddingTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
         answer.answer || answer.question || "")),
-    h(Choice, { id: `viz-type-${id}`, label: "Visualization", value: now.type || "", onChange: (v) => set({ type: v }),
-                options: [{ v: "", t: "As answered" }, ...offered.types] }),
-    h(Choice, { id: `viz-x-${id}`, label: "X axis", value: now.x || "", onChange: (v) => set({ x: v }),
-                options: [{ v: "", t: "As answered" }, ...columnsOf(offered.dimensions)] }),
-    h(Choice, { id: `viz-y-${id}`, label: "Y axis", value: now.y || "", onChange: (v) => set({ y: v }),
-                options: [{ v: "", t: "As answered" }, ...columnsOf(offered.measures)] }),
+    h(Choice, { id: `viz-type-${id}`, label: "Visualization", value: now.type || drawn.type, onChange: (v) => set({ type: v }),
+                options: types }),
+    h(Choice, { id: `viz-x-${id}`, label: "X axis", value: now.x || drawn.x, onChange: (v) => set({ x: v }),
+                options: columnsOf(withField(offered.dimensions, drawn.x)) }),
+    h(Choice, { id: `viz-y-${id}`, label: "Y axis", value: now.y || drawn.y, onChange: (v) => set({ y: v }),
+                options: columnsOf(withField(offered.measures, drawn.y)) }),
     h(Choice, { id: `viz-color-${id}`, label: "Color", value: now.color || "", onChange: (v) => set({ color: v }),
                 options: [{ v: "", t: "None" }, ...columnsOf(offered.dimensions)] }),
     h(OnOff, { label: "Labels", on: now.labels !== false, onChange: (on) => set({ labels: on }) }),
@@ -294,7 +299,7 @@ function Editor({ id, answer }) {
       h("div", { role: "group", "aria-label": "Orientation", style: { display: "flex", gap: 6 } },
         [["", "Auto"], ["vertical", "Vertical"], ["horizontal", "Horizontal"]].map(([v, t]) =>
           h("button", { key: t, type: "button", "aria-pressed": way === v, style: button(way === v), onClick: () => set({ orient: v }) }, t)))),
-    h("div", null, h("button", { type: "button", style: button(false), disabled: chosen(id) === null, onClick: () => choose(id, null) }, "Back to the chart as answered")));
+    h("div", null, h("button", { type: "button", style: button(false), disabled: chosen(id) === null, onClick: () => choose(id, null) }, "Reset to the original chart")));
 }
 
 // ── what an answer's receipt names ───────────────────────────────────────────────────────────────────────────
