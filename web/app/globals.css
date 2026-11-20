@@ -1079,6 +1079,8 @@ textarea.aug-input, .aug-textarea { min-height: 56px; padding: 7px 9px; line-hei
 .aug-status-strip { height: 28px; flex-shrink: 0; display: flex; align-items: center; gap: 0; padding: 0 12px;
   background: var(--bg-1); font-size: 12px; color: var(--t2); white-space: nowrap; overflow: hidden; }
 .aug-status-item { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+/* A badge in the strip keeps its colour and drops its ring: the strip is quiet, its words carry it. */
+.aug-status-strip .rt-Badge { box-shadow: none; background: transparent; padding-inline: 0; }
 .aug-status-sep { visibility: hidden; margin: 0 6px; }
 .aug-status-dot { display: inline-block; width: 7px; height: 7px; border-radius: var(--r-pill); background: var(--grn3); margin-right: 6px; }
 .aug-status-quiet { color: var(--t3); }

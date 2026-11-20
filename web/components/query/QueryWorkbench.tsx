@@ -393,7 +393,7 @@ function WorkbenchInner({
     return allTables.filter(t => (t.connectionId ?? connId) === scopeConn);
   }, [mode, allTables, scopeConn, connId]);
   const railPicker = mode === "sql" && railChoices.length > 0 ? (
-    <SelectField bespoke aria-label="Connection" data-testid="rail-scope"
+    <SelectField bespoke variant="soft" aria-label="Connection" data-testid="rail-scope"
       title="The connection the editor queries — the catalog lists its schemas; or list every connection"
       style={{ ...controlStyle, width: "100%", maxWidth: "100%" }}
       value={railScope === "workspace" ? EVERY : (scopeConn ?? "")}

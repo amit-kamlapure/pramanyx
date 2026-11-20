@@ -6,7 +6,7 @@ import { fieldClass, fieldStyle } from "@/components/ui/field"
 /** A field, on Radix Themes: its size-2 text field — 32px, 14px text, the size of every form
  *  field (`ui/field.ts`). `className` and `style` land on the field's box and may place it, not
  *  size or paint it; `bespoke` is a field that draws itself (24px, everything as given). */
-function Input({ className, style, size: _size, color: _color, bespoke, leading, trailing, defaultValue, value, ...props }:
+function Input({ className, style, size: _size, color: _color, bespoke, leading, trailing, defaultValue, value, variant, ...props }:
   Omit<React.ComponentProps<"input">, "size" | "color"> & {
     size?: number; color?: string; bespoke?: boolean; leading?: React.ReactNode;
     /** At the field's right end, inside it — a search's clear. */
@@ -19,6 +19,7 @@ function Input({ className, style, size: _size, color: _color, bespoke, leading,
       className={bespoke ? className : fieldClass(className)} style={bespoke ? style : fieldStyle(style)}
       {...(value !== undefined ? { value: value as string | number } : {})}
       {...(defaultValue !== undefined ? { defaultValue: defaultValue as string | number } : {})}
+      {...(variant === "soft" ? { variant: "soft" as const, color: "gray" as const } : {})}
       {...(props as Record<string, unknown>)}>
       {leading != null && <TextField.Slot>{leading}</TextField.Slot>}
       {trailing != null && trailing !== false && <TextField.Slot side="right">{trailing}</TextField.Slot>}
