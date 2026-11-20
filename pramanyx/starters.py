@@ -29,7 +29,8 @@ from typing import Optional
 
 @dataclass(frozen=True)
 class ResearchStarter:
-    """One named, deterministic research playbook."""
+    """One named, deterministic research playbook. ``title`` is what a landing lists it by — a short question, since a
+    list of suggested questions reads as questions (2026-11-20); ``question`` is the whole brief that is asked."""
     id: str
     title: str
     question: str
@@ -48,7 +49,7 @@ class ResearchStarter:
 STARTERS: tuple[ResearchStarter, ...] = (
     ResearchStarter(
         id="outlier_entities",
-        title="Interesting outlier entities",
+        title="Which records stand out as outliers?",
         question=("Profile the most unusual entities in this data — which specific "
                   "records stand out as extreme outliers, and on which measures?"),
         mode="explore",
@@ -75,7 +76,7 @@ STARTERS: tuple[ResearchStarter, ...] = (
     ),
     ResearchStarter(
         id="data_quality_scan",
-        title="Data quality scan",
+        title="How clean is this data?",
         question=("Characterize the data quality across this schema — gaps, "
                   "impossible values, duplicates and inconsistent grains."),
         mode="explore",

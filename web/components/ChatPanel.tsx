@@ -61,7 +61,8 @@ const OVERVIEW_STARTER: Starter = {
 
 // requestMode/purpose (R13): a named research starter's declared route — sent on
 // /ask so the router pins investigate|explore deterministically; chips style deep.
-type Starter = { text: string; mode: "ask" | "investigate"; requestMode?: "investigate" | "explore"; purpose?: string };
+// label: the few words a named starter is listed by, when its question is a whole brief (the full text is what is asked).
+type Starter = { text: string; mode: "ask" | "investigate"; requestMode?: "investigate" | "explore"; purpose?: string; label?: string };
 
 interface Props {
   connectionId: string;
@@ -1026,11 +1027,14 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
         }));
         // R13 — named research-starter playbooks: lead the
         // grid, styled as deep chips, carrying their declared route + purpose tag.
-        const library: Starter[] = (data.starters ?? []).map((s: { text: string; mode: string; purpose?: string }) => ({
+        const library: Starter[] = (data.starters ?? []).map((s: { text: string; mode: string; purpose?: string; title?: string; source?: string }) => ({
           text: s.text,
           mode: "investigate" as const,
           requestMode: (s.mode === "explore" ? "explore" : "investigate") as "investigate" | "explore",
           purpose: s.purpose,
+          // a named starter's question is a brief of several lines; it is listed by its title (a curated one's title
+          // is its table's name, so it is listed by its question)
+          label: s.source === "curated" ? undefined : s.title || undefined,
         }));
         const merged = [...library, ...suggestions].slice(0, 9);
         if (merged.length > 0) setStarters(merged);
@@ -1385,6 +1389,15 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
       onDropSubject: () => (subject === pageHere ? setDroppedPage(subjectKey(pageHere)) : setAskSubject(null)) } : {}),
   };
 
+  // How the one conversation answers (2026-11-20): straight away, and /agent goes deep — there is no Quick/Agent picker.
+  // Said under the generic greeting, and under a landing a page brings (a Data Canvas's).
+  const howInPanel = (
+    <p data-testid="chat-empty-how" className="aug-fs-sm text-center" style={{ color: "var(--t3)" }}>
+      {inputBoxProps.changes ? "Ask a question or describe a change: nothing changes until you allow it. " : "Answers straight away. "}
+      Type <span className="font-bold" style={{ color: "var(--t2)" }}>/agent</span> to investigate in depth.
+    </p>
+  );
+
   return (
     <HarnessContext.Provider value={harnessLook}>
     {harness && wantsObjects && <MentionObjects connectionId={connectionId} onObjects={setObjects} />}
@@ -1483,6 +1496,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
           <div className="w-full max-w-[var(--measure-chat)] px-[var(--chat-gutter)] my-auto flex flex-col gap-5">
 
             {capabilities}
+            {capabilities && inPanel && howInPanel}
 
             {/* Order matters: a canvas's own landing block wins (you are IN that
                 canvas), then the agent you came here to talk to, and only then the
@@ -1494,13 +1508,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
             {!capabilities && !activeAgent && (
               <div className="text-center">
                 <p className="aug-fs-sm font-bold text-zinc-200">Ask your data anything</p>
-                {inPanel ? (
-                  // the Ask panel has no Quick/Agent picker (2026-11-20): it answers straight away, and /agent goes deep
-                  <p data-testid="chat-empty-how" className="aug-fs-sm mt-1.5" style={{ color: "var(--t3)" }}>
-                    {inputBoxProps.changes ? "Ask a question or describe a change: nothing changes until you allow it. " : "Answers straight away. "}
-                    Type <span className="font-bold" style={{ color: "var(--t2)" }}>/agent</span> to investigate in depth.
-                  </p>
-                ) : (
+                {inPanel ? <div className="mt-1.5">{howInPanel}</div> : (
                   <p data-testid="chat-empty-how" className="aug-fs-sm text-zinc-500 mt-1.5">
                     <span className="text-violet-400/90 font-bold">Agent</span> investigates in depth —
                     switch to <span className="text-zinc-400 font-bold">Quick</span> for a straight answer.
@@ -1520,7 +1528,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                 overview starter, green for investigate, grey otherwise), which made a list
                 of questions read as a control panel. A question is a line of text. */}
             {!beside && <div className="pt-1">
-              <p className="text-[11px] uppercase tracking-[0.08em] mb-2" style={{ color: "var(--b3)" }}>Suggested questions</p>
+              <p className="aug-label mb-1">Suggested questions</p>
               {suggestionsMissing && !loadingStarters && (
                 <p className="aug-fs-xs mb-1" style={{ color: "var(--t3)" }}>{suggestionsMissing}</p>
               )}
@@ -1548,12 +1556,15 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                           isOverview || s.requestMode ? "auto" : s.mode,
                           s.requestMode ? { requestMode: s.requestMode, purpose: s.purpose } : undefined,
                         )}
-                        className="aug-pressable w-full text-left aug-fs-ui leading-snug py-3 transition-colors"
+                        data-testid="chat-starter"
+                        className="aug-pressable w-full text-left aug-fs-ui leading-snug py-3 transition-colors flex items-center gap-3"
                         style={{ color: "var(--t2)", borderBottom: "1px solid var(--b1)", background: "transparent" }}
                         onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--t1)"; }}
                         onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--t2)"; }}
                       >
-                        {s.text}
+                        <span className="min-w-0 flex-1">{s.label ?? s.text}</span>
+                        {/* a starter that runs a deep analysis says so before it is clicked: it takes minutes and spends more */}
+                        {s.requestMode && <span className="aug-fs-xs shrink-0" style={{ color: "var(--t3)" }}>Deep analysis</span>}
                       </button>
                     );
                   })}

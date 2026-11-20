@@ -52,6 +52,16 @@ export function tablesTitle(c: Canvas): string {
   return t.length > 12 ? `${shown} and ${formatCount(t.length - 12)} more` : shown;
 }
 
+/** The tables a canvas reads as a person reads them on its landing: each by its own name, with its schema only where
+ *  two schemas hold a table of the same name (`luxexperience.customers` beside `main.customers`). */
+export function tableNames(c: Canvas): string[] {
+  const t = tablesOf(c);
+  const bare = (q: string) => q.split(".").pop() ?? q;
+  const seen = new Map<string, number>();
+  for (const q of t) seen.set(bare(q), (seen.get(bare(q)) ?? 0) + 1);
+  return t.map(q => ((seen.get(bare(q)) ?? 0) > 1 ? q : bare(q)));
+}
+
 /** A connection's kind as a person names it. */
 export function connectionKind(conn: Connection | undefined): string {
   if (!conn) return "";

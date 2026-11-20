@@ -4,7 +4,7 @@
  * An open Data Canvas — its chrome redone to `pramanyx-v2/CLARITY.md` (2026-10-12). The conversation, the reports and
  * the configuration panel are what the person made and are drawn as before; around them: one header line (the way
  * back, the name, what it is in a line, its facts as chips, the three views, a new conversation and one Tools menu),
- * a two-line landing in place of a block that repeated the header, the history with a question asked eleven times said
+ * a landing that opens on the canvas itself (its mark, its name, what it reads), the history with a question asked eleven times said
  * once, and the saved artifacts — each saying when it could not be read, never showing that as empty.
  */
 import dynamic from "next/dynamic";
@@ -17,6 +17,7 @@ import { ConfigurePanel } from "@/components/ConfigurePanel";
 import { HistoryDetailPanel } from "@/components/HistoryDetailPanel";
 import { LifecyclePanel } from "@/components/LifecyclePanel";
 import { Button } from "@/components/ui/button";
+import { PramanyxMark } from "@/components/ui/brand";
 import { ChromeActions, ChromeFacts, ChromeToolbar, useChromeBack, useInShell } from "@/components/shell/PageChrome";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
@@ -29,7 +30,7 @@ import {
   updateCanvas, type CanvasArtifact, type CanvasDocument, type DocumentEntry,
 } from "@/lib/api";
 import {
-  agoWords, connectionGone, connectionKind, dayMonth, foldHistory, RUN_KIND_WORD, runStateWord, scopeWords, tablesOf,
+  agoWords, connectionGone, connectionKind, dayMonth, foldHistory, RUN_KIND_WORD, runStateWord, scopeWords, tableNames,
   tablesTitle, type AskedQuestion, type RunKind,
 } from "@/lib/canvasList";
 import { countNoun, formatCount, formatTimestamp } from "@/lib/format";
@@ -157,22 +158,50 @@ function HeadChips({ canvas, connection, gone, pinned }: {
 
 // ── The landing — what the empty conversation opens on ────────────────────────────────────────────────────────────
 
-/** The question it invites and the two ways to answer — the name, the description and the scope are in the header. */
+/** How many of its tables the landing names before "Show all". */
+const TABLES_NAMED = 10;
+
+/** The tile the mark stands on: the coworker's first screen draws its mark the same way. */
+const MARK_TILE: CSSProperties = {
+  width: 72, height: 72, display: "grid", placeItems: "center", borderRadius: 14, color: "var(--t1)",
+  background: "var(--bg-2)", border: "1px solid var(--b1)", boxShadow: "var(--shadow-md)",
+};
+
+/**
+ * The canvas as the space a person has walked into (the user, 2026-11-20, beside another product's data space: "Are we in
+ * 1990?" … "DBX does so grand!"): its mark on a tile, its name large, what it is for, and the tables it reads, named on
+ * the page rather than counted with the names in a hover. It was a line counting tables ("What do you want to know about
+ * these 24 tables?") over two chips naming a Quick/Agent choice this conversation no longer has; how to go deeper is
+ * the conversation's own line, under this.
+ */
 function CanvasLanding({ canvas, connection, gone }: { canvas: Canvas; connection: Connection | undefined; gone: boolean }) {
-  const tables = tablesOf(canvas);
-  const about = gone ? "this canvas"
-    : tables.length === 0 ? (connection?.name ?? "this connection")
-    : tables.length === 1 ? tables[0]
-    : `these ${formatCount(tables.length)} tables`;
+  const names = tableNames(canvas);
+  const [all, setAll] = useState(false);
+  const shown = all ? names : names.slice(0, TABLES_NAMED);
   return (
-    <div data-testid="canvas-landing" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <div className="aug-fs-h1" title={tablesTitle(canvas)} style={{ color: "var(--t1)", fontWeight: 600 }}>
-        What do you want to know about {about}?
-      </div>
-      <div style={{ ...ROW, gap: 6 }}>
-        <Chip title="One query and a straight answer">Quick · one query</Chip>
-        <Chip title="Several steps that look for what moved and why">Agent · a deep analysis</Chip>
-      </div>
+    <div data-testid="canvas-landing" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, textAlign: "center", paddingBottom: 4 }}>
+      <span aria-hidden="true" style={{ ...MARK_TILE, marginBottom: 10 }}><PramanyxMark size={34} /></span>
+      {/* h2: the page's own heading is the shell's title, which names it too */}
+      <h2 data-testid="canvas-landing-name" className="aug-fs-hero" style={{ margin: 0, color: "var(--t1)", fontWeight: 600, overflowWrap: "anywhere" }}>
+        {canvas.name}
+      </h2>
+      {canvas.description && (
+        <p data-testid="canvas-landing-what" className="aug-fs-h2" style={{ margin: 0, color: "var(--t2)", lineHeight: 1.5 }}>{canvas.description}</p>
+      )}
+      <p data-testid="canvas-landing-reads" className="aug-fs-sm" style={{ margin: 0, color: "var(--t3)", lineHeight: 1.7 }}>
+        {gone ? "The connection this canvas reads is gone from this workspace."
+          : names.length === 0 ? `Reads every table of ${connection?.name ?? "its connection"}.`
+          : <>
+              <span style={{ color: "var(--t2)" }}>Reads {countNoun(names.length, "table")}</span>
+              {" · "}{shown.join(" · ")}
+              {names.length > TABLES_NAMED && (
+                <Button variant="outline" size="xs" onClick={() => setAll(v => !v)} data-testid="canvas-landing-all"
+                  style={{ marginLeft: 6, verticalAlign: "baseline" }}>
+                  {all ? "Show fewer" : `Show all ${formatCount(names.length)}`}
+                </Button>
+              )}
+            </>}
+      </p>
     </div>
   );
 }
@@ -548,6 +577,8 @@ export function CanvasWorkspace({ canvas, connections, allConnections, onClose, 
   const known = allConnections?.length ? allConnections : connections;
   const [wsTab, setWsTab] = useState<WsTab>("chat");
   const [chatKey, setChatKey] = useState(0);
+  // Which conversation has begun (its key): until it has, the landing says what the canvas is for, so the header does not.
+  const [begunKey, setBegunKey] = useState<number | null>(null);
   const [openInvId, setOpenInvId] = useState<string | null>(null);
   const [restoreSessionId, setRestoreSessionId] = useState<string | null>(null);
   // Seed question for ChatPanel, set by the canvas-scoped Intelligence actions that start a deep analysis.
@@ -632,6 +663,9 @@ export function CanvasWorkspace({ canvas, connections, allConnections, onClose, 
     setChatInitialQuestion(undefined); setChatInitialMode(undefined);
   };
 
+  // The landing shows: a fresh conversation in the Chat view, not yet begun.
+  const onLanding = wsTab === "chat" && !openInvId && !restoreSessionId && !chatInitialQuestion && begunKey !== chatKey;
+
   const tools: ToolItem[] = [
     { label: "Configure…", title: "The tables it reads, its instructions and metrics, and its documents",
       onSelect: () => { setShowConfigure(true); setShowSettings(false); }, testId: "canvas-tool-configure" },
@@ -642,7 +676,8 @@ export function CanvasWorkspace({ canvas, connections, allConnections, onClose, 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--bg-canvas)" }}>
 
-      <CanvasHead name={canvas.name} what={canvas.description || undefined} onBack={onClose}
+      {/* What it is for is said once: on the landing while it shows, beside the name once a conversation has begun. */}
+      <CanvasHead name={canvas.name} what={onLanding ? undefined : canvas.description || undefined} onBack={onClose}
         chips={<HeadChips canvas={canvas} connection={connection} gone={gone} pinned={pinned} />}
         views={<>
           {/* The three views. A fresh conversation is the "+" beside them — a distinct create action, not a second
@@ -693,6 +728,7 @@ export function CanvasWorkspace({ canvas, connections, allConnections, onClose, 
             initialQuestion={chatInitialQuestion}
             initialMode={chatInitialMode}
             capabilities={<CanvasLanding canvas={canvas} connection={connection} gone={gone} />}
+            onSession={() => setBegunKey(chatKey)}
           />
         </div>
 

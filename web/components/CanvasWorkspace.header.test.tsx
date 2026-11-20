@@ -102,6 +102,8 @@ describe("the header, when the row is short of room", () => {
   // box and the workspace slid sideways under the sidebar.
   it("lets the description give way first, then the connection's chip, then the name — and nothing else", () => {
     show({ ...CANVAS, name: "E-Commerce Operations Overview", description: "Orders, items and returns for the online shop." });
+    // on the landing the description is the landing's; in any other view it stands beside the name
+    fireEvent.click(screen.getByRole("button", { name: "History" }));
 
     const name = screen.getByTestId("canvas-name");
     expect(name).toHaveTextContent("E-Commerce Operations Overview");
@@ -148,17 +150,36 @@ describe("the header, when the row is short of room", () => {
 });
 
 describe("the landing", () => {
-  it("invites a question about what the canvas reads, without repeating the header's name or description", () => {
+  // The user, 2026-11-20, beside another product's data space: "Are we in 1990?" … "DBX does so grand!" — it opened on a line
+  // counting tables, with their names in a hover, over two chips naming a Quick/Agent choice the conversation no longer has.
+  it("opens on the canvas itself: its name large, what it is for, and the tables it reads, named", () => {
     show({ ...CANVAS, description: "Orders, items and returns." });
+    expect(screen.getByTestId("canvas-landing-name")).toHaveTextContent("Returns");
+    expect(screen.getByTestId("canvas-landing-name")).toHaveClass("aug-fs-hero");
+    expect(screen.getByTestId("canvas-landing-what")).toHaveTextContent("Orders, items and returns.");
+    expect(screen.getByTestId("canvas-landing-reads")).toHaveTextContent("Reads 1 table · order_items");
     const landing = screen.getByTestId("canvas-landing");
-    expect(landing).toHaveTextContent("What do you want to know about thelook.order_items?");
-    expect(landing).not.toHaveTextContent("Returns");
-    expect(landing).not.toHaveTextContent("Orders, items and returns.");
+    expect(landing).not.toHaveTextContent("Quick");
+    expect(landing).not.toHaveTextContent("What do you want to know");
+    expect(landing.querySelector("[title]")).toBeNull();                 // nothing it says hides in a hover
+    // said once: while the landing says what the canvas is for, the header does not
+    expect(screen.queryByTestId("canvas-what")).toBeNull();
   });
 
-  it("names the connection for a canvas over all of it", () => {
+  it("names a table by its own name, with its schema only where two schemas share it, and shows the rest on asking", () => {
+    const tables = ["luxexperience.customers", "main.customers", ...Array.from({ length: 12 }, (_, i) => `main.t${i + 1}`)];
+    show({ ...CANVAS, scopes: [{ connection_id: "thelook", schema_name: null, tables }] });
+    const reads = screen.getByTestId("canvas-landing-reads");
+    expect(reads).toHaveTextContent("Reads 14 tables · luxexperience.customers · main.customers · t1 ·");
+    expect(reads).not.toHaveTextContent("t9");
+    fireEvent.click(screen.getByTestId("canvas-landing-all"));
+    expect(reads).toHaveTextContent("t12");
+    expect(screen.getByTestId("canvas-landing-all")).toHaveTextContent("Show fewer");
+  });
+
+  it("says a canvas over all of a connection reads every table of it", () => {
     show({ ...CANVAS, scopes: [{ connection_id: "thelook", schema_name: null, tables: [] }] });
-    expect(screen.getByTestId("canvas-landing")).toHaveTextContent("What do you want to know about theLook?");
+    expect(screen.getByTestId("canvas-landing-reads")).toHaveTextContent("Reads every table of theLook.");
   });
 });
 
@@ -212,7 +233,7 @@ describe("inside the app's shell (2026-11-10)", () => {
     );
     await settle();
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Returns");
-    expect(screen.getByTestId("canvas-what").closest(".aug-title-facts")).toBeTruthy();
+    expect(screen.queryByTestId("canvas-what")).toBeNull();            // the landing says what it is for…
     expect(screen.getByTestId("canvas-tabs").closest(".aug-page-toolbar")).toBeTruthy();
     expect(screen.getByTestId("canvas-tools").closest(".aug-title-actions")).toBeTruthy();
     expect(screen.queryByTestId("canvas-back")).toBeNull();            // the breadcrumb is the way back now
@@ -220,5 +241,6 @@ describe("inside the app's shell (2026-11-10)", () => {
     expect(onClose).toHaveBeenCalledTimes(1);                           // as "← Data Canvas" did: the canvas is closed
     fireEvent.click(screen.getByRole("button", { name: "Briefing" }));  // the views still switch from the toolbar row
     expect(screen.getByRole("button", { name: "Briefing" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByTestId("canvas-what").closest(".aug-title-facts")).toBeTruthy();   // …away from it, the header
   });
 });

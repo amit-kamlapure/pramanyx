@@ -88,6 +88,32 @@ describe("the Ask composer", () => {
     expect(sent.at(-1)?.body).toMatchObject({ depth: "quick" });
   });
 
+  it("under a canvas's own landing, still says how it answers (2026-11-20: the landing's Quick/Agent chips are gone)", async () => {
+    render(<QueryClientProvider client={new QueryClient()}><ChatPanel connectionId="sheets" canvasId="cv1" harness oneConversation
+      capabilities={<div data-testid="the-landing">Returns</div>} /></QueryClientProvider>);
+    await act(async () => {});
+    expect(screen.getByTestId("the-landing")).toBeInTheDocument();
+    expect(screen.getByTestId("chat-empty-how")).toHaveTextContent(/^Answers straight away\. Type \/agent to .+ in depth\.$/);
+    expect(screen.queryByText("Ask your data anything")).toBeNull();
+  });
+
+  it("lists a named starter by its short question, says it runs a deep analysis, and asks its whole brief (2026-11-20)", async () => {
+    const brief = "Where are we losing money? Quantify money that walks back out — refunds, cancellations, chargebacks.";
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ suggestions: [{ text: "How many orders a day?", mode: "ask" }],
+      starters: [{ title: "Where are we losing money?", text: brief, mode: "explore", purpose: "profitability", source: "library" },
+        { title: "orders", text: "Which states order most?", mode: "explore", purpose: "curated_question", source: "curated" }] }), { status: 200 })));
+    render(<QueryClientProvider client={new QueryClient()}><ChatPanel connectionId="sheets" canvasId="cv1" harness oneConversation /></QueryClientProvider>);
+    await act(async () => {});
+    const rows = await screen.findAllByTestId("chat-starter");
+    const texts = rows.map(r => r.textContent);
+    expect(texts).toContain("Where are we losing money?Deep analysis");
+    expect(texts).toContain("Which states order most?Deep analysis");   // a curated one is listed by its question, not its table
+    expect(texts).toContain("How many orders a day?");                  // a plain suggestion answers straight away
+    expect(texts.join(" ")).not.toContain("Quantify");
+    fireEvent.click(rows.find(r => r.textContent?.startsWith("Where are we losing money?"))!);
+    expect(sent.at(-1)?.text).toBe(brief);
+  });
+
   it("says which saved agent the person arrived talking to, and lets it go", async () => {
     render(<QueryClientProvider client={new QueryClient()}><ChatPanel connectionId="sheets" harness oneConversation initialAgentId="ag1" /></QueryClientProvider>);
     await act(async () => {});
