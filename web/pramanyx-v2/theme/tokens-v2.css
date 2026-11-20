@@ -164,7 +164,7 @@
   --r3: var(--radius-4);    /* frames, panels, overlays: a Radix card's own corner */
   --r-pill: 9999px;         /* only what IS round: avatars and status dots */
   --r-chip: var(--r1);      /* a text-bearing chip is a rectangle */
-  --r-composer: var(--r2);  /* the chat composer is a field */
+  --r-composer: 12px;       /* the box a person writes to the model in: curved, as the coworker's is (the user, 2026-11-20) */
 
   /* shell */
   --sidebar: 198px;            /* 20% narrower than its 248px (the user, 2026-11-19: "This width needs be to cut down by 20%") */
