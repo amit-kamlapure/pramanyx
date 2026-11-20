@@ -78,9 +78,9 @@
 html, body {
   height: 100%;
   font-family: var(--font-ui);
-  /* The reading size (2026-09-25); chrome stays 13. It follows the Theme's scaling — the one
-     knob for size since 2026-10-06 (90% reads as the old compact density did). */
-  font-size: calc(14px * var(--scaling));
+  /* The reading size (2026-09-25); chrome, rows and cells are 13. A fixed step since 2026-11-20: the look's size knob
+     sets space and control heights, never text (`.radix-themes` below says why). */
+  font-size: 14px;
   background: var(--bg-0);
   color: var(--t1);
   line-height: 1.5;
@@ -619,7 +619,7 @@ textarea.aug-input, .aug-textarea { min-height: 56px; padding: 7px 9px; line-hei
   color: inherit;   /* the callout's own hue: red for an error or a refusal, amber for a partial */
 }
 .aug-state-meta { margin-left: auto; font-size: 12px; color: var(--t3); white-space: nowrap; }
-.aug-state-claim { font-size: calc(14px * var(--scaling)); line-height: 1.6; color: var(--t1); }
+.aug-state-claim { font-size: 14px; line-height: 1.6; color: var(--t1); }
 .aug-state-what { font-size: 12px; line-height: 1.6; color: var(--t1); }
 .aug-state-detail { font-size: 12px; line-height: 1.6; color: var(--t2); }
 .aug-state-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 2px; }
@@ -1013,11 +1013,21 @@ textarea.aug-input, .aug-textarea { min-height: 56px; padding: 7px 9px; line-hei
 .radix-themes {
   --default-font-family: var(--font-sans);
   --code-font-family: var(--font-mono);
+  /* Text on the scale at any density (the user, 2026-11-20: "make sure that Font and Font size are not changing much
+     across the platform"). Themes multiplies each of its steps by --scaling while ours are plain pixels, so a 95% look
+     drew 11.4 beside 11 and 13.3 beside 13 on one screen. The look's size knob now sets space and control heights; text
+     stays on 11 · 12 · 13 · 14 · 15 · 18 · 22. Themes' steps map onto ours: 1 is secondary (12); 2 is chrome and content —
+     buttons, tabs, inputs, a table's cells (13); 3 a subheading (15); 4 and 5 a heading (18); 6 a figure (22). */
+  --font-size-1: 12px; --font-size-2: 13px; --font-size-3: 15px; --font-size-4: 18px; --font-size-5: 18px;
+  --font-size-6: 22px; --font-size-7: 28px; --font-size-8: 34px; --font-size-9: 40px;
   --cursor-button: pointer;
   font-size: inherit;
   line-height: inherit;
   color: inherit;
 }
+/* A table's cells are content, 13 on every page (the user's choice, 2026-11-20): a Themes table reads --font-size-2
+   above; a plain one and a grid of cells read this. Column heads keep their own, smaller label size. */
+td, [role="gridcell"][role="gridcell"], [role="cell"][role="cell"] { font-size: var(--aug-fs-chrome); }
 /* The page, as one layer under everything Radix portals into <body> (app/layout.tsx). */
 .aug-root { isolation: isolate; display: flex; flex-direction: column; flex: 1 1 0%; min-height: 100%; }
 /* A Themes ghost button bleeds into its neighbours by design (negative margins, to line its

@@ -1,7 +1,10 @@
 /* ── Pramanyx Type Scale · Instrument ─────────────────────────────────────────
    Seven steps and no others — 11 · 12 · 13 · 14 · 15 · 18 · 22 — on a 14px root since
-   2026-09-25 (the user: body 13 → 14). 14 is the READING size: body, prose, table cells,
-   the claim in a state row. 13 is CHROME: the rail, tabs, buttons, inputs, segments.
+   2026-09-25 (the user: body 13 → 14). 14 is the READING size: prose, an answer, the claim in
+   a state row. 13 is CONTENT AND CHROME: every list row and table cell on every page (the user's
+   choice, 2026-11-20, when one page read 11 and the next 13), and the rail, tabs, buttons,
+   inputs, segments. 12 is a row's second line; 11 is meta only — a time, a count, a caption.
+   Fixed pixels at any density since 2026-11-20: the look's size knob moves space, not type.
    11px is the absolute floor. 28px exists in exactly one place: an icon rendered in an
    empty state (.aug-fs-glyph / .aug-empty-glyph). Two families, one job each: Inter for
    every word AND every figure (with tabular numerals, so decimal points still stack);
@@ -28,7 +31,7 @@
 }
 
 .aug-text-h3 {
-  font-size: calc(14px * var(--scaling));
+  font-size: 14px;
   font-weight: 600;
   line-height: 1.5;
   color: var(--t1);
@@ -36,14 +39,14 @@
 
 /* ── Body ── */
 .aug-text-ui {
-  font-size: calc(14px * var(--scaling));   /* the reading size, at the Theme's scaling */
+  font-size: 14px;   /* the reading size */
   line-height: 1.7;
   color: var(--t1);
 }
 
 /* Prose — the Briefing and a finished deep analysis only: a real measure and 1.8 leading. */
 .aug-text-prose {
-  font-size: calc(14px * var(--scaling));
+  font-size: 14px;
   line-height: 1.8;
   max-width: var(--shell-measure);
   color: var(--t1);
@@ -76,8 +79,8 @@
    changing an element's colour or weight. */
 .aug-fs-xs      { font-size: 11px; }  /* labels, captions, meta (the floor) */
 .aug-fs-sm      { font-size: 12px; }  /* secondary text, buttons, inputs */
-.aug-fs-chrome  { font-size: 13px; }  /* chrome: the rail, tabs, buttons, inputs */
-.aug-fs-ui      { font-size: calc(14px * var(--scaling)); }  /* the reading size, at the Theme's scaling */
+.aug-fs-chrome  { font-size: 13px; }  /* content and chrome: every row and cell; the rail, tabs, buttons, inputs */
+.aug-fs-ui      { font-size: 14px; }  /* the reading size */
 .aug-fs-h2      { font-size: 15px; }  /* subheadings */
 .aug-fs-h1      { font-size: 18px; }  /* headings, the verdict sentence */
 .aug-fs-display { font-size: 22px; }  /* hero stat numbers — tabular figures, never words */
