@@ -19,9 +19,11 @@ import { inTheApp, withOthers } from "./threads.js";
 const CHOSEN = "pramanyx.coworker.connection";
 const QUESTIONS_SHOWN = 4;
 
-const line = "color-mix(in srgb, currentColor 16%, transparent)";
+/* Borders are the exception (the platform's rule, 2026-11-20): a card is a surface, an action a soft fill. */
+const soft = "color-mix(in srgb, currentColor 9%, transparent)";
 const faint = "color-mix(in srgb, currentColor 5%, transparent)";
 const quiet = { opacity: 0.66 };
+const surface = `var(--dsw-alias-bg-layer-1, ${faint})`;
 
 async function read(path) {
   const answer = await fetch(`/pramanyx${path}`, { headers: { accept: "application/json" } });
@@ -66,8 +68,8 @@ const HOME_LOOK = `
 [class*="composerHero"] [class*="_fishHitbox"] {
   width: 72px; height: 72px; border-radius: 14px; display: grid; place-items: center;
   color: var(--dsw-alias-brand-primary, #46a0c4);
-  background: color-mix(in srgb, currentColor 9%, var(--dsw-alias-bg-base, #111113));
-  box-shadow: 0 0 0 1px color-mix(in srgb, currentColor 22%, transparent), 0 12px 32px rgba(0, 0, 0, 0.28);
+  background: var(--dsw-alias-bg-layer-2, color-mix(in srgb, currentColor 9%, var(--dsw-alias-bg-base, #111113)));
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
 }
 [class*="composerHero"] [class*="_titleGroup"] { font-size: 34px; line-height: 1.15; font-weight: 400; letter-spacing: -0.01em; align-items: center; }
 [class*="composerHero"] [data-composer-card] { border-radius: 10px; }
@@ -78,6 +80,7 @@ const HOME_LOOK = `
 .pramanyx-home-row:hover, .pramanyx-home-row:focus-visible { background: color-mix(in srgb, currentColor 7%, transparent); }
 .pramanyx-home-row:focus-visible { outline: 1px solid color-mix(in srgb, currentColor 40%, transparent); }
 .pramanyx-home-row svg { flex: none; opacity: 0.62; }
+.pramanyx-home-soft:hover, .pramanyx-home-soft:focus-visible { background: color-mix(in srgb, currentColor 15%, transparent) !important; }
 `;
 
 function wearHomeLook() {
@@ -118,7 +121,7 @@ function Item({ icon, text, note, onPick }) {
 
 function Card({ title, empty, children }) {
   const rows = Array.isArray(children) ? children.filter(Boolean) : children;
-  return h("section", { style: { flex: "1 1 300px", minWidth: 0, border: `1px solid ${line}`, borderRadius: 10, padding: "16px 12px 10px", minHeight: 150, display: "flex", flexDirection: "column" } },
+  return h("section", { style: { flex: "1 1 300px", minWidth: 0, background: surface, borderRadius: 10, padding: "16px 12px 10px", minHeight: 150, display: "flex", flexDirection: "column" } },
     h("div", { style: { ...quiet, fontSize: 13, padding: "0 10px 8px" } }, title),
     rows && rows.length ? h("div", { style: { display: "flex", flexDirection: "column", gap: 2 } }, rows)
       : h("div", { style: { ...quiet, flex: "1 1 auto", display: "grid", placeItems: "center", fontSize: 13, padding: "18px 10px" } }, empty));
@@ -180,7 +183,7 @@ function Block({ inputActions, here }) {
       h("select", {
         id: "pramanyx-connection", value: chosen,
         onChange: (e) => { remember(e.target.value); setChosen(e.target.value); },
-        style: { font: "inherit", color: "inherit", background: "transparent", border: `1px solid ${line}`, borderRadius: 4, padding: "3px 8px" },
+        style: { font: "inherit", color: "inherit", background: soft, border: 0, borderRadius: 4, padding: "3px 8px" },
       }, connections.map((c) => h("option", { key: c.id, value: c.id }, c.name)))),
     h("div", { style: { display: "flex", flexDirection: "column", gap: 2 } },
       questions === null ? h("div", { style: { ...quiet, padding: "9px 10px" } }, "Reading the questions worth asking…")
@@ -266,14 +269,14 @@ function AgentsPage({ ask }) {
           : h("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 12 } },
               agents.map((agent) => h("section", {
                 key: agent.id,
-                style: { display: "flex", flexDirection: "column", gap: 8, border: `1px solid ${line}`, borderRadius: 6, padding: 14, background: faint },
+                style: { display: "flex", flexDirection: "column", gap: 8, borderRadius: 10, padding: 14, background: surface },
               },
                 h("div", { style: { fontSize: 15, fontWeight: 600 } }, agent.name),
                 agent.connection_id ? h("div", { style: { ...quiet, fontSize: 12 } }, `Answers on ${named(agent.connection_id)}`) : null,
                 h("div", { style: { flex: "1 1 auto", lineHeight: 1.5 } }, purpose(agent) || "No description."),
                 h("div", null, h("button", {
-                  type: "button", onClick: () => ask(agent),
-                  style: { font: "inherit", fontSize: 12.5, color: "inherit", cursor: "pointer", padding: "5px 12px", background: "transparent", border: `1px solid ${line}`, borderRadius: 4 },
+                  type: "button", onClick: () => ask(agent), className: "pramanyx-home-soft",
+                  style: { font: "inherit", fontSize: 12.5, color: "inherit", cursor: "pointer", padding: "5px 12px", background: soft, border: 0, borderRadius: 4 },
                 }, "Ask this agent"))))));
 }
 
@@ -336,8 +339,8 @@ function AppThreadsPage({ pick, heading, note, empty, back, rowOf }) {
     const conn = /^[A-Za-z0-9_-]{1,64}$/.test(open.connection || "") ? `&conn=${encodeURIComponent(open.connection)}` : "";
     return h("div", { style: { display: "flex", flexDirection: "column", height: "100%" } },
       h("div", { style: { padding: "8px 14px", fontSize: 12.5, display: "flex", gap: 10, alignItems: "center" } },
-        h("button", { type: "button", onClick: () => setOpen(null),
-                      style: { font: "inherit", color: "inherit", background: "transparent", border: `1px solid ${line}`, borderRadius: 4, padding: "2px 10px", cursor: "pointer" } },
+        h("button", { type: "button", onClick: () => setOpen(null), className: "pramanyx-home-soft",
+                      style: { font: "inherit", color: "inherit", background: soft, border: 0, borderRadius: 4, padding: "2px 10px", cursor: "pointer" } },
           back),
         h("span", { style: quiet }, open.title)),
       h("iframe", {
@@ -455,7 +458,7 @@ function Switcher() {
   }, [open]);
   if (!back) return null;
   const row = { display: "flex", gap: 10, alignItems: "center", padding: "8px 9px", borderRadius: 6, color: "inherit", textDecoration: "none" };
-  const tile = { width: 32, height: 32, flex: "none", borderRadius: 6, border: `1px solid ${line}`, display: "inline-flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 13 };
+  const tile = { width: 32, height: 32, flex: "none", borderRadius: 6, background: soft, display: "inline-flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 13 };
   const words = (name, note) => h("span", { style: { display: "flex", flexDirection: "column", gap: 1, minWidth: 0 } },
     h("span", { style: { fontSize: 13.5, fontWeight: 600 } }, name), h("span", { style: { ...quiet, fontSize: 12 } }, note));
   return h("div", { ref: host, style: { position: "relative", display: "inline-flex" } },
@@ -468,7 +471,7 @@ function Switcher() {
       role: "menu", "aria-label": "Switch to",
       style: { position: "absolute", right: 0, top: 32, zIndex: 60, width: 300, boxSizing: "border-box", padding: 8, display: "flex",
                flexDirection: "column", gap: 2, fontSize: 13, color: "var(--dsw-alias-label-primary)",
-               background: "color-mix(in srgb, currentColor 8%, var(--dsw-alias-bg-base, #111113))", border: `1px solid ${line}`, borderRadius: 8,
+               background: "var(--dsw-alias-bg-layer-2, color-mix(in srgb, currentColor 8%, var(--dsw-alias-bg-base, #111113)))", borderRadius: 8,
                boxShadow: "0 16px 40px rgba(0, 0, 0, 0.35)" },
     },
       h("span", { style: { ...quiet, fontSize: 12, padding: "2px 9px 6px" } }, "Switch to"),

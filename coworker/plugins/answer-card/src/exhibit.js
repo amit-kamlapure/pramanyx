@@ -11,10 +11,20 @@ import { labelOf, numericColumns, vizChoices } from "./chart";
 
 export const line = "color-mix(in srgb, currentColor 18%, transparent)";
 export const faint = "color-mix(in srgb, currentColor 6%, transparent)";
+/* Borders are the exception (the platform's rule, 2026-11-20): an action is a soft fill, a block of code or a chart sits
+   on a surface, and a line is kept where it carries the reading — a table's rows, a rule between sections. */
+export const soft = "color-mix(in srgb, currentColor 9%, transparent)";
+export const surface = `var(--dsw-alias-bg-layer-1, ${faint})`;
+/** The one action a card waits on (Send, Allow): the platform's accent, as the box's own send button is. */
+export const primary = (off) => ({
+  ...button(false), fontWeight: 600, background: "var(--dsw-alias-state-business-primary, #46a0c4)",
+  color: "var(--dsw-alias-bg-base, #ffffff)", opacity: off ? 0.5 : 1, cursor: off ? "default" : "pointer",
+});
+export const code = `var(--dsw-alias-markdown-code-block, ${faint})`;
 export const quiet = { opacity: 0.68 };
 export const button = (on) => ({
   font: "inherit", fontSize: 12, padding: "3px 10px", borderRadius: 4, cursor: "pointer", color: "inherit",
-  border: `1px solid ${line}`, background: on ? "color-mix(in srgb, currentColor 14%, transparent)" : "transparent",
+  border: 0, background: on ? "color-mix(in srgb, currentColor 18%, transparent)" : soft,
 });
 
 // ── what this page has seen, and what was chosen for it ──────────────────────────────────────────────────────
@@ -227,12 +237,12 @@ function SqlAndResult({ answer }) {
       h("span", { style: heading }, "SQL"), h("span", { style: { flex: "1 1 auto" } }),
       answer.sql ? h("button", { type: "button", style: button(false), onClick: copy }, copied ? "Copied" : "Copy SQL") : null),
     h("pre", {
-      style: { margin: 0, padding: 12, border: `1px solid ${line}`, borderRadius: 4, background: faint, fontSize: 12.5,
+      style: { margin: 0, padding: 12, borderRadius: 6, background: code, fontSize: 12.5,
                lineHeight: 1.55, overflowX: "auto", whiteSpace: "pre-wrap", overflowWrap: "anywhere" },
     }, answer.sql || "No SQL came back with this answer."));
 }
 
-const field = { font: "inherit", fontSize: 13, color: "inherit", background: "transparent", border: `1px solid ${line}`,
+const field = { font: "inherit", fontSize: 13, color: "inherit", background: soft, border: 0,
                 borderRadius: 4, padding: "7px 10px", width: "100%", boxSizing: "border-box" };
 
 function Choice({ label, value, options, onChange, id }) {
@@ -247,8 +257,8 @@ function OnOff({ label, on, onChange }) {
     h("span", { style: { ...heading, flex: "1 1 auto" } }, label),
     h("button", {
       type: "button", role: "switch", "aria-checked": on, "aria-label": label, onClick: () => onChange(!on),
-      style: { width: 40, height: 22, borderRadius: 11, border: `1px solid ${line}`, padding: 2, cursor: "pointer", display: "flex",
-               justifyContent: on ? "flex-end" : "flex-start", background: on ? "var(--dsw-alias-brand-primary, #46a0c4)" : "transparent" },
+      style: { width: 40, height: 22, borderRadius: 11, border: 0, padding: 3, cursor: "pointer", display: "flex",
+               justifyContent: on ? "flex-end" : "flex-start", background: on ? "var(--dsw-alias-state-business-primary, #46a0c4)" : soft },
     }, h("span", { style: { width: 16, height: 16, borderRadius: "50%", background: on ? "#0b1a21" : "currentColor", opacity: on ? 1 : 0.55 } })));
 }
 
@@ -412,7 +422,7 @@ function AppPage({ path }) {
 
 const isScalar = (v) => v === null || ["string", "number", "boolean"].includes(typeof v);
 const isCode = (key, v) => typeof v === "string" && (/sql|formula|expression|query/i.test(key) || /\bSELECT\b[\s\S]*\bFROM\b/i.test(v));
-const pre = { margin: 0, padding: 10, border: `1px solid ${line}`, borderRadius: 4, background: faint, fontSize: 12.5, lineHeight: 1.55,
+const pre = { margin: 0, padding: 10, borderRadius: 6, background: code, fontSize: 12.5, lineHeight: 1.55,
               whiteSpace: "pre-wrap", overflowWrap: "anywhere", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" };
 
 /**
