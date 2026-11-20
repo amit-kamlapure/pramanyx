@@ -266,7 +266,7 @@ export function McpServersSection() {
             ))}
           </div>
           {access === "signin" && (
-            <div className="aug-fs-xs" style={{ color: "var(--t3)", lineHeight: 1.5 }}>
+            <div className="aug-fs-sm" style={{ color: "var(--t3)", lineHeight: 1.5 }}>
               After adding it, press Sign in: the server&apos;s own page asks you to approve
               Pramanyx. There is no key to copy, and what it hands back is stored encrypted.
             </div>
@@ -285,14 +285,14 @@ export function McpServersSection() {
                 placeholder="Header value — e.g. Bearer …, or an API key"
                 aria-label="Auth header value"
                 value={authHeader} onChange={e => setAuthHeader(e.target.value)} />
-              <div className="aug-fs-xs" style={{ color: "var(--t3)" }}>
+              <div className="aug-fs-sm" style={{ color: "var(--t3)" }}>
                 <Icon name="lock" size={11} /> Stored encrypted, and never returned by any
                 read — not even masked.
               </div>
             </>
           )}
           {access === "none" && (
-            <div className="aug-fs-xs" style={{ color: "var(--t3)" }}>
+            <div className="aug-fs-sm" style={{ color: "var(--t3)" }}>
               For a server that asks for no credential.
             </div>
           )}
@@ -308,7 +308,7 @@ export function McpServersSection() {
             value={argsLine} onChange={e => setArgsLine(e.target.value)} />
           {/* Said before the command is pasted, not after it runs. This is the more
               dangerous of the two transports and the form should say which. */}
-          <div className="aug-fs-xs" style={{ color: "var(--amb4)", lineHeight: 1.5 }}>
+          <div className="aug-fs-sm" style={{ color: "var(--amb4)", lineHeight: 1.5 }}>
             <Icon name="warning" size={11} /> A local process runs with this
             deployment&apos;s own privileges. Nothing is passed to a shell — the
             command and its arguments stay separate — but only add a process you would
@@ -326,7 +326,7 @@ export function McpServersSection() {
           Cancel
         </Button>
       </div>
-      <div className="aug-fs-xs" style={{ color: "var(--t3)" }}>
+      <div className="aug-fs-sm" style={{ color: "var(--t3)" }}>
         Adding a server contacts nothing. Press Discover afterwards to ask it what it
         offers.
       </div>
@@ -347,7 +347,7 @@ export function McpServersSection() {
   };
 
   const pendingLine = (s: McpServerRow) => s.oauth?.sign_in_pending ? (
-    <div className="aug-fs-xs" style={{ ...MUTED, padding: "4px 0 0 22px" }}>
+    <div className="aug-fs-sm" style={{ ...MUTED, padding: "4px 0 0 22px" }}>
       Waiting for you to finish signing in on the server&apos;s page
       {signInLinks[s.id]
         ? <> — <a href={signInLinks[s.id]} target="_blank" rel="noreferrer">open it</a></>
@@ -359,7 +359,7 @@ export function McpServersSection() {
   const controls = (s: McpServerRow) => (
     <div data-testid={`mcp-controls-${s.id}`} style={{ padding: "6px 0 2px 22px" }}>
       {health[s.id] && (
-        <div className="aug-fs-xs" style={{ marginBottom: 6,
+        <div className="aug-fs-sm" style={{ marginBottom: 6,
           color: health[s.id].startsWith("unreachable") ? "var(--red4)" : "var(--grn4)" }}>
           {health[s.id]}
         </div>
@@ -398,9 +398,9 @@ export function McpServersSection() {
   /** What Details opens: what the server is, where it is, and its roster with each tool's verdict. */
   const details = (about: string, s: McpServerRow | undefined) => (
     <div data-testid="mcp-details" style={{ padding: "6px 0 2px 22px", display: "flex", flexDirection: "column", gap: 4 }}>
-      {about && <div className="aug-fs-xs" style={{ color: "var(--t2)" }}>{about}</div>}
+      {about && <div className="aug-fs-sm" style={{ color: "var(--t2)" }}>{about}</div>}
       {s && (
-        <div className="aug-fs-xs" style={{ ...MUTED, fontFamily: "var(--font-mono)", overflowWrap: "anywhere" }}>
+        <div className="aug-fs-sm" style={{ ...MUTED, fontFamily: "var(--font-mono)", overflowWrap: "anywhere" }}>
           {s.transport === "stdio" ? [s.command, ...(s.args || [])].join(" ") : s.url}
         </div>
       )}
@@ -409,7 +409,7 @@ export function McpServersSection() {
       )}
       {s && (s.tool_count > 0
         ? <ToolRoster tools={s.tools} discoveredAt={s.discovered_at} serverId={s.id} onChanged={() => void load()} />
-        : <div className="aug-fs-xs" style={MUTED}>{s.discovered_at ? "It offers no tools." : "Its tools are not discovered yet."}</div>)}
+        : <div className="aug-fs-sm" style={MUTED}>{s.discovered_at ? "It offers no tools." : "Its tools are not discovered yet."}</div>)}
     </div>
   );
 
@@ -432,7 +432,7 @@ export function McpServersSection() {
               </span>
               <Chip tone={chip.tone}>{chip.text}</Chip>
             </div>
-            {meta && <div className="aug-fs-xs" title={meta} style={{ ...MUTED, ...ONE_LINE }}>{meta}</div>}
+            {meta && <div className="aug-fs-sm" title={meta} style={{ ...MUTED, ...ONE_LINE }}>{meta}</div>}
           </div>
           <div style={{ ...ROW, flexWrap: "nowrap", gap: 4 }}>
             {primary}
@@ -464,7 +464,7 @@ export function McpServersSection() {
         </Button>
       )}>
       {error && (
-        <div role="alert" className="aug-fs-xs" style={{ color: "var(--red4)", marginBottom: 6 }}>
+        <div role="alert" className="aug-fs-sm" style={{ color: "var(--red4)", marginBottom: 6 }}>
           {error}
         </div>
       )}
@@ -513,7 +513,7 @@ export function McpServersSection() {
 
       {/* The emptiness is the design, so it is stated as one. */}
       {loaded && servers.length === 0 && !adding && (
-        <div className="aug-fs-xs" style={{ ...MUTED, paddingTop: 6 }}>
+        <div className="aug-fs-sm" style={{ ...MUTED, paddingTop: 6 }}>
           Nothing is registered, so this deployment can call no MCP server at all — a server&apos;s
           {" "}<strong>read-only</strong> tools become steps once one is added and discovered.
         </div>
@@ -561,7 +561,7 @@ function ToolRoster({ tools, discoveredAt, serverId, onChanged }: {
         Read from the server at {discoveredAt ? formatTimestamp(discoveredAt, "short") : "an unknown time"}.
       </div>
       {failed && (
-        <div className="aug-fs-xs" style={{ color: "var(--red4)", marginBottom: 6 }}>
+        <div className="aug-fs-sm" style={{ color: "var(--red4)", marginBottom: 6 }}>
           {failed}
         </div>
       )}
@@ -578,7 +578,7 @@ function ToolRoster({ tools, discoveredAt, serverId, onChanged }: {
                 {callable || granted ? "●" : "○"}
               </span>
               <div style={{ minWidth: 0, flex: 1 }}>
-                <span className="aug-fs-xs" style={{ fontFamily: "var(--font-mono)",
+                <span className="aug-fs-chrome" style={{ fontFamily: "var(--font-mono)",
                   color: callable || granted ? "var(--t2)" : "var(--t3)" }}>{t.name}</span>
                 {granted && (
                   // Named a write, not merely allowed. This is the one row on the panel
@@ -588,20 +588,20 @@ function ToolRoster({ tools, discoveredAt, serverId, onChanged }: {
                   </span>
                 )}
                 {t.description && (
-                  <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>
+                  <span className="aug-fs-sm" style={{ color: "var(--t3)" }}>
                     {" "}— {t.description}
                   </span>
                 )}
                 {!callable && !granted && (
                   // The server's sentence, verbatim. It is the whole posture. For a STALE
                   // grant it is the drift sentence instead, which says what changed.
-                  <div className="aug-fs-xs" style={{ color: stale ? "var(--red4)" : "var(--t3)",
+                  <div className="aug-fs-sm" style={{ color: stale ? "var(--red4)" : "var(--t3)",
                     marginTop: 2 }}>
                     {stale ? t.grant_reason : t.reason}
                   </div>
                 )}
                 {granted && (
-                  <div className="aug-fs-xs" style={{ color: "var(--t3)", marginTop: 2 }}>
+                  <div className="aug-fs-sm" style={{ color: "var(--t3)", marginTop: 2 }}>
                     Granted{t.granted_by ? ` by ${t.granted_by}` : ""}
                     {t.granted_at ? ` on ${dayMonth(t.granted_at)}` : ""}. Covers the
                     declaration this server makes today — if that changes, the grant lapses.

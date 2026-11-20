@@ -259,7 +259,7 @@ export function EvidencePanel({ connectionId, canvasId, onInvestigate: reexamine
               const name = nameOf(g.run);
               return (
                 <div key={g.run} role="rowgroup" data-testid="evidence-run">
-                  <div role="row" className="aug-fs-xs" style={{ display: "flex", alignItems: "baseline", gap: 8,
+                  <div role="row" className="aug-fs-sm" style={{ display: "flex", alignItems: "baseline", gap: 8,
                     padding: "10px 0 4px 8px", borderTop: "1px solid var(--b1)" }}>
                     <span role="cell" title={name.full || undefined} style={{ ...ONE_LINE, color: "var(--t2)", fontWeight: 600 }}>{name.title}</span>
                     {name.scheduled && <Chip>scheduled</Chip>}
@@ -368,19 +368,19 @@ function ClaimRow({ claim: c, picked, onPick }: { claim: EvidenceClaim; picked: 
         background: picked ? "var(--bg-hover)" : undefined, boxShadow: picked ? "inset 2px 0 0 var(--blue3)" : undefined }}>
       <span role="cell" style={{ minWidth: 0 }} title={c.claim_text}>
         <span className="aug-fs-chrome" style={{ ...ONE_LINE, display: "block", color: "var(--t1)" }}>{head}</span>
-        {rest && <span className="aug-fs-xs" style={{ ...MUTED, ...ONE_LINE, display: "block" }}>{rest}</span>}
+        {rest && <span className="aug-fs-sm" style={{ ...MUTED, ...ONE_LINE, display: "block" }}>{rest}</span>}
       </span>
-      <span role="cell" className="aug-fs-xs" style={{ ...ROW, gap: 6, flexWrap: "nowrap", color: fb ? "var(--t1)" : "var(--t3)" }}>
+      <span role="cell" className="aug-fs-chrome" style={{ ...ROW, gap: 6, flexWrap: "nowrap", color: fb ? "var(--t1)" : "var(--t3)" }}>
         <Dot hue={fb?.hue ?? "grey"} />{fb?.word ?? "not reviewed"}
       </span>
-      <span role="cell" className="aug-fs-xs" style={{ ...ONE_LINE, color: c.metric_used ? "var(--t2)" : "var(--t3)" }}
+      <span role="cell" className="aug-fs-chrome" style={{ ...ONE_LINE, color: c.metric_used ? "var(--t2)" : "var(--t3)" }}
         title={c.metric_used ? "A keyword found in the claim, not a link to the metric." : undefined}>
         {c.metric_used ?? "none"}
       </span>
-      <span role="cell" className="aug-fs-xs" style={{ ...ONE_LINE, color: "var(--t2)" }} title={reads.join(", ") || undefined}>
+      <span role="cell" className="aug-fs-chrome" style={{ ...ONE_LINE, color: "var(--t2)" }} title={reads.join(", ") || undefined}>
         {c.sql_source ? (reads.length ? reads.join(", ") : "its query") : <Chip title="No query was recorded for this claim.">no query</Chip>}
       </span>
-      <span role="cell" className="aug-fs-xs" title={formatTimestamp(c.created_at)} style={{ ...MUTED, ...NUM, textAlign: "right", whiteSpace: "nowrap" }}>
+      <span role="cell" className="aug-fs-chrome" title={formatTimestamp(c.created_at)} style={{ ...MUTED, ...NUM, textAlign: "right", whiteSpace: "nowrap" }}>
         {ago(c.created_at)}
       </span>
     </div>

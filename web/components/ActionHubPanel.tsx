@@ -154,8 +154,8 @@ function TriggerForm({
           {saving ? "Saving…" : initial ? "Update" : "Create"}
         </Button>
         <Button type="button" onClick={onCancel} variant="ghost" size="xs">Cancel</Button>
-        {initial && <span className="aug-fs-xs" style={MUTED}>The stored URL is kept unless you replace it.</span>}
-        {error && <span role="alert" className="aug-fs-xs" style={{ color: "var(--red4)" }}>{error}</span>}
+        {initial && <span className="aug-fs-sm" style={MUTED}>The stored URL is kept unless you replace it.</span>}
+        {error && <span role="alert" className="aug-fs-sm" style={{ color: "var(--red4)" }}>{error}</span>}
       </div>
     </form>
   );
@@ -392,7 +392,7 @@ function TriggerRow({ t, first, last, sources, windowFull, note, testing, editin
             {!t.enabled && <Chip>off</Chip>}
             {note && <Chip tone={note.tone} testId="trigger-note">{note.text}</Chip>}
           </div>
-          <div className="aug-fs-xs" title={meta} style={{ ...MUTED, ...ONE_LINE }}>{meta}</div>
+          <div className="aug-fs-sm" title={meta} style={{ ...MUTED, ...ONE_LINE }}>{meta}</div>
         </div>
         <div style={{ ...ROW, flexWrap: "nowrap", gap: 4 }}>
           <Button size="xs" variant="outline" disabled={testing} onClick={onTest} title="Send a test message through this trigger">
@@ -425,7 +425,7 @@ function DeliveryRow({ g, first, open, onToggle }: { g: DeliveryGroup; first: bo
             <span className="aug-fs-chrome" style={{ ...ONE_LINE, fontWeight: 500, color: "var(--t1)" }}>{g.triggerName}</span>
             {g.removed && <Chip title="This trigger no longer exists — these sends are history">since removed</Chip>}
           </div>
-          <div className="aug-fs-xs" title={full || meta} style={{ ...MUTED, ...ONE_LINE }}>{meta}</div>
+          <div className="aug-fs-sm" title={full || meta} style={{ ...MUTED, ...ONE_LINE }}>{meta}</div>
         </div>
         <span className="aug-fs-chrome" data-testid="delivery-count"
           style={{ color: "var(--t2)", ...NUM, minWidth: 28, textAlign: "right" }}>
@@ -443,7 +443,7 @@ function DeliveryRow({ g, first, open, onToggle }: { g: DeliveryGroup; first: bo
             {g.latest.http_status != null && <Chip>{`HTTP ${g.latest.http_status}`}</Chip>}
           </div>
           {g.messages.length > 0 && (
-            <div className="aug-fs-xs" style={{ color: "var(--t2)" }}>
+            <div className="aug-fs-sm" style={{ color: "var(--t2)" }}>
               {`${g.messages.length === 1 ? "Message" : "Messages"}: ${g.messages.slice(0, 3).map(m => `“${m.length > 80 ? `${m.slice(0, 79)}…` : m}”`).join(" · ")}`}
               {g.messages.length > 3 ? ` · and ${formatCount(g.messages.length - 3)} more` : ""}
             </div>

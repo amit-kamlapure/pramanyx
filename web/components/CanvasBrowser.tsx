@@ -102,11 +102,11 @@ function CanvasCard({ row, onSelect, onDelete }: { row: CanvasRow; onSelect: () 
           <Icon name={CANVAS_ICON} size={17} color={canvas.is_legacy ? "var(--t3)" : "var(--blue4)"} />
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--t1)", lineHeight: 1.35,
+          <div className="aug-fs-chrome" style={{ fontWeight: 600, color: "var(--t1)", lineHeight: 1.35,
             overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {canvas.name}
           </div>
-          <div style={{ fontSize: 11, color: "var(--t3)", marginTop: 1 }}>
+          <div className="aug-fs-sm" style={{ color: "var(--t3)", marginTop: 1 }}>
             {canvas.is_legacy ? "Data Canvas · auto-generated" : "Data Canvas"}
             {canvas.access === "" ? " · not shared with you" : canvas.sharing === "chosen" ? " · shared with people chosen" : ""}
           </div>
@@ -127,8 +127,8 @@ function CanvasCard({ row, onSelect, onDelete }: { row: CanvasRow; onSelect: () 
       </div>
 
       {/* Description — two lines, quiet */}
-      <div style={{
-        flex: 1, fontSize: 12, color: "var(--t3)", lineHeight: 1.5,
+      <div className="aug-fs-sm" style={{
+        flex: 1, color: "var(--t3)", lineHeight: 1.5,
         display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
       }}>
         {canvas.description || "No description."}
@@ -137,19 +137,19 @@ function CanvasCard({ row, onSelect, onDelete }: { row: CanvasRow; onSelect: () 
       {/* Footer — signal chips: connection · tables · updated */}
       <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
         {connection && (
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px",
+          <span className="aug-fs-xs" style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px",
             borderRadius: 4, background: "var(--gray-a3)", border: "1px solid transparent",
-            fontSize: 11, color: "var(--t2)", whiteSpace: "nowrap" }}>
+            color: "var(--t2)", whiteSpace: "nowrap" }}>
             <Icon name={DB_ICON} size={10} color="var(--t3)" />{connection.name}
           </span>
         )}
-        <span style={{ display: "inline-flex", alignItems: "center", padding: "2px 8px", borderRadius: 4,
+        <span className="aug-fs-xs" style={{ display: "inline-flex", alignItems: "center", padding: "2px 8px", borderRadius: 4,
           background: n === 0 ? "color-mix(in srgb, var(--grn3) 14%, transparent)" : "var(--gray-a3)",
           border: "1px solid transparent",
-          fontSize: 11, color: n === 0 ? "var(--grn4)" : "var(--t3)", whiteSpace: "nowrap" }}>
+          color: n === 0 ? "var(--grn4)" : "var(--t3)", whiteSpace: "nowrap" }}>
           {tableLabel}
         </span>
-        <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--t3)", whiteSpace: "nowrap" }}>
+        <span className="aug-fs-xs" style={{ marginLeft: "auto", color: "var(--t3)", whiteSpace: "nowrap" }}>
           {updated}
         </span>
       </div>
@@ -282,11 +282,11 @@ export function CanvasBrowser({ connections, onSelect, onNew, workspaceId }: Pro
             <Icon name={CANVAS_ICON} size={13} color={canvas.is_legacy ? "var(--t3)" : "var(--blue4)"} />
           </div>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 500, color: "var(--t1)" }}>
+            <div className="aug-fs-chrome" style={{ fontWeight: 500, color: "var(--t1)" }}>
               {canvas.name}
             </div>
             {canvas.is_legacy && (
-              <div style={{ fontSize: 11, color: "var(--t3)" }}>auto-generated</div>
+              <div className="aug-fs-sm" style={{ color: "var(--t3)" }}>auto-generated</div>
             )}
           </div>
         </div>
@@ -297,7 +297,7 @@ export function CanvasBrowser({ connections, onSelect, onNew, workspaceId }: Pro
       key: "description",
       ellipsis: true,
       render: (_, { canvas }) => (
-        <span style={{ fontSize: 12, color: "var(--t3)" }}>
+        <span className="aug-fs-chrome" style={{ color: "var(--t3)" }}>
           {canvas.description || "—"}
         </span>
       ),
@@ -307,7 +307,7 @@ export function CanvasBrowser({ connections, onSelect, onNew, workspaceId }: Pro
       key: "modified",
       width: 110,
       render: (_, { canvas }) => (
-        <span style={{ fontSize: 12, color: "var(--t3)" }}>
+        <span className="aug-fs-chrome" style={{ color: "var(--t3)" }}>
           {timeAgo(canvas.updated_at || canvas.created_at)}
         </span>
       ),
@@ -321,15 +321,15 @@ export function CanvasBrowser({ connections, onSelect, onNew, workspaceId }: Pro
         const ct = connection.conn_type;
         const label = ct === "duckdb" ? "DuckDB" : ct === "postgres" ? "PG" : ct.toUpperCase().slice(0, 4);
         return (
-          <span style={{
+          <span className="aug-fs-xs" style={{
             display: "inline-flex", alignItems: "center", gap: 5,
             padding: "2px 8px", borderRadius: 3,
             background: "var(--gray-a3)", border: "1px solid transparent",
-            fontSize: 11, color: "var(--t2)", whiteSpace: "nowrap",
+            color: "var(--t2)", whiteSpace: "nowrap",
           }}>
             <Icon name={DB_ICON} size={10} color="var(--t3)" />
             {connection.name}
-            <span style={{ color: "var(--t3)", fontSize: 11 }}>{label}</span>
+            <span style={{ color: "var(--t3)" }}>{label}</span>
           </span>
         );
       },
@@ -342,13 +342,12 @@ export function CanvasBrowser({ connections, onSelect, onNew, workspaceId }: Pro
         const n = canvas.scopes[0]?.tables.length ?? 0;
         const label = n === 0 ? "All tables" : `${n} table${n !== 1 ? "s" : ""}`;
         return (
-          <span style={{
+          <span className="aug-fs-xs" style={{
             display: "inline-block", padding: "2px 8px", borderRadius: 3,
             background: n === 0
               ? "color-mix(in srgb, var(--grn3) 10%, transparent)"
               : "var(--gray-a3)",
             border: "1px solid transparent",
-            fontSize: 11,
             color: n === 0 ? "var(--grn4)" : "var(--t3)",
           }}>
             {label}

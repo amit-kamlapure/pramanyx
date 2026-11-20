@@ -105,7 +105,7 @@ function DeepRunRow({ group, first, open, onOpen, onResume }: {
             style={{ ...ONE_LINE, color: "var(--t1)", fontWeight: 500 }}>
             {shortQuestion(group.title)}
           </div>
-          <div className="aug-fs-xs" style={{ ...ROW, gap: 6, color: "var(--t2)", marginTop: 2 }}>
+          <div className="aug-fs-sm" style={{ ...ROW, gap: 6, color: "var(--t2)", marginTop: 2 }}>
             {group.scheduled
               ? <Chip testId="ao-deep-run-scheduled" title="Run by an automation on its schedule">scheduled</Chip>
               : <span>asked</span>}

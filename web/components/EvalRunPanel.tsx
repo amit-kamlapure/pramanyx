@@ -197,7 +197,7 @@ function GroupRow({ group: g, first, name, suite, open, onToggle, onOpen }: {
             {/* "no band" / "nothing measured" are said once, under the score — not again as a chip here */}
             {(floor === "held" || floor === "noisy") && <Chip tone={chip.tone} title={chip.title}>{chip.text}</Chip>}
           </div>
-          <div className="aug-fs-xs" title={meta} style={{ ...MUTED, ...ONE_LINE }}>{meta}</div>
+          <div className="aug-fs-sm" title={meta} style={{ ...MUTED, ...ONE_LINE }}>{meta}</div>
         </div>
         <Trend runs={g.runs} />
         <div style={{ textAlign: "right" }}>
@@ -241,7 +241,7 @@ function RunLine({ run, onOpen }: { run: EvalRun; onOpen: () => void }) {
       </Chip>
       <div style={{ ...ROW, flexWrap: "nowrap", minWidth: 0 }}>
         {passRate(run) != null && (
-          <span className="aug-fs-sm" style={{ color: "var(--t1)", ...NUM }}>
+          <span className="aug-fs-chrome" style={{ color: "var(--t1)", ...NUM }}>
             {`${rate(passRate(run))} · ${s.stable_pass ?? 0} of ${s.total ?? 0} stable`}
           </span>
         )}
@@ -249,7 +249,7 @@ function RunLine({ run, onOpen }: { run: EvalRun; onOpen: () => void }) {
         {(s.flaky ?? 0) > 0 && <Chip tone="amber">{`${s.flaky} flaky`}</Chip>}
         {(s.errors ?? 0) > 0 && <Chip tone="down">{plural(s.errors ?? 0, "error")}</Chip>}
         {s.accuracy != null && <Chip title="Correct answers among the cases that declared one">{`accuracy ${rate(s.accuracy)}`}</Chip>}
-        {note && <span className="aug-fs-xs" title={note} style={{ ...MUTED, ...ONE_LINE }}>{note}</span>}
+        {note && <span className="aug-fs-sm" title={note} style={{ ...MUTED, ...ONE_LINE }}>{note}</span>}
       </div>
       <Button size="xs" variant="ghost" onClick={onOpen}>Cases</Button>
     </div>
@@ -313,8 +313,8 @@ function RunDetail({ run, suiteName, suite, onBack }: {
   const columns: TableColumnsType<Row> = [
     { title: "Case", dataIndex: "case_id", key: "case_id",
       render: (v: string) => (questions?.[v]
-        ? <span className="aug-fs-sm" title={questions[v]}>{questions[v]}</span>
-        : <code className="aug-fs-xs" style={{ fontFamily: "var(--font-mono)" }}>{v}</code>) },
+        ? <span className="aug-fs-chrome" title={questions[v]}>{questions[v]}</span>
+        : <code className="aug-fs-chrome" style={{ fontFamily: "var(--font-mono)" }}>{v}</code>) },
     { title: "Iteration", dataIndex: "iteration", key: "iteration", width: 80, align: "right" },
     { title: "Passed", dataIndex: "passed", key: "passed", width: 90,
       render: (v: boolean | null) => <BoolChip v={v} yes="pass" no="fail" /> },
@@ -324,11 +324,11 @@ function RunDetail({ run, suiteName, suite, onBack }: {
       render: (v: number | null) => <span style={NUM}>{v == null ? "—" : `${formatCount(Math.round(v))} ms`}</span> },
     { title: "Checks failed", dataIndex: "fired", key: "fired",
       render: (v: string[]) => v && v.length
-        ? <span className="aug-fs-xs">{v.map(n => <code key={n} style={{ fontFamily: "var(--font-code)", color: "var(--amb4)", marginRight: 6 }}>{n}</code>)}</span>
+        ? <span className="aug-fs-chrome">{v.map(n => <code key={n} style={{ fontFamily: "var(--font-code)", color: "var(--amb4)", marginRight: 6 }}>{n}</code>)}</span>
         : <span style={MUTED}>—</span> },
     { title: "Error", dataIndex: "error", key: "error",
       render: (v: string) => v
-        ? <span className="aug-fs-xs" title={v} style={{ color: "var(--red4)" }}>{v.slice(0, 60)}</span>
+        ? <span className="aug-fs-chrome" title={v} style={{ color: "var(--red4)" }}>{v.slice(0, 60)}</span>
         : <span style={MUTED}>—</span> },
   ];
   const dataSource: Row[] = run.results.map((r, i) => ({ ...r, key: i }));

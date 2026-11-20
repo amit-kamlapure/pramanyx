@@ -281,7 +281,7 @@ function DuplicatesDrawer({ connId, schema, onClose, onMerged }: {
             </div>
             <ul className="space-y-0.5">
               {c.entities.map(e => (
-                <li key={e.id} className="aug-fs-xs text-zinc-300">
+                <li key={e.id} className="aug-fs-chrome text-zinc-300">
                   {e.display_name} <span className="text-zinc-500">({e.source_tables.join(", ") || "—"})</span>
                 </li>
               ))}
@@ -322,7 +322,7 @@ function DuplicatesDrawer({ connId, schema, onClose, onMerged }: {
             <p className="aug-fs-xs text-zinc-500">Judged different earlier</p>
             {rejected.map(r => (
               <div key={r.pair.join("|")} className="flex items-center gap-2">
-                <span className="aug-fs-xs text-zinc-300 flex-1 min-w-0 truncate">
+                <span className="aug-fs-chrome text-zinc-300 flex-1 min-w-0 truncate">
                   {r.pair.join(" ≠ ")}{r.reason ? ` — ${r.reason}` : ""}{r.rejected_by ? ` (${r.rejected_by})` : ""}
                 </span>
                 <Button size="sm" variant="ghost" onClick={() => doReconsider(r)}>Reconsider</Button>
@@ -416,13 +416,13 @@ function ProposalsDrawer({ connId, schema, onClose }: { connId: string; schema?:
             <div key={pr.id} className="rounded bg-[var(--gray-a3)] p-2.5 space-y-1.5" data-testid="ontology-proposal">
               <div className="flex items-center gap-2">
                 <span className={cn("aug-fs-xs rounded-[var(--r-chip)] px-1.5 py-0.5", kind.tone)}>{kind.label}</span>
-                <span className="aug-fs-xs font-mono text-zinc-300 truncate" title={pr.target_id}>
+                <span className="aug-fs-chrome font-mono text-zinc-300 truncate" title={pr.target_id}>
                   {pr.entity}{column ? `.${column}` : ""}
                 </span>
                 {pr.support > 1 && <span className="aug-fs-xs text-zinc-500 ml-auto">seen ×{pr.support}</span>}
               </div>
-              {note && <p className="aug-fs-xs text-zinc-200">{note}</p>}
-              {!note && pr.reason && <p className="aug-fs-xs text-zinc-300">{pr.reason}</p>}
+              {note && <p className="aug-fs-sm text-zinc-200">{note}</p>}
+              {!note && pr.reason && <p className="aug-fs-sm text-zinc-300">{pr.reason}</p>}
               {evidenceText && (
                 <p className="aug-fs-xs text-zinc-500">
                   <span className="text-zinc-600">evidence · </span>{evidenceText}
@@ -516,11 +516,11 @@ function SkillsDrawer({ connId, schema, onClose }: { connId: string; schema?: st
         {skills?.map(sk => (
           <div key={sk.id} className="rounded bg-violet-500/[0.07] p-2.5 space-y-1.5">
             <div className="flex items-center justify-between gap-2">
-              <span className="aug-fs-xs text-violet-200 truncate" title={sk.display_name}>{sk.display_name}</span>
+              <span className="aug-fs-chrome text-violet-200 truncate" title={sk.display_name}>{sk.display_name}</span>
               <span className="aug-fs-xs text-zinc-500 shrink-0">{sk.action_type} · used {sk.usage_count ?? 0}×</span>
             </div>
-            {sk.description && <p className="aug-fs-xs text-zinc-500 line-clamp-2">{sk.description}</p>}
-            <pre className="aug-fs-xs text-zinc-400 bg-zinc-900/60 rounded p-1.5 overflow-x-auto whitespace-pre-wrap break-words max-h-24">{sk.sql_template}</pre>
+            {sk.description && <p className="aug-fs-sm text-zinc-500 line-clamp-2">{sk.description}</p>}
+            <pre className="aug-fs-sm text-zinc-400 bg-zinc-900/60 rounded p-1.5 overflow-x-auto whitespace-pre-wrap break-words max-h-24">{sk.sql_template}</pre>
             {sk.parameters?.length > 0 && (
               <div className="flex flex-wrap gap-1">
                 {sk.parameters.map(p => (

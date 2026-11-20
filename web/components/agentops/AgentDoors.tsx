@@ -32,10 +32,10 @@ function DoorRow({ kind, title, state, hue, detail, action }: {
       <span className="aug-fs-xs" style={{ color: "var(--t3)", width: 72, flexShrink: 0,
         textTransform: "uppercase", letterSpacing: "0.05em" }}>{kind}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div className="aug-fs-ui" style={{ color: "var(--t1)", overflow: "hidden",
+        <div className="aug-fs-chrome" style={{ color: "var(--t1)", overflow: "hidden",
           textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</div>
         {detail && (
-          <div className="aug-fs-xs" style={{ color: "var(--t2)", marginTop: 2 }}>{detail}</div>
+          <div className="aug-fs-sm" style={{ color: "var(--t2)", marginTop: 2 }}>{detail}</div>
         )}
       </div>
       <StatusChip hue={hue} strength="soft">{state}</StatusChip>

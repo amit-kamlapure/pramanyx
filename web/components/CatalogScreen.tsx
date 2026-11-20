@@ -300,7 +300,7 @@ export function CatalogScreen({ connections, selectedConn, onSelect, onDeleteCon
       );
 
       if (section.entries.length === 0 && section.id === "connections") {
-        nodes.push(<p key="empty" style={{ fontSize: 11, color: "var(--t3)", padding: "6px 12px 10px" }}>No connections yet.</p>);
+        nodes.push(<p key="empty" className="aug-fs-chrome" style={{ color: "var(--t3)", padding: "6px 12px 10px" }}>No connections yet.</p>);
       }
 
       section.entries.forEach(entry => {

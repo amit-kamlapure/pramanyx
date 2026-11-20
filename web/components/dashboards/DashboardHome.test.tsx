@@ -117,15 +117,25 @@ describe("the home", () => {
     expect(screen.getAllByTestId("dashboard-miniature").length).toBe(3);             // this App's fixture says no layout
   });
 
-  it("writes names and details at the platform's reading size, in every view", async () => {
+  it("writes a name at 13px, a card's second line at 12 and a chip's words at the chip's 11, in every view (2026-11-20)", async () => {
     prefs.getMyPreferences.mockResolvedValue({ user: "local", preferences: { dashboards_view: "grid" } });
     draw();
     const grid = await screen.findByTestId("dashboards-grid");
-    expect(within(grid).getAllByText("Returns")[0]).toHaveClass("aug-fs-ui");
-    expect(within(grid).getByText(/ago · You/)).toHaveClass("aug-fs-ui");
-    expect(within(grid).getByText("Pinned")).toHaveClass("aug-fs-ui");
-    // a chip's own class is its shape: the words inside it are at the reading size
-    for (const small of grid.querySelectorAll(".aug-fs-xs, .aug-fs-sm")) expect(small.querySelector(".aug-fs-ui")).not.toBeNull();
+    expect(within(grid).getAllByText("Returns")[0]).toHaveClass("aug-fs-chrome");
+    expect(within(grid).getByText(/ago · You/)).toHaveClass("aug-fs-sm");
+    // a chip's words are the chip's own size, as every chip on every page
+    expect(within(grid).getByText("Pinned").closest(".aug-fs-xs")).not.toBeNull();
+    expect(within(grid).getByText("Pinned").closest(".aug-fs-ui")).toBeNull();
+    // nothing in a row or a card is at the reading size: every list row is 13px on every page
+    expect(grid.querySelector(".aug-fs-ui")).toBeNull();
+  });
+
+  it("draws the list's rows at 13px and its column heads at 11", () => {
+    draw();
+    const list = screen.getByTestId("dashboards-list");
+    expect(list).toHaveClass("aug-fs-chrome");
+    expect(within(list).getByText("Name").closest("tr")).toHaveClass("aug-fs-xs");
+    expect(within(list).getAllByText("Returns")[0]).toHaveClass("aug-fs-chrome");
   });
 
   it("draws the detail with what last changed and the facts", async () => {

@@ -616,7 +616,8 @@ export function ResultsGrid({
         // them invisible to the code. ⌘C is handled here, so nothing is lost.
         userSelect: "none",
       }}
-      className="aug-fs-ui"
+      // the head and the cells at 13px, as a sheet's are — every table cell on every page (the user, 2026-11-20)
+      className="aug-fs-chrome"
     >
       <div style={{ width: totalWidth + rowW, minWidth: "100%" }}>
         {/* Sticky header. `position: sticky` on the scroll container's own child keeps

@@ -102,14 +102,14 @@ function PayloadView({ payload }: { payload: Record<string, unknown> }) {
         <React.Fragment key={k}>
           <span className="aug-fs-xs" style={{ color: "var(--t3)", paddingTop: 1 }}>{k}</span>
           {LONG_FIELDS.has(k) && typeof v === "string" ? (
-            <pre className="aug-fs-xs" style={{
+            <pre className="aug-fs-chrome" style={{
               margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word",
               fontFamily: "var(--font-mono)", color: "var(--t2)",
               background: "var(--bg-1)",
               borderRadius: "var(--r2)", padding: "6px 8px", maxHeight: 180, overflow: "auto",
             }}>{v}</pre>
           ) : (
-            <span className="aug-fs-sm" style={{ color: "var(--t2)", wordBreak: "break-word" }}>
+            <span className="aug-fs-chrome" style={{ color: "var(--t2)", wordBreak: "break-word" }}>
               {typeof v === "string" ? v : JSON.stringify(v)}
             </span>
           )}
@@ -146,7 +146,7 @@ function CandidateRow({ cand, decision, onDecide, edit, onEdit, applyError }: {
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <Button variant="plain" onClick={() => setOpen(o => !o)} data-testid={`intake-open-${cand.id}`}
-          className="aug-fs-sm h-auto min-w-0 flex-1 justify-start gap-2 border-none p-0 text-left font-normal hover:bg-transparent"
+          className="aug-fs-chrome h-auto min-w-0 flex-1 justify-start gap-2 border-none p-0 text-left font-normal hover:bg-transparent"
           style={{ color: "var(--t1)" }}>
           <Icon name={open ? "chevd" : "chevr"} size={14} />
           <span className="aug-fs-xs" style={{ color: "var(--t3)", whiteSpace: "nowrap" }}>
@@ -177,7 +177,7 @@ function CandidateRow({ cand, decision, onDecide, edit, onEdit, applyError }: {
         )}
       </div>
       {cand.detail && (
-        <p className="aug-fs-xs" style={{ color: cand.verdict === "conflict" ? "var(--amb4)" : "var(--t3)",
+        <p className="aug-fs-sm" style={{ color: cand.verdict === "conflict" ? "var(--amb4)" : "var(--t3)",
           margin: "6px 0 0 22px" }}>{cand.detail}</p>
       )}
       {applyError && (
@@ -286,11 +286,11 @@ function MetricFileColumns() {
           <TableBody>
             {cols.map(c => (
               <TableRow key={c.column}>
-                <TableCell className="aug-fs-xs" style={{ fontFamily: "var(--font-mono)", whiteSpace: "nowrap" }}>
+                <TableCell className="aug-fs-chrome" style={{ fontFamily: "var(--font-mono)", whiteSpace: "nowrap" }}>
                   {c.column}{c.required ? " *" : ""}
                 </TableCell>
-                <TableCell className="aug-fs-xs">{c.meaning}</TableCell>
-                <TableCell className="aug-fs-xs" style={{ fontFamily: "var(--font-mono)", color: "var(--t3)" }}>{c.example}</TableCell>
+                <TableCell className="aug-fs-chrome">{c.meaning}</TableCell>
+                <TableCell className="aug-fs-chrome" style={{ fontFamily: "var(--font-mono)", color: "var(--t3)" }}>{c.example}</TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -639,7 +639,7 @@ export function IntakePanel({ connId, schema }: { connId: string; schema?: strin
               className="h-auto w-full flex-col items-start gap-0.5 whitespace-normal p-2 text-left font-normal"
               style={{ background: selected === b.id ? "var(--bg-sel)" : "var(--bg-2)",
                 borderRadius: "var(--r2)" }}>
-              <span className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: 500, maxWidth: "100%",
+              <span className="aug-fs-chrome" style={{ color: "var(--t1)", fontWeight: 500, maxWidth: "100%",
                 overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {b.source || "bundle"}
               </span>
@@ -714,7 +714,7 @@ export function IntakePanel({ connId, schema }: { connId: string; schema?: strin
               {settled.length > 0 && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   {settled.map(c => (
-                    <div key={c.id} className="aug-fs-sm" style={{ display: "flex", gap: 8,
+                    <div key={c.id} className="aug-fs-chrome" style={{ display: "flex", gap: 8,
                       alignItems: "baseline", flexWrap: "wrap", color: "var(--t3)",
                       padding: "4px 12px", borderLeft: "2px solid var(--b1)" }}>
                       <span style={{ color: "var(--t2)" }}>{candidateLabel(c.kind, (c.edited_payload ?? c.payload))}</span>
@@ -734,7 +734,7 @@ export function IntakePanel({ connId, schema }: { connId: string; schema?: strin
                     {noops.length} already declared — nothing to decide
                   </Button>
                   {showNoop && (
-                    <ul className="aug-fs-sm" style={{ color: "var(--t3)", margin: "6px 0 0", paddingLeft: 26 }}>
+                    <ul className="aug-fs-chrome" style={{ color: "var(--t3)", margin: "6px 0 0", paddingLeft: 26 }}>
                       {noops.map(c => <li key={c.id}>{KIND_WORD[c.kind] ?? c.kind}: {candidateLabel(c.kind, c.payload)}</li>)}
                     </ul>
                   )}

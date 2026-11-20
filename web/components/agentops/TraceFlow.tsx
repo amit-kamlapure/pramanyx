@@ -891,7 +891,7 @@ function TimelineRail({ timeline, nodes, origin, selectedId, onSelect }: {
                 flexShrink: 0, display: "flex" }}>
                 <Icon name={FACE_META[face].icon} size={11} />
               </span>
-              <span style={{ flex: 1, minWidth: 0, overflow: "hidden",
+              <span className="aug-fs-chrome" style={{ flex: 1, minWidth: 0, overflow: "hidden",
                 textOverflow: "ellipsis", whiteSpace: "nowrap",
                 color: active ? "var(--t1)" : "var(--t2)" }}>{n.name}</span>
               <span style={{ color: "var(--t3)", flexShrink: 0,

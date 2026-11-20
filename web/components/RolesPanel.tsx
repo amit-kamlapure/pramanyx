@@ -42,7 +42,7 @@ function refusal(e: unknown): string {
 /** A refused write's reason, in the card whose write it was. */
 function Refused({ text }: { text: string | null }) {
   if (!text) return null;
-  return <div role="alert" className="aug-fs-xs" style={{ color: "var(--red4)", margin: "4px 0 8px" }}>{text}</div>;
+  return <div role="alert" className="aug-fs-sm" style={{ color: "var(--red4)", margin: "4px 0 8px" }}>{text}</div>;
 }
 
 const LIST_ROW = { ...ROW, gap: 10, padding: "7px 0", ...RULE, flexWrap: "nowrap" as const };
@@ -308,9 +308,9 @@ export function RolesPanel() {
           {roles.map((r, i) => (
             <div key={r.name} style={{ padding: "7px 0", ...(i ? RULE : {}) }}>
               <div style={{ ...ROW, gap: 10, flexWrap: "nowrap" }}>
-                <span className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: 500, minWidth: 64 }}>{roleName(r.name)}</span>
+                <span className="aug-fs-chrome" style={{ color: "var(--t1)", fontWeight: 500, minWidth: 64 }}>{roleName(r.name)}</span>
                 {me?.roles.includes(r.name) && <Chip tone="accent">you</Chip>}
-                <span className="aug-fs-xs" style={{ ...MUTED, ...ONE_LINE, flex: 1 }} title={r.description}>{r.description}</span>
+                <span className="aug-fs-sm" style={{ ...MUTED, ...ONE_LINE, flex: 1 }} title={r.description}>{r.description}</span>
                 {assignments && <span className="aug-fs-xs" style={{ ...MUTED, ...NUM, whiteSpace: "nowrap" }}>held by {heldBy(r.name)}</span>}
               </div>
               <Details label={plural(r.permissions.length, "permission")}>
@@ -347,8 +347,8 @@ export function RolesPanel() {
               <div key={g.id} style={{ ...RULE, padding: "7px 0" }}>
                 <div style={{ ...ROW, gap: 10, flexWrap: "nowrap" }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: 500 }}>{g.name}</div>
-                    <div className="aug-fs-xs" style={{ ...MUTED, ...ONE_LINE }}>
+                    <div className="aug-fs-chrome" style={{ color: "var(--t1)", fontWeight: 500 }}>{g.name}</div>
+                    <div className="aug-fs-sm" style={{ ...MUTED, ...ONE_LINE }}>
                       <span style={{ fontFamily: "var(--font-mono)" }}>group:{g.id}</span>
                       {" · "}{g.channel_trigger_id ? `→ ${triggerName(g.channel_trigger_id)}` : "no channel"}
                       {memberCounts[g.id] != null && <> · {plural(memberCounts[g.id]!, "member")}</>}
@@ -511,7 +511,7 @@ export function RolesPanel() {
               {(assignments && assignments.length > 0) ? (
                 assignments.map(a => (
                   <div key={`${a.user_id}:${a.role}`} style={LIST_ROW}>
-                    <span className="aug-fs-sm" style={{ flex: 1, color: "var(--t1)", ...ONE_LINE }}>{a.user_id}</span>
+                    <span className="aug-fs-chrome" style={{ flex: 1, color: "var(--t1)", ...ONE_LINE }}>{a.user_id}</span>
                     <Chip>{roleName(a.role)}</Chip>
                     <Button variant="ghost" size="xs" onClick={() => onRevoke(a.user_id, a.role)} disabled={busy}
                       title="Revoke this role">Revoke</Button>
@@ -534,7 +534,7 @@ export function RolesPanel() {
             ) : (
               au.users.map(u => (
                 <div key={u.user_id} style={LIST_ROW}>
-                  <span className="aug-fs-sm" style={{ flex: 1, color: "var(--t1)", ...ONE_LINE }}>{u.user_id}</span>
+                  <span className="aug-fs-chrome" style={{ flex: 1, color: "var(--t1)", ...ONE_LINE }}>{u.user_id}</span>
                   {u.roles.map(r => <Chip key={r}>{roleName(r)}</Chip>)}
                   <span className="aug-fs-xs" style={{ color: "var(--t2)", ...NUM, whiteSpace: "nowrap" }}>
                     {plural(u.calls, "call")}{u.cost_usd > 0 && <> · ${u.cost_usd.toFixed(2)}{!u.cost_is_complete && "+"}</>}

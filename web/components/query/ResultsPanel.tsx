@@ -813,13 +813,13 @@ export function ResultsPanel({
           </>
         )}
         {activeView === "profile" && (
-          <div className="aug-rview aug-fs-sm" data-testid="results-profile">
-            <p style={{ margin: "0 0 8px", color: "var(--t3)" }}>
+          <div className="aug-rview aug-fs-chrome" data-testid="results-profile">
+            <p className="aug-fs-sm" style={{ margin: "0 0 8px", color: "var(--t3)" }}>
               Every column of the {countNoun(rawRows.length, "loaded row")}{result.truncated ? " — the result was cut, so this is the loaded rows, not the whole result" : ""}.
               A row opens its column in the inspector.
             </p>
             <table>
-              <thead><tr>
+              <thead className="aug-fs-xs"><tr>
                 <th>Column</th><th>Type</th><th className="num">Empty</th><th className="num">Distinct</th>
                 <th className="num">Lowest</th><th className="num">Highest</th><th>Most common</th>
               </tr></thead>
@@ -845,35 +845,35 @@ export function ResultsPanel({
           </div>
         )}
         {activeView === "execution" && (
-          <div className="aug-rview aug-fs-sm" data-testid="results-execution">
+          <div className="aug-rview aug-fs-chrome" data-testid="results-execution">
             <table>
               <tbody>
-                <tr><th>Outcome</th><td>{result.error ? `Failed — ${result.error}` : "Succeeded"}</td></tr>
-                <tr><th>Took</th><td>{formatSeconds(result.duration_ms)}</td></tr>
-                <tr><th>Rows</th><td>{formatCount(result.row_count)}{result.truncated
+                <tr><th className="aug-fs-xs">Outcome</th><td>{result.error ? `Failed — ${result.error}` : "Succeeded"}</td></tr>
+                <tr><th className="aug-fs-xs">Took</th><td>{formatSeconds(result.duration_ms)}</td></tr>
+                <tr><th className="aug-fs-xs">Rows</th><td>{formatCount(result.row_count)}{result.truncated
                   ? ` — cut by ${result.cut_by === "budget" ? "the connection's row budget" : result.cut_by === "cap" ? "the connector's per-call cap" : "the row limit"}`
                   : " — the whole result"}</td></tr>
-                <tr><th>Served</th><td>{result.cached
+                <tr><th className="aug-fs-xs">Served</th><td>{result.cached
                   ? "From the result cache — not run again; when it was measured is not kept"
                   : `Run on the warehouse${readAt ? `, read ${utcDayWords(readAt, true)}` : ""}`}</td></tr>
-                <tr><th>Guards</th><td>{verdict ? <span title={verdict.title}>{verdict.text}</span> : "Not checked for this run"}</td></tr>
-                <tr><th>Receipt</th><td>{result.receipt_id
+                <tr><th className="aug-fs-xs">Guards</th><td>{verdict ? <span title={verdict.title}>{verdict.text}</span> : "Not checked for this run"}</td></tr>
+                <tr><th className="aug-fs-xs">Receipt</th><td>{result.receipt_id
                   ? <a href={`/receipt/${encodeURIComponent(result.receipt_id)}`} target="_blank" rel="noreferrer" className="aug-mono">{result.receipt_id}</a>
                   : "This run left no receipt"}</td></tr>
                 {result.params && Object.keys(result.params).length > 0 && (
-                  <tr><th>Bound values</th><td className="aug-mono">{Object.entries(result.params).map(([k2, v2]) => `${k2} = ${String(v2)}`).join(" · ")}</td></tr>
+                  <tr><th className="aug-fs-xs">Bound values</th><td className="aug-mono">{Object.entries(result.params).map(([k2, v2]) => `${k2} = ${String(v2)}`).join(" · ")}</td></tr>
                 )}
               </tbody>
             </table>
-            <div style={{ margin: "12px 0 4px", color: "var(--t3)" }}>The statement as it ran</div>
-            <pre className="aug-mono aug-fs-xs" style={{ margin: 0, padding: 10, background: "var(--bg-1)", border: "1px solid var(--b0)",
+            <div className="aug-fs-sm" style={{ margin: "12px 0 4px", color: "var(--t3)" }}>The statement as it ran</div>
+            <pre className="aug-mono aug-fs-sm" style={{ margin: 0, padding: 10, background: "var(--bg-1)", border: "1px solid var(--b0)",
               borderRadius: "var(--r2)", whiteSpace: "pre-wrap", color: "var(--t1)" }}>{result.sql}</pre>
           </div>
         )}
         {activeView === "logs" && (
-          <div className="aug-rview aug-fs-sm" data-testid="results-logs">
+          <div className="aug-rview aug-fs-chrome" data-testid="results-logs">
             <table>
-              <thead><tr><th>#</th><th>Statement</th><th className="num">Rows</th><th className="num">Took</th><th>Outcome</th></tr></thead>
+              <thead className="aug-fs-xs"><tr><th>#</th><th>Statement</th><th className="num">Rows</th><th className="num">Took</th><th>Outcome</th></tr></thead>
               <tbody>
                 {results.map((r, i) => (
                   <tr key={`log-${i}`} data-testid="results-log-row" onClick={() => onResultIdx(i)}
@@ -891,7 +891,7 @@ export function ResultsPanel({
               </tbody>
             </table>
             {caveats.length > 0 && (
-              <div style={{ marginTop: 10, color: "var(--amb4)" }}>{caveats.map((c, i) => <div key={`lc-${i}`}>{c}</div>)}</div>
+              <div className="aug-fs-sm" style={{ marginTop: 10, color: "var(--amb4)" }}>{caveats.map((c, i) => <div key={`lc-${i}`}>{c}</div>)}</div>
             )}
           </div>
         )}

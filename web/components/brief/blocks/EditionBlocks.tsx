@@ -137,8 +137,8 @@ function ContextBody({ block, src, ctx }: BodyProps) {
                                           color: running ? "var(--amb4)" : "var(--t3)" }}>{kicker}</div>
       <p className="aug-fs-h2" style={{ color: "var(--t1)", margin: 0 }}>{head}</p>
       {/* the work's own summary only when the edition wrote nothing of its own about it: both said the same thing twice */}
-      {more && (src.kind !== "analysis" || !block.text) && <p className="aug-fs-sm" style={{ color: "var(--t2)", margin: "6px 0 0" }}>{more}</p>}
-      {block.text && <p className="aug-fs-sm" style={{ margin: "8px 0 0" }}><CitedText text={block.text} onCite={ctx.onCite} /></p>}
+      {more && (src.kind !== "analysis" || !block.text) && <p className="aug-fs-ui" style={{ color: "var(--t2)", margin: "6px 0 0" }}>{more}</p>}
+      {block.text && <p className="aug-fs-ui" style={{ margin: "8px 0 0" }}><CitedText text={block.text} onCite={ctx.onCite} /></p>}
       {measuredBeforeWords(src) && (
         <p data-testid="edition-measured-before" className="aug-fs-sm" style={{ color: "var(--amb4)", margin: "8px 0 0" }}>{measuredBeforeWords(src)}</p>
       )}
@@ -231,7 +231,7 @@ const BODY: Record<BlockType, (p: BodyProps) => React.ReactNode> = {
           <div className="aug-fs-display" style={{ color: "var(--t1)", fontWeight: 600 }}>{fig.current_text}</div>
           {u && <div className="aug-fs-sm" style={{ color: "var(--t3)" }}>usual {u.low_text}–{u.high_text}</div>}
           {fig.previous_text && <div className="aug-fs-sm" style={{ color: "var(--t3)" }}>the range before {fig.previous_text}</div>}
-          {block.text && <p className="aug-fs-sm" style={{ margin: "8px 0 0" }}><CitedText text={block.text} onCite={ctx.onCite} /></p>}
+          {block.text && <p className="aug-fs-ui" style={{ margin: "8px 0 0" }}><CitedText text={block.text} onCite={ctx.onCite} /></p>}
         </div>
         <RangeBars figure={fig} period="week" />
       </div>
@@ -367,7 +367,7 @@ const BODY: Record<BlockType, (p: BodyProps) => React.ReactNode> = {
   },
   decision: p => <DecisionBody {...p} />,
   context: p => <ContextBody {...p} />,
-  quiet: ({ block, ctx }) => <p className="aug-fs-sm" style={{ color: "var(--t3)", margin: 0 }}><CitedText text={block.text} onCite={ctx.onCite} /></p>,
+  quiet: ({ block, ctx }) => <p className="aug-fs-ui" style={{ color: "var(--t3)", margin: 0 }}><CitedText text={block.text} onCite={ctx.onCite} /></p>,
 };
 
 /** The way back on a card a reader has drilled: each earlier version a button, back to the one the model wrote. */

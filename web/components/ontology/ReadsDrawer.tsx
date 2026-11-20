@@ -78,20 +78,20 @@ export function ReadsDrawer({ connectionId, schema, onClose }: {
               <li key={`reads:${row.entity}`} data-testid="ontology-reads-row"
                 style={{ listStyle: "none", padding: "8px 0", borderTop: RULE }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                  <span className="aug-fs-sm" style={{ color: "var(--t1)", overflow: "hidden", textOverflow: "ellipsis",
+                  <span className="aug-fs-chrome" style={{ color: "var(--t1)", overflow: "hidden", textOverflow: "ellipsis",
                                                        whiteSpace: "nowrap" }} title={row.object_type}>
                     {row.display_name}
                   </span>
                   {row.part_of && <span className="aug-tag aug-tag-gray">part</span>}
-                  <span className="aug-fs-sm" style={{ marginLeft: "auto", fontVariantNumeric: "tabular-nums",
+                  <span className="aug-fs-chrome" style={{ marginLeft: "auto", fontVariantNumeric: "tabular-nums",
                                                        color: row.reads == null ? "var(--t3)" : "var(--t1)" }}
                     data-testid="ontology-reads-count">
                     {row.reads == null ? "not counted" : countNoun(row.reads, "read")}
                   </span>
                 </div>
-                <div className="aug-fs-xs" style={{ color: "var(--t3)", marginTop: 2 }}>{metaOf(row, state.days)}</div>
+                <div className="aug-fs-sm" style={{ color: "var(--t3)", marginTop: 2 }}>{metaOf(row, state.days)}</div>
                 {row.shared_said && (
-                  <div className="aug-fs-xs" style={{ color: "var(--t3)", marginTop: 2 }}>Shared table: {row.shared_said}</div>
+                  <div className="aug-fs-sm" style={{ color: "var(--t3)", marginTop: 2 }}>Shared table: {row.shared_said}</div>
                 )}
               </li>
             ))}

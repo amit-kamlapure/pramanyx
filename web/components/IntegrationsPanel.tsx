@@ -102,7 +102,7 @@ function Fact({ name, children, mono }: { name: string; children: React.ReactNod
   return (
     <>
       <span className="aug-fs-xs" style={MUTED}>{name}</span>
-      <span className="aug-fs-xs" style={{ color: "var(--t2)", minWidth: 0, overflowWrap: "anywhere",
+      <span className="aug-fs-chrome" style={{ color: "var(--t2)", minWidth: 0, overflowWrap: "anywhere",
         fontFamily: mono ? "var(--font-mono)" : undefined }}>{children}</span>
     </>
   );
@@ -497,15 +497,15 @@ export function IntegrationsPanel() {
                 </Chip>
               )}
             </div>
-            {meta && <div className="aug-fs-xs" title={meta} style={{ ...MUTED, ...ONE_LINE }}>{meta}</div>}
+            {meta && <div className="aug-fs-sm" title={meta} style={{ ...MUTED, ...ONE_LINE }}>{meta}</div>}
             {!!p.withheld_products?.length && (
-              <div className="aug-fs-xs" data-testid={`integration-withheld-${p.id}`} style={{ color: "var(--amb4)" }}>
+              <div className="aug-fs-sm" data-testid={`integration-withheld-${p.id}`} style={{ color: "var(--amb4)" }}>
                 {`${p.name} did not grant ${p.withheld_products.join(", ")} on the last connect — connect that card again and `
                   + `tick its box on ${p.name}'s page.`}
               </div>
             )}
             {p.client_id_problem && (
-              <div className="aug-fs-xs" data-testid={`integration-client-problem-${p.id}`} style={{ color: "var(--amb4)" }}>
+              <div className="aug-fs-sm" data-testid={`integration-client-problem-${p.id}`} style={{ color: "var(--amb4)" }}>
                 {`${p.client_id_problem}. Edit the app to fix it — Connect is held until then.`}
               </div>
             )}
@@ -568,7 +568,7 @@ export function IntegrationsPanel() {
                   style={{ display: "grid", gridTemplateColumns: "20px minmax(0, 1fr) auto", gap: 8, alignItems: "center",
                     minHeight: 28 }}>
                   <BrandTile type={pr.name} size={20} />
-                  <span className="aug-fs-sm" title={about} style={{ ...ONE_LINE, color: "var(--t1)" }}>{pr.name}</span>
+                  <span className="aug-fs-chrome" title={about} style={{ ...ONE_LINE, color: "var(--t1)" }}>{pr.name}</span>
                   {pr.options?.length ? (
                     // A card with a choice (Gmail, 2026-11-15): what is granted, and the rest to choose from.
                     <span style={{ ...ROW, gap: 6, flexWrap: "nowrap" }}>
@@ -682,7 +682,7 @@ export function IntegrationsPanel() {
         {setupFor === p.id && (
           <div data-testid={`integration-setup-${p.id}`} style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8,
             ...RULE, paddingTop: 10, paddingLeft: 22 }}>
-            <div className="aug-fs-xs" style={MUTED}>
+            <div className="aug-fs-sm" style={MUTED}>
               {p.configured && "Replace the stored client — the current secret is never shown, only overwritten. "}
               {p.configured ? "Create or pick an OAuth client in " : "Create an OAuth client in "}
               <a href={p.console_url} target="_blank" rel="noreferrer" style={{ color: "var(--blue4)" }}>the {p.name} console</a>
@@ -691,7 +691,7 @@ export function IntegrationsPanel() {
             {/* Editable, and labelled: the redirect URI is the address the provider sends the browser BACK to — asked
                 for "the redirect URI" beside a console link, a reasonable person pastes the provider's address.
                 Saving it unchanged stores no override at all. */}
-            <div className="aug-fs-xs" style={MUTED}>
+            <div className="aug-fs-sm" style={MUTED}>
               Redirect URI — where {p.name} sends the browser <strong>back to Pramanyx</strong>; it must reach this API
               {p.https_only ? " over HTTPS (a tunnel is enough)" : ""} and match the console exactly.
             </div>
@@ -701,7 +701,7 @@ export function IntegrationsPanel() {
               placeholder={redirectUri}
               onChange={e => setCallback(e.target.value)} />
             {callback.trim() && callback.trim() !== redirectUri.trim() && (
-              <div className="aug-fs-xs" style={MUTED}>
+              <div className="aug-fs-sm" style={MUTED}>
                 Overrides the derived address ({redirectUri}) — the provider is sent this one, and the exchange uses the
                 same string.
               </div>
@@ -709,7 +709,7 @@ export function IntegrationsPanel() {
             {/* Said BEFORE the credentials are pasted, not after the provider's own error page. `https_only` is the
                 provider's own documented rule, carried as adapter data rather than assumed here. */}
             {p.https_only && redirectUri.startsWith("http://") && (
-              <div className="aug-fs-xs" style={{ color: "var(--amb4)" }}>
+              <div className="aug-fs-sm" style={{ color: "var(--amb4)" }}>
                 {p.name} refuses an <code>http://</code> redirect URL, localhost included — registering the URI above will
                 fail with “redirect_uri did not match”. Reach this API over HTTPS (a tunnel is enough), then register
                 that address instead.
@@ -735,7 +735,7 @@ export function IntegrationsPanel() {
               <Button variant="ghost" size="xs" onClick={() => setSetupFor(null)}>
                 Cancel
               </Button>
-              <span className="aug-fs-xs" style={MUTED}>
+              <span className="aug-fs-sm" style={MUTED}>
                 <Icon name="lock" size={11} /> Stored encrypted; the secret comes back masked and is never shown again.
               </span>
             </div>
@@ -780,7 +780,7 @@ export function IntegrationsPanel() {
                 </Chip>
               )}
             </div>
-            <div className="aug-fs-xs" title={meta} style={{ ...MUTED, ...ONE_LINE }}>{meta}</div>
+            <div className="aug-fs-sm" title={meta} style={{ ...MUTED, ...ONE_LINE }}>{meta}</div>
           </div>
           <div style={{ ...ROW, flexWrap: "nowrap", gap: 4 }}>
             <Button variant="ghost" size="xs" disabled={busy === b.id} aria-expanded={editing} onClick={() => openBotEdit(b)}>
@@ -841,7 +841,7 @@ export function IntegrationsPanel() {
               onChange={e => setBotDraft(d => ({ ...d, channel_id: e.target.value }))} />
             {/* AO-6 — rehearse: a post from an automation AS this bot waits in Attention for a person's click before it
                 reaches the channel, and a channel mention is answered in the asker's DM first. */}
-            <label className="aug-fs-xs" style={{ display: "inline-flex", alignItems: "center",
+            <label className="aug-fs-chrome" style={{ display: "inline-flex", alignItems: "center",
               gap: 6, color: "var(--t2)", cursor: "pointer" }}>
               <Checkbox checked={botDraft.rehearse}
                 onChange={e => setBotDraft(d => ({ ...d, rehearse: e.target.checked }))} />
@@ -853,7 +853,7 @@ export function IntegrationsPanel() {
                 onClick={() => saveBot(b, botDraft)}>
                 Save
               </Button>
-              <span className="aug-fs-xs" style={MUTED}>
+              <span className="aug-fs-sm" style={MUTED}>
                 A new agent or connection re-opens the socket within 30 seconds; a rename does not.
                 {` Slack member ID ${b.bot_user_id || "unknown"}.`}
               </span>
@@ -875,11 +875,11 @@ export function IntegrationsPanel() {
         {standalone && <Dot hue={keyIssued ? "green" : "grey"} />}
         <div style={{ minWidth: 0 }}>
           <div style={{ ...ROW, flexWrap: "nowrap" }}>
-            <span className={standalone ? "aug-fs-chrome" : "aug-fs-xs"}
+            <span className="aug-fs-chrome"
               style={standalone ? { fontWeight: 600, color: "var(--t1)" } : { color: "var(--t2)" }}>Supervisor key</span>
             <Chip tone={keyIssued ? "up" : "plain"}>{keyIssued ? "set" : "not set"}</Chip>
           </div>
-          <div className="aug-fs-xs" style={{ ...MUTED, ...ONE_LINE }}>Only for running it by hand; posting never uses it</div>
+          <div className="aug-fs-sm" style={{ ...MUTED, ...ONE_LINE }}>Only for running it by hand; posting never uses it</div>
         </div>
         <Button variant="secondary" size="xs" disabled={busy === "key"} onClick={() => void generateKey()}>
           {keyIssued ? "Regenerate" : "Generate"}
@@ -888,11 +888,11 @@ export function IntegrationsPanel() {
       {freshKey && (
         <div style={{ marginTop: 8, paddingLeft: standalone ? 22 : 0, display: "flex", flexDirection: "column", gap: 6 }}>
           {/* Shown ONCE. Re-reading returns a status, never the value, so this line is the only chance to copy it. */}
-          <code className="aug-fs-xs" style={{ padding: "6px 8px", background: "var(--bg-3)", borderRadius: "var(--r2)",
+          <code className="aug-fs-chrome" style={{ padding: "6px 8px", background: "var(--bg-3)", borderRadius: "var(--r2)",
             overflowWrap: "anywhere" }}>
             {freshKey}
           </code>
-          <div className="aug-fs-xs" style={{ color: "var(--amb4)" }}>
+          <div className="aug-fs-sm" style={{ color: "var(--amb4)" }}>
             Copy this now — it is shown once. Paste it into the bot supervisor&apos;s <code>.env.local</code>, then
             restart that process.{" "}
             {graceUntil
@@ -932,7 +932,7 @@ export function IntegrationsPanel() {
                   title="The process that keeps each bot's Slack socket open, so @mentions are answered">Supervisor</span>
                 <Chip tone={tone}>{SUPERVISOR_WORD[st].toLowerCase()}</Chip>
               </div>
-              {meta && <div className="aug-fs-xs" title={meta} style={{ ...MUTED, ...ONE_LINE }}>{meta}</div>}
+              {meta && <div className="aug-fs-sm" title={meta} style={{ ...MUTED, ...ONE_LINE }}>{meta}</div>}
             </div>
             <div style={{ ...ROW, flexWrap: "nowrap", gap: 4 }}>
               {supervisor.managed && (

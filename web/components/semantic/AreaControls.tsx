@@ -160,8 +160,8 @@ export function SuggestedAreas({ connId, schema, areas, onSaved }: {
       </span>
       {suggested.map((s) => (
         <span key={s.id} data-testid="suggested-area" style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-          <span className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: 500 }}>{s.label}</span>
-          <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>
+          <span className="aug-fs-chrome" style={{ color: "var(--t1)", fontWeight: 500 }}>{s.label}</span>
+          <span className="aug-fs-sm" style={{ color: "var(--t3)" }}>
             {countNoun(s.tables.length, "table")}{s.tables.length ? `: ${s.tables.slice(0, 4).join(", ")}${s.tables.length > 4 ? "…" : ""}` : ""}
           </span>
           <Button size="xs" variant="outline" disabled={!!busy} onClick={() => void declare(s)}>Declare it</Button>

@@ -695,7 +695,7 @@ function FlowEdges({
                     textAnchor="middle"
                     dominantBaseline="central"
                     fontSize={9}
-                    fontFamily="system-ui, sans-serif"
+                    style={{ fontFamily: "var(--font-ui)" }}
                     fill={isHovered ? hoverColor : baseColor}
                     fontStyle="italic"
                   >
@@ -716,7 +716,7 @@ function FlowEdges({
                   textAnchor="middle"
                   dominantBaseline="central"
                   fontSize={8}
-                  fontFamily="monospace"
+                  style={{ fontFamily: "var(--font-mono)" }}
                   fill={hoverColor}
                   opacity={0.75}
                 >

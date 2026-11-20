@@ -545,7 +545,7 @@ export function ForEachRows({ e, onChange }: {
     return (
       <div style={{ marginTop: 12 }}>
         <div style={{ ...labelStyle, marginBottom: 3 }}>For each</div>
-        <div className="aug-fs-xs" style={{ fontFamily: "var(--font-mono)",
+        <div className="aug-fs-chrome" style={{ fontFamily: "var(--font-mono)",
           color: "var(--chart-2)" }}>
           {bound ? refOf(source) : `${items.length} items · edited on the canvas`}
         </div>

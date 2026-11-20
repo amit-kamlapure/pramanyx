@@ -49,7 +49,7 @@ function StatRow({ label, value, sub, highlight }: StatRowProps) {
     <div className="flex items-baseline justify-between py-1.5 border-b border-white/5 last:border-0">
       <span className="text-xs text-zinc-400">{label}</span>
       <div className="text-right">
-        <span className={`text-xs font-mono ${valColor}`}>{value}</span>
+        <span className={`aug-fs-chrome font-mono ${valColor}`}>{value}</span>
         {sub && <span className="aug-fs-xs text-zinc-500 ml-1.5">{sub}</span>}
       </div>
     </div>
@@ -142,7 +142,7 @@ function Backend() {
   return (
     <Section title="Backend">
       <div className="py-2">
-        <p className="aug-fs-xs text-zinc-500 mb-2">
+        <p className="aug-fs-sm text-zinc-500 mb-2">
           Where this browser sends every request. Stored per browser — your data never leaves
           the machine running the backend.
         </p>
@@ -164,7 +164,7 @@ function Backend() {
           </Button>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="aug-fs-xs text-zinc-500">
+          <span className="aug-fs-sm text-zinc-500">
             In force: <span className="text-zinc-300">{effective}</span> — from {sourceLabel}.
           </span>
           {source === "user" && (
@@ -172,7 +172,7 @@ function Backend() {
           )}
         </div>
         {probe && (
-          <p className={`aug-fs-xs mt-1 ${probe.ok ? "text-emerald-400" : "text-amber-400"}`}>
+          <p className={`aug-fs-sm mt-1 ${probe.ok ? "text-emerald-400" : "text-amber-400"}`}>
             {probe.text}
           </p>
         )}
@@ -461,13 +461,13 @@ function FeatureFlags() {
         )}
       </div>
       {refusedChange && (
-        <p role="alert" className="text-xs pb-2" style={{ color: "var(--red3)" }}>{refusedChange}</p>
+        <p role="alert" className="aug-fs-sm pb-2" style={{ color: "var(--red3)" }}>{refusedChange}</p>
       )}
       {GROUPS.filter(g => byGroup.has(g.key)).map(g => (
         <details key={g.key} open={g.open || !!q} className="mb-2 last:mb-0">
           <summary className="cursor-pointer select-none list-none flex items-baseline gap-2 pt-1 pb-1.5">
-            <span className="text-[11px] font-medium uppercase tracking-wide" style={{ color: "var(--t3)" }}>{g.title}</span>
-            <span className="text-[11px]" style={{ color: "var(--t3)" }}>{byGroup.get(g.key)!.length}</span>
+            <span className="aug-fs-xs font-medium uppercase tracking-wide" style={{ color: "var(--t3)" }}>{g.title}</span>
+            <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>{byGroup.get(g.key)!.length}</span>
             <span className="aug-fs-xs leading-snug truncate" style={{ color: "var(--t3)" }}>— {g.hint}</span>
           </summary>
           {byGroup.get(g.key)!.map(([name, f]) => (
@@ -501,11 +501,11 @@ function FlagRow({ name, f, chip, busy, onToggle }: {
     <div className="flex items-start justify-between gap-4 py-2.5 border-b border-white/5 last:border-0">
       <div className="min-w-0">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-zinc-200">{f.label}</span>
+          <span className="aug-fs-chrome font-medium text-zinc-200">{f.label}</span>
           {chip && <Badge variant="outline">{chip}</Badge>}
         </div>
         {f.summary && (
-          <p className="aug-fs-xs mt-0.5 leading-snug" style={{ color: "var(--t2)" }}>{f.summary}</p>
+          <p className="aug-fs-sm mt-0.5 leading-snug" style={{ color: "var(--t2)" }}>{f.summary}</p>
         )}
         <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
           {(f.facts || []).map(x => (
@@ -522,8 +522,8 @@ function FlagRow({ name, f, chip, busy, onToggle }: {
         </div>
         {expanded && (
           <div className="mt-1.5 pl-2 border-l border-white/10">
-            <p className="aug-fs-xs leading-snug" style={{ color: "var(--t3)" }}>{f.description}</p>
-            <p className="text-[11px] font-mono mt-1" style={{ color: "var(--t3)" }}>{name} · {f.env_var}</p>
+            <p className="aug-fs-sm leading-snug" style={{ color: "var(--t3)" }}>{f.description}</p>
+            <p className="aug-fs-xs font-mono mt-1" style={{ color: "var(--t3)" }}>{name} · {f.env_var}</p>
           </div>
         )}
       </div>
@@ -554,14 +554,14 @@ function Toggle({ checked, disabled, onChange }: { checked: boolean; disabled?: 
 function GraduationEvidence({ g }: { g?: EvalGraduation }) {
   if (!g) {
     return (
-      <p className="aug-fs-xs pl-2 pb-1.5" style={{ color: "var(--t3)" }}>
+      <p className="aug-fs-sm pl-2 pb-1.5" style={{ color: "var(--t3)" }}>
         No evidence recorded yet.
       </p>
     );
   }
   const verdictColor = g.can_graduate ? "var(--grn4)" : "var(--amb4)";
   return (
-    <div className="aug-fs-xs pl-2 pb-1.5" style={{ color: "var(--t3)" }}>
+    <div className="aug-fs-sm pl-2 pb-1.5" style={{ color: "var(--t3)" }}>
       <span style={{ color: verdictColor, fontWeight: 500 }}>
         {g.can_graduate ? "evidence says: graduate" : "evidence says: not yet"}
       </span>

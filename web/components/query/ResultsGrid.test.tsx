@@ -50,9 +50,9 @@ describe("DE-5a — each column's declared type, and a row-number column", () =>
     const icon = head.querySelector("[data-column-type]") as HTMLElement;
     expect(icon.compareDocumentPosition(screen.getByText("total")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByText("BIGINT")).toBeNull();                         // no line of words under the name
-    // one font for both grids: the cells in the app's own, at the reading size, as a sheet's are
+    // one font for both grids: the cells in the app's own, at 13px, as a sheet's are
     expect(screen.getByText("Shipped").style.fontFamily).toBe("");
-    expect(screen.getAllByTestId("grid-col-head")[0].closest(".aug-fs-ui")).not.toBeNull();
+    expect(screen.getAllByTestId("grid-col-head")[0].closest(".aug-fs-chrome")).not.toBeNull();
     expect(screen.getByTestId("grid-rownum-header")).toHaveTextContent("#");
     expect(texts("grid-rownum")).toEqual(["1", "2", "3"]);
   });

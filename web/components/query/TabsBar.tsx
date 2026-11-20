@@ -156,7 +156,7 @@ export function TabsBar({
         onWheel={e => { if (strip.current && Math.abs(e.deltaY) > Math.abs(e.deltaX)) strip.current.scrollLeft += e.deltaY; }}
         style={{ display: "flex", alignItems: "stretch", gap: 2, flex: "0 1 auto", minWidth: 0, overflowX: "auto", overflowY: "hidden", scrollbarWidth: "thin" }}>
       {tabs.length === 0 && startLabel && (
-        <div role="tab" aria-selected tabIndex={0} data-testid="sql-start-tab" className="aug-folder-tab aug-fs-ui"
+        <div role="tab" aria-selected tabIndex={0} data-testid="sql-start-tab" className="aug-folder-tab aug-fs-chrome"
           style={{ display: "flex", alignItems: "center", flexShrink: 0, padding: "0 12px", ...OPEN_TAB }}>
           {startLabel}
         </div>
@@ -173,7 +173,7 @@ export function TabsBar({
             aria-label={t.status === "error" ? `${t.name}, the last run failed` : t.name}
             tabIndex={active ? 0 : -1}
             title={`${t.name} — double-click to rename`}
-            className="aug-folder-tab aug-fs-ui"
+            className="aug-folder-tab aug-fs-chrome"
             onClick={() => { if (editing !== t.id) onSelect(t.id); }}
             onDoubleClick={() => { setEditing(t.id); setDraftName(t.name); }}
             onKeyDown={e => {

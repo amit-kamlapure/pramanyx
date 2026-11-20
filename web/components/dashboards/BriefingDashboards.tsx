@@ -593,10 +593,10 @@ function NewDashboard({ connectionId, schema, sym, onKept, onClose, onBusy }: {
                     style={{ height: "auto", justifyContent: "flex-start", textAlign: "left", whiteSpace: "normal", padding: "8px 10px" }}>
                     <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
                       <span style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-                        <span className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: 500 }}>{x.name}</span>
+                        <span className="aug-fs-chrome" style={{ color: "var(--t1)", fontWeight: 500 }}>{x.name}</span>
                         <span className="aug-fs-xs" style={{ color: "var(--accent-11)" }}>{SHAPES[x.shape].label}</span>
                       </span>
-                      <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>{x.short}</span>
+                      <span className="aug-fs-sm" style={{ color: "var(--t3)" }}>{x.short}</span>
                     </span>
                   </Button>
                 ))}
@@ -753,7 +753,7 @@ function PublishPanel({ connectionId, dashboardId, publishedTo, draft = false, r
         : (
           <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 4 }}>
             {all.map(a => (
-              <li key={`${a.kind}:${a.id}`} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <li key={`${a.kind}:${a.id}`} className="aug-fs-chrome" style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <Checkbox checked={chosen.some(c => c.kind === a.kind && c.id === a.id)} disabled={busy}
                   aria-label={`Publish to ${a.name}`} onChange={e => toggle(a, e.target.checked)} />
                 <span>{a.name}</span>
@@ -1345,9 +1345,9 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
       </div>
       <ol data-testid="dashboard-history" style={{ listStyle: "none", margin: 0, padding: 0 }}>
         {data.history.map(v => (
-          <li key={v.artifact_id} className="aug-fs-sm" style={{ display: "flex", alignItems: "baseline", gap: 12, padding: "7px 0", borderBottom: "1px solid var(--b0)", color: "var(--t2)", flexWrap: "wrap" }}>
+          <li key={v.artifact_id} className="aug-fs-chrome" style={{ display: "flex", alignItems: "baseline", gap: 12, padding: "7px 0", borderBottom: "1px solid var(--b0)", color: "var(--t2)", flexWrap: "wrap" }}>
             <span style={{ color: "var(--t1)", fontWeight: 500, minWidth: 74 }}>Version {v.version}</span>
-            <span style={{ flex: 1, minWidth: 0 }}>
+            <span className="aug-fs-sm" style={{ flex: 1, minWidth: 0 }}>
               {/* Arc AP-6 — what it changed, in words; a server before the words says its counts, as before */}
               {v.said ? (v.said.length > 0 && (
                 <span data-testid="dashboard-history-said" style={{ display: "block", color: "var(--t1)" }}>{v.said.join(" · ")}</span>

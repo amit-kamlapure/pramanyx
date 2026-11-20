@@ -306,7 +306,7 @@ export function ObjectTimelinePiece({ elementKey, entity, set, setFrom, chooses,
               <g key={key} data-testid="object-timeline-lane" data-open={open || undefined} style={{ cursor: choice ? "pointer" : undefined }}
                 onClick={() => choice && pick(choice, on ? null : { objectType: page.object_type, typeId: page.type_id, pk: l.pk })}>
                 <rect x={0} y={y - 2} width={width} height={LANE_PX - 2} fill={on ? "var(--bg-sel)" : "transparent"} />
-                <text x={4} y={y + 13} fill="var(--t1)" style={{ font: "12px Inter, system-ui, sans-serif" }}>{l.name.length > 22 ? `${l.name.slice(0, 21)}…` : l.name}</text>
+                <text x={4} y={y + 13} fill="var(--t1)" style={{ font: "12px var(--font-ui)" }}>{l.name.length > 22 ? `${l.name.slice(0, 21)}…` : l.name}</text>
                 {l.from !== null && (
                   <rect x={x(l.from)} y={y + 3} width={Math.max(3, x(l.to ?? now) - x(l.from))} height={LANE_PX - 12} rx={3}
                     fill={open ? "var(--chart-deemph)" : "var(--chart-1)"} strokeDasharray={open ? "3 2" : undefined} stroke={open ? "var(--chart-1)" : undefined}>

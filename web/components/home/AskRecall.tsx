@@ -40,11 +40,11 @@ export function AskRecall({ connectionId, question, onOpen, onRunAgain }: {
   const since = found.count > 1 ? ` since ${shortDate(found.first_at)}` : "";
   return (
     <div data-testid="ask-recall" style={{ background: "var(--bg-3)", borderRadius: "var(--r2)", padding: "10px 12px" }}>
-      <div style={{ fontSize: 13, color: "var(--t1)" }}>
+      <div className="aug-fs-chrome" style={{ color: "var(--t1)" }}>
         {`Already on record: answered ${times}${since}, last on ${shortDate(found.last_at)}`}
       </div>
       {found.latest.headline && (
-        <div style={{ fontSize: 12, color: "var(--t2)", marginTop: 2, lineHeight: 1.5 }}>{found.latest.headline}</div>
+        <div className="aug-fs-sm" style={{ color: "var(--t2)", marginTop: 2, lineHeight: 1.5 }}>{found.latest.headline}</div>
       )}
       <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
         <Button size="sm" variant="outline" onClick={() => onOpen(found.latest!.id, found.latest!.kind)}>Open that answer</Button>

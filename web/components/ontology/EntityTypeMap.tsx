@@ -491,7 +491,7 @@ function TypeRail({ types, parts, selected, query, onQuery, onPick, processes, r
         <span style={{ display: "grid", gridTemplateColumns: "auto minmax(0, 1fr) auto", columnGap: 8, rowGap: 1, width: "100%",
                        textAlign: "left", alignItems: "center" }}>
           <IconSquare name={part ? "layers" : "node"} title={part ? "a part of another type" : "an entity type"} />
-          <span className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: current ? 600 : 500, overflow: "hidden",
+          <span className="aug-fs-chrome" style={{ color: "var(--t1)", fontWeight: current ? 600 : 500, overflow: "hidden",
                                                 textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {t.display_name}
           </span>
@@ -502,12 +502,12 @@ function TypeRail({ types, parts, selected, query, onQuery, onPick, processes, r
           {/* ON-8 — the connection on a line of its own: a name like "LuxExperience (explorer draft)" would push the key
               and the links off the rail's edge. */}
           {sources && t.connection_id && (
-            <span className="aug-fs-xs" data-testid="entity-rail-connection" title={`read from ${nameOf(sources, t.connection_id)}`}
+            <span className="aug-fs-sm" data-testid="entity-rail-connection" title={`read from ${nameOf(sources, t.connection_id)}`}
               style={{ gridColumn: "2 / -1", color: "var(--t3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               on {nameOf(sources, t.connection_id)}
             </span>
           )}
-          <span className="aug-fs-xs" style={{ gridColumn: "2 / -1", color: "var(--t3)" }}>
+          <span className="aug-fs-sm" style={{ gridColumn: "2 / -1", color: "var(--t3)" }}>
             {part ? `part of ${t.absorbed_into}` : (
               <>
                 <KeyMark verified={t.key_verified} />
@@ -587,8 +587,8 @@ function DeclarationRows({ processes, rules, openProcess, onPickProcess, onPickT
             title={`Open the ${p.display_name} process — its stages, timings and promises`}
             style={current ? { background: "var(--bg-hover)" } : undefined}>
             <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", minWidth: 0, gap: 1 }}>
-              <span className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: current ? 600 : 500 }}>{p.display_name}</span>
-              <span className="aug-fs-xs" style={{ color: p.verified === false ? "var(--red5)" : "var(--t3)" }}>
+              <span className="aug-fs-chrome" style={{ color: "var(--t1)", fontWeight: current ? 600 : 500 }}>{p.display_name}</span>
+              <span className="aug-fs-sm" style={{ color: p.verified === false ? "var(--red5)" : "var(--t3)" }}>
                 {p.entity} · {p.stages.length} stages
                 {p.promises.map((promise) => ` · ${promise.name} ${breachWords(promise.breach_rate)}`).join("")}
               </span>
@@ -614,8 +614,8 @@ function DeclarationRows({ processes, rules, openProcess, onPickProcess, onPickT
         <Button key={r.id} variant="plain" size="sm" onClick={() => onPickType(r.entity)} data-testid="entity-rail-rule"
           className="h-auto w-full justify-start py-1.5" title={`Open ${r.entity}, where ${r.display_name} reads as a segment`}>
           <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", minWidth: 0, gap: 1 }}>
-            <span className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: 500 }}>{r.display_name}</span>
-            <span className="aug-fs-xs" style={{ color: r.verified === false ? "var(--red5)" : "var(--t3)" }}>
+            <span className="aug-fs-chrome" style={{ color: "var(--t1)", fontWeight: 500 }}>{r.display_name}</span>
+            <span className="aug-fs-sm" style={{ color: r.verified === false ? "var(--red5)" : "var(--t3)" }}>
               {r.entity} · {r.admitted == null ? "not counted" : `admits ${formatCount(r.admitted)}`}
               {r.scopes?.length ? ` · scopes ${r.scopes.join(", ")}` : ""}
               {r.flags ? ` · ${r.flags} flagged` : ""}
@@ -714,10 +714,10 @@ function ExplorerDraft({ draft, explore, confirm, onOpen, reviewSignal = 0 }: {
                   <Button variant="minimal" size="xs" onClick={() => onOpen(p.object_type)}>Open</Button>
                 )}
               </div>
-              <div className="aug-fs-xs" style={{ ...MONO, color: "var(--t1)", overflowWrap: "anywhere", marginTop: 2 }}>
+              <div className="aug-fs-chrome" style={{ ...MONO, color: "var(--t1)", overflowWrap: "anywhere", marginTop: 2 }}>
                 {p.sentence}
               </div>
-              <div className="aug-fs-xs" style={{ color: "var(--t3)", lineHeight: 1.45, overflowWrap: "anywhere" }}
+              <div className="aug-fs-sm" style={{ color: "var(--t3)", lineHeight: 1.45, overflowWrap: "anywhere" }}
                 title={p.note}>
                 {p.tier === "refused" || !p.reason ? p.note : p.reason}
               </div>

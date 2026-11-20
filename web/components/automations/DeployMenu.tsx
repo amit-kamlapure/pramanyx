@@ -141,17 +141,17 @@ export function DeployMenu({ automationId, onChanged }: DeployMenuProps) {
                 </span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                    <span className="aug-fs-ui" style={{ fontWeight: 600 }}>{d.label}</span>
+                    <span className="aug-fs-chrome" style={{ fontWeight: 600 }}>{d.label}</span>
                     <span className="aug-fs-xs" style={{ color: STATE[d.state].color }}>
                       ● {STATE[d.state].label}
                     </span>
                     {d.detail && (
-                      <span className="aug-fs-xs" style={{ color: "var(--t3)", overflow: "hidden",
+                      <span className="aug-fs-sm" style={{ color: "var(--t3)", overflow: "hidden",
                         textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.detail}</span>
                     )}
                   </div>
                   {/* The server's sentence, verbatim — see this file's header. */}
-                  <div className="aug-fs-xs" style={{ color: "var(--t3)", marginTop: 2 }}>
+                  <div className="aug-fs-sm" style={{ color: "var(--t3)", marginTop: 2 }}>
                     {d.reason}
                   </div>
                   {d.kind === "webhook" && issued && (

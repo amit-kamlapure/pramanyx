@@ -349,7 +349,7 @@ export function CatalogTable({ connId, catalogName, schemaName, table, view, onA
                 : withUniqueKeys(about, f => f.id).map(([key, f], i) => (
                   <div key={key} data-testid="catalog-table-finding" style={{ padding: "8px 0", ...(i ? RULE : {}) }}>
                     <div style={{ ...ROW, flexWrap: "nowrap" }}>
-                      <span className="aug-fs-sm" title={f.question || f.angle} style={{ ...ONE_LINE, color: "var(--t1)", fontWeight: 500 }}>
+                      <span className="aug-fs-chrome" title={f.question || f.angle} style={{ ...ONE_LINE, color: "var(--t1)", fontWeight: 500 }}>
                         {f.angle && f.angle !== "pinned-question" ? f.angle : f.question || f.domain || "Finding"}
                       </span>
                       {f.domain && <Chip>{f.domain}</Chip>}
@@ -390,7 +390,7 @@ export function CatalogTable({ connId, catalogName, schemaName, table, view, onA
                         <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto" }}>
                           {lifecycle.states.map((s, i) => (
                             <div key={`${i}-${s.name}`} style={{ display: "contents" }}>
-                              <span className="aug-fs-sm" style={{ ...ROW, flexWrap: "nowrap", padding: "6px 0", ...(i ? RULE : {}) }}>
+                              <span className="aug-fs-chrome" style={{ ...ROW, flexWrap: "nowrap", padding: "6px 0", ...(i ? RULE : {}) }}>
                                 <Dot hue={s.ends ? "grey" : "blue"} />{s.name}
                               </span>
                               <span className="aug-fs-xs" style={{ ...MUTED, padding: "6px 0", textAlign: "right", ...(i ? RULE : {}) }}>
@@ -409,7 +409,7 @@ export function CatalogTable({ connId, catalogName, schemaName, table, view, onA
                     : readers === null ? <Empty>The metrics could not be read.</Empty>
                     : readers.length === 0 ? <Empty>No approved metric reads this table.</Empty>
                     : withUniqueKeys(readers, m => m.name).map(([key, m], i) => (
-                      <div key={key} className="aug-fs-sm" style={{ ...ROW, flexWrap: "nowrap", padding: "6px 0", ...(i ? RULE : {}) }}>
+                      <div key={key} className="aug-fs-chrome" style={{ ...ROW, flexWrap: "nowrap", padding: "6px 0", ...(i ? RULE : {}) }}>
                         <span style={{ ...ONE_LINE, color: "var(--t1)" }} title={m.name}>{m.label || m.name}</span>
                         <span className="aug-fs-xs" style={{ ...MUTED, marginLeft: "auto", whiteSpace: "nowrap" }}>
                           {m.owner ? `owner ${m.owner}` : "no owner recorded"}
@@ -431,7 +431,7 @@ export function CatalogTable({ connId, catalogName, schemaName, table, view, onA
               <Card label={`Runs over ${schemaName}`} testId="catalog-table-runs">
                 {ds ? (programLine(ds).length
                   ? programLine(ds).map((l, i) => (
-                    <div key={`${i}-${l}`} className="aug-fs-sm" style={{ color: "var(--t2)", padding: "6px 0", ...(i ? RULE : {}) }}>{l}</div>
+                    <div key={`${i}-${l}`} className="aug-fs-chrome" style={{ color: "var(--t2)", padding: "6px 0", ...(i ? RULE : {}) }}>{l}</div>
                   ))
                   : <Empty>Nothing has run over it yet.</Empty>)
                   : <Empty>{view === undefined ? "Reading…" : "Not read."}</Empty>}
@@ -502,7 +502,7 @@ function LineageView({ connId, table, schemaName, catalogName }: {
           : read.dependents.length === 0 ? <Empty>Nothing the platform knows of reads this table yet.</Empty>
           : (
             <>
-              <div className="aug-fs-sm" style={LINEAGE_GRID} data-testid="catalog-lineage-list">
+              <div className="aug-fs-chrome" style={LINEAGE_GRID} data-testid="catalog-lineage-list">
                 <span className="aug-fs-xs" style={LIST_HEAD}>Kind</span>
                 <span className="aug-fs-xs" style={LIST_HEAD}>Name</span>
                 <span className="aug-fs-xs" style={{ ...LIST_HEAD, textAlign: "right" }}>Hops</span>
@@ -574,7 +574,7 @@ function UsageView({ connId, table, catalogName }: { connId: string; table: stri
                 <div key={r.id} data-testid="catalog-usage-row" style={{ ...ROW, flexWrap: "nowrap", padding: "6px 0", ...(i ? RULE : {}) }}>
                   <span className="aug-fs-xs" style={{ ...MUTED, whiteSpace: "nowrap", width: 150, flexShrink: 0 }}>{utcDayWords(r.ts, true)}</span>
                   <span className="aug-fs-xs" style={{ ...MUTED, whiteSpace: "nowrap", width: 120, flexShrink: 0, ...ONE_LINE }}>{surfaceOf(r.hypothesis_id)}</span>
-                  <span className="aug-fs-sm" style={{ ...ONE_LINE, fontFamily: "var(--font-mono)", color: r.error ? "var(--red4)" : "var(--t2)" }}
+                  <span className="aug-fs-chrome" style={{ ...ONE_LINE, fontFamily: "var(--font-mono)", color: r.error ? "var(--red4)" : "var(--t2)" }}
                     title={r.error ? `${r.error}\n\n${r.sql_written || r.sql_full}` : r.sql_written || r.sql_full}>
                     {(r.sql_written || r.sql_full).replace(/\s+/g, " ")}
                   </span>
@@ -657,8 +657,8 @@ function ColumnsList({ cols, rows, loading, distMap, onSave, mode }: {
                     )}
                   </span>
                   <ColumnTypeIcon type={c.type} size={13} />
-                  <span className="aug-fs-sm" style={{ fontFamily: "var(--font-mono)", color: "var(--t1)", ...ONE_LINE }}>{c.name}</span>
-                  {means && <span className="aug-fs-xs" style={{ ...MUTED, ...ONE_LINE, maxWidth: 360 }}>{means}</span>}
+                  <span className="aug-fs-chrome" style={{ fontFamily: "var(--font-mono)", color: "var(--t1)", ...ONE_LINE }}>{c.name}</span>
+                  {means && <span className="aug-fs-sm" style={{ ...MUTED, ...ONE_LINE, maxWidth: 360 }}>{means}</span>}
                 </div>
                 {editing === c.name ? (
                   <div style={{ ...ROW, flexWrap: "nowrap", gap: 4 }}>

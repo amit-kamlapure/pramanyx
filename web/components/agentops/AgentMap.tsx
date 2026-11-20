@@ -85,7 +85,7 @@ function MapCard({ data }: { data: MapNodeData }) {
         <span style={{ color: meta.color, display: "flex" }}>
           <Icon name={meta.icon} size={12} />
         </span>
-        <span className={isAgent ? "aug-fs-sm" : "aug-fs-xs"}
+        <span className="aug-fs-chrome"
           style={{ color: "var(--t1)", fontWeight: 600, overflow: "hidden",
                    textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {node.title}
@@ -97,7 +97,7 @@ function MapCard({ data }: { data: MapNodeData }) {
       {/* A fact the reader must not have to infer — carried from the record, not coined
           here (Create Agent says the same thing in the same words on its own step). */}
       {node.warn && (
-        <div className="aug-fs-xs" style={{ color: "var(--amb5)", padding: "1px 9px 2px",
+        <div className="aug-fs-sm" style={{ color: "var(--amb5)", padding: "1px 9px 2px",
           lineHeight: 1.4 }}>
           {node.warn}
         </div>

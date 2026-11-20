@@ -75,9 +75,10 @@ function buildAntTheme(mode: "dark" | "light", grid = false, rowHeight = 36): Th
       // Brand (interaction accent)
       colorPrimary:         v("--blue3"),
       colorPrimaryHover:    v("--blue4"),
-      // Misc — grid stays Inter (text columns readable); numeric formatting keeps tabular alignment
-      fontSize:             12,
-      fontFamily:           "'Inter', system-ui, sans-serif",
+      // Misc — the page's own face and the row size every table has (2026-11-20: a cell is 13 on every page). The face was
+      // written 'Inter', a name the self-hosted font is never registered under, so these tables fell back to the system face.
+      fontSize:             13,
+      fontFamily:           "var(--font-ui)",
       borderRadius:         tokenPx("--r2", 6),   // the Theme's radius, as a control wears it
       borderRadiusSM:       tokenPx("--r1", 4),
       controlHeight:        30,
@@ -420,7 +421,7 @@ export function SqlResultTable({
         scroll={{ x: "max-content", y: maxHeight }}
         pagination={dataSource.length > 100 ? { pageSize: 100, size: "small", showSizeChanger: false } : false}
         summary={summary}
-        style={{ fontSize: 12 }}
+        style={{ fontSize: 13 }}
         locale={filtering ? { emptyText: "No rows match these filters" } : undefined}
         onChange={(_p, _f, sorter, extra) => {
           if (extra.action !== "sort") return;

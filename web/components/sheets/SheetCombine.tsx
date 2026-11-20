@@ -39,12 +39,12 @@ function Pick({ value, onChange, items, label }: {
 /** What a step has kept, as the card it folds into: the thing kept, and its counts. */
 function Kept({ title, lines }: { title: ReactNode; lines: ReactNode[] }) {
   return (
-    <div className="aug-fs-sm" style={{ display: "flex", flexDirection: "column", gap: 2, padding: "6px 8px",
+    <div className="aug-fs-chrome" style={{ display: "flex", flexDirection: "column", gap: 2, padding: "6px 8px",
       borderRadius: "var(--r2)", background: "var(--bg-1)" }}>
       <span>{title}</span>
       {lines.map((l, i) => (
         // the lines of one kept item, in their order
-        <span key={i} className="aug-fs-xs" style={MUTED}>{l}</span>
+        <span key={i} className="aug-fs-sm" style={MUTED}>{l}</span>
       ))}
     </div>
   );
@@ -57,7 +57,7 @@ function Step({ n, title, done, children }: { n: number; title: string; done?: s
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <span className="aug-fs-xs" style={{ width: 18, height: 18, borderRadius: "var(--r-pill)", background: "var(--bg-3)",
           display: "inline-flex", alignItems: "center", justifyContent: "center", ...NUM }}>{n}</span>
-        <b className="aug-fs-sm">{title}</b>
+        <b className="aug-fs-chrome">{title}</b>
         {done && <span style={{ marginLeft: "auto" }}><Chip tone="up">{done}</Chip></span>}
       </div>
       {children}
@@ -156,7 +156,7 @@ function LinkStep({ sheet, stored, others, onFail, onKept }: {
               <span className="aug-fs-xs" style={MUTED}>Bring in from {seen.other_name}:</span>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px" }}>
                 {seen.can_bring.map(c => (
-                  <label key={c.id} className="aug-fs-xs" style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                  <label key={c.id} className="aug-fs-chrome" style={{ display: "flex", gap: 4, alignItems: "center" }}>
                     <Checkbox checked={bring.has(c.id)} aria-label={c.name}
                       onChange={() => { const b = new Set(bring); if (b.has(c.id)) b.delete(c.id); else b.add(c.id); setBring(b); }} />
                     {c.name}
@@ -278,7 +278,7 @@ function MergeStep({ sheet, stored, onFail, onKept }: {
           {seen.file_columns_not_in_sheet.length > 0 && <span className="aug-fs-xs" style={MUTED}>Not in the sheet, not added:{" "}
             {seen.file_columns_not_in_sheet.join(", ")}</span>}
           {seen.changes.length > 0 && (
-            <div className="aug-fs-xs" style={{ maxHeight: 180, overflowY: "auto", background: "var(--bg-3)", borderRadius: "var(--r2)" }}>
+            <div className="aug-fs-chrome" style={{ maxHeight: 180, overflowY: "auto", background: "var(--bg-3)", borderRadius: "var(--r2)" }}>
               {seen.changes.map(c => (
                 <div key={`${c.row}-${c.column}`} style={{ padding: "3px 6px", borderBottom: "1px solid var(--b0)" }}>
                   <span style={MUTED}>{seen.key ? nameOf(seen.key) : "key"} {c.key} · {c.name}:</span>{" "}

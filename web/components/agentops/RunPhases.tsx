@@ -85,7 +85,7 @@ export function RunPhases({ runId, onResume }: {
 
   return (
     <div>
-      <div style={{ fontSize: 11, color: "var(--t2)", marginBottom: 12 }}>
+      <div className="aug-fs-xs" style={{ color: "var(--t2)", marginBottom: 12 }}>
         status {graph.status} · branch {graph.branch}
         {graph.checkpoint.exists
           ? ` · checkpoint step ${graph.checkpoint.step ?? "?"}${
@@ -101,8 +101,8 @@ export function RunPhases({ runId, onResume }: {
             const atGate = graph.interrupt.paused && graph.interrupt.gate === node;
             return (
               <span key={node} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                {i > 0 && <span style={{ color: "var(--t2)", fontSize: 11 }}>→</span>}
-                <span style={{ fontSize: 11, padding: "3px 7px",
+                {i > 0 && <span className="aug-fs-xs" style={{ color: "var(--t2)" }}>→</span>}
+                <span className="aug-fs-xs" style={{ padding: "3px 7px",
                   borderRadius: "var(--r2)",
                   border: `1px solid ${atGate ? "var(--amb3)" : "var(--b1)"}`,
                   background: atGate ? "var(--amb1)" : "var(--bg-1)",
@@ -122,13 +122,13 @@ export function RunPhases({ runId, onResume }: {
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {/* `phase_id` names the phase's KIND — a run can hold two of one kind. */}
           {withUniqueKeys(graph.phases, p => p.phase_id).map(([key, p]) => (
-            <div key={key} style={{ display: "flex", alignItems: "center",
-              gap: 8, fontSize: 12 }}>
+            <div key={key} className="aug-fs-chrome" style={{ display: "flex", alignItems: "center",
+              gap: 8 }}>
               <StatusChip hue={PHASE_HUE[p.status] ?? "muted"} strength="soft">
                 {p.status}
               </StatusChip>
               <span style={{ fontWeight: 500 }}>{p.phase_name}</span>
-              <span style={{ color: "var(--t3)", flex: 1, minWidth: 0,
+              <span className="aug-fs-sm" style={{ color: "var(--t3)", flex: 1, minWidth: 0,
                 overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {p.summary || p.skipped_reason || ""}
               </span>
@@ -136,7 +136,7 @@ export function RunPhases({ runId, onResume }: {
           ))}
         </div>
       ) : (
-        <div style={{ fontSize: 12, color: "var(--t3)" }}>
+        <div className="aug-fs-sm" style={{ color: "var(--t3)" }}>
           {graph.checkpoint.exists
             ? "No phases recorded yet."
             : "This run left no checkpoint — its phase history is not reconstructible."}
@@ -147,9 +147,9 @@ export function RunPhases({ runId, onResume }: {
         <div style={{ marginTop: 14, padding: 10, background: "var(--amb1)",
           border: "1px solid var(--amb2)", borderRadius: "var(--r2)",
           display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontSize: 12, color: "var(--amb5)", flex: 1 }}>
+          <span className="aug-fs-sm" style={{ color: "var(--amb5)", flex: 1 }}>
             Paused at{" "}
-            <code style={{ fontSize: 11 }} title={graph.interrupt.gate ?? undefined}>
+            <code className="aug-fs-xs" title={graph.interrupt.gate ?? undefined}>
               {nodeLabel(graph.interrupt.gate ?? "")}
             </code> —
             resume with feedback from the Agent view.

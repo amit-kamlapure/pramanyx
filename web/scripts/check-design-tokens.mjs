@@ -66,8 +66,9 @@ const SCALE = new Set([11, 12, 13, 14, 15, 18, 22, 28]);
  *  (2026-10-28): an off-path screen deleted with the flags (ROADMAP §3.65), measured. 456 → 453 (2026-11-06):
  *  measured while the Slack step's What gets posted panel was built on the type scale's classes. 453 → 446
  *  (2026-11-19): the chart editor redrawn channel by channel, on the type scale's classes. 446 → 445 (2026-11-20):
- *  the SQL Editor's pass that made borders the exception. */
-const FONT_SIZE_BASELINE = 445;
+ *  the SQL Editor's pass that made borders the exception. 445 → 290 (2026-11-20): every page's rows and cells put on
+ *  one size (13), the literals swapped for the scale's classes as they were touched. */
+const FONT_SIZE_BASELINE = 290;
 
 const RADIUS_RULES = [
   {

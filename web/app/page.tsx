@@ -539,7 +539,7 @@ function HomeScreen({
                     <NavIcon name={s.icon} size={13} color={s.accent} />
                     <div style={{ fontSize: 13, fontWeight: 600, color: "var(--t1)" }}>{s.title}</div>
                   </div>
-                  <div style={{ fontSize: 11, color: "var(--t3)", lineHeight: 1.5, flex: 1, marginBottom: 12 }}>{s.desc}</div>
+                  <div className="aug-fs-sm" style={{ color: "var(--t3)", lineHeight: 1.5, flex: 1, marginBottom: 12 }}>{s.desc}</div>
                   <button onClick={s.action} disabled={!!s.busy} style={{ alignSelf: "flex-start", fontSize: 11, fontWeight: 600, color: s.accent, background: s.accent + "14", border: `1px solid ${s.accent}44`, borderRadius: "var(--r2)", padding: "6px 12px", cursor: s.busy ? "progress" : "pointer", opacity: s.busy ? 0.6 : 1 }}>{s.cta} →</button>
                 </div>
               ))}
@@ -817,7 +817,7 @@ function DeleteConnModal({
           </div>
           <div>
             <div style={{ fontSize: 15, fontWeight: 600, color: "var(--t1)" }}>Remove connection</div>
-            <div style={{ fontSize: 11, color: "var(--t3)", marginTop: 3, lineHeight: 1.5 }}>
+            <div className="aug-fs-sm" style={{ color: "var(--t3)", marginTop: 3, lineHeight: 1.5 }}>
               This removes <span style={{ color: "var(--t2)" }}>{conn.name}</span> from Pramanyx. The database is not affected.
             </div>
           </div>

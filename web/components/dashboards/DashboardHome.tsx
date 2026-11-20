@@ -87,11 +87,12 @@ function Marks({ item }: { item: HomeItem }) {
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
       {item.pinned
-        ? <Chip testId="dashboard-pinned"><Icon name="pin" size={12} /> <span className="aug-fs-ui">Pinned</span></Chip>
-        : <span className="aug-fs-ui" style={{ color: "var(--t2)" }}>{item.state}</span>}
+        // a chip's words at the chip's own 11px, as every chip on every page; the state as a cell's 13 (2026-11-20)
+        ? <Chip testId="dashboard-pinned"><Icon name="pin" size={12} /> <span>Pinned</span></Chip>
+        : <span className="aug-fs-chrome" style={{ color: "var(--t2)" }}>{item.state}</span>}
       {item.mark && (
         <Chip tone={item.mark.status === "certified" ? "up" : "amber"} title={certificationTitle(item.mark)}>
-          <span className="aug-fs-ui">{item.mark.status === "certified" ? "Certified" : "Deprecated"}</span>
+          <span>{item.mark.status === "certified" ? "Certified" : "Deprecated"}</span>
         </Chip>
       )}
     </span>
@@ -119,7 +120,7 @@ function Name({ item, onOpen }: { item: HomeItem; onOpen: () => void }) {
   return (
     <Button variant="plain" size="xs" data-testid="dashboard-open" onClick={e => { e.stopPropagation(); onOpen(); }}
       title={item.title} style={{ minWidth: 0, maxWidth: "100%", justifyContent: "flex-start", paddingInline: 0, color: "var(--t1)", fontWeight: 600 }}>
-      <span className="aug-fs-ui" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.title}</span>
+      <span className="aug-fs-chrome" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.title}</span>
     </Button>
   );
 }
@@ -129,8 +130,9 @@ const CELL: CSSProperties = { padding: "8px 12px", borderBottom: "1px solid var(
 
 function ListView({ items, stars, onStar, onOpen }: ViewProps) {
   return (
-    <table className="aug-fs-ui" data-testid="dashboards-list" style={{ width: "100%", borderCollapse: "collapse" }}>
-      <thead><tr><th style={HEAD}>Name</th><th style={HEAD}>Modified</th><th style={HEAD}>Owner</th><th style={HEAD}>Status</th></tr></thead>
+    // every row and cell at 13px, the column heads at 11 — as every list on every page (the user, 2026-11-20)
+    <table className="aug-fs-chrome" data-testid="dashboards-list" style={{ width: "100%", borderCollapse: "collapse" }}>
+      <thead><tr className="aug-fs-xs"><th style={HEAD}>Name</th><th style={HEAD}>Modified</th><th style={HEAD}>Owner</th><th style={HEAD}>Status</th></tr></thead>
       <tbody>
         {items.map(item => (
           <tr key={item.id} data-testid="dashboard-row" data-id={item.id} {...lit()} onClick={() => onOpen(item.id)} style={{ cursor: "pointer" }}>
@@ -170,8 +172,8 @@ function DetailView({ items, stars, onStar, onOpen }: ViewProps) {
           <Miniature item={item} height={84} />
           <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
             <Name item={item} onOpen={() => onOpen(item.id)} />
-            {item.change && <div className="aug-fs-ui" style={{ color: "var(--t2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.change}</div>}
-            <div className="aug-fs-ui" style={{ color: "var(--t3)" }}>{facts(item)}</div>
+            {item.change && <div className="aug-fs-sm" style={{ color: "var(--t2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.change}</div>}
+            <div className="aug-fs-xs" style={{ color: "var(--t3)" }}>{facts(item)}</div>
           </div>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
             <Marks item={item} />
@@ -194,7 +196,7 @@ function GridView({ items, stars, onStar, onOpen }: ViewProps) {
             <span style={{ flex: 1, minWidth: 0, display: "flex" }}><Name item={item} onOpen={() => onOpen(item.id)} /></span>
             <Star item={item} on={stars.includes(item.id)} onToggle={() => onStar(item.id)} />
           </div>
-          <div className="aug-fs-ui" style={{ color: "var(--t3)" }}>{item.modifiedAt ? `${modifiedWords(item.modifiedAt)} · ` : ""}{item.owner}</div>
+          <div className="aug-fs-sm" style={{ color: "var(--t3)" }}>{item.modifiedAt ? `${modifiedWords(item.modifiedAt)} · ` : ""}{item.owner}</div>
           <Marks item={item} />
         </div>
       ))}

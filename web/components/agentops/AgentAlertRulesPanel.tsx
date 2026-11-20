@@ -245,7 +245,7 @@ export function AgentAlertRulesPanel({ agentId = "", agentName = "" }: {
                 {rule.severity}
               </StatusChip>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div className="aug-fs-ui" style={{ overflow: "hidden",
+                <div className="aug-fs-chrome" style={{ overflow: "hidden",
                   textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rule.name}</div>
                 <div className="aug-fs-sm" style={{ color: "var(--t2)", marginTop: 2 }}>
                   {METRIC_LABEL[rule.metric] ?? rule.metric}{" "}

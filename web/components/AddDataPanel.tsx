@@ -145,7 +145,7 @@ function ConnectorCard({ info, onClick }: { info: ConnectorTypeInfo; onClick: ()
             ? <span style={{ fontSize: 11, fontWeight: 600, padding: "1px 6px", borderRadius: 4, background: "color-mix(in srgb, var(--t3) 16%, transparent)", color: "var(--t3)", whiteSpace: "nowrap" }}>NOT INSTALLED</span>
             : m.badge && <span style={{ fontSize: 11, fontWeight: 600, padding: "1px 6px", borderRadius: 4, background: "color-mix(in srgb, var(--blue4,#60a5fa) 16%, transparent)", color: "var(--blue4,#60a5fa)", whiteSpace: "nowrap" }}>{m.badge}</span>}
         </span>
-        <span style={{ display: "block", fontSize: 11, color: "var(--t3)", marginTop: 1, lineHeight: 1.35 }}>{off ? missingNote(info) : m.blurb}</span>
+        <span className="aug-fs-sm" style={{ display: "block", color: "var(--t3)", marginTop: 1, lineHeight: 1.35 }}>{off ? missingNote(info) : m.blurb}</span>
       </span>
     </Button>
   );
@@ -394,7 +394,7 @@ function WorkspaceUploader({ onAdded, workspaceId }: {
                       the moment you override the select beside it — which is the only
                       confirmation this screen gives that a cast took. */}
                   <ColumnTypeIcon type={chosen[c.name] ?? detected} size={13} />
-                  <span style={{ flex: "1 1 0", minWidth: 0, fontSize: 12, fontWeight: 500, color: "var(--t1)", fontFamily: "var(--font-mono)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</span>
+                  <span className="aug-fs-chrome" style={{ flex: "1 1 0", minWidth: 0, fontWeight: 500, color: "var(--t1)", fontFamily: "var(--font-mono)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</span>
                   <span className="aug-fs-xs" style={{ color: "var(--t3)", fontFamily: "var(--font-mono)", flexShrink: 0 }}>{c.detected_type}</span>
                   {/* DE-5's hygiene: the reader would have made this column a number and changed its
                       values, so it is text — and the row SAYS so, rather than showing VARCHAR where
@@ -585,12 +585,12 @@ function WorkspaceUploader({ onAdded, workspaceId }: {
               {bulkResults.filter(r => r.status === "ok").length} added{bulkResults.some(r => r.status === "error") ? ` · ${bulkResults.filter(r => r.status === "error").length} failed` : ""} → {bulkSchema}
             </p>
             {bulkResults.map((r, i) => (
-              <div key={`${r.filename}-${i}`} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderTop: i ? "1px solid var(--b0)" : "none", fontSize: 12 }}>
+              <div key={`${r.filename}-${i}`} className="aug-fs-chrome" style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderTop: i ? "1px solid var(--b0)" : "none" }}>
                 <span style={{ color: r.status === "ok" ? "var(--grn4,#34d399)" : "var(--red4)", fontWeight: 700, flexShrink: 0 }}>{r.status === "ok" ? "✓" : "✕"}</span>
                 <span style={{ flex: 1, minWidth: 0, color: "var(--t2)", fontFamily: "var(--font-mono)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {r.filename}{r.status === "ok" && r.table_name ? ` → ${r.table_name}` : ""}
                 </span>
-                {r.status === "error" && <span style={{ color: "var(--red4)", fontSize: 11, flexShrink: 0 }}>{r.error}</span>}
+                {r.status === "error" && <span className="aug-fs-sm" style={{ color: "var(--red4)", flexShrink: 0 }}>{r.error}</span>}
               </div>
             ))}
           </div>
@@ -617,8 +617,8 @@ function WorkspaceUploader({ onAdded, workspaceId }: {
                         {f.extension.replace(".", "")}
                       </span>
                       <span style={{ minWidth: 0, flex: 1 }}>
-                        <span style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--t1)", fontFamily: "var(--font-mono)" }}>{f.table_name}</span>
-                        <span style={{ display: "block", fontSize: 11, color: "var(--t3)", marginTop: 1 }}>{f.filename} · {fmtBytes(f.size_bytes)}{f.column_types && Object.keys(f.column_types).length > 0 ? ` · ${Object.keys(f.column_types).length} typed` : ""}</span>
+                        <span className="aug-fs-chrome" style={{ display: "block", fontWeight: 600, color: "var(--t1)", fontFamily: "var(--font-mono)" }}>{f.table_name}</span>
+                        <span className="aug-fs-sm" style={{ display: "block", color: "var(--t3)", marginTop: 1 }}>{f.filename} · {fmtBytes(f.size_bytes)}{f.column_types && Object.keys(f.column_types).length > 0 ? ` · ${Object.keys(f.column_types).length} typed` : ""}</span>
                       </span>
                       <Button variant="plain" onClick={() => remove(f)} title="Remove table"
                         className={`h-auto p-0 ${SVG_SIZE_AUTO}`}

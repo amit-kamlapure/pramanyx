@@ -48,9 +48,9 @@ export function EditionEvidence({ source, used, onPick, onClose }: {
         </p>
         {used.map((s, i) => (
           <div key={s.id} style={{ padding: "8px 0", borderTop: RULE }}>
-            <span role="button" tabIndex={0} className="aug-fs-sm" style={{ color: "var(--t1)", cursor: "pointer" }}
+            <span role="button" tabIndex={0} className="aug-fs-chrome" style={{ color: "var(--t1)", cursor: "pointer" }}
               onClick={() => onPick(s.id)} onKeyDown={e => { if (e.key === "Enter") onPick(s.id); }}>{i + 1}. {s.label}</span>
-            <div className="aug-fs-xs" style={{ color: "var(--t3)" }}>{KIND[s.kind] ?? s.kind} · {s.rows.length} rows</div>
+            <div className="aug-fs-sm" style={{ color: "var(--t3)" }}>{KIND[s.kind] ?? s.kind} · {s.rows.length} rows</div>
           </div>
         ))}
       </div>

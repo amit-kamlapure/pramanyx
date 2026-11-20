@@ -41,7 +41,7 @@ export function ValueViewer({ value, column, declaredType, row, onClose }: {
   let body: React.ReactNode;
   if (!structured || raw) {
     body = (
-      <pre className="aug-fs-sm" data-testid="grid-value-text" style={{ ...mono, margin: 0, whiteSpace: "pre-wrap",
+      <pre className="aug-fs-chrome" data-testid="grid-value-text" style={{ ...mono, margin: 0, whiteSpace: "pre-wrap",
         wordBreak: "break-word", color: value === null ? "var(--t3)" : "var(--t2)" }}>
         {value === null || value === undefined ? NULL_GLYPH : kind.kind === "json" ? jsonLiteral(value) : text}
       </pre>
@@ -100,7 +100,7 @@ function JsonTree({ value }: { value: unknown }) {
     return next;
   });
   return (
-    <div className="aug-fs-sm" data-testid="json-tree" style={{ ...mono, color: "var(--t2)", lineHeight: 1.6 }}>
+    <div className="aug-fs-chrome" data-testid="json-tree" style={{ ...mono, color: "var(--t2)", lineHeight: 1.6 }}>
       <JsonNode name={null} value={value} path="$" depth={0} closed={closed} toggle={toggle} />
     </div>
   );

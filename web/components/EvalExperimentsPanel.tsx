@@ -194,7 +194,7 @@ function PairRow({ exp, first, verdict, suiteName, suite, labels, onOpen }: {
   const side = (s: "a" | "b") => {
     const r = exp[s];
     return (
-      <span className="aug-fs-sm" style={{ ...NUM, color: "var(--t2)" }}>
+      <span className="aug-fs-chrome" style={{ ...NUM, color: "var(--t2)" }}>
         {sideWords(exp.axis, s)}{" "}
         <span style={{ color: "var(--t1)", fontWeight: 600 }}>{r.pass_rate != null ? rate(r.pass_rate) : r.status}</span>
       </span>
@@ -211,10 +211,10 @@ function PairRow({ exp, first, verdict, suiteName, suite, labels, onOpen }: {
           <Chip>{exp.axis.kind}</Chip>
           {suite && measuresConsistency(suite) && <Chip title={suite.description}>consistency, not correctness</Chip>}
         </div>
-        <div className="aug-fs-xs" title={meta} style={{ ...MUTED, ...ONE_LINE }}>{meta}</div>
+        <div className="aug-fs-sm" title={meta} style={{ ...MUTED, ...ONE_LINE }}>{meta}</div>
       </div>
       <div style={{ ...ROW, flexWrap: "nowrap", gap: 6 }}>{side("a")}<span style={MUTED}>→</span>{side("b")}</div>
-      <span className="aug-fs-sm" title="B's pass rate minus A's, in percentage points"
+      <span className="aug-fs-chrome" title="B's pass rate minus A's, in percentage points"
         style={{ ...NUM, textAlign: "right", color: "var(--t1)" }}>{diff}</span>
       <Chip tone={chip.tone} title={chip.title} testId="experiment-verdict">{chip.text}</Chip>
       <Button size="xs" variant="ghost" onClick={onOpen}>Details</Button>
@@ -242,7 +242,7 @@ function CompareDetail({ cmp, exp, suiteName, suite, labels, verdict, onBack }: 
 
   const columns: TableColumnsType<Row> = [
     { title: "Question", dataIndex: "question", key: "question",
-      render: (v: string) => <span className="aug-fs-sm">{v || "—"}</span> },
+      render: (v: string) => <span className="aug-fs-chrome">{v || "—"}</span> },
     { title: A, dataIndex: "a", key: "a", width: 100,
       render: (v: string) => <Chip tone={VERDICT_TONE[v] ?? "plain"}>{v}</Chip> },
     { title: B, dataIndex: "b", key: "b", width: 100,
@@ -252,11 +252,11 @@ function CompareDetail({ cmp, exp, suiteName, suite, labels, verdict, onBack }: 
     { title: `SQL (${A} → ${B})`, key: "sql",
       render: (_: unknown, r: ExperimentCompareRow) => (
         (r.a_sql || r.b_sql)
-          ? <div className="aug-fs-xs" style={{ fontFamily: "var(--font-code)", maxWidth: 420 }}>
+          ? <div className="aug-fs-chrome" style={{ fontFamily: "var(--font-code)", maxWidth: 420 }}>
               <div title={r.a_sql} style={{ ...ONE_LINE, color: "var(--t2)" }}>{r.a_sql || "—"}</div>
               <div title={r.b_sql} style={{ ...ONE_LINE, color: "var(--t1)" }}>{r.b_sql || "—"}</div>
             </div>
-          : <span className="aug-fs-xs" style={MUTED} title={r.a_error || r.b_error}>
+          : <span className="aug-fs-chrome" style={MUTED} title={r.a_error || r.b_error}>
               {(r.a_error || r.b_error) ? (r.a_error || r.b_error).slice(0, 60) : "—"}
             </span>
       ) },

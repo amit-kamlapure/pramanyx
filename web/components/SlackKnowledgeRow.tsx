@@ -35,7 +35,7 @@ export function SlackKnowledgeRow({ botId }: { botId: string }) {
     : status.last_sync ? `${status.pages_indexed} channel-days read from ${status.channels.map(c => `#${c.name}`).join(", ") || "no channel"} · ${formatDateTime(status.last_sync)}`
     : "Not read yet. Only the channels the bot was invited to are read, and each is readable here by its members only.";
   return (
-    <div data-testid="slack-knowledge" className="aug-fs-xs" style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6, paddingLeft: 38, color: "var(--t2)" }}>
+    <div data-testid="slack-knowledge" className="aug-fs-sm" style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6, paddingLeft: 38, color: "var(--t2)" }}>
       <span style={{ flex: 1, minWidth: 0, color: status?.refused ? "var(--amb4)" : "var(--t2)" }}>{err || said}</span>
       <Button variant="outline" size="xs" disabled={busy} onClick={() => void go()}
         title="Read what was said in the channels this bot is in, readable here by each channel's members only">

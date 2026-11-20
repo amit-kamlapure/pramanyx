@@ -87,7 +87,7 @@ export function VolumesPanel({ catalogId }: { catalogId: string }) {
               style={{ padding: "9px 12px", cursor: "pointer", borderBottom: "0.5px solid var(--b0)",
                 background: v.id === selected ? "var(--bg-1)" : "transparent", display: "flex", alignItems: "center", gap: 8 }}>
               <IcoVolume />
-              <span style={{ fontSize: 12, color: "var(--t1)", fontWeight: v.id === selected ? 600 : 400 }}>{v.name}</span>
+              <span className="aug-fs-chrome" style={{ color: "var(--t1)", fontWeight: v.id === selected ? 600 : 400 }}>{v.name}</span>
             </div>
           ))}
         </div>
@@ -112,9 +112,9 @@ export function VolumesPanel({ catalogId }: { catalogId: string }) {
               {objects.length === 0 && <p style={{ padding: 20, fontSize: 12, color: "var(--t3)" }}>No objects. Upload a file to get started.</p>}
               {objects.map(o => (
                 <div key={o.id} style={{ display: "grid", gridTemplateColumns: "1fr 90px 130px 120px", padding: "10px 16px", borderBottom: "0.5px solid var(--b0)", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontSize: 12, color: "var(--t1)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.name}</span>
-                  <span style={{ fontSize: 11, color: "var(--t3)", textAlign: "right" }}>{fmtBytes(o.size_bytes)}</span>
-                  <span style={{ fontSize: 11, color: "var(--t3)" }}>{o.mime_type}</span>
+                  <span className="aug-fs-chrome" style={{ color: "var(--t1)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.name}</span>
+                  <span className="aug-fs-xs" style={{ color: "var(--t3)", textAlign: "right" }}>{fmtBytes(o.size_bytes)}</span>
+                  <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>{o.mime_type}</span>
                   <span style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
                     <a href={volumeObjectContentUrl(selected, o.id)} target="_blank" rel="noreferrer"
                       style={{ fontSize: 11, color: "var(--blue4)", textDecoration: "none" }}>Download</a>
@@ -171,7 +171,7 @@ export function PermissionsPanel({ catalogId }: { catalogId: string }) {
       </div>
       {rows.map(({ ws, member, granted }) => (
         <div key={ws.id} style={{ display: "grid", gridTemplateColumns: "1fr 160px 110px", padding: "11px 4px", borderBottom: "0.5px solid var(--b0)", alignItems: "center" }}>
-          <span style={{ fontSize: 12, color: "var(--t1)" }}>{ws.name}{ws.is_default ? " (default)" : ""}</span>
+          <span className="aug-fs-chrome" style={{ color: "var(--t1)" }}>{ws.name}{ws.is_default ? " (default)" : ""}</span>
           <span style={{ display: "flex", gap: 6 }}>
             {member && <span className="aug-tag aug-tag-blue" style={{ fontSize: 11 }}>Member</span>}
             {granted && <span className="aug-tag aug-tag-green" style={{ fontSize: 11 }}>Granted</span>}

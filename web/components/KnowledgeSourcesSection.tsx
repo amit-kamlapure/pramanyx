@@ -146,7 +146,7 @@ export function KnowledgeSourcesSection({ onSources }: {
               <Chip>{s.conn_type === "confluence" ? "Confluence" : "Notion"}</Chip>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div className="aug-fs-chrome" style={{ ...ONE_LINE, color: "var(--t1)", fontWeight: 500 }}>{s.name}</div>
-                <div className="aug-fs-xs" style={{ ...(s.error ? { color: "var(--red4)" } : MUTED), ...ONE_LINE }} title={s.error}>
+                <div className="aug-fs-sm" style={{ ...(s.error ? { color: "var(--red4)" } : MUTED), ...ONE_LINE }} title={s.error}>
                   {s.error ? s.error
                     : <>last sync {s.status?.last_sync ? `${relTime(s.status.last_sync)} ago` : "never"}
                         {pages != null && <> · {pages} pages indexed</>}
@@ -166,7 +166,7 @@ export function KnowledgeSourcesSection({ onSources }: {
                 </summary>
                 <ul style={{ margin: "4px 0 0", padding: 0, listStyle: "none" }}>
                   {skipped.map((p, k) => (
-                    <li key={`${p.url}:${k}`} className="aug-fs-xs" style={MUTED}>
+                    <li key={`${p.url}:${k}`} className="aug-fs-sm" style={MUTED}>
                       {p.url ? <a href={p.url} target="_blank" rel="noreferrer" style={{ color: "var(--t1)" }}>{p.title}</a>
                         : <span style={{ color: "var(--t1)" }}>{p.title}</span>} — {p.reason}
                     </li>

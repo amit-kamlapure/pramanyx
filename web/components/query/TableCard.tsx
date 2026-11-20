@@ -60,11 +60,11 @@ export function TableCard({ table, onPreview }: { table: CatalogTable; onPreview
           <Icon name={copied ? "check" : "copy"} size={14} />
         </Button>
       </div>
-      <dl className="aug-fs-sm" style={{ display: "grid", gridTemplateColumns: "max-content 1fr", gap: "4px 16px", margin: 0 }}>
+      <dl style={{ display: "grid", gridTemplateColumns: "max-content 1fr", gap: "4px 16px", margin: 0, alignItems: "baseline" }}>
         {tableFacts(table).map(([label, value]) => (
           <div key={label} style={{ display: "contents" }}>
-            <dt style={MUTED}>{label}</dt>
-            <dd style={{ margin: 0, color: "var(--t1)", ...NUM }}>{value}</dd>
+            <dt className="aug-fs-xs" style={MUTED}>{label}</dt>
+            <dd className="aug-fs-chrome" style={{ margin: 0, color: "var(--t1)", ...NUM }}>{value}</dd>
           </div>
         ))}
       </dl>

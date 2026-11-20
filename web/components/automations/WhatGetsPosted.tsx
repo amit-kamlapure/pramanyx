@@ -135,7 +135,7 @@ export function WhatGetsPosted({ automationId, index, e, siblings, onChange, onO
         {question && (
           <section style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <span className="aug-fs-xs" style={sectionLabel}>The question it answers · {sourceAlias}</span>
-            <div className="aug-fs-sm" style={{ color: "var(--t2)", background: "var(--gray-a3)", padding: "8px 10px", borderRadius: "var(--r2)" }}>{question}</div>
+            <div className="aug-fs-chrome" style={{ color: "var(--t2)", background: "var(--gray-a3)", padding: "8px 10px", borderRadius: "var(--r2)" }}>{question}</div>
             {onOpenStep && (
               <div><Button size="xs" variant="secondary" onClick={() => onOpenStep(sourceAlias)}>Edit the question</Button></div>
             )}
@@ -191,9 +191,9 @@ export function WhatGetsPosted({ automationId, index, e, siblings, onChange, onO
               {!!preview?.results?.length && (
                 <ol style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 4 }}>
                   {preview.results.map((r, i) => (
-                    <li key={i} className="aug-fs-xs" style={{ color: chosen.has(i) ? "var(--t1)" : "var(--t3)",
+                    <li key={i} className="aug-fs-chrome" style={{ color: chosen.has(i) ? "var(--t1)" : "var(--t3)",
                       fontWeight: chosen.has(i) ? 500 : 400 }}>
-                      {r.claim || r.columns.join(", ")} <span style={{ color: "var(--t3)", fontWeight: 400 }}>· {r.rows} row{r.rows === 1 ? "" : "s"}</span>
+                      {r.claim || r.columns.join(", ")} <span className="aug-fs-xs" style={{ color: "var(--t3)", fontWeight: 400 }}>· {r.rows} row{r.rows === 1 ? "" : "s"}</span>
                     </li>
                   ))}
                 </ol>

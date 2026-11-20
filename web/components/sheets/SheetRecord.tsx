@@ -118,7 +118,7 @@ export function SheetRecordPanel({ sheet, row, editable, onClose, onOpenSheet, o
                   <div key={f.column} title={f.description || undefined} style={{ display: "grid",
                     gridTemplateColumns: "140px 1fr", gap: 8, padding: "6px 0", borderBottom: "1px solid var(--b0)" }}>
                     <span className="aug-mono aug-fs-xs" style={{ ...MUTED, overflow: "hidden", textOverflow: "ellipsis" }}>{f.name}</span>
-                    <span className="aug-fs-sm" style={{ minWidth: 0 }}>
+                    <span className="aug-fs-chrome" style={{ minWidth: 0 }}>
                       <span style={{ display: "block", overflowWrap: "anywhere" }}>
                         {f.value === null || f.value === undefined || f.value === "" ? <span style={MUTED}>empty</span>
                           : col ? showValue(f.value, col) : String(f.value)}
@@ -156,10 +156,10 @@ export function SheetRecordPanel({ sheet, row, editable, onClose, onOpenSheet, o
                   </Button>
                 )}
               </div>
-              <div className="aug-fs-sm" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <div className="aug-fs-chrome" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 <span style={MUTED}>{rec.came_from.replace(/^imported/, "Imported")}{rec.history.length ? "" : " · not changed since."}</span>
                 {rec.history.map(h => (
-                  <span key={`${h.at}-${h.column}-${h.event}`} className="aug-fs-xs">
+                  <span key={`${h.at}-${h.column}-${h.event}`}>
                     {h.column ? <b>{h.column}</b> : "the row"}{" "}
                     {h.event === "set" ? (h.column ? `set to ${String(h.value ?? "empty")}` : String(h.value ?? "")) : "back to its source's value"}
                     {" "}· {who(h.by)} · {formatTimestamp(h.at, "short")}
@@ -176,7 +176,7 @@ export function SheetRecordPanel({ sheet, row, editable, onClose, onOpenSheet, o
                   readable by whoever can read this row.</div>
               )}
               {rec.comments.map(c => (
-                <div key={c.id || c.at} className="aug-fs-sm" style={{ padding: "6px 0", borderBottom: "1px solid var(--b0)" }}>
+                <div key={c.id || c.at} className="aug-fs-chrome" style={{ padding: "6px 0", borderBottom: "1px solid var(--b0)" }}>
                   <div>{c.text}</div>
                   <div className="aug-fs-xs" style={MUTED}>{who(c.by)} · {formatTimestamp(c.at, "short")} · a said claim in the Record</div>
                 </div>
@@ -212,14 +212,14 @@ function LinkedCard({ row, columns, kinds, values }: {
     <div style={{ background: "var(--bg-2)", border: "1px solid var(--card-edge)", borderRadius: "var(--r2)", padding: "8px 10px",
       display: "flex", flexDirection: "column", gap: 4 }}>
       <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
-        <b className="aug-fs-sm aug-mono" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{show(0) || "—"}</b>
+        <b className="aug-fs-chrome aug-mono" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{show(0) || "—"}</b>
         <span className="aug-fs-xs" style={{ ...MUTED, ...NUM, marginLeft: "auto" }}>row {formatCount(row)}</span>
       </div>
       <div className="aug-fs-xs" style={{ display: "grid", gridTemplateColumns: "max-content 1fr", gap: "2px 10px" }}>
         {columns.slice(1).map((name, j) => show(j + 1) && (
           <span key={name} style={{ display: "contents" }}>
             <span style={MUTED}>{name}</span>
-            <span style={{ overflowWrap: "anywhere" }}>{show(j + 1)}</span>
+            <span className="aug-fs-chrome" style={{ overflowWrap: "anywhere" }}>{show(j + 1)}</span>
           </span>
         ))}
       </div>

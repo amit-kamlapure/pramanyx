@@ -383,13 +383,13 @@ export function ConnectionGraphPanel({ connectionId, schema, onInvestigate: onAs
                         <span style={{ minWidth: 0 }}>
                           <span className="aug-fs-chrome" style={{ display: "block", color: "var(--t1)", fontWeight: 500 }}>{d.label}</span>
                           {joined.length > 0 && (
-                            <span className="aug-fs-xs" style={{ ...MUTED, ...ONE_LINE, display: "block" }}
+                            <span className="aug-fs-sm" style={{ ...MUTED, ...ONE_LINE, display: "block" }}
                               title={joined.map((j) => `${countNoun(j.count, "cross-domain join")} to ${j.other}`).join(" · ")}>
                               joins {joined.map((j) => (j.count > 1 ? `${j.other} ×${j.count}` : j.other)).join(", ")}
                             </span>
                           )}
                         </span>
-                        <span className="aug-fs-sm" style={{ ...NUM, color: "var(--t2)" }}>{countNoun(d.table_count, "table")}</span>
+                        <span className="aug-fs-xs" style={{ ...NUM, color: "var(--t2)" }}>{countNoun(d.table_count, "table")}</span>
                       </Button>
                     );
                   })}
@@ -405,7 +405,7 @@ export function ConnectionGraphPanel({ connectionId, schema, onInvestigate: onAs
                         style={{ ...rowButtonStyle(false, { display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 12 }), ...(i === 0 ? { borderTop: 0 } : {}) }}>
                         <span style={{ minWidth: 0 }}>
                           <span className="aug-fs-chrome" style={{ display: "block", color: "var(--t1)", fontWeight: 500 }}>{nodeName(t)}</span>
-                          {t.summary && <span className="aug-fs-xs" style={{ ...MUTED, ...ONE_LINE, display: "block" }} title={t.summary}>{t.summary}</span>}
+                          {t.summary && <span className="aug-fs-sm" style={{ ...MUTED, ...ONE_LINE, display: "block" }} title={t.summary}>{t.summary}</span>}
                         </span>
                         <span className="aug-fs-xs" style={{ ...MUTED, ...NUM }}>
                           {[countNoun(columnsFor(t.id).length, "column"),
@@ -608,7 +608,7 @@ function AtRest({ graph, review, reviewError, audit, auditError, driftShown, onR
                 <div key={g.items[0].id} style={{ ...ROW, flexWrap: "nowrap", alignItems: "flex-start", padding: "7px 0", ...(i ? RULE : {}) }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div className="aug-fs-chrome" title={first.question} style={{ ...ONE_LINE, color: "var(--t1)", fontWeight: 500 }}>{name}</div>
-                    <div className="aug-fs-xs" title={first.why} style={{ ...ONE_LINE, color: "var(--t3)" }}>
+                    <div className="aug-fs-sm" title={first.why} style={{ ...ONE_LINE, color: "var(--t3)" }}>
                       <span style={{ color: KIND_TONE[first.type] ?? "var(--t3)" }}>{reviewWord(first.type)}</span>
                       {first.depends > 0 && ` · ${dependsWords(first.depends)}`}
                     </div>
@@ -624,7 +624,7 @@ function AtRest({ graph, review, reviewError, audit, auditError, driftShown, onR
                   <div className="aug-fs-chrome" style={{ color: KIND_TONE[first.type] ?? "var(--t1)", fontWeight: 500 }}>
                     <span style={NUM}>{formatCount(g.items.length)}</span> {reviewWord(g.type, g.items.length).toLowerCase()}
                   </div>
-                  <div className="aug-fs-xs" title={g.why ?? first.why} style={{ ...ONE_LINE, color: "var(--t3)" }}>
+                  <div className="aug-fs-sm" title={g.why ?? first.why} style={{ ...ONE_LINE, color: "var(--t3)" }}>
                     {names.join(", ")}{g.items.length > names.length ? ` +${formatCount(g.items.length - names.length)}` : ""}
                   </div>
                 </div>
@@ -711,7 +711,7 @@ function NodeEssentials({ n, graph, trust, trustError, joins, findings, builtOn,
           <Label right={formatCount(joins.length)}>Joins</Label>
           {joins.length === 0 ? <Empty>No joins.</Empty> : joins.map((j, i) => (
             <div key={j.id} style={{ ...ROW, padding: "5px 0", ...(i ? RULE : {}) }}>
-              <span className="aug-fs-sm" style={{ color: "var(--t1)" }}>→ {j.other}</span>
+              <span className="aug-fs-chrome" style={{ color: "var(--t1)" }}>→ {j.other}</span>
               <WarrantChip warrant={j.warrant} showDetail />
             </div>
           ))}
@@ -727,7 +727,7 @@ function ManyChosen({ nodes, onAsk }: { nodes: CGNode[]; onAsk?: (q: string) => 
     <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "12px 14px 14px" }} data-testid="graph-chosen">
       <Label right={formatCount(nodes.length)}>Chosen</Label>
       {nodes.map((n) => (
-        <div key={n.id} className="aug-fs-sm" style={{ ...ROW, flexWrap: "nowrap", color: "var(--t1)" }}>
+        <div key={n.id} className="aug-fs-chrome" style={{ ...ROW, flexWrap: "nowrap", color: "var(--t1)" }}>
           <Dot color={KIND_HUE[n.kind] ?? KIND_HUE.domain} title={KIND_WORD[n.kind] ?? n.kind} />
           <span style={ONE_LINE} title={n.label}>{nodeName(n)}</span>
         </div>
@@ -803,7 +803,7 @@ function TablePage({ t, trust, trustError, joins, findings, terms, cols, tags, d
           <Label right={formatCount(joins.length)}>Joins</Label>
           {joins.map((j, i) => (
             <div key={j.id} style={{ ...ROW, padding: "5px 0", ...(i ? RULE : {}) }}>
-              <span className="aug-fs-sm" style={{ color: "var(--t1)" }}>→ {j.other}</span>
+              <span className="aug-fs-chrome" style={{ color: "var(--t1)" }}>→ {j.other}</span>
               <WarrantChip warrant={j.warrant} showDetail />
             </div>
           ))}
@@ -816,7 +816,7 @@ function TablePage({ t, trust, trustError, joins, findings, terms, cols, tags, d
             Findings on this table
           </Label>
           {shownFindings.map((f, i) => (
-            <div key={f.id} className="aug-fs-sm" style={{ ...ROW, flexWrap: "nowrap", alignItems: "flex-start", padding: "5px 0", ...(i ? RULE : {}) }}>
+            <div key={f.id} className="aug-fs-chrome" style={{ ...ROW, flexWrap: "nowrap", alignItems: "flex-start", padding: "5px 0", ...(i ? RULE : {}) }}>
               {!oneFindingWarrant && <WarrantChip warrant={f.warrant} />}
               <span style={{ color: "var(--t2)", lineHeight: 1.55 }}>{f.summary || f.label}</span>
             </div>
@@ -837,7 +837,7 @@ function TablePage({ t, trust, trustError, joins, findings, terms, cols, tags, d
           <div className="aug-fs-sm" style={{ display: "grid", gridTemplateColumns: "minmax(120px, max-content) minmax(0, 1fr)", gap: "4px 16px" }}>
             {shownLines.map((l) => (
               <React.Fragment key={l.key}>
-                <code className="aug-fs-xs" style={{ color: "var(--t1)", fontFamily: "var(--font-mono)" }}>{l.name}</code>
+                <code className="aug-fs-chrome" style={{ color: "var(--t1)", fontFamily: "var(--font-mono)" }}>{l.name}</code>
                 <span style={{ color: "var(--t3)", minWidth: 0 }} title={l.term?.warrant ? `${l.term.warrant.label}: ${l.term.summary}` : undefined}>
                   {l.term?.summary || ""}
                 </span>
@@ -899,12 +899,12 @@ function DependentsFold({ connectionId, schema, nodeId }: {
       {open && lineage.dependents.map((d, i) => (
         <div key={d.node_id} style={{ ...ROW, flexWrap: "nowrap", padding: "5px 0", ...(i ? RULE : {}) }}>
           <Dot color={KIND_HUE[d.kind] ?? KIND_HUE.domain} title={KIND_WORD[d.kind] ?? d.kind} />
-          <span className="aug-fs-sm" style={{ ...ONE_LINE, color: "var(--t1)", maxWidth: 340, flexShrink: 0 }} title={d.label}>{d.label}</span>
+          <span className="aug-fs-chrome" style={{ ...ONE_LINE, color: "var(--t1)", maxWidth: 340, flexShrink: 0 }} title={d.label}>{d.label}</span>
           {d.site && (
             // One line, ellipsised, full text on hover. Sites run to 200 characters of SQL; rendered in full they
             // wrapped to their own row and the list stopped being scannable — which defeats the point, since this
             // exists to be skimmed for the one artifact worth opening.
-            <code className="aug-fs-xs" title={`${d.site_line > 0 ? `line ${d.site_line}: ` : ""}${d.site}`}
+            <code className="aug-fs-sm" title={`${d.site_line > 0 ? `line ${d.site_line}: ` : ""}${d.site}`}
               style={{ ...ONE_LINE, color: "var(--t3)", background: "var(--bg-3)", borderRadius: "var(--r1)", padding: "1px 6px",
                 maxWidth: 420, flexShrink: 1, fontFamily: "var(--font-mono)" }}>
               {d.site_line > 0 ? `line ${d.site_line}: ` : ""}{d.site}
@@ -951,7 +951,7 @@ function ReviewList({ review, error, graph, onRetry, onAsk, isTableNode, onOpenT
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div className="aug-fs-chrome" title={it.question} style={{ ...ONE_LINE, color: "var(--t1)", fontWeight: 500 }}>{name}</div>
                     {(!g.why || it.depends > 0) && (
-                      <div className="aug-fs-xs" title={it.why} style={{ ...ONE_LINE, color: "var(--t3)" }}>
+                      <div className="aug-fs-sm" title={it.why} style={{ ...ONE_LINE, color: "var(--t3)" }}>
                         {[g.why ? "" : it.why, dependsWords(it.depends)].filter(Boolean).join(" · ")}
                       </div>
                     )}
@@ -995,7 +995,7 @@ function TourView({ tour, error, graph, onRetry }: {
                   <Dot color={KIND_HUE[s.kind] ?? KIND_HUE.domain} title={KIND_WORD[s.kind] ?? s.kind} />
                   <span style={{ color: "var(--t1)", fontWeight: 500 }}>{name}</span>
                   {(s.connection || s.connects_to_label) && (
-                    <span className="aug-fs-xs" style={MUTED}>{s.connection || `builds on ${s.connects_to_label}`}</span>
+                    <span className="aug-fs-sm" style={MUTED}>{s.connection || `builds on ${s.connects_to_label}`}</span>
                   )}
                 </div>
                 {s.narration && <div className="aug-fs-sm" style={{ color: "var(--t2)", marginTop: 2 }}>{s.narration}</div>}
@@ -1064,7 +1064,7 @@ function GraphList({ graph, onCentre }: { graph: ConnectionGraph; onCentre: (id:
     <Page testId="graph-list">
       <section aria-label="Nodes" style={CARD} data-testid="graph-list-nodes">
         <Label right={countNoun(nodes.length, "node")}>Nodes</Label>
-        <table className="aug-fs-sm" style={{ width: "100%", borderCollapse: "collapse" }}>
+        <table className="aug-fs-chrome" style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead><tr>{["Kind", "Name", "Links", "How it is known", ""].map(h => (
             <th key={h || "act"} className="aug-fs-xs" style={{ ...MUTED, textAlign: h === "Links" ? "right" : "left", fontWeight: 500, textTransform: "uppercase", letterSpacing: ".06em", padding: "0 10px 6px 0" }}>{h}</th>
           ))}</tr></thead>
@@ -1086,7 +1086,7 @@ function GraphList({ graph, onCentre }: { graph: ConnectionGraph; onCentre: (id:
       <section aria-label="Links" style={CARD} data-testid="graph-list-links">
         <Label right={countNoun(edges.length, "link")}>Links</Label>
         {edges.length === 0 ? <Empty>No link between the nodes drawn.</Empty> : (
-          <table className="aug-fs-sm" style={{ width: "100%", borderCollapse: "collapse" }}>
+          <table className="aug-fs-chrome" style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead><tr>{["From", "Link", "To", "How it is known"].map(h => (
               <th key={h} className="aug-fs-xs" style={{ ...MUTED, textAlign: "left", fontWeight: 500, textTransform: "uppercase", letterSpacing: ".06em", padding: "0 10px 6px 0" }}>{h}</th>
             ))}</tr></thead>

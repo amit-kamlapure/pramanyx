@@ -515,7 +515,8 @@ export function ClaimLine({ claim, onOpen, note, action }: {
 }) {
   return (
     <div className="aug-claim-line">
-      <div className="aug-fs-ui" style={{ color: "var(--t1)", minWidth: 0 }}>
+      {/* A claim in a list is a row, 13 as every row is (2026-11-20). */}
+      <div className="aug-fs-chrome" style={{ color: "var(--t1)", minWidth: 0 }}>
         {onOpen
           ? <Button variant="link" size="xs" className="aug-ledger-open" onClick={() => onOpen(claim.id)}>{claim.statement.text}</Button>
           : claim.statement.text}

@@ -147,7 +147,7 @@ export function SheetGroups({ sheet, query, group, hidden, editable, tick, onEdi
             const left = g.rows - rows.length;
             return (
               <div key={k} role="rowgroup">
-                <div role="row" className="aug-fs-sm" style={{ display: "flex", height: ROW_HEIGHT + 4,
+                <div role="row" className="aug-fs-chrome" style={{ display: "flex", height: ROW_HEIGHT + 4,
                   background: "var(--bg-1)", borderBottom: LINE, alignItems: "center" }}>
                   <div style={{ width: leadWidth, minWidth: leadWidth, display: "flex", alignItems: "center", gap: 8,
                     padding: "0 8px", overflow: "hidden" }}>
@@ -171,7 +171,7 @@ export function SheetGroups({ sheet, query, group, hidden, editable, tick, onEdi
                 {isOpen && rows.map(r => {
                   const rowNo = Number(r[0]);
                   return (
-                    <div key={rowNo} role="row" className="aug-fs-sm" style={{ display: "flex", width: span,
+                    <div key={rowNo} role="row" className="aug-fs-chrome" style={{ display: "flex", width: span,
                       minWidth: "100%" }}>
                       <RowNumber row={rowNo} marks={marksOf(rowNo)} rules={sheet.rules} onOpen={() => onOpenRow(rowNo)} />
                       {shown.map(c => work.cell(rowNo, c, r[index[c.id]], !!changedOf(rowNo, c.id)))}

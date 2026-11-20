@@ -143,7 +143,7 @@ export function LookPanel() {
           </SegmentedControl.Root>
         </Knob>
       </div>
-      <div className="aug-fs-xs" style={{ color: "var(--t3)", marginTop: 12 }}>
+      <div className="aug-fs-sm" style={{ color: "var(--t3)", marginTop: 12 }}>
         Kept for you, in this browser and wherever you sign in. Charts keep their own colours.
       </div>
     </Card>

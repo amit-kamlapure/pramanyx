@@ -166,7 +166,7 @@ const CELL = LIST_CELL;
 function CatalogsTable({ rows, onOpen }: { rows: CatalogRow[]; onOpen: (connId: string) => void }) {
   return (
     <div style={{ overflowX: "auto" }}>
-      <div className="aug-fs-sm" style={{ ...CAT_GRID, minWidth: 520 }}>
+      <div className="aug-fs-chrome" style={{ ...CAT_GRID, minWidth: 520 }}>
         <span className="aug-fs-xs" style={HEAD}>Catalog</span>
         <span className="aug-fs-xs" style={{ ...HEAD, textAlign: "right" }}>Tables</span>
         <span className="aug-fs-xs" style={{ ...HEAD, textAlign: "right" }}>Rows</span>
@@ -177,9 +177,9 @@ function CatalogsTable({ rows, onOpen }: { rows: CatalogRow[]; onOpen: (connId: 
             <div style={CELL}>
               <Button variant="link" size="xs" onClick={() => onOpen(r.id)}
                 style={{ padding: 0, height: "auto", maxWidth: "100%", alignSelf: "flex-start" }}>
-                <span style={{ ...ONE_LINE, fontWeight: 500 }}>{r.name}</span>
+                <span className="aug-fs-chrome" style={{ ...ONE_LINE, fontWeight: 500 }}>{r.name}</span>
               </Button>
-              <div className="aug-fs-xs" title={r.what} style={{ ...MUTED, ...ONE_LINE }}>{r.what}</div>
+              <div className="aug-fs-sm" title={r.what} style={{ ...MUTED, ...ONE_LINE }}>{r.what}</div>
             </div>
             <div style={{ ...CELL, textAlign: "right", ...NUM }}>{formatCount(r.tables)}</div>
             <div style={{ ...CELL, textAlign: "right", ...NUM, color: r.rows == null ? "var(--t3)" : "var(--t1)" }}
@@ -196,17 +196,18 @@ function CatalogsTable({ rows, onOpen }: { rows: CatalogRow[]; onOpen: (connId: 
 }
 
 function Explored({ e }: { e: CatalogRow["explored"] }) {
-  if (e === "reading") return <span className="aug-fs-xs" style={MUTED}>reading…</span>;
-  if (e === "failed") return <span className="aug-fs-xs" style={MUTED}>not read</span>;
+  // the cell's value at the cell's 13px, as "not counted" is in the Rows column beside it
+  if (e === "reading") return <span style={MUTED}>reading…</span>;
+  if (e === "failed") return <span style={MUTED}>not read</span>;
   if (e.percent == null) {
-    return <span className="aug-fs-xs" style={MUTED} title={e.of ? `${e.given} of ${e.of} schemas carry a number` : "Nothing to explore"}>
+    return <span style={MUTED} title={e.of ? `${e.given} of ${e.of} schemas carry a number` : "Nothing to explore"}>
       not given</span>;
   }
   return (
     <span style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 36px", gap: 8, alignItems: "center" }}
       title={e.given < e.of ? `${e.given} of ${e.of} schemas carry a number` : undefined}>
       <Bar value={e.percent} max={100} color={e.percent >= 100 ? "var(--grn3)" : "var(--chart-1)"} />
-      <span className="aug-fs-xs" style={{ textAlign: "right", color: "var(--t2)", ...NUM }}>{e.percent}%</span>
+      <span style={{ textAlign: "right", color: "var(--t2)", ...NUM }}>{e.percent}%</span>
     </span>
   );
 }
@@ -241,9 +242,9 @@ function Saved({ mode, tree, onPick }: { mode: "favorites" | "recents"; tree: Ca
               <span style={{ display: "inline-flex", color: "var(--t3)" }}>{ICON[it.type]}</span>
               <div style={{ minWidth: 0, flex: 1 }}>
                 <Button variant="link" size="xs" onClick={() => onPick(it)} style={{ padding: 0, height: "auto", maxWidth: "100%" }}>
-                  <span style={{ ...ONE_LINE, fontFamily: it.type === "Catalog" ? undefined : "var(--font-mono)" }}>{it.name}</span>
+                  <span className="aug-fs-chrome" style={{ ...ONE_LINE, fontFamily: it.type === "Catalog" ? undefined : "var(--font-mono)" }}>{it.name}</span>
                 </Button>
-                <div className="aug-fs-xs" style={{ ...MUTED, ...ONE_LINE }}>{it.path}</div>
+                <div className="aug-fs-sm" style={{ ...MUTED, ...ONE_LINE }}>{it.path}</div>
               </div>
               <span className="aug-fs-xs" style={MUTED}>{it.type}</span>
               <Button variant="ghost" size="icon-xs" onClick={() => setFavs(favorites.toggle(it.key))}

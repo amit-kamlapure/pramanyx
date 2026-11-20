@@ -78,7 +78,7 @@ export function OverridesDrawer({ connId, schema, onClose, onChanged }: {
             return (
               <div key={i} className="bg-[var(--gray-a3)] rounded-[var(--r2)] p-2 space-y-1">
                 <div className="flex items-center gap-2">
-                  <span className="aug-fs-sm text-zinc-200">{id}</span>
+                  <span className="aug-fs-chrome text-zinc-200">{id}</span>
                   {!bindOk && (
                     <span className="aug-fs-xs text-amber-300">
                       did not bind — the table it names is unreadable
@@ -112,7 +112,7 @@ export function OverridesDrawer({ connId, schema, onClose, onChanged }: {
           <div key={i} className="bg-[var(--gray-a3)] rounded-[var(--r2)] p-2">
             <div className="flex items-center gap-2">
               <span className="aug-fs-xs text-zinc-500 uppercase">{o.target_kind}</span>
-              <span className="aug-fs-sm text-zinc-200 truncate">{o.target_id}</span>
+              <span className="aug-fs-chrome text-zinc-200 truncate">{o.target_id}</span>
               <Button size="xs" variant="ghost" className="ml-auto text-zinc-500 hover:text-red-400"
                 disabled={busy}
                 onClick={() => run(
@@ -121,7 +121,7 @@ export function OverridesDrawer({ connId, schema, onClose, onChanged }: {
                 Revert
               </Button>
             </div>
-            <p className="aug-fs-xs text-zinc-500 mt-1 truncate">
+            <p className="aug-fs-sm text-zinc-500 mt-1 truncate">
               overrides: {Object.keys(o.fields ?? {}).join(", ") || "—"}
             </p>
           </div>

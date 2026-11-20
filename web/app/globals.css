@@ -619,7 +619,7 @@ textarea.aug-input, .aug-textarea { min-height: 56px; padding: 7px 9px; line-hei
   color: inherit;   /* the callout's own hue: red for an error or a refusal, amber for a partial */
 }
 .aug-state-meta { margin-left: auto; font-size: 12px; color: var(--t3); white-space: nowrap; }
-.aug-state-claim { font-size: 14px; line-height: 1.6; color: var(--t1); }
+.aug-state-claim { font-size: 13px; line-height: 1.6; color: var(--t1); }
 .aug-state-what { font-size: 12px; line-height: 1.6; color: var(--t1); }
 .aug-state-detail { font-size: 12px; line-height: 1.6; color: var(--t2); }
 .aug-state-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 2px; }
@@ -1139,9 +1139,11 @@ td, [role="gridcell"][role="gridcell"], [role="cell"][role="cell"] { font-size: 
   font-size: 13px; color: var(--t1); }
 .aug-inspector-facts { margin: 0; display: grid; border-top: 1px solid var(--b0); }
 .aug-inspector-fact { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--b0); }
-.aug-inspector-fact dt { font-size: 12px; color: var(--t3); }
-.aug-inspector-fact dd { margin: 0; min-width: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
-.aug-inspector-note { font-size: 11px; color: var(--t3); margin-top: 2px; }
+/* A label · value row as the kit's Facts draws one (2026-11-20): the label is meta (11), the value the row's content (13),
+   a note under it a second line (12). */
+.aug-inspector-fact dt { font-size: 11px; color: var(--t3); }
+.aug-inspector-fact dd { margin: 0; min-width: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; font-size: 13px; }
+.aug-inspector-note { font-size: 12px; color: var(--t3); margin-top: 2px; }
 
 .aug-freshness { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .aug-freshness-receipt { font-size: 11px; color: var(--accent-text); }

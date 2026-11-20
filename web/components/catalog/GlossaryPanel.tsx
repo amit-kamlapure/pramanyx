@@ -166,7 +166,7 @@ export function GlossaryPanel({ table, columns, schema, connectionId }: {
         return (
           <div key={c} style={{ display: "grid", gridTemplateColumns: "180px 1fr", gap: 12, padding: "10px 0", borderBottom: "0.5px solid var(--b0)", alignItems: "start" }}>
             <div style={{ minWidth: 0 }}>
-              <span style={{ fontSize: 12, color: "var(--t1)", fontWeight: 500, fontFamily: "var(--font-mono)" }}>{c}</span>
+              <span className="aug-fs-chrome" style={{ color: "var(--t1)", fontWeight: 500, fontFamily: "var(--font-mono)" }}>{c}</span>
             </div>
             <div>
               <EditableField value={ce.description ?? ""} placeholder="Add a comment…"

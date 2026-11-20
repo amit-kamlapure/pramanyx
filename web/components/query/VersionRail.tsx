@@ -114,7 +114,7 @@ export function VersionRail({
 
   if (!queryId) {
     return (
-      <div style={{ padding: "12px 14px", fontSize: 13, color: "var(--t3)" }}>
+      <div className="aug-fs-chrome" style={{ padding: "12px 14px", color: "var(--t3)" }}>
         Save this query to start a version history.
       </div>
     );
@@ -140,16 +140,17 @@ export function VersionRail({
           <button
             key={v.version}
             onClick={() => setSelected(v.version)}
+            className="aug-fs-chrome"
             style={{
               display: "flex", alignItems: "baseline", gap: 8, width: "100%",
               textAlign: "left", padding: "4px 12px", border: "none", cursor: "pointer",
               background: v.version === selected ? "var(--bg-2)" : "transparent",
-              color: "var(--t2)", fontSize: 13,
+              color: "var(--t2)",
             }}
           >
             <span style={{ color: "var(--t1)" }}>v{v.version}</span>
-            {i === 0 && <span className="aug-fs-ui" style={{ color: "var(--t3)" }}>current</span>}
-            <span className="aug-fs-ui" style={{ color: "var(--t3)", marginLeft: "auto" }}
+            {i === 0 && <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>current</span>}
+            <span className="aug-fs-xs" style={{ color: "var(--t3)", marginLeft: "auto" }}
               title={v.created_at ? formatTimestamp(v.created_at) : undefined}>
               {v.created_at ? `${relTime(v.created_at)} ago` : ""}
             </span>
@@ -165,7 +166,7 @@ export function VersionRail({
               padding: "6px 12px", borderTop: "1px solid var(--b0)",
             }}
           >
-            <span className="aug-fs-ui" style={{ color: "var(--t3)" }}>
+            <span className="aug-fs-sm" style={{ color: "var(--t3)" }}>
               {changes.length === 0
                 ? "No field changes"
                 : `${changes.length} ${changes.length === 1 ? "change" : "changes"}`}
@@ -186,7 +187,7 @@ export function VersionRail({
           {changes.length > 0 && (
             <div style={{ padding: "0 12px 6px", maxHeight: 110, overflow: "auto" }}>
               {changes.map((c, i) => (
-                <div key={i} className="aug-fs-ui" style={{ color: "var(--t3)" }}>
+                <div key={i} className="aug-fs-chrome" style={{ color: "var(--t3)" }}>
                   <span style={{ color: "var(--t2)" }}>{c.path}</span>
                   {" — "}{c.kind}
                 </div>

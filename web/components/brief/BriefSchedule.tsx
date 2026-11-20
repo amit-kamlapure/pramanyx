@@ -110,7 +110,7 @@ export function BriefSchedule({ connId }: { connId: string }) {
         <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
           padding: "6px 10px", borderRadius: "var(--r2)",
           background: "var(--bg-1)", marginBottom: 6 }}>
-          <span style={{ color: "var(--t1)", fontWeight: 500 }}>{s.name}</span>
+          <span className="aug-fs-chrome" style={{ color: "var(--t1)", fontWeight: 500 }}>{s.name}</span>
           <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>
             {describe(s)} ·{" "}
             <span style={{ fontFamily: "var(--font-mono)" }}>{s.send_cron}</span>

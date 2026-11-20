@@ -58,7 +58,7 @@ function ChangeRow({ change, busy, onDiscard }: {
     <li style={{ padding: "8px 0", borderTop: RULE, listStyle: "none" }} data-testid="release-change">
       <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
         <span className={`aug-tag ${look.tag}`}>{look.label}</span>
-        <span className="aug-fs-sm" style={{ color: "var(--t1)" }}>
+        <span className="aug-fs-chrome" style={{ color: "var(--t1)" }}>
           {change.kind} <span style={{ fontFamily: "var(--font-mono)" }}>{change.target_id}</span> — {change.change}
         </span>
         {change.by && <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>by {change.by}</span>}
@@ -67,14 +67,14 @@ function ChangeRow({ change, busy, onDiscard }: {
       </div>
       <ul style={{ margin: "4px 0 0", padding: 0 }}>
         {change.reasons.filter(r => r.class !== "SAFE" || change.class === "SAFE").map((r, i) => (
-          <li key={`${change.element}-reason-${i}`} className="aug-fs-xs"
+          <li key={`${change.element}-reason-${i}`} className="aug-fs-sm"
             style={{ listStyle: "none", color: r.class === "ERR" ? "var(--red5)" : "var(--t2)" }}>
             {r.why}
           </li>
         ))}
       </ul>
       {touched && (
-        <p className="aug-fs-xs" style={{ margin: "4px 0 0", color: "var(--t2)" }}>
+        <p className="aug-fs-sm" style={{ margin: "4px 0 0", color: "var(--t2)" }}>
           Touches {touched}
           {change.touches.automations.length > 0 && <>: {change.touches.automations.map(a => a.name).join(", ")}</>}
           {(change.touches.cockpits?.length ?? 0) > 0 && <> — {change.touches.cockpits!.map(c => `“${c.title || c.cockpit}”`).join(", ")}</>}

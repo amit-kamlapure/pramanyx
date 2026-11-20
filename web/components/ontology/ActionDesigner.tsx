@@ -516,7 +516,7 @@ export function ActionDesigner({ connectionId, schema, types, entity, within = "
               return (
                 <div key={`cond-${c.property}`} style={{ borderTop: i ? RULE : undefined, paddingTop: i ? 8 : 0, marginBottom: 8 }}>
                   <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
-                    <span className="aug-fs-sm" style={{ color: "var(--t1)" }}>{c.label}</span>
+                    <span className="aug-fs-chrome" style={{ color: "var(--t1)" }}>{c.label}</span>
                     <SelectField value={c.negate ? "not" : "is"} aria-label={`Condition ${i + 1}`} disabled={!drafting} style={{ width: 150 }}
                       onChange={e => editCondition(i, { negate: e.target.value === "not" })}>
                       <option value="is">is one of</option>
@@ -652,7 +652,7 @@ export function ActionDesigner({ connectionId, schema, types, entity, within = "
               const id = `${p.dashboardId}/${p.detailKey}`;
               const seg = segmentOf(p.segment);
               return (
-                <label key={id} className="aug-fs-xs" style={{ display: "flex", gap: 6, alignItems: "flex-start", marginBottom: 6, color: "var(--t2)" }}>
+                <label key={id} className="aug-fs-chrome" style={{ display: "flex", gap: 6, alignItems: "flex-start", marginBottom: 6, color: "var(--t2)" }}>
                   <Checkbox checked={!!ticked[id]} disabled={phase.at === "placed"} aria-label={`Add it to ${p.title}`}
                     onChange={e => setTicked(t => ({ ...t, [id]: e.target.checked }))} />
                   <span>
@@ -702,8 +702,8 @@ function Choice({ on, disabled, icon, title, says, onPick }: {
       <span style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
         <Icon name={icon} size={14} />
         <span style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-          <span className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: on ? 500 : 400 }}>{title}</span>
-          <span className="aug-fs-xs" style={{ color: "var(--t3)", whiteSpace: "normal" }}>{says}</span>
+          <span className="aug-fs-chrome" style={{ color: "var(--t1)", fontWeight: on ? 500 : 400 }}>{title}</span>
+          <span className="aug-fs-sm" style={{ color: "var(--t3)", whiteSpace: "normal" }}>{says}</span>
         </span>
       </span>
     </Button>

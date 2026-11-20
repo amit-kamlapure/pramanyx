@@ -165,7 +165,7 @@ export function HomeDesk({ connectionId, analyses, onOpenAnalysis, onDraft }: {
               <span className="aug-fs-chrome" title={s.latest.headline ?? ""} style={{ ...oneLine, display: "block", color: "var(--t1)", fontWeight: 500 }}>
                 {readableFigures(s.latest.headline)}
               </span>
-              <span className="aug-fs-xs" style={{ ...oneLine, ...muted, display: "block" }}>{s.question}</span>
+              <span className="aug-fs-sm" style={{ ...oneLine, ...muted, display: "block" }}>{s.question}</span>
             </span>
             <span className="aug-fs-xs" style={{ ...muted, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{s.count}×</span>
           </Button>
@@ -440,10 +440,10 @@ function WeekCard({ due }: { due: Due[] }) {
         <div key={d.on} style={{ padding: i ? "8px 0 0" : 0, borderTop: i ? "1px solid var(--b0)" : undefined, marginTop: i ? 8 : 0 }}>
           {i > 0 && <div className="aug-fs-sm" style={{ color: "var(--t1)", marginBottom: 4 }}>{dayWords(d.on)}</div>}
           {d.reviews.map(r => (
-            <div key={r.what} className="aug-fs-sm" style={{ ...oneLine, color: "var(--t2)" }} title={r.what}>{r.what}</div>
+            <div key={r.what} className="aug-fs-chrome" style={{ ...oneLine, color: "var(--t2)" }} title={r.what}>{r.what}</div>
           ))}
           {i === 0 ? (
-            <div className="aug-fs-sm" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: "3px 16px" }}>
+            <div className="aug-fs-chrome" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: "3px 16px" }}>
               {d.forecasts.slice(0, 4).map(f => (
                 <div key={f.what} style={{ display: "contents" }}>
                   <span style={{ ...oneLine, color: "var(--t2)" }}>{metricWords(f.metric)}</span>

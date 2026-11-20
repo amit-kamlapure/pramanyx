@@ -114,10 +114,10 @@ export function HistoryRail({
             {savedHits.map(s => (
               <Button key={s.id} variant="plain" onClick={() => onOpenSaved?.(s)} title="Open this saved query"
                 className="mb-0.5 block h-auto w-full whitespace-normal px-2 py-1.5 text-left font-normal">
-                <span className="aug-fs-sm" style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--t1)" }}>
+                <span className="aug-fs-chrome" style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--t1)" }}>
                   <Icon name="bookmark" size={11} />{s.name}
                 </span>
-                <span className="aug-fs-xs" style={{ display: "block", fontFamily: "var(--font-code, monospace)", color: "var(--t3)",
+                <span className="aug-fs-sm" style={{ display: "block", fontFamily: "var(--font-code, monospace)", color: "var(--t3)",
                   overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 2 }}>{preview(s.sql)}</span>
               </Button>
             ))}
@@ -139,7 +139,7 @@ export function HistoryRail({
               className="mb-0.5 block h-auto w-full whitespace-normal px-2 py-1.5 text-left font-normal"
             >
               <span
-                className="aug-fs-sm"
+                className="aug-fs-chrome"
                 style={{
                   display: "block", fontFamily: "var(--font-code, monospace)",
                   color: "var(--t2)", overflow: "hidden", textOverflow: "ellipsis",

@@ -105,7 +105,7 @@ export function ColumnValuePicker({
   };
 
   return (
-    <div data-testid="column-value-picker" className="aug-fs-ui" style={{
+    <div data-testid="column-value-picker" className="aug-fs-chrome" style={{
       position: "absolute", zIndex: 12, width: 300, maxHeight: 360, display: "flex", flexDirection: "column",
       background: "var(--bg-2)", border: "1px solid var(--b2)", borderRadius: "var(--r2)",
       boxShadow: "var(--shadow-md)", ...style,

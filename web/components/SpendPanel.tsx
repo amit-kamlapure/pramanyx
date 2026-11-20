@@ -107,15 +107,15 @@ function Bar({ name, sub, value, share, fill, title }: {
   return (
     <>
       <span style={oneLine} title={title}>
-        <span className="aug-fs-sm" style={{ color: "var(--t1)" }}>{name}</span>
-        <span className="aug-fs-xs" style={{ ...muted, ...oneLine, display: "block" }}>{sub}</span>
+        <span className="aug-fs-chrome" style={{ color: "var(--t1)" }}>{name}</span>
+        <span className="aug-fs-sm" style={{ ...muted, ...oneLine, display: "block" }}>{sub}</span>
       </span>
       <span title={title} style={{ height: 10, borderRadius: "var(--r-pill)", background: "var(--bg-3)", overflow: "hidden" }}>
         <i data-unknown={fill === HATCH ? "true" : undefined}
           style={{ display: "block", height: "100%", borderRadius: "var(--r-pill)", background: fill,
             width: share > 0 ? `${Math.max(0.6, share * 100)}%` : 0 }} />
       </span>
-      <span className="aug-fs-sm" title={title} style={{ textAlign: "right", color: "var(--t2)", ...tabular }}>{value}</span>
+      <span className="aug-fs-chrome" title={title} style={{ textAlign: "right", color: "var(--t2)", ...tabular }}>{value}</span>
     </>
   );
 }
@@ -365,11 +365,11 @@ function CapsEditor({ data, onChanged, onClose }: {
     <section aria-label="Spend caps" data-testid="spend-caps" style={card}>
       <Label right={<Button size="xs" variant="ghost" onClick={onClose}>Close</Button>}>Spend caps</Label>
       {data.caps.map((c, i) => (
-        <div key={`${c.scope}:${c.subject}:${c.metric}:${c.window_hours}`} className="aug-fs-sm"
+        <div key={`${c.scope}:${c.subject}:${c.metric}:${c.window_hours}`} className="aug-fs-chrome"
           style={{ ...row, flexWrap: "nowrap", gap: 12, padding: "8px 2px", borderTop: i ? "1px solid var(--b0)" : undefined }}>
           <span style={{ color: "var(--t1)", fontWeight: 500, ...tabular }}>{capAmount(c.metric, c.limit)}</span>
-          <span className="aug-fs-xs" style={muted}>per {c.window_hours}h · {c.scope === "user" ? `user ${c.subject}` : "whole org"}</span>
-          <span className="aug-fs-xs" style={{ color: c.action === "block" ? "var(--red4)" : "var(--amb4)" }}>
+          <span className="aug-fs-sm" style={muted}>per {c.window_hours}h · {c.scope === "user" ? `user ${c.subject}` : "whole org"}</span>
+          <span className="aug-fs-sm" style={{ color: c.action === "block" ? "var(--red4)" : "var(--amb4)" }}>
             {c.action === "block" ? "blocks new work" : "alerts"}
           </span>
           <span style={{ flex: 1 }} />
@@ -405,10 +405,10 @@ function CapsEditor({ data, onChanged, onClose }: {
         </SelectField>
         <Button size="sm" disabled={busy || !form.limit.trim()} onClick={declare} data-testid="cap-declare">Declare the cap</Button>
       </div>
-      <div className="aug-fs-xs" style={{ ...muted, marginTop: 8 }}>
+      <div className="aug-fs-sm" style={{ ...muted, marginTop: 8 }}>
         Alert records a breach in the governance feed · block refuses new work and names the number
       </div>
-      {err && <div className="aug-fs-xs" style={{ color: "var(--red4)", marginTop: 6 }}>{err}</div>}
+      {err && <div className="aug-fs-sm" style={{ color: "var(--red4)", marginTop: 6 }}>{err}</div>}
     </section>
   );
 }
@@ -476,13 +476,13 @@ function GovernanceCard() {
         : !feed ? <Loading what="the governance feed" />
         : folds.length === 0 ? <div className="aug-fs-sm" style={muted}>Nothing recorded yet.</div>
         : folds.map((f, i) => (
-          <div key={f.key} data-testid="governance-fold" className="aug-fs-sm"
+          <div key={f.key} data-testid="governance-fold" className="aug-fs-chrome"
             style={{ display: "grid", gridTemplateColumns: "18px minmax(0, 1fr) auto auto", gap: 10, alignItems: "center",
               padding: "8px 2px", borderTop: i ? "1px solid var(--b0)" : undefined }}>
             <span style={{ display: "inline-flex", color: FOLD_ICON[f.tone].color }}><Icon name={FOLD_ICON[f.tone].name} size={14} /></span>
             <span style={oneLine} title={f.sub ? `${f.title} · ${f.sub}` : f.title}>
               <span style={{ color: "var(--t1)" }}>{f.title}</span>
-              {f.sub && <span style={{ ...muted, marginLeft: 6 }}>{f.sub}</span>}
+              {f.sub && <span className="aug-fs-sm" style={{ ...muted, marginLeft: 6 }}>{f.sub}</span>}
             </span>
             <span style={{ color: "var(--t2)", textAlign: "right", minWidth: 36, ...tabular }}>{formatCount(f.count)}</span>
             {f.tone === "amber" ? <Button size="xs" variant="secondary" onClick={() => view(f)}>View</Button> : <span />}
@@ -674,9 +674,9 @@ function FullFeed({ base, categories, focus, windowed = false, onClearFocus, onR
           </Button>
         )}
       </div>
-      {exportErr && <div className="aug-fs-xs" style={{ color: "var(--red4)", marginBottom: 8 }}>{exportErr}</div>}
+      {exportErr && <div className="aug-fs-sm" style={{ color: "var(--red4)", marginBottom: 8 }}>{exportErr}</div>}
       {focus && (
-        <div className="aug-fs-xs" style={{ ...row, ...muted, marginBottom: 8 }} data-testid="feed-focus">
+        <div className="aug-fs-sm" style={{ ...row, ...muted, marginBottom: 8 }} data-testid="feed-focus">
           {`Showing the ${focus.keys.size === 1 ? "event" : `${formatCount(focus.keys.size)} events`} behind “${focus.label}”`}
           <Button size="xs" variant="ghost" onClick={onClearFocus}>Show all</Button>
         </div>

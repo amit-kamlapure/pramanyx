@@ -95,7 +95,7 @@ export function LayoutTree({ spec, selected, onSelect, cardTitle, entityTitle }:
         const on = selected === line.key;
         return (
           <button key={line.key} type="button" role="treeitem" aria-selected={on} data-testid="builder-line" data-key={line.key}
-            onClick={() => onSelect(line.key)} className="aug-fs-sm"
+            onClick={() => onSelect(line.key)} className="aug-fs-chrome"
             style={{ display: "flex", alignItems: "center", gap: 7, width: "100%", padding: `4px 6px 4px ${6 + line.depth * 14}px`,
               border: 0, borderRadius: "var(--r2)", background: on ? "var(--accent-a3, var(--bg-3))" : "transparent", cursor: "pointer",
               color: on ? "var(--t1)" : "var(--t2)", textAlign: "left", font: "inherit" }}>
@@ -574,8 +574,8 @@ function ChecksChip({ spec, checks, onChoose, cardTitle, entityTitle }: {
             <Button key={id} role="listitem" variant="plain" data-testid="builder-checks-item" onClick={() => { setOpen(false); onChoose(key); }}
               style={{ height: "auto", justifyContent: "flex-start", textAlign: "left", whiteSpace: "normal", padding: "6px 8px" }}>
               <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
-                <span className="aug-fs-sm" style={{ color: "var(--t1)" }}>{lineOf(spec.elements, key, cardTitle, entityTitle, setTitles(spec))}</span>
-                <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>{c.reason || "It could not be read."}</span>
+                <span className="aug-fs-chrome" style={{ color: "var(--t1)" }}>{lineOf(spec.elements, key, cardTitle, entityTitle, setTitles(spec))}</span>
+                <span className="aug-fs-sm" style={{ color: "var(--t3)" }}>{c.reason || "It could not be read."}</span>
               </span>
             </Button>
           ))}

@@ -47,7 +47,7 @@ function Term({ children }: { children: React.ReactNode }) {
   return <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>{children}</span>;
 }
 function Val({ children, mono }: { children: React.ReactNode; mono?: boolean }) {
-  return <span className="aug-fs-sm" style={{ color: "var(--t1)", ...(mono ? MONO : {}), minWidth: 0, overflowWrap: "anywhere" }}>{children}</span>;
+  return <span className="aug-fs-chrome" style={{ color: "var(--t1)", ...(mono ? MONO : {}), minWidth: 0, overflowWrap: "anywhere" }}>{children}</span>;
 }
 
 export function SourceMapping({ detail, binding, columns, said }: {
@@ -116,7 +116,7 @@ export function SourceMapping({ detail, binding, columns, said }: {
                 aria-pressed={active} style={row(active, !read)} onClick={() => pickColumn(i)} onKeyDown={onKey(() => pickColumn(i))}
                 title={read ? `${c.name} · ${c.type}` : `${c.name} · ${c.type} — no property of ${detail.display_name} reads it`}>
                 <ColumnTypeSquare type={c.type} />
-                <span className="aug-fs-sm" style={{ ...MONO, ...CLIP }}>{c.name}</span>
+                <span className="aug-fs-chrome" style={{ ...MONO, ...CLIP }}>{c.name}</span>
                 <span className="aug-fs-xs" style={{ marginLeft: "auto", color: "var(--t3)", whiteSpace: "nowrap" }}>{read ? c.type : "not read"}</span>
               </div>
             );
@@ -150,7 +150,7 @@ export function SourceMapping({ detail, binding, columns, said }: {
                 style={row(active, false)} onClick={() => pick(p.name)} onKeyDown={onKey(() => pick(p.name))}
                 title={p.description || p.display_name || p.name}>
                 <ColumnTypeSquare type={p.data_type} />
-                <span className="aug-fs-sm" style={{ ...MONO, ...CLIP }}>{p.name}</span>
+                <span className="aug-fs-chrome" style={{ ...MONO, ...CLIP }}>{p.name}</span>
                 {p.is_key && <span style={{ color: "var(--t3)", display: "inline-flex" }}><Icon name="key" size={11} label="Key" /></span>}
                 {isDisplay(p) && <span style={{ color: "var(--t3)", display: "inline-flex" }}><Icon name="bookmark" size={11} label="Display property" /></span>}
                 <span className="aug-fs-xs" style={{ marginLeft: "auto", color: "var(--t3)", whiteSpace: "nowrap" }}>{word}</span>

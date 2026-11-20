@@ -280,7 +280,7 @@ function RetryPanel({ ep, connectionId, errorMsg, canvasId }: { ep: ExplorationE
       </div>
       {result && (
         <div className="space-y-2 pt-1">
-          {result.explanation && <p className="aug-fs-xs" style={{ color: "var(--blue4)" }}>{result.explanation}</p>}
+          {result.explanation && <p className="aug-fs-sm" style={{ color: "var(--blue4)" }}>{result.explanation}</p>}
           <pre className="aug-fs-xs font-code rounded p-2 overflow-x-auto"
             style={{ background: "var(--code-bg)", color: "var(--t3)", whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
             {result.corrected_sql}
@@ -337,7 +337,7 @@ function SaveFeedback({ saved }: { saved: FixSaveResult }) {
     text = `✓ Query fixed — ${saved.reason ?? "no finding stored"}`;
   }
   return (
-    <p className="aug-fs-xs px-2.5 py-1.5 rounded" style={{ background: tone.bg, color: tone.fg }}>
+    <p className="aug-fs-sm px-2.5 py-1.5 rounded" style={{ background: tone.bg, color: tone.fg }}>
       {text}
     </p>
   );
@@ -353,23 +353,23 @@ function ExpandedDetail({ ep, connectionId, canvasId }: { ep: ExplorationEpisode
     <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: "12px 4px 8px" }}>
       {/* SQL */}
       <div>
-        <p style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--t3)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 6 }}>SQL</p>
-        <pre style={{ fontSize: 11, fontFamily: "var(--font-code)", color: "var(--t3)", background: "var(--bg-0)", borderRadius: 4, padding: "8px 10px", overflowX: "auto", whiteSpace: "pre-wrap", wordBreak: "break-all", lineHeight: 1.6, margin: 0 }}>
+        <p className="aug-fs-xs" style={{ fontFamily: "var(--font-mono)", color: "var(--t3)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 6 }}>SQL</p>
+        <pre className="aug-fs-xs" style={{ fontFamily: "var(--font-code)", color: "var(--t3)", background: "var(--bg-0)", borderRadius: 4, padding: "8px 10px", overflowX: "auto", whiteSpace: "pre-wrap", wordBreak: "break-all", lineHeight: 1.6, margin: 0 }}>
           {ep.sql || "(no sql)"}
         </pre>
       </div>
       {/* Result */}
       <div>
-        <p style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--t3)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 6 }}>Result</p>
-        <pre style={{ fontSize: 11, fontFamily: "var(--font-code)", color: isError ? "var(--red4)" : "var(--t3)", background: isError ? "var(--red1)" : "var(--code-bg)", borderRadius: 4, padding: "8px 10px", overflowX: "auto", whiteSpace: "pre-wrap", wordBreak: "break-all", lineHeight: 1.6, margin: 0 }}>
+        <p className="aug-fs-xs" style={{ fontFamily: "var(--font-mono)", color: "var(--t3)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 6 }}>Result</p>
+        <pre className="aug-fs-xs" style={{ fontFamily: "var(--font-code)", color: isError ? "var(--red4)" : "var(--t3)", background: isError ? "var(--red1)" : "var(--code-bg)", borderRadius: 4, padding: "8px 10px", overflowX: "auto", whiteSpace: "pre-wrap", wordBreak: "break-all", lineHeight: 1.6, margin: 0 }}>
           {obsPreview}
         </pre>
       </div>
       {/* Query intent */}
       {ep.think && (
         <div>
-          <p style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--t3)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 4 }}>Query intent</p>
-          <p style={{ fontSize: 11, color: "var(--t3)", lineHeight: 1.55, margin: 0 }}>{ep.think}</p>
+          <p className="aug-fs-xs" style={{ fontFamily: "var(--font-mono)", color: "var(--t3)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 4 }}>Query intent</p>
+          <p className="aug-fs-sm" style={{ color: "var(--t3)", lineHeight: 1.55, margin: 0 }}>{ep.think}</p>
         </div>
       )}
       {isError && ep.sql && <RetryPanel ep={ep} connectionId={connectionId} errorMsg={ep.observation} canvasId={canvasId} />}
@@ -407,7 +407,7 @@ function LogTable({ items, connectionId, canvasId, sortCol, sortDir, onSort }: L
     position: "sticky", top: 0, zIndex: 1,
     background: "var(--bg-0)",
     padding: "7px 8px",
-    textAlign: "left", fontSize: 11,
+    textAlign: "left",
     fontFamily: "var(--font-mono)", color: "var(--t3)",
     textTransform: "uppercase", letterSpacing: "0.07em",
     borderBottom: "1px solid var(--b2)", fontWeight: 500,
@@ -417,7 +417,7 @@ function LogTable({ items, connectionId, canvasId, sortCol, sortDir, onSort }: L
   };
 
   function thClick(col: SortCol) {
-    return { style: { ...TH, color: sortCol === col ? "var(--blue4)" : "var(--t3)" }, onClick: () => onSort(col) };
+    return { className: "aug-fs-xs", style: { ...TH, color: sortCol === col ? "var(--blue4)" : "var(--t3)" }, onClick: () => onSort(col) };
   }
 
   return (
@@ -456,7 +456,7 @@ function LogTable({ items, connectionId, canvasId, sortCol, sortDir, onSort }: L
             <TableHead {...thClick("object")}>
               object<SortIcon active={sortCol === "object"} dir={sortDir} />
             </TableHead>
-            <TableHead style={{ ...TH, cursor: "default" }} />
+            <TableHead className="aug-fs-xs" style={{ ...TH, cursor: "default" }} />
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -482,27 +482,27 @@ function LogTable({ items, connectionId, canvasId, sortCol, sortDir, onSort }: L
                   onMouseLeave={e => { if (!isOpen) (e.currentTarget as HTMLTableRowElement).style.background = "transparent"; }}
                 >
                   {/* # — var(--b0) was a BORDER token used as text: near-invisible */}
-                  <TableCell style={{ padding: "7px 10px 7px 8px", textAlign: "right", fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--t3)", whiteSpace: "nowrap" }}>
+                  <TableCell className="aug-fs-chrome" style={{ padding: "7px 10px 7px 8px", textAlign: "right", fontFamily: "var(--font-mono)", color: "var(--t3)", whiteSpace: "nowrap" }}>
                     {seq}
                   </TableCell>
                   {/* timestamp */}
-                  <TableCell style={{ padding: "7px 8px", fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--t3)", whiteSpace: "nowrap" }}>
+                  <TableCell className="aug-fs-chrome" style={{ padding: "7px 8px", fontFamily: "var(--font-mono)", color: "var(--t3)", whiteSpace: "nowrap" }}>
                     {meta.datetime}
                   </TableCell>
                   {/* type */}
                   <TableCell style={{ padding: "7px 8px" }}>
-                    <span style={{ fontSize: 11, padding: "2px 6px", borderRadius: 3, background: pm.bg, color: pm.color }}>
+                    <span className="aug-fs-xs" style={{ padding: "2px 6px", borderRadius: 3, background: pm.bg, color: pm.color }}>
                       {pm.label}
                     </span>
                   </TableCell>
                   {/* message */}
-                  <TableCell style={{ padding: "7px 8px", fontSize: 11, color: meta.isError ? "var(--red4)" : "var(--t3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <TableCell className="aug-fs-chrome" style={{ padding: "7px 8px", color: meta.isError ? "var(--red4)" : "var(--t3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {meta.message}
                   </TableCell>
                   {/* status */}
                   <TableCell style={{ padding: "7px 8px" }}>
-                    <span style={{
-                      fontSize: 11, padding: "2px 6px", borderRadius: 3, fontWeight: 500,
+                    <span className="aug-fs-xs" style={{
+                      padding: "2px 6px", borderRadius: 3, fontWeight: 500,
                       background: meta.isError ? "var(--red1)" : "var(--grn1)",
                       color: meta.isError ? "var(--red4)" : "var(--grn4)",
                     }}>
@@ -510,15 +510,15 @@ function LogTable({ items, connectionId, canvasId, sortCol, sortDir, onSort }: L
                     </span>
                   </TableCell>
                   {/* rows */}
-                  <TableCell style={{ padding: "7px 8px", fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--t3)", textAlign: "right", whiteSpace: "nowrap" }}>
+                  <TableCell className="aug-fs-chrome" style={{ padding: "7px 8px", fontFamily: "var(--font-mono)", color: "var(--t3)", textAlign: "right", whiteSpace: "nowrap" }}>
                     {formatCount(meta.rows)}
                   </TableCell>
                   {/* object */}
-                  <TableCell style={{ padding: "7px 8px", fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--t3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <TableCell className="aug-fs-chrome" style={{ padding: "7px 8px", fontFamily: "var(--font-mono)", color: "var(--t3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {meta.object}
                   </TableCell>
                   {/* expand */}
-                  <TableCell style={{ padding: "7px 8px", textAlign: "center", fontSize: 11, color: "var(--t3)" }}>
+                  <TableCell className="aug-fs-xs" style={{ padding: "7px 8px", textAlign: "center", color: "var(--t3)" }}>
                     {isOpen ? "▲" : "▼"}
                   </TableCell>
                 </TableRow>
@@ -675,10 +675,10 @@ export function ActivityLog({ connectionId, isActive, canvasId }: Props) {
     return (
       <div className="h-full flex flex-col">
         <StatusBar status={status} stopped={stopped} onStop={handleStop} onResume={handleResume} onRestart={handleRestart} stopping={stopping} resuming={resuming} restarting={restarting} />
-        {runError && <div className="aug-fs-xs px-4 py-1" data-testid="run-error" style={{ color: "var(--amb4)" }}>{runError}</div>}
+        {runError && <div className="aug-fs-sm px-4 py-1" data-testid="run-error" style={{ color: "var(--amb4)" }}>{runError}</div>}
         <div className="flex-1 flex flex-col items-center justify-center gap-2" style={{ color: "var(--t3)" }}>
           <p className="aug-fs-sm">No activity recorded yet.</p>
-          <p className="aug-fs-xs" style={{ color: "var(--t3)" }}>Activity appears here as background exploration runs.</p>
+          <p className="aug-fs-sm" style={{ color: "var(--t3)" }}>Activity appears here as background exploration runs.</p>
         </div>
       </div>
     );
@@ -687,7 +687,7 @@ export function ActivityLog({ connectionId, isActive, canvasId }: Props) {
   return (
     <div className="h-full flex flex-col overflow-hidden">
       <StatusBar status={status} stopped={stopped} onStop={handleStop} onResume={handleResume} onRestart={handleRestart} stopping={stopping} resuming={resuming} restarting={restarting} />
-        {runError && <div className="aug-fs-xs px-4 py-1" data-testid="run-error" style={{ color: "var(--amb4)" }}>{runError}</div>}
+        {runError && <div className="aug-fs-sm px-4 py-1" data-testid="run-error" style={{ color: "var(--amb4)" }}>{runError}</div>}
 
       {/* Filter + controls bar */}
       <div className="flex items-center gap-2.5 px-4 pt-2 pb-3 shrink-0 flex-wrap"
@@ -711,7 +711,7 @@ export function ActivityLog({ connectionId, isActive, canvasId }: Props) {
         />
         <div style={{ flex: 1 }} />
         {errorCount > 0 && (
-          <span style={{ fontSize: 11, padding: "2px 7px", borderRadius: 4, background: "var(--red1)", color: "var(--red4)" }}>
+          <span className="aug-fs-xs" style={{ padding: "2px 7px", borderRadius: 4, background: "var(--red1)", color: "var(--red4)" }}>
             {errorCount} error{errorCount !== 1 ? "s" : ""}
           </span>
         )}
@@ -727,7 +727,7 @@ export function ActivityLog({ connectionId, isActive, canvasId }: Props) {
           </Button>
         )}
         {fixAllSummary && (
-          <span style={{ fontSize: 11, color: "var(--t3)" }}>
+          <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>
             fixed {fixAllSummary.fixed}/{fixAllSummary.total} · saved {fixAllSummary.saved}
             {fixAllSummary.flagged > 0 && ` (${fixAllSummary.flagged} flagged)`}
             {fixAllSummary.failed > 0 && ` · ${fixAllSummary.failed} still failing`}
@@ -751,7 +751,7 @@ export function ActivityLog({ connectionId, isActive, canvasId }: Props) {
       {/* Table */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto" style={{ background: "var(--bg-0)" }}>
         {displayed.length === 0 ? (
-          <div className="flex items-center justify-center h-32 aug-fs-xs" style={{ color: "var(--t3)" }}>
+          <div className="flex items-center justify-center h-32 aug-fs-sm" style={{ color: "var(--t3)" }}>
             No entries match the current filters.
           </div>
         ) : (

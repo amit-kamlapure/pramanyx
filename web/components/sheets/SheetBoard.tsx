@@ -179,10 +179,11 @@ export function SheetBoard({ sheet, query, column, card, editable, tick, onOpenR
                     {fields.map(c => {
                       const v = r[index[c.id]];
                       return (
-                        <span key={c.id} className="aug-fs-xs" style={{ display: "flex", gap: 6, minWidth: 0 }}>
+                        // the field's name a label at 11, its value at 13 — a value in a label/value list (2026-11-20)
+                        <span key={c.id} className="aug-fs-xs" style={{ display: "flex", gap: 6, minWidth: 0, alignItems: "baseline" }}>
                           <span style={{ ...MUTED, flex: "0 0 auto", maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis",
                             whiteSpace: "nowrap" }}>{c.name}</span>
-                          <span style={{ ...NUM, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          <span className="aug-fs-chrome" style={{ ...NUM, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                             {v === null || v === undefined || v === "" ? "—" : showValue(v, c)}
                           </span>
                         </span>

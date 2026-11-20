@@ -128,12 +128,12 @@ function Short({ label, rows, empty, testId, mono = false, unit }: {
           style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto auto", alignItems: "center", gap: 10,
             padding: "6px 0", ...(i ? RULE : {}) }}>
           <div style={{ minWidth: 0 }}>
-            <div className={mono ? "aug-fs-sm aug-mono" : "aug-fs-sm"} style={{ ...ONE_LINE, color: "var(--t1)" }}>
+            <div className={mono ? "aug-fs-chrome aug-mono" : "aug-fs-chrome"} style={{ ...ONE_LINE, color: "var(--t1)" }}>
               {r.name}
             </div>
-            <div className="aug-fs-xs" style={{ ...MUTED, ...ONE_LINE }}>{r.meta}</div>
+            <div className="aug-fs-sm" style={{ ...MUTED, ...ONE_LINE }}>{r.meta}</div>
           </div>
-          <span className="aug-fs-sm" style={{ ...NUM, color: "var(--t1)", fontWeight: 600 }}>{compactNumber(r.value)}</span>
+          <span className="aug-fs-chrome" style={{ ...NUM, color: "var(--t1)", fontWeight: 600 }}>{compactNumber(r.value)}</span>
           {r.onOpen ? (
             <Button variant="ghost" size="xs" onClick={r.onOpen} title={`The live events behind ${r.name}`}
               style={{ color: "var(--blue4)" }}>Explore ›</Button>

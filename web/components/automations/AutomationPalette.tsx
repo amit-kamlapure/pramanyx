@@ -148,7 +148,7 @@ function PaletteRowWithReason({ entry, onAdd }: RowProps) {
         // The reason sits UNDER its row rather than in a tooltip: it is the one thing a
         // reader needs in order to act, and a hover is not a place to put an instruction.
         <div
-          className="aug-fs-xs"
+          className="aug-fs-sm"
           style={{ color: "var(--t3)", padding: "0 6px 6px", lineHeight: 1.45 }}
           data-testid={`palette-reason-${entry.kind}`}
         >
@@ -184,7 +184,7 @@ function PaletteRow({ entry, onAdd }: RowProps) {
       <Icon name={entry.icon as IconName} size={14} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div
-          className="aug-fs-sm"
+          className="aug-fs-chrome"
           style={{
             color: "var(--t1)", fontWeight: 500,
             overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
@@ -197,7 +197,7 @@ function PaletteRow({ entry, onAdd }: RowProps) {
             what the next one can bind to, and that is not visible until the node is on
             the canvas otherwise. */}
         {!!gives && usable && (
-          <div className="aug-fs-xs" style={{ color: "var(--t3)" }}>
+          <div className="aug-fs-sm" style={{ color: "var(--t3)" }}>
             gives {gives}
           </div>
         )}

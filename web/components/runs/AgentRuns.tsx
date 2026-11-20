@@ -228,7 +228,7 @@ export function AgentRuns({ onGoToChat, onOpenRun, onOpenMachineView, workspaceI
         <div key={j.id} data-testid="runs-live-row" style={{ ...ROW, gap: 8, padding: "6px 0", ...(i ? RULE : {}) }}>
           <Dot color="var(--blue4)" />
           <span className="aug-fs-chrome" style={{ ...ONE_LINE, color: "var(--t1)", flex: 1, minWidth: 0 }}>{j.title || j.kind}</span>
-          <span className="aug-fs-xs" style={MUTED}>
+          <span className="aug-fs-sm" style={MUTED}>
             {j.agent?.agent || j.kind}{j.conn_id ? ` · ${connectionLabel(j.conn_id, conns)}` : ""}
             {j.started_at || j.created_at ? ` · started ${relTime(j.started_at || j.created_at || "")} ago` : ""}
           </span>
@@ -438,11 +438,11 @@ function GroupRow({ g, grid, showConn, conns, held, onPick, onOpen }: {
           </span>
           <span className="aug-fs-chrome" style={{ ...ONE_LINE, color: "var(--t1)", fontWeight: 500 }}>{shortQuestion(g.title)}</span>
         </span>
-        <span role="cell" className="aug-fs-xs" style={{ ...ROW, flexWrap: "nowrap", gap: 6, color: "var(--t2)", minWidth: 0 }}>
+        <span role="cell" className="aug-fs-chrome" style={{ ...ROW, flexWrap: "nowrap", gap: 6, color: "var(--t2)", minWidth: 0 }}>
           <span style={ONE_LINE}>{chat ? "conversation" : "deep analysis"}</span>
           {g.scheduled && <Chip title="Asked by a schedule, not a person">scheduled</Chip>}
         </span>
-        <span role="cell" className="aug-fs-xs" style={{ ...ROW, flexWrap: "nowrap", gap: 6, color: "var(--t2)", minWidth: 0 }}>
+        <span role="cell" className="aug-fs-chrome" style={{ ...ROW, flexWrap: "nowrap", gap: 6, color: "var(--t2)", minWidth: 0 }}>
           <StatusMark status={latest.status} />
           <Headline run={latest} />
           {earlierUnfinished > 0 && (
@@ -452,7 +452,7 @@ function GroupRow({ g, grid, showConn, conns, held, onPick, onOpen }: {
           )}
         </span>
         {showConn && (
-          <span role="cell" className="aug-fs-xs" style={{ ...ONE_LINE, color: "var(--t2)" }}>
+          <span role="cell" className="aug-fs-chrome" style={{ ...ONE_LINE, color: "var(--t2)" }}>
             {latest.connection_id ? connectionLabel(latest.connection_id, conns) : ""}
           </span>
         )}
@@ -465,7 +465,7 @@ function GroupRow({ g, grid, showConn, conns, held, onPick, onOpen }: {
             </Button>
           ) : <span className="aug-fs-xs" style={{ ...MUTED, ...NUM }}>1</span>}
         </span>
-        <span role="cell" className="aug-fs-xs" style={{ ...MUTED, ...NUM, textAlign: "right", whiteSpace: "nowrap" }}
+        <span role="cell" className="aug-fs-chrome" style={{ ...MUTED, ...NUM, textAlign: "right", whiteSpace: "nowrap" }}
           title={formatTimestamp(latest.started_at)}>
           {ago(latest.started_at)}
         </span>
@@ -482,8 +482,8 @@ function GroupRow({ g, grid, showConn, conns, held, onPick, onOpen }: {
               <div key={r.id} role="row" data-testid="run-earlier-row" tabIndex={0} aria-selected={on}
                 title={formatTimestamp(r.started_at)} onClick={() => onPick(r)} onKeyDown={onEnter(() => onPick(r))}
                 style={{ ...EARLIER_GRID, padding: "4px 0 4px 8px", cursor: "pointer", ...pickedStyle(on) }}>
-                <span role="cell" className="aug-fs-xs" style={{ ...MUTED, ...NUM, whiteSpace: "nowrap" }}>{formatTimestamp(r.started_at, "short")}</span>
-                <span role="cell" className="aug-fs-xs" style={{ ...ROW, flexWrap: "nowrap", gap: 6, color: "var(--t2)", minWidth: 0 }}>
+                <span role="cell" className="aug-fs-chrome" style={{ ...MUTED, ...NUM, whiteSpace: "nowrap" }}>{formatTimestamp(r.started_at, "short")}</span>
+                <span role="cell" className="aug-fs-chrome" style={{ ...ROW, flexWrap: "nowrap", gap: 6, color: "var(--t2)", minWidth: 0 }}>
                   <StatusMark status={r.status} />
                   <Headline run={r} />
                 </span>
@@ -523,9 +523,9 @@ function FindingSql({ f, connId }: { f: RunFinding; connId?: string }) {
   const openInQuery = useOpenInQuery();
   return (
     <div data-testid="run-finding" style={{ padding: "8px 0", ...RULE }}>
-      <div className="aug-fs-xs" style={{ ...ROW, gap: 6, flexWrap: "nowrap", marginBottom: 4 }}>
+      <div className="aug-fs-chrome" style={{ ...ROW, gap: 6, flexWrap: "nowrap", marginBottom: 4 }}>
         <span style={{ ...ONE_LINE, color: "var(--t1)", fontWeight: 500 }} title={f.title}>{f.title || f.finding_id || "A finding"}</span>
-        <span style={{ marginLeft: "auto", ...MUTED, ...NUM, whiteSpace: "nowrap" }}>
+        <span className="aug-fs-xs" style={{ marginLeft: "auto", ...MUTED, ...NUM, whiteSpace: "nowrap" }}>
           {f.error ? "failed" : f.row_count != null ? countNoun(f.row_count, "row") : ""}
         </span>
         {openInQuery && f.sql && (
@@ -579,9 +579,9 @@ export function runSubject({ run: r, group: g, detail, detailRead, conns, onOpen
         <div>
           <Origin testId="run-narrative-label" word="Narrative"
             says={chat ? "the answer, written by the model from the rows its query returned" : "written by the model from the run’s queries"} />
-          <div className="aug-fs-sm" style={{ color: "var(--t1)", whiteSpace: "pre-wrap" }}>{plain(headline)}</div>
+          <div className="aug-fs-chrome" style={{ color: "var(--t1)", whiteSpace: "pre-wrap" }}>{plain(headline)}</div>
           {report?.executive_summary && (
-            <div className="aug-fs-xs" style={{ color: "var(--t2)", marginTop: 6 }}>{plain(report.executive_summary)}</div>
+            <div className="aug-fs-sm" style={{ color: "var(--t2)", marginTop: 6 }}>{plain(report.executive_summary)}</div>
           )}
         </div>
       ) : (
@@ -607,9 +607,9 @@ export function runSubject({ run: r, group: g, detail, detailRead, conns, onOpen
         <div data-testid="run-figures">
           <Origin word="Narrative" says="figures the report quotes; one the platform could not match to a result is withheld (Provenance)" />
           {withUniqueKeys(report!.figures!, f => f.label).map(([key, f], i) => (
-            <div key={key} className="aug-fs-xs" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", columnGap: 10,
+            <div key={key} className="aug-fs-chrome" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", columnGap: 10,
               padding: "5px 0", ...(i ? RULE : {}) }}>
-              <span style={{ color: "var(--t2)", minWidth: 0 }}>{f.label}{f.note && <span style={{ ...MUTED, display: "block" }}>{f.note}</span>}</span>
+              <span style={{ color: "var(--t2)", minWidth: 0 }}>{f.label}{f.note && <span className="aug-fs-sm" style={{ ...MUTED, display: "block" }}>{f.note}</span>}</span>
               <span style={{ ...NUM, color: "var(--t1)", fontWeight: 600 }}>{f.value}</span>
             </div>
           ))}
@@ -623,15 +623,15 @@ export function runSubject({ run: r, group: g, detail, detailRead, conns, onOpen
     phases.length === 0 ? (reading ?? <Empty>Its record holds no stages.</Empty>) : (
       <div data-testid="run-stages" style={{ minWidth: 0 }}>
         {phases.map(([key, p], i) => (
-          <div key={key} data-testid="run-stage" className="aug-fs-xs" style={{ padding: "7px 0", ...(i ? RULE : {}) }}>
+          <div key={key} data-testid="run-stage" className="aug-fs-chrome" style={{ padding: "7px 0", ...(i ? RULE : {}) }}>
             <div style={{ ...ROW, gap: 6, flexWrap: "nowrap" }}>
               <Dot hue={p.status === "complete" ? "green" : p.status === "failed" ? "red" : "grey"} />
               <span style={{ ...ONE_LINE, color: "var(--t1)", fontWeight: 500 }} title={p.phase_name}>{p.phase_name}</span>
-              <span style={{ marginLeft: "auto", ...MUTED, whiteSpace: "nowrap" }}>
+              <span className="aug-fs-xs" style={{ marginLeft: "auto", ...MUTED, whiteSpace: "nowrap" }}>
                 {p.status === "complete" ? "" : `${keyToWords(p.status)} · `}{countNoun(p.findings?.length ?? 0, "finding")}
               </span>
             </div>
-            {p.summary && <div style={{ color: "var(--t2)", marginTop: 2 }}>{plain(p.summary)}</div>}
+            {p.summary && <div className="aug-fs-sm" style={{ color: "var(--t2)", marginTop: 2 }}>{plain(p.summary)}</div>}
           </div>
         ))}
       </div>
@@ -662,7 +662,7 @@ export function runSubject({ run: r, group: g, detail, detailRead, conns, onOpen
             <div data-testid="run-gaps">
               <Label>What it could not establish</Label>
               {withUniqueKeys(report!.data_gaps!, t => t).map(([key, t], i) => (
-                <div key={key} className="aug-fs-xs" style={{ color: "var(--t2)", padding: "5px 0", ...(i ? RULE : {}) }}>{plain(t)}</div>
+                <div key={key} className="aug-fs-chrome" style={{ color: "var(--t2)", padding: "5px 0", ...(i ? RULE : {}) }}>{plain(t)}</div>
               ))}
             </div>
           )}
@@ -670,9 +670,9 @@ export function runSubject({ run: r, group: g, detail, detailRead, conns, onOpen
             <div data-testid="run-withheld">
               <Label>Withheld</Label>
               {withUniqueKeys(report!.withheld!, w => w.text).map(([key, w], i) => (
-                <div key={key} className="aug-fs-xs" style={{ padding: "5px 0", ...(i ? RULE : {}) }}>
+                <div key={key} className="aug-fs-chrome" style={{ padding: "5px 0", ...(i ? RULE : {}) }}>
                   <div style={{ color: "var(--t2)" }}>{plain(w.text)}</div>
-                  <div style={{ ...MUTED, marginTop: 2 }}>
+                  <div className="aug-fs-sm" style={{ ...MUTED, marginTop: 2 }}>
                     from {keyToWords(w.from)}{w.figures?.length ? ` · the figure${w.figures.length > 1 ? "s" : ""} ${w.figures.join(", ")} matched no result` : ""}
                   </div>
                 </div>

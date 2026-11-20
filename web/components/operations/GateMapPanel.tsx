@@ -264,8 +264,8 @@ export function GateMapView() {
                       <Empty>Every statement declares its dialect, is written for its engine, or is rendered for it.</Empty>
                     ) : s.unguarded.map((site, i) => (
                       <div key={site.key} data-testid="gate-unguarded-site" style={{ padding: "7px 2px", ...(i ? RULE : {}) }}>
-                        <div className="aug-fs-sm" style={{ color: "var(--t1)" }}>{site.note || "no reason recorded"}</div>
-                        <div className="aug-fs-xs" title={site.key} style={{ ...MUTED, ...ONE_LINE, marginTop: 2 }}>
+                        <div className="aug-fs-chrome" style={{ color: "var(--t1)" }}>{site.note || "no reason recorded"}</div>
+                        <div className="aug-fs-sm" title={site.key} style={{ ...MUTED, ...ONE_LINE, marginTop: 2 }}>
                           <span className="aug-mono">{site.path}</span> · in {site.function} · written by{" "}
                           {site.author === "person" ? "a person" : site.author === "model" ? "a model" : `the ${site.author}`}
                         </div>
@@ -418,7 +418,7 @@ export function PoliciesView({ onOpenSettings, onOpenSpend }: {
           <div className="aug-fs-ui" style={SENTENCE}>
             Leaves as one file of JSON lines: every claim, decision, outcome, inquiry and mission as it stands.
           </div>
-          <div className="aug-fs-xs" style={{ ...MUTED, marginTop: 4 }}>The governance events of every audit sink are in the Spend page&apos;s feed.</div>
+          <div className="aug-fs-sm" style={{ ...MUTED, marginTop: 4 }}>The governance events of every audit sink are in the Spend page&apos;s feed.</div>
         </Rule>
       </section>
     </Page>

@@ -230,7 +230,7 @@ function CatalogFooter({ catalog, name, busy, error, onRefresh, onRemove }: {
           so a failure means an empty picker, and saying so beats a silent blank. The
           field is free text either way: a known id can still be typed straight in. */}
       {!catalog.live && (error || catalog.error) && (
-        <div className="aug-fs-xs" style={{ color: "var(--amb4)" }}>
+        <div className="aug-fs-sm" style={{ color: "var(--amb4)" }}>
           Couldn’t reach {name} for its model
           list ({error || catalog.error}). Type a model id directly, or Refresh to retry.
         </div>
@@ -283,7 +283,7 @@ const KEY_STATE: Record<LlmAddedProvider["key_state"], { text: string; tone: Ton
 /** The server's own reason for a refused write — said in the dialog whose write it was. */
 function Refused({ text }: { text: string | null }) {
   if (!text) return null;
-  return <div role="alert" data-testid="llm-provider-refused" className="aug-fs-xs"
+  return <div role="alert" data-testid="llm-provider-refused" className="aug-fs-sm"
     style={{ color: "var(--red4)", lineHeight: 1.5 }}>{text}</div>;
 }
 
@@ -344,7 +344,7 @@ function ProviderForm({ p, busy, setBusy, onCancel, onDone }: {
             : "paste a key, or leave blank for an endpoint that takes none"} />
       </Field>
       {p && p.key_state !== "unset" && (
-        <label className="aug-fs-xs" style={{ display: "flex", alignItems: "center", gap: 7, cursor: "pointer",
+        <label className="aug-fs-chrome" style={{ display: "flex", alignItems: "center", gap: 7, cursor: "pointer",
           color: "var(--t2)" }}>
           <Checkbox checked={dropKey} onChange={(e) => setDropKey(e.target.checked)} />
           <span>Remove the stored key — this endpoint takes none</span>
@@ -763,7 +763,7 @@ export function InferencePanel() {
   ].filter(Boolean);
 
   const testResult = result && (
-    <div className="aug-fs-xs" data-testid="llm-test-result" style={{
+    <div className="aug-fs-sm" data-testid="llm-test-result" style={{
       padding: "8px 12px", borderRadius: "var(--r2)", lineHeight: 1.5,
       background: result.ok ? "var(--grn1)" : "var(--red1)",
       border: `1px solid ${result.ok ? "var(--grn2)" : "var(--red2)"}`,
@@ -808,7 +808,7 @@ export function InferencePanel() {
       : probe.verdict === "no_reuse" ? "✗ No cross-request prefix reuse — prefix alignment won't help this binding"
       : "~ Inconclusive — measurement was ambiguous; left as declared";
     return (
-      <div className="aug-fs-xs" data-testid="llm-probe-result" style={{
+      <div className="aug-fs-sm" data-testid="llm-probe-result" style={{
         padding: "8px 12px", borderRadius: "var(--r2)", lineHeight: 1.55,
         background: tone.bg, color: tone.fg, border: `1px solid ${tone.bd}`,
         ...MONO, wordBreak: "break-word",
@@ -896,7 +896,7 @@ export function InferencePanel() {
                 <Field label="Base URL" meta={<Chip tone={KEY_STATE[addedSel.key_state].tone}>
                   {KEY_STATE[addedSel.key_state].text}</Chip>}>
                   <div style={{ ...ROW, gap: 8, flexWrap: "nowrap" }}>
-                    <span className="aug-fs-sm" style={{ ...MONO, ...ONE_LINE, flex: 1 }} title={addedSel.base_url}>
+                    <span className="aug-fs-chrome" style={{ ...MONO, ...ONE_LINE, flex: 1 }} title={addedSel.base_url}>
                       {addedSel.base_url}</span>
                     <Button variant="ghost" size="xs" onClick={() => setProviderDialog({ mode: "edit", p: addedSel })}>
                       Edit</Button>
@@ -957,20 +957,20 @@ export function InferencePanel() {
             <Note>Any model id works — the list is what this provider serves. A blank role fails its calls, saying so.</Note>
 
             {jsonPinnable && boundModels.length > 0 && (
-              <div className="aug-fs-xs" style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 12,
+              <div className="aug-fs-sm" style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 12,
                 color: "var(--t2)" }}>
                 <span>
                   <strong>Structured output</strong> — a model that advertises tool calling and does not do it fails
-                  as <code className="aug-fs-xs">tools_unsupported</code>. Tick it to run in JSON mode.
+                  as <code className="aug-fs-sm">tools_unsupported</code>. Tick it to run in JSON mode.
                 </span>
                 {boundModels.map(m => (
-                  <label key={m} style={{ display: "flex", alignItems: "center", gap: 7, cursor: "pointer" }}>
+                  <label key={m} className="aug-fs-chrome" style={{ display: "flex", alignItems: "center", gap: 7, cursor: "pointer" }}>
                     <Checkbox
                       checked={jsonPins.includes(m)}
                       onChange={e => setJsonPins(prev =>
                         e.target.checked ? Array.from(new Set([...prev, m])) : prev.filter(x => x !== m))}
                     />
-                    <span>Use JSON structured output for <code className="aug-fs-xs">{m}</code></span>
+                    <span>Use JSON structured output for <code className="aug-fs-chrome">{m}</code></span>
                   </label>
                 ))}
               </div>
@@ -1038,7 +1038,7 @@ export function InferencePanel() {
       {/* Save, the tools, and what they answered */}
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {paidBindings.length > 0 && (
-          <div className="aug-fs-xs" data-testid="llm-paid-ack" style={{
+          <div className="aug-fs-sm" data-testid="llm-paid-ack" style={{
             lineHeight: 1.5, padding: "8px 12px", borderRadius: "var(--r3)",
             background: "var(--amb1)", color: "var(--amb4)", display: "flex", flexWrap: "wrap", gap: "4px 14px",
             alignItems: "center",
@@ -1074,7 +1074,7 @@ export function InferencePanel() {
           ]} />
           {(testing || probing) && <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>{testing ? "Testing…" : "Measuring…"}</span>}
           {saved && <span className="aug-fs-xs" style={{ color: "var(--grn4)" }}>✓ Saved</span>}
-          {loadErr && <span className="aug-fs-xs" style={{ color: "var(--red4)" }}>Could not re-read the settings: {loadErr}</span>}
+          {loadErr && <span className="aug-fs-sm" style={{ color: "var(--red4)" }}>Could not re-read the settings: {loadErr}</span>}
         </div>
         {testResult}
         {probeResult}
@@ -1093,9 +1093,9 @@ export function InferencePanel() {
             </Note>
           ) : added.map(p => (
             <div key={p.id} data-testid={`llm-provider-${p.id}`}
-              style={{ ...ROW, ...RULE, gap: 10, padding: "7px 0", flexWrap: "nowrap" }}>
+              className="aug-fs-chrome" style={{ ...ROW, ...RULE, gap: 10, padding: "7px 0", flexWrap: "nowrap" }}>
               <span style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{p.name}</span>
-              <span className="aug-fs-xs" style={{ ...MONO, ...ONE_LINE, color: "var(--t3)", flex: 1 }}
+              <span className="aug-fs-sm" style={{ ...MONO, ...ONE_LINE, color: "var(--t3)", flex: 1 }}
                 title={p.base_url}>{p.base_url}</span>
               {p.id === live && <Chip tone="accent" title="Every role runs on it">in use</Chip>}
               {p.id === fb?.backend && <Chip title="Calls land on it when the primary refuses">fallback</Chip>}

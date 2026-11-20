@@ -707,10 +707,10 @@ function CheckRow({ check, late, disabled, sample, onShow, onLeft, onLate, onUnd
 function Sample({ page }: { page: ObjectListingPage }) {
   return (
     <div style={{ overflowX: "auto" }} data-testid="designer-sample">
-      <table className="aug-fs-xs" style={{ borderCollapse: "collapse", width: "100%" }}>
+      <table className="aug-fs-chrome" style={{ borderCollapse: "collapse", width: "100%" }}>
         <thead>
           <tr>{withUniqueKeys(page.names, n => n).map(([k, n]) => (
-            <th key={k} style={{ textAlign: "left", padding: "2px 8px", color: "var(--t2)", borderBottom: RULE }}>{n}</th>
+            <th key={k} className="aug-fs-xs" style={{ textAlign: "left", padding: "2px 8px", color: "var(--t2)", borderBottom: RULE }}>{n}</th>
           ))}</tr>
         </thead>
         <tbody>
@@ -721,7 +721,7 @@ function Sample({ page }: { page: ObjectListingPage }) {
           ))}
         </tbody>
       </table>
-      {page.total != null && <span style={HINT}>{formatCount(page.total)} in all</span>}
+      {page.total != null && <span className="aug-fs-xs" style={HINT}>{formatCount(page.total)} in all</span>}
     </div>
   );
 }
@@ -757,7 +757,7 @@ function MovesSection({ draft, preview, disabled, onMark }: {
           {withUniqueKeys(observed, m => `${m.from_stage}>${m.to_stage}`).map(([k, m]) => {
             const expected = draft.moves ? draft.moves.some(x => x.from === m.from_stage && x.to === m.to_stage) : m.declared;
             return (
-            <label key={k} className="aug-fs-sm" data-testid="designer-move"
+            <label key={k} className="aug-fs-chrome" data-testid="designer-move"
               style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--t1)" }}>
               <Checkbox checked={expected} disabled={disabled}
                 aria-label={`Expect ${label(m.from_stage)} to ${label(m.to_stage)}`}

@@ -155,7 +155,7 @@ export function FieldRow({ label, value, tone = "var(--t2)" }:
     <div className="aug-fs-xs" style={{ display: "flex", justifyContent: "space-between",
       gap: 8, padding: "2px 9px" }}>
       <span style={{ color: "var(--t3)", flexShrink: 0 }}>{label}</span>
-      <span style={{ color: tone, textAlign: "right", overflow: "hidden",
+      <span className="aug-fs-sm" style={{ color: tone, textAlign: "right", overflow: "hidden",
         textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</span>
     </div>
   );
@@ -170,7 +170,7 @@ export function FaceHeader({ face, title, duration, failed }:
       <span style={{ color: failed ? "var(--red4)" : meta.color, display: "flex" }}>
         <Icon name={meta.icon} size={12} />
       </span>
-      <span className="aug-fs-xs" style={{ color: "var(--t1)", fontWeight: 500,
+      <span className="aug-fs-chrome" style={{ color: "var(--t1)", fontWeight: 500,
         overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
         {title}
       </span>
@@ -218,7 +218,7 @@ export function UsageBlock({ usage }: {
  */
 export function ProseBlock({ text, tone = "var(--t2)" }: { text: string; tone?: string }) {
   return (
-    <div className="aug-fs-xs nowheel" style={{
+    <div className="aug-fs-sm nowheel" style={{
       padding: "6px 9px 5px", color: tone,
       maxHeight: 76, overflowY: "auto", lineHeight: 1.4, overflowWrap: "anywhere",
     }}>

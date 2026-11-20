@@ -808,7 +808,8 @@ export function Popover({ children, onClose, left = 0, width = 360, up = false }
   const ref = useRef<HTMLDivElement>(null);
   useCloseOutside(ref, onClose);
   return (
-    <div ref={ref} role="dialog" className="aug-fs-sm" style={{ position: "absolute", ...(up ? { bottom: "100%" } : { top: "100%" }), left, zIndex: 30, width,
+    // its rows — a column, a rule — at 13px, as every list row is (the user, 2026-11-20); captions say themselves at 11
+    <div ref={ref} role="dialog" className="aug-fs-chrome" style={{ position: "absolute", ...(up ? { bottom: "100%" } : { top: "100%" }), left, zIndex: 30, width,
       background: "var(--bg-2)", border: "1px solid var(--b1)", borderRadius: "var(--r3)",
       padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8, boxShadow: "var(--shadow-md)" }}>
       {children}
@@ -848,7 +849,7 @@ function CardPop({ sheet, card, onApply, onClose }: {
       <span className="aug-fs-xs" style={MUTED}>A card shows, under its title — at most four</span>
       <div style={{ maxHeight: 280, overflowY: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
         {sheet.columns.map(c => (
-          <label key={c.id} className="aug-fs-sm" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <label key={c.id} className="aug-fs-chrome" style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <Checkbox checked={card.includes(c.id)} onChange={() => toggle(c.id)} aria-label={`Show ${c.name} on a card`} />
             <span style={{ flex: 1 }}>{c.name}</span>
             <span className="aug-fs-xs" style={MUTED}>{KIND_LABEL[c.kind]}</span>
@@ -918,7 +919,7 @@ function RulesPop({ sheet, run, onShow, onClose, editable = true }: {
         <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 0", borderTop: "1px solid var(--b0)" }}>
           <Dot color={RULE_COLOR[r.tone]} title={r.tone} />
           <b>{r.name}</b>
-          <span className="aug-fs-xs" style={{ ...MUTED, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+          <span className="aug-fs-sm" style={{ ...MUTED, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
             title={filterWords(r.conditions, sheet.columns)}>{filterWords(r.conditions, sheet.columns)}</span>
           <span className="aug-fs-xs" style={NUM}>{formatCount(sheet.rule_rows?.[r.id] ?? 0)} rows</span>
           <Button variant="ghost" size="xs" onClick={() => onShow(r.id)}>Show these</Button>
@@ -1040,7 +1041,7 @@ function FieldsPop({ sheet, hidden, editable, onHidden, onClose, run }: {
               <span className="aug-fs-xs" style={MUTED}>It reads, for each row:</span>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px" }}>
                 {readable.map(c => (
-                  <label key={c.id} className="aug-fs-xs" style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <label key={c.id} className="aug-fs-chrome" style={{ display: "flex", alignItems: "center", gap: 4 }}>
                     <Checkbox checked={reads.includes(c.id)} aria-label={`It reads ${c.name}`}
                       onChange={e => setReads(e.target.checked ? [...reads, c.id] : reads.filter(x => x !== c.id))} />
                     {c.name}

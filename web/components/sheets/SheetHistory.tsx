@@ -73,7 +73,7 @@ export function SheetHistory({ sheet, tick, editable, scope, canUndo, onScope, o
             {told && (
               <div data-testid="history-scope" style={{ display: "flex", flexDirection: "column", gap: 4, paddingBottom: 14 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <b className="aug-fs-sm" style={{ minWidth: 0, overflowWrap: "anywhere" }}>
+                  <b className="aug-fs-chrome" style={{ minWidth: 0, overflowWrap: "anywhere" }}>
                     {told.name ? `${told.name} · row ${formatCount(told.row)}` : `Row ${formatCount(told.row)}`}
                   </b>
                   {told.title && <span className="aug-fs-xs" style={{ ...MUTED, whiteSpace: "nowrap" }}>{short(told.title)}</span>}
@@ -128,7 +128,7 @@ function Change({ change, sheet, editable, scoped, whole, busy, onScope, onShowA
     <section data-testid="history-change" aria-label={change.what || undefined} style={{ padding: "8px 0", borderBottom: RULE, display: "flex", flexDirection: "column", gap: 6 }}>
       {head && (
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span className="aug-fs-sm" style={{ minWidth: 0, overflowWrap: "anywhere" }}>{change.what}</span>
+          <span className="aug-fs-chrome" style={{ minWidth: 0, overflowWrap: "anywhere" }}>{change.what}</span>
           {editable && !scoped && total > 1 && (
             <Button variant="ghost" size="xs" disabled={!!busy} style={{ marginLeft: "auto", flex: "0 0 auto" }}
               title="Puts back every value of this change that still stands. A value changed since is left as it is, and named."
@@ -186,19 +186,19 @@ function Line({ change, line, sheet, editable, scoped, busy, onScope, onPutBack 
                 {line.title && <span>· {short(line.title)}</span>}
               </div>
             )}
-            <div className="aug-fs-sm" style={{ overflowWrap: "anywhere" }}>
+            <div className="aug-fs-chrome" style={{ overflowWrap: "anywhere" }}>
               <span style={MUTED}>{words(line.from)}</span> → {words(line.to)}
               {named && !line.stands && !line.blocked && <span className="aug-fs-xs" style={MUTED}> · now {words(line.now)}</span>}
             </div>
           </>
         ) : (
           <>
-            <div className="aug-fs-sm" style={{ overflowWrap: "anywhere" }}>
+            <div className="aug-fs-chrome" style={{ overflowWrap: "anywhere" }}>
               Row {formatCount(line.row)} {line.what || "changed"}
               {line.title && <span className="aug-fs-xs" style={MUTED}> · {short(line.title)}</span>}
             </div>
             {line.values && Object.keys(line.values).length > 0 && (
-              <div className="aug-fs-xs" style={{ ...MUTED, overflowWrap: "anywhere" }}>
+              <div className="aug-fs-sm" style={{ ...MUTED, overflowWrap: "anywhere" }}>
                 {Object.entries(line.values).map(([name, value]) => `${name} ${String(value)}`).join(" · ")}
               </div>
             )}

@@ -136,12 +136,12 @@ export function BusinessLine({ stages, figures, chosen, onChoose }: {
                 {out ? `${out} of ${figs.length} outside usual` : "all inside usual"}
               </div>
               {figs.map(f => (
-                <div key={f.id} data-testid="line-figure" className="aug-fs-sm"
+                <div key={f.id} data-testid="line-figure" className="aug-fs-chrome"
                   style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "2px 8px", padding: "5px 0", borderTop: RULE }}>
                   <span style={{ color: "var(--t2)" }} title={f.why || undefined}>{f.label}</span>
                   <span style={{ ...NUM, color: "var(--t1)", fontWeight: 600, textAlign: "right" }}>{f.current_text ?? "—"}</span>
                   <Track figure={f} />
-                  <span className="aug-fs-xs" style={{ ...NUM, gridColumn: "1 / 3", color: "var(--t3)" }}
+                  <span className="aug-fs-sm" style={{ ...NUM, gridColumn: "1 / 3", color: "var(--t3)" }}
                     title={f.equal_age && !f.equal_age.equal ? f.equal_age.why : undefined}>
                     {f.usual ? `usual ${usualWords(f)}${sideOf(f) && !f.outside ? " · not called" : ""}` : "no usual range"}
                     {f.status !== "final" ? ` · ${f.status.replace("_", " ")}` : ""}
@@ -171,7 +171,7 @@ function Trail({ trail, onCite }: { trail: StorylineTrail[]; onCite: (source: st
   return (
     <ol data-testid="storyline-trail" style={{ listStyle: "none", margin: 0, padding: 0, marginLeft: 4, borderLeft: "2px solid var(--b1)" }}>
       {trail.map((t, i) => (
-        <li key={i} className="aug-fs-sm" style={{ position: "relative", padding: "0 0 10px 14px", color: "var(--t2)" }}>
+        <li key={i} className="aug-fs-chrome" style={{ position: "relative", padding: "0 0 10px 14px", color: "var(--t2)" }}>
           <span aria-hidden style={{ position: "absolute", left: -6, top: 5, width: 8, height: 8, boxSizing: "content-box",
             background: t.now ? "var(--blue4)" : "var(--bg-1)",
             border: `2px ${t.open ? "dashed var(--amb4)" : `solid ${t.now ? "var(--blue4)" : "var(--t3)"}`}` }} />
@@ -244,13 +244,13 @@ export function Storylines({ stories, figures, period, readerName, teams, open, 
                 {!s.called && <>{" "}<Chip title="Read outside its usual range, but the platform does not call it a move">not called</Chip></>}
                 {s.status !== "final" && <>{" "}<Chip tone="amber" title="Its range is still filling, so the figure may yet change">{s.status.replace("_", " ")}</Chip></>}
               </span>
-              <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>
-                <b className="aug-fs-sm" data-testid="storyline-owner" style={{ display: "block", fontWeight: 600, color: s.owner ? "var(--t1)" : "var(--amb4)" }}>
+              <span className="aug-fs-sm" style={{ color: "var(--t3)" }}>
+                <b className="aug-fs-chrome" data-testid="storyline-owner" style={{ display: "block", fontWeight: 600, color: s.owner ? "var(--t1)" : "var(--amb4)" }}>
                   {s.owner || "No owner"}</b>
                 {s.stage_name || (s.decision?.decided ? `decided ${day(s.decision.decided)}` : "")}
               </span>
-              <span className="aug-fs-xs" style={{ ...NUM, color: "var(--t3)" }}>
-                <b className="aug-fs-sm" style={{ display: "block", fontWeight: 600, color: "var(--t1)" }}>{worthWords(s)}</b>
+              <span className="aug-fs-sm" style={{ ...NUM, color: "var(--t3)" }}>
+                <b className="aug-fs-chrome" style={{ display: "block", fontWeight: 600, color: "var(--t1)" }}>{worthWords(s)}</b>
                 {s.worth.value != null ? (s.worth.value > 0 ? "above its usual top" : "below its usual bottom") : ""}
               </span>
               <span>{next && <Button size="sm" variant="outline" disabled={busy === s.id} data-testid="storyline-step"
@@ -346,9 +346,9 @@ function Ledger({ title, info, testid, children }: { title: string; info: string
 function Entry({ title, sub, action }: { title: string; sub?: string; action?: ReactNode }) {
   return (
     <div data-testid="ledger-entry" style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) auto", gap: "2px 10px", padding: "7px 0", borderTop: RULE }}>
-      <span className="aug-fs-sm" title={title} style={{ ...CLAMP, color: "var(--t1)" }}>{title}</span>
+      <span className="aug-fs-chrome" title={title} style={{ ...CLAMP, color: "var(--t1)" }}>{title}</span>
       {action && <span style={{ gridRow: "1 / 3", gridColumn: 2 }}>{action}</span>}
-      {sub && <span className="aug-fs-xs" title={sub} style={{ ...CLAMP, ...NUM, gridColumn: 1, color: "var(--t3)" }}>{sub}</span>}
+      {sub && <span className="aug-fs-sm" title={sub} style={{ ...CLAMP, ...NUM, gridColumn: 1, color: "var(--t3)" }}>{sub}</span>}
     </div>
   );
 }

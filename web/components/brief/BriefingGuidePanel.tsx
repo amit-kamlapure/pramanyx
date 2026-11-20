@@ -126,26 +126,26 @@ export function BriefingGuidePanel({ connectionId, schema, guide, onChange, read
       ) : (
         <>
           <H>The business</H>
-          <p className="aug-fs-sm" style={{ margin: 0 }}>{doc.business}</p>
+          <p className="aug-fs-ui" style={{ margin: 0 }}>{doc.business}</p>
           <H>What each range is for</H>
-          <ul className="aug-fs-sm" style={{ margin: 0, paddingLeft: 16 }}>
+          <ul className="aug-fs-chrome" style={{ margin: 0, paddingLeft: 16 }}>
             {(["week", "month", "year", "custom"] as const).filter(k => doc.ranges[k]).map(k => (
               <li key={k} style={{ marginBottom: 4 }}><b style={{ color: "var(--t1)", fontWeight: 500 }}>
                 {k[0].toUpperCase() + k.slice(1)}</b> — {doc.ranges[k]}</li>
             ))}
           </ul>
           <H>What counts as news</H>
-          <p className="aug-fs-sm" style={{ margin: 0 }}>
+          <p className="aug-fs-ui" style={{ margin: 0 }}>
             A figure is news when it leaves its usual range — the {doc.news.usual_week ?? 8} weeks before
             (for a week), give or take one standard deviation. One more than {doc.news.floor_sd ?? 2} away
             is on every reader&apos;s edition.
           </p>
           {doc.comparisons.length > 0 && (<><H>Fair comparisons</H>
-            <ul className="aug-fs-sm" style={{ margin: 0, paddingLeft: 16 }}>
+            <ul className="aug-fs-chrome" style={{ margin: 0, paddingLeft: 16 }}>
               {doc.comparisons.map((c, i) => (
                 <li key={`${i}-${c.text.slice(0, 20)}`} style={{ marginBottom: 4 }}>{c.text}
                   {c.exclude_from_last_year && (
-                    <span className="aug-fs-xs" style={{ display: "block", color: "var(--t3)" }}>
+                    <span className="aug-fs-sm" style={{ display: "block", color: "var(--t3)" }}>
                       Compared without {c.exclude_from_last_year.value}
                       {c.exclude_from_last_year.until ? ` before ${c.exclude_from_last_year.until}` : ""} —
                       {guide.editions_read?.state === "published" ? " applied." : " applied once a person publishes the guide."}
@@ -154,15 +154,15 @@ export function BriefingGuidePanel({ connectionId, schema, guide, onChange, read
               ))}
             </ul></>)}
           {doc.calendar.length > 0 && (<><H>The calendar</H>
-            <p className="aug-fs-sm" style={{ margin: 0 }}>
+            <p className="aug-fs-chrome" style={{ margin: 0 }}>
               {doc.calendar.map(d => `${d.name} (${d.when})`).join(" · ")}
             </p></>)}
           {doc.care.length > 0 && (<><H>Read with care</H>
-            <ul className="aug-fs-sm" style={{ margin: 0, paddingLeft: 16 }}>
+            <ul className="aug-fs-chrome" style={{ margin: 0, paddingLeft: 16 }}>
               {doc.care.map((c, i) => <li key={`${i}-${c.text.slice(0, 20)}`} style={{ marginBottom: 4 }}>{c.text}<Ev>{c.evidence}</Ev></li>)}
             </ul></>)}
           <H>What an edition measures · {doc.checks.length}</H>
-          <ul className="aug-fs-sm" style={{ margin: 0, paddingLeft: 16 }}>
+          <ul className="aug-fs-chrome" style={{ margin: 0, paddingLeft: 16 }}>
             {doc.checks.map(c => <li key={c.id} style={{ marginBottom: 3 }}>{c.label}
               <Ev>{c.metric ? `approved metric ${c.metric}` : c.evidence}</Ev></li>)}
           </ul>
@@ -175,7 +175,7 @@ export function BriefingGuidePanel({ connectionId, schema, guide, onChange, read
       )}
 
       <H>Readers</H>
-      <div className="aug-fs-sm" style={{ display: "grid" }}>
+      <div className="aug-fs-chrome" style={{ display: "grid" }}>
         {doc.readers.length === 0 && <span style={{ color: "var(--t3)" }}>No reader added yet — editions are written for the organisation.</span>}
         {doc.readers.map(r => (
           <div key={r.group_id} style={{ display: "grid", gridTemplateColumns: "116px 1fr", gap: 8, padding: "4px 0",
@@ -189,7 +189,7 @@ export function BriefingGuidePanel({ connectionId, schema, guide, onChange, read
         <div data-testid="guide-proposed-readers" style={{ marginTop: 8 }}>
           <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>The guide proposes:</span>
           {withUniqueKeys(doc.proposed_readers, (r: GuideReader) => r.name).map(([key, r]) => (
-            <div key={key} className="aug-fs-sm" style={{ display: "flex", gap: 8, alignItems: "center", padding: "3px 0" }}>
+            <div key={key} className="aug-fs-chrome" style={{ display: "flex", gap: 8, alignItems: "center", padding: "3px 0" }}>
               <span style={{ flex: 1 }}><b style={{ fontWeight: 500, color: "var(--t1)" }}>{r.name}</b> — {r.watches}</span>
               <Button size="sm" variant="secondary" disabled={!!busy}
                 onClick={() => addReader({ name: r.name, watches: r.watches, check_ids: r.check_ids })}>Add</Button>
@@ -221,7 +221,7 @@ export function BriefingGuidePanel({ connectionId, schema, guide, onChange, read
         {history ? "Hide" : `${guide.versions.length} versions`}
       </Button>
       {history && (
-        <ol className="aug-fs-xs" style={{ margin: "4px 0 0", paddingLeft: 16, color: "var(--t2)" }}>
+        <ol className="aug-fs-chrome" style={{ margin: "4px 0 0", paddingLeft: 16, color: "var(--t2)" }}>
           {guide.versions.map(v => (
             <li key={v.version}>v{v.version} · {v.state} · {v.by}{v.note ? ` — ${v.note}` : ""}</li>
           ))}

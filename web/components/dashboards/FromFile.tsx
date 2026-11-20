@@ -48,7 +48,7 @@ function ColumnsRead({ staged }: { staged: StagedFile }) {
   const tab = staged.tabs[0];
   return (
     <div style={{ overflowX: "auto" }}>
-      <table className="aug-fs-sm" data-testid="from-file-columns" style={{ width: "100%", borderCollapse: "collapse" }}>
+      <table className="aug-fs-chrome" data-testid="from-file-columns" style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead><tr style={{ color: "var(--t3)", textAlign: "left" }}>
           {["Column", "Reads as", "What is in it"].map(h => <th key={h} className="aug-fs-xs" style={{ ...SECTION_LABEL, fontWeight: 400, padding: "0 12px 4px 0", borderBottom: "1px solid var(--b0)" }}>{h}</th>)}
         </tr></thead>

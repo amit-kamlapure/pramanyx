@@ -84,8 +84,8 @@ function ShareForm({ docId, name, access, onClose, onSaved }: {
                   <label key={p.email} style={{ display: "flex", gap: 8, alignItems: "center", cursor: "pointer" }}>
                     <Checkbox checked={chosen.has(p.email.toLowerCase())} onChange={() => toggle(p.email.toLowerCase())}
                       aria-label={p.name || p.email} />
-                    <span className="aug-fs-sm" style={{ color: "var(--t1)" }}>{p.name || p.email}</span>
-                    {p.name && <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>{p.email}</span>}
+                    <span className="aug-fs-chrome" style={{ color: "var(--t1)" }}>{p.name || p.email}</span>
+                    {p.name && <span className="aug-fs-sm" style={{ color: "var(--t3)" }}>{p.email}</span>}
                   </label>
                 ))}
               </div>

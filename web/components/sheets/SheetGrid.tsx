@@ -305,8 +305,9 @@ export function GridHeader({ sheet, shown, sort = [], onSort, onWidth, onFit, on
   /** The conditions of the view's filter on a column — what its arrow says and its menu starts from. */
   const filteredBy = (c: SheetColumn) => columnConditions(filter, c.id, sheet.columns);
   return (
-    // the head and the rows at the reading size, as the SQL editor's results draw theirs — one font, one size, both grids
-    <div ref={rowRef} role="row" className="aug-fs-ui" style={{ display: "flex", position: "sticky", top: 0, zIndex: 3,
+    // the head and the rows at 13px, as the SQL editor's results draw theirs — one font, one size, both grids; every
+    // table cell on every page is 13px (the user, 2026-11-20)
+    <div ref={rowRef} role="row" className="aug-fs-chrome" style={{ display: "flex", position: "sticky", top: 0, zIndex: 3,
       background: "var(--bg-2)", color: "var(--t2)" }}>
       <div data-corner title={onSelectAll ? "Select every cell · Cmd or Ctrl+A" : undefined}
         onPointerDown={e => { if (onSelectAll && e.button === 0) { e.preventDefault(); onSelectAll(); } }}
@@ -1284,7 +1285,7 @@ export function SheetGrid({ sheet, rows, hidden, editable, onEdit, onEditMany, o
               }
               const rowNo = Number(r[0]);
               return (
-                <div key={rowNo} role="row" className="aug-fs-ui" style={{ position: "absolute", top: item.start, left: 0,
+                <div key={rowNo} role="row" className="aug-fs-chrome" style={{ position: "absolute", top: item.start, left: 0,
                   display: "flex", width: span, minWidth: "100%", height: ROW_HEIGHT, background: "var(--bg-0)" }}>
                   <RowNumber row={rowNo} marks={rows.marksOf(rowNo)} rules={sheet.rules} onOpen={() => onOpenRow(rowNo)}
                     selected={work.rowSelected(item.index)}
@@ -1336,7 +1337,7 @@ function CellEditor({ column, text, original, saving, typed, onChange, onSave, o
   return (
     <>
       <input ref={ref} value={text} disabled={saving} list={listId} placeholder={placeholder}
-        aria-label={`New value for ${column.name}`} className="aug-fs-ui"
+        aria-label={`New value for ${column.name}`} className="aug-fs-chrome"
         onChange={e => onChange(e.target.value)} onBlur={() => decide(text !== original)}
         onKeyDown={e => {
           e.stopPropagation();
@@ -1397,7 +1398,7 @@ function CellBar({ sheet, selected, column, value, set, editable, error, said, r
       ) : (
         <>
           <span style={{ ...NUM, whiteSpace: "nowrap" }}>{column.name} · row {formatCount(selected.row)}</span>
-          <span className="aug-fs-sm" title={empty ? undefined : String(value)}
+          <span className="aug-fs-chrome" title={empty ? undefined : String(value)}
             style={{ ...ELLIPSIS, maxWidth: 360, color: empty ? "var(--t4)" : "var(--t1)", fontWeight: 600 }}>
             {empty ? (column.model_writes ? "not filled" : "empty") : showValue(value, column) || String(value)}
           </span>

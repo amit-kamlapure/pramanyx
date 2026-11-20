@@ -603,12 +603,12 @@ function MonitorRow({ monitor, proof, proofRead, metricLabel, channel, alerts, r
         <span className="aug-fs-chrome" title={monitor.name} style={{ ...ONE_LINE, display: "block", fontWeight: 600, color: "var(--t1)" }}>
           {monitor.name}
         </span>
-        <span className="aug-fs-xs" style={{ ...MUTED, ...ONE_LINE, display: "block" }}>
+        <span className="aug-fs-sm" style={{ ...MUTED, ...ONE_LINE, display: "block" }}>
           {watches}{!monitor.enabled ? " · off" : ""}
         </span>
       </span>
-      <span role="cell" className="aug-fs-xs" style={{ ...ONE_LINE, color: "var(--t2)" }} title={ruleWords(monitor)}>{ruleWords(monitor)}</span>
-      <span role="cell" className="aug-fs-xs" style={{ ...ONE_LINE, color: "var(--t2)" }} title={monitor.check_cron}>{scheduleWords(monitor.check_cron)}</span>
+      <span role="cell" className="aug-fs-chrome" style={{ ...ONE_LINE, color: "var(--t2)" }} title={ruleWords(monitor)}>{ruleWords(monitor)}</span>
+      <span role="cell" className="aug-fs-chrome" style={{ ...ONE_LINE, color: "var(--t2)" }} title={monitor.check_cron}>{scheduleWords(monitor.check_cron)}</span>
       <span role="cell" style={{ minWidth: 0, overflow: "hidden" }}>
         {proofRead
           ? <Chip tone={PROOF_TONE[state]} title={proof ? proofSentence(proof.sentence) : "Could not read whether this alert was proven"}>
@@ -616,13 +616,13 @@ function MonitorRow({ monitor, proof, proofRead, metricLabel, channel, alerts, r
             </Chip>
           : <span className="aug-fs-xs" style={MUTED}>reading…</span>}
       </span>
-      <span role="cell" className="aug-fs-xs" style={{ ...ROW, gap: 6, flexWrap: "nowrap", color: "var(--t2)" }}>
+      <span role="cell" className="aug-fs-chrome" style={{ ...ROW, gap: 6, flexWrap: "nowrap", color: "var(--t2)" }}>
         {lastAlert
           ? <span title={formatTimestamp(lastAlert.triggered_at)}>{`${relTime(lastAlert.triggered_at)} ago`}</span>
           : <span style={MUTED}>never fired</span>}
         {unacked > 0 && <Chip tone="amber">{`${unacked} open`}</Chip>}
       </span>
-      <span role="cell" className="aug-fs-xs" style={{ ...ONE_LINE, color: channel.startsWith("sends nowhere") ? "var(--amb4)" : "var(--t2)" }} title={channel}>{channel}</span>
+      <span role="cell" className="aug-fs-chrome" style={{ ...ONE_LINE, color: channel.startsWith("sends nowhere") ? "var(--amb4)" : "var(--t2)" }} title={channel}>{channel}</span>
       <span role="cell" onClick={stop} onKeyDown={stop} style={{ justifySelf: "end" }}>
         <Button size="xs" variant="outline" onClick={onRun} title={runResult || "Run its check now"}>Run now</Button>
       </span>
@@ -661,17 +661,17 @@ function monitorSubject({ monitor: m, proof, proofRead, metricLabel, channel, al
       activity: fired.length === 0 ? <Empty>It has never fired.</Empty> : (
         <div data-testid="monitor-alert-log">
           {fired.slice(0, 30).map((a, i) => (
-            <div key={a.id} className="aug-fs-xs" style={{ padding: "7px 0", ...(i ? RULE : {}) }}>
+            <div key={a.id} className="aug-fs-chrome" style={{ padding: "7px 0", ...(i ? RULE : {}) }}>
               <div style={{ ...ROW, gap: 6, flexWrap: "nowrap" }}>
                 <Dot hue={SEVERITY_HUE[a.severity] ?? "blue"} />
                 <span style={{ color: "var(--t1)", fontWeight: 500 }}>{a.severity}</span>
-                <span style={MUTED} title={formatTimestamp(a.triggered_at)}>{formatTimestamp(a.triggered_at)}</span>
-                <span style={{ marginLeft: "auto", ...MUTED }}>
+                <span className="aug-fs-xs" style={MUTED} title={formatTimestamp(a.triggered_at)}>{formatTimestamp(a.triggered_at)}</span>
+                <span className="aug-fs-xs" style={{ marginLeft: "auto", ...MUTED }}>
                   {a.acknowledged ? "acknowledged" : a.closed_by ? "closed by a recovery" : "open"}
                 </span>
               </div>
-              <div style={{ color: "var(--t2)", marginTop: 2 }}>{alertText(a.message)}</div>
-              <div style={{ ...MUTED, marginTop: 2 }}>
+              <div className="aug-fs-sm" style={{ color: "var(--t2)", marginTop: 2 }}>{alertText(a.message)}</div>
+              <div className="aug-fs-sm" style={{ ...MUTED, marginTop: 2 }}>
                 {/* the severity beside what it affects (the study, §14.3) */}
                 affects {a.metric_name ? `the metric ${a.metric_name}` : metricLabel ? `the metric ${metricLabel}` : "what its own query reads"}
                 {a.current_value != null ? ` · read ${a.current_value}` : ""}{a.threshold != null ? ` against ${a.threshold}` : ""}
@@ -689,7 +689,7 @@ function monitorSubject({ monitor: m, proof, proofRead, metricLabel, channel, al
             <Button size="xs" variant="outline" onClick={onEdit}>Edit</Button>
             <Button size="xs" variant="destructive" onClick={onDelete}>Delete</Button>
           </div>
-          {runResult && <div role="status" className="aug-fs-xs" style={MUTED}>{runResult}</div>}
+          {runResult && <div role="status" className="aug-fs-sm" style={MUTED}>{runResult}</div>}
           <MonitorProofRow monitorId={m.id} proof={proofRead ? proof : undefined} onChanged={onProofChanged} />
         </div>
       ),
@@ -729,7 +729,7 @@ function RunLog({ connId }: { connId: string }) {
                 <span role="columnheader" style={{ textAlign: "right" }}>Rows</span><span role="columnheader" style={{ textAlign: "right" }}>Took</span>
               </div>
               {log.map(r => (
-                <div key={r.id} role="row" data-testid="run-log-row" className="aug-fs-xs" style={{ ...LOG_GRID, padding: "5px 0", ...RULE }}>
+                <div key={r.id} role="row" data-testid="run-log-row" className="aug-fs-chrome" style={{ ...LOG_GRID, padding: "5px 0", ...RULE }}>
                   <span role="cell" style={{ ...MUTED, whiteSpace: "nowrap" }} title={r.ts}>{formatTimestamp(r.ts)}</span>
                   <span role="cell" style={{ color: r.error ? "var(--red4)" : "var(--grn4)" }} title={r.error ?? undefined}>{r.error ? "failed" : "ran"}</span>
                   <span role="cell" style={{ ...ONE_LINE, fontFamily: "var(--font-code)", color: "var(--t2)" }} title={r.sql_full}>{r.sql_full.replace(/\s+/g, " ")}</span>
@@ -817,7 +817,7 @@ export function MonitorProofRow({ monitorId, proof: given, onChanged }: {
     <div>
       <div style={{ ...ROW, gap: 6 }}>
         {proof || failed ? (
-          <span className="aug-fs-xs" style={{ ...MUTED, flex: "1 1 160px", minWidth: 160 }}>
+          <span className="aug-fs-sm" style={{ ...MUTED, flex: "1 1 160px", minWidth: 160 }}>
             {proof ? proofSentence(proof.sentence) : "Could not read whether this alert was proven."}
           </span>
         ) : (
@@ -828,7 +828,7 @@ export function MonitorProofRow({ monitorId, proof: given, onChanged }: {
         {btn("send", "Send test alert", "Feed the rule a synthetic outlier and deliver the [DRILL] alert through its real channel")}
       </div>
       {outcome && (
-        <div role="status" className="aug-fs-xs" style={{ marginTop: 6, color: outcome.tone === "ok" ? "var(--t2)" : "var(--amb4)" }}>
+        <div role="status" className="aug-fs-sm" style={{ marginTop: 6, color: outcome.tone === "ok" ? "var(--t2)" : "var(--amb4)" }}>
           {outcome.text}
         </div>
       )}
@@ -874,7 +874,7 @@ function AlertRow({ g, first, removed, onAck }: { g: AlertGroup; first: boolean;
             {a.caveat && <Chip tone="amber" title={a.caveat}>value may be mis-computed</Chip>}
             {removed && <Chip title="This monitor no longer exists — these alerts are history">since removed</Chip>}
           </div>
-          <div className="aug-fs-xs" title={a.message} style={{ ...MUTED, ...ONE_LINE }}>
+          <div className="aug-fs-sm" title={a.message} style={{ ...MUTED, ...ONE_LINE }}>
             {alertText(a.message)}{a.previous_value != null && !recovery ? ` · was ${short(a.previous_value)}` : ""} · {when}
           </div>
         </div>
@@ -972,8 +972,8 @@ function MonitorForm({
           onValueChange={v => setField("alert_on", v as AlertOn)}>
           {ALERT_TYPES.map(at => (
             <RadioCards.Item key={at.value} value={at.value} style={{ flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
-              <span className="aug-fs-sm" style={{ fontWeight: 600 }}>{at.label}</span>
-              <span className="aug-fs-xs" style={{ color: "var(--t3)", textAlign: "left" }}>{at.desc}</span>
+              <span className="aug-fs-chrome" style={{ fontWeight: 600 }}>{at.label}</span>
+              <span className="aug-fs-sm" style={{ color: "var(--t3)", textAlign: "left" }}>{at.desc}</span>
             </RadioCards.Item>
           ))}
         </RadioCards.Root>
@@ -1087,7 +1087,7 @@ function MonitorForm({
           value={form.grace_period_hours ?? 4}
           onChange={e => setField("grace_period_hours", Number(e.target.value) as any)}
           style={{ width: 120 }} />
-        <div className="aug-fs-xs" style={{ color: "var(--t3)", marginTop: 2 }}>
+        <div className="aug-fs-sm" style={{ color: "var(--t3)", marginTop: 2 }}>
           After an alert, the same or a lower severity stays quiet this long; a worse one fires at once.
         </div>
       </Field>
@@ -1101,12 +1101,12 @@ function MonitorForm({
           {stranded && <option value={channel}>{`"${channel}" — no such destination`}</option>}
         </SelectField>
         {triggers !== null && triggers.length === 0 && (
-          <div className="aug-fs-xs" style={{ color: "var(--t3)", marginTop: 2 }}>
+          <div className="aug-fs-sm" style={{ color: "var(--t3)", marginTop: 2 }}>
             Alerts stay in-app until a webhook or Slack trigger exists under Operations ▸ Notifications.
           </div>
         )}
         {stranded && (
-          <div className="aug-fs-xs" style={{ color: "var(--red4)", marginTop: 2 }}>
+          <div className="aug-fs-sm" style={{ color: "var(--red4)", marginTop: 2 }}>
             {`"${channel}" names no destination, so these alerts are sent nowhere. Choose one.`}
           </div>
         )}

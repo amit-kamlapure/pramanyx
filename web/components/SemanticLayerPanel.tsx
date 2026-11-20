@@ -270,7 +270,7 @@ function AnnotationsTab({ connId, scopeTable }: { connId: string; scopeTable: st
             </div>
             {Object.entries(data[table]?.columns ?? {}).map(([col, colData]) => (
               <div key={col} style={{ ...ROW, flexWrap: "nowrap", gap: 12, padding: "4px 0 0 18px" }}>
-                <span className="aug-fs-sm" style={{ fontFamily: "var(--font-mono)", color: "var(--t2)", minWidth: 120, flexShrink: 0 }}>{col}</span>
+                <span className="aug-fs-chrome" style={{ fontFamily: "var(--font-mono)", color: "var(--t2)", minWidth: 120, flexShrink: 0 }}>{col}</span>
                 <span className="aug-fs-sm" style={{ flex: 1, minWidth: 0, color: "var(--t2)" }}>{colData.description}</span>
                 <RowTools what={`${table}.${col}`}
                   onEdit={() => { setEditingTable(table); setEditingColumn(col); setEditDesc(colData.description ?? ""); }}

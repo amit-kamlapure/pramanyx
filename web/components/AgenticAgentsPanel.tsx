@@ -388,10 +388,10 @@ function RosterRow({ name, kind, enabled, role, sub, reserved, figures, onClick 
       onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }}
       style={{ cursor: "pointer", opacity: reserved ? 0.55 : 1 }}>
       <TableCell>
-        <div className="aug-text-ui" style={{ fontWeight: 500, overflow: "hidden",
+        <div className="aug-fs-chrome" style={{ color: "var(--t1)", fontWeight: 500, overflow: "hidden",
           textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</div>
         {sub && (
-          <div className="aug-fs-xs" style={{ color: "var(--t2)", marginTop: 2,
+          <div className="aug-fs-sm" style={{ color: "var(--t2)", marginTop: 2,
             overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sub}</div>
         )}
       </TableCell>
@@ -595,7 +595,7 @@ function AgentRail({ agent, grounding, connName, onSetup }: {
       <Row k="Packs" v={named(agent.pack_ids, packName, "pack")} />
       <Row k="May propose" v={agent.tool_grants.length ? (
         <>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>{agent.tool_grants.join(", ")}</span>
+          <span style={{ fontFamily: "var(--font-mono)" }}>{agent.tool_grants.join(", ")}</span>
           <span style={{ color: "var(--t3)" }}> · proposes, never executes</span>
         </>
       ) : <span style={{ color: "var(--t2)" }}>nothing — no grants</span>} />
@@ -604,8 +604,8 @@ function AgentRail({ agent, grounding, connName, onSetup }: {
       <Row k="History" v={`created ${formatTimestamp(agent.created_at, "short")} · updated ${formatTimestamp(agent.updated_at, "short")}`} />
       <div className="aug-label" style={{ margin: "14px 0 6px" }}>Instructions</div>
       {agent.instructions ? (
-        <div style={{ padding: "10px 12px", background: "var(--code-bg)",
-          borderRadius: "var(--r2)", fontSize: 13, color: "var(--t2)", lineHeight: 1.5,
+        <div className="aug-fs-chrome" style={{ padding: "10px 12px", background: "var(--code-bg)",
+          borderRadius: "var(--r2)", color: "var(--t2)", lineHeight: 1.5,
           whiteSpace: "pre-wrap" }}>
           {agent.instructions}
         </div>
@@ -706,7 +706,7 @@ function BuiltInMap({ charter }: { charter: AgentRosterEntry }) {
     <div style={{ display: "flex", gap: 10, alignItems: "baseline" }}>
       <span className="aug-fs-xs" style={{ color: "var(--t3)", width: 72, flexShrink: 0,
         textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</span>
-      <span className="aug-fs-sm" style={{ color: "var(--t2)" }}>{children}</span>
+      <span className="aug-fs-chrome" style={{ color: "var(--t2)" }}>{children}</span>
     </div>
   );
   return (
@@ -839,7 +839,7 @@ export function CustomAgentOverview({ agent, onOpenTrace, range }: {
             <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 10,
               padding: "8px 10px", background: "var(--bg-1)",
               borderRadius: "var(--r2)" }}>
-              <span style={{ flex: 1, fontSize: 12, color: "var(--t1)", overflow: "hidden",
+              <span className="aug-fs-chrome" style={{ flex: 1, color: "var(--t1)", overflow: "hidden",
                 textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {r.headline || r.question}
               </span>
@@ -847,7 +847,7 @@ export function CustomAgentOverview({ agent, onOpenTrace, range }: {
                 {r.kind === "chat" ? `quick${r.query_count > 1 ? ` ·${r.query_count}` : ""}` : "deep"}
               </StatusChip>
               <StatusChip hue={STATUS_HUE[r.status] ?? "muted"} strength="soft">{r.status}</StatusChip>
-              <span style={{ fontSize: 11, color: "var(--t3)", flexShrink: 0, width: 110,
+              <span className="aug-fs-xs" style={{ color: "var(--t3)", flexShrink: 0, width: 110,
                 textAlign: "right" }}>{formatTimestamp(r.started_at, "short")}</span>
               {onOpenTrace && r.kind !== "chat" && (
                 <Button variant="ghost" size="xs" onClick={() => onOpenTrace(r.id)}
@@ -964,7 +964,7 @@ function AgentBenchmark({ agent, onChanged, onError }: {
             drafted question brings none.
           </span>
           {candidates.map(c => (
-            <div key={c.id} className="aug-fs-sm" style={{ display: "flex", flexDirection: "column", gap: 4,
+            <div key={c.id} className="aug-fs-chrome" style={{ display: "flex", flexDirection: "column", gap: 4,
               color: "var(--t2)", paddingTop: 6, borderTop: "1px solid var(--b0)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <StatusChip hue={c.source === "use" ? "accent" : "muted"} strength="soft">
@@ -979,7 +979,7 @@ function AgentBenchmark({ agent, onChanged, onError }: {
                 }}>Dismiss</Button>
               </div>
               {c.headline && (
-                <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>
+                <span className="aug-fs-sm" style={{ color: "var(--t3)" }}>
                   {c.source === "use" ? `the answer said: ${c.headline}` : c.headline}
                 </span>
               )}
@@ -1014,7 +1014,7 @@ function AgentBenchmark({ agent, onChanged, onError }: {
         background: "var(--bg-2)", borderRadius: "var(--r2)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span className="aug-label"><Term id="goldens">Golden questions</Term></span>
-          <span style={{ fontSize: 11, color: "var(--t3)" }}>
+          <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>
             re-run after editing instructions or documents
           </span>
           <span style={{ marginLeft: "auto", display: "inline-flex", gap: 6 }}>
@@ -1031,7 +1031,7 @@ function AgentBenchmark({ agent, onChanged, onError }: {
           </span>
         </div>
         {evalResult && (
-          <div style={{ fontSize: 12, color: evalResult.passed === evalResult.total
+          <div className="aug-fs-sm" style={{ color: evalResult.passed === evalResult.total
             ? "var(--grn5)" : "var(--amb5)" }}>
             {evalResult.passed}/{evalResult.total} passing
             {evalResult.diff?.before && (
@@ -1068,8 +1068,8 @@ function AgentBenchmark({ agent, onChanged, onError }: {
           </div>
         )}
         {goldens.map(g => (
-          <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 8,
-            fontSize: 12, color: "var(--t2)" }}>
+          <div key={g.id} className="aug-fs-chrome" style={{ display: "flex", alignItems: "center", gap: 8,
+            color: "var(--t2)" }}>
             <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis",
               whiteSpace: "nowrap" }} title={g.reference_sql}>{g.question}</span>
             {g.source && g.source !== "person" && (
@@ -1201,14 +1201,14 @@ function PersonaConfigure({ agent, onChanged, onDeleted, onError }: {
         <Input value={form.schema_scope} maxLength={120}
           placeholder="e.g. finance — leave empty for all schemas"
           onChange={e => setForm(f => ({ ...f, schema_scope: e.target.value }))} />
-        <span style={{ fontSize: 11, color: "var(--t3)" }}>
+        <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>
           When set, the agent answers within this schema; asking it about another schema is rejected.
         </span>
       </label>
       <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
         <span className="aug-label">Documents</span>
         {documents.length === 0 ? (
-          <span style={{ fontSize: 12, color: "var(--t3)" }}>
+          <span className="aug-fs-sm" style={{ color: "var(--t3)" }}>
             No uploaded documents yet — an agent only sees the documents attached to it.
           </span>
         ) : (
@@ -1216,8 +1216,8 @@ function PersonaConfigure({ agent, onChanged, onDeleted, onError }: {
             overflowY: "auto", padding: "8px 10px", background: "var(--bg-3)",
             borderRadius: "var(--r2)" }}>
             {documents.map(d => (
-              <label key={d.doc_id} style={{ display: "flex", alignItems: "center", gap: 8,
-                fontSize: 12, color: "var(--t2)", cursor: "pointer" }}>
+              <label key={d.doc_id} className="aug-fs-chrome" style={{ display: "flex", alignItems: "center", gap: 8,
+                color: "var(--t2)", cursor: "pointer" }}>
                 <Checkbox checked={form.doc_ids.includes(d.doc_id)}
                   onChange={() => toggleIn("doc_ids", d.doc_id)} />
                 <span style={{ overflow: "hidden", textOverflow: "ellipsis",
@@ -1234,8 +1234,8 @@ function PersonaConfigure({ agent, onChanged, onDeleted, onError }: {
             overflowY: "auto", padding: "8px 10px", background: "var(--bg-3)",
             borderRadius: "var(--r2)" }}>
             {packs.map(p => (
-              <label key={p.id} style={{ display: "flex", alignItems: "center", gap: 8,
-                fontSize: 12, color: "var(--t2)", cursor: "pointer" }}>
+              <label key={p.id} className="aug-fs-chrome" style={{ display: "flex", alignItems: "center", gap: 8,
+                color: "var(--t2)", cursor: "pointer" }}>
                 <Checkbox checked={form.pack_ids.includes(p.id)}
                   onChange={() => toggleIn("pack_ids", p.id)} />
                 <span>{p.name || p.id}</span>
@@ -1274,17 +1274,17 @@ function PersonaConfigure({ agent, onChanged, onDeleted, onError }: {
               borderRadius: "var(--r2)" }}
               data-testid="agent-grants">
               {ids.map(id => (
-                <label key={id} className="aug-fs-sm"
+                <label key={id} className="aug-fs-chrome"
                   style={{ display: "flex", alignItems: "center", gap: 8,
                   color: "var(--t2)", cursor: "pointer" }}>
                   <Checkbox checked={form.tool_grants.includes(id)}
                     onChange={() => toggleIn("tool_grants", id)} />
                   <span style={{ fontFamily: "var(--font-mono)" }}>{id}</span>
                   {roster[id]?.title ? (
-                    <span style={{ color: "var(--t3)", overflow: "hidden",
+                    <span className="aug-fs-sm" style={{ color: "var(--t3)", overflow: "hidden",
                       textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{roster[id].title}</span>
                   ) : !(id in roster) && (
-                    <span style={{ color: "var(--amb4)" }}>no longer declared</span>
+                    <span className="aug-fs-sm" style={{ color: "var(--amb4)" }}>no longer declared</span>
                   )}
                 </label>
               ))}
@@ -1347,14 +1347,14 @@ function FieldDiff({ field, before, after }: {
         {FIELD_LABEL[field] ?? field}
       </span>
       <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-        <div className="aug-fs-xs"
+        <div className="aug-fs-chrome"
              style={{ flex: 1, minWidth: 0, color: "var(--t3)",
                       background: "var(--bg-1)",
                       borderRadius: "var(--r-chip)", padding: "4px 6px",
                       whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
           {valueText(field, before)}
         </div>
-        <div className="aug-fs-xs"
+        <div className="aug-fs-chrome"
              style={{ flex: 1, minWidth: 0, color: "var(--t2)",
                       background: "var(--bg-1)",
                       borderRadius: "var(--r-chip)", padding: "4px 6px",
@@ -1503,7 +1503,7 @@ export function AgentConfigHistory({ agent, onChanged, onError }: {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       <span className="aug-label">Configuration history</span>
-      <span style={{ fontSize: 11, color: "var(--t3)" }}>
+      <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>
         Instructions, connection, schema scope and bindings. Restoring adds a new revision —
         nothing in between is erased.
       </span>
@@ -1522,8 +1522,8 @@ export function AgentConfigHistory({ agent, onChanged, onError }: {
             display: "flex", flexDirection: "column",
             padding: "5px 0", borderTop: "1px solid var(--b0)",
           }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
-              <span style={{ color: "var(--t3)", minWidth: 28 }}>v{r.version}</span>
+            <div className="aug-fs-chrome" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span className="aug-fs-xs" style={{ color: "var(--t3)", minWidth: 28 }}>v{r.version}</span>
               <span style={{ color: "var(--t2)", minWidth: 118 }}>{formatTimestamp(r.at)}</span>
               <span style={{ flex: 1, minWidth: 0, display: "flex", gap: 4,
                              flexWrap: "wrap", alignItems: "center" }}>
@@ -1656,7 +1656,7 @@ function CharterDetail({ charter, workspaceId, onBack, onChanged, onError, range
     <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
     <div style={{ maxWidth: 720 }}>
       <div className="aug-fs-sm" style={{ color: "var(--t2)", marginBottom: 4 }}>{charter.lane} · {charter.role}</div>
-      <div style={{ fontSize: 13, color: "var(--t2)", marginBottom: 12 }}>{charter.goal}</div>
+      <div className="aug-fs-chrome" style={{ color: "var(--t2)", marginBottom: 12 }}>{charter.goal}</div>
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
         {charter.job_kinds.map(k => <span key={k} className="aug-tag aug-tag-blue">{k}</span>)}
@@ -1712,7 +1712,7 @@ function CharterDetail({ charter, workspaceId, onBack, onChanged, onError, range
               model id per agent, and those were removed with every other model list
               (2026-08-15). An agent runs on the operator's pin, or inherits the role
               binding — there is nothing left for this product to recommend. */}
-          <div style={{ fontSize: 11, color: "var(--t2)", lineHeight: 1.5 }}>
+          <div className="aug-fs-xs" style={{ color: "var(--t2)", lineHeight: 1.5 }}>
             These are the charter&rsquo;s REAL knobs. There is no per-agent temperature,
             topP or tool toggle here: the transport pins temperature platform-wide
             (13% run-to-run flip measured at default temp), and capability changes are
@@ -1905,7 +1905,7 @@ export function AgentModelPin({ pinned, busy, onPin }: {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+      <label className="aug-fs-sm" style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <span style={{ width: 110, color: "var(--t3)", flexShrink: 0 }}>Model pin</span>
         <Input value={draft} disabled={busy}
           spellCheck={false} autoComplete="off"
@@ -1925,7 +1925,7 @@ export function AgentModelPin({ pinned, busy, onPin }: {
           </Button>
         )}
       </label>
-      <div style={{ fontSize: 11, color: "var(--t2)", lineHeight: 1.5 }}>
+      <div className="aug-fs-xs" style={{ color: "var(--t2)", lineHeight: 1.5 }}>
         {pinned ? (
           <>Pinned — this agent&rsquo;s coder and narrator calls run on the pinned model;
             its cheap &ldquo;fast&rdquo; calls stay on the Settings → Models binding. </>
@@ -1968,9 +1968,9 @@ function Tile({ label, value, sub }: { label: string; value: string; sub?: strin
   return (
     <div style={{ flex: "1 1 130px", minWidth: 130, background: "var(--bg-2)",
       borderRadius: "var(--r3)", padding: "10px 14px" }}>
-      <div style={{ fontSize: 18, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{value}</div>
-      <div style={{ fontSize: 11, color: "var(--t3)", marginTop: 3 }}>{label}</div>
-      {sub && <div style={{ fontSize: 11, color: "var(--t2)", marginTop: 2 }}>{sub}</div>}
+      <div className="aug-fs-h1" style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{value}</div>
+      <div className="aug-fs-xs" style={{ color: "var(--t3)", marginTop: 3 }}>{label}</div>
+      {sub && <div className="aug-fs-xs" style={{ color: "var(--t2)", marginTop: 2 }}>{sub}</div>}
     </div>
   );
 }

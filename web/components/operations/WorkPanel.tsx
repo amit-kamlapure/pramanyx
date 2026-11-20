@@ -162,7 +162,7 @@ export function WorkPanel({ onOpenRuns, onOpenDepartures, onOpenOverview, onOpen
             <>
               {failures.map(([kind, n]) => (
                 <div className="aug-item" key={kind}>
-                  <div className="aug-fs-ui" style={{ color: "var(--t1)" }}>
+                  <div className="aug-fs-chrome" style={{ color: "var(--t1)" }}>
                     <span className="aug-num" style={{ marginRight: 10 }}>{n}</span>{failureWords(kind)}
                   </div>
                   <div className="aug-item-foot aug-fs-sm">
@@ -183,7 +183,7 @@ export function WorkPanel({ onOpenRuns, onOpenDepartures, onOpenOverview, onOpen
             if (states.length === 0) return <Absent>Nothing has reached the departure gate yet.</Absent>;
             return (
               <div className="aug-item">
-                <div className="aug-fs-ui" style={{ color: "var(--t1)" }}>
+                <div className="aug-fs-chrome" style={{ color: "var(--t1)" }}>
                   {states.map(([s, n]) => `${n} ${keyToWords(s)}`).join(" · ")}
                 </div>
                 <div className="aug-item-foot aug-fs-sm">

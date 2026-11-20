@@ -179,7 +179,7 @@ export function BriefFrontView({ reads, connectionId, leadMetric, parts = EVERY_
         <Part title="In short" testid="brief-short-part"
           badges={<span className="aug-fs-xs" style={{ color: "var(--t3)", background: "var(--gray-a3)", borderRadius: "var(--r1)", padding: "0 6px" }}
             title="Counted from the measured table and the desk — no model and no person wrote it">Computed</span>}>
-          <p className="aug-fs-sm" data-testid="brief-short" style={{ margin: 0, color: "var(--t2)" }}>{short}</p>
+          <p className="aug-fs-ui" data-testid="brief-short" style={{ margin: 0, color: "var(--t2)" }}>{short}</p>
         </Part>
       )}
       {/* the lead figure */}
@@ -197,7 +197,7 @@ export function BriefFrontView({ reads, connectionId, leadMetric, parts = EVERY_
           </p>
         ) : (
           <>
-            <div className="aug-fs-sm" style={{ color: "var(--t2)", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <div className="aug-fs-chrome" style={{ color: "var(--t2)", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <span style={{ color: "var(--t1)", fontWeight: 600 }}>{lead.name}</span>
               <span title={block?.covers}>· {now}</span>
               <Chip tone={STATUS[lead.status]?.tone} title={lead.current_partial || undefined}>{STATUS[lead.status]?.label ?? lead.status}</Chip>
@@ -315,7 +315,7 @@ function DeskTable({ title, sub, items, more, connectionId, empty, testid, kinds
               <tr key={k}>
                 <td style={TD} title={it.source.label}>
                   <div style={{ color: "var(--t1)" }}>{it.title}</div>
-                  {it.text && <div className="aug-fs-xs" style={{ color: "var(--t3)" }}>{it.text}</div>}
+                  {it.text && <div className="aug-fs-sm" style={{ color: "var(--t3)" }}>{it.text}</div>}
                 </td>
                 {kinds
                   ? <td style={TD}>{KIND[it.kind] ?? it.kind.replace(/_/g, " ")}</td>

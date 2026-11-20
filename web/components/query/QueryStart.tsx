@@ -84,9 +84,9 @@ function CatalogFigures({ tables, joins, loading, where, onOpenTable }: {
   ].filter(Boolean).join(" · ");
   return (
     <div style={{ display: "grid", gap: 14 }}>
-      <div className="aug-fs-sm" data-testid="query-start-catalog-whole">
-        <div style={{ color: "var(--t1)", ...NUM }}>{whole}</div>
-        <div style={{ ...MUTED, marginTop: 2 }}>{joined}</div>
+      <div data-testid="query-start-catalog-whole">
+        <div className="aug-fs-chrome" style={{ color: "var(--t1)", ...NUM }}>{whole}</div>
+        <div className="aug-fs-sm" style={{ ...MUTED, marginTop: 2 }}>{joined}</div>
       </div>
       <div>
         <div className="aug-fs-sm" style={SUBHEAD}>Schemas</div>
@@ -96,12 +96,13 @@ function CatalogFigures({ tables, joins, loading, where, onOpenTable }: {
             return (
               <div key={key} style={{ display: "contents" }}
                 title={`${x.name || "No schema"}: ${countNoun(x.tables, "table")}, ${countNoun(x.columns, "column")}, ${rows}`}>
-                <span className="aug-fs-sm" style={{ ...ONE_LINE, minWidth: 0 }}>
+                <span className="aug-fs-chrome" style={{ ...ONE_LINE, minWidth: 0 }}>
                   <span style={{ fontFamily: "var(--font-mono)", color: "var(--t1)" }}>{x.name || "no schema"}</span>
-                  <span style={{ ...MUTED, ...NUM }}> · {countNoun(x.tables, "table")}</span>
+                  <span className="aug-fs-sm" style={{ ...MUTED, ...NUM }}> · {countNoun(x.tables, "table")}</span>
                 </span>
                 <Bar value={x.rows} max={maxSchema} hatched={x.rows === 0 && x.uncounted > 0} />
-                <span className="aug-fs-xs" style={{ ...MUTED, ...NUM, textAlign: "right", whiteSpace: "nowrap" }}>
+                {/* the figure at a bar's end at the row's 13px, as the kit's bars draw theirs */}
+                <span className="aug-fs-chrome" style={{ ...MUTED, ...NUM, textAlign: "right", whiteSpace: "nowrap" }}>
                   {x.rows || !x.uncounted ? compactNumber(x.rows) : "not counted"}
                 </span>
               </div>
@@ -117,7 +118,7 @@ function CatalogFigures({ tables, joins, loading, where, onOpenTable }: {
               <Button variant="plain" size="xs" className="justify-start px-1 font-normal" style={{ minWidth: 0 }}
                 aria-label={t.name} title={`Open a query on ${t.name} in a new tab`} onClick={() => onOpenTable(t.name)}>
                 {/* the schema quiet, the table's own name to read: long qualified names fit the column */}
-                <span className="aug-fs-sm" style={{ ...ONE_LINE, fontFamily: "var(--font-mono)", color: "var(--t1)" }}>
+                <span className="aug-fs-chrome" style={{ ...ONE_LINE, fontFamily: "var(--font-mono)", color: "var(--t1)" }}>
                   {t.name.includes(".") && <span style={{ color: "var(--t3)" }}>{t.name.slice(0, t.name.lastIndexOf(".") + 1)}</span>}
                   {t.name.slice(t.name.lastIndexOf(".") + 1)}
                 </span>
@@ -125,7 +126,7 @@ function CatalogFigures({ tables, joins, loading, where, onOpenTable }: {
               <span title={t.rows == null ? `${t.name}: rows not counted` : `${t.name}: ${formatCount(t.rows)} rows`}>
                 <Bar value={t.rows ?? maxTable} max={maxTable} hatched={t.rows == null} />
               </span>
-              <span className="aug-fs-xs" style={{ ...MUTED, ...NUM, textAlign: "right", whiteSpace: "nowrap" }}>{t.shown}</span>
+              <span className="aug-fs-chrome" style={{ ...MUTED, ...NUM, textAlign: "right", whiteSpace: "nowrap" }}>{t.shown}</span>
             </div>
           ))}
         </div>
@@ -211,7 +212,7 @@ export function QueryStart({
             <Button key={r.last.id} variant="plain" className={ROW_BTN} style={i ? RULE : undefined}
               title="Open this statement in a new tab" onClick={() => onOpenRun(r.sql)}>
               <span style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-                <span className="aug-fs-ui" data-testid="query-start-run-words"
+                <span className="aug-fs-chrome" data-testid="query-start-run-words"
                   style={{ ...ONE_LINE, flex: "1 1 0%", color: "var(--t1)",
                     ...(words ? {} : { fontFamily: "var(--font-mono)" }) }}>
                   {words || r.preview}
@@ -224,7 +225,7 @@ export function QueryStart({
                 </span>
               </span>
               {words && (
-                <span className="aug-fs-xs" data-testid="query-start-run-sql" style={MONO_LINE}>{r.preview}</span>
+                <span className="aug-fs-sm" data-testid="query-start-run-sql" style={MONO_LINE}>{r.preview}</span>
               )}
             </Button>
           );
@@ -248,13 +249,13 @@ export function QueryStart({
       <Button key={q.id} variant="plain" className={ROW_BTN} style={i ? RULE : undefined}
         title="Open this saved query — Save updates it" onClick={() => onOpenSaved(q)}>
         <span style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-          <span className="aug-fs-ui" style={{ ...ONE_LINE, flex: "1 1 0%", color: "var(--t1)" }}>{q.name}</span>
+          <span className="aug-fs-chrome" style={{ ...ONE_LINE, flex: "1 1 0%", color: "var(--t1)" }}>{q.name}</span>
           <span className="aug-fs-xs" style={{ ...MUTED, flexShrink: 0, whiteSpace: "nowrap" }}>
             {isVisualQuery(q) ? "visual" : "sql"}{q.updated_at ? ` · ${relTime(q.updated_at)} ago` : ""}
           </span>
         </span>
         {q.sql.trim() && (
-          <span className="aug-fs-xs" style={MONO_LINE}>{q.sql.replace(/\s+/g, " ").trim()}</span>
+          <span className="aug-fs-sm" style={MONO_LINE}>{q.sql.replace(/\s+/g, " ").trim()}</span>
         )}
       </Button>
     ));

@@ -92,7 +92,7 @@ export function FindingPicker({ connectionId, schema, placed, busy, onPlaced, on
                   const on = placed.has(f.id);
                   return (
                     <li key={f.id} data-testid="finding-row" data-finding={f.id} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "5px 0", borderTop: "1px solid var(--b0)" }}>
-                      <span className="aug-fs-sm" style={{ flex: 1, minWidth: 0, color: measured ? "var(--t1)" : "var(--t3)" }}>
+                      <span className="aug-fs-chrome" style={{ flex: 1, minWidth: 0, color: measured ? "var(--t1)" : "var(--t3)" }}>
                         {f.finding}
                         {!measured && <span style={{ color: "var(--t3)" }}> · no query — nothing to measure</span>}
                         {on && <span style={{ color: "var(--t3)" }}> · on this dashboard</span>}

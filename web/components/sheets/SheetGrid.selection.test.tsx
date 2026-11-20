@@ -139,12 +139,12 @@ describe("a Number column's format", () => {
 });
 
 describe("a row's number and the corner", () => {
-  it("draws its rows at the reading size, in the app's font — as the SQL editor's results draw theirs", () => {
+  it("draws its rows at 13px, in the app's font — as the SQL editor's results draw theirs", () => {
     grid();
     const rows = screen.getAllByRole("row").filter(r => r.querySelector("[role=rowheader], [aria-label^='Open row']"));
     expect(rows.length).toBeGreaterThan(0);
     for (const r of rows) {
-      expect(r).toHaveClass("aug-fs-ui");
+      expect(r).toHaveClass("aug-fs-chrome");
       expect(r.style.fontFamily).toBe("");
     }
   });

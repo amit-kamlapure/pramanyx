@@ -128,12 +128,12 @@ export function ProvenanceDrawer({ open, data, onClose }: {
 }
 
 function Dt({ children }: { children: ReactNode }) {
-  return <dt className="aug-fs-sm" style={{ color: "var(--t2)", margin: 0 }}>{children}</dt>;
+  return <dt className="aug-fs-xs" style={{ color: "var(--t2)", margin: 0 }}>{children}</dt>;
 }
 
 function Dd({ children, mono }: { children: ReactNode; mono?: boolean }) {
   return (
-    <dd className="aug-fs-sm" style={{
+    <dd className="aug-fs-chrome" style={{
       margin: 0, color: "var(--t1)",
       fontFamily: mono ? "var(--font-mono)" : undefined,
     }}>{children}</dd>

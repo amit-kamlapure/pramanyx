@@ -369,7 +369,7 @@ function TablesTab({ summary, schemas, onOpen, onOpenSchema }: {
                 style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: "3px 8px", width: "100%", height: "auto",
                   padding: "6px 8px", margin: 0, textAlign: "left", fontWeight: 400, borderRadius: "var(--r2)",
                   background: on ? "var(--blue1)" : undefined, ...(i ? {} : { marginBottom: 4 }) }}>
-                <span className="aug-fs-sm" style={{ ...ONE_LINE, color: "var(--t1)" }}>{row.name ?? "All schemas"}</span>
+                <span className="aug-fs-chrome" style={{ ...ONE_LINE, color: "var(--t1)" }}>{row.name ?? "All schemas"}</span>
                 <span className="aug-fs-xs" style={{ ...MUTED, ...NUM }}>{formatCount(row.n)}</span>
                 {row.name && (
                   <span aria-hidden style={{ gridColumn: "1 / span 2", display: "block", height: 6, borderRadius: 3, background: "var(--bg-3)" }}>

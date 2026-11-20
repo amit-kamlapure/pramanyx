@@ -185,25 +185,25 @@ export function CoverageCard({ connId, schema, rows, onAdopted }: {
                 <Button variant="plain" aria-expanded={isOpen} onClick={() => setOpen(isOpen ? null : a.id)} style={rowButtonStyle(isOpen, GRID)}>
                   <span style={{ minWidth: 0 }}>
                     <span className="aug-fs-chrome" style={{ ...ONE_LINE, display: "block", color: "var(--t1)", fontWeight: 500 }}>{a.name}</span>
-                    <span className="aug-fs-xs" style={{ ...MUTED, ...ONE_LINE, display: "block" }}>{a.question}</span>
+                    <span className="aug-fs-sm" style={{ ...MUTED, ...ONE_LINE, display: "block" }}>{a.question}</span>
                     {ownersOf(a.id) && ownersWords(ownersOf(a.id)!) && (
-                      <span className="aug-fs-xs" data-testid="coverage-area-owners" style={{ ...MUTED, ...ONE_LINE, display: "block" }}>
+                      <span className="aug-fs-sm" data-testid="coverage-area-owners" style={{ ...MUTED, ...ONE_LINE, display: "block" }}>
                         {ownersWords(ownersOf(a.id)!)}
                       </span>
                     )}
                   </span>
-                  <span className="aug-fs-sm" style={{ ...NUM, color: a.has_data ? "var(--t2)" : "var(--t3)" }}>
+                  <span className="aug-fs-chrome" style={{ ...NUM, color: a.has_data ? "var(--t2)" : "var(--t3)" }}>
                     {a.has_data ? `${formatCount(a.rows)} rows · ${countNoun(a.tables.length, "table")}` : "—"}
                   </span>
                   <span style={{ ...ROW, gap: 6 }}>
                     {/* its state as a mark and a word, not a filled chip (2026-11-20) */}
-                    <span data-testid="coverage-state" title={state.title} className="aug-fs-sm"
+                    <span data-testid="coverage-state" title={state.title} className="aug-fs-chrome"
                       style={{ display: "inline-flex", alignItems: "center", gap: 6, color: DOT_TEXT[state.tone] }}>
                       <Dot hue={DOT_HUE[state.tone]} />{state.text}
                     </span>
                     {a.metrics.length > 0 && <span className="aug-fs-xs" style={{ ...MUTED, ...NUM }}>{`${working}/${a.metrics.length}`}</span>}
                   </span>
-                  <span className="aug-fs-sm" style={{ ...NUM, color: a.adoptable ? "var(--t1)" : "var(--t3)" }}
+                  <span className="aug-fs-chrome" style={{ ...NUM, color: a.adoptable ? "var(--t1)" : "var(--t3)" }}
                     title={a.open_patterns?.length ? `${countNoun(a.open_patterns.length, "pattern")} no metric here computes yet` : undefined}>
                     {a.proposals ? `${formatCount(a.adoptable)} ready${a.failed ? ` · ${formatCount(a.failed)} failed` : ""}`
                       : a.open_patterns?.length && a.has_data ? `${countNoun(a.open_patterns.length, "open pattern")}` : "—"}
@@ -258,21 +258,21 @@ function AreaDetail({ coverage, area, connId, schema, rows, onAdopted }: {
       <section>
         <div className="aug-fs-xs" style={{ ...MUTED, textTransform: "uppercase", letterSpacing: ".06em" }}>Data</div>
         {area.tables.length === 0 ? <Empty>No table is placed here.</Empty> : withUniqueKeys(area.tables, t => `table:${t.name}`).map(([key, t]) => (
-          <div key={key} className="aug-fs-sm" style={{ ...ROW, ...RULE, padding: "4px 0" }}>
+          <div key={key} className="aug-fs-chrome" style={{ ...ROW, ...RULE, padding: "4px 0" }}>
             <span style={{ fontFamily: "var(--font-mono)", color: "var(--t1)" }}>{t.name}</span>
-            <span style={{ ...MUTED, ...NUM }}>{t.rows != null ? `${formatCount(t.rows)} rows` : "rows not read"}</span>
-            <span style={MUTED}>{t.why}</span>
+            <span className="aug-fs-sm" style={{ ...MUTED, ...NUM }}>{t.rows != null ? `${formatCount(t.rows)} rows` : "rows not read"}</span>
+            <span className="aug-fs-sm" style={MUTED}>{t.why}</span>
           </div>
         ))}
       </section>
       <section>
         <div className="aug-fs-xs" style={{ ...MUTED, textTransform: "uppercase", letterSpacing: ".06em" }}>Metrics</div>
         {area.metrics.length === 0 ? <Empty>No metric reads on this area.</Empty> : withUniqueKeys(area.metrics, m => `metric:${m.name}`).map(([key, m]) => (
-          <div key={key} className="aug-fs-sm" style={{ ...ROW, ...RULE, padding: "4px 0" }}>
+          <div key={key} className="aug-fs-chrome" style={{ ...ROW, ...RULE, padding: "4px 0" }}>
             <span style={{ color: "var(--t1)" }}>{m.label}</span>
             <Chip>{m.status}</Chip>
             {m.moves?.ok === false && <Chip tone="amber" title={m.moves.why}>never moves</Chip>}
-            <span style={MUTED}>{m.why}</span>
+            <span className="aug-fs-sm" style={MUTED}>{m.why}</span>
           </div>
         ))}
       </section>
@@ -295,14 +295,14 @@ function AreaDetail({ coverage, area, connId, schema, rows, onAdopted }: {
         </div>
         {proposals.length === 0 ? <Empty>Nothing is proposed for this area.</Empty>
           : withUniqueKeys(proposals, p => `proposal:${p.name}`).map(([key, p]) => (
-            <div key={key} className="aug-fs-sm" style={{ ...RULE, padding: "6px 0" }} data-testid="coverage-proposal">
+            <div key={key} className="aug-fs-chrome" style={{ ...RULE, padding: "6px 0" }} data-testid="coverage-proposal">
               <div style={{ ...ROW, gap: 6 }}>
                 <span style={{ color: "var(--t1)", fontWeight: 500 }}>{p.label}</span>
                 <Chip tone="violet">{ORIGIN_WORDS[p.source] ?? p.source}</Chip>
                 <Chip tone={p.state === "proposed" ? "up" : "amber"}>{p.state === "proposed" ? "passed every check" : "failed a check"}</Chip>
-                {p.pattern_title && <span style={MUTED}>{p.pattern_title}</span>}
+                {p.pattern_title && <span className="aug-fs-sm" style={MUTED}>{p.pattern_title}</span>}
               </div>
-              <div className="aug-fs-xs" style={{ ...MUTED, marginTop: 2 }}>{gateLine(p.gates)}</div>
+              <div className="aug-fs-sm" style={{ ...MUTED, marginTop: 2 }}>{gateLine(p.gates)}</div>
             </div>
           ))}
       </section>

@@ -103,7 +103,7 @@ export function SheetCalendar({ sheet, query, column, card, tick, onOpenRow }: {
                   background: n ? `color-mix(in srgb, var(--blue2) ${Math.round(12 + 40 * (n / busiest))}%, var(--bg-1))`
                     : "var(--bg-1)" }}>
                 <span className="aug-fs-xs" style={{ ...MUTED, ...NUM }}>{Number(d.slice(8))}</span>
-                {n > 0 ? <span className="aug-fs-sm" style={{ ...NUM, color: "var(--t1)", fontWeight: 600 }}>{formatCount(n)}</span>
+                {n > 0 ? <span className="aug-fs-chrome" style={{ ...NUM, color: "var(--t1)", fontWeight: 600 }}>{formatCount(n)}</span>
                   : <span className="aug-fs-xs" style={{ color: "var(--t4)" }}>—</span>}
               </Button>
             );
@@ -121,12 +121,12 @@ export function SheetCalendar({ sheet, query, column, card, tick, onOpenRow }: {
                       style={{ height: "auto", display: "flex", flexDirection: "column", alignItems: "stretch", gap: 2,
                         padding: "7px 9px", textAlign: "left", fontWeight: 400, background: "var(--bg-2)",
                         border: "1px solid var(--card-edge)", borderRadius: "var(--r2)" }}>
-                      <span className="aug-mono aug-fs-sm" style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis",
+                      <span className="aug-mono aug-fs-chrome" style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis",
                         whiteSpace: "nowrap" }}>{title ? String(r[index[title.id]] ?? `row ${rowNo}`) : `row ${rowNo}`}</span>
                       {fields.map(c => (
-                        <span key={c.id} className="aug-fs-xs" style={{ display: "flex", gap: 6 }}>
+                        <span key={c.id} className="aug-fs-xs" style={{ display: "flex", gap: 6, alignItems: "baseline" }}>
                           <span style={MUTED}>{c.name}</span>
-                          <span style={NUM}>{showValue(r[index[c.id]], c) || "—"}</span>
+                          <span className="aug-fs-chrome" style={NUM}>{showValue(r[index[c.id]], c) || "—"}</span>
                         </span>
                       ))}
                     </Button>

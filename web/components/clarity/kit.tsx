@@ -400,7 +400,7 @@ export function HBars({ bars, testId }: { bars: HBar[]; testId?: string }) {
         <div key={b.key} style={{ display: "contents" }}>
           <div className="aug-fs-chrome" style={{ minWidth: 0 }}>
             <div style={{ ...ONE_LINE, color: "var(--t1)" }}>{b.name}</div>
-            {b.meta != null && <div className="aug-fs-xs" style={{ ...MUTED, ...ONE_LINE }}>{b.meta}</div>}
+            {b.meta != null && <div className="aug-fs-sm" style={{ ...MUTED, ...ONE_LINE }}>{b.meta}</div>}
           </div>
           <Tooltip content={b.tip}>
             <div role="img" aria-label={b.tip} style={{ height: 10, borderRadius: 5, background: "var(--bg-3)", overflow: "hidden" }}>

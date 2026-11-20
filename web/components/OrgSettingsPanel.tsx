@@ -205,8 +205,8 @@ export function OrgSettingsPanel({ workspaceId, workspaceName }: { workspaceId?:
         style={{ marginTop: 2, cursor: "pointer" }}
       />
       <span style={{ display: "flex", flexDirection: "column" }}>
-        <span className="aug-fs-sm" style={{ color: "var(--t1)" }}>{label}</span>
-        <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>{hint}</span>
+        <span className="aug-fs-chrome" style={{ color: "var(--t1)" }}>{label}</span>
+        <span className="aug-fs-sm" style={{ color: "var(--t3)" }}>{hint}</span>
       </span>
     </label>
   );
@@ -243,10 +243,10 @@ export function OrgSettingsPanel({ workspaceId, workspaceName }: { workspaceId?:
           aria-label={label}
         />
         <span style={{ display: "flex", flexDirection: "column" }}>
-          <span className="aug-fs-sm" style={{ color: "var(--t1)" }}>{label}</span>
-          <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>{hint}</span>
+          <span className="aug-fs-chrome" style={{ color: "var(--t1)" }}>{label}</span>
+          <span className="aug-fs-sm" style={{ color: "var(--t3)" }}>{hint}</span>
           {fromServer && (
-            <span className="aug-fs-xs" data-testid={`org-allows-${k}-from-server`} style={{ color: "var(--amb4)" }}>
+            <span className="aug-fs-sm" data-testid={`org-allows-${k}-from-server`} style={{ color: "var(--amb4)" }}>
               On through this server&apos;s environment until you choose here.
             </span>
           )}
@@ -320,7 +320,7 @@ export function OrgSettingsPanel({ workspaceId, workspaceName }: { workspaceId?:
             </Button>
           ))}
           {scope === "workspace" && (
-            <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>
+            <span className="aug-fs-sm" style={{ color: "var(--t3)" }}>
               Overrides for <b>{workspaceName}</b>. Blank fields inherit the app default; a set value also
               wins over what Pramanyx infers from the data.
             </span>

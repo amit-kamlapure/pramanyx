@@ -350,7 +350,7 @@ export function CreateAgentFlow({ onCreated, onCancel, onSaved, inDialog = false
                 </p>
               )}
               <Field label="Scope">
-                <span className="aug-fs-sm" style={{ color: "var(--t1)" }}>
+                <span className="aug-fs-chrome" style={{ color: "var(--t1)" }}>
                   {proposal.draft.schema_scope || "every schema on this connection"}
                   {" · "}
                   {(proposal.draft.doc_ids?.length ?? 0)} document(s)
@@ -359,7 +359,7 @@ export function CreateAgentFlow({ onCreated, onCancel, onSaved, inDialog = false
                 </span>
               </Field>
               <Field label="Stance">
-                <p className="aug-fs-sm" style={{
+                <p className="aug-fs-chrome" style={{
                   color: "var(--t1)", margin: 0, whiteSpace: "pre-wrap",
                   background: "var(--bg-1)",
                   borderRadius: "var(--r2)", padding: "8px 11px", maxWidth: 640,
@@ -369,7 +369,7 @@ export function CreateAgentFlow({ onCreated, onCancel, onSaved, inDialog = false
               {proposal.goldens.length > 0 && (
                 <Field label={`${proposal.goldens.length} question(s) worth being right about`}
                   hint="Drafted, not certified — you write the reference SQL on the Prove step.">
-                  <ul className="aug-fs-sm" style={{
+                  <ul className="aug-fs-chrome" style={{
                     color: "var(--t1)", margin: 0, paddingLeft: 18,
                   }}>
                     {proposal.goldens.map((g, i) => <li key={i}>{g.question}</li>)}
@@ -410,7 +410,7 @@ export function CreateAgentFlow({ onCreated, onCancel, onSaved, inDialog = false
                   display: "flex", flexDirection: "column", gap: 7,
                 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span className="aug-text-ui" style={{ fontWeight: 600 }}>{t.name}</span>
+                    <span className="aug-fs-chrome" style={{ color: "var(--t1)", fontWeight: 600 }}>{t.name}</span>
                     {t.status !== "active" && (
                       <StatusChip hue="muted" strength="soft">{t.status}</StatusChip>
                     )}
@@ -519,7 +519,7 @@ export function CreateAgentFlow({ onCreated, onCancel, onSaved, inDialog = false
               <div data-testid="agent-documents" style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 168,
                             overflowY: "auto" }}>
                 {attachable.shown.map(({ doc: d, orgWide }) => (
-                  <label key={d.doc_id} className="aug-fs-sm"
+                  <label key={d.doc_id} className="aug-fs-chrome"
                     style={{ display: "flex", gap: 8, alignItems: "center", cursor: "pointer" }}>
                     <Checkbox checked={docIds.includes(d.doc_id)}
                       onChange={e => setDocIds(prev => e.target.checked
@@ -545,7 +545,7 @@ export function CreateAgentFlow({ onCreated, onCancel, onSaved, inDialog = false
               note="A pack steers a question only once it is active AND pinned to the connection — binding one here is inert until then.">
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 {packs.map(p => (
-                  <label key={p.id} className="aug-fs-sm"
+                  <label key={p.id} className="aug-fs-chrome"
                     style={{ display: "flex", gap: 8, alignItems: "center", cursor: "pointer" }}>
                     <Checkbox checked={packIds.includes(p.id)}
                       onChange={e => setPackIds(prev => e.target.checked
@@ -583,7 +583,7 @@ export function CreateAgentFlow({ onCreated, onCancel, onSaved, inDialog = false
                       background: "var(--bg-1)",
                       borderRadius: "var(--r2)",
                     }}>
-                      <span className="aug-fs-sm" style={{ flex: 1, color: "var(--t1)" }}>
+                      <span className="aug-fs-chrome" style={{ flex: 1, color: "var(--t1)" }}>
                         {s.question}
                       </span>
                       <Button variant="ghost" size="xs"
@@ -627,7 +627,7 @@ export function CreateAgentFlow({ onCreated, onCancel, onSaved, inDialog = false
                     padding: "7px 10px", background: "var(--bg-2)",
                     borderRadius: "var(--r2)" }}>
                     <StatusChip hue="positive" strength="soft">ground truth</StatusChip>
-                    <span className="aug-fs-sm" style={{ flex: 1, color: "var(--t1)" }}>
+                    <span className="aug-fs-chrome" style={{ flex: 1, color: "var(--t1)" }}>
                       {g.question}
                     </span>
                     <Button variant="ghost" size="xs"

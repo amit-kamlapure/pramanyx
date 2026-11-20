@@ -40,13 +40,13 @@ function ItemRow({ item }: { item: PackOfferedItem }) {
   return (
     <li data-testid="pack-upgrade-item" data-key={item.key} style={{ display: "flex", gap: 8, alignItems: "baseline", padding: "2px 0" }}>
       <span className="aug-fs-xs" style={{ color: "var(--t3)", minWidth: 64 }}>{KIND_WORD[item.kind]}</span>
-      <span className="aug-fs-xs" style={{ color: "var(--t1)", minWidth: 0 }}>
+      <span className="aug-fs-chrome" style={{ color: "var(--t1)", minWidth: 0 }}>
         {item.label}
         {item.was ? <span style={{ color: "var(--t3)" }}> · {item.was} → {item.said}</span>
           : item.said ? <span style={{ color: "var(--t3)" }}> · {item.said}</span> : null}
         {mark && <span data-testid="pack-upgrade-declined" style={{ color: "var(--amb4)" }}> · {mark}</span>}
       </span>
-      <span className="aug-fs-xs" style={{ marginLeft: "auto", color: item.will_offer ? "var(--accent-11)" : "var(--t3)", whiteSpace: "nowrap" }}
+      <span className="aug-fs-sm" style={{ marginLeft: "auto", color: item.will_offer ? "var(--accent-11)" : "var(--t3)", whiteSpace: "nowrap" }}
         title={item.why}>
         {item.will_offer ? "proposed on upgrade" : item.why}
       </span>
@@ -95,25 +95,25 @@ function UpgradeDiff({ packId, install, available, connName, onUpgraded }: {
     } finally { setBusy(false); }
   };
 
-  if (err) return <p className="aug-fs-xs" style={{ color: "var(--red4)" }}>{err}</p>;
+  if (err) return <p className="aug-fs-sm" style={{ color: "var(--red4)" }}>{err}</p>;
   if (!diff) return <p className="aug-fs-xs" style={{ color: "var(--t3)" }}>Reading what changed…</p>;
   const nothing = !diff.added.length && !diff.changed.length && !diff.removed.length;
   return (
     <div data-testid="pack-upgrade-diff" style={{ marginTop: 6, paddingLeft: 8, borderLeft: "1px solid var(--b1)" }}>
-      {diff.note && <p className="aug-fs-xs" style={{ color: "var(--t3)", margin: "0 0 4px" }}>{diff.note}</p>}
-      {nothing && <p className="aug-fs-xs" style={{ color: "var(--t3)", margin: 0 }}>Nothing was added, changed or removed since v{diff.installed}.</p>}
+      {diff.note && <p className="aug-fs-sm" style={{ color: "var(--t3)", margin: "0 0 4px" }}>{diff.note}</p>}
+      {nothing && <p className="aug-fs-sm" style={{ color: "var(--t3)", margin: 0 }}>Nothing was added, changed or removed since v{diff.installed}.</p>}
       <Group title="Added" items={diff.added} />
       <Group title="Changed" items={diff.changed} />
       <Group title="Removed" items={diff.removed} />
       <Group title="Declined, and unchanged — they stay declined" items={diff.kept_declined} />
       {Object.entries(diff.not_read).map(([what, why]) => (
-        <p key={what} className="aug-fs-xs" style={{ color: "var(--t3)", margin: "4px 0 0" }}>Not read ({what}): {why}</p>
+        <p key={what} className="aug-fs-sm" style={{ color: "var(--t3)", margin: "4px 0 0" }}>Not read ({what}): {why}</p>
       ))}
       <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8 }}>
         <Button size="xs" data-testid="pack-upgrade-apply" disabled={busy || !diff.upgrade_available} onClick={() => void upgrade()}>
           {busy ? "Upgrading…" : `Upgrade to v${available}`}
         </Button>
-        <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>
+        <span className="aug-fs-sm" style={{ color: "var(--t3)" }}>
           {diff.upgrade_available
             ? `Proposes ${countNoun(diff.will_offer, "item")} for you to confirm; nothing you declined comes back unchanged.`
             : "Up to date."}
@@ -153,8 +153,8 @@ export function PackInstalls({ packId }: { packId: string }) {
         return (
           <div key={id} data-testid="pack-install" style={{ padding: "4px 0", borderTop: "1px solid var(--b0)" }}>
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-              <span className="aug-fs-xs" style={{ color: "var(--t1)" }}>{name}{i.schema ? ` · ${i.schema}` : ""}</span>
-              <span className="aug-fs-xs" data-testid="pack-install-version"
+              <span className="aug-fs-chrome" style={{ color: "var(--t1)" }}>{name}{i.schema ? ` · ${i.schema}` : ""}</span>
+              <span className="aug-fs-sm" data-testid="pack-install-version"
                 style={{ color: i.behind ? "var(--accent-11)" : "var(--t3)" }}>{versionLine(i, data.available)}</span>
               {i.bound_by && <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>bound by {i.bound_by.replace(/^user:/, "")}</span>}
               <Button size="xs" variant="ghost" style={{ marginLeft: "auto" }} data-testid="pack-install-open"

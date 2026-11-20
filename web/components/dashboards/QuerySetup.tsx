@@ -301,8 +301,8 @@ export function QuerySetup({ connectionId, card, onKept, onClose, values = NO_VA
               {!ranThis && <span style={{ color: "var(--t3)" }}> · the SQL changed since</span>}
             </span>
             <div style={{ overflow: "auto" }}>
-              <table className="aug-fs-xs" style={{ width: "100%", borderCollapse: "collapse", fontVariantNumeric: "tabular-nums" }}>
-                <thead><tr>{preview.got.columns.map((c, j) => <th key={`${c.name}-${j}`} style={{ textAlign: "left", color: "var(--t3)", fontWeight: 500, padding: "3px 5px", whiteSpace: "nowrap" }}>{c.name}</th>)}</tr></thead>
+              <table className="aug-fs-chrome" style={{ width: "100%", borderCollapse: "collapse", fontVariantNumeric: "tabular-nums" }}>
+                <thead className="aug-fs-xs"><tr>{preview.got.columns.map((c, j) => <th key={`${c.name}-${j}`} style={{ textAlign: "left", color: "var(--t3)", fontWeight: 500, padding: "3px 5px", whiteSpace: "nowrap" }}>{c.name}</th>)}</tr></thead>
                 <tbody>{(preview.got.rows ?? []).slice(0, PREVIEW_SHOWN).map((r, i) => (
                   <tr key={i}>{r.map((v, j) => <td key={j} style={{ padding: "3px 5px", whiteSpace: "nowrap", borderTop: "1px solid var(--b1)" }}>{cellText(v, preview.got.columns?.[j]?.type, undefined, "", "", preview.got.columns?.[j]?.name)}</td>)}</tr>
                 ))}</tbody>

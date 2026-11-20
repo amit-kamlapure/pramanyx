@@ -61,7 +61,9 @@ export function BriefHeadline({
     enabled: animate && isString,
   });
   return (
-    <h2 className={`aug-text-h2 leading-snug ${className}`}>
+    // The verdict sentence, 18 (aug-fs-h1), as the coworker's answers draw it (2026-11-20: one size for an answer's
+    // headline wherever the answer is).
+    <h2 className={`aug-text-h2 aug-fs-h1 leading-snug ${className}`}>
       {isString ? (
         <>
           {renderEmphasis(safePartial(shown))}

@@ -131,7 +131,7 @@ export function ShareChooser({ id, me, onChanged, read = readSharing, save: keep
           {shares.length === 0 && <span className="aug-fs-xs" style={MUTED}>No one is chosen yet.</span>}
           {shares.map(s => (
             <div key={`${s.kind}:${s.id}`} style={{ display: "flex", alignItems: "center", gap: 6, minHeight: 26 }}>
-              <span style={{ flex: "1 1 auto", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+              <span className="aug-fs-chrome" style={{ flex: "1 1 auto", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                 title={s.id}>
                 {s.name ?? s.id}{KIND_WORDS[s.kind] && <span className="aug-fs-xs" style={MUTED}> · {KIND_WORDS[s.kind]}</span>}
               </span>

@@ -54,14 +54,14 @@ export function PackTemplatePicker({ connectionId, schema, disabled, onDrafted }
         return (
           <div key={key} data-testid="dashboard-pack-template" style={{ background: "var(--gray-a3)", borderRadius: "var(--r3)", padding: "8px 10px" }}>
             <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
-              <span className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: 500 }}>{t.title}</span>
+              <span className="aug-fs-chrome" style={{ color: "var(--t1)", fontWeight: 500 }}>{t.title}</span>
               <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>{t.pack_name} pack · v{t.version}</span>
               <Button size="xs" style={{ marginLeft: "auto" }} data-testid="dashboard-pack-template-draft"
                 disabled={disabled || !!busy || t.ready === 0} onClick={() => void draft(t)}>
                 {busy === key ? "Drafting…" : "Draft it"}
               </Button>
             </div>
-            {t.description && <div className="aug-fs-xs" style={{ color: "var(--t2)", marginTop: 2 }}>{t.description}</div>}
+            {t.description && <div className="aug-fs-sm" style={{ color: "var(--t2)", marginTop: 2 }}>{t.description}</div>}
             <div className="aug-fs-xs" style={{ color: "var(--t3)", marginTop: 4 }}>
               {countNoun(t.ready, "card")} this connection can make
               {left.length > 0 && <> · left out: {left.map(c => `${c.title} (${c.why})`).join("; ")}</>}

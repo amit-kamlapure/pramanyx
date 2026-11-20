@@ -104,11 +104,11 @@ export function TableChoices({ tables, picked, onFlip, max, disabled = false }: 
               const key = tableName(t);
               const on = picked.includes(key);
               return (
-                <label key={key} className="aug-fs-sm" data-testid="dashboard-table-choice" style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 8px", borderRadius: "var(--r2)", cursor: "pointer", background: on ? "var(--bg-sel)" : undefined }}>
+                <label key={key} className="aug-fs-chrome" data-testid="dashboard-table-choice" style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 8px", borderRadius: "var(--r2)", cursor: "pointer", background: on ? "var(--bg-sel)" : undefined }}>
                   <Checkbox checked={on} aria-label={key} disabled={disabled || (!on && picked.length >= max)} onChange={() => onFlip(key)} />
                   <Icon name="table" size={14} />
                   <span style={{ color: "var(--t1)" }}>{t.table}</span>
-                  {t.schema && <span style={{ color: "var(--t3)" }}>{t.schema}</span>}
+                  {t.schema && <span className="aug-fs-sm" style={{ color: "var(--t3)" }}>{t.schema}</span>}
                 </label>
               );
             })}
@@ -495,7 +495,7 @@ function DatasetResult({ connectionId, sql, asked, values = null }: {
       </div>
       {problem && <div className="aug-fs-sm" role="alert" style={{ color: "var(--t1)" }}>{problem}</div>}
       {got && !got.refused.length && (view === "schema" ? (
-        <table className="aug-fs-sm" data-testid="data-dataset-schema" style={{ borderCollapse: "collapse", width: "auto" }}>
+        <table className="aug-fs-chrome" data-testid="data-dataset-schema" style={{ borderCollapse: "collapse", width: "auto" }}>
           <tbody>
             {withUniqueKeys(columns, c => c.name).map(([k, c]) => (
               <tr key={k}>
@@ -507,7 +507,7 @@ function DatasetResult({ connectionId, sql, asked, values = null }: {
         </table>
       ) : (
         <div style={{ overflow: "auto", maxHeight: 360, borderRadius: "var(--r2)" }}>
-          <table className="aug-fs-sm" data-testid="data-dataset-rows" style={{ borderCollapse: "collapse", minWidth: "100%" }}>
+          <table className="aug-fs-chrome" data-testid="data-dataset-rows" style={{ borderCollapse: "collapse", minWidth: "100%" }}>
             <thead>
               <tr>{withUniqueKeys(columns, c => c.name).map(([k, c]) => <th key={k} style={{ position: "sticky", top: 0, background: "var(--bg-2)", textAlign: "left", padding: "6px 10px", color: "var(--t2)", fontWeight: 500, whiteSpace: "nowrap" }}>{c.name}</th>)}</tr>
             </thead>
@@ -787,8 +787,8 @@ export function DataView({ spec, connectionId, onChange, onFollow, opened = null
                   style={{ flex: 1, minWidth: 0, justifyContent: "flex-start", height: "auto", padding: "6px 8px", gap: 8 }}>
                   <Icon name={d.table ? "table" : "sql"} size={14} />
                   <span style={{ minWidth: 0, textAlign: "left" }}>
-                    <span style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--t1)" }}>{d.label}</span>
-                    <span className="aug-fs-xs" style={{ display: "block", color: "var(--t3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <span className="aug-fs-chrome" style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--t1)" }}>{d.label}</span>
+                    <span className="aug-fs-sm" style={{ display: "block", color: "var(--t3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {d.table ?? "Your own SQL"}{charts ? ` · ${formatCount(charts)} ${charts === 1 ? "chart" : "charts"}` : ""}
                     </span>
                   </span>

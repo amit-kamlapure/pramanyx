@@ -373,22 +373,22 @@ function ActionRow({ a, nameOf, picked, onPick }: {
         background: picked ? "var(--bg-hover)" : undefined, boxShadow: picked ? "inset 2px 0 0 var(--blue3)" : undefined }}>
       <span role="cell" style={{ minWidth: 0 }} title={a.description || a.id}>
         <span className="aug-fs-chrome" style={{ ...ONE_LINE, display: "block", color: "var(--t1)", fontWeight: 600 }}>{a.display_name || humanName(a.id)}</span>
-        {a.description && <span className="aug-fs-xs" style={{ ...ONE_LINE, display: "block", color: "var(--t2)" }}>{a.description}</span>}
+        {a.description && <span className="aug-fs-sm" style={{ ...ONE_LINE, display: "block", color: "var(--t2)" }}>{a.description}</span>}
       </span>
       <span role="cell"><Chip tone={gate?.ask ? "amber" : "plain"} title={gate?.title}>{gate ? gate.label : String(a.risk)}</Chip></span>
-      <span role="cell" className="aug-fs-xs" style={{ ...ONE_LINE, color: "var(--t2)" }}>{a.object_type ? humanName(a.object_type) : none}</span>
-      <span role="cell" className="aug-fs-xs" style={{ ...ONE_LINE, color: "var(--t2)" }} title={changes.map(f => f.title).filter(Boolean).join("\n") || undefined}>
+      <span role="cell" className="aug-fs-chrome" style={{ ...ONE_LINE, color: "var(--t2)" }}>{a.object_type ? humanName(a.object_type) : none}</span>
+      <span role="cell" className="aug-fs-chrome" style={{ ...ONE_LINE, color: "var(--t2)" }} title={changes.map(f => f.title).filter(Boolean).join("\n") || undefined}>
         {changes.length ? changes.map((f, i) => <span key={f.key}>{i ? " · " : ""}{f.node}</span>) : none}
       </span>
-      <span role="cell" className="aug-fs-xs" style={{ ...ONE_LINE, color: "var(--t2)" }}
+      <span role="cell" className="aug-fs-chrome" style={{ ...ONE_LINE, color: "var(--t2)" }}
         title={(a.params ?? []).map(p => `${p.name}: ${p.kind === "object" ? p.object_type : p.data_type}`).join(" · ") || undefined}>
         {(a.params ?? []).length ? (a.params ?? []).map(p => p.display_name || p.name).join(", ") : none}
       </span>
-      <span role="cell" className="aug-fs-xs" style={{ ...ONE_LINE, color: "var(--t2)" }}
+      <span role="cell" className="aug-fs-chrome" style={{ ...ONE_LINE, color: "var(--t2)" }}
         title={[...(a.submission_criteria ?? []).map(c => c.expr), a.verification?.sql ?? ""].filter(Boolean).join("\n") || undefined}>
         {rules.length ? rules.join(" · ") : none}
       </span>
-      <span role="cell" className="aug-fs-xs" style={{ ...ONE_LINE, color: "var(--t2)" }}>
+      <span role="cell" className="aug-fs-chrome" style={{ ...ONE_LINE, color: "var(--t2)" }}>
         {a.reversibility === "irreversible"
           ? <Chip tone="down" title="Declared irreversible: no undo can take it back">irreversible</Chip>
           : a.undo?.action_id ? `by ${nameOf(a.undo.action_id)}${hours > 0 ? ` · ${hours} h` : ""}` : none}
@@ -417,9 +417,9 @@ function actionSubject(a: Declared, nameOf: (id: string) => string) {
       definition: facts.length ? (
         <div data-testid="action-definition" style={{ display: "flex", flexDirection: "column" }}>
           {facts.map((f, i) => (
-            <div key={f.key} className="aug-fs-sm" style={{ padding: "7px 0", color: "var(--t1)", ...(i ? RULE : {}) }}>
+            <div key={f.key} className="aug-fs-chrome" style={{ padding: "7px 0", color: "var(--t1)", ...(i ? RULE : {}) }}>
               {f.node}
-              {f.title && <div className="aug-fs-xs" style={{ ...MUTED, overflowWrap: "anywhere", marginTop: 2, fontFamily: /^(SELECT|WITH|POST|GET|PUT|PATCH|DELETE)\b/i.test(f.title) ? "var(--font-mono)" : undefined }}>{f.title}</div>}
+              {f.title && <div className="aug-fs-sm" style={{ ...MUTED, overflowWrap: "anywhere", marginTop: 2, fontFamily: /^(SELECT|WITH|POST|GET|PUT|PATCH|DELETE)\b/i.test(f.title) ? "var(--font-mono)" : undefined }}>{f.title}</div>}
             </div>
           ))}
         </div>
@@ -484,13 +484,13 @@ function ProposeForm({ connectionId, nameOf, onClose, onStaged }: {
       </div>
       {proposals && proposals.length === 0 && <Empty>The agent abstained — nothing to propose.</Empty>}
       {proposals && proposals.length > 0 && withUniqueKeys(proposals, p => p.inbox_id || p.action_id).map(([key, p]) => (
-        <div key={key} className="aug-fs-sm" style={{ ...RULE, padding: "6px 0", marginTop: 6 }}>
+        <div key={key} className="aug-fs-chrome" style={{ ...RULE, padding: "6px 0", marginTop: 6 }}>
           <div style={ROW}>
             <span style={{ color: "var(--t1)", fontWeight: 600 }}>{nameOf(p.action_id)}</span>
-            <span style={MUTED}>{p.inbox_id ? "staged — waits for approval" : String(p.status ?? "")}</span>
+            <span className="aug-fs-sm" style={MUTED}>{p.inbox_id ? "staged — waits for approval" : String(p.status ?? "")}</span>
           </div>
-          {p.reasoning && <div style={{ color: "var(--t2)" }}>{p.reasoning}</div>}
-          <div className="aug-fs-xs" style={{ ...MUTED, ...MONO, overflowWrap: "anywhere" }}>
+          {p.reasoning && <div className="aug-fs-sm" style={{ color: "var(--t2)" }}>{p.reasoning}</div>}
+          <div className="aug-fs-sm" style={{ ...MUTED, ...MONO, overflowWrap: "anywhere" }}>
             {Object.entries(p.params ?? {}).map(([k, v]) => `${k}: ${String(v)}`).join(" · ") || "no parameters"}
           </div>
           {!p.ok && p.message && <div role="alert" style={ERR}>{p.message}</div>}
@@ -656,10 +656,10 @@ function EditLayer({ connectionId, read, nameOf }: { connectionId: string; read:
                 return (
                   <div key={e.id} data-testid="edit-row" title={e.version ? `version ${e.version}` : undefined}
                     style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0 10px", padding: "1px 0 1px 12px" }}>
-                    <span className="aug-fs-sm" style={{ flex: "0 1 190px", color: "var(--t2)", ...ONE_LINE }} title={e.column || undefined}>
+                    <span className="aug-fs-chrome" style={{ flex: "0 1 190px", color: "var(--t2)", ...ONE_LINE }} title={e.column || undefined}>
                       {editLabel(e)}
                     </span>
-                    <span className="aug-fs-sm" style={{ flex: "1 1 220px", minWidth: 0, overflowWrap: "anywhere" }}>
+                    <span className="aug-fs-chrome" style={{ flex: "1 1 220px", minWidth: 0, overflowWrap: "anywhere" }}>
                       <span style={{ color: "var(--t1)" }}>{e.body}</span>
                       {meta && <span className="aug-fs-xs" style={{ ...MUTED, marginLeft: 8 }}>{meta}</span>}
                     </span>
@@ -759,25 +759,25 @@ function CallRow({ s, first }: { s: ActionSend; first: boolean }) {
   return (
     <div role="row" data-testid="send-row" style={{ ...CALLS_GRID, padding: "6px 0", ...(first ? {} : RULE) }}>
       <span role="cell" className="aug-fs-chrome" style={{ ...ONE_LINE, color: "var(--t1)", fontWeight: 500 }} title={s.action_name}>{s.action_name}</span>
-      <span role="cell" className="aug-fs-xs" style={{ color: s.status === "delivered" ? "var(--grn4)" : s.status === "dead" ? "var(--red4)" : "var(--t2)" }}>
+      <span role="cell" className="aug-fs-chrome" style={{ color: s.status === "delivered" ? "var(--grn4)" : s.status === "dead" ? "var(--red4)" : "var(--t2)" }}>
         {SEND_WORDS[s.status]}
       </span>
-      <span role="cell" className="aug-fs-xs" style={{ ...ONE_LINE, ...MUTED }} title={s.effect.target || undefined}>
+      <span role="cell" className="aug-fs-chrome" style={{ ...ONE_LINE, ...MUTED }} title={s.effect.target || undefined}>
         {s.effect.kind}{s.effect.lane === "writeback" ? " · writeback" : ""}
       </span>
-      <span role="cell" className="aug-fs-xs" style={{ ...NUM, color: "var(--t2)" }}>{s.attempts ? formatCount(s.attempts) : "—"}</span>
+      <span role="cell" className="aug-fs-chrome" style={{ ...NUM, color: "var(--t2)" }}>{s.attempts ? formatCount(s.attempts) : "—"}</span>
       <span role="cell" style={{ minWidth: 0 }}>
         {/* a call a person left undelivered says who and why — their reason, beside what the call itself met */}
         {s.status === "dismissed" && (s.resolved_by || s.note) && (
-          <div className="aug-fs-xs" data-testid="send-left-by" style={{ color: "var(--t2)" }}>
+          <div className="aug-fs-chrome" data-testid="send-left-by" style={{ color: "var(--t2)" }}>
             {[s.resolved_by && `by ${s.resolved_by}`, s.note].filter(Boolean).join(" — ")}
           </div>
         )}
         {settled
-          ? <div className="aug-fs-xs" data-testid="send-said" style={{ ...MUTED, overflowWrap: "anywhere" }}>{settled}</div>
-          : !(s.status === "dismissed" && (s.resolved_by || s.note)) && <span className="aug-fs-xs" style={MUTED}>—</span>}
+          ? <div className="aug-fs-chrome" data-testid="send-said" style={{ ...MUTED, overflowWrap: "anywhere" }}>{settled}</div>
+          : !(s.status === "dismissed" && (s.resolved_by || s.note)) && <span className="aug-fs-chrome" style={MUTED}>—</span>}
       </span>
-      <span role="cell" className="aug-fs-xs" style={{ ...MUTED, ...NUM, whiteSpace: "nowrap", textAlign: "right" }} title={formatTimestamp(s.updated_at)}>
+      <span role="cell" className="aug-fs-chrome" style={{ ...MUTED, ...NUM, whiteSpace: "nowrap", textAlign: "right" }} title={formatTimestamp(s.updated_at)}>
         {relTime(s.updated_at)}
       </span>
     </div>

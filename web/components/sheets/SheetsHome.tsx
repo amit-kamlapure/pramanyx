@@ -139,7 +139,7 @@ export function SheetsHome({ onOpen }: { onOpen: (id: string) => void }) {
                   <span style={{ color: "var(--blue4)", paddingTop: 2 }}><Icon name={t.icon} size={16} /></span>
                   <span>
                     <span className="aug-fs-ui" style={{ display: "block", color: "var(--t1)", fontWeight: 600 }}>{t.title}</span>
-                    <span className="aug-fs-xs" style={{ ...MUTED, display: "block", marginTop: 2 }}>{t.detail}</span>
+                    <span className="aug-fs-sm" style={{ ...MUTED, display: "block", marginTop: 2 }}>{t.detail}</span>
                   </span>
                 </Button>
               ))}
@@ -154,7 +154,7 @@ export function SheetsHome({ onOpen }: { onOpen: (id: string) => void }) {
             {data.sheets.length === 0 && data.withheld.length === 0 ? (
               <Empty>No sheet yet. Start one from a file, from nothing, or from a query&apos;s rows.</Empty>
             ) : (
-              <table className="aug-fs-sm" style={{ width: "100%", borderCollapse: "collapse" }}>
+              <table className="aug-fs-chrome" style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
                   <tr className="aug-fs-xs" style={{ ...MUTED, textAlign: "left" }}>
                     <th style={{ padding: "6px 8px", fontWeight: 500 }}>Sheet</th>
@@ -249,7 +249,7 @@ export function SheetsHome({ onOpen }: { onOpen: (id: string) => void }) {
                 {files.map(f => (
                   <div key={`${f.schema}/${f.file}`} style={{ display: "flex", alignItems: "center", gap: 10,
                     padding: "5px 0", borderTop: "1px solid var(--b0)" }}>
-                    <span className="aug-mono aug-fs-sm" style={{ color: "var(--t1)", ...ONE_LINE }}>{f.file}</span>
+                    <span className="aug-mono aug-fs-chrome" style={{ color: "var(--t1)", ...ONE_LINE }}>{f.file}</span>
                     <span className="aug-fs-xs" style={{ ...MUTED, ...NUM, whiteSpace: "nowrap" }}>
                       {schemas.size > 1 ? `${f.schema} · ` : ""}{size(f.size)}
                     </span>

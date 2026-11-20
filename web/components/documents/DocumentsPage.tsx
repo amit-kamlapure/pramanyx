@@ -504,7 +504,7 @@ function DocumentRow({ doc, first, status, connections, now, maxChunks, open, re
           <div className="aug-fs-chrome" title={doc.generated ? `Schema documentation — ${name}` : name} style={{ ...ONE_LINE, color: "var(--t1)", fontWeight: 500 }}>
             {name}
           </div>
-          {meta && <div className="aug-fs-xs" style={{ ...MUTED, ...ONE_LINE }}>{meta}</div>}
+          {meta && <div className="aug-fs-sm" style={{ ...MUTED, ...ONE_LINE }}>{meta}</div>}
           {!doc.generated && (
             <span style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <CertificationMark compact target={{ kind: "document", ref: doc.doc_id }} initial={cert} />
@@ -513,7 +513,8 @@ function DocumentRow({ doc, first, status, connections, now, maxChunks, open, re
           )}
         </div>
         <span title={`${countNoun(c.indexed, "chunk")} in the index`}><Bar value={c.indexed} max={maxChunks} /></span>
-        <span className="aug-fs-sm" style={{ ...NUM, textAlign: "right", color: "var(--t2)" }}>
+        {/* the figure at a bar's end at the row's 13px, as the kit's bars draw theirs */}
+        <span className="aug-fs-chrome" style={{ ...NUM, textAlign: "right", color: "var(--t2)" }}>
           {c.drift ? <Chip tone="amber" title={LISTED_IS_A_CLAIM}>{chunkWords(doc, status)}</Chip> : chunkWords(doc, status)}
         </span>
         <span className="aug-fs-xs" style={{ ...MUTED, ...ONE_LINE }} title={formatTimestamp(doc.uploaded_at)}>
@@ -632,7 +633,7 @@ function StoredDocument({ doc }: { doc: DocumentEntry }) {
         <span className="aug-fs-xs" style={MUTED}>Uploaded before originals were kept, so only its text remains — re-upload it to preview.</span>
       ))}
       {view === "markdown" && !error && (markdown === null ? <Loading what="the Markdown" /> : (
-        <pre className="aug-fs-xs" style={{ margin: 0, padding: "8px 10px", borderRadius: "var(--r2)", background: "var(--code-bg)",
+        <pre className="aug-fs-sm" style={{ margin: 0, padding: "8px 10px", borderRadius: "var(--r2)", background: "var(--code-bg)",
           color: "var(--t2)", fontFamily: "var(--font-mono)", whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: "28rem",
           overflow: "auto" }}>
           {markdown}

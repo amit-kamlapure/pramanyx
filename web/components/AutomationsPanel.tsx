@@ -355,10 +355,10 @@ export function AutomationsPanel({ connId, focusId, sentence = "", beside = fals
               style={{ padding: "5px 12px" }}>
               Import flow…
             </Button>
-            <Button variant="ghost" className="h-auto"
+            <Button variant="ghost" className="h-auto aug-fs-sm"
               onClick={() => { setCanvasFor(null); setCreateName("Untitled automation");
                                setCreating({}); setView("canvas"); }}
-              style={{ fontSize: 12, padding: "5px 12px" }}>
+              style={{ padding: "5px 12px" }}>
               + Design it yourself
             </Button>
           </>
@@ -366,8 +366,8 @@ export function AutomationsPanel({ connId, focusId, sentence = "", beside = fals
         </>} />}
 
       {banner && (
-        <div style={{
-          margin: "10px 20px 0", padding: "8px 12px", borderRadius: "var(--r3)", fontSize: 12,
+        <div className="aug-fs-sm" style={{
+          margin: "10px 20px 0", padding: "8px 12px", borderRadius: "var(--r3)",
           background: banner.tone === "ok" ? "var(--grn1)" : "var(--red1)",
           color: banner.tone === "ok" ? "var(--grn5)" : "var(--red5)",
         }}>{banner.text}</div>
@@ -423,7 +423,7 @@ export function AutomationsPanel({ connId, focusId, sentence = "", beside = fals
             <div style={{ flex: 1, overflowY: "auto", display: "flex",
               flexDirection: "column", gap: 4 }}>
               {importReport.report.map(row => (
-                <div key={row.node_id} className="aug-fs-sm" style={{ display: "flex",
+                <div key={row.node_id} className="aug-fs-chrome" style={{ display: "flex",
                   gap: 8, padding: "6px 9px", background: "var(--bg-2)",
                   borderRadius: "var(--r2)", alignItems: "baseline" }}>
                   <span style={{ flexShrink: 0, fontWeight: 600, color:
@@ -434,7 +434,7 @@ export function AutomationsPanel({ connId, focusId, sentence = "", beside = fals
                   </span>
                   <span style={{ flexShrink: 0, fontFamily: "var(--font-mono)",
                     color: "var(--t2)" }}>{row.component}</span>
-                  <span style={{ color: "var(--t3)" }}>{row.detail}</span>
+                  <span className="aug-fs-sm" style={{ color: "var(--t3)" }}>{row.detail}</span>
                 </div>
               ))}
             </div>
@@ -603,11 +603,11 @@ function AutomationCard({ a, onToggle, onPause, onRun, onEdit, onDelete, onRuns,
         <Switch checked={a.enabled} onChange={onToggle} title={a.enabled ? "Disable" : "Enable"} aria-label={a.enabled ? "Disable" : "Enable"} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 13, fontWeight: 600 }}>{a.name}</span>
+            <span className="aug-fs-chrome" style={{ fontWeight: 600 }}>{a.name}</span>
             {muted && <Badge variant="amber">muted</Badge>}
-            {a.last_status && <span style={{ color: OUTCOME_COLOR[a.last_status] || "var(--t3)", fontSize: 11 }}>● {a.last_status}</span>}
+            {a.last_status && <span className="aug-fs-xs" style={{ color: OUTCOME_COLOR[a.last_status] || "var(--t3)" }}>● {a.last_status}</span>}
           </div>
-          <div style={{ fontSize: 11, color: "var(--t3)", marginTop: 2 }}>
+          <div className="aug-fs-sm" style={{ color: "var(--t3)", marginTop: 2 }}>
             {a.conditions.map(c => describeCondition(c, a.timezone)).join(a.condition_logic === "all" ? " AND " : " OR ")}
             {" → "}
             {a.effects.map(describeEffect).join(", ")}
@@ -711,8 +711,8 @@ export function VersionsList({ versions }: { versions: AutomationVersions | null
       {versions.versions.length === 0
         ? <div className="aug-fs-xs" style={{ color: "var(--t3)" }}>None kept yet.</div>
         : versions.versions.map(v => (
-          <div key={v.version_id} className="aug-fs-xs" style={{ display: "flex", gap: 6, color: "var(--t3)" }}>
-            <span style={{ color: "var(--t2)", fontWeight: 600 }}>v{v.version}</span>
+          <div key={v.version_id} className="aug-fs-chrome" style={{ display: "flex", gap: 6, color: "var(--t3)", alignItems: "baseline" }}>
+            <span className="aug-fs-xs" style={{ color: "var(--t2)", fontWeight: 600 }}>v{v.version}</span>
             <span>{versionLine(v)}</span>
           </div>
         ))}
@@ -732,9 +732,9 @@ function RunsView({ automations, runsFor, runs, versions, onPick }: {
           <Button key={a.id} size="xs" variant={runsFor?.id === a.id ? "default" : "outline"} static onClick={() => onPick(a)}>{a.name}</Button>
         ))}
       </div>
-      {!runsFor && <div style={{ color: "var(--t3)", fontSize: 13 }}>Pick an automation to see its tick history.</div>}
+      {!runsFor && <div className="aug-fs-chrome" style={{ color: "var(--t3)" }}>Pick an automation to see its tick history.</div>}
       {runsFor && <VersionsList versions={versions} />}
-      {runsFor && runs.length === 0 && <div style={{ color: "var(--t3)", fontSize: 13 }}>No ticks yet — hit “Run now”.</div>}
+      {runsFor && runs.length === 0 && <div className="aug-fs-chrome" style={{ color: "var(--t3)" }}>No ticks yet — hit “Run now”.</div>}
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {collapseQuietTicks(runs).map(row => row.kind === "quiet" ? (
           // A run of ticks that did nothing, as ONE row. The count and the span are exact:
@@ -748,7 +748,7 @@ function RunsView({ automations, runsFor, runs, versions, onPick }: {
               color: "var(--t3)" }}>
               not fired ×{row.count}
             </span>
-            <span className="aug-fs-sm">
+            <span className="aug-fs-chrome">
               {row.reason || "the schedule was not due"}
             </span>
             <div style={{ flex: 1 }} />
@@ -760,16 +760,16 @@ function RunsView({ automations, runsFor, runs, versions, onPick }: {
           <div key={r.id} style={{ background: "var(--bg-2)", borderRadius: 6, padding: "10px 14px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <Badge variant={OUTCOME_BADGE[r.outcome] ?? "secondary"} style={{ textTransform: "uppercase" }}>{r.outcome.replace("_", " ")}</Badge>
-              <span style={{ fontSize: 12, color: "var(--t2)" }}>{r.reason}</span>
+              <span className="aug-fs-chrome" style={{ color: "var(--t2)" }}>{r.reason}</span>
               <div style={{ flex: 1 }} />
-              <span style={{ fontSize: 11, color: "var(--t3)" }}>
+              <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>
                 {relTime(r.started_at)} · {r.duration_ms}ms{runVersionLabel(r) ? ` · ${runVersionLabel(r)}` : ""}
               </span>
             </div>
             {r.effects.length > 0 && (
               <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 3, paddingLeft: 4 }}>
                 {r.effects.map((e, i) => (
-                  <div key={i} style={{ fontSize: 11, color: "var(--t3)" }}>
+                  <div key={i} className="aug-fs-sm" style={{ color: "var(--t3)" }}>
                     <span style={{ color: STATUS_COLOR[e.status] || "var(--t3)", fontWeight: 600 }}>{e.status}</span>
                     {" · "}{e.kind}{e.target ? ` (${e.target})` : ""}{e.attempts > 1 ? ` ×${e.attempts}` : ""}
                     {e.message ? <span style={{ color: "var(--t3)" }}> — {e.message}</span> : null}
@@ -777,7 +777,7 @@ function RunsView({ automations, runsFor, runs, versions, onPick }: {
                 ))}
               </div>
             )}
-            {r.error && <div style={{ marginTop: 4, fontSize: 11, color: "var(--red3)" }}>{r.error}</div>}
+            {r.error && <div className="aug-fs-sm" style={{ marginTop: 4, color: "var(--red3)" }}>{r.error}</div>}
           </div>
         ); })())}
       </div>
@@ -809,7 +809,7 @@ function InboxView({ conn, proposals, grants, onReload, flash, onOpenInEditor }:
     catch (e) { flash("err", (e as Error).message); }
   };
 
-  if (!conn) return <div style={{ color: "var(--t3)", fontSize: 13 }}>Select a connection to see its proposal queue.</div>;
+  if (!conn) return <div className="aug-fs-chrome" style={{ color: "var(--t3)" }}>Select a connection to see its proposal queue.</div>;
 
   return (
     <div>
@@ -819,9 +819,9 @@ function InboxView({ conn, proposals, grants, onReload, flash, onOpenInEditor }:
       </MiniStatRow>
 
       {pending.length === 0 && grants.length === 0 && (
-        <div style={{ color: "var(--t3)", fontSize: 13, paddingTop: 12 }}>
+        <div className="aug-fs-chrome" style={{ color: "var(--t3)", paddingTop: 12 }}>
           No staged proposals. When the agent proposes a declared action, it lands here for you to accept or reject.
-          <div style={{ marginTop: 6, fontSize: 11 }}>(Requires the <code>automations.proposals</code> flag.)</div>
+          <div className="aug-fs-xs" style={{ marginTop: 6 }}>(Requires the <code>automations.proposals</code> flag.)</div>
         </div>
       )}
 
@@ -838,11 +838,11 @@ function InboxView({ conn, proposals, grants, onReload, flash, onOpenInEditor }:
 
       {grants.length > 0 && (
         <>
-          <div style={{ fontSize: 11, fontWeight: 600, color: "var(--t3)", textTransform: "uppercase", margin: "16px 0 8px" }}>Standing grants</div>
+          <div className="aug-fs-xs" style={{ fontWeight: 600, color: "var(--t3)", textTransform: "uppercase", margin: "16px 0 8px" }}>Standing grants</div>
           {grants.map(g => (
             <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 10, background: "var(--bg-2)", borderRadius: 6, padding: "8px 12px", marginBottom: 6 }}>
-              <span style={{ fontSize: 12 }}><b>{g.action_id}</b> → {g.target_arg}=<code>{g.target_value}</code></span>
-              <span style={{ fontSize: 11, color: "var(--t3)" }}>used {g.use_count}× · by {g.created_by || g.owner_kind}</span>
+              <span className="aug-fs-chrome"><b>{g.action_id}</b> → {g.target_arg}=<code>{g.target_value}</code></span>
+              <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>used {g.use_count}× · by {g.created_by || g.owner_kind}</span>
               <div style={{ flex: 1 }} />
               <Button variant="ghost" className="font-normal" onClick={() => revoke(g)} style={{ ...ghostBtn, color: "var(--red3)" }}>Revoke</Button>
             </div>
@@ -852,9 +852,9 @@ function InboxView({ conn, proposals, grants, onReload, flash, onOpenInEditor }:
 
       {resolved.length > 0 && (
         <>
-          <div style={{ fontSize: 11, fontWeight: 600, color: "var(--t3)", textTransform: "uppercase", margin: "16px 0 8px" }}>Recently resolved</div>
+          <div className="aug-fs-xs" style={{ fontWeight: 600, color: "var(--t3)", textTransform: "uppercase", margin: "16px 0 8px" }}>Recently resolved</div>
           {resolved.slice(0, 8).map(p => (
-            <div key={p.id} style={{ fontSize: 11, color: "var(--t3)", padding: "4px 0" }}>
+            <div key={p.id} className="aug-fs-chrome" style={{ color: "var(--t3)", padding: "4px 0" }}>
               <span style={{ color: STATUS_COLOR[p.status] || "var(--t3)", fontWeight: 600 }}>{p.status}</span>
               {" · "}{p.action_id} · {p.resolved_by || "—"}{p.status_message ? ` — ${p.status_message}` : ""}
             </div>

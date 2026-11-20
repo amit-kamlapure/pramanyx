@@ -192,11 +192,11 @@ function StepNode({ data }: { data: Record<string, unknown> }) {
     }}>
       <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
       <div className="aug-fs-xs" style={{ color: "var(--t3)" }}>{String(data.kind || "")}</div>
-      <div className="aug-fs-sm" style={{ fontWeight: 600, marginTop: 1 }}>
+      <div className="aug-fs-chrome" style={{ fontWeight: 600, marginTop: 1 }}>
         {String(data.label || "")}
       </div>
       {!!data.detail && (
-        <div className="aug-fs-xs" style={{ color: "var(--t3)", marginTop: 2,
+        <div className="aug-fs-sm" style={{ color: "var(--t3)", marginTop: 2,
           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {String(data.detail)}
         </div>
@@ -205,7 +205,7 @@ function StepNode({ data }: { data: Record<string, unknown> }) {
           A run canvas that shows only "skipped" cannot tell a design working from an
           upstream breaking. */}
       {Array.isArray(data.when) && (data.when as string[]).length > 0 && (
-        <div className="aug-fs-xs" style={{ color: "var(--chart-3)", marginTop: 3,
+        <div className="aug-fs-sm" style={{ color: "var(--chart-3)", marginTop: 3,
           fontFamily: "var(--font-mono)", overflow: "hidden", textOverflow: "ellipsis",
           whiteSpace: "nowrap" }}>
           only if {(data.when as string[]).join(
@@ -215,7 +215,7 @@ function StepNode({ data }: { data: Record<string, unknown> }) {
       {/* DS-6 — the route, a design fact like the guard above it: an arm drawn
           without its "otherwise" reads as a step that always fires. */}
       {!!data.else_of && (
-        <div className="aug-fs-xs" style={{ color: "var(--chart-4)", marginTop: 3,
+        <div className="aug-fs-sm" style={{ color: "var(--chart-4)", marginTop: 3,
           fontFamily: "var(--font-mono)", overflow: "hidden", textOverflow: "ellipsis",
           whiteSpace: "nowrap" }}>
           otherwise of {String(data.else_of)}
@@ -249,7 +249,7 @@ function StepNode({ data }: { data: Record<string, unknown> }) {
           many of them ran (the server writes "2 of 3 ran" as the message); this says
           what the list WAS, which is the half a run cannot infer. */}
       {!!data.for_each && (
-        <div className="aug-fs-xs" style={{ color: "var(--chart-2)", marginTop: 3,
+        <div className="aug-fs-sm" style={{ color: "var(--chart-2)", marginTop: 3,
           fontFamily: "var(--font-mono)", overflow: "hidden", textOverflow: "ellipsis",
           whiteSpace: "nowrap" }}>
           for each {String(data.for_each)}
@@ -278,7 +278,7 @@ function TriggerNode({ data }: { data: Record<string, unknown> }) {
       border: "1px dashed var(--b1)", background: "var(--bg-2)",
     }}>
       <div className="aug-fs-xs" style={{ color: "var(--t3)" }}>when</div>
-      <div className="aug-fs-sm" style={{ fontWeight: 600, marginTop: 1 }}>
+      <div className="aug-fs-chrome" style={{ fontWeight: 600, marginTop: 1 }}>
         {String(data.detail || "manual")}
       </div>
       {Array.isArray(data.fired) && (data.fired as string[]).length > 0 && (
@@ -584,7 +584,7 @@ function DesignStepNodeInner({ data, selected }: { data: DesignNodeData; selecte
         }}>
           <Icon name={KIND_ICON[data.kind] ?? "process"} size={13} />
         </span>
-        <span className="aug-fs-ui" style={{ fontWeight: 600 }}>{kindLabel}</span>
+        <span className="aug-fs-chrome" style={{ fontWeight: 600 }}>{kindLabel}</span>
         <span className="aug-fs-xs" style={{ marginLeft: "auto", color: "var(--t3)",
           borderRadius: "var(--r-chip)",
           padding: "1px 8px", background: "var(--gray-a3)" }}>
@@ -644,7 +644,7 @@ function DesignStepNodeInner({ data, selected }: { data: DesignNodeData; selecte
                 {field}
               </div>
               {bound ? (
-                <div className="aug-fs-sm" style={{ display: "flex", alignItems: "center",
+                <div className="aug-fs-chrome" style={{ display: "flex", alignItems: "center",
                   gap: 7, padding: "6px 9px", borderRadius: "var(--r2)",
                   // No edge: the tint says bound; transparent keeps the field's height (2026-11-20).
                   border: "1px solid transparent",
@@ -702,7 +702,7 @@ function DesignStepNodeInner({ data, selected }: { data: DesignNodeData; selecte
             only if{data.when.length > 1 ? ` · ${data.whenLogic}` : ""}
           </div>
           {guardSentences(data.when, guardOps).map((line, i) => (
-            <div key={i} className="aug-fs-xs" style={{ color: "var(--chart-3)",
+            <div key={i} className="aug-fs-sm" style={{ color: "var(--chart-3)",
               fontFamily: "var(--font-mono)", marginTop: 2, overflow: "hidden",
               textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{line}</div>
           ))}
@@ -726,7 +726,7 @@ function DesignStepNodeInner({ data, selected }: { data: DesignNodeData; selecte
           <div className="aug-fs-xs" style={{ color: "var(--t3)", letterSpacing: "0.04em" }}>
             otherwise
           </div>
-          <div className="aug-fs-xs" style={{ color: "var(--chart-4)",
+          <div className="aug-fs-sm" style={{ color: "var(--chart-4)",
             fontFamily: "var(--font-mono)", marginTop: 2, overflow: "hidden",
             textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             when {data.elseOf}&apos;s only-if does not hold
@@ -751,7 +751,7 @@ function DesignStepNodeInner({ data, selected }: { data: DesignNodeData; selecte
           <div className="aug-fs-xs" style={{ color: "var(--t3)", letterSpacing: "0.04em" }}>
             for each
           </div>
-          <div className="aug-fs-xs" style={{ color: "var(--chart-2)",
+          <div className="aug-fs-sm" style={{ color: "var(--chart-2)",
             fontFamily: "var(--font-mono)", marginTop: 2, overflow: "hidden",
             textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{data.forEach}</div>
         </div>
@@ -822,7 +822,7 @@ function DesignTriggerNode({ data }: {
         }}>
           <Icon name="bolt" size={13} />
         </span>
-        <span className="aug-fs-ui" style={{ fontWeight: 600 }}>Trigger</span>
+        <span className="aug-fs-chrome" style={{ fontWeight: 600 }}>Trigger</span>
         {data.conditions.length > 1 && (
           <span className="aug-fs-xs" style={{ marginLeft: "auto", color: "var(--t3)" }}>
             {data.logic === "all" ? "all match" : "any match"}
@@ -1817,7 +1817,7 @@ export function AutomationGraph({ automationId, automation, create, onCreated, h
             {(graph?.runs ?? []).map((r) => {
               const active = (runId || graph?.run_id) === r.id;
               return (
-                <Button key={r.id} variant="plain" size="sm" className="aug-fs-xs"
+                <Button key={r.id} variant="plain" size="sm" className="aug-fs-chrome"
                   onClick={() => { setPreview(null); setRunId(r.id); }}
                   style={{
                     display: "block", width: "100%", height: "auto", textAlign: "left",
@@ -1826,7 +1826,7 @@ export function AutomationGraph({ automationId, automation, create, onCreated, h
                     color: active ? "var(--t1)" : "var(--t3)",
                   }}>
                   <div>{r.at ? r.at.replace("T", " ").slice(5, 16) : r.id.slice(0, 8)}</div>
-                  <div style={{ color: r.failed > 0 ? "var(--red4)" : "var(--t3)" }}>
+                  <div className="aug-fs-sm" style={{ color: r.failed > 0 ? "var(--red4)" : "var(--t3)" }}>
                     {r.outcome}{r.failed > 0 ? ` · ${r.failed} failed` : ""}
                   </div>
                 </Button>
