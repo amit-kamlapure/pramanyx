@@ -147,8 +147,22 @@ function Block({ inputActions, here }) {
     const inList = (node) => Boolean(node && list.current?.contains(node));
     const empty = () => !(box()?.textContent || "").trim();
     const turn = (event) => setOpen((was) => nextOpen(was, event));
-    const enter = (e) => { if (inBox(e.target)) turn({ kind: "enter", empty: empty() }); };
-    const input = (e) => { if (inBox(e.target)) turn({ kind: "input", empty: empty() }); };
+    // The shell's editor writes the box itself, so typing, pasting or dictating need not fire `input`: what the box
+    // holds is watched instead, and what counts is it going from empty to written in, or back.
+    let wasEmpty = true;
+    const written = () => {
+      if (empty() === wasEmpty) return;
+      wasEmpty = !wasEmpty;
+      turn({ kind: "input", empty: wasEmpty });
+    };
+    const watcher = new MutationObserver(written);
+    const enter = (e) => {
+      if (!inBox(e.target)) return;
+      watcher.disconnect();
+      watcher.observe(box(), { childList: true, characterData: true, subtree: true });
+      wasEmpty = empty();
+      turn({ kind: "enter", empty: wasEmpty });
+    };
     const leave = (e) => {
       if (inBox(e.target) || inList(e.target)) turn({ kind: "leave", staysNear: inBox(e.relatedTarget) || inList(e.relatedTarget) });
     };
@@ -164,14 +178,13 @@ function Block({ inputActions, here }) {
     };
     document.addEventListener("focusin", enter);
     document.addEventListener("pointerdown", enter);
-    document.addEventListener("input", input, true);
     document.addEventListener("focusout", leave);
     document.addEventListener("keydown", key, true);
     return () => {
       document.removeEventListener("focusin", enter);
       document.removeEventListener("pointerdown", enter);
-      document.removeEventListener("input", input, true);
       document.removeEventListener("focusout", leave);
+      watcher.disconnect();
       document.removeEventListener("keydown", key, true);
     };
   }, []);
