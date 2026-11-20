@@ -171,9 +171,9 @@ describe("quick-path parity (the reducer's ask-mode fields)", () => {
       { event: "route", data: { depth: "quick", why: "", body: "converse" } },
       { event: "plan", data: { steps: [{ text: "Investigate why" }, { text: "Draft a dashboard" }, { text: "Set an alert" }] } },
       { event: "converse_step", data: { index: 2, tool: "deep_analysis", ok: true, detail: "" } },
-      { event: "answer_report", data: { answer_report: { headline: "No rows for 2026-11-19", sections: [] }, query_mode: "investigate", investigation_id: "inv-9" } },
+      { event: "answer_report", data: { answer_report: { headline: "No rows for 2026-11-19", sections: [] } } },
       { event: "plan", data: { steps: [{ text: "Investigate why", done: true }, { text: "Draft a dashboard", done: true }, { text: "Set an alert", done: true }] } },
-      { event: "proposal_staged", data: { proposal_id: "p-dash", kind: "cockpit_draft", connection_id: "sheets", action_id: "cockpit:revenue" } },
+      { event: "proposal_staged", data: { proposal_id: "p-dash", kind: "chart_look", connection_id: "sheets", action_id: "dashboard:revenue" } },
       { event: "proposal_staged", data: { proposal_id: "p-alert", kind: "monitor_bundle", connection_id: "sheets", action_id: "monitor:revenue" } },
       { event: "headline", data: { headline: "All three parts are staged and wait for your Allow." } },
       { event: "done", data: {} },
@@ -184,7 +184,7 @@ describe("quick-path parity (the reducer's ask-mode fields)", () => {
     // a deep analysis asked on its own still ends at its report
     const alone = projectTurn("why?", await messageFrom([
       { event: "route", data: { depth: "deep", why: "" } },
-      { event: "answer_report", data: { answer_report: { headline: "x", sections: [] }, query_mode: "investigate" } },
+      { event: "answer_report", data: { answer_report: { headline: "x", sections: [] } } },
       { event: "proposal_staged", data: { proposal_id: "late", kind: "x", connection_id: "c", action_id: "a" } },
     ]));
     expect(alone.stagedProposals).toEqual([]);
