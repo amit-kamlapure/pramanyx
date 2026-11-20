@@ -16,7 +16,7 @@ import { use, useEffect, useRef, useState } from "react";
 import { ResultChartCard } from "@/components/charts/ResultChartCard";
 import type { VizConfig } from "@/components/charts/vizConfig";
 import { ChartDock } from "@/components/dashboards/CardInspector";
-import { getVizConfigs, saveVizConfig } from "@/lib/api";
+import { getStoredAnswerChart, getVizConfigs, saveVizConfig, type StoredAnswerChart } from "@/lib/api";
 import { installAuthFetch } from "@/lib/auth";
 import { getApiBase } from "@/lib/config";
 
@@ -29,18 +29,8 @@ const COWORKER_SCOPE = "coworker";
 const SAVED_MESSAGE = "pramanyx:chart-saved";
 const WAIT_MS = 400;
 
-interface Answer { headline: string; columns: string[]; rows: unknown[][]; chartType: string | null }
-
-/** An answer's chart as the platform stored it: the report of its run. */
-async function readAnswer(id: string): Promise<Answer | null> {
-  const res = await fetch(`${getApiBase()}/investigations/${encodeURIComponent(id)}`);
-  if (!res.ok) return null;
-  const body = await res.json();
-  const report = body?.report ?? {};
-  const columns = Array.isArray(report.columns) ? report.columns.map(String) : [];
-  const rows = Array.isArray(report.rows) ? report.rows : [];
-  return { headline: String(report.headline || body?.headline || ""), columns, rows, chartType: report.chart_type ?? null };
-}
+type Answer = StoredAnswerChart;
+const readAnswer = getStoredAnswerChart;
 
 function segment(value: string): string {
   try { return decodeURIComponent(value); } catch { return value; }
