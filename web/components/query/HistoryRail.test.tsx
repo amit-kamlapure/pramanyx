@@ -34,4 +34,28 @@ describe("the history rail", () => {
     fireEvent.click(row);
     expect(onRestore).toHaveBeenCalledWith("SELECT country, COUNT(*) FROM users GROUP BY 1");
   });
+
+  // "+ → Open existing" is gone (the user, 2026-11-20); its search is here, over the runs and the saved queries.
+  it("searches the runs by what they said and the saved queries by name or SQL, and opens either", async () => {
+    api.getQueryHistory.mockResolvedValue([run("a", "SELECT state FROM orders"), run("b", "SELECT city FROM customers")]);
+    const onRestore = vi.fn();
+    const onOpenSaved = vi.fn();
+    const saved = [
+      { id: "q1", connection_id: "8233e4fd", name: "Orders by state", sql: "SELECT 1", spec: {}, created_at: "", updated_at: "" },
+      { id: "q2", connection_id: "8233e4fd", name: "Revenue", sql: "SELECT sum(x) FROM payments", spec: {}, created_at: "", updated_at: "" },
+    ];
+    render(<HistoryRail connId="8233e4fd" refreshKey={0} onRestore={onRestore} saved={saved} onOpenSaved={onOpenSaved} />);
+    await screen.findByText("SELECT city FROM customers");
+    expect(screen.queryByTestId("history-saved-hits")).toBeNull();            // no search: the runs, as before
+    fireEvent.change(screen.getByTestId("history-search"), { target: { value: "orders" } });
+    expect(screen.getByTestId("history-saved-hits")).toHaveTextContent("Orders by state");
+    expect(screen.queryByText("Revenue")).toBeNull();
+    expect(screen.queryByText("SELECT city FROM customers")).toBeNull();
+    fireEvent.click(screen.getByText("Orders by state"));
+    expect(onOpenSaved).toHaveBeenCalledWith(saved[0]);
+    fireEvent.click(screen.getByText("SELECT state FROM orders"));
+    expect(onRestore).toHaveBeenCalledWith("SELECT state FROM orders");
+    fireEvent.change(screen.getByTestId("history-search"), { target: { value: "zzz" } });
+    expect(screen.getByText(/Nothing run or saved here says/)).toBeInTheDocument();
+  });
 });

@@ -56,7 +56,6 @@ import { cmDialect, engineFamily, engineWord, explainPrefix, quoteIdentifier, ty
 import {
   DEFAULT_FORMAT_PREFS, formatSql, readFormatPrefs, writeFormatPrefs, type FormatPrefs,
 } from "@/lib/query/format";
-import { OpenQueryDialog } from "@/components/query/OpenQueryDialog";
 import { QueryStart } from "@/components/query/QueryStart";
 import { resolveParamValue, type ParamDef, type ParamValue } from "@/lib/query/paramDefs";
 import {
@@ -265,8 +264,7 @@ export function SqlMode({
   const runAllPref = !!active?.runAll;
   const [showRunMenu, setShowRunMenu] = useState(false);
 
-  // SE-8F — "+ → Open existing", Format's preferences and the keyboard sheet: each opened from Tools ▾ now.
-  const [showOpenDialog, setShowOpenDialog] = useState(false);
+  // Format's preferences and the keyboard sheet, each opened from Tools ▾ ("Open existing" became the recent-runs search).
   const [showFormatMenu, setShowFormatMenu] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   // Storage read in an EFFECT, never a useState initializer (hydration rule).
@@ -724,7 +722,6 @@ export function SqlMode({
         runAll: () => void runAll(),
         format: () => setSql(formatSql(sqlText, engine, fmtPrefs)),
         formatPrefs: () => setShowFormatMenu(true),
-        openExisting: () => setShowOpenDialog(true),
         toggleHistory: () => setRail(r => r === "history" ? "" : "history"),
         shortcuts: () => setShowShortcuts(true),
       },
@@ -781,16 +778,9 @@ export function SqlMode({
           onClose={closeTab}
           onRename={(id, name) => setTabs(prev => prev.map(t => t.id === id ? { ...t, name } : t))}
           trailing={toolbar}
-          onOpenExisting={() => setShowOpenDialog(true)}
           startLabel="New tab"
         />
 
-        <OpenQueryDialog
-          connId={connId}
-          open={showOpenDialog}
-          onClose={() => setShowOpenDialog(false)}
-          onOpen={(sql, name) => openInNewTab(sql, name)}
-        />
 
         {noTabs && (
           <QueryStart
@@ -1110,6 +1100,8 @@ export function SqlMode({
           connId={connId}
           refreshKey={historyKey}
           onRestore={sql => openInNewTab(sql, "History")}
+          saved={saved ?? undefined}
+          onOpenSaved={q => onOpenSaved?.(q)}
         />
       }
     />

@@ -143,7 +143,7 @@ export function editorTools(s: {
   historyOpen: boolean;
   act: {
     explain: () => void; runAll: () => void; format: () => void; formatPrefs: () => void;
-    openExisting: () => void; toggleHistory: () => void; shortcuts: () => void;
+    toggleHistory: () => void; shortcuts: () => void;
   };
 }): ToolSpec[] {
   return [
@@ -157,10 +157,10 @@ export function editorTools(s: {
       title: "The selection, or the whole query (⌘⇧F)", hidden: !s.hasSql },
     { label: "Formatting preferences…", onSelect: s.act.formatPrefs, testId: "sql-format-prefs",
       title: "Keyword and function case, indent" },
-    { label: "Open a saved or recent query…", onSelect: s.act.openExisting, testId: "sql-open-existing", apart: true,
-      title: "Opens a copy in a new tab" },
-    { label: s.historyOpen ? "Hide recent runs" : "Recent runs", onSelect: s.act.toggleHistory,
-      testId: "sql-history-toggle", title: "Queries run from this editor, on this connection" },
+    // "Open a saved or recent query…" is gone (the user, 2026-11-20: "there is nothing that requires opening"): its
+    // search is the recent-runs panel's, over the runs and the saved queries both
+    { label: s.historyOpen ? "Hide recent runs" : "Recent runs", onSelect: s.act.toggleHistory, apart: true,
+      testId: "sql-history-toggle", title: "Queries run from this editor, on this connection — and a search over them and the saved ones" },
     { label: "Keyboard shortcuts", onSelect: s.act.shortcuts, testId: "sql-shortcuts",
       title: "Every key this editor binds — or Esc then H, outside the editor" },
   ];

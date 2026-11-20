@@ -103,7 +103,7 @@ const OPEN_TAB: React.CSSProperties = {
 const TAB_NAME_MAX = 200;
 
 export function TabsBar({
-  tabs, activeId, onSelect, onNew, onClose, onRename, trailing, onOpenExisting, startLabel,
+  tabs, activeId, onSelect, onNew, onClose, onRename, trailing, startLabel,
 }: {
   tabs: EditorTab[];
   activeId: string;
@@ -116,9 +116,6 @@ export function TabsBar({
    *  console has two, and the difference was rows that each carried three controls.
    *  Anything a tab does not own — the connection, the saved state — comes in here. */
   trailing?: React.ReactNode;
-  /** SE-8F — when present, "+" opens a two-option menu (new / open existing)
-   *  instead of creating immediately. */
-  onOpenExisting?: () => void;
   /** With no query tab open, the strip still has its open tab: the start page's, under this name — never closed or
    *  renamed, and gone when a query tab opens (the user, 2026-11-09, choosing a reference console's start page). */
   startLabel?: string;
@@ -130,7 +127,6 @@ export function TabsBar({
     strip.current?.querySelector<HTMLElement>(`[data-tab-id="${activeId}"]`)?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
   }, [activeId, tabs.length]);
   const [draftName, setDraftName] = useState("");
-  const [plusMenu, setPlusMenu] = useState(false);
 
   const commit = useCallback(() => {
     if (editing && draftName.trim()) onRename(editing, draftName.trim());
@@ -232,39 +228,12 @@ export function TabsBar({
       })}
       </div>
       <div style={{ display: "flex", alignItems: "center", padding: "0 6px", flexShrink: 0 }}>
-      {onOpenExisting ? (
-        <div style={{ position: "relative", flexShrink: 0 }}>
-          <Button variant="plain" size="xs" className="aug-fs-ui"
-            onClick={() => setPlusMenu(v => !v)} title="New tab" style={{ color: "var(--t3)" }}>
-            <Icon name="plus" size={13} />
-          </Button>
-          {plusMenu && (
-            <>
-              <div style={{ position: "fixed", inset: 0, zIndex: 40 }} onClick={() => setPlusMenu(false)} />
-              <div className="aug-fs-ui" style={{
-                position: "absolute", top: "100%", left: 0, zIndex: 41, marginTop: 4,
-                minWidth: 170, padding: 5, background: "var(--bg-2)",
-                border: "1px solid var(--b2)", borderRadius: "var(--r2)", boxShadow: "var(--shadow-md)",
-              }}>
-                <Button variant="plain" size="xs" className="aug-fs-ui"
-                  style={{ width: "100%", justifyContent: "flex-start" }}
-                  onClick={() => { setPlusMenu(false); onNew(); }}>
-                  New query
-                </Button>
-                <Button variant="plain" size="xs" className="aug-fs-ui"
-                  style={{ width: "100%", justifyContent: "flex-start" }}
-                  onClick={() => { setPlusMenu(false); onOpenExisting(); }}>
-                  Open existing…
-                </Button>
-              </div>
-            </>
-          )}
-        </div>
-      ) : (
-        <Button variant="plain" size="xs" className="aug-fs-ui" onClick={onNew} title="New tab" style={{ color: "var(--t3)" }}>
-          <Icon name="plus" size={13} />
-        </Button>
-      )}
+      {/* One click opens a new query tab (the user, 2026-11-20: "'+' will directly create a new Query tab"); what was
+          "Open existing" is the search in the recent-runs panel now. */}
+      <Button variant="plain" size="xs" className="aug-fs-ui" onClick={onNew} title="New query" aria-label="New query"
+        data-testid="sql-new-tab" style={{ color: "var(--t3)" }}>
+        <Icon name="plus" size={13} />
+      </Button>
       </div>
       {trailing && (
         <>

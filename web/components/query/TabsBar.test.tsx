@@ -62,7 +62,7 @@ describe("SQL editor tabs", () => {
     expect(screen.queryByRole("button", { name: /^Close/ })).toBeNull();
     fireEvent.doubleClick(start);
     expect(screen.queryByRole("textbox")).toBeNull();
-    fireEvent.click(screen.getByTitle("New tab"));                          // the + beside it stays
+    fireEvent.click(screen.getByTitle("New query"));                          // the + beside it stays
     expect(on.onNew).toHaveBeenCalledTimes(1);
   });
 
@@ -85,5 +85,12 @@ describe("SQL editor tabs", () => {
     const strip = screen.getByTestId("sql-tabs");
     expect(strip.style.overflowX).toBe("auto");
     expect(["0", "0px"]).toContain(strip.style.minWidth);                       // it may shrink below its tabs
+  });
+
+  it("opens a new query tab on one click of +, with no menu between (2026-11-20)", () => {
+    const on = setup();
+    fireEvent.click(screen.getByTestId("sql-new-tab"));
+    expect(on.onNew).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("Open existing…")).toBeNull();
   });
 });
