@@ -510,12 +510,12 @@ export function CanvasWorkspace({ canvas, connections, allConnections, onClose, 
         onClick={() => showView(wsTab === "history" ? "chat" : "history")}>
         <Icon name="history" size={15} />
       </Button>
-      <Button variant="outline" size="xs" aria-pressed={showConfigure} data-testid="canvas-configure"
+      <Button variant={showConfigure ? "secondary" : "soft"} size="xs" aria-pressed={showConfigure} data-testid="canvas-configure"
         title="Its tables, instructions, documents, versions and saved artifacts"
         onClick={() => { setShowConfigure(v => !v); setSharingOpen(false); }}>
         <Icon name="settings" size={13} /> Configure
       </Button>
-      <Button variant="secondary" size="xs" aria-pressed={sharingOpen} data-testid="canvas-share"
+      <Button variant={sharingOpen ? "secondary" : "soft"} size="xs" aria-pressed={sharingOpen} data-testid="canvas-share"
         title={canvas.sharing === "chosen" ? "Shared with the people and groups chosen" : "Shared with everyone in the workspace"}
         onClick={() => { setSharingOpen(v => !v); setShowConfigure(false); }}>
         <Icon name={canvas.sharing === "chosen" ? "lock" : "users"} size={13} /> Share
