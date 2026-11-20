@@ -36,7 +36,6 @@ import { deltaInfo, formatMetric } from "@/components/brief/metricFormat";
 import { ResultChartCard } from "@/components/charts/ResultChartCard";
 import { type ChartCustom } from "@/components/Chart";
 import { chartOptionsOf, type VizConfig } from "@/components/charts/vizConfig";
-import { ALL_CHART_TYPES } from "@/components/charts/chartTypeInference";
 import type { Pick as ChartPick } from "@/components/charts/selection";
 import { VegaChart } from "@/components/charts/vega/VegaChart";
 import { useCellBox, useMeasured } from "@/components/dashboards/cellBox";
@@ -46,7 +45,7 @@ import { Button } from "@/components/ui/button";
 import { Icon, type IconName } from "@/components/ui/icon";
 import { readMetricTrend, type BriefingRange, type CardRunPrevious, type DashboardCard, type QueryShaped, type QueryShown, type StatedRange } from "@/lib/api";
 import { readVegaTokens } from "@/components/charts/vega/config";
-import { queryChartSpec, queryLookOf } from "@/lib/dashboards/queryChart";
+import { isOtherKind, queryChartSpec, queryGrid, queryLookOf } from "@/lib/dashboards/queryChart";
 import { cellText } from "@/lib/dashboards/objectView";
 import { SPAN, type Size } from "@/lib/dashboards/catalog";
 import { cardValue } from "@/lib/dashboards/hostStatus";
@@ -718,22 +717,8 @@ export function settingsKey(viz: VizConfig | null | undefined): string {
   return JSON.stringify(Object.entries(viz ?? {}).sort(([a], [b]) => a.localeCompare(b)));
 }
 
-/** A kind an answer's chart draws that a query card's own six do not (bar, line, area, scatter, a figure, a table). */
-const OWN_SIX = new Set(["auto", "bar", "line", "area", "scatter", "table", "figure"]);
-export function isOtherKind(type: string | null | undefined): boolean {
-  return !!type && !OWN_SIX.has(type) && (ALL_CHART_TYPES as readonly string[]).includes(type);
-}
-
-/** A query card's chart points as a result grid — the place, its series when split, its measure by its own column name
- *  (so a money column still reads as money) — for an answer's chart to draw. */
-export function queryGrid(c: Extract<QueryShaped, { as: "bar" | "line" | "area" | "scatter" }>,
-  setup: Pick<QueryShown, "series" | "split">): { columns: string[]; rows: unknown[][] } {
-  const measure = setup.series?.[0]?.column || "value";
-  const split = c.series.length > 1 || (c.series.length === 1 && c.series[0] !== "");
-  return split
-    ? { columns: [c.x.name, setup.split || "series", measure], rows: c.points.map(p => [p.x, p.s || "", p.v]) }
-    : { columns: [c.x.name, measure], rows: c.points.map(p => [p.x, p.v]) };
-}
+// a kind beyond the query's own six, and a query card's points as a result grid: `lib/dashboards/queryChart.ts`
+export { isOtherKind, queryGrid };
 
 /** A card's run as rows to take away. */
 function runTable(run: CardState["run"]): CardTable | null {
