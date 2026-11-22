@@ -30,6 +30,7 @@ from typing import Any, Callable, Optional
 from pydantic import BaseModel
 
 from pramanyx.agent.tool_loop import ToolSpec
+from pramanyx.canvas.scope import held_to_its_canvas
 
 logger = logging.getLogger(__name__)
 
@@ -400,6 +401,13 @@ def route_error(error: str, sql: str = "", dialect: str = "") -> dict:
                 "instruction": ("A person turned this table off for analysis. Do not read it: answer "
                                 "from the other tables if they can, and tell the user it was left out "
                                 "and why.")}
+    if error.lstrip().startswith("[OUTSIDE]"):
+        # The user, 2026-11-23 — a Data Canvas is strict: its turn reads only the canvas's tables.
+        return {"retryable": True, "kind": "outside",
+                "instruction": ("This conversation is on a Data Canvas and reads only its tables; the statement "
+                                "read another. Answer from the canvas's tables if they can; if they cannot, tell "
+                                "the user the question is outside this canvas and name its tables. Never answer "
+                                "from another table.")}
     if error.lstrip().startswith("[BLOCKED]"):
         return {"retryable": False, "kind": "blocked",
                 "instruction": ("This statement is disallowed by the read-only guard, not "
@@ -960,6 +968,7 @@ def remember_tools_refused() -> None:
     _REFUSED_TOOLS.add((backend, model))
 
 
+@held_to_its_canvas
 def converse(connection_id: str, question: str, *, extra_context: Optional[str] = None,
              provider=None, max_steps: Optional[int] = None,
              on_step=None, tool_emit: Optional[Emit] = None,

@@ -22,9 +22,12 @@ never raises.
 """
 from __future__ import annotations
 
+import functools
+import inspect
 import logging
+from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Callable, Optional
+from typing import Callable, Iterator, Optional
 
 from pramanyx.kernel.errors import tolerate
 
@@ -48,10 +51,20 @@ class ExecutionScope:
     tables: tuple[str, ...] = ()
     #: ``build_canvas_schema_context(canvas)`` output, when requested at resolve time.
     schema_context: str = ""
+    #: The canvas's name, as a reader knows it ("" for a non-canvas run).
+    canvas_name: str = ""
 
     @property
     def is_full_schema(self) -> bool:
         return not self.tables
+
+    def held(self):
+        """The door's hold for a run on this canvas (`db.doors.Held`), or None: a non-canvas run, or a canvas that
+        names neither tables nor a schema (it reads the whole connection, so there is nothing to hold it to)."""
+        if not self.canvas_id or not (self.tables or self.declared_schema):
+            return None
+        from pramanyx.db.doors import Held
+        return Held(name=self.canvas_name or self.canvas_id, tables=self.tables, schema=self.declared_schema)
 
     @property
     def eff_schema(self) -> Optional[str]:
@@ -95,6 +108,7 @@ def resolve_execution_scope(
     declared_schema: Optional[str] = None
     tables: tuple[str, ...] = ()
     schema_context = ""
+    canvas_name = ""
     eff_conn = connection_id
 
     if canvas_id:
@@ -106,6 +120,7 @@ def resolve_execution_scope(
                 eff_conn = canvas.primary_connection_id or connection_id
                 declared_schema = canvas.scopes[0].schema_name
                 tables = tuple(canvas.scopes[0].tables or [])
+                canvas_name = str(getattr(canvas, "name", "") or "")
                 if schema_context_builder is not None:
                     schema_context = schema_context_builder(canvas)
         except Exception as e:  # fail-open — a bad canvas must never break a run
@@ -120,4 +135,38 @@ def resolve_execution_scope(
         declared_schema=declared_schema,
         tables=tables,
         schema_context=schema_context,
+        canvas_name=canvas_name,
     )
+
+
+@contextmanager
+def holding_its_canvas(connection_id: str, canvas_id: Optional[str]) -> Iterator[None]:
+    """Run the body held to ``canvas_id``'s tables at the door (`db.doors.held_to`); no canvas holds nothing.
+
+    The user, 2026-11-23: a Data Canvas is strict. A turn's entry point — the conversation, the quick pipeline, the
+    analyst, the deep graph — runs under this, so every statement its model writes is held, helpers included (they
+    run in copies of its context)."""
+    from pramanyx.db.doors import held_to
+
+    hold = resolve_execution_scope(connection_id, canvas_id).held() if canvas_id else None
+    with held_to(hold):
+        yield
+
+
+def held_to_its_canvas(fn: Callable) -> Callable:
+    """`holding_its_canvas` around a turn's entry point, read from its own ``connection_id`` and ``canvas_id``."""
+    sig = inspect.signature(fn)
+
+    @functools.wraps(fn)
+    def run(*args, **kwargs):
+        try:
+            bound = sig.bind_partial(*args, **kwargs).arguments
+        except TypeError:
+            return fn(*args, **kwargs)   # the call itself is wrong: let it fail as it would
+        canvas_id = bound.get("canvas_id")
+        if not canvas_id:
+            return fn(*args, **kwargs)
+        with holding_its_canvas(str(bound.get("connection_id") or ""), canvas_id):
+            return fn(*args, **kwargs)
+
+    return run

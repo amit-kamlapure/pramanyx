@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from pramanyx.agent.chart_vocab import answer_chart_payload
 from pramanyx.agent.state import AgentState
+from pramanyx.canvas.scope import held_to_its_canvas
 from pramanyx.db.connection import open_connection_for
 from pramanyx.kernel.concurrency import ContextThreadPoolExecutor
 from pramanyx.db.history import (
@@ -701,13 +702,15 @@ async def _aiter_sync_with_progress(sync_iter, progress_q, ctx):
         next_graph.cancel()
 
 
-def _investigation_stream(graph_stream, declared: Optional[list] = None):
+def _investigation_stream(graph_stream, declared: Optional[list] = None, held=None):
     """The deep-run event iterator: interleaves per-dimension ``phase_progress`` markers
     into the stream, so a scan node reports progress DURING execution and not only at
-    ``phase_complete``. ``declared`` — the rules a resumed run's intake declared before."""
+    ``phase_complete``. ``declared`` — the rules a resumed run's intake declared before.
+    ``held`` — the Data Canvas the run reads only the tables of (`db.doors.Held`), or None."""
     import contextvars
 
     from pramanyx.agent.progress import set_progress_sink
+    from pramanyx.db.doors import hold
     from pramanyx.semantic.enforcement import holding
     from pramanyx.util.stream_events import set_chain_sink
     loop = asyncio.get_running_loop()
@@ -718,6 +721,9 @@ def _investigation_stream(graph_stream, declared: Optional[list] = None):
     # Arc OC-3 — the rules the run's intake declares (a keyed metric taken from the frame) are held here, so every
     # node after the intake executes its statements over them (`semantic.enforcement.declare`).
     ctx.run(holding, declared)
+    # The user, 2026-11-23 — a deep run on a Data Canvas reads only its tables: every node's statement is held at the
+    # door (`db.connection._security_pre`).
+    ctx.run(hold, held)
     return _aiter_sync_with_progress(graph_stream, q, ctx)
 
 
@@ -1852,8 +1858,9 @@ class _CoreCancelled(BaseException):
 def _note_unanswered(connection_id: str, schema: Optional[str], sql: str, signal: str, error: str) -> None:
     """A quick answer that could not answer — its query failed, or an analytical question came back empty —
     is counted against the dataset it was asked of; two in a week reopen that dataset's questions (the
-    exploration principles §3). A refusal is not a gap: a table turned off, a statement the guard blocked."""
-    if signal not in ("error", "no_rows") or str(error or "").lstrip().startswith(("[EXCLUDED]", "[BLOCKED]")):
+    exploration principles §3). A refusal is not a gap: a table turned off, a statement the guard blocked, a
+    table outside the Data Canvas the turn was on."""
+    if signal not in ("error", "no_rows") or str(error or "").lstrip().startswith(("[EXCLUDED]", "[BLOCKED]", "[OUTSIDE]")):
         return
     try:
         from pramanyx.explorer import program
@@ -1869,6 +1876,7 @@ def _note_unanswered(connection_id: str, schema: Optional[str], sql: str, signal
                  conn_id=connection_id or None)
 
 
+@held_to_its_canvas
 def _answer_core(
     question: str,
     connection_id: str,
@@ -4074,6 +4082,18 @@ async def _stream_converse(
                            f"tables cannot answer is said to be outside this schema, never "
                            f"answered from another dataset on the connection.")
             _memory = _scope_line + "\n\n" + _memory if _memory else _scope_line
+        elif canvas_id:
+            # The user, 2026-11-23 — a Data Canvas is strict, and the door now refuses a statement reading
+            # another table; the conversation is told so before it writes one, and in the words its answer uses.
+            from pramanyx.canvas.scope import resolve_execution_scope as _canvas_scope
+            _hold = _canvas_scope(connection_id, canvas_id).held()
+            if _hold is not None:
+                _reads = ", ".join(_hold.tables) if _hold.tables else f"the tables of schema '{_hold.schema}'"
+                _scope_line = (f"SCOPE — this conversation is on the Data Canvas '{_hold.name}'. It reads only "
+                               f"{_reads}; a statement reading any other table is refused. A question those "
+                               f"tables cannot answer is said to be outside this canvas, never answered from "
+                               f"another table.")
+                _memory = _scope_line + "\n\n" + _memory if _memory else _scope_line
         # "Ask this briefing" — the Briefing the user has open, read server-side from the
         # same entry it rendered (the RANGE entry when a period is open), with its period
         # and its Key Metrics tiles. This body never read it: the brief block lived only in
@@ -4892,7 +4912,8 @@ async def _stream_investigation(
         timed_out = False
         report_emitted = False  # did the graph reach a terminal synthesis node?
 
-        async for event in _investigation_stream(agent.stream(initial_state, config={"configurable": {"thread_id": inv_id}})):
+        async for event in _investigation_stream(agent.stream(initial_state, config={"configurable": {"thread_id": inv_id}}),
+                                                 held=_es.held()):
             # A supervised kernel job (K1) completes SERVER-SIDE even if the streaming client goes away: a
             # tab close or a transient disconnect must not discard a multi-minute investigation — nor write
             # its Trust Receipt outside the job's metering (which is exactly what an early abort did: an
@@ -5283,7 +5304,8 @@ async def _stream_resume(inv_id: str, feedback: str, request: Request,
     # Resume with the canvas scope (declared schema + derived owning-schema pin) if applicable.
     from pramanyx.canvas.scope import resolve_execution_scope
     try:
-        db = resolve_execution_scope(inv["connection_id"], inv.get("canvas_id")).open()
+        _resumed_scope = resolve_execution_scope(inv["connection_id"], inv.get("canvas_id"))
+        db = _resumed_scope.open()
     except Exception as e:
         yield _sse("error", _error_event(e))
         yield _sse("done", {})
@@ -5318,7 +5340,8 @@ async def _stream_resume(inv_id: str, feedback: str, request: Request,
         deadline = time.monotonic() + _TIMEOUT
 
         async for event in _investigation_stream(agent.stream(None, config=config),
-                                                 declared=merged.get("declared_rules")):
+                                                 declared=merged.get("declared_rules"),
+                                                 held=_resumed_scope.held()):
             # Same K1 rule: the resumed job completes server-side despite a client disconnect (bounded by
             # the deadline; explicit stop still cancels). An early abort here wrote an empty receipt too.
             if time.monotonic() > deadline:

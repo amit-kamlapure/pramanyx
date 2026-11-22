@@ -2342,7 +2342,8 @@ export default function Home() {
         </SchemaProvider>
         <InspectorHost />
         {/* The Ask panel beside every page; the Ask page itself is the same conversations at full size */}
-        <AskPanelHost connectionId={selectedConn} hidden={tab === "chat"} />
+        <AskPanelHost connectionId={selectedConn} hidden={tab === "chat"}
+          canvas={tab === "canvas-workspace" && activeCanvas ? { id: activeCanvas.id, name: activeCanvas.name } : null} />
       </div>
       <StatusStrip connection={statusConn} running={navCounts?.runningRuns ?? 0} />
 

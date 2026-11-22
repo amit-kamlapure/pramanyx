@@ -123,11 +123,14 @@ _BASELINE = dict(
     # Every role at the old constant — BASELINE is "the behaviour everything was
     # measured against", so it stays byte-identical.
     role_output_tokens={"coder": 4_096, "narrator": 4_096, "fast": 4_096},
-    # How many tool-choosing turns one converse question may spend. A ceiling, not a
-    # target: the model stops when it has an answer. BASELINE is deliberately tight —
-    # a weaker model that has not converged in four steps is usually looping, and each
-    # step is a whole request against a 1,000/day free-tier allowance.
-    tool_loop_steps=4,
+    # How many tool-choosing turns one converse question may spend — the Ask panel's and a
+    # Data Canvas's conversation. A ceiling, not a target: the model stops when it has an
+    # answer, and one that runs out is offered Keep going. Raised 4 → 8 (the user,
+    # 2026-11-23: "limit increase on panel and canvas.. no limit for Coworker"): four
+    # steps ended ordinary two-query answers on "Keep going" while the coworker, with no
+    # ceiling at all, finished them. Each step is still a whole request against a
+    # 1,000/day free-tier allowance, so it stays a ceiling.
+    tool_loop_steps=8,
     # The analyst's deep-turn ceiling (CA-3): enough steps to reach a concrete segment
     # at a finer grain than the question's, tight enough that a looping baseline model
     # cannot spend a day's allowance on one turn.
@@ -160,8 +163,9 @@ _CAPABLE = dict(
     # deadline plus reasoning-effort caps bound that independently.
     role_output_tokens={"coder": 8_192, "narrator": 12_288, "fast": 4_096},
     # A capable model can afford to look something up, be wrong, and recover — which is
-    # the whole argument for a loop over a single shot.
-    tool_loop_steps=8,
+    # the whole argument for a loop over a single shot. Raised 8 → 16 with the baseline
+    # (the user, 2026-11-23).
+    tool_loop_steps=16,
     # The analyst may slice, see, and slice again (CA-3) — a real investigation is
     # several looks, and a capable binding can afford the requests.
     deep_loop_steps=24,

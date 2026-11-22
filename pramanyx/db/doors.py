@@ -18,8 +18,10 @@ reader, and it is the one place those words live.
 from __future__ import annotations
 
 import re
+from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Any, Callable, Iterable, Optional
+from dataclasses import dataclass
+from typing import Any, Callable, Iterable, Iterator, Optional
 
 _TRAIL: ContextVar[Optional[list[str]]] = ContextVar("pramanyx_door_trail", default=None)
 #: GM-5 — the statement in flight was declared platform plumbing by its caller (`internal=True`). Read by the safety
@@ -35,6 +37,89 @@ _SCHEMA: ContextVar[Optional[str]] = ContextVar("pramanyx_door_schema", default=
 #: Arc ED, ED-1 — what a step told the reader about the statement in flight (`say`), added to its result's caveats on
 #: the way out: a narrowed read is said on the answer it narrowed, never implied by a smaller number.
 _SAID: ContextVar[Optional[list[str]]] = ContextVar("pramanyx_door_said", default=None)
+
+
+@dataclass(frozen=True)
+class Held:
+    """A Data Canvas's tables, as the door holds a turn on it to them.
+
+    The user, 2026-11-23: a canvas is strict — a statement reading a table outside it is refused, and the answer says
+    the question is outside the canvas. Before, only the schema text was narrowed (`list_tables`, `describe_table`,
+    the quick body's prompt) and a statement was pinned to the canvas's schema: any other table of that schema, or of
+    another one named in full, was read. The door is the one step every statement passes, so the conversation, the
+    quick pipeline, the analyst and the deep graph are held alike."""
+
+    #: The canvas, as a reader knows it.
+    name: str
+    #: Its tables as it lists them (`orders`, `olist.orders`); empty when it reads a whole schema.
+    tables: tuple[str, ...] = ()
+    #: Its own schema, when it declares one.
+    schema: Optional[str] = None
+
+    def outside(self, sql: str, dialect: Optional[str], default_schema: Optional[str] = None) -> list[str]:
+        """The tables this statement reads that are not the canvas's, as the statement names them. A statement that
+        does not parse names none: the engine refuses it anyway."""
+        from pramanyx.sql.tables import extract_tables
+
+        listed: dict[str, set[Optional[str]]] = {}
+        for t in self.tables:
+            parts = [p.strip('"`[] ').lower() for p in str(t).split(".") if p.strip()]
+            if parts:
+                listed.setdefault(parts[-1], set()).add(parts[-2] if len(parts) > 1 else None)
+        own = (self.schema or "").lower() or None
+        out: list[str] = []
+        for ref in sorted(extract_tables(sql, dialect), key=lambda r: r.qualified()):
+            table = (ref.table or "").lower()
+            if not table:
+                continue   # a table function (`read_csv(...)`): no table to hold
+            schema = (ref.schema or default_schema or self.schema or "").lower() or None
+            if self.tables:
+                schemas = listed.get(table)
+                inside = schemas is not None and (None in schemas or schema is None or schema in schemas)
+            else:
+                inside = own is None or schema is None or schema == own
+            if not inside:
+                out.append(ref.qualified() if ref.schema else ref.table)
+        return list(dict.fromkeys(out))
+
+    def refusal(self, names: list[str]) -> str:
+        """The sentence a statement reading ``names`` is refused with."""
+        mine = [str(t).split(".")[-1] for t in self.tables]
+        reads = (", ".join(mine[:8]) + (f" and {len(mine) - 8} more" if len(mine) > 8 else "")) if mine \
+            else f"the {self.schema} schema"
+        one = len(names) == 1
+        return (f"[OUTSIDE] {', '.join(names)} {'is' if one else 'are'} not among the tables of the Data Canvas "
+                f"'{self.name}', which reads only {reads}. Answer from those tables, or say the question is outside "
+                "this canvas.")
+
+
+#: The Data Canvas a turn runs on (`held_to`), or None. Set for a turn's whole run — the copied contexts its threads
+#: and helpers run in carry it — and read by the door for every statement a model or a person wrote in that turn.
+_HELD: ContextVar[Optional[Held]] = ContextVar("pramanyx_door_held", default=None)
+
+
+def held() -> Optional[Held]:
+    """The canvas the turn in flight is held to, or None."""
+    return _HELD.get()
+
+
+def hold(canvas: Optional[Held]) -> None:
+    """Hold the CURRENT context to ``canvas`` — for a run whose every step executes in one copied context it then
+    discards (the deep graph's stream, `routers.investigations._investigation_stream`)."""
+    _HELD.set(canvas)
+
+
+@contextmanager
+def held_to(canvas: Optional[Held]) -> Iterator[None]:
+    """Hold every statement run inside to ``canvas``'s tables; ``None`` holds nothing (and leaves an outer hold)."""
+    if canvas is None:
+        yield
+        return
+    token = _HELD.set(canvas)
+    try:
+        yield
+    finally:
+        _HELD.reset(token)
 
 #: Each door word, in plain words. ``{d}`` is the detail after the colon.
 WORDS: dict[str, str] = {

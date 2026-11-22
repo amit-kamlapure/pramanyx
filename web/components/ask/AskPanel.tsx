@@ -18,7 +18,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import type { ChatSessionSummary } from "@/components/ThreadsRail";
 import {
   closeAskTab, followPageConnection, hideAskPanel, inTheCoworker, newAskTab, noteAskSession, openAskConversation, PANEL_MAX_W, PANEL_MIN_W, selectAskTab,
-  setAskPanelWidth, toggleAskPanel, useAskPanel, useAskPanelWidth, type AskTab,
+  setAskPanelWidth, toggleAskPanel, useAskPanel, useAskPanelWidth, type AskTab, type PageCanvas,
 } from "@/lib/askPanel";
 import { getApiBase } from "@/lib/config";
 import { requestTab } from "@/lib/navigate";
@@ -75,8 +75,9 @@ export function AskPushedPage({ hidden = false, children }: { hidden?: boolean; 
   );
 }
 
-/** A tab's name: the conversation's first question, or "New conversation" before one is asked. */
-const tabName = (t: AskTab) => t.title || "New conversation";
+/** A tab's name: the conversation's first question, or before one is asked "New conversation" — on a Data Canvas, its name,
+ *  so the reader sees which tables the conversation is held to. */
+const tabName = (t: AskTab) => t.title || (t.canvasName ? `On ${t.canvasName}` : "New conversation");
 
 function History({ connectionId }: { connectionId: string }) {
   const [rows, setRows] = useState<ChatSessionSummary[] | null>(null);
@@ -114,12 +115,20 @@ function History({ connectionId }: { connectionId: string }) {
 
 /** The panel, drawn once by the shell beside the content. `hidden` while the Ask page shows the conversations at full size:
  *  it stays mounted, so an answer still being written is not cut off. */
-export function AskPanelHost({ connectionId, hidden = false }: { connectionId: string; hidden?: boolean }) {
+export function AskPanelHost({ connectionId, canvas = null, hidden = false }: {
+  connectionId: string;
+  /** The Data Canvas the page shows, if any: a conversation begun over it reads only its tables. */
+  canvas?: PageCanvas | null;
+  hidden?: boolean;
+}) {
   const { open, tabs, active } = useAskPanel();
   const narrow = useNarrowScreen();
   const width = useAskPanelWidth();
-  // a conversation nothing has been asked in yet is about the page's connection
-  useEffect(() => { if (open) followPageConnection(connectionId); }, [open, connectionId, active]);
+  // a conversation nothing has been asked in yet is about the page's connection, and its canvas
+  const canvasId = canvas?.id ?? null, canvasName = canvas?.name ?? "";
+  useEffect(() => {
+    if (open) followPageConnection(connectionId, canvasId ? { id: canvasId, name: canvasName } : null);
+  }, [open, connectionId, canvasId, canvasName, active]);
 
   const keep = setAskPanelWidth;
   const startDrag = (e: React.PointerEvent) => {
@@ -188,7 +197,8 @@ export function AskPanelHost({ connectionId, hidden = false }: { connectionId: s
       {tabs.map(t => (
         <div key={t.key} role="tabpanel" aria-label={tabName(t)} hidden={t.key !== front.key}
           style={{ flex: 1, minHeight: 0, display: t.key === front.key ? "flex" : "none", flexDirection: "column" }}>
-          <ChatPanel connectionId={t.connectionId} beside harness restoreSessionId={t.session} takesQueued={shown && t.key === front.key}
+          <ChatPanel connectionId={t.connectionId} canvasId={t.canvasId} beside harness restoreSessionId={t.session}
+            takesQueued={shown && t.key === front.key}
             onSession={(session, title) => noteAskSession(t.key, session, title)} onNew={() => newAskTab(t.connectionId)} />
         </div>
       ))}

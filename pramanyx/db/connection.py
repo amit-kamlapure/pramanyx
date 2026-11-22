@@ -23,7 +23,7 @@ from urllib.parse import urlsplit
 
 from pramanyx.db.dialects import known_dialect, sql_for_engine
 from pramanyx.db.signing import sign
-from pramanyx.db.doors import add as _add_doors, door_dialect, door_schema, passed as _passed, statement_is_internal, through_door
+from pramanyx.db.doors import add as _add_doors, door_dialect, door_schema, held as _held, passed as _passed, statement_is_internal, through_door
 from pramanyx.db.errors import ConnectionUnreachable, classify_error, is_unreachable
 from pramanyx.db.single_flight import single_flight_build
 from pramanyx.control_plane.contracts.execution import QueryResult
@@ -68,6 +68,15 @@ def _security_pre(connection_id: str, hypothesis_id: str, sql: str) -> QueryResu
         _passed("internal")
         _count_internal(connection_id)
         return None  # platform plumbing — never block or audit; counted, so the audit page can say it ran
+    # The user, 2026-11-23 — a turn on a Data Canvas reads only the canvas's tables (`doors.Held`). The platform's own
+    # probes above (a schema read, a sample) are not the data a turn answers from; outside a turn nothing is held.
+    canvas = _held()
+    if canvas is not None:
+        outside = canvas.outside(sql, dialect, door_schema())
+        if outside:
+            _passed("blocked:canvas")
+            return QueryResult(hypothesis_id=hypothesis_id, sql=sql, columns=[], rows=[], row_count=0,
+                               error=canvas.refusal(outside))
     try:
         from pramanyx.security.safety import SafetyChecker, SafetyVerdict
         from pramanyx.security.audit  import AuditLogger
