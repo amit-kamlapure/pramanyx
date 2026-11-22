@@ -510,7 +510,7 @@ function SkillsDrawer({ connId, schema, onClose }: { connId: string; schema?: st
         {!loading && !error && skills?.length === 0 && (
           <p className="aug-fs-xs text-zinc-500">
             No learned skills yet. A skill is crystallized from a finished deep analysis
-            (its grounded, read-only query) — run a deep analysis, then “Save as skill”.
+            (its grounded, read-only query) — run a deep analysis, then “Save as a skill”.
           </p>
         )}
         {skills?.map(sk => (

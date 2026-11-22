@@ -2141,7 +2141,7 @@ function SaveAsSkillButton({ invId, connectionId }: { invId: string; connectionI
     }
   };
   if (state === "saved")
-    return <span className="aug-fs-xs text-emerald-400">✓ Saved as skill</span>;
+    return <span className="aug-fs-xs text-emerald-400">✓ Saved as a skill</span>;
   return (
     <Button
       variant="ghost"
@@ -2151,7 +2151,7 @@ function SaveAsSkillButton({ invId, connectionId }: { invId: string; connectionI
       title={msg || "Crystallize this deep analysis into a reusable, governed skill (Ontology ▸ Learned skills)"}
       className="h-auto px-2.5 py-1 aug-fs-xs font-normal text-violet-400 hover:text-violet-300 rounded hover:bg-transparent dark:hover:bg-transparent"
     >
-      {state === "saving" ? "Saving…" : state === "error" ? "Retry — not skill-worthy?" : "Save as skill"}
+      {state === "saving" ? "Saving…" : state === "error" ? "Retry — not skill-worthy?" : "Save as a skill"}
     </Button>
   );
 }
