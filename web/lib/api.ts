@@ -434,12 +434,17 @@ export async function cancelInvestigation(invId: string): Promise<void> {
   await fetch(`${getApiBase()}/investigations/${encodeURIComponent(invId)}/cancel`, { method: "POST" });
 }
 
-/** The deep analysis a turn can be asked to answer early: one still running, and not waiting on the person's own choice. */
+/** The deep analysis a turn can be asked to answer early: one still running, and not waiting on the person's own choice.
+ *  A quick turn has one when the conversation started a deep analysis itself (2026-11-23: Answer now showed only on a
+ *  turn routed deep, so the deep analysis the Ask panel's conversation reaches for could not be answered early): the
+ *  analyst's `start` is the only one a quick turn carries, and its run can be answered early until its report lands. */
 export function answerableRun(turn: {
   status: string; mode: string; investigationId?: string | null; runHandle?: string | null; planPending?: unknown; clarifyPending?: unknown;
+  deepReport?: unknown;
 }): string | null {
-  if (turn.status !== "loading" || turn.mode !== "investigate" || turn.planPending || turn.clarifyPending) return null;
-  return turn.investigationId ?? turn.runHandle ?? null;
+  if (turn.status !== "loading" || turn.planPending || turn.clarifyPending) return null;
+  if (turn.mode === "investigate") return turn.investigationId ?? turn.runHandle ?? null;
+  return turn.runHandle && !turn.deepReport ? turn.runHandle : null;
 }
 
 /** Answer now: a running deep analysis stops where it is and answers from what it has found. Says why when it cannot. */

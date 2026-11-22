@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@/lib/testing";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AnswerNow } from "@/components/chat/AnswerNow";
+import { answerableRun } from "@/lib/api";
 
 const answerRunNow = vi.fn();
 vi.mock("@/lib/api", async (original) => ({ ...(await original<typeof import("@/lib/api")>()), answerRunNow: (...a: unknown[]) => answerRunNow(...a) }));
@@ -24,5 +25,21 @@ describe("Answer now", () => {
     fireEvent.click(screen.getByRole("button", { name: "Answer now" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("It is not running");
     expect(screen.getByRole("button", { name: "Answer now" })).toBeEnabled();
+  });
+});
+
+describe("which run a turn can answer early", () => {
+  const running = { status: "loading", planPending: null, clarifyPending: null };
+
+  it("a turn routed deep, by its run", () => {
+    expect(answerableRun({ ...running, mode: "investigate", investigationId: "inv7" })).toBe("inv7");
+    expect(answerableRun({ ...running, status: "done", mode: "investigate", investigationId: "inv7" })).toBeNull();
+    expect(answerableRun({ ...running, mode: "investigate", investigationId: "inv7", planPending: {} })).toBeNull();
+  });
+
+  it("a quick turn whose conversation started a deep analysis, until its report lands (2026-11-23)", () => {
+    expect(answerableRun({ ...running, mode: "ask" })).toBeNull();                       // a quick answer: no run
+    expect(answerableRun({ ...running, mode: "ask", runHandle: "inv9" })).toBe("inv9");  // the analyst's start
+    expect(answerableRun({ ...running, mode: "ask", runHandle: "inv9", deepReport: { headline: "…" } })).toBeNull();
   });
 });
