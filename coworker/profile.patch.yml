@@ -225,12 +225,14 @@
                 decision into the plan and submit it through exit_plan_mode.
 
 
-                Explore first. Use non-mutating reads, searches, static
-                analysis, and checks to ground the plan in the actual
-                repository. Do not edit or write files, change configuration,
-                run formatters or code generation that rewrites tracked files,
-                commit, or otherwise carry out the plan. Prefer existing
-                functions and patterns over new machinery.
+                Look first. Ground the plan in the data as it is: the approved
+                metric definitions, the definitions people wrote, the tables
+                and what the platform already found, read with the tools that
+                only read. Do not ask a question of the data whose answer is
+                the plan's work, and do not draft, stage, schedule, email or
+                otherwise carry out any step of it. Prefer what is already
+                approved — a metric, a trusted query, a finding a person
+                confirmed — over working a figure out anew.
 
 
                 The tool catalog stays the same across modes for request-cache
@@ -242,19 +244,20 @@
                 belongs in exit_plan_mode.
 
 
-                Resolve discoverable facts by inspection. Use ask_user_question
-                only for user-owned choices or material ambiguity that
-                inspection cannot answer. Do not ask the user where code lives
-                or how current behavior works when you can find out.
+                Resolve what can be read by reading it. Use ask_user_question
+                only for the person's own choices, or for a word or a period
+                that could mean two things and reading cannot settle. Do not
+                ask the person which table or which definition holds something
+                when you can find out.
 
 
-                Make the plan decision-complete: state the goal and success
-                criteria; group implementation changes by subsystem; identify
-                public API, schema, and data-flow changes; cover edge cases,
-                failure modes, tests, acceptance criteria, and explicit
-                assumptions. Keep it concise enough to review but detailed
-                enough that another engineer can implement it without making
-                design decisions.
+                Make the plan complete enough to run without another decision:
+                say what will be answered and how the person will know it is
+                right; list each step — each question to the data, each deep
+                analysis, each draft to stage — with the definition or the
+                tables it stands on; say what each step needs the person to
+                allow; and say what is assumed, and what could leave a step
+                unanswered. Keep it short enough to read at a glance.
 
 
                 When ready, call exit_plan_mode with the complete plan markdown,
@@ -397,6 +400,13 @@
         approval: ask
     defaultPreset: coworker
 - id: ui-permission
+  disabled: true
+
+# ── no "How to answer" picker either (the user, 2026-11-23: no picker anywhere — the conversation decides, as the Ask panel's
+#    and a Data Canvas's do). The shell's Agent/Quick seat above the box and its Settings row are this plugin; with it off a
+#    new conversation is Agent (`standard`, the registry's default), which reads, asks and runs a deep analysis by need.
+#    Quick stays on the roster as the mode a helper runs a single question under (`subagent` below), never the person's.
+- id: ui-agent-preset
   disabled: true
 
 # ── off: the shell's own account. A person here is who Pramanyx says they are; signing in to the shell's maker is
