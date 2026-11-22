@@ -3947,6 +3947,7 @@ async def _stream_converse(
     sheet: str = "",
     dashboard: Optional[tuple[str, ...]] = None,
     person: str = "",
+    asked_again: bool = False,
 ) -> AsyncGenerator[str, None]:
     """Serve one `/ask` turn as a CONVERSATION (SP-14; unconditional since 2026-10-28).
 
@@ -4049,8 +4050,14 @@ async def _stream_converse(
         # was answered before elsewhere: the sheet on screen is its grounding, an earlier answer may predate the edits
         # people made since, and earlier answers' shape pulled the model back to it — a breakdown after the rows card,
         # and "The earlier answers in this session…" in a conversation that had none (live, trace bf4d145e).
-        _memory = build_history_section(history) + ("" if sheet else build_prior_answers_section(
+        _memory = build_history_section(history) + ("" if sheet or asked_again else build_prior_answers_section(
             resolve_prior_answers(question, connection_id, session_id)))
+        # Ask again (2026-11-23): the person wants the question answered afresh — seen live, a repeat ran nothing and
+        # wrote the earlier answer's figures from what it held. It is told so, and is not handed earlier answers.
+        if asked_again:
+            _again = ("ASKED AGAIN — the person asked this question again for a fresh answer. Run it again with a "
+                      "query and answer from that query's rows; do not repeat an earlier answer's figures.")
+            _memory = _again + "\n\n" + _memory if _memory else _again
         if origin_prose:
             _memory = origin_prose + "\n\n" + _memory if _memory else origin_prose
         # Stage 4 (2026-11-20): a request of several parts is said to be one, with the ability for each part
@@ -6286,6 +6293,8 @@ async def _stream_ask(req: "AskRequest", request: Request, conn_id: str) -> Asyn
                              dashboard=_own_dashboard(req, request),
                              # Stage 2 — who asks, so the reads of what depends on a table name only their dashboards
                              person=_asker(request),
+                             # Ask again — answered afresh, not from what the conversation already holds
+                             asked_again=(req.purpose or "") == "ask_again",
                              # CI-4 — a seeded/dossier turn hands its finding to the
                              # conversation instead of bypassing it; SP-15 — a turn
                              # summoned from an object hands that object's live state.

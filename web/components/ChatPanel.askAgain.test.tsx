@@ -78,6 +78,6 @@ describe("a question asked again, in the Ask panel beside what a reader chose", 
     await inThePanel();
     fireEvent.click(screen.getByText("↺ Ask again"));
     expect(regenerate).toHaveBeenCalledTimes(1);
-    expect(regenerate.mock.calls[0][0]).toMatchObject({ body: { mode: "auto", depth: "quick", ...FOCUS } });
+    expect(regenerate.mock.calls[0][0]).toMatchObject({ body: { mode: "auto", depth: "quick", purpose: "ask_again", ...FOCUS } });
   });
 });

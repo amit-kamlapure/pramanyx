@@ -1180,7 +1180,8 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
   }, [mode, subject, agentId]);
   const askAgain = useCallback(() => {
     if (busy) sdkStop();
-    void regenerate({ body: plainBody() });
+    // said to be asked again, so the conversation runs it afresh rather than repeating what it already holds
+    void regenerate({ body: { ...plainBody(), purpose: "ask_again" } });
   }, [busy, sdkStop, regenerate, plainBody]);
 
   const stop = useCallback(() => { cancelActiveRun(); sdkStop(); }, [cancelActiveRun, sdkStop]);

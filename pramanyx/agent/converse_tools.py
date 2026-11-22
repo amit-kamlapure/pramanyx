@@ -260,6 +260,35 @@ def breakdown_where_one_figure_was_asked(question: str, results: list[dict], ans
             "rate computed in SQL — so the result shown is the answer. Then answer.")
 
 
+def figures_no_query_read(answer: str, results: list[dict], sheet: str = "") -> Optional[str]:
+    """Why an answer is not finished, when it states figures and no query in this turn read them — or None.
+
+    Seen live (2026-11-23, the Ask panel beside the Olist orders sheet): asked "How many orders are there by order
+    status?" again, the conversation ran nothing and wrote the eight counts from what it already held; the grounding
+    check after the loop then struck them, and the person read "The data shows a total of 99441 orders, but does not
+    provide a breakdown by order status" under a question that had just been answered right. That check can only remove
+    a figure; this one, in the loop, hands the draft back once while a query can still be run. Two figures or more:
+    one count read from the schema's own listing is how a definitional answer is written, and is held after the loop.
+    A sheet's own counts (`sheets.answer.citable_counts`) are this turn's to cite, as the check after the loop allows."""
+    if results:
+        return None
+    from pramanyx.explorer.grounding import verify_finding
+    cells: list = []
+    if sheet:
+        try:
+            from pramanyx.sheets.answer import citable_counts
+            cells = citable_counts(sheet)
+        except Exception as exc:  # noqa: BLE001 — without the sheet's counts the check is only stricter
+            from pramanyx.kernel.errors import tolerate
+            tolerate(exc, "a sheet's citable counts are best-effort here", counter="converse.figures_check")
+    missing = list(verify_finding(answer or "", cells).ungrounded)
+    if len(missing) < 2:
+        return None
+    return (f"Your answer states figures that no query in this turn read ({', '.join(missing[:4])}). A figure from an "
+            "earlier answer, or from a table's own sample values, is not this turn's answer. Run the query that reads "
+            "them — answer_question or run_sql — and answer from its rows.")
+
+
 def citable_totals(results: list[dict]) -> list[list]:
     """Each result's column totals, as rows the grounding check may cite. The model is GIVEN these (`run_sql`'s
     ``totals``, computed by code and to be quoted, never added up by hand) — and the check then held every quoted total
@@ -995,6 +1024,7 @@ def converse(connection_id: str, question: str, *, extra_context: Optional[str] 
     # The results this turn's queries returned, in order — what the stop check reads to see which one an answer
     # stands on. Only a streaming caller has frames to read; a sync caller's turn is checked for working notes alone.
     results: list[dict] = []
+    streaming = tool_emit is not None
     if tool_emit is not None:
         _outer = tool_emit
 
@@ -1006,7 +1036,9 @@ def converse(connection_id: str, question: str, *, extra_context: Optional[str] 
             _outer(kind, payload)
 
     def _not_yet(answer: str) -> Optional[str]:
-        return working_notes(answer) or breakdown_where_one_figure_was_asked(question, results, answer)
+        return (working_notes(answer) or breakdown_where_one_figure_was_asked(question, results, answer)
+                # only a streaming caller's results are kept, so only its turn can be said to have read nothing
+                or (figures_no_query_read(answer, results, sheet) if streaming else None))
 
     provider = provider or get_provider("coder")
     if max_steps is None:
