@@ -1030,6 +1030,11 @@ textarea.aug-input, .aug-textarea { min-height: 56px; padding: 7px 9px; line-hei
 td, [role="gridcell"][role="gridcell"], [role="cell"][role="cell"] { font-size: var(--aug-fs-chrome); }
 /* The page, as one layer under everything Radix portals into <body> (app/layout.tsx). */
 .aug-root { isolation: isolate; display: flex; flex-direction: column; flex: 1 1 0%; min-height: 100%; }
+/* The chart editor's drawer (VizEditorPanel, not docked) takes the right of the window; the page makes room for it, so the
+   chart being edited stays in view beside it (2026-11-23). A narrow window keeps the drawer over the page. */
+@media (min-width: 1000px) {
+  body[data-viz-editor="open"] .aug-root { margin-right: min(340px, 92vw); transition: margin-right 0.15s ease; }
+}
 /* A Themes ghost button bleeds into its neighbours by design (negative margins, to line its
    label up with text). In a toolbar or a table cell that eats the gap, so ours sit still. */
 .rt-BaseButton:where(.rt-variant-ghost) { margin: 0; }

@@ -513,16 +513,29 @@ export function VizEditorPanel({ model, onClose, docked = false }: { model: VizE
   // to handle, not the drawer's). The listener is attached on mount, AFTER the opening pencil click.
   useEffect(() => {
     if (docked) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    // Read before an open list handles it (capture): Escape in an open list closes the list, not the editor (2026-11-23:
+    // closing "Dates as" with Escape closed the whole editor).
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (document.querySelector('[data-slot="select-content"][data-open], .rt-PopoverContent, [role="listbox"]')) return;
+      onClose();
+    };
     const onDown = (e: MouseEvent) => {
       const t = e.target as Element | null;
       if (t?.closest?.('[data-slot="select-content"], [data-radix-popper-content-wrapper], .rt-PopoverContent')) return;
       if (document.querySelector('[data-slot="select-content"][data-open], .rt-PopoverContent')) return;  // a menu is open → dismiss it
       if (ref.current && !ref.current.contains(t as globalThis.Node)) onClose();
     };
-    window.addEventListener("keydown", onKey);
+    window.addEventListener("keydown", onKey, true);
     document.addEventListener("mousedown", onDown);
-    return () => { window.removeEventListener("keydown", onKey); document.removeEventListener("mousedown", onDown); };
+    // The page makes room for the drawer while it is open, so the chart being edited is never under it (2026-11-23: its
+    // legend and right side were covered); a narrow screen keeps the drawer over the page (globals.css).
+    document.body.dataset.vizEditor = "open";
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      document.removeEventListener("mousedown", onDown);
+      delete document.body.dataset.vizEditor;
+    };
   }, [onClose, docked]);
 
   const chartMode = model.view === "chart" && model.chartAvailable;
@@ -802,8 +815,11 @@ export function VizEditorPanel({ model, onClose, docked = false }: { model: VizE
         )}
         {model.setDateFormat && model.dateFormatOptions && (
           <div data-testid="viz-date-format" style={{ ...ROW, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-            <span className="aug-fs-chrome" style={TITLE}>Dates as</span>
-            <Select label="Dates as" value={model.dateFormatValue ?? ""} options={model.dateFormatOptions} onChange={model.setDateFormat} />
+            {/* the title on one line and the list within the row (2026-11-23: "Dates / as", and a box past the edge) */}
+            <span className="aug-fs-chrome" style={{ ...TITLE, whiteSpace: "nowrap", flex: "none" }}>Dates as</span>
+            <div style={{ flex: "1 1 auto", minWidth: 0, maxWidth: 220 }}>
+              <Select label="Dates as" value={model.dateFormatValue ?? ""} options={model.dateFormatOptions} onChange={model.setDateFormat} />
+            </div>
           </div>
         )}
         {chartMode && <ToggleRow title="Tooltip" on={model.tooltipOn} onChange={model.setTooltipOn} />}
