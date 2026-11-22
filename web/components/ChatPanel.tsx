@@ -345,8 +345,20 @@ function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, se
 
       {/* Toggle row — mode buttons left, actions right */}
       <div className="flex items-center justify-between px-3 pb-2">
-        {/* Mode toggle — Quick answers, Agent investigates. Agent is the default. The Ask panel's composer has none. */}
-        {plain ? <span /> : (
+        {/* Mode toggle — Quick answers, Agent investigates. Agent is the default. The one conversation's composer has none:
+            the conversation decides, and a typed /agent is said here until it is let go (the user, 2026-11-23 — it stayed on
+            for the rest of the conversation with nothing on screen saying so). */}
+        {plain ? (mode === "investigate" ? (
+          <span data-testid="composer-depth" className="aug-fs-xs"
+            style={{ marginRight: 8, display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 2px 2px 8px",
+              borderRadius: "var(--r2)", background: "var(--gray-a3)", color: "var(--t1)" }}>
+            <Icon name="spark" size={12} /> Agent
+            <Button variant="ghost" size="icon-xs" aria-label="Answer straight away instead" title="Answer straight away instead · /quick"
+              onClick={() => setMode("ask")}>
+              <Icon name="close" size={12} />
+            </Button>
+          </span>
+        ) : <span />) : (
           <Segmented label="How to answer" value={mode} onChange={setMode}
             options={[
               { value: "ask", label: <><Icon name="chat" size={14} /> Quick</> },
@@ -747,7 +759,7 @@ export function claimChatAddress(params: URLSearchParams, address?: string): str
  * grants — never written as flattering copy. A grant in particular is stated as what
  * it is: this agent may PROPOSE those actions, and never executes one.
  */
-function AgentLandingBlock({ agent, connectionName }: { agent: UserAgent; connectionName?: string }) {
+function AgentLandingBlock({ agent, connectionName, plain = false }: { agent: UserAgent; connectionName?: string; plain?: boolean }) {
   // The agent's OWN connection, not the chat's. Naming the chat's connection beside the
   // agent's schema produced "spotify · thelook" — two halves of two different scopes
   // presented as one.
@@ -761,7 +773,9 @@ function AgentLandingBlock({ agent, connectionName }: { agent: UserAgent; connec
   if (agent.pack_ids.length) {
     caps.push(`Carries ${agent.pack_ids.length} knowledge pack${agent.pack_ids.length === 1 ? "" : "s"}`);
   }
-  caps.push("Ask in Quick mode for fast SQL answers, or Agent for multi-step root-cause analysis");
+  // the one conversation has no Quick/Agent picker: it answers straight away, and /agent investigates (2026-11-23)
+  caps.push(plain ? "Answers straight away; type /agent for a multi-step root-cause analysis"
+    : "Ask in Quick mode for fast SQL answers, or Agent for multi-step root-cause analysis");
   if (agent.tool_grants.length) {
     caps.push(`May PROPOSE ${agent.tool_grants.length} action${agent.tool_grants.length === 1 ? "" : "s"} — proposing is not doing; you approve each one`);
   }
@@ -1512,7 +1526,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                 canvas), then the agent you came here to talk to, and only then the
                 generic greeting. */}
             {!capabilities && activeAgent && (
-              <AgentLandingBlock agent={activeAgent} connectionName={agentConnectionName} />
+              <AgentLandingBlock agent={activeAgent} connectionName={agentConnectionName} plain={inPanel} />
             )}
 
             {!capabilities && !activeAgent && (
