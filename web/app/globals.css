@@ -1031,8 +1031,9 @@ td, [role="gridcell"][role="gridcell"], [role="cell"][role="cell"] { font-size: 
 /* The page, as one layer under everything Radix portals into <body> (app/layout.tsx). */
 .aug-root { isolation: isolate; display: flex; flex-direction: column; flex: 1 1 0%; min-height: 100%; }
 /* The chart editor's drawer (VizEditorPanel, not docked) takes the right of the window; the page makes room for it, so the
-   chart being edited stays in view beside it (2026-11-23). A narrow window keeps the drawer over the page. */
-@media (min-width: 1000px) {
+   chart being edited stays in view beside it (2026-11-23). Below 1280px the room left would squeeze the chart to a sliver
+   (seen at 1024px), so a narrower window keeps the drawer over the page. */
+@media (min-width: 1280px) {
   body[data-viz-editor="open"] .aug-root { margin-right: min(340px, 92vw); transition: margin-right 0.15s ease; }
 }
 /* A Themes ghost button bleeds into its neighbours by design (negative margins, to line its
