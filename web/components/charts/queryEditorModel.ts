@@ -131,8 +131,11 @@ export function queryEditorModel(input: QueryEditorInput): VizEditorModel {
     if (v === "pivot") {
       commit({ shown, viz: { ...viz, view: "pivot" } });
     } else if (v === "table" || v === "figure" || OWN_KINDS.includes(v as ChartType)) {
-      // the query's own kind, kept with its setup; the chart settings' kind cleared, so nothing else draws it another way
-      commit({ shown: settle(setupAs(shown, v as QueryShownAs, columns)), viz: rest });
+      // the query's own kind, kept with its setup; the chart settings' kind cleared, so nothing else draws it another way.
+      // An answer's line shows its points unless told not to (`openingDraft`) — whichever kind it was switched from
+      // (2026-11-23: Multi-line → Line hid them, though nobody turned them off).
+      const kept = ro && v === "line" && viz.markers !== false ? { ...rest, markers: true } : rest;
+      commit({ shown: settle(setupAs(shown, v as QueryShownAs, columns)), viz: kept });
     } else {
       const { view: _v, ...kept } = viz;
       commit({ shown: chart ? shown : settle(setupAs(shown, "bar", columns)), viz: { ...kept, type: v as ChartType } });

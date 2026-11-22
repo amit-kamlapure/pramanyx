@@ -44,6 +44,18 @@ describe("the one editor's model", () => {
     expect(m.transformOptions.length).toBeGreaterThan(0);
   });
 
+  it("an answer switched to Line keeps showing its points, as an answer's line does (2026-11-23)", () => {
+    const answer = vi.fn();
+    build({ shown: { ...SHOWN, summed: false, bucket: "" }, viz: { type: "multi_line" } }, true, answer).setChartType("line");
+    expect(answer.mock.calls[0][0].viz.markers).toBe(true);
+    const told = vi.fn();
+    build({ shown: { ...SHOWN, summed: false, bucket: "" }, viz: { type: "multi_line", markers: false } }, true, told).setChartType("line");
+    expect(told.mock.calls[0][0].viz.markers).toBe(false);
+    const card = vi.fn();
+    build({ shown: { ...SHOWN, as: "bar" }, viz: {} }, false, card).setChartType("line");
+    expect(card.mock.calls[0][0].viz.markers).toBeUndefined();   // a query card's line hides them unless told
+  });
+
   it("rows only: a change is kept as rows draw it, never summed nor bucketed", () => {
     const commit = vi.fn();
     const m = build({ shown: { ...SHOWN, summed: false, bucket: "" }, viz: {} }, true, commit);

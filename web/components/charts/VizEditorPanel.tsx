@@ -464,7 +464,9 @@ function AnnotationSection({ model }: { model: VizEditorModel }) {
       {model.refLines.map((l, i) => (
         <div key={i} className="aug-fs-sm" style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--t2)" }}>
           <span style={{ width: 12, borderTop: "1.5px dashed var(--t3)" }} />
-          <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.label} · {l.value}</span>
+          <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {/* written as a person reads a number (2026-11-23: "Average · 13087.3611") */}
+            {l.label} · {l.value.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
           <Button variant="ghost" size="icon-sm" onClick={() => model.removeRefLine(i)} aria-label={`Take ${l.label} off`} title="Take it off" style={{ color: "var(--t3)" }}>
             <Icon name="minus" size={14} />
           </Button>

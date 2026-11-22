@@ -81,3 +81,15 @@ describe("a tooltip", () => {
     expect(spec).not.toContain('"title":"Value"');
   });
 });
+
+describe("a large number", () => {
+  it("is written as the app writes it on a dashboard's chart too — 20.0K and 1.2B, never 20k and 1.2G", () => {
+    const big: Chart = { as: "bar", x: { name: "status", kind: "text", bucket: "" }, series: [""], other: false, said: [],
+      points: [{ x: "Complete", s: "", v: 31000 }, { x: "Shipped", s: "", v: 1_200_000_000 }] };
+    const spec = queryChartSpec(big, { segments: "stacked", labels: true, running: false }, COLOURS);
+    const y = (first(spec).encoding.y.axis as Obj);
+    expect(String(y.labelExpr)).toContain("'B'");
+    expect(JSON.stringify(spec)).toContain('"as":"__label"');
+    expect(String(y.labelExpr)).not.toContain("~s");
+  });
+});

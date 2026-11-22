@@ -15,6 +15,7 @@ import { dayLabel } from "@/lib/dashboards/objectView";
 import { cleanLabel, fmtDate, formatDateAs, type DateFormat, type Gran } from "@/lib/format";
 import { emphasisOpacity } from "@/components/charts/vega/emphasis";
 import { HOVER_MARK, type HoverMeta } from "@/components/charts/vega/hoverTooltip";
+import { COMPACT } from "@/components/charts/vega/compact";
 import { colorsFor } from "@/lib/dashboards/valueColors";
 
 export type QueryChart = Extract<QueryShaped, { as: "bar" | "line" | "area" | "scatter" }>;
@@ -169,9 +170,12 @@ export function queryChartSpec(c: QueryChart, setup: Pick<QueryShown, "segments"
     : shares || c.format === "percent" ? ".0%" : c.format === "money" ? "$.3~s" : small ? ".2~f" : ".3~s";
   const labelFormat = look?.format && !shares ? look.format : small ? ".2~f" : ".3~s";
   const chosenScale = valueAxisScale(options, values.map(p => p.v).filter((v): v is number => typeof v === "number"));
+  // a large number in the app's own compact form, as an answer's chart writes it — 20.0K and 1.2B, never 20k and 1.2G
+  const compact = !(look?.format && !shares) && !shares && c.format !== "percent" && !small;
   const y = {
     field: "v", type: "quantitative", stack, title: null,
-    axis: { title: look?.yTitle || null, tickCount: 4, format: axisFormat },
+    axis: { title: look?.yTitle || null, tickCount: 4, format: axisFormat,
+            ...(compact ? { labelExpr: (c.format === "money" ? "'$' + " : "") + COMPACT("datum.value") } : {}) },
     ...(c.as === "scatter" || Object.keys(chosenScale).length ? { scale: { ...(c.as === "scatter" ? { zero: false } : {}), ...chosenScale } } : {}),
   };
   // each by its own name, as its pill says it (2026-11-23: a tooltip said "Value" for Orders)
@@ -208,13 +212,19 @@ export function queryChartSpec(c: QueryChart, setup: Pick<QueryShown, "segments"
     // 2026-10-11): only the highest at each labelled place says its number
     const lead = bars && split && setup.segments === "side_by_side"
       ? [{ window: [{ op: "rank", as: "at" }], sort: [{ field: "v", order: "descending" }], groupby: ["x"] }, { filter: "datum.at === 1" }] : [];
+    // a label writes its number as the axis beside it does: the app's compact form unless a format was chosen
+    const compactLabels = labelFormat === ".3~s";
+    const said = (field: string) => compactLabels
+      ? { transform: [{ calculate: (c.format === "money" ? "'$' + " : "") + COMPACT(`datum['${field}']`), as: "__label" }],
+          text: { field: "__label", type: "nominal" } }
+      : { transform: [], text: { field, type: "quantitative", format: labelFormat } };
+    const totalSaid = said("total"), valueSaid = said("v");
     layer.push(bars && stack === "zero"
-      ? { transform: [...only, { aggregate: [{ op: "sum", field: "v", as: "total" }], groupby: ["x"] }],
+      ? { transform: [...only, { aggregate: [{ op: "sum", field: "v", as: "total" }], groupby: ["x"] }, ...totalSaid.transform],
         mark: { type: "text", dy: -6, fontSize: 10.5 },
-        encoding: { x: { field: "x", type: x.type, sort: xSort }, y: { field: "total", type: "quantitative" },
-          text: { field: "total", type: "quantitative", format: labelFormat } } }
-      : { transform: [...only, ...lead], mark: { type: "text", dy: -6, fontSize: 10.5 },
-        encoding: { x, y: { field: "v", type: "quantitative", stack }, text: { field: "v", type: "quantitative", format: labelFormat },
+        encoding: { x: { field: "x", type: x.type, sort: xSort }, y: { field: "total", type: "quantitative" }, text: totalSaid.text } }
+      : { transform: [...only, ...lead, ...valueSaid.transform], mark: { type: "text", dy: -6, fontSize: 10.5 },
+        encoding: { x, y: { field: "v", type: "quantitative", stack }, text: valueSaid.text,
           ...(bars && split && setup.segments === "side_by_side" ? { xOffset: { field: "s", sort: named } } : {}) } });
   }
   // reference lines a person drew (the editor's Annotation): a dashed rule across the value axis, its label at its start
