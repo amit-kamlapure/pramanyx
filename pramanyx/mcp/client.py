@@ -8,7 +8,7 @@ happen in the API process, not a second copy of it. The MCP server stays statele
 and light (httpx only), so it starts fast under a stdio launcher and never spins up a
 second JobKernel.
 
-Two of the surfaces are SSE streams (``/chat`` and ``/investigate``); the rest are
+Two of the surfaces are SSE streams (``/chat`` and a deep ``/ask``); the rest are
 plain JSON. ``_stream_sse`` parses Pramanyx's framing (one ``data: {"type": …}`` line
 per event) and the high-level ``ask``/``deep_analysis`` helpers fold the stream into a
 single result an MCP tool can return.
@@ -460,11 +460,17 @@ class PramanyxClient:
         skip_cache: bool = False,
         canvas: Optional[str] = None,
     ) -> dict:
-        """Drive ``/investigate`` to completion (bounded by ``deep_timeout``) and return
-        the final report. On timeout, hands back the investigation_id to poll."""
+        """Drive a deep ``/ask`` turn to completion (bounded by ``deep_timeout``) and return
+        the final report. On timeout, hands back the investigation_id to poll.
+
+        The engine is the analyst (`agent/analyst.py`), the one the Ask panel's and a Data Canvas's
+        deep turns run — the user, 2026-11-23: one deep engine everywhere. Until then this drove
+        ``/investigate``, the older phase graph, so the same "why" got a different method and a
+        different report in the coworker than beside a dashboard. A binding that cannot call tools
+        is still served by the graph, behind the same door, as every place's is."""
         body = {
             "question": question, "connection_id": connection, "schema": schema,
-            "deep": deep, "skip_cache": skip_cache, "canvas_id": canvas,
+            "depth": "deep", "deep": deep, "skip_cache": skip_cache, "canvas_id": canvas,
         }
         acc: dict[str, Any] = {
             "question": question, "connection": connection, "investigation_id": None,
@@ -472,8 +478,12 @@ class PramanyxClient:
             "from_cache": False, "error": None,
         }
         try:
-            async for ev in self._stream_sse("POST", "/investigate", body, timeout=self.deep_timeout):
+            async for ev in self._stream_sse("POST", "/ask", body, timeout=self.deep_timeout):
                 t = ev.get("type")
+                if t == "route" and ev.get("downgraded_from") == "deep":
+                    # `/ask` degrades a deep turn the licence does not cover to a quick one; asked for a deep
+                    # analysis, say it is locked, as `/investigate`'s 402 did, rather than hand back a quick answer.
+                    raise PramanyxError(f"capability locked: {ev.get('why') or 'deep analysis needs an upgrade'}")
                 if t == "start":
                     acc["investigation_id"] = ev.get("investigation_id") or acc["investigation_id"]
                 elif t == "hypotheses":
