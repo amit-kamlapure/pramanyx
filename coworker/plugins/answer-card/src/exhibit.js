@@ -321,11 +321,13 @@ export const pageFor = {
   toAgent: (question, connection) => `/agents/new?conn=${encodeURIComponent(connection)}&description=${encodeURIComponent(question)}`,
   // A deep analysis kept as a skill (punch list 88): its method, to run again on other values.
   toSkill: (investigation, connection) => `/skills/new?conn=${encodeURIComponent(connection)}&inv=${encodeURIComponent(investigation)}`,
+  // A deep analysis's whole report, drawn by the platform's own report view (2026-11-23): one drawing of it everywhere.
+  report: (investigation) => `/report/${encodeURIComponent(investigation)}`,
 };
 const NAMED = [[/^\/metrics\/([^/?]+)/, "Metric"], [/^\/ontology\/([^/?]+)/, "Ontology"], [/^\/receipt\//, "Why this number"],
                [/^\/sheets\/[^/?]+/, "Sheet"], [/^\/definitions\/([^/?]+)/, "Definition"], [/^\/automations\?/, "Schedule"],
                [/^\/questions\/keep\?/, "Keep on a dashboard"], [/^\/agents\/new\?/, "New agent"],
-               [/^\/skills\/new\?/, "Save as a skill"], [/^\/chart\/[^/?]+/, "Edit visualization"]];
+               [/^\/skills\/new\?/, "Save as a skill"], [/^\/chart\/[^/?]+/, "Edit visualization"], [/^\/report\/[^/?]+/, "Report"]];
 
 /** A referenced spreadsheet's tab is called by its own name and nothing else — "Olist orders", not "Sheet". */
 function sheetName(path) {

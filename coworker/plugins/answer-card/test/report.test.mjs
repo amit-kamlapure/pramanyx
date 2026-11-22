@@ -1,0 +1,63 @@
+/**
+ * A deep analysis in the coworker reads as its report (the user, 2026-11-23: "the output format, the methodology and user
+ * experience has to be the same across the harness (coworker), Data canvas and the Ask on the right panel"). Before, its
+ * result was a step whose detail was raw JSON.
+ *
+ *   node --test coworker/plugins/answer-card/test/
+ */
+import { test } from "node:test";
+import assert from "node:assert/strict";
+
+import { reportFacts, reportOf } from "../src/report.js";
+
+const RESULT = {
+  question: "Why did revenue fall in August?", connection: "sheets", investigation_id: "inv7", status: "complete",
+  report_kind: "ada",
+  report: {
+    headline: "Revenue fell 12% in August, most of it in São Paulo",
+    executive_summary: "Revenue fell 12% in August, most of it in São Paulo",
+    total_change_label: "−12%", observation_period: "Aug 2018", comparison_basis: "Jul 2018",
+    closing_summary: "Freight costs, not demand, explain the fall.",
+    recommendations: [{ action: "Review São Paulo freight contracts" }, "Watch September"],
+    phases: [
+      { phase_id: "intake", status: "complete", findings: [{ sql: "SELECT 1" }] },
+      { phase_id: "decomposition", status: "complete", findings: [{ sql: "SELECT a" }, { sql: "SELECT b", error: "x" }, { sql: "" }] },
+      { phase_id: "segments", status: "skipped", findings: [{ sql: "SELECT c" }] },
+      { phase_id: "drivers", status: "complete", findings: [{ sql: "SELECT d" }] },
+    ],
+  },
+};
+
+test("it says what the platform's report opens and closes with, each once", () => {
+  const f = reportFacts(reportOf(JSON.stringify(RESULT)));
+  assert.equal(f.head, "Revenue fell 12% in August, most of it in São Paulo");
+  assert.equal(f.summary, "", "a summary that only repeats the headline is said once");
+  assert.deepEqual(f.period, ["−12%", "Aug 2018 vs Jul 2018"]);
+  assert.equal(f.closing, "Freight costs, not demand, explain the fall.");
+  assert.deepEqual(f.recs, ["Review São Paulo freight contracts", "Watch September"]);
+  assert.equal(f.sources, 2, "each query a phase ran, not the intake's, a skipped phase's, a failed or an empty one");
+  assert.equal(f.id, "inv7");
+});
+
+test("a change or a period the words already say is not said again under them", () => {
+  const f = reportFacts({ report: { headline: "Revenue fell −12% in Aug 2018 vs Jul 2018", total_change_label: "−12%",
+    observation_period: "Aug 2018", comparison_basis: "Jul 2018" } });
+  assert.deepEqual(f.period, []);
+});
+
+test("a result cut short on its way still names its analysis, so the card can open it whole", () => {
+  const whole = JSON.stringify(RESULT, null, 2);
+  const cut = whole.slice(0, whole.indexOf('"phases"'));
+  const got = reportOf(cut);
+  assert.equal(got.cut, true);
+  assert.equal(got.investigation_id, "inv7");
+  assert.equal(got.question, "Why did revenue fall in August?");
+  assert.equal(reportFacts(got).head, "");
+  assert.equal(reportOf("not json at all"), null);
+});
+
+test("a run still going is said to be running", () => {
+  const f = reportFacts({ investigation_id: "inv8", status: "running", message: "Still running after 300s." });
+  assert.equal(f.running, true);
+  assert.equal(f.message, "Still running after 300s.");
+});

@@ -19,6 +19,7 @@ import { deckOf } from "./deck.js";
 import { driveFilesOf } from "./drive.js";
 import { ABOUT_TO, DOES, PREFIX, STAGED, saidOf, stagedOf, turnedDown } from "./steps.js";
 import { drawChart, labelOf, numericColumns } from "./chart";
+import { reportFacts, reportOf } from "./report.js";
 import { unstatedFigures } from "../../../../web/lib/statedFigures";
 import {
   PANE, PANE_PATTERN, PaneBody, groundingOf, pageFor, PaneTitle, ResultGrid, button, code, faint, hasPane, idOf, line,
@@ -382,8 +383,64 @@ const DeepAnalysisCard = inTail(
   (props) => h("div", null, h(ToolStep, props),
     props.phase !== "result" ? h(AnswerNow, { question: argsOf(props.block).question }) : null),
   (props) => (props.phase === "result" && !props.block?.isError
-    ? h("div", null, h(AnsweredEarly, { text: resultText(props.block) }), h(SkillDoor, { text: resultText(props.block) }))
+    ? h(DeepReport, { text: resultText(props.block), asked: argsOf(props.block).question })
     : null));
+
+/**
+ * A deep analysis's result as its report reads (the user, 2026-11-23: one output format in the coworker, a Data Canvas
+ * and the Ask panel). Until then the coworker drew it as a step whose result was raw JSON, while the platform drew the
+ * report. The card says what the platform's report opens with — its headline, its summary, the period it measured — and
+ * closes as it does, on its bottom line and its recommended actions; it ends on the foot every answer ends on, whose
+ * sources open the whole report beside the conversation (`/report/<id>`, the platform's own report view, as
+ * `/chart/<id>` is its chart editor). A result cut short on its way to the page still names its analysis, and opens it.
+ */
+function DeepReport({ text, asked }) {
+  const [onward, setOnward] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const got = reportOf(text);
+  if (!got) return null;
+  const { id, connection, running, cut, head, summary, period, closing, recs, sources, message } = reportFacts(got);
+  const question = String(got.question || asked || "").trim();
+  const full = id && hasPane() ? () => openBeside("page", pageFor.report(id)) : null;
+  const becomes = question && connection && hasPane() ? [
+    ...(id && !running ? [["Save as a skill", pageFor.toSkill(id, connection), "Keep its method, to run again on other values"]] : []),
+    ["Schedule it", pageFor.toSchedule(question, connection), "Set this question on a schedule — you choose when, and where the answer goes"],
+    ["Keep on a dashboard", pageFor.toKeep(question, connection, id), "Keep it on the connection's dashboard, asked again on a rhythm you choose"],
+    ["Make an agent from it", pageFor.toAgent(question, connection), "Draft an agent that answers questions like this one — you read it before it is made"],
+  ] : [];
+  const copy = () => {
+    const words = [head, summary, ...period, closing ? `Bottom line: ${closing}` : "", ...recs.map((r) => `- ${r}`)].filter(Boolean).join("\n\n");
+    navigator.clipboard?.writeText(words).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); });
+  };
+  const label = { ...quiet, fontSize: 12, fontWeight: 600 };
+  return h("div", { "data-pramanyx-deep-report": "", style: { display: "flex", flexDirection: "column", gap: 14, margin: "10px 0 6px", fontSize: 14, lineHeight: 1.6 } },
+    h("div", { role: "heading", "aria-level": 3, style: { fontSize: 18, fontWeight: 600, lineHeight: 1.35 } },
+      head || (running ? "The deep analysis is still running" : cut ? "The deep analysis finished" : "The deep analysis found no answer")),
+    summary && said(summary) !== said(head) ? prose(summary) : null,
+    period.length ? h("div", { style: { ...quiet, fontSize: 12 } }, period.join(" · ")) : null,
+    running ? h("div", { style: { ...quiet, fontSize: 13 } }, message || "It goes on in the platform; its report opens here when it is done.") : null,
+    cut && !head ? h("div", { style: { ...quiet, fontSize: 13 } }, "Its report was too long to read here whole; it opens in full beside the conversation.") : null,
+    closing ? h("div", { style: { display: "flex", flexDirection: "column", gap: 6 } },
+      h("div", { role: "heading", "aria-level": 4, style: label }, "Bottom line"), prose(closing)) : null,
+    recs.length ? h("div", { style: { display: "flex", flexDirection: "column", gap: 6 } },
+      h("div", { role: "heading", "aria-level": 4, style: label }, "Recommended actions"),
+      h("ul", { style: { margin: 0, paddingLeft: 20, display: "flex", flexDirection: "column", gap: 2 } }, recs.map((r, i) => h("li", { key: i }, rich(r))))) : null,
+    h(AnsweredEarly, { text }),
+    becomes.length ? h("div", { "data-pramanyx-onward": "", style: { display: "flex", flexDirection: "column" } },
+      h("button", { type: "button", className: "pramanyx-fold", "aria-expanded": onward, onClick: () => setOnward((was) => !was) },
+        "Follow-ups", h(Fold, { open: onward })),
+      onward ? h("div", { role: "group", "aria-label": "What this answer can become",
+                          style: { display: "flex", flexWrap: "wrap", gap: 14, padding: "4px 0 2px", fontSize: 13 } },
+        becomes.map(([name, path, hint]) => h("button", { key: name, type: "button", className: "pramanyx-link", title: hint,
+          onClick: () => openBeside("page", path) }, name))) : null) : null,
+    h(Feedback, { answer: { investigation_id: id, connection, answer: head, question }, extras: [
+      h("button", { key: "copy", type: "button", className: "pramanyx-icon", "aria-label": copied ? "Copied" : "Copy the answer", title: copied ? "Copied" : "Copy the answer", onClick: copy }, h(Glyph, { d: GLYPH.copy })),
+      id && !running ? h("a", { key: "pdf", className: "pramanyx-icon", download: "", "aria-label": "Download as PDF", title: "Download as PDF",
+                                href: `/pramanyx/investigations/${encodeURIComponent(id)}/export?format=pdf` }, h(Glyph, { d: GLYPH.download })) : null,
+      full && !running ? h("button", { key: "source", type: "button", className: "pramanyx-source", title: "The whole report, each source with its rows and SQL",
+                                       onClick: full }, sources ? `${sources} ${sources === 1 ? "source" : "sources"}` : "Report") : null,
+    ] }));
+}
 
 /**
  * The turns a helpers question takes after its first: each starts with a helper's report (a helper under Agent mode
