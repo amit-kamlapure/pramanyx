@@ -8,7 +8,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { reportFacts, reportOf } from "../src/report.js";
+import { isDeepRecord, reportFacts, reportOf } from "../src/report.js";
 
 const RESULT = {
   question: "Why did revenue fall in August?", connection: "sheets", investigation_id: "inv7", status: "complete",
@@ -60,4 +60,16 @@ test("a run still going is said to be running", () => {
   const f = reportFacts({ investigation_id: "inv8", status: "running", message: "Still running after 300s." });
   assert.equal(f.running, true);
   assert.equal(f.message, "Still running after 300s.");
+});
+
+test("a run read back later (get_investigation) is drawn as its report when it is a deep analysis's (2026-11-23)", () => {
+  const record = { id: "inv9", question: "Why?", connection_id: "workspace", status: "complete",
+                   report: { headline: "It fell", phases: [{ phase_id: "drivers", status: "complete", findings: [{ sql: "SELECT 1" }] }] } };
+  assert.equal(isDeepRecord(record), true);
+  const f = reportFacts(record);
+  assert.equal(f.id, "inv9");
+  assert.equal(f.connection, "workspace");
+  assert.equal(f.sources, 1);
+  assert.equal(isDeepRecord({ id: "q1", report: { headline: "42 rows", rows: [[42]] } }), false, "a quick answer has no phases");
+  assert.equal(reportFacts({ id: "inv9", status: "pending" }).running, true);
 });

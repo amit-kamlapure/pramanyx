@@ -19,7 +19,7 @@ import { deckOf } from "./deck.js";
 import { driveFilesOf } from "./drive.js";
 import { ABOUT_TO, DOES, PREFIX, STAGED, saidOf, stagedOf, turnedDown } from "./steps.js";
 import { drawChart, labelOf, numericColumns } from "./chart";
-import { reportFacts, reportOf } from "./report.js";
+import { isDeepRecord, reportFacts, reportOf } from "./report.js";
 import { unstatedFigures } from "../../../../web/lib/statedFigures";
 import {
   PANE, PANE_PATTERN, PaneBody, groundingOf, pageFor, PaneTitle, ResultGrid, button, code, faint, hasPane, idOf, line,
@@ -386,6 +386,14 @@ const DeepAnalysisCard = inTail(
     ? h(DeepReport, { text: resultText(props.block), asked: argsOf(props.block).question })
     : null));
 
+/** An earlier analysis read back (`get_investigation`) — the run a deep analysis handed over while it went on — drawn
+ *  as its report once it is one, so a run that outlasted the call ends where every deep analysis ends. */
+const EarlierAnalysisCard = inTail(
+  (props) => h(ToolStep, props),
+  (props) => (props.phase === "result" && !props.block?.isError && isDeepRecord(reportOf(resultText(props.block)))
+    ? h(DeepReport, { text: resultText(props.block), asked: "" })
+    : null));
+
 /**
  * A deep analysis's result as its report reads (the user, 2026-11-23: one output format in the coworker, a Data Canvas
  * and the Ask panel). Until then the coworker drew it as a step whose result was raw JSON, while the platform drew the
@@ -437,8 +445,10 @@ function DeepReport({ text, asked }) {
       h("button", { key: "copy", type: "button", className: "pramanyx-icon", "aria-label": copied ? "Copied" : "Copy the answer", title: copied ? "Copied" : "Copy the answer", onClick: copy }, h(Glyph, { d: GLYPH.copy })),
       id && !running ? h("a", { key: "pdf", className: "pramanyx-icon", download: "", "aria-label": "Download as PDF", title: "Download as PDF",
                                 href: `/pramanyx/investigations/${encodeURIComponent(id)}/export?format=pdf` }, h(Glyph, { d: GLYPH.download })) : null,
-      full && !running ? h("button", { key: "source", type: "button", className: "pramanyx-source", title: "The whole report, each source with its rows and SQL",
-                                       onClick: full }, sources ? `${sources} ${sources === 1 ? "source" : "sources"}` : "Report") : null,
+      // still running, the report opens beside and says so until it lands; done, its sources are the queries it ran
+      full ? h("button", { key: "source", type: "button", className: "pramanyx-source",
+                           title: running ? "Its report, beside the conversation, once it lands" : "The whole report, each source with its rows and SQL",
+                           onClick: full }, running ? "Open the report" : sources ? `${sources} ${sources === 1 ? "source" : "sources"}` : "Report") : null,
     ] }));
 }
 
@@ -1909,6 +1919,7 @@ export function apply(ctx) {
           : name === PREFIX + "bring_in_file" ? BroughtInCard
           : name === PREFIX + "draft_definition" ? DraftedDefinitionCard
           : name === PREFIX + "deep_analysis" ? DeepAnalysisCard
+          : name === PREFIX + "get_investigation" ? EarlierAnalysisCard
           : name === PREFIX + "deck_of_answers" ? DeckCard
           : name === PREFIX + "search_my_drive" ? DriveCard
           : SCHEDULES.test(name) ? ScheduleCard

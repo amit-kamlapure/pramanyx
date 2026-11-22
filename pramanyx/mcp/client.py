@@ -15,6 +15,7 @@ single result an MCP tool can return.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -113,6 +114,21 @@ class PramanyxError(RuntimeError):
     """A Pramanyx API call failed (a non-2xx response or a transport error). The
     message is shaped for an LLM client — capability-locked (402) and not-found
     (404) read cleanly rather than as raw stack traces."""
+
+
+#: Deep runs still being read after their caller stopped waiting (`deep_analysis`). Module-level, not per client: the
+#: loop keeps only weak references to tasks, and a client made for one tool call may be gone before its run ends.
+_CARRIED: "set[asyncio.Task]" = set()
+
+
+def _settle_quietly(task: "asyncio.Task") -> None:
+    """A deep run read on after its caller moved on: its outcome is the platform's record, so an error here is logged,
+    never raised into a loop nobody is awaiting."""
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc is not None:
+        logger.warning("a deep analysis read in the background ended with %s", exc)
 
 
 class PramanyxClient:
@@ -450,6 +466,42 @@ class PramanyxClient:
                 acc["receipt"] = None
         return acc
 
+    async def _drive_deep(self, body: dict, acc: dict) -> None:
+        """Read a deep ``/ask`` stream to its end, folding each frame into ``acc`` as it lands — so a caller that stops
+        waiting still holds what arrived (the run's id first of all), and the run is never left without a reader."""
+        async for ev in self._stream_sse("POST", "/ask", body, timeout=self.deep_timeout):
+            t = ev.get("type")
+            if t == "route" and ev.get("downgraded_from") == "deep":
+                # `/ask` degrades a deep turn the licence does not cover to a quick one; asked for a deep
+                # analysis, say it is locked, as `/investigate`'s 402 did, rather than hand back a quick answer.
+                raise PramanyxError(f"capability locked: {ev.get('why') or 'deep analysis needs an upgrade'}")
+            if t == "start":
+                acc["investigation_id"] = ev.get("investigation_id") or acc["investigation_id"]
+            elif t == "hypotheses":
+                acc["hypotheses"] = ev.get("hypotheses")
+            elif t in ("answer_report", "ada_report"):  # ada_report = deprecated wire alias (U9)
+                acc["report"], acc["report_kind"] = ev.get("answer_report") or ev.get("ada_report"), "ada"
+                acc["from_cache"] = bool(ev.get("from_cache"))
+                acc["investigation_id"] = ev.get("investigation_id") or acc["investigation_id"]
+            elif t == "explore_report":
+                acc["report"], acc["report_kind"] = ev.get("explore_report"), "explore"
+                acc["from_cache"] = bool(ev.get("from_cache"))
+                acc["investigation_id"] = ev.get("investigation_id") or acc["investigation_id"]
+            elif t == "dossier_report":
+                acc["report"], acc["report_kind"] = ev.get("dossier"), "dossier"
+                acc["investigation_id"] = ev.get("insight_id") or acc["investigation_id"]
+            elif t == "report":
+                acc["report"] = ev.get("report")
+                acc["report_kind"] = acc["report_kind"] or "report"
+                acc["investigation_id"] = ev.get("investigation_id") or acc["investigation_id"]
+            elif t == "error":
+                acc["error"] = ev.get("message")
+            elif t == "done":
+                acc["status"] = "complete"
+            if ev.get("answered_early"):
+                # The person had it answer now (punch list 89): the report says less than the run planned.
+                acc["answered_early"] = ev.get("answered_early")
+
     async def deep_analysis(
         self,
         question: str,
@@ -477,43 +529,33 @@ class PramanyxClient:
             "status": "running", "report": None, "report_kind": None, "hypotheses": None,
             "from_cache": False, "error": None,
         }
+        # The deadline is on the whole call, not on silence (2026-11-23, seen live: the analyst ran 11 minutes on a free
+        # model; the stream's keep-alive every 20 s reset the read timeout, so the call ran past the shell's 6-minute
+        # tool limit and the coworker said "Request timed out" over an analysis that then finished). A deep `/ask` stops
+        # when its reader leaves, so the run is not dropped at the deadline: it is read to its end in the background,
+        # and the caller gets the id to poll.
+        run = asyncio.create_task(self._drive_deep(body, acc))
         try:
-            async for ev in self._stream_sse("POST", "/ask", body, timeout=self.deep_timeout):
-                t = ev.get("type")
-                if t == "route" and ev.get("downgraded_from") == "deep":
-                    # `/ask` degrades a deep turn the licence does not cover to a quick one; asked for a deep
-                    # analysis, say it is locked, as `/investigate`'s 402 did, rather than hand back a quick answer.
-                    raise PramanyxError(f"capability locked: {ev.get('why') or 'deep analysis needs an upgrade'}")
-                if t == "start":
-                    acc["investigation_id"] = ev.get("investigation_id") or acc["investigation_id"]
-                elif t == "hypotheses":
-                    acc["hypotheses"] = ev.get("hypotheses")
-                elif t in ("answer_report", "ada_report"):  # ada_report = deprecated wire alias (U9)
-                    acc["report"], acc["report_kind"] = ev.get("answer_report") or ev.get("ada_report"), "ada"
-                    acc["from_cache"] = bool(ev.get("from_cache"))
-                    acc["investigation_id"] = ev.get("investigation_id") or acc["investigation_id"]
-                elif t == "explore_report":
-                    acc["report"], acc["report_kind"] = ev.get("explore_report"), "explore"
-                    acc["from_cache"] = bool(ev.get("from_cache"))
-                    acc["investigation_id"] = ev.get("investigation_id") or acc["investigation_id"]
-                elif t == "dossier_report":
-                    acc["report"], acc["report_kind"] = ev.get("dossier"), "dossier"
-                    acc["investigation_id"] = ev.get("insight_id") or acc["investigation_id"]
-                elif t == "report":
-                    acc["report"] = ev.get("report")
-                    acc["report_kind"] = acc["report_kind"] or "report"
-                    acc["investigation_id"] = ev.get("investigation_id") or acc["investigation_id"]
-                elif t == "error":
-                    acc["error"] = ev.get("message")
-                elif t == "done":
-                    acc["status"] = "complete"
-                if ev.get("answered_early"):
-                    # The person had it answer now (punch list 89): the report says less than the run planned.
-                    acc["answered_early"] = ev.get("answered_early")
+            await asyncio.wait_for(asyncio.shield(run), timeout=self.deep_timeout)
+        except asyncio.TimeoutError:
+            _CARRIED.add(run)
+            run.add_done_callback(_CARRIED.discard)
+            run.add_done_callback(_settle_quietly)
+            if acc["investigation_id"]:
+                acc["status"] = "running"
+                acc["message"] = (
+                    f"Deep analysis is still running after {self.deep_timeout:.0f}s, and goes on. Poll "
+                    f"get_investigation('{acc['investigation_id']}') for the report when it finishes."
+                )
+                return dict(acc)
+            raise PramanyxError(
+                f"deep_analysis had not started after {self.deep_timeout:.0f}s; it goes on, and its report will be "
+                "in the person's analyses when it finishes."
+            )
         except httpx.TimeoutException:
-            # A long run exceeded the read timeout. If it has started, hand back the id
-            # to poll; otherwise it never got going. (Genuine errors — a 402 lock, a bad
-            # request — are raised by _stream_sse and propagate cleanly, uncaught here.)
+            # The stream itself went silent past the read timeout (no keep-alive came). If it has started, hand back
+            # the id to poll; otherwise it never got going. Genuine errors — a 402 lock, a bad request — are raised by
+            # _stream_sse and propagate cleanly, uncaught here.
             if acc["investigation_id"]:
                 acc["status"] = "running"
                 acc["message"] = (

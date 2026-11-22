@@ -36,12 +36,19 @@ export function reportFacts(got) {
     .filter((p) => p && p.phase_id !== "intake" && p.status !== "skipped")
     .reduce((n, p) => n + (Array.isArray(p.findings) ? p.findings.filter((f) => String(f?.sql || "").trim() && !f?.error).length : 0), 0);
   return {
-    id: String(got?.investigation_id || ""),
+    // a `deep_analysis` result names its run `investigation_id`; the platform's own record of it (`get_investigation`) `id`
+    id: String(got?.investigation_id || got?.id || ""),
     connection: String(got?.connection || got?.connection_id || ""),
-    running: got?.status === "running",
+    running: ["running", "pending", "started"].includes(String(got?.status || "")),
     cut: Boolean(got?.cut),
     message: String(got?.message || ""),
     head, summary, period, recs, sources,
     closing: String(report?.closing_summary || "").trim(),
   };
+}
+
+/** Whether a record read back (`get_investigation`) is a deep analysis's — one its report card draws — rather than a
+ *  quick answer's, which has no phases. */
+export function isDeepRecord(got) {
+  return Boolean(got && typeof got === "object" && got.report && typeof got.report === "object" && Array.isArray(got.report.phases));
 }

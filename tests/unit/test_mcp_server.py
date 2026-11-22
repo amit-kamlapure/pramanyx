@@ -189,6 +189,34 @@ def test_deep_analysis_accepts_deprecated_ada_report_wire_alias():
     assert res["report"] == {"findings": [{"x": 1}]}
 
 
+def test_a_deep_analysis_past_its_deadline_hands_back_the_id_and_is_read_to_its_end():
+    """2026-11-23, live: the analyst ran 11 minutes; the stream's keep-alive reset the read timeout, the call outran the
+    shell's tool limit, and the coworker said "Request timed out". The deadline is on the whole call now; the run, which
+    stops when its reader leaves, is read on in the background."""
+    read_to_end: list[bool] = []
+
+    async def slow():
+        yield _sse([{"type": "start", "investigation_id": "inv8", "body": "analyst"}]).encode()
+        await asyncio.sleep(0.5)
+        yield b": keep-alive\n\n"
+        await asyncio.sleep(0.3)
+        yield _sse([{"type": "answer_report", "answer_report": {"headline": "h"}, "investigation_id": "inv8"},
+                    {"type": "done"}]).encode()
+        read_to_end.append(True)
+
+    async def go():
+        client = _client({"/ask": lambda req: httpx.Response(200, content=slow())})
+        client.deep_timeout = 0.2
+        res = await client.deep_analysis("why did margin fall", "c")
+        assert res["status"] == "running" and res["investigation_id"] == "inv8"
+        assert "get_investigation('inv8')" in res["message"]
+        assert not read_to_end, "returned at the deadline, not at the end"
+        await asyncio.sleep(1.2)
+        assert read_to_end == [True], "the run was left without a reader, and a deep /ask stops then"
+
+    _run(go())
+
+
 def test_deep_analysis_running_when_no_terminal_report():
     # stream ends after `start` (e.g. the client stopped reading) — hand back the id to poll.
     routes = {"/ask": httpx.Response(200, content=_sse([
