@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { answerableRun, getConnections, getMetrics, listCards, listDashboards, listUserAgents, recordOverviewDrill, cancelInvestigation, cancelActiveDeepRun, standingDashboards, type UserAgent } from "@/lib/api";
+import { answerableRun, DEEP_ANALYSIS_MODE, getConnections, getMetrics, listCards, listDashboards, listUserAgents, recordOverviewDrill, cancelInvestigation, cancelActiveDeepRun, standingDashboards, type UserAgent } from "@/lib/api";
 import { useQuery } from "@tanstack/react-query";
 import { askedBefore, assistAt, historyStep, mentionIn, mentionOffers, withoutCommand, type Offer } from "@/lib/composerAssist";
 import { useRichSchema } from "@/lib/schema-context";
@@ -61,7 +61,7 @@ const OVERVIEW_STARTER: Starter = {
 };
 
 // requestMode/purpose (R13): a named research starter's declared route — sent on
-// /ask so the router pins investigate|explore deterministically; chips style deep.
+// /ask so the router pins the deep or the explore route deterministically; chips style deep.
 // label: the few words a named starter is listed by, when its question is a whole brief (the full text is what is asked).
 type Starter = { text: string; mode: "ask" | "investigate"; requestMode?: "investigate" | "explore"; purpose?: string; label?: string };
 
@@ -345,10 +345,10 @@ function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, se
 
       {/* Toggle row — mode buttons left, actions right */}
       <div className="flex items-center justify-between px-3 pb-2">
-        {/* Mode toggle — Quick answers, Agent investigates. Agent is the default. The one conversation's composer has none:
+        {/* Mode toggle — Quick answers, Agent runs a deep analysis. Agent is the default. The one conversation's composer has none:
             the conversation decides, and a typed /agent is said here until it is let go (the user, 2026-11-23 — it stayed on
             for the rest of the conversation with nothing on screen saying so). */}
-        {plain ? (mode === "investigate" ? (
+        {plain ? (mode === DEEP_ANALYSIS_MODE ? (
           <span data-testid="composer-depth" className="aug-fs-xs"
             style={{ marginRight: 8, display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 2px 2px 8px",
               borderRadius: "var(--r2)", background: "var(--gray-a3)", color: "var(--t1)" }}>
@@ -773,7 +773,7 @@ function AgentLandingBlock({ agent, connectionName, plain = false }: { agent: Us
   if (agent.pack_ids.length) {
     caps.push(`Carries ${agent.pack_ids.length} knowledge pack${agent.pack_ids.length === 1 ? "" : "s"}`);
   }
-  // the one conversation has no Quick/Agent picker: it answers straight away, and /agent investigates (2026-11-23)
+  // the one conversation has no Quick/Agent picker: it answers straight away, and /agent goes deep (2026-11-23)
   caps.push(plain ? "Answers straight away; type /agent for a multi-step root-cause analysis"
     : "Ask in Quick mode for fast SQL answers, or Agent for multi-step root-cause analysis");
   if (agent.tool_grants.length) {
@@ -1260,7 +1260,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
     wasStreamingRef.current = busy;
   }, [busy]); // eslint-disable-line
 
-  // Auto-submit a question injected from outside (e.g. "Investigate" from the Ontology canvas)
+  // Auto-submit a question injected from outside (e.g. a deep analysis started from the Ontology canvas)
   const initialFiredRef = useRef(false);
   // The send of the conversation ON SCREEN when the timer fires — not the one this effect's render held, which belongs
   // to whichever conversation was current then.
@@ -1666,7 +1666,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                         // CA-1 — edit-and-resend: replaces THIS user message and re-sends;
                         // the SDK truncates the thread from here (branching, the cheap way).
                         onEdit={(q) => void sendMessage(
-                          { text: q, messageId: userMsg.id, metadata: { mode: mode === "investigate" ? "investigate" : "ask" } },
+                          { text: q, messageId: userMsg.id, metadata: { mode: mode === DEEP_ANALYSIS_MODE ? DEEP_ANALYSIS_MODE : "ask" } },
                           { body: plainBody() },
                         )}
                       />

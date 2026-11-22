@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * `/report/<investigation id>`: a deep analysis's report, drawn by the platform's one report view — the page the coworker
+ * `/report/<run id>`: a deep analysis's report, drawn by the platform's one report view — the page the coworker
  * opens beside its conversation for a deep answer (the user, 2026-11-23: "the output format, the methodology and user
  * experience has to be the same across the harness (coworker), Data canvas and the Ask on the right panel"). Before, the
  * coworker drew a deep analysis as a step row of raw JSON while the Ask panel and a Data Canvas drew the report. As with
@@ -13,6 +13,7 @@ import { use, useEffect, useState } from "react";
 
 import { SourcePanel } from "@/components/ChatMessage";
 import { InvestigationReportView, type AnswerReport } from "@/components/InvestigationReport";
+import { readStoredRun } from "@/lib/api";
 import { installAuthFetch } from "@/lib/auth";
 import { getApiBase } from "@/lib/config";
 
@@ -41,13 +42,12 @@ export default function ReportRoute({ params }: { params: Promise<{ id: string }
     let gone = false;
     (async () => {
       try {
-        const res = await fetch(`${getApiBase()}/investigations/${encodeURIComponent(id)}`);
-        if (!res.ok) {
-          if (!gone) setRead({ state: "none", text: res.status === 404 ? "There is no analysis with this id." : `The platform said ${res.status}.` });
+        const { status, body } = await readStoredRun(id);
+        if (!body) {
+          if (!gone) setRead({ state: "none", text: status === 404 ? "There is no analysis with this id." : `The platform said ${status}.` });
           return;
         }
-        const body = await res.json();
-        const report = body?.report;
+        const report = body.report as { phases?: unknown; headline?: unknown } | null | undefined;
         const question = String(body?.question ?? "");
         const connectionId = String(body?.connection_id ?? "");
         if (gone) return;

@@ -2,7 +2,7 @@
 
 "Data Canvas is more or less restricted to selected tables and queries" was asked as a question, and answered:
 strict — a statement reading a table outside the canvas is refused, and the answer says the question is outside the
-canvas, as a Genie Agent's chosen tables work. Before, only the schema text was narrowed (`list_tables`,
+canvas, as a space built on chosen tables should. Before, only the schema text was narrowed (`list_tables`,
 `describe_table`, the quick body's prompt) and a statement was pinned to the canvas's schema: `run_sql` read any other
 table of that schema, or of another one named in full, and the conversation's prompt never said it was on a canvas.
 

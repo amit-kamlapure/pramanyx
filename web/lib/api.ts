@@ -3288,6 +3288,13 @@ export async function getVizConfigs(scopeKey: string): Promise<Record<string, Re
 /** An answer's chart as the platform stored it — the report of its run: what it said, its columns, rows and chart hint.
  *  Null when it cannot be read. An agent's answer is stored without its rows (`app/chart/[id]` asks its opener then). */
 export interface StoredAnswerChart { headline: string; columns: string[]; rows: unknown[][]; chartType: string | null }
+/** A stored run as the platform keeps it — its question, connection, status and report — for the page that draws a deep
+ *  analysis's report on its own (`/report/<id>`). The response's status, so the page can say a missing run from a refusal. */
+export async function readStoredRun(id: string): Promise<{ status: number; body: Record<string, unknown> | null }> {
+  const res = await fetch(`${getApiBase()}/investigations/${encodeURIComponent(id)}`);
+  return { status: res.status, body: res.ok ? await res.json() : null };
+}
+
 export async function getStoredAnswerChart(id: string): Promise<StoredAnswerChart | null> {
   const res = await fetch(`${getApiBase()}/investigations/${encodeURIComponent(id)}`);
   // An answer the platform never stored is nothing to read (the chart page then draws the rows the coworker hands it);
