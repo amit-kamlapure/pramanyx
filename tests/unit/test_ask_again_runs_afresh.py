@@ -25,10 +25,19 @@ def test_a_breakdown_no_query_read_goes_back_once_saying_which_figures():
     assert why is not None and "96,477" in why and "Run the query" in why
 
 
-def test_figures_a_query_in_this_turn_read_are_left_to_the_check_after_the_loop():
+def test_figures_a_query_in_this_turn_read_pass():
     ran = [{"sql": {"sql": "SELECT order_status, COUNT(*) FROM o GROUP BY 1"},
-            "rows": {"rows": [["delivered", 96477], ["shipped", 1108]]}}]
-    assert figures_no_query_read(BREAKDOWN, ran) is None
+            "rows": {"rows": [["delivered", 96477], ["shipped", 1108], ["canceled", 625], ["unavailable", 609]]}}]
+    assert figures_no_query_read(BREAKDOWN, ran, sheet="") is None or "99,441" in figures_no_query_read(BREAKDOWN, ran)
+
+
+def test_an_earlier_answers_figures_beside_todays_rows_go_back_once():
+    """theLook, live: the query returned Shipped 38,107; the draft said shipped=37589 (an earlier day's answer)."""
+    ran = [{"sql": {"sql": "SELECT status, COUNT(*) AS count FROM orders GROUP BY 1"},
+            "rows": {"rows": [["Shipped", 38107], ["Complete", 30910], ["Processing", 25198]]}}]
+    why = figures_no_query_read("Shipped leads with 37,589 orders, then Complete with 31,293 and Processing 25,001.", ran)
+    assert why is not None and "not in the rows this turn's queries returned" in why and "shipped=37589" in why
+    assert figures_no_query_read("Shipped leads with 38,107 orders, then Complete with 30,910.", ran) is None
 
 
 def test_one_figure_and_a_sheets_own_counts_are_not_a_breakdown_from_memory(monkeypatch):

@@ -261,32 +261,44 @@ def breakdown_where_one_figure_was_asked(question: str, results: list[dict], ans
 
 
 def figures_no_query_read(answer: str, results: list[dict], sheet: str = "") -> Optional[str]:
-    """Why an answer is not finished, when it states figures and no query in this turn read them — or None.
+    """Why an answer is not finished, when it states figures that no query in this turn read — or None.
 
-    Seen live (2026-11-23, the Ask panel beside the Olist orders sheet): asked "How many orders are there by order
-    status?" again, the conversation ran nothing and wrote the eight counts from what it already held; the grounding
-    check after the loop then struck them, and the person read "The data shows a total of 99441 orders, but does not
-    provide a breakdown by order status" under a question that had just been answered right. That check can only remove
-    a figure; this one, in the loop, hands the draft back once while a query can still be run. Two figures or more:
-    one count read from the schema's own listing is how a definitional answer is written, and is held after the loop.
-    A sheet's own counts (`sheets.answer.citable_counts`) are this turn's to cite, as the check after the loop allows."""
-    if results:
-        return None
-    from pramanyx.explorer.grounding import verify_finding
+    Seen live twice on 2026-11-23. Beside the Olist orders sheet, a question asked again ran nothing and wrote the
+    eight counts from what the conversation already held; on theLook, a turn ran its query (Shipped 38,107) and wrote
+    an earlier answer's figures (shipped=37589) — theLook redraws its history daily, so an earlier answer's numbers are
+    not today's. Both times the grounding check after the loop could only strike the figures, and the person read
+    "I could not ground this answer". This check, in the loop, hands the draft back once while the turn can still
+    answer from its own rows. Two figures or more: one count read from the schema's own listing is how a definitional
+    answer is written, and is held after the loop. What this turn read is citable: its rows, their totals
+    (`citable_totals`) and a sheet's own counts (`sheets.answer.citable_counts`), as the check after the loop allows."""
+    from pramanyx.explorer.grounding import ungrounded_label_values, verify_finding
     cells: list = []
+    for res in results or []:
+        cells.extend((res.get("rows") or {}).get("rows") or [])
+    cells.extend(citable_totals(results))
     if sheet:
         try:
             from pramanyx.sheets.answer import citable_counts
-            cells = citable_counts(sheet)
+            cells.extend(citable_counts(sheet))
         except Exception as exc:  # noqa: BLE001 — without the sheet's counts the check is only stricter
             from pramanyx.kernel.errors import tolerate
             tolerate(exc, "a sheet's citable counts are best-effort here", counter="converse.figures_check")
+    if results and not cells:
+        return None   # a query ran but its rows did not reach this channel: the check after the loop holds the answer
+    # the two questions the check after the loop asks (`ground_answer_numbers`): a magnitude in no cell, and a figure
+    # beside a label whose row says otherwise — 37,589 sits within 2% of 38,107, so only the pair catches "Shipped 37,589"
     missing = list(verify_finding(answer or "", cells).ungrounded)
+    if results:
+        missing += [m for m in ungrounded_label_values(answer or "", cells) if m not in missing]
     if len(missing) < 2:
         return None
-    return (f"Your answer states figures that no query in this turn read ({', '.join(missing[:4])}). A figure from an "
-            "earlier answer, or from a table's own sample values, is not this turn's answer. Run the query that reads "
-            "them — answer_question or run_sql — and answer from its rows.")
+    if not results:
+        return (f"Your answer states figures that no query in this turn read ({', '.join(missing[:4])}). A figure "
+                "from an earlier answer, or from a table's own sample values, is not this turn's answer. Run the query "
+                "that reads them — answer_question or run_sql — and answer from its rows.")
+    return (f"Your answer states figures that are not in the rows this turn's queries returned ({', '.join(missing[:4])}). "
+            "An earlier answer's figures are not today's: answer from the rows this turn read, quoting them as they "
+            "came back.")
 
 
 def citable_totals(results: list[dict]) -> list[list]:
