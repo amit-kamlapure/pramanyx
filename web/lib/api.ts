@@ -3286,7 +3286,10 @@ export async function getVizConfigs(scopeKey: string): Promise<Record<string, Re
 export interface StoredAnswerChart { headline: string; columns: string[]; rows: unknown[][]; chartType: string | null }
 export async function getStoredAnswerChart(id: string): Promise<StoredAnswerChart | null> {
   const res = await fetch(`${getApiBase()}/investigations/${encodeURIComponent(id)}`);
-  if (!res.ok) return null;
+  // An answer the platform never stored is nothing to read (the chart page then draws the rows the coworker hands it);
+  // any other refusal says so, rather than reading as no answer (the refusal ratchet, `apiHiddenFailures.test.ts`).
+  if (res.status === 404) return null;
+  if (!res.ok) throw await refused(res, "Reading the answer");
   const body = await res.json();
   const report = body?.report ?? {};
   const columns = Array.isArray(report.columns) ? report.columns.map(String) : [];
