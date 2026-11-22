@@ -3931,6 +3931,39 @@ async def _stream_chat(
 _CONVERSE_SUPPRESSED = frozenset({"done", "error", "clarify", "followups", "mode"})
 
 
+#: How long a conversation turn waits for its next questions before it ends without them.
+FOLLOWUPS_WAIT_S = 8.0
+
+
+def _conversation_followups(question: str, answer: str, turn: dict) -> list[str]:
+    """Up to three next questions for a conversation turn's answer, or [] — best-effort: the answer is already sent."""
+    if turn.get("followups"):
+        return list(turn["followups"])[:3]
+    results = turn.get("results") or []
+    if not results or not (answer or "").strip():
+        return []
+    last = results[-1]
+    sql = str((last.get("sql") or {}).get("sql") or "")
+    columns = [str(c) for c in (last.get("columns") or {}).get("columns") or []]
+    rows = (last.get("rows") or {}).get("rows") or []
+    try:
+        from pramanyx.agent.followups import followup_system, followup_user
+        from pramanyx.llm.provider import get_provider
+        from pramanyx.sql.tables import extract_tables
+        tables = sorted(r.qualified() for r in extract_tables(sql))
+        got = get_provider("narrator").complete(
+            system=followup_system(),
+            user=followup_user(question, headline=answer[:600], sql=sql, tables=tables, columns=columns,
+                               row_count=len(rows)),
+            response_model=_FollowUpBase)
+        return [q for q in (got.questions or []) if str(q).strip()][:3]
+    except Exception as exc:  # noqa: BLE001
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "a conversation's next questions are best-effort; its answer is already sent",
+                 counter="converse.followups")
+        return []
+
+
 async def _stream_converse(
     question: str,
     connection_id: str,
@@ -3982,7 +4015,7 @@ async def _stream_converse(
         # `results` keeps each query's own result, in order, so the one the answer stands on can be the one shown
         # (`converse_tools.answering_result`) — not merely the last one run.
         turn: dict = {"steps": 0, "sql": False, "inv_id": "", "has_receipt": False,
-                      "rows": [], "results": []}
+                      "rows": [], "results": [], "followups": []}
         if sheet:
             # Arc SH — the sheet's own counts, which the conversation is handed in its grounding (the rows the sheet
             # holds, the rows the view on screen shows), are citable like any result: without them the check rewrote
@@ -4001,6 +4034,11 @@ async def _stream_converse(
                 if _frame_payload.get("inv_id"):
                     turn["inv_id"] = _frame_payload["inv_id"]
                     turn["has_receipt"] = bool(_frame_payload.get("has_receipt"))
+                return
+            if _frame_type == "followups":
+                # A tool's next questions are about ITS question, so they are not streamed as they come; the last
+                # one's are kept, and offered under the turn's answer when the turn stood on that tool (below).
+                turn["followups"] = [str(q) for q in (_frame_payload.get("questions") or []) if str(q).strip()]
                 return
             if _frame_type in _CONVERSE_SUPPRESSED:
                 return
@@ -4248,6 +4286,20 @@ async def _stream_converse(
             # text-only converse answer renders exactly like a definitional one does.
             emit("mode", {"query_mode": "final_text"})
         emit("headline", {"headline": answer})
+        # The next questions under the answer (2026-11-23: the Ask panel's and a Data Canvas's answers offered none,
+        # the coworker's did — the conversation dropped every tool's `followups`). The tool's own when the turn read
+        # through `answer_question` (already paid for); else, when a query ran, one call over that query's artifact, as
+        # the deep path makes them; none for a turn that read no rows.
+        # Asked beside the filing below, and waited on for a few seconds at most before `done`: on a slow model a
+        # call takes a minute, and the turn reads as finished only at `done`.
+        import contextvars as _cv
+        import threading as _th
+        _next_box: dict = {}
+        _next_thread = _th.Thread(
+            target=_cv.copy_context().run,
+            args=(lambda: _next_box.__setitem__("q", _conversation_followups(question, answer, turn)),),
+            daemon=True, name="converse-followups")
+        _next_thread.start()
         # The turn spent every step (2026-11-20): Keep going picks up from where it stopped, with the steps it took
         if result.stop_reason in ("budget", "budget_answered"):
             from pramanyx.agent.orchestrate import found_lines
@@ -4287,6 +4339,9 @@ async def _stream_converse(
             from pramanyx.learning.decisions import attach_run
             attach_run(_decision_trace, turn["inv_id"])
 
+        _next_thread.join(timeout=FOLLOWUPS_WAIT_S)
+        if _next_box.get("q"):
+            emit("followups", {"questions": _next_box["q"]})
         emit("done", {"inv_id": turn["inv_id"], "has_receipt": turn["has_receipt"],
                       "body": "converse", "stop_reason": result.stop_reason,
                       "steps": len(result.steps)})
