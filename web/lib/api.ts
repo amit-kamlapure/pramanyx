@@ -3003,7 +3003,11 @@ export type QueryShaped =
   | { as: "figure"; value: number | null; label: string; said: string[]; beside?: { value: number | null; words: string; format: string } | null; format?: string }
   | { as: "table"; columns: TypedColumn[]; rows: (string | number | boolean | null)[][]; more: boolean; said: string[] }
   | { as: "bar" | "line" | "area" | "scatter"; x: { name: string; kind: "number" | "date" | "time" | "text"; bucket: QueryBucket };
-      series: string[]; points: QueryChartPoint[]; other: boolean; said: string[]; tones?: Record<string, string>; format?: string };
+      series: string[]; points: QueryChartPoint[]; other: boolean; said: string[]; tones?: Record<string, string>; format?: string;
+      /** The one measure's name as its pill says it, and what splits the series — a tooltip's words (2026-11-23). */
+      valueName?: string; seriesName?: string;
+      /** The values were made shares of a whole (a transform): a line drawn in the measure's own units does not apply. */
+      reshaped?: "share" };
 
 /** A query run as the builder would keep it: its typed columns and first rows, the card as shown — or what stops it. */
 export interface QueryPreview {

@@ -144,13 +144,25 @@ export function shapeAnswer(columns: TypedColumn[], rows: unknown[][], s: QueryS
     const acc = new Map<string, number>();
     for (const p of points) { acc.set(p.s, (acc.get(p.s) ?? 0) + (p.v ?? 0)); p.v = acc.get(p.s)!; }
   }
+  // Several rows at one place and nothing to tell them apart (2026-11-23: orders by month and status, Color taken off,
+  // drew twelve bars on top of each other per status): they are drawn apart — stacked, or as points — and said.
+  if (si < 0 && !several && s.as !== "scatter") {
+    const per = new Map<unknown, number>();
+    for (const p of points) per.set(p.x, (per.get(p.x) ?? 0) + 1);
+    const most = Math.max(0, ...per.values());
+    if (most > 1) said.push(`Up to ${most} rows share each ${cleanLabel(s.x).toLowerCase()} and nothing here tells them apart: `
+      + "choose a Color to split them, or sum them in the query.");
+  }
   points = transformed(points, opts.transform);
   const share = opts.transform === "pop" || opts.transform === "contribution";
   const unit = String(opts.units?.[first?.column ?? ""] ?? "").toLowerCase();
   const format = share || unit === "percent" ? "percent" : unit.startsWith("currency") ? "money" : undefined;
   const xType = columns[xi]?.type ?? "";
   return { as: s.as, x: { name: s.x, kind: kindOf(xType), bucket: "" }, series, points, other: false, said, tones: {},
-    ...(format ? { format } : {}) } as QueryShaped;
+    ...(format ? { format } : {}),
+    ...(!several && first ? { valueName: first.label || cleanLabel(first.column) } : {}),
+    ...(si >= 0 ? { seriesName: cleanLabel(s.split) } : {}),
+    ...(share ? { reshaped: "share" as const } : {}) } as QueryShaped;
 }
 
 const OWN = new Set(["bar", "line", "area", "scatter"]);

@@ -12,7 +12,7 @@ import { ALL_CHART_TYPES } from "@/components/charts/chartTypeInference";
 import type { VizConfig } from "@/components/charts/vizConfig";
 import type { QueryShaped, QueryShown } from "@/lib/api";
 import { dayLabel } from "@/lib/dashboards/objectView";
-import { fmtDate, formatDateAs, type DateFormat, type Gran } from "@/lib/format";
+import { cleanLabel, fmtDate, formatDateAs, type DateFormat, type Gran } from "@/lib/format";
 import { emphasisOpacity } from "@/components/charts/vega/emphasis";
 import { HOVER_MARK, type HoverMeta } from "@/components/charts/vega/hoverTooltip";
 import { colorsFor } from "@/lib/dashboards/valueColors";
@@ -157,7 +157,11 @@ export function queryChartSpec(c: QueryChart, setup: Pick<QueryShown, "segments"
     ...(c.as === "scatter" && numericX ? { scale: { zero: false } } : {}),
   };
   const shares = setup.segments === "shares" && (c.as === "bar" || c.as === "area");
-  const stack = c.as === "line" || c.as === "scatter" || !split ? null
+  // several points at one place with nothing to tell them apart: bars and areas stack, a line is drawn as its points
+  // (`answerShape` says so under the chart) — never one bar painted over another, or a line zig-zagging up a place
+  const repeated = !split && c.as !== "scatter" && new Set(values.map(p => String(p.xr))).size < values.length;
+  const stack = c.as === "line" || c.as === "scatter" ? null
+    : !split ? (repeated ? "zero" : null)
     : shares ? "normalize" : setup.segments === "side_by_side" ? null : "zero";
   // A share reads as a percent and money with its symbol. Below a thousand, the SI form says "500m" for a tick of 0.5: never what a reader means.
   const small = Math.max(0, ...values.map(p => Math.abs(p.v ?? 0))) < 1000;
@@ -170,10 +174,11 @@ export function queryChartSpec(c: QueryChart, setup: Pick<QueryShown, "segments"
     axis: { title: look?.yTitle || null, tickCount: 4, format: axisFormat },
     ...(c.as === "scatter" || Object.keys(chosenScale).length ? { scale: { ...(c.as === "scatter" ? { zero: false } : {}), ...chosenScale } } : {}),
   };
+  // each by its own name, as its pill says it (2026-11-23: a tooltip said "Value" for Orders)
   const tooltip = [
-    { field: "x", title: "Along the bottom" },
-    ...(split ? [{ field: "s", title: "Series" }] : []),
-    { field: "v", type: "quantitative", title: "Value", format: look?.format || (c.format === "percent" ? ".1%" : c.format === "money" ? "$,.0f" : ",.2~f") },
+    { field: "x", title: c.x.name ? cleanLabel(c.x.name) : "Along the bottom" },
+    ...(split ? [{ field: "s", title: c.seriesName || "Series" }] : []),
+    { field: "v", type: "quantitative", title: c.valueName || "Value", format: look?.format || (c.format === "percent" ? ".1%" : c.format === "money" ? "$,.0f" : ",.2~f") },
   ];
   const tips = look?.tooltip !== false;
   // one series, so no legend and no scale: what went wrong still wears its colour
@@ -181,6 +186,7 @@ export function queryChartSpec(c: QueryChart, setup: Pick<QueryShown, "segments"
   const lone = tone === "adverse" ? { color: colours.palette[ADVERSE_AT % colours.palette.length] } : tone === "open" ? { color: colours.other } : {};
   const shape = options?.lineShape === "smooth" ? { interpolate: "monotone" } : options?.lineShape === "step" ? { interpolate: "step-after" } : {};
   const mark = bars ? { type: "bar", tooltip: tips, cornerRadiusEnd: 2, ...lone }
+    : c.as === "line" && repeated ? { type: "point", tooltip: tips, filled: true, size: 36 }
     : c.as === "line" ? { type: "line", strokeWidth: options?.lineWidth ?? 2, ...shape, ...(options?.markers ? { point: true } : {}) }
       : c.as === "area" ? { type: "area", tooltip: tips, ...shape, ...(stack === null && split ? { opacity: 0.45 } : {}) }
         : { type: "point", tooltip: tips, filled: true, size: 36 };
@@ -212,7 +218,10 @@ export function queryChartSpec(c: QueryChart, setup: Pick<QueryShown, "segments"
           ...(bars && split && setup.segments === "side_by_side" ? { xOffset: { field: "s", sort: named } } : {}) } });
   }
   // reference lines a person drew (the editor's Annotation): a dashed rule across the value axis, its label at its start
-  for (const line of look?.refLines ?? []) {
+  // a line drawn in the measure's own units does not apply to shares of a whole (2026-11-23: an Average of 13,087
+  // orders stretched a 0–100% axis to 1,000,000% and every bar to nothing) — left off, and said on the chart
+  const linesOff = (shares || c.reshaped === "share") && (look?.refLines?.length ?? 0) > 0;
+  for (const line of linesOff ? [] : look?.refLines ?? []) {
     if (!Number.isFinite(line.value)) continue;
     const at = { field: "v", type: "quantitative" };
     layer.push(
@@ -224,11 +233,13 @@ export function queryChartSpec(c: QueryChart, setup: Pick<QueryShown, "segments"
     );
   }
   // the hover rule last, so its voronoi is over every mark it reads for — none when the tooltip is off
-  const hover = c.as === "line" && tips ? hoverRule(x, y, color, split, named, c.format) : null;
+  const hover = c.as === "line" && tips && !repeated ? hoverRule(x, y, color, split, named, c.format, c.valueName) : null;
   if (hover) layer.push(...hover.layers);
   return { $schema: "https://vega.github.io/schema/vega-lite/v5.json", background: null, data: { values }, layer,
            // what the cut left out is said on the chart, never implied
-           ...(keep ? { title: { text: `The ${keep.size} largest of ${totals.size}`, fontSize: 11, fontWeight: "normal", anchor: "start" } } : {}),
+           ...(keep || linesOff ? { title: { text: [keep ? `The ${keep.size} largest of ${totals.size}` : "",
+                                                    linesOff ? "The reference line is not drawn: the chart shows shares, and the line is in the measure's own units." : ""]
+                                                   .filter(Boolean).join(" "), fontSize: 11, fontWeight: "normal", anchor: "start" } } : {}),
            ...(hover ? { usermeta: { hover: hover.meta } } : {}) };
 }
 
@@ -238,9 +249,9 @@ export function queryChartSpec(c: QueryChart, setup: Pick<QueryShown, "segments"
  * written by `hoverTooltip.ts`. A click through it reports the place as the query returned it (`xr`), as a point did.
  */
 function hoverRule(x: Record<string, unknown>, y: Record<string, unknown>, color: Record<string, unknown>,
-  split: boolean, named: string[], format: QueryChart["format"]): { layers: Record<string, unknown>[]; meta: HoverMeta } {
+  split: boolean, named: string[], format: QueryChart["format"], valueName?: string): { layers: Record<string, unknown>[]; meta: HoverMeta } {
   const meta: HoverMeta = {
-    x: "x", gran: null, series: split ? named : ["v"], label: split ? null : "Value",
+    x: "x", gran: null, series: split ? named : ["v"], label: split ? null : (valueName || "Value"),
     format: format === "money" ? "$,.0f" : format === "percent" ? null : ",.2~f", pct: format === "percent", prefix: "",
   };
   return {

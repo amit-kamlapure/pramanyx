@@ -624,6 +624,9 @@ function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
                                          .map((v) => (lineScaled ? v / 100 : v)));
     if (Object.keys(lineScale).length) (enc.y as Record<string, unknown>).scale = lineScale;
     const interpolate = opts.lineShape === "smooth" ? "monotone" : opts.lineShape === "step" ? "step-after" : null;
+    // Several rows at one place and no series to tell them apart (2026-11-23: Color taken off a multi-line drew one line
+    // zig-zagging up every month): the rows are drawn as points, and the chart says why.
+    const repeated = !seriesCol && new Set(xValues.map(String)).size < xValues.length;
     // `sort: null` keeps the series in DATA order. Vega-Lite sorts a nominal domain
     // alphabetically by default, which hands the same series a different hue than the
     // ECharts path gives it — every screenshot in the Phase 2 diff would flag.
@@ -647,6 +650,10 @@ function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
         ...(lineScaled ? { transform: [...((base.transform as Record<string, unknown>[]) ?? []),
                                        { calculate: `datum['${measure}'] / 100`, as: lineField }] } : {}),
         usermeta: { hover },
+        ...(repeated ? { title: { text: (base.title as string | undefined) ?? "Several rows share each place and nothing tells them apart: choose a Color to split them.",
+                                  ...(base.title ? { subtitle: "Several rows share each place and nothing tells them apart: choose a Color to split them." }
+                                                 : { fontSize: 11, fontWeight: "normal" }),
+                                  anchor: "start" } } : {}),
         /**
          * The line, its points, and the hover rule (study R25). The x is shared; the value and the series are the
          * lines' own, since the rule reads one row per x with every series in it (`pivot`).
@@ -662,7 +669,8 @@ function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
         layer: [
           { encoding: lineEnc,
             layer: [
-              { mark: { type: "line", ...(interpolate ? { interpolate } : {}) } },
+              repeated ? { mark: { type: "point", filled: true } }
+                : { mark: { type: "line", ...(interpolate ? { interpolate } : {}) } },
               // the points, unless a person turned the markers off (study R12); the hover's rings stay
               ...(opts.markers === false ? [] : [{ mark: { type: "point" },
                 encoding: { opacity: emphasisOn(exhibit?.emphasis, x, xIsDate) ?? SELECT_OPACITY } }]),
@@ -831,6 +839,8 @@ function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
 
   /** Reference lines — context the reader otherwise supplies from memory. */
   function refLineLayers(horizontalForm: boolean): Record<string, unknown>[] {
+    // a line in the measure's own units does not apply once the values are made shares or changes (2026-11-23)
+    if (transform && (transform.op === "pop" || transform.op === "contribution")) return [];
     return (exhibit?.ref_lines ?? []).filter((l) => Number.isFinite(l?.value)).map((l) => ({
       data: { values: [{ __ref: l.value, __label: l.label ?? "" }] },
       // Across the whole plot, by value: the spec's own band encoding is inherited by every layer, and this layer's
