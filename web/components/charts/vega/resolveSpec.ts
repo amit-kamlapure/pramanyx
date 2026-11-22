@@ -14,7 +14,7 @@
  * which is precisely why a resolved chart cannot be persisted.
  */
 
-import { cleanLabel, detectGranularity, fmtDate } from "@/lib/format";
+import { cleanLabel, detectGranularity, fmtDate, type DateFormat } from "@/lib/format";
 import { currencySymbol, effectiveCurrencySymbol, isMoneyColumn } from "@/lib/orgSettings";
 import { classifyColumns, isIdLike, isNumberPeriod, isNumeric, isPriorPeriodCol, isUngraphableGrid, percentRates, plottedMeasures,
          tooFewToCompare, uniqueLabelBand, CHANGE_METRIC_COL, HORIZONTAL_MAX_CATS, PERCENT_CHANGE_COL,
@@ -24,7 +24,7 @@ import { sanitizeExhibit, type ExhibitSpec } from "@/components/charts/exhibit";
 import { inferChartType, HINT_TO_TYPE, type ChartType } from "@/components/charts/chartTypeInference";
 import { applyNames, type SeriesNames } from "@/components/charts/vega/names";
 import { periodsSpanned, timeBarFit } from "@/components/charts/vega/bandFit";
-import { dateAxis, utcScale } from "@/components/charts/vega/timeAxis";
+import { dateAxisAs, utcScale } from "@/components/charts/vega/timeAxis";
 import { emphasisOpacity as emphasisOn } from "@/components/charts/vega/emphasis";
 import { HOVER_MARK, type HoverMeta } from "@/components/charts/vega/hoverTooltip";
 import type { ChartOptions } from "@/components/charts/chartCustom";
@@ -147,6 +147,8 @@ export interface ResolveSpecArgs {
   /** What a person set in the editor beyond the kind (study R12): line shape and markers, axis range and log, a
    *  bar's sort and top N. */
   options?: ChartOptions | null;
+  /** How the dates along a time axis are written ("Dates as"); absent, as the grain writes them. */
+  dateFormat?: DateFormat | null;
 }
 
 export interface ResolvedSpec {
@@ -291,7 +293,7 @@ export function resolveVegaSpec(args: ResolveSpecArgs): ResolvedSpec | null {
 
 function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
   const { columns, rows, chartType, format, xTitle, yTitle, showLabels = false, title, orient,
-          transform, exhibit: exhibitRaw, columnUnits, measure: chosenMeasure } = args;
+          transform, exhibit: exhibitRaw, columnUnits, measure: chosenMeasure, dateFormat = null } = args;
   const opts: ChartOptions = args.options ?? {};
   const topN = typeof opts.top === "number" && opts.top > 0 ? Math.floor(opts.top) : 0;
   // Fail-open on a malformed spec: a bad exhibit costs its semantics, never the chart —
@@ -610,7 +612,7 @@ function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
          */
         axis: {
           ...bandAxis(axisTitle(xTitle, x)),
-          ...(xIsDate ? dateAxis(detectGranularity(x, xValues), xValues) : {}),
+          ...(xIsDate ? dateAxisAs(detectGranularity(x, xValues), xValues, dateFormat) : {}),
         },
       },
       // A percentage reads as one on a trend too: this axis ignored the unit the bar path
@@ -666,6 +668,17 @@ function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
                 encoding: { opacity: emphasisOn(exhibit?.emphasis, x, xIsDate) ?? SELECT_OPACITY } }]),
               { transform: [{ filter: { param: "hover", empty: false } }],
                 mark: { type: "point", filled: false, size: 90, strokeWidth: 2 } },
+              // Labels on (2026-11-23: the editor's switch did nothing on a line): the last place of each series says
+              // its value, as a dashboard's line does — never a number on every point.
+              ...(showLabels ? [{
+                transform: [{ window: [{ op: "rank", as: "__last" }], sort: [{ field: x, order: "descending" }],
+                              ...(seriesCol ? { groupby: [seriesCol] } : {}) },
+                            { filter: "datum.__last === 1" },
+                            { calculate: linePct ? SI_TEXT(lineField, ".1%", "")
+                                                 : SI_TEXT(lineField, valueFormat(format), moneyPrefix(measure)),
+                              as: "__valueLabel" }],
+                mark: { type: "text", align: "left", baseline: "middle", dx: 6, fontSize: 10.5 },
+                encoding: { text: { field: "__valueLabel", type: "nominal" } } }] : []),
             ] },
           { transform: [...(seriesCol ? [{ pivot: seriesCol, value: lineField, groupby: [x] }] : []),
                         { calculate: "true", as: HOVER_MARK }],
@@ -673,6 +686,8 @@ function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
             params: [HOVER_PARAM(x), SELECT_PARAM(x)],
             encoding: { y: { value: 0 }, y2: { value: { expr: "height" } },
                         opacity: { condition: { param: "hover", empty: false, value: 0.7 }, value: 0 } } },
+          // the reference lines a person drew (the editor's Annotation; 2026-11-23: a line drew none)
+          ...refLineLayers(false),
         ],
         encoding: { x: xEnc },
       },
@@ -751,7 +766,7 @@ function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
     ...(Object.keys(bandScale).length ? { scale: bandScale } : {}),
     axis: {
       ...bandAxis(axisTitle(xTitle, band)),
-      ...(bandOnTime && bandGran ? dateAxis(bandGran, bandValues) : {}),
+      ...(bandOnTime && bandGran ? dateAxisAs(bandGran, bandValues, dateFormat) : {}),
       ...(periodRows && bandGran === "month" && !numberBand ? compactPeriodLabels(periodRows.map((d) => String(d.__period))) : {}),
     },
     // Lead with the largest — the ranking the question implies. Ties break stably.
@@ -818,12 +833,17 @@ function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
   function refLineLayers(horizontalForm: boolean): Record<string, unknown>[] {
     return (exhibit?.ref_lines ?? []).filter((l) => Number.isFinite(l?.value)).map((l) => ({
       data: { values: [{ __ref: l.value, __label: l.label ?? "" }] },
+      // Across the whole plot, by value: the spec's own band encoding is inherited by every layer, and this layer's
+      // data has no band field to place it by.
       layer: [
         { mark: { type: "rule", strokeDash: [4, 4] },
-          encoding: { [horizontalForm ? "x" : "y"]: { field: "__ref", type: "quantitative" } } },
+          encoding: { [horizontalForm ? "x" : "y"]: { field: "__ref", type: "quantitative" },
+                      ...(horizontalForm ? { y: { value: 0 }, y2: { value: { expr: "height" } } }
+                                         : { x: { value: 0 }, x2: { value: { expr: "width" } } }) } },
         { mark: { type: "text", align: horizontalForm ? "left" : "right",
                   dx: horizontalForm ? 4 : -4, dy: -4, fontSize: 10 },
           encoding: { [horizontalForm ? "x" : "y"]: { field: "__ref", type: "quantitative" },
+                      ...(horizontalForm ? { y: { value: 0 } } : { x: { value: { expr: "width" } } }),
                       text: { field: "__label" } } },
       ],
     }));

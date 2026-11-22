@@ -6,6 +6,8 @@
  * file; the contract outlives it unchanged.
  */
 
+import type { DateFormat } from "@/lib/format";
+
 export interface ChartCustom {
   format?: string;        // d3 number format for the quantitative axis (e.g. ",.0f", "$,.2f", "~s")
   colorScheme?: string;   // categorical palette name (a named scheme, e.g. "set2")
@@ -23,6 +25,8 @@ export interface ChartCustom {
                 window?: number; agg?: "mean" | "sum" | "min" | "max" } | null;
   /** The chart options a person sets in the editor (the dashboards study, R12). */
   options?: ChartOptions | null;
+  /** How dates are written along the axis ("Dates as"); absent, as the grain writes them. */
+  dateFormat?: DateFormat | null;
 }
 
 /**

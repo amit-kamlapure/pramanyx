@@ -4,7 +4,7 @@
  * and the stacked bar in `forms.ts` read it here, so a month reads the same under all three.
  */
 
-import { chartDateFormat, type Gran } from "@/lib/format";
+import { chartDateFormat, type DateFormat, type Gran } from "@/lib/format";
 
 /** One tick per period of the series' grain — a stride of periods past eighteen. `%b %Y` labels on
  *  the default ticks repeated a month ("Aug 2025 Aug 2025 Sep 2025 …") once a chart was wide enough
@@ -50,4 +50,21 @@ export function dateAxis(gran: Gran, values: unknown[]): Record<string, unknown>
   return { format: chartDateFormat(gran, multiYear),
            ...periodTicks(gran, new Set(values.map(String)).size),
            ...compactMonths(gran, values) };
+}
+
+/** Each way of writing a date the editor offers (`DATE_FORMATS`), as the axis's UTC format. */
+const DATE_FORMAT_D3: Record<DateFormat, string> = {
+  "YYYY-MM-DD": "%Y-%m-%d", "YYYY-MM": "%Y-%m", "MMM YYYY": "%b %Y", "DD MMM YYYY": "%d %b %Y",
+  "MMM D, YYYY": "%b %-d, %Y", "YYYY-QQ": "%Y Q%q", YYYY: "%Y",
+};
+
+/**
+ * The date axis, written as a person chose in the editor ("Dates as") when they chose — one tick per period still, every
+ * label in that one format — else as the grain writes it (`dateAxis`). 2026-11-23: an answer's line and bar ignored the
+ * choice (the editor said "YYYY-MM", the axis said "Sep 2017"), while a dashboard's card honoured it.
+ */
+export function dateAxisAs(gran: Gran, values: unknown[], written?: DateFormat | null): Record<string, unknown> {
+  if (!written || !DATE_FORMAT_D3[written]) return dateAxis(gran, values);
+  return { ...periodTicks(gran, new Set(values.map(String)).size), labelFlush: false,
+           labelExpr: `utcFormat(datum.value, '${DATE_FORMAT_D3[written]}')` };
 }
