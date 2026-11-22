@@ -26,8 +26,10 @@ export function doorFor(mode: ButtonMode, depth: Depth, plain = true): { mode: B
 }
 
 /** The only per-turn options a plain question carries; anything else set means the send carries
- *  more than a question, and keeps its own door. */
-const PLAIN_KEYS = new Set(["depth", "schema", "keepGoing"]);
+ *  more than a question, and keeps its own door. ``purpose`` is a tag `/ask` forwards (a clicked follow-up's
+ *  "followup"): until 2026-11-23 it kept the click on the old `/chat` door — no tools, no subject — so a follow-up
+ *  was answered differently from the same question typed. */
+const PLAIN_KEYS = new Set(["depth", "schema", "keepGoing", "purpose"]);
 
 export function isPlainSend(opts: object): boolean {
   return Object.entries(opts).every(([k, v]) => PLAIN_KEYS.has(k) || !v);

@@ -1157,6 +1157,18 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
     );
   }, [busy, status, sdkStop, cancelActiveRun, clearError, sendMessage, agentId, subject]);
 
+  // A question asked again — edited, or "Ask again" — goes through the door a typed one does, at the conversation's depth
+  // and about what the page shows (2026-11-23: both went to `/ask` at depth auto with no subject, so a question about a
+  // dashboard asked again was answered about nothing in particular).
+  const plainBody = useCallback((): Record<string, unknown> => {
+    const door = subject ? { mode: "auto" as const, depth: mode === "ask" ? "quick" as const : "deep" as const } : doorFor(mode, "auto");
+    return { mode: door.mode, depth: door.depth, agent_id: agentId || null, ...(subject ? { focus: focusOf(subject) } : {}) };
+  }, [mode, subject, agentId]);
+  const askAgain = useCallback(() => {
+    if (busy) sdkStop();
+    void regenerate({ body: plainBody() });
+  }, [busy, sdkStop, regenerate, plainBody]);
+
   const stop = useCallback(() => { cancelActiveRun(); sdkStop(); }, [cancelActiveRun, sdkStop]);
 
   const clear = useCallback(() => {
@@ -1622,7 +1634,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                         // so this needs no new store.
                         onFollowUp={(q) => handleSend(q, undefined, { purpose: "followup" })}
                         onRegenerate={harness && i === turns.length - 1 && turn.status !== "loading" && assistantMsg
-                          ? () => { if (busy) sdkStop(); void regenerate(); } : undefined}
+                          ? askAgain : undefined}
                         onRunFresh={(q) => handleSend(q, "investigate", { skipCache: true })}
                         onShowSource={data => { setSourcePage(null); setSourcePanel(data); }}
                         onDeeper={(q, insightId) => sendQuestion(q, "investigate", { insightId: insightId ?? undefined, deep: true })}
@@ -1639,8 +1651,8 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                         // CA-1 — edit-and-resend: replaces THIS user message and re-sends;
                         // the SDK truncates the thread from here (branching, the cheap way).
                         onEdit={(q) => void sendMessage(
-                          { text: q, messageId: userMsg.id, metadata: { mode: "ask" } },
-                          { body: { mode: "auto" } },
+                          { text: q, messageId: userMsg.id, metadata: { mode: mode === "investigate" ? "investigate" : "ask" } },
+                          { body: plainBody() },
                         )}
                       />
                     </ErrorBoundary>
@@ -1704,7 +1716,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                         <Button
                           variant="ghost"
                           size="xs"
-                          onClick={() => { if (busy) sdkStop(); void regenerate(); }}
+                          onClick={askAgain}
                           title="Ask this again — a fresh answer replaces this one"
                           className="h-auto gap-1 px-1.5 py-0.5 aug-fs-xs font-normal text-zinc-500 hover:text-zinc-300 hover:bg-transparent dark:hover:bg-transparent"
                         >
