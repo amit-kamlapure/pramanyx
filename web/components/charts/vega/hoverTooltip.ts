@@ -11,7 +11,7 @@
  * handler in `VegaChart.tsx` knows a row of this rule from any other mark's datum.
  */
 import { format as d3format } from "d3-format";
-import { fmtDate, formatMetricValue, type Gran } from "@/lib/format";
+import { fmtDate, formatDateAs, formatMetricValue, type DateFormat, type Gran } from "@/lib/format";
 
 /** The marker the rule's rows carry; nothing else in a chart's data has it. */
 export const HOVER_MARK = "__hover";
@@ -31,6 +31,8 @@ export interface HoverMeta {
   pct: boolean;
   /** The money symbol the axis is prefixed with, or "". */
   prefix: string;
+  /** How a person chose to write the dates ("Dates as"), when they chose: the hover says the date as the axis does. */
+  written?: DateFormat | null;
 }
 
 export interface HoverRow {
@@ -41,12 +43,13 @@ export interface HoverRow {
 }
 
 /** The x as the axis writes it: a date in its grain, anything else as itself. */
-export function hoverHead(x: unknown, gran: Gran | null): string {
+export function hoverHead(x: unknown, gran: Gran | null, written?: DateFormat | null): string {
   if (x === null || x === undefined) return "";
   if (gran) {
     const day = x instanceof Date ? x : typeof x === "number" ? new Date(x) : null;
     const iso = day && Number.isFinite(day.getTime()) ? day.toISOString() : String(x);
-    return fmtDate(iso, gran);
+    // the date as the axis writes it, when a person chose how (2026-11-23: axis "2025-07", hover "Jul 2025")
+    return (written ? formatDateAs(iso, written) : null) ?? fmtDate(iso, gran);
   }
   return String(x);
 }
@@ -80,7 +83,7 @@ export function hoverRows(datum: Record<string, unknown>, meta: HoverMeta,
 /** The tooltip's HTML: the x, then a row per series with its swatch. Every word passes through `esc`. */
 export function hoverHtml(datum: Record<string, unknown>, meta: HoverMeta,
   colorOf: (series: string) => string | null, esc: (v: unknown) => string): string {
-  const head = hoverHead(datum[meta.x], meta.gran);
+  const head = hoverHead(datum[meta.x], meta.gran, meta.written);
   const safeColor = (c: string | null) => (c && /^(#[0-9a-fA-F]{3,8}|rgba?\([0-9., %]+\)|hsla?\([0-9., %deg]+\))$/.test(c) ? c : "");
   const rows = hoverRows(datum, meta, colorOf).map((r) => {
     const swatch = safeColor(r.color);

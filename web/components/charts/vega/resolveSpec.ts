@@ -621,6 +621,7 @@ function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
       label: seriesCol ? null : axisTitle(yTitle, measure),
       format: linePct ? null : (format && format.trim() ? format : null), pct: linePct,
       prefix: linePct ? "" : moneyPrefix(measure),
+      written: xIsDate ? dateFormat : null,
     };
     return {
       tier: 1, resolved: seriesCol ? "multi-line" : "line", defaultH: 300, xCategories: 0,
@@ -650,8 +651,9 @@ function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
             layer: [
               repeated ? { mark: { type: "point", filled: true } }
                 : { mark: { type: "line", ...(interpolate ? { interpolate } : {}) } },
-              // the points, unless a person turned the markers off (study R12); the hover's rings stay
-              ...(opts.markers === false ? [] : [{ mark: { type: "point" },
+              // the points, unless a person turned the markers off (study R12) or the rows are already drawn as points
+              // (`repeated`); the hover's rings stay
+              ...(opts.markers === false || repeated ? [] : [{ mark: { type: "point" },
                 encoding: { opacity: emphasisOn(exhibit?.emphasis, x, xIsDate) ?? SELECT_OPACITY } }]),
               { transform: [{ filter: { param: "hover", empty: false } }],
                 mark: { type: "point", filled: false, size: 90, strokeWidth: 2 } },

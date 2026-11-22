@@ -67,3 +67,20 @@ describe("an answer's line, as the editor sets it", () => {
     compiles(dressed(spec, { legend: "none" }));
   });
 });
+
+describe("the hover and the points, as the chart is set", () => {
+  it("writes the hover's date as the axis does when a person chose how", async () => {
+    const { hoverHead } = await import("@/components/charts/vega/hoverTooltip");
+    expect(hoverHead(Date.UTC(2025, 6, 1), "month", "YYYY-MM")).toBe("2025-07");
+    expect(hoverHead(Date.UTC(2025, 6, 1), "month")).toBe("Jul 2025");
+    const meta = ((multi({ dateFormat: "YYYY-MM" }).spec.usermeta as Obj).hover as Obj);
+    expect(meta.written).toBe("YYYY-MM");
+  });
+
+  it("draws rows with no series as one set of points, not two on top of each other", () => {
+    const v = resolveVegaSpec({ ...ORDERS, chartType: "line", measure: "orders" })!;
+    const inner = ((v.spec.layer as Obj[])[0].layer as Obj[]);
+    expect(inner.filter((l) => (l.mark as Obj)?.type === "point" && (l.mark as Obj)?.filled === true)).toHaveLength(1);
+    expect(inner.filter((l) => JSON.stringify(l).includes("opacity") && (l.mark as Obj)?.type === "point")).toHaveLength(0);
+  });
+});
