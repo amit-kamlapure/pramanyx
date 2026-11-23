@@ -162,10 +162,12 @@ function moveColour(sign: number, card: DashboardCard): string {
   return towardTheLimit ? "var(--red4)" : "var(--grn4)";
 }
 
-export function Frame({ testid, shape, over, dashed, bare, children, doors }: {
+export function Frame({ testid, shape, over, dashed, bare, tight, children, doors }: {
   testid: string; shape?: TileShape; over?: boolean; dashed?: boolean;
   /** Words standing on the page itself, a heading across the dashboard: no card around them. */
   bare?: boolean;
+  /** A box too short for a card's air: the air gives way before what it holds does. */
+  tight?: boolean;
   children: ReactNode; doors?: ReactNode;
 }) {
   return (
@@ -174,7 +176,7 @@ export function Frame({ testid, shape, over, dashed, bare, children, doors }: {
       // on a section's grid the box is fixed: what it holds stays inside it, and a piece's own body scrolls (Arc AP-1)
       minHeight: 0, overflow: "hidden",
       // the quieter card of the board study (docs/OPENDASHBOARDS_STUDY.md §6.2): more air, no shadow (CLARITY.md)
-      gap: 8, padding: bare ? "4px 2px" : "16px 18px 14px", background: bare ? "transparent" : "var(--bg-2)", borderRadius: "var(--r3)",
+      gap: tight ? 4 : 8, padding: bare ? "4px 2px" : tight ? "8px 12px 6px" : "16px 18px 14px", background: bare ? "transparent" : "var(--bg-2)", borderRadius: "var(--r3)",
       // a card stands on the page by its fill; an edge is drawn only where it says something — dashed for a piece
       // that cannot be read, red for a figure over its limit (CLARITY.md, "cards on the ground")
       border: `1px ${dashed ? "dashed" : "solid"} ${bare ? "transparent" : over ? "color-mix(in srgb, var(--red4) 55%, var(--b1))" : dashed ? "var(--b1)" : "var(--card-edge)"}`,

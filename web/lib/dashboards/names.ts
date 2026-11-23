@@ -8,6 +8,7 @@
  * names — "Objects table · Order, overdue dispatch" — never by a key a person did not choose.
  */
 import type { ComponentName } from "@/lib/dashboards/catalog";
+import { plainWords } from "@/lib/definitionBody";
 
 /** Each component's word, as a reader says it. */
 export const KIND_WORDS: Record<ComponentName, string> = {
@@ -78,7 +79,9 @@ export function nameOf(elements: Record<string, El | undefined>, key: string,
       case "Section": return String(p.title ?? (p.layout === "columns" ? "In columns" : p.layout === "rows" ? "In rows" : p.layout === "tabs" ? "As tabs" : ""));
       case "Tab": return String(p.label ?? "");
       case "Card": return cardTitle(String(p.card ?? "")) || String(p.card ?? "");
-      case "Note": return cut(String(p.text ?? "").replace(/\s+/g, " ").trim(), 60);
+      // a note by its words, never its marks (seen live, 2026-11-24: "Each row is **one product…"); a heading's words are
+      // a note's own, so its mark goes and its words stay
+      case "Note": return cut(plainWords(String(p.text ?? "").replace(/^\s{0,3}#{1,6}\s+/gm, "")), 60);
       case "Image": return String(p.caption ?? "");
       case "ProcessBoard": return words(p.process);
       case "ActionButton": return words(p.action);

@@ -51,6 +51,14 @@ describe("what each element is called (the study's defects 1 and 5)", () => {
     expect(lineOf(els, "sec")).toBe("Section · Orders");
   });
 
+  it("names a note by its words, without the marks it is written in", () => {
+    const els = objectDashboard().elements;
+    els.note = { type: "Note", props: { text: "Each row is **one product in one year**. Read it beside:\n\n- the [Returns](https://x.example) Area\n- the Operations dashboard\n\n" }, children: [] };
+    expect(lineOf(els, "note")).toBe("Note · Each row is one product in one year. Read it beside: the Ret…");
+    els.note = { type: "Note", props: { text: "# Fulfilment\n## This week" }, children: [] };
+    expect(lineOf(els, "note")).toBe("Note · Fulfilment This week");
+  });
+
   it("names a card by its title, and by its id when its title is not known", () => {
     const els = premise().elements;
     expect(nameOf(els, "card-rate", id => (id === "c7f3a001" ? "Return rate" : undefined))).toEqual({ kind: "card", title: "Return rate" });
