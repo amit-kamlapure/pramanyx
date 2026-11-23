@@ -11,10 +11,11 @@
  * publishes it; anyone else's change is a SUGGESTED EDIT the owner accepts or declines, and the published wording
  * stands until then. One word may mean one thing in one Area and another in the next — each its own definition.
  */
-import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type MouseEvent, type ReactNode } from "react";
 
 import { Chip } from "@/components/clarity/kit";
 import { DefinitionBody } from "@/components/definitions/DefinitionBody";
+import { RichBody } from "@/components/definitions/RichBody";
 import { DiscoverFinder } from "@/components/discover/DiscoverFinder";
 import { Button } from "@/components/ui/button";
 import { Icon, type IconName } from "@/components/ui/icon";
@@ -25,13 +26,13 @@ import { openInApp } from "@/lib/addressOnce";
 import { fastApiError } from "@/lib/api";
 import { getApiBase } from "@/lib/config";
 import { readAreas, type BusinessArea } from "@/lib/areas";
-import { BODY_MAX, BODY_TEMPLATE, apply, type Tool } from "@/lib/definitionBody";
+import { BODY_MAX, BODY_TEMPLATE, isBlankBody } from "@/lib/definitionBody";
 import {
   earlierWordings, inAppHref, linkHref, same, who,
   type Definition, type DefinitionLink, type DefinitionSource,
 } from "@/lib/definitions";
 import { KIND_ICON, KIND_WORDS, readDiscoverItems, type DiscoverItem, type DiscoverKind } from "@/lib/discover";
-import { fmtDate, formatCount } from "@/lib/format";
+import { fmtDate } from "@/lib/format";
 
 const MUTED = { color: "var(--t3)" };
 
@@ -143,7 +144,7 @@ export function DefinitionView({ term, connection, initialArea = "", inApp = fal
   const startWriting = () => { setDraft(fromDefinition(found, term, area)); setWriting(true); setSaid(""); };
   const cancel = () => { setWriting(false); setSaid(""); if (!term) onCancel?.(); };
   const nameOk = !!(found?.term ?? draft.name).trim();
-  const textOk = !!draft.text.trim() && draft.text.trim() !== BODY_TEMPLATE.trim() && draft.text.length <= BODY_MAX;
+  const textOk = !isBlankBody(draft.text) && draft.text.length <= BODY_MAX;
   const open = (href: string | null) =>
     (href && inApp && href.startsWith("/?") ? (e: MouseEvent) => inPlace(e, () => openInApp(href)) : undefined);
 
@@ -260,7 +261,7 @@ export function DefinitionView({ term, connection, initialArea = "", inApp = fal
             {/* the body */}
             <div style={{ padding: "0 20px 16px", boxShadow: "inset 0 1px 0 var(--b0)" }}>
               {writing ? (
-                <BodyEditor value={draft.text} onChange={(text) => setDraft((d) => ({ ...d, text }))} />
+                <RichBody value={draft.text} onChange={(text) => setDraft((d) => ({ ...d, text }))} />
               ) : (
                 <div style={{ paddingTop: 12 }}><DefinitionBody text={found?.statement.text ?? ""} /></div>
               )}
@@ -405,55 +406,6 @@ function Synonyms({ value, editing, onChange }: { value: string[]; editing: bool
         <Button size="icon-xs" variant="outline" aria-label="Add a synonym" onClick={() => setAdding(true)}><Icon name="plus" size={12} /></Button>
       ))}
     </span>
-  );
-}
-
-const TOOLS: { tool: Tool; label: string; icon?: IconName; text?: string }[] = [
-  { tool: "bold", label: "Bold", text: "B" }, { tool: "italic", label: "Italic", text: "I" },
-  { tool: "bullets", label: "Bulleted list", icon: "list" }, { tool: "numbers", label: "Numbered list", icon: "num" },
-  { tool: "link", label: "Link", icon: "link" }, { tool: "table", label: "Table", icon: "table" },
-];
-
-/** The body, written in Markdown under its toolbar, with a look at it drawn. */
-function BodyEditor({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const area = useRef<HTMLTextAreaElement>(null);
-  const [preview, setPreview] = useState(false);
-  const use = (tool: Tool) => {
-    const el = area.current;
-    const next = apply(tool, { text: value, start: el?.selectionStart ?? value.length, end: el?.selectionEnd ?? value.length });
-    onChange(next.text);
-    requestAnimationFrame(() => { el?.focus(); el?.setSelectionRange(next.start, next.end); });
-  };
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingTop: 10 }} data-testid="definition-editor">
-      <div role="toolbar" aria-label="Format" style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap" }}>
-        <SelectField bespoke aria-label="Heading" value="" disabled={preview} onChange={(e) => { if (e.target.value) use(e.target.value as Tool); }}>
-          <option value="">Heading…</option>
-          <option value="heading">Heading</option>
-          <option value="subheading">Subheading</option>
-          <option value="text">Text</option>
-        </SelectField>
-        {TOOLS.map((t) => (
-          <Button key={t.tool} size="icon-xs" variant="outline" aria-label={t.label} title={t.label} disabled={preview} onClick={() => use(t.tool)}>
-            {t.icon ? <Icon name={t.icon} size={13} />
-              : <span style={{ fontWeight: t.text === "B" ? 700 : 400, fontStyle: t.text === "I" ? "italic" : "normal" }}>{t.text}</span>}
-          </Button>
-        ))}
-        <span style={{ flex: 1 }} />
-        <span className="aug-fs-xs" style={{ color: value.length > BODY_MAX ? "var(--red4)" : "var(--t3)" }}>
-          {formatCount(value.length)} / {formatCount(BODY_MAX)}
-        </span>
-        <Button size="xs" variant={preview ? "secondary" : "outline"} aria-pressed={preview} onClick={() => setPreview((p) => !p)}>
-          {preview ? "Write" : "Preview"}
-        </Button>
-      </div>
-      {preview ? (
-        <div style={{ minHeight: 160 }}><DefinitionBody text={value} /></div>
-      ) : (
-        <Textarea ref={area} aria-label="What it means" rows={12} value={value} onChange={(e) => onChange(e.target.value)}
-          style={{ fontFamily: "var(--font-mono)" }} />
-      )}
-    </div>
   );
 }
 
