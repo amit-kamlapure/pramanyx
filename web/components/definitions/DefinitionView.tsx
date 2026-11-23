@@ -152,6 +152,7 @@ export function DefinitionView({ term, connection, initialArea = "", inApp = fal
   const handOn = async () => {
     const to = handTo.trim();
     if (!to) return;
+    if (found && same(who(to), who(found.owner))) { setSaid(`It is already ${who(found.owner)}'s`); setHanding(false); return; }
     await act("/record/definitions/owner", { to }, `Handed to ${who(to)}: they answer for it now`);
     setHanding(false);
   };
