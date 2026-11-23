@@ -137,9 +137,9 @@ class ClaimIn(BaseModel):
     extra: dict[str, Any] = Field(default_factory=dict)
 
 
-def _claim_view(c: C.Claim) -> dict:
+def _claim_view(c: C.Claim, tallies: Optional[dict] = None) -> dict:
     from pramanyx.record.confidence import why_uncounted, with_confidence
-    seen = with_confidence(c)
+    seen = with_confidence(c, tallies=tallies)
     view = seen.model_dump()
     if seen.confidence is None:
         view["confidence_note"] = why_uncounted(c)
@@ -218,7 +218,8 @@ def read_claims(kind: Optional[str] = None, connection_id: Optional[str] = None,
         raise HTTPException(status_code=422, detail=str(exc))
     if author:
         rows = [c for c in rows if c.author == author]
-    return [_claim_view(c) for c in rows if _visible(c.about.key if c.about.kind == "connection" else "")]
+    tallies: dict = {}   # each class counted once for the list, not once per claim
+    return [_claim_view(c, tallies) for c in rows if _visible(c.about.key if c.about.kind == "connection" else "")]
 
 
 @router.get("/claims/{claim_id}")
@@ -236,7 +237,8 @@ def read_claim_versions(claim_id: str) -> list[dict]:
     c = C.get(claim_id)
     if c is None or not _visible(c.about.key if c.about.kind == "connection" else ""):
         raise HTTPException(status_code=404, detail="No such claim")
-    return [_claim_view(v) for v in C.versions(c.key)]
+    tallies: dict = {}
+    return [_claim_view(v, tallies) for v in C.versions(c.key)]
 
 
 @router.get("/restatements")

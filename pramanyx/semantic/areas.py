@@ -21,6 +21,16 @@ from typing import Optional
 
 KEY = "area"
 MAX_DEPTH = 5
+#: The most an Area's page puts first, and the longest description it keeps (Discover D4).
+MAX_FEATURED = 12
+MAX_DESCRIPTION = 2000
+
+#: The kinds Discover lists that a person places in an Area on the tag store, each under the artifact kind its tag is
+#: written as (`artifact:<kind>:<ref>`, read back by `discover.items._placed_tags`; a schedule is an automation there).
+ARTIFACT_KINDS = {"dashboard": "dashboard", "canvas": "canvas", "agent": "agent", "schedule": "automation",
+                  "document": "document", "sheet": "sheet", "trusted_query": "trusted_query"}
+#: What an Area may put first: anything Discover lists.
+FEATURABLE = ("table", "metric", "definition", *ARTIFACT_KINDS)
 
 
 def area_id(name: str) -> str:
@@ -46,12 +56,98 @@ def areas_for(connection_id: str, schema_name: Optional[str] = None, *, workspac
         d = declared.pop(a.id, None)
         out.append({"id": a.id, "name": (d.name if d and d.name else a.name), "question": (d.question if d and d.question else a.question),
                     "parent": d.parent if d else "", "business_owners": list(d.business_owners) if d else [],
-                    "technical_owners": list(d.technical_owners) if d else [], "source": "package", "pack_id": a.pack_id})
+                    "technical_owners": list(d.technical_owners) if d else [], "source": "package", "pack_id": a.pack_id,
+                    **_curated(d)})
     for d in declared.values():
         out.append({"id": d.id, "name": d.name or d.id, "question": d.question, "parent": d.parent,
                     "business_owners": list(d.business_owners), "technical_owners": list(d.technical_owners),
-                    "source": "organisation", "pack_id": ""})
+                    "source": "organisation", "pack_id": "", **_curated(d)})
     return out
+
+
+def _curated(d) -> dict:
+    """What an Area's curators wrote for its page: its description and what it puts first."""
+    return {"description": (getattr(d, "description", "") or "") if d else "",
+            "featured": [{"kind": f.kind, "ref": f.ref} for f in (getattr(d, "featured", None) or [])] if d else []}
+
+
+def curates(area: dict, person: str, *, admin: bool) -> bool:
+    """Whether ``person`` may change ``area`` — its description, owners and what it puts first — and place anything in
+    it: its business and technical owners, and whoever administers the organisation (the user's call, 2026-11-23: no
+    new role). An agent never does; its doors refuse it before this is asked."""
+    if admin:
+        return True
+    me = _who(person)
+    return bool(me) and me in {_who(o) for o in [*(area.get("business_owners") or []), *(area.get("technical_owners") or [])]}
+
+
+#: The fields of an Area its curators may change from its page.
+EDITABLE = ("name", "question", "description", "business_owners", "technical_owners", "featured")
+
+
+def edit_area(area_id: str, changes: dict, *, by: str, known: set[str]) -> dict:
+    """Change one Area as its curators write it — its words, its owners, what it puts first — and keep who changed what,
+    when, in the ledger (an Area's declaration is published on save; its history is that record). A package's Area is
+    annotated under its own id; an Area no connection has is refused. Raises ``ValueError`` with every problem said."""
+    from pramanyx.orgsettings.models import AreaDeclaration, FeaturedThing
+    from pramanyx.orgsettings.store import load_org_settings, save_org_settings
+    if not (by or "").strip():
+        raise ValueError("a change to an Area says who made it")
+    unknown = sorted(set(changes) - set(EDITABLE))
+    if unknown:
+        raise ValueError(f"an Area's page changes its {', '.join(EDITABLE)}; not {', '.join(unknown)}")
+    settings = load_org_settings()
+    decls = list(settings.areas)
+    at = next((i for i, d in enumerate(decls) if d.id == area_id), None)
+    if at is None and area_id not in known:
+        raise ValueError(f"{area_id!r} is no Area; declare it first")
+    before = decls[at] if at is not None else AreaDeclaration(id=area_id)
+    update: dict = {}
+    for k in ("name", "question"):
+        if k in changes:
+            update[k] = str(changes[k] or "").strip()[:200]
+    if "description" in changes:
+        text = str(changes["description"] or "").strip()
+        if len(text) > MAX_DESCRIPTION:
+            raise ValueError(f"a description is at most {MAX_DESCRIPTION} characters")
+        update["description"] = text
+    for k in ("business_owners", "technical_owners"):
+        if k in changes:
+            update[k] = list(dict.fromkeys(str(o).strip() for o in (changes[k] or []) if str(o).strip()))
+    if "featured" in changes:
+        featured, seen = [], set()
+        for f in changes["featured"] or []:
+            kind, ref = str((f or {}).get("kind") or "").strip(), str((f or {}).get("ref") or "").strip()
+            if kind not in FEATURABLE or not ref:
+                raise ValueError(f"a featured thing is a kind ({', '.join(FEATURABLE)}) and its id")
+            if (kind, ref) not in seen:
+                seen.add((kind, ref))
+                featured.append(FeaturedThing(kind=kind, ref=ref))
+        if len(featured) > MAX_FEATURED:
+            raise ValueError(f"an Area puts at most {MAX_FEATURED} things first")
+        update["featured"] = featured
+    after = before.model_copy(update=update)
+    decls = decls[:at] + [after] + decls[at + 1:] if at is not None else [*decls, after]
+    problems = check_declarations(decls, known=known)
+    if problems:
+        raise ValueError("; ".join(problems))
+    save_org_settings(settings.model_copy(update={"areas": decls}))
+    _journal_area(area_id, before.model_dump(), after.model_dump(), by)
+    return after.model_dump()
+
+
+def _journal_area(area_id: str, before: dict, after: dict, by: str) -> None:
+    """Who changed which of an Area's fields, from what to what. Best effort: the settings file is the authority and the
+    change has landed; an unrecorded change is said in the log, never undone."""
+    changed = {k: {"from": before.get(k), "to": after.get(k)} for k in EDITABLE if before.get(k) != after.get(k)}
+    if not changed:
+        return
+    try:
+        from pramanyx.kernel.ledger import Ledger
+        Ledger.default().emit("area.changed", {"area": area_id, "by": by, "changed": changed})
+    except Exception as exc:  # noqa: BLE001 — see the docstring
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, f"the change to the Area {area_id} was saved but not journalled", counter="areas.journal")
 
 
 def _who(person: str) -> str:
@@ -183,11 +279,11 @@ def check_declarations(decls: list, known: Optional[set[str]] = None) -> list[st
     return sorted(set(problems))
 
 
-def place(kind: str, ref: str, area: str, *, by: str, connection_id: str, schema_name: str = "") -> Optional[str]:
-    """A person places a table (or a whole connection) or a metric in an area — ``area`` ``""`` takes it out. Returns
-    the area it now stands in, or None."""
+def place(kind: str, ref: str, area: str, *, by: str, connection_id: str = "", schema_name: str = "") -> Optional[str]:
+    """A person places a table (or a whole connection), a metric, or anything else Discover lists (``ARTIFACT_KINDS``)
+    in an area — ``area`` ``""`` takes it out. Returns the area it now stands in, or None."""
     from pramanyx.govern.tag_store import clear_tag, set_tag
-    from pramanyx.metastore.models import catalog_securable, table_securable, thing_securable
+    from pramanyx.metastore.models import artifact_securable, catalog_securable, table_securable, thing_securable
     kind = (kind or "").strip().lower()
     if not (by or "").strip():
         raise ValueError("a placement says who made it")
@@ -198,8 +294,12 @@ def place(kind: str, ref: str, area: str, *, by: str, connection_id: str, schema
     elif kind == "metric":
         # a metric is named on its connection: two connections' `gmv` are two metrics, placed apart
         securable = thing_securable("metric", f"{connection_id}/{ref}")
+    elif kind in ARTIFACT_KINDS:
+        if not (ref or "").strip():
+            raise ValueError(f"which {kind} is placed")
+        securable = artifact_securable(ARTIFACT_KINDS[kind], ref)
     else:
-        raise ValueError("a table, a connection or a metric is placed in an area")
+        raise ValueError(f"a table, a connection, a metric or one of {', '.join(ARTIFACT_KINDS)} is placed in an area")
     if not area:
         clear_tag(securable, KEY, cleared_by=by)
         return None

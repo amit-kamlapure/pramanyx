@@ -53,16 +53,17 @@ def custom_models(backend: str) -> list[str]:
 
 
 def _write_custom(backend: str, models: list[str]) -> list[str]:
-    from pramanyx.llm.provider import write_config
+    from pramanyx.llm.provider import config_lock, write_config
 
-    cfg = dict(_config())
-    customs = dict(cfg.get("custom_models") or {})
-    if models:
-        customs[backend] = models
-    else:
-        customs.pop(backend, None)
-    cfg["custom_models"] = customs
-    write_config(cfg)        # shares a file with encrypted keys — one writer owns it
+    with config_lock():      # a read-change-write of the shared file — see provider.config_lock
+        cfg = dict(_config())
+        customs = dict(cfg.get("custom_models") or {})
+        if models:
+            customs[backend] = models
+        else:
+            customs.pop(backend, None)
+        cfg["custom_models"] = customs
+        write_config(cfg)        # shares a file with encrypted keys — one writer owns it
     return models
 
 
@@ -278,6 +279,12 @@ def fetch_live_models(backend: str, *, timeout: float = 6.0) -> tuple[list[dict]
                     "not match the one it was encrypted with; nothing was sent to the provider")
     key = active_key(backend)
     try:
+        if backend == "chatgpt":
+            # The account's own list, asked with its sign-in: what this person's plan may use, in OpenAI's order.
+            from pramanyx.llm import chatgpt_plan
+            if not chatgpt_plan.is_signed_in():
+                return [], "nobody is signed in to a ChatGPT plan — Continue with ChatGPT first"
+            return chatgpt_plan.list_models(timeout=timeout), ""
         if backend == "ollama":
             return _ollama_models(base_url, timeout=timeout), ""
         if backend == "anthropic":
@@ -317,18 +324,19 @@ def _record_model_facts(entries: list[dict]) -> None:
     if not sizes and not tools:
         return
     try:
-        from pramanyx.llm.provider import read_config, write_config
-        cfg = dict(read_config())
-        ctx_known = dict(cfg.get("model_context") or {})
-        tools_known = dict(cfg.get("model_tools") or {})
-        if (all(ctx_known.get(k) == v for k, v in sizes.items())
-                and all(tools_known.get(k) == v for k, v in tools.items())):
-            return                      # nothing new — do not touch the keys file
-        ctx_known.update(sizes)
-        tools_known.update(tools)
-        cfg["model_context"] = ctx_known
-        cfg["model_tools"] = tools_known
-        write_config(cfg)
+        from pramanyx.llm.provider import config_lock, read_config, write_config
+        with config_lock():
+            cfg = dict(read_config())
+            ctx_known = dict(cfg.get("model_context") or {})
+            tools_known = dict(cfg.get("model_tools") or {})
+            if (all(ctx_known.get(k) == v for k, v in sizes.items())
+                    and all(tools_known.get(k) == v for k, v in tools.items())):
+                return                      # nothing new — do not touch the keys file
+            ctx_known.update(sizes)
+            tools_known.update(tools)
+            cfg["model_context"] = ctx_known
+            cfg["model_tools"] = tools_known
+            write_config(cfg)
     except Exception as exc:
         from pramanyx.kernel.errors import tolerate
         tolerate(exc, "model-fact capture is best-effort; defaults stay conservative",

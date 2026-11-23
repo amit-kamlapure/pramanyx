@@ -48,6 +48,8 @@ class Item:
     href: str = ""
     #: Kind-specific facts the page may say (a table's rows and schema, a metric's unit).
     detail: dict = field(default_factory=dict)
+    #: A person placed it in its Area, so it can be taken out; one read from its tables or its name cannot.
+    placed: bool = False
     #: The tables it reads, for its Area; not sent.
     tables: list = field(default_factory=list)
 
@@ -169,6 +171,7 @@ def settle(item: Item, scope: Scope, *, placed: Optional[tuple[str, str]] = None
     Returns (seen live, 2026-11-23). The word that placed it is said, so a weak placement can be seen for one."""
     if placed and placed[0]:
         item.area, item.area_how = placed[0], f"{who_of(placed[1]) or 'someone'} placed it here"
+        item.placed = True
         return item
     if item.tables and item.connection_id:
         from pramanyx.semantic.areas import area_of_tables
@@ -232,7 +235,8 @@ def tables(scope: Scope) -> Found:
             area, why = placed.get(t.name.lower(), ("", ""))
             found.items.append(Item(
                 kind="table", id=f"{conn}.{schema}.{t.name}" if schema else f"{conn}.{t.name}", name=t.name,
-                connection_id=conn, connection_name=name, area=area, area_how=why, certification=mark,
+                connection_id=conn, connection_name=name, area=area, area_how=why, placed=why.endswith(" placed it here"),
+                certification=mark,
                 href=_href("/", tab="catalog", conn=conn, schema=schema, table=t.name),
                 detail={"rows": t.rows, "schema": schema, "dated_by": t.date_column}))
     return found
@@ -252,7 +256,8 @@ def metrics(scope: Scope) -> Found:
             found.items.append(Item(
                 kind="metric", id=f"{conn}/{m['name']}", name=str(m.get("label") or m["name"]),
                 line=str(m.get("description") or ""), connection_id=conn, connection_name=name, area=area,
-                area_how=why, owner=str(m.get("owner") or ""), state=str(m.get("status") or ""),
+                area_how=why, placed=why.endswith(" placed it here"), owner=str(m.get("owner") or ""),
+                state=str(m.get("status") or ""),
                 updated_at=str(m.get("approved_at") or m.get("proposed_at") or ""),
                 href=_href("/", tab="semantic", conn=conn, metric=str(m["name"]), schema=str(m.get("home_schema") or "")),
                 detail={"unit": m.get("unit") or "", "measurable": m.get("measurable")}))
@@ -420,6 +425,7 @@ def trusted_queries(scope: Scope) -> Found:
     from pramanyx.govern.retrieval_trim import tables_of_sql, trim_by_tables
     from pramanyx.semantic.trusted_queries import list_trusted
     found = Found()
+    placed = _placed_tags("trusted_query")
     for conn, name in scope.connections.items():
         rows = list_trusted(conn)
         if not rows:
@@ -433,7 +439,7 @@ def trusted_queries(scope: Scope) -> Found:
                 connection_name=name, state=str(getattr(q, "status", "") or "approved"),
                 updated_at=str(getattr(q, "verified_at", "") or getattr(q, "updated_at", "") or ""),
                 href=_href("/", tab="intelligence", layer="memory", conn=conn, trusted=qid),
-                tables=sorted(tables_of_sql(str(getattr(q, "sql", "") or "")))), scope))
+                tables=sorted(tables_of_sql(str(getattr(q, "sql", "") or "")))), scope, placed=placed.get(f"{conn}/{qid}")))
     return found
 
 

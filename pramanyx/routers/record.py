@@ -45,11 +45,11 @@ def _visible(conn_id: str) -> bool:
     return _gate()(conn_id)
 
 
-def _claim_view(c: C.Claim) -> dict:
+def _claim_view(c: C.Claim, tallies: Optional[dict] = None) -> dict:
     """The claim with its confidence COUNTED on read (P1-4): a hit rate with its n, the count
     alone below the threshold, or nothing — with why — when no class counts this kind yet."""
     from pramanyx.record.confidence import why_uncounted, with_confidence
-    seen = with_confidence(c)
+    seen = with_confidence(c, tallies=tallies)
     view = seen.model_dump()
     if seen.confidence is None:
         view["confidence_note"] = why_uncounted(c)
@@ -99,7 +99,8 @@ def list_record_claims(kind: Optional[str] = None, about_kind: Optional[str] = N
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     ok = _gate()
-    return [_claim_view(c) for c in rows if ok(c.about.key if c.about.kind == "connection" else "")]
+    tallies: dict = {}   # each class counted once for the list, not once per claim
+    return [_claim_view(c, tallies) for c in rows if ok(c.about.key if c.about.kind == "connection" else "")]
 
 
 @router.get("/record/claims/{claim_id}")
@@ -126,7 +127,8 @@ def get_record_claim_versions(claim_id: str) -> list[dict]:
     c = C.get(claim_id)
     if c is None or not _visible(c.about.key if c.about.kind == "connection" else ""):
         raise HTTPException(status_code=404, detail="No such claim")
-    return [_claim_view(v) for v in C.versions(c.key)]
+    tallies: dict = {}
+    return [_claim_view(v, tallies) for v in C.versions(c.key)]
 
 
 class SaidRequest(BaseModel):

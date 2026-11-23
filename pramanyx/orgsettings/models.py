@@ -36,6 +36,13 @@ class Priority(BaseModel):
     note: str = Field(default="", description="Why it matters, one line")
 
 
+class FeaturedThing(BaseModel):
+    """One thing an Area's curators put first on its page (Discover D4, 2026-11-23): its kind as Discover names it and
+    its id there."""
+    kind: str
+    ref: str
+
+
 class AreaDeclaration(BaseModel):
     """An area of the business as the organisation declares it (the ontology study, Phase 1, 2026-11-17): a new one, or
     an industry package's own (named by its id) given owners or a place under another. Written by a curator, never
@@ -46,6 +53,8 @@ class AreaDeclaration(BaseModel):
     parent: str = Field(default="", description="The area it sits under, by id; empty at the top (at most five levels)")
     business_owners: list[str] = Field(default_factory=list, description="Who answers for what it means")
     technical_owners: list[str] = Field(default_factory=list, description="Who answers for its data")
+    description: str = Field(default="", description="What the area covers, in its curators' words; its question stays the line under its name")
+    featured: list[FeaturedThing] = Field(default_factory=list, description="What its curators put first on its page, in their order")
 
 
 class OrgSettings(BaseModel):

@@ -1,5 +1,5 @@
-"""Discover's doors (`pramanyx/discover/`; the plan's D1 and D3): the page, a kind or an Area's things in full, one
-Area, and search.
+"""Discover's doors (`pramanyx/discover/`; the plan's D1, D3 and D4): the page, a kind or an Area's things in full, one
+Area, search — and an Area's curation: its words, owners and what it puts first, and what stands in it.
 
 All three are reads over what the platform keeps, scoped as the catalog is: the workspace's connections the caller's
 organisation may see, and one of them when ``connection_id`` names it (checked by the connection guard, as every door
@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel
 
 from pramanyx.security.authz import connection_owner_guard
 
@@ -84,3 +85,108 @@ def get_discover_area(request: Request, area_id: str, workspace_id: Optional[str
     if page is None:
         raise HTTPException(status_code=404, detail="No such Area on the connections in view")
     return page
+
+
+# ── D4: an Area's curation (the plan's §4.4) ────────────────────────────────────────────────────────────────────────
+
+
+def _a_persons_own(request: Request, what: str) -> None:
+    from pramanyx.rbac.agent_gate import is_agent_request
+    if is_agent_request(request):
+        raise HTTPException(status_code=403, detail=f"{what} is a person's own call; an agent cannot make it")
+
+
+def _every_package_area() -> set[str]:
+    """Every industry package's Area id on every connection — what an organisation's declaration may sit under."""
+    from pramanyx.db.registry import list_connections
+    from pramanyx.semantic.metric_map import map_for
+    known: set[str] = set()
+    for c in list_connections():
+        try:
+            known |= {a.id for a in map_for(c["id"]).areas if not a.generic}
+        except Exception as exc:  # noqa: BLE001 — a connection's map unread adds none
+            from pramanyx.kernel.errors import tolerate
+            tolerate(exc, "discover: a connection's areas could not be read for a curation", counter="discover.known")
+    return known
+
+
+class AreaEditIn(BaseModel):
+    """What an Area's page changes; a field left out is left as it is."""
+    name: Optional[str] = None
+    question: Optional[str] = None
+    description: Optional[str] = None
+    business_owners: Optional[list[str]] = None
+    technical_owners: Optional[list[str]] = None
+    featured: Optional[list[dict]] = None
+
+
+@router.put("/discover/areas/{area_id}")
+def put_discover_area(request: Request, area_id: str, body: AreaEditIn, workspace_id: Optional[str] = None) -> dict:
+    """An Area's curators — its business and technical owners, or whoever administers the organisation — change its
+    words, its owners and what it puts first. Published on save, and who changed what is kept in the ledger."""
+    from pramanyx.discover.items import OTHER
+    from pramanyx.discover.service import areas_in_view
+    from pramanyx.semantic.areas import curates, edit_area
+    _a_persons_own(request, "curating an Area")
+    scope = scope_of(request, workspace_id, None)
+    area = areas_in_view(scope).get(area_id)
+    if area is None or area_id == OTHER:
+        raise HTTPException(status_code=404, detail="No such Area on the connections in view")
+    if not curates(area, scope.person, admin=scope.curator):
+        raise HTTPException(status_code=403, detail="only this Area's owners, or whoever administers the organisation, change it")
+    changes = body.model_dump(exclude_unset=True)
+    try:
+        return {"area": edit_area(area_id, changes, by=scope.person, known=_every_package_area())}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+class PlaceIn(BaseModel):
+    kind: str
+    id: str          # the thing's id as Discover lists it
+    area: str = ""   # an Area's id; "" (or Everything else) takes it out
+
+
+@router.put("/discover/placement")
+def put_discover_placement(request: Request, body: PlaceIn, workspace_id: Optional[str] = None) -> dict:
+    """Place one thing the person can open in an Area, or take it out. Its own owner may, the Area's owners may (for a
+    thing taken out, the owners of the Area it stood in), and whoever administers the organisation; an agent never. A
+    Definition's Area is chosen on its own page."""
+    from pramanyx.discover.items import OTHER, who_of
+    from pramanyx.discover.service import areas_in_view, gather
+    from pramanyx.semantic.areas import ARTIFACT_KINDS, areas_for, curates, place
+    _a_persons_own(request, "placing a thing in an Area")
+    kind = (body.kind or "").strip()
+    if kind == "definition":
+        raise HTTPException(status_code=422, detail="a Definition's Area is chosen on its own page")
+    if kind not in ("table", "metric", *ARTIFACT_KINDS):
+        raise HTTPException(status_code=422, detail=f"a thing placed is a table, a metric or one of {', '.join(ARTIFACT_KINDS)}")
+    scope = scope_of(request, workspace_id, None)
+    item = next((i for i in gather(scope, (kind,))[kind].items if i.id == body.id), None)
+    if item is None:
+        raise HTTPException(status_code=404, detail="No such thing among those you can open here")
+    areas = areas_in_view(scope)
+    target = "" if body.area == OTHER else (body.area or "").strip()
+    if target and target not in areas:
+        raise HTTPException(status_code=422, detail=f"{target!r} is no Area on the connections in view")
+    me = who_of(scope.person).lower()
+    owns = bool(me) and who_of(item.owner).lower() == me
+    may = scope.curator or owns or (
+        curates(areas[target], scope.person, admin=False) if target
+        else item.area in areas and curates(areas[item.area], scope.person, admin=False))
+    if not may:
+        raise HTTPException(status_code=403, detail="its own owner, the Area's owners, or whoever administers the organisation place it")
+    if not target and not item.placed:
+        raise HTTPException(status_code=422, detail="nobody placed it here: it stands here by its tables or its name; place it in another Area instead")
+    try:
+        if kind in ("table", "metric"):
+            if target and target not in {a["id"] for a in areas_for(item.connection_id)}:
+                raise HTTPException(status_code=422, detail=f"{target!r} is no Area of {item.connection_name or item.connection_id}")
+            ref = item.name if kind == "table" else item.id.split("/", 1)[-1]
+            now = place(kind, ref, target, by=scope.person, connection_id=item.connection_id,
+                        schema_name=str(item.detail.get("schema") or "") if kind == "table" else "")
+        else:
+            now = place(kind, item.id, target, by=scope.person)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return {"kind": kind, "id": item.id, "area": now or ""}

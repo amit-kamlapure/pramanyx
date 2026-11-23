@@ -63,10 +63,14 @@ ROLES: tuple[Role, ...] = ("coder", "narrator", "fast")
 #: :func:`backends` — the one list every reader asking "is this a provider here?" consults.
 #: This tuple alone answers only "which ones ship" (and the CLI keeps a literal mirror of it).
 BACKENDS: tuple[str, ...] = ("ollama", "lmstudio", "groq", "together", "anthropic",
-                             "gemini", "openrouter", "openai")
+                             "gemini", "openrouter", "openai", "chatgpt")
 # Built-in backends that require an API key (the others are local). An added provider takes a
 # key too, and may run without one — see :func:`keyed_backends`.
 NEEDS_KEY: tuple[str, ...] = ("groq", "together", "anthropic", "gemini", "openrouter", "openai")
+# Built-in backends whose credential is a person's SIGN-IN, not a pasted key: the ChatGPT plan
+# (pramanyx/llm/chatgpt_plan.py). Not keyed — a key for one is never stored — and never in the
+# default fallback order: a person's plan is spent only where they chose it.
+SIGN_IN_BACKENDS: tuple[str, ...] = ("chatgpt",)
 # Backends whose base URL is user-overridable (the hosted ones are fixed).
 LOCAL_BACKENDS: tuple[str, ...] = ("ollama", "lmstudio")
 
@@ -92,6 +96,9 @@ _DEFAULT_BASE_URLS = {
     "openrouter": "https://openrouter.ai/api/v1",
     # OpenAI's own API. Its model is the person's pick from its catalogue (`GET /models`, keyed).
     "openai":   "https://api.openai.com/v1",
+    # The same API, paid by the person's ChatGPT plan through its sign-in; spoken over the
+    # Responses wire by `chatgpt_plan.PlanTransport`, never Chat Completions.
+    "chatgpt":  "https://api.openai.com/v1",
 }
 
 class NoModelConfigured(RuntimeError):
@@ -242,7 +249,9 @@ def _reasoning_extra_body(backend: str) -> dict:
         tolerate(exc, "profile tier unreadable — legacy reasoning effort",
                  counter="llm.profile_tier_unreadable")
     effort = os.getenv("PRAMANYX_REASONING_EFFORT", default_effort).strip().lower()
-    if backend != "openrouter" or effort in ("", "off", "none"):
+    # The ChatGPT plan takes the same `reasoning` object on its Responses wire (measured 2026-11-23);
+    # its transport carries it across.
+    if backend not in ("openrouter", "chatgpt") or effort in ("", "off", "none"):
         return {}
     if effort not in ("low", "medium", "high"):
         effort = default_effort
@@ -667,6 +676,30 @@ def unknown_backend(backend: str) -> ValueError:
 def read_config() -> dict:
     """The on-disk config as written (secrets still encrypted)."""
     return _read_config()
+
+
+#: Held across every read-change-write of the config file. Each writer reads the whole file,
+#: changes its part and writes the whole file back, so two at once drop one's change. That was
+#: survivable while every write was a person clicking Save; the ChatGPT plan's refresh token
+#: ROTATES hourly in the same file, and a lost rotation ends the person's session at the next
+#: refresh (`refresh_token_reused`). Re-entrant: a writer may call another under it.
+_CONFIG_LOCK = threading.RLock()
+
+
+def config_lock() -> threading.RLock:
+    """The lock every writer of the inference config holds from its read to its write."""
+    return _CONFIG_LOCK
+
+
+def _config_writer(fn):
+    """Run a read-change-write of the config under :func:`config_lock`."""
+    import functools
+
+    @functools.wraps(fn)
+    def held(*args, **kwargs):
+        with _CONFIG_LOCK:
+            return fn(*args, **kwargs)
+    return held
 
 
 def write_config(cfg: dict) -> None:
@@ -1134,6 +1167,22 @@ def _build_gemini_client(base_url: str, api_key: str) -> instructor.Instructor:
     return instructor.from_openai(raw, mode=mode)
 
 
+def _build_chatgpt_client() -> instructor.Instructor:
+    """The ChatGPT plan: the ordinary OpenAI client over a transport that speaks the plan's Responses wire.
+
+    No key: the transport puts a fresh access token from the person's sign-in on every request
+    (`chatgpt_plan.access_token`), so a client the cache keeps past the hour never sends a lapsed one,
+    and nobody signed in is refused by name at the first call — building is not using. JSON_SCHEMA mode:
+    the plan honours `json_schema` output (measured), so the schema is the provider's to keep."""
+    import httpx
+
+    from pramanyx.llm import chatgpt_plan
+
+    raw = OpenAI(base_url=chatgpt_plan.API_BASE, api_key="chatgpt-plan-sign-in", max_retries=_SDK_RETRIES,
+                 http_client=httpx.Client(transport=chatgpt_plan.PlanTransport()))
+    return instructor.from_openai(raw, mode=instructor.Mode.JSON_SCHEMA)
+
+
 def _build_anthropic_client(api_key: str) -> instructor.Instructor:
     if not api_key:
         raise RuntimeError("missing Anthropic API key — set it in Settings → Inference")
@@ -1514,6 +1563,9 @@ _QUOTA_EXHAUSTED_MSGS = (
     # probed again on EVERY call — a wasted round trip ahead of each fallback — and never cooled down. OpenRouter's
     # 402 says "Insufficient credits".
     "credit balance is too low", "insufficient credits",
+    # A ChatGPT plan's allowance, spent (its five-hour or weekly window): the plan names it by this code, and
+    # OpenAI asks that no reset time be guessed — so it cools down like a spent balance, never retried in place.
+    "subscription_sharing_usage_limit_exceeded",
 )
 
 # ── Wave R2: the error body names the failure; read it (J7) ───────────────────
@@ -2039,6 +2091,11 @@ def _record_llm_call(*, backend: str, model: str, role: str,
     Strict no-op when the flag is off; never raises (the sink swallows).
     """
     from pramanyx.obs import session_log
+    if backend in SIGN_IN_BACKENDS:
+        # The plan's wire takes no temperature (`chatgpt_plan._NOT_SENT`): the model sampled at its own default,
+        # so the record says that rather than a number the model never saw.
+        temperature = None
+        extra = {**(extra or {}), "sampling": "provider default"}
     if failure:
         error_class = failure.get("error_class") or error_class
         extra = {**(extra or {}), "refused": bool(failure.get("refused")),
@@ -2500,6 +2557,8 @@ class LLMProvider:
             self._client = _build_gemini_client(url, key)
         elif backend == "anthropic":
             self._client = _build_anthropic_client(key)
+        elif backend == "chatgpt":
+            self._client = _build_chatgpt_client()
         elif backend == FAUX_BACKEND:
             from pramanyx.llm.faux import build_client
             self._client = build_client(role)
@@ -3532,6 +3591,10 @@ def current_config() -> dict:
         "backends": list(backends()),
         # Where a missing key is a fault. An added provider takes a key but may run without one.
         "needs_key": list(NEEDS_KEY),
+        # Where the credential is a person's sign-in instead of a key, and the ChatGPT plan's state — signed in or
+        # not, as whom, whether it may pay for calls, why a session ended. Never a token.
+        "sign_in_backends": list(SIGN_IN_BACKENDS),
+        "chatgpt_plan": _chatgpt_status(),
         "local_backends": list(LOCAL_BACKENDS),
         # The providers a person added, as Settings shows and edits them — what each IS and
         # whether its key is set, NEVER the key (this route is not gated; the key is write-only).
@@ -3540,6 +3603,17 @@ def current_config() -> dict:
         # payload shape is unchanged; what it no longer does is suggest a model.
         "default_models": {b: {} for b in backends()},
     }
+
+
+def _chatgpt_status() -> dict:
+    from pramanyx.llm import chatgpt_plan
+    try:
+        return chatgpt_plan.status()
+    except Exception as exc:          # an unreadable record must not take the settings page down
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "ChatGPT plan status unreadable; said as unknown", counter="llm.chatgpt_status")
+        return {"signed_in": False, "account": None, "plan_usage": False, "ended": "status could not be read",
+                "signing_in": False, "usage_url": chatgpt_plan.USAGE_URL}
 
 
 def describe_added_provider(pid: str) -> dict:
@@ -3577,6 +3651,10 @@ def door_binding(role: Role) -> tuple[str, str, str, str]:
     backend, model, _ = resolve_binding(role)
     if not (model or "").strip():
         raise NoModelConfigured(backend, role)
+    if backend in SIGN_IN_BACKENDS:
+        # The ChatGPT plan answers the Responses API only (its `/chat/completions` is a 401), and its credential is a
+        # person's sign-in, not a key another runtime should be handed.
+        raise NotOnTheDoorsWire(backend)
     base_url, key = endpoint_for(backend)
     if backend == "ollama":
         base_url = _ollama_openai_base(base_url)
@@ -3619,6 +3697,7 @@ def ensure_free_or_allowed(backend: str, model: str, *, allow_paid: bool = False
         )
 
 
+@_config_writer
 def set_config(patch: dict) -> dict:
     """Merge `patch` into the on-disk config and reload. Returns current_config().
 
@@ -3797,6 +3876,7 @@ def _forget_cached(pid: str) -> None:
             _ping_cache.pop(k, None)
 
 
+@_config_writer
 def add_provider(name: str, base_url: str, api_key: str = "", models: Any = None) -> dict:
     """Add a named OpenAI-compatible provider. Returns :func:`current_config`.
 
@@ -3831,6 +3911,7 @@ def add_provider(name: str, base_url: str, api_key: str = "", models: Any = None
     return current_config()
 
 
+@_config_writer
 def update_provider(pid: str, *, base_url: Any = None, api_key: Any = None, models: Any = None) -> dict:
     """Edit an added provider. ``None`` leaves a field as it is; ``api_key=""`` removes the stored key (the
     endpoint takes none) and a masked key is left unchanged; ``models`` REPLACES its listed ids. Its name is
@@ -3866,6 +3947,7 @@ def update_provider(pid: str, *, base_url: Any = None, api_key: Any = None, mode
     return current_config()
 
 
+@_config_writer
 def remove_provider(pid: str) -> dict:
     """Remove an added provider and everything stored for it — its key, its listed models, the models bound
     for it, its JSON-mode pins, its measured cache verdicts. A setting that NAMED it is cleared, not left to

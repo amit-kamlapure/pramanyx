@@ -98,7 +98,8 @@ def all_items(found: dict[str, Found]) -> list[Item]:
 
 def _area_view(a: dict, held: list[Item]) -> dict:
     counts = Counter(i.kind for i in held)
-    return {"id": a["id"], "name": a["name"], "question": a.get("question", ""), "parent": a.get("parent", ""),
+    return {"id": a["id"], "name": a["name"], "question": a.get("question", ""), "description": a.get("description", ""),
+            "parent": a.get("parent", ""),
             "business_owners": a.get("business_owners", []), "technical_owners": a.get("technical_owners", []),
             "source": a.get("source", ""), "connections": a.get("connections", []),
             "counts": {k: counts[k] for k in KINDS if counts[k]}, "total": len(held),
@@ -198,7 +199,18 @@ def area_page(scope: Scope, area_id: str) -> Optional[dict]:
     for c_id, c in areas.items():
         if c.get("parent") == area_id:
             children.append(_area_view(c, [i for i in items if i.area == c_id]))
+    # what its curators put first, in their order — one the person may not open, or one gone, is counted and said
+    by_ref = {(i.kind, i.id): i for i in items}
+    wanted = a.get("featured") or []
+    featured = [by_ref[(f["kind"], f["ref"])] for f in wanted if (f["kind"], f["ref"]) in by_ref]
+    said = [s for k in KINDS for s in found[k].said]
+    if len(featured) < len(wanted):
+        gone = len(wanted) - len(featured)
+        said.append(f"{gone} of the things put first here {'is' if gone == 1 else 'are'} not yours to open, or no longer there")
+    from pramanyx.semantic.areas import curates
     return {"area": _area_view(a, held), "children": children,
+            "featured": [i.view() for i in featured], "featured_refs": wanted,
             "kinds": [_kind_view(k, by_kind[k], 0, shown=len(by_kind[k])) for k in KINDS if by_kind[k]],
             "empty_kinds": [k for k in KINDS if not by_kind[k]],
-            "said": [s for k in KINDS for s in found[k].said]}
+            "can_curate": area_id != OTHER and curates(a, scope.person, admin=scope.curator),
+            "you": who_of(scope.person), "said": said}

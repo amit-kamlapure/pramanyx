@@ -5,10 +5,11 @@
  * suggested edit for anyone else (2026-11-17), the owner deciding on one. The API is stubbed.
  */
 import { Suspense } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import DefinitionRoute from "@/app/definitions/[term]/page";
 import { DefinitionView } from "@/components/definitions/DefinitionView";
+import { editorOf, measureNothing } from "@/components/ui/richTextTesting";
 import { act, change, fireEvent, render, screen, waitFor, within } from "@/lib/testing";
 
 const base = { statement: { text: "## Definition\nPaid in the last 30 days." }, tier: "approved", state: "published", author: "user:ana",
@@ -51,6 +52,13 @@ const show = async (area = "") => {
 };
 
 afterEach(() => vi.unstubAllGlobals());
+beforeAll(measureNothing);
+
+/** Write the body as typing would land in it (it is written as it reads — `RichBody`). */
+async function writeBody(markdown: string) {
+  const editor = await editorOf();
+  await act(async () => { editor.commands.setContent(markdown, { contentType: "markdown" }); });
+}
 
 describe("the Definition page, as a Page", () => {
   it("shows a published definition: its Area, owner, synonyms, description, body, related assets and sources", async () => {
@@ -80,10 +88,11 @@ describe("the Definition page, as a Page", () => {
     expect(screen.queryByRole("button", { name: "Accept" })).toBeNull();                 // not Cai's to decide
     fireEvent.click(screen.getByRole("button", { name: "Suggest an edit" }));
     expect(screen.queryByRole("button", { name: "Publish" })).toBeNull();                // not Cai's to publish
-    fireEvent.change(screen.getByLabelText("What it means"), { target: { value: "Clicked in 60 days." } });
+    await writeBody("Clicked in 60 days.");
     fireEvent.click(screen.getByRole("button", { name: "Suggest this edit" }));
     await waitFor(() => expect(posted[0]?.path).toBe("/record/definitions"));
-    expect(posted[0].body).toMatchObject({ connection_id: "shop", term: "Active customer", area: "marketing", text: "Clicked in 60 days." });
+    expect(posted[0].body).toMatchObject({ connection_id: "shop", term: "Active customer", area: "marketing" });
+    expect(String(posted[0].body.text).trim()).toBe("Clicked in 60 days.");
     expect(await screen.findByRole("status")).toHaveTextContent("as a suggested edit");
   });
 
@@ -116,13 +125,12 @@ describe("a new Definition", () => {
     const posted = serve("user:ana", []);
     const onNamed = vi.fn();
     await act(async () => { render(<DefinitionView term="" connection="shop" inApp onNamed={onNamed} />); });
-    const body = screen.getByLabelText("What it means") as HTMLTextAreaElement;
+    const body = await screen.findByRole("textbox", { name: "What it means" });
     expect(screen.queryByText("Reading…")).toBeNull();                                      // nothing to read yet
-    expect(body.value).toContain("## Definition");
-    expect(body.value).toContain("## Business use");
+    expect([...body.querySelectorAll("h2")].map((h) => h.textContent)).toEqual(["Definition", "Business use"]);
     expect(screen.getByRole("button", { name: "Publish" })).toBeDisabled();                 // no name, the template alone
     fireEvent.change(screen.getByLabelText("Its name"), { target: { value: "Repeat buyer" } });
-    fireEvent.change(body, { target: { value: "## Definition\nOrdered twice or more.\n\n## Business use\nLoyalty." } });
+    await writeBody("## Definition\n\nOrdered twice or more.\n\n## Business use\n\nLoyalty.");
     change(screen.getByLabelText("Area"), { target: { value: "marketing" } });
     // a related asset, found as Discover finds it
     fireEvent.click(screen.getByRole("button", { name: "Add related asset" }));
@@ -134,8 +142,9 @@ describe("a new Definition", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
     fireEvent.click(screen.getByRole("button", { name: "Publish" }));
     await waitFor(() => expect(posted.map(p => p.path)).toEqual(["/record/definitions", "/record/definitions/approve"]));
+    expect(String(posted[0].body.text).replace(/\n+/g, "\n").trim()).toBe("## Definition\nOrdered twice or more.\n## Business use\nLoyalty.");
     expect(posted[0].body).toMatchObject({
-      term: "Repeat buyer", area: "marketing", text: "## Definition\nOrdered twice or more.\n\n## Business use\nLoyalty.",
+      term: "Repeat buyer", area: "marketing",
       links: [{ kind: "canvas", ref: "d52cdcd4", label: "The Look Analytics", href: "/?tab=canvas-workspace&conn=shop&canvas=d52cdcd4" }],
       sources: [{ kind: "url", ref: "https://wiki.example/repeat", label: "" }] });
     expect(onNamed).toHaveBeenCalledWith("Repeat buyer", "marketing");

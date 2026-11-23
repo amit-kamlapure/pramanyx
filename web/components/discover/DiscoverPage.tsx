@@ -12,9 +12,11 @@
  * counted where it would have stood, and a kind that could not be read is said. No title bar: the rail and the tab say
  * where this is (the user, 2026-09-26).
  */
-import { useEffect, useMemo, useState, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 
 import { Card, Chip, Empty, MUTED, Page } from "@/components/clarity/kit";
+import { DefinitionBody } from "@/components/definitions/DefinitionBody";
+import { AddToArea, AreaEditor, RowMenu } from "@/components/discover/AreaCuration";
 import { BackHeader } from "@/components/record/kit";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
@@ -301,13 +303,19 @@ function AreaView({ areaId, conn, workspaceId, onBack, onOpenArea, onName }: {
   const [page, setPage] = useState<DiscoverAreaPage | null | undefined>(undefined);
   const [err, setErr] = useState("");
   const [tick, setTick] = useState(0);
+  // a curator's change re-reads the page in place; another Area, connection or workspace starts it afresh
+  const [mode, setMode] = useState<"" | "edit" | "add">("");
+  const shown = useRef("");
   useEffect(() => {
     let alive = true;
-    setPage(undefined); setErr("");
+    const key = `${areaId}|${conn}|${workspaceId}`;
+    if (shown.current !== key) { shown.current = key; setPage(undefined); setMode(""); }
+    setErr("");
     readDiscoverArea(areaId, conn, workspaceId, tick > 0).then(p => { if (alive) setPage(p); })
       .catch(e => { if (alive) setErr(String((e as Error)?.message ?? e)); });
     return () => { alive = false; };
   }, [areaId, conn, workspaceId, tick]);
+  const reload = () => setTick(t => t + 1);
   const name = page?.area.name ?? null;
   useEffect(() => { onName(name); return () => onName(null); }, [name, onName]);
 
@@ -323,6 +331,7 @@ function AreaView({ areaId, conn, workspaceId, onBack, onOpenArea, onName }: {
   const a = page.area;
   const many = conn === "" && a.connections.length > 1;
   const other = a.id === OTHER;
+  const menu = (i: DiscoverItem) => <RowMenu item={i} page={page} workspaceId={workspaceId} onChanged={reload} />;
   return (
     <Page testId="discover-area">
       <BackHeader from="Discover" onBack={onBack} title={a.name} chips={<>
@@ -330,14 +339,32 @@ function AreaView({ areaId, conn, workspaceId, onBack, onOpenArea, onName }: {
         {a.source === "organisation" && <Chip>Declared by your organisation</Chip>}
         {a.total > 0 && <Chip>{formatCount(a.total)} {a.total === 1 ? "thing" : "things"}</Chip>}
         {a.deprecated > 0 && <Chip tone="amber">{formatCount(a.deprecated)} deprecated</Chip>}
-      </>} />
+      </>} actions={page.can_curate ? <>
+        <Button size="xs" variant="outline" onClick={() => setMode(m => (m === "add" ? "" : "add"))} aria-pressed={mode === "add"}>
+          <Icon name="plus" size={12} />Add to this Area
+        </Button>
+        <Button size="xs" variant="outline" onClick={() => setMode(m => (m === "edit" ? "" : "edit"))} aria-pressed={mode === "edit"}>
+          <Icon name="edit" size={12} />Edit
+        </Button>
+      </> : undefined} />
       <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 12 }}>
         {a.question && <p className="aug-fs-ui" style={{ margin: 0, color: "var(--t2)" }}>{a.question}</p>}
+        {a.description
+          ? <div data-testid="discover-area-description" style={{ maxWidth: "80ch" }}><DefinitionBody text={a.description} /></div>
+          : page.can_curate && <p className="aug-fs-sm" style={{ ...MUTED, margin: 0 }}>No description yet — Edit to write what it covers.</p>}
         <p className="aug-fs-sm" style={{ margin: 0, ...(other ? MUTED : a.business_owners.length || a.technical_owners.length ? MUTED : { color: "var(--amb4)" }) }}>
           {other ? "What no Area holds: nobody placed it, its tables are in none, and its name names none." : ownersLine(a)}
         </p>
       </div>
       <Said lines={page.said} />
+      {mode === "edit" && <AreaEditor page={page} workspaceId={workspaceId} onCancel={() => setMode("")}
+        onSaved={() => { setMode(""); reload(); }} />}
+      {mode === "add" && <AddToArea page={page} workspaceId={workspaceId} onAdded={reload} onClose={() => setMode("")} />}
+      {page.featured.length > 0 && (
+        <Card label="Featured" testId="discover-area-featured" right={<span className="aug-fs-xs">chosen by its owners, in their order</span>}>
+          {page.featured.map(i => <ItemRow key={`${i.kind}:${i.id}`} item={i} many={many} how actions={menu(i)} />)}
+        </Card>
+      )}
       {page.children.length > 0 && (
         <Card label="Sub-areas" testId="discover-children">
           <div className="aug-discover-areas">{page.children.map(c => <AreaCard key={c.id} area={c} onOpen={onOpenArea} />)}</div>
@@ -347,7 +374,7 @@ function AreaView({ areaId, conn, workspaceId, onBack, onOpenArea, onName }: {
         <span className="aug-fs-xs">each says how it came to be here</span>}>
         {page.kinds.length
           ? <div className="aug-discover-kinds">
-              {withUniqueKeys(page.kinds, k => k.kind).map(([key, k]) => <AreaKindTile key={key} view={k} many={many} />)}
+              {withUniqueKeys(page.kinds, k => k.kind).map(([key, k]) => <AreaKindTile key={key} view={k} many={many} menu={menu} />)}
             </div>
           : <Empty>Nothing on the connections in view stands in this Area yet.</Empty>}
         {page.kinds.length > 0 && page.empty_kinds.length > 0 && (
@@ -360,7 +387,7 @@ function AreaView({ areaId, conn, workspaceId, onBack, onOpenArea, onName }: {
   );
 }
 
-function AreaKindTile({ view, many }: { view: DiscoverKindView; many: boolean }) {
+function AreaKindTile({ view, many, menu }: { view: DiscoverKindView; many: boolean; menu?: (i: DiscoverItem) => ReactNode }) {
   const [all, setAll] = useState(false);
   const shown = all ? view.items : view.items.slice(0, AREA_ROWS);
   return (
@@ -373,7 +400,7 @@ function AreaKindTile({ view, many }: { view: DiscoverKindView; many: boolean })
           </span>
         )}
       </div>
-      {shown.map(i => <ItemRow key={`${i.kind}:${i.id}`} item={i} many={many} how />)}
+      {shown.map(i => <ItemRow key={`${i.kind}:${i.id}`} item={i} many={many} how actions={menu?.(i)} />)}
     </section>
   );
 }
@@ -462,7 +489,11 @@ function KindTile({ view, areaNames, many, more, add }: {
 
 /** One thing: its kind, its name and what it is, its mark, and its Area (or, on the Area's own page, how it came to
  *  stand there). The row is a link to its page; "Ask about it" sits beside the link, never inside it. */
-function ItemRow({ item, areaName, many, how = false }: { item: DiscoverItem; areaName?: string; many: boolean; how?: boolean }) {
+function ItemRow({ item, areaName, many, how = false, actions }: {
+  item: DiscoverItem; areaName?: string; many: boolean; how?: boolean;
+  /** What may be done to it here — an Area's page gives its curators and the thing's owner a menu (D4). */
+  actions?: ReactNode;
+}) {
   const mark = markOf(item);
   const subject = askSubjectOf(item);
   const also = item.also_on?.length ? `also on ${item.also_on.join(", ")}` : "";
@@ -489,6 +520,7 @@ function ItemRow({ item, areaName, many, how = false }: { item: DiscoverItem; ar
           <Icon name="chat" size={14} />
         </Button>
       )}
+      {actions}
     </div>
   );
 }

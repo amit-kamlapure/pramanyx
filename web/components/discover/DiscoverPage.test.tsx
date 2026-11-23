@@ -79,8 +79,8 @@ const HOME: DiscoverHome = {
 function renderPage(openId: string | null = null) {
   const onOpenArea = vi.fn();
   const onName = vi.fn();
-  render(<DiscoverPage openId={openId} onOpenArea={onOpenArea} onName={onName} connections={[{ id: "8233e4fd", name: "theLook" }]} />);
-  return { onOpenArea, onName };
+  const { unmount } = render(<DiscoverPage openId={openId} onOpenArea={onOpenArea} onName={onName} connections={[{ id: "8233e4fd", name: "theLook" }]} />);
+  return { onOpenArea, onName, unmount };
 }
 
 beforeEach(() => {
@@ -201,7 +201,7 @@ describe("an Area's page", () => {
   const PAGE: DiscoverAreaPage = {
     area: area("orders_sales", "Orders & sales", { table: 1 }), children: [],
     kinds: [{ kind: "table", title: "Tables", count: 1, withheld: 0, states: {}, items: [ORDERS] }],
-    empty_kinds: ["definition", "agent"], said: [],
+    empty_kinds: ["definition", "agent"], said: [], featured: [], featured_refs: [], can_curate: false, you: "ana",
   };
 
   it("names the tab, says its question and that nobody owns it, and how each thing came to stand in it", async () => {
@@ -214,6 +214,25 @@ describe("an Area's page", () => {
     expect(within(holds).getByTestId("discover-row").textContent).toContain("its name says order");
     expect(holds.textContent).toContain("Nothing here yet: Definitions, Agents.");
     expect(readDiscoverArea).toHaveBeenCalledWith("orders_sales", "", "", false);
+  });
+
+  it("shows everyone its description and what it features; only its curators get Edit and Add to this Area (D4)", async () => {
+    const curated = { ...PAGE, area: { ...PAGE.area, description: "Every order, from cart to cash." }, featured: [ORDERS],
+      featured_refs: [{ kind: "table" as const, ref: ORDERS.id }] };
+    readDiscoverArea.mockResolvedValue(curated);
+    const { unmount } = renderPage("orders_sales");
+    expect(await screen.findByTestId("discover-area-description")).toHaveTextContent("Every order, from cart to cash.");
+    expect(within(screen.getByTestId("discover-area-featured")).getByTestId("discover-row").textContent).toContain(ORDERS.name);
+    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add to this Area" })).toBeNull();
+    unmount();
+    readDiscoverArea.mockResolvedValue({ ...curated, can_curate: true });
+    renderPage("orders_sales");
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    expect(screen.getByTestId("discover-area-editor")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Add to this Area" }));
+    expect(screen.queryByTestId("discover-area-editor")).toBeNull();          // one at a time
+    expect(screen.getByTestId("discover-area-add")).toBeInTheDocument();
   });
 
   it("says when no connection in view has the Area", async () => {

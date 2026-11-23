@@ -79,6 +79,8 @@ import { ChromeActions, ChromeFacts, ChromeStatus, useChromeBack, useInShell, us
 import { CertificationMark } from "@/components/govern/CertificationMark";
 import { ErrorState, Loading, Refusal } from "@/components/ui/states";
 import { Textarea } from "@/components/ui/textarea";
+import { RichText } from "@/components/ui/rich-text";
+import { NOTE_TEXT } from "@/components/dashboards/NoteProse";
 import { toast } from "@/components/ui/toast";
 import { exportDashboard,
   DashboardRefused, acceptProposal, askDashboard, dashboardAudiences, dashboardImageUrl, copySharedDashboard, draftDashboard, findingOfCard,
@@ -254,12 +256,12 @@ function NoteComposer({ busy, onPlace, onClose }: { busy: boolean; onPlace: (tex
         Your words, as a reminder to yourself or your readers: bold, italics, lists and links, up to {MAX_NOTE} characters.
         Pramanyx never reads a note, cites it or learns from it; a model may move it, never write it.
       </div>
-      <Textarea aria-label="The note's words" placeholder="Target for Q4: return rate under **10%**…" value={text} maxLength={MAX_NOTE}
-        autoFocus disabled={busy} onChange={e => setText(e.target.value)} style={{ minHeight: 96 }} />
+      {/* written as it reads (the user, 2026-11-23), kept as the Markdown a note is drawn from */}
+      <RichText kind={NOTE_TEXT} label="The note's words" placeholder="Target for Q4: return rate under 10%…" value={text}
+        onChange={setText} max={MAX_NOTE} autoFocus minHeight={96} testId="note-composer-editor" />
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <Button size="sm" disabled={busy || !text.trim()} onClick={() => onPlace(text)}>Place the note</Button>
+        <Button size="sm" disabled={busy || !text.trim() || text.length > MAX_NOTE} onClick={() => onPlace(text)}>Place the note</Button>
         <Button size="sm" variant="ghost" disabled={busy} onClick={onClose}>Cancel</Button>
-        <span className="aug-fs-xs" style={{ marginLeft: "auto", color: "var(--t3)", fontVariantNumeric: "tabular-nums" }}>{text.length} / {MAX_NOTE}</span>
       </div>
     </div>
   );

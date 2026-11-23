@@ -16,13 +16,13 @@
 import { useState, type ReactNode } from "react";
 
 import { Foot, Frame, Title } from "@/components/dashboards/DashboardTile";
-import { NoteProse, isHeadingNote } from "@/components/dashboards/NoteProse";
+import { NOTE_TEXT, NoteProse, isHeadingNote } from "@/components/dashboards/NoteProse";
 import { useCellBox } from "@/components/dashboards/cellBox";
 import { SizePick } from "@/components/dashboards/SizePick";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { RichText } from "@/components/ui/rich-text";
 import { MAX_CAPTION, MAX_NOTE, SPAN, type Size } from "@/lib/dashboards/catalog";
 import { formatDateTime } from "@/lib/format";
 
@@ -91,13 +91,13 @@ export function NoteTile({ elementKey, text, author, writtenAt, size, doors }: {
       {!headingOnly && <Title title="Note" right={<span className="aug-fs-xs" data-testid="note-chip" style={{ color: "var(--t3)", whiteSpace: "nowrap" }}>Your words</span>} />}
       {editing ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 6, flex: 1 }}>
-          <Textarea aria-label="The note's words" value={draft} maxLength={MAX_NOTE} autoFocus
-            onChange={e => setDraft(e.target.value)} style={{ minHeight: 88 }} />
+          {/* written as it reads (the user, 2026-11-23), kept as the Markdown a note is drawn from */}
+          <RichText kind={NOTE_TEXT} label="The note's words" value={draft} onChange={setDraft} max={MAX_NOTE} autoFocus minHeight={88}
+            testId="note-editor" />
           <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-            <Button size="xs" disabled={!draft.trim() || draft.trim() === text}
+            <Button size="xs" disabled={!draft.trim() || draft.trim() === text.trim() || draft.length > MAX_NOTE}
               onClick={() => { doors.onEditNote?.(elementKey as string, draft); setEditing(false); }}>Keep</Button>
             <Button size="xs" variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>
-            <span className="aug-fs-xs" style={{ marginLeft: "auto", color: "var(--t3)", fontVariantNumeric: "tabular-nums" }}>{draft.length} / {MAX_NOTE}</span>
           </div>
         </div>
       ) : (

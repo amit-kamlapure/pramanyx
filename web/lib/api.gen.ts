@@ -5770,7 +5770,12 @@ export interface paths {
          * @description One Area's page: the Area, its sub-areas, and what it holds by kind.
          */
         get: operations["get_discover_area_discover_areas__area_id__get"];
-        put?: never;
+        /**
+         * Put Discover Area
+         * @description An Area's curators — its business and technical owners, or whoever administers the organisation — change its
+         *     words, its owners and what it puts first. Published on save, and who changed what is kept in the ledger.
+         */
+        put: operations["put_discover_area_discover_areas__area_id__put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -5791,6 +5796,28 @@ export interface paths {
          */
         get: operations["get_discover_items_discover_items_get"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/discover/placement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Discover Placement
+         * @description Place one thing the person can open in an Area, or take it out. Its own owner may, the Area's owners may (for a
+         *     thing taken out, the owners of the Area it stood in), and whoever administers the organisation; an agent never. A
+         *     Definition's Area is chosen on its own page.
+         */
+        put: operations["put_discover_placement_discover_placement_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -10911,6 +10938,49 @@ export interface paths {
          *     close beside the filing's — before and after, recorded.
          */
         post: operations["close_one_links__link_id__close_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/llm/chatgpt/sign-in": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Chatgpt Sign In
+         * @description Start a sign-in to the person's ChatGPT plan: the URL their browser opens. OpenAI returns the browser to
+         *     this API on `127.0.0.1` at the port it listens on, so the browser must be on the machine the API runs on —
+         *     refused with that reason otherwise, rather than sending a person to a sign-in that cannot come back.
+         */
+        post: operations["chatgpt_sign_in_llm_chatgpt_sign_in_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/llm/chatgpt/sign-out": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Chatgpt Sign Out
+         * @description End the ChatGPT session: the tokens are forgotten here first, then revoked with OpenAI. Calls bound to the
+         *     ChatGPT backend refuse by name until someone signs in again; the fallback chain still serves them.
+         */
+        post: operations["chatgpt_sign_out_llm_chatgpt_sign_out_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -20458,6 +20528,17 @@ export interface components {
              */
             business_owners?: string[];
             /**
+             * Description
+             * @description What the area covers, in its curators' words; its question stays the line under its name
+             * @default
+             */
+            description: string;
+            /**
+             * Featured
+             * @description What its curators put first on its page, in their order
+             */
+            featured?: components["schemas"]["FeaturedThing"][];
+            /**
              * Id
              * @description A short id: an industry package's area id to annotate it, or a new one
              */
@@ -20485,6 +20566,26 @@ export interface components {
              * @description Who answers for its data
              */
             technical_owners?: string[];
+        };
+        /**
+         * AreaEditIn
+         * @description What an Area's page changes; a field left out is left as it is.
+         */
+        AreaEditIn: {
+            /** Business Owners */
+            business_owners?: string[] | null;
+            /** Description */
+            description?: string | null;
+            /** Featured */
+            featured?: {
+                [key: string]: unknown;
+            }[] | null;
+            /** Name */
+            name?: string | null;
+            /** Question */
+            question?: string | null;
+            /** Technical Owners */
+            technical_owners?: string[] | null;
         };
         /** AreasIn */
         AreasIn: {
@@ -22687,6 +22788,17 @@ export interface components {
              */
             text: string;
         };
+        /**
+         * FeaturedThing
+         * @description One thing an Area's curators put first on its page (Discover D4, 2026-11-23): its kind as Discover names it and
+         *     its id there.
+         */
+        FeaturedThing: {
+            /** Kind */
+            kind: string;
+            /** Ref */
+            ref: string;
+        };
         /** FeedbackRequest */
         FeedbackRequest: {
             /** Clarify Choice */
@@ -24514,6 +24626,18 @@ export interface components {
             sql: string;
             /** Title */
             title?: string | null;
+        };
+        /** PlaceIn */
+        PlaceIn: {
+            /**
+             * Area
+             * @default
+             */
+            area: string;
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
         };
         /** PlaceRequest */
         PlaceRequest: {
@@ -38246,6 +38370,45 @@ export interface operations {
             };
         };
     };
+    put_discover_area_discover_areas__area_id__put: {
+        parameters: {
+            query?: {
+                workspace_id?: string | null;
+            };
+            header?: never;
+            path: {
+                area_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AreaEditIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_discover_items_discover_items_get: {
         parameters: {
             query?: {
@@ -38264,6 +38427,43 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_discover_placement_discover_placement_put: {
+        parameters: {
+            query?: {
+                workspace_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlaceIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -46606,6 +46806,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    chatgpt_sign_in_llm_chatgpt_sign_in_post: {
+        parameters: {
+            query?: {
+                connection_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    chatgpt_sign_out_llm_chatgpt_sign_out_post: {
+        parameters: {
+            query?: {
+                connection_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */

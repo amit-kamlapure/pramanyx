@@ -23,6 +23,7 @@ import {
   type MetricTrendPoint,
 } from "@/lib/api";
 import { COMPARE_CAVEAT } from "@/lib/dashboards/ledger";
+import { DefinitionBody } from "@/components/definitions/DefinitionBody";
 import { countNoun, formatPoints, formatVariance } from "@/lib/format";
 
 export interface MetricOpened {
@@ -262,7 +263,7 @@ function Definition({ trend: t }: { trend: MetricTrend }) {
           {t.time_kind ? `${t.time_kind[0].toUpperCase()}${t.time_kind.slice(1)}: ${KIND_WORDS[t.time_kind] ?? ""}` : "Its dates"}
         </Box>
       )}
-      {t.caveats && <Box foot="Caveat on the definition">{t.caveats}</Box>}
+      {t.caveats && <Box foot="Caveat on the definition"><DefinitionBody text={t.caveats} /></Box>}
       <Absent>
         Version {t.version}{t.approved_by ? `, approved by ${t.approved_by}` : ""}{t.owner ? ` · owned by ${t.owner}` : ""}. Its definition is edited in the Semantic Layer.
       </Absent>

@@ -53,13 +53,29 @@ def _tally(name: str, connection_id: Optional[str]) -> tuple[int, int]:
     raise ValueError(f"no reference class named {name!r}")
 
 
-def count_class(name: str, *, connection_id: Optional[str] = None) -> _claims.Confidence:
+#: One read's tallies, ``(class, connection) → (n, hits)``: a list of claims counts each class once per connection, not
+#: once per claim. Home's predictions read counted 129 predictions' class 258 times, each a read of up to 5,000 scored
+#: predictions — 4 to 5 s for one list (2026-11-24).
+Tallies = dict
+
+
+def _tally_once(tallies: Optional[Tallies], name: str, connection_id: Optional[str]) -> tuple[int, int]:
+    if tallies is None:
+        return _tally(name, connection_id)
+    key = (name, connection_id)
+    if key not in tallies:
+        tallies[key] = _tally(name, connection_id)
+    return tallies[key]
+
+
+def count_class(name: str, *, connection_id: Optional[str] = None, tallies: Optional[Tallies] = None) -> _claims.Confidence:
     """The class counted: on the connection when it has enough cases, else across every connection
-    (said in ``scope``); the hit rate withheld, with the count, below :data:`MIN_N`."""
-    n, hits = _tally(name, connection_id) if connection_id else (0, 0)
+    (said in ``scope``); the hit rate withheld, with the count, below :data:`MIN_N`. ``tallies`` is one read's: pass the
+    same dict for every claim of a list and each class is counted once."""
+    n, hits = _tally_once(tallies, name, connection_id) if connection_id else (0, 0)
     scope = connection_id or ALL
     if n < MIN_N:
-        n_all, hits_all = _tally(name, None)
+        n_all, hits_all = _tally_once(tallies, name, None)
         if connection_id and n_all > n:
             n, hits, scope = n_all, hits_all, ALL
         elif not connection_id:
@@ -93,20 +109,21 @@ def why_uncounted(claim: _claims.Claim) -> str:
             + " yet; nothing is shown rather than a number nobody counted")
 
 
-def counted(claim: _claims.Claim) -> Optional[_claims.Confidence]:
+def counted(claim: _claims.Claim, *, tallies: Optional[Tallies] = None) -> Optional[_claims.Confidence]:
     name = reference_class_of(claim)
     if name is None:
         return None
     conn = claim.about.key if claim.about.kind == "connection" and claim.about.key else None
-    return count_class(name, connection_id=conn)
+    return count_class(name, connection_id=conn, tallies=tallies)
 
 
-def with_confidence(claim: _claims.Claim) -> _claims.Claim:
+def with_confidence(claim: _claims.Claim, *, tallies: Optional[Tallies] = None) -> _claims.Claim:
     """The claim as the reader should see it: confidence filled by the counter, on a copy — the
-    ledger row stays without one, and the door still refuses a writer that sets it."""
+    ledger row stays without one, and the door still refuses a writer that sets it. A list passes one ``tallies`` for
+    all its claims."""
     out = claim.model_copy(deep=True)
     try:
-        out.confidence = counted(claim)
+        out.confidence = counted(claim, tallies=tallies)
     except Exception as exc:  # noqa: BLE001 — a count that cannot be read shows nothing, never a stale number
         from pramanyx.kernel.errors import tolerate
         tolerate(exc, "counted confidence could not be read; the claim shows none",

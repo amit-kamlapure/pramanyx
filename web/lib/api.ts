@@ -9200,7 +9200,23 @@ export interface LlmCapability {
   token_accounting: "exact" | "estimated";
   max_context: number;
   privacy_class: "local" | "private_endpoint" | "public_api";  // governs what context may be sent
-  cost: "free" | "per_token" | "flat" | "unknown";   // "free" = the `:free` tier marker
+  // "free" = the `:free` tier marker; "plan" = a person's ChatGPT plan pays (no per-call charge, its allowance is the limit)
+  cost: "free" | "per_token" | "flat" | "plan" | "unknown";
+}
+
+/** The ChatGPT plan's sign-in, as Settings shows it — never a token. */
+export interface ChatgptPlanStatus {
+  signed_in: boolean;
+  /** The ChatGPT account signed in, when one is. */
+  account: string | null;
+  /** Signed in AND allowed to use the plan for calls — a person can decline that on OpenAI's screen. */
+  plan_usage: boolean;
+  /** Why the last session ended (signed out, or ChatGPT ended it), when nobody is signed in. */
+  ended: string | null;
+  /** A sign-in was started and its browser tab has not come back yet. */
+  signing_in: boolean;
+  /** Where the person sees what their plan has used (OpenAI asks every app to link it). */
+  usage_url: string;
 }
 
 export interface LlmConfig {
@@ -9238,6 +9254,29 @@ export interface LlmConfig {
   /** The providers a person added — each an OpenAI-compatible endpoint, already in `backends`.
    *  What it IS and whether its key is set; never the key. */
   providers?: LlmAddedProvider[];
+  /** Backends whose credential is a person's sign-in instead of a key (the ChatGPT plan). */
+  sign_in_backends?: string[];
+  chatgpt_plan?: ChatgptPlanStatus;
+}
+
+/** Start a ChatGPT sign-in: the URL the browser opens. OpenAI returns that tab to this API. */
+export async function startChatgptSignIn(): Promise<{ authorize_url: string; expires_in: number }> {
+  const res = await fetch(`${getApiBase()}/llm/chatgpt/sign-in`, { method: "POST" });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(fastApiError(e, "Could not start the ChatGPT sign-in"));
+  }
+  return res.json();
+}
+
+/** End the ChatGPT session: forgotten here, then revoked with OpenAI. `revocation` says how that went. */
+export async function signOutChatgpt(): Promise<ChatgptPlanStatus & { revocation: string | null }> {
+  const res = await fetch(`${getApiBase()}/llm/chatgpt/sign-out`, { method: "POST" });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(fastApiError(e, "Could not sign out of ChatGPT"));
+  }
+  return res.json();
 }
 
 /** A provider a person added in Settings ▸ Inference. `id` is what every setting names it by. */
