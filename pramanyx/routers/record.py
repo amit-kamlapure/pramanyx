@@ -83,6 +83,15 @@ def _named(name: str) -> str:
     return name if ":" in name else f"person:{name}"
 
 
+def _signs_in_as(name: str) -> str:
+    """The person a Definition is handed to, as they sign in: who owns one is who may change it, so it is kept the way a
+    signed-in person is (``user:<id>``, `_who`) — never ``person:``, a name nobody signs in as."""
+    name = (name or "").strip()
+    if not name:
+        return ""
+    return name if name.startswith("user:") else name if ":" in name else f"user:{name}"
+
+
 # ── claims ─────────────────────────────────────────────────────────────────────────────────
 
 @router.get("/record/claims")
@@ -198,6 +207,10 @@ class DefinitionApproval(BaseModel):
     area: str = Field("", max_length=120)
 
 
+class DefinitionHandover(DefinitionApproval):
+    to: str = Field(min_length=1, max_length=200)    # the person it is handed to, as the directory names them
+
+
 class SuggestionDecision(DefinitionApproval):
     suggestion_id: str = Field(min_length=1, max_length=40)
     accept: bool
@@ -210,6 +223,7 @@ def _definition_view(c: C.Claim) -> dict:
             "links": x.get("links") or [], "description": x.get("description", ""), "sources": x.get("sources") or [],
             "state": "published" if c.tier == "approved" else "draft",
             "approved_by": x.get("approved_by", ""), "approved_on": x.get("approved_on", ""),
+            "handed": (x.get("handed") or [])[-5:],
             "drafted_by_agent": bool(x.get("drafted_by_agent")) and c.tier != "approved",
             "suggestions": x.get("suggestions") or [], "declined": (x.get("declined") or [])[-5:],
             "accepted": (x.get("accepted") or [])[-5:],
@@ -349,6 +363,20 @@ def unpublish_record_definition(req: DefinitionApproval, principal=Depends(get_p
     from pramanyx.record.writers import unpublish_definition
     return _owners_act(lambda who: unpublish_definition(connection_id=req.connection_id, term=req.term, by=who,
                                                         area=req.area), req, principal, request, "unpublishing a definition")
+
+
+@router.post("/record/definitions/owner", dependencies=[gate(Capability.SEMANTIC_EDIT)])
+def hand_record_definition(req: DefinitionHandover, principal=Depends(get_principal), request: Request = None) -> dict:
+    """Its owner hands a definition to another person, who answers for it from then on; an organisation's admin may hand
+    on one whose owner cannot. Anyone else is refused, and told whose it is. Nothing is sent: the hand-over is on its
+    record and in the audit log."""
+    from pramanyx.rbac.permissions import Permission
+    from pramanyx.rbac.resolver import has_permission
+    from pramanyx.record.writers import hand_definition
+    admin = bool(principal) and has_permission(principal, Permission.ADMIN_MANAGE_ORG)
+    return _owners_act(lambda who: hand_definition(connection_id=req.connection_id, term=req.term, area=req.area,
+                                                   by=who, to=_signs_in_as(req.to), by_admin=admin),
+                       req, principal, request, "handing a definition on")
 
 
 @router.post("/record/definitions/suggestions/decide", dependencies=[gate(Capability.SEMANTIC_EDIT)])

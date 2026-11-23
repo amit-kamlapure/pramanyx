@@ -31,6 +31,7 @@ function serve(me: string, rows: unknown[], posted: { path: string; body: Record
     const path = String(url).replace(/^https?:\/\/[^/]+/, "");
     if (path.startsWith("/record/you")) return new Response(JSON.stringify({ principal: me }));
     if (path.startsWith("/discover/search")) return new Response(JSON.stringify(SEARCH));
+    if (path.startsWith("/rbac/directory")) return new Response(JSON.stringify([{ email: "dee@shop.example", name: "Dee", active: true }]));
     if (path.startsWith("/areas/")) return new Response(JSON.stringify({ placed: { tables: {}, metrics: {}, connection: null }, areas: [
       { id: "finance", name: "Finance", question: "", parent: "", business_owners: [], technical_owners: [], source: "organisation", pack_id: "" },
       { id: "marketing", name: "Marketing", question: "", parent: "", business_owners: [], technical_owners: [], source: "organisation", pack_id: "" }] }));
@@ -117,6 +118,24 @@ describe("the Definition page, as a Page", () => {
     await waitFor(() => expect(posted[0]?.path).toBe("/record/definitions"));
     expect(posted[0].body).toMatchObject({ description: "Who engages with email", aliases: ["engaged"], area: "marketing" });
     expect(posted.some(p => p.path === "/record/definitions/approve")).toBe(false);
+  });
+
+  it("lets its owner hand it to another person, and offers anyone else no such door", async () => {
+    let posted = serve("user:cai", [FINANCE]);
+    await show("finance");
+    await screen.findByText(/Published by ana/);
+    expect(screen.queryByRole("button", { name: "Hand to…" })).toBeNull();
+    vi.unstubAllGlobals();
+    document.body.innerHTML = "";
+    posted = serve("user:ana", [{ ...FINANCE, handed: [{ on: "2026-11-20", by: "user:bo", from: "user:bo", to: "user:ana" }] }]);
+    await show("finance");
+    expect(await screen.findByTestId("definition-handed")).toHaveTextContent("handed on by bo");
+    fireEvent.click(await screen.findByRole("button", { name: "Hand to…" }));
+    fireEvent.change(screen.getByLabelText("Hand it to"), { target: { value: "dee" } });
+    fireEvent.click(screen.getByRole("button", { name: "Hand it on" }));
+    await waitFor(() => expect(posted[0]?.path).toBe("/record/definitions/owner"));
+    expect(posted[0].body).toMatchObject({ to: "dee", term: "Active customer", area: "finance", connection_id: "shop" });
+    expect(await screen.findByText("Handed to dee: they answer for it now")).toBeInTheDocument();
   });
 });
 

@@ -33,6 +33,7 @@ import {
 } from "@/lib/definitions";
 import { KIND_ICON, KIND_WORDS, readDiscoverItems, type DiscoverItem, type DiscoverKind } from "@/lib/discover";
 import { fmtDate } from "@/lib/format";
+import { readDirectory, type DirectoryPerson } from "@/lib/threads";
 
 const MUTED = { color: "var(--t3)" };
 
@@ -71,6 +72,11 @@ export function DefinitionView({ term, connection, initialArea = "", inApp = fal
   const [writing, setWriting] = useState(!term);
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState("");
+  // handing it to another person (2026-11-24): the name they sign in with, the directory's names offered where the
+  // reader may read it (it is an admin's list: for anyone else it is empty, and a name is typed)
+  const [handing, setHanding] = useState(false);
+  const [handTo, setHandTo] = useState("");
+  const [people, setPeople] = useState<DirectoryPerson[]>([]);
 
   // undefined while it is read; null when there is none — a new one (no word yet) is none, never "Reading…"
   const found = !term ? null
@@ -139,6 +145,17 @@ export function DefinitionView({ term, connection, initialArea = "", inApp = fal
     return <main className="aug-fs-sm" style={{ padding: 20, ...MUTED }}>This page needs a connection: add <code>?conn=</code> to its address.</main>;
   }
   const mine = !!found && !!me && same(found.owner, me);
+  const startHanding = () => {
+    setHanding(true); setHandTo(""); setSaid("");
+    if (!people.length) readDirectory().then(setPeople).catch(() => setPeople([]));
+  };
+  const handOn = async () => {
+    const to = handTo.trim();
+    if (!to) return;
+    await act("/record/definitions/owner", { to }, `Handed to ${who(to)}: they answer for it now`);
+    setHanding(false);
+  };
+  const lastHanded = found?.handed?.at(-1);
   const published = found?.state === "published";
   const isNew = !found;
   const startWriting = () => { setDraft(fromDefinition(found, term, area)); setWriting(true); setSaid(""); };
@@ -241,8 +258,31 @@ export function DefinitionView({ term, connection, initialArea = "", inApp = fal
                   </span>
                 ) : <span className="aug-fs-sm" style={MUTED}>Everywhere — no one area</span>}
               </Field>
-              <Field label="Owner" title="Whoever writes it first owns it; only its owner publishes it, and anyone else suggests an edit">
-                <Chip>{found ? `${who(found.owner) || "no one named"}${mine ? " (you)" : ""}` : `${who(me) || "you"} (you)`}</Chip>
+              <Field label="Owner" title="Whoever writes it first owns it, until they hand it on; only its owner publishes it, and anyone else suggests an edit">
+                <span style={{ display: "inline-flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                  <Chip>{found ? `${who(found.owner) || "no one named"}${mine ? " (you)" : ""}` : `${who(me) || "you"} (you)`}</Chip>
+                  {mine && !writing && !handing && (
+                    <Button size="xs" variant="outline" disabled={busy} onClick={startHanding}
+                      title="Make someone else its owner: they publish it, change it and decide what others suggest">Hand to…</Button>
+                  )}
+                  {handing && (
+                    <>
+                      <Input bespoke autoFocus aria-label="Hand it to" placeholder="The name they sign in with" list="definition-people"
+                        value={handTo} onChange={(e) => setHandTo(e.target.value)} style={{ width: 220 }}
+                        onKeyDown={(e) => { if (e.key === "Enter") void handOn(); if (e.key === "Escape") setHanding(false); }} />
+                      <datalist id="definition-people">
+                        {people.map((p) => <option key={p.email} value={p.email}>{p.name}</option>)}
+                      </datalist>
+                      <Button size="xs" disabled={busy || !handTo.trim()} onClick={() => void handOn()}>Hand it on</Button>
+                      <Button size="xs" variant="ghost" disabled={busy} onClick={() => setHanding(false)}>Cancel</Button>
+                    </>
+                  )}
+                  {lastHanded && !handing && (
+                    <span className="aug-fs-xs" style={MUTED} data-testid="definition-handed">
+                      handed on by {who(lastHanded.by)} on {fmtDate(lastHanded.on, "day")}
+                    </span>
+                  )}
+                </span>
               </Field>
               <Field label="Synonyms">
                 <Synonyms value={writing ? draft.aliases : (found?.aliases ?? [])} editing={writing}

@@ -838,6 +838,53 @@ def unpublish_definition(*, connection_id: str, term: str, by: str, area: str = 
     return _claims.restate(key, new, conn_id=connection_id)
 
 
+def _a_person(who: str) -> bool:
+    who = (who or "").strip()
+    return bool(who) and who not in ("unidentified", "model") and not who.startswith(("agent:", "system"))
+
+
+def hand_definition(*, connection_id: str, term: str, by: str, to: str, area: str = "",
+                    by_admin: bool = False) -> Optional[str]:
+    """Its OWNER hands a Definition to another person (2026-11-24, the Page editor's owner handover), who answers for it
+    from then on: edits it directly, publishes or unpublishes it, decides its suggested edits. An organisation's admin
+    may hand on one whose owner cannot (``by_admin``: someone who left). Restated with the new owner; its words and
+    whether it stands published are unchanged — the approval it carries still names who approved it — and the hand-over
+    is kept on it (``handed``: when, by whom, from whom, to whom). Raises `NotTheOwner` for anyone else, ``ValueError``
+    for an owner who is not a person: a Definition is a person's. None when there is no such Definition, or it is
+    already theirs."""
+    to = (to or "").strip()[:200]
+    if not _a_person(to):
+        raise ValueError("a definition is handed to a person; an agent cannot own one")
+    key = definition_key(connection_id, term, area)
+    prior = _claims.latest(key)
+    if prior is None or prior.state == "withdrawn" or not by:
+        return None
+    if not by_admin and not _same(prior.owner, by):
+        raise NotTheOwner(f"only its owner, {prior.owner or 'no one named'}, hands this definition on")
+    if _same(prior.owner, to):
+        return None
+    new = prior.model_copy(deep=True)
+    new.confidence = None
+    new.owner = to
+    new.extra = {**prior.extra, "handed": [*(prior.extra.get("handed") or []),
+                                           {"on": _today(), "by": by, "from": prior.owner, "to": to}]}
+    cid = _claims.restate(key, new, conn_id=connection_id)
+    _journal_handed(connection_id, term, area, prior.owner, to, by)
+    return cid
+
+
+def _journal_handed(connection_id: str, term: str, area: str, was: str, to: str, by: str) -> None:
+    """Who answers for a Definition changed: a governance change, said in the audit log. Best effort: the Record holds
+    the hand-over (``handed``) and has it; an unrecorded event is said, never undone."""
+    try:
+        from pramanyx.kernel.ledger import Ledger
+        Ledger.default().emit("definition.handed", {"connection_id": connection_id, "term": term, "area": area,
+                                                    "from": was, "to": to, "by": by})
+    except Exception as exc:  # noqa: BLE001 — see the docstring
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, f"the definition {term} was handed to {to} but not journalled", counter="definitions.journal")
+
+
 def withdraw_definition(*, connection_id: str, term: str, by: str, reason: str = "", area: str = "",
                         by_platform: bool = False) -> Optional[str]:
     """A definition taken away is WITHDRAWN, its wording kept beneath it — never deleted. Its OWNER takes it away

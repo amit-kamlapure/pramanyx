@@ -17301,6 +17301,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/record/definitions/owner": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Hand Record Definition
+         * @description Its owner hands a definition to another person, who answers for it from then on; an organisation's admin may hand
+         *     on one whose owner cannot. Anyone else is refused, and told whose it is. Nothing is sent: the hand-over is on its
+         *     record and in the audit log.
+         */
+        post: operations["hand_record_definition_record_definitions_owner_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/record/definitions/suggestions/decide": {
         parameters: {
             query?: never;
@@ -22217,6 +22239,20 @@ export interface components {
             connection_id: string;
             /** Term */
             term: string;
+        };
+        /** DefinitionHandover */
+        DefinitionHandover: {
+            /**
+             * Area
+             * @default
+             */
+            area: string;
+            /** Connection Id */
+            connection_id: string;
+            /** Term */
+            term: string;
+            /** To */
+            to: string;
         };
         /** DefinitionLink */
         DefinitionLink: {
@@ -57628,6 +57664,43 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    hand_record_definition_record_definitions_owner_post: {
+        parameters: {
+            query?: {
+                connection_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DefinitionHandover"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

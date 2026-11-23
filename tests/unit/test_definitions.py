@@ -309,3 +309,63 @@ def test_the_door_writes_and_reads_the_page_s_fields(monkeypatch):
     refused = client.post("/record/definitions", json={"connection_id": conn, "term": "Y", "text": "z",
                                                       "sources": [{"kind": "url", "ref": "not an address"}]})
     assert refused.status_code == 422
+
+
+def test_an_owner_hands_a_definition_to_another_person_who_answers_for_it_from_then_on(monkeypatch):
+    from pramanyx.kernel import ledger as L
+    said: list[tuple[str, dict]] = []
+    emit = L.Ledger.emit
+
+    def heard(self, kind, payload, *a, **kw):
+        if kind == "definition.handed":
+            said.append((kind, payload))
+        return emit(self, kind, payload, *a, **kw)
+    monkeypatch.setattr(L.Ledger, "emit", heard)
+    conn = _conn()
+    W.write_definition(connection_id=conn, term="Repeat buyer", text="Ordered twice or more.", by="user:ana")
+    W.approve_definition(connection_id=conn, term="Repeat buyer", by="user:ana")
+    with pytest.raises(W.NotTheOwner):                                   # only its owner hands it on
+        W.hand_definition(connection_id=conn, term="Repeat buyer", by="user:cai", to="user:cai")
+    with pytest.raises(ValueError):                                      # and only to a person
+        W.hand_definition(connection_id=conn, term="Repeat buyer", by="user:ana", to="agent:coworker")
+    assert W.hand_definition(connection_id=conn, term="Repeat buyer", by="user:ana", to="user:cai")
+    now = C.latest(W.definition_key(conn, "Repeat buyer"))
+    assert now.owner == "user:cai" and now.tier == "approved" and now.statement.text == "Ordered twice or more."
+    assert now.extra["approved_by"] == "user:ana"                         # the approval still names who approved it
+    assert [(h["by"], h["from"], h["to"]) for h in now.extra["handed"]] == [("user:ana", "user:ana", "user:cai")]
+    assert said == [("definition.handed", {"connection_id": conn, "term": "Repeat buyer", "area": "",
+                                           "from": "user:ana", "to": "user:cai", "by": "user:ana"})]
+    # the new owner changes it directly; the one who handed it on now suggests, like anyone else
+    W.write_definition(connection_id=conn, term="Repeat buyer", text="Ordered on two days or more.", by="user:cai")
+    with pytest.raises(W.NotTheOwner):
+        W.write_definition(connection_id=conn, term="Repeat buyer", text="x", by="user:ana")
+    assert W.hand_definition(connection_id=conn, term="Repeat buyer", by="user:cai", to="user:cai") is None   # already theirs
+    # an admin hands on one whose owner cannot
+    assert W.hand_definition(connection_id=conn, term="Repeat buyer", by="user:root", to="user:dee", by_admin=True)
+    assert C.latest(W.definition_key(conn, "Repeat buyer")).owner == "user:dee"
+
+
+def test_the_door_hands_a_definition_on_as_the_person_signs_in_and_refuses_anyone_but_its_owner(monkeypatch):
+    from pramanyx.routers import record as R
+    conn = _conn()
+    who = {"now": "user:ana"}
+    monkeypatch.setattr(R, "_visible", lambda c: True)
+    monkeypatch.setattr(R, "_who", lambda principal: who["now"])
+    monkeypatch.setattr(R, "_refresh_definitions", lambda c: None)
+    app = FastAPI()
+    app.include_router(R.router)
+    client = TestClient(app)
+    assert client.post("/record/definitions", json={"connection_id": conn, "term": "Churned",
+                                                    "text": "No order in 180 days."}).status_code == 201
+    body = {"connection_id": conn, "term": "Churned", "to": "cai"}
+    who["now"] = "user:bo"
+    refused = client.post("/record/definitions/owner", json=body)
+    assert refused.status_code == 403 and "not yours" in refused.json()["detail"]
+    who["now"] = "user:ana"
+    handed = client.post("/record/definitions/owner", json=body)
+    assert handed.status_code == 200
+    got = handed.json()
+    assert got["owner"] == "user:cai"                                    # kept as the person signs in
+    assert got["handed"][-1]["from"] == "user:ana" and got["handed"][-1]["to"] == "user:cai"
+    assert client.post("/record/definitions/owner", json={**body, "term": "Nothing"}).status_code == 404
+    assert client.post("/record/definitions/owner", json={**body, "to": "agent:coworker"}).status_code == 422
