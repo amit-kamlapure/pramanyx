@@ -73,7 +73,7 @@ function HomeView({ filters, setFilters, onOpenArea, onName, connections, worksp
   useEffect(() => {
     let alive = true;
     setHome(null); setErr("");
-    readDiscover(filters.conn, workspaceId).then(h => { if (alive) setHome(h); })
+    readDiscover(filters.conn, workspaceId, tick > 0).then(h => { if (alive) setHome(h); })
       .catch(e => { if (alive) setErr(String((e as Error)?.message ?? e)); });
     return () => { alive = false; };
   }, [filters.conn, workspaceId, tick]);
@@ -278,7 +278,7 @@ function AreaView({ areaId, conn, workspaceId, onBack, onOpenArea, onName }: {
   useEffect(() => {
     let alive = true;
     setPage(undefined); setErr("");
-    readDiscoverArea(areaId, conn, workspaceId).then(p => { if (alive) setPage(p); })
+    readDiscoverArea(areaId, conn, workspaceId, tick > 0).then(p => { if (alive) setPage(p); })
       .catch(e => { if (alive) setErr(String((e as Error)?.message ?? e)); });
     return () => { alive = false; };
   }, [areaId, conn, workspaceId, tick]);

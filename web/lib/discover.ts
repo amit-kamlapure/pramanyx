@@ -124,27 +124,34 @@ function url(path: string, params: Record<string, string | number | boolean | un
 }
 
 /** Reads under way, by address: a page that asks twice for the same read while the first is out (React's strict
- *  double effect, a tab resolving on load) waits on the one — each Discover read is every reader at once. */
+ *  double effect, a tab resolving on load) waits on the one — each Discover read is every reader at once. A read that
+ *  answered is kept a few seconds, so the page mounted again as the shell settles, or Back from an Area, shows it at
+ *  once; `fresh` (after a change the person made) reads again. */
 const underWay = new Map<string, Promise<unknown>>();
+const kept = new Map<string, { at: number; value: unknown }>();
+export const KEEP_MS = 20_000;
 
-function once<T>(href: string, go: () => Promise<T>): Promise<T> {
+function once<T>(href: string, go: () => Promise<T>, fresh = false): Promise<T> {
+  if (fresh) kept.delete(href);
+  const k = kept.get(href);
+  if (k && Date.now() - k.at < KEEP_MS) return Promise.resolve(k.value as T);
   const have = underWay.get(href) as Promise<T> | undefined;
   if (have) return have;
-  const p = go().finally(() => underWay.delete(href));
+  const p = go().then(v => { kept.set(href, { at: Date.now(), value: v }); return v; }).finally(() => underWay.delete(href));
   underWay.set(href, p);
   return p;
 }
 
-function read<T>(href: string, what: string): Promise<T> {
+function read<T>(href: string, what: string, fresh = false): Promise<T> {
   return once(href, async () => {
     const res = await fetch(href);
     if (!res.ok) throw new Error(fastApiError(await res.json().catch(() => ({})), `Reading ${what} failed (${res.status})`));
     return (await res.json()) as T;
-  });
+  }, fresh);
 }
 
-export function readDiscover(connectionId = "", workspaceId?: string): Promise<DiscoverHome> {
-  return read(url("/discover", { connection_id: connectionId }, workspaceId), "Discover");
+export function readDiscover(connectionId = "", workspaceId?: string, fresh = false): Promise<DiscoverHome> {
+  return read(url("/discover", { connection_id: connectionId }, workspaceId), "Discover", fresh);
 }
 
 export interface ItemsAsked {
@@ -158,14 +165,14 @@ export function readDiscoverItems(a: ItemsAsked): Promise<DiscoverItems> {
 }
 
 /** One Area's page; null when no connection in view has that Area (the server's 404). */
-export function readDiscoverArea(areaId: string, connectionId = "", workspaceId?: string): Promise<DiscoverAreaPage | null> {
+export function readDiscoverArea(areaId: string, connectionId = "", workspaceId?: string, fresh = false): Promise<DiscoverAreaPage | null> {
   const href = url(`/discover/areas/${encodeURIComponent(areaId)}`, { connection_id: connectionId }, workspaceId);
   return once(href, async () => {
     const res = await fetch(href);
     if (res.status === 404) return null;
     if (!res.ok) throw new Error(fastApiError(await res.json().catch(() => ({})), `Reading the Area failed (${res.status})`));
     return (await res.json()) as DiscoverAreaPage;
-  });
+  }, fresh);
 }
 
 // ── what a row and a card say ────────────────────────────────────────────────────────────────────────────────────

@@ -164,7 +164,7 @@ describe("the workspace", () => {
     rerender(<DiscoverPage {...props} workspaceId="default" ready />);
     await screen.findByTestId("discover-areas");
     expect(readDiscover).toHaveBeenCalledTimes(1);
-    expect(readDiscover).toHaveBeenCalledWith("", "default");
+    expect(readDiscover).toHaveBeenCalledWith("", "default", false);
   });
 });
 
@@ -184,7 +184,7 @@ describe("an Area's page", () => {
     expect(screen.getByTestId("discover-area").textContent).toContain("No owner yet");
     expect(within(holds).getByTestId("discover-row").textContent).toContain("its name says order");
     expect(holds.textContent).toContain("Nothing here yet: Definitions, Agents.");
-    expect(readDiscoverArea).toHaveBeenCalledWith("orders_sales", "", "");
+    expect(readDiscoverArea).toHaveBeenCalledWith("orders_sales", "", "", false);
   });
 
   it("says when no connection in view has the Area", async () => {

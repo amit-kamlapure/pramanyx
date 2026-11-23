@@ -4,9 +4,9 @@
  * the one mark a row carries, and the Ask panel subject a row can be asked about by — none for a kind the panel has
  * no subject for.
  */
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { askSubjectOf, holdsWords, markOf, ownersLine, secondLine, withheldWords, type DiscoverItem } from "@/lib/discover";
+import { askSubjectOf, holdsWords, markOf, ownersLine, readDiscover, secondLine, withheldWords, type DiscoverItem } from "@/lib/discover";
 
 const item = (over: Partial<DiscoverItem>): DiscoverItem => ({
   kind: "metric", id: "x", name: "x", line: "", connection_id: "8233e4fd", connection_name: "theLook", area: "",
@@ -61,5 +61,21 @@ describe("a row", () => {
     expect(withheldWords("canvas", 2)).toBe("2 not shared with you");
     expect(withheldWords("trusted_query", 1)).toBe("1 beyond your clearance");
     expect(withheldWords("sheet", 0)).toBe("");
+  });
+});
+
+describe("reading Discover", () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it("asks once for a read already out or just answered, and again when told to read fresh", async () => {
+    const fetch = vi.fn(async (_href: string) => new Response(JSON.stringify({ areas: [] }), { status: 200 }));
+    vi.stubGlobal("fetch", fetch);
+    await Promise.all([readDiscover("c-once", "w"), readDiscover("c-once", "w")]);   // a strict double effect
+    await readDiscover("c-once", "w");                                               // mounted again as the shell settles
+    expect(fetch).toHaveBeenCalledTimes(1);
+    await readDiscover("c-once", "w", true);                                         // after a change the person made
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(String(fetch.mock.calls[0][0])).toContain("connection_id=c-once");
+    expect(String(fetch.mock.calls[0][0])).toContain("workspace_id=w");
   });
 });
