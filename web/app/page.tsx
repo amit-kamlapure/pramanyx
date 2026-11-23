@@ -453,6 +453,7 @@ function HomeScreen({
   connections,
   selectedConn,
   workspaceId,
+  ready,
   onGoToChat,
   onNavigate,
   onOpenInvestigation,
@@ -463,6 +464,9 @@ function HomeScreen({
   connections: Connection[];
   selectedConn: string;
   workspaceId: string;
+  /** The workspace is known (its list has answered). Read before it, Home's list was read twice — and on a page opened
+   *  elsewhere, read for the instant Home is drawn before the address's page (2026-11-23). */
+  ready: boolean;
   onGoToChat: (q?: string, mode?: AskMode) => void;
   onNavigate: (t: NavTab) => void;
   onOpenInvestigation: (id: string, kind?: "investigation" | "chat", connectionId?: string, canvasId?: string | null) => void;
@@ -486,11 +490,12 @@ function HomeScreen({
     // The whole recent list, not a five-row table: Home picks its lead, its question and its
     // standing questions from it (`components/home/HomeDesk.tsx`). Workspace-scoped, so it
     // runs without a connection too.
+    if (!ready) return;
     fetch(`${getApiBase()}/investigations${workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : ""}`)
       .then(r => r.json())
       .then(d => setRecentInvs(Array.isArray(d) ? d : []))
       .catch(() => {});
-  }, [workspaceId]);
+  }, [workspaceId, ready]);
   const openAnswer = (id: string, kind?: string) => onOpenInvestigation(id, kind === "chat" ? "chat" : undefined, selectedConn);
 
   return (
@@ -1548,6 +1553,8 @@ export default function Home() {
 
   const redirectedHome = useRef(false);
   useEffect(() => {
+    // once the workspace is known: read before it, the settings were read twice on every load (2026-11-23)
+    if (!wsLoaded) return;
     getEffectiveSettings(selectedWorkspace || undefined)
       .then((settings) => {
         setOrgSettingsCache(settings);
@@ -1563,7 +1570,7 @@ export default function Home() {
         }
       })
       .catch(() => {});
-  }, [selectedWorkspace]);
+  }, [selectedWorkspace, wsLoaded]);
 
   const reloadWorkspaces = () => getWorkspaces().then(setWorkspaces).catch(() => {});
 
@@ -1957,6 +1964,7 @@ export default function Home() {
                 connections={wsConnections}
                 selectedConn={selectedConn}
                 workspaceId={selectedWorkspace}
+                ready={wsLoaded}
                 onGoToChat={goToChat}
                 onNavigate={handleNavigate}
                 onOpenInvestigation={openInvestigation}
