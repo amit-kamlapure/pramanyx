@@ -406,7 +406,7 @@ def test_a_drafted_description_is_drawn_from_what_the_definition_says_and_booked
 def test_a_definition_shows_pictures_uploaded_to_its_own_connection_and_no_other(monkeypatch):
     from pramanyx.dashboards import images
     conn = _conn()
-    monkeypatch.setattr(images, "_held", lambda c, object_id: object() if (c, object_id) == (conn, "ab12") else None)
+    monkeypatch.setattr(images, "stamp_of", lambda c, object_id: {"object": object_id} if (c, object_id) == (conn, "ab12") else None)
     kept = f"## Definition\nA buyer, as the form shows it:\n\n![the order form](/dashboards/images/ab12?connection_id={conn})"
     W.write_definition(connection_id=conn, term="Buyer", text=kept, by="user:ana")
     assert "![the order form]" in C.latest(W.definition_key(conn, "Buyer")).statement.text

@@ -667,8 +667,8 @@ def _check_pictures(connection_id: str, text: str) -> None:
         kept = _KEPT_PICTURE.match(src)
         if not kept or unquote(kept.group(2)) != connection_id:
             raise ValueError(f"a definition shows pictures uploaded to its own connection; not {src[:80] or 'an empty one'}")
-        from pramanyx.dashboards.images import _held
-        if _held(connection_id, unquote(kept.group(1))) is None:
+        from pramanyx.dashboards.images import stamp_of
+        if stamp_of(connection_id, unquote(kept.group(1))) is None:
             raise ValueError(f"the picture {unquote(kept.group(1))} is not one uploaded to this connection, or it is gone")
 
 
