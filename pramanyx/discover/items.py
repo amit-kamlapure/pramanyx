@@ -177,11 +177,16 @@ def _declared_schema(connection_id: str) -> str:
 
 def tables(scope: Scope) -> Found:
     """The tables the platform has read on each connection — the profiler's, never a warehouse read here — each in the
-    Area the coverage matrix places it, with why. A connection never read is said."""
+    Area the coverage matrix places it, with why. A connection never read is said. The Sheets connection's tables are
+    the spreadsheets themselves, listed by their own kind under their own sharing — never again here, where a sheet
+    not shared with the person would be listed as a table (seen live, 2026-11-23)."""
     from pramanyx.govern.certification import of_prefix
     from pramanyx.semantic.metric_coverage import tables_of
+    from pramanyx.sheets.model import SHEETS_CONNECTION
     found = Found()
     for conn, name in scope.connections.items():
+        if conn == SHEETS_CONNECTION:
+            continue
         facts = tables_of(conn)
         if not facts:
             found.said.append(f"{name}: its tables have not been read yet")
@@ -369,7 +374,7 @@ def sheets(scope: Scope) -> Found:
             found.withheld += 1
             continue
         found.items.append(settle(Item(
-            kind="sheet", id=s.id, name=s.name, line=f"{len(s.columns)} columns", connection_id="sheets",
+            kind="sheet", id=s.id, name=s.name, line=f"{len(s.columns)} columns", connection_id=model.SHEETS_CONNECTION,
             owner=str(s.created_by or ""), updated_at=str(getattr(s.change, "at", "") or s.created_at or ""),
             href=f"/sheets/{quote(s.id)}"), scope, placed=placed.get(s.id), words=s.name))
     return found

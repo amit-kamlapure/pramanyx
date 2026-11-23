@@ -225,3 +225,18 @@ def test_the_page_is_scoped_to_the_workspace_and_a_connection_outside_it_is_not_
     assert client.get("/discover/items", params={"kind": "nonsense"}).status_code == 422
     monkeypatch.setattr("pramanyx.discover.service.area_page", lambda scope, area: None)
     assert client.get("/discover/areas/none").status_code == 404
+
+
+def test_the_sheets_connection_s_tables_are_not_listed_again_as_tables(monkeypatch):
+    """Seen live, 2026-11-23: every spreadsheet stood twice — as a sheet, and as a table of the Sheets connection, where
+    one not shared with the person would have been listed past its sharing."""
+    from types import SimpleNamespace
+    from pramanyx.sheets.model import SHEETS_CONNECTION
+    read = []
+    monkeypatch.setattr("pramanyx.semantic.metric_coverage.tables_of",
+                        lambda conn: read.append(conn) or [SimpleNamespace(name="orders", rows=3, date_column="")])
+    monkeypatch.setattr(I, "_coverage_placements", lambda scope, conn: ({}, {}, None))
+    monkeypatch.setattr(I, "_declared_schema", lambda conn: "shop")
+    monkeypatch.setattr("pramanyx.govern.certification.of_prefix", lambda prefix: {})
+    got = I.tables(Scope(None, "user:ana", {"c1": "theLook", SHEETS_CONNECTION: "Sheets"}))
+    assert read == ["c1"] and [i.connection_id for i in got.items] == ["c1"]
