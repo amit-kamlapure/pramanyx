@@ -25,7 +25,8 @@ a.aug-discover-area:hover { background: var(--bg-hover); }
 .aug-discover-row .main { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .aug-discover-row .n { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .aug-discover-row .d { color: var(--t3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.aug-discover-row .meta { display: flex; align-items: center; gap: 6px; flex: none; }
+.aug-discover-row .meta { display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex: 0 1 auto; max-width: 45%; min-width: 0; }
+.aug-discover-row .meta .how { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .aug-discover-row .ask { flex: none; margin-right: 6px; }
 
 .aug-discover-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }

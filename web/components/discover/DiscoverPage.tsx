@@ -446,7 +446,7 @@ function ItemRow({ item, areaName, many, how = false }: { item: DiscoverItem; ar
         <span className="meta aug-fs-xs">
           {mark && <Chip tone={mark.tone}>{mark.word}</Chip>}
           {how
-            ? item.area_how && <span style={MUTED}>{item.area_how}</span>
+            ? item.area_how && <span className="how" style={MUTED} title={item.area_how}>{item.area_how}</span>
             : areaName && <Chip title={item.area_how || undefined}>{areaName}</Chip>}
         </span>
       </a>
