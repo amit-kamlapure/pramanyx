@@ -19,7 +19,7 @@ import { AppearancePanel } from "@/components/settings/AppearancePanel";
 import { useNavCollapsed, useNavCollapsedState } from "@/components/shell/useNavCollapsed";
 import { Tooltip } from "@/components/ui/tooltip";
 import { installAuthFetch } from "@/lib/auth";
-import { installWorkspaceHeader, setActiveWorkspace } from "@/lib/workspace";
+import { getActiveWorkspace, installWorkspaceHeader, setActiveWorkspace } from "@/lib/workspace";
 import { InferencePanel } from "@/components/InferencePanel";
 import { OrgSettingsPanel } from "@/components/OrgSettingsPanel";
 import { OwnersPanel } from "@/components/OwnersPanel";
@@ -1175,7 +1175,19 @@ export default function Home() {
       if (r.recordLayer) setRecordLayer(r.recordLayer);
       if (r.secLens) setSecLens(r.secLens);
       if (r.settingsSection) setSettingsSection(r.settingsSection);
+      // a layer named by the event lands as a link's `?layer=` does on a cold load (Discover's links, `lib/addressOnce.ts`)
+      if (detail.params?.layer) applyLayerFor(r.tab, detail.params.layer);
       setOpenId(detail.params?.id ?? null);
+      // a canvas named by the event opens as `?canvas=` does on a cold load: found in the workspace's roster, or said not here
+      if (detail.params?.canvas) {
+        const wanted = detail.params.canvas;
+        getCanvases(getActiveWorkspace() || undefined).then(all => {
+          const found = all.find(c => c.id === wanted) ?? null;
+          if (found) setActiveCanvas(found);
+          else toast.info("The linked canvas isn't in this workspace", {
+            description: "It may have been deleted, or it belongs to another workspace." });
+        }).catch(() => toast.info("The linked canvas could not be read"));
+      }
       // a conversation named by the event opens on the Ask page: the Ask panel's "Open at full size"
       if (detail.params?.chat) {
         setShowHistory(false);

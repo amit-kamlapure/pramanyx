@@ -16,7 +16,7 @@ import { BUILT_IN_AGENT_KIND, CUSTOM_AGENT_KIND, getConnections, getDepartureSum
 import { askSpotlight } from "@/lib/commandRegistry";
 import { Icon as Glyph, type IconName } from "@/components/ui/icon";
 import { SelectField } from "@/components/ui/select";
-import { takeFromAddress } from "@/lib/addressOnce";
+import { useFromAddress } from "@/lib/addressOnce";
 
 // ── Lazy panels — load on first open, then keep mounted (Workspace keep-alive),
 // so the live events, a selected trace and an agent detail survive switches.
@@ -147,18 +147,22 @@ export function AgenticOpsWorkspace({
   // in the Roster.
   const [traceFocus, setTraceFocus] = useState<{ traceId?: string; investigationId?: string } | null>(null);
   const [agentFocus, setAgentFocus] = useState<{ id: string; kind: typeof BUILT_IN_AGENT_KIND | typeof CUSTOM_AGENT_KIND } | null>(null);
-  // `?agent=<built-in agent id>` opens one built-in agent's page on arrival — the chat's budget
-  // refusal links to the Responder's this way. Read once, then dropped from the address,
-  // so a later visit to Agents opens the roster rather than the same agent again.
-  useEffect(() => {
-    // `&kind=custom` opens one of the workspace's own agents (Discover links to each, 2026-11-23)
-    const { agent: id, kind } = takeFromAddress("agent", "kind");
-    if (!id) return;
+  // `?agent=<built-in agent id>` opens one built-in agent's page on arrival — the chat's budget refusal links to the
+  // Responder's this way; `&kind=custom` opens one of the workspace's own agents (Discover links to each, 2026-11-23).
+  // Read on arrival and whenever a link names one while this workspace is open (`lib/addressOnce.ts`), then dropped
+  // from the address, so a later visit to Agents opens the roster rather than the same agent again.
+  useFromAddress(["agent", "kind"], ({ agent: id, kind }) => {
     setAgentFocus({ id, kind: kind === "custom" ? CUSTOM_AGENT_KIND : BUILT_IN_AGENT_KIND });
-  }, []);
+  });
   // AO-4 — "Open automation" carries its id from every layer; the Automations layer
   // opens that one on arrival rather than the list it is somewhere in.
   const [automationFocus, setAutomationFocus] = useState<string | null>(null);
+  // `?automation=<id>` (on `layer=automations`) opens that schedule — Discover links to each, 2026-11-23
+  // (cleared first, so a second link to the schedule already focused opens it again)
+  useFromAddress(["automation"], ({ automation }) => {
+    setAutomationFocus(null);
+    window.setTimeout(() => setAutomationFocus(automation), 0);
+  });
   const openAutomation = useCallback((automationId?: string) => {
     setAutomationFocus(automationId ?? null);
     onLayerChange("automations");

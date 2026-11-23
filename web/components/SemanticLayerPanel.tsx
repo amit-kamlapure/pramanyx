@@ -36,6 +36,8 @@ import { Loading, ReadFailed } from "@/components/ui/states";
 import { TabStrip } from "@/components/ui/tab-strip";
 import { ChromeToolbar, useInShell } from "@/components/shell/PageChrome";
 import { Textarea } from "@/components/ui/textarea";
+import { DefinitionView } from "@/components/definitions/DefinitionView";
+import { useFromAddress } from "@/lib/addressOnce";
 import { type RichSchema } from "@/lib/api";
 import { getApiBase } from "@/lib/config";
 import { countNoun, formatCount } from "@/lib/format";
@@ -348,7 +350,13 @@ const KIND_HINTS: Record<string, { title: string; body: string; hint: string }> 
 
 const EMPTY_ENTRY = { id: "", title: "", body: "", kind: "note", tags: "", area: "" };
 
-function KnowledgeTab({ connId }: { connId: string }) {
+function KnowledgeTab({ connId, openDef, onOpenDef, onCloseDef }: {
+  connId: string;
+  /** The Definition open inside the app, from a link or an entry's Open; null for the list. */
+  openDef: { term: string; area: string } | null;
+  onOpenDef: (term: string, area: string) => void;
+  onCloseDef: () => void;
+}) {
   const [entries, setEntries]     = useState<KnowledgeEntry[]>([]);
   const [loading, setLoading]     = useState(false);
   const [err, setErr]             = useState("");
@@ -406,6 +414,17 @@ function KnowledgeTab({ connId }: { connId: string }) {
     finally { setRebuilding(false); }
   }
 
+  // One Definition, inside the app — the page `/definitions/<word>` shows on its own (2026-11-23: a link from Discover,
+  // or an entry's Open, never leaves the app)
+  if (openDef) {
+    return (
+      <Page testId="semantic-definition">
+        <div><Button size="xs" variant="link" onClick={onCloseDef} style={{ padding: 0 }}>‹ Definitions</Button></div>
+        <DefinitionView key={`${openDef.term}:${openDef.area}`} term={openDef.term} connection={connId} initialArea={openDef.area} inApp />
+      </Page>
+    );
+  }
+
   return (
     <Page testId="semantic-knowledge">
       <Card label="Definitions" testId="knowledge" right={<>
@@ -436,7 +455,11 @@ function KnowledgeTab({ connId }: { connId: string }) {
               {e.standing && (
                 <div className="aug-fs-xs" style={{ ...MUTED, marginTop: 2 }}>
                   {standingWords(e.standing)} ·{" "}
-                  <a href={`/definitions/${encodeURIComponent(e.title)}?conn=${encodeURIComponent(connId)}${e.area ? `&area=${encodeURIComponent(e.area)}` : ""}`}>
+                  <a href={`/?${new URLSearchParams({ tab: "semantic", conn: connId, definition: e.title, ...(e.area ? { area: e.area } : {}) })}`}
+                    onClick={ev => {
+                      if (ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
+                      ev.preventDefault(); onOpenDef(e.title, e.area ?? "");
+                    }}>
                     {e.standing.tier === "approved" ? "Open" : "Open to publish"}
                   </a>
                 </div>
@@ -748,6 +771,20 @@ export function SemanticLayerPanel({ connectionId, connName, connections = [] }:
   }, [activeTab]);
   const [scopeSchema, setScopeSchema] = useState("");
   const [scopeTable, setScopeTable]   = useState("");
+  // A link into one metric or one Definition (Discover's, 2026-11-23): on arrival, and whenever a link names one while
+  // this page is open (`lib/addressOnce.ts`). The metric opens in the whole list of its connection; the Definition opens
+  // here, inside the app.
+  const [focusMetric, setFocusMetric] = useState<{ name: string; n: number } | null>(null);
+  const [openDef, setOpenDef] = useState<{ term: string; area: string } | null>(null);
+  useFromAddress(["metric", "schema"], ({ metric }) => {
+    setScopeSchema(""); setScopeTable("");
+    setActiveTab("Metrics");
+    setFocusMetric(f => ({ name: metric, n: (f?.n ?? 0) + 1 }));
+  });
+  useFromAddress(["definition", "area"], ({ definition, area }) => {
+    setActiveTab("Definitions");
+    setOpenDef({ term: definition, area: area ?? "" });
+  });
 
   // The semantic layer is an ORG-level surface: the active connection here is independent of the app's globally-
   // selected connection. It defaults to the current selection but the user can browse any connection's semantic layer.
@@ -838,9 +875,10 @@ export function SemanticLayerPanel({ connectionId, connName, connections = [] }:
 
       {/* Content — keyed on activeConn so each tab reloads when the scope changes */}
       <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }} key={activeConn}>
-        {activeTab === "Metrics"     && <MetricsPanel connId={activeConn} schema={metricsSchema || undefined} datasets={schemas} />}
+        {activeTab === "Metrics"     && <MetricsPanel connId={activeConn} schema={metricsSchema || undefined} datasets={schemas} focus={focusMetric} />}
         {activeTab === "Annotations" && <AnnotationsTab connId={activeConn} scopeTable={scopeTable} />}
-        {activeTab === "Definitions" && <KnowledgeTab   connId={activeConn} />}
+        {activeTab === "Definitions" && <KnowledgeTab   connId={activeConn} openDef={openDef}
+          onOpenDef={(term, area) => setOpenDef({ term, area })} onCloseDef={() => setOpenDef(null)} />}
         {activeTab === "Review"      && <Page testId="semantic-review"><ReviewQueue connId={activeConn} /></Page>}
         {activeTab === "Benchmarks"  && <BenchmarksTab  connId={activeConn} />}
         {activeTab === "Import"      && (

@@ -1,25 +1,63 @@
 // @vitest-environment jsdom
 /**
- * A link's word for what to open is read once and taken off the address (Discover's links, 2026-11-23), so the next
- * visit to the page opens it as it opens.
+ * A link into one thing inside the app (Discover's links, 2026-11-23): its words ride the address, are read once and
+ * taken off; a page reads them when it mounts AND when a link names them while it is open (the shell keeps pages
+ * mounted); one page never takes another link's qualifier; and opening a link in place puts its words on the address
+ * as a step Back undoes and asks the shell for its screen, without a reload.
  */
-import { afterEach, describe, expect, it } from "vitest";
+import { act, renderHook } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { takeFromAddress } from "@/lib/addressOnce";
+import { ADDRESS_EVENT, openInApp, takeFromAddress, useFromAddress } from "@/lib/addressOnce";
+import { NAVIGATE_EVENT } from "@/lib/navigate";
 
 afterEach(() => window.history.replaceState(null, "", "/"));
 
-describe("a link's word", () => {
-  it("is read once and taken off, and the app's own words stay", () => {
+describe("a link's words", () => {
+  it("are read once and taken off, and the app's own words stay", () => {
     window.history.replaceState(null, "", "/?tab=catalog&conn=c1&schema=thelook&table=orders");
     expect(takeFromAddress("table", "schema")).toEqual({ table: "orders", schema: "thelook" });
     expect(window.location.search).toBe("?tab=catalog&conn=c1");
     expect(takeFromAddress("table", "schema")).toEqual({});
   });
 
-  it("leaves the address alone when it holds none of them", () => {
-    window.history.replaceState(null, "", "/?tab=documents");
-    expect(takeFromAddress("doc")).toEqual({});
-    expect(window.location.search).toBe("?tab=documents");
+  it("are taken only by the page whose key they carry — a metric's schema is not the Catalog's", () => {
+    window.history.replaceState(null, "", "/?tab=semantic&conn=c1&metric=revenue&schema=thelook");
+    expect(takeFromAddress("table", "schema")).toEqual({});
+    expect(window.location.search).toContain("schema=thelook");
+    expect(takeFromAddress("metric", "schema")).toEqual({ metric: "revenue", schema: "thelook" });
+  });
+});
+
+describe("a page that holds things", () => {
+  it("reads a link's words when it mounts, and again when a link names them while it is open", () => {
+    window.history.replaceState(null, "", "/?tab=spreadsheets&sheet=s1");
+    const seen: string[] = [];
+    renderHook(() => useFromAddress(["sheet"], ({ sheet }) => seen.push(sheet)));
+    expect(seen).toEqual(["s1"]);
+    act(() => openInApp("/?tab=spreadsheets&sheet=s2"));
+    expect(seen).toEqual(["s1", "s2"]);
+    expect(window.location.search).toBe("?tab=spreadsheets");
+  });
+
+  it("does not stir for a link that names something else", () => {
+    const seen: string[] = [];
+    renderHook(() => useFromAddress(["sheet"], ({ sheet }) => seen.push(sheet)));
+    window.history.replaceState(null, "", "/?tab=documents&doc=d1&sheet=lingering");
+    act(() => { window.dispatchEvent(new CustomEvent(ADDRESS_EVENT, { detail: { words: ["tab", "doc"] } })); });
+    expect(seen).toEqual([]);
+  });
+});
+
+describe("opening a link in place", () => {
+  it("puts its words on the address as a step, and asks the shell for its screen, connection and layer", () => {
+    const asked = vi.fn();
+    window.addEventListener(NAVIGATE_EVENT, asked);
+    const before = window.history.length;
+    openInApp("/?tab=agentic-ops&layer=automations&conn=c1&automation=a1");
+    window.removeEventListener(NAVIGATE_EVENT, asked);
+    expect(window.history.length).toBe(before + 1);
+    expect(window.location.search).toBe("?tab=agentic-ops&layer=automations&conn=c1&automation=a1");
+    expect((asked.mock.calls[0][0] as CustomEvent).detail).toEqual({ tab: "agentic-ops", params: { conn: "c1", layer: "automations" } });
   });
 });

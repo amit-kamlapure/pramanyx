@@ -41,7 +41,7 @@ import { CatalogTable } from "@/components/catalog/CatalogTable";
 import { recents } from "@/components/catalog/CatalogTools";
 import { explored, findDuplicates, itemKey, type CatalogItem } from "@/lib/catalogSummary";
 import { relTime } from "@/lib/format";
-import { takeFromAddress } from "@/lib/addressOnce";
+import { useFromAddress } from "@/lib/addressOnce";
 
 /** <Button> forces child SVGs to size-4/size-3; this restores each icon's own
  *  width/height attributes (size-auto → the SVG's intrinsic attribute size). */
@@ -166,18 +166,34 @@ export function CatalogScreen({ connections, selectedConn, onSelect, onDeleteCon
   const [treeError, setTreeError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set(["section:connections", "catalog:workspace", "schema:workspace:ecommerce"]));
   const [sel, setSel]           = useState<Sel>(null);
-  // The table a link names (`?table=`, under `?schema=` and the app's `?conn=`), read once and opened when the tree holds it.
-  // Read in an effect declared before the tree's load, never in render: a strict double render would take it twice. The
-  // connection is not read from the address alone: the page writes its address before its connections load, and `?conn=`
-  // is briefly gone when this screen mounts (seen live, 2026-11-23) — the page's chosen connection answers it then.
+  // The table a link names (`?table=`, under `?schema=` and the app's `?conn=`): read when this screen mounts, and again
+  // when a link names one while it is open (`lib/addressOnce.ts`), then opened in the tree this screen holds, or on the
+  // tree's next answer when it holds none yet. Its connection: the link's, else the page's chosen one — the page writes
+  // its address before its connections load, so `?conn=` is briefly gone on a cold load (seen live, 2026-11-23).
   const linkedTable = useRef<{ conn: string; schema: string; table: string } | null>(null);
   const chosenConn = useRef(selectedConn);
   useEffect(() => { chosenConn.current = selectedConn; }, [selectedConn]);
-  useEffect(() => {
-    const conn = new URLSearchParams(window.location.search).get("conn") ?? "";
-    const { table, schema } = takeFromAddress("table", "schema");
-    if (table) linkedTable.current = { conn, schema: schema ?? "", table };
-  }, []);
+  const treeNow = useRef<CatalogTree | null>(null);
+  const openLinked = (t: CatalogTree | null): void => {
+    const want = linkedTable.current;
+    if (!want || !t) return;
+    const uc = t.sections.find(x => x.id === "connections");
+    const inSchema = (x: CatalogSchemaInfo) => (!want.schema || x.name === want.schema) && x.tables.some(tb => tb.name === want.table);
+    // its catalog: the one the link names, else the page's chosen one, else the only one that holds such a table
+    const holders = (uc?.entries ?? []).filter(e => e.schemas.some(inSchema));
+    const named = want.conn || chosenConn.current || "";
+    const holding = holders.find(e => e.conn_id === named) ?? (holders.length === 1 ? holders[0] : undefined);
+    const sc = holding?.schemas.find(inSchema);
+    const tb = sc?.tables.find(x => x.name === want.table);
+    if (!holding || !sc || !tb) return;   // not in the tree yet: kept for its next answer
+    linkedTable.current = null;
+    onSelect(holding.conn_id);
+    openTable(holding.conn_id, sc.name, tb);
+  };
+  useFromAddress(["table", "schema"], ({ table, schema }) => {
+    linkedTable.current = { conn: new URLSearchParams(window.location.search).get("conn") ?? "", schema: schema ?? "", table };
+    openLinked(treeNow.current);
+  });
   const [showAddData, setShowAddData] = useState(false);
   const [search, setSearch]     = useState("");
   const [testing, setTesting]   = useState<string | null>(null);
@@ -212,6 +228,7 @@ export function CatalogScreen({ connections, selectedConn, onSelect, onDeleteCon
       .then(t => {
         if (seq !== treeReq.current) return t;   // a newer request is in flight; its answer is the one that counts
         setTree(t);
+        treeNow.current = t;
         setTreeError(null);
         const uc = t.sections.find(s => s.id === "connections");
         if (uc && uc.entries.length > 0) {
@@ -223,21 +240,7 @@ export function CatalogScreen({ connections, selectedConn, onSelect, onDeleteCon
             return n;
           });
         }
-        // A link to one table (`?conn=&schema=&table=`, as Discover's items link, 2026-11-23) opens it once the tree
-        // holds it; a table not in the tree yet keeps the link for the next answer of a catalog still reading.
-        // Its catalog: the one the link names, else the page's chosen one, else the only one that holds such a table.
-        const want = linkedTable.current;
-        const holds = (e: CatalogEntry) => e.schemas.some(x => (!want?.schema || x.name === want.schema) && x.tables.some(tb => tb.name === want?.table));
-        const holders = want ? (uc?.entries ?? []).filter(holds) : [];
-        const named = want?.conn || chosenConn.current || "";
-        const holding = holders.find(e => e.conn_id === named) ?? (holders.length === 1 ? holders[0] : undefined);
-        const sc = holding && holding.schemas.find(x => (!want?.schema || x.name === want.schema) && x.tables.some(tb => tb.name === want?.table));
-        const tb = sc && want && sc.tables.find(x => x.name === want.table);
-        if (want && holding && sc && tb) {
-          linkedTable.current = null;
-          onSelect(holding.conn_id);
-          openTable(holding.conn_id, sc.name, tb);
-        }
+        openLinked(t);   // a table a link named, once the tree holds it
         // A catalog still reading when the tree answered (the server waits for no one longer than a few seconds) is
         // asked again shortly, once its read can have landed — a few times, not forever.
         const unsettled = t.sections.some(s => s.entries.some(e => e.read === "reading" || e.read === "earlier"));

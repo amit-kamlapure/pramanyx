@@ -6,7 +6,8 @@
  *
  * A browse page, not a dashboard: the search and its filters first, then the Areas as cards, what is certified, and each
  * kind with its first few. An Area opens on its own page (`?tab=discover&id=<area>`, so Back and a reload keep it). A row
- * is a link to the thing's own page — a real link, so it opens in a new tab as a person expects; one the Ask panel has a
+ * is a link to the thing's own page inside the app, opened in place without a reload (`lib/addressOnce.openInApp`) — a
+ * real link still, so ⌘-click opens it in a new tab as a person expects; one the Ask panel has a
  * subject for (a table, a dashboard, a spreadsheet) can be asked about from the row. What a person may not open is
  * counted where it would have stood, and a kind that could not be read is said. No title bar: the rail and the tab say
  * where this is (the user, 2026-09-26).
@@ -20,6 +21,7 @@ import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
 import { SelectField } from "@/components/ui/select";
 import { Loading, ReadFailed } from "@/components/ui/states";
+import { openInApp } from "@/lib/addressOnce";
 import { declarationsOf, readAreas, saveAreas, setNotAnArea } from "@/lib/areas";
 import { askAbout } from "@/lib/askSubject";
 import {
@@ -438,7 +440,7 @@ function ItemRow({ item, areaName, many, how = false }: { item: DiscoverItem; ar
   const line = secondLine(item, many);
   return (
     <div className="aug-discover-row" data-testid="discover-row">
-      <a href={item.href} title={`${KIND_WORDS[item.kind][0]} · ${item.name}`}>
+      <a href={item.href} title={`${KIND_WORDS[item.kind][0]} · ${item.name}`} onClick={e => inPlace(e, () => openInApp(item.href))}>
         <span className="k"><Icon name={KIND_ICON[item.kind]} size={15} /></span>
         <span className="main">
           <span className="n aug-fs-chrome">{item.name}</span>

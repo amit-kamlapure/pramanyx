@@ -16,7 +16,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import asdict, dataclass, field
 from typing import Any, Callable, Optional
-from urllib.parse import quote, urlencode
+from urllib.parse import urlencode
 
 #: The kinds, in the order Discover shows them.
 KINDS = ("metric", "table", "definition", "dashboard", "canvas", "agent", "schedule", "document", "sheet",
@@ -98,6 +98,9 @@ def who_of(person: str) -> str:
 
 
 def _href(path: str, **params: str) -> str:
+    """The thing's own page INSIDE the app, in the shell's own words for it (`tab` and `layer` as the app writes them, so
+    opening it adds one step Back undoes) and the words its page reads (`web/lib/addressOnce.ts`). Never a page of its
+    own: one opened from Discover leaves the app's rail and bar behind (the user, 2026-11-23)."""
     kept = {k: v for k, v in params.items() if v}
     return f"{path}?{urlencode(kept)}" if kept else path
 
@@ -225,7 +228,7 @@ def metrics(scope: Scope) -> Found:
                 line=str(m.get("description") or ""), connection_id=conn, connection_name=name, area=area,
                 area_how=why, owner=str(m.get("owner") or ""), state=str(m.get("status") or ""),
                 updated_at=str(m.get("approved_at") or m.get("proposed_at") or ""),
-                href=_href(f"/metrics/{quote(str(m['name']))}", conn=conn, schema=str(m.get("home_schema") or "")),
+                href=_href("/", tab="semantic", conn=conn, metric=str(m["name"]), schema=str(m.get("home_schema") or "")),
                 detail={"unit": m.get("unit") or "", "measurable": m.get("measurable")}))
     return found
 
@@ -247,7 +250,7 @@ def definitions(scope: Scope) -> Found:
                 connection_id=conn, connection_name=name, area=area, area_how="its own" if area else "",
                 owner=str(x.get("approved_by") or c.owner or c.author or ""), updated_at=c.recorded_at,
                 state="published" if published else "draft",
-                href=_href(f"/definitions/{quote(term)}", conn=conn, area=area)))
+                href=_href("/", tab="semantic", conn=conn, definition=term, area=area)))
     return found
 
 
@@ -267,7 +270,7 @@ def dashboards(scope: Scope) -> Found:
                 kind="dashboard", id=ref, name=str(d.get("title") or d.get("dashboard_id")), line="Yours",
                 connection_id=conn, connection_name=name, owner=owner, updated_at=str(d.get("kept_at") or ""),
                 state=str(d.get("state") or ""), certification=marks.get(ref),
-                href=_href("/", tab="dashboards", conn=conn, dashboard=str(d.get("dashboard_id") or ""))),
+                href=_href("/", tab="intelligence", layer="dashboards", conn=conn, dashboard=str(d.get("dashboard_id") or ""))),
                 scope, placed=placed.get(ref)))
         for d in sharing.shared_with(conn, owner):
             ref = f"{conn}:{d.get('owner')}:{d.get('dashboard_id')}"
@@ -276,7 +279,7 @@ def dashboards(scope: Scope) -> Found:
                 line=f"Published by {who_of(str(d.get('owner') or ''))}", connection_id=conn, connection_name=name,
                 owner=str(d.get("owner") or ""), state="published", certification=marks.get(ref),
                 # one published to the person is opened as `shared:<owner>:<id>` (`dashboards/BriefingDashboards.tsx`)
-                href=_href("/", tab="dashboards", conn=conn,
+                href=_href("/", tab="intelligence", layer="dashboards", conn=conn,
                            dashboard=f"shared:{d.get('owner') or ''}:{d.get('dashboard_id') or ''}")),
                 scope, placed=placed.get(ref)))
     return found
@@ -300,7 +303,7 @@ def canvases(scope: Scope) -> Found:
         item = Item(kind="canvas", id=c.id, name=c.name, line=str(c.description or ""), connection_id=conn,
                     connection_name=scope.connections[conn], owner=str(c.created_by or ""),
                     updated_at=str(activity.get(c.id) or c.updated_at or ""), certification=marks.get(c.id),
-                    href=_href("/", tab="canvas-workspace", canvas=c.id),
+                    href=_href("/", tab="canvas-workspace", conn=conn, canvas=c.id),
                     tables=[t for s in c.scopes for t in (s.tables or [])])
         found.items.append(settle(item, scope, placed=placed.get(c.id)))
     return found
@@ -318,7 +321,7 @@ def agents(scope: Scope) -> Found:
         found.items.append(settle(Item(
             kind="agent", id=a.id, name=a.name, line=a.purpose, connection_id=a.connection_id,
             connection_name=scope.connections.get(a.connection_id, ""), owner=a.owner, updated_at=a.updated_at,
-            state="on" if a.enabled else "off", href=_href("/", tab="agents", agent=a.id, kind="custom")),
+            state="on" if a.enabled else "off", href=_href("/", tab="agentic-ops", layer="agents", agent=a.id, kind="custom")),
             scope, placed=placed.get(a.id)))
     return found
 
@@ -335,7 +338,7 @@ def schedules(scope: Scope) -> Found:
         found.items.append(settle(Item(
             kind="schedule", id=a.id, name=a.name, line=a.description, connection_id=a.conn_id,
             connection_name=scope.connections[a.conn_id], owner=a.declared_by, updated_at=str(a.updated_at or ""),
-            state="on" if a.enabled else "off", href=_href("/automations", conn=a.conn_id, focus=a.id)),
+            state="on" if a.enabled else "off", href=_href("/", tab="agentic-ops", layer="automations", conn=a.conn_id, automation=a.id)),
             scope, placed=placed.get(a.id)))
     return found
 
@@ -381,7 +384,7 @@ def sheets(scope: Scope) -> Found:
         found.items.append(settle(Item(
             kind="sheet", id=s.id, name=s.name, line=f"{len(s.columns)} columns", connection_id=model.SHEETS_CONNECTION,
             owner=str(s.created_by or ""), updated_at=str(getattr(s.change, "at", "") or s.created_at or ""),
-            href=f"/sheets/{quote(s.id)}"), scope, placed=placed.get(s.id)))
+            href=_href("/", tab="spreadsheets", sheet=s.id)), scope, placed=placed.get(s.id)))
     return found
 
 
@@ -402,7 +405,7 @@ def trusted_queries(scope: Scope) -> Found:
                 kind="trusted_query", id=f"{conn}/{qid}", name=str(q.question), connection_id=conn,
                 connection_name=name, state=str(getattr(q, "status", "") or "approved"),
                 updated_at=str(getattr(q, "verified_at", "") or getattr(q, "updated_at", "") or ""),
-                href=_href("/", tab="memory", conn=conn, trusted=qid),
+                href=_href("/", tab="intelligence", layer="memory", conn=conn, trusted=qid),
                 tables=sorted(tables_of_sql(str(getattr(q, "sql", "") or "")))), scope))
     return found
 

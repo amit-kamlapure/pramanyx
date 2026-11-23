@@ -200,7 +200,7 @@ def test_another_person_s_draft_definition_is_theirs_and_is_not_listed(monkeypat
         claim("Shipped", "approved", "user:bo"), claim("Returned", "draft", "user:ana"), claim("Active", "draft", "user:bo")])
     got = I.definitions(_scope())
     assert [(i.name, i.state) for i in got.items] == [("Shipped", "published"), ("Returned", "draft")]
-    assert got.items[0].href == "/definitions/Shipped?conn=c1&area=returns"
+    assert got.items[0].href == "/?tab=semantic&conn=c1&definition=Shipped&area=returns"
 
 
 def test_an_archived_dashboard_is_not_listed_and_a_published_one_carries_its_owner(monkeypatch):
@@ -215,7 +215,7 @@ def test_an_archived_dashboard_is_not_listed_and_a_published_one_carries_its_own
     monkeypatch.setattr(I, "by_words", lambda scope, text, conn="": ("", ""))
     got = I.dashboards(_scope())
     assert [i.name for i in got.items] == ["Sales", "Operations"]
-    assert got.items[0].certification == CERT and got.items[1].href == "/?tab=dashboards&conn=c1&dashboard=shared%3Abo%3Aops"
+    assert got.items[0].certification == CERT and got.items[1].href == "/?tab=intelligence&layer=dashboards&conn=c1&dashboard=shared%3Abo%3Aops"
 
 
 # ── the doors ──────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -256,3 +256,19 @@ def test_the_sheets_connection_s_tables_are_not_listed_again_as_tables(monkeypat
     monkeypatch.setattr("pramanyx.govern.certification.of_prefix", lambda prefix: {})
     got = I.tables(Scope(None, "user:ana", {"c1": "theLook", SHEETS_CONNECTION: "Sheets"}))
     assert read == ["c1"] and [i.connection_id for i in got.items] == ["c1"]
+
+
+def test_every_kind_links_to_its_page_inside_the_app():
+    """Seen live, 2026-11-23: a spreadsheet opened on a page of its own, without the app's rail or bar. Every reader
+    links inside the app (`/?tab=…`), in the words its page reads — never `/sheets/…`, `/metrics/…`, `/definitions/…`
+    or `/automations`."""
+    import ast
+    import inspect
+    tree = ast.parse(inspect.getsource(I))
+    hrefs = [kw.value for node in ast.walk(tree) if isinstance(node, ast.Call)
+             for kw in node.keywords if kw.arg == "href"]
+    assert len(hrefs) >= len(I.KINDS)
+    for h in hrefs:
+        assert isinstance(h, ast.Call) and getattr(h.func, "id", "") == "_href", ast.unparse(h)
+        assert ast.literal_eval(h.args[0]) == "/", ast.unparse(h)
+        assert any(kw.arg == "tab" for kw in h.keywords), ast.unparse(h)

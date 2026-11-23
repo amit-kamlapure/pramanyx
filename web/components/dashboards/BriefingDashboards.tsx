@@ -102,7 +102,8 @@ import { hostStateOf } from "@/lib/dashboards/hostStatus";
 import { SHAPES } from "@/lib/dashboards/shapes";
 import { emptyDashboardSpec, overdueSegmentOf, processDashboardHolds, processDashboardSpec, startDashboard } from "@/lib/dashboards/start";
 import { valuesRead } from "@/lib/dashboards/values";
-import { dashboardInAddress, focusOfCard, useDashboardFocus } from "@/lib/dashboards/focus";
+import { DASHBOARD_PARAM, dashboardInAddress, focusOfCard, useDashboardFocus } from "@/lib/dashboards/focus";
+import { useFromAddress } from "@/lib/addressOnce";
 import { isOtherKind, tileShape } from "@/components/dashboards/DashboardTile";
 import { CardSql, ChartDock, QueryChartEditor, type KeptValueColors } from "@/components/dashboards/CardInspector";
 import { formatDateTime, utcDayWords } from "@/lib/format";
@@ -1136,6 +1137,10 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
     setPicking(false); setPublishing(false); setNoting(false); setImaging(false); setComposing(false); setQuestioning(false);
     setEditing(keepEditing); setStacks(NO_STEPS); previewAsGroup("");
   };
+
+  // A link that names a dashboard while this page is open (Discover's, `lib/addressOnce.ts`) opens it here; on arrival the
+  // list's own read takes the word (`dashboardInAddress`), so a cold load opens it exactly as before.
+  useFromAddress([DASHBOARD_PARAM], ({ [DASHBOARD_PARAM]: id }) => choose(id));
 
   const refreshOne = useCallback(async (id: string) => {
     try {

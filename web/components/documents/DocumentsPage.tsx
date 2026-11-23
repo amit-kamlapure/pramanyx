@@ -56,7 +56,7 @@ import {
 import { readCertifications, type Certification } from "@/lib/certification";
 import { countNoun, formatCount, formatTimestamp } from "@/lib/format";
 import { connectionLabel } from "@/lib/names";
-import { showWhenDrawn, takeFromAddress } from "@/lib/addressOnce";
+import { showWhenDrawn, useFromAddress } from "@/lib/addressOnce";
 
 type Conn = { id: string; name: string };
 
@@ -103,15 +103,14 @@ export function DocumentsPage({ connectionId, connections = [] }: {
   // The purge is read first, as a dry run, and runs only when the person confirms what it will delete.
   const [purgePlan, setPurgePlan] = useState<{ chunks: number; documents: number } | null>(null);
   const [showSchemaDocs, setShowSchemaDocs] = useState(false);
-  // `?doc=<id>` opens that document's preview on arrival (Discover links to each, 2026-11-23); a schema's compiled
-  // document is folded under the uploads, so its fold opens with it (its id is `doctree::…`, as the server tells them).
-  useEffect(() => {
-    const { doc } = takeFromAddress("doc");
-    if (!doc) return;
+  // `?doc=<id>` opens that document's preview (Discover links to each, 2026-11-23) — on arrival, and when a link names one
+  // while this page is open (`lib/addressOnce.ts`); a schema's compiled document is folded under the uploads, so its fold
+  // opens with it (its id is `doctree::…`, as the server tells them).
+  useFromAddress(["doc"], ({ doc }) => {
     if (doc.startsWith("doctree::")) setShowSchemaDocs(true);
     setOpenDocId(doc);
     showWhenDrawn(`[data-doc-id="${CSS.escape(doc)}"]`, 40);
-  }, []);
+  });
   const [now] = useState(() => Date.now());
 
   // A failed read of the list used to leave it empty under "No documents yet", and a failed read of the plane's status

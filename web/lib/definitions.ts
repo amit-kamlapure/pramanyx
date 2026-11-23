@@ -30,6 +30,16 @@ export function linkHref(link: DefinitionLink, connection: string): string | nul
   return null;
 }
 
+/** Where a link opens inside the app (the Semantic Layer holds metrics and Definitions — Discover's links, 2026-11-23),
+ *  for a definition shown in the app rather than on a page of its own. */
+export function inAppHref(link: DefinitionLink, connection: string): string | null {
+  const q = (more: Record<string, string>) => `/?${new URLSearchParams({ tab: "semantic", conn: connection, ...more })}`;
+  if (link.kind === "metric") return q({ metric: link.ref });
+  if (link.kind === "definition") return q({ definition: link.ref });
+  if (link.kind === "url" && /^https?:\/\//.test(link.ref)) return link.ref;
+  return null;
+}
+
 /** The versions whose WORDS changed — a suggestion filed or decided restates the claim without changing them. */
 export function earlierWordings(versions: Version[]): Version[] {
   const out: Version[] = [];
