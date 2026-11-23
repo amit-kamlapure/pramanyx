@@ -16,6 +16,10 @@ updates:
     directory: "/web"
     schedule:
       interval: "weekly"
+    # The same seven days web/.npmrc holds every install to (min-release-age): a version younger than that is one a
+    # developer's npm refuses, so proposing it only makes a PR nobody can install (2026-11-24: #28 partly did).
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     groups:
       npm-minor-and-patch:
