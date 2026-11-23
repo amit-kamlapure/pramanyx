@@ -198,6 +198,15 @@ under the workspace, kept 20 s); ten suggestions crowding the Areas (folded); lo
 whole on hover); and the dev server's Turbopack cache serving the old stylesheet after the checkout move (cleared, the
 user's call). Not in D2: Featured, an Area's description and Add/Edit (D4), Most used (D5), meaning search (D3).
 
+**Links, made robust, 2026-11-23** (the user, on a spreadsheet that opened with no rail and no bar: it "must connect
+very well and in a very robust manner"). Every kind links to its home INSIDE the app (`discover/items._href`; a guard reads
+every link): a metric and a Definition to the Semantic Layer (the Definition page — `components/definitions/DefinitionView`
+— now shown there as well as at `/definitions/<word>`), a spreadsheet to Spreadsheets, a schedule to Agent Ops'
+Automations, a trusted query to Memory, a dashboard to Dashboards, a canvas to the Data Canvas, a table to the Catalog,
+an agent to the Roster, a document to Documents. Opened in place (`lib/addressOnce.openInApp`): the shell's words go on
+the address, the link's own are handed to the page (Next's router writes back what a `pushState` gave it, so a word put
+there stayed); each page reads them on mount AND while open (`useFromAddress`). Seen live, each kind, cold and warm.
+
 ## 7 · Not in this plan
 
 - **Across workspaces** (Databricks' account scope) — **Later**: nothing spans workspaces yet.
