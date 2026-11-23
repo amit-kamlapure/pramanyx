@@ -155,6 +155,24 @@ def test_a_document_not_shared_with_the_person_is_counted_not_listed(monkeypatch
     assert got.items[0].href == "/?tab=documents&doc=d1"
 
 
+def test_a_connection_s_schema_document_stands_with_it_and_is_out_of_view_with_it(monkeypatch):
+    """Seen live, 2026-11-23: theLook's Discover listed Olist's schema documentation."""
+    monkeypatch.setattr("pramanyx.routers.knowledge.list_documents_endpoint", lambda: [
+        {"doc_id": "doctree::c1::thelook", "title": "Schema documentation — c1/thelook", "generated": True,
+         "connection_id": "c1"},
+        {"doc_id": "doctree::c9::olist", "title": "Schema documentation — c9/olist", "generated": True,
+         "connection_id": "c9"},
+        {"doc_id": "d1", "title": "Kpi Handbook", "connection_id": None}])
+    monkeypatch.setattr("pramanyx.knowledge.access.may_read", lambda d, reader=None: True)
+    monkeypatch.setattr(I, "_certified", lambda kind: {})
+    monkeypatch.setattr(I, "_placed_tags", lambda kind: {})
+    monkeypatch.setattr(I, "by_words", lambda scope, text, conn="": "")
+    got = I.documents(_scope())
+    assert [(i.name, i.connection_name) for i in got.items] == [
+        ("Schema documentation — theLook/thelook", "theLook"), ("Kpi Handbook", "")]
+    assert got.withheld == 0
+
+
 def test_another_person_s_draft_definition_is_theirs_and_is_not_listed(monkeypatch):
     def claim(term, tier, author):
         return SimpleNamespace(extra={"term": term, "area": "returns"}, tier=tier, author=author, owner="",

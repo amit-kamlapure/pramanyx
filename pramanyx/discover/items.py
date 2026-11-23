@@ -331,19 +331,26 @@ def schedules(scope: Scope) -> Found:
 
 
 def documents(scope: Scope) -> Found:
-    """The documents the person may read; one that is private to someone else is counted, not listed."""
+    """The documents the person may read; one that is private to someone else is counted, not listed. A document of
+    one connection (a schema's documentation) stands with it, and is out of view with it; one of none is always in."""
     from pramanyx.knowledge.access import may_read
     from pramanyx.routers.knowledge import list_documents_endpoint
     found = Found()
     marks, placed = _certified("document"), _placed_tags("document")
     for d in list_documents_endpoint():
+        conn = str(d.get("connection_id") or "")
+        if conn and conn not in scope.connections:
+            continue
         if not may_read(d):
             found.withheld += 1
             continue
         doc_id = str(d.get("doc_id") or "")
         title = str(d.get("title") or d.get("filename") or doc_id)
+        if conn and d.get("generated"):
+            title = title.replace(f"{conn}/", f"{scope.connections[conn]}/", 1)   # its connection by name, not id
         found.items.append(settle(Item(
             kind="document", id=doc_id, name=title, line="Written by the platform" if d.get("generated") else "",
+            connection_id=conn, connection_name=scope.connections.get(conn, ""),
             owner=str((d.get("access") or {}).get("owner") or ""), updated_at=str(d.get("uploaded_at") or ""),
             certification=marks.get(doc_id), href=_href("/", tab="documents", doc=doc_id)),
             scope, placed=placed.get(doc_id), words=title))
