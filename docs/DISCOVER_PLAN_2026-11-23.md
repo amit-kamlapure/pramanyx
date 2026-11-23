@@ -216,6 +216,18 @@ item. Fused by rank, each connection by its own; a table on two connections said
 again" → Repeat Purchase Rate, the conversion rate and the buyers' tables by user_id; "late deliveries" → the delivery
 columns and metrics; nonsense → nothing; 0.6–1.8 s. Not in D3: findings as results (not a Discover kind).
 
+**The Definition as a Page, live 2026-11-23** (the user, showing a catalog's Page beside ours: "Dont know what this is").
+`components/definitions/DefinitionView.tsx` lays a Definition out as a Page: name, state and actions on one row (Cancel /
+Save as draft / Publish for its owner, Suggest this edit for anyone else); Area, Owner, Synonyms and Description a row
+each; the body in Markdown under a toolbar (`lib/definitionBody.ts`), a new one opening on Definition and Business use,
+drawn when read (`DefinitionBody.tsx`); related assets picked from anything Discover lists, by name or meaning; sources —
+a web address or a document. The store gained a description, sources, and related assets of every Discover kind with
+their in-app address (`record/writers.py`). Begun from the Semantic Layer's "Add a definition" (its quick entry moved to
+the card's tools) and Discover's "Write a Definition" / "New". Seen live: filled in, picked "Repeat Purchase Rate" by
+"who buys again", previewed, cancelled — nothing written. Differences kept: the body is Markdown with a preview rather
+than typed in place; the owner is whoever writes it first (no handing it to another yet); no images; no model writes the
+description.
+
 ## 7 · Not in this plan
 
 - **Across workspaces** (Databricks' account scope) — **Later**: nothing spans workspaces yet.
