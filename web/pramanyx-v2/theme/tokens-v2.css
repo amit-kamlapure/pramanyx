@@ -81,7 +81,10 @@
      at the foot re-declares the ones that differ. */
   --bg-0: var(--gray-1);             /* the ground: the page, canvases — dark gray 1; light gray 3 below */
   --bg-1: var(--gray-2);             /* chrome: topbar, rail, tab strips, a table's header row */
-  --bg-2: var(--gray-3);             /* a card, a panel: one step above the ground in dark; white in light */
+  /* a card, a panel: in dark the step just above the ground, its hairline doing the parting (2026-11-23, the user, with
+     the reference beside ours: "This light grey on dark bluish grey is painful to the eyes" — it was gray 3, the frame's
+     slab, grey words on it); white in light */
+  --bg-2: var(--gray-2);
   --bg-3: var(--gray-1);             /* inset, input: a step under the card in dark; gray 3 in light */
   --bg-4: var(--gray-5);             /* pressed, the active segment */
   --bg-hover: var(--gray-4);         /* row and nav hover */
@@ -286,27 +289,20 @@
    inter is what the page was, and edges on is the skin's own grammar, so a person who chose
    nothing sees the skin as it is drawn. ── */
 
-/* edges: on by default in both skins since 2026-10-25; off takes the card's hairline away */
+/* edges: on by default in both skins since 2026-10-25; off takes the card's hairline away in light. In dark a card sits
+   a breath above the ground (2026-11-23), so its hairline is what shows it: off makes it fainter, never gone. */
 :root[data-edges="off"] {
   --card-edge: transparent;
 }
+:root:not([data-theme="light"])[data-edges="off"] {
+  --card-edge: var(--gray-5);
+}
 
-/* ── A CARD (2026-11-23, the user, with the reference's Discover beside ours: "This light grey on dark bluish grey is
-   painful to the eyes" — its cards stand on the page with a hairline round them, ours were a slab a step lighter with
-   grey words on it). In dark a card is the page's own ground with a hairline; in light it is what it was — white on the
-   grey ground, its edge the knob's. `--card-bg` and `--card-line` are a card's own: what else paints with --bg-2 (a
-   graph's node, a grid's header, a menu) keeps its fill. With edges off the dark hairline is fainter, never gone: a
-   card on the ground with no edge would not be seen. ── */
+/* ── A CARD — its surface and its line, named for it: --bg-2 and --card-edge (2026-11-23: in dark a breath above the
+   ground with a hairline round it, as the reference's cards; in light white on the grey ground). ── */
 :root {
   --card-bg: var(--bg-2);
   --card-line: var(--card-edge);
-}
-:root:not([data-theme="light"]) {
-  --card-bg: var(--bg-0);
-  --card-line: var(--gray-6);
-}
-:root:not([data-theme="light"])[data-edges="off"] {
-  --card-line: var(--gray-5);
 }
 
 /* typeface: the interface set in Source Sans 3 instead of Inter. --font-ui is what the body
