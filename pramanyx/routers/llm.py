@@ -7,7 +7,10 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from html import escape
+
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from pramanyx.licensing import Capability, gate
@@ -204,3 +207,62 @@ def cache_probe(req: Optional[_ProbeRequest] = None):
     # place, and the probe owns it.
     kw = {"rounds": req.rounds} if req.rounds else {}
     return _probe.probe_prefix_cache(role=(req.role or "coder"), **kw)
+
+
+# ── The ChatGPT plan's sign-in (pramanyx/llm/chatgpt_plan.py) ─────────────────────────────────
+
+def _loopback(host: str) -> bool:
+    return host in ("127.0.0.1", "::1", "localhost") or host.startswith("127.")
+
+
+@router.post("/llm/chatgpt/sign-in", dependencies=[gate(Capability.SECURITY_SUITE)])
+def chatgpt_sign_in(request: Request) -> dict:
+    """Start a sign-in to the person's ChatGPT plan: the URL their browser opens. OpenAI returns the browser to
+    this API on `127.0.0.1` at the port it listens on, so the browser must be on the machine the API runs on —
+    refused with that reason otherwise, rather than sending a person to a sign-in that cannot come back."""
+    from pramanyx.llm import chatgpt_plan
+
+    client = (request.client.host if request.client else "") or ""
+    if client and not _loopback(client):
+        raise HTTPException(status_code=409, detail=(
+            "Sign in to ChatGPT from a browser on the machine this API runs on: OpenAI returns the browser to "
+            "127.0.0.1, which from another machine is that machine, not this one."))
+    server = request.scope.get("server") or ("127.0.0.1", request.url.port or 8000)
+    return chatgpt_plan.begin(chatgpt_plan.redirect_uri_for(int(server[1])))
+
+
+@router.get("/auth/callback", response_class=HTMLResponse, include_in_schema=False)
+def chatgpt_callback(state: str = "", code: str = "", client_id: str = "", error: str = "",
+                     error_description: str = "") -> HTMLResponse:
+    """Where OpenAI returns the browser after a ChatGPT sign-in. Exempt from the API key (`api._AUTH_EXEMPT`):
+    the return carries none, and the unguessable `state` this install minted is what is verified — a state no
+    sign-in is waiting for is refused."""
+    from pramanyx.llm import chatgpt_plan
+
+    def page(title: str, words: str, status: int = 200) -> HTMLResponse:
+        return HTMLResponse(f"<!doctype html><meta charset=utf-8><title>{escape(title)}</title>"
+                            f"<body style='font:14px system-ui;margin:48px'><h1 style='font-size:18px'>"
+                            f"{escape(title)}</h1><p>{escape(words)}</p></body>", status_code=status)
+    try:
+        out = chatgpt_plan.complete(state=state, code=code, client_id=client_id,
+                                    error=(error_description or error))
+    except LookupError as exc:
+        return page("Sign-in not completed", str(exc), 404)
+    except Exception as exc:
+        return page("Sign-in failed", str(exc)[:400], 400)
+    if not out["plan_usage"]:
+        return page("Signed in, without plan use",
+                    "ChatGPT signed you in but did not allow Pramanyx to use your plan, so no model calls will run "
+                    "on it. Sign in again from Settings ▸ Inference and allow it.")
+    return page("You're using your ChatGPT plan",
+                f"Signed in as {out.get('account') or 'your ChatGPT account'}. Model calls on the ChatGPT backend "
+                "now draw on your plan. You can close this tab and go back to Pramanyx.")
+
+
+@router.post("/llm/chatgpt/sign-out", dependencies=[gate(Capability.SECURITY_SUITE)])
+def chatgpt_sign_out() -> dict:
+    """End the ChatGPT session: the tokens are forgotten here first, then revoked with OpenAI. Calls bound to the
+    ChatGPT backend refuse by name until someone signs in again; the fallback chain still serves them."""
+    from pramanyx.llm import chatgpt_plan
+
+    return chatgpt_plan.sign_out()

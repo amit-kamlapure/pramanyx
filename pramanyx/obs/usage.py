@@ -99,6 +99,11 @@ PRICES: dict[tuple[str, str], Price] = {
     # Encoded explicitly rather than left unpriced, because "free" is a fact here, not a
     # gap — see the 1,000 requests/day free allowance the transport plane is built around.
     ("openrouter", ":free"): Price(0.0, 0.0, "2026-07-28"),
+    # A person's ChatGPT plan (`pramanyx/llm/chatgpt_plan.py`): a flat subscription, so a call bills nothing beyond
+    # it — a fact, not a gap. What a call DOES spend is the plan's allowance, which OpenAI meters and shows at
+    # chatgpt.com/settings/usage; the capability says `cost: plan` so no reader takes this $0 for "free". The empty
+    # prefix covers every model the account lists, none of which this repo names.
+    ("chatgpt", ""): Price(0.0, 0.0, "2026-11-23"),
 }
 
 #: AO-3 (2026-10-03) — prices the OPERATOR declares, for a provider whose API publishes
