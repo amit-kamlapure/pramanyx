@@ -61,9 +61,12 @@ def words_score(item: Item, asked: list[str]) -> tuple[float, str]:
     return (2 * len(in_name) + len(in_line)) / (2 * len(asked)), ("its name" if in_name else "its description")
 
 
-#: How near a node must be to the question to be found by meaning alone (cosine similarity of the platform's embedder).
-#: Past it the nearest neighbours are noise: "revenue" found `events` by a column named impact. Measured on theLook.
-MIN_SIMILARITY = 0.0
+#: How near a node must be to the question to be found by meaning alone (cosine similarity, the platform's local
+#: embedder, nomic-embed-text). Measured on the default workspace, 2026-11-23: what a question means scores high —
+#: "revenue" → Revenue 0.763, "who buys again" → Repeat Purchase Rate 0.599, "late deliveries" → the delivery columns
+#: 0.61–0.62, "stock" → products and inventory_items ~0.63 — while a nonsense question's nearest neighbour reached 0.478
+#: and the business objects no question named sat at 0.36–0.47. Another embedder has another scale: measure again.
+MIN_SIMILARITY = 0.52
 
 
 def _graph_rank(cg, q: str, vector: list[float]) -> list[tuple[object, float]]:

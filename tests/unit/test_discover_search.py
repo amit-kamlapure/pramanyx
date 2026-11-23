@@ -150,3 +150,14 @@ def test_the_graph_s_kinds_narrow_its_word_match_too():
     cg.add_node(GraphNode(id="metric:revenue", kind="metric", label="revenue", provenance=Provenance(source="metrics_catalog")))
     assert [n.id for n, _ in lexical_search(cg, "revenue", 3)][0].startswith("finding")
     assert [n.id for n, _ in lexical_search(cg, "revenue", 3, D._GRAPH_KINDS)] == ["metric:revenue"]
+
+
+def test_meaning_alone_finds_only_what_is_near_enough(monkeypatch):
+    """A nonsense question's nearest neighbours (0.478 on theLook) are not results."""
+    from pramanyx.ontology import context_graph_search as G
+    from pramanyx.ontology.context_graph import ContextGraph, GraphNode, Provenance
+    cg = ContextGraph(org_id="o", connection_id="c", schema_name="main")
+    cg.add_node(GraphNode(id="metric:revenue", kind="metric", label="revenue", provenance=Provenance(source="metrics_catalog")))
+    cg.add_node(GraphNode(id="metric:units", kind="metric", label="units sold", provenance=Provenance(source="metrics_catalog")))
+    monkeypatch.setattr(G, "similar_nodes", lambda cg, v, k, kinds=None: [("metric:revenue", 0.76), ("metric:units", 0.48)])
+    assert [(n.id, sim) for n, sim in D._graph_rank(cg, "zzqx", [0.1])] == [("metric:revenue", 0.76)]
