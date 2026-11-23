@@ -1,4 +1,5 @@
-"""Discover's doors (`pramanyx/discover/`; the plan's D1): the page, a kind or an Area's things in full, one Area.
+"""Discover's doors (`pramanyx/discover/`; the plan's D1 and D3): the page, a kind or an Area's things in full, one
+Area, and search.
 
 All three are reads over what the platform keeps, scoped as the catalog is: the workspace's connections the caller's
 organisation may see, and one of them when ``connection_id`` names it (checked by the connection guard, as every door
@@ -57,6 +58,21 @@ def get_discover_items(request: Request, workspace_id: Optional[str] = None, con
         raise HTTPException(status_code=422, detail=f"a kind is one of {', '.join(KINDS)}")
     return list_items(scope_of(request, workspace_id, connection_id), kind=kind, area=area, certified=certified,
                       mine=mine, q=q, cursor=cursor, limit=limit)
+
+
+@router.get("/discover/search")
+def get_discover_search(request: Request, q: str = Query(..., min_length=1, max_length=200),
+                        workspace_id: Optional[str] = None, connection_id: Optional[str] = None, kind: str = "",
+                        area: str = "", certified: bool = False, mine: bool = False,
+                        limit: int = Query(50, ge=1, le=200)) -> dict:
+    """One ranked list across every kind and every connection in view, by meaning and by words, each result saying
+    why it matched (the plan's §4.3). The question is embedded once by the platform's embedder; no model is called."""
+    from pramanyx.discover.items import KINDS
+    from pramanyx.discover.search import search
+    if kind and kind not in KINDS:
+        raise HTTPException(status_code=422, detail=f"a kind is one of {', '.join(KINDS)}")
+    return search(scope_of(request, workspace_id, connection_id), q, kind=kind, area=area, certified=certified,
+                  mine=mine, limit=limit)
 
 
 @router.get("/discover/areas/{area_id}")

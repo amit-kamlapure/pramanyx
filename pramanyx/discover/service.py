@@ -35,12 +35,16 @@ def gather(scope: Scope, kinds: tuple = KINDS) -> dict[str, Found]:
         return {k: f.result() for k, f in futures.items()}
 
 
+def order_key(i: Item) -> tuple:
+    """Where an item stands among its kind: the vouched-for first, the warned-off last, then its own standing, the newest,
+    its name. Search breaks a tie in relevance by it."""
+    mark = (i.certification or {}).get("status")
+    return (0 if mark == "certified" else 2 if mark == "deprecated" else 1,
+            _STATE_RANK.get(i.state, 1), _negated(i.updated_at), i.name.lower())
+
+
 def _order(items: list[Item]) -> list[Item]:
-    def key(i: Item):
-        mark = (i.certification or {}).get("status")
-        return (0 if mark == "certified" else 2 if mark == "deprecated" else 1,
-                _STATE_RANK.get(i.state, 1), _negated(i.updated_at), i.name.lower())
-    return sorted(items, key=key)
+    return sorted(items, key=order_key)
 
 
 def _negated(at: str) -> tuple:
@@ -69,7 +73,8 @@ def areas_in_view(scope: Scope) -> dict[str, dict]:
     return out
 
 
-def _all_items(found: dict[str, Found]) -> list[Item]:
+def all_items(found: dict[str, Found]) -> list[Item]:
+    """Every item read, each in an Area — what none holds stands in Everything else."""
     items = [i for f in found.values() for i in f.items]
     for i in items:
         if not i.area:
@@ -98,7 +103,7 @@ def home(scope: Scope) -> dict:
     """The page: the Areas that hold something (and apart, those that hold nothing yet), what is certified, each kind
     with its first few, what the person may not open counted, and what could not be read said."""
     found = gather(scope)
-    items = _all_items(found)
+    items = all_items(found)
     areas = areas_in_view(scope)
     by_area: dict[str, list[Item]] = {}
     for i in items:
@@ -144,7 +149,7 @@ def list_items(scope: Scope, *, kind: str = "", area: str = "", certified: bool 
     the person owns; ``q`` matches the words of a thing's name and line (the meaning search is D3's)."""
     kinds = (kind,) if kind else KINDS
     found = gather(scope, kinds)
-    items = _all_items(found)
+    items = all_items(found)
     if area:
         items = [i for i in items if i.area == area]
     if certified:
@@ -169,7 +174,7 @@ def area_page(scope: Scope, area_id: str) -> Optional[dict]:
     if a is None:
         return None
     found = gather(scope)
-    items = _all_items(found)
+    items = all_items(found)
     held = [i for i in items if i.area == area_id]
     by_kind: dict[str, list[Item]] = {k: [] for k in KINDS}
     for i in held:

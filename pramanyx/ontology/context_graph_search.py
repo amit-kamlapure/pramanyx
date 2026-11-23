@@ -136,16 +136,18 @@ def index_graph(cg: ContextGraph) -> int:
     return len(points)
 
 
-def _vector_search(cg: ContextGraph, question: str, top_k: int) -> list[tuple[str, float]]:
+def _vector_search(cg: ContextGraph, question: str, top_k: int,
+                   vector: Optional[list[float]] = None) -> list[tuple[str, float]]:
     """Vector rank → [(node_id, score)]. Empty list when the collection is empty; may
     raise on an unreachable Qdrant/embedder (the hybrid caller counts it and falls back
-    to the lexical floor)."""
+    to the lexical floor). ``vector`` is the question already embedded — a caller reading
+    several graphs embeds once (Discover's search, 2026-11-23)."""
     from pramanyx.semantic.embedder import embed_one
     from pramanyx.semantic.vector_store import collection_count, search
 
     if collection_count(GRAPH_COLLECTION) == 0:
         return []
-    vec = embed_one(question)
+    vec = vector if vector is not None else embed_one(question)
     hits = search(GRAPH_COLLECTION, vec, top_k=top_k, query_filter=graph_scope_filter(_scope(cg)))
     out: list[tuple[str, float]] = []
     for h in hits:
@@ -158,15 +160,18 @@ def _vector_search(cg: ContextGraph, question: str, top_k: int) -> list[tuple[st
 
 # ── hybrid (the search callers use) ───────────────────────────────────────────
 
-def search_graph(cg: ContextGraph, question: str, *, top_k: int = 6) -> list[tuple[GraphNode, float]]:
+def search_graph(cg: ContextGraph, question: str, *, top_k: int = 6,
+                 vector: Optional[list[float]] = None) -> list[tuple[GraphNode, float]]:
     """Hybrid search: the deterministic lexical rank always runs; the vector rank is
     fused in when Qdrant is reachable (Reciprocal Rank Fusion, k=60 — robust to the
     lexical/cosine score-scale mismatch). A vector failure is counted, not swallowed,
-    and the lexical floor still stands."""
+    and the lexical floor still stands. ``vector``: the question already embedded, read
+    as is; an EMPTY one means no vector rank (the caller's embedder could not be reached)."""
     lex = lexical_search(cg, question, top_k * 3)
     vec: list[tuple[str, float]] = []
     try:
-        vec = _vector_search(cg, question, top_k * 3)
+        if vector is None or vector:
+            vec = _vector_search(cg, question, top_k * 3, vector=vector)
     except Exception as exc:
         tolerate(exc, "context-graph vector search is best-effort; lexical rank still "
                       "stands (never degrades to unranked)",
