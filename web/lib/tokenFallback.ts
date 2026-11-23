@@ -13,7 +13,7 @@ export const TOKEN_FALLBACK = {
   // 2026-10-25, the surface grammar: a card one step above the ground, a control a step under the card,
   // lines a step stronger in dark; in light a grey ground under white cards.
   dark: {
-    "--bg-0": "#11171D", "--bg-1": "#171E24", "--bg-2": "#1F272D", "--bg-3": "#11171D", "--bg-4": "#27343E",
+    "--bg-0": "#11171D", "--bg-1": "#171E24", "--bg-2": "#171E24", "--bg-3": "#11171D", "--bg-4": "#27343E",
     "--bg-hover": "#232E36", "--bg-sel": "#003362",
     "--b0": "#2E3D49", "--b1": "#3A4A57", "--b2": "#3A4A57",
     "--t1": "#E8ECF0", "--t2": "#92A4B3", "--t3": "#92A4B3", "--t4": "#637584",
