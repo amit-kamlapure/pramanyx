@@ -245,3 +245,67 @@ def test_the_coworker_drafts_for_a_person_and_never_writes_their_word(monkeypatc
     monkeypatch.setattr(R, "_who", lambda principal: "")
     assert client.post("/record/definitions/draft", json={"connection_id": conn, "term": "X", "text": "y"},
                        headers=agent).status_code == 422
+
+
+# ── the Page (2026-11-23, Databricks' Page editor): a description, sources, and related assets of any kind ──────────
+
+
+def test_a_definition_carries_its_description_sources_and_related_assets_of_any_kind_and_keeps_them():
+    conn = _conn()
+    W.write_definition(connection_id=conn, term="Repeat buyer", text="## Definition\nOrdered twice or more.", by="user:ana",
+                       description="  A customer   who comes back.  ",
+                       sources=[{"kind": "url", "ref": "https://wiki.example/repeat", "label": "Finance wiki"},
+                                {"kind": "document", "ref": "doc123", "label": "KPI handbook"}],
+                       links=[{"kind": "canvas", "ref": "d52cdcd4", "label": "The Look Analytics",
+                               "href": "/?tab=canvas-workspace&canvas=d52cdcd4"},
+                              {"kind": "metric", "ref": "repeat_purchase_rate", "href": "javascript:alert(1)"}])
+    c = C.latest(W.definition_key(conn, "Repeat buyer"))
+    assert c.extra["description"] == "A customer who comes back."
+    assert [s["kind"] for s in c.extra["sources"]] == ["url", "document"]
+    assert c.extra["links"][0] == {"kind": "canvas", "ref": "d52cdcd4", "label": "The Look Analytics",
+                                   "href": "/?tab=canvas-workspace&canvas=d52cdcd4"}
+    assert "href" not in c.extra["links"][1]                     # only the app's own address is kept as one
+    W.write_definition(connection_id=conn, term="Repeat buyer", text="Ordered twice or more, in a year.", by="user:ana")
+    c = C.latest(W.definition_key(conn, "Repeat buyer"))
+    assert c.extra["description"] == "A customer who comes back." and len(c.extra["sources"]) == 2   # kept when not sent
+
+
+@pytest.mark.parametrize("bad", [{"kind": "file", "ref": "x"}, {"kind": "url", "ref": "ftp://x"}])
+def test_a_source_is_a_web_address_or_a_document(bad):
+    with pytest.raises(ValueError):
+        W.write_definition(connection_id=_conn(), term="X", text="y", by="user:ana", sources=[bad])
+
+
+def test_a_suggested_description_and_sources_reach_the_definition_when_its_owner_accepts():
+    conn = _conn()
+    W.write_definition(connection_id=conn, term="AOV", text="Revenue over orders.", by="user:ana")
+    s = W.suggest_definition_edit(connection_id=conn, term="AOV", by="user:cai", description="Average order value",
+                                  sources=[{"kind": "url", "ref": "https://wiki.example/aov"}])
+    assert C.latest(W.definition_key(conn, "AOV")).extra.get("description", "") == ""        # stands until accepted
+    W.decide_definition_suggestion(connection_id=conn, term="AOV", suggestion_id=s["id"], by="user:ana", accept=True)
+    now = C.latest(W.definition_key(conn, "AOV"))
+    assert now.extra["description"] == "Average order value" and now.extra["sources"][0]["ref"] == "https://wiki.example/aov"
+
+
+def test_the_door_writes_and_reads_the_page_s_fields(monkeypatch):
+    from pramanyx.routers import record as R
+    conn = _conn()
+    monkeypatch.setattr(R, "_visible", lambda c: True)
+    monkeypatch.setattr(R, "_who", lambda principal: "user:ana")
+    monkeypatch.setattr(R, "_refresh_definitions", lambda c: None)
+    app = FastAPI()
+    app.include_router(R.router)
+    client = TestClient(app)
+    wrote = client.post("/record/definitions", json={
+        "connection_id": conn, "term": "Late delivery", "text": "Delivered after its promise.",
+        "description": "When an order arrives after the date it was promised",
+        "sources": [{"kind": "url", "ref": "https://ops.example/sla", "label": "SLA"}],
+        "links": [{"kind": "schedule", "ref": "a1", "label": "Dispatch promise watch",
+                   "href": "/?tab=agentic-ops&layer=automations&automation=a1"}]})
+    assert wrote.status_code == 201
+    got = client.get("/record/definitions", params={"connection_id": conn, "term": "late delivery"}).json()[0]
+    assert got["description"].startswith("When an order arrives")
+    assert got["sources"][0]["label"] == "SLA" and got["links"][0]["kind"] == "schedule"
+    refused = client.post("/record/definitions", json={"connection_id": conn, "term": "Y", "text": "z",
+                                                      "sources": [{"kind": "url", "ref": "not an address"}]})
+    assert refused.status_code == 422

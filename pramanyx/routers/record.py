@@ -166,9 +166,16 @@ def book_record_said(req: SaidRequest, principal=Depends(get_principal)) -> dict
 # ── Definitions: what a business word means, written by a person, approved by one ─────────────────────────────
 
 class DefinitionLink(BaseModel):
-    kind: str = Field(min_length=1, max_length=20)          # table · metric · definition · dashboard · document · person · url
+    kind: str = Field(min_length=1, max_length=20)          # a kind Discover lists · person · url (`writers.LINK_KINDS`)
     ref: str = Field(min_length=1, max_length=300)
     label: str = Field("", max_length=120)
+    href: str = Field("", max_length=400)                   # where it opens inside the app, `/?tab=…`
+
+
+class DefinitionSource(BaseModel):
+    kind: str = Field(min_length=1, max_length=20)          # url · document
+    ref: str = Field(min_length=1, max_length=400)
+    label: str = Field("", max_length=160)
 
 
 class DefinitionRequest(BaseModel):
@@ -178,6 +185,8 @@ class DefinitionRequest(BaseModel):
     area: str = Field("", max_length=120)
     aliases: Optional[list[str]] = Field(None, max_length=50)
     links: Optional[list[DefinitionLink]] = Field(None, max_length=30)
+    description: Optional[str] = Field(None, max_length=400)
+    sources: Optional[list[DefinitionSource]] = Field(None, max_length=20)
     why: str = Field("", max_length=400)                    # said with a suggestion, when the change is one
 
 
@@ -196,7 +205,8 @@ class SuggestionDecision(DefinitionApproval):
 def _definition_view(c: C.Claim) -> dict:
     x = c.extra or {}
     return {**_claim_view(c), "term": x.get("term", ""), "area": x.get("area", ""), "aliases": x.get("aliases") or [],
-            "links": x.get("links") or [], "state": "published" if c.tier == "approved" else "draft",
+            "links": x.get("links") or [], "description": x.get("description", ""), "sources": x.get("sources") or [],
+            "state": "published" if c.tier == "approved" else "draft",
             "approved_by": x.get("approved_by", ""), "approved_on": x.get("approved_on", ""),
             "drafted_by_agent": bool(x.get("drafted_by_agent")) and c.tier != "approved",
             "suggestions": x.get("suggestions") or [], "declined": (x.get("declined") or [])[-5:],
@@ -244,14 +254,17 @@ def write_record_definition(req: DefinitionRequest, principal=Depends(get_princi
     if not who:
         raise HTTPException(status_code=422, detail="nobody is signed in to this request — a definition is a person's")
     links = [link.model_dump() for link in req.links] if req.links is not None else None
+    sources = [src.model_dump() for src in req.sources] if req.sources is not None else None
     suggested = None
     try:
         try:
             cid = write_definition(connection_id=req.connection_id, term=req.term, text=req.text, by=who,
-                                   aliases=req.aliases, area=req.area, links=links)
+                                   aliases=req.aliases, area=req.area, links=links, description=req.description,
+                                   sources=sources)
         except NotTheOwner:
             suggested = suggest_definition_edit(connection_id=req.connection_id, term=req.term, area=req.area,
-                                                by=who, text=req.text, aliases=req.aliases, links=links, why=req.why)
+                                                by=who, text=req.text, aliases=req.aliases, links=links, why=req.why,
+                                                description=req.description, sources=sources)
             cid = C.latest(definition_key(req.connection_id, req.term, req.area)).id
     except (ValueError, C.ClaimRefused) as exc:
         raise HTTPException(status_code=422, detail=str(exc))

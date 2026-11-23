@@ -592,10 +592,18 @@ def definition_key(connection_id: str, term: str, area: str = "") -> str:
     return _claims.claim_key("definition", *parts)
 
 
-#: What a Definition may link to (the assets it refers to), and how many synonyms and links it carries.
-LINK_KINDS = ("table", "metric", "definition", "dashboard", "document", "person", "url")
+#: What a Definition may link to — its related assets: every kind Discover lists (2026-11-23, the Page editor: "Add
+#: related asset" picks any thing a person may open), a person, or a web address — and how many synonyms, links and
+#: sources it carries.
+LINK_KINDS = ("table", "metric", "definition", "dashboard", "document", "person", "url",
+              "canvas", "agent", "schedule", "sheet", "trusted_query")
+#: Where a Definition's words come from: a web address or a document of the corpus.
+SOURCE_KINDS = ("url", "document")
 MAX_SYNONYMS = 50
 MAX_LINKS = 30
+MAX_SOURCES = 20
+#: A Definition's short description — the line under its name, apart from what it means.
+MAX_DESCRIPTION = 400
 
 
 class NotTheOwner(PermissionError):
@@ -621,9 +629,31 @@ def _clean_links(links: Optional[list[dict]]) -> list[dict]:
         kind, ref = str(link.get("kind") or "").strip().lower(), str(link.get("ref") or "").strip()[:300]
         if kind not in LINK_KINDS:
             raise ValueError(f"a definition links to a {', '.join(LINK_KINDS)}; not a {kind or 'nothing'}")
+        href = str(link.get("href") or "").strip()[:400]
         if ref and not any(o["kind"] == kind and o["ref"] == ref for o in out):
-            out.append({"kind": kind, "ref": ref, "label": str(link.get("label") or "").strip()[:120]})
+            out.append({"kind": kind, "ref": ref, "label": str(link.get("label") or "").strip()[:120],
+                        # where it opens inside the app (Discover's own address for it); nothing else is kept as one
+                        **({"href": href} if href.startswith("/?tab=") else {})})
     return out[:MAX_LINKS]
+
+
+def _clean_sources(sources: Optional[list[dict]]) -> list[dict]:
+    out: list[dict] = []
+    for src in sources or []:
+        if not isinstance(src, dict):
+            continue
+        kind, ref = str(src.get("kind") or "").strip().lower(), str(src.get("ref") or "").strip()[:400]
+        if kind not in SOURCE_KINDS:
+            raise ValueError(f"a definition's source is a {' or a '.join(SOURCE_KINDS)}; not a {kind or 'nothing'}")
+        if kind == "url" and not ref.lower().startswith(("http://", "https://")):
+            raise ValueError("a web source is an address that begins http:// or https://")
+        if ref and not any(o["kind"] == kind and o["ref"] == ref for o in out):
+            out.append({"kind": kind, "ref": ref, "label": str(src.get("label") or "").strip()[:160]})
+    return out[:MAX_SOURCES]
+
+
+def _clean_description(description: Optional[str]) -> str:
+    return " ".join(str(description or "").split())[:MAX_DESCRIPTION]
 
 
 def _same(a: str, b: str) -> bool:
@@ -632,7 +662,8 @@ def _same(a: str, b: str) -> bool:
 
 def write_definition(*, connection_id: str, term: str, text: str, by: str,
                      aliases: Optional[list[str]] = None, kind: str = "", entry_id: str = "",
-                     by_person: bool = True, area: str = "", links: Optional[list[dict]] = None) -> str:
+                     by_person: bool = True, area: str = "", links: Optional[list[dict]] = None,
+                     description: Optional[str] = None, sources: Optional[list[dict]] = None) -> str:
     """A person writes what a business word means on a connection, in a area: a Record claim of kind ``definition``.
 
     - A word nobody has defined in that area is a DRAFT (tier ``declared``), the writer its owner.
@@ -656,6 +687,9 @@ def write_definition(*, connection_id: str, term: str, text: str, by: str,
              "term": term[:120], "area": area[:120],
              "aliases": _clean_aliases(aliases if aliases is not None else (live.extra.get("aliases") if live else [])),
              "links": _clean_links(links if links is not None else (live.extra.get("links") if live else [])),
+             "description": _clean_description(description if description is not None
+                                               else (live.extra.get("description") if live else "")),
+             "sources": _clean_sources(sources if sources is not None else (live.extra.get("sources") if live else [])),
              **({"kb_kind": kind} if kind else {}), **({"entry_id": entry_id} if entry_id else {})}
     warrants = list(live.warrants) if published else []
     if published:
@@ -675,7 +709,8 @@ def write_definition(*, connection_id: str, term: str, text: str, by: str,
 
 def suggest_definition_edit(*, connection_id: str, term: str, by: str, area: str = "", text: str = "",
                             aliases: Optional[list[str]] = None, links: Optional[list[dict]] = None, why: str = "",
-                            by_agent: bool = False) -> dict:
+                            by_agent: bool = False, description: Optional[str] = None,
+                            sources: Optional[list[dict]] = None) -> dict:
     """Anyone suggests an edit to a Definition (the user, 2026-11-17: "anyone drafts or suggests; only the owner
     publishes"). The suggestion rides on the Definition, pending; the wording it would change stands until its owner
     accepts it. ``by_agent`` marks one an agent drafted for ``by``: it is said as such, and decided like any other.
@@ -687,13 +722,16 @@ def suggest_definition_edit(*, connection_id: str, term: str, by: str, area: str
     prior = _claims.latest(key)
     if prior is None or prior.state == "withdrawn":
         raise ValueError("there is no such definition to suggest an edit to; write it instead")
-    if not ((text or "").strip() or aliases is not None or links is not None):
-        raise ValueError("a suggestion changes the wording, the other names or the links")
+    if not ((text or "").strip() or aliases is not None or links is not None or description is not None
+            or sources is not None):
+        raise ValueError("a suggestion changes the wording, the other names, the description, the links or the sources")
     suggestion = {"id": _uuid.uuid4().hex[:10], "by": by, "at": _today(), "why": (why or "").strip()[:400],
                   "by_agent": bool(by_agent),
                   **({"text": text.strip()[:4000]} if (text or "").strip() else {}),
                   **({"aliases": _clean_aliases(aliases)} if aliases is not None else {}),
-                  **({"links": _clean_links(links)} if links is not None else {})}
+                  **({"links": _clean_links(links)} if links is not None else {}),
+                  **({"description": _clean_description(description)} if description is not None else {}),
+                  **({"sources": _clean_sources(sources)} if sources is not None else {})}
     new = prior.model_copy(deep=True)
     new.confidence = None
     new.extra = {**prior.extra, "suggestions": [*(prior.extra.get("suggestions") or []), suggestion][-20:]}
@@ -754,7 +792,9 @@ def decide_definition_suggestion(*, connection_id: str, term: str, suggestion_id
     cid = write_definition(connection_id=connection_id, term=prior.extra.get("term", term), area=area,
                            text=found.get("text") or prior.statement.text, by=by,
                            aliases=found.get("aliases") if "aliases" in found else None,
-                           links=found.get("links") if "links" in found else None)
+                           links=found.get("links") if "links" in found else None,
+                           description=found.get("description") if "description" in found else None,
+                           sources=found.get("sources") if "sources" in found else None)
     now = _claims.latest(key)
     new = now.model_copy(deep=True)
     new.confidence = None
