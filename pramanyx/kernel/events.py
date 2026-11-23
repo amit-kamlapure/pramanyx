@@ -51,6 +51,7 @@ CATALOGUE: dict[str, dict[str, Any]] = {
     "metric.enforcement": {"what": "a governed metric definition was enforced on an answer", "payload": ["metric", "enforced"], "emitted_by": "routers/investigations"},
     "trusted_query.governance": {"what": "a trusted query was created, approved or changed", "payload": ["trusted_query", "connection_id", "action", "actor", "from", "to"], "emitted_by": "semantic/trusted_verify, routers/learning"},
     "intake.governance": {"what": "an intake bundle was uploaded or a person resolved an item", "payload": ["action"], "emitted_by": "routers/intake"},
+    "area.changed": {"what": "an Area's curators changed its words, owners or what it features (Discover D4)", "payload": ["area", "by", "changed"], "emitted_by": "semantic/areas.edit_area"},
     "eval.graduation": {"what": "a flag's graduation decision was recorded", "payload": ["flag", "can_graduate", "pass_rate", "reasons"], "emitted_by": "routers/evals"},
     "mcp.tool_call": {"what": "an agent's call through the MCP door, allowed or refused", "payload": ["actor", "tool", "route", "allowed", "code", "required_level", "policy_level"], "emitted_by": "rbac/agent_gate"},
     "agent.grounding_read": {"what": "a program read what a custom agent would read for a question, without a model; never the question or the content", "payload": ["principal", "door", "agent", "rev", "connection_id", "schema", "present", "absent", "embedder_called", "embedder_backend"], "emitted_by": "custom_agents/grounding_read"},
