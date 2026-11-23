@@ -148,8 +148,14 @@ export function queryChartSpec(c: QueryChart, setup: Pick<QueryShown, "segments"
   // a category along the bottom reads largest first; dates and numbers in their own order. A date a statement wrote as text
   // (`strftime(day, '%Y-%m')`) is still a date: months ranked by size read as a chart of nothing.
   const datesAsText = datedText;
+  // Largest first, written out as the places in order: Vega-Lite drops a sort by "sum" where two layers share the axis
+  // (a bar and its labels), and the bars fell back to the alphabet — Cancelled over Shipped (2026-11-23, the coworker's
+  // horizontal bar once its labels were back).
+  const sums = new Map<string, number>();
+  for (const p of values) sums.set(String(p.x), (sums.get(String(p.x)) ?? 0) + (p.v ?? 0));
+  const largestFirst = [...sums.entries()].sort((a, b) => b[1] - a[1]).map(([place]) => place);
   const xSort = categories && options?.sort === "label" ? "ascending" as const
-    : c.x.kind === "text" && bars && !setup.running && !datesAsText ? { op: "sum", field: "v", order: "descending" } : null;
+    : c.x.kind === "text" && bars && !setup.running && !datesAsText ? largestFirst : null;
   const x = {
     field: "x",
     type: c.as === "scatter" && numericX ? "quantitative" : "ordinal",

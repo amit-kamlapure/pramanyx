@@ -73,7 +73,10 @@ describe("a query card's chart", () => {
     expect(dated[1].transform?.[1]).toEqual({ aggregate: [{ op: "sum", field: "v", as: "total" }], groupby: ["x"] });
     const kinds = layers(queryChartSpec(chart("bar", true, "text"), setup("stacked", true), COLOURS));
     expect(kinds[1].transform).toEqual([{ aggregate: [{ op: "sum", field: "v", as: "total" }], groupby: ["x"] }]);
-    expect(kinds[0].encoding.x.sort).toEqual({ op: "sum", field: "v", order: "descending" });
+    // largest total first, written out as the places in order: a sort by "sum" is dropped where the bars and their labels
+    // share the axis, and the bars fell back to the alphabet (2026-11-23)
+    expect(kinds[0].encoding.x.sort).toEqual(["Returned", "Processing", "Shipped"]);
+    expect(kinds[1].encoding.x.sort).toEqual(kinds[0].encoding.x.sort);
     expect(layers(queryChartSpec(chart("bar"), setup("shares", true), COLOURS))).toHaveLength(1);   // a share needs no number
   });
 
@@ -117,7 +120,8 @@ describe("a chart drafted from a file", () => {
   it("keeps months a statement wrote as text in their own order, and still ranks real categories", () => {
     const along = (xs: string[]) => ({ as: "bar" as const, x: { name: "x", kind: "text" as const, bucket: null }, series: [""], other: false, said: [], tones: {}, format: "",
       points: xs.map((x, i) => ({ x, s: "", v: 10 - i })) });
-    const sorted = (spec: Record<string, unknown>) => JSON.stringify(spec).includes('"op":"sum"');
+    const sorted = (spec: Record<string, unknown>) =>
+      Array.isArray((((spec.layer as Record<string, unknown>[])[0].encoding as Record<string, Record<string, unknown>>).x).sort);
     const stay = { segments: "stacked" as const, labels: false, running: false };
     expect(sorted(queryChartSpec(along(["2017-01", "2017-02", "2017-03"]) as unknown as Chart, stay, COLOURS))).toBe(false);
     expect(sorted(queryChartSpec(along(["2017-01-05", "2017-01-06"]) as unknown as Chart, stay, COLOURS))).toBe(false);
