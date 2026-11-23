@@ -56,6 +56,7 @@ import {
 import { readCertifications, type Certification } from "@/lib/certification";
 import { countNoun, formatCount, formatTimestamp } from "@/lib/format";
 import { connectionLabel } from "@/lib/names";
+import { showWhenDrawn, takeFromAddress } from "@/lib/addressOnce";
 
 type Conn = { id: string; name: string };
 
@@ -95,6 +96,11 @@ export function DocumentsPage({ connectionId, connections = [] }: {
   };
 
   const [openDocId, setOpenDocId] = useState<string | null>(null);
+  // `?doc=<id>` opens that document's preview on arrival (Discover links to each, 2026-11-23)
+  useEffect(() => {
+    const { doc } = takeFromAddress("doc");
+    if (doc) { setOpenDocId(doc); showWhenDrawn(`[data-doc-id="${CSS.escape(doc)}"]`); }
+  }, []);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteFailed, setDeleteFailed] = useState<{ docId: string; error: string } | null>(null);
   const [purging, setPurging] = useState(false);
@@ -496,7 +502,7 @@ function DocumentRow({ doc, first, status, connections, now, maxChunks, open, re
   const meta = doc.generated ? "" : [doc.filename !== doc.title ? doc.filename : "", doc.has_original === false ? "original not kept" : ""]
     .filter(Boolean).join(" · ");
   return (
-    <div data-testid="document-row" style={{ ...(first ? {} : RULE), padding: "8px 2px" }}>
+    <div data-testid="document-row" data-doc-id={doc.doc_id} style={{ ...(first ? {} : RULE), padding: "8px 2px" }}>
       <div style={{ display: "grid", gridTemplateColumns: doc.generated ? SCHEMA_ROW_GRID : ROW_GRID, gap: 12, alignItems: "center" }}>
         {/* A compiled schema document's group already says what it is; a "Schema" chip would say it on every row. */}
         {!doc.generated && <span><Chip>{formatLabel(doc)}</Chip></span>}

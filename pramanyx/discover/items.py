@@ -308,7 +308,7 @@ def agents(scope: Scope) -> Found:
         found.items.append(settle(Item(
             kind="agent", id=a.id, name=a.name, line=a.purpose, connection_id=a.connection_id,
             connection_name=scope.connections.get(a.connection_id, ""), owner=a.owner, updated_at=a.updated_at,
-            state="on" if a.enabled else "off", href=_href("/", tab="agents", agent=a.id)),
+            state="on" if a.enabled else "off", href=_href("/", tab="agents", agent=a.id, kind="persona")),
             scope, placed=placed.get(a.id), words=f"{a.name} {a.purpose}"))
     return found
 

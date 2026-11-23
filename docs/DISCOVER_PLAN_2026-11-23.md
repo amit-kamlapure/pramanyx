@@ -154,14 +154,24 @@ Each is shown working on theLook before the next, with its tests and the gates. 
 | **D5** | **Use** (§4.5): 30-day reads and readers, opened events where missing, Most used, Recently opened, popularity sort in the Catalog. | M |
 | **D6** | **The coworker** (§4.6): sidebar entry, `/discover` page, Ask about it. | S |
 
-## 6 · Defects found while planning (fixed in D1)
+## 6 · Defects found while planning (D1)
 
-1. Reading one table's certification ignores its schema (`routers/governance.py:299-300`; `web/lib/certification.ts`
-   sends none) while a write with a schema stores `table:<conn>.<schema>.<t>` — a certified table can read as not.
-2. Placements are read back by bare table name (`areas.placed_by_people`), so two schemas' `orders` collide.
-3. A canvas is spelled two ways: `artifact:canvas:<id>` for certification, `canvas:<id>` for grants.
-4. Area declarations are install-wide (`data/org_settings.json`) while placements are per organisation
-   (`govern_tags`, keyed by org) — say which is meant before a second organisation declares Areas.
+1. **Fixed.** Reading one table's certification ignores its schema (`routers/governance.py:299-300`;
+   `web/lib/certification.ts` sends none) while a write with a schema stores `table:<conn>.<schema>.<t>` — a certified
+   table can read as not. Both now carry the schema (`test_a_table_certified_under_its_schema_reads_back_under_it`).
+2. **Fixed.** Placements are read back by bare table name (`areas.placed_by_people`), so two schemas' `orders` collide.
+   They are read under `schema.table` first; a bare name placed in two Areas is no longer answered by either
+   (`test_one_table_name_in_two_schemas_is_read_under_its_schema`).
+3. **Decided, nothing to change.** A canvas is spelled two ways: `artifact:canvas:<id>` for certification,
+   `canvas:<id>` for grants. They are two securables for two things — what is said OF the canvas (its mark, its Area)
+   and who it is shared WITH — and Discover reads each from its own (`discover/items.py`'s docstring says so).
+4. **Open.** Area declarations are install-wide (`data/org_settings.json`) while placements are per organisation
+   (`govern_tags`, keyed by org) — say which is meant before a second organisation declares Areas. D4's.
+
+D1 also added the four missing deep links (`web/lib/addressOnce.ts`): `?tab=agents&agent=<id>&kind=persona` opens a
+custom agent, `?tab=documents&doc=<id>` a document's preview, `?tab=memory&trusted=<id>` a trusted query, and
+`?tab=catalog&conn=&schema=&table=` a table. Each is read once on arrival and taken off the address; a page kept
+mounted behind another tab reads it only when it mounts, so D2's links open by navigation, not by a tab switch alone.
 
 ## 7 · Not in this plan
 

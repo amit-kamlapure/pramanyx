@@ -16,6 +16,7 @@ import { BUILT_IN_AGENT_KIND, getConnections, getDepartureSummary, getNeedsHuman
 import { askSpotlight } from "@/lib/commandRegistry";
 import { Icon as Glyph, type IconName } from "@/components/ui/icon";
 import { SelectField } from "@/components/ui/select";
+import { takeFromAddress } from "@/lib/addressOnce";
 
 // ── Lazy panels — load on first open, then keep mounted (Workspace keep-alive),
 // so the live events, a selected trace and an agent detail survive switches.
@@ -150,12 +151,10 @@ export function AgenticOpsWorkspace({
   // refusal links to the Responder's this way. Read once, then dropped from the address,
   // so a later visit to Agents opens the roster rather than the same agent again.
   useEffect(() => {
-    const u = new URL(window.location.href);
-    const id = u.searchParams.get("agent");
+    // `&kind=persona` opens one of the workspace's own agents (Discover links to each, 2026-11-23)
+    const { agent: id, kind } = takeFromAddress("agent", "kind");
     if (!id) return;
-    setAgentFocus({ id, kind: BUILT_IN_AGENT_KIND });
-    u.searchParams.delete("agent");
-    window.history.replaceState(window.history.state, "", u);
+    setAgentFocus({ id, kind: kind === "persona" ? "persona" : BUILT_IN_AGENT_KIND });
   }, []);
   // AO-4 — "Open automation" carries its id from every layer; the Automations layer
   // opens that one on arrival rather than the list it is somewhere in.

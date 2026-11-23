@@ -41,6 +41,7 @@ import { CatalogTable } from "@/components/catalog/CatalogTable";
 import { recents } from "@/components/catalog/CatalogTools";
 import { explored, findDuplicates, itemKey, type CatalogItem } from "@/lib/catalogSummary";
 import { relTime } from "@/lib/format";
+import { takeFromAddress } from "@/lib/addressOnce";
 
 /** <Button> forces child SVGs to size-4/size-3; this restores each icon's own
  *  width/height attributes (size-auto → the SVG's intrinsic attribute size). */
@@ -165,6 +166,14 @@ export function CatalogScreen({ connections, selectedConn, onSelect, onDeleteCon
   const [treeError, setTreeError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set(["section:connections", "catalog:workspace", "schema:workspace:ecommerce"]));
   const [sel, setSel]           = useState<Sel>(null);
+  // The table a link names (`?table=`, under `?schema=` and the app's `?conn=`), read once and opened when the tree holds it.
+  // Read in an effect declared before the tree's load, never in render: a strict double render would take it twice.
+  const linkedTable = useRef<{ conn: string; schema: string; table: string } | null>(null);
+  useEffect(() => {
+    const conn = new URLSearchParams(window.location.search).get("conn") ?? "";
+    const { table, schema } = takeFromAddress("table", "schema");
+    if (table && conn) linkedTable.current = { conn, schema: schema ?? "", table };
+  }, []);
   const [showAddData, setShowAddData] = useState(false);
   const [search, setSearch]     = useState("");
   const [testing, setTesting]   = useState<string | null>(null);
@@ -209,6 +218,17 @@ export function CatalogScreen({ connections, selectedConn, onSelect, onDeleteCon
             if (first.schemas.length === 1) n.add(`schema:${first.conn_id}:${first.schemas[0].name}`);
             return n;
           });
+        }
+        // A link to one table (`?conn=&schema=&table=`, as Discover's items link, 2026-11-23) opens it once the tree
+        // holds it; a table not in the tree yet keeps the link for the next answer of a catalog still reading.
+        const want = linkedTable.current;
+        const holding = want && uc?.entries.find(e => e.conn_id === want.conn);
+        const sc = holding && holding.schemas.find(x => (!want.schema || x.name === want.schema) && x.tables.some(tb => tb.name === want.table));
+        const tb = sc && sc.tables.find(x => x.name === want.table);
+        if (want && holding && sc && tb) {
+          linkedTable.current = null;
+          onSelect(want.conn);
+          openTable(want.conn, sc.name, tb);
         }
         // A catalog still reading when the tree answered (the server waits for no one longer than a few seconds) is
         // asked again shortly, once its read can have landed — a few times, not forever.

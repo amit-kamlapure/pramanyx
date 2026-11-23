@@ -30,6 +30,7 @@ import { Loading, ReadFailed } from "@/components/ui/states";
 import { SelectField } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { showWhenDrawn, takeFromAddress } from "@/lib/addressOnce";
 
 /** The acting identity for governance writes — the signed-in email, else the
  *  same word the actions inbox uses. The server owns identity; this is provenance. */
@@ -116,6 +117,11 @@ export function MemoryPanel() {
   const [readings, setReadings] = useState<RememberedReading[] | null>(null);
   const [readingsErr, setReadingsErr] = useState("");
   const [trusted, setTrusted] = useState<TrustedQueryRow[] | null>(null);
+  // `?trusted=<id>` brings that trusted query into view on arrival (Discover links to each, 2026-11-23)
+  useEffect(() => {
+    const { trusted: id } = takeFromAddress("trusted");
+    if (id) showWhenDrawn(`[data-testid="tq-${CSS.escape(id)}"]`, 40);
+  }, []);
   const [trustedErr, setTrustedErr] = useState("");
   const [datasets, setDatasets] = useState<LearningDatasets | null>(null);
   const [datasetsState, setDatasetsState] = useState<"loading" | "ready" | "failed">("loading");
