@@ -14,7 +14,7 @@
  */
 import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 
-import { Card, Chip, Empty, MUTED, Page } from "@/components/clarity/kit";
+import { Card, Chip, Empty, Label, MUTED, Page } from "@/components/clarity/kit";
 import { DefinitionBody } from "@/components/definitions/DefinitionBody";
 import { AddToArea, AreaEditor, RowMenu } from "@/components/discover/AreaCuration";
 import { BackHeader } from "@/components/record/kit";
@@ -217,11 +217,21 @@ function Browse({ home, areaNames, many, onOpenArea, onViewAll, onCertified, rel
         </Card>
       )}
 
-      <Card label="Most used this month" testId="discover-most-used"
-        right={<span className="aug-fs-xs">reads of tables, opens of the rest, the last 30 days</span>}>
-        {home.most_used?.length
-          ? home.most_used.map(i => <ItemRow key={`${i.kind}:${i.id}`} item={i} areaName={areaNames[i.area]} many={many} />)
-          : <Empty>Nothing was read or opened this month yet.</Empty>}
+      <Card label="Most used this month" testId="discover-most-used" right={<span className="aug-fs-xs">the last 30 days</span>}>
+        <div className="aug-discover-kinds">
+          <div data-testid="discover-most-opened">
+            <Label>Opened most</Label>
+            {home.most_used?.length
+              ? home.most_used.map(i => <ItemRow key={`${i.kind}:${i.id}`} item={i} areaName={areaNames[i.area]} many={many} />)
+              : <Empty>Nothing was opened this month yet.</Empty>}
+          </div>
+          <div data-testid="discover-most-read">
+            <Label>Tables read most</Label>
+            {home.most_read?.length
+              ? home.most_read.map(i => <ItemRow key={`${i.kind}:${i.id}`} item={i} areaName={areaNames[i.area]} many={many} />)
+              : <Empty>No table was read this month yet.</Empty>}
+          </div>
+        </div>
         {(home.use_said?.length ?? 0) > 0 && (
           <p className="aug-fs-xs" style={{ ...MUTED, margin: "8px 0 0" }} data-testid="discover-use-said">{home.use_said!.join(" ")}</p>
         )}

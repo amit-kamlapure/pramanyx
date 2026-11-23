@@ -114,8 +114,9 @@ def test_the_page_puts_the_most_used_first_and_what_the_person_opened_lately(_fr
     U.note_opened(_request("ana"), "dashboard", "c1:user:ana:ops", "c1")
     U.note_opened(_request("bo"), "dashboard", "c1:user:ana:sales", "c1")
     page = S.home(Scope(None, "user:ana", {"c1": "theLook"}))
-    assert [i["name"] for i in page["most_used"]] == ["orders", "Operations", "Sales", "The Look Analytics"]
-    assert page["most_used"][0]["use"]["measured"] == "reads" and page["most_used"][0]["use"]["people"] is None
+    assert [i["name"] for i in page["most_used"]] == ["Operations", "Sales", "The Look Analytics"]    # opens, a person's
+    assert [i["name"] for i in page["most_read"]] == ["orders"]                                     # reads, apart
+    assert page["most_read"][0]["use"]["measured"] == "reads" and page["most_read"][0]["use"]["people"] is None
     assert [i["name"] for i in page["recent"]] == ["Operations", "The Look Analytics"]       # hers, newest first
     assert U.NOT_MEASURED in page["use_said"]
     listed = S.list_items(Scope(None, "user:ana", {"c1": "theLook"}), kind="table", sort="use")

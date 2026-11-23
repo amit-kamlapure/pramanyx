@@ -122,8 +122,10 @@ export interface DiscoverHome {
   suggested: SuggestedInView[];
   certified: DiscoverItem[];
   certified_count: number;
-  /** D5: the most read or opened this month, and what the person reading opened lately, newest first. */
+  /** D5: the most opened this month (a person's opens), the tables most read (audited statements, most of them the
+   *  platform's own — not one scale with opens, so apart), and what the person reading opened lately, newest first. */
   most_used?: DiscoverItem[];
+  most_read?: DiscoverItem[];
   recent?: DiscoverItem[];
   /** What use could not be said yet, or is not measured. */
   use_said?: string[];

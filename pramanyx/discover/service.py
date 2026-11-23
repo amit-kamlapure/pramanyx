@@ -128,9 +128,12 @@ def _used(items: list[Item]) -> list[str]:
     return said
 
 
-def _by_use(items: list[Item]) -> list[Item]:
+def _by_use(items: list[Item], measured: str = "") -> list[Item]:
+    """The used this month, most first — of one measure when ``measured`` names it. A table's reads (statements, most of
+    them the platform's own) and a thing's opens (a person's) are not one scale: the page ranks each apart."""
     from pramanyx.discover.usage import score
-    return sorted((i for i in items if score(i.use) > 0), key=lambda i: (-score(i.use), order_key(i)))
+    return sorted((i for i in items if score(i.use) > 0 and (not measured or (i.use or {}).get("measured") == measured)),
+                  key=lambda i: (-score(i.use), order_key(i)))
 
 
 def home(scope: Scope) -> dict:
@@ -174,7 +177,8 @@ def home(scope: Scope) -> dict:
         "areas": holding, "quiet_areas": quiet, "suggested": suggested,
         "certified": [i.view() for i in certified[:SHOWN]], "certified_count": len(certified),
         # D5: read from what happened — a table's reads, the opens of what a person opens — never a model's guess
-        "most_used": [i.view() for i in _by_use(items)[:SHOWN]],
+        "most_used": [i.view() for i in _by_use(items, "opens")[:SHOWN]],
+        "most_read": [i.view() for i in _by_use(items, "reads")[:SHOWN]],
         "recent": [i.view() for i in recent],
         "use_said": [*use_said, NOT_MEASURED],
         "kinds": [_kind_view(k, by_kind[k], found[k].withheld) for k in KINDS],
