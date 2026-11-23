@@ -2,7 +2,7 @@
 may open, across every connection in view — by meaning and by words — each result saying why it matched.
 
 No model is called. The question is embedded ONCE by the platform's embedder (local by default) and that one vector reads
-every connection's context graph (`ontology/context_graph_search.search_graph`, which fuses its own words and meaning);
+every connection's context graph (its word rank and the nodes near enough in meaning, fused as the graph fuses them);
 the graph's tables, metrics and columns stand for Discover's tables and metrics. The words of the question are matched
 against every item's name and description, which reaches the kinds no graph holds (dashboards, canvases, agents,
 schedules, documents, spreadsheets, Definitions, trusted queries). The two ranks are fused (Reciprocal Rank Fusion, as the
@@ -61,14 +61,41 @@ def words_score(item: Item, asked: list[str]) -> tuple[float, str]:
     return (2 * len(in_name) + len(in_line)) / (2 * len(asked)), ("its name" if in_name else "its description")
 
 
-def _graph_hits(scope: Scope, q: str, items: list[Item]) -> tuple[list[tuple[str, str]], bool, list[str], int]:
-    """``([(item key, why)], by_meaning, said, withheld)`` — each connection's context graph asked once, with the question
+#: How near a node must be to the question to be found by meaning alone (cosine similarity of the platform's embedder).
+#: Past it the nearest neighbours are noise: "revenue" found `events` by a column named impact. Measured on theLook.
+MIN_SIMILARITY = 0.0
+
+
+def _graph_rank(cg, q: str, vector: list[float]) -> list[tuple[object, float]]:
+    """One graph's hits for the question: its word rank and, when the question was embedded, the nodes near enough to it
+    in meaning, fused by rank as the graph fuses its own — each with the similarity it was found by (0 by words alone)."""
+    from pramanyx.ontology.context_graph_search import lexical_search, similar_nodes
+    lex = lexical_search(cg, q, _GRAPH_TOP, _GRAPH_KINDS)
+    near: list[tuple[str, float]] = []
+    if vector:
+        try:
+            near = [(nid, sim) for nid, sim in similar_nodes(cg, vector, _GRAPH_TOP, _GRAPH_KINDS) if sim >= MIN_SIMILARITY]
+        except Exception as exc:  # noqa: BLE001 — the vector rank is best-effort; the words still stand
+            from pramanyx.kernel.errors import tolerate
+            tolerate(exc, "discover: a graph's vector rank could not be read", counter="discover.vector")
+    fused: dict[str, float] = {}
+    sim_of = dict(near)
+    for ranked in ([n.id for n, _ in lex], [nid for nid, _ in near]):
+        for rank, nid in enumerate(ranked):
+            fused[nid] = fused.get(nid, 0.0) + 1.0 / (_RRF_K + rank + 1)
+    order = sorted(fused, key=lambda nid: -fused[nid])
+    return [(cg.nodes[nid], round(sim_of.get(nid, 0.0), 3)) for nid in order if nid in cg.nodes]
+
+
+def _graph_hits(scope: Scope, q: str, items: list[Item]) -> tuple[list[tuple[str, str]], bool, list[str], int,
+                                                                    dict[str, float]]:
+    """``([(item key, why)], by_meaning, said, withheld, similarity)`` — each connection's context graph asked once, with the question
     embedded once, its hits trimmed by clearance and mapped onto Discover's tables and metrics. The hits come back
     interleaved by each graph's own rank — its first, every connection's first, then its second — so one connection is
     never ranked above another for being read first."""
     from pramanyx.kernel.errors import tolerate
     from pramanyx.ontology.context_graph_readback import trim_graph_by_clearance
-    from pramanyx.ontology.context_graph_search import merge_graphs, search_graph
+    from pramanyx.ontology.context_graph_search import merge_graphs
     from pramanyx.ontology.context_graph_store import graphs_for_connection
     from pramanyx.org.context import current_org_id
 
@@ -83,6 +110,7 @@ def _graph_hits(scope: Scope, q: str, items: list[Item]) -> tuple[list[tuple[str
     tables = {(i.connection_id, i.name.lower()): f"{i.kind}:{i.id}" for i in items if i.kind == "table"}
     metrics = {(i.connection_id, i.id.split("/", 1)[-1].lower()): f"{i.kind}:{i.id}" for i in items if i.kind == "metric"}
     per_conn: list[list[tuple[str, str]]] = []
+    similarity: dict[str, float] = {}
     withheld = 0
     org = current_org_id()
     for conn, name in scope.connections.items():
@@ -90,8 +118,9 @@ def _graph_hits(scope: Scope, q: str, items: list[Item]) -> tuple[list[tuple[str
             cg = merge_graphs(graphs_for_connection(org, conn, build=False))
             if cg is None or not cg.nodes:
                 continue
-            ranked = search_graph(cg, q, top_k=_GRAPH_TOP, vector=vector, kinds=_GRAPH_KINDS)
+            ranked = _graph_rank(cg, q, vector)
             nodes = [n for n, _ in ranked]
+            sim_of_node = {n.id: sim for n, sim in ranked}
             kept, _edges, notice = trim_graph_by_clearance(nodes, (), connection_id=conn,
                                                            schema_name=getattr(cg, "schema_name", "") or "", graph=cg)
             withheld += len(nodes) - len(kept)
@@ -114,12 +143,15 @@ def _graph_hits(scope: Scope, q: str, items: list[Item]) -> tuple[list[tuple[str
                           f"its column {d.get('column')}" if d.get("column") else "by meaning")]
             else:
                 found = []   # a finding or a declaration is not a thing Discover lists
-            hits += [(key, why) for key, why in found if key]
+            for key, why in found:
+                if key:
+                    hits.append((key, why))
+                    similarity[key] = max(similarity.get(key, 0.0), sim_of_node.get(n.id, 0.0))
         per_conn.append(hits)
     interleaved: list[tuple[str, str]] = []
     for rank in range(max((len(hits) for hits in per_conn), default=0)):
         interleaved += [hits[rank] for hits in per_conn if rank < len(hits)]
-    return interleaved, bool(vector), said, withheld
+    return interleaved, bool(vector), said, withheld, similarity
 
 
 def why_words(whys: list[str]) -> list[str]:
@@ -160,7 +192,7 @@ def search(scope: Scope, q: str, *, kind: str = "", area: str = "", certified: b
     scored.sort(key=lambda t: (-t[0], order_key(t[1])))
     words_rank = [(_key(i), why) for _s, i, why in scored]
 
-    graph_rank, meaning, said, graph_withheld = _graph_hits(scope, q, items) if asked else ([], False, [], 0)
+    graph_rank, meaning, said, graph_withheld, similarity = _graph_hits(scope, q, items) if asked else ([], False, [], 0, {})
 
     fused: dict[str, float] = {}
     why_of: dict[str, list[str]] = {}
@@ -195,7 +227,8 @@ def search(scope: Scope, q: str, *, kind: str = "", area: str = "", certified: b
         if same and same in said_once:
             said_once[same]["also_on"].append(i.connection_name)
             continue
-        view = {**i.view(), "matched": why_words(why_of.get(key, [])), "score": round(score, 5), "also_on": []}
+        view = {**i.view(), "matched": why_words(why_of.get(key, [])), "score": round(score, 5), "also_on": [],
+                "similarity": similarity.get(key, 0.0)}
         if same:
             said_once[same] = view
         out.append(view)

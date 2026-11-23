@@ -53,10 +53,9 @@ def world(monkeypatch):
         assert build is False, "a read never builds a graph"
         return [SimpleNamespace(conn=conn, nodes={"x": 1}, schema_name="")]
 
-    def search_graph(cg, q, top_k=6, vector=None, kinds=None):
-        assert kinds == D._GRAPH_KINDS, "only the kinds Discover lists are asked of the graph"
+    def graph_rank(cg, q, vector):
         state.vectors.append(vector)
-        return [(n, 1.0) for n in state.hits[cg.conn]]
+        return [(n, 0.8) for n in state.hits[cg.conn]]
 
     def trim(nodes, edges, connection_id, schema_name, graph=None):
         kept = [n for n in nodes if n.id not in state.withhold]
@@ -65,7 +64,7 @@ def world(monkeypatch):
     monkeypatch.setattr("pramanyx.semantic.embedder.embed_one", embed_one)
     monkeypatch.setattr("pramanyx.ontology.context_graph_store.graphs_for_connection", graphs_for_connection)
     monkeypatch.setattr("pramanyx.ontology.context_graph_search.merge_graphs", lambda gs: gs[0] if gs else None)
-    monkeypatch.setattr("pramanyx.ontology.context_graph_search.search_graph", search_graph)
+    monkeypatch.setattr(D, "_graph_rank", graph_rank)
     monkeypatch.setattr("pramanyx.ontology.context_graph_readback.trim_graph_by_clearance", trim)
     monkeypatch.setattr("pramanyx.org.context.current_org_id", lambda: "default")
     return state

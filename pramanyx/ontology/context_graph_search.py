@@ -165,6 +165,13 @@ def _vector_search(cg: ContextGraph, question: str, top_k: int,
     return out
 
 
+def similar_nodes(cg: ContextGraph, vector: list[float], top_k: int,
+                  kinds: Optional[frozenset[str]] = None) -> list[tuple[str, float]]:
+    """The graph's nodes nearest an already-embedded question, with their similarity — for a caller that weighs the
+    similarity itself (Discover's search keeps only what is near enough). May raise as the vector rank may."""
+    return _vector_search(cg, "", top_k, vector=vector, kinds=kinds)
+
+
 # ── hybrid (the search callers use) ───────────────────────────────────────────
 
 def search_graph(cg: ContextGraph, question: str, *, top_k: int = 6,
