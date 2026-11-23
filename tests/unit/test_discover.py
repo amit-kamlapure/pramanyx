@@ -162,6 +162,9 @@ def test_a_connection_s_schema_document_stands_with_it_and_is_out_of_view_with_i
          "connection_id": "c1"},
         {"doc_id": "doctree::c9::olist", "title": "Schema documentation — c9/olist", "generated": True,
          "connection_id": "c9"},
+        # an older row names no connection; its id does
+        {"doc_id": "doctree::c8::ecommerce", "title": "Schema documentation — c8/ecommerce", "generated": True,
+         "connection_id": None},
         {"doc_id": "d1", "title": "Kpi Handbook", "connection_id": None}])
     monkeypatch.setattr("pramanyx.knowledge.access.may_read", lambda d, reader=None: True)
     monkeypatch.setattr(I, "_certified", lambda kind: {})

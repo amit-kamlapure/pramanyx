@@ -334,11 +334,13 @@ def documents(scope: Scope) -> Found:
     """The documents the person may read; one that is private to someone else is counted, not listed. A document of
     one connection (a schema's documentation) stands with it, and is out of view with it; one of none is always in."""
     from pramanyx.knowledge.access import may_read
+    from pramanyx.knowledge.indexer import doctree_connection
     from pramanyx.routers.knowledge import list_documents_endpoint
     found = Found()
     marks, placed = _certified("document"), _placed_tags("document")
     for d in list_documents_endpoint():
-        conn = str(d.get("connection_id") or "")
+        # an older schema document's row names no connection; its id does (`doctree::<conn>::<schema>`)
+        conn = str(d.get("connection_id") or doctree_connection(str(d.get("doc_id") or "")) or "")
         if conn and conn not in scope.connections:
             continue
         if not may_read(d):
