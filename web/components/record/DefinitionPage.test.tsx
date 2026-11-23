@@ -9,7 +9,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import DefinitionRoute from "@/app/definitions/[term]/page";
 import { DefinitionView } from "@/components/definitions/DefinitionView";
-import { editorOf, measureNothing } from "@/components/definitions/richBodyTesting";
+import { editorOf, measureNothing } from "@/components/ui/richTextTesting";
 import { act, change, fireEvent, render, screen, waitFor, within } from "@/lib/testing";
 
 const base = { statement: { text: "## Definition\nPaid in the last 30 days." }, tier: "approved", state: "published", author: "user:ana",

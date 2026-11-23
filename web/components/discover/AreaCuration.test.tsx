@@ -4,12 +4,13 @@
  * owners and what it features in place, add anything Discover lists, and feature or take out a row; a thing's own owner
  * may take out what they placed; anyone else is offered nothing. The API is stubbed; what is sent is what is checked.
  */
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { AddToArea, AreaEditor, RowMenu } from "@/components/discover/AreaCuration";
 import { declarationsOf, type BusinessArea } from "@/lib/areas";
 import type { DiscoverAreaPage, DiscoverItem } from "@/lib/discover";
 import { fireEvent, render, screen, waitFor } from "@/lib/testing";
+import { measureNothing, writeIn } from "@/components/ui/richTextTesting";
 
 const item = (over: Partial<DiscoverItem>): DiscoverItem => ({
   kind: "canvas", id: "cv1", name: "Returns desk", line: "", connection_id: "c1", connection_name: "theLook", area: "returns",
@@ -42,13 +43,14 @@ function serve(found: DiscoverItem[] = []) {
 }
 
 afterEach(() => vi.unstubAllGlobals());
+beforeAll(measureNothing);
 
 describe("editing an Area", () => {
   it("saves its description, its owners as people, and what it features in the order chosen", async () => {
     const put = serve();
     const onSaved = vi.fn();
     render(<AreaEditor page={page()} onSaved={onSaved} onCancel={() => {}} />);
-    fireEvent.change(screen.getByLabelText("Description"), { target: { value: "What customers send back." } });
+    await writeIn("Description", "What customers send back.");
     fireEvent.change(screen.getByLabelText("Owned by"), { target: { value: "bo, cai" } });
     fireEvent.click(screen.getByRole("button", { name: "Move Return rate down" }));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));

@@ -8,7 +8,7 @@ import { useState } from "react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { RichBody } from "@/components/definitions/RichBody";
-import { editorOf, measureNothing } from "@/components/definitions/richBodyTesting";
+import { editorOf, measureNothing } from "@/components/ui/richTextTesting";
 import { act, change, fireEvent, render, screen, waitFor } from "@/lib/testing";
 
 beforeAll(measureNothing);
@@ -48,7 +48,7 @@ describe("the toolbar", () => {
     render(<Harness start="Orders twice" onChange={onChange} />);
     const editor = await editorOf();
     await act(async () => { editor.commands.selectAll(); });
-    change(screen.getByLabelText("Heading"), { target: { value: "subheading" } });
+    change(screen.getByLabelText("Heading"), { target: { value: "h3" } });
     await waitFor(() => expect(md(onChange)).toMatch(/^### Orders twice/));
     change(screen.getByLabelText("Heading"), { target: { value: "text" } });
     await waitFor(() => expect(md(onChange)).toMatch(/^Orders twice/));

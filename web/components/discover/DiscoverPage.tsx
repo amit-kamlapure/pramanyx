@@ -15,6 +15,7 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 
 import { Card, Chip, Empty, MUTED, Page } from "@/components/clarity/kit";
+import { DefinitionBody } from "@/components/definitions/DefinitionBody";
 import { AddToArea, AreaEditor, RowMenu } from "@/components/discover/AreaCuration";
 import { BackHeader } from "@/components/record/kit";
 import { Button } from "@/components/ui/button";
@@ -349,7 +350,7 @@ function AreaView({ areaId, conn, workspaceId, onBack, onOpenArea, onName }: {
       <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 12 }}>
         {a.question && <p className="aug-fs-ui" style={{ margin: 0, color: "var(--t2)" }}>{a.question}</p>}
         {a.description
-          ? <p className="aug-fs-ui" data-testid="discover-area-description" style={{ margin: 0, color: "var(--t1)", whiteSpace: "pre-wrap", maxWidth: "80ch" }}>{a.description}</p>
+          ? <div data-testid="discover-area-description" style={{ maxWidth: "80ch" }}><DefinitionBody text={a.description} /></div>
           : page.can_curate && <p className="aug-fs-sm" style={{ ...MUTED, margin: 0 }}>No description yet — Edit to write what it covers.</p>}
         <p className="aug-fs-sm" style={{ margin: 0, ...(other ? MUTED : a.business_owners.length || a.technical_owners.length ? MUTED : { color: "var(--amb4)" }) }}>
           {other ? "What no Area holds: nobody placed it, its tables are in none, and its name names none." : ownersLine(a)}

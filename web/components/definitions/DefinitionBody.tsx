@@ -9,8 +9,17 @@ import type { MouseEvent, ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import type { RichTextKind } from "@/components/ui/rich-text";
 import { openInApp } from "@/lib/addressOnce";
 import { bodyHref } from "@/lib/definitionBody";
+
+/** What a Definition's body may hold when written (`RichText`): what this reader draws — and an Area's description, which
+ *  it draws too, holds less (`discover/AreaCuration.AREA_TEXT`). */
+export const DEFINITION_TEXT: RichTextKind = {
+  headings: [{ label: "Heading", level: 2 }, { label: "Subheading", level: 3 }],
+  lists: true, table: true, code: true, quote: true, rule: true,
+  linkHref: (h) => bodyHref(h)?.href ?? null, linkHint: "https://… or a page of the app (/?tab=…)",
+};
 
 const ALLOWED = ["h1", "h2", "h3", "h4", "p", "ul", "ol", "li", "strong", "em", "a", "br", "code", "blockquote",
   "table", "thead", "tbody", "tr", "th", "td", "hr"];

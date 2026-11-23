@@ -11,6 +11,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { change, fireEvent, render, screen, waitFor, within } from "@/lib/testing";
+import { measureNothing, writeIn } from "@/components/ui/richTextTesting";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CardState } from "@/components/brief/PinnedCardBody";
@@ -30,6 +31,7 @@ vi.mock("@/lib/api", async (original) => ({
 }));
 vi.mock("@/components/charts/vega/VegaChart", () => ({ VegaChart: () => <div data-testid="vega" /> }));
 
+beforeAll(measureNothing);
 beforeAll(() => {
   globalThis.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver;
 });
@@ -181,7 +183,7 @@ describe("a size", () => {
 describe("the doors", () => {
   const owner = (): DashboardDoors => ({ ...READER, onTakeOff: vi.fn(), onResize: vi.fn(), onEditNote: vi.fn(), onRecaption: vi.fn() });
 
-  it("an owner takes a note off, resizes an element and edits a note, each by the element's key", () => {
+  it("an owner takes a note off, resizes an element and edits a note, each by the element's key", async () => {
     const doors = owner();
     render(<ComposedDashboard spec={canvas()} cards={CARDS} host={host("final", "within")} doors={doors} images={{ ab12cd34ef56: PROMO }} />);
     const note = screen.getByTestId("dashboard-note");
@@ -192,7 +194,8 @@ describe("the doors", () => {
     expect(doors.onResize).toHaveBeenCalledWith("card-net", "hero");
 
     fireEvent.click(within(note).getByRole("button", { name: "Edit the note" }));
-    fireEvent.change(within(note).getByRole("textbox", { name: "The note's words" }), { target: { value: "Check ops by the 12th." } });
+    expect(await within(note).findByRole("textbox", { name: "The note's words" })).toBeInTheDocument();   // written as it reads, in the tile
+    await writeIn("The note's words", "Check ops by the 12th.");
     fireEvent.click(within(note).getByRole("button", { name: "Keep" }));
     expect(doors.onEditNote).toHaveBeenCalledWith("note-1", "Check ops by the 12th.");
 

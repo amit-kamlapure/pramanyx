@@ -15,9 +15,10 @@ import { DiscoverFinder } from "@/components/discover/DiscoverFinder";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { RichText, type RichTextKind } from "@/components/ui/rich-text";
 import { toast } from "@/components/ui/toast";
 import { people } from "@/lib/areas";
+import { bodyHref } from "@/lib/definitionBody";
 import {
   KIND_WORDS, mayPlace, placeInDiscoverArea, saveDiscoverArea, type DiscoverAreaPage, type DiscoverItem, type FeaturedRef,
 } from "@/lib/discover";
@@ -25,6 +26,13 @@ import {
 /** The most an Area's page puts first, and the longest description it keeps — the server's own bounds. */
 export const MAX_FEATURED = 12;
 export const MAX_DESCRIPTION = 2000;
+
+/** What an Area's description may hold when written (`RichText`): a few paragraphs, bold, italics, lists and links — to
+ *  the web or a page of the app — and no heading or table: its name heads the page. Drawn by `DefinitionBody`. */
+export const AREA_TEXT: RichTextKind = {
+  headings: [], lists: true, table: false, code: false, quote: false, rule: false,
+  linkHref: (h) => bodyHref(h)?.href ?? null, linkHint: "https://… or a page of the app (/?tab=…)",
+};
 
 const aThing = (word: string) => `${/^[aeiou]/i.test(word) ? "An" : "A"} ${word}`;
 const plain = (owners: string[]) => owners.map((o) => o.replace(/^user:/, "")).join(", ");
@@ -62,13 +70,12 @@ export function AreaEditor({ page, workspaceId, onSaved, onCancel }: {
         <Button size="xs" onClick={() => void save()} disabled={busy || description.length > MAX_DESCRIPTION}>{busy ? "Saving…" : "Save"}</Button>
       </span>}>
       <div style={{ display: "grid", gridTemplateColumns: "minmax(120px, 160px) 1fr", gap: "10px 16px", alignItems: "start" }}>
-        <label className="aug-fs-sm" htmlFor="area-description" style={{ ...MUTED, paddingTop: 6 }}>Description</label>
+        <span className="aug-fs-sm" style={{ ...MUTED, paddingTop: 6 }}>Description</span>
         <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          <Textarea id="area-description" rows={4} value={description} onChange={(e) => setDescription(e.target.value)}
-            placeholder={`What ${a.name} covers, and what someone new to it should know`} />
-          <span className="aug-fs-xs" style={description.length > MAX_DESCRIPTION ? { color: "var(--red4)" } : MUTED}>
-            {description.length} of {MAX_DESCRIPTION}. Its question stays the line under its name.
-          </span>
+          {/* written as it reads (the user, 2026-11-23), kept as Markdown */}
+          <RichText kind={AREA_TEXT} label="Description" value={description} onChange={setDescription} max={MAX_DESCRIPTION}
+            minHeight={96} placeholder={`What ${a.name} covers, and what someone new to it should know`} testId="area-description-editor" />
+          <span className="aug-fs-xs" style={MUTED}>Its question stays the line under its name.</span>
         </div>
         <label className="aug-fs-sm" htmlFor="area-business" style={{ ...MUTED, paddingTop: 6 }}>Owned by</label>
         <Input bespoke id="area-business" value={business} onChange={(e) => setBusiness(e.target.value)}

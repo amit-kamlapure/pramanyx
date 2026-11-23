@@ -20,6 +20,8 @@ import { Input } from "@/components/ui/input";
 import { Segmented } from "@/components/ui/segmented";
 import { SelectField } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { RichText, type RichTextKind } from "@/components/ui/rich-text";
+import { NOTE_TEXT } from "@/components/dashboards/NoteProse";
 import {
   BREAKDOWN_TOPS, CHART_DAYS, CHART_TOPS, CHOOSERS, FIGURE_AGGS, MAX_BREAKDOWN_MEASURES, MAX_CAPTION, MAX_CARD_DESCRIPTION, MAX_COLOR_VALUES,
   MAX_COLUMN_LOOKS, MAX_FILTERS, MAX_LABEL, SERIES_SLOTS, type ColumnLook,
@@ -179,10 +181,12 @@ function Row({ label, right, hint, children, testid }: { label: string; right?: 
 }
 
 /** A person's words, kept when they leave the field or press Enter — and only when there are some. */
-function Words({ label, value, max, onSave, many, clearable, placeholder, rows = 5 }: {
+function Words({ label, value, max, onSave, many, clearable, placeholder, rows = 5, rich }: {
   label: string; value: string; max: number; onSave: (v: string) => void; many?: boolean;
   /** Emptied, it saves "" (the prop goes back to unset) where a name may not be emptied. */
   clearable?: boolean; placeholder?: string; rows?: number;
+  /** Written as it reads, holding what its reader draws (a note's words, 2026-11-23); kept when the person moves on. */
+  rich?: RichTextKind;
 }) {
   const [text, setText] = useState(value);
   // a value changed from elsewhere — an undo, another dashboard — replaces what the field shows
@@ -193,6 +197,10 @@ function Words({ label, value, max, onSave, many, clearable, placeholder, rows =
     if ((t || clearable) && t !== value) onSave(t);
     else setText(value);
   };
+  if (rich) {
+    return <RichText kind={rich} label={label} value={text} placeholder={placeholder} onChange={setText} onBlur={save} max={max}
+      minHeight={rows * 20} testId="piece-words" />;
+  }
   return many ? (
     <Textarea aria-label={label} value={text} rows={rows} placeholder={placeholder} onChange={e => setText(e.target.value)} onBlur={save} />
   ) : (
@@ -1291,7 +1299,7 @@ export function PieceSetup({ spec, selected, onChange, connectionId, schema, car
       )}
       {el.type === "Note" && (
         <Row label="Words" hint="Yours, stamped with your name and today when kept. A model never writes one. Start a line with # or ## for a heading; a note of headings alone stands on the page with no card.">
-          <Words many label="Words" value={String(p.text ?? "")} max={MAX_NOTE} onSave={v => onChange(editNote(spec, k, v), "a note's words changed by hand")} />
+          <Words many rich={NOTE_TEXT} label="Words" value={String(p.text ?? "")} max={MAX_NOTE} onSave={v => onChange(editNote(spec, k, v), "a note's words changed by hand")} />
         </Row>
       )}
       {el.type === "Image" && (

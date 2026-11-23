@@ -33,30 +33,3 @@ a.aug-discover-area:hover { background: var(--bg-hover); border-color: var(--b1)
 .aug-discover-row .ask { flex: none; margin-right: 6px; }
 
 .aug-discover-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-
-/* A Definition's body, written as it reads (`components/definitions/RichBody.tsx`, 2026-11-23). Drawn as the
-   reader draws it (`DefinitionBody`): the same sizes, lists, tables, quotes and links. A form field, so it keeps its edge. */
-.aug-rich-body {
-  min-height: 220px; padding: 10px 12px; border: 1px solid var(--b1); border-radius: var(--r2); background: var(--bg-0);
-  color: var(--t1); font-size: 14px; line-height: 1.6; overflow-wrap: anywhere;
-}
-.aug-rich-body > * + * { margin-top: 8px; }
-.aug-rich-body p { margin: 0; }
-.aug-rich-body h1 { margin: 8px 0 2px; font-size: 18px; font-weight: 600; }
-.aug-rich-body h2 { margin: 8px 0 2px; font-size: 15px; font-weight: 600; }
-.aug-rich-body h3 { margin: 6px 0 2px; font-size: 14px; font-weight: 600; }
-.aug-rich-body h4 { margin: 6px 0 2px; font-size: 14px; font-weight: 600; color: var(--t2); }
-.aug-rich-body ul { margin: 0; padding-left: 20px; list-style: disc; }
-.aug-rich-body ol { margin: 0; padding-left: 20px; list-style: decimal; }
-.aug-rich-body li > p { margin: 0; }
-.aug-rich-body strong { font-weight: 600; }
-.aug-rich-body a { text-decoration: underline; text-underline-offset: 2px; }
-.aug-rich-body code { font-family: var(--font-mono); background: var(--gray-a3); border-radius: 4px; padding: 0 4px; }
-.aug-rich-body blockquote { margin: 0; padding-left: 12px; color: var(--t2); box-shadow: inset 2px 0 0 var(--b1); }
-.aug-rich-body hr { border: 0; border-top: 1px solid var(--b0); }
-.aug-rich-body table { border-collapse: collapse; min-width: 280px; }
-.aug-rich-body th, .aug-rich-body td { padding: 6px 10px; text-align: left; border-top: 1px solid var(--b0); min-width: 80px; vertical-align: top; }
-.aug-rich-body th { border-top: 0; color: var(--t3); font-weight: 600; font-size: 13px; }
-.aug-rich-body .selectedCell { background: var(--accent-a3); }
-.aug-rich-body .is-empty.is-editor-empty::before,
-.aug-rich-body p.is-empty::before { content: attr(data-placeholder); color: var(--t3); float: left; height: 0; pointer-events: none; }

@@ -15,6 +15,8 @@
 import type { ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 
+import type { RichTextKind } from "@/components/ui/rich-text";
+
 const ALLOWED = ["h1", "h2", "p", "ul", "ol", "li", "strong", "em", "a", "br"];
 
 /** A note that is nothing but headings: a title across the dashboard, drawn with no card around it. */
@@ -35,6 +37,14 @@ export function noteHref(href: string | undefined): string | undefined {
     return undefined;
   }
 }
+
+/** What a note may hold when written (`RichText`): what this reader draws — a title and a section's head, bold, italics,
+ *  lists and links to the web; no table, no code, no quote, no link into the app. */
+export const NOTE_TEXT: RichTextKind = {
+  headings: [{ label: "Title", level: 1 }, { label: "Heading", level: 2 }],
+  lists: true, table: false, code: false, quote: false, rule: false,
+  linkHref: (h) => noteHref(h) ?? null, linkHint: "https://…",
+};
 
 const COMPONENTS = {
   h1: ({ children }: ElProps) => <h2 className="aug-fs-h1" data-testid="note-heading" style={{ margin: 0, lineHeight: 1.25, fontWeight: 600 }}>{children}</h2>,

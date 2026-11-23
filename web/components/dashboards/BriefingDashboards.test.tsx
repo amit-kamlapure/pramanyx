@@ -11,7 +11,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { act, change, choose, fireEvent, optionsOf, render, screen, waitFor, within } from "@/lib/testing";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { measureNothing, writeIn } from "@/components/ui/richTextTesting";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BriefingDashboards } from "@/components/dashboards/BriefingDashboards";
 import type { BriefingRangeBlock, DashboardList, PersonDashboard } from "@/lib/api";
@@ -148,6 +149,8 @@ async function openHistory() {
   fireEvent.keyDown(screen.getByTestId("dashboard-more"), { key: "Enter" });
   fireEvent.click(await screen.findByTestId("dashboard-history-open"));
 }
+
+beforeAll(measureNothing);
 
 describe("a person's dashboards", () => {
   it("draws the one asked for, each card it places run as written", async () => {
@@ -544,7 +547,7 @@ describe("the canvas: a note, an image and a size, by hand (2026-10-08)", () => 
   it("a note typed here is placed in the first section and kept as the next version, its stamps the server's", async () => {
     await openBuilder();
     setDown("dashboard-note-new");
-    fireEvent.change(screen.getByRole("textbox", { name: "The note's words" }), { target: { value: "Check **ops** before the 15th." } });
+    await writeIn("The note's words", "Check **ops** before the 15th.");
     fireEvent.click(screen.getByRole("button", { name: "Place the note" }));
     await waitFor(() => expect(api.keepDashboard).toHaveBeenCalled());
     const [conn, id, spec, note] = api.keepDashboard.mock.calls[0] as [string, string, { elements: Record<string, { type: string; props: Record<string, unknown> }> }, string];
@@ -810,7 +813,7 @@ describe("building a dashboard in place (Arc AP-1)", () => {
     await waitFor(() => expect(doors().onRegrid).toBeTypeOf("function"));
     act(() => { doors().onRegrid!("card-net", { w: 6, h: 5 }, {}); });
     setDown("dashboard-note-new");
-    fireEvent.change(await screen.findByLabelText("The note's words"), { target: { value: "Watch returns in Q4" } });
+    await writeIn("The note's words", "Watch returns in Q4");
     fireEvent.click(screen.getByRole("button", { name: "Place the note" }));
     await waitFor(() => expect(api.keepDashboard).toHaveBeenCalledTimes(1));
     const kept = api.keepDashboard.mock.calls[0][2] as { elements: Record<string, { type: string; props: Record<string, unknown> }> };
@@ -828,7 +831,7 @@ describe("building a dashboard in place (Arc AP-1)", () => {
     act(() => { doors().onRegrid!("card-net", { w: 6, h: 5 }, {}); });
     await waitFor(() => expect(api.keepDashboard).toHaveBeenCalledTimes(1), { timeout: 3000 });   // the resize, on its way
     setDown("dashboard-note-new");
-    fireEvent.change(await screen.findByLabelText("The note's words"), { target: { value: "After the resize" } });
+    await writeIn("The note's words", "After the resize");
     fireEvent.click(screen.getByRole("button", { name: "Place the note" }));
     await new Promise(r => setTimeout(r, 50));
     expect(api.keepDashboard).toHaveBeenCalledTimes(1);                                          // it waits for the first
