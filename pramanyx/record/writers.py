@@ -28,6 +28,7 @@ Every door here is best-effort by contract — the receipt and the re-check stan
 from __future__ import annotations
 
 import datetime as _dt
+import re as _re
 from typing import Any, Optional
 
 from pramanyx.record import claims as _claims
@@ -652,6 +653,25 @@ def _clean_sources(sources: Optional[list[dict]]) -> list[dict]:
     return out[:MAX_SOURCES]
 
 
+#: A picture in a Definition's words (2026-11-24): Markdown's ``![words](path)``, the path one of its connection's uploads.
+_PICTURE = _re.compile(r"!\[[^\]]*\]\(([^)\s]*)\)")
+_KEPT_PICTURE = _re.compile(r"^/dashboards/images/([A-Za-z0-9_.%-]+)\?connection_id=([A-Za-z0-9_.%-]+)$")
+
+
+def _check_pictures(connection_id: str, text: str) -> None:
+    """Every picture a Definition shows is one uploaded to its own connection's image store: an address anywhere else
+    would tell that host who reads the page, and another connection's picture is not this page's to show. Raises
+    ``ValueError`` naming the first that is not."""
+    from urllib.parse import unquote
+    for src in _PICTURE.findall(text or ""):
+        kept = _KEPT_PICTURE.match(src)
+        if not kept or unquote(kept.group(2)) != connection_id:
+            raise ValueError(f"a definition shows pictures uploaded to its own connection; not {src[:80] or 'an empty one'}")
+        from pramanyx.dashboards.images import _held
+        if _held(connection_id, unquote(kept.group(1))) is None:
+            raise ValueError(f"the picture {unquote(kept.group(1))} is not one uploaded to this connection, or it is gone")
+
+
 def _clean_description(description: Optional[str]) -> str:
     return " ".join(str(description or "").split())[:MAX_DESCRIPTION]
 
@@ -676,6 +696,7 @@ def write_definition(*, connection_id: str, term: str, text: str, by: str,
     term, text, area = (term or "").strip(), (text or "").strip(), (area or "").strip()
     if not (term and text and by):
         raise ValueError("a definition names its word, says what it means, and is a person's")
+    _check_pictures(connection_id, text)
     key = definition_key(connection_id, term, area)
     prior = _claims.latest(key)
     live = prior if prior is not None and prior.state != "withdrawn" else None   # a withdrawn word is written anew
@@ -725,6 +746,7 @@ def suggest_definition_edit(*, connection_id: str, term: str, by: str, area: str
     if not ((text or "").strip() or aliases is not None or links is not None or description is not None
             or sources is not None):
         raise ValueError("a suggestion changes the wording, the other names, the description, the links or the sources")
+    _check_pictures(connection_id, text)
     suggestion = {"id": _uuid.uuid4().hex[:10], "by": by, "at": _today(), "why": (why or "").strip()[:400],
                   "by_agent": bool(by_agent),
                   **({"text": text.strip()[:4000]} if (text or "").strip() else {}),

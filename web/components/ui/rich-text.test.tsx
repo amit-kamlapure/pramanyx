@@ -8,7 +8,7 @@ import { useState } from "react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { NOTE_TEXT } from "@/components/dashboards/NoteProse";
-import { DEFINITION_TEXT } from "@/components/definitions/DefinitionBody";
+import { DEFINITION_TEXT, DefinitionBody } from "@/components/definitions/DefinitionBody";
 import { AREA_TEXT } from "@/components/discover/AreaCuration";
 import { RichText, type RichTextKind } from "@/components/ui/rich-text";
 import { editorOf, measureNothing } from "@/components/ui/richTextTesting";
@@ -83,5 +83,42 @@ describe("a field kept when it is left", () => {
     fireEvent.focusOut(editor.view.dom, { relatedTarget: document.body });
     expect(onLeave).toHaveBeenCalledTimes(1);
     expect(onLeave).toHaveBeenLastCalledWith("*Each* row is one product.");
+  });
+});
+
+describe("pictures in a Definition's words", () => {
+  const kept = "/dashboards/images/ab12?connection_id=shop";
+
+  it("takes a chosen picture where the place keeps pictures, and keeps the store's path as Markdown", async () => {
+    const onChange = vi.fn();
+    const onImage = vi.fn(async () => ({ src: kept, alt: "order form" }));
+    function WithPictures() {
+      const [value, setValue] = useState("A buyer.");
+      return <RichText kind={DEFINITION_TEXT} label="Words" value={value} onImage={onImage}
+        onChange={(md) => { setValue(md); onChange(md); }} />;
+    }
+    render(<WithPictures />);
+    const editor = await editorOf("Words");
+    expect(tools()).toContain("Image");
+    const file = new File(["png"], "order form.png", { type: "image/png" });
+    fireEvent.change(screen.getByLabelText("Choose a picture"), { target: { files: [file] } });
+    await waitFor(() => expect(onChange).toHaveBeenLastCalledWith(expect.stringContaining(`![order form](${kept})`)));
+    expect(onImage).toHaveBeenCalledWith(file);
+    const img = (editor.view.dom as HTMLElement).querySelector("img[data-kept]")!;
+    expect(img.getAttribute("data-kept")).toBe(kept);
+    expect(img.getAttribute("src")).toMatch(/\/dashboards\/images\/ab12\?connection_id=shop$/);
+  });
+
+  it("has no picture button where the place keeps none, or nothing takes one", async () => {
+    render(<RichText kind={DEFINITION_TEXT} label="Words" value="x" onChange={() => {}} />);
+    await editorOf("Words");
+    expect(tools()).not.toContain("Image");
+  });
+
+  it("draws a kept picture, and says where one from anywhere else stood instead of fetching it", () => {
+    render(<DefinitionBody text={`![order form](${kept})\n\n![tracker](https://elsewhere.example/p.png)`} />);
+    expect(screen.getByTestId("definition-image").getAttribute("src")).toMatch(/\/dashboards\/images\/ab12\?connection_id=shop$/);
+    expect(screen.getAllByTestId("definition-image")).toHaveLength(1);
+    expect(screen.getByText("[a picture this page does not show: tracker]")).toBeInTheDocument();
   });
 });

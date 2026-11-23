@@ -10,7 +10,7 @@
  * in a pop-up, and only one its reader would draw is taken.
  */
 import { useEffect, useRef, useState, type CSSProperties, type FocusEvent as ReactFocusEvent, type MouseEvent as ReactMouseEvent } from "react";
-import { EditorContent, useEditor, useEditorState, type Editor } from "@tiptap/react";
+import { EditorContent, Node as EditorNode, mergeAttributes, useEditor, useEditorState, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { Markdown } from "@tiptap/markdown";
 import { TableKit } from "@tiptap/extension-table";
@@ -39,6 +39,29 @@ export interface RichTextKind {
   linkHref: ((href: string) => string | null) | null;
   /** What the address box suggests. */
   linkHint?: string;
+  /** Images a place keeps: where one it keeps is read from to be drawn, or null for one it would not. Absent, no images
+   *  (2026-11-24: a Definition's body holds pictures uploaded to its connection). */
+  imageShown?: (src: string) => string | null;
+}
+
+/** A picture in the words, kept as Markdown (`![words](path)`): the path a place keeps, drawn from where `shown` says. */
+function imageNode(shown: (src: string) => string | null) {
+  return EditorNode.create({
+    name: "image", inline: true, group: "inline", atom: true, draggable: true,
+    addAttributes() { return { src: { default: "" }, alt: { default: "" } }; },
+    // the path kept rides on the drawn picture, so the editor reading its own page keeps the path, not the address
+    parseHTML() {
+      return [{ tag: "img[src]", getAttrs: (el: HTMLElement) => ({ src: el.getAttribute("data-kept") || el.getAttribute("src") || "",
+        alt: el.getAttribute("alt") || "" }) }];
+    },
+    renderHTML({ HTMLAttributes }) {
+      const kept = String(HTMLAttributes.src ?? "");
+      return ["img", mergeAttributes(HTMLAttributes, { src: shown(kept) ?? "", "data-kept": kept })];
+    },
+    markdownTokenName: "image",
+    parseMarkdown: (token, helpers) => helpers.createNode("image", { src: String(token.href ?? ""), alt: String(token.text ?? "") }),
+    renderMarkdown: (node) => `![${String(node.attrs?.alt ?? "").replace(/[[\]]/g, "")}](${String(node.attrs?.src ?? "")})`,
+  });
 }
 
 /** What the editor understands, for one kind of words. */
@@ -55,6 +78,7 @@ export function richTextExtensions(kind: RichTextKind, placeholder = "") {
       link: href ? { openOnClick: false, autolink: true, defaultProtocol: "https", isAllowedUri: (url: string) => !!href(url) } : false,
     }),
     ...(kind.table ? [TableKit.configure({ table: { resizable: false } })] : []),
+    ...(kind.imageShown ? [imageNode(kind.imageShown)] : []),
     Placeholder.configure({ placeholder }),
     Markdown,
   ];
@@ -72,7 +96,7 @@ const blockOf = (e: Editor, kind: RichTextKind): string => {
   return h ? `h${h.level}` : e.isActive("paragraph") ? "text" : "";
 };
 
-export function RichText({ kind, value, onChange, onBlur, label, placeholder = "", max, autoFocus = false, minHeight = 220, testId = "rich-text" }: {
+export function RichText({ kind, value, onChange, onBlur, onImage, label, placeholder = "", max, autoFocus = false, minHeight = 220, testId = "rich-text" }: {
   kind: RichTextKind;
   /** The words, as Markdown. */
   value: string;
@@ -80,6 +104,9 @@ export function RichText({ kind, value, onChange, onBlur, label, placeholder = "
   /** Left: a place that keeps its words when the person moves on (a panel's field). The toolbar is part of the field:
    *  focus that moves to its buttons, its heading menu or its link's address has not left it. */
   onBlur?: () => void;
+  /** Takes a picture the person chose where the place keeps pictures, and says what the words keep for it — for a kind
+   *  with `imageShown`; without it there is no Image button. A refusal (its reason) is said under the toolbar. */
+  onImage?: (file: File) => Promise<{ src: string; alt: string }>;
   /** Its name, as a reader of the page hears it. */
   label: string;
   placeholder?: string;
@@ -122,6 +149,17 @@ export function RichText({ kind, value, onChange, onBlur, label, placeholder = "
     } : null,
   });
   const [linking, setLinking] = useState(false);
+  const [picturing, setPicturing] = useState(false);
+  const [pictureSaid, setPictureSaid] = useState("");
+  const picker = useRef<HTMLInputElement>(null);
+  const picked = (file: File | undefined) => {
+    if (!file || !onImage || !editor) return;
+    setPicturing(true); setPictureSaid("");
+    onImage(file)
+      .then(({ src, alt }) => { editor.chain().focus().insertContent({ type: "image", attrs: { src, alt } }).run(); })
+      .catch((e) => setPictureSaid(String((e as Error)?.message ?? e)))
+      .finally(() => { setPicturing(false); if (picker.current) picker.current.value = ""; });
+  };
   const [address, setAddress] = useState("");
   const linked = kind.linkHref ? kind.linkHref(address.trim()) : null;
 
@@ -184,6 +222,16 @@ export function RichText({ kind, value, onChange, onBlur, label, placeholder = "
             <Icon name="link" size={13} />
           </Button>
         )}
+        {kind.imageShown && onImage && (
+          <>
+            <Button size="icon-xs" variant="outline" aria-label="Image" title="A picture: PNG, JPEG, GIF, WebP or SVG, up to 5 MB"
+              disabled={picturing} onMouseDown={keep} onClick={() => picker.current?.click()}>
+              <Icon name="image" size={13} />
+            </Button>
+            <input ref={picker} type="file" hidden aria-label="Choose a picture" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml"
+              onChange={(e) => picked(e.target.files?.[0])} />
+          </>
+        )}
         {kind.table && (
           <Button size="icon-xs" variant="outline" aria-label="Table" title="Table" disabled={!!state?.table} onMouseDown={keep}
             onClick={() => editor?.chain().focus().insertTable({ rows: 3, cols: 2, withHeaderRow: true }).run()}>
@@ -212,6 +260,7 @@ export function RichText({ kind, value, onChange, onBlur, label, placeholder = "
           </>
         )}
       </div>
+      {pictureSaid && <div className="aug-fs-sm" role="alert" style={{ color: "var(--red4)" }}>{pictureSaid}</div>}
       <EditorContent editor={editor} />
     </div>
   );

@@ -401,3 +401,19 @@ def test_a_drafted_description_is_drawn_from_what_the_definition_says_and_booked
     monkeypatch.setattr(P, "get_provider", lambda role="coder", **kw: _Down())
     failed = client.post("/record/definitions/suggest-description", json=body)
     assert failed.status_code == 502 and "the plan is spent" in failed.json()["detail"]
+
+
+def test_a_definition_shows_pictures_uploaded_to_its_own_connection_and_no_other(monkeypatch):
+    from pramanyx.dashboards import images
+    conn = _conn()
+    monkeypatch.setattr(images, "_held", lambda c, object_id: object() if (c, object_id) == (conn, "ab12") else None)
+    kept = f"## Definition\nA buyer, as the form shows it:\n\n![the order form](/dashboards/images/ab12?connection_id={conn})"
+    W.write_definition(connection_id=conn, term="Buyer", text=kept, by="user:ana")
+    assert "![the order form]" in C.latest(W.definition_key(conn, "Buyer")).statement.text
+    for src, said in [("https://elsewhere.example/p.png", "its own connection"),
+                      ("/dashboards/images/ab12?connection_id=other", "its own connection"),
+                      (f"/dashboards/images/zz99?connection_id={conn}", "not one uploaded")]:
+        with pytest.raises(ValueError, match=said):
+            W.write_definition(connection_id=conn, term="Buyer", text=f"A buyer. ![x]({src})", by="user:ana")
+        with pytest.raises(ValueError, match=said):
+            W.suggest_definition_edit(connection_id=conn, term="Buyer", by="user:cai", text=f"A buyer. ![x]({src})")

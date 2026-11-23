@@ -330,7 +330,7 @@ export function DefinitionView({ term, connection, initialArea = "", inApp = fal
             {/* the body */}
             <div style={{ padding: "0 20px 16px", boxShadow: "inset 0 1px 0 var(--b0)" }}>
               {writing ? (
-                <RichBody value={draft.text} onChange={(text) => setDraft((d) => ({ ...d, text }))} />
+                <RichBody value={draft.text} onChange={(text) => setDraft((d) => ({ ...d, text }))} connection={connection} />
               ) : (
                 <div style={{ paddingTop: 12 }}><DefinitionBody text={found?.statement.text ?? ""} /></div>
               )}
