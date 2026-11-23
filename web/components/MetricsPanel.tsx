@@ -70,6 +70,9 @@ import { showWhenDrawn } from "@/lib/addressOnce";
 import { BindRolesDialog } from "@/components/semantic/BindRoles";
 import { useMe } from "@/lib/useMe";
 import { byWho } from "@/lib/names";
+import { DefinitionBody, PROSE_TEXT } from "@/components/definitions/DefinitionBody";
+import { RichText } from "@/components/ui/rich-text";
+import { plainWords } from "@/lib/definitionBody";
 
 const GRAINS = ["day", "week", "month", "quarter", "year"] as const;
 
@@ -1075,8 +1078,9 @@ export function MetricsPanel({ connId, schema, datasets = [], focus = null }: {
           <Input placeholder="is_test = false, deleted_at IS NULL" value={form.filters} onChange={set("filters")} aria-label="Filters" />
         </Field>
         <Field label="Caveats">
-          <Textarea style={{ minHeight: 56, resize: "vertical" }} placeholder="Finance-approved. Excludes internal test accounts."
-            value={form.caveats} onChange={set("caveats")} aria-label="Caveats" />
+          {/* written as it reads (2026-11-24), kept as Markdown: drawn whole in the metric's detail, one plain line in its row */}
+          <RichText kind={PROSE_TEXT} label="Caveats" placeholder="Finance-approved. Excludes internal test accounts."
+            value={form.caveats} onChange={(v) => setForm((f) => ({ ...f, caveats: v }))} minHeight={56} testId="metric-caveats-editor" />
         </Field>
         <Field label="Additivity" hint="may period figures be summed">
           <SelectField value={form.additivity} aria-label="Additivity"
@@ -1218,7 +1222,8 @@ export function MetricsPanel({ connId, schema, datasets = [], focus = null }: {
                 ["Definition", p.row.definition?.trim() || <NotSet key="d" word="Not written" what="No definition is written for it" />],
                 // its caveats, where they say something the definition does not (a catalogue row's definition is often
                 // the stored caveats themselves)
-                ...(sm.caveats?.trim() && sm.caveats.trim() !== p.row.definition?.trim() ? [["Caveats", sm.caveats] as [string, ReactNode]] : []),
+                ...(sm.caveats?.trim() && sm.caveats.trim() !== p.row.definition?.trim()
+                  ? [["Caveats", <DefinitionBody key="caveats" text={sm.caveats} />] as [string, ReactNode]] : []),
                 ["Grain", sm.time_column
                   ? <span key="g">{`${sm.time_grain ?? "month"} · dated by `}<span style={{ fontFamily: "var(--font-mono)" }}>{sm.time_column}</span></span>
                   : <NotSet key="g" word="No date column" what="It has no figure for a period until a date column is set — Dates" />],
@@ -1445,7 +1450,7 @@ function MetricRow({ p, every, open, onToggle, children }: {
   const r = p.row, m = p.stored;
   const chip = standingChip(p);
   const unit = shortUnit(m?.unit ?? r.unit);
-  const what = (r.definition || m?.caveats || "").trim();
+  const what = plainWords(r.definition || m?.caveats || "");
   const meta = [what, every ? datasetWords(r.schema) : ""].filter(Boolean).join(" · ");
   const col = m?.time_column ? shortColumn(m.time_column) : "";
   const grain = m?.time_grain ?? (r.grain || "");

@@ -15,6 +15,18 @@ export function isBlankBody(text: string): boolean {
   return !bare(text) || bare(text) === bare(BODY_TEMPLATE);
 }
 
+/** Formatted words as one plain line, for where a page shows one line of them: their words, without the marks
+ *  (headings, bold, code, links, lists, tables) — the server's `discover.items.plain_words`, here. */
+export function plainWords(markdown: string): string {
+  return (markdown || "")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")                 // a link: its words
+    .replace(/^\s{0,3}#{1,6}\s+[^\n]*\n?/gm, "")               // a heading names a section; it is not the words
+    .replace(/^\s*(?:[-*]|\d+\.)\s+/gm, "")                    // a list's marks
+    .replace(/^\s*\|?\s*:?-{3,}.*$/gm, "")                      // a table's rule
+    .replace(/[*_`>|]+/g, "")
+    .split(/\s+/).filter(Boolean).join(" ");
+}
+
 /** A link a body may carry: the web (opens in a new tab) or a page of the app (`/?tab=…`); nothing else runs from it. */
 export function bodyHref(href: string | undefined): { href: string; inApp: boolean } | null {
   if (!href) return null;

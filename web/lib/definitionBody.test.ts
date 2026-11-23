@@ -3,7 +3,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { BODY_TEMPLATE, bodyHref, isBlankBody } from "@/lib/definitionBody";
+import { BODY_TEMPLATE, bodyHref, isBlankBody, plainWords } from "@/lib/definitionBody";
 
 const at = (text: string, start: number, end = start) => ({ text, start, end });
 
@@ -24,5 +24,13 @@ describe("a link in a body", () => {
     expect(bodyHref("/?tab=semantic&metric=revenue")).toEqual({ href: "/?tab=semantic&metric=revenue", inApp: true });
     expect(bodyHref("javascript:alert(1)")).toBeNull();
     expect(bodyHref("/sheets/1")).toBeNull();
+  });
+});
+
+describe("one plain line of formatted words", () => {
+  it("keeps the words and drops the marks, where a row shows one line (a metric's caveats, 2026-11-24)", () => {
+    expect(plainWords("**Finance-approved.** Excludes [test accounts](https://wiki.example/t).")).toBe("Finance-approved. Excludes test accounts.");
+    expect(plainWords("## Definition\n\n- paid\n- shipped\n\n| a | b |\n| --- | --- |")).toBe("paid shipped a b");
+    expect(plainWords("")).toBe("");
   });
 });

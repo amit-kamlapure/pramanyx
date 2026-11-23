@@ -15,6 +15,13 @@ import { bodyHref } from "@/lib/definitionBody";
 
 /** What a Definition's body may hold when written (`RichText`): what this reader draws — and an Area's description, which
  *  it draws too, holds less (`discover/AreaCuration.AREA_TEXT`). */
+/** Prose a page shows under something's name — an Area's description, a metric's caveats: paragraphs, bold, italics,
+ *  lists and links (the web or a page of the app), no heading and no table. Drawn by this reader too. */
+export const PROSE_TEXT: RichTextKind = {
+  headings: [], lists: true, table: false, code: false, quote: false, rule: false,
+  linkHref: (h) => bodyHref(h)?.href ?? null, linkHint: "https://… or a page of the app (/?tab=…)",
+};
+
 export const DEFINITION_TEXT: RichTextKind = {
   headings: [{ label: "Heading", level: 2 }, { label: "Subheading", level: 3 }],
   lists: true, table: true, code: true, quote: true, rule: true,

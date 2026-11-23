@@ -15,10 +15,10 @@ import { DiscoverFinder } from "@/components/discover/DiscoverFinder";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
+import { PROSE_TEXT } from "@/components/definitions/DefinitionBody";
 import { RichText, type RichTextKind } from "@/components/ui/rich-text";
 import { toast } from "@/components/ui/toast";
 import { people } from "@/lib/areas";
-import { bodyHref } from "@/lib/definitionBody";
 import {
   KIND_WORDS, mayPlace, placeInDiscoverArea, saveDiscoverArea, type DiscoverAreaPage, type DiscoverItem, type FeaturedRef,
 } from "@/lib/discover";
@@ -27,12 +27,9 @@ import {
 export const MAX_FEATURED = 12;
 export const MAX_DESCRIPTION = 2000;
 
-/** What an Area's description may hold when written (`RichText`): a few paragraphs, bold, italics, lists and links — to
- *  the web or a page of the app — and no heading or table: its name heads the page. Drawn by `DefinitionBody`. */
-export const AREA_TEXT: RichTextKind = {
-  headings: [], lists: true, table: false, code: false, quote: false, rule: false,
-  linkHref: (h) => bodyHref(h)?.href ?? null, linkHint: "https://… or a page of the app (/?tab=…)",
-};
+/** What an Area's description may hold when written (`RichText`): prose — no heading or table, its name heads the page.
+ *  Drawn by `DefinitionBody`. */
+export const AREA_TEXT: RichTextKind = PROSE_TEXT;
 
 const aThing = (word: string) => `${/^[aeiou]/i.test(word) ? "An" : "A"} ${word}`;
 const plain = (owners: string[]) => owners.map((o) => o.replace(/^user:/, "")).join(", ");
