@@ -185,6 +185,19 @@ the address loses `?conn=` while the page loads; a schema document's link landin
 dashboard linked by a word the page never reads (`shared:<owner>:<id>` now). Opened in the browser: a table, a custom
 agent, a document, a trusted query and a dashboard each open on the thing itself.
 
+**D2 live, 2026-11-23** (`components/discover/DiscoverPage.tsx`, `lib/discover.ts`, `styles/discover.css`): Discover is
+Data's first row (`navDestinations.ts`), so Data opens on it. No title bar (the user, 2026-09-26): the search and its
+filters (Area, kind, Certified, Mine — who owns it, new on `/discover/items` — and connection) lead; then the Areas as
+cards opening their page at `?tab=discover&id=<area>` (page.tsx's `id`, as the Record's readers use it: Back and a reload
+keep it), the empty ones and the model's suggestions (Declare / Not an area, as the Semantic Layer does them) each a
+click away; Certified, or that nothing is; each kind's first six with View all. A row is a real link; a table, dashboard
+or spreadsheet has Ask about it (the Ask panel's own subjects — the other kinds have none yet, so none is offered). The
+tab reads Discover, or the Area's name. Seen live at 1600 px on the default workspace (6 connections, 14 Areas holding
+something). Reading it live found: four reads before the workspace was known, across every connection (now read once,
+under the workspace, kept 20 s); ten suggestions crowding the Areas (folded); long "how" words squeezing names (cut,
+whole on hover); and the dev server's Turbopack cache serving the old stylesheet after the checkout move (cleared, the
+user's call). Not in D2: Featured, an Area's description and Add/Edit (D4), Most used (D5), meaning search (D3).
+
 ## 7 · Not in this plan
 
 - **Across workspaces** (Databricks' account scope) — **Later**: nothing spans workspaces yet.
