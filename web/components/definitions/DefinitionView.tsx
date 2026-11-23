@@ -77,6 +77,10 @@ export function DefinitionView({ term, connection, initialArea = "", inApp = fal
   const [handing, setHanding] = useState(false);
   const [handTo, setHandTo] = useState("");
   const [people, setPeople] = useState<DirectoryPerson[]>([]);
+  // a description the model drafted from what it means, at the person's press (2026-11-24): said as such until they
+  // change it or keep it — their save is what makes it theirs
+  const [drafted, setDrafted] = useState(false);
+  const [drafting, setDrafting] = useState(false);
 
   // undefined while it is read; null when there is none — a new one (no word yet) is none, never "Reading…"
   const found = !term ? null
@@ -157,9 +161,18 @@ export function DefinitionView({ term, connection, initialArea = "", inApp = fal
     setHanding(false);
   };
   const lastHanded = found?.handed?.at(-1);
+  const draftDescription = async () => {
+    setDrafting(true); setSaid("");
+    try {
+      const out = await post("/record/definitions/suggest-description", { text: draft.text, aliases: draft.aliases },
+        (found?.term ?? draft.name).trim(), found?.area ?? draft.area);
+      setDraft((d) => ({ ...d, description: String(out?.description ?? "") }));
+      setDrafted(true);
+    } catch (e) { setSaid((e as Error).message); } finally { setDrafting(false); }
+  };
   const published = found?.state === "published";
   const isNew = !found;
-  const startWriting = () => { setDraft(fromDefinition(found, term, area)); setWriting(true); setSaid(""); };
+  const startWriting = () => { setDraft(fromDefinition(found, term, area)); setWriting(true); setSaid(""); setDrafted(false); };
   const cancel = () => { setWriting(false); setSaid(""); if (!term) onCancel?.(); };
   const nameOk = !!(found?.term ?? draft.name).trim();
   const textOk = !isBlankBody(draft.text) && draft.text.length <= BODY_MAX;
@@ -291,8 +304,23 @@ export function DefinitionView({ term, connection, initialArea = "", inApp = fal
               </Field>
               <Field label="Description">
                 {writing ? (
-                  <Textarea aria-label="Description" rows={2} placeholder="Add a short description" value={draft.description}
-                    maxLength={400} onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))} style={{ width: "100%" }} />
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, width: "100%" }}>
+                    <Textarea aria-label="Description" rows={2} placeholder="Add a short description" value={draft.description}
+                      maxLength={400} onChange={(e) => { setDrafted(false); setDraft((d) => ({ ...d, description: e.target.value })); }}
+                      style={{ width: "100%" }} />
+                    <span style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                      <Button size="xs" variant="outline" disabled={busy || drafting || isBlankBody(draft.text) || !nameOk}
+                        title="One model call: a line drawn from what it means, below. Nothing is kept until you save."
+                        onClick={() => void draftDescription()}>
+                        {drafting ? "Drafting…" : "Draft with AI"}
+                      </Button>
+                      {drafted && (
+                        <span className="aug-fs-xs" style={MUTED} data-testid="description-drafted">
+                          Drafted by the model from what it means: read it before you keep it
+                        </span>
+                      )}
+                    </span>
+                  </div>
                 ) : found?.description ? (
                   <span className="aug-fs-ui" style={{ color: "var(--t1)" }} data-testid="definition-description">{found.description}</span>
                 ) : <span className="aug-fs-sm" style={MUTED}>No description</span>}

@@ -120,6 +120,20 @@ describe("the Definition page, as a Page", () => {
     expect(posted.some(p => p.path === "/record/definitions/approve")).toBe(false);
   });
 
+  it("drafts a description with the model at the owner's press, says so, and keeps nothing until it is saved", async () => {
+    const posted = serve("user:bo", [MARKETING]);
+    await show("marketing");
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Draft with AI" }));
+    await waitFor(() => expect(posted[0]?.path).toBe("/record/definitions/suggest-description"));
+    expect(posted[0].body).toMatchObject({ term: "Active customer", area: "marketing", text: "Opened an email in 90 days." });
+    await waitFor(() => expect(screen.getByLabelText("Description")).toHaveValue("A customer who pays"));
+    expect(screen.getByTestId("description-drafted")).toHaveTextContent("Drafted by the model");
+    expect(posted).toHaveLength(1);                                        // nothing kept yet
+    fireEvent.change(screen.getByLabelText("Description"), { target: { value: "A customer who pays, monthly" } });
+    expect(screen.queryByTestId("description-drafted")).toBeNull();        // the person's own words now
+  });
+
   it("lets its owner hand it to another person, and offers anyone else no such door", async () => {
     let posted = serve("user:cai", [FINANCE]);
     await show("finance");

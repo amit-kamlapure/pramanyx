@@ -17323,6 +17323,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/record/definitions/suggest-description": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Suggest Record Definition Description
+         * @description ⚑ Spends one model call, when a person presses for it (the Page editor's AI-drafted description, 2026-11-24): a
+         *     description drawn from what the Definition says, returned to the page and booked nowhere — the person reads it, and
+         *     their own save makes it theirs. Refused without words to draw it from; a model that fails is said, never guessed.
+         */
+        post: operations["suggest_record_definition_description_record_definitions_suggest_description_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/record/definitions/suggestions/decide": {
         parameters: {
             query?: never;
@@ -22347,6 +22369,25 @@ export interface components {
              * @default
              */
             why: string;
+        };
+        /** DescriptionAsk */
+        DescriptionAsk: {
+            /** Aliases */
+            aliases?: string[] | null;
+            /**
+             * Area
+             * @default
+             */
+            area: string;
+            /** Connection Id */
+            connection_id: string;
+            /** Term */
+            term: string;
+            /**
+             * Text
+             * @default
+             */
+            text: string;
         };
         /**
          * DeveloperMessage
@@ -57696,6 +57737,43 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["DefinitionHandover"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    suggest_record_definition_description_record_definitions_suggest_description_post: {
+        parameters: {
+            query?: {
+                connection_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DescriptionAsk"];
             };
         };
         responses: {

@@ -288,6 +288,55 @@ def write_record_definition(req: DefinitionRequest, principal=Depends(get_princi
     return {**_definition_view(C.get(cid)), "suggested": suggested}
 
 
+class DescriptionAsk(BaseModel):
+    connection_id: str = Field(min_length=1, max_length=80)
+    term: str = Field(min_length=1, max_length=120)
+    area: str = Field("", max_length=120)
+    text: str = Field("", max_length=4000)                   # what it means, as written on the page — saved or not yet
+    aliases: Optional[list[str]] = Field(None, max_length=50)
+
+
+class _Described(BaseModel):
+    description: str
+
+
+#: What the model is told when a person asks it to draft a Definition's description: one plain sentence drawn from the
+#: Definition's own words, adding nothing they do not say — the description is the person's once they keep it.
+DESCRIBE_SYSTEM = (
+    "You write the one-line description shown under a business word's name in a company's glossary. You are given the "
+    "word, the part of the business it belongs to, its synonyms, and what it means, as its owner wrote it. Write ONE "
+    "plain sentence, under 25 words, that says what the word is to a person who has not read the definition. Use only "
+    "what the definition says: never add a number, a rule, a source or a claim it does not make. No quotes, no markup, "
+    "do not start with the word itself.")
+
+
+@router.post("/record/definitions/suggest-description", dependencies=[gate(Capability.SEMANTIC_EDIT)])
+def suggest_record_definition_description(req: DescriptionAsk, request: Request = None) -> dict:
+    """⚑ Spends one model call, when a person presses for it (the Page editor's AI-drafted description, 2026-11-24): a
+    description drawn from what the Definition says, returned to the page and booked nowhere — the person reads it, and
+    their own save makes it theirs. Refused without words to draw it from; a model that fails is said, never guessed."""
+    from pramanyx.record.writers import MAX_DESCRIPTION
+    if not _visible(req.connection_id):
+        raise HTTPException(status_code=404, detail="No such connection")
+    _persons_own(request, "asking for a drafted description")
+    text = (req.text or "").strip()
+    if not text:
+        raise HTTPException(status_code=422, detail="Write what it means first: the description is drawn from it.")
+    synonyms = ", ".join(a.strip() for a in (req.aliases or []) if a.strip()) or "none"
+    user = (f"Word: {req.term.strip()}\nPart of the business: {req.area.strip() or 'the whole business'}\n"
+            f"Synonyms: {synonyms}\n\nWhat it means:\n{text}")
+    try:
+        from pramanyx.llm.provider import get_provider
+        out = get_provider("narrator").complete(system=DESCRIBE_SYSTEM, user=user, response_model=_Described,
+                                                temperature=0.2)
+    except Exception as exc:  # noqa: BLE001 — the reason is said to the person who pressed for it
+        raise HTTPException(status_code=502, detail=f"The model could not draft a description: {str(exc)[:200]}")
+    words = " ".join(str(getattr(out, "description", "") or "").split()).strip().strip('"')[:MAX_DESCRIPTION]
+    if not words:
+        raise HTTPException(status_code=502, detail="The model drafted no description; write one, or ask again.")
+    return {"description": words}
+
+
 class DraftForRequest(BaseModel):
     connection_id: str = Field(min_length=1, max_length=80)
     term: str = Field(min_length=1, max_length=120)

@@ -369,3 +369,35 @@ def test_the_door_hands_a_definition_on_as_the_person_signs_in_and_refuses_anyon
     assert got["handed"][-1]["from"] == "user:ana" and got["handed"][-1]["to"] == "user:cai"
     assert client.post("/record/definitions/owner", json={**body, "term": "Nothing"}).status_code == 404
     assert client.post("/record/definitions/owner", json={**body, "to": "agent:coworker"}).status_code == 422
+
+
+def test_a_drafted_description_is_drawn_from_what_the_definition_says_and_booked_nowhere(monkeypatch):
+    from pramanyx.llm import provider as P
+    from pramanyx.routers import record as R
+    asked: list[dict] = []
+
+    class _Model:
+        def complete(self, *, system, user, response_model, temperature):
+            asked.append({"system": system, "user": user})
+            return response_model(description='  "A customer who has ordered more than once."  ')
+    monkeypatch.setattr(P, "get_provider", lambda role="coder", **kw: _Model())
+    monkeypatch.setattr(R, "_visible", lambda c: True)
+    app = FastAPI()
+    app.include_router(R.router)
+    client = TestClient(app)
+    conn = _conn()
+    body = {"connection_id": conn, "term": "Repeat buyer", "area": "customers", "aliases": ["returning customer"],
+            "text": "## Definition\nA customer with more than one order."}
+    got = client.post("/record/definitions/suggest-description", json=body)
+    assert got.status_code == 200 and got.json() == {"description": "A customer who has ordered more than once."}
+    assert "A customer with more than one order." in asked[0]["user"] and "returning customer" in asked[0]["user"]
+    assert "never add a number" in asked[0]["system"]
+    assert C.latest(W.definition_key(conn, "Repeat buyer", "customers")) is None        # booked nowhere
+    assert client.post("/record/definitions/suggest-description", json={**body, "text": " "}).status_code == 422
+
+    class _Down:
+        def complete(self, **kw):
+            raise RuntimeError("the plan is spent")
+    monkeypatch.setattr(P, "get_provider", lambda role="coder", **kw: _Down())
+    failed = client.post("/record/definitions/suggest-description", json=body)
+    assert failed.status_code == 502 and "the plan is spent" in failed.json()["detail"]
