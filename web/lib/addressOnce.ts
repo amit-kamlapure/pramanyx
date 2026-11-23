@@ -78,12 +78,18 @@ export function openInApp(href: string): void {
   window.dispatchEvent(new CustomEvent<AddressDetail>(ADDRESS_EVENT, { detail: { words: [...u.searchParams.keys()] } }));
 }
 
-/** Bring the element a link opened into view, once it is drawn. */
+/** Bring the element a link opened into view once it is drawn AND the page around it has settled: what loads above it
+ *  (a section read after it) pushes it down, and a scroll made before that lands short (seen live, 2026-11-23: a metric
+ *  opened at y=1057 of an 846-high page). Looked for every 150 ms; scrolled when its place has held for two looks, or
+ *  at the last look wherever it is. */
 export function showWhenDrawn(selector: string, tries = 20): void {
   if (typeof window === "undefined") return;
+  let last: number | null = null;
   const look = (left: number) => {
     const el = document.querySelector(selector);
-    if (el) { el.scrollIntoView({ block: "center" }); return; }
+    const top = el ? el.getBoundingClientRect().top : null;
+    if (el && ((last !== null && Math.abs(top! - last) < 1) || left <= 0)) { el.scrollIntoView({ block: "center" }); return; }
+    last = top;
     if (left > 0) window.setTimeout(() => look(left - 1), 150);
   };
   look(tries);

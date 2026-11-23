@@ -66,6 +66,7 @@ import {
   type Need, type Placed,
 } from "@/lib/semanticMetrics";
 import { withUniqueKeys } from "@/lib/listKeys";
+import { showWhenDrawn } from "@/lib/addressOnce";
 import { BindRolesDialog } from "@/components/semantic/BindRoles";
 import { useMe } from "@/lib/useMe";
 import { byWho } from "@/lib/names";
@@ -846,7 +847,10 @@ export function MetricsPanel({ connId, schema, datasets = [], focus = null }: {
     if (!focus || focusDone.current === focus.n || !loaded) return;
     focusDone.current = focus.n;
     const hit = place(rows, metrics).find(p => p.row.name === focus.name || p.stored?.name === focus.name);
-    if (hit) { setFocusMissing(""); open(hit, "overview", { scroll: true }); }
+    if (hit) {
+      setFocusMissing(""); open(hit, "overview");
+      showWhenDrawn(`#${CSS.escape(`metric-row-${hit.key}`)}`, 40);   // once the sections above it have landed
+    }
     else setFocusMissing(focus.name);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focus, loaded, rows, metrics]);
