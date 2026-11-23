@@ -117,6 +117,7 @@ describe("a new Definition", () => {
     const onNamed = vi.fn();
     await act(async () => { render(<DefinitionView term="" connection="shop" inApp onNamed={onNamed} />); });
     const body = screen.getByLabelText("What it means") as HTMLTextAreaElement;
+    expect(screen.queryByText("Reading…")).toBeNull();                                      // nothing to read yet
     expect(body.value).toContain("## Definition");
     expect(body.value).toContain("## Business use");
     expect(screen.getByRole("button", { name: "Publish" })).toBeDisabled();                 // no name, the template alone

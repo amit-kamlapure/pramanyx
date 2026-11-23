@@ -70,7 +70,10 @@ export function DefinitionView({ term, connection, initialArea = "", inApp = fal
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState("");
 
-  const found = all?.find((d) => same(d.area, area)) ?? (all && !area ? all[0] : undefined) ?? (all ? null : undefined);
+  // undefined while it is read; null when there is none — a new one (no word yet) is none, never "Reading…"
+  const found = !term ? null
+    : all === undefined ? undefined
+    : (all?.find((d) => same(d.area, area)) ?? (all && !area ? all[0] : undefined) ?? null);
 
   const read = useCallback(async () => {
     if (!term) return;
