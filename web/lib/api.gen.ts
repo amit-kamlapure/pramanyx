@@ -5798,6 +5798,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/discover/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Discover Search
+         * @description One ranked list across every kind and every connection in view, by meaning and by words, each result saying
+         *     why it matched (the plan's §4.3). The question is embedded once by the platform's embedder; no model is called.
+         */
+        get: operations["get_discover_search_discover_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/documents": {
         parameters: {
             query?: never;
@@ -38212,6 +38233,46 @@ export interface operations {
                 mine?: boolean;
                 q?: string;
                 cursor?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_discover_search_discover_search_get: {
+        parameters: {
+            query: {
+                q: string;
+                workspace_id?: string | null;
+                connection_id?: string | null;
+                kind?: string;
+                area?: string;
+                certified?: boolean;
+                mine?: boolean;
                 limit?: number;
             };
             header?: never;

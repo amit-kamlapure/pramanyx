@@ -21,12 +21,12 @@ import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
 import { SelectField } from "@/components/ui/select";
 import { Loading, ReadFailed } from "@/components/ui/states";
-import { openInApp } from "@/lib/addressOnce";
+import { openInApp, useFromAddress } from "@/lib/addressOnce";
 import { declarationsOf, readAreas, saveAreas, setNotAnArea } from "@/lib/areas";
 import { askAbout } from "@/lib/askSubject";
 import {
   KINDS, KIND_ICON, KIND_TITLES, KIND_WORDS, OTHER, askSubjectOf, holdsWords, markOf, ownersLine, readDiscover,
-  readDiscoverArea, readDiscoverItems, secondLine, withheldWords,
+  readDiscoverArea, readDiscoverItems, readDiscoverSearch, secondLine, withheldWords,
   type DiscoverArea, type DiscoverAreaPage, type DiscoverHome, type DiscoverItem, type DiscoverItems, type DiscoverKind,
   type DiscoverKindView, type SuggestedInView,
 } from "@/lib/discover";
@@ -36,6 +36,9 @@ import { withUniqueKeys } from "@/lib/listKeys";
 interface Filters { conn: string; q: string; kind: DiscoverKind | ""; area: string; certified: boolean; mine: boolean }
 const NO_FILTERS: Filters = { conn: "", q: "", kind: "", area: "", certified: false, mine: false };
 const narrowed = (f: Filters) => !!(f.q.trim() || f.kind || f.area || f.certified || f.mine);
+
+/** How many results a search shows — the best of them; the count says how many more there are. */
+const SEARCH_LIMIT = 100;
 
 /** How many rows a kind shows on an Area's page before "Show all". */
 const AREA_ROWS = 8;
@@ -54,6 +57,8 @@ export function DiscoverPage({ openId, onOpenArea, onName, connections, workspac
   ready?: boolean;
 }) {
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
+  // `?q=` — ⌘K's "Search everything" opens Discover on the words typed there (`lib/addressOnce.ts`)
+  useFromAddress(["q"], ({ q }) => setFilters(f => ({ ...NO_FILTERS, conn: f.conn, q })));
   if (!ready) return <Page testId="discover"><Loading what="Discover" /></Page>;
   if (openId) {
     return <AreaView key={`${openId}:${filters.conn}:${workspaceId}`} areaId={openId} conn={filters.conn} workspaceId={workspaceId}
@@ -108,6 +113,8 @@ function SearchBar({ filters, setFilters, home, areaNames, connections }: {
   connections: { id: string; name: string }[];
 }) {
   const [text, setText] = useState(filters.q);
+  // words set from outside (⌘K, Clear) show in the box; the box's own words come back here unchanged
+  useEffect(() => { setText(filters.q); }, [filters.q]);
   useEffect(() => {
     if (text === filters.q) return;
     const t = window.setTimeout(() => setFilters({ ...filters, q: text }), 250);
@@ -118,7 +125,7 @@ function SearchBar({ filters, setFilters, home, areaNames, connections }: {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
       <Input type="search" aria-label="Search Discover" value={text} onChange={e => setText(e.target.value)}
-        placeholder="Search names and descriptions — tables, metrics, dashboards, canvases, agents, documents…"
+        placeholder="Search by name or by what it means — tables, columns, metrics, dashboards, canvases, agents, documents…"
         leading={<Icon name="search" size={16} />} style={{ width: "100%" }} data-testid="discover-search" />
       <div className="aug-discover-filters">
         <SelectField bespoke aria-label="Area" value={filters.area} onChange={e => set({ area: e.target.value })} data-testid="discover-area-filter">
@@ -216,22 +223,28 @@ function Browse({ home, areaNames, many, onOpenArea, onViewAll, onCertified, rel
   );
 }
 
+/** What the search and the filters find. Words go to the search — by meaning and by words, across every kind, each
+ *  result saying why (`/discover/search`, D3); filters alone list a kind, an Area, the certified or your own, a page at a
+ *  time (`/discover/items`). */
 function Results({ filters, workspaceId, areaNames, many, onClear }: {
   filters: Filters; workspaceId: string; areaNames: Record<string, string>; many: boolean; onClear: () => void;
 }) {
-  const [page, setPage] = useState<DiscoverItems | null>(null);
+  const [page, setPage] = useState<(DiscoverItems & { by_meaning?: boolean }) | null>(null);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [tick, setTick] = useState(0);
+  const searching = !!filters.q.trim();
   const asked = useMemo(() => ({ kind: filters.kind, area: filters.area, certified: filters.certified, mine: filters.mine,
     q: filters.q, connectionId: filters.conn, workspaceId }), [filters, workspaceId]);
   useEffect(() => {
     let alive = true;
     setPage(null); setErr("");
-    readDiscoverItems({ ...asked, limit: 50 }).then(p => { if (alive) setPage(p); })
-      .catch(e => { if (alive) setErr(String((e as Error)?.message ?? e)); });
+    const read = searching
+      ? readDiscoverSearch({ ...asked, q: asked.q, limit: SEARCH_LIMIT }).then(r => ({ ...r, next_cursor: null }))
+      : readDiscoverItems({ ...asked, limit: 50 });
+    read.then(p => { if (alive) setPage(p); }).catch(e => { if (alive) setErr(String((e as Error)?.message ?? e)); });
     return () => { alive = false; };
-  }, [asked, tick]);
+  }, [asked, searching, tick]);
   const more = async () => {
     if (!page?.next_cursor) return;
     setBusy(true);
@@ -240,19 +253,23 @@ function Results({ filters, workspaceId, areaNames, many, onClear }: {
       setPage({ ...next, items: [...page.items, ...next.items] });
     } catch (e) { setErr(String((e as Error)?.message ?? e)); } finally { setBusy(false); }
   };
-  if (err) return <ReadFailed what="what Discover holds" error={err} onRetry={() => setTick(t => t + 1)} />;
-  if (!page) return <Loading what="what matches" />;
-  const withheld = (Object.entries(page.withheld) as [DiscoverKind, number][]).filter(([, n]) => n)
-    .map(([k, n]) => `${KIND_TITLES[k]}: ${withheldWords(k, n)}`);
+  if (err) return <ReadFailed what={searching ? "the search" : "what Discover holds"} error={err} onRetry={() => setTick(t => t + 1)} />;
+  if (!page) return <Loading what={searching ? "what matches" : "what Discover holds"} />;
+  const withheld = (Object.entries(page.withheld) as [DiscoverKind | "graph", number][]).filter(([, n]) => n)
+    .map(([k, n]) => (k === "graph" ? withheldWords(k, n) : `${KIND_TITLES[k]}: ${withheldWords(k, n)}`));
+  const label = searching ? `“${filters.q.trim()}”`
+    : filters.kind && !filters.area && !filters.certified && !filters.mine ? KIND_TITLES[filters.kind] : "Found";
   return (
     <>
       <Said lines={page.said} />
-      <Card label={filters.kind && !filters.q && !filters.area && !filters.certified && !filters.mine ? KIND_TITLES[filters.kind] : "Found"}
-        testId="discover-results"
-        right={<span className="aug-fs-xs">{formatCount(page.total)} {page.total === 1 ? "thing" : "things"}</span>}>
+      <Card label={label} testId="discover-results" right={<span className="aug-fs-xs">
+        {formatCount(page.total)} {page.total === 1 ? "thing" : "things"}
+        {searching && page.total > page.items.length ? ` · the first ${formatCount(page.items.length)}` : ""}
+        {searching ? (page.by_meaning ? " · by meaning and by words" : " · by words") : ""}
+      </span>}>
         {page.items.length
           ? page.items.map(i => <ItemRow key={`${i.kind}:${i.id}`} item={i} areaName={areaNames[i.area]} many={many} />)
-          : <Empty>Nothing here matches. Discover matches the words of a thing’s name and its description.{" "}
+          : <Empty>Nothing here matches{searching ? " — by its words or by what it means" : ""}.{" "}
               <Button size="xs" variant="link" onClick={onClear}>Clear the search</Button></Empty>}
         {page.next_cursor != null && (
           <div style={{ marginTop: 8 }}>
@@ -437,7 +454,8 @@ function KindTile({ view, areaNames, many, more }: {
 function ItemRow({ item, areaName, many, how = false }: { item: DiscoverItem; areaName?: string; many: boolean; how?: boolean }) {
   const mark = markOf(item);
   const subject = askSubjectOf(item);
-  const line = secondLine(item, many);
+  const also = item.also_on?.length ? `also on ${item.also_on.join(", ")}` : "";
+  const line = [secondLine(item, many), also].filter(Boolean).join(" · ");
   return (
     <div className="aug-discover-row" data-testid="discover-row">
       <a href={item.href} title={`${KIND_WORDS[item.kind][0]} · ${item.name}`} onClick={e => inPlace(e, () => openInApp(item.href))}>
@@ -447,6 +465,7 @@ function ItemRow({ item, areaName, many, how = false }: { item: DiscoverItem; ar
           {line && <span className="d aug-fs-sm">{line}</span>}
         </span>
         <span className="meta aug-fs-xs">
+          {item.matched?.length ? <span className="how" style={MUTED} title={item.matched.join(" · ")}>{item.matched.join(" · ")}</span> : null}
           {mark && <Chip tone={mark.tone}>{mark.word}</Chip>}
           {how
             ? item.area_how && <span className="how" style={MUTED} title={item.area_how}>{item.area_how}</span>

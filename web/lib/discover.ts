@@ -55,6 +55,11 @@ export interface DiscoverItem {
   certification: Certification | null;
   href: string;
   detail: Record<string, unknown>;
+  /** Search only: why it matched ("by meaning", "its name", "its column sale_price"), the other connections the same
+   *  table stands on, and how near in meaning it was (0 when found by words alone). */
+  matched?: string[];
+  also_on?: string[];
+  similarity?: number;
 }
 
 export interface DiscoverArea {
@@ -164,6 +169,22 @@ export function readDiscoverItems(a: ItemsAsked): Promise<DiscoverItems> {
     connection_id: a.connectionId, cursor: a.cursor, limit: a.limit }, a.workspaceId), "what Discover holds");
 }
 
+export interface DiscoverSearch {
+  items: DiscoverItem[];
+  total: number;
+  /** Whether the question was read for its meaning too, or by its words alone (the embedder could not be reached). */
+  by_meaning: boolean;
+  /** Per kind, plus `graph`: what the knowledge graph found that clearance withholds. */
+  withheld: Partial<Record<DiscoverKind | "graph", number>>;
+  said: string[];
+}
+
+/** Search by meaning and by words across every kind and connection in view (`GET /discover/search`, the plan's D3). */
+export function readDiscoverSearch(a: ItemsAsked & { q: string }): Promise<DiscoverSearch> {
+  return read(url("/discover/search", { q: a.q.trim(), kind: a.kind, area: a.area, certified: a.certified, mine: a.mine,
+    connection_id: a.connectionId, limit: a.limit }, a.workspaceId), "the search");
+}
+
 /** One Area's page; null when no connection in view has that Area (the server's 404). */
 export function readDiscoverArea(areaId: string, connectionId = "", workspaceId?: string, fresh = false): Promise<DiscoverAreaPage | null> {
   const href = url(`/discover/areas/${encodeURIComponent(areaId)}`, { connection_id: connectionId }, workspaceId);
@@ -236,7 +257,8 @@ export function askSubjectOf(i: DiscoverItem): AskSubject | null {
 }
 
 /** What is withheld from a kind, in words: "2 not shared with you". */
-export function withheldWords(kind: DiscoverKind, n: number): string {
+export function withheldWords(kind: DiscoverKind | "graph", n: number): string {
   if (!n) return "";
+  if (kind === "graph") return `${formatCount(n)} found by the knowledge graph withheld by data governance`;
   return kind === "trusted_query" ? `${formatCount(n)} beyond your clearance` : `${formatCount(n)} not shared with you`;
 }

@@ -13,6 +13,7 @@ import { fireEvent, render, screen, waitFor, within } from "@/lib/testing";
 const readDiscover = vi.fn();
 const readDiscoverItems = vi.fn();
 const readDiscoverArea = vi.fn();
+const readDiscoverSearch = vi.fn();
 const askAbout = vi.fn();
 const readAreas = vi.fn();
 const saveAreas = vi.fn();
@@ -23,6 +24,7 @@ vi.mock("@/lib/discover", async importOriginal => ({
   readDiscover: (...a: unknown[]) => readDiscover(...a),
   readDiscoverItems: (...a: unknown[]) => readDiscoverItems(...a),
   readDiscoverArea: (...a: unknown[]) => readDiscoverArea(...a),
+  readDiscoverSearch: (...a: unknown[]) => readDiscoverSearch(...a),
 }));
 vi.mock("@/lib/askSubject", async importOriginal => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -47,6 +49,8 @@ const ORDERS = item({ kind: "table", id: "8233e4fd.thelook.orders", name: "order
 const REVENUE = item({ id: "8233e4fd/revenue", name: "Revenue", state: "approved", href: "/metrics/revenue?conn=8233e4fd" });
 const GMR = item({ id: "8233e4fd/gmr", name: "Gross Margin Rate", state: "deprecated", area: "margin_pricing" });
 const SCOUT = item({ kind: "agent", id: "ua_6d", name: "Anomaly Scout", area: "other", state: "on" });
+const REPEAT_FOUND = item({ id: "8233e4fd/repeat_purchase_rate", name: "Repeat Purchase Rate", area: "customers",
+  matched: ["by meaning"], similarity: 0.599 });
 
 const area = (id: string, name: string, counts: Record<string, number>, over = {}) => ({
   id, name, question: id === "orders_sales" ? "How much did we sell?" : "", parent: "", business_owners: [], technical_owners: [],
@@ -80,7 +84,8 @@ function renderPage(openId: string | null = null) {
 }
 
 beforeEach(() => {
-  for (const f of [readDiscover, readDiscoverItems, readDiscoverArea, askAbout, readAreas, saveAreas, setNotAnArea]) f.mockReset();
+  for (const f of [readDiscover, readDiscoverItems, readDiscoverArea, readDiscoverSearch, askAbout, readAreas, saveAreas,
+    setNotAnArea]) f.mockReset();
   readDiscover.mockResolvedValue(HOME);
 });
 
@@ -126,19 +131,36 @@ describe("Discover", () => {
     expect(askAbout).toHaveBeenCalledWith(expect.objectContaining({ kind: "table", table: "thelook.orders" }));
   });
 
-  it("narrows to a list as a person types or filters, and counts what the list leaves out", async () => {
-    const found: DiscoverItems = { items: [REVENUE], total: 1, next_cursor: null, withheld: { canvas: 2 }, said: [] };
-    readDiscoverItems.mockResolvedValue(found);
+  it("searches by meaning and by words as a person types, says why each matched, and counts what it leaves out", async () => {
+    readDiscoverSearch.mockResolvedValue({
+      items: [{ ...REPEAT_FOUND }, { ...ORDERS, matched: ["the business object Order", "its name"], also_on: ["DuckDB"] }],
+      total: 2, by_meaning: true, withheld: { canvas: 2, graph: 1 }, said: [] });
     renderPage();
     await screen.findByTestId("discover-areas");
     fireEvent.change(screen.getByTestId("discover-search").querySelector("input") ?? screen.getByTestId("discover-search"),
-      { target: { value: "revenue" } });
+      { target: { value: "who buys again" } });
     const results = await screen.findByTestId("discover-results", {}, { timeout: 2000 });
-    expect(readDiscoverItems).toHaveBeenLastCalledWith(expect.objectContaining({ q: "revenue", limit: 50 }));
-    expect(results.textContent).toContain("Revenue");
+    expect(readDiscoverSearch).toHaveBeenLastCalledWith(expect.objectContaining({ q: "who buys again" }));
+    expect(readDiscoverItems).not.toHaveBeenCalled();
+    expect(results.textContent).toContain("by meaning and by words");
+    const rows = within(results).getAllByTestId("discover-row");
+    expect(rows[0].textContent).toContain("by meaning");
+    expect(rows[1].textContent).toContain("the business object Order · its name");
+    expect(rows[1].textContent).toContain("also on DuckDB");
     expect(screen.getByTestId("discover-withheld").textContent).toContain("Data Canvases: 2 not shared with you");
+    expect(screen.getByTestId("discover-withheld").textContent).toContain("1 found by the knowledge graph withheld by data governance");
     fireEvent.click(screen.getByRole("button", { name: "Mine" }));
-    await waitFor(() => expect(readDiscoverItems).toHaveBeenLastCalledWith(expect.objectContaining({ q: "revenue", mine: true })));
+    await waitFor(() => expect(readDiscoverSearch).toHaveBeenLastCalledWith(expect.objectContaining({ q: "who buys again", mine: true })));
+  });
+
+  it("lists by filters alone, a page at a time, when no words are typed", async () => {
+    readDiscoverItems.mockResolvedValue({ items: [REVENUE], total: 1, next_cursor: null, withheld: {}, said: [] });
+    renderPage();
+    await screen.findByTestId("discover-areas");
+    fireEvent.click(screen.getByRole("button", { name: "Certified" }));
+    await screen.findByTestId("discover-results");
+    expect(readDiscoverItems).toHaveBeenLastCalledWith(expect.objectContaining({ certified: true, q: "" }));
+    expect(readDiscoverSearch).not.toHaveBeenCalled();
   });
 
   it("declares a suggested Area as the Semantic Layer does, keeping the organisation's other declarations", async () => {
