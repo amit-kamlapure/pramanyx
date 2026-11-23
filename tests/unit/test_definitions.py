@@ -247,7 +247,7 @@ def test_the_coworker_drafts_for_a_person_and_never_writes_their_word(monkeypatc
                        headers=agent).status_code == 422
 
 
-# ── the Page (2026-11-23, Databricks' Page editor): a description, sources, and related assets of any kind ──────────
+# ── the Page (2026-11-23, the user's reference Page editor): a description, sources, and related assets of any kind ──────────
 
 
 def test_a_definition_carries_its_description_sources_and_related_assets_of_any_kind_and_keeps_them():

@@ -22116,6 +22116,11 @@ export interface components {
         };
         /** DefinitionLink */
         DefinitionLink: {
+            /**
+             * Href
+             * @default
+             */
+            href: string;
             /** Kind */
             kind: string;
             /**
@@ -22137,8 +22142,12 @@ export interface components {
             area: string;
             /** Connection Id */
             connection_id: string;
+            /** Description */
+            description?: string | null;
             /** Links */
             links?: components["schemas"]["DefinitionLink"][] | null;
+            /** Sources */
+            sources?: components["schemas"]["DefinitionSource"][] | null;
             /** Term */
             term: string;
             /** Text */
@@ -22148,6 +22157,18 @@ export interface components {
              * @default
              */
             why: string;
+        };
+        /** DefinitionSource */
+        DefinitionSource: {
+            /** Kind */
+            kind: string;
+            /**
+             * Label
+             * @default
+             */
+            label: string;
+            /** Ref */
+            ref: string;
         };
         /** DeltaStatusIn */
         DeltaStatusIn: {

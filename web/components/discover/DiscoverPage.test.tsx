@@ -112,7 +112,14 @@ describe("Discover", () => {
     expect((await screen.findByTestId("discover-certified")).textContent).toContain("Nothing here is certified yet");
     expect(screen.getByTestId("discover-said").textContent).toContain("Spreadsheets could not be read");
     expect(screen.getByTestId("discover-kind-canvas").textContent).toContain("2 not shared with you");
-    expect(screen.getByTestId("discover-nothing-yet").textContent).toBe("Nothing yet: Definitions, Trusted queries.");
+    expect(screen.getByTestId("discover-nothing-yet").textContent).toContain("Nothing yet: Definitions, Trusted queries.");
+    // with no Definition yet, one is written from here, on its Page in the Semantic Layer
+    const asked = vi.fn();
+    window.addEventListener("pramanyx:navigate", asked);
+    fireEvent.click(within(screen.getByTestId("discover-nothing-yet")).getByRole("button", { name: "Write a Definition" }));
+    window.removeEventListener("pramanyx:navigate", asked);
+    expect((asked.mock.calls[0][0] as CustomEvent).detail.tab).toBe("semantic");
+    window.history.replaceState(null, "", "/");
     expect(screen.queryByTestId("discover-kind-definition")).toBeNull();
   });
 

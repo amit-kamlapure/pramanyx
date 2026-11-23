@@ -4,17 +4,27 @@
  * suggested edits from anyone, one area of the business, other names, and what it refers to.
  */
 export interface Version { id: string; text: string; tier: string; author: string; recorded_at: string }
-export interface DefinitionLink { kind: string; ref: string; label: string }
-export interface Suggestion { id: string; by: string; at: string; why: string; by_agent?: boolean; text?: string; aliases?: string[]; links?: DefinitionLink[] }
+/** A related asset: any thing Discover lists, a person or a web address — with the app's own address for it, when kept. */
+export interface DefinitionLink { kind: string; ref: string; label: string; href?: string }
+/** Where its words come from: a web address, or a document of the corpus. */
+export interface DefinitionSource { kind: "url" | "document"; ref: string; label: string }
+export interface Suggestion {
+  id: string; by: string; at: string; why: string; by_agent?: boolean; text?: string; aliases?: string[];
+  links?: DefinitionLink[]; description?: string; sources?: DefinitionSource[];
+}
 export interface Definition {
   term: string; area: string; statement: { text: string }; tier: string; state: "published" | "draft"; owner: string;
   author: string; approved_by: string; approved_on: string; aliases: string[]; links: DefinitionLink[];
+  /** The line under its name, apart from what it means (2026-11-23). */
+  description?: string;
+  sources?: DefinitionSource[];
   suggestions: Suggestion[]; versions: Version[];
   /** The coworker drafted it for its owner, who has not published it yet (2026-11-17). */
   drafted_by_agent?: boolean;
 }
 
-export const LINK_KINDS = ["metric", "table", "definition", "dashboard", "document", "person", "url"] as const;
+export const LINK_KINDS = ["metric", "table", "definition", "dashboard", "document", "person", "url",
+  "canvas", "agent", "schedule", "sheet", "trusted_query"] as const;
 
 /** A principal as a reader names them: `user:ana` is Ana. */
 export const who = (ref: string) => String(ref || "").replace(/^(user|person):/, "");
@@ -33,6 +43,7 @@ export function linkHref(link: DefinitionLink, connection: string): string | nul
 /** Where a link opens inside the app (the Semantic Layer holds metrics and Definitions — Discover's links, 2026-11-23),
  *  for a definition shown in the app rather than on a page of its own. */
 export function inAppHref(link: DefinitionLink, connection: string): string | null {
+  if (link.href?.startsWith("/?tab=")) return link.href;   // picked from Discover: its own address
   const q = (more: Record<string, string>) => `/?${new URLSearchParams({ tab: "semantic", conn: connection, ...more })}`;
   if (link.kind === "metric") return q({ metric: link.ref });
   if (link.kind === "definition") return q({ definition: link.ref });

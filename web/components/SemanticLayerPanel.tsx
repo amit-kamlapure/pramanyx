@@ -420,7 +420,8 @@ function KnowledgeTab({ connId, openDef, onOpenDef, onCloseDef }: {
     return (
       <Page testId="semantic-definition">
         <div><Button size="xs" variant="link" onClick={onCloseDef} style={{ padding: 0 }}>‹ Definitions</Button></div>
-        <DefinitionView key={`${openDef.term}:${openDef.area}`} term={openDef.term} connection={connId} initialArea={openDef.area} inApp />
+        <DefinitionView key={`${openDef.term}:${openDef.area}`} term={openDef.term} connection={connId} initialArea={openDef.area} inApp
+          onCancel={onCloseDef} onNamed={(term, area) => { onOpenDef(term, area); void load(); }} />
       </Page>
     );
   }
@@ -429,8 +430,13 @@ function KnowledgeTab({ connId, openDef, onOpenDef, onCloseDef }: {
     <Page testId="semantic-knowledge">
       <Card label="Definitions" testId="knowledge" right={<>
         {entries.length > 0 && <span style={NUM}>{countNoun(entries.length, "definition", "definitions")}</span>}
-        <Button size="xs" variant="ghost" onClick={startAdd}><Icon name="plus" size={12} />Add a definition</Button>
+        {/* a Definition is written on its Page (2026-11-23, the reference Page the user showed); the quick entry — a note,
+            synonym, rule or join, with its kind — is one click further, in the tools */}
+        <Button size="xs" variant="ghost" onClick={() => onOpenDef("", "")} data-testid="knowledge-new-definition">
+          <Icon name="plus" size={12} />Add a definition</Button>
         <ToolsMenu testId="knowledge-tools" items={[
+          { label: "Quick entry — a note, synonym, rule or join", onSelect: startAdd,
+            title: "A short entry with its kind and other names, kept as a Definition too" },
           { label: rebuilding ? "Rebuilding…" : "Rebuild the search index", onSelect: rebuildIndex, disabled: rebuilding,
             title: "Re-reads every entry into the index answers retrieve them from" },
         ]} />
@@ -784,6 +790,11 @@ export function SemanticLayerPanel({ connectionId, connName, connections = [] }:
   useFromAddress(["definition", "area"], ({ definition, area }) => {
     setActiveTab("Definitions");
     setOpenDef({ term: definition, area: area ?? "" });
+  });
+  // `?new_definition=1` — Discover's "Write a Definition" opens a new one's Page here
+  useFromAddress(["new_definition"], () => {
+    setActiveTab("Definitions");
+    setOpenDef({ term: "", area: "" });
   });
 
   // The semantic layer is an ORG-level surface: the active connection here is independent of the app's globally-

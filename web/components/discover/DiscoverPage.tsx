@@ -101,7 +101,7 @@ function HomeView({ filters, setFilters, onOpenArea, onName, connections, worksp
         : !home ? <Loading what="Discover" />
         : narrowed(filters) ? <Results filters={filters} workspaceId={workspaceId} areaNames={areaNames} many={many}
             onClear={() => setFilters({ ...NO_FILTERS, conn: filters.conn })} />
-        : <Browse home={home} areaNames={areaNames} many={many} onOpenArea={onOpenArea}
+        : <Browse home={home} areaNames={areaNames} many={many} onOpenArea={onOpenArea} conn={filters.conn}
             onViewAll={kind => setFilters({ ...filters, kind })} onCertified={() => setFilters({ ...filters, certified: true })}
             reload={() => setTick(t => t + 1)} />}
     </Page>
@@ -160,15 +160,18 @@ function SearchBar({ filters, setFilters, home, areaNames, connections }: {
   );
 }
 
-function Browse({ home, areaNames, many, onOpenArea, onViewAll, onCertified, reload }: {
+function Browse({ home, areaNames, many, onOpenArea, onViewAll, onCertified, reload, conn }: {
   home: DiscoverHome; areaNames: Record<string, string>; many: boolean; onOpenArea: (id: string) => void;
-  onViewAll: (kind: DiscoverKind) => void; onCertified: () => void; reload: () => void;
+  onViewAll: (kind: DiscoverKind) => void; onCertified: () => void; reload: () => void; conn: string;
 }) {
+  // A Definition is written on its Page, in the Semantic Layer (its home inside the app)
+  const writeDefinition = () => openInApp(`/?${new URLSearchParams({ tab: "semantic", ...(conn ? { conn } : {}), new_definition: "1" })}`);
   const [showQuiet, setShowQuiet] = useState(false);
   // the model's suggestions are a curator's to answer, and on every connection they can outnumber the Areas: one click away
   const [showSuggested, setShowSuggested] = useState(false);
   const holding = home.areas.filter(a => a.id !== OTHER).length;
   const nothing = home.kinds.filter(k => !k.count && !k.withheld).map(k => k.title);
+  const noDefinitions = home.kinds.some(k => k.kind === "definition" && !k.count && !k.withheld);
   return (
     <>
       <Said lines={home.said} />
@@ -210,12 +213,15 @@ function Browse({ home, areaNames, many, onOpenArea, onViewAll, onCertified, rel
         <div className="aug-discover-kinds">
           {withUniqueKeys(home.kinds.filter(k => k.count || k.withheld), k => k.kind).map(([key, k]) => (
             <KindTile key={key} view={k} areaNames={areaNames} many={many}
-              more={k.count > k.items.length ? () => onViewAll(k.kind) : undefined} />
+              more={k.count > k.items.length ? () => onViewAll(k.kind) : undefined}
+              add={k.kind === "definition" ? writeDefinition : undefined} />
           ))}
         </div>
         {nothing.length > 0 && (
-          <p className="aug-fs-sm" style={{ ...MUTED, margin: "12px 0 0" }} data-testid="discover-nothing-yet">
-            Nothing yet: {nothing.join(", ")}.
+          <p className="aug-fs-sm" style={{ ...MUTED, margin: "12px 0 0", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}
+            data-testid="discover-nothing-yet">
+            <span>Nothing yet: {nothing.join(", ")}.</span>
+            {noDefinitions && <Button size="xs" variant="outline" onClick={writeDefinition}><Icon name="plus" size={12} />Write a Definition</Button>}
           </p>
         )}
       </Card>
@@ -429,15 +435,20 @@ function SuggestedCard({ s, many, onDone }: { s: SuggestedInView; many: boolean;
   );
 }
 
-function KindTile({ view, areaNames, many, more }: {
-  view: DiscoverKindView; areaNames: Record<string, string>; many: boolean; more?: () => void;
+function KindTile({ view, areaNames, many, more, add }: {
+  view: DiscoverKindView; areaNames: Record<string, string>; many: boolean; more?: () => void; add?: () => void;
 }) {
   return (
     <section className="aug-discover-kind" aria-label={view.title} data-testid={`discover-kind-${view.kind}`}>
       <div className="head aug-fs-sm">
         <span className="title">{view.title}</span><span>{formatCount(view.count)}</span>
         {view.withheld > 0 && <span>· {withheldWords(view.kind, view.withheld)}</span>}
-        {more && <span className="right"><Button size="xs" variant="link" onClick={more}>View all</Button></span>}
+        {(more || add) && (
+          <span className="right" style={{ display: "inline-flex", gap: 6 }}>
+            {add && <Button size="xs" variant="outline" onClick={add}><Icon name="plus" size={12} />New</Button>}
+            {more && <Button size="xs" variant="link" onClick={more}>View all</Button>}
+          </span>
+        )}
       </div>
       {view.items.map(i => <ItemRow key={`${i.kind}:${i.id}`} item={i} areaName={areaNames[i.area]} many={many} />)}
       {!view.items.length && (
