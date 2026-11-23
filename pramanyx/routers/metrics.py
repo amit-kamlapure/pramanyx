@@ -254,8 +254,13 @@ def put_areas(conn_id: str, body: AreasIn, request: Request, schema: Optional[st
     _persons_own(request, "declaring the areas of the business")
     if not has_permission(getattr(request.state, "principal", None), Permission.ADMIN_MANAGE_ORG):
         raise HTTPException(status_code=403, detail="only a curator — whoever administers the organisation — declares its areas")
+    stored = {d.id: d for d in load_org_settings().areas}
     try:
-        decls = [AreaDeclaration(**a) for a in body.areas]
+        # A row that does not say an Area's description or what it puts first keeps what its curators wrote on its page
+        # (Discover D4): the Semantic Layer saves every declaration at once and edits neither.
+        decls = [AreaDeclaration(**{**({k: getattr(stored[a["id"]], k) for k in ("description", "featured")}
+                                      if isinstance(a, dict) and a.get("id") in stored else {}), **a})
+                 for a in body.areas]
     except Exception as exc:  # noqa: BLE001 — a malformed row is refused, said
         raise HTTPException(status_code=422, detail=f"an area is an id, a name, a question, a parent and its owners: {exc}")
     schema = schema or _declared_schema(conn_id)
