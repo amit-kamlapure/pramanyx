@@ -93,10 +93,8 @@ _stop_reasons: dict[str, str] = {}
 _BUDGET_STOP = re.compile(r"^budget exceeded: (time|token) budget \(([\d,.]+)(?:s| tokens)\)")
 
 
-def describe_stop(exc: Optional[BaseException] = None) -> str:
-    """Why the run on this task ended without an answer, then what to do — one short
-    paragraph for the investigation record and the run history that quotes it."""
-    job_id = _current_job.get()
+def _charter_named() -> tuple[str, str]:
+    """``(agent_id, agent name)`` of the run on this task — the name best-effort, the id as its fallback."""
     agent_id = _current_charter.get() or ""
     agent = agent_id
     try:
@@ -106,14 +104,42 @@ def describe_stop(exc: Optional[BaseException] = None) -> str:
     except Exception as e:
         from pramanyx.kernel.errors import tolerate
         tolerate(e, "a stop reason names the agent best-effort", counter="jobs.describe_stop")
+    return agent_id, agent
+
+
+def describe_stop(exc: Optional[BaseException] = None) -> str:
+    """Why the run on this task ended without an answer, then what to do — one short
+    paragraph for the investigation record and the run history that quotes it."""
+    job_id = _current_job.get()
+    agent_id, agent = _charter_named()
     from pramanyx.kernel.cancellation import RunStopped
     m = metering.current()
     return stop_sentence(
+        # The in-context budget (`metering.check_budget`, armed by `_run`) raises inside the run, before `_run` has
+        # stamped `_stop_reasons` — so the reason is read off the exception, in the words the heartbeat's kill uses.
         reason=(exc.reason if isinstance(exc, RunStopped)
+                else f"budget exceeded: {exc.reason}" if isinstance(exc, metering.BudgetExceeded)
                 else _stop_reasons.get(job_id, "") if job_id else ""),
         in_job=job_id is not None, agent_id=agent_id, agent=agent,
         cancelled=exc is None or isinstance(exc, (asyncio.CancelledError, GeneratorExit)),
         error="" if exc is None else (str(exc) or type(exc).__name__),
+        llm_calls=m.llm_calls if m is not None else None,
+        queries=m.query_count if m is not None else None)
+
+
+#: What a run that ended without an answer says when nothing it streamed said why.
+ENDED_UNSAID = "the run ended without recording an answer, and no step said why"
+
+
+def describe_end(said: str = "") -> str:
+    """Why a run that ENDED — nothing raised — left no answer: what its own stream said (``said``, the last error it
+    streamed), else that nothing did. The sibling of :func:`describe_stop`, for the end no exception names."""
+    job_id = _current_job.get()
+    agent_id, agent = _charter_named()
+    m = metering.current()
+    return stop_sentence(
+        reason="", in_job=job_id is not None, agent_id=agent_id, agent=agent, cancelled=False,
+        error=(said or "").strip() or ENDED_UNSAID,
         llm_calls=m.llm_calls if m is not None else None,
         queries=m.query_count if m is not None else None)
 

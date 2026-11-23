@@ -73,3 +73,23 @@ test("a run read back later (get_investigation) is drawn as its report when it i
   assert.equal(isDeepRecord({ id: "q1", report: { headline: "42 rows", rows: [[42]] } }), false, "a quick answer has no phases");
   assert.equal(reportFacts({ id: "inv9", status: "pending" }).running, true);
 });
+
+test("a deep analysis that stopped is drawn, and says why in the platform's own sentence (2026-11-24)", () => {
+  // e4796f93 as read back: failed, no phases, the reason in `error` — the card drew nothing, and said nothing of why
+  const record = { id: "e4796f93", kind: "investigation", status: "failed", connection_id: "8233e4fd",
+                   question: "Why did revenue on theLook rise or fall between July and August 2026?",
+                   error: "Stopped at the Analyst's 1800s time budget before answering (14 model calls, 9 queries). "
+                        + "Bind a faster model in Settings → Models, or raise time_budget_s with PATCH /agents/analyst.",
+                   report: { envelope: { headline: "" } } };
+  assert.equal(isDeepRecord(record), true, "drawn, though it has no phases");
+  const f = reportFacts(record);
+  assert.equal(f.stopped, true);
+  assert.equal(f.running, false);
+  assert.equal(f.why, record.error);
+  assert.equal(f.head, "");
+  for (const status of ["timed_out", "interrupted"]) assert.equal(reportFacts({ status }).stopped, true, status);
+  assert.equal(reportFacts({ status: "complete" }).stopped, false);
+  assert.equal(reportFacts({ status: "paused" }).stopped, false, "a run waiting on a person has not stopped");
+  assert.equal(isDeepRecord({ id: "q1", kind: "chat", status: "failed", error: "x" }), false, "a quick answer's failure is not a deep report");
+  assert.equal(isDeepRecord({ id: "inv8", kind: "investigation", status: "running" }), false, "a running record read back is not drawn, as before");
+});

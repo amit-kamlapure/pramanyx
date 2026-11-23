@@ -8,6 +8,7 @@ SUCCEEDED, and cancel → CANCELLED + reconcile); these lock the mechanics.
 """
 import asyncio
 import inspect
+import json
 
 import pramanyx.routers.investigations as inv_mod
 
@@ -66,9 +67,13 @@ def test_wrapper_releases_client_even_when_generator_errors(monkeypatch):
         return out
 
     # The _drive finally must still push the sentinel so the client loop ends
-    # (otherwise a failed investigation would hang the SSE response forever).
+    # (otherwise a failed investigation would hang the SSE response forever) —
+    # and, the body having said nothing about it, tell the reader why it stopped
+    # rather than end the stream on the partial frame (2026-11-24).
     items = asyncio.run(asyncio.wait_for(_collect(), timeout=5))
-    assert items == ["data: partial\n\n"]
+    assert items[0] == "data: partial\n\n" and len(items) == 2
+    told = json.loads(items[1][len("data: "):])
+    assert told["type"] == "error" and told["message"] == "Stopped before answering: node blew up"
 
 
 def test_investigate_route_uses_the_job_wrapper():
