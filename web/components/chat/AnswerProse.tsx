@@ -27,6 +27,7 @@ import remarkGfm from "remark-gfm";
 
 import { renderEmphasis } from "@/components/brief/BriefProse";
 import { ProseTable } from "@/components/TableActions";
+import { boldable } from "@/lib/answerTitle";
 import { monthsInTables } from "@/lib/format";
 
 /** A bare id in prose — a uuid, or the repo's own prefixed ids (`ua_…`, `sb_…`). */
@@ -105,9 +106,13 @@ const COMPONENTS = {
   li: ({ children }: ElProps) => (
     <li className="aug-text-ui leading-relaxed text-zinc-300">{withInline(children)}</li>
   ),
-  strong: ({ children }: ElProps) => (
-    <strong className="font-semibold">{withInline(children)}</strong>
-  ),
+  // Bold marks a figure or a name, never a sentence (`lib/answerTitle.ts`): a whole sentence the model set bold reads as text.
+  strong: ({ children }: ElProps) => {
+    const words = React.Children.toArray(children).filter((c) => typeof c === "string").join("");
+    return !words.trim() || boldable(words)
+      ? <strong className="font-semibold">{withInline(children)}</strong>
+      : <>{withInline(children)}</>;
+  },
   // Bold or normal text only (the user, 2026-09-30): an emphasis the model marks reads as normal.
   em: ({ children }: ElProps) => <>{withInline(children)}</>,
   del: ({ children }: ElProps) => <del>{withInline(children)}</del>,

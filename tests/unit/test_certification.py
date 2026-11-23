@@ -98,3 +98,16 @@ def test_only_a_curator_certifies_and_never_through_an_agent(client, monkeypatch
     monkeypatch.setattr("pramanyx.rbac.resolver.has_permission", lambda principal, perm: True)
     bad = client.put("/governance/certification", json={"kind": "metric", "ref": "gmv", "status": "certified"})
     assert bad.status_code == 422 and "own lifecycle" in bad.json()["detail"]
+
+
+def test_a_table_certified_under_its_schema_reads_back_under_it(client):
+    """2026-11-23: the table page certified under the table's schema and read the mark back without one, so a certified
+    table read as uncertified the next time its page opened."""
+    conn = _conn()
+    body = {"kind": "table", "ref": "orders", "connection_id": conn, "schema": "thelook", "status": "certified",
+            "why": "reconciled"}
+    assert client.put("/governance/certification", json=body).status_code == 200
+    read = client.get("/governance/certification",
+                      params={"kind": "table", "ref": "orders", "connection_id": conn, "schema": "thelook"}).json()
+    assert read["certification"]["status"] == "certified"
+    assert read["certification"]["securable"] == f"table:{conn}.thelook.orders"

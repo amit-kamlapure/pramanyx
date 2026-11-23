@@ -1229,6 +1229,7 @@ from pramanyx.routers import (
     kinetic,
     automations,
     governance,
+    discover,
     obs as obs_router,
     control_room,
     charts,
@@ -1261,6 +1262,7 @@ app.include_router(metrics.router)
 app.include_router(actions.router)
 app.include_router(security.router)
 app.include_router(governance.router)
+app.include_router(discover.router)  # Discover — everything one may open, by Area (docs/DISCOVER_PLAN_2026-11-23.md)
 app.include_router(admin.router)  # VA-10 — the cross-user view (metadata only, §6.4)
 app.include_router(authcfg.router)  # VA-10 — how to authenticate (public; see _AUTH_EXEMPT)
 app.include_router(query.router)

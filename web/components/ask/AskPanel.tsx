@@ -18,7 +18,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import type { ChatSessionSummary } from "@/components/ThreadsRail";
 import {
   closeAskTab, followPageConnection, hideAskPanel, inTheCoworker, newAskTab, noteAskSession, openAskConversation, PANEL_MAX_W, PANEL_MIN_W, selectAskTab,
-  setAskPanelWidth, toggleAskPanel, useAskPanel, useAskPanelWidth, type AskTab,
+  setAskPanelWidth, toggleAskPanel, useAskPanel, useAskPanelWidth, type AskTab, type PageCanvas,
 } from "@/lib/askPanel";
 import { getApiBase } from "@/lib/config";
 import { requestTab } from "@/lib/navigate";
@@ -75,8 +75,9 @@ export function AskPushedPage({ hidden = false, children }: { hidden?: boolean; 
   );
 }
 
-/** A tab's name: the conversation's first question, or "New conversation" before one is asked. */
-const tabName = (t: AskTab) => t.title || "New conversation";
+/** A tab's name: the conversation's first question, or before one is asked "New conversation" — on a Data Canvas, its name,
+ *  so the reader sees which tables the conversation is held to. */
+const tabName = (t: AskTab) => t.title || (t.canvasName ? `On ${t.canvasName}` : "New conversation");
 
 function History({ connectionId }: { connectionId: string }) {
   const [rows, setRows] = useState<ChatSessionSummary[] | null>(null);
@@ -113,13 +114,26 @@ function History({ connectionId }: { connectionId: string }) {
 }
 
 /** The panel, drawn once by the shell beside the content. `hidden` while the Ask page shows the conversations at full size:
- *  it stays mounted, so an answer still being written is not cut off. */
-export function AskPanelHost({ connectionId, hidden = false }: { connectionId: string; hidden?: boolean }) {
+ *  it stays mounted, so an answer still being written is not cut off. A conversation is drawn the first time it is shown. */
+export function AskPanelHost({ connectionId, canvas = null, hidden = false }: {
+  connectionId: string;
+  /** The Data Canvas the page shows, if any: a conversation begun over it reads only its tables. */
+  canvas?: PageCanvas | null;
+  hidden?: boolean;
+}) {
   const { open, tabs, active } = useAskPanel();
   const narrow = useNarrowScreen();
   const width = useAskPanelWidth();
-  // a conversation nothing has been asked in yet is about the page's connection
-  useEffect(() => { if (open) followPageConnection(connectionId); }, [open, connectionId, active]);
+  // The conversations drawn so far: a tab is drawn the first time it is in front of an open panel, and kept after, so an
+  // answer being written is never cut off by hiding the panel or turning to another tab. Never at load: drawn behind a
+  // closed panel, each remembered tab read its whole conversation, its people, suggestions, agents and connections and
+  // drew its charts on every page the person opened (2026-11-23: three tabs were half of a cold load's 120 reads).
+  const [drawn, setDrawn] = useState<readonly string[]>([]);
+  // a conversation nothing has been asked in yet is about the page's connection, and its canvas
+  const canvasId = canvas?.id ?? null, canvasName = canvas?.name ?? "";
+  useEffect(() => {
+    if (open) followPageConnection(connectionId, canvasId ? { id: canvasId, name: canvasName } : null);
+  }, [open, connectionId, canvasId, canvasName, active]);
 
   const keep = setAskPanelWidth;
   const startDrag = (e: React.PointerEvent) => {
@@ -134,6 +148,7 @@ export function AskPanelHost({ connectionId, hidden = false }: { connectionId: s
   if (!tabs.length) return null;
   const shown = open && !hidden;
   const front = tabs.find(t => t.key === active) ?? tabs[tabs.length - 1];
+  if (shown && !drawn.includes(front.key)) setDrawn([...drawn, front.key]);
   const fullPage = () => {
     hideAskPanel();
     requestTab("chat", { conn: front.connectionId, ...(front.session ? { chat: front.session } : {}) });
@@ -188,8 +203,11 @@ export function AskPanelHost({ connectionId, hidden = false }: { connectionId: s
       {tabs.map(t => (
         <div key={t.key} role="tabpanel" aria-label={tabName(t)} hidden={t.key !== front.key}
           style={{ flex: 1, minHeight: 0, display: t.key === front.key ? "flex" : "none", flexDirection: "column" }}>
-          <ChatPanel connectionId={t.connectionId} beside harness restoreSessionId={t.session} takesQueued={shown && t.key === front.key}
-            onSession={(session, title) => noteAskSession(t.key, session, title)} onNew={() => newAskTab(t.connectionId)} />
+          {(drawn.includes(t.key) || (shown && t.key === front.key)) && (
+            <ChatPanel connectionId={t.connectionId} canvasId={t.canvasId} beside harness restoreSessionId={t.session}
+              takesQueued={shown && t.key === front.key}
+              onSession={(session, title) => noteAskSession(t.key, session, title)} onNew={() => newAskTab(t.connectionId)} />
+          )}
         </div>
       ))}
     </aside>

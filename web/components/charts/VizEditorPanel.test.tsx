@@ -116,3 +116,20 @@ describe("the drawer beside an answer's chart", () => {
     expect(within(d).getByRole("button", { name: "Color: Channel" })).toBeInTheDocument();
   });
 });
+
+describe("the drawer as a person works in it (2026-11-23)", () => {
+  it("makes the page give it room while open, and Escape in an open list closes the list, not the drawer", async () => {
+    render(<ResultChartCard columns={COLUMNS} rows={ROWS} chartType="bar" editorKey="answer-esc" onConfigChange={vi.fn()} />);
+    const d = await drawer("answer-esc");
+    expect(document.body.dataset.vizEditor).toBe("open");
+    const list = document.createElement("div");
+    list.setAttribute("role", "listbox");
+    document.body.appendChild(list);
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(d).toBeInTheDocument();                                    // the list was open: the drawer stays
+    list.remove();
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit visualization" })).toBeNull());
+    expect(document.body.dataset.vizEditor).toBeUndefined();
+  });
+});

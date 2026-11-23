@@ -10,6 +10,7 @@
 import { useCallback, useState } from "react";
 
 import { SheetView } from "@/components/sheets/SheetView";
+import { useFromAddress } from "@/lib/addressOnce";
 import { SheetsHome } from "@/components/sheets/SheetsHome";
 
 /** The sheet in the address, so a sheet is linkable and the back button leaves it. */
@@ -29,6 +30,8 @@ export function SpreadsheetsPage() {
   const [open, setOpen] = useState<string>(() => sheetInUrl());
 
   const openSheet = useCallback((id: string) => { setOpen(id); putSheetInUrl(id); }, []);
+  // a link that names a sheet while this page is open (Discover's, `lib/addressOnce.ts`) opens it here too
+  useFromAddress(["sheet"], ({ sheet }) => openSheet(sheet));
 
   if (open) {
     return <SheetView key={open} sheetId={open} onBack={() => openSheet("")} onOpen={openSheet} />;

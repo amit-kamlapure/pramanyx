@@ -15,7 +15,14 @@ export interface AskTab {
   title: string;
   /** The connection the conversation is on: it stays there whichever page is open. */
   connectionId: string;
+  /** The Data Canvas it is on, when it began over one: held to the canvas's tables, as the canvas's own conversation is
+   *  (the user, 2026-11-23). */
+  canvasId?: string;
+  canvasName?: string;
 }
+
+/** A Data Canvas the page shows, as the panel's conversations take it. */
+export interface PageCanvas { id: string; name: string }
 
 export interface AskPanelState {
   open: boolean;
@@ -141,12 +148,16 @@ export function openAskPanelOn(connectionId: string): void {
   write({ open: true, tabs: withTab(s.tabs, tab), active: tab.key });
 }
 
-/** A conversation nothing has been asked in yet follows the page to another connection. */
-export function followPageConnection(connectionId: string): void {
+/** A conversation nothing has been asked in yet follows the page to another connection, and onto (or off) the Data Canvas
+ *  the page shows: asked over a canvas, it reads only the canvas's tables. One begun keeps where it began. */
+export function followPageConnection(connectionId: string, canvas: PageCanvas | null = null): void {
   const s = read();
   const front = s.tabs.find(t => t.key === s.active);
-  if (!front || front.session || !connectionId || front.connectionId === connectionId) return;
-  write({ ...s, tabs: s.tabs.map(t => (t.key === front.key ? { ...t, connectionId } : t)) });
+  if (!front || front.session || !connectionId) return;
+  if (front.connectionId === connectionId && (front.canvasId ?? null) === (canvas?.id ?? null)) return;
+  const { canvasId: _was, canvasName: _wasNamed, ...rest } = front;
+  const moved: AskTab = { ...rest, connectionId, ...(canvas ? { canvasId: canvas.id, canvasName: canvas.name } : {}) };
+  write({ ...s, tabs: s.tabs.map(t => (t.key === front.key ? moved : t)) });
 }
 
 // ── the panel's width: the person's own, kept in their browser ──

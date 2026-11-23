@@ -134,6 +134,7 @@ function customOf(base: ChartCustom | null | undefined, c: VizConfig, opts: { co
     ...(c.xTitle ? { xTitle: c.xTitle } : {}),
     ...(c.yTitle ? { yTitle: c.yTitle } : {}),
     ...(c.tooltipOff ? { tooltip: "off" as const } : {}),
+    ...(c.dateFormat ? { dateFormat: c.dateFormat } : {}),
     ...(c.orient ? { orient: c.orient } : {}),
     ...(options ? { options } : {}),
     ...(c.transform && c.transform !== "none" && opts.valueCol

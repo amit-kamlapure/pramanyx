@@ -29,6 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { findObjects, type ObjectFindAnswer } from "@/lib/objects";
 import { objectHref } from "@/lib/objectLinks";
+import { openInApp } from "@/lib/addressOnce";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -68,6 +69,7 @@ const SECTION_LABELS: Record<ItemType, string> = {
 /** Palette glyphs, by role — drawings come from the platform set. */
 const ROLE: Record<string, IconName> = {
   spark: "spark",
+  compass: "compass",   // Discover — "Search everything"
   clock: "clock",
   db: "db",
   node: "node",
@@ -212,6 +214,7 @@ export function CommandPalette({ open, onClose, selectedConn, onNavigate, onGoTo
     // depth:"quick" keeps the overlay snappy (the router honours it with no model
     // call); `surface` is the summoned-from tab, sanitized server-side.
     body: { depth: "quick", surface },
+    resume: false,   // minted with the palette: nothing of it can be running yet
   });
   const streaming = status === "submitted" || status === "streaming";
   const spotTurns = useMemo(() => projectThread(messages, {
@@ -520,7 +523,16 @@ export function CommandPalette({ open, onClose, selectedConn, onNavigate, onGoTo
       keepOpen: true,
       onSelect: () => ask(q),
     };
-    return [...results, ...objectRows, { item: row, refIndex: 0, matches: [] }];
+    // Search everything (the plan's D3): Discover's search over every kind and connection, by meaning and by words
+    const everything: PaletteItem = {
+      id: "discover-search",
+      label: "Search everything",
+      sublabel: q,
+      type: "spotlight",
+      icon: "compass",
+      onSelect: () => openInApp(`/?${new URLSearchParams({ tab: "discover", q })}`),
+    };
+    return [...results, ...objectRows, { item: everything, refIndex: 0, matches: [] }, { item: row, refIndex: 0, matches: [] }];
   }, [results, query, ask, objectRows]);
 
   // Group results by type preserving section order

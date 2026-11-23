@@ -6,7 +6,8 @@
  * This file holds what the card and the pane share: which answers this page has seen, what a person chose in the
  * editor for each, and the two things drawn in both places (the result grid and the editor).
  */
-import { createElement as h, useEffect, useState, useSyncExternalStore } from "react";
+import { createElement as h, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { watchTheme } from "../../../../web/components/charts/vega/themeWatch";
 import { labelOf, numericColumns } from "./chart";
 
 export const line = "color-mix(in srgb, currentColor 18%, transparent)";
@@ -321,11 +322,13 @@ export const pageFor = {
   toAgent: (question, connection) => `/agents/new?conn=${encodeURIComponent(connection)}&description=${encodeURIComponent(question)}`,
   // A deep analysis kept as a skill (punch list 88): its method, to run again on other values.
   toSkill: (investigation, connection) => `/skills/new?conn=${encodeURIComponent(connection)}&inv=${encodeURIComponent(investigation)}`,
+  // A deep analysis's whole report, drawn by the platform's own report view (2026-11-23): one drawing of it everywhere.
+  report: (investigation) => `/report/${encodeURIComponent(investigation)}`,
 };
 const NAMED = [[/^\/metrics\/([^/?]+)/, "Metric"], [/^\/ontology\/([^/?]+)/, "Ontology"], [/^\/receipt\//, "Why this number"],
                [/^\/sheets\/[^/?]+/, "Sheet"], [/^\/definitions\/([^/?]+)/, "Definition"], [/^\/automations\?/, "Schedule"],
                [/^\/questions\/keep\?/, "Keep on a dashboard"], [/^\/agents\/new\?/, "New agent"],
-               [/^\/skills\/new\?/, "Save as a skill"], [/^\/chart\/[^/?]+/, "Edit visualization"]];
+               [/^\/skills\/new\?/, "Save as a skill"], [/^\/chart\/[^/?]+/, "Edit visualization"], [/^\/report\/[^/?]+/, "Report"]];
 
 /** A referenced spreadsheet's tab is called by its own name and nothing else — "Olist orders", not "Sheet". */
 function sheetName(path) {
@@ -383,11 +386,32 @@ function handRows() {
   });
 }
 
+/** Light or dark, as this page wears it now: the shell marks its dark theme on `<body>`. */
+const themeNow = () => (document.body?.hasAttribute("data-ds-dark-theme") ? "dark" : "light");
+
+/** An address with the theme its page is to wear on its first paint (`web/lib/frameTheme.ts`), before any `#…`. */
+function withTheme(url, theme) {
+  const at = url.indexOf("#");
+  const [base, tail] = at < 0 ? [url, ""] : [url.slice(0, at), url.slice(at)];
+  return `${base}${base.includes("?") ? "&" : "?"}theme=${theme}${tail}`;
+}
+
+/**
+ * The app's page in the panel wears this page's light or dark (the user, 2026-11-23: it took the theme the browser
+ * stored for the app, so a light editor stood beside a dark conversation): said in its address for the first paint, and
+ * in a message each time this page turns, without loading it again. The page wears it alone; the app's own setting is
+ * not written.
+ */
 function AppPage({ path }) {
+  const frame = useRef(null);
+  const [first] = useState(themeNow);
+  useEffect(() => watchTheme(() => frame.current?.contentWindow?.postMessage({ type: "pramanyx:theme", theme: themeNow() }, appOrigin())), []);
   if (!NAMED.some(([shape]) => shape.test(path))) return h("div", { style: { ...page, ...quiet } }, "This tab names a page this pane does not show.");
   handRows();
   return h("iframe", {
-    src: appOrigin() + path, title: pageName(path), referrerPolicy: "no-referrer",
+    ref: frame, src: withTheme(appOrigin() + path, first), title: pageName(path), referrerPolicy: "no-referrer",
+    // it may have turned while the page loaded
+    onLoad: () => frame.current?.contentWindow?.postMessage({ type: "pramanyx:theme", theme: themeNow() }, appOrigin()),
     style: { width: "100%", height: "100%", border: 0, display: "block", background: "transparent" },
   });
 }

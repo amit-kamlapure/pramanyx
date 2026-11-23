@@ -594,7 +594,7 @@ BASELINE: dict[str, int] = {
     # nine comments that still said cockpit for a dashboard.
     # 966 → 927 (2026-10-28, ROADMAP §3.65): the dashboard flags were made unconditional — their nine `cockpit.*` aliases,
     # their nine `PRAMANYX_COCKPIT_*` variables and the off paths that said the word went with them.
-    "cockpit": 893,
+    "cockpit": 890,
     "control_room": 25,
     # 2026-11-11: 4 → 0, by the same cleanup.
     "copilotkit": 0,
@@ -677,7 +677,7 @@ BASELINE: dict[str, int] = {
     "object_type": 105,
     # 2026-11-11: 6 → 0, by the same cleanup.
     "palantir": 0,
-    "persona": 213,  # paid down 2026-08-24, twice: VA-7 rewrote the configuration-history
+    "persona": 212,  # paid down 2026-08-24, twice: VA-7 rewrote the configuration-history
                      # component (281 → 271) and VA-8 renamed the custom-agent detail
                      # component it hangs off (271 → 216). Both were named for the retired
                      # word and both were being edited anyway.

@@ -434,12 +434,17 @@ export async function cancelInvestigation(invId: string): Promise<void> {
   await fetch(`${getApiBase()}/investigations/${encodeURIComponent(invId)}/cancel`, { method: "POST" });
 }
 
-/** The deep analysis a turn can be asked to answer early: one still running, and not waiting on the person's own choice. */
+/** The deep analysis a turn can be asked to answer early: one still running, and not waiting on the person's own choice.
+ *  A quick turn has one when the conversation started a deep analysis itself (2026-11-23: Answer now showed only on a
+ *  turn routed deep, so the deep analysis the Ask panel's conversation reaches for could not be answered early): the
+ *  analyst's `start` is the only one a quick turn carries, and its run can be answered early until its report lands. */
 export function answerableRun(turn: {
   status: string; mode: string; investigationId?: string | null; runHandle?: string | null; planPending?: unknown; clarifyPending?: unknown;
+  deepReport?: unknown;
 }): string | null {
-  if (turn.status !== "loading" || turn.mode !== "investigate" || turn.planPending || turn.clarifyPending) return null;
-  return turn.investigationId ?? turn.runHandle ?? null;
+  if (turn.status !== "loading" || turn.planPending || turn.clarifyPending) return null;
+  if (turn.mode === "investigate") return turn.investigationId ?? turn.runHandle ?? null;
+  return turn.runHandle && !turn.deepReport ? turn.runHandle : null;
 }
 
 /** Answer now: a running deep analysis stops where it is and answers from what it has found. Says why when it cannot. */
@@ -2998,7 +3003,11 @@ export type QueryShaped =
   | { as: "figure"; value: number | null; label: string; said: string[]; beside?: { value: number | null; words: string; format: string } | null; format?: string }
   | { as: "table"; columns: TypedColumn[]; rows: (string | number | boolean | null)[][]; more: boolean; said: string[] }
   | { as: "bar" | "line" | "area" | "scatter"; x: { name: string; kind: "number" | "date" | "time" | "text"; bucket: QueryBucket };
-      series: string[]; points: QueryChartPoint[]; other: boolean; said: string[]; tones?: Record<string, string>; format?: string };
+      series: string[]; points: QueryChartPoint[]; other: boolean; said: string[]; tones?: Record<string, string>; format?: string;
+      /** The one measure's name as its pill says it, and what splits the series — a tooltip's words (2026-11-23). */
+      valueName?: string; seriesName?: string;
+      /** The values were made shares of a whole (a transform): a line drawn in the measure's own units does not apply. */
+      reshaped?: "share" };
 
 /** A query run as the builder would keep it: its typed columns and first rows, the card as shown — or what stops it. */
 export interface QueryPreview {
@@ -3279,9 +3288,19 @@ export async function getVizConfigs(scopeKey: string): Promise<Record<string, Re
 /** An answer's chart as the platform stored it — the report of its run: what it said, its columns, rows and chart hint.
  *  Null when it cannot be read. An agent's answer is stored without its rows (`app/chart/[id]` asks its opener then). */
 export interface StoredAnswerChart { headline: string; columns: string[]; rows: unknown[][]; chartType: string | null }
+/** A stored run as the platform keeps it — its question, connection, status and report — for the page that draws a deep
+ *  analysis's report on its own (`/report/<id>`). The response's status, so the page can say a missing run from a refusal. */
+export async function readStoredRun(id: string): Promise<{ status: number; body: Record<string, unknown> | null }> {
+  const res = await fetch(`${getApiBase()}/investigations/${encodeURIComponent(id)}`);
+  return { status: res.status, body: res.ok ? await res.json() : null };
+}
+
 export async function getStoredAnswerChart(id: string): Promise<StoredAnswerChart | null> {
   const res = await fetch(`${getApiBase()}/investigations/${encodeURIComponent(id)}`);
-  if (!res.ok) return null;
+  // An answer the platform never stored is nothing to read (the chart page then draws the rows the coworker hands it);
+  // any other refusal says so, rather than reading as no answer (the refusal ratchet, `apiHiddenFailures.test.ts`).
+  if (res.status === 404) return null;
+  if (!res.ok) throw await refused(res, "Reading the answer");
   const body = await res.json();
   const report = body?.report ?? {};
   const columns = Array.isArray(report.columns) ? report.columns.map(String) : [];
@@ -9649,6 +9668,8 @@ export async function cancelJob(jobId: string): Promise<{ job_id: string; cancel
 
 /** The wire's word for a built-in agent's row (`kind`), named once for files outside the roster. */
 export const BUILT_IN_AGENT_KIND = "charter" as const;
+/** The wire's word for one of the workspace's own (custom) agents' rows, named once likewise. */
+export const CUSTOM_AGENT_KIND = "persona" as const;
 
 export interface AgentGovernance {
   enabled: boolean; token_budget: number | null; time_budget_s: number | null; model?: string | null;
@@ -11979,6 +12000,8 @@ export interface TimeSeriesResponse {
   /** Share of scanned rows that carried the grouping key. A top-N built from 3% of the
    *  traffic is not a top-N, so this ships with every answer rather than on request. */
   coverage: number | null;
+  /** Source `jobs` asked with `runners: false`: the automation engine's runs were left unread. */
+  runners_read?: boolean;
 }
 
 export async function getObsTimeseries(params: {
@@ -11987,9 +12010,11 @@ export async function getObsTimeseries(params: {
    *  time); `events` counts model CALLS by the charter stamped when they were written. */
   source?: "jobs" | "events";
   range?: string; since?: string; until?: string;
+  /** `false` (source `jobs`): leave the automation engine's runs unread, for a reader of agent runs alone. */
+  runners?: boolean;
 }): Promise<TimeSeriesResponse> {
   const qs = new URLSearchParams();
-  for (const [k, v] of Object.entries(params)) if (v) qs.set(k, String(v));
+  for (const [k, v] of Object.entries(params)) if (v || v === false) qs.set(k, String(v));
   const res = await fetch(`${getApiBase()}/obs/timeseries?${qs}`);
   if (!res.ok) throw new Error(`Failed to fetch timeseries (${res.status})`);
   return res.json();

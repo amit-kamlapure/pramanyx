@@ -30,6 +30,7 @@ from typing import Any, Callable, Optional
 from pydantic import BaseModel
 
 from pramanyx.agent.tool_loop import ToolSpec
+from pramanyx.canvas.scope import held_to_its_canvas
 
 logger = logging.getLogger(__name__)
 
@@ -259,6 +260,47 @@ def breakdown_where_one_figure_was_asked(question: str, results: list[dict], ans
             "rate computed in SQL — so the result shown is the answer. Then answer.")
 
 
+def figures_no_query_read(answer: str, results: list[dict], sheet: str = "") -> Optional[str]:
+    """Why an answer is not finished, when it states figures that no query in this turn read — or None.
+
+    Seen live twice on 2026-11-23. Beside the Olist orders sheet, a question asked again ran nothing and wrote the
+    eight counts from what the conversation already held; on theLook, a turn ran its query (Shipped 38,107) and wrote
+    an earlier answer's figures (shipped=37589) — theLook redraws its history daily, so an earlier answer's numbers are
+    not today's. Both times the grounding check after the loop could only strike the figures, and the person read
+    "I could not ground this answer". This check, in the loop, hands the draft back once while the turn can still
+    answer from its own rows. Two figures or more: one count read from the schema's own listing is how a definitional
+    answer is written, and is held after the loop. What this turn read is citable: its rows, their totals
+    (`citable_totals`) and a sheet's own counts (`sheets.answer.citable_counts`), as the check after the loop allows."""
+    from pramanyx.explorer.grounding import ungrounded_label_values, verify_finding
+    cells: list = []
+    for res in results or []:
+        cells.extend((res.get("rows") or {}).get("rows") or [])
+    cells.extend(citable_totals(results))
+    if sheet:
+        try:
+            from pramanyx.sheets.answer import citable_counts
+            cells.extend(citable_counts(sheet))
+        except Exception as exc:  # noqa: BLE001 — without the sheet's counts the check is only stricter
+            from pramanyx.kernel.errors import tolerate
+            tolerate(exc, "a sheet's citable counts are best-effort here", counter="converse.figures_check")
+    if results and not cells:
+        return None   # a query ran but its rows did not reach this channel: the check after the loop holds the answer
+    # the two questions the check after the loop asks (`ground_answer_numbers`): a magnitude in no cell, and a figure
+    # beside a label whose row says otherwise — 37,589 sits within 2% of 38,107, so only the pair catches "Shipped 37,589"
+    missing = list(verify_finding(answer or "", cells).ungrounded)
+    if results:
+        missing += [m for m in ungrounded_label_values(answer or "", cells) if m not in missing]
+    if len(missing) < 2:
+        return None
+    if not results:
+        return (f"Your answer states figures that no query in this turn read ({', '.join(missing[:4])}). A figure "
+                "from an earlier answer, or from a table's own sample values, is not this turn's answer. Run the query "
+                "that reads them — answer_question or run_sql — and answer from its rows.")
+    return (f"Your answer states figures that are not in the rows this turn's queries returned ({', '.join(missing[:4])}). "
+            "An earlier answer's figures are not today's: answer from the rows this turn read, quoting them as they "
+            "came back.")
+
+
 def citable_totals(results: list[dict]) -> list[list]:
     """Each result's column totals, as rows the grounding check may cite. The model is GIVEN these (`run_sql`'s
     ``totals``, computed by code and to be quoted, never added up by hand) — and the check then held every quoted total
@@ -400,6 +442,13 @@ def route_error(error: str, sql: str = "", dialect: str = "") -> dict:
                 "instruction": ("A person turned this table off for analysis. Do not read it: answer "
                                 "from the other tables if they can, and tell the user it was left out "
                                 "and why.")}
+    if error.lstrip().startswith("[OUTSIDE]"):
+        # The user, 2026-11-23 — a Data Canvas is strict: its turn reads only the canvas's tables.
+        return {"retryable": True, "kind": "outside",
+                "instruction": ("This conversation is on a Data Canvas and reads only its tables; the statement "
+                                "read another. Answer from the canvas's tables if they can; if they cannot, tell "
+                                "the user the question is outside this canvas and name its tables. Never answer "
+                                "from another table.")}
     if error.lstrip().startswith("[BLOCKED]"):
         return {"retryable": False, "kind": "blocked",
                 "instruction": ("This statement is disallowed by the read-only guard, not "
@@ -960,6 +1009,7 @@ def remember_tools_refused() -> None:
     _REFUSED_TOOLS.add((backend, model))
 
 
+@held_to_its_canvas
 def converse(connection_id: str, question: str, *, extra_context: Optional[str] = None,
              provider=None, max_steps: Optional[int] = None,
              on_step=None, tool_emit: Optional[Emit] = None,
@@ -986,6 +1036,7 @@ def converse(connection_id: str, question: str, *, extra_context: Optional[str] 
     # The results this turn's queries returned, in order — what the stop check reads to see which one an answer
     # stands on. Only a streaming caller has frames to read; a sync caller's turn is checked for working notes alone.
     results: list[dict] = []
+    streaming = tool_emit is not None
     if tool_emit is not None:
         _outer = tool_emit
 
@@ -997,7 +1048,9 @@ def converse(connection_id: str, question: str, *, extra_context: Optional[str] 
             _outer(kind, payload)
 
     def _not_yet(answer: str) -> Optional[str]:
-        return working_notes(answer) or breakdown_where_one_figure_was_asked(question, results, answer)
+        return (working_notes(answer) or breakdown_where_one_figure_was_asked(question, results, answer)
+                # only a streaming caller's results are kept, so only its turn can be said to have read nothing
+                or (figures_no_query_read(answer, results, sheet) if streaming else None))
 
     provider = provider or get_provider("coder")
     if max_steps is None:
@@ -1154,6 +1207,10 @@ def converse_system_prompt(connection_id: str, extra: Optional[str] = None,
         "Do not write markdown tables. The rows a query returned travel with the answer "
         "as its exhibit, and a table in your prose would be shown twice; name the "
         "figures that matter in a sentence instead.",
+        "",
+        "Your answer's first line is shown as its title: it is the answer itself, one "
+        "sentence with the figure it rests on — not a heading, a query's name or a line "
+        "that leads into a list.",
         "",
         TOOLS_UNNAMED,
         *(["", settling_note] if settling_note else []),

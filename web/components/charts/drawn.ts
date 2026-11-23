@@ -30,6 +30,41 @@ export interface DrawArgs {
   keptColors?: ValueColors | null;
 }
 
+/**
+ * What a person set on the chart's dress that the spec does not take as an argument (2026-11-23: the editor's Tooltip
+ * switch and Legend position reached this engine and were never read — a tooltip stayed on with the switch off):
+ * the tooltip off, every mark's and every channel's, and where the legend stands.
+ */
+export function dressed(spec: Record<string, unknown>, custom: ChartCustom | null): Record<string, unknown> {
+  if (!custom || (custom.tooltip !== "off" && !custom.legend)) return spec;
+  let out = spec;
+  if (custom.tooltip === "off") {
+    const strip = (node: unknown, key = ""): unknown => {
+      if (Array.isArray(node)) return node.map((n) => strip(n, key));
+      if (key === "mark" && typeof node === "string") return { type: node, tooltip: false };
+      if (!node || typeof node !== "object" || key === "data" || key === "usermeta") return node;
+      const kept: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
+        if (k === "tooltip") continue;                     // a mark's `tooltip` and an encoding's `tooltip` channel alike
+        kept[k] = strip(v, k);
+      }
+      if (key === "mark") kept.tooltip = false;
+      return kept;
+    };
+    out = strip(out) as Record<string, unknown>;
+    const config = (out.config as Record<string, unknown>) ?? {};
+    out = { ...out, config: { ...config, mark: { ...((config.mark as Record<string, unknown>) ?? {}), tooltip: false } },
+            usermeta: { ...((out.usermeta as Record<string, unknown>) ?? {}), tooltipOff: true } };
+  }
+  if (custom.legend) {
+    const config = (out.config as Record<string, unknown>) ?? {};
+    const legend = (config.legend as Record<string, unknown>) ?? {};
+    out = { ...out, config: { ...config, legend: custom.legend === "none" ? { ...legend, disable: true }
+                                                                           : { ...legend, orient: custom.legend } } };
+  }
+  return out;
+}
+
 /** The spec `<Chart>` draws for a result, or null where the result has no honest chart in it. */
 export function resolveChart({ columns, rows, chartType, chartConfig, showLabels, custom = null, exhibit = null, measure = null,
   userFormat = null, keptColors = null }: DrawArgs): DrawnSpec | null {
@@ -45,9 +80,11 @@ export function resolveChart({ columns, rows, chartType, chartConfig, showLabels
     orient: custom?.orient ?? null,
     transform: custom?.transform ?? null,
     options: custom?.options ?? null,
+    dateFormat: custom?.dateFormat ?? null,
   });
   // v17 — on a dashboard, a value wears the colour the dashboard keeps for it, on every card (study R11)
-  if (v) return { spec: withValueColors(v.spec, keptColors, keptColors ? readVegaTokens().palette : []), defaultH: v.defaultH, xCategories: v.xCategories, tier: 1, resolved: v.resolved };
+  if (v) return { spec: dressed(withValueColors(v.spec, keptColors, keptColors ? readVegaTokens().palette : []), custom),
+                  defaultH: v.defaultH, xCategories: v.xCategories, tier: 1, resolved: v.resolved };
   // A customization must never brick the chart. Saved viz-configs key by POSITION
   // (pinned__N) and pinned findings reorder across briefing regenerations, so a
   // stale seed can name columns this finding does not have — the customized

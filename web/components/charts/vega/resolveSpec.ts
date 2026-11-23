@@ -14,7 +14,7 @@
  * which is precisely why a resolved chart cannot be persisted.
  */
 
-import { cleanLabel, detectGranularity, fmtDate } from "@/lib/format";
+import { cleanLabel, detectGranularity, fmtDate, type DateFormat } from "@/lib/format";
 import { currencySymbol, effectiveCurrencySymbol, isMoneyColumn } from "@/lib/orgSettings";
 import { classifyColumns, isIdLike, isNumberPeriod, isNumeric, isPriorPeriodCol, isUngraphableGrid, percentRates, plottedMeasures,
          tooFewToCompare, uniqueLabelBand, CHANGE_METRIC_COL, HORIZONTAL_MAX_CATS, PERCENT_CHANGE_COL,
@@ -24,7 +24,8 @@ import { sanitizeExhibit, type ExhibitSpec } from "@/components/charts/exhibit";
 import { inferChartType, HINT_TO_TYPE, type ChartType } from "@/components/charts/chartTypeInference";
 import { applyNames, type SeriesNames } from "@/components/charts/vega/names";
 import { periodsSpanned, timeBarFit } from "@/components/charts/vega/bandFit";
-import { dateAxis, utcScale } from "@/components/charts/vega/timeAxis";
+import { dateAxisAs, utcScale } from "@/components/charts/vega/timeAxis";
+import { SI_LABEL, SI_TEXT } from "@/components/charts/vega/compact";
 import { emphasisOpacity as emphasisOn } from "@/components/charts/vega/emphasis";
 import { HOVER_MARK, type HoverMeta } from "@/components/charts/vega/hoverTooltip";
 import type { ChartOptions } from "@/components/charts/chartCustom";
@@ -147,6 +148,8 @@ export interface ResolveSpecArgs {
   /** What a person set in the editor beyond the kind (study R12): line shape and markers, axis range and log, a
    *  bar's sort and top N. */
   options?: ChartOptions | null;
+  /** How the dates along a time axis are written ("Dates as"); absent, as the grain writes them. */
+  dateFormat?: DateFormat | null;
 }
 
 export interface ResolvedSpec {
@@ -217,28 +220,6 @@ function valueFormat(format?: string | null): string {
 }
 
 /** Value axis: no domain line, horizontal grid. Band axis: domain line, no grid. */
-/** d3's `~s` renders 6.6k and 1.2G; every other number in this product reads 6.6K and 1.2B.
- *  The axis formats through an expression so the two surfaces agree. */
-/**
- * The app's own compact number, as a Vega expression: 6642 → "6.6K", 26766377 → "26.8M".
- * d3's `~s` renders "6.642k" and "26.766377M", which is neither what lib/format produces nor
- * what any other number on the page looks like — a print chart reading 6.642K beside a card
- * reading 6.6K is the kind of difference a reader notices and cannot explain. Under a thousand it
- * keeps four significant digits — 787.4, as the app writes it; it printed the raw value, and a bar of
- * Q3's monthly change read "€787.420043826" (2026-10-02) — and a small tick stays itself (0.002).
- */
-const COMPACT = (v: string) =>
-  `(abs(${v}) >= 1e9 ? format(${v}/1e9,'.1f')+'B'` +
-  ` : abs(${v}) >= 1e6 ? format(${v}/1e6,'.1f')+'M'` +
-  ` : abs(${v}) >= 1e3 ? format(${v}/1e3,'.1f')+'K'` +
-  ` : format(${v},'.4~r'))`;
-const SI = (inner: string) => `replace(replace(${inner}, 'k', 'K'), 'G', 'B')`;
-// A caller-supplied format wins; the default SI goes through the app's compact form.
-const SI_LABEL = (f: string, prefix: string) =>
-  `'${prefix}' + ` + (f === "~s" ? COMPACT("datum.value") : SI(`format(datum.value, '${f}')`));
-const SI_TEXT = (field: string, f: string, prefix: string) =>
-  `'${prefix}' + ` + (f === "~s" ? COMPACT(`datum['${field}']`) : SI(`format(datum['${field}'], '${f}')`));
-
 function valueAxis(title: string | null | undefined, format?: string | null, prefix = "") {
   return {
     // An axis says what it measures. The reference labels both ("Values", "Date"); an
@@ -291,7 +272,7 @@ export function resolveVegaSpec(args: ResolveSpecArgs): ResolvedSpec | null {
 
 function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
   const { columns, rows, chartType, format, xTitle, yTitle, showLabels = false, title, orient,
-          transform, exhibit: exhibitRaw, columnUnits, measure: chosenMeasure } = args;
+          transform, exhibit: exhibitRaw, columnUnits, measure: chosenMeasure, dateFormat = null } = args;
   const opts: ChartOptions = args.options ?? {};
   const topN = typeof opts.top === "number" && opts.top > 0 ? Math.floor(opts.top) : 0;
   // Fail-open on a malformed spec: a bad exhibit costs its semantics, never the chart —
@@ -610,7 +591,7 @@ function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
          */
         axis: {
           ...bandAxis(axisTitle(xTitle, x)),
-          ...(xIsDate ? dateAxis(detectGranularity(x, xValues), xValues) : {}),
+          ...(xIsDate ? dateAxisAs(detectGranularity(x, xValues), xValues, dateFormat) : {}),
         },
       },
       // A percentage reads as one on a trend too: this axis ignored the unit the bar path
@@ -622,6 +603,9 @@ function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
                                          .map((v) => (lineScaled ? v / 100 : v)));
     if (Object.keys(lineScale).length) (enc.y as Record<string, unknown>).scale = lineScale;
     const interpolate = opts.lineShape === "smooth" ? "monotone" : opts.lineShape === "step" ? "step-after" : null;
+    // Several rows at one place and no series to tell them apart (2026-11-23: Color taken off a multi-line drew one line
+    // zig-zagging up every month): the rows are drawn as points, and the chart says why.
+    const repeated = !seriesCol && new Set(xValues.map(String)).size < xValues.length;
     // `sort: null` keeps the series in DATA order. Vega-Lite sorts a nominal domain
     // alphabetically by default, which hands the same series a different hue than the
     // ECharts path gives it — every screenshot in the Phase 2 diff would flag.
@@ -637,6 +621,7 @@ function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
       label: seriesCol ? null : axisTitle(yTitle, measure),
       format: linePct ? null : (format && format.trim() ? format : null), pct: linePct,
       prefix: linePct ? "" : moneyPrefix(measure),
+      written: xIsDate ? dateFormat : null,
     };
     return {
       tier: 1, resolved: seriesCol ? "multi-line" : "line", defaultH: 300, xCategories: 0,
@@ -645,6 +630,10 @@ function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
         ...(lineScaled ? { transform: [...((base.transform as Record<string, unknown>[]) ?? []),
                                        { calculate: `datum['${measure}'] / 100`, as: lineField }] } : {}),
         usermeta: { hover },
+        ...(repeated ? { title: { text: (base.title as string | undefined) ?? "Several rows share each place and nothing tells them apart: choose a Color to split them.",
+                                  ...(base.title ? { subtitle: "Several rows share each place and nothing tells them apart: choose a Color to split them." }
+                                                 : { fontSize: 11, fontWeight: "normal" }),
+                                  anchor: "start" } } : {}),
         /**
          * The line, its points, and the hover rule (study R25). The x is shared; the value and the series are the
          * lines' own, since the rule reads one row per x with every series in it (`pivot`).
@@ -660,12 +649,25 @@ function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
         layer: [
           { encoding: lineEnc,
             layer: [
-              { mark: { type: "line", ...(interpolate ? { interpolate } : {}) } },
-              // the points, unless a person turned the markers off (study R12); the hover's rings stay
-              ...(opts.markers === false ? [] : [{ mark: { type: "point" },
+              repeated ? { mark: { type: "point", filled: true } }
+                : { mark: { type: "line", ...(interpolate ? { interpolate } : {}) } },
+              // the points, unless a person turned the markers off (study R12) or the rows are already drawn as points
+              // (`repeated`); the hover's rings stay
+              ...(opts.markers === false || repeated ? [] : [{ mark: { type: "point" },
                 encoding: { opacity: emphasisOn(exhibit?.emphasis, x, xIsDate) ?? SELECT_OPACITY } }]),
               { transform: [{ filter: { param: "hover", empty: false } }],
                 mark: { type: "point", filled: false, size: 90, strokeWidth: 2 } },
+              // Labels on (2026-11-23: the editor's switch did nothing on a line): the last place of each series says
+              // its value, as a dashboard's line does — never a number on every point.
+              ...(showLabels ? [{
+                transform: [{ window: [{ op: "rank", as: "__last" }], sort: [{ field: x, order: "descending" }],
+                              ...(seriesCol ? { groupby: [seriesCol] } : {}) },
+                            { filter: "datum.__last === 1" },
+                            { calculate: linePct ? SI_TEXT(lineField, ".1%", "")
+                                                 : SI_TEXT(lineField, valueFormat(format), moneyPrefix(measure)),
+                              as: "__valueLabel" }],
+                mark: { type: "text", align: "left", baseline: "middle", dx: 6, fontSize: 10.5 },
+                encoding: { text: { field: "__valueLabel", type: "nominal" } } }] : []),
             ] },
           { transform: [...(seriesCol ? [{ pivot: seriesCol, value: lineField, groupby: [x] }] : []),
                         { calculate: "true", as: HOVER_MARK }],
@@ -673,6 +675,8 @@ function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
             params: [HOVER_PARAM(x), SELECT_PARAM(x)],
             encoding: { y: { value: 0 }, y2: { value: { expr: "height" } },
                         opacity: { condition: { param: "hover", empty: false, value: 0.7 }, value: 0 } } },
+          // the reference lines a person drew (the editor's Annotation; 2026-11-23: a line drew none)
+          ...refLineLayers(false),
         ],
         encoding: { x: xEnc },
       },
@@ -751,7 +755,7 @@ function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
     ...(Object.keys(bandScale).length ? { scale: bandScale } : {}),
     axis: {
       ...bandAxis(axisTitle(xTitle, band)),
-      ...(bandOnTime && bandGran ? dateAxis(bandGran, bandValues) : {}),
+      ...(bandOnTime && bandGran ? dateAxisAs(bandGran, bandValues, dateFormat) : {}),
       ...(periodRows && bandGran === "month" && !numberBand ? compactPeriodLabels(periodRows.map((d) => String(d.__period))) : {}),
     },
     // Lead with the largest — the ranking the question implies. Ties break stably.
@@ -816,14 +820,21 @@ function resolveUnnamed(args: ResolveSpecArgs): ResolvedSpec | null {
 
   /** Reference lines — context the reader otherwise supplies from memory. */
   function refLineLayers(horizontalForm: boolean): Record<string, unknown>[] {
+    // a line in the measure's own units does not apply once the values are made shares or changes (2026-11-23)
+    if (transform && (transform.op === "pop" || transform.op === "contribution")) return [];
     return (exhibit?.ref_lines ?? []).filter((l) => Number.isFinite(l?.value)).map((l) => ({
       data: { values: [{ __ref: l.value, __label: l.label ?? "" }] },
+      // Across the whole plot, by value: the spec's own band encoding is inherited by every layer, and this layer's
+      // data has no band field to place it by.
       layer: [
         { mark: { type: "rule", strokeDash: [4, 4] },
-          encoding: { [horizontalForm ? "x" : "y"]: { field: "__ref", type: "quantitative" } } },
+          encoding: { [horizontalForm ? "x" : "y"]: { field: "__ref", type: "quantitative" },
+                      ...(horizontalForm ? { y: { value: 0 }, y2: { value: { expr: "height" } } }
+                                         : { x: { value: 0 }, x2: { value: { expr: "width" } } }) } },
         { mark: { type: "text", align: horizontalForm ? "left" : "right",
                   dx: horizontalForm ? 4 : -4, dy: -4, fontSize: 10 },
           encoding: { [horizontalForm ? "x" : "y"]: { field: "__ref", type: "quantitative" },
+                      ...(horizontalForm ? { y: { value: 0 } } : { x: { value: { expr: "width" } } }),
                       text: { field: "__label" } } },
       ],
     }));

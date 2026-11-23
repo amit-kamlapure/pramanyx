@@ -51,7 +51,9 @@ export const NAV_DESTINATIONS: readonly NavDestination[] = [
   ] },
   // Documents left "what Pramanyx knows" for Data on 2026-11-10. The corpus is still global — `index_file`
   // takes no connection — and the Data destination claims no connection scope of its own.
+  // Discover is Data's first row (the user, 2026-11-23): everything a person may open, by Area — so Data opens on it.
   { id: "data", icon: "db", label: "Data", sections: [
+    { id: "discover",  label: "Discover",  icon: "compass" },
     { id: "catalog",   label: "Catalog",   icon: "catalog" },
     { id: "intel-hub", label: "Profile",   icon: "eye" },
     { id: "documents", label: "Documents", icon: "folder" },

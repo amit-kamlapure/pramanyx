@@ -84,7 +84,7 @@ def test_a_person_s_placement_outranks_the_evidence_and_a_connection_placed_whol
     A.place("table", "order_returns", "", by="user:ana", connection_id=conn)
     A.place("metric", "gmv", "", by="user:ana", connection_id=conn)
     A.place("connection", "", "", by="user:bo", connection_id=conn)
-    assert A.placed_by_people(conn) == {"tables": {}, "metrics": {}, "connection": None}
+    assert A.placed_by_people(conn) == {"tables": {}, "tables_qualified": {}, "metrics": {}, "connection": None}
 
 
 def test_only_a_curator_declares_areas_a_person_places_and_an_agent_does_neither(settings, monkeypatch):
@@ -111,3 +111,21 @@ def test_only_a_curator_declares_areas_a_person_places_and_an_agent_does_neither
     # placing an asset in an area widens nobody's reach: the tag is `area`, never the grant-bearing `domain`
     from pramanyx.govern.tag_store import tags_for
     assert [t.key for t in tags_for(f"table:{conn}..orders")] == ["area"]
+
+
+def test_one_table_name_in_two_schemas_is_read_under_its_schema(settings, monkeypatch):
+    """2026-11-23: placements were read back by bare name, so two schemas' ``orders`` placed in two areas collided and
+    the last one read stood for both. Each is read under its schema; the bare name is left to neither."""
+    from pramanyx.semantic import areas as A
+    conn = "c" + uuid.uuid4().hex[:6]
+    A.place("table", "orders", "orders_sales", by="user:ana", connection_id=conn, schema_name="shop")
+    A.place("table", "orders", "returns", by="user:ana", connection_id=conn, schema_name="returns_desk")
+    placed = A.placed_by_people(conn)
+    assert placed["tables_qualified"]["shop.orders"][0] == "orders_sales"
+    assert placed["tables_qualified"]["returns_desk.orders"][0] == "returns"
+    assert "orders" not in placed["tables"], "a bare name placed in two areas is not guessed"
+    monkeypatch.setattr("pramanyx.semantic.metric_map.map_for", lambda *a, **k: type("M", (), {"areas": []})())
+    assert A.area_of_tables(["returns_desk.orders"], conn) == "returns"
+    assert A.area_of_tables(["shop.orders"], conn) == "orders_sales"
+    A.place("table", "orders", "orders_sales", by="user:ana", connection_id=conn, schema_name="returns_desk")
+    assert A.placed_by_people(conn)["tables"]["orders"][0] == "orders_sales", "one area for the name: read by it"

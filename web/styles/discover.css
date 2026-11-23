@@ -1,0 +1,35 @@
+/* Discover (`components/discover/DiscoverPage.tsx`) — the Areas as cards, each kind's rows, the full width the page has.
+   Cards stand on the page with a hairline round them (2026-11-23); a suggested Area's is dashed, as it is not one yet. */
+.aug-discover-areas { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+.aug-discover-area {
+  display: flex; flex-direction: column; gap: 6px; min-height: 112px; padding: 14px 16px; box-sizing: border-box;
+  border-radius: var(--r3); background: var(--card-bg); border: 1px solid var(--card-line); color: var(--t1);
+  text-decoration: none; min-width: 0;
+}
+a.aug-discover-area:hover { background: var(--bg-hover); border-color: var(--b1); }
+.aug-discover-area .name { font-weight: 600; }
+.aug-discover-area .q { color: var(--t2); }
+.aug-discover-area .holds { color: var(--t2); margin-top: auto; }
+.aug-discover-area .who { color: var(--t3); }
+/* a suggestion is not an Area yet: its outline dashed */
+.aug-discover-area.is-suggested { background: transparent; border-style: dashed; }
+
+.aug-discover-kinds { display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 16px; }
+.aug-discover-kind { background: var(--card-bg); border: 1px solid var(--card-line); border-radius: var(--r3); padding: 12px 8px 8px;
+  display: flex; flex-direction: column; min-width: 0; }
+.aug-discover-kind > .head { display: flex; align-items: baseline; gap: 8px; padding: 0 8px; margin-bottom: 6px; color: var(--t3); }
+.aug-discover-kind > .head .title { font-weight: 600; color: var(--t2); }
+.aug-discover-kind > .head .right { margin-left: auto; }
+
+.aug-discover-row { display: flex; align-items: center; gap: 4px; min-width: 0; border-radius: var(--r2); }
+.aug-discover-row:hover { background: var(--bg-hover); }
+.aug-discover-row > a { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; padding: 6px 8px; color: var(--t1); text-decoration: none; }
+.aug-discover-row .k { flex: none; color: var(--t3); display: inline-flex; }
+.aug-discover-row .main { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.aug-discover-row .n { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.aug-discover-row .d { color: var(--t3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.aug-discover-row .meta { display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex: 0 1 auto; max-width: 45%; min-width: 0; }
+.aug-discover-row .meta .how { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.aug-discover-row .ask { flex: none; margin-right: 6px; }
+
+.aug-discover-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }

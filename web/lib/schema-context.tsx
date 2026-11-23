@@ -80,13 +80,10 @@ interface SchemaContextValue extends RichSchemaResult {
   connId: string | null;
 }
 
-const SchemaContext = createContext<SchemaContextValue>({
-  connId: null,
-  schema: null,
-  loading: false,
-  error: null,
-  refresh: () => {},
-});
+// The provider says only WHICH connection; the schema is read by the component that asks for it. The provider wraps
+// every page, and reading there fetched the selected connection's whole schema on every page load — Discover, Home,
+// Agent Ops — for the three components that use it (2026-11-23).
+const SchemaContext = createContext<{ connId: string | null }>({ connId: null });
 
 export function SchemaProvider({
   connId,
@@ -95,14 +92,11 @@ export function SchemaProvider({
   connId: string | null;
   children: React.ReactNode;
 }) {
-  const { schema, loading, error, refresh } = useRichSchema(connId);
-  const value = useMemo(
-    () => ({ connId, schema, loading, error, refresh }),
-    [connId, schema, loading, error, refresh],
-  );
+  const value = useMemo(() => ({ connId }), [connId]);
   return <SchemaContext.Provider value={value}>{children}</SchemaContext.Provider>;
 }
 
-export function useSchema() {
-  return useContext(SchemaContext);
+export function useSchema(): SchemaContextValue {
+  const { connId } = useContext(SchemaContext);
+  return { connId, ...useRichSchema(connId) };
 }

@@ -130,12 +130,15 @@ def test_the_happy_path_order_is_recorded_and_stable(client: TestClient, builtin
             assert types.index(frame) < done, f"{frame} must ship before done"
 
     # 3. `done` is NOT the last frame when narration runs — the deliberate exception.
-    #    Asserted as a permitted fact so an extraction that "fixes" it fails here.
+    #    Asserted as a permitted fact so an extraction that "fixes" it fails here. A
+    #    `headline` after done is the narrator's title (2026-11-23): written once the rows
+    #    are read, kept only when its figures are in them, the guards' cautions carried
+    #    on (`_narrated_title`, `_caution_tail`) — so no correction is dropped by it.
     after = types[done + 1:]
     for frame in after:
         assert frame in {"narrative", "narrative_delta", "insight", "insight_delta",
                          "followups", "inspect_warning", "learning", "activations",
-                         "receipt_id", "error"}, (
+                         "receipt_id", "error", "headline"}, (
             f"unexpected frame {frame!r} after done — the post-done phase is narration "
             f"only. Full sequence: {types}")
 

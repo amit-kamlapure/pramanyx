@@ -7,6 +7,7 @@
 @import "../styles/type.css";
 @import "../styles/sql-tokens.css";
 @import "../styles/atlas.css";
+@import "../styles/discover.css";
 
 /* ── Instrument · the component layer ────────────────────────────────────────
    The import order above is load-bearing: styles/tokens.css holds the Tailwind
@@ -291,6 +292,9 @@ a:hover { color: var(--blue4); }
 }
 /* Hover is a fill and nothing else — no bar, no weight — so it is never mistaken for active. */
 .aug-nav-item:hover { background: var(--bg-hover); color: var(--t1); }
+/* In dark the rail's words are the primary text (2026-11-23, the user: "light grey on dark bluish grey is painful") —
+   as the reference's rail; the open page still carries its fill, weight and the accent's bar. */
+:root:not([data-theme="light"]) .aug-nav-item { color: var(--t1); }
 /* Active: one item in the whole rail — --bg-sel, weight 500, a 2px --accent bar at the edge. */
 .aug-nav-item[aria-current="page"],
 .aug-nav-item.active { background: var(--bg-nav-sel); color: var(--t1); font-weight: 500; }
@@ -1030,6 +1034,12 @@ textarea.aug-input, .aug-textarea { min-height: 56px; padding: 7px 9px; line-hei
 td, [role="gridcell"][role="gridcell"], [role="cell"][role="cell"] { font-size: var(--aug-fs-chrome); }
 /* The page, as one layer under everything Radix portals into <body> (app/layout.tsx). */
 .aug-root { isolation: isolate; display: flex; flex-direction: column; flex: 1 1 0%; min-height: 100%; }
+/* The chart editor's drawer (VizEditorPanel, not docked) takes the right of the window; the page makes room for it, so the
+   chart being edited stays in view beside it (2026-11-23). Below 1280px the room left would squeeze the chart to a sliver
+   (seen at 1024px), so a narrower window keeps the drawer over the page. */
+@media (min-width: 1280px) {
+  body[data-viz-editor="open"] .aug-root { margin-right: min(340px, 92vw); transition: margin-right 0.15s ease; }
+}
 /* A Themes ghost button bleeds into its neighbours by design (negative margins, to line its
    label up with text). In a toolbar or a table cell that eats the gap, so ours sit still. */
 .rt-BaseButton:where(.rt-variant-ghost) { margin: 0; }

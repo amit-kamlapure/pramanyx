@@ -59,13 +59,18 @@ def _who(person: str) -> str:
     return who[5:] if who.startswith("user:") else who
 
 
-def _area_of_tables(tables: list[str], connection_id: str) -> str:
+def area_of_tables(tables: list[str], connection_id: str) -> str:
     """The area a set of tables is read in: where a person placed one of them, else the area whose words name one."""
     from pramanyx.semantic.metric_map import best_areas, map_for
-    people = placed_by_people(connection_id)["tables"]
+    placed = placed_by_people(connection_id)
+    people, qualified = placed.get("tables") or {}, placed.get("tables_qualified") or {}
     named = [a for a in map_for(connection_id).areas if not a.generic]
     for t in tables:
-        bare = str(t).split(".")[-1].lower()
+        parts = str(t).lower().split(".")
+        bare = parts[-1]
+        under = ".".join(parts[-2:]) if len(parts) > 1 else ""
+        if under and under in qualified:
+            return qualified[under][0]
         if bare in people:
             return people[bare][0]
         hits = best_areas(bare, named)
@@ -96,7 +101,7 @@ def standing(person: str, area: str, connection_id: str) -> tuple[int, int]:
             inv = get_investigation(v["investigation_id"]) or {}
             report = inv.get("report") if isinstance(inv.get("report"), dict) else {}
             tables = list((report or {}).get("tables_used") or inv.get("tables_used") or [])
-            if tables and _area_of_tables(tables, connection_id) == area:
+            if tables and area_of_tables(tables, connection_id) == area:
                 right += 1
     except Exception as exc:  # noqa: BLE001 — unread, the owner's word still stands
         from pramanyx.kernel.errors import tolerate
@@ -203,12 +208,25 @@ def place(kind: str, ref: str, area: str, *, by: str, connection_id: str, schema
 
 
 def placed_by_people(connection_id: str) -> dict:
-    """``{"tables": {bare: (area, by)}, "metrics": {name: (area, by)}, "connection": (area, by) | None}`` — what people
-    placed, for coverage to read before any evidence."""
+    """``{"tables": {bare: (area, by)}, "tables_qualified": {"schema.table": (area, by)}, "metrics": {name: (area, by)},
+    "connection": (area, by) | None}`` — what people placed, for coverage to read before any evidence.
+
+    A table is placed under its schema (``table:<connection>.<schema>.<table>``). Read by its bare name only while that
+    name is placed in one area: two schemas' ``orders`` placed in two areas leave the bare name out, and each is read
+    under its schema (2026-11-23: keyed by the bare name alone, the last one read silently stood for both)."""
     from pramanyx.govern.tag_store import list_tags
-    out: dict = {"tables": {}, "metrics": {}, "connection": None}
-    for t in list_tags(key=KEY, securable_prefix=f"table:{connection_id}.", limit=5000):
-        out["tables"][t.securable.rsplit(".", 1)[-1].lower()] = (t.value, t.set_by)
+    out: dict = {"tables": {}, "tables_qualified": {}, "metrics": {}, "connection": None}
+    prefix = f"table:{connection_id}."
+    areas_of_bare: dict[str, set[str]] = {}
+    for t in list_tags(key=KEY, securable_prefix=prefix, limit=5000):
+        qualified = t.securable[len(prefix):].lower().lstrip(".")
+        bare = qualified.rsplit(".", 1)[-1]
+        out["tables_qualified"][qualified] = (t.value, t.set_by)
+        areas_of_bare.setdefault(bare, set()).add(t.value)
+        out["tables"][bare] = (t.value, t.set_by)
+    for bare, areas in areas_of_bare.items():
+        if len(areas) > 1:
+            out["tables"].pop(bare, None)
     for t in list_tags(key=KEY, securable_prefix=f"metric:{connection_id}/", limit=5000):
         out["metrics"][t.securable.split("/", 1)[1]] = (t.value, t.set_by)
     for t in list_tags(key=KEY, securable_prefix=f"catalog:{connection_id}", limit=5):

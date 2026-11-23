@@ -56,7 +56,9 @@ def window_rows(rule: AgentAlertRule, *, now: Optional[datetime] = None
     now = now or datetime.now(timezone.utc)
     start = now - timedelta(minutes=rule.window_minutes)
     window = resolve_window(since=start.isoformat(), until=now.isoformat())
-    agents, _runners, truncated = job_rows(window)
+    # the agents' side alone: the runners were read only to be dropped — a day holds some forty automation runs to each
+    # agent run (2026-11-23), and this read is made per rule on the heartbeat
+    agents, _runners, truncated = job_rows(window, runners=False)
 
     calls: list[dict] = []
     if rule.metric == "cost_usd":

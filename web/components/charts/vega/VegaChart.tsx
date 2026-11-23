@@ -17,6 +17,7 @@
 import { useEffect, useRef, useState } from "react";
 import { bandPaddingFor, withBandPadding } from "@/components/charts/vega/bandFit";
 import { buildVegaConfig, buildVegaRuntimeConfig, readVegaTokens } from "@/components/charts/vega/config";
+import { watchTheme } from "@/components/charts/vega/themeWatch";
 import { clickedDatum } from "@/components/charts/selection";
 import { HOVER_MARK, hoverHtml, hoverMetaOf } from "@/components/charts/vega/hoverTooltip";
 import type { ChartInstance, PngOptions } from "@/lib/chartExport";
@@ -73,13 +74,9 @@ export function VegaChart({ spec, tier = 1, height = 300, className, onCompiled,
   const [themeTick, setThemeTick] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
-  // Observe the app theme toggle once — the config is rebuilt from tokens on every flip,
-  // which is what keeps a STORED spec following the token layer instead of freezing colours.
-  useEffect(() => {
-    const obs = new MutationObserver(() => setThemeTick((t) => t + 1));
-    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "class"] });
-    return () => obs.disconnect();
-  }, []);
+  // Drawn again whenever the page turns light or dark (`themeWatch.ts`, one rule for every chart, the coworker's too) —
+  // the config is rebuilt from tokens on every flip, which keeps a STORED spec following the token layer.
+  useEffect(() => watchTheme(() => setThemeTick((t) => t + 1)), []);
 
   useEffect(() => {
     let cancelled = false;

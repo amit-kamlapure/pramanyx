@@ -13,7 +13,9 @@ export interface Certification { securable: string; status: CertStatus; why: str
 export interface CertTarget { kind: CertKind; ref: string; connectionId?: string; schema?: string }
 
 export async function readCertification(t: CertTarget): Promise<Certification | null> {
-  const q = new URLSearchParams({ kind: t.kind, ref: t.ref, ...(t.connectionId ? { connection_id: t.connectionId } : {}) });
+  // a table is read under the schema it is written under (`setCertification` sends it), or the two never meet
+  const q = new URLSearchParams({ kind: t.kind, ref: t.ref, ...(t.connectionId ? { connection_id: t.connectionId } : {}),
+                                  ...(t.schema ? { schema: t.schema } : {}) });
   const res = await fetch(`${getApiBase()}/governance/certification?${q}`);
   if (!res.ok) throw new Error(fastApiError(await res.json().catch(() => ({})), `Reading the certification failed (${res.status})`));
   return ((await res.json()) as { certification: Certification | null }).certification;

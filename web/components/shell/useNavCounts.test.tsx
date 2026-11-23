@@ -45,4 +45,17 @@ describe("useNavCounts", () => {
     await waitFor(() => expect(api.getAllAlerts).toHaveBeenCalled());
     await waitFor(() => expect(result.current.unackedAlerts).toBe(1));
   });
+
+  it("reads nothing until the workspace is known, then reads each count once, for it", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => [] })));
+    api.getAllAlerts.mockResolvedValue([]);
+    const { rerender } = renderHook(({ ws, ready }) => useNavCounts(ws, ready), {
+      initialProps: { ws: undefined as string | undefined, ready: false } });
+    await new Promise(r => setTimeout(r, 0));
+    expect(api.getAllAlerts).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalled();
+    rerender({ ws: "w1", ready: true });
+    await waitFor(() => expect(api.getAllAlerts).toHaveBeenCalledTimes(1));
+    expect(api.getAllAlerts).toHaveBeenCalledWith(undefined, 100, "w1");
+  });
 });

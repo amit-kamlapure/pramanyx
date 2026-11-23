@@ -56,6 +56,7 @@ import {
 import { readCertifications, type Certification } from "@/lib/certification";
 import { countNoun, formatCount, formatTimestamp } from "@/lib/format";
 import { connectionLabel } from "@/lib/names";
+import { showWhenDrawn, useFromAddress } from "@/lib/addressOnce";
 
 type Conn = { id: string; name: string };
 
@@ -102,6 +103,14 @@ export function DocumentsPage({ connectionId, connections = [] }: {
   // The purge is read first, as a dry run, and runs only when the person confirms what it will delete.
   const [purgePlan, setPurgePlan] = useState<{ chunks: number; documents: number } | null>(null);
   const [showSchemaDocs, setShowSchemaDocs] = useState(false);
+  // `?doc=<id>` opens that document's preview (Discover links to each, 2026-11-23) — on arrival, and when a link names one
+  // while this page is open (`lib/addressOnce.ts`); a schema's compiled document is folded under the uploads, so its fold
+  // opens with it (its id is `doctree::…`, as the server tells them).
+  useFromAddress(["doc"], ({ doc }) => {
+    if (doc.startsWith("doctree::")) setShowSchemaDocs(true);
+    setOpenDocId(doc);
+    showWhenDrawn(`[data-doc-id="${CSS.escape(doc)}"]`, 40);
+  });
   const [now] = useState(() => Date.now());
 
   // A failed read of the list used to leave it empty under "No documents yet", and a failed read of the plane's status
@@ -496,7 +505,7 @@ function DocumentRow({ doc, first, status, connections, now, maxChunks, open, re
   const meta = doc.generated ? "" : [doc.filename !== doc.title ? doc.filename : "", doc.has_original === false ? "original not kept" : ""]
     .filter(Boolean).join(" · ");
   return (
-    <div data-testid="document-row" style={{ ...(first ? {} : RULE), padding: "8px 2px" }}>
+    <div data-testid="document-row" data-doc-id={doc.doc_id} style={{ ...(first ? {} : RULE), padding: "8px 2px" }}>
       <div style={{ display: "grid", gridTemplateColumns: doc.generated ? SCHEMA_ROW_GRID : ROW_GRID, gap: 12, alignItems: "center" }}>
         {/* A compiled schema document's group already says what it is; a "Schema" chip would say it on every row. */}
         {!doc.generated && <span><Chip>{formatLabel(doc)}</Chip></span>}

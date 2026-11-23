@@ -22,6 +22,7 @@ import {
   type BriefMetric,
 } from "@/components/brief/Brief";
 import { AnswerProse, readsAsProse } from "@/components/chat/AnswerProse";
+import { AnswerLead, CautionLine } from "@/components/chat/AnswerLead";
 import { safePartial } from "@/lib/useReveal";
 import { Button } from "@/components/ui/button";
 import { ErrorState, Loading } from "@/components/ui/states";
@@ -1194,18 +1195,14 @@ function NarrativeBrief({
       : turn.narrative?.narrative?.trim() || (figureShown ? "" : proseText);
     return (
       <Brief>
-        {turn.headline && readsAsProse(turn.headline)
-          ? <AnswerProse text={turn.headline} />
-          : turn.headline
-          ? <BriefHeadline animate={turn.startedAt > 0}>{turn.headline}</BriefHeadline>
+        {/* The title, then any caution in the amber line, then the words (`lib/answerTitle.ts`: one rule, three places). */}
+        {turn.headline
+          ? <AnswerLead text={turn.headline} animate={turn.startedAt > 0} />
           : streamingHeadline != null
             ? <BriefHeadline animate={false} className="aug-stream-in">{safePartial(streamingHeadline)}</BriefHeadline>
             : streaming ? <HeadlineSkeleton /> : null}
         {inspect && inspect.issues.length > 0 && (
-          <p role="alert" className="aug-text-sm text-amber-400/90 leading-relaxed flex items-start gap-1.5">
-            <span className="shrink-0 mt-0.5"><Icon name="warning" size={16} label="Warning" /></span>
-            <span>{inspect.kind === "not_what_was_asked" ? inspect.issues.join(" ") : <>Result may be incomplete — {inspect.issues.join("; ")}{inspect.suggestedFix ? `. ${inspect.suggestedFix}` : ""}</>}</span>
-          </p>
+          <CautionLine>{inspect.kind === "not_what_was_asked" ? inspect.issues.join(" ") : <>Result may be incomplete — {inspect.issues.join("; ")}{inspect.suggestedFix ? `. ${inspect.suggestedFix}` : ""}</>}</CautionLine>
         )}
         {prose && (readsAsProse(prose)
           ? <AnswerProse className={fadeCls} text={prose} caret={streamingProse != null} />
@@ -1247,12 +1244,10 @@ function NarrativeBrief({
           multi-paragraph or markdown-structured answer reads as PROSE through the
           markdown renderer (SP-10 / decision 22(b)) — lists render, backticks become
           copyable chips, ids and dates are never tinted as figures, and nothing wears
-          the display type at paragraph length. A one-line conclusion keeps the
-          headline treatment it was built for. */}
-      {turn.headline && readsAsProse(turn.headline)
-        ? <AnswerProse text={turn.headline} />
-        : turn.headline
-        ? <BriefHeadline animate={turn.startedAt > 0}>{turn.headline}</BriefHeadline>
+          the display type at paragraph length. Its first sentence is the title, and a
+          caution written onto it is said in the amber line (`lib/answerTitle.ts`). */}
+      {turn.headline
+        ? <AnswerLead text={turn.headline} animate={turn.startedAt > 0} />
         : streamingHeadline != null
           ? readsAsProse(streamingHeadline)
             ? <AnswerProse className="aug-stream-in" text={safePartial(streamingHeadline)} caret />
@@ -2141,7 +2136,7 @@ function SaveAsSkillButton({ invId, connectionId }: { invId: string; connectionI
     }
   };
   if (state === "saved")
-    return <span className="aug-fs-xs text-emerald-400">✓ Saved as skill</span>;
+    return <span className="aug-fs-xs text-emerald-400">✓ Saved as a skill</span>;
   return (
     <Button
       variant="ghost"
@@ -2151,7 +2146,7 @@ function SaveAsSkillButton({ invId, connectionId }: { invId: string; connectionI
       title={msg || "Crystallize this deep analysis into a reusable, governed skill (Ontology ▸ Learned skills)"}
       className="h-auto px-2.5 py-1 aug-fs-xs font-normal text-violet-400 hover:text-violet-300 rounded hover:bg-transparent dark:hover:bg-transparent"
     >
-      {state === "saving" ? "Saving…" : state === "error" ? "Retry — not skill-worthy?" : "Save as skill"}
+      {state === "saving" ? "Saving…" : state === "error" ? "Retry — not skill-worthy?" : "Save as a skill"}
     </Button>
   );
 }

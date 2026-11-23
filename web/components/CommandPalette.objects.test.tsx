@@ -83,3 +83,18 @@ it("names an entity with more matches by the name a reader knows it by", async (
   await waitFor(() => expect(screen.getByTestId("objects-said").textContent).toBe(
     "searched 2 of 5 entities · more in Inventory Item"));
 });
+
+it("searches everything in Discover with the words typed, without a reload", async () => {
+  Element.prototype.scrollIntoView = vi.fn();
+  serve({ ...ANSWER, q: "who buys again", hits: [] });
+  const navigated = vi.fn();
+  window.addEventListener("pramanyx:navigate", navigated);
+  const user = userEvent.setup();
+  render(<CommandPalette open onClose={vi.fn()} selectedConn="c1" onNavigate={vi.fn()} onGoToChat={vi.fn()} />);
+  await user.type(screen.getByPlaceholderText(/search/i), "who buys again");
+  await user.click(await screen.findByText("Search everything"));
+  window.removeEventListener("pramanyx:navigate", navigated);
+  expect((navigated.mock.calls[0][0] as CustomEvent).detail.tab).toBe("discover");
+  expect(window.location.search).toBe("?tab=discover");   // the words are handed to Discover, not left on the address
+  window.history.replaceState(null, "", "/");
+});

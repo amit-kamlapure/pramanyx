@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { answerableRun, getConnections, getMetrics, listCards, listDashboards, listUserAgents, recordOverviewDrill, cancelInvestigation, cancelActiveDeepRun, standingDashboards, type UserAgent } from "@/lib/api";
+import { answerableRun, DEEP_ANALYSIS_MODE, getConnections, getMetrics, listCards, listDashboards, listUserAgents, recordOverviewDrill, cancelInvestigation, cancelActiveDeepRun, standingDashboards, type UserAgent } from "@/lib/api";
 import { useQuery } from "@tanstack/react-query";
 import { askedBefore, assistAt, historyStep, mentionIn, mentionOffers, withoutCommand, type Offer } from "@/lib/composerAssist";
 import { useRichSchema } from "@/lib/schema-context";
@@ -61,7 +61,7 @@ const OVERVIEW_STARTER: Starter = {
 };
 
 // requestMode/purpose (R13): a named research starter's declared route — sent on
-// /ask so the router pins investigate|explore deterministically; chips style deep.
+// /ask so the router pins the deep or the explore route deterministically; chips style deep.
 // label: the few words a named starter is listed by, when its question is a whole brief (the full text is what is asked).
 type Starter = { text: string; mode: "ask" | "investigate"; requestMode?: "investigate" | "explore"; purpose?: string; label?: string };
 
@@ -345,8 +345,20 @@ function InputBox({ textareaRef, multiline, input, setInput, streaming, mode, se
 
       {/* Toggle row — mode buttons left, actions right */}
       <div className="flex items-center justify-between px-3 pb-2">
-        {/* Mode toggle — Quick answers, Agent investigates. Agent is the default. The Ask panel's composer has none. */}
-        {plain ? <span /> : (
+        {/* Mode toggle — Quick answers, Agent runs a deep analysis. Agent is the default. The one conversation's composer has none:
+            the conversation decides, and a typed /agent is said here until it is let go (the user, 2026-11-23 — it stayed on
+            for the rest of the conversation with nothing on screen saying so). */}
+        {plain ? (mode === DEEP_ANALYSIS_MODE ? (
+          <span data-testid="composer-depth" className="aug-fs-xs"
+            style={{ marginRight: 8, display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 2px 2px 8px",
+              borderRadius: "var(--r2)", background: "var(--gray-a3)", color: "var(--t1)" }}>
+            <Icon name="spark" size={12} /> Agent
+            <Button variant="ghost" size="icon-xs" aria-label="Answer straight away instead" title="Answer straight away instead · /quick"
+              onClick={() => setMode("ask")}>
+              <Icon name="close" size={12} />
+            </Button>
+          </span>
+        ) : <span />) : (
           <Segmented label="How to answer" value={mode} onChange={setMode}
             options={[
               { value: "ask", label: <><Icon name="chat" size={14} /> Quick</> },
@@ -747,7 +759,7 @@ export function claimChatAddress(params: URLSearchParams, address?: string): str
  * grants — never written as flattering copy. A grant in particular is stated as what
  * it is: this agent may PROPOSE those actions, and never executes one.
  */
-function AgentLandingBlock({ agent, connectionName }: { agent: UserAgent; connectionName?: string }) {
+function AgentLandingBlock({ agent, connectionName, plain = false }: { agent: UserAgent; connectionName?: string; plain?: boolean }) {
   // The agent's OWN connection, not the chat's. Naming the chat's connection beside the
   // agent's schema produced "spotify · thelook" — two halves of two different scopes
   // presented as one.
@@ -761,7 +773,9 @@ function AgentLandingBlock({ agent, connectionName }: { agent: UserAgent; connec
   if (agent.pack_ids.length) {
     caps.push(`Carries ${agent.pack_ids.length} knowledge pack${agent.pack_ids.length === 1 ? "" : "s"}`);
   }
-  caps.push("Ask in Quick mode for fast SQL answers, or Agent for multi-step root-cause analysis");
+  // the one conversation has no Quick/Agent picker: it answers straight away, and /agent goes deep (2026-11-23)
+  caps.push(plain ? "Answers straight away; type /agent for a multi-step root-cause analysis"
+    : "Ask in Quick mode for fast SQL answers, or Agent for multi-step root-cause analysis");
   if (agent.tool_grants.length) {
     caps.push(`May PROPOSE ${agent.tool_grants.length} action${agent.tool_grants.length === 1 ? "" : "s"} — proposing is not doing; you approve each one`);
   }
@@ -1157,6 +1171,19 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
     );
   }, [busy, status, sdkStop, cancelActiveRun, clearError, sendMessage, agentId, subject]);
 
+  // A question asked again — edited, or "Ask again" — goes through the door a typed one does, at the conversation's depth
+  // and about what the page shows (2026-11-23: both went to `/ask` at depth auto with no subject, so a question about a
+  // dashboard asked again was answered about nothing in particular).
+  const plainBody = useCallback((): Record<string, unknown> => {
+    const door = subject ? { mode: "auto" as const, depth: mode === "ask" ? "quick" as const : "deep" as const } : doorFor(mode, "auto");
+    return { mode: door.mode, depth: door.depth, agent_id: agentId || null, ...(subject ? { focus: focusOf(subject) } : {}) };
+  }, [mode, subject, agentId]);
+  const askAgain = useCallback(() => {
+    if (busy) sdkStop();
+    // said to be asked again, so the conversation runs it afresh rather than repeating what it already holds
+    void regenerate({ body: { ...plainBody(), purpose: "ask_again" } });
+  }, [busy, sdkStop, regenerate, plainBody]);
+
   const stop = useCallback(() => { cancelActiveRun(); sdkStop(); }, [cancelActiveRun, sdkStop]);
 
   const clear = useCallback(() => {
@@ -1233,7 +1260,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
     wasStreamingRef.current = busy;
   }, [busy]); // eslint-disable-line
 
-  // Auto-submit a question injected from outside (e.g. "Investigate" from the Ontology canvas)
+  // Auto-submit a question injected from outside (e.g. a deep analysis started from the Ontology canvas)
   const initialFiredRef = useRef(false);
   // The send of the conversation ON SCREEN when the timer fires — not the one this effect's render held, which belongs
   // to whichever conversation was current then.
@@ -1500,7 +1527,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                 canvas), then the agent you came here to talk to, and only then the
                 generic greeting. */}
             {!capabilities && activeAgent && (
-              <AgentLandingBlock agent={activeAgent} connectionName={agentConnectionName} />
+              <AgentLandingBlock agent={activeAgent} connectionName={agentConnectionName} plain={inPanel} />
             )}
 
             {!capabilities && !activeAgent && (
@@ -1622,7 +1649,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                         // so this needs no new store.
                         onFollowUp={(q) => handleSend(q, undefined, { purpose: "followup" })}
                         onRegenerate={harness && i === turns.length - 1 && turn.status !== "loading" && assistantMsg
-                          ? () => { if (busy) sdkStop(); void regenerate(); } : undefined}
+                          ? askAgain : undefined}
                         onRunFresh={(q) => handleSend(q, "investigate", { skipCache: true })}
                         onShowSource={data => { setSourcePage(null); setSourcePanel(data); }}
                         onDeeper={(q, insightId) => sendQuestion(q, "investigate", { insightId: insightId ?? undefined, deep: true })}
@@ -1639,8 +1666,8 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                         // CA-1 — edit-and-resend: replaces THIS user message and re-sends;
                         // the SDK truncates the thread from here (branching, the cheap way).
                         onEdit={(q) => void sendMessage(
-                          { text: q, messageId: userMsg.id, metadata: { mode: "ask" } },
-                          { body: { mode: "auto" } },
+                          { text: q, messageId: userMsg.id, metadata: { mode: mode === DEEP_ANALYSIS_MODE ? DEEP_ANALYSIS_MODE : "ask" } },
+                          { body: plainBody() },
                         )}
                       />
                     </ErrorBoundary>
@@ -1704,7 +1731,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                         <Button
                           variant="ghost"
                           size="xs"
-                          onClick={() => { if (busy) sdkStop(); void regenerate(); }}
+                          onClick={askAgain}
                           title="Ask this again — a fresh answer replaces this one"
                           className="h-auto gap-1 px-1.5 py-0.5 aug-fs-xs font-normal text-zinc-500 hover:text-zinc-300 hover:bg-transparent dark:hover:bg-transparent"
                         >

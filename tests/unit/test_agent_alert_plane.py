@@ -54,6 +54,23 @@ def _insert_jobs(states: list[str], *, kind: str = "exploration",
                         "started_at": iso, "heartbeat_at": iso})
 
 
+def test_a_rule_reads_the_agents_runs_and_never_the_automations(monkeypatch):
+    """The runners are outside every rule's population, so they are not read: a day held 226 agent runs beside 9,227
+    automation runs (2026-11-23), read per rule on the heartbeat only to be dropped."""
+    import pramanyx.obs.timeseries as ts
+    from pramanyx.obs.agent_alert_runner import window_rows
+
+    asked: list[dict] = []
+    real = ts.job_rows
+    monkeypatch.setattr(ts, "job_rows", lambda window, **kw: (asked.append(kw), real(window, **kw))[1])
+    then = datetime.now(timezone.utc) - timedelta(days=1)            # a day back: no other test's window sees these
+    _insert_jobs(["FAILED", "SUCCEEDED"], at=then)
+    _insert_jobs(["SUCCEEDED"] * 3, kind="automation", at=then - timedelta(seconds=10))
+    agents, _calls, _guards, truncated = window_rows(_rule(), now=then + timedelta(minutes=1))
+    assert asked == [{"runners": False}]
+    assert {j["kind"] for j in agents} == {"exploration"} and truncated is False
+
+
 # ── the seam that makes the plane live ────────────────────────────────────────────
 
 def test_an_enabled_rule_reaches_the_one_loop():

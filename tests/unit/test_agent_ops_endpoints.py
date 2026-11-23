@@ -327,6 +327,25 @@ def test_a_page_of_ticks_cannot_starve_the_agent_runs():
     assert truncated is True, "a read that filled its cap must say so"
 
 
+def test_a_reader_of_agent_runs_alone_leaves_the_ticks_unread(client):
+    """The top bar's strip draws agent runs on every page; a day held 226 of them beside 9,227
+    automation ticks (2026-11-23), and reading the ticks to drop them was most of the read.
+    `runners=false` leaves them unread — and says so, rather than a zero that reads as a quiet day.
+    """
+    from pramanyx.obs.timeseries import job_rows, resolve_window
+
+    _seed_ticks_newer(n_agent=30, n_tick=300)
+    agents, runners, truncated = job_rows(resolve_window("1h"), limit=100, runners=False)
+    assert (len(agents), runners, truncated) == (30, [], False)
+
+    whole = client.get("/obs/timeseries?source=jobs&range=1h").json()
+    agents_only = client.get("/obs/timeseries?source=jobs&range=1h&runners=false").json()
+    assert agents_only["series"] == whole["series"], "the agents' side is the same either way"
+    assert whole["runners_read"] is True and whole["runner_runs"] == 300
+    assert agents_only["runners_read"] is False and agents_only["runner_runs"] is None
+    assert agents_only["runners"] == [] and agents_only["scanned"] == 30
+
+
 def test_the_tile_and_the_chart_count_the_same_runs(client, monkeypatch):
     """THE parity that was missing. The existing ratchet compares the tile to the roster
     table — both computed from the same list, so it can never see the two panels disagree.

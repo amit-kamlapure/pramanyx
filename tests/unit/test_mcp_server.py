@@ -153,10 +153,10 @@ def test_ask_raises_on_error_event_without_answer():
     assert "token budget" in str(e.value)
 
 
-# ── deep_analysis: folds the investigate SSE stream ──────────────────────────────
+# ── deep_analysis: folds a deep /ask stream — the analyst, the one deep engine (2026-11-23) ──
 def test_deep_analysis_returns_report_and_receipt():
     routes = {
-        "/investigate": httpx.Response(200, content=_sse([
+        "/ask": httpx.Response(200, content=_sse([
             {"type": "start", "investigation_id": "inv9"},
             {"type": "hypotheses", "hypotheses": [{"text": "h1"}]},
             {"type": "answer_report", "answer_report": {"findings": [{"x": 1}]}, "investigation_id": "inv9"},
@@ -177,7 +177,7 @@ def test_deep_analysis_accepts_deprecated_ada_report_wire_alias():
     # The old `ada_report` event/field is kept one release (REC-U9) — a client on the new
     # code must still fold a stream from an older server.
     routes = {
-        "/investigate": httpx.Response(200, content=_sse([
+        "/ask": httpx.Response(200, content=_sse([
             {"type": "start", "investigation_id": "inv9"},
             {"type": "ada_report", "ada_report": {"findings": [{"x": 1}]}, "investigation_id": "inv9"},
             {"type": "done"},
@@ -189,9 +189,37 @@ def test_deep_analysis_accepts_deprecated_ada_report_wire_alias():
     assert res["report"] == {"findings": [{"x": 1}]}
 
 
+def test_a_deep_analysis_past_its_deadline_hands_back_the_id_and_is_read_to_its_end():
+    """2026-11-23, live: the analyst ran 11 minutes; the stream's keep-alive reset the read timeout, the call outran the
+    shell's tool limit, and the coworker said "Request timed out". The deadline is on the whole call now; the run, which
+    stops when its reader leaves, is read on in the background."""
+    read_to_end: list[bool] = []
+
+    async def slow():
+        yield _sse([{"type": "start", "investigation_id": "inv8", "body": "analyst"}]).encode()
+        await asyncio.sleep(0.5)
+        yield b": keep-alive\n\n"
+        await asyncio.sleep(0.3)
+        yield _sse([{"type": "answer_report", "answer_report": {"headline": "h"}, "investigation_id": "inv8"},
+                    {"type": "done"}]).encode()
+        read_to_end.append(True)
+
+    async def go():
+        client = _client({"/ask": lambda req: httpx.Response(200, content=slow())})
+        client.deep_timeout = 0.2
+        res = await client.deep_analysis("why did margin fall", "c")
+        assert res["status"] == "running" and res["investigation_id"] == "inv8"
+        assert "get_investigation('inv8')" in res["message"]
+        assert not read_to_end, "returned at the deadline, not at the end"
+        await asyncio.sleep(1.2)
+        assert read_to_end == [True], "the run was left without a reader, and a deep /ask stops then"
+
+    _run(go())
+
+
 def test_deep_analysis_running_when_no_terminal_report():
     # stream ends after `start` (e.g. the client stopped reading) — hand back the id to poll.
-    routes = {"/investigate": httpx.Response(200, content=_sse([
+    routes = {"/ask": httpx.Response(200, content=_sse([
         {"type": "start", "investigation_id": "inv5"},
     ]))}
     res = _run(_client(routes).deep_analysis("q", "c"))
@@ -274,10 +302,38 @@ def test_list_jobs_passthrough():
 
 # ── error surfacing ──────────────────────────────────────────────────────────────
 def test_capability_lock_surfaces_cleanly():
-    routes = {"/investigate": httpx.Response(402, json={"detail": "Upgrade to Pro for Deep Analysis"})}
+    routes = {"/ask": httpx.Response(402, json={"detail": "Upgrade to Pro for Deep Analysis"})}
     with pytest.raises(PramanyxError) as e:
         _run(_client(routes).deep_analysis("q", "c"))
     assert "capability locked" in str(e.value)
+
+
+def test_a_deep_analysis_the_licence_degrades_to_quick_is_said_to_be_locked():
+    routes = {"/ask": httpx.Response(200, content=_sse([
+        {"type": "route", "depth": "quick", "downgraded_from": "deep",
+         "why": "deep analysis needs an upgrade — answering quickly instead"},
+        {"type": "done"},
+    ]))}
+    with pytest.raises(PramanyxError) as e:
+        _run(_client(routes).deep_analysis("q", "c"))
+    assert "capability locked" in str(e.value) and "upgrade" in str(e.value)
+
+
+def test_deep_analysis_asks_the_analyst_through_ask_at_deep_depth():
+    seen = {}
+
+    def _ask(request):
+        import json as _json
+        seen.update(_json.loads(request.content))
+        return httpx.Response(200, content=_sse([
+            {"type": "start", "investigation_id": "inv7", "body": "analyst"},
+            {"type": "answer_report", "answer_report": {"headline": "Margin fell on freight"}, "investigation_id": "inv7"},
+            {"type": "done", "body": "analyst"},
+        ]))
+    routes = {"/ask": _ask, "/ada/c/inv7/receipt": httpx.Response(200, json={"natural_key": "ada:c:inv7"})}
+    res = _run(_client(routes).deep_analysis("why did margin fall", "c", canvas="cv1"))
+    assert seen["depth"] == "deep" and seen["canvas_id"] == "cv1"
+    assert res["report"] == {"headline": "Margin fell on freight"} and res["status"] == "complete"
 
 
 def test_not_found_surfaces_cleanly():

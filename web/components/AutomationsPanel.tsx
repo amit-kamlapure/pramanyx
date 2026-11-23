@@ -175,7 +175,8 @@ export function AutomationsPanel({ connId, focusId, sentence = "", beside = fals
   // Once per focus id: a later list reload must not yank the reader back onto it.
   const openedFocus = useRef<string | null>(null);
   useEffect(() => {
-    if (!focusId || openedFocus.current === focusId) return;
+    if (!focusId) { openedFocus.current = null; return; }   // let go, so the same one asked for again opens again
+    if (openedFocus.current === focusId) return;
     const hit = automations.find(a => a.id === focusId);
     if (!hit) return;
     openedFocus.current = focusId;

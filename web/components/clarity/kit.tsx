@@ -16,9 +16,10 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Tooltip } from "@/components/ui/tooltip";
 
-/** A card on the ground: the panel fill, no shadow, the edge only where the skin needs one (light). */
+/** A card on the ground: in dark the page's own ground with a hairline round it (2026-11-23, the reference's cards), in
+ *  light white on the grey ground — `--card-bg` / `--card-line`, `pramanyx-v2/theme/tokens-v2.css`. No shadow. */
 export const CARD: CSSProperties = {
-  background: "var(--bg-2)", border: "1px solid var(--card-edge)", borderRadius: "var(--r3)", padding: "12px 14px",
+  background: "var(--card-bg)", border: "1px solid var(--card-line)", borderRadius: "var(--r3)", padding: "12px 14px",
   minWidth: 0,
 };
 

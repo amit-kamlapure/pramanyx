@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from pramanyx.agent.chart_vocab import answer_chart_payload
 from pramanyx.agent.state import AgentState
+from pramanyx.canvas.scope import held_to_its_canvas
 from pramanyx.db.connection import open_connection_for
 from pramanyx.kernel.concurrency import ContextThreadPoolExecutor
 from pramanyx.db.history import (
@@ -102,6 +103,54 @@ def _error_event(exc: "BaseException | None" = None, *, message: str = "",
 #: because merging the two into ONE narrator call is what stopped this path spending
 #: two round-trips per answer. Same voice instruction either way: a chip is typed into
 #: the composer verbatim when clicked, so it must read as the user's own words.
+#: What the narrator's headline is (`_NarrativeResult.headline`), said the same in both of its prompts.
+_TITLE_CLAUSE = (
+    "write the headline: the answer itself in ONE sentence with the figure it rests on, read from the results — what "
+    "a reader sees first. Not a label of the query ('Revenue by month'), no caution or caveat (those are shown beside "
+    "it), no markdown. Quote each figure exactly as a cell of the results gives it — never a difference, a sum or a "
+    "share you work out yourself: the headline is checked against the results, and one stating a figure they do not "
+    "hold is not used."
+)
+
+#: The longest title kept: one sentence, read at a glance.
+_TITLE_WORDS = 30
+
+#: " — caution: …" / " — note: …", as the guards write them onto a headline.
+_CAUTION_TAIL_RE = re.compile(r"\s+[—–-]{1,2}\s+(?:caution|note):\s+", re.IGNORECASE)
+
+
+def _caution_tail(headline: str) -> str:
+    """The cautions the guards wrote onto a headline (" — caution: …"), as written, or "" — carried onto the title
+    that replaces it, so a reader still sees them (`web/lib/answerTitle.ts` shows them in the amber line)."""
+    m = _CAUTION_TAIL_RE.search(headline or "")
+    return (headline or "")[m.start():] if m else ""
+
+
+def _narrated_title(title: str, columns, rows, sql: str = "") -> str:
+    """The narrator's title for a quick answer when it holds, else "": one sentence stating a figure, every figure of
+    it in the rows or their totals (`verify_finding`), none beside a label whose row says otherwise
+    (`ungrounded_label_values`), and none the headline's own check would rewrite (`_ground_headline`). A caution it
+    copied from the headline it was shown is dropped — the guards' own cautions are carried on by the caller."""
+    said = " ".join(str(title or "").replace("**", "").split()).lstrip("#").strip()
+    said = _CAUTION_TAIL_RE.split(said)[0].strip()
+    if not said or not rows:
+        return ""
+    from pramanyx.explorer.grounding import ungrounded_label_values, verify_finding
+    why = ("it states no figure" if not re.search(r"\d", said)
+           else f"it runs {len(said.split())} words" if len(said.split()) > _TITLE_WORDS
+           else "")
+    if not why:
+        missing = list(verify_finding(said, rows).ungrounded) + ungrounded_label_values(said, rows)
+        why = f"figures not in the rows: {', '.join(missing[:4])}" if missing else ""
+    if not why and _ground_headline(said, columns, rows, sql) != said:
+        why = "the headline's own check would rewrite it"
+    if why:
+        # said where an operator reads it: a title written and not used is not silently gone
+        logger.info("[chat] the narrator's title was not used (%s): %r", why, said[:240])
+        return ""
+    return said
+
+
 _FOLLOWUP_CLAUSE = (
     "suggest exactly 3 follow-up questions written AS THE USER would type them "
     "(max 12 words each) — concrete operations on THIS result, using its real column "
@@ -701,13 +750,15 @@ async def _aiter_sync_with_progress(sync_iter, progress_q, ctx):
         next_graph.cancel()
 
 
-def _investigation_stream(graph_stream, declared: Optional[list] = None):
+def _investigation_stream(graph_stream, declared: Optional[list] = None, held=None):
     """The deep-run event iterator: interleaves per-dimension ``phase_progress`` markers
     into the stream, so a scan node reports progress DURING execution and not only at
-    ``phase_complete``. ``declared`` — the rules a resumed run's intake declared before."""
+    ``phase_complete``. ``declared`` — the rules a resumed run's intake declared before.
+    ``held`` — the Data Canvas the run reads only the tables of (`db.doors.Held`), or None."""
     import contextvars
 
     from pramanyx.agent.progress import set_progress_sink
+    from pramanyx.db.doors import hold
     from pramanyx.semantic.enforcement import holding
     from pramanyx.util.stream_events import set_chain_sink
     loop = asyncio.get_running_loop()
@@ -718,6 +769,9 @@ def _investigation_stream(graph_stream, declared: Optional[list] = None):
     # Arc OC-3 — the rules the run's intake declares (a keyed metric taken from the frame) are held here, so every
     # node after the intake executes its statements over them (`semantic.enforcement.declare`).
     ctx.run(holding, declared)
+    # The user, 2026-11-23 — a deep run on a Data Canvas reads only its tables: every node's statement is held at the
+    # door (`db.connection._security_pre`).
+    ctx.run(hold, held)
     return _aiter_sync_with_progress(graph_stream, q, ctx)
 
 
@@ -1176,8 +1230,12 @@ class _FollowUpBase(BaseModel):
 
 
 class _NarrativeResult(BaseModel):
-    """The prose enrichment attached to a quick answer — anomaly detection, trend, comparison."""
-    narrative: str = Field(default="", description="2-3 tight sentences that lead with the answer and wrap decisive numbers in **bold**.")
+    """The prose enrichment attached to a quick answer — its title, anomaly detection, trend, comparison."""
+    # First, so the narrator writes the answer's sentence before the words that follow it (`_narrated_title`).
+    headline: str = Field(default="", description=(
+        "The answer itself in ONE sentence (at most 25 words) with the figure it rests on, read from the results — "
+        "what a reader sees first. Not a label of the query ('Revenue by month'), no caution, no markdown."))
+    narrative: str = Field(default="", description="2-3 tight sentences that follow the headline without restating it and wrap decisive numbers in **bold**.")
     anomalies: list[str] = Field(default_factory=list, description=(
         "Only what genuinely stands out in these rows: an outlier, a break in the pattern, one value far from the "
         "rest. An EMPTY list when nothing does — never a sentence saying nothing stands out. Not the ranking or the "
@@ -1760,6 +1818,7 @@ class _AnswerCoreResult:
     # ── the answer ───────────────────────────────────────────────────────────
     #: The GROUNDED headline, after the currency pass — never `answer.headline`,
     #: which is the model's pre-execution prediction (what `headline_delta` types).
+    #: The narrator's title in its place when one held against the rows (`_narrated_title`), its cautions kept.
     headline: str = ""
     sql: str = ""
     columns: list = field(default_factory=list)
@@ -1852,8 +1911,9 @@ class _CoreCancelled(BaseException):
 def _note_unanswered(connection_id: str, schema: Optional[str], sql: str, signal: str, error: str) -> None:
     """A quick answer that could not answer — its query failed, or an analytical question came back empty —
     is counted against the dataset it was asked of; two in a week reopen that dataset's questions (the
-    exploration principles §3). A refusal is not a gap: a table turned off, a statement the guard blocked."""
-    if signal not in ("error", "no_rows") or str(error or "").lstrip().startswith(("[EXCLUDED]", "[BLOCKED]")):
+    exploration principles §3). A refusal is not a gap: a table turned off, a statement the guard blocked, a
+    table outside the Data Canvas the turn was on."""
+    if signal not in ("error", "no_rows") or str(error or "").lstrip().startswith(("[EXCLUDED]", "[BLOCKED]", "[OUTSIDE]")):
         return
     try:
         from pramanyx.explorer import program
@@ -1869,6 +1929,7 @@ def _note_unanswered(connection_id: str, schema: Optional[str], sql: str, signal
                  conn_id=connection_id or None)
 
 
+@held_to_its_canvas
 def _answer_core(
     question: str,
     connection_id: str,
@@ -3520,18 +3581,24 @@ def _answer_core(
                     "You are an analytical data interpreter writing for a clean published brief. "
                     "Given a user question, the SQL that answered it, and its results (all of them, or the first "
                     "rows of a longer result, as the results line says): "
-                    "(1) produce a tight analytical narrative (2-3 sentences) that LEADS WITH THE ANSWER, "
-                    "wraps each decisive number in **double asterisks** for bold (e.g. **$2,112**, **+18%**), "
+                    "(1) " + _TITLE_CLAUSE + " "
+                    "(2) produce a tight analytical narrative (2-3 sentences) that FOLLOWS THE HEADLINE without "
+                    "restating it, wraps each decisive number in **double asterisks** for bold (e.g. **$2,112**, **+18%**), "
                     "names any genuine anomaly (unexpected value, spike, drop, outlier) in plain words, and "
                     "states the overall trend and your confidence. Start with the finding — no preamble, no "
                     "hedging, no 'the data shows' scaffolding. Use ONLY numbers present in the results; never "
                     "invent values, and bold never licenses invented precision." + _ts_clause + " "
-                    "Then (2) " + _FOLLOWUP_CLAUSE
+                    "Then (3) " + _FOLLOWUP_CLAUSE
+                )
+            elif result.rows:
+                _system = (
+                    "Given a user question, the SQL that answered it and its result: (1) " + _TITLE_CLAUSE
+                    + " Then (2) " + _FOLLOWUP_CLAUSE + " Leave the narrative empty."
                 )
             else:
                 _system = (
                     "Given a user question and its answer, " + _FOLLOWUP_CLAUSE
-                    + " Leave the narrative empty."
+                    + " Leave the headline and the narrative empty."
                 )
             _rows_label = _narrator_rows_label(_sample_rows, max(len(result.rows), result.row_count or 0), _is_ts)
             # The resolution's single caveat leads the narrator too, so the
@@ -3650,6 +3717,28 @@ def _answer_core(
             if "exc" in _pa_result:
                 raise _pa_result["exc"]
             _pa: _PostAnswer = _pa_result["pa"]
+            # The answer's title, written now that the rows are read (the user, 2026-11-23: "Title: the answer in one
+            # sentence, with its figure; never a caution or a query label"). The headline above was the coder's, written
+            # with the SQL before it ran, so it names the subject — "Order counts by fulfillment status" — and cannot
+            # state a figure it has not seen. Kept only when every figure in it is in the rows (`_narrated_title`); the
+            # cautions the guards wrote onto the headline ride on after it, so nothing they said is lost. Not over a
+            # verdict the platform checked (not as asked) or a claim a guard qualified in place.
+            _titled = "" if (_not_as_asked is not None or _rcpt.get("narration_inversion")) else \
+                _narrated_title(_pa.headline, result.columns, result.rows, final_sql or "")
+            if _titled:
+                # as each guard appends its caution: the sentence without its full stop, then the tail
+                _tail = _caution_tail(_grounded_headline)
+                _grounded_headline = _apply_currency(_titled.rstrip(". ") if _tail else _titled, _cur_sym) + _tail
+                emit("headline", {"headline": _grounded_headline})
+                logger.info("[chat] the narrator's title replaced the coder's headline")
+                if _chat_inv_id:
+                    try:
+                        from pramanyx.db.history import update_chat_turn_headline
+                        update_chat_turn_headline(_chat_inv_id, _grounded_headline)
+                    except Exception as exc:
+                        from pramanyx.kernel.errors import tolerate
+                        tolerate(exc, "the title's persistence is best-effort; it was already streamed this session",
+                                 counter="chat.title_persist")
             if _narrative_worth_it and _pa.narrative:
                 _narrative_dict = {
                     "narrative": _apply_currency(_pa.narrative, _cur_sym),
@@ -3923,6 +4012,39 @@ async def _stream_chat(
 _CONVERSE_SUPPRESSED = frozenset({"done", "error", "clarify", "followups", "mode"})
 
 
+#: How long a conversation turn waits for its next questions before it ends without them.
+FOLLOWUPS_WAIT_S = 8.0
+
+
+def _conversation_followups(question: str, answer: str, turn: dict) -> list[str]:
+    """Up to three next questions for a conversation turn's answer, or [] — best-effort: the answer is already sent."""
+    if turn.get("followups"):
+        return list(turn["followups"])[:3]
+    results = turn.get("results") or []
+    if not results or not (answer or "").strip():
+        return []
+    last = results[-1]
+    sql = str((last.get("sql") or {}).get("sql") or "")
+    columns = [str(c) for c in (last.get("columns") or {}).get("columns") or []]
+    rows = (last.get("rows") or {}).get("rows") or []
+    try:
+        from pramanyx.agent.followups import followup_system, followup_user
+        from pramanyx.llm.provider import get_provider
+        from pramanyx.sql.tables import extract_tables
+        tables = sorted(r.qualified() for r in extract_tables(sql))
+        got = get_provider("narrator").complete(
+            system=followup_system(),
+            user=followup_user(question, headline=answer[:600], sql=sql, tables=tables, columns=columns,
+                               row_count=len(rows)),
+            response_model=_FollowUpBase)
+        return [q for q in (got.questions or []) if str(q).strip()][:3]
+    except Exception as exc:  # noqa: BLE001
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "a conversation's next questions are best-effort; its answer is already sent",
+                 counter="converse.followups")
+        return []
+
+
 async def _stream_converse(
     question: str,
     connection_id: str,
@@ -3939,6 +4061,7 @@ async def _stream_converse(
     sheet: str = "",
     dashboard: Optional[tuple[str, ...]] = None,
     person: str = "",
+    asked_again: bool = False,
 ) -> AsyncGenerator[str, None]:
     """Serve one `/ask` turn as a CONVERSATION (SP-14; unconditional since 2026-10-28).
 
@@ -3973,7 +4096,7 @@ async def _stream_converse(
         # `results` keeps each query's own result, in order, so the one the answer stands on can be the one shown
         # (`converse_tools.answering_result`) — not merely the last one run.
         turn: dict = {"steps": 0, "sql": False, "inv_id": "", "has_receipt": False,
-                      "rows": [], "results": []}
+                      "rows": [], "results": [], "followups": []}
         if sheet:
             # Arc SH — the sheet's own counts, which the conversation is handed in its grounding (the rows the sheet
             # holds, the rows the view on screen shows), are citable like any result: without them the check rewrote
@@ -3992,6 +4115,11 @@ async def _stream_converse(
                 if _frame_payload.get("inv_id"):
                     turn["inv_id"] = _frame_payload["inv_id"]
                     turn["has_receipt"] = bool(_frame_payload.get("has_receipt"))
+                return
+            if _frame_type == "followups":
+                # A tool's next questions are about ITS question, so they are not streamed as they come; the last
+                # one's are kept, and offered under the turn's answer when the turn stood on that tool (below).
+                turn["followups"] = [str(q) for q in (_frame_payload.get("questions") or []) if str(q).strip()]
                 return
             if _frame_type in _CONVERSE_SUPPRESSED:
                 return
@@ -4041,8 +4169,14 @@ async def _stream_converse(
         # was answered before elsewhere: the sheet on screen is its grounding, an earlier answer may predate the edits
         # people made since, and earlier answers' shape pulled the model back to it — a breakdown after the rows card,
         # and "The earlier answers in this session…" in a conversation that had none (live, trace bf4d145e).
-        _memory = build_history_section(history) + ("" if sheet else build_prior_answers_section(
+        _memory = build_history_section(history) + ("" if sheet or asked_again else build_prior_answers_section(
             resolve_prior_answers(question, connection_id, session_id)))
+        # Ask again (2026-11-23): the person wants the question answered afresh — seen live, a repeat ran nothing and
+        # wrote the earlier answer's figures from what it held. It is told so, and is not handed earlier answers.
+        if asked_again:
+            _again = ("ASKED AGAIN — the person asked this question again for a fresh answer. Run it again with a "
+                      "query and answer from that query's rows; do not repeat an earlier answer's figures.")
+            _memory = _again + "\n\n" + _memory if _memory else _again
         if origin_prose:
             _memory = origin_prose + "\n\n" + _memory if _memory else origin_prose
         # Stage 4 (2026-11-20): a request of several parts is said to be one, with the ability for each part
@@ -4074,6 +4208,18 @@ async def _stream_converse(
                            f"tables cannot answer is said to be outside this schema, never "
                            f"answered from another dataset on the connection.")
             _memory = _scope_line + "\n\n" + _memory if _memory else _scope_line
+        elif canvas_id:
+            # The user, 2026-11-23 — a Data Canvas is strict, and the door now refuses a statement reading
+            # another table; the conversation is told so before it writes one, and in the words its answer uses.
+            from pramanyx.canvas.scope import resolve_execution_scope as _canvas_scope
+            _hold = _canvas_scope(connection_id, canvas_id).held()
+            if _hold is not None:
+                _reads = ", ".join(_hold.tables) if _hold.tables else f"the tables of schema '{_hold.schema}'"
+                _scope_line = (f"SCOPE — this conversation is on the Data Canvas '{_hold.name}'. It reads only "
+                               f"{_reads}; a statement reading any other table is refused. A question those "
+                               f"tables cannot answer is said to be outside this canvas, never answered from "
+                               f"another table.")
+                _memory = _scope_line + "\n\n" + _memory if _memory else _scope_line
         # "Ask this briefing" — the Briefing the user has open, read server-side from the
         # same entry it rendered (the RANGE entry when a period is open), with its period
         # and its Key Metrics tiles. This body never read it: the brief block lived only in
@@ -4221,6 +4367,20 @@ async def _stream_converse(
             # text-only converse answer renders exactly like a definitional one does.
             emit("mode", {"query_mode": "final_text"})
         emit("headline", {"headline": answer})
+        # The next questions under the answer (2026-11-23: the Ask panel's and a Data Canvas's answers offered none,
+        # the coworker's did — the conversation dropped every tool's `followups`). The tool's own when the turn read
+        # through `answer_question` (already paid for); else, when a query ran, one call over that query's artifact, as
+        # the deep path makes them; none for a turn that read no rows.
+        # Asked beside the filing below, and waited on for a few seconds at most before `done`: on a slow model a
+        # call takes a minute, and the turn reads as finished only at `done`.
+        import contextvars as _cv
+        import threading as _th
+        _next_box: dict = {}
+        _next_thread = _th.Thread(
+            target=_cv.copy_context().run,
+            args=(lambda: _next_box.__setitem__("q", _conversation_followups(question, answer, turn)),),
+            daemon=True, name="converse-followups")
+        _next_thread.start()
         # The turn spent every step (2026-11-20): Keep going picks up from where it stopped, with the steps it took
         if result.stop_reason in ("budget", "budget_answered"):
             from pramanyx.agent.orchestrate import found_lines
@@ -4260,6 +4420,9 @@ async def _stream_converse(
             from pramanyx.learning.decisions import attach_run
             attach_run(_decision_trace, turn["inv_id"])
 
+        _next_thread.join(timeout=FOLLOWUPS_WAIT_S)
+        if _next_box.get("q"):
+            emit("followups", {"questions": _next_box["q"]})
         emit("done", {"inv_id": turn["inv_id"], "has_receipt": turn["has_receipt"],
                       "body": "converse", "stop_reason": result.stop_reason,
                       "steps": len(result.steps)})
@@ -4892,7 +5055,8 @@ async def _stream_investigation(
         timed_out = False
         report_emitted = False  # did the graph reach a terminal synthesis node?
 
-        async for event in _investigation_stream(agent.stream(initial_state, config={"configurable": {"thread_id": inv_id}})):
+        async for event in _investigation_stream(agent.stream(initial_state, config={"configurable": {"thread_id": inv_id}}),
+                                                 held=_es.held()):
             # A supervised kernel job (K1) completes SERVER-SIDE even if the streaming client goes away: a
             # tab close or a transient disconnect must not discard a multi-minute investigation — nor write
             # its Trust Receipt outside the job's metering (which is exactly what an early abort did: an
@@ -5283,7 +5447,8 @@ async def _stream_resume(inv_id: str, feedback: str, request: Request,
     # Resume with the canvas scope (declared schema + derived owning-schema pin) if applicable.
     from pramanyx.canvas.scope import resolve_execution_scope
     try:
-        db = resolve_execution_scope(inv["connection_id"], inv.get("canvas_id")).open()
+        _resumed_scope = resolve_execution_scope(inv["connection_id"], inv.get("canvas_id"))
+        db = _resumed_scope.open()
     except Exception as e:
         yield _sse("error", _error_event(e))
         yield _sse("done", {})
@@ -5318,7 +5483,8 @@ async def _stream_resume(inv_id: str, feedback: str, request: Request,
         deadline = time.monotonic() + _TIMEOUT
 
         async for event in _investigation_stream(agent.stream(None, config=config),
-                                                 declared=merged.get("declared_rules")):
+                                                 declared=merged.get("declared_rules"),
+                                                 held=_resumed_scope.held()):
             # Same K1 rule: the resumed job completes server-side despite a client disconnect (bounded by
             # the deadline; explicit stop still cancels). An early abort here wrote an empty receipt too.
             if time.monotonic() > deadline:
@@ -6263,6 +6429,8 @@ async def _stream_ask(req: "AskRequest", request: Request, conn_id: str) -> Asyn
                              dashboard=_own_dashboard(req, request),
                              # Stage 2 — who asks, so the reads of what depends on a table name only their dashboards
                              person=_asker(request),
+                             # Ask again — answered afresh, not from what the conversation already holds
+                             asked_again=(req.purpose or "") == "ask_again",
                              # CI-4 — a seeded/dossier turn hands its finding to the
                              # conversation instead of bypassing it; SP-15 — a turn
                              # summoned from an object hands that object's live state.

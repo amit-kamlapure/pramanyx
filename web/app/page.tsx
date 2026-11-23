@@ -19,7 +19,8 @@ import { AppearancePanel } from "@/components/settings/AppearancePanel";
 import { useNavCollapsed, useNavCollapsedState } from "@/components/shell/useNavCollapsed";
 import { Tooltip } from "@/components/ui/tooltip";
 import { installAuthFetch } from "@/lib/auth";
-import { installWorkspaceHeader, setActiveWorkspace } from "@/lib/workspace";
+import { getActiveWorkspace, installWorkspaceHeader, setActiveWorkspace } from "@/lib/workspace";
+import { installSharedReads } from "@/lib/sharedReads";
 import { InferencePanel } from "@/components/InferencePanel";
 import { OrgSettingsPanel } from "@/components/OrgSettingsPanel";
 import { OwnersPanel } from "@/components/OwnersPanel";
@@ -45,6 +46,8 @@ import { Workspace as WorkspaceShell, type WorkspaceLayer } from "@/components/W
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { NAVIGATE_EVENT, type NavigateRequest } from "@/lib/navigate";
 import { NAV_DESTINATIONS, NAV_SECTION_IDS, destinationOf } from "@/lib/navDestinations";
+import { keepTabTitle, pageName, tabTitle } from "@/lib/tabTitle";
+import { usePageSubject } from "@/lib/askSubject";
 import { ChromeActions, ChromeFacts, ChromeToolbar, PageChromeProvider, PageHeader, StatusStrip, useChromeBackTo } from "@/components/shell/PageChrome";
 import { InspectorHost, InspectorProvider } from "@/components/shell/Inspector";
 import { AskPanelHost, AskPanelToggle, AskPushedPage } from "@/components/ask/AskPanel";
@@ -77,6 +80,7 @@ const RolesPanel        = dynamic(() => import("@/components/RolesPanel").then(m
 const ProcessHealthPanel= dynamic(() => import("@/components/ProcessHealthPanel").then(m => ({ default: m.ProcessHealthPanel })), { ssr: false, loading });
 const PlaybookPanel     = dynamic(() => import("@/components/PlaybookPanel").then(m => ({ default: m.PlaybookPanel })),      { ssr: false, loading });
 const RecommendationInbox= dynamic(() => import("@/components/RecommendationInbox").then(m => ({ default: m.RecommendationInbox })), { ssr: false, loading });
+const DiscoverPage      = dynamic(() => import("@/components/discover/DiscoverPage").then(m => ({ default: m.DiscoverPage })),{ ssr: false, loading });
 const DocumentsPage     = dynamic(() => import("@/components/documents/DocumentsPage").then(m => ({ default: m.DocumentsPage })),{ ssr: false, loading });
 const SpreadsheetsPage  = dynamic(() => import("@/components/sheets/SpreadsheetsPage").then(m => ({ default: m.SpreadsheetsPage })),{ ssr: false, loading });
 const CatalogScreen     = dynamic(() => import("@/components/CatalogScreen").then(m => ({ default: m.CatalogScreen })),      { ssr: false, loading });
@@ -109,6 +113,8 @@ if (typeof window !== "undefined") installAuthFetch(getApiBase());
 // adds the bearer token. Installed the other way round, the workspace header would be
 // built before auth replaced the init and would be dropped.
 if (typeof window !== "undefined") installWorkspaceHeader();
+// And this one outermost of all: an identical read already on its way is shared, not sent again (`lib/sharedReads.ts`).
+if (typeof window !== "undefined") installSharedReads();
 import {
   getConnections,
   seedDemoConnection,
@@ -180,6 +186,7 @@ type NavTab =
   | "data"              // unified Data workspace (Catalog / Query Builder / Semantic Layer)
   | "health"
   | "playbook"
+  | "discover"         // Discover — everything a person may open, by Area (Data's first row; `?id=` opens an Area)
   | "documents"        // the global document corpus — see the nav comment on why it is here
   | "spreadsheets"     // Arc SH — the sheets people make, edit, combine and chat with
   | "catalog"
@@ -446,6 +453,7 @@ function HomeScreen({
   connections,
   selectedConn,
   workspaceId,
+  ready,
   onGoToChat,
   onNavigate,
   onOpenInvestigation,
@@ -456,6 +464,9 @@ function HomeScreen({
   connections: Connection[];
   selectedConn: string;
   workspaceId: string;
+  /** The workspace is known (its list has answered). Read before it, Home's list was read twice — and on a page opened
+   *  elsewhere, read for the instant Home is drawn before the address's page (2026-11-23). */
+  ready: boolean;
   onGoToChat: (q?: string, mode?: AskMode) => void;
   onNavigate: (t: NavTab) => void;
   onOpenInvestigation: (id: string, kind?: "investigation" | "chat", connectionId?: string, canvasId?: string | null) => void;
@@ -479,11 +490,12 @@ function HomeScreen({
     // The whole recent list, not a five-row table: Home picks its lead, its question and its
     // standing questions from it (`components/home/HomeDesk.tsx`). Workspace-scoped, so it
     // runs without a connection too.
+    if (!ready) return;
     fetch(`${getApiBase()}/investigations${workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : ""}`)
       .then(r => r.json())
       .then(d => setRecentInvs(Array.isArray(d) ? d : []))
       .catch(() => {});
-  }, [workspaceId]);
+  }, [workspaceId, ready]);
   const openAnswer = (id: string, kind?: string) => onOpenInvestigation(id, kind === "chat" ? "chat" : undefined, selectedConn);
 
   return (
@@ -870,7 +882,7 @@ const VALID_TABS = new Set<NavTab>([
   "inbox", "briefing", "intelligence", "intel-hub", "intel", "org-intel",
   "graph", "memory", "declared-actions", "evidence", "brain",
   "ontology", "dashboards", "operations", "agentic-ops", "control-room", "evals", "data",
-  "health", "playbook", "documents", "spreadsheets", "catalog", "builder", "query", "connections", "metrics",
+  "health", "playbook", "discover", "documents", "spreadsheets", "catalog", "builder", "query", "connections", "metrics",
   // AO-4 — `integrations` is an Operations layer alias like `monitors`; it was missing
   // here, so `?tab=integrations` (the link every Slack door hands out) opened Home.
   "monitors", "actions", "integrations", "activity", "security", "semantic", "settings",
@@ -1037,9 +1049,16 @@ export default function Home() {
   // The deep link is applied just below instead, after mount. Same for intelLayer and
   // the `?table=` entity link.
   const [tab, setTab] = useState<NavTab>("home");
+  // The Ask screen's conversation is drawn the first time its screen opens and kept after, so an answer being written
+  // survives a change of screen. Not at load behind another page: there it minted a new conversation and read its
+  // people, suggestions, agents and connections on every page load (2026-11-23).
+  const [chatOpened, setChatOpened] = useState(false);
+  if (tab === "chat" && !chatOpened) setChatOpened(true);
   // The record a Ledger row opened in the Record workspace — an inquiry, a decision, a mission, a
   // claim — addressed as `?id=`, so a Reader is a link like any other screen.
   const [openId, setOpenId] = useState<string | null>(null);
+  // The Area Discover has open, by its name, for the tab (`lib/tabTitle.ts`); null on Discover itself.
+  const [discoverName, setDiscoverName] = useState<string | null>(null);
   const [theme, setThemeState] = useState<Theme>("dark");
   const [rawSelectedConn, setSelectedConn] = useState("");
 
@@ -1169,7 +1188,19 @@ export default function Home() {
       if (r.recordLayer) setRecordLayer(r.recordLayer);
       if (r.secLens) setSecLens(r.secLens);
       if (r.settingsSection) setSettingsSection(r.settingsSection);
+      // a layer named by the event lands as a link's `?layer=` does on a cold load (Discover's links, `lib/addressOnce.ts`)
+      if (detail.params?.layer) applyLayerFor(r.tab, detail.params.layer);
       setOpenId(detail.params?.id ?? null);
+      // a canvas named by the event opens as `?canvas=` does on a cold load: found in the workspace's roster, or said not here
+      if (detail.params?.canvas) {
+        const wanted = detail.params.canvas;
+        getCanvases(getActiveWorkspace() || undefined).then(all => {
+          const found = all.find(c => c.id === wanted) ?? null;
+          if (found) setActiveCanvas(found);
+          else toast.info("The linked canvas isn't in this workspace", {
+            description: "It may have been deleted, or it belongs to another workspace." });
+        }).catch(() => toast.info("The linked canvas could not be read"));
+      }
       // a conversation named by the event opens on the Ask page: the Ask panel's "Open at full size"
       if (detail.params?.chat) {
         setShowHistory(false);
@@ -1238,8 +1269,8 @@ export default function Home() {
     // Only the workspace is addressed by a canvas; elsewhere the id is noise that would
     // survive into screens it means nothing on.
     const wantCanvas = tab === "canvas-workspace" ? (activeCanvas?.id ?? null) : null;
-    // A Reader is addressed by the id its Ledger row opened; elsewhere the id means nothing.
-    const wantId = tab === "record" ? openId : null;
+    // A Reader is addressed by the id its Ledger row opened, and an Area by its own on Discover; elsewhere the id means nothing.
+    const wantId = tab === "record" || tab === "discover" ? openId : null;
     if (urlTab === writeTab && (urlConn ?? "") === rawSelectedConn
         && (urlLayer ?? null) === wantLayer && (urlCanvas ?? null) === wantCanvas
         && (urlId ?? null) === wantId) return;
@@ -1258,6 +1289,17 @@ export default function Home() {
       window.history.pushState(null, "", next);
     }
   }, [tab, rawSelectedConn, intelLayer, opsLayer, evalsLayer, agentsLayer, recordLayer, settingsSection, dataLayer, activeCanvas, openId]);
+  // The tab names what is open, and nothing else (`lib/tabTitle.ts`): the one thing the page shows, the open canvas, or
+  // the page — its layer where the rail names the layer (Health, Monitors…), else the page itself.
+  const onPage = usePageSubject();
+  useEffect(() => {
+    const layer = tab === "data" ? dataLayer
+      : tab === "intelligence" ? intelLayer : tab === "operations" ? opsLayer : tab === "evals" ? evalsLayer
+      : tab === "agentic-ops" ? agentsLayer : tab === "record" ? recordLayer : null;
+    const section = layer && pageName(String(layer)) !== "Pramanyx" ? String(layer) : tab;
+    const openName = tab === "canvas-workspace" ? activeCanvas?.name : tab === "discover" ? discoverName : null;
+    return keepTabTitle(tabTitle(section, onPage, openName));
+  }, [tab, dataLayer, intelLayer, opsLayer, evalsLayer, agentsLayer, recordLayer, onPage, activeCanvas, discoverName]);
   useEffect(() => {
     const onPop = () => {
       const t = tabFromUrl();
@@ -1301,7 +1343,6 @@ export default function Home() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [selectedWorkspace, setSelectedWorkspace] = useState("");
-  const navCounts = useNavCounts(selectedWorkspace || undefined);
 
   // ── Workspace-scoped connections (the tenancy boundary) ───────────────────
   // Everything below the topbar sees only the connections belonging to the
@@ -1411,6 +1452,8 @@ export default function Home() {
   const [connsLoaded, setConnsLoaded] = useState(false);
   const [wsLoaded, setWsLoaded] = useState(false);
   const contextReady = connsLoaded && wsLoaded;
+  // The rail's counts are read once the workspace is known, not first without it and again with it.
+  const navCounts = useNavCounts(selectedWorkspace || undefined, wsLoaded);
   useEffect(() => {
     getConnections()
       .then(conns => {
@@ -1510,6 +1553,8 @@ export default function Home() {
 
   const redirectedHome = useRef(false);
   useEffect(() => {
+    // once the workspace is known: read before it, the settings were read twice on every load (2026-11-23)
+    if (!wsLoaded) return;
     getEffectiveSettings(selectedWorkspace || undefined)
       .then((settings) => {
         setOrgSettingsCache(settings);
@@ -1525,7 +1570,7 @@ export default function Home() {
         }
       })
       .catch(() => {});
-  }, [selectedWorkspace]);
+  }, [selectedWorkspace, wsLoaded]);
 
   const reloadWorkspaces = () => getWorkspaces().then(setWorkspaces).catch(() => {});
 
@@ -1919,6 +1964,7 @@ export default function Home() {
                 connections={wsConnections}
                 selectedConn={selectedConn}
                 workspaceId={selectedWorkspace}
+                ready={wsLoaded}
                 onGoToChat={goToChat}
                 onNavigate={handleNavigate}
                 onOpenInvestigation={openInvestigation}
@@ -2010,7 +2056,7 @@ export default function Home() {
               </ErrorBoundary>
             )}
 
-            {/* ── CHAT (Investigate) ── always mounted so SSE streams survive tab switches */}
+            {/* ── CHAT (Investigate) ── drawn when first opened, then kept mounted so SSE streams survive tab switches */}
             <div style={{ flex: 1, flexDirection: "column", overflow: "hidden", background: "var(--bg-0)", display: tab === "chat" ? "flex" : "none" }}>
                 {/* What the conversation is scoped to, beside the title, and its actions in the title row (2026-11-10, ROADMAP
                     §6 item 64) — said only while the conversation is the page: it stays mounted behind every other one. */}
@@ -2116,7 +2162,7 @@ export default function Home() {
                       )}
                       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
                         {/* the Ask page is the Ask panel at full size (decision 7 of the plan, 2026-11-19): the same layout */}
-                        <ChatPanel
+                        {chatOpened && <ChatPanel
                           key={chatKey}
                           address="main"
                           harness
@@ -2128,7 +2174,7 @@ export default function Home() {
                           initialMode={chatInitialMode}
                           initialInsightId={chatInitialInsightId}
                           initialAgentId={chatInitialAgentId}
-                        />
+                        />}
                       </div>
                     </div>
                   )
@@ -2238,6 +2284,14 @@ export default function Home() {
               </div>
             )}
 
+            {tab === "discover" && (
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--bg-0)" }}>
+                <DiscoverPage openId={openId} onOpenArea={setOpenId} onName={setDiscoverName}
+                  workspaceId={selectedWorkspace} ready={contextReady}
+                  connections={wsConnections.map(c => ({ id: c.id, name: c.name }))} />
+              </div>
+            )}
+
             {tab === "documents" && (
               <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--bg-0)" }}>
                 <DocumentsPage connectionId={selectedConn} connections={connections} />
@@ -2342,7 +2396,8 @@ export default function Home() {
         </SchemaProvider>
         <InspectorHost />
         {/* The Ask panel beside every page; the Ask page itself is the same conversations at full size */}
-        <AskPanelHost connectionId={selectedConn} hidden={tab === "chat"} />
+        <AskPanelHost connectionId={selectedConn} hidden={tab === "chat"}
+          canvas={tab === "canvas-workspace" && activeCanvas ? { id: activeCanvas.id, name: activeCanvas.name } : null} />
       </div>
       <StatusStrip connection={statusConn} running={navCounts?.runningRuns ?? 0} />
 

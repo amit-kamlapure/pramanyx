@@ -2,7 +2,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
-  MAX_TABS, PANEL_DEFAULT_W, PANEL_MAX_W, PANEL_MIN_W, closeAskTab, hideAskPanel, newAskTab, noteAskSession, openAskConversation,
+  MAX_TABS, PANEL_DEFAULT_W, PANEL_MAX_W, PANEL_MIN_W, closeAskTab, followPageConnection, hideAskPanel, newAskTab, noteAskSession,
+  openAskConversation,
   openAskPanel, resetAskPanel, selectAskTab, setAskPanelWidth, toggleAskPanel, useAskPanel, useAskPanelWidth,
 } from "@/lib/askPanel";
 import { renderHook } from "@testing-library/react";
@@ -38,6 +39,20 @@ describe("the Ask panel", () => {
     expect(tabs).toHaveLength(MAX_TABS);
     expect(tabs[tabs.length - 1].key).toBe(active);
     expect(tabs.some(t => t.session === "s0")).toBe(false);
+  });
+
+  it("takes the Data Canvas the page shows before a question, keeps it after one, and lets it go off the canvas", () => {
+    openAskPanel("c1");
+    followPageConnection("c1", { id: "cv1", name: "Orders desk" });
+    expect(now().tabs[0]).toMatchObject({ connectionId: "c1", canvasId: "cv1", canvasName: "Orders desk" });
+    followPageConnection("c1", null);
+    expect(now().tabs[0].canvasId).toBeUndefined();
+    followPageConnection("c2", { id: "cv2", name: "Returns" });
+    const [tab] = now().tabs;
+    expect(tab).toMatchObject({ connectionId: "c2", canvasId: "cv2" });
+    noteAskSession(tab.key, "s1", "Which orders were late?");
+    followPageConnection("c1", null);
+    expect(now().tabs[0]).toMatchObject({ connectionId: "c2", canvasId: "cv2" }); // a begun conversation keeps its canvas
   });
 
   it("brings an open conversation to the front instead of opening it twice", () => {

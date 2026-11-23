@@ -33,5 +33,7 @@ describe("doorFor", () => {
     expect(isPlainSend({ depth: "quick", schema: "shop", skipCache: false })).toBe(true);
     expect(isPlainSend({ skipCache: true })).toBe(false);
     expect(isPlainSend({ seedSql: "SELECT 1" })).toBe(false);
+    // a clicked follow-up is the same question typed, tagged: it takes the conversation's door
+    expect(isPlainSend({ purpose: "followup" })).toBe(true);
   });
 });

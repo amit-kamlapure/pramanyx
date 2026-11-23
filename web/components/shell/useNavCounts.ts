@@ -29,6 +29,7 @@ import { getApiBase } from "@/lib/config";
 import { owes } from "@/lib/departures";
 import { subscribeKernelEvents } from "@/lib/events";
 import { WAITING_CHANGED_EVENT, getSetAside, listDecisions, listInquiries } from "@/lib/record";
+import { whenIdle } from "@/lib/whenIdle";
 
 export interface NavCounts {
   unackedAlerts: number;
@@ -45,11 +46,14 @@ export function waitingOnAPerson(c: NavCounts): number {
   return c.decisionsDue + c.inquiriesDue + c.departuresOwed;
 }
 
-export function useNavCounts(workspaceId?: string): NavCounts {
+/** `ready` is false while the shell is still finding the person's workspace: read before it, every count was read twice on
+ *  a cold load, once for no workspace and again for theirs (2026-11-23). */
+export function useNavCounts(workspaceId?: string, ready = true): NavCounts {
   const [counts, setCounts] = useState<NavCounts>(NONE);
   const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    if (!ready) return;
     let alive = true;
     const load = () => {
       getAllAlerts(undefined, 100, workspaceId || undefined)
@@ -85,7 +89,8 @@ export function useNavCounts(workspaceId?: string): NavCounts {
         .then(n => { if (alive) setCounts(c => ({ ...c, departuresOwed: n })); })
         .catch(() => {});
     };
-    load();
+    // the frame's counts wait for the page's own first reads (`lib/whenIdle.ts`)
+    const cancelFirst = whenIdle(load);
     window.addEventListener(WAITING_CHANGED_EVENT, load);
     const throttled = () => {
       if (pending.current) return;
@@ -95,13 +100,14 @@ export function useNavCounts(workspaceId?: string): NavCounts {
     const iv = setInterval(load, 60_000);
     return () => {
       alive = false;
+      cancelFirst();
       window.removeEventListener(WAITING_CHANGED_EVENT, load);
       unsub();
       clearInterval(iv);
       if (pending.current) clearTimeout(pending.current);
       pending.current = null;
     };
-  }, [workspaceId]);
+  }, [workspaceId, ready]);
 
   return counts;
 }

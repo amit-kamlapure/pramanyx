@@ -19,7 +19,10 @@ import { deckOf } from "./deck.js";
 import { driveFilesOf } from "./drive.js";
 import { ABOUT_TO, DOES, PREFIX, STAGED, saidOf, stagedOf, turnedDown } from "./steps.js";
 import { drawChart, labelOf, numericColumns } from "./chart";
+import { watchTheme } from "../../../../web/components/charts/vega/themeWatch";
+import { isDeepRecord, reportFacts, reportOf } from "./report.js";
 import { unstatedFigures } from "../../../../web/lib/statedFigures";
+import { boldable, titleOf as answerTitleOf } from "../../../../web/lib/answerTitle";
 import {
   PANE, PANE_PATTERN, PaneBody, groundingOf, pageFor, PaneTitle, ResultGrid, button, code, faint, hasPane, idOf, line,
   primary, soft, surface,
@@ -83,6 +86,10 @@ function Chart({ answer, viz }) {
   const box = useRef(null);
   const [none, setNone] = useState(false);
   const [width, setWidth] = useState(0);
+  // Drawn again in the page's colours when it turns light or dark — the app's charts follow the same rule
+  // (`web/components/charts/vega/themeWatch.ts`): read once, the labels stayed the old theme's grey.
+  const [turned, setTurned] = useState(0);
+  useEffect(() => watchTheme(() => setTurned((n) => n + 1)), []);
   useEffect(() => {
     const el = box.current;
     if (!el || typeof ResizeObserver === "undefined") return undefined;
@@ -107,7 +114,7 @@ function Chart({ answer, viz }) {
     }
     setNone(!remove);
     return () => { if (remove) remove(); };
-  }, [answer, viz, width]);
+  }, [answer, viz, width, turned]);
   return h("div", { style: { minWidth: 0 } },
     h("div", { ref: box, style: { width: "100%", minHeight: none ? 0 : 220, overflow: "hidden" } }),
     none ? h("div", { style: { ...quiet, padding: "8px 0" } },
@@ -382,8 +389,76 @@ const DeepAnalysisCard = inTail(
   (props) => h("div", null, h(ToolStep, props),
     props.phase !== "result" ? h(AnswerNow, { question: argsOf(props.block).question }) : null),
   (props) => (props.phase === "result" && !props.block?.isError
-    ? h("div", null, h(AnsweredEarly, { text: resultText(props.block) }), h(SkillDoor, { text: resultText(props.block) }))
+    ? h(DeepReport, { text: resultText(props.block), asked: argsOf(props.block).question })
     : null));
+
+/** An earlier analysis read back (`get_investigation`) — the run a deep analysis handed over while it went on — drawn
+ *  as its report once it is one, so a run that outlasted the call ends where every deep analysis ends. */
+const EarlierAnalysisCard = inTail(
+  (props) => h(ToolStep, props),
+  (props) => (props.phase === "result" && !props.block?.isError && isDeepRecord(reportOf(resultText(props.block)))
+    ? h(DeepReport, { text: resultText(props.block), asked: "" })
+    : null));
+
+/**
+ * A deep analysis's result as its report reads (the user, 2026-11-23: one output format in the coworker, a Data Canvas
+ * and the Ask panel). Until then the coworker drew it as a step whose result was raw JSON, while the platform drew the
+ * report. The card says what the platform's report opens with — its headline, its summary, the period it measured — and
+ * closes as it does, on its bottom line and its recommended actions; it ends on the foot every answer ends on, whose
+ * sources open the whole report beside the conversation (`/report/<id>`, the platform's own report view, as
+ * `/chart/<id>` is its chart editor). A result cut short on its way to the page still names its analysis, and opens it.
+ */
+function DeepReport({ text, asked }) {
+  const [onward, setOnward] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const got = reportOf(text);
+  if (!got) return null;
+  const { id, connection, running, cut, head, summary, period, closing, recs, sources, message } = reportFacts(got);
+  const lead = headlineOf(head);
+  const question = String(got.question || asked || "").trim();
+  const full = id && hasPane() ? () => openBeside("page", pageFor.report(id)) : null;
+  const becomes = question && connection && hasPane() ? [
+    ...(id && !running ? [["Save as a skill", pageFor.toSkill(id, connection), "Keep its method, to run again on other values"]] : []),
+    ["Schedule it", pageFor.toSchedule(question, connection), "Set this question on a schedule — you choose when, and where the answer goes"],
+    ["Keep on a dashboard", pageFor.toKeep(question, connection, id), "Keep it on the connection's dashboard, asked again on a rhythm you choose"],
+    ["Make an agent from it", pageFor.toAgent(question, connection), "Draft an agent that answers questions like this one — you read it before it is made"],
+  ] : [];
+  const copy = () => {
+    const words = [head, summary, ...period, closing ? `Bottom line: ${closing}` : "", ...recs.map((r) => `- ${r}`)].filter(Boolean).join("\n\n");
+    navigator.clipboard?.writeText(words).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); });
+  };
+  const label = { ...quiet, fontSize: 12, fontWeight: 600 };
+  return h("div", { "data-pramanyx-deep-report": "", style: { display: "flex", flexDirection: "column", gap: 14, margin: "10px 0 6px", fontSize: 14, lineHeight: 1.6 } },
+    h("div", { role: "heading", "aria-level": 3, style: { fontSize: 18, fontWeight: 600, lineHeight: 1.35 } },
+      head ? rich(lead.head || head) : running ? "The deep analysis is still running" : cut ? "The deep analysis finished" : "The deep analysis found no answer"),
+    h(Caution, { said: lead.cautions }),
+    summary && said(summary) !== said(head) ? prose(summary) : null,
+    period.length ? h("div", { style: { ...quiet, fontSize: 12 } }, period.join(" · ")) : null,
+    running ? h("div", { style: { ...quiet, fontSize: 13 } }, message || "It goes on in the platform; its report opens here when it is done.") : null,
+    cut && !head ? h("div", { style: { ...quiet, fontSize: 13 } }, "Its report was too long to read here whole; it opens in full beside the conversation.") : null,
+    closing ? h("div", { style: { display: "flex", flexDirection: "column", gap: 6 } },
+      h("div", { role: "heading", "aria-level": 4, style: label }, "Bottom line"), prose(closing)) : null,
+    recs.length ? h("div", { style: { display: "flex", flexDirection: "column", gap: 6 } },
+      h("div", { role: "heading", "aria-level": 4, style: label }, "Recommended actions"),
+      h("ul", { style: { margin: 0, paddingLeft: 20, display: "flex", flexDirection: "column", gap: 2 } }, recs.map((r, i) => h("li", { key: i }, rich(r))))) : null,
+    h(AnsweredEarly, { text }),
+    becomes.length ? h("div", { "data-pramanyx-onward": "", style: { display: "flex", flexDirection: "column" } },
+      h("button", { type: "button", className: "pramanyx-fold", "aria-expanded": onward, onClick: () => setOnward((was) => !was) },
+        "Follow-ups", h(Fold, { open: onward })),
+      onward ? h("div", { role: "group", "aria-label": "What this answer can become",
+                          style: { display: "flex", flexWrap: "wrap", gap: 14, padding: "4px 0 2px", fontSize: 13 } },
+        becomes.map(([name, path, hint]) => h("button", { key: name, type: "button", className: "pramanyx-link", title: hint,
+          onClick: () => openBeside("page", path) }, name))) : null) : null,
+    h(Feedback, { answer: { investigation_id: id, connection, answer: head, question }, extras: [
+      h("button", { key: "copy", type: "button", className: "pramanyx-icon", "aria-label": copied ? "Copied" : "Copy the answer", title: copied ? "Copied" : "Copy the answer", onClick: copy }, h(Glyph, { d: GLYPH.copy })),
+      id && !running ? h("a", { key: "pdf", className: "pramanyx-icon", download: "", "aria-label": "Download as PDF", title: "Download as PDF",
+                                href: `/pramanyx/investigations/${encodeURIComponent(id)}/export?format=pdf` }, h(Glyph, { d: GLYPH.download })) : null,
+      // still running, the report opens beside and says so until it lands; done, its sources are the queries it ran
+      full ? h("button", { key: "source", type: "button", className: "pramanyx-source",
+                           title: running ? "Its report, beside the conversation, once it lands" : "The whole report, each source with its rows and SQL",
+                           onClick: full }, running ? "Open the report" : sources ? `${sources} ${sources === 1 ? "source" : "sources"}` : "Report") : null,
+    ] }));
+}
 
 /**
  * The turns a helpers question takes after its first: each starts with a helper's report (a helper under Agent mode
@@ -1339,10 +1414,18 @@ function prose(text) {
   return h("div", { style: { display: "flex", flexDirection: "column", gap: 8 } }, blocks);
 }
 
+/** Words with what was marked `**bold**` set bold — a figure or a name, never a whole sentence — and text in backticks
+ *  set as code, not shown with its marks (the platform's one rule, `web/lib/answerTitle.ts`). */
 function rich(text) {
-  return String(text || "").split(/(\*\*[^*]+\*\*)/g).filter(Boolean).map((piece, i) =>
-    (piece.startsWith("**") && piece.endsWith("**") && piece.length > 4
-      ? h("strong", { key: i, style: { fontWeight: 600 } }, piece.slice(2, -2)) : piece));
+  return String(text || "").split(/(\*\*[^*]+\*\*|`[^`\n]+`)/g).filter(Boolean).map((piece, i) => {
+    if (piece.startsWith("**") && piece.endsWith("**") && piece.length > 4) {
+      return boldable(piece.slice(2, -2)) ? h("strong", { key: i, style: { fontWeight: 600 } }, piece.slice(2, -2)) : piece.slice(2, -2);
+    }
+    if (piece.startsWith("`") && piece.endsWith("`") && piece.length > 2) {
+      return h("code", { key: i, style: { fontFamily: "var(--dsw-font-mono, ui-monospace, monospace)", fontSize: "0.9em", background: code, borderRadius: 4, padding: "0 4px" } }, piece.slice(1, -1));
+    }
+    return piece;
+  });
 }
 
 /** "Total gmv eur by platform": what an exhibit of one measure over one dimension is of, from its own columns. */
@@ -1393,16 +1476,20 @@ function unsaidOf(answer, words) {
  * row at its foot. Nothing here is a second telling: every word is the platform's, and every number is from the rows.
  */
 export function headlineOf(text) {
-  const said = String(text || "").trim();
-  // An agent's answer can be written as markdown — a sentence, then paragraphs and a list (2026-11-20, the KPI Analyst:
-  // "…€3,217,143.16 across four platforms.\n\n- Mytheresa: …"). Its first line is the headline, without the bold marks a
-  // heading has no use for; the rest is drawn as paragraphs and a list (`prose`), never run together.
-  const lineAt = said.indexOf("\n");
-  if (lineAt > 0 && lineAt <= 220) return { head: said.slice(0, lineAt).replace(/\*\*/g, "").trim(), rest: said.slice(lineAt + 1).trim() };
-  if (said.length <= 220) return { head: said.replace(/\*\*/g, ""), rest: "" };
-  const cut = said.slice(0, 220).search(/[.!?](\s|$)(?![\s\S]*[.!?](\s|$))/);
-  const at = cut > 40 ? cut + 1 : said.slice(0, 220).lastIndexOf(" ");
-  return { head: said.slice(0, at > 0 ? at : 220).trim(), rest: said.slice(at > 0 ? at : 220).trim() };
+  // The platform's one rule (`web/lib/answerTitle.ts`, 2026-11-23): the answer's first line, or its first sentence when
+  // that is long, without the marks a heading has no use for; a caution written onto it ("— caution: …") said apart,
+  // in the amber line; a lead-in, a list or a table no title at all. The rest is drawn as paragraphs and a list (`prose`).
+  const { title, cautions, rest } = answerTitleOf(String(text || ""));
+  return { head: title, cautions, rest };
+}
+
+/** The amber line under an answer's headline: what the platform cautioned about it, or found wrong with it. */
+function Caution({ said }) {
+  const text = said.filter(Boolean).join(" ");
+  return text ? h("div", { role: "alert", style: { display: "flex", gap: 8, alignItems: "baseline", padding: "8px 10px", borderRadius: 6,
+                                                   background: "color-mix(in srgb, #e5a50a 14%, transparent)" } },
+    h("span", { "aria-hidden": "true", style: { fontWeight: 600 } }, "!"),
+    h("span", null, text)) : null;
 }
 
 function Exhibit({ answer, whole, asked }) {
@@ -1492,13 +1579,11 @@ function Exhibit({ answer, whole, asked }) {
   // On the platform's scale, as its answers are (2026-11-20): the headline is the verdict sentence (18), the words are
   // read at 14, a section's label is 12, a figure 22, and a row or a cell 13.
   return h("div", { style: { display: "flex", flexDirection: "column", gap: 14, margin: "10px 0 6px", fontSize: 14, lineHeight: 1.6 } },
-    h("div", { role: "heading", "aria-level": 3, style: { fontSize: 18, fontWeight: 600, lineHeight: 1.35 } }, lead.head),
+    lead.head ? h("div", { role: "heading", "aria-level": 3, style: { fontSize: 18, fontWeight: 600, lineHeight: 1.35 } }, rich(lead.head)) : null,
+    // What the platform itself says is wrong with this answer — what it cautioned, and what its check found — said
+    // under the headline where a finding would be, and never as part of it.
+    h(Caution, { said: [...lead.cautions, wrong.length ? (checked ? wrong.join(" ") : `This may not be right: ${wrong.join("; ")}`) : ""] }),
     lead.rest ? prose(lead.rest) : null,
-    // What the platform itself says is wrong with this answer, said under the headline where a finding would be.
-    wrong.length ? h("div", { role: "alert", style: { display: "flex", gap: 8, alignItems: "baseline", padding: "8px 10px", borderRadius: 6,
-                                                      background: "color-mix(in srgb, #e5a50a 14%, transparent)" } },
-      h("span", { "aria-hidden": "true", style: { fontWeight: 600 } }, "!"),
-      h("span", null, checked ? wrong.join(" ") : `This may not be right: ${wrong.join("; ")}`)) : null,
     words || stoodOn.length ? h("div", null, rich(words), stoodOn) : null,
     figure ? (unsaid.length ? h(Figures, { answer, only: unsaid }) : null)
     : h("div", { style: { background: surface, borderRadius: 10, padding: "10px 10px 6px 16px" } },
@@ -1852,6 +1937,7 @@ export function apply(ctx) {
           : name === PREFIX + "bring_in_file" ? BroughtInCard
           : name === PREFIX + "draft_definition" ? DraftedDefinitionCard
           : name === PREFIX + "deep_analysis" ? DeepAnalysisCard
+          : name === PREFIX + "get_investigation" ? EarlierAnalysisCard
           : name === PREFIX + "deck_of_answers" ? DeckCard
           : name === PREFIX + "search_my_drive" ? DriveCard
           : SCHEDULES.test(name) ? ScheduleCard

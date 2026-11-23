@@ -41,7 +41,7 @@ def _who(request: Request) -> str:
     return acting_person(get_principal(request))
 
 
-def _seen_as(canvas, request: Request) -> dict:
+def seen_as(canvas, request: Request) -> dict:
     """A canvas as the person asking may see it: whole, with what they may do (``access``); or, not shared with them,
     its name and who to ask — listed and said, never read."""
     from pramanyx.canvas import sharing
@@ -113,7 +113,7 @@ def get_canvases(request: Request, include_legacy: bool = True, workspace_id: st
             continue
         if org_conns is not None and conn not in org_conns:
             continue
-        d = _seen_as(c, request)
+        d = seen_as(c, request)
         # Most recent investigation/chat timestamp for this canvas (drives the
         # "latest investigation" sort and the recently-used section).
         d["last_activity"] = activity.get(c.id)
@@ -142,7 +142,7 @@ def create_canvas_endpoint(req: CreateCanvasRequest, request: Request,
     from pramanyx.util.idempotency import lookup, remember
     prior = lookup("canvas", idempotency_key)  # API-03: retry returns the same canvas
     if prior and (existing := get_canvas(prior)):
-        return _seen_as(existing, request)
+        return seen_as(existing, request)
     scope = CanvasScope(connection_id=req.connection_id, schema_name=req.schema_name, tables=req.tables)
     name = (req.name or "").strip() or _derive_canvas_name(scope)
     canvas = create_canvas(name=name, scopes=[scope], description=req.description, created_by=_who(request))
@@ -170,7 +170,7 @@ def create_canvas_endpoint(req: CreateCanvasRequest, request: Request,
         from pramanyx.kernel.errors import tolerate
         tolerate(exc, "canvas birth kickoff is best-effort",
                  counter="birth.job", conn_id=scope.connection_id)
-    return _seen_as(canvas, request)
+    return seen_as(canvas, request)
 
 
 @router.get("/canvases/{canvas_id}")
@@ -179,7 +179,7 @@ def get_canvas_endpoint(canvas_id: str, request: Request):
     canvas = get_canvas(canvas_id)
     if not canvas:
         raise HTTPException(status_code=404, detail="Canvas not found")
-    return _seen_as(canvas, request)
+    return seen_as(canvas, request)
 
 
 class CanvasSharingRequest(BaseModel):
@@ -240,7 +240,7 @@ def clone_canvas_endpoint(canvas_id: str, request: Request, req: Optional[CloneC
         raise HTTPException(status_code=404, detail="Canvas not found")
     if text := canvas_instructions(canvas_id):
         set_canvas_instructions(copy.id, text)
-    return _seen_as(copy, request)
+    return seen_as(copy, request)
 
 
 @router.put("/canvases/{canvas_id}")
@@ -256,7 +256,7 @@ def update_canvas_endpoint(canvas_id: str, req: UpdateCanvasRequest, request: Re
         new_scopes = [CanvasScope(connection_id=old_scope.connection_id, schema_name=old_scope.schema_name, tables=req.tables)]
     canvas = update_canvas(canvas_id, name=req.name, description=req.description,
                            scopes=new_scopes, doc_ids=_checked_doc_ids(req.doc_ids))
-    return _seen_as(canvas, request)
+    return seen_as(canvas, request)
 
 
 def _checked_doc_ids(doc_ids: Optional[list[str]]) -> Optional[list[str]]:

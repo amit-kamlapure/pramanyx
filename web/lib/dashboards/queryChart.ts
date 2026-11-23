@@ -12,9 +12,10 @@ import { ALL_CHART_TYPES } from "@/components/charts/chartTypeInference";
 import type { VizConfig } from "@/components/charts/vizConfig";
 import type { QueryShaped, QueryShown } from "@/lib/api";
 import { dayLabel } from "@/lib/dashboards/objectView";
-import { fmtDate, formatDateAs, type DateFormat, type Gran } from "@/lib/format";
+import { cleanLabel, fmtDate, formatDateAs, type DateFormat, type Gran } from "@/lib/format";
 import { emphasisOpacity } from "@/components/charts/vega/emphasis";
 import { HOVER_MARK, type HoverMeta } from "@/components/charts/vega/hoverTooltip";
+import { COMPACT } from "@/components/charts/vega/compact";
 import { colorsFor } from "@/lib/dashboards/valueColors";
 
 export type QueryChart = Extract<QueryShaped, { as: "bar" | "line" | "area" | "scatter" }>;
@@ -147,8 +148,14 @@ export function queryChartSpec(c: QueryChart, setup: Pick<QueryShown, "segments"
   // a category along the bottom reads largest first; dates and numbers in their own order. A date a statement wrote as text
   // (`strftime(day, '%Y-%m')`) is still a date: months ranked by size read as a chart of nothing.
   const datesAsText = datedText;
+  // Largest first, written out as the places in order: Vega-Lite drops a sort by "sum" where two layers share the axis
+  // (a bar and its labels), and the bars fell back to the alphabet — Cancelled over Shipped (2026-11-23, the coworker's
+  // horizontal bar once its labels were back).
+  const sums = new Map<string, number>();
+  for (const p of values) sums.set(String(p.x), (sums.get(String(p.x)) ?? 0) + (p.v ?? 0));
+  const largestFirst = [...sums.entries()].sort((a, b) => b[1] - a[1]).map(([place]) => place);
   const xSort = categories && options?.sort === "label" ? "ascending" as const
-    : c.x.kind === "text" && bars && !setup.running && !datesAsText ? { op: "sum", field: "v", order: "descending" } : null;
+    : c.x.kind === "text" && bars && !setup.running && !datesAsText ? largestFirst : null;
   const x = {
     field: "x",
     type: c.as === "scatter" && numericX ? "quantitative" : "ordinal",
@@ -157,7 +164,11 @@ export function queryChartSpec(c: QueryChart, setup: Pick<QueryShown, "segments"
     ...(c.as === "scatter" && numericX ? { scale: { zero: false } } : {}),
   };
   const shares = setup.segments === "shares" && (c.as === "bar" || c.as === "area");
-  const stack = c.as === "line" || c.as === "scatter" || !split ? null
+  // several points at one place with nothing to tell them apart: bars and areas stack, a line is drawn as its points
+  // (`answerShape` says so under the chart) — never one bar painted over another, or a line zig-zagging up a place
+  const repeated = !split && c.as !== "scatter" && new Set(values.map(p => String(p.xr))).size < values.length;
+  const stack = c.as === "line" || c.as === "scatter" ? null
+    : !split ? (repeated ? "zero" : null)
     : shares ? "normalize" : setup.segments === "side_by_side" ? null : "zero";
   // A share reads as a percent and money with its symbol. Below a thousand, the SI form says "500m" for a tick of 0.5: never what a reader means.
   const small = Math.max(0, ...values.map(p => Math.abs(p.v ?? 0))) < 1000;
@@ -165,15 +176,19 @@ export function queryChartSpec(c: QueryChart, setup: Pick<QueryShown, "segments"
     : shares || c.format === "percent" ? ".0%" : c.format === "money" ? "$.3~s" : small ? ".2~f" : ".3~s";
   const labelFormat = look?.format && !shares ? look.format : small ? ".2~f" : ".3~s";
   const chosenScale = valueAxisScale(options, values.map(p => p.v).filter((v): v is number => typeof v === "number"));
+  // a large number in the app's own compact form, as an answer's chart writes it — 20.0K and 1.2B, never 20k and 1.2G
+  const compact = !(look?.format && !shares) && !shares && c.format !== "percent" && !small;
   const y = {
     field: "v", type: "quantitative", stack, title: null,
-    axis: { title: look?.yTitle || null, tickCount: 4, format: axisFormat },
+    axis: { title: look?.yTitle || null, tickCount: 4, format: axisFormat,
+            ...(compact ? { labelExpr: (c.format === "money" ? "'$' + " : "") + COMPACT("datum.value") } : {}) },
     ...(c.as === "scatter" || Object.keys(chosenScale).length ? { scale: { ...(c.as === "scatter" ? { zero: false } : {}), ...chosenScale } } : {}),
   };
+  // each by its own name, as its pill says it (2026-11-23: a tooltip said "Value" for Orders)
   const tooltip = [
-    { field: "x", title: "Along the bottom" },
-    ...(split ? [{ field: "s", title: "Series" }] : []),
-    { field: "v", type: "quantitative", title: "Value", format: look?.format || (c.format === "percent" ? ".1%" : c.format === "money" ? "$,.0f" : ",.2~f") },
+    { field: "x", title: c.x.name ? cleanLabel(c.x.name) : "Along the bottom" },
+    ...(split ? [{ field: "s", title: c.seriesName || "Series" }] : []),
+    { field: "v", type: "quantitative", title: c.valueName || "Value", format: look?.format || (c.format === "percent" ? ".1%" : c.format === "money" ? "$,.0f" : ",.2~f") },
   ];
   const tips = look?.tooltip !== false;
   // one series, so no legend and no scale: what went wrong still wears its colour
@@ -181,10 +196,25 @@ export function queryChartSpec(c: QueryChart, setup: Pick<QueryShown, "segments"
   const lone = tone === "adverse" ? { color: colours.palette[ADVERSE_AT % colours.palette.length] } : tone === "open" ? { color: colours.other } : {};
   const shape = options?.lineShape === "smooth" ? { interpolate: "monotone" } : options?.lineShape === "step" ? { interpolate: "step-after" } : {};
   const mark = bars ? { type: "bar", tooltip: tips, cornerRadiusEnd: 2, ...lone }
+    : c.as === "line" && repeated ? { type: "point", tooltip: tips, filled: true, size: 36 }
     : c.as === "line" ? { type: "line", strokeWidth: options?.lineWidth ?? 2, ...shape, ...(options?.markers ? { point: true } : {}) }
       : c.as === "area" ? { type: "area", tooltip: tips, ...shape, ...(stack === null && split ? { opacity: 0.45 } : {}) }
         : { type: "point", tooltip: tips, filled: true, size: 36 };
   const across = bars && !!setup.across;
+  const labelled = setup.labels && !shares && c.as !== "scatter";
+  // Bars that run across are labelled too (2026-11-23, the coworker's chart editor: once a horizontal bar was edited it
+  // was drawn here, where no label was ever drawn across — its labels went and the switch could not bring them back).
+  // The number stands right of the bar's end, so the value scale is given room for it, as the answer's own chart gives
+  // it (`resolveSpec`'s headroom): the longest bar's number lands inside the plot.
+  if (across && labelled && !(y.scale && "domainMax" in y.scale)) {
+    const ends = new Map<string, number>();
+    for (const p of values) {
+      const at = String(p.xr ?? p.x), v = p.v ?? 0;
+      ends.set(at, stack === "zero" ? (ends.get(at) ?? 0) + v : Math.max(ends.get(at) ?? -Infinity, v));
+    }
+    const peak = Math.max(0, ...ends.values());
+    if (peak > 0) (y as Record<string, unknown>).scale = { ...(y.scale ?? {}), domainMax: peak * 1.12 };
+  }
   const offset = bars && split && setup.segments === "side_by_side" ? { field: "s", sort: named } : null;
   const tipped = tips ? { tooltip } : {};
   const encoding: Record<string, unknown> = across
@@ -193,7 +223,7 @@ export function queryChartSpec(c: QueryChart, setup: Pick<QueryShown, "segments"
   // a line stays whole: its chosen place is said by the label layer's point, not by fading the path
   if (lit && c.as !== "line") encoding.opacity = lit;
   const layer: Record<string, unknown>[] = [{ mark, encoding }];
-  if (setup.labels && !shares && c.as !== "scatter" && !across) {
+  if (labelled) {
     // labels are selective: along dates or numbers only the last place is labelled — a stack by its total, a line or a
     // side-by-side bar by each series' value there; along categories each bar is
     const lastX = temporal || numericX ? values.at(-1)?.x : undefined;
@@ -202,17 +232,31 @@ export function queryChartSpec(c: QueryChart, setup: Pick<QueryShown, "segments"
     // 2026-10-11): only the highest at each labelled place says its number
     const lead = bars && split && setup.segments === "side_by_side"
       ? [{ window: [{ op: "rank", as: "at" }], sort: [{ field: "v", order: "descending" }], groupby: ["x"] }, { filter: "datum.at === 1" }] : [];
+    // a label writes its number as the axis beside it does: the app's compact form unless a format was chosen
+    const compactLabels = labelFormat === ".3~s";
+    const said = (field: string) => compactLabels
+      ? { transform: [{ calculate: (c.format === "money" ? "'$' + " : "") + COMPACT(`datum['${field}']`), as: "__label" }],
+          text: { field: "__label", type: "nominal" } }
+      : { transform: [], text: { field, type: "quantitative", format: labelFormat } };
+    const totalSaid = said("total"), valueSaid = said("v");
+    // above a bar that stands up; right of the end of one that runs across, on its middle
+    const at = across
+      ? { mark: { type: "text", align: "left", baseline: "middle", dx: 4, fontSize: 10.5 }, place: "y", value: "x", offset: "yOffset",
+          placed: { ...x, axis: { ...x.axis, labelLimit: 180 } } }
+      : { mark: { type: "text", dy: -6, fontSize: 10.5 }, place: "x", value: "y", offset: "xOffset", placed: x };
     layer.push(bars && stack === "zero"
-      ? { transform: [...only, { aggregate: [{ op: "sum", field: "v", as: "total" }], groupby: ["x"] }],
-        mark: { type: "text", dy: -6, fontSize: 10.5 },
-        encoding: { x: { field: "x", type: x.type, sort: xSort }, y: { field: "total", type: "quantitative" },
-          text: { field: "total", type: "quantitative", format: labelFormat } } }
-      : { transform: [...only, ...lead], mark: { type: "text", dy: -6, fontSize: 10.5 },
-        encoding: { x, y: { field: "v", type: "quantitative", stack }, text: { field: "v", type: "quantitative", format: labelFormat },
-          ...(bars && split && setup.segments === "side_by_side" ? { xOffset: { field: "s", sort: named } } : {}) } });
+      ? { transform: [...only, { aggregate: [{ op: "sum", field: "v", as: "total" }], groupby: ["x"] }, ...totalSaid.transform],
+        mark: at.mark,
+        encoding: { [at.place]: { field: "x", type: x.type, sort: xSort }, [at.value]: { field: "total", type: "quantitative" }, text: totalSaid.text } }
+      : { transform: [...only, ...lead, ...valueSaid.transform], mark: at.mark,
+        encoding: { [at.place]: at.placed, [at.value]: { field: "v", type: "quantitative", stack }, text: valueSaid.text,
+          ...(bars && split && setup.segments === "side_by_side" ? { [at.offset]: { field: "s", sort: named } } : {}) } });
   }
   // reference lines a person drew (the editor's Annotation): a dashed rule across the value axis, its label at its start
-  for (const line of look?.refLines ?? []) {
+  // a line drawn in the measure's own units does not apply to shares of a whole (2026-11-23: an Average of 13,087
+  // orders stretched a 0–100% axis to 1,000,000% and every bar to nothing) — left off, and said on the chart
+  const linesOff = (shares || c.reshaped === "share") && (look?.refLines?.length ?? 0) > 0;
+  for (const line of linesOff ? [] : look?.refLines ?? []) {
     if (!Number.isFinite(line.value)) continue;
     const at = { field: "v", type: "quantitative" };
     layer.push(
@@ -224,11 +268,13 @@ export function queryChartSpec(c: QueryChart, setup: Pick<QueryShown, "segments"
     );
   }
   // the hover rule last, so its voronoi is over every mark it reads for — none when the tooltip is off
-  const hover = c.as === "line" && tips ? hoverRule(x, y, color, split, named, c.format) : null;
+  const hover = c.as === "line" && tips && !repeated ? hoverRule(x, y, color, split, named, c.format, c.valueName) : null;
   if (hover) layer.push(...hover.layers);
   return { $schema: "https://vega.github.io/schema/vega-lite/v5.json", background: null, data: { values }, layer,
            // what the cut left out is said on the chart, never implied
-           ...(keep ? { title: { text: `The ${keep.size} largest of ${totals.size}`, fontSize: 11, fontWeight: "normal", anchor: "start" } } : {}),
+           ...(keep || linesOff ? { title: { text: [keep ? `The ${keep.size} largest of ${totals.size}` : "",
+                                                    linesOff ? "The reference line is not drawn: the chart shows shares, and the line is in the measure's own units." : ""]
+                                                   .filter(Boolean).join(" "), fontSize: 11, fontWeight: "normal", anchor: "start" } } : {}),
            ...(hover ? { usermeta: { hover: hover.meta } } : {}) };
 }
 
@@ -238,9 +284,9 @@ export function queryChartSpec(c: QueryChart, setup: Pick<QueryShown, "segments"
  * written by `hoverTooltip.ts`. A click through it reports the place as the query returned it (`xr`), as a point did.
  */
 function hoverRule(x: Record<string, unknown>, y: Record<string, unknown>, color: Record<string, unknown>,
-  split: boolean, named: string[], format: QueryChart["format"]): { layers: Record<string, unknown>[]; meta: HoverMeta } {
+  split: boolean, named: string[], format: QueryChart["format"], valueName?: string): { layers: Record<string, unknown>[]; meta: HoverMeta } {
   const meta: HoverMeta = {
-    x: "x", gran: null, series: split ? named : ["v"], label: split ? null : "Value",
+    x: "x", gran: null, series: split ? named : ["v"], label: split ? null : (valueName || "Value"),
     format: format === "money" ? "$,.0f" : format === "percent" ? null : ",.2~f", pct: format === "percent", prefix: "",
   };
   return {

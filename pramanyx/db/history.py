@@ -578,6 +578,31 @@ def update_chat_turn_insight(inv_id: str, insight: dict | None) -> bool:
     c.close()
     return True
 
+def update_chat_turn_headline(inv_id: str, headline: str) -> bool:
+    """Set a chat turn's headline to the title its narrator wrote once the rows were read (`_narrated_title`), in the
+    row and in its report, so a reload and History show what the reader was shown."""
+    if not headline:
+        return False
+    c = _conn()
+    ensure_once(c, _ensure_schema)
+    row = c.execute(
+        "SELECT report_json FROM investigations WHERE id = ? AND kind = 'chat'",
+        (inv_id,),
+    ).fetchone()
+    if not row:
+        c.close()
+        return False
+    report = json.loads(row["report_json"] or "{}")
+    report["headline"] = headline
+    c.execute(
+        "UPDATE investigations SET headline = ?, report_json = ? WHERE id = ?",
+        (headline, json.dumps(report), inv_id),
+    )
+    c.commit()
+    c.close()
+    return True
+
+
 #: Idea 5 — how many re-checks one answer keeps. Each is a dated record of what the answer's
 #: own query returned that day; older ones are superseded by the cap, never edited.
 RECHECKS_KEPT = 30

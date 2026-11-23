@@ -17,6 +17,7 @@ import React from "react";
 import { localizeCurrency } from "@/lib/orgSettings";
 import { monthsInTables } from "@/lib/format";
 import { ProseTable } from "@/components/TableActions";
+import { boldable } from "@/lib/answerTitle";
 
 const EMPHASIS_RE = /(\*\*[^*]+\*\*|\*[^*\n]+\*)/g;
 
@@ -28,8 +29,11 @@ export function renderEmphasis(text: string): React.ReactNode[] {
   text = localizeCurrency(text);
   return text.split(EMPHASIS_RE).map((part, i) => {
     if (!part) return null;
+    // Bold marks a figure or a name, never a sentence (`lib/answerTitle.ts`, one rule for the three places an answer is read).
     if (part.length > 4 && part.startsWith("**") && part.endsWith("**"))
-      return <strong key={i} className="font-semibold">{part.slice(2, -2)}</strong>;
+      return boldable(part.slice(2, -2))
+        ? <strong key={i} className="font-semibold">{part.slice(2, -2)}</strong>
+        : <React.Fragment key={i}>{part.slice(2, -2)}</React.Fragment>;
     // Single-asterisk italic (models emit these) reads as normal text, markers dropped.
     if (part.length > 2 && part.startsWith("*") && part.endsWith("*"))
       return <React.Fragment key={i}>{part.slice(1, -1)}</React.Fragment>;

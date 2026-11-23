@@ -19,12 +19,17 @@
  * `job.state` fires on every automation tick, with a slow fallback interval for a dropped
  * stream. If the series cannot be read the strip is not drawn: no ticks is honest, invented
  * ticks are not.
+ *
+ * It is read on every page, so it reads no more than it draws (2026-11-23): the agents' runs
+ * alone — a day held 9,227 automation runs beside 226 agent runs — and the series once at load,
+ * not again when the connection arrives; only the explorer's phase is the connection's.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { colorFor } from "@/components/agentops/ActivityChart";
 import { getExplorationStatus, getJobs, getObsTimeseries, type TimeSeriesResponse } from "@/lib/api";
 import { subscribeKernelEvents } from "@/lib/events";
+import { whenIdle } from "@/lib/whenIdle";
 import { countNoun, formatCount } from "@/lib/format";
 
 /** What pramanyx/kernel/agents.py names a job no agent claims — background work, not an agent. */
@@ -41,11 +46,13 @@ export function ActivityStrip({ connectionId, onOpen }: {
   const [phase, setPhase] = useState<string | null>(null);
   const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const load = useCallback(() => {
-    getObsTimeseries({ source: "jobs", range: "24h" }).then(setChart).catch(() => setChart(null));
+  const loadRuns = useCallback(() => {
+    getObsTimeseries({ source: "jobs", range: "24h", runners: false }).then(setChart).catch(() => setChart(null));
     getJobs({ state: "active", limit: 200 })
       .then(jobs => setLive(jobs.filter(j => j.agent?.agent !== RUNNER_AGENT).length))
       .catch(() => setLive(null));
+  }, []);
+  const loadPhase = useCallback(() => {
     if (connectionId) {
       getExplorationStatus(connectionId)
         // An interrupted run is not exploring: its phase is where it stopped (2026-10-07).
@@ -55,22 +62,28 @@ export function ActivityStrip({ connectionId, onOpen }: {
       setPhase(null);
     }
   }, [connectionId]);
+  // what a refresh reads, kept current, so a connection arriving re-reads the phase alone, not the runs
+  const refresh = useRef(() => {});
+  useEffect(() => { refresh.current = () => { loadRuns(); loadPhase(); }; }, [loadRuns, loadPhase]);
 
+  // the frame's own reads wait for the page's first ones (`lib/whenIdle.ts`)
+  useEffect(() => whenIdle(loadPhase), [loadPhase]);
   useEffect(() => {
-    load();
+    const cancelFirst = whenIdle(loadRuns);
     const throttled = () => {
       if (pending.current) return;
-      pending.current = setTimeout(() => { pending.current = null; load(); }, 10_000);
+      pending.current = setTimeout(() => { pending.current = null; refresh.current(); }, 10_000);
     };
     const unsub = subscribeKernelEvents(throttled, { kinds: ["job.state", "exploration."] });
-    const iv = setInterval(load, 60_000);
+    const iv = setInterval(() => refresh.current(), 60_000);
     return () => {
+      cancelFirst();
       unsub();
       clearInterval(iv);
       if (pending.current) clearTimeout(pending.current);
       pending.current = null;
     };
-  }, [load]);
+  }, [loadRuns]);
 
   const ticks = useMemo(() => {
     if (!chart?.measured || !chart.series?.length) return null;

@@ -66,6 +66,7 @@ import {
   type Need, type Placed,
 } from "@/lib/semanticMetrics";
 import { withUniqueKeys } from "@/lib/listKeys";
+import { showWhenDrawn } from "@/lib/addressOnce";
 import { BindRolesDialog } from "@/components/semantic/BindRoles";
 import { useMe } from "@/lib/useMe";
 import { byWho } from "@/lib/names";
@@ -649,13 +650,16 @@ type DetailTab = "overview" | "approval" | "dates" | "measures" | "edit";
 
 // ── Component ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
-export function MetricsPanel({ connId, schema, datasets = [] }: {
+export function MetricsPanel({ connId, schema, datasets = [], focus = null }: {
   connId?: string;
   /** The dataset whose metrics to list; "*" — every dataset of the connection at once, each row saying which (the
    *  user, 2026-10-07). */
   schema?: string;
   /** The connection's datasets — what a definition can belong to. */
   datasets?: string[];
+  /** A metric a link named (Discover's, 2026-11-23): opened on its overview and brought into view once the list holds it;
+   *  `n` tells one asking from the next, so the same metric asked for again opens again. */
+  focus?: { name: string; n: number } | null;
 }) {
   const me = useMe();
   const [metrics, setMetrics] = useState<Metric[]>([]);
@@ -835,6 +839,21 @@ export function MetricsPanel({ connId, schema, datasets = [] }: {
     if (expanded === p.key) { setExpanded(null); cancelForm(); return; }
     open(p);
   };
+
+  // The metric a link named, opened once the list holds it — or said not to be on it, never left unopened in silence.
+  const focusDone = useRef(0);
+  const [focusMissing, setFocusMissing] = useState("");
+  useEffect(() => {
+    if (!focus || focusDone.current === focus.n || !loaded) return;
+    focusDone.current = focus.n;
+    const hit = place(rows, metrics).find(p => p.row.name === focus.name || p.stored?.name === focus.name);
+    if (hit) {
+      setFocusMissing(""); open(hit, "overview");
+      showWhenDrawn(`#${CSS.escape(`metric-row-${hit.key}`)}`, 40);   // once the sections above it have landed
+    }
+    else setFocusMissing(focus.name);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus, loaded, rows, metrics]);
 
   /** Reopen a definition by name and dataset after a write, on its overview — or close it when it moved away. */
   const reopen = (stored: Metric[] | null, name: string, ds: string) => {
@@ -1279,6 +1298,11 @@ export function MetricsPanel({ connId, schema, datasets = [] }: {
 
   return (
     <Page testId="metrics-tab">
+      {focusMissing && (
+        <p className="aug-fs-sm" style={{ color: "var(--amb4)", margin: "0 0 8px" }} data-testid="metrics-focus-missing">
+          The metric “{focusMissing}” is not in this list — it may be in another dataset or on another connection.
+        </p>
+      )}
       {rows.length > 0 && (
         <>
           <Figures testId="metrics-figures">

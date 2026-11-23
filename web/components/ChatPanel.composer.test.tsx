@@ -139,6 +139,23 @@ describe("the Ask composer", () => {
     expect(sent.at(-1)?.body).toMatchObject({ depth: "quick" });
   });
 
+  it("says Agent while /agent is on, and its × lets it go (2026-11-23: it stayed on unseen)", async () => {
+    const { box } = await panel();
+    expect(screen.queryByTestId("composer-depth")).toBeNull();
+    type(box, "/a");
+    fireEvent.keyDown(box, { key: "Enter" });
+    expect(screen.getByTestId("composer-depth")).toHaveTextContent("Agent");
+    type(box, "why did orders fall?");
+    fireEvent.keyDown(box, { key: "Enter" });
+    expect(sent.at(-1)?.body).toMatchObject({ depth: "deep" });
+    expect(screen.getByTestId("composer-depth")).toBeInTheDocument();   // it stays on, and says so
+    fireEvent.click(screen.getByRole("button", { name: "Answer straight away instead" }));
+    expect(screen.queryByTestId("composer-depth")).toBeNull();
+    type(box, "how many orders?");
+    fireEvent.keyDown(box, { key: "Enter" });
+    expect(sent.at(-1)?.body).toMatchObject({ depth: "quick" });
+  });
+
   it("opens a new conversation with /new", async () => {
     const { box, onNew } = await panel();
     type(box, "/ne");

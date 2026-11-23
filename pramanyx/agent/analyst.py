@@ -42,6 +42,7 @@ from typing import Any, Callable, Optional
 
 from pramanyx.agent import answer_now
 from pramanyx.agent.tool_loop import LoopResult, LoopStep, ToolSpec, run_tool_loop
+from pramanyx.canvas.scope import held_to_its_canvas
 
 logger = logging.getLogger(__name__)
 
@@ -2114,6 +2115,7 @@ def build_analyst_context(connection_id: str, question: str, *,
     }
 
 
+@held_to_its_canvas
 def run_analyst(
     connection_id: str,
     question: str,

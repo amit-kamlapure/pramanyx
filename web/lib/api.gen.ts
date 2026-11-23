@@ -5737,6 +5737,88 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/discover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Discover
+         * @description The Discover page: the Areas with what each holds, what is certified, each kind with its first few, what the
+         *     person may not open counted, and what could not be read said. No model and no warehouse is read.
+         */
+        get: operations["get_discover_discover_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/discover/areas/{area_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Discover Area
+         * @description One Area's page: the Area, its sub-areas, and what it holds by kind.
+         */
+        get: operations["get_discover_area_discover_areas__area_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/discover/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Discover Items
+         * @description Every thing of a kind, of an Area, certified, or the person's own — "View all" — a page at a time.
+         */
+        get: operations["get_discover_items_discover_items_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/discover/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Discover Search
+         * @description One ranked list across every kind and every connection in view, by meaning and by words, each result saying
+         *     why it matched (the plan's §4.3). The question is embedded once by the platform's embedder; no model is called.
+         */
+        get: operations["get_discover_search_discover_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/documents": {
         parameters: {
             query?: never;
@@ -8080,6 +8162,9 @@ export interface paths {
         /**
          * Get Certification
          * @description What is certified or deprecated: one asset (``ref``), or every one of a kind (a connection's tables).
+         *
+         *     A table is read under its ``schema``, as it is written (2026-11-23: the write named the schema and this read did
+         *     not, so a table certified on its page read as uncertified the next time the page opened).
          */
         get: operations["get_certification_governance_certification_get"];
         /**
@@ -12941,6 +13026,9 @@ export interface paths {
          *     write time — which is empty for every call made before that column existed, and for
          *     every call answered inline rather than inside a run. A panel headed "runs by agent"
          *     must ask for jobs; one headed "tokens by model" must ask for events.
+         *
+         *     `runners=false` (source `jobs`) leaves the automation engine's runs unread, for a reader
+         *     of agent runs alone — the top bar's strip, on every page: it is the larger side by far.
          */
         get: operations["obs_timeseries_obs_timeseries_get"];
         put?: never;
@@ -22031,6 +22119,11 @@ export interface components {
         };
         /** DefinitionLink */
         DefinitionLink: {
+            /**
+             * Href
+             * @default
+             */
+            href: string;
             /** Kind */
             kind: string;
             /**
@@ -22052,8 +22145,12 @@ export interface components {
             area: string;
             /** Connection Id */
             connection_id: string;
+            /** Description */
+            description?: string | null;
             /** Links */
             links?: components["schemas"]["DefinitionLink"][] | null;
+            /** Sources */
+            sources?: components["schemas"]["DefinitionSource"][] | null;
             /** Term */
             term: string;
             /** Text */
@@ -22063,6 +22160,18 @@ export interface components {
              * @default
              */
             why: string;
+        };
+        /** DefinitionSource */
+        DefinitionSource: {
+            /** Kind */
+            kind: string;
+            /**
+             * Label
+             * @default
+             */
+            label: string;
+            /** Ref */
+            ref: string;
         };
         /** DeltaStatusIn */
         DeltaStatusIn: {
@@ -38067,6 +38176,157 @@ export interface operations {
             };
         };
     };
+    get_discover_discover_get: {
+        parameters: {
+            query?: {
+                workspace_id?: string | null;
+                connection_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_discover_area_discover_areas__area_id__get: {
+        parameters: {
+            query?: {
+                workspace_id?: string | null;
+                connection_id?: string | null;
+            };
+            header?: never;
+            path: {
+                area_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_discover_items_discover_items_get: {
+        parameters: {
+            query?: {
+                workspace_id?: string | null;
+                connection_id?: string | null;
+                kind?: string;
+                area?: string;
+                certified?: boolean;
+                mine?: boolean;
+                q?: string;
+                cursor?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_discover_search_discover_search_get: {
+        parameters: {
+            query: {
+                q: string;
+                workspace_id?: string | null;
+                connection_id?: string | null;
+                kind?: string;
+                area?: string;
+                certified?: boolean;
+                mine?: boolean;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_documents_endpoint_documents_get: {
         parameters: {
             query?: never;
@@ -41920,6 +42180,7 @@ export interface operations {
                 kind: string;
                 connection_id?: string;
                 ref?: string;
+                schema?: string;
             };
             header?: never;
             path?: never;
@@ -49985,6 +50246,7 @@ export interface operations {
                 since?: string;
                 until?: string;
                 limit?: number;
+                runners?: boolean;
             };
             header?: never;
             path?: never;

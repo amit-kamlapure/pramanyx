@@ -679,7 +679,7 @@ def model_usage(scan: int = 5000):
 def obs_timeseries(group: str = "model", measure: str = "calls", kind: Optional[str] = None,
                    source: str = "events",
                    range: str = "24h", since: str = "", until: str = "",
-                   limit: int = JOB_READ_LIMIT):
+                   limit: int = JOB_READ_LIMIT, runners: bool = True):
     """Session events bucketed on the SHARED time axis, one series per group value.
 
     Every other fold in this router is row-windowed (`scan=N` = "the last N rows"), which
@@ -694,15 +694,18 @@ def obs_timeseries(group: str = "model", measure: str = "calls", kind: Optional[
     write time — which is empty for every call made before that column existed, and for
     every call answered inline rather than inside a run. A panel headed "runs by agent"
     must ask for jobs; one headed "tokens by model" must ask for events.
+
+    `runners=false` (source `jobs`) leaves the automation engine's runs unread, for a reader
+    of agent runs alone — the top bar's strip, on every page: it is the larger side by far.
     """
     from pramanyx.obs.timeseries import event_series, job_series
     win = resolve_window(range, since=since, until=until)
     if source == "jobs":
-        payload = job_series(win, limit=max(100, min(int(limit), 50000)))
+        payload = job_series(win, limit=max(100, min(int(limit), 50000)), read_runners=runners)
+        counted = payload["agent_runs"] + (payload["runner_runs"] or 0)
         return {"measured": True, "group": "charter", "measure": "runs",
-                "scanned": payload["agent_runs"] + payload["runner_runs"],
-                "attributed": payload["agent_runs"] + payload["runner_runs"],
-                "coverage": 1.0 if (payload["agent_runs"] or payload["runner_runs"]) else None,
+                "scanned": counted, "attributed": counted,
+                "coverage": 1.0 if counted else None,
                 **payload}
     try:
         return {"measured": True,
