@@ -53,7 +53,8 @@ def world(monkeypatch):
         assert build is False, "a read never builds a graph"
         return [SimpleNamespace(conn=conn, nodes={"x": 1}, schema_name="")]
 
-    def search_graph(cg, q, top_k=6, vector=None):
+    def search_graph(cg, q, top_k=6, vector=None, kinds=None):
+        assert kinds == D._GRAPH_KINDS, "only the kinds Discover lists are asked of the graph"
         state.vectors.append(vector)
         return [(n, 1.0) for n in state.hits[cg.conn]]
 
@@ -97,17 +98,18 @@ def test_meaning_finds_what_the_words_do_not_and_says_why(world):
 
 
 def test_found_by_both_ranks_first_and_one_table_on_two_connections_is_said_once(world):
-    world.hits["c1"] = [_node("table", "table:orders", "orders")]
+    world.hits["c1"] = [_node("table", "table:Order", "Order", source_tables=["thelook.orders"])]   # a business object
     out = D.search(_scope(), "orders")
     assert names(out)[0] == "orders"
-    assert out["items"][0]["matched"] == ["by meaning", "its name"]
+    assert out["items"][0]["matched"] == ["the business object Order", "its name"]
     assert out["items"][0]["also_on"] == ["DuckDB"]
     assert names(out).count("orders") == 1
 
 
 def test_the_person_s_filters_apply_and_what_is_withheld_is_counted(world):
-    world.hits["c1"] = [_node("metric", "metric:revenue", "revenue"), _node("table", "table:orders", "orders")]
-    world.withhold = {"table:orders"}
+    world.hits["c1"] = [_node("metric", "metric:revenue", "revenue"), _node("table", "table:Order", "Order",
+                                                                         source_tables=["orders"])]
+    world.withhold = {"table:Order"}
     out = D.search(_scope(), "revenue", kind="metric")
     assert names(out) == ["Revenue"]
     assert out["withheld"] == {"canvas": 1, "graph": 1}
@@ -122,3 +124,30 @@ def test_without_the_embedder_the_words_still_find_and_it_is_said(world):
     assert out["by_meaning"] is False
     assert "Searched by words only — the embedder could not be reached" in out["said"]
     assert world.vectors == [[], []]          # each graph read by its words alone, never embedding again
+
+
+def test_one_connection_is_never_ranked_above_another_for_being_read_first(world):
+    world.hits["c1"] = [_node("table", "table:OrderItem", "OrderItem", source_tables=["order_items"]),
+                        _node("metric", "metric:revenue", "revenue")]
+    world.hits["c2"] = [_node("table", "table:Order", "Order", source_tables=["orders"])]
+    out = D.search(_scope(), "zzz")          # no word of it names anything: the graphs' order alone
+    assert names(out) == ["order_items", "orders", "Revenue"]   # each graph's first, then c1's second
+
+
+def test_why_says_its_columns_once():
+    assert D.why_words(["its column a"]) == ["its column a"]
+    assert D.why_words(["by meaning", "its column a", "its column b"]) == ["by meaning", "its columns a and b"]
+    assert D.why_words(["its column a", "its column b", "its column c", "its column d"]) == ["its columns a, b and 2 more"]
+
+
+def test_the_graph_s_kinds_narrow_its_word_match_too():
+    """On a connection with many findings they crowded out its metrics (theLook: 24 asked of "revenue", 24 findings)."""
+    from pramanyx.ontology.context_graph import ContextGraph, GraphNode, Provenance
+    from pramanyx.ontology.context_graph_search import lexical_search
+    cg = ContextGraph(org_id="o", connection_id="c", schema_name="main")
+    for i in range(5):
+        cg.add_node(GraphNode(id=f"finding:{i}", kind="finding", label=f"revenue fell {i}",
+                              provenance=Provenance(source="record")))
+    cg.add_node(GraphNode(id="metric:revenue", kind="metric", label="revenue", provenance=Provenance(source="metrics_catalog")))
+    assert [n.id for n, _ in lexical_search(cg, "revenue", 3)][0].startswith("finding")
+    assert [n.id for n, _ in lexical_search(cg, "revenue", 3, D._GRAPH_KINDS)] == ["metric:revenue"]

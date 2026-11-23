@@ -71,16 +71,19 @@ def _scope(cg: ContextGraph) -> str:
     return f"{cg.org_id}|{cg.connection_id}|{cg.schema_name}"
 
 
-def graph_scope_filter(scope: str):
-    """A Qdrant filter restricting a search to one graph's scope (or None). Defined
+def graph_scope_filter(scope: str, kinds: Optional[frozenset[str]] = None):
+    """A Qdrant filter restricting a search to one graph's scope (or None), and to the node kinds asked for. Defined
     here rather than reusing the schema retriever's private ``_scope_filter`` — the
     same shape, but importing another module's ``_internals`` is exactly what the
     private-cross-import ratchet forbids."""
     if not scope:
         return None
     try:
-        from qdrant_client.models import FieldCondition, Filter, MatchValue
-        return Filter(must=[FieldCondition(key="scope", match=MatchValue(value=scope))])
+        from qdrant_client.models import FieldCondition, Filter, MatchAny, MatchValue
+        must = [FieldCondition(key="scope", match=MatchValue(value=scope))]
+        if kinds:
+            must.append(FieldCondition(key="kind", match=MatchAny(any=sorted(kinds))))
+        return Filter(must=must)
     except Exception:
         return None
 
@@ -98,11 +101,14 @@ def lexical_score(node: GraphNode, question: str) -> float:
     return round(len(qtok & _tokens(node_text(node))) / len(qtok), 3)
 
 
-def lexical_search(cg: ContextGraph, question: str, top_k: int) -> list[tuple[GraphNode, float]]:
+def lexical_search(cg: ContextGraph, question: str, top_k: int,
+                   kinds: Optional[frozenset[str]] = None) -> list[tuple[GraphNode, float]]:
     if not _tokens(question):
         return []
     scored: list[tuple[GraphNode, float]] = []
     for n in cg.nodes.values():
+        if kinds and n.kind not in kinds:
+            continue
         score = lexical_score(n, question)
         if score >= _MIN_LEXICAL_SCORE:
             scored.append((n, score))
@@ -137,7 +143,8 @@ def index_graph(cg: ContextGraph) -> int:
 
 
 def _vector_search(cg: ContextGraph, question: str, top_k: int,
-                   vector: Optional[list[float]] = None) -> list[tuple[str, float]]:
+                   vector: Optional[list[float]] = None,
+                   kinds: Optional[frozenset[str]] = None) -> list[tuple[str, float]]:
     """Vector rank → [(node_id, score)]. Empty list when the collection is empty; may
     raise on an unreachable Qdrant/embedder (the hybrid caller counts it and falls back
     to the lexical floor). ``vector`` is the question already embedded — a caller reading
@@ -148,7 +155,7 @@ def _vector_search(cg: ContextGraph, question: str, top_k: int,
     if collection_count(GRAPH_COLLECTION) == 0:
         return []
     vec = vector if vector is not None else embed_one(question)
-    hits = search(GRAPH_COLLECTION, vec, top_k=top_k, query_filter=graph_scope_filter(_scope(cg)))
+    hits = search(GRAPH_COLLECTION, vec, top_k=top_k, query_filter=graph_scope_filter(_scope(cg), kinds))
     out: list[tuple[str, float]] = []
     for h in hits:
         payload = h.get("payload") or {}
@@ -161,17 +168,19 @@ def _vector_search(cg: ContextGraph, question: str, top_k: int,
 # ── hybrid (the search callers use) ───────────────────────────────────────────
 
 def search_graph(cg: ContextGraph, question: str, *, top_k: int = 6,
-                 vector: Optional[list[float]] = None) -> list[tuple[GraphNode, float]]:
+                 vector: Optional[list[float]] = None,
+                 kinds: Optional[frozenset[str]] = None) -> list[tuple[GraphNode, float]]:
     """Hybrid search: the deterministic lexical rank always runs; the vector rank is
     fused in when Qdrant is reachable (Reciprocal Rank Fusion, k=60 — robust to the
     lexical/cosine score-scale mismatch). A vector failure is counted, not swallowed,
     and the lexical floor still stands. ``vector``: the question already embedded, read
-    as is; an EMPTY one means no vector rank (the caller's embedder could not be reached)."""
-    lex = lexical_search(cg, question, top_k * 3)
+    as is; an EMPTY one means no vector rank (the caller's embedder could not be reached). ``kinds`` keeps the search to
+    those node kinds — Discover lists no findings, and on a connection with many they crowd out its metrics."""
+    lex = lexical_search(cg, question, top_k * 3, kinds)
     vec: list[tuple[str, float]] = []
     try:
         if vector is None or vector:
-            vec = _vector_search(cg, question, top_k * 3, vector=vector)
+            vec = _vector_search(cg, question, top_k * 3, vector=vector, kinds=kinds)
     except Exception as exc:
         tolerate(exc, "context-graph vector search is best-effort; lexical rank still "
                       "stands (never degrades to unranked)",

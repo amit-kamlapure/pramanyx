@@ -22,8 +22,10 @@ from pramanyx.discover.service import all_items, gather, order_key
 
 #: Reciprocal Rank Fusion's constant, the graph search's own.
 _RRF_K = 60
-#: How many hits each connection's graph is asked for.
-_GRAPH_TOP = 24
+#: How many hits each connection's graph is asked for: its best few; past them the nearest neighbours are noise.
+_GRAPH_TOP = 10
+#: The graph's node kinds that stand for something Discover lists (a finding or a declaration does not).
+_GRAPH_KINDS = frozenset({"metric", "table", "glossary_term"})
 
 _STOP = frozenset({
     "the", "a", "an", "of", "for", "and", "or", "to", "in", "on", "by", "per", "each", "what", "which", "how", "is", "are",
@@ -61,7 +63,9 @@ def words_score(item: Item, asked: list[str]) -> tuple[float, str]:
 
 def _graph_hits(scope: Scope, q: str, items: list[Item]) -> tuple[list[tuple[str, str]], bool, list[str], int]:
     """``([(item key, why)], by_meaning, said, withheld)`` — each connection's context graph asked once, with the question
-    embedded once, its hits trimmed by clearance and mapped onto Discover's tables and metrics."""
+    embedded once, its hits trimmed by clearance and mapped onto Discover's tables and metrics. The hits come back
+    interleaved by each graph's own rank — its first, every connection's first, then its second — so one connection is
+    never ranked above another for being read first."""
     from pramanyx.kernel.errors import tolerate
     from pramanyx.ontology.context_graph_readback import trim_graph_by_clearance
     from pramanyx.ontology.context_graph_search import merge_graphs, search_graph
@@ -78,7 +82,7 @@ def _graph_hits(scope: Scope, q: str, items: list[Item]) -> tuple[list[tuple[str
         said.append("Searched by words only — the embedder could not be reached")
     tables = {(i.connection_id, i.name.lower()): f"{i.kind}:{i.id}" for i in items if i.kind == "table"}
     metrics = {(i.connection_id, i.id.split("/", 1)[-1].lower()): f"{i.kind}:{i.id}" for i in items if i.kind == "metric"}
-    hits: list[tuple[str, str]] = []
+    per_conn: list[list[tuple[str, str]]] = []
     withheld = 0
     org = current_org_id()
     for conn, name in scope.connections.items():
@@ -86,7 +90,7 @@ def _graph_hits(scope: Scope, q: str, items: list[Item]) -> tuple[list[tuple[str
             cg = merge_graphs(graphs_for_connection(org, conn, build=False))
             if cg is None or not cg.nodes:
                 continue
-            ranked = search_graph(cg, q, top_k=_GRAPH_TOP, vector=vector)
+            ranked = search_graph(cg, q, top_k=_GRAPH_TOP, vector=vector, kinds=_GRAPH_KINDS)
             nodes = [n for n, _ in ranked]
             kept, _edges, notice = trim_graph_by_clearance(nodes, (), connection_id=conn,
                                                            schema_name=getattr(cg, "schema_name", "") or "", graph=cg)
@@ -95,22 +99,40 @@ def _graph_hits(scope: Scope, q: str, items: list[Item]) -> tuple[list[tuple[str
             tolerate(exc, "discover: a connection's graph could not be searched", counter="discover.graph")
             said.append(f"{name}: its knowledge graph could not be searched")
             continue
+        hits: list[tuple[str, str]] = []
         for n in kept:
             d = n.data or {}
+            bare = lambda t: str(t).split(".")[-1].lower()   # noqa: E731 — a table named with or without its schema
             if n.kind == "metric":
-                key = metrics.get((conn, str(n.id).split(":", 1)[-1].lower()))
-                why = "by meaning"
+                found = [(metrics.get((conn, str(n.id).split(":", 1)[-1].lower())), "by meaning")]
             elif n.kind == "table":
-                key = tables.get((conn, str(n.label or "").split(".")[-1].lower()))
-                why = "by meaning"
+                # a graph's table is a business object ("Order") over the tables it reads (`source_tables`)
+                found = [(tables.get((conn, bare(t))), f"the business object {n.label}" if n.label else "by meaning")
+                         for t in (d.get("source_tables") or [n.label])]
             elif n.kind == "glossary_term" and d.get("table"):
-                key = tables.get((conn, str(d["table"]).split(".")[-1].lower()))
-                why = f"its column {d.get('column')}" if d.get("column") else "by meaning"
+                found = [(tables.get((conn, bare(d["table"]))),
+                          f"its column {d.get('column')}" if d.get("column") else "by meaning")]
             else:
-                key = None   # a finding or a declaration is not a thing Discover lists
-            if key:
-                hits.append((key, why))
-    return hits, bool(vector), said, withheld
+                found = []   # a finding or a declaration is not a thing Discover lists
+            hits += [(key, why) for key, why in found if key]
+        per_conn.append(hits)
+    interleaved: list[tuple[str, str]] = []
+    for rank in range(max((len(hits) for hits in per_conn), default=0)):
+        interleaved += [hits[rank] for hits in per_conn if rank < len(hits)]
+    return interleaved, bool(vector), said, withheld
+
+
+def why_words(whys: list[str]) -> list[str]:
+    """Why a thing matched, short: its columns said once ("its columns delivered_at, shipped_at and 2 more")."""
+    cols = [w[len("its column "):] for w in whys if w.startswith("its column ")]
+    rest = [w for w in whys if not w.startswith("its column ")]
+    if len(cols) == 1:
+        rest.append(f"its column {cols[0]}")
+    elif len(cols) == 2:
+        rest.append(f"its columns {cols[0]} and {cols[1]}")
+    elif cols:
+        rest.append(f"its columns {cols[0]}, {cols[1]} and {len(cols) - 2} more")
+    return rest
 
 
 def _key(i: Item) -> str:
@@ -173,7 +195,7 @@ def search(scope: Scope, q: str, *, kind: str = "", area: str = "", certified: b
         if same and same in said_once:
             said_once[same]["also_on"].append(i.connection_name)
             continue
-        view = {**i.view(), "matched": why_of.get(key, []), "score": round(score, 5), "also_on": []}
+        view = {**i.view(), "matched": why_words(why_of.get(key, [])), "score": round(score, 5), "also_on": []}
         if same:
             said_once[same] = view
         out.append(view)
