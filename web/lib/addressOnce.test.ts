@@ -57,7 +57,21 @@ describe("opening a link in place", () => {
     openInApp("/?tab=agentic-ops&layer=automations&conn=c1&automation=a1");
     window.removeEventListener(NAVIGATE_EVENT, asked);
     expect(window.history.length).toBe(before + 1);
-    expect(window.location.search).toBe("?tab=agentic-ops&layer=automations&conn=c1&automation=a1");
+    // only the shell's words go on the address; the schedule's is handed to the page (Next's router writes back what a
+    // pushState gave it, so a word put there would stay)
+    expect(window.location.search).toBe("?tab=agentic-ops&layer=automations&conn=c1");
     expect((asked.mock.calls[0][0] as CustomEvent).detail).toEqual({ tab: "agentic-ops", params: { conn: "c1", layer: "automations" } });
+  });
+});
+
+describe("a link opened in place before its page is open", () => {
+  it("is held for the page and read as it mounts", () => {
+    openInApp("/?tab=catalog&conn=c1&schema=thelook&table=orders");
+    expect(window.location.search).toBe("?tab=catalog&conn=c1");
+    const seen: Record<string, string>[] = [];
+    renderHook(() => useFromAddress(["table", "schema"], found => seen.push(found)));
+    expect(seen).toEqual([{ table: "orders", schema: "thelook" }]);
+    renderHook(() => useFromAddress(["table", "schema"], found => seen.push(found)));   // taken once, not twice
+    expect(seen).toHaveLength(1);
   });
 });

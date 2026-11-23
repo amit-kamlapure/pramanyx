@@ -3,10 +3,11 @@
  * agent, a schedule, a document, a trusted query, a dashboard, a canvas (Discover's items link to each,
  * `pramanyx/discover/items.py`) — and how the page that holds the thing finds it.
  *
- * A link's words ride the address. The page reads them when it mounts AND when a link names them while it is already
- * open (the shell keeps pages mounted behind other tabs, so "read on mount" alone missed every link but the first —
- * the user, 2026-11-23: it must connect "in a very robust manner"). Read once and taken off the address, so the next
- * visit to the page opens it as it opens, not on the same thing again.
+ * A link's words ride the address when it is opened cold (a new tab, a reload) and are handed over when it is opened in
+ * place (`openInApp`). The page reads them when it mounts AND when a link names them while it is already open (the
+ * shell keeps pages mounted behind other tabs, so "read on mount" alone missed every link but the first — the user,
+ * 2026-11-23: it must connect "in a very robust manner"). Read once and taken, so the next visit to the page opens it as
+ * it opens, not on the same thing again.
  *
  * The first word is the link's key (`table`, `metric`, `sheet`…); the rest qualify it (`schema`). Nothing is taken
  * unless the key is there, so one page never takes another link's qualifier.
@@ -15,9 +16,28 @@ import { useEffect, useRef } from "react";
 
 import { requestTab } from "@/lib/navigate";
 
-/** Said when a link in the app has put its words on the address; `words` names them, so only a page they are for reads. */
+/** Said when a link in the app has handed over its words; `words` names them, so only a page they are for reads. */
 export const ADDRESS_EVENT = "pramanyx:address";
 interface AddressDetail { words: string[] }
+
+/** The shell's own words — which screen, connection, layer, canvas, reader — the only ones a link opened in place puts on
+ *  the address. */
+const SHELL_WORDS = ["tab", "conn", "layer", "canvas", "id"];
+
+/** A link opened in place hands its own words over here, never on the address: Next's router keeps the address a
+ *  `pushState` gave it and writes it back on its next render, so a word put there and taken off came back (seen live,
+ *  2026-11-23: `&table=` stayed on the address after the table opened). Held until the page they are for takes them —
+ *  now, when it is open, or when it mounts. */
+let handedOver: Record<string, string> = {};
+
+function takeHandedOver(names: string[]): Record<string, string> {
+  if (!handedOver[names[0]]) return {};
+  const out: Record<string, string> = {};
+  for (const name of names) {
+    if (handedOver[name]) { out[name] = handedOver[name]; delete handedOver[name]; }
+  }
+  return out;
+}
 
 export function takeFromAddress(...names: string[]): Record<string, string> {
   if (typeof window === "undefined" || !names.length) return {};
@@ -44,7 +64,7 @@ export function useFromAddress(names: readonly string[], onFound: (found: Record
   useEffect(() => {
     const wanted = key.split(",");
     const read = () => {
-      const found = takeFromAddress(...wanted);
+      const found = { ...takeFromAddress(...wanted), ...takeHandedOver(wanted) };
       if (Object.keys(found).length) latest.current(found);
     };
     read();
@@ -57,9 +77,10 @@ export function useFromAddress(names: readonly string[], onFound: (found: Record
   }, [key]);
 }
 
-/** Open an in-app address (`/?tab=…&…`) without reloading the app: the address takes the link's words as a step Back
- *  undoes, the shell its screen (and connection and layer), and a page already open reads the words for itself. An
- *  address of a page of its own (`/sheets/…`) is navigated to as any link is. */
+/** Open an in-app address (`/?tab=…&…`) without reloading the app: the shell's words go on the address as a step Back
+ *  undoes and the shell goes to that screen (connection, layer, canvas); the link's own words are handed to the page
+ *  they are for — read now if it is open, or as it mounts. The same address opened cold (a new tab, a reload) carries
+ *  every word, and the page reads them off the address. An address of a page of its own is navigated to as any link is. */
 export function openInApp(href: string): void {
   if (typeof window === "undefined") return;
   const u = new URL(href, window.location.origin);
@@ -68,14 +89,16 @@ export function openInApp(href: string): void {
     window.location.assign(u.toString());
     return;
   }
-  window.history.pushState(null, "", `/?${u.searchParams.toString()}`);
+  const shell = new URLSearchParams();
   const params: Record<string, string> = {};
-  for (const k of ["conn", "layer", "canvas", "id"]) {
-    const v = u.searchParams.get(k);
-    if (v) params[k] = v;
+  handedOver = {};
+  for (const [k, v] of u.searchParams) {
+    if (SHELL_WORDS.includes(k)) { shell.set(k, v); if (k !== "tab") params[k] = v; }
+    else if (v) handedOver[k] = v;
   }
+  window.history.pushState(null, "", `/?${shell.toString()}`);
   requestTab(tab, params);
-  window.dispatchEvent(new CustomEvent<AddressDetail>(ADDRESS_EVENT, { detail: { words: [...u.searchParams.keys()] } }));
+  window.dispatchEvent(new CustomEvent<AddressDetail>(ADDRESS_EVENT, { detail: { words: Object.keys(handedOver) } }));
 }
 
 /** Bring the element a link opened into view once it is drawn AND the page around it has settled: what loads above it
