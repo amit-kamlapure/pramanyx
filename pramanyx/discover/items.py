@@ -273,8 +273,9 @@ def dashboards(scope: Scope) -> Found:
                 kind="dashboard", id=ref, name=str(d.get("title") or d.get("dashboard_id")),
                 line=f"Published by {_who(str(d.get('owner') or ''))}", connection_id=conn, connection_name=name,
                 owner=str(d.get("owner") or ""), state="published", certification=marks.get(ref),
-                href=_href("/", tab="dashboards", conn=conn, dashboard=str(d.get("dashboard_id") or ""),
-                           owner=str(d.get("owner") or ""))),
+                # one published to the person is opened as `shared:<owner>:<id>` (`dashboards/BriefingDashboards.tsx`)
+                href=_href("/", tab="dashboards", conn=conn,
+                           dashboard=f"shared:{d.get('owner') or ''}:{d.get('dashboard_id') or ''}")),
                 scope, placed=placed.get(ref)))
     return found
 

@@ -209,7 +209,7 @@ def test_an_archived_dashboard_is_not_listed_and_a_published_one_carries_its_own
     monkeypatch.setattr(I, "by_words", lambda scope, text, conn="": ("", ""))
     got = I.dashboards(_scope())
     assert [i.name for i in got.items] == ["Sales", "Operations"]
-    assert got.items[0].certification == CERT and got.items[1].href.endswith("owner=bo")
+    assert got.items[0].certification == CERT and got.items[1].href == "/?tab=dashboards&conn=c1&dashboard=shared%3Abo%3Aops"
 
 
 # ── the doors ──────────────────────────────────────────────────────────────────────────────────────────────────────
