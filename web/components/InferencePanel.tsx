@@ -18,7 +18,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   addLlmModel, addLlmProvider, cacheProbe, editLlmProvider, getLlmConfig, getLlmModels, getUsageReport, removeLlmModel,
-  removeLlmProvider, setLlmConfig, testLlmConfig,
+  removeLlmProvider, setLlmConfig, signOutChatgpt, startChatgptSignIn, testLlmConfig,
   type CacheProbeResult, type LlmAddedProvider, type LlmCapability, type LlmConfig, type LlmModelCatalog,
   type LlmTestReport, type UsageReport,
 } from "@/lib/api";
@@ -81,11 +81,13 @@ function fmtCtx(n: number): string {
  *  the axes a catalogue cannot answer — privacy, prefix-cache, tooling. */
 interface ChipSpec { text: string; title: string; tone?: Tone }
 
-function capabilityChips({ cap, typed = "", saved = "", catalog = null }: {
+function capabilityChips({ cap, typed = "", saved = "", catalog = null, plan = false }: {
   cap: LlmCapability;
   typed?: string;
   saved?: string;
   catalog?: LlmModelCatalog | null;
+  /** The provider in the form is paid by a person's plan (the ChatGPT plan): no model on it is "$/token". */
+  plan?: boolean;
 }): ChipSpec[] {
   const p = PRIVACY_META[cap.privacy_class] ?? PRIVACY_META.private_endpoint;
   const id = typed.trim();
@@ -96,11 +98,12 @@ function capabilityChips({ cap, typed = "", saved = "", catalog = null }: {
   const ctxK = fmtCtx(ctx);
   // `free` means two different things upstream: the catalogue knows the real PRICE, the
   // server marks the `:free` TIER. Prefer the price — that is what actually bills you.
-  const cost: string = entry?.free !== undefined
-    ? (entry.free ? "free" : "per_token")
-    : id
-      ? (id.endsWith(":free") ? "free" : "per_token")
-      : cap.cost;
+  const cost: string = plan ? "plan"
+    : entry?.free !== undefined
+      ? (entry.free ? "free" : "per_token")
+      : id
+        ? (id.endsWith(":free") ? "free" : "per_token")
+        : cap.cost;
   return [
     { text: p.label, title: p.note, tone: p.tone },
     { text: ctxK, title: entry?.context
@@ -108,9 +111,11 @@ function capabilityChips({ cap, typed = "", saved = "", catalog = null }: {
       : "model context window (drives payload caps) — declared default, not measured" },
     { text: CACHE_NOTE[cap.cache_mode] ?? cap.cache_mode, title: `cache_mode: ${cap.cache_mode}` },
     ...(cap.tooling === "native_tools" ? [{ text: "tools", title: "native tool calling" }] : []),
-    { text: cost === "per_token" ? "$/token" : cost, title: entry?.free !== undefined
-      ? `cost: ${cost} — from the catalogue's own pricing`
-      : `cost: ${cost}` },
+    { text: cost === "per_token" ? "$/token" : cost === "plan" ? "your plan" : cost,
+      title: cost === "plan" ? "cost: your ChatGPT plan pays — no per-call charge; each call draws on its allowance"
+        : entry?.free !== undefined
+          ? `cost: ${cost} — from the catalogue's own pricing`
+          : `cost: ${cost}` },
     ...(unsaved ? [{ text: "unsaved", title: "these describe the id you typed — press Save to bind it", tone: "accent" as Tone }] : []),
     ...(cap.token_accounting === "estimated" ? [{ text: "est. tokens", title: "usage estimated (provider omits a usage block)" }] : []),
   ];
@@ -476,6 +481,11 @@ export function InferencePanel() {
   // The provider dialog — add, edit, remove a provider a person added — and what the last removal said it cleared.
   const [providerDialog, setProviderDialog] = useState<ProviderDialogFor | null>(null);
   const [removed, setRemoved] = useState<{ name: string; said: string[] } | null>(null);
+  // The ChatGPT plan's sign-in: busy while the API is asked, the link when the browser would not open a tab,
+  // and what a sign-in or sign-out said when it did not go as asked.
+  const [planBusy, setPlanBusy] = useState(false);
+  const [planLink, setPlanLink] = useState<string | null>(null);
+  const [planSaid, setPlanSaid] = useState<string | null>(null);
 
   const load = useCallback(() =>
     getLlmConfig()
@@ -508,6 +518,18 @@ export function InferencePanel() {
       .catch(() => setUsageFailed(true));
   }, []);
 
+  // A ChatGPT sign-in finishes in another tab, at the API's callback; this page learns of it by asking. Only the
+  // SAVED config is refreshed — the form is a draft, and a person who picked "ChatGPT plan" to sign in keeps it.
+  const planPending = !!cfg?.chatgpt_plan?.signing_in;
+  const planSignedIn = !!cfg?.chatgpt_plan?.plan_usage;
+  useEffect(() => {
+    if (!planPending) return;
+    const timer = setInterval(() => {
+      getLlmConfig().then((c) => setCfg(c)).catch(() => undefined);
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [planPending]);
+
   // The fallback's catalogue is a SECOND provider's list — never the primary's. Showing
   // OpenRouter ids while the fallback is Gemini would suggest models that 404 on the one
   // backend they would actually be dispatched to.
@@ -533,7 +555,8 @@ export function InferencePanel() {
       .catch((e) => { if (!ignore) setCatalogErr(e instanceof Error ? e.message : String(e)); })
       .finally(() => { if (!ignore) setCatalogBusy(false); });
     return () => { ignore = true; };
-  }, [backend]);
+    // A ChatGPT sign-in landing re-reads it too: the account's own list, refused a moment ago, can be read now.
+  }, [backend, planSignedIn]);
 
   const keepModel = (model: string) => {
     if (!backend) return;
@@ -582,6 +605,40 @@ export function InferencePanel() {
 
   const isLocal = cfg.local_backends.includes(backend);
   const needsKey = cfg.needs_key.includes(backend);
+  // The ChatGPT plan: its credential is a sign-in, so the form offers that in place of a key field.
+  const signInBackends = cfg.sign_in_backends ?? [];
+  const isSignIn = signInBackends.includes(backend);
+  const plan = cfg.chatgpt_plan;
+
+  const signInToPlan = () => {
+    // The tab opens inside the click, before anything is awaited: one opened after an await is a pop-up the
+    // browser may block. It is pointed at OpenAI's page once the API has the address.
+    const tab = window.open("about:blank", "_blank");
+    setPlanBusy(true); setPlanSaid(null); setPlanLink(null);
+    startChatgptSignIn()
+      .then(({ authorize_url }) => {
+        if (tab && !tab.closed) {
+          tab.opener = null;
+          tab.location.href = authorize_url;
+        } else {
+          setPlanLink(authorize_url);
+        }
+        return getLlmConfig().then((c) => setCfg(c));
+      })
+      .catch((e) => { tab?.close(); setPlanSaid(e instanceof Error ? e.message : String(e)); })
+      .finally(() => setPlanBusy(false));
+  };
+
+  const signOutOfPlan = () => {
+    setPlanBusy(true); setPlanSaid(null);
+    signOutChatgpt()
+      .then((out) => {
+        if (out.revocation && out.revocation !== "revoked") setPlanSaid(`Signed out here; ${out.revocation}.`);
+        return getLlmConfig().then((c) => setCfg(c));
+      })
+      .catch((e) => setPlanSaid(e instanceof Error ? e.message : String(e)))
+      .finally(() => setPlanBusy(false));
+  };
   // Always {} since 2026-08-15 — no backend ships a default model. Kept because the
   // payload still carries the key; it must never again put a model id in this form.
   const defaults = cfg.default_models[backend] || {};
@@ -686,7 +743,8 @@ export function InferencePanel() {
   // What each role's model is, as chips — said once when all three say the same thing.
   const chipsByRole: Record<string, ChipSpec[] | null> = Object.fromEntries(ROLES.map(role => [role,
     cfg.capabilities?.[role]
-      ? capabilityChips({ cap: cfg.capabilities[role], typed: models[role] ?? "", saved: cfg.models[role] ?? "", catalog })
+      ? capabilityChips({ cap: cfg.capabilities[role], typed: models[role] ?? "", saved: cfg.models[role] ?? "", catalog,
+          plan: isSignIn })
       : null]));
   const chipsShared = ROLES.every(r => chipsByRole[r])
     && ROLES.every(r => JSON.stringify(chipsByRole[r]) === JSON.stringify(chipsByRole.coder));
@@ -717,7 +775,14 @@ export function InferencePanel() {
     ...(fbChosen && fb?.model ? [{ backend: fb.backend, model: fb.model }] : []),
   ].filter((b, i, all) => all.findIndex(x => x.model === b.model && x.backend === b.backend) === i));
 
+  const liveSignIn = signInBackends.includes(live);
   const needs = [
+    liveSignIn && !plan?.plan_usage && (
+      <NeedsRow key="sign-in" testId="needs-sign-in"
+        title={plan?.signed_in ? "ChatGPT is signed in, but plan use was not allowed" : "Nobody is signed in to the ChatGPT plan"}
+        detail={`Every call to it fails until someone signs in and allows plan use${plan?.ended ? ` · the last session: ${plan.ended}` : ""}.`}
+        actions={<Button size="xs" variant="secondary" onClick={() => goTo("models-provider", "#llm-chatgpt")}>Sign in</Button>} />
+    ),
     liveNeedsKey && liveKey === "unset" && (
       <NeedsRow key="key" testId="needs-key" title={`${label(live)} has no API key`}
         detail="Every call to it fails until a key is pasted."
@@ -891,6 +956,38 @@ export function InferencePanel() {
                 </Field>
               )}
 
+              {/* The ChatGPT plan: a sign-in in place of a key, saved at once — the provider choice is saved with Save. */}
+              {isSignIn && (
+                <Field label="ChatGPT plan"
+                  meta={<Chip tone={plan?.plan_usage ? "up" : "amber"}>
+                    {plan?.plan_usage ? "Using ChatGPT plan" : plan?.signed_in ? "plan use not allowed" : "not signed in"}</Chip>}>
+                  <div style={{ ...ROW, gap: 8, flexWrap: "nowrap" }}>
+                    {plan?.signed_in ? (
+                      <>
+                        <span className="aug-fs-chrome" style={{ ...ONE_LINE, flex: 1 }} title={plan.account ?? undefined}>
+                          {plan.account ?? "Signed in"}</span>
+                        <Button id="llm-chatgpt" variant="secondary" size="xs"
+                          onClick={() => window.open(plan.usage_url, "_blank", "noopener,noreferrer")}>Manage usage</Button>
+                        {!plan.plan_usage && (
+                          <Button variant="secondary" size="xs" disabled={planBusy} onClick={signInToPlan}>Sign in again</Button>
+                        )}
+                        <Button variant="ghost" size="xs" disabled={planBusy} onClick={signOutOfPlan}>Sign out</Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button id="llm-chatgpt" size="xs" disabled={planBusy} onClick={signInToPlan}>Continue with ChatGPT</Button>
+                        {plan?.signing_in && (
+                          <span className="aug-fs-xs" style={{ ...ONE_LINE, color: "var(--t3)" }}>
+                            Waiting for you to finish on OpenAI&apos;s page
+                            {planLink ? <> — <a href={planLink} target="_blank" rel="noreferrer">open it</a></> : "…"}
+                          </span>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </Field>
+              )}
+
               {/* An added provider: its address and key are edited in its own dialog, saved at once. */}
               {addedSel && (
                 <Field label="Base URL" meta={<Chip tone={KEY_STATE[addedSel.key_state].tone}>
@@ -917,6 +1014,14 @@ export function InferencePanel() {
                 </Field>
               )}
             </div>
+            {isSignIn && (
+              <Note tone={planSaid ? "red" : undefined}>
+                {planSaid
+                  ?? (plan?.plan_usage
+                    ? "Calls on this provider draw on your ChatGPT plan's allowance, not a per-call charge. When it runs out, calls go to the fallback until it resets."
+                    : `Sign in from a browser on the machine the API runs on; OpenAI returns you here. The sign-in is stored encrypted on the server.${plan?.ended ? ` The last session: ${plan.ended}.` : ""}`)}
+              </Note>
+            )}
             {needsKey && (
               <Note tone={keyUnreadable ? "red" : undefined}>
                 {keyUnreadable

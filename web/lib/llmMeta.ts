@@ -16,6 +16,7 @@ export const BACKEND_LABEL: Record<string, string> = {
   gemini: "Google Gemini",
   openrouter: "OpenRouter",
   openai: "OpenAI",
+  chatgpt: "ChatGPT plan",
 };
 
 /** A provider's name: an added one's own, else the built-in label, else its id. */
