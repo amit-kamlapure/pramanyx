@@ -146,12 +146,25 @@ describe("Discover", () => {
       source: "organisation", pack_id: "" }], placed: { tables: {}, metrics: {}, connection: null } });
     saveAreas.mockResolvedValue([]);
     renderPage();
+    fireEvent.click(await screen.findByTestId("discover-suggested-toggle"));
     const card = await screen.findByTestId("discover-suggested-operations");
     expect(card.textContent).toContain("Read from distribution_centers");
     fireEvent.click(within(card).getByRole("button", { name: "Declare" }));
     await waitFor(() => expect(saveAreas).toHaveBeenCalledWith("8233e4fd", [
       expect.objectContaining({ id: "vip", name: "VIP" }), { id: "operations", name: "Operations", question: "", parent: "" }]));
     await waitFor(() => expect(readDiscover).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe("the workspace", () => {
+  it("reads nothing before the shell knows it, then reads under it — never every workspace's connections", async () => {
+    const props = { openId: null, onOpenArea: vi.fn(), onName: vi.fn(), connections: [] };
+    const { rerender } = render(<DiscoverPage {...props} workspaceId="" ready={false} />);
+    expect(readDiscover).not.toHaveBeenCalled();
+    rerender(<DiscoverPage {...props} workspaceId="default" ready />);
+    await screen.findByTestId("discover-areas");
+    expect(readDiscover).toHaveBeenCalledTimes(1);
+    expect(readDiscover).toHaveBeenCalledWith("", "default");
   });
 });
 
@@ -171,7 +184,7 @@ describe("an Area's page", () => {
     expect(screen.getByTestId("discover-area").textContent).toContain("No owner yet");
     expect(within(holds).getByTestId("discover-row").textContent).toContain("its name says order");
     expect(holds.textContent).toContain("Nothing here yet: Definitions, Agents.");
-    expect(readDiscoverArea).toHaveBeenCalledWith("orders_sales", "");
+    expect(readDiscoverArea).toHaveBeenCalledWith("orders_sales", "", "");
   });
 
   it("says when no connection in view has the Area", async () => {

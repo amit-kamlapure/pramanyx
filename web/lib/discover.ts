@@ -113,41 +113,59 @@ export interface DiscoverAreaPage {
 /** The Area of what no Area holds. */
 export const OTHER = "other";
 
-function url(path: string, params: Record<string, string | number | boolean | undefined>): string {
+function url(path: string, params: Record<string, string | number | boolean | undefined>, workspaceId?: string): string {
   const q = new URLSearchParams();
-  const ws = getActiveWorkspace();
+  // the workspace the page stands in, as the Catalog is read: its connections and no others
+  const ws = workspaceId || getActiveWorkspace();
   if (ws) q.set("workspace_id", ws);
   for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== "" && v !== false) q.set(k, String(v));
   const s = q.toString();
   return `${getApiBase()}${path}${s ? `?${s}` : ""}`;
 }
 
-async function read<T>(href: string, what: string): Promise<T> {
-  const res = await fetch(href);
-  if (!res.ok) throw new Error(fastApiError(await res.json().catch(() => ({})), `Reading ${what} failed (${res.status})`));
-  return (await res.json()) as T;
+/** Reads under way, by address: a page that asks twice for the same read while the first is out (React's strict
+ *  double effect, a tab resolving on load) waits on the one — each Discover read is every reader at once. */
+const underWay = new Map<string, Promise<unknown>>();
+
+function once<T>(href: string, go: () => Promise<T>): Promise<T> {
+  const have = underWay.get(href) as Promise<T> | undefined;
+  if (have) return have;
+  const p = go().finally(() => underWay.delete(href));
+  underWay.set(href, p);
+  return p;
 }
 
-export function readDiscover(connectionId = ""): Promise<DiscoverHome> {
-  return read(url("/discover", { connection_id: connectionId }), "Discover");
+function read<T>(href: string, what: string): Promise<T> {
+  return once(href, async () => {
+    const res = await fetch(href);
+    if (!res.ok) throw new Error(fastApiError(await res.json().catch(() => ({})), `Reading ${what} failed (${res.status})`));
+    return (await res.json()) as T;
+  });
+}
+
+export function readDiscover(connectionId = "", workspaceId?: string): Promise<DiscoverHome> {
+  return read(url("/discover", { connection_id: connectionId }, workspaceId), "Discover");
 }
 
 export interface ItemsAsked {
   kind?: DiscoverKind | ""; area?: string; certified?: boolean; mine?: boolean; q?: string; connectionId?: string;
-  cursor?: number; limit?: number;
+  cursor?: number; limit?: number; workspaceId?: string;
 }
 
 export function readDiscoverItems(a: ItemsAsked): Promise<DiscoverItems> {
   return read(url("/discover/items", { kind: a.kind, area: a.area, certified: a.certified, mine: a.mine, q: a.q?.trim(),
-    connection_id: a.connectionId, cursor: a.cursor, limit: a.limit }), "what Discover holds");
+    connection_id: a.connectionId, cursor: a.cursor, limit: a.limit }, a.workspaceId), "what Discover holds");
 }
 
 /** One Area's page; null when no connection in view has that Area (the server's 404). */
-export async function readDiscoverArea(areaId: string, connectionId = ""): Promise<DiscoverAreaPage | null> {
-  const res = await fetch(url(`/discover/areas/${encodeURIComponent(areaId)}`, { connection_id: connectionId }));
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error(fastApiError(await res.json().catch(() => ({})), `Reading the Area failed (${res.status})`));
-  return (await res.json()) as DiscoverAreaPage;
+export function readDiscoverArea(areaId: string, connectionId = "", workspaceId?: string): Promise<DiscoverAreaPage | null> {
+  const href = url(`/discover/areas/${encodeURIComponent(areaId)}`, { connection_id: connectionId }, workspaceId);
+  return once(href, async () => {
+    const res = await fetch(href);
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(fastApiError(await res.json().catch(() => ({})), `Reading the Area failed (${res.status})`));
+    return (await res.json()) as DiscoverAreaPage;
+  });
 }
 
 // ── what a row and a card say ────────────────────────────────────────────────────────────────────────────────────

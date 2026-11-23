@@ -37,7 +37,7 @@ const narrowed = (f: Filters) => !!(f.q.trim() || f.kind || f.area || f.certifie
 /** How many rows a kind shows on an Area's page before "Show all". */
 const AREA_ROWS = 8;
 
-export function DiscoverPage({ openId, onOpenArea, onName, connections }: {
+export function DiscoverPage({ openId, onOpenArea, onName, connections, workspaceId = "", ready = true }: {
   /** The Area open, from the address (`?id=`); null for Discover itself. */
   openId: string | null;
   onOpenArea: (id: string | null) => void;
@@ -45,20 +45,26 @@ export function DiscoverPage({ openId, onOpenArea, onName, connections }: {
   onName: (name: string | null) => void;
   /** The workspace's connections, for the connection filter. */
   connections: { id: string; name: string }[];
+  /** The workspace the page stands in: its connections, as the Catalog reads them. */
+  workspaceId?: string;
+  /** Whether the shell knows the workspace yet — nothing is read before it does, or the first read spans every one. */
+  ready?: boolean;
 }) {
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
+  if (!ready) return <Page testId="discover"><Loading what="Discover" /></Page>;
   if (openId) {
-    return <AreaView key={`${openId}:${filters.conn}`} areaId={openId} conn={filters.conn} onBack={() => onOpenArea(null)}
-      onOpenArea={onOpenArea} onName={onName} />;
+    return <AreaView key={`${openId}:${filters.conn}:${workspaceId}`} areaId={openId} conn={filters.conn} workspaceId={workspaceId}
+      onBack={() => onOpenArea(null)} onOpenArea={onOpenArea} onName={onName} />;
   }
-  return <HomeView filters={filters} setFilters={setFilters} onOpenArea={onOpenArea} onName={onName} connections={connections} />;
+  return <HomeView filters={filters} setFilters={setFilters} onOpenArea={onOpenArea} onName={onName} connections={connections}
+    workspaceId={workspaceId} />;
 }
 
 // ── Discover itself ──────────────────────────────────────────────────────────────────────────────────────────────
 
-function HomeView({ filters, setFilters, onOpenArea, onName, connections }: {
+function HomeView({ filters, setFilters, onOpenArea, onName, connections, workspaceId }: {
   filters: Filters; setFilters: (f: Filters) => void; onOpenArea: (id: string) => void; onName: (name: string | null) => void;
-  connections: { id: string; name: string }[];
+  connections: { id: string; name: string }[]; workspaceId: string;
 }) {
   const [home, setHome] = useState<DiscoverHome | null>(null);
   const [err, setErr] = useState("");
@@ -67,10 +73,10 @@ function HomeView({ filters, setFilters, onOpenArea, onName, connections }: {
   useEffect(() => {
     let alive = true;
     setHome(null); setErr("");
-    readDiscover(filters.conn).then(h => { if (alive) setHome(h); })
+    readDiscover(filters.conn, workspaceId).then(h => { if (alive) setHome(h); })
       .catch(e => { if (alive) setErr(String((e as Error)?.message ?? e)); });
     return () => { alive = false; };
-  }, [filters.conn, tick]);
+  }, [filters.conn, workspaceId, tick]);
 
   const areaNames = useMemo(() => {
     const m: Record<string, string> = { [OTHER]: "Everything else" };
@@ -85,7 +91,8 @@ function HomeView({ filters, setFilters, onOpenArea, onName, connections }: {
       <SearchBar filters={filters} setFilters={setFilters} home={home} areaNames={areaNames} connections={connections} />
       {err ? <ReadFailed what="Discover" error={err} onRetry={() => setTick(t => t + 1)} />
         : !home ? <Loading what="Discover" />
-        : narrowed(filters) ? <Results filters={filters} areaNames={areaNames} many={many} onClear={() => setFilters({ ...NO_FILTERS, conn: filters.conn })} />
+        : narrowed(filters) ? <Results filters={filters} workspaceId={workspaceId} areaNames={areaNames} many={many}
+            onClear={() => setFilters({ ...NO_FILTERS, conn: filters.conn })} />
         : <Browse home={home} areaNames={areaNames} many={many} onOpenArea={onOpenArea}
             onViewAll={kind => setFilters({ ...filters, kind })} onCertified={() => setFilters({ ...filters, certified: true })}
             reload={() => setTick(t => t + 1)} />}
@@ -148,6 +155,8 @@ function Browse({ home, areaNames, many, onOpenArea, onViewAll, onCertified, rel
   onViewAll: (kind: DiscoverKind) => void; onCertified: () => void; reload: () => void;
 }) {
   const [showQuiet, setShowQuiet] = useState(false);
+  // the model's suggestions are a curator's to answer, and on every connection they can outnumber the Areas: one click away
+  const [showSuggested, setShowSuggested] = useState(false);
   const holding = home.areas.filter(a => a.id !== OTHER).length;
   const nothing = home.kinds.filter(k => !k.count && !k.withheld).map(k => k.title);
   return (
@@ -161,6 +170,11 @@ function Browse({ home, areaNames, many, onOpenArea, onViewAll, onCertified, rel
               {showQuiet ? "Hide the empty ones" : `Show the ${formatCount(home.quiet_areas.length)} that hold nothing yet`}
             </Button>
           )}
+          {home.suggested.length > 0 && (
+            <Button size="xs" variant="link" onClick={() => setShowSuggested(s => !s)} data-testid="discover-suggested-toggle">
+              {showSuggested ? "Hide the suggestions" : `${formatCount(home.suggested.length)} suggested by the model`}
+            </Button>
+          )}
         </span>}>
         <div className="aug-discover-areas">
           {home.areas.map(a => <AreaCard key={a.id} area={a} onOpen={onOpenArea} />)}
@@ -168,7 +182,7 @@ function Browse({ home, areaNames, many, onOpenArea, onViewAll, onCertified, rel
             <AreaCard key={a.id} onOpen={onOpenArea} area={{ ...a, parent: "", business_owners: [], technical_owners: [], source: "",
               connections: [], counts: {}, total: 0, deprecated: 0 }} quiet />
           ))}
-          {home.suggested.map(s => <SuggestedCard key={`${s.connection_id}:${s.id}`} s={s} many={many} onDone={reload} />)}
+          {showSuggested && home.suggested.map(s => <SuggestedCard key={`${s.connection_id}:${s.id}`} s={s} many={many} onDone={reload} />)}
         </div>
       </Card>
 
@@ -199,15 +213,15 @@ function Browse({ home, areaNames, many, onOpenArea, onViewAll, onCertified, rel
   );
 }
 
-function Results({ filters, areaNames, many, onClear }: {
-  filters: Filters; areaNames: Record<string, string>; many: boolean; onClear: () => void;
+function Results({ filters, workspaceId, areaNames, many, onClear }: {
+  filters: Filters; workspaceId: string; areaNames: Record<string, string>; many: boolean; onClear: () => void;
 }) {
   const [page, setPage] = useState<DiscoverItems | null>(null);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [tick, setTick] = useState(0);
   const asked = useMemo(() => ({ kind: filters.kind, area: filters.area, certified: filters.certified, mine: filters.mine,
-    q: filters.q, connectionId: filters.conn }), [filters]);
+    q: filters.q, connectionId: filters.conn, workspaceId }), [filters, workspaceId]);
   useEffect(() => {
     let alive = true;
     setPage(null); setErr("");
@@ -254,8 +268,9 @@ function Results({ filters, areaNames, many, onClear }: {
 
 // ── one Area ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
-function AreaView({ areaId, conn, onBack, onOpenArea, onName }: {
-  areaId: string; conn: string; onBack: () => void; onOpenArea: (id: string) => void; onName: (name: string | null) => void;
+function AreaView({ areaId, conn, workspaceId, onBack, onOpenArea, onName }: {
+  areaId: string; conn: string; workspaceId: string; onBack: () => void; onOpenArea: (id: string) => void;
+  onName: (name: string | null) => void;
 }) {
   const [page, setPage] = useState<DiscoverAreaPage | null | undefined>(undefined);
   const [err, setErr] = useState("");
@@ -263,10 +278,10 @@ function AreaView({ areaId, conn, onBack, onOpenArea, onName }: {
   useEffect(() => {
     let alive = true;
     setPage(undefined); setErr("");
-    readDiscoverArea(areaId, conn).then(p => { if (alive) setPage(p); })
+    readDiscoverArea(areaId, conn, workspaceId).then(p => { if (alive) setPage(p); })
       .catch(e => { if (alive) setErr(String((e as Error)?.message ?? e)); });
     return () => { alive = false; };
-  }, [areaId, conn, tick]);
+  }, [areaId, conn, workspaceId, tick]);
   const name = page?.area.name ?? null;
   useEffect(() => { onName(name); return () => onName(null); }, [name, onName]);
 

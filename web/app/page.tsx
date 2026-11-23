@@ -2258,6 +2258,7 @@ export default function Home() {
             {tab === "discover" && (
               <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--bg-0)" }}>
                 <DiscoverPage openId={openId} onOpenArea={setOpenId} onName={setDiscoverName}
+                  workspaceId={selectedWorkspace} ready={contextReady}
                   connections={wsConnections.map(c => ({ id: c.id, name: c.name }))} />
               </div>
             )}
