@@ -206,7 +206,8 @@ RUNNER_CHARTER_ID = "worker"
 JOB_READ_LIMIT = 20000
 
 
-def job_rows(window: Window, *, limit: int = JOB_READ_LIMIT) -> tuple[list[dict], list[dict], bool]:
+def job_rows(window: Window, *, limit: int = JOB_READ_LIMIT,
+             runners: bool = True) -> tuple[list[dict], list[dict], bool]:
     """Agent jobs and runner jobs in the window, read SEPARATELY, newest first, each with
     its charter resolved. Returns ``(agents, runners, truncated)``.
 
@@ -220,6 +221,10 @@ def job_rows(window: Window, *, limit: int = JOB_READ_LIMIT) -> tuple[list[dict]
 
     ``truncated`` is True when either read filled its cap, so a caller can present its
     number as a floor instead of passing a truncated count off as a total.
+
+    ``runners=False`` reads the agents' side alone, for a reader that draws or counts agent
+    runs only: a day held 226 agent runs beside 9,227 automation ticks (2026-11-23), and
+    loading the ticks to drop them was most of the read.
     """
     from pramanyx.kernel.agents import charter_for_kind
     from pramanyx.kernel.ledger import Ledger
@@ -236,8 +241,8 @@ def job_rows(window: Window, *, limit: int = JOB_READ_LIMIT) -> tuple[list[dict]
             r["charter_id"] = charter_for_kind(r.get("kind")).id
         return rows
 
-    agents, runners = _read(agent_kinds), _read(runner_kinds)
-    return agents, runners, (len(agents) >= limit or len(runners) >= limit)
+    agents, runner_rows = _read(agent_kinds), (_read(runner_kinds) if runners else [])
+    return agents, runner_rows, (len(agents) >= limit or len(runner_rows) >= limit)
 
 
 def is_runner(charter_id: str) -> bool:
@@ -245,14 +250,16 @@ def is_runner(charter_id: str) -> bool:
 
 
 def job_series(window: Window, *, include_runners: bool = False,
-               limit: int = JOB_READ_LIMIT) -> dict:
+               limit: int = JOB_READ_LIMIT, read_runners: bool = True) -> dict:
     """Runs per bucket, one series per charter — the Overview's activity chart.
 
     Returns the runner series separately rather than mixed in, so the caller decides
     whether to draw it and the agent totals never quietly include a cron tick.
+    ``read_runners=False`` leaves the runners unread, and says so: ``runners_read`` is
+    False and ``runner_runs`` None — not a zero, which would read as a quiet day.
     """
     from pramanyx.kernel.agents import get_charter
-    agents, runners, truncated = job_rows(window, limit=limit)
+    agents, runners, truncated = job_rows(window, limit=limit, runners=read_runners)
     rows = agents + runners
     labels = {}
     for r in rows:
@@ -270,7 +277,8 @@ def job_series(window: Window, *, include_runners: bool = False,
         "series": [s.as_dict() for s in series],
         "runners": [s.as_dict() for s in runner_series],
         "agent_runs": sum(int(s.total) for s in series),
-        "runner_runs": sum(int(s.total) for s in runner_series),
+        "runner_runs": sum(int(s.total) for s in runner_series) if read_runners else None,
+        "runners_read": bool(read_runners),
         "include_runners": bool(include_runners),
         # A cap that is hit is a number that is a floor. Say so rather than letting a
         # truncated count be read as a total.

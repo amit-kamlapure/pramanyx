@@ -13026,6 +13026,9 @@ export interface paths {
          *     write time — which is empty for every call made before that column existed, and for
          *     every call answered inline rather than inside a run. A panel headed "runs by agent"
          *     must ask for jobs; one headed "tokens by model" must ask for events.
+         *
+         *     `runners=false` (source `jobs`) leaves the automation engine's runs unread, for a reader
+         *     of agent runs alone — the top bar's strip, on every page: it is the larger side by far.
          */
         get: operations["obs_timeseries_obs_timeseries_get"];
         put?: never;
@@ -50243,6 +50246,7 @@ export interface operations {
                 since?: string;
                 until?: string;
                 limit?: number;
+                runners?: boolean;
             };
             header?: never;
             path?: never;

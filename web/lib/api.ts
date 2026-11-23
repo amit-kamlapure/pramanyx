@@ -12000,6 +12000,8 @@ export interface TimeSeriesResponse {
   /** Share of scanned rows that carried the grouping key. A top-N built from 3% of the
    *  traffic is not a top-N, so this ships with every answer rather than on request. */
   coverage: number | null;
+  /** Source `jobs` asked with `runners: false`: the automation engine's runs were left unread. */
+  runners_read?: boolean;
 }
 
 export async function getObsTimeseries(params: {
@@ -12008,9 +12010,11 @@ export async function getObsTimeseries(params: {
    *  time); `events` counts model CALLS by the charter stamped when they were written. */
   source?: "jobs" | "events";
   range?: string; since?: string; until?: string;
+  /** `false` (source `jobs`): leave the automation engine's runs unread, for a reader of agent runs alone. */
+  runners?: boolean;
 }): Promise<TimeSeriesResponse> {
   const qs = new URLSearchParams();
-  for (const [k, v] of Object.entries(params)) if (v) qs.set(k, String(v));
+  for (const [k, v] of Object.entries(params)) if (v || v === false) qs.set(k, String(v));
   const res = await fetch(`${getApiBase()}/obs/timeseries?${qs}`);
   if (!res.ok) throw new Error(`Failed to fetch timeseries (${res.status})`);
   return res.json();
