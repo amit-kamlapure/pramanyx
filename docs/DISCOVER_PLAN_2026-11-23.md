@@ -207,6 +207,15 @@ an agent to the Roster, a document to Documents. Opened in place (`lib/addressOn
 the address, the link's own are handed to the page (Next's router writes back what a `pushState` gave it, so a word put
 there stayed); each page reads them on mount AND while open (`useFromAddress`). Seen live, each kind, cold and warm.
 
+**D3 live, 2026-11-23** (`pramanyx/discover/search.py`, `GET /discover/search`; the Discover box; ⌘K's Search everything).
+The question is embedded once and that one vector read against every connection's graph — its word rank and the nodes
+near enough in meaning (cosine ≥ 0.52, measured: what a question meant scored 0.6–0.76, a nonsense question's nearest
+0.478) — kept to the kinds Discover lists (theLook's many revenue findings had crowded out its Revenue metric); a graph's
+business object maps through its source tables (`table:Order` → orders), a column to its table. Words are matched on every
+item. Fused by rank, each connection by its own; a table on two connections said once with "also on". Seen live: "who buys
+again" → Repeat Purchase Rate, the conversion rate and the buyers' tables by user_id; "late deliveries" → the delivery
+columns and metrics; nonsense → nothing; 0.6–1.8 s. Not in D3: findings as results (not a Discover kind).
+
 ## 7 · Not in this plan
 
 - **Across workspaces** (Databricks' account scope) — **Later**: nothing spans workspaces yet.
