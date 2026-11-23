@@ -21,15 +21,29 @@ SHOWN = 6
 _STATE_RANK = {"approved": 0, "published": 0, "on": 0, "": 1, "draft": 2, "proposed": 2, "off": 3, "deprecated": 4}
 
 
+#: How long each kind's reader took on the last read, in ms — the page's slowest part named, never guessed at.
+LAST_TOOK: dict[str, int] = {}
+
+
 def gather(scope: Scope, kinds: tuple = KINDS) -> dict[str, Found]:
-    """Each kind's reader, side by side. One that raises is said, and its kind is empty."""
+    """Each kind's reader, side by side. One that raises is said, and its kind is empty. How long each took is kept
+    (`LAST_TOOK`) and a slow one logged."""
+    import logging
+    import time
+
     def run(kind: str) -> Found:
+        started = time.monotonic()
         try:
             return READERS[kind](scope)
         except Exception as exc:  # noqa: BLE001 — a kind unread is said; the page still stands
             from pramanyx.kernel.errors import tolerate
             tolerate(exc, f"discover: the {kind} reader failed", counter=f"discover.{kind}")
             return Found(said=[f"{TITLES[kind]} could not be read ({type(exc).__name__})"])
+        finally:
+            took = int((time.monotonic() - started) * 1000)
+            LAST_TOOK[kind] = took
+            if took > 1500:
+                logging.getLogger(__name__).info("discover: the %s reader took %d ms", kind, took)
     with ThreadPoolExecutor(max_workers=len(kinds), thread_name_prefix="discover") as pool:
         futures = {k: pool.submit(contextvars.copy_context().run, run, k) for k in kinds}
         return {k: f.result() for k, f in futures.items()}
@@ -134,6 +148,7 @@ def home(scope: Scope) -> dict:
         "kinds": [_kind_view(k, by_kind[k], found[k].withheld) for k in KINDS],
         "withheld": {k: found[k].withheld for k in KINDS if found[k].withheld},
         "said": [s for k in KINDS for s in found[k].said],
+        "took_ms": {k: LAST_TOOK.get(k, 0) for k in KINDS},
     }
 
 
