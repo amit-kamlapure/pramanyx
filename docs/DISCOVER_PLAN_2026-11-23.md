@@ -295,3 +295,14 @@ on live data.
 - Every tool of the old toolbar moved over: Heading, Subheading, Text, Bold, Italic, the lists, Link (asked in the
   toolbar) and Table, with the count. Preview went, since what is written is what is read.
 - Seen live on "Repeat buyer": its stored Markdown reads in and writes back unchanged.
+
+**One editor for formatted words, 2026-11-23** (the user: "Both"). The editor is one shared component
+(`components/ui/rich-text.tsx`). Each place declares what it may hold, from what its own reader draws (`RichTextKind`,
+kept beside that reader):
+- **Dashboard notes** hold a title and a heading, bold, italics, lists and links to the web. That applies in all three
+  places a note is written: the tile's Edit, a new note placed on the dashboard, and the Words field in a piece's panel.
+- **An Area's description** holds paragraphs, bold, italics, lists and links. It is drawn formatted on the Area's page.
+- **A Definition** keeps every tool it had.
+
+Everything is still stored as Markdown. Seen live: the Area description's editor on Returns, with nothing saved. A
+dashboard note was not tried live, because no dashboard holds one and adding one opens a real dashboard's edit mode.
