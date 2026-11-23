@@ -40,3 +40,16 @@ export function subjectName(subject: AskSubject | null): string {
 export function tabTitle(section: string, onPage: AskSubject | null, canvasName?: string | null): string {
   return subjectName(onPage).trim() || (canvasName ?? "").trim() || pageName(section);
 }
+
+/** Write `title` to the tab and keep it there while it is what is open: the page's head writes the product's name as
+ *  it settles after the first load, over what this wrote (seen: the Home tab said "Pramanyx"). Returns the function
+ *  that lets go — call it when what is open changes. */
+export function keepTabTitle(title: string): () => void {
+  if (typeof document === "undefined") return () => {};
+  const hold = () => { if (document.title !== title) document.title = title; };
+  hold();
+  if (typeof MutationObserver === "undefined" || !document.head) return () => {};
+  const watch = new MutationObserver(hold);
+  watch.observe(document.head, { childList: true, subtree: true, characterData: true });
+  return () => watch.disconnect();
+}

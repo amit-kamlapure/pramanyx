@@ -16,13 +16,14 @@
 const ON_ROOT = ["data-theme", "class", "data-ds-theme-source"];
 const ON_BODY = ["data-ds-dark-theme", "data-theme", "class"];
 
-/** Call `turned` (once per frame at most) whenever the page turns light or dark. Returns the function that stops it. */
+/** Call `turned` once for each turn of the page light or dark — several attributes flip together, so they are taken as
+ *  one, on a timer: an animation frame never comes to a tab in the background, and its charts stayed the old colours. */
 export function watchTheme(turned: () => void): () => void {
   if (typeof window === "undefined" || typeof MutationObserver === "undefined") return () => {};
-  let frame = 0;
+  let frame: ReturnType<typeof setTimeout> | 0 = 0;
   const once = () => {
     if (frame) return;
-    frame = window.requestAnimationFrame(() => { frame = 0; turned(); });
+    frame = setTimeout(() => { frame = 0; turned(); }, 0);
   };
   const watch = new MutationObserver(once);
   watch.observe(document.documentElement, { attributes: true, attributeFilter: ON_ROOT });
@@ -32,6 +33,6 @@ export function watchTheme(turned: () => void): () => void {
   return () => {
     watch.disconnect();
     system?.removeEventListener?.("change", once);
-    if (frame) window.cancelAnimationFrame(frame);
+    if (frame) clearTimeout(frame);
   };
 }

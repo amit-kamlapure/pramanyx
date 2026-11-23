@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /**
  * The app's tab names what is open, and nothing else (the user, 2026-11-23: "'Whats Open' only").
  */
@@ -31,5 +32,21 @@ describe("a tab", () => {
 
   it("never says the product's long name", () => {
     expect(tabTitle("home", null)).not.toContain("Autonomous");
+  });
+});
+
+describe("the tab's words", () => {
+  it("hold when the page's head writes the product's name over them, and let go when asked", async () => {
+    const { keepTabTitle } = await import("@/lib/tabTitle");
+    const head = document.head.querySelector("title") ?? document.head.appendChild(document.createElement("title"));
+    const letGo = keepTabTitle("Home");
+    expect(document.title).toBe("Home");
+    head.textContent = "Pramanyx";
+    await new Promise((r) => setTimeout(r, 0));
+    expect(document.title).toBe("Home");
+    letGo();
+    head.textContent = "Pramanyx";
+    await new Promise((r) => setTimeout(r, 0));
+    expect(document.title).toBe("Pramanyx");
   });
 });
