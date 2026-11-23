@@ -126,7 +126,7 @@ def test_an_area_s_page_holds_its_things_by_kind_and_its_sub_areas(monkeypatch):
 
 
 def test_a_thing_stands_where_a_person_placed_it_else_by_its_tables_else_by_its_words(monkeypatch):
-    monkeypatch.setattr("pramanyx.semantic.areas._area_of_tables", lambda tables, conn: "returns" if "returns" in tables else "")
+    monkeypatch.setattr("pramanyx.semantic.areas.area_of_tables", lambda tables, conn: "returns" if "returns" in tables else "")
     monkeypatch.setattr(I, "by_words", lambda scope, text, conn="": "orders_sales" if "sales" in text.lower() else "")
     s = _scope()
     placed = I.settle(Item("dashboard", "d", "Anything", connection_id="c1"), s, placed=("marketing", "user:ana"))
@@ -172,7 +172,7 @@ def test_an_archived_dashboard_is_not_listed_and_a_published_one_carries_its_own
         {"dashboard_id": "sales", "title": "Sales", "state": "draft", "kept_at": "2026-11-18"},
         {"dashboard_id": "old", "title": "Old", "state": "archived"}])
     monkeypatch.setattr("pramanyx.dashboards.sharing.shared_with", lambda conn, person: [
-        {"owner": "bo", "cockpit_id": "ops", "title": "Operations"}])
+        {"owner": "bo", "dashboard_id": "ops", "title": "Operations"}])
     monkeypatch.setattr(I, "_certified", lambda kind: {"c1:ana:sales": CERT})
     monkeypatch.setattr(I, "_placed_tags", lambda kind: {})
     monkeypatch.setattr(I, "by_words", lambda scope, text, conn="": "")

@@ -1,7 +1,7 @@
 /**
  * A link's word for what to open on arrival — a table, a custom agent, a document, a trusted query (Discover's items
  * link to each, `pramanyx/discover/items.py`) — read once and taken off the address, so the next visit to the page
- * opens it as it opens, not on the same thing again (the pattern `?agent=` began in `AgenticOpsWorkspace`).
+ * opens it as it opens, not on the same thing again (the pattern `?agent=` began on the Agents page).
  */
 export function takeFromAddress(...names: string[]): Record<string, string> {
   if (typeof window === "undefined") return {};

@@ -9668,6 +9668,8 @@ export async function cancelJob(jobId: string): Promise<{ job_id: string; cancel
 
 /** The wire's word for a built-in agent's row (`kind`), named once for files outside the roster. */
 export const BUILT_IN_AGENT_KIND = "charter" as const;
+/** The wire's word for one of the workspace's own (custom) agents' rows, named once likewise. */
+export const CUSTOM_AGENT_KIND = "persona" as const;
 
 export interface AgentGovernance {
   enabled: boolean; token_budget: number | null; time_budget_s: number | null; model?: string | null;

@@ -168,7 +168,7 @@ Each is shown working on theLook before the next, with its tests and the gates. 
 4. **Open.** Area declarations are install-wide (`data/org_settings.json`) while placements are per organisation
    (`govern_tags`, keyed by org) — say which is meant before a second organisation declares Areas. D4's.
 
-D1 also added the four missing deep links (`web/lib/addressOnce.ts`): `?tab=agents&agent=<id>&kind=persona` opens a
+D1 also added the four missing deep links (`web/lib/addressOnce.ts`): `?tab=agents&agent=<id>&kind=custom` opens a
 custom agent, `?tab=documents&doc=<id>` a document's preview, `?tab=memory&trusted=<id>` a trusted query, and
 `?tab=catalog&conn=&schema=&table=` a table. Each is read once on arrival and taken off the address; a page kept
 mounted behind another tab reads it only when it mounts, so D2's links open by navigation, not by a tab switch alone.

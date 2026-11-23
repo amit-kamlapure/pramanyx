@@ -15,7 +15,7 @@ import { NAV_DESTINATIONS } from "@/lib/navDestinations";
 /** Pages the rail does not list by these ids, by the name they are known by. */
 const PAGES: Record<string, string> = {
   chat: "Ask", "canvas-workspace": "Data Canvas", query: "SQL Editor", data: "Data", settings: "Settings",
-  operations: "Operations", agents: "Agents", fleet: "Agent runs", record: "Record",
+  operations: "Operations", agents: "Agents", record: "Record",
 };
 
 /** A page's name from its id: the rail's word for it, else the name it is known by, else "Pramanyx". */

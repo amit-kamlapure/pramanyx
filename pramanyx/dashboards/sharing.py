@@ -126,14 +126,14 @@ def shared_with(connection_id: str, user_id: str) -> list[dict]:
         payload = row["payload"]
         if payload.get("retired") or not payload.get("published_to") or not payload.get("spec"):
             continue
-        owner, cockpit_id = _owner_and_id(key, connection_id)
+        owner, dashboard_id = _owner_and_id(key, connection_id)
         if owner == user_id or not reaches(payload["published_to"], audience):
             continue
         read = versions.published(key)                  # Arc ED-4 — named by the version its readers read
         if read is None or not read.get("spec"):
             continue
         spec, number, at = read["spec"], read["version"], read["kept_at"]
-        out.append({"owner": owner, "cockpit_id": cockpit_id, "title": versions.title_of(spec),
+        out.append({"owner": owner, "cockpit_id": dashboard_id, "dashboard_id": dashboard_id, "title": versions.title_of(spec),
                     "version": number, "kept_at": at, "outline": versions.outline_of(spec),
                     "published_by": payload.get("published_by") or "", "published_to": list(payload["published_to"])})
     return sorted(out, key=lambda c: (c["title"].lower(), c["owner"]))

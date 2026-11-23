@@ -59,7 +59,7 @@ def _who(person: str) -> str:
     return who[5:] if who.startswith("user:") else who
 
 
-def _area_of_tables(tables: list[str], connection_id: str) -> str:
+def area_of_tables(tables: list[str], connection_id: str) -> str:
     """The area a set of tables is read in: where a person placed one of them, else the area whose words name one."""
     from pramanyx.semantic.metric_map import best_areas, map_for
     placed = placed_by_people(connection_id)
@@ -101,7 +101,7 @@ def standing(person: str, area: str, connection_id: str) -> tuple[int, int]:
             inv = get_investigation(v["investigation_id"]) or {}
             report = inv.get("report") if isinstance(inv.get("report"), dict) else {}
             tables = list((report or {}).get("tables_used") or inv.get("tables_used") or [])
-            if tables and _area_of_tables(tables, connection_id) == area:
+            if tables and area_of_tables(tables, connection_id) == area:
                 right += 1
     except Exception as exc:  # noqa: BLE001 — unread, the owner's word still stands
         from pramanyx.kernel.errors import tolerate

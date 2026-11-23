@@ -125,7 +125,7 @@ def test_one_table_name_in_two_schemas_is_read_under_its_schema(settings, monkey
     assert placed["tables_qualified"]["returns_desk.orders"][0] == "returns"
     assert "orders" not in placed["tables"], "a bare name placed in two areas is not guessed"
     monkeypatch.setattr("pramanyx.semantic.metric_map.map_for", lambda *a, **k: type("M", (), {"areas": []})())
-    assert A._area_of_tables(["returns_desk.orders"], conn) == "returns"
-    assert A._area_of_tables(["shop.orders"], conn) == "orders_sales"
+    assert A.area_of_tables(["returns_desk.orders"], conn) == "returns"
+    assert A.area_of_tables(["shop.orders"], conn) == "orders_sales"
     A.place("table", "orders", "orders_sales", by="user:ana", connection_id=conn, schema_name="returns_desk")
     assert A.placed_by_people(conn)["tables"]["orders"][0] == "orders_sales", "one area for the name: read by it"

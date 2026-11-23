@@ -138,8 +138,8 @@ def settle(item: Item, scope: Scope, *, placed: Optional[tuple[str, str]] = None
         item.area, item.area_how = placed[0], f"{_who(placed[1]) or 'someone'} placed it here"
         return item
     if item.tables and item.connection_id:
-        from pramanyx.semantic.areas import _area_of_tables
-        area = _area_of_tables([str(t) for t in item.tables], item.connection_id)
+        from pramanyx.semantic.areas import area_of_tables
+        area = area_of_tables([str(t) for t in item.tables], item.connection_id)
         if area:
             item.area, item.area_how = area, "read from its tables"
             return item
@@ -261,12 +261,12 @@ def dashboards(scope: Scope) -> Found:
                 href=_href("/", tab="dashboards", conn=conn, dashboard=str(d.get("dashboard_id") or ""))),
                 scope, placed=placed.get(ref)))
         for d in sharing.shared_with(conn, owner):
-            ref = f"{conn}:{d.get('owner')}:{d.get('cockpit_id')}"
+            ref = f"{conn}:{d.get('owner')}:{d.get('dashboard_id')}"
             found.items.append(settle(Item(
-                kind="dashboard", id=ref, name=str(d.get("title") or d.get("cockpit_id")),
+                kind="dashboard", id=ref, name=str(d.get("title") or d.get("dashboard_id")),
                 line=f"Published by {_who(str(d.get('owner') or ''))}", connection_id=conn, connection_name=name,
                 owner=str(d.get("owner") or ""), state="published", certification=marks.get(ref),
-                href=_href("/", tab="dashboards", conn=conn, dashboard=str(d.get("cockpit_id") or ""),
+                href=_href("/", tab="dashboards", conn=conn, dashboard=str(d.get("dashboard_id") or ""),
                            owner=str(d.get("owner") or ""))),
                 scope, placed=placed.get(ref)))
     return found
@@ -276,7 +276,7 @@ def canvases(scope: Scope) -> Found:
     """The Data Canvases shared with the person; one that is not is counted, not listed."""
     from pramanyx.canvas.store import list_canvases
     from pramanyx.db.history import last_activity_by_canvas
-    from pramanyx.routers.canvas import _seen_as
+    from pramanyx.routers.canvas import seen_as
     found = Found()
     marks, placed = _certified("canvas"), _placed_tags("canvas")
     activity = last_activity_by_canvas()
@@ -284,7 +284,7 @@ def canvases(scope: Scope) -> Found:
         conn = getattr(c, "primary_connection_id", None) or (c.scopes[0].connection_id if c.scopes else "")
         if conn not in scope.connections:
             continue
-        if not _seen_as(c, scope.request).get("access"):
+        if not seen_as(c, scope.request).get("access"):
             found.withheld += 1
             continue
         item = Item(kind="canvas", id=c.id, name=c.name, line=str(c.description or ""), connection_id=conn,
@@ -308,7 +308,7 @@ def agents(scope: Scope) -> Found:
         found.items.append(settle(Item(
             kind="agent", id=a.id, name=a.name, line=a.purpose, connection_id=a.connection_id,
             connection_name=scope.connections.get(a.connection_id, ""), owner=a.owner, updated_at=a.updated_at,
-            state="on" if a.enabled else "off", href=_href("/", tab="agents", agent=a.id, kind="persona")),
+            state="on" if a.enabled else "off", href=_href("/", tab="agents", agent=a.id, kind="custom")),
             scope, placed=placed.get(a.id), words=f"{a.name} {a.purpose}"))
     return found
 

@@ -12,7 +12,7 @@ import { ChromeActions, useInShell } from "@/components/shell/PageChrome";
 import { useTimeRange } from "@/components/agentops/useTimeRange";
 import { Workspace, type WorkspaceLayer } from "@/components/Workspace";
 import { OVERVIEW_LAYER, type AgentOpsLayer } from "@/lib/agentOpsLayers";
-import { BUILT_IN_AGENT_KIND, getConnections, getDepartureSummary, getNeedsHuman, type Connection } from "@/lib/api";
+import { BUILT_IN_AGENT_KIND, CUSTOM_AGENT_KIND, getConnections, getDepartureSummary, getNeedsHuman, type Connection } from "@/lib/api";
 import { askSpotlight } from "@/lib/commandRegistry";
 import { Icon as Glyph, type IconName } from "@/components/ui/icon";
 import { SelectField } from "@/components/ui/select";
@@ -146,15 +146,15 @@ export function AgenticOpsWorkspace({
   // Overview's "Every trace" fold, open on it; an agent opened from the Overview lands
   // in the Roster.
   const [traceFocus, setTraceFocus] = useState<{ traceId?: string; investigationId?: string } | null>(null);
-  const [agentFocus, setAgentFocus] = useState<{ id: string; kind: "charter" | "persona" } | null>(null);
+  const [agentFocus, setAgentFocus] = useState<{ id: string; kind: typeof BUILT_IN_AGENT_KIND | typeof CUSTOM_AGENT_KIND } | null>(null);
   // `?agent=<built-in agent id>` opens one built-in agent's page on arrival — the chat's budget
   // refusal links to the Responder's this way. Read once, then dropped from the address,
   // so a later visit to Agents opens the roster rather than the same agent again.
   useEffect(() => {
-    // `&kind=persona` opens one of the workspace's own agents (Discover links to each, 2026-11-23)
+    // `&kind=custom` opens one of the workspace's own agents (Discover links to each, 2026-11-23)
     const { agent: id, kind } = takeFromAddress("agent", "kind");
     if (!id) return;
-    setAgentFocus({ id, kind: kind === "persona" ? "persona" : BUILT_IN_AGENT_KIND });
+    setAgentFocus({ id, kind: kind === "custom" ? CUSTOM_AGENT_KIND : BUILT_IN_AGENT_KIND });
   }, []);
   // AO-4 — "Open automation" carries its id from every layer; the Automations layer
   // opens that one on arrival rather than the list it is somewhere in.
@@ -164,7 +164,7 @@ export function AgenticOpsWorkspace({
     onLayerChange("automations");
     onOpenAutomations?.();
   }, [onLayerChange, onOpenAutomations]);
-  const openAgent = useCallback((id: string, kind: NonNullable<typeof agentFocus>["kind"] = "persona") => {
+  const openAgent = useCallback((id: string, kind: NonNullable<typeof agentFocus>["kind"] = CUSTOM_AGENT_KIND) => {
     setAgentFocus({ id, kind });
     onLayerChange("agents");
   }, [onLayerChange]);
