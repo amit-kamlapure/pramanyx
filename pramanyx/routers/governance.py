@@ -292,12 +292,16 @@ def put_certification(body: CertificationIn, request: Request):
 
 
 @router.get("/governance/certification", dependencies=[Depends(connection_owner_guard)])
-def get_certification(kind: str, connection_id: str = "", ref: str = ""):
-    """What is certified or deprecated: one asset (``ref``), or every one of a kind (a connection's tables)."""
+def get_certification(kind: str, connection_id: str = "", ref: str = "", schema: str = ""):
+    """What is certified or deprecated: one asset (``ref``), or every one of a kind (a connection's tables).
+
+    A table is read under its ``schema``, as it is written (2026-11-23: the write named the schema and this read did
+    not, so a table certified on its page read as uncertified the next time the page opened)."""
     from pramanyx.govern import certification as K
     try:
         if ref:
-            return {"certification": K.certification_of(K.securable_for(kind, ref, connection_id=connection_id))}
+            return {"certification": K.certification_of(K.securable_for(kind, ref, connection_id=connection_id,
+                                                                         schema=schema))}
         if kind == "table":
             if not connection_id:
                 raise ValueError("a connection's tables are read by its id")
