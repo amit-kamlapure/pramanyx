@@ -29,6 +29,7 @@ import { getApiBase } from "@/lib/config";
 import { owes } from "@/lib/departures";
 import { subscribeKernelEvents } from "@/lib/events";
 import { WAITING_CHANGED_EVENT, getSetAside, listDecisions, listInquiries } from "@/lib/record";
+import { whenIdle } from "@/lib/whenIdle";
 
 export interface NavCounts {
   unackedAlerts: number;
@@ -88,7 +89,8 @@ export function useNavCounts(workspaceId?: string, ready = true): NavCounts {
         .then(n => { if (alive) setCounts(c => ({ ...c, departuresOwed: n })); })
         .catch(() => {});
     };
-    load();
+    // the frame's counts wait for the page's own first reads (`lib/whenIdle.ts`)
+    const cancelFirst = whenIdle(load);
     window.addEventListener(WAITING_CHANGED_EVENT, load);
     const throttled = () => {
       if (pending.current) return;
@@ -98,6 +100,7 @@ export function useNavCounts(workspaceId?: string, ready = true): NavCounts {
     const iv = setInterval(load, 60_000);
     return () => {
       alive = false;
+      cancelFirst();
       window.removeEventListener(WAITING_CHANGED_EVENT, load);
       unsub();
       clearInterval(iv);

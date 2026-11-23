@@ -29,6 +29,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { colorFor } from "@/components/agentops/ActivityChart";
 import { getExplorationStatus, getJobs, getObsTimeseries, type TimeSeriesResponse } from "@/lib/api";
 import { subscribeKernelEvents } from "@/lib/events";
+import { whenIdle } from "@/lib/whenIdle";
 import { countNoun, formatCount } from "@/lib/format";
 
 /** What pramanyx/kernel/agents.py names a job no agent claims — background work, not an agent. */
@@ -65,9 +66,10 @@ export function ActivityStrip({ connectionId, onOpen }: {
   const refresh = useRef(() => {});
   useEffect(() => { refresh.current = () => { loadRuns(); loadPhase(); }; }, [loadRuns, loadPhase]);
 
-  useEffect(() => { loadPhase(); }, [loadPhase]);
+  // the frame's own reads wait for the page's first ones (`lib/whenIdle.ts`)
+  useEffect(() => whenIdle(loadPhase), [loadPhase]);
   useEffect(() => {
-    loadRuns();
+    const cancelFirst = whenIdle(loadRuns);
     const throttled = () => {
       if (pending.current) return;
       pending.current = setTimeout(() => { pending.current = null; refresh.current(); }, 10_000);
@@ -75,6 +77,7 @@ export function ActivityStrip({ connectionId, onOpen }: {
     const unsub = subscribeKernelEvents(throttled, { kinds: ["job.state", "exploration."] });
     const iv = setInterval(() => refresh.current(), 60_000);
     return () => {
+      cancelFirst();
       unsub();
       clearInterval(iv);
       if (pending.current) clearTimeout(pending.current);

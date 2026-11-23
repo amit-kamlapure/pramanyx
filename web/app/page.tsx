@@ -20,6 +20,7 @@ import { useNavCollapsed, useNavCollapsedState } from "@/components/shell/useNav
 import { Tooltip } from "@/components/ui/tooltip";
 import { installAuthFetch } from "@/lib/auth";
 import { getActiveWorkspace, installWorkspaceHeader, setActiveWorkspace } from "@/lib/workspace";
+import { installSharedReads } from "@/lib/sharedReads";
 import { InferencePanel } from "@/components/InferencePanel";
 import { OrgSettingsPanel } from "@/components/OrgSettingsPanel";
 import { OwnersPanel } from "@/components/OwnersPanel";
@@ -112,6 +113,8 @@ if (typeof window !== "undefined") installAuthFetch(getApiBase());
 // adds the bearer token. Installed the other way round, the workspace header would be
 // built before auth replaced the init and would be dropped.
 if (typeof window !== "undefined") installWorkspaceHeader();
+// And this one outermost of all: an identical read already on its way is shared, not sent again (`lib/sharedReads.ts`).
+if (typeof window !== "undefined") installSharedReads();
 import {
   getConnections,
   seedDemoConnection,
