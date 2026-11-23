@@ -425,10 +425,77 @@ def test_a_plan_call_bills_nothing_beyond_the_plan():
     assert price is not None and (price.input_per_1m, price.output_per_1m) == (0.0, 0.0)
 
 
-def test_the_model_door_does_not_relay_to_the_plan(monkeypatch):
+def test_the_model_door_is_bound_to_the_plan_and_hands_no_credential(monkeypatch):
+    """The user, 2026-11-24: "Teach the door the plan" — the coworker's own turns run on the plan too. The door is given
+    an address and no key: the token is added in this process, on the way out."""
     monkeypatch.setattr(P, "resolve_binding", lambda role: ("chatgpt", "plan-model", CP.API_BASE))
-    with pytest.raises(P.NotOnTheDoorsWire):
-        P.door_binding("coder")
+    assert P.door_binding("coder") == ("chatgpt", "plan-model", f"{CP.API_BASE}/chat/completions", "")
+
+
+@pytest.fixture
+def plan_door(monkeypatch):
+    """The model door open and bound to the plan, the plan answered by a script."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from pramanyx.orgsettings.store import load_org_settings, save_org_settings
+    from pramanyx.routers import model_door
+    _signed_in()
+    before = load_org_settings()
+    save_org_settings(before.model_copy(update={"coworker_models": True}))
+    monkeypatch.setattr(P, "resolve_binding", lambda role: ("chatgpt", f"plan-{role}", CP.API_BASE))
+    records: list[dict] = []
+    monkeypatch.setattr(P, "record_door_call", lambda **kw: records.append(kw))
+    holder: dict = {}
+
+    def plan_client():
+        sync = CP.PlanTransport(upstream=httpx.Client(transport=httpx.MockTransport(holder["plan"])))
+        return httpx.AsyncClient(transport=CP.AsyncPlanTransport(sync))
+    monkeypatch.setattr(model_door, "_plan_client", plan_client)
+    app = FastAPI()
+    app.include_router(model_door.router)
+    client = TestClient(app)
+
+    def ask(plan, **body):
+        holder["plan"] = plan
+        return client.post("/llm/door/v1/chat/completions",
+                           json={"model": "narrator", "messages": [{"role": "user", "content": "hi"}], **body})
+    yield ask, records
+    save_org_settings(before)
+
+
+def _chunks(text: str) -> list[dict]:
+    return [json.loads(line[5:]) for line in text.splitlines() if line.startswith("data:") and line.strip() != "data: [DONE]"]
+
+
+def test_the_door_relays_a_streamed_answer_from_the_plan_as_chat_completions_chunks(plan_door):
+    ask, records = plan_door
+    plan = _Plan(_text_answer("Revenue rose in August."))
+    r = ask(plan, stream=True)
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/event-stream")
+    words = "".join((c["choices"][0]["delta"].get("content") or "") for c in _chunks(r.text) if c.get("choices"))
+    assert words == "Revenue rose in August."
+    assert plan.sent[0]["model"] == "plan-narrator" and plan.sent[0]["stream"] is True   # the organisation's model
+    assert plan.headers[0]["authorization"] == "Bearer AT-1" and "AT-1" not in r.text     # the token stays here
+    assert records and records[0]["backend"] == "chatgpt" and records[0]["ok"] is True
+    assert records[0]["prompt_tokens"] == 40 and records[0]["completion_tokens"] == 7    # counted from the stream
+
+
+def test_the_door_relays_a_tool_call_and_a_plain_answer_from_the_plan(plan_door):
+    ask, _ = plan_door
+    r = ask(_Plan(_tool_answer()), stream=True, tools=[{"type": "function", "function": {"name": "run_sql"}}])
+    calls = [tc for c in _chunks(r.text) if c.get("choices") for tc in (c["choices"][0]["delta"].get("tool_calls") or [])]
+    assert calls[0]["function"]["name"] == "run_sql"
+    assert "".join(tc["function"].get("arguments") or "" for tc in calls) == '{"sql":"SELECT 1"}'
+    r = ask(_Plan(_text_answer("Twelve.")))                                               # not streamed
+    assert r.status_code == 200 and r.json()["choices"][0]["message"]["content"] == "Twelve."
+
+
+def test_a_spent_plan_is_said_through_the_door_before_anything_streams(plan_door):
+    ask, records = plan_door
+    r = ask(_Plan(_limit_reached()), stream=True)
+    assert r.status_code == 429 and "subscription_sharing_usage_limit_exceeded" in r.text
+    assert records[-1]["ok"] is False
 
 
 def test_an_organisation_cannot_bind_the_plan():
