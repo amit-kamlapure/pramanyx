@@ -240,7 +240,8 @@ def _persons_own(request, what: str) -> None:
 
 
 @router.get("/record/definitions")
-def list_definitions(connection_id: str, term: Optional[str] = None, area: Optional[str] = None) -> list[dict]:
+def list_definitions(connection_id: str, term: Optional[str] = None, area: Optional[str] = None,
+                     request: Request = None) -> list[dict]:
     """A connection's Definitions, or the ones for ``term`` — one per area it is defined in, or the one in ``area``.
     Read by the app's Definition page and by an answer that leaned on one."""
     from pramanyx.record.writers import definition_term, definitions, definitions_of
@@ -250,6 +251,10 @@ def list_definitions(connection_id: str, term: Optional[str] = None, area: Optio
         rows = definitions_of(connection_id, term)
         if area is not None:
             rows = [c for c in rows if definition_term(c.extra.get("area", "")) == definition_term(area)]
+        from pramanyx.discover.usage import note_opened
+        for c in rows:     # a word read on its page: each of its Areas' Definitions is opened (Discover D5)
+            note_opened(request, "definition", f"{connection_id}/{c.extra.get('term', '')}/{c.extra.get('area', '')}",
+                        connection_id)
         return [_definition_view(c) for c in rows]
     return [_definition_view(c) for c in definitions(connection_id)]
 

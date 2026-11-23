@@ -18,7 +18,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Card, Chip, Empty, Figure, Figures, HBars, MUTED, NUM, NeedsRow, NeedsYou, ONE_LINE, Page, ROW } from "@/components/clarity/kit";
 import {
-  BriefingsToggle, ConnectorActions, FilterBox, PAIR, PanelHead, SchemaDocs, ShareBars, StateChip, TablesList, ToolsMenu,
+  BriefingsToggle, ConnectorActions, FilterBox, PAIR, PanelHead, SchemaDocs, ShareBars, StateChip, TablesList, ToolsMenu, readsKey,
   hasConnectorActions, useFavorite, type ToolItem,
 } from "@/components/catalog/CatalogTools";
 import { PermissionsPanel, VolumesPanel } from "@/components/catalog/MetastorePanels";
@@ -27,6 +27,7 @@ import { ERDiagram } from "@/components/ERDiagram";
 import { ExplorationBadge } from "@/components/ExplorationBadge";
 import { SchemaShape } from "@/components/SchemaShape";
 import { Button } from "@/components/ui/button";
+import { SelectField } from "@/components/ui/select";
 import { Pending } from "@/components/ui/motion";
 import { Loading } from "@/components/ui/states";
 import { TabStrip } from "@/components/ui/tab-strip";
@@ -39,6 +40,7 @@ import {
 import {
   duplicateWords, itemKey, scopeSummary, unsearchable, whatItIs, type Duplicate, type ScopeSummary, type ScopeTable,
 } from "@/lib/catalogSummary";
+import { readDiscoverItems, type DiscoverUse } from "@/lib/discover";
 import { compactNumber, countNoun, formatCount, formatTimestamp } from "@/lib/format";
 import { dayWords } from "@/lib/home";
 import { useRichSchema } from "@/lib/schema-context";
@@ -209,7 +211,7 @@ export function CatalogScope({ entry, schema, view, conn, dups, status, label, o
                 onAll={() => setTab("tables")} />
             )}
             {tab === "tables" && (
-              <TablesTab summary={summary} schemas={multi ? entry.schemas : []}
+              <TablesTab summary={summary} schemas={multi ? entry.schemas : []} connId={connId}
                 onOpen={t => onOpenTable(t.schema, { name: t.name, row_count: t.rows })} onOpenSchema={onOpenSchema} />
             )}
             {tab === "docs" && (
@@ -338,23 +340,47 @@ function Overview({ summary: s, metricsRead, multi, needs, onOpen, onAll }: {
 
 // ── Tables: a filter column of schemas, the list beside it ───────────────────────────────────────────────────────
 
-function TablesTab({ summary, schemas, onOpen, onOpenSchema }: {
+function TablesTab({ summary, schemas, onOpen, onOpenSchema, connId }: {
   summary: ScopeSummary; schemas: CatalogSchemaInfo[]; onOpen: (t: ScopeTable) => void;
-  onOpenSchema: (s: CatalogSchemaInfo) => void;
+  onOpenSchema: (s: CatalogSchemaInfo) => void; connId?: string;
 }) {
   const [filter, setFilter] = useState("");
   const [only, setOnly] = useState<string | null>(null);
+  // D5: the most read this month first, read from the audited statements (Discover's `sort=use`), never guessed
+  const [byUse, setByUse] = useState(false);
+  const [reads, setReads] = useState<{ by: Record<string, DiscoverUse | null | undefined>; said: string[] } | null>(null);
+  useEffect(() => {
+    if (!byUse || !connId || reads) return;
+    readDiscoverItems({ kind: "table", connectionId: connId, sort: "use", limit: 200 })
+      .then(r => setReads({ by: Object.fromEntries(r.items.map(i => [readsKey(String(i.detail.schema ?? ""), i.name), i.use])),
+        said: r.use_said ?? [] }))
+      .catch(e => setReads({ by: {}, said: [String((e as Error)?.message ?? e)] }));
+  }, [byUse, connId, reads]);
   const q = filter.toLowerCase();
-  const list = summary.tables.filter(t => (!only || t.schema === only)
+  const shown = summary.tables.filter(t => (!only || t.schema === only)
     && (!q || t.name.toLowerCase().includes(q) || (t.object?.words.toLowerCase().includes(q) ?? false)));
+  const count = (t: ScopeTable) => reads?.by[readsKey(t.schema, t.name)]?.count ?? 0;
+  const list = byUse && reads ? [...shown].sort((a, b) => count(b) - count(a)) : shown;
   const max = Math.max(1, ...schemas.map(s => s.tables.length));
   const chosen = schemas.find(s => s.name === only);
   const listCard = (
     <Card label={list.length === summary.tables.length ? countNoun(list.length, "table") : `${formatCount(list.length)} of ${formatCount(summary.tables.length)} tables`}
-      right={<FilterBox value={filter} onChange={setFilter} placeholder="Filter tables…" width={200} />} testId="catalog-tables-tab"
+      right={
+        <span style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
+          {connId && (
+            <SelectField bespoke aria-label="Sort the tables" value={byUse ? "use" : "rows"} onChange={e => setByUse(e.target.value === "use")}>
+              <option value="rows">By rows</option>
+              <option value="use">Most read this month</option>
+            </SelectField>
+          )}
+          <FilterBox value={filter} onChange={setFilter} placeholder="Filter tables…" width={200} />
+        </span>} testId="catalog-tables-tab"
       style={{ flex: "1 1 480px" }}>
-      {list.length ? <TablesList tables={list} onOpen={onOpen} showSchema={schemas.length > 1} />
+      {list.length ? <TablesList tables={list} onOpen={onOpen} showSchema={schemas.length > 1} reads={byUse ? reads?.by ?? {} : undefined} />
         : <Empty>{q ? "No table matches that filter." : "No tables."}</Empty>}
+      {byUse && (reads?.said.length ?? 0) > 0 && (
+        <p className="aug-fs-xs" style={{ ...MUTED, margin: "8px 0 0" }} data-testid="catalog-reads-said">{reads!.said.join(" ")}</p>
+      )}
     </Card>
   );
   if (schemas.length < 2) return listCard;

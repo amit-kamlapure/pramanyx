@@ -51,14 +51,16 @@ def get_discover(request: Request, workspace_id: Optional[str] = None, connectio
 def get_discover_items(request: Request, workspace_id: Optional[str] = None, connection_id: Optional[str] = None,
                        kind: str = "", area: str = "", certified: bool = False, mine: bool = False,
                        q: str = Query("", max_length=200),
-                       cursor: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=200)) -> dict:
-    """Every thing of a kind, of an Area, certified, or the person's own — "View all" — a page at a time."""
+                       cursor: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=200),
+                       sort: str = Query("", pattern="^(|use)$")) -> dict:
+    """Every thing of a kind, of an Area, certified, or the person's own — "View all" — a page at a time; ``sort=use``
+    puts the most used this month first (D5)."""
     from pramanyx.discover.items import KINDS
     from pramanyx.discover.service import list_items
     if kind and kind not in KINDS:
         raise HTTPException(status_code=422, detail=f"a kind is one of {', '.join(KINDS)}")
     return list_items(scope_of(request, workspace_id, connection_id), kind=kind, area=area, certified=certified,
-                      mine=mine, q=q, cursor=cursor, limit=limit)
+                      mine=mine, q=q, cursor=cursor, limit=limit, sort=sort)
 
 
 @router.get("/discover/search")

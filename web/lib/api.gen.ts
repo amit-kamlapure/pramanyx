@@ -5792,7 +5792,8 @@ export interface paths {
         };
         /**
          * Get Discover Items
-         * @description Every thing of a kind, of an Area, certified, or the person's own — "View all" — a page at a time.
+         * @description Every thing of a kind, of an Area, certified, or the person's own — "View all" — a page at a time; ``sort=use``
+         *     puts the most used this month first (D5).
          */
         get: operations["get_discover_items_discover_items_get"];
         put?: never;
@@ -38498,6 +38499,7 @@ export interface operations {
                 q?: string;
                 cursor?: number;
                 limit?: number;
+                sort?: string;
             };
             header?: never;
             path?: never;

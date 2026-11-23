@@ -28,6 +28,7 @@ import {
 } from "@/lib/api";
 import type { Know, ScopeTable, StateWord } from "@/lib/catalogSummary";
 import { getApiBase } from "@/lib/config";
+import { useLine, type DiscoverUse } from "@/lib/discover";
 import { compactNumber, formatCount, formatTimestamp } from "@/lib/format";
 
 // ── Favorites and recents ─────────────────────────────────────────────────────────────────────────────────────────
@@ -206,6 +207,13 @@ const GRID: CSSProperties = {
   display: "grid", gridTemplateColumns: "minmax(150px, 1.3fr) minmax(120px, 1fr) 92px 100px 128px minmax(120px, 150px)",
   columnGap: 0, alignItems: "stretch",
 };
+/** The same list with how often each table was read this month beside its rows (D5). */
+const GRID_READS: CSSProperties = {
+  ...GRID, gridTemplateColumns: "minmax(150px, 1.3fr) minmax(120px, 1fr) 92px 116px 100px 128px minmax(120px, 150px)",
+};
+
+/** A table's key among this month's reads: its schema and name, as Discover lists them. */
+export const readsKey = (schema: string, name: string) => `${schema}.${name}`.toLowerCase();
 /** A list's column heading and cell. No gap between columns — the space is the cell's padding — so the rule under each
  *  row runs the whole width instead of breaking at every column. */
 export const LIST_HEAD: CSSProperties = { ...MUTED, padding: "2px 12px 6px 2px",
@@ -218,16 +226,19 @@ const RIGHT: CSSProperties = { textAlign: "right", ...NUM };
 
 /** Each table: its name (the door to it), its business object, rows, questions asked of it, metrics that read it,
  *  its state. "not counted" — never 0 — for a table whose rows are not counted. */
-export function TablesList({ tables, onOpen, showSchema, testId }: {
+export function TablesList({ tables, onOpen, showSchema, testId, reads }: {
   tables: ScopeTable[]; onOpen: (t: ScopeTable) => void; showSchema?: boolean; testId?: string;
+  /** This month's reads by `readsKey`, drawn as a column of their own when given (D5). */
+  reads?: Record<string, DiscoverUse | null | undefined>;
 }) {
   if (!tables.length) return <Empty>No tables.</Empty>;
   return (
     <div data-testid={testId} style={{ overflowX: "auto" }}>
-      <div className="aug-fs-chrome" style={{ ...GRID, minWidth: 640 }}>
+      <div className="aug-fs-chrome" style={{ ...(reads ? GRID_READS : GRID), minWidth: 640 }}>
         <span className="aug-fs-xs" style={HEAD}>Table</span>
         <span className="aug-fs-xs" style={HEAD}>Business object</span>
         <span className="aug-fs-xs" style={{ ...HEAD, ...RIGHT }}>Rows</span>
+        {reads && <span className="aug-fs-xs" style={{ ...HEAD, ...RIGHT }}>Read this month</span>}
         <span className="aug-fs-xs" style={{ ...HEAD, ...RIGHT }}>Questions</span>
         <span className="aug-fs-xs" style={{ ...HEAD, ...RIGHT }}>Metrics read it</span>
         <span className="aug-fs-xs" style={HEAD}>State</span>
@@ -247,6 +258,15 @@ export function TablesList({ tables, onOpen, showSchema, testId }: {
               title={t.rows == null ? "Its rows are not counted" : `${formatCount(t.rows)} rows`}>
               {t.rows == null ? "not counted" : compactNumber(t.rows)}
             </div>
+            {reads && (() => {
+              const u = reads[readsKey(t.schema, t.name)];
+              return (
+                <div style={{ ...CELL, ...RIGHT, color: u?.count ? "var(--t1)" : "var(--t3)" }} data-testid="catalog-table-reads"
+                  title={u ? useLine(u) || "Not read this month" : "Not read yet"}>
+                  {u ? (u.count ? compactNumber(u.count) : "—") : "…"}
+                </div>
+              );
+            })()}
             <div style={{ ...CELL, ...RIGHT, color: t.questions ? "var(--t1)" : "var(--t3)" }} title={t.questionsNote || undefined}>
               {t.questions ? `${t.questions.n}/${t.questions.of}` : "—"}
             </div>

@@ -211,6 +211,22 @@ function Browse({ home, areaNames, many, onOpenArea, onViewAll, onCertified, rel
               says so wherever it shows.</Empty>}
       </Card>
 
+      {(home.recent?.length ?? 0) > 0 && (
+        <Card label="Recently opened by you" testId="discover-recent" right={<span className="aug-fs-xs">newest first</span>}>
+          {home.recent!.map(i => <ItemRow key={`${i.kind}:${i.id}`} item={i} areaName={areaNames[i.area]} many={many} />)}
+        </Card>
+      )}
+
+      <Card label="Most used this month" testId="discover-most-used"
+        right={<span className="aug-fs-xs">reads of tables, opens of the rest, the last 30 days</span>}>
+        {home.most_used?.length
+          ? home.most_used.map(i => <ItemRow key={`${i.kind}:${i.id}`} item={i} areaName={areaNames[i.area]} many={many} />)
+          : <Empty>Nothing was read or opened this month yet.</Empty>}
+        {(home.use_said?.length ?? 0) > 0 && (
+          <p className="aug-fs-xs" style={{ ...MUTED, margin: "8px 0 0" }} data-testid="discover-use-said">{home.use_said!.join(" ")}</p>
+        )}
+      </Card>
+
       <Card label="Everything, by kind" testId="discover-kinds">
         <div className="aug-discover-kinds">
           {withUniqueKeys(home.kinds.filter(k => k.count || k.withheld), k => k.kind).map(([key, k]) => (

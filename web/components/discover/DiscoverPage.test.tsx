@@ -185,6 +185,27 @@ describe("Discover", () => {
   });
 });
 
+describe("use this month (D5)", () => {
+  it("lists the most used with each one's use, what the person opened lately, and says what is not measured", async () => {
+    readDiscover.mockResolvedValue({ ...HOME,
+      most_used: [{ ...ORDERS, use: { measured: "reads", count: 1204, people: null, unattributed: null, last: null } }, SCOUT],
+      recent: [{ ...SCOUT, use: { measured: "opens", count: 3, people: 1, unattributed: 0, last: null } }],
+      use_said: ["Metrics and trusted queries have no page of their own to open, so their use is not measured yet."] });
+    renderPage();
+    const most = await screen.findByTestId("discover-most-used");
+    expect(within(most).getAllByTestId("discover-row").map(r => r.textContent)).toEqual([
+      expect.stringContaining("read 1,204 times this month · who read it is not recorded"), expect.stringContaining("Anomaly Scout")]);
+    expect(within(screen.getByTestId("discover-recent")).getByText(/opened 3 times this month by one person/)).toBeInTheDocument();
+    expect(screen.getByTestId("discover-use-said")).toHaveTextContent("their use is not measured yet");
+  });
+
+  it("says nothing was used yet, and shows no recent row for a person who opened nothing", async () => {
+    renderPage();
+    expect(await screen.findByTestId("discover-most-used")).toHaveTextContent("Nothing was read or opened this month yet.");
+    expect(screen.queryByTestId("discover-recent")).toBeNull();
+  });
+});
+
 describe("the workspace", () => {
   it("reads nothing before the shell knows it, then reads under it — never every workspace's connections", async () => {
     const props = { openId: null, onOpenArea: vi.fn(), onName: vi.fn(), connections: [] };

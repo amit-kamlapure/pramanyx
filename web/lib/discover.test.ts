@@ -6,7 +6,7 @@
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { askSubjectOf, holdsWords, markOf, ownersLine, readDiscover, secondLine, withheldWords, type DiscoverItem } from "@/lib/discover";
+import { askSubjectOf, holdsWords, markOf, ownersLine, readDiscover, secondLine, useLine, withheldWords, type DiscoverItem } from "@/lib/discover";
 
 const item = (over: Partial<DiscoverItem>): DiscoverItem => ({
   kind: "metric", id: "x", name: "x", line: "", connection_id: "8233e4fd", connection_name: "theLook", area: "",
@@ -77,5 +77,17 @@ describe("reading Discover", () => {
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(String(fetch.mock.calls[0][0])).toContain("connection_id=c-once");
     expect(String(fetch.mock.calls[0][0])).toContain("workspace_id=w");
+  });
+});
+
+describe("a thing's use this month, in words (D5)", () => {
+  it("says reads and opens, by how many people, and that who read it is not recorded when it is not", () => {
+    expect(useLine({ measured: "reads", count: 1204, people: 2, unattributed: 40, last: null }))
+      .toBe("read 1,204 times this month by 2 people (40 not recorded who)");
+    expect(useLine({ measured: "reads", count: 9, people: null, unattributed: null, last: null }))
+      .toBe("read 9 times this month · who read it is not recorded");
+    expect(useLine({ measured: "opens", count: 1, people: 1, unattributed: 0, last: null })).toBe("opened once this month by one person");
+    expect(useLine({ measured: "opens", count: 0, people: 0, unattributed: 0, last: null })).toBe("");
+    expect(useLine(null)).toBe("");
   });
 });
