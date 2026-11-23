@@ -287,3 +287,11 @@ Model-suggested Areas with **Declare** and **Not an area** were already on Disco
 
 Seen live on theLook's Returns: Edit, Add to this Area (with real results) and the row menu all work. Nothing was saved
 on live data.
+
+**The Definition's body written as it reads, 2026-11-23** (the user's choice of editor).
+- The body is written as it reads (`components/definitions/RichBody.tsx`). Markdown stays the stored form, so answers
+  and the reader are unchanged.
+- Its packages are pinned at the newest version the repo's seven-day damper admits.
+- Every tool of the old toolbar moved over: Heading, Subheading, Text, Bold, Italic, the lists, Link (asked in the
+  toolbar) and Table, with the count. Preview went, since what is written is what is read.
+- Seen live on "Repeat buyer": its stored Markdown reads in and writes back unchanged.
