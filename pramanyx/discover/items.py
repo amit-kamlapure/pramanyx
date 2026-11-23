@@ -95,7 +95,9 @@ class Scope:
 
     def coverage(self, connection_id: str) -> dict:
         from pramanyx.semantic.metric_coverage import coverage
-        return self._once(self._coverage, "coverage", connection_id, lambda: coverage(connection_id))
+        # the Area map this request already made, not a second one (coverage never changes a map in place)
+        return self._once(self._coverage, "coverage", connection_id,
+                          lambda: coverage(connection_id, mmap=self.metric_map(connection_id)))
 
     def metric_map(self, connection_id: str):
         from pramanyx.semantic.metric_map import map_for
