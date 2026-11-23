@@ -279,3 +279,35 @@ def test_a_definition_s_row_says_its_description_or_its_words_without_their_mark
     body = "## Definition\nA customer with **more than one** order in `orders`.\n\n## Business use\n- [Repeat Purchase Rate](/?tab=x) reads it."
     assert I.plain_words(body) == "A customer with more than one order in orders. Repeat Purchase Rate reads it."
     assert I.plain_words("| a | b |\n| --- | --- |\n| 1 | 2 |") == "a b 1 2"
+
+
+def test_a_read_the_readers_share_is_made_once_while_they_run_side_by_side(monkeypatch):
+    """The readers run in threads; the table and metric readers both ask for a connection's coverage matrix. Unguarded,
+    each built it at the same moment and the ontology under it was applied three times per page read (2026-11-23)."""
+    import threading
+    import time
+
+    import pramanyx.semantic.metric_coverage as MC
+    import pramanyx.semantic.metric_map as MM
+
+    made: list[str] = []
+
+    def slow(what):
+        def make(connection_id, *a, **k):
+            made.append(f"{what}:{connection_id}")
+            time.sleep(0.05)                                   # long enough for every thread to arrive while it is made
+            return {"areas": [], "made_for": connection_id}
+        return make
+
+    monkeypatch.setattr(MC, "coverage", slow("coverage"))
+    monkeypatch.setattr(MM, "map_for", slow("map"))
+    scope = _scope()
+    got: list = []
+    threads = [threading.Thread(target=lambda c=c: got.append((scope.coverage(c), scope.metric_map(c))))
+               for c in ("c1", "c1", "c1", "c2", "c2")]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert sorted(made) == ["coverage:c1", "coverage:c2", "map:c1", "map:c2"]
+    assert {cov["made_for"] for cov, _ in got} == {"c1", "c2"} and len(got) == 5

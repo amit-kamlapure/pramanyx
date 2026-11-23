@@ -65,10 +65,15 @@ class Found:
 
 
 class Scope:
-    """Who is looking, and over which connections — with each connection's reads kept for the one request."""
+    """Who is looking, and over which connections — with each connection's reads kept for the one request.
+
+    The readers run side by side (`service.gather`), so a read they share is made ONCE: the first reader to ask makes
+    it and the others wait for it. Unguarded, the table and metric readers each built the same coverage matrix at the
+    same moment, and the ontology under it was applied three times per page read (2026-11-23)."""
 
     def __init__(self, request: Any, person: str, connections: dict[str, str], *, workspace_id: Optional[str] = None,
                  curator: bool = False):
+        import threading
         self.request = request
         self.person = person
         self.connections = connections
@@ -76,18 +81,25 @@ class Scope:
         self.curator = curator
         self._coverage: dict[str, dict] = {}
         self._maps: dict[str, Any] = {}
+        self._guard = threading.Lock()
+        self._making: dict[tuple[str, str], Any] = {}
+
+    def _once(self, kept: dict, what: str, key: str, make: Callable[[], Any]) -> Any:
+        import threading
+        with self._guard:
+            lock = self._making.setdefault((what, key), threading.Lock())
+        with lock:
+            if key not in kept:
+                kept[key] = make()
+        return kept[key]
 
     def coverage(self, connection_id: str) -> dict:
-        if connection_id not in self._coverage:
-            from pramanyx.semantic.metric_coverage import coverage
-            self._coverage[connection_id] = coverage(connection_id)
-        return self._coverage[connection_id]
+        from pramanyx.semantic.metric_coverage import coverage
+        return self._once(self._coverage, "coverage", connection_id, lambda: coverage(connection_id))
 
     def metric_map(self, connection_id: str):
-        if connection_id not in self._maps:
-            from pramanyx.semantic.metric_map import map_for
-            self._maps[connection_id] = map_for(connection_id)
-        return self._maps[connection_id]
+        from pramanyx.semantic.metric_map import map_for
+        return self._once(self._maps, "map", connection_id, lambda: map_for(connection_id))
 
 
 def who_of(person: str) -> str:
