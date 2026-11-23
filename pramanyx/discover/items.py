@@ -38,7 +38,7 @@ class Item:
     connection_id: str = ""
     connection_name: str = ""
     area: str = ""
-    #: How it came to stand in its Area, in words: "Ana placed it here", "read from its tables", "named by its words".
+    #: How it came to stand in its Area, in words: "Ana placed it here", "read from its tables", 'its name says "sales"'.
     area_how: str = ""
     owner: str = ""
     updated_at: str = ""
@@ -113,12 +113,12 @@ def _certified(kind: str) -> dict[str, dict]:
     return artifacts_of(kind)
 
 
-def by_words(scope: Scope, text: str, connection_id: str = "") -> str:
-    """The Area the words of ``text`` name, on its connection's map — or, for a thing of no connection, on the first
-    map in the scope that names one. "" when none does."""
+def by_words(scope: Scope, text: str, connection_id: str = "") -> tuple[str, str]:
+    """``(area, word)`` — the Area the words of ``text`` name and the word that named it, on its connection's map, or,
+    for a thing of no connection, on the first map in the scope that names one. ``("", "")`` when none does."""
     from pramanyx.semantic.metric_map import best_areas
     if not (text or "").strip():
-        return ""
+        return "", ""
     for c in ([connection_id] if connection_id else list(scope.connections)):
         try:
             named = [a for a in scope.metric_map(c).areas if not a.generic]
@@ -128,12 +128,14 @@ def by_words(scope: Scope, text: str, connection_id: str = "") -> str:
             continue
         hits = best_areas(text, named)
         if hits:
-            return hits[0][0].id
-    return ""
+            return hits[0][0].id, hits[0][1]
+    return "", ""
 
 
-def settle(item: Item, scope: Scope, *, placed: Optional[tuple[str, str]] = None, words: str = "") -> Item:
-    """Stand ``item`` in its Area: a person's placement, else the tables it reads, else its own words, else none."""
+def settle(item: Item, scope: Scope, *, placed: Optional[tuple[str, str]] = None) -> Item:
+    """Stand ``item`` in its Area: a person's placement, else the tables it reads, else its name's words, else none.
+    Its NAME only: a description is prose, and read for Areas it placed a schedule that "returns the top five" in
+    Returns (seen live, 2026-11-23). The word that placed it is said, so a weak placement can be seen for one."""
     if placed and placed[0]:
         item.area, item.area_how = placed[0], f"{_who(placed[1]) or 'someone'} placed it here"
         return item
@@ -143,9 +145,9 @@ def settle(item: Item, scope: Scope, *, placed: Optional[tuple[str, str]] = None
         if area:
             item.area, item.area_how = area, "read from its tables"
             return item
-    area = by_words(scope, words or item.name, item.connection_id)
+    area, word = by_words(scope, item.name, item.connection_id)
     if area:
-        item.area, item.area_how = area, "named by its words"
+        item.area, item.area_how = area, f'its name says "{word}"'
     return item
 
 
@@ -297,7 +299,7 @@ def canvases(scope: Scope) -> Found:
                     updated_at=str(activity.get(c.id) or c.updated_at or ""), certification=marks.get(c.id),
                     href=_href("/", tab="canvas-workspace", canvas=c.id),
                     tables=[t for s in c.scopes for t in (s.tables or [])])
-        found.items.append(settle(item, scope, placed=placed.get(c.id), words=f"{c.name} {c.description or ''}"))
+        found.items.append(settle(item, scope, placed=placed.get(c.id)))
     return found
 
 
@@ -314,7 +316,7 @@ def agents(scope: Scope) -> Found:
             kind="agent", id=a.id, name=a.name, line=a.purpose, connection_id=a.connection_id,
             connection_name=scope.connections.get(a.connection_id, ""), owner=a.owner, updated_at=a.updated_at,
             state="on" if a.enabled else "off", href=_href("/", tab="agents", agent=a.id, kind="custom")),
-            scope, placed=placed.get(a.id), words=f"{a.name} {a.purpose}"))
+            scope, placed=placed.get(a.id)))
     return found
 
 
@@ -331,7 +333,7 @@ def schedules(scope: Scope) -> Found:
             kind="schedule", id=a.id, name=a.name, line=a.description, connection_id=a.conn_id,
             connection_name=scope.connections[a.conn_id], owner=a.declared_by, updated_at=str(a.updated_at or ""),
             state="on" if a.enabled else "off", href=_href("/automations", conn=a.conn_id, focus=a.id)),
-            scope, placed=placed.get(a.id), words=f"{a.name} {a.description}"))
+            scope, placed=placed.get(a.id)))
     return found
 
 
@@ -360,7 +362,7 @@ def documents(scope: Scope) -> Found:
             connection_id=conn, connection_name=scope.connections.get(conn, ""),
             owner=str((d.get("access") or {}).get("owner") or ""), updated_at=str(d.get("uploaded_at") or ""),
             certification=marks.get(doc_id), href=_href("/", tab="documents", doc=doc_id)),
-            scope, placed=placed.get(doc_id), words=title))
+            scope, placed=placed.get(doc_id)))
     return found
 
 
@@ -376,7 +378,7 @@ def sheets(scope: Scope) -> Found:
         found.items.append(settle(Item(
             kind="sheet", id=s.id, name=s.name, line=f"{len(s.columns)} columns", connection_id=model.SHEETS_CONNECTION,
             owner=str(s.created_by or ""), updated_at=str(getattr(s.change, "at", "") or s.created_at or ""),
-            href=f"/sheets/{quote(s.id)}"), scope, placed=placed.get(s.id), words=s.name))
+            href=f"/sheets/{quote(s.id)}"), scope, placed=placed.get(s.id)))
     return found
 
 
@@ -398,7 +400,7 @@ def trusted_queries(scope: Scope) -> Found:
                 connection_name=name, state=str(getattr(q, "status", "") or "approved"),
                 updated_at=str(getattr(q, "verified_at", "") or getattr(q, "updated_at", "") or ""),
                 href=_href("/", tab="memory", conn=conn, trusted=qid),
-                tables=sorted(tables_of_sql(str(getattr(q, "sql", "") or "")))), scope, words=str(q.question)))
+                tables=sorted(tables_of_sql(str(getattr(q, "sql", "") or "")))), scope))
     return found
 
 

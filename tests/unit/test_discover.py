@@ -127,16 +127,26 @@ def test_an_area_s_page_holds_its_things_by_kind_and_its_sub_areas(monkeypatch):
 
 def test_a_thing_stands_where_a_person_placed_it_else_by_its_tables_else_by_its_words(monkeypatch):
     monkeypatch.setattr("pramanyx.semantic.areas.area_of_tables", lambda tables, conn: "returns" if "returns" in tables else "")
-    monkeypatch.setattr(I, "by_words", lambda scope, text, conn="": "orders_sales" if "sales" in text.lower() else "")
+    monkeypatch.setattr(I, "by_words",
+                        lambda scope, text, conn="": ("orders_sales", "sales") if "sales" in text.lower() else ("", ""))
     s = _scope()
     placed = I.settle(Item("dashboard", "d", "Anything", connection_id="c1"), s, placed=("marketing", "user:ana"))
     assert (placed.area, placed.area_how) == ("marketing", "ana placed it here")
     by_tables = I.settle(Item("canvas", "cv", "Sales desk", connection_id="c1", tables=["returns"]), s)
     assert (by_tables.area, by_tables.area_how) == ("returns", "read from its tables")
     by_name = I.settle(Item("dashboard", "d2", "Sales", connection_id="c1"), s)
-    assert (by_name.area, by_name.area_how) == ("orders_sales", "named by its words")
+    assert (by_name.area, by_name.area_how) == ("orders_sales", 'its name says "sales"')
     nowhere = I.settle(Item("agent", "a", "Anomaly Scout", connection_id="c1"), s)
     assert (nowhere.area, nowhere.area_how) == ("", "")
+
+
+def test_a_thing_is_placed_by_its_name_never_its_description(monkeypatch):
+    """Seen live, 2026-11-23: a schedule whose description said it "returns the top five" stood in Returns."""
+    monkeypatch.setattr(I, "by_words",
+                        lambda scope, text, conn="": ("returns", "returns") if "returns" in text else ("", ""))
+    got = I.settle(Item("schedule", "s", "Top sellers yesterday", line="returns the top five", connection_id="c1"),
+                   _scope())
+    assert got.area == ""
 
 
 # ── each kind's own access rule ────────────────────────────────────────────────────────────────────────────────────
@@ -149,7 +159,7 @@ def test_a_document_not_shared_with_the_person_is_counted_not_listed(monkeypatch
     monkeypatch.setattr("pramanyx.knowledge.access.may_read", lambda d, reader=None: d["doc_id"] == "d1")
     monkeypatch.setattr(I, "_certified", lambda kind: {})
     monkeypatch.setattr(I, "_placed_tags", lambda kind: {})
-    monkeypatch.setattr(I, "by_words", lambda scope, text, conn="": "")
+    monkeypatch.setattr(I, "by_words", lambda scope, text, conn="": ("", ""))
     got = I.documents(_scope())
     assert [i.name for i in got.items] == ["Kpi Handbook"] and got.withheld == 1
     assert got.items[0].href == "/?tab=documents&doc=d1"
@@ -169,7 +179,7 @@ def test_a_connection_s_schema_document_stands_with_it_and_is_out_of_view_with_i
     monkeypatch.setattr("pramanyx.knowledge.access.may_read", lambda d, reader=None: True)
     monkeypatch.setattr(I, "_certified", lambda kind: {})
     monkeypatch.setattr(I, "_placed_tags", lambda kind: {})
-    monkeypatch.setattr(I, "by_words", lambda scope, text, conn="": "")
+    monkeypatch.setattr(I, "by_words", lambda scope, text, conn="": ("", ""))
     got = I.documents(_scope())
     assert [(i.name, i.connection_name) for i in got.items] == [
         ("Schema documentation — theLook/thelook", "theLook"), ("Kpi Handbook", "")]
@@ -196,7 +206,7 @@ def test_an_archived_dashboard_is_not_listed_and_a_published_one_carries_its_own
         {"owner": "bo", "dashboard_id": "ops", "title": "Operations"}])
     monkeypatch.setattr(I, "_certified", lambda kind: {"c1:ana:sales": CERT})
     monkeypatch.setattr(I, "_placed_tags", lambda kind: {})
-    monkeypatch.setattr(I, "by_words", lambda scope, text, conn="": "")
+    monkeypatch.setattr(I, "by_words", lambda scope, text, conn="": ("", ""))
     got = I.dashboards(_scope())
     assert [i.name for i in got.items] == ["Sales", "Operations"]
     assert got.items[0].certification == CERT and got.items[1].href.endswith("owner=bo")
