@@ -328,169 +328,6 @@ wheels = [
 ]
 
 [[package]]
-name = "pramanyx"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "ag-ui-protocol" },
-    { name = "anthropic" },
-    { name = "apscheduler" },
-    { name = "click" },
-    { name = "cryptography" },
-    { name = "duckdb" },
-    { name = "fastapi" },
-    { name = "instructor" },
-    { name = "langchain-core", version = "1.6.10", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'emscripten'" },
-    { name = "langchain-core", version = "1.7.2", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'emscripten'" },
-    { name = "langgraph" },
-    { name = "langgraph-checkpoint-sqlite" },
-    { name = "mcp" },
-    { name = "numpy" },
-    { name = "openai" },
-    { name = "psycopg2-binary" },
-    { name = "pydantic" },
-    { name = "pyjwt", extra = ["crypto"] },
-    { name = "python-dotenv" },
-    { name = "python-multipart" },
-    { name = "pytz" },
-    { name = "pyyaml" },
-    { name = "resvg-py" },
-    { name = "rich" },
-    { name = "scipy" },
-    { name = "sqlglot" },
-    { name = "uvicorn" },
-]
-
-[package.optional-dependencies]
-cloud-storage = [
-    { name = "azure-storage-blob" },
-]
-crm = [
-    { name = "requests" },
-]
-dev = [
-    { name = "httpx" },
-    { name = "pytest" },
-    { name = "pytest-anyio" },
-]
-docs = [
-    { name = "firecrawl-anydoc" },
-    { name = "pdfplumber" },
-    { name = "pypdf" },
-    { name = "python-docx" },
-]
-evals = [
-    { name = "autoevals" },
-    { name = "braintrust" },
-]
-export = [
-    { name = "python-pptx" },
-    { name = "reportlab" },
-    { name = "svglib" },
-]
-fastread = [
-    { name = "polars" },
-]
-knowledge-sync = [
-    { name = "atlassian-python-api" },
-    { name = "notion-client" },
-]
-observability = [
-    { name = "langfuse" },
-    { name = "mlflow-skinny" },
-    { name = "opentelemetry-exporter-otlp" },
-    { name = "opentelemetry-sdk" },
-]
-semantic = [
-    { name = "qdrant-client" },
-]
-shared-state = [
-    { name = "langgraph-checkpoint-postgres" },
-    { name = "psycopg", extra = ["binary"] },
-]
-warehouse = [
-    { name = "clickhouse-connect" },
-    { name = "connectorx" },
-    { name = "databricks-sql-connector" },
-    { name = "google-cloud-bigquery" },
-    { name = "ibis-framework", extra = ["duckdb", "postgres"] },
-    { name = "oracledb" },
-    { name = "pyathena" },
-    { name = "pyexasol" },
-    { name = "pymssql" },
-    { name = "pymysql" },
-    { name = "snowflake-connector-python" },
-    { name = "trino" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "ag-ui-protocol", specifier = "==0.1.19" },
-    { name = "anthropic", specifier = ">=0.40.0,<1" },
-    { name = "apscheduler", specifier = ">=3.10.0" },
-    { name = "atlassian-python-api", marker = "extra == 'knowledge-sync'", specifier = ">=3.41.0" },
-    { name = "autoevals", marker = "extra == 'evals'", specifier = ">=0.0.70" },
-    { name = "azure-storage-blob", marker = "extra == 'cloud-storage'", specifier = ">=12.0.0" },
-    { name = "braintrust", marker = "extra == 'evals'", specifier = ">=0.0.150" },
-    { name = "click", specifier = ">=8.1.0" },
-    { name = "clickhouse-connect", marker = "extra == 'warehouse'", specifier = ">=0.8.0" },
-    { name = "connectorx", marker = "extra == 'warehouse'", specifier = ">=0.3.3" },
-    { name = "cryptography", specifier = ">=48.0.0" },
-    { name = "databricks-sql-connector", marker = "extra == 'warehouse'", specifier = ">=3.0.0" },
-    { name = "duckdb", specifier = ">=1.1.0" },
-    { name = "fastapi", specifier = ">=0.136.1" },
-    { name = "firecrawl-anydoc", marker = "extra == 'docs'", specifier = ">=0.2.4" },
-    { name = "google-cloud-bigquery", marker = "extra == 'warehouse'", specifier = ">=3.0.0" },
-    { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27.0" },
-    { name = "ibis-framework", extras = ["duckdb", "postgres"], marker = "extra == 'warehouse'", specifier = ">=9.0.0" },
-    { name = "instructor", specifier = ">=1.4.0" },
-    { name = "langchain-core", specifier = ">=0.3.0" },
-    { name = "langfuse", marker = "extra == 'observability'", specifier = ">=4,<5" },
-    { name = "langgraph", specifier = ">=0.2.0" },
-    { name = "langgraph-checkpoint-postgres", marker = "extra == 'shared-state'", specifier = "==3.1.3" },
-    { name = "langgraph-checkpoint-sqlite", specifier = ">=3.1.0" },
-    { name = "mcp", specifier = ">=1.28.0" },
-    { name = "mlflow-skinny", marker = "extra == 'observability'", specifier = ">=3.13" },
-    { name = "notion-client", marker = "extra == 'knowledge-sync'", specifier = ">=2.2.0" },
-    { name = "numpy", specifier = ">=1.26.0" },
-    { name = "openai", specifier = ">=1.50.0" },
-    { name = "opentelemetry-exporter-otlp", marker = "extra == 'observability'", specifier = ">=1.24.0" },
-    { name = "opentelemetry-sdk", marker = "extra == 'observability'", specifier = ">=1.24.0" },
-    { name = "oracledb", marker = "extra == 'warehouse'", specifier = ">=2.0.0" },
-    { name = "pdfplumber", marker = "extra == 'docs'", specifier = ">=0.11.10" },
-    { name = "polars", marker = "extra == 'fastread'", specifier = ">=1.0.0" },
-    { name = "psycopg", extras = ["binary"], marker = "extra == 'shared-state'", specifier = ">=3.2.0" },
-    { name = "psycopg2-binary", specifier = ">=2.9.12" },
-    { name = "pyathena", marker = "extra == 'warehouse'", specifier = ">=3.0.0" },
-    { name = "pydantic", specifier = ">=2.7.0" },
-    { name = "pyexasol", marker = "extra == 'warehouse'", specifier = ">=0.25.0" },
-    { name = "pyjwt", extras = ["crypto"], specifier = ">=2.9.0" },
-    { name = "pymssql", marker = "extra == 'warehouse'", specifier = ">=2.3.0" },
-    { name = "pymysql", marker = "extra == 'warehouse'", specifier = ">=1.0.0" },
-    { name = "pypdf", marker = "extra == 'docs'", specifier = ">=6.4.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
-    { name = "pytest-anyio", marker = "extra == 'dev'", specifier = ">=0.0.0" },
-    { name = "python-docx", marker = "extra == 'docs'", specifier = ">=1.0.0" },
-    { name = "python-dotenv", specifier = ">=1.0.0" },
-    { name = "python-multipart", specifier = ">=0.0.9" },
-    { name = "python-pptx", marker = "extra == 'export'", specifier = ">=1.0.2" },
-    { name = "pytz", specifier = ">=2024.1" },
-    { name = "pyyaml", specifier = ">=6.0.3" },
-    { name = "qdrant-client", marker = "extra == 'semantic'", specifier = ">=1.9.0" },
-    { name = "reportlab", marker = "extra == 'export'", specifier = ">=4.5.1" },
-    { name = "requests", marker = "extra == 'crm'", specifier = ">=2.32.0" },
-    { name = "resvg-py", specifier = ">=0.5.0" },
-    { name = "rich", specifier = ">=13.0.0" },
-    { name = "scipy", specifier = ">=1.13.0" },
-    { name = "snowflake-connector-python", marker = "extra == 'warehouse'", specifier = ">=3.0.0" },
-    { name = "sqlglot", specifier = ">=25.0.0" },
-    { name = "svglib", marker = "extra == 'export'", specifier = ">=1.5.1" },
-    { name = "trino", marker = "extra == 'warehouse'", specifier = ">=0.330.0" },
-    { name = "uvicorn", specifier = ">=0.46.0" },
-]
-provides-extras = ["fastread", "shared-state", "semantic", "export", "docs", "warehouse", "crm", "cloud-storage", "knowledge-sync", "dev", "observability", "evals"]
-
-[[package]]
 name = "autoevals"
 version = "0.2.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2063,7 +1900,7 @@ wheels = [
 
 [[package]]
 name = "langgraph-checkpoint-postgres"
-version = "3.1.3"
+version = "3.2.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "langgraph-checkpoint" },
@@ -2071,9 +1908,9 @@ dependencies = [
     { name = "psycopg" },
     { name = "psycopg-pool" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/78/bf/d0ab4d6e4d61952de2f77044d7407b7ce09e07d53e7bb448cf9df55c35e5/langgraph_checkpoint_postgres-3.1.3.tar.gz", hash = "sha256:a152a9c0c3d5931bc949b64e01e8c7da20be57a32aa754626446318e90a07650", size = 158122, upload-time = "2026-10-12T23:05:19.759Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/72/16/1ac32b1d315f96db9a8cb93f427fcdbfb48e1d65409c0af8e29fbc0f26b7/langgraph_checkpoint_postgres-3.2.1.tar.gz", hash = "sha256:d1485fd1d6741fa7dde149a3c8e4373b3cb96c8c46f4140fb907ad79ea8130c3", size = 166488, upload-time = "2026-11-14T01:38:53.082Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/41/42/659106ed829ee026144e32ddd589735f978d2ed09681020e5965cdfca04c/langgraph_checkpoint_postgres-3.1.3-py3-none-any.whl", hash = "sha256:050ae583223e24d97747f27b9e06e7345bf13c972f1fb6ed33bb3d1f9c11cee4", size = 52048, upload-time = "2026-10-12T23:05:18.854Z" },
+    { url = "https://files.pythonhosted.org/packages/3d/60/0ad36f48e12d646731108bd8485f5bd494347738f0b274f0c31a89205cdb/langgraph_checkpoint_postgres-3.2.1-py3-none-any.whl", hash = "sha256:77163c33d76c4f4da0362e544ea19350e1acbfd7f612c4152d207af82501aa91", size = 56300, upload-time = "2026-11-14T01:38:51.893Z" },
 ]
 
 [[package]]
@@ -3394,6 +3231,169 @@ sdist = { url = "https://files.pythonhosted.org/packages/5e/77/65b857a69ed876e19
 wheels = [
     { url = "https://files.pythonhosted.org/packages/4b/a6/38c8e2f318bf67d338f4d629e93b0b4b9af331f455f0390ea8ce4a099b26/portalocker-3.2.0-py3-none-any.whl", hash = "sha256:3cdc5f565312224bc570c49337bd21428bba0ef363bbcf58b9ef4a9f11779968", size = 22424, upload-time = "2025-06-14T13:20:38.083Z" },
 ]
+
+[[package]]
+name = "pramanyx"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "ag-ui-protocol" },
+    { name = "anthropic" },
+    { name = "apscheduler" },
+    { name = "click" },
+    { name = "cryptography" },
+    { name = "duckdb" },
+    { name = "fastapi" },
+    { name = "instructor" },
+    { name = "langchain-core", version = "1.6.10", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'emscripten'" },
+    { name = "langchain-core", version = "1.7.2", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'emscripten'" },
+    { name = "langgraph" },
+    { name = "langgraph-checkpoint-sqlite" },
+    { name = "mcp" },
+    { name = "numpy" },
+    { name = "openai" },
+    { name = "psycopg2-binary" },
+    { name = "pydantic" },
+    { name = "pyjwt", extra = ["crypto"] },
+    { name = "python-dotenv" },
+    { name = "python-multipart" },
+    { name = "pytz" },
+    { name = "pyyaml" },
+    { name = "resvg-py" },
+    { name = "rich" },
+    { name = "scipy" },
+    { name = "sqlglot" },
+    { name = "uvicorn" },
+]
+
+[package.optional-dependencies]
+cloud-storage = [
+    { name = "azure-storage-blob" },
+]
+crm = [
+    { name = "requests" },
+]
+dev = [
+    { name = "httpx" },
+    { name = "pytest" },
+    { name = "pytest-anyio" },
+]
+docs = [
+    { name = "firecrawl-anydoc" },
+    { name = "pdfplumber" },
+    { name = "pypdf" },
+    { name = "python-docx" },
+]
+evals = [
+    { name = "autoevals" },
+    { name = "braintrust" },
+]
+export = [
+    { name = "python-pptx" },
+    { name = "reportlab" },
+    { name = "svglib" },
+]
+fastread = [
+    { name = "polars" },
+]
+knowledge-sync = [
+    { name = "atlassian-python-api" },
+    { name = "notion-client" },
+]
+observability = [
+    { name = "langfuse" },
+    { name = "mlflow-skinny" },
+    { name = "opentelemetry-exporter-otlp" },
+    { name = "opentelemetry-sdk" },
+]
+semantic = [
+    { name = "qdrant-client" },
+]
+shared-state = [
+    { name = "langgraph-checkpoint-postgres" },
+    { name = "psycopg", extra = ["binary"] },
+]
+warehouse = [
+    { name = "clickhouse-connect" },
+    { name = "connectorx" },
+    { name = "databricks-sql-connector" },
+    { name = "google-cloud-bigquery" },
+    { name = "ibis-framework", extra = ["duckdb", "postgres"] },
+    { name = "oracledb" },
+    { name = "pyathena" },
+    { name = "pyexasol" },
+    { name = "pymssql" },
+    { name = "pymysql" },
+    { name = "snowflake-connector-python" },
+    { name = "trino" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "ag-ui-protocol", specifier = "==0.1.19" },
+    { name = "anthropic", specifier = ">=0.40.0,<1" },
+    { name = "apscheduler", specifier = ">=3.10.0" },
+    { name = "atlassian-python-api", marker = "extra == 'knowledge-sync'", specifier = ">=3.41.0" },
+    { name = "autoevals", marker = "extra == 'evals'", specifier = ">=0.0.70" },
+    { name = "azure-storage-blob", marker = "extra == 'cloud-storage'", specifier = ">=12.0.0" },
+    { name = "braintrust", marker = "extra == 'evals'", specifier = ">=0.0.150" },
+    { name = "click", specifier = ">=8.1.0" },
+    { name = "clickhouse-connect", marker = "extra == 'warehouse'", specifier = ">=0.8.0" },
+    { name = "connectorx", marker = "extra == 'warehouse'", specifier = ">=0.3.3" },
+    { name = "cryptography", specifier = ">=48.0.0" },
+    { name = "databricks-sql-connector", marker = "extra == 'warehouse'", specifier = ">=3.0.0" },
+    { name = "duckdb", specifier = ">=1.1.0" },
+    { name = "fastapi", specifier = ">=0.136.1" },
+    { name = "firecrawl-anydoc", marker = "extra == 'docs'", specifier = ">=0.2.4" },
+    { name = "google-cloud-bigquery", marker = "extra == 'warehouse'", specifier = ">=3.0.0" },
+    { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27.0" },
+    { name = "ibis-framework", extras = ["duckdb", "postgres"], marker = "extra == 'warehouse'", specifier = ">=9.0.0" },
+    { name = "instructor", specifier = ">=1.4.0" },
+    { name = "langchain-core", specifier = ">=0.3.0" },
+    { name = "langfuse", marker = "extra == 'observability'", specifier = ">=4,<5" },
+    { name = "langgraph", specifier = ">=0.2.0" },
+    { name = "langgraph-checkpoint-postgres", marker = "extra == 'shared-state'", specifier = "==3.2.1" },
+    { name = "langgraph-checkpoint-sqlite", specifier = ">=3.1.0" },
+    { name = "mcp", specifier = ">=1.28.0" },
+    { name = "mlflow-skinny", marker = "extra == 'observability'", specifier = ">=3.13" },
+    { name = "notion-client", marker = "extra == 'knowledge-sync'", specifier = ">=2.2.0" },
+    { name = "numpy", specifier = ">=1.26.0" },
+    { name = "openai", specifier = ">=1.50.0" },
+    { name = "opentelemetry-exporter-otlp", marker = "extra == 'observability'", specifier = ">=1.24.0" },
+    { name = "opentelemetry-sdk", marker = "extra == 'observability'", specifier = ">=1.24.0" },
+    { name = "oracledb", marker = "extra == 'warehouse'", specifier = ">=2.0.0" },
+    { name = "pdfplumber", marker = "extra == 'docs'", specifier = ">=0.11.10" },
+    { name = "polars", marker = "extra == 'fastread'", specifier = ">=1.0.0" },
+    { name = "psycopg", extras = ["binary"], marker = "extra == 'shared-state'", specifier = ">=3.2.0" },
+    { name = "psycopg2-binary", specifier = ">=2.9.12" },
+    { name = "pyathena", marker = "extra == 'warehouse'", specifier = ">=3.0.0" },
+    { name = "pydantic", specifier = ">=2.7.0" },
+    { name = "pyexasol", marker = "extra == 'warehouse'", specifier = ">=0.25.0" },
+    { name = "pyjwt", extras = ["crypto"], specifier = ">=2.9.0" },
+    { name = "pymssql", marker = "extra == 'warehouse'", specifier = ">=2.3.0" },
+    { name = "pymysql", marker = "extra == 'warehouse'", specifier = ">=1.0.0" },
+    { name = "pypdf", marker = "extra == 'docs'", specifier = ">=6.4.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
+    { name = "pytest-anyio", marker = "extra == 'dev'", specifier = ">=0.0.0" },
+    { name = "python-docx", marker = "extra == 'docs'", specifier = ">=1.0.0" },
+    { name = "python-dotenv", specifier = ">=1.0.0" },
+    { name = "python-multipart", specifier = ">=0.0.9" },
+    { name = "python-pptx", marker = "extra == 'export'", specifier = ">=1.0.2" },
+    { name = "pytz", specifier = ">=2024.1" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
+    { name = "qdrant-client", marker = "extra == 'semantic'", specifier = ">=1.9.0" },
+    { name = "reportlab", marker = "extra == 'export'", specifier = ">=4.5.1" },
+    { name = "requests", marker = "extra == 'crm'", specifier = ">=2.32.0" },
+    { name = "resvg-py", specifier = ">=0.5.0" },
+    { name = "rich", specifier = ">=13.0.0" },
+    { name = "scipy", specifier = ">=1.13.0" },
+    { name = "snowflake-connector-python", marker = "extra == 'warehouse'", specifier = ">=3.0.0" },
+    { name = "sqlglot", specifier = ">=25.0.0" },
+    { name = "svglib", marker = "extra == 'export'", specifier = ">=1.5.1" },
+    { name = "trino", marker = "extra == 'warehouse'", specifier = ">=0.330.0" },
+    { name = "uvicorn", specifier = ">=0.46.0" },
+]
+provides-extras = ["fastread", "shared-state", "semantic", "export", "docs", "warehouse", "crm", "cloud-storage", "knowledge-sync", "dev", "observability", "evals"]
 
 [[package]]
 name = "propcache"
