@@ -96,11 +96,6 @@ export function DocumentsPage({ connectionId, connections = [] }: {
   };
 
   const [openDocId, setOpenDocId] = useState<string | null>(null);
-  // `?doc=<id>` opens that document's preview on arrival (Discover links to each, 2026-11-23)
-  useEffect(() => {
-    const { doc } = takeFromAddress("doc");
-    if (doc) { setOpenDocId(doc); showWhenDrawn(`[data-doc-id="${CSS.escape(doc)}"]`); }
-  }, []);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteFailed, setDeleteFailed] = useState<{ docId: string; error: string } | null>(null);
   const [purging, setPurging] = useState(false);
@@ -108,6 +103,15 @@ export function DocumentsPage({ connectionId, connections = [] }: {
   // The purge is read first, as a dry run, and runs only when the person confirms what it will delete.
   const [purgePlan, setPurgePlan] = useState<{ chunks: number; documents: number } | null>(null);
   const [showSchemaDocs, setShowSchemaDocs] = useState(false);
+  // `?doc=<id>` opens that document's preview on arrival (Discover links to each, 2026-11-23); a schema's compiled
+  // document is folded under the uploads, so its fold opens with it (its id is `doctree::…`, as the server tells them).
+  useEffect(() => {
+    const { doc } = takeFromAddress("doc");
+    if (!doc) return;
+    if (doc.startsWith("doctree::")) setShowSchemaDocs(true);
+    setOpenDocId(doc);
+    showWhenDrawn(`[data-doc-id="${CSS.escape(doc)}"]`, 40);
+  }, []);
   const [now] = useState(() => Date.now());
 
   // A failed read of the list used to leave it empty under "No documents yet", and a failed read of the plane's status
