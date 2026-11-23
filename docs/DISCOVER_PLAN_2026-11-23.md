@@ -262,3 +262,28 @@ data arrived at 12.2 s. Now it reads 28 times and the data arrives at 2.3 s:
 - the schema is read by the component that asks for it, not by the provider round every page;
 - the top bar's strip reads the agents' runs alone (`runners=false`), not a day of automation runs too;
 - Discover makes each connection's coverage matrix and Area map once per read (3.4 s → 1.2 s warm).
+
+**D4 live, 2026-11-23** (branch `claude/discover-curation`). An Area's page now carries a description and a Featured
+list, both kept on the Area's own record (`AreaDeclaration.description`, `.featured`), with no new store.
+
+Who may do what (the user's call 2):
+- An Area's curators are its business and technical owners, plus whoever administers the organisation.
+- They change it in place on its page, through **Edit**, never a pop-up. That covers its description, its owners and
+  the order of what it features (`PUT /discover/areas/{id}`).
+- **Add to this Area** places anything Discover lists, found by name or meaning with the same finder a Definition's
+  related assets use (`DiscoverFinder`).
+- A row offers curators **Feature** / **Stop featuring**. Where a person placed the thing, it also offers **Take out**,
+  which the thing's own owner gets too (`PUT /discover/placement`).
+- Agents never curate.
+- A Definition's Area stays on its own page.
+
+How it is kept:
+- `place()` takes every kind Discover lists, on the artifact securables Discover already read. Trusted queries now read
+  them too.
+- Each change to an Area is an `area.changed` ledger event and appears as a governance change in the audit feed.
+- The Semantic Layer's whole-list save keeps what an Area's page wrote.
+
+Model-suggested Areas with **Declare** and **Not an area** were already on Discover for admins (D2).
+
+Seen live on theLook's Returns: Edit, Add to this Area (with real results) and the row menu all work. Nothing was saved
+on live data.
