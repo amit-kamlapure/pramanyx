@@ -529,6 +529,20 @@ export function InferencePanel() {
     }, 3000);
     return () => clearInterval(timer);
   }, [planPending]);
+  // …and when the page is looked at again: the sign-in may have happened in another tab or another browser on this
+  // machine, which this page never asked to watch. Seen live on 2026-11-24 — signed in elsewhere, this page still
+  // said "not signed in".
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "visible") getLlmConfig().then((c) => setCfg(c)).catch(() => undefined);
+    };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, []);
 
   // The fallback's catalogue is a SECOND provider's list — never the primary's. Showing
   // OpenRouter ids while the fallback is Gemini would suggest models that 404 on the one
@@ -895,6 +909,10 @@ export function InferencePanel() {
         <Figure label="Provider" value={label(live)} testId="fig-provider"
           sub={<>
             {liveAdded ? <span style={{ ...ONE_LINE, ...MONO }} title={liveAdded.base_url}>{hostOf(liveAdded.base_url)}</span>
+              // A sign-in provider has no key either, and is no more on this machine than a keyed one.
+              : liveSignIn ? (cfg.chatgpt_plan?.plan_usage
+                ? <span style={ONE_LINE} title={cfg.chatgpt_plan.account ?? undefined}>on your ChatGPT plan</span>
+                : <Chip tone="amber">not signed in</Chip>)
               : !liveNeedsKey ? <span>runs on this machine</span>
               : liveKey !== "set" && <Chip tone="amber">{liveKey === "unreadable" ? "key unreadable" : "no key"}</Chip>}
             {privacy && <Chip tone={PRIVACY_META[privacy].tone} title={privacy === "public_api" ? LEAVES : PRIVACY_META[privacy].note}>
@@ -1018,7 +1036,9 @@ export function InferencePanel() {
               <Note tone={planSaid ? "red" : undefined}>
                 {planSaid
                   ?? (plan?.plan_usage
-                    ? "Calls on this provider draw on your ChatGPT plan's allowance, not a per-call charge. When it runs out, calls go to the fallback until it resets."
+                    ? `Calls on this provider draw on your ChatGPT plan's allowance, not a per-call charge. When it runs out, ${
+                      chain.length ? `calls go to the fallback (${label(chain[0])}) until it resets`
+                        : "calls fail, saying so, until it resets — choose a fallback to keep answering"}.`
                     : `Sign in from a browser on the machine the API runs on; OpenAI returns you here. The sign-in is stored encrypted on the server.${plan?.ended ? ` The last session: ${plan.ended}.` : ""}`)}
               </Note>
             )}

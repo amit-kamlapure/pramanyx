@@ -55,7 +55,9 @@ describe("Settings ▸ Models · the ChatGPT plan", () => {
     expect(needs).toHaveTextContent("refresh_token_reused");
     expect(screen.getByRole("button", { name: "Continue with ChatGPT" })).toBeInTheDocument();
     expect(screen.queryByLabelText("API key")).toBeNull();
-    expect(screen.getByText("not signed in")).toBeInTheDocument();
+    // Said where it is in force (the Provider figure) and where it is fixed (the card).
+    expect(screen.getAllByText("not signed in")).toHaveLength(2);
+    expect(screen.getByTestId("fig-provider")).toHaveTextContent("not signed in");
   });
 
   it("opens OpenAI's page in the tab it opened inside the click", async () => {
@@ -79,6 +81,37 @@ describe("Settings ▸ Models · the ChatGPT plan", () => {
     expect(screen.getByRole("button", { name: "Manage usage" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sign out" })).toBeInTheDocument();
     expect(screen.queryByTestId("needs-sign-in")).toBeNull();
+  });
+
+  it("the Provider figure says the plan, never 'runs on this machine' (it has no key, and is not local)", async () => {
+    api.getLlmConfig.mockResolvedValue(config(SIGNED_IN));
+    render(<InferencePanel />);
+    const fig = await screen.findByTestId("fig-provider");
+    await waitFor(() => expect(fig).toHaveTextContent("on your ChatGPT plan"));
+    expect(fig).not.toHaveTextContent("runs on this machine");
+    expect(fig).toHaveTextContent("prompts leave this machine");
+  });
+
+  it("with no fallback, says a spent plan fails calls — not that they go to a fallback", async () => {
+    api.getLlmConfig.mockResolvedValue(config(SIGNED_IN));
+    render(<InferencePanel />);
+    expect(await screen.findByText(/calls fail, saying so, until it resets/)).toBeInTheDocument();
+    expect(screen.queryByText(/calls go to the fallback/)).toBeNull();
+  });
+
+  it("with a fallback, names where calls go when the plan is spent", async () => {
+    api.getLlmConfig.mockResolvedValue(config(SIGNED_IN, {
+      fallback: { backend: "openrouter", model: "m", chain: ["openrouter"], active: false, env_pinned: false } }));
+    render(<InferencePanel />);
+    expect(await screen.findByText(/calls go to the fallback \(OpenRouter\) until it resets/)).toBeInTheDocument();
+  });
+
+  it("learns of a sign-in made in another tab when the page is looked at again", async () => {
+    api.getLlmConfig.mockResolvedValueOnce(config(SIGNED_OUT)).mockResolvedValue(config(SIGNED_IN));
+    render(<InferencePanel />);
+    expect(await screen.findByRole("button", { name: "Continue with ChatGPT" })).toBeInTheDocument();
+    window.dispatchEvent(new Event("focus"));
+    expect(await screen.findByText("person@example.com")).toBeInTheDocument();
   });
 
   it("says a model on the plan is paid by the plan, never $/token", async () => {
