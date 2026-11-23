@@ -45,11 +45,14 @@ export function waitingOnAPerson(c: NavCounts): number {
   return c.decisionsDue + c.inquiriesDue + c.departuresOwed;
 }
 
-export function useNavCounts(workspaceId?: string): NavCounts {
+/** `ready` is false while the shell is still finding the person's workspace: read before it, every count was read twice on
+ *  a cold load, once for no workspace and again for theirs (2026-11-23). */
+export function useNavCounts(workspaceId?: string, ready = true): NavCounts {
   const [counts, setCounts] = useState<NavCounts>(NONE);
   const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    if (!ready) return;
     let alive = true;
     const load = () => {
       getAllAlerts(undefined, 100, workspaceId || undefined)
@@ -101,7 +104,7 @@ export function useNavCounts(workspaceId?: string): NavCounts {
       if (pending.current) clearTimeout(pending.current);
       pending.current = null;
     };
-  }, [workspaceId]);
+  }, [workspaceId, ready]);
 
   return counts;
 }

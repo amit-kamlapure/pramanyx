@@ -1041,6 +1041,11 @@ export default function Home() {
   // The deep link is applied just below instead, after mount. Same for intelLayer and
   // the `?table=` entity link.
   const [tab, setTab] = useState<NavTab>("home");
+  // The Ask screen's conversation is drawn the first time its screen opens and kept after, so an answer being written
+  // survives a change of screen. Not at load behind another page: there it minted a new conversation and read its
+  // people, suggestions, agents and connections on every page load (2026-11-23).
+  const [chatOpened, setChatOpened] = useState(false);
+  if (tab === "chat" && !chatOpened) setChatOpened(true);
   // The record a Ledger row opened in the Record workspace — an inquiry, a decision, a mission, a
   // claim — addressed as `?id=`, so a Reader is a link like any other screen.
   const [openId, setOpenId] = useState<string | null>(null);
@@ -1330,7 +1335,6 @@ export default function Home() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [selectedWorkspace, setSelectedWorkspace] = useState("");
-  const navCounts = useNavCounts(selectedWorkspace || undefined);
 
   // ── Workspace-scoped connections (the tenancy boundary) ───────────────────
   // Everything below the topbar sees only the connections belonging to the
@@ -1440,6 +1444,8 @@ export default function Home() {
   const [connsLoaded, setConnsLoaded] = useState(false);
   const [wsLoaded, setWsLoaded] = useState(false);
   const contextReady = connsLoaded && wsLoaded;
+  // The rail's counts are read once the workspace is known, not first without it and again with it.
+  const navCounts = useNavCounts(selectedWorkspace || undefined, wsLoaded);
   useEffect(() => {
     getConnections()
       .then(conns => {
@@ -2039,7 +2045,7 @@ export default function Home() {
               </ErrorBoundary>
             )}
 
-            {/* ── CHAT (Investigate) ── always mounted so SSE streams survive tab switches */}
+            {/* ── CHAT (Investigate) ── drawn when first opened, then kept mounted so SSE streams survive tab switches */}
             <div style={{ flex: 1, flexDirection: "column", overflow: "hidden", background: "var(--bg-0)", display: tab === "chat" ? "flex" : "none" }}>
                 {/* What the conversation is scoped to, beside the title, and its actions in the title row (2026-11-10, ROADMAP
                     §6 item 64) — said only while the conversation is the page: it stays mounted behind every other one. */}
@@ -2145,7 +2151,7 @@ export default function Home() {
                       )}
                       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
                         {/* the Ask page is the Ask panel at full size (decision 7 of the plan, 2026-11-19): the same layout */}
-                        <ChatPanel
+                        {chatOpened && <ChatPanel
                           key={chatKey}
                           address="main"
                           harness
@@ -2157,7 +2163,7 @@ export default function Home() {
                           initialMode={chatInitialMode}
                           initialInsightId={chatInitialInsightId}
                           initialAgentId={chatInitialAgentId}
-                        />
+                        />}
                       </div>
                     </div>
                   )

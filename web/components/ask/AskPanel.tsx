@@ -114,7 +114,7 @@ function History({ connectionId }: { connectionId: string }) {
 }
 
 /** The panel, drawn once by the shell beside the content. `hidden` while the Ask page shows the conversations at full size:
- *  it stays mounted, so an answer still being written is not cut off. */
+ *  it stays mounted, so an answer still being written is not cut off. A conversation is drawn the first time it is shown. */
 export function AskPanelHost({ connectionId, canvas = null, hidden = false }: {
   connectionId: string;
   /** The Data Canvas the page shows, if any: a conversation begun over it reads only its tables. */
@@ -124,6 +124,11 @@ export function AskPanelHost({ connectionId, canvas = null, hidden = false }: {
   const { open, tabs, active } = useAskPanel();
   const narrow = useNarrowScreen();
   const width = useAskPanelWidth();
+  // The conversations drawn so far: a tab is drawn the first time it is in front of an open panel, and kept after, so an
+  // answer being written is never cut off by hiding the panel or turning to another tab. Never at load: drawn behind a
+  // closed panel, each remembered tab read its whole conversation, its people, suggestions, agents and connections and
+  // drew its charts on every page the person opened (2026-11-23: three tabs were half of a cold load's 120 reads).
+  const [drawn, setDrawn] = useState<readonly string[]>([]);
   // a conversation nothing has been asked in yet is about the page's connection, and its canvas
   const canvasId = canvas?.id ?? null, canvasName = canvas?.name ?? "";
   useEffect(() => {
@@ -143,6 +148,7 @@ export function AskPanelHost({ connectionId, canvas = null, hidden = false }: {
   if (!tabs.length) return null;
   const shown = open && !hidden;
   const front = tabs.find(t => t.key === active) ?? tabs[tabs.length - 1];
+  if (shown && !drawn.includes(front.key)) setDrawn([...drawn, front.key]);
   const fullPage = () => {
     hideAskPanel();
     requestTab("chat", { conn: front.connectionId, ...(front.session ? { chat: front.session } : {}) });
@@ -197,9 +203,11 @@ export function AskPanelHost({ connectionId, canvas = null, hidden = false }: {
       {tabs.map(t => (
         <div key={t.key} role="tabpanel" aria-label={tabName(t)} hidden={t.key !== front.key}
           style={{ flex: 1, minHeight: 0, display: t.key === front.key ? "flex" : "none", flexDirection: "column" }}>
-          <ChatPanel connectionId={t.connectionId} canvasId={t.canvasId} beside harness restoreSessionId={t.session}
-            takesQueued={shown && t.key === front.key}
-            onSession={(session, title) => noteAskSession(t.key, session, title)} onNew={() => newAskTab(t.connectionId)} />
+          {(drawn.includes(t.key) || (shown && t.key === front.key)) && (
+            <ChatPanel connectionId={t.connectionId} canvasId={t.canvasId} beside harness restoreSessionId={t.session}
+              takesQueued={shown && t.key === front.key}
+              onSession={(session, title) => noteAskSession(t.key, session, title)} onNew={() => newAskTab(t.connectionId)} />
+          )}
         </div>
       ))}
     </aside>
