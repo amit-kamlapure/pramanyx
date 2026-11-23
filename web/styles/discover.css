@@ -1,0 +1,31 @@
+/* Discover (`components/discover/DiscoverPage.tsx`) — the Areas as cards, each kind's rows, the full width the page has.
+   Surfaces carry the structure and space groups it; no edge but a suggested Area's, which is not one yet. */
+.aug-discover-areas { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+.aug-discover-area {
+  display: flex; flex-direction: column; gap: 6px; min-height: 112px; padding: 14px 16px; box-sizing: border-box;
+  border-radius: var(--r3); background: var(--bg-2); color: var(--t1); text-decoration: none; min-width: 0;
+}
+a.aug-discover-area:hover { background: var(--bg-hover); }
+.aug-discover-area .name { font-weight: 600; }
+.aug-discover-area .q { color: var(--t3); }
+.aug-discover-area .holds { color: var(--t2); margin-top: auto; }
+.aug-discover-area .who { color: var(--t3); }
+.aug-discover-area.is-suggested { background: transparent; box-shadow: inset 0 0 0 1px var(--b1); }
+
+.aug-discover-kinds { display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 16px; }
+.aug-discover-kind { background: var(--bg-2); border-radius: var(--r3); padding: 12px 8px 8px; display: flex; flex-direction: column; min-width: 0; }
+.aug-discover-kind > .head { display: flex; align-items: baseline; gap: 8px; padding: 0 8px; margin-bottom: 6px; color: var(--t3); }
+.aug-discover-kind > .head .title { font-weight: 600; color: var(--t2); }
+.aug-discover-kind > .head .right { margin-left: auto; }
+
+.aug-discover-row { display: flex; align-items: center; gap: 4px; min-width: 0; border-radius: var(--r2); }
+.aug-discover-row:hover { background: var(--bg-hover); }
+.aug-discover-row > a { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; padding: 6px 8px; color: var(--t1); text-decoration: none; }
+.aug-discover-row .k { flex: none; color: var(--t3); display: inline-flex; }
+.aug-discover-row .main { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.aug-discover-row .n { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.aug-discover-row .d { color: var(--t3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.aug-discover-row .meta { display: flex; align-items: center; gap: 6px; flex: none; }
+.aug-discover-row .ask { flex: none; margin-right: 6px; }
+
+.aug-discover-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }

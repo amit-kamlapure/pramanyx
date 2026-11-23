@@ -36,9 +36,10 @@ export function subjectName(subject: AskSubject | null): string {
   return "";
 }
 
-/** The tab's words: the open thing's name, or the open canvas's, or the page's. */
-export function tabTitle(section: string, onPage: AskSubject | null, canvasName?: string | null): string {
-  return subjectName(onPage).trim() || (canvasName ?? "").trim() || pageName(section);
+/** The tab's words: the open thing's name, or the name of what the page has open (the canvas, the Area on Discover), or
+ *  the page's. */
+export function tabTitle(section: string, onPage: AskSubject | null, openName?: string | null): string {
+  return subjectName(onPage).trim() || (openName ?? "").trim() || pageName(section);
 }
 
 /** Write `title` to the tab and keep it there while it is what is open: the page's head writes the product's name as

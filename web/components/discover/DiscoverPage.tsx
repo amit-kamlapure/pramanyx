@@ -1,0 +1,459 @@
+"use client";
+
+/**
+ * Discover — one page over everything a person may open, by the Area of the business it belongs to (the plan's §4.1
+ * and §4.2, `docs/DISCOVER_PLAN_2026-11-23.md`; the D0 mockup the user saw). Data's first row.
+ *
+ * A browse page, not a dashboard: the search and its filters first, then the Areas as cards, what is certified, and each
+ * kind with its first few. An Area opens on its own page (`?tab=discover&id=<area>`, so Back and a reload keep it). A row
+ * is a link to the thing's own page — a real link, so it opens in a new tab as a person expects; one the Ask panel has a
+ * subject for (a table, a dashboard, a spreadsheet) can be asked about from the row. What a person may not open is
+ * counted where it would have stood, and a kind that could not be read is said. No title bar: the rail and the tab say
+ * where this is (the user, 2026-09-26).
+ */
+import { useEffect, useMemo, useState, type MouseEvent, type ReactNode } from "react";
+
+import { Card, Chip, Empty, MUTED, Page } from "@/components/clarity/kit";
+import { BackHeader } from "@/components/record/kit";
+import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icon";
+import { Input } from "@/components/ui/input";
+import { SelectField } from "@/components/ui/select";
+import { Loading, ReadFailed } from "@/components/ui/states";
+import { declarationsOf, readAreas, saveAreas, setNotAnArea } from "@/lib/areas";
+import { askAbout } from "@/lib/askSubject";
+import {
+  KINDS, KIND_ICON, KIND_TITLES, KIND_WORDS, OTHER, askSubjectOf, holdsWords, markOf, ownersLine, readDiscover,
+  readDiscoverArea, readDiscoverItems, secondLine, withheldWords,
+  type DiscoverArea, type DiscoverAreaPage, type DiscoverHome, type DiscoverItem, type DiscoverItems, type DiscoverKind,
+  type DiscoverKindView, type SuggestedInView,
+} from "@/lib/discover";
+import { formatCount } from "@/lib/format";
+
+interface Filters { conn: string; q: string; kind: DiscoverKind | ""; area: string; certified: boolean; mine: boolean }
+const NO_FILTERS: Filters = { conn: "", q: "", kind: "", area: "", certified: false, mine: false };
+const narrowed = (f: Filters) => !!(f.q.trim() || f.kind || f.area || f.certified || f.mine);
+
+/** How many rows a kind shows on an Area's page before "Show all". */
+const AREA_ROWS = 8;
+
+export function DiscoverPage({ openId, onOpenArea, onName, connections }: {
+  /** The Area open, from the address (`?id=`); null for Discover itself. */
+  openId: string | null;
+  onOpenArea: (id: string | null) => void;
+  /** The name the tab says: the Area's on its page, else none (the tab then says Discover). */
+  onName: (name: string | null) => void;
+  /** The workspace's connections, for the connection filter. */
+  connections: { id: string; name: string }[];
+}) {
+  const [filters, setFilters] = useState<Filters>(NO_FILTERS);
+  if (openId) {
+    return <AreaView key={`${openId}:${filters.conn}`} areaId={openId} conn={filters.conn} onBack={() => onOpenArea(null)}
+      onOpenArea={onOpenArea} onName={onName} />;
+  }
+  return <HomeView filters={filters} setFilters={setFilters} onOpenArea={onOpenArea} onName={onName} connections={connections} />;
+}
+
+// ── Discover itself ──────────────────────────────────────────────────────────────────────────────────────────────
+
+function HomeView({ filters, setFilters, onOpenArea, onName, connections }: {
+  filters: Filters; setFilters: (f: Filters) => void; onOpenArea: (id: string) => void; onName: (name: string | null) => void;
+  connections: { id: string; name: string }[];
+}) {
+  const [home, setHome] = useState<DiscoverHome | null>(null);
+  const [err, setErr] = useState("");
+  const [tick, setTick] = useState(0);
+  useEffect(() => { onName(null); }, [onName]);
+  useEffect(() => {
+    let alive = true;
+    setHome(null); setErr("");
+    readDiscover(filters.conn).then(h => { if (alive) setHome(h); })
+      .catch(e => { if (alive) setErr(String((e as Error)?.message ?? e)); });
+    return () => { alive = false; };
+  }, [filters.conn, tick]);
+
+  const areaNames = useMemo(() => {
+    const m: Record<string, string> = { [OTHER]: "Everything else" };
+    for (const a of home?.areas ?? []) m[a.id] = a.name;
+    for (const a of home?.quiet_areas ?? []) m[a.id] = a.name;
+    return m;
+  }, [home]);
+  const many = (home?.connections.length ?? 0) > 1;
+
+  return (
+    <Page testId="discover">
+      <SearchBar filters={filters} setFilters={setFilters} home={home} areaNames={areaNames} connections={connections} />
+      {err ? <ReadFailed what="Discover" error={err} onRetry={() => setTick(t => t + 1)} />
+        : !home ? <Loading what="Discover" />
+        : narrowed(filters) ? <Results filters={filters} areaNames={areaNames} many={many} onClear={() => setFilters({ ...NO_FILTERS, conn: filters.conn })} />
+        : <Browse home={home} areaNames={areaNames} many={many} onOpenArea={onOpenArea}
+            onViewAll={kind => setFilters({ ...filters, kind })} onCertified={() => setFilters({ ...filters, certified: true })}
+            reload={() => setTick(t => t + 1)} />}
+    </Page>
+  );
+}
+
+function SearchBar({ filters, setFilters, home, areaNames, connections }: {
+  filters: Filters; setFilters: (f: Filters) => void; home: DiscoverHome | null; areaNames: Record<string, string>;
+  connections: { id: string; name: string }[];
+}) {
+  const [text, setText] = useState(filters.q);
+  useEffect(() => {
+    if (text === filters.q) return;
+    const t = window.setTimeout(() => setFilters({ ...filters, q: text }), 250);
+    return () => window.clearTimeout(t);
+  }, [text, filters, setFilters]);
+  const set = (part: Partial<Filters>) => setFilters({ ...filters, ...part });
+  const areaIds = Object.keys(areaNames).filter(id => id !== OTHER).sort((a, b) => areaNames[a].localeCompare(areaNames[b]));
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
+      <Input type="search" aria-label="Search Discover" value={text} onChange={e => setText(e.target.value)}
+        placeholder="Search names and descriptions — tables, metrics, dashboards, canvases, agents, documents…"
+        leading={<Icon name="search" size={16} />} style={{ width: "100%" }} data-testid="discover-search" />
+      <div className="aug-discover-filters">
+        <SelectField aria-label="Area" value={filters.area} onChange={e => set({ area: e.target.value })} data-testid="discover-area-filter">
+          <option value="">Every Area</option>
+          {areaIds.map(id => <option key={id} value={id}>{areaNames[id]}</option>)}
+          <option value={OTHER}>Everything else</option>
+        </SelectField>
+        <SelectField aria-label="Kind" value={filters.kind} onChange={e => set({ kind: e.target.value as DiscoverKind | "" })} data-testid="discover-kind-filter">
+          <option value="">Every kind</option>
+          {KINDS.map(k => <option key={k} value={k}>{KIND_TITLES[k]}</option>)}
+        </SelectField>
+        <Button size="sm" variant={filters.certified ? "secondary" : "outline"} aria-pressed={filters.certified}
+          onClick={() => set({ certified: !filters.certified })}>Certified</Button>
+        <Button size="sm" variant={filters.mine ? "secondary" : "outline"} aria-pressed={filters.mine}
+          onClick={() => set({ mine: !filters.mine })}>Mine</Button>
+        {(connections.length > 1 || filters.conn) && (
+          <SelectField aria-label="Connection" value={filters.conn} onChange={e => set({ conn: e.target.value })} data-testid="discover-conn-filter">
+            <option value="">Every connection</option>
+            {connections.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </SelectField>
+        )}
+        {narrowed(filters) && (
+          <Button size="sm" variant="link" onClick={() => { setText(""); setFilters({ ...NO_FILTERS, conn: filters.conn }); }}>Clear</Button>
+        )}
+        {home && !narrowed(filters) && (
+          <span className="aug-fs-xs" style={{ ...MUTED, marginLeft: "auto" }}>
+            {home.connections.length === 1 ? `On ${home.connections[0].name}` : `Across ${formatCount(home.connections.length)} connections`}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Browse({ home, areaNames, many, onOpenArea, onViewAll, onCertified, reload }: {
+  home: DiscoverHome; areaNames: Record<string, string>; many: boolean; onOpenArea: (id: string) => void;
+  onViewAll: (kind: DiscoverKind) => void; onCertified: () => void; reload: () => void;
+}) {
+  const [showQuiet, setShowQuiet] = useState(false);
+  const holding = home.areas.filter(a => a.id !== OTHER).length;
+  const nothing = home.kinds.filter(k => !k.count && !k.withheld).map(k => k.title);
+  return (
+    <>
+      <Said lines={home.said} />
+      <Card label="Areas" testId="discover-areas" right={
+        <span className="aug-fs-xs" style={{ display: "inline-flex", gap: 10, alignItems: "center" }}>
+          <span>{formatCount(holding)} hold something</span>
+          {home.quiet_areas.length > 0 && (
+            <Button size="xs" variant="link" onClick={() => setShowQuiet(s => !s)} data-testid="discover-quiet-toggle">
+              {showQuiet ? "Hide the empty ones" : `Show the ${formatCount(home.quiet_areas.length)} that hold nothing yet`}
+            </Button>
+          )}
+        </span>}>
+        <div className="aug-discover-areas">
+          {home.areas.map(a => <AreaCard key={a.id} area={a} onOpen={onOpenArea} />)}
+          {showQuiet && home.quiet_areas.map(a => (
+            <AreaCard key={a.id} onOpen={onOpenArea} area={{ ...a, parent: "", business_owners: [], technical_owners: [], source: "",
+              connections: [], counts: {}, total: 0, deprecated: 0 }} quiet />
+          ))}
+          {home.suggested.map(s => <SuggestedCard key={`${s.connection_id}:${s.id}`} s={s} many={many} onDone={reload} />)}
+        </div>
+      </Card>
+
+      <Card label="Certified" testId="discover-certified" right={
+        home.certified_count > home.certified.length
+          ? <Button size="xs" variant="link" onClick={onCertified}>View all {formatCount(home.certified_count)}</Button>
+          : <span className="aug-fs-xs">{formatCount(home.certified_count)}</span>}>
+        {home.certified.length
+          ? home.certified.map(i => <ItemRow key={`${i.kind}:${i.id}`} item={i} areaName={areaNames[i.area]} many={many} />)
+          : <Empty>Nothing here is certified yet. An Area’s owners mark what people should trust; a deprecated thing
+              says so wherever it shows.</Empty>}
+      </Card>
+
+      <Card label="Everything, by kind" testId="discover-kinds">
+        <div className="aug-discover-kinds">
+          {home.kinds.filter(k => k.count || k.withheld).map(k => (
+            <KindTile key={k.kind} view={k} areaNames={areaNames} many={many}
+              more={k.count > k.items.length ? () => onViewAll(k.kind) : undefined} />
+          ))}
+        </div>
+        {nothing.length > 0 && (
+          <p className="aug-fs-sm" style={{ ...MUTED, margin: "12px 0 0" }} data-testid="discover-nothing-yet">
+            Nothing yet: {nothing.join(", ")}.
+          </p>
+        )}
+      </Card>
+    </>
+  );
+}
+
+function Results({ filters, areaNames, many, onClear }: {
+  filters: Filters; areaNames: Record<string, string>; many: boolean; onClear: () => void;
+}) {
+  const [page, setPage] = useState<DiscoverItems | null>(null);
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [tick, setTick] = useState(0);
+  const asked = useMemo(() => ({ kind: filters.kind, area: filters.area, certified: filters.certified, mine: filters.mine,
+    q: filters.q, connectionId: filters.conn }), [filters]);
+  useEffect(() => {
+    let alive = true;
+    setPage(null); setErr("");
+    readDiscoverItems({ ...asked, limit: 50 }).then(p => { if (alive) setPage(p); })
+      .catch(e => { if (alive) setErr(String((e as Error)?.message ?? e)); });
+    return () => { alive = false; };
+  }, [asked, tick]);
+  const more = async () => {
+    if (!page?.next_cursor) return;
+    setBusy(true);
+    try {
+      const next = await readDiscoverItems({ ...asked, cursor: page.next_cursor, limit: 50 });
+      setPage({ ...next, items: [...page.items, ...next.items] });
+    } catch (e) { setErr(String((e as Error)?.message ?? e)); } finally { setBusy(false); }
+  };
+  if (err) return <ReadFailed what="what Discover holds" error={err} onRetry={() => setTick(t => t + 1)} />;
+  if (!page) return <Loading what="what matches" />;
+  const withheld = (Object.entries(page.withheld) as [DiscoverKind, number][]).filter(([, n]) => n)
+    .map(([k, n]) => `${KIND_TITLES[k]}: ${withheldWords(k, n)}`);
+  return (
+    <>
+      <Said lines={page.said} />
+      <Card label={filters.kind && !filters.q && !filters.area && !filters.certified && !filters.mine ? KIND_TITLES[filters.kind] : "Found"}
+        testId="discover-results"
+        right={<span className="aug-fs-xs">{formatCount(page.total)} {page.total === 1 ? "thing" : "things"}</span>}>
+        {page.items.length
+          ? page.items.map(i => <ItemRow key={`${i.kind}:${i.id}`} item={i} areaName={areaNames[i.area]} many={many} />)
+          : <Empty>Nothing here matches. Discover matches the words of a thing’s name and its description.{" "}
+              <Button size="xs" variant="link" onClick={onClear}>Clear the search</Button></Empty>}
+        {page.next_cursor != null && (
+          <div style={{ marginTop: 8 }}>
+            <Button size="sm" variant="outline" disabled={busy} onClick={() => void more()}>
+              {busy ? "Reading…" : `Show more (${formatCount(page.total - page.items.length)} left)`}
+            </Button>
+          </div>
+        )}
+        {withheld.length > 0 && (
+          <p className="aug-fs-sm" style={{ ...MUTED, margin: "10px 0 0" }} data-testid="discover-withheld">Not listed — {withheld.join(" · ")}.</p>
+        )}
+      </Card>
+    </>
+  );
+}
+
+// ── one Area ─────────────────────────────────────────────────────────────────────────────────────────────────────
+
+function AreaView({ areaId, conn, onBack, onOpenArea, onName }: {
+  areaId: string; conn: string; onBack: () => void; onOpenArea: (id: string) => void; onName: (name: string | null) => void;
+}) {
+  const [page, setPage] = useState<DiscoverAreaPage | null | undefined>(undefined);
+  const [err, setErr] = useState("");
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    setPage(undefined); setErr("");
+    readDiscoverArea(areaId, conn).then(p => { if (alive) setPage(p); })
+      .catch(e => { if (alive) setErr(String((e as Error)?.message ?? e)); });
+    return () => { alive = false; };
+  }, [areaId, conn, tick]);
+  const name = page?.area.name ?? null;
+  useEffect(() => { onName(name); return () => onName(null); }, [name, onName]);
+
+  if (err) return <Page testId="discover-area"><BackHeader from="Discover" onBack={onBack} title="Area" />
+    <ReadFailed what="the Area" error={err} onRetry={() => setTick(t => t + 1)} /></Page>;
+  if (page === undefined) return <Page testId="discover-area"><Loading what="the Area" /></Page>;
+  if (page === null) return (
+    <Page testId="discover-area">
+      <BackHeader from="Discover" onBack={onBack} title="Area" />
+      <Empty>No connection in view has this Area. <Button size="xs" variant="link" onClick={onBack}>Back to Discover</Button></Empty>
+    </Page>
+  );
+  const a = page.area;
+  const many = conn === "" && a.connections.length > 1;
+  const other = a.id === OTHER;
+  return (
+    <Page testId="discover-area">
+      <BackHeader from="Discover" onBack={onBack} title={a.name} chips={<>
+        {a.source === "package" && <Chip>From the industry package</Chip>}
+        {a.source === "organisation" && <Chip>Declared by your organisation</Chip>}
+        {a.total > 0 && <Chip>{formatCount(a.total)} {a.total === 1 ? "thing" : "things"}</Chip>}
+        {a.deprecated > 0 && <Chip tone="amber">{formatCount(a.deprecated)} deprecated</Chip>}
+      </>} />
+      <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 12 }}>
+        {a.question && <p className="aug-fs-ui" style={{ margin: 0, color: "var(--t2)" }}>{a.question}</p>}
+        <p className="aug-fs-sm" style={{ margin: 0, ...(other ? MUTED : a.business_owners.length || a.technical_owners.length ? MUTED : { color: "var(--amb4)" }) }}>
+          {other ? "What no Area holds: nobody placed it, its tables are in none, and its name names none." : ownersLine(a)}
+        </p>
+      </div>
+      <Said lines={page.said} />
+      {page.children.length > 0 && (
+        <Card label="Sub-areas" testId="discover-children">
+          <div className="aug-discover-areas">{page.children.map(c => <AreaCard key={c.id} area={c} onOpen={onOpenArea} />)}</div>
+        </Card>
+      )}
+      <Card label="What it holds" testId="discover-area-holds" right={
+        <span className="aug-fs-xs">each says how it came to be here</span>}>
+        {page.kinds.length
+          ? <div className="aug-discover-kinds">
+              {page.kinds.map(k => <AreaKindTile key={k.kind} view={k} many={many} />)}
+            </div>
+          : <Empty>Nothing on the connections in view stands in this Area yet.</Empty>}
+        {page.kinds.length > 0 && page.empty_kinds.length > 0 && (
+          <p className="aug-fs-sm" style={{ ...MUTED, margin: "12px 0 0" }}>
+            Nothing here yet: {page.empty_kinds.map(k => KIND_TITLES[k]).join(", ")}.
+          </p>
+        )}
+      </Card>
+    </Page>
+  );
+}
+
+function AreaKindTile({ view, many }: { view: DiscoverKindView; many: boolean }) {
+  const [all, setAll] = useState(false);
+  const shown = all ? view.items : view.items.slice(0, AREA_ROWS);
+  return (
+    <section className="aug-discover-kind" aria-label={view.title} data-testid={`discover-kind-${view.kind}`}>
+      <div className="head aug-fs-sm">
+        <span className="title">{view.title}</span><span>{formatCount(view.count)}</span>
+        {view.items.length > AREA_ROWS && (
+          <span className="right">
+            <Button size="xs" variant="link" onClick={() => setAll(s => !s)}>{all ? "Show fewer" : `Show all ${formatCount(view.items.length)}`}</Button>
+          </span>
+        )}
+      </div>
+      {shown.map(i => <ItemRow key={`${i.kind}:${i.id}`} item={i} many={many} how />)}
+    </section>
+  );
+}
+
+// ── the parts ────────────────────────────────────────────────────────────────────────────────────────────────────
+
+/** A click that opens in place; one with a modifier is the browser's (a new tab, a new window). */
+function inPlace(e: MouseEvent, open: () => void) {
+  if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  e.preventDefault();
+  open();
+}
+
+function AreaCard({ area, onOpen, quiet = false }: { area: DiscoverArea; onOpen: (id: string) => void; quiet?: boolean }) {
+  const other = area.id === OTHER;
+  return (
+    <a className="aug-discover-area" href={`?tab=discover&id=${encodeURIComponent(area.id)}`} data-testid={`discover-area-${area.id}`}
+      onClick={e => inPlace(e, () => onOpen(area.id))}>
+      <span className="name aug-fs-ui">{area.name}</span>
+      {area.question && <span className="q aug-fs-sm">{area.question}</span>}
+      <span className="holds aug-fs-sm">
+        {quiet ? "Holds nothing yet" : holdsWords(area.counts)}
+        {area.deprecated > 0 && <> · <span style={{ color: "var(--amb4)" }}>{formatCount(area.deprecated)} deprecated</span></>}
+      </span>
+      {!quiet && <span className="who aug-fs-xs">{other ? "Nobody placed these, and no Area names them" : ownersLine(area)}</span>}
+    </a>
+  );
+}
+
+function SuggestedCard({ s, many, onDone }: { s: SuggestedInView; many: boolean; onDone: () => void }) {
+  const [busy, setBusy] = useState<"" | "declare" | "refuse">("");
+  const [err, setErr] = useState("");
+  const act = async (what: "declare" | "refuse") => {
+    setBusy(what); setErr("");
+    try {
+      if (what === "declare") {
+        // as the Semantic Layer declares one (`semantic/AreaControls.tsx`): the organisation's declarations, and this one
+        const read = await readAreas(s.connection_id);
+        await saveAreas(s.connection_id, [...declarationsOf(read.areas), { id: s.id, name: s.label, question: "", parent: "" }]);
+      } else {
+        await setNotAnArea(s.connection_id, s.label);
+      }
+      onDone();
+    } catch (e) { setErr(String((e as Error)?.message ?? e)); setBusy(""); }
+  };
+  const tables = s.tables.slice(0, 4).join(", ") + (s.tables.length > 4 ? ` and ${formatCount(s.tables.length - 4)} more` : "");
+  return (
+    <div className="aug-discover-area is-suggested" data-testid={`discover-suggested-${s.id}`}>
+      <span style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <span className="name aug-fs-ui">{s.label}</span><Chip tone="accent">Suggested by the model</Chip>
+      </span>
+      <span className="q aug-fs-sm">{many ? `${s.connection_name} · ` : ""}{tables ? `Read from ${tables}` : "Read from its tables"}</span>
+      {err && <span className="aug-fs-xs" style={{ color: "var(--red4)" }}>{err}</span>}
+      <span style={{ display: "flex", gap: 6, marginTop: "auto" }}>
+        <Button size="xs" disabled={!!busy} onClick={() => void act("declare")}>{busy === "declare" ? "Declaring…" : "Declare"}</Button>
+        <Button size="xs" variant="outline" disabled={!!busy} onClick={() => void act("refuse")}>Not an area</Button>
+      </span>
+    </div>
+  );
+}
+
+function KindTile({ view, areaNames, many, more }: {
+  view: DiscoverKindView; areaNames: Record<string, string>; many: boolean; more?: () => void;
+}) {
+  return (
+    <section className="aug-discover-kind" aria-label={view.title} data-testid={`discover-kind-${view.kind}`}>
+      <div className="head aug-fs-sm">
+        <span className="title">{view.title}</span><span>{formatCount(view.count)}</span>
+        {view.withheld > 0 && <span>· {withheldWords(view.kind, view.withheld)}</span>}
+        {more && <span className="right"><Button size="xs" variant="link" onClick={more}>View all</Button></span>}
+      </div>
+      {view.items.map(i => <ItemRow key={`${i.kind}:${i.id}`} item={i} areaName={areaNames[i.area]} many={many} />)}
+      {!view.items.length && (
+        <p className="aug-fs-sm" style={{ ...MUTED, margin: "2px 8px 6px" }}>
+          None you may open — {withheldWords(view.kind, view.withheld)}.
+        </p>
+      )}
+    </section>
+  );
+}
+
+/** One thing: its kind, its name and what it is, its mark, and its Area (or, on the Area's own page, how it came to
+ *  stand there). The row is a link to its page; "Ask about it" sits beside the link, never inside it. */
+function ItemRow({ item, areaName, many, how = false }: { item: DiscoverItem; areaName?: string; many: boolean; how?: boolean }) {
+  const mark = markOf(item);
+  const subject = askSubjectOf(item);
+  const line = secondLine(item, many);
+  return (
+    <div className="aug-discover-row" data-testid="discover-row">
+      <a href={item.href} title={`${KIND_WORDS[item.kind][0]} · ${item.name}`}>
+        <span className="k"><Icon name={KIND_ICON[item.kind]} size={15} /></span>
+        <span className="main">
+          <span className="n aug-fs-chrome">{item.name}</span>
+          {line && <span className="d aug-fs-sm">{line}</span>}
+        </span>
+        <span className="meta aug-fs-xs">
+          {mark && <Chip tone={mark.tone}>{mark.word}</Chip>}
+          {how
+            ? item.area_how && <span style={MUTED}>{item.area_how}</span>
+            : areaName && <Chip title={item.area_how || undefined}>{areaName}</Chip>}
+        </span>
+      </a>
+      {subject && (
+        <Button className="ask" size="icon-xs" variant="ghost" aria-label={`Ask about ${item.name}`} title="Ask about it"
+          onClick={() => askAbout(subject)}>
+          <Icon name="chat" size={14} />
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function Said({ lines }: { lines: string[] }): ReactNode {
+  if (!lines.length) return null;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 12 }} data-testid="discover-said">
+      {lines.map(l => (
+        <span key={l} className="aug-fs-sm" style={{ color: "var(--amb4)", display: "inline-flex", gap: 6, alignItems: "center" }}>
+          <Icon name="warning" size={13} />{l}
+        </span>
+      ))}
+    </div>
+  );
+}

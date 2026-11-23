@@ -48,7 +48,7 @@ def _found() -> dict[str, Found]:
         "metric": Found(items=[
             Item("metric", "c1/revenue", "Revenue", connection_id="c1", area="orders_sales", state="approved"),
             Item("metric", "c1/gmr", "Gross Margin Rate", connection_id="c1", area="orders_sales", state="deprecated"),
-            Item("metric", "c1/rr", "Return rate", connection_id="c1", area="returns", state="approved")]),
+            Item("metric", "c1/rr", "Return rate", connection_id="c1", area="returns", state="approved", owner="user:ana")]),
         "table": Found(items=[
             Item("table", "c1.s.orders", "orders", connection_id="c1", area="orders_sales", certification=CERT),
             Item("table", "c1.s.old_orders", "old_orders", connection_id="c1", area="orders_sales", certification=DEPR),
@@ -111,6 +111,12 @@ def test_view_all_filters_by_kind_area_certified_and_words_a_page_at_a_time(monk
     rest = S.list_items(_scope(), kind="metric", cursor=2, limit=2)
     assert len(rest["items"]) == 1 and rest["next_cursor"] is None
     assert S.list_items(_scope(), kind="canvas")["withheld"] == {"canvas": 2}
+
+
+def test_mine_keeps_what_the_person_owns_however_their_name_is_written(monkeypatch):
+    _stand_in(monkeypatch, _found())
+    assert [i["name"] for i in S.list_items(_scope(), mine=True)["items"]] == ["Return rate"]   # "user:ana" is ana
+    assert S.list_items(Scope(None, "", {"c1": "theLook"}), mine=True)["total"] == 0           # nobody owns nothing
 
 
 def test_an_area_s_page_holds_its_things_by_kind_and_its_sub_areas(monkeypatch):

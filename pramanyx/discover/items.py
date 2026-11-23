@@ -90,9 +90,11 @@ class Scope:
         return self._maps[connection_id]
 
 
-def _who(person: str) -> str:
+def who_of(person: str) -> str:
+    """A person's name as people say it: ``user:ana`` and ``ana`` are one person."""
     who = str(person or "").strip()
     return who[5:] if who.startswith("user:") else who
+
 
 
 def _href(path: str, **params: str) -> str:
@@ -137,7 +139,7 @@ def settle(item: Item, scope: Scope, *, placed: Optional[tuple[str, str]] = None
     Its NAME only: a description is prose, and read for Areas it placed a schedule that "returns the top five" in
     Returns (seen live, 2026-11-23). The word that placed it is said, so a weak placement can be seen for one."""
     if placed and placed[0]:
-        item.area, item.area_how = placed[0], f"{_who(placed[1]) or 'someone'} placed it here"
+        item.area, item.area_how = placed[0], f"{who_of(placed[1]) or 'someone'} placed it here"
         return item
     if item.tables and item.connection_id:
         from pramanyx.semantic.areas import area_of_tables
@@ -232,12 +234,12 @@ def definitions(scope: Scope) -> Found:
     """Each connection's published Definitions, and the person's own drafts; another's draft is theirs to publish."""
     from pramanyx.record.writers import definitions as of_connection
     found = Found()
-    me = _who(scope.person).lower()
+    me = who_of(scope.person).lower()
     for conn, name in scope.connections.items():
         for c in of_connection(conn):
             x = c.extra or {}
             published = c.tier == "approved"
-            if not published and _who(c.author).lower() != me:
+            if not published and who_of(c.author).lower() != me:
                 continue
             term, area = str(x.get("term") or ""), str(x.get("area") or "")
             found.items.append(Item(
@@ -271,7 +273,7 @@ def dashboards(scope: Scope) -> Found:
             ref = f"{conn}:{d.get('owner')}:{d.get('dashboard_id')}"
             found.items.append(settle(Item(
                 kind="dashboard", id=ref, name=str(d.get("title") or d.get("dashboard_id")),
-                line=f"Published by {_who(str(d.get('owner') or ''))}", connection_id=conn, connection_name=name,
+                line=f"Published by {who_of(str(d.get('owner') or ''))}", connection_id=conn, connection_name=name,
                 owner=str(d.get("owner") or ""), state="published", certification=marks.get(ref),
                 # one published to the person is opened as `shared:<owner>:<id>` (`dashboards/BriefingDashboards.tsx`)
                 href=_href("/", tab="dashboards", conn=conn,

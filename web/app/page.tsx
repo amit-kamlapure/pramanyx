@@ -79,6 +79,7 @@ const RolesPanel        = dynamic(() => import("@/components/RolesPanel").then(m
 const ProcessHealthPanel= dynamic(() => import("@/components/ProcessHealthPanel").then(m => ({ default: m.ProcessHealthPanel })), { ssr: false, loading });
 const PlaybookPanel     = dynamic(() => import("@/components/PlaybookPanel").then(m => ({ default: m.PlaybookPanel })),      { ssr: false, loading });
 const RecommendationInbox= dynamic(() => import("@/components/RecommendationInbox").then(m => ({ default: m.RecommendationInbox })), { ssr: false, loading });
+const DiscoverPage      = dynamic(() => import("@/components/discover/DiscoverPage").then(m => ({ default: m.DiscoverPage })),{ ssr: false, loading });
 const DocumentsPage     = dynamic(() => import("@/components/documents/DocumentsPage").then(m => ({ default: m.DocumentsPage })),{ ssr: false, loading });
 const SpreadsheetsPage  = dynamic(() => import("@/components/sheets/SpreadsheetsPage").then(m => ({ default: m.SpreadsheetsPage })),{ ssr: false, loading });
 const CatalogScreen     = dynamic(() => import("@/components/CatalogScreen").then(m => ({ default: m.CatalogScreen })),      { ssr: false, loading });
@@ -182,6 +183,7 @@ type NavTab =
   | "data"              // unified Data workspace (Catalog / Query Builder / Semantic Layer)
   | "health"
   | "playbook"
+  | "discover"         // Discover — everything a person may open, by Area (Data's first row; `?id=` opens an Area)
   | "documents"        // the global document corpus — see the nav comment on why it is here
   | "spreadsheets"     // Arc SH — the sheets people make, edit, combine and chat with
   | "catalog"
@@ -872,7 +874,7 @@ const VALID_TABS = new Set<NavTab>([
   "inbox", "briefing", "intelligence", "intel-hub", "intel", "org-intel",
   "graph", "memory", "declared-actions", "evidence", "brain",
   "ontology", "dashboards", "operations", "agentic-ops", "control-room", "evals", "data",
-  "health", "playbook", "documents", "spreadsheets", "catalog", "builder", "query", "connections", "metrics",
+  "health", "playbook", "discover", "documents", "spreadsheets", "catalog", "builder", "query", "connections", "metrics",
   // AO-4 — `integrations` is an Operations layer alias like `monitors`; it was missing
   // here, so `?tab=integrations` (the link every Slack door hands out) opened Home.
   "monitors", "actions", "integrations", "activity", "security", "semantic", "settings",
@@ -1042,6 +1044,8 @@ export default function Home() {
   // The record a Ledger row opened in the Record workspace — an inquiry, a decision, a mission, a
   // claim — addressed as `?id=`, so a Reader is a link like any other screen.
   const [openId, setOpenId] = useState<string | null>(null);
+  // The Area Discover has open, by its name, for the tab (`lib/tabTitle.ts`); null on Discover itself.
+  const [discoverName, setDiscoverName] = useState<string | null>(null);
   const [theme, setThemeState] = useState<Theme>("dark");
   const [rawSelectedConn, setSelectedConn] = useState("");
 
@@ -1240,8 +1244,8 @@ export default function Home() {
     // Only the workspace is addressed by a canvas; elsewhere the id is noise that would
     // survive into screens it means nothing on.
     const wantCanvas = tab === "canvas-workspace" ? (activeCanvas?.id ?? null) : null;
-    // A Reader is addressed by the id its Ledger row opened; elsewhere the id means nothing.
-    const wantId = tab === "record" ? openId : null;
+    // A Reader is addressed by the id its Ledger row opened, and an Area by its own on Discover; elsewhere the id means nothing.
+    const wantId = tab === "record" || tab === "discover" ? openId : null;
     if (urlTab === writeTab && (urlConn ?? "") === rawSelectedConn
         && (urlLayer ?? null) === wantLayer && (urlCanvas ?? null) === wantCanvas
         && (urlId ?? null) === wantId) return;
@@ -1268,8 +1272,9 @@ export default function Home() {
       : tab === "intelligence" ? intelLayer : tab === "operations" ? opsLayer : tab === "evals" ? evalsLayer
       : tab === "agentic-ops" ? agentsLayer : tab === "record" ? recordLayer : null;
     const section = layer && pageName(String(layer)) !== "Pramanyx" ? String(layer) : tab;
-    return keepTabTitle(tabTitle(section, onPage, tab === "canvas-workspace" ? activeCanvas?.name : null));
-  }, [tab, dataLayer, intelLayer, opsLayer, evalsLayer, agentsLayer, recordLayer, onPage, activeCanvas]);
+    const openName = tab === "canvas-workspace" ? activeCanvas?.name : tab === "discover" ? discoverName : null;
+    return keepTabTitle(tabTitle(section, onPage, openName));
+  }, [tab, dataLayer, intelLayer, opsLayer, evalsLayer, agentsLayer, recordLayer, onPage, activeCanvas, discoverName]);
   useEffect(() => {
     const onPop = () => {
       const t = tabFromUrl();
@@ -2247,6 +2252,13 @@ export default function Home() {
                 <div style={{ flex: 1, overflowY: "auto", padding: "0 0 16px" }}>
                   <PlaybookPanel />
                 </div>
+              </div>
+            )}
+
+            {tab === "discover" && (
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--bg-0)" }}>
+                <DiscoverPage openId={openId} onOpenArea={setOpenId} onName={setDiscoverName}
+                  connections={wsConnections.map(c => ({ id: c.id, name: c.name }))} />
               </div>
             )}
 

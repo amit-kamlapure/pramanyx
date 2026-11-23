@@ -12,7 +12,7 @@ from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
-from pramanyx.discover.items import KINDS, OTHER, READERS, TITLES, Found, Item, Scope
+from pramanyx.discover.items import KINDS, OTHER, READERS, TITLES, Found, Item, Scope, who_of
 
 #: How many of each kind the page shows before "View all".
 SHOWN = 6
@@ -138,10 +138,10 @@ def _matches(i: Item, q: str) -> bool:
     return all(w in text for w in words)
 
 
-def list_items(scope: Scope, *, kind: str = "", area: str = "", certified: bool = False, q: str = "",
-               cursor: int = 0, limit: int = 50) -> dict:
-    """Every thing of a kind, an Area or both, in order, a page at a time — what "View all" opens. ``q`` matches the
-    words of a thing's name and line (the meaning search is D3's)."""
+def list_items(scope: Scope, *, kind: str = "", area: str = "", certified: bool = False, mine: bool = False,
+               q: str = "", cursor: int = 0, limit: int = 50) -> dict:
+    """Every thing of a kind, an Area or both, in order, a page at a time — what "View all" opens. ``mine`` keeps what
+    the person owns; ``q`` matches the words of a thing's name and line (the meaning search is D3's)."""
     kinds = (kind,) if kind else KINDS
     found = gather(scope, kinds)
     items = _all_items(found)
@@ -149,6 +149,9 @@ def list_items(scope: Scope, *, kind: str = "", area: str = "", certified: bool 
         items = [i for i in items if i.area == area]
     if certified:
         items = [i for i in items if (i.certification or {}).get("status") == "certified"]
+    if mine:
+        me = who_of(scope.person).lower()
+        items = [i for i in items if me and who_of(i.owner).lower() == me]
     if q.strip():
         items = [i for i in items if _matches(i, q)]
     ordered = _order(items)

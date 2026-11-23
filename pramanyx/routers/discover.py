@@ -47,15 +47,16 @@ def get_discover(request: Request, workspace_id: Optional[str] = None, connectio
 
 @router.get("/discover/items")
 def get_discover_items(request: Request, workspace_id: Optional[str] = None, connection_id: Optional[str] = None,
-                       kind: str = "", area: str = "", certified: bool = False, q: str = Query("", max_length=200),
+                       kind: str = "", area: str = "", certified: bool = False, mine: bool = False,
+                       q: str = Query("", max_length=200),
                        cursor: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=200)) -> dict:
-    """Every thing of a kind, of an Area, or certified — "View all" — a page at a time."""
+    """Every thing of a kind, of an Area, certified, or the person's own — "View all" — a page at a time."""
     from pramanyx.discover.items import KINDS
     from pramanyx.discover.service import list_items
     if kind and kind not in KINDS:
         raise HTTPException(status_code=422, detail=f"a kind is one of {', '.join(KINDS)}")
     return list_items(scope_of(request, workspace_id, connection_id), kind=kind, area=area, certified=certified,
-                      q=q, cursor=cursor, limit=limit)
+                      mine=mine, q=q, cursor=cursor, limit=limit)
 
 
 @router.get("/discover/areas/{area_id}")

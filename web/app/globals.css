@@ -7,6 +7,7 @@
 @import "../styles/type.css";
 @import "../styles/sql-tokens.css";
 @import "../styles/atlas.css";
+@import "../styles/discover.css";
 
 /* ── Instrument · the component layer ────────────────────────────────────────
    The import order above is load-bearing: styles/tokens.css holds the Tailwind
