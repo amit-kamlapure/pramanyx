@@ -43,7 +43,7 @@ DEFAULT_DB = _rehome(Path(__file__).parent.parent / "data" / "pramanyx.duckdb")
 # tests/unit/test_cli_up.py pins the two lists in sync. A provider added in Settings is
 # not a CLI choice: it lives in the runtime config, which `--help` must not read.
 LLM_BACKENDS: tuple[str, ...] = ("ollama", "lmstudio", "groq", "together", "anthropic",
-                                 "gemini", "openrouter", "openai")
+                                 "gemini", "openrouter", "openai", "chatgpt")
 
 
 # ── CLI group ────────────────────────────────────────────────────────────────

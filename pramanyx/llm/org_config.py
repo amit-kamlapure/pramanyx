@@ -145,8 +145,8 @@ def save_org_config(org_id: str, patch: dict) -> dict:
     model requires ``allow_paid`` (the free-by-default ratchet applies to tenants
     exactly as it does to the operator).
     """
-    from pramanyx.llm.provider import (ROLES, active_backend, backends, ensure_free_or_allowed,
-                                     keyed_backends, unknown_backend)
+    from pramanyx.llm.provider import (ROLES, SIGN_IN_BACKENDS, active_backend, backends,
+                                     ensure_free_or_allowed, keyed_backends, unknown_backend)
     from pramanyx.secretvault import encrypt_secret, is_masked
 
     org_id = org_id or DEFAULT_ORG_ID
@@ -156,6 +156,11 @@ def save_org_config(org_id: str, patch: dict) -> dict:
         backend = str(patch["backend"]).strip()
         if backend and backend not in backends():
             raise unknown_backend(backend)
+        if backend in SIGN_IN_BACKENDS:
+            # A ChatGPT plan is one person's, signed in on this install; an organisation's own binding would
+            # spend it on everyone that organisation serves. The install's operator may choose it; a tenant may not.
+            raise ValueError(f"{backend!r} runs on the ChatGPT plan of the person who signed in on this install; "
+                             "an organisation cannot bind it as its own. Choose a provider it holds a key for.")
         current["backend"] = backend
 
     if isinstance(patch.get("models"), dict):

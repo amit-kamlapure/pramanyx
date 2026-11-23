@@ -39,8 +39,13 @@ def _llm_readiness() -> dict:
         # readiness said ready while every model door refused the key by name.
         # An added provider may run without a key, but not on one that cannot be read.
         unreadable = provider.key_is_undecryptable(backend)
-        key_present = not unreadable and (
-            backend not in provider.NEEDS_KEY or bool(provider._active_key(backend)))
+        if backend in provider.SIGN_IN_BACKENDS:
+            # The ChatGPT plan's credential is a sign-in: present when someone is signed in and allowed plan use.
+            from pramanyx.llm import chatgpt_plan
+            key_present = chatgpt_plan.is_signed_in()
+        else:
+            key_present = not unreadable and (
+                backend not in provider.NEEDS_KEY or bool(provider._active_key(backend)))
         out["key_present"] = key_present
         # Nothing ships a default model (provider.NoModelConfigured): an empty model id
         # means every request raises, which is the opposite of ready.

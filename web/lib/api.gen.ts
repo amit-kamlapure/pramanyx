@@ -10944,6 +10944,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/llm/chatgpt/sign-in": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Chatgpt Sign In
+         * @description Start a sign-in to the person's ChatGPT plan: the URL their browser opens. OpenAI returns the browser to
+         *     this API on `127.0.0.1` at the port it listens on, so the browser must be on the machine the API runs on —
+         *     refused with that reason otherwise, rather than sending a person to a sign-in that cannot come back.
+         */
+        post: operations["chatgpt_sign_in_llm_chatgpt_sign_in_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/llm/chatgpt/sign-out": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Chatgpt Sign Out
+         * @description End the ChatGPT session: the tokens are forgotten here first, then revoked with OpenAI. Calls bound to the
+         *     ChatGPT backend refuse by name until someone signs in again; the fallback chain still serves them.
+         */
+        post: operations["chatgpt_sign_out_llm_chatgpt_sign_out_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/llm/config": {
         parameters: {
             query?: never;
@@ -46763,6 +46806,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    chatgpt_sign_in_llm_chatgpt_sign_in_post: {
+        parameters: {
+            query?: {
+                connection_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    chatgpt_sign_out_llm_chatgpt_sign_out_post: {
+        parameters: {
+            query?: {
+                connection_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */

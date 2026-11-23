@@ -50,8 +50,9 @@ TokenAccounting = Literal["exact", "estimated"]
 # What context a provider may be *sent* — a governance routing constraint.
 PrivacyClass = Literal["local", "private_endpoint", "public_api"]
 # How spend is modelled for per-agent budgets. "free" is OpenRouter's `:free`
-# catalog tier — zero marginal cost, and the deployment's default posture.
-Cost = Literal["per_token", "flat", "free", "unknown"]
+# catalog tier — zero marginal cost, and the deployment's default posture. "plan" is a
+# person's ChatGPT plan: no per-call charge, but every call draws on the plan's allowance.
+Cost = Literal["per_token", "flat", "free", "plan", "unknown"]
 
 T = TypeVar("T", bound="BaseModel")
 
@@ -96,6 +97,10 @@ def _is_cloud_ollama(model: str) -> bool:
 def _cache_mode(backend: str, model: str, base_url: str) -> CacheMode:
     if backend == "anthropic":
         return "explicit_breakpoint"            # cache_control breakpoints
+    if backend == "chatgpt":
+        # OpenAI's automatic prefix cache reports `cached_tokens`, but on the plan's wire nothing has measured a
+        # hit yet (the probe's prompts were all under the cache's minimum) — so Layer B never assumes one.
+        return "auto_prefix_unverified"
     if backend in ("ollama", "lmstudio", "groq", "together", "gemini", "openai"):
         if backend == "ollama" and _is_cloud_ollama(model):
             # Hosted/multiplexed — prefix-KV reuse across separate requests is not
@@ -119,7 +124,7 @@ def _is_added(backend: str) -> bool:
 
 
 def _tooling(backend: str, model: str) -> Tooling:
-    if backend in ("anthropic", "groq", "together", "gemini", "openai"):
+    if backend in ("anthropic", "groq", "together", "gemini", "openai", "chatgpt"):
         return "native_tools"
     if backend in ("ollama", "openrouter") or _is_added(backend):
         return "native_tools" if _declares_tools(model) else "none"
@@ -129,8 +134,9 @@ def _tooling(backend: str, model: str) -> Tooling:
 def _structured_output(backend: str, model: str) -> StructuredOutput:
     # "native" = provider enforces the schema (tool / json_schema mode);
     # "instructor_emulated" = plain JSON mode with reprompt-on-mismatch.
-    if backend in ("anthropic", "lmstudio", "gemini"):
-        return "native"                          # gemini: schema-native via TOOLS/json_schema mode
+    if backend in ("anthropic", "lmstudio", "gemini", "chatgpt"):
+        return "native"                          # gemini: schema-native via TOOLS/json_schema mode;
+                                                 # chatgpt: json_schema output, measured on the plan
     if backend in ("ollama", "openrouter"):
         return "native" if _declares_tools(model) else "instructor_emulated"
     return "instructor_emulated"                 # groq / together JSON mode
@@ -142,7 +148,7 @@ def _token_accounting(backend: str) -> TokenAccounting:
 
 
 def _privacy_class(backend: str, model: str, base_url: str) -> PrivacyClass:
-    if backend in ("anthropic", "groq", "together", "gemini", "openrouter", "openai"):
+    if backend in ("anthropic", "groq", "together", "gemini", "openrouter", "openai", "chatgpt"):
         return "public_api"                      # openrouter IS a public API — the
                                                  # private_endpoint fallback was a lie
     if _is_added(backend):
@@ -165,6 +171,8 @@ def _cost(backend: str, model: str, base_url: str) -> Cost:
         return "free" if model.endswith(":free") else "per_token"
     if backend in ("anthropic", "groq", "together", "gemini", "openai"):
         return "per_token"
+    if backend == "chatgpt":
+        return "plan"                             # the person's ChatGPT plan pays; its allowance is the limit
     if backend == "ollama" and _is_cloud_ollama(model):
         return "unknown"                          # cloud pricing not modelled here
     if _is_local_url(base_url):
