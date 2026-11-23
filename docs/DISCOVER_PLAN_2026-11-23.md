@@ -173,6 +173,18 @@ custom agent, `?tab=documents&doc=<id>` a document's preview, `?tab=memory&trust
 `?tab=catalog&conn=&schema=&table=` a table. Each is read once on arrival and taken off the address; a page kept
 mounted behind another tab reads it only when it mounts, so D2's links open by navigation, not by a tab switch alone.
 
+**D1 live on theLook, 2026-11-23** (API restarted on the branch's tip; every read over HTTP, no model, no warehouse):
+`/discover?connection_id=8233e4fd` answers in ~1.1 s — nine Areas holding something (Orders & sales 14: 4 metrics,
+3 tables, 2 dashboards, 5 schedules), six quiet, "Everything else" 21; 23 metrics, 7 tables, 3 dashboards, 3 canvases,
+2 agents, 8 schedules, 3 documents, 6 sheets; no Definitions, trusted queries or certification marks exist there (each
+checked at its own route). All eight connections: ~2.7 s. Reading it live found six things, each fixed before this
+was called done: another connection's schema documents listed (out of view now, and named by the connection's name);
+every spreadsheet listed twice, once as a table of the Sheets connection, past its sharing; Areas read from
+descriptions ("returns the top five" in Returns) — names only now, the placing word said; a table link dropped because
+the address loses `?conn=` while the page loads; a schema document's link landing on a folded group; and a shared
+dashboard linked by a word the page never reads (`shared:<owner>:<id>` now). Opened in the browser: a table, a custom
+agent, a document, a trusted query and a dashboard each open on the thing itself.
+
 ## 7 · Not in this plan
 
 - **Across workspaces** (Databricks' account scope) — **Later**: nothing spans workspaces yet.
