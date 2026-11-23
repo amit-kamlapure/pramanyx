@@ -92,7 +92,7 @@ export function RichText({ kind, value, onChange, onBlur, label, placeholder = "
   // caret); one changed from outside — a draft reset, an accepted suggestion, an undo — is
   const wrote = useRef(value);
   const blurred = useRef(onBlur);
-  blurred.current = onBlur;
+  useEffect(() => { blurred.current = onBlur; }, [onBlur]);
   const editor = useEditor({
     extensions: richTextExtensions(kind, placeholder),
     content: value,
