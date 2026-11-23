@@ -14,6 +14,8 @@ import { createElement as h, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { NAME_BAR_STOPS } from "../../../../web/components/ui/brandArt";
 import { Logo } from "../../brand/src/logo.js";
+import { watchTheme } from "../../../../web/components/charts/vega/themeWatch";
+import { askedAbout, discoverAddress } from "./discover.js";
 import { nextOpen } from "./opens.js";
 import { unstick, workspaceOf } from "./stuck.js";
 import { inTheApp, withOthers } from "./threads.js";
@@ -408,6 +410,52 @@ function SchedulesPage() {
   });
 }
 
+const DISCOVER = "pramanyx-discover";
+
+/** The sidebar's drawing for Discover: a compass, as the app's rail draws it. */
+function DiscoverIcon({ size = 16 }) {
+  return h("svg", { width: size, height: size, viewBox: "0 0 16 16", fill: "none", stroke: "currentColor", strokeWidth: 1.3, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" },
+    h("circle", { cx: 8, cy: 8, r: 5.5 }),
+    h("path", { d: "M10.2 5.8 9 9 5.8 10.2 7 7z" }));
+}
+
+/** Light or dark, as this page wears it now: the shell marks its dark theme on `<body>`. */
+const themeNow = () => (document.body?.hasAttribute("data-ds-dark-theme") ? "dark" : "light");
+
+/**
+ * Discover (D6, 2026-11-24): the platform's own page of everything a person may open, by Area — in a frame, so it is the
+ * same page the app shows, in this page's light or dark (said in its address for the first paint, and in a message each
+ * time this page turns). A row opens its thing in the app, in a browser tab of its own; "Ask about it" begins a question
+ * in a new conversation on that thing's connection (`apply`), never sending it.
+ */
+function DiscoverPage() {
+  const frame = useRef(null);
+  const [first] = useState(themeNow);
+  const tell = () => frame.current?.contentWindow?.postMessage({ type: "pramanyx:theme", theme: themeNow() }, appOrigin());
+  useEffect(() => watchTheme(tell), []);
+  return h("iframe", {
+    ref: frame, src: discoverAddress(appOrigin(), first, location.origin), title: "Discover", referrerPolicy: "no-referrer",
+    onLoad: tell,
+    style: { width: "100%", height: "100%", border: 0, display: "block", background: "var(--dsw-alias-bg-base)" },
+  });
+}
+
+/** A new conversation on a connection's workspace with a question begun, once the shell has read its workspaces; on
+ *  none found in time, a new conversation where the person is. Nothing is asked until they finish it and send it. */
+function beginOn(ctx, connection, prompt, tries = 0) {
+  const folder = new RegExp(`[\\/]connections[\\/]${connection}(?:[\\/"]|$)`);
+  let found = null;
+  try {
+    const items = connection ? ctx.uiWorkspace?.workspaces?.list?.getSnapshot?.()?.items ?? [] : [];
+    found = items.find((item) => folder.test(JSON.stringify(item))) ?? null;
+  } catch { found = null; }
+  if (found?.workspaceId !== undefined || !connection || tries >= 20) {
+    ctx.uiWorkspace.startSession(found?.workspaceId, { prompt, whenDraftExists: "append" });
+    return;
+  }
+  setTimeout(() => beginOn(ctx, connection, prompt, tries + 1), 250);
+}
+
 const WITH_OTHERS = "pramanyx-with-others";
 const IN_THE_APP = "pramanyx-in-the-app";
 
@@ -770,6 +818,15 @@ export function apply(ctx) {
   ctx.slots.inject("sidebar.panellist", () =>
     ctx.slots.register({ name: "sidebar.panellist", id: SCHEDULES, order: 6, label: () => "Schedules" }, SchedulesIcon));
   ctx.slots.inject("main", () => ctx.slots.register({ name: "main", key: SCHEDULES }, SchedulesPage));
+
+  // Discover (D6): the platform's page of everything a person may open; a row's "Ask about it" begins a question here.
+  ctx.slots.inject("sidebar.panellist", () =>
+    ctx.slots.register({ name: "sidebar.panellist", id: DISCOVER, order: 4, label: () => "Discover" }, DiscoverIcon));
+  ctx.slots.inject("main", () => ctx.slots.register({ name: "main", key: DISCOVER }, DiscoverPage));
+  window.addEventListener("message", (e) => {
+    const asked = askedAbout(e, appOrigin());
+    if (asked) beginOn(ctx, asked.connection, asked.text);
+  });
 
   // Conversations with others (2026-11-17): the group conversations this person is in, as the app's own threads.
   ctx.slots.inject("sidebar.panellist", () =>

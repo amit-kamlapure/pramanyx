@@ -38,6 +38,7 @@ vi.mock("@/lib/areas", async importOriginal => ({
 }));
 
 const { DiscoverPage } = await import("@/components/discover/DiscoverPage");
+const { DiscoverHost, askWords, shellOrigin } = await import("@/components/discover/host");
 
 const item = (over: Partial<DiscoverItem>): DiscoverItem => ({
   kind: "metric", id: "x", name: "x", line: "", connection_id: "8233e4fd", connection_name: "theLook", area: "orders_sales",
@@ -207,6 +208,32 @@ describe("use this month (D5)", () => {
     expect(await screen.findByTestId("discover-most-used")).toHaveTextContent("Nothing was opened this month yet.");
     expect(screen.getByTestId("discover-most-read")).toHaveTextContent("No table was read this month yet.");
     expect(screen.queryByTestId("discover-recent")).toBeNull();
+  });
+});
+
+describe("shown in the coworker (D6)", () => {
+  it("opens a thing through its host and hands any thing's question to it, never the app's own Ask panel", async () => {
+    const open = vi.fn();
+    const ask = vi.fn();
+    render(<DiscoverHost.Provider value={{ open, ask }}>
+      <DiscoverPage openId={null} onOpenArea={() => {}} onName={() => {}} connections={[{ id: "8233e4fd", name: "theLook" }]} />
+    </DiscoverHost.Provider>);
+    const kinds = await screen.findByTestId("discover-kinds");
+    fireEvent.click(within(kinds).getByText("Revenue"));
+    expect(open).toHaveBeenCalledWith("/metrics/revenue?conn=8233e4fd");
+    fireEvent.click(within(kinds).getByRole("button", { name: "Ask about Revenue" }));   // a metric too, in the coworker
+    expect(ask).toHaveBeenCalledWith(expect.objectContaining({ name: "Revenue" }));
+    expect(askAbout).not.toHaveBeenCalled();
+  });
+
+  it("offers no question where its host can take none, and words one for the person to finish", async () => {
+    render(<DiscoverHost.Provider value={{ open: vi.fn() }}>
+      <DiscoverPage openId={null} onOpenArea={() => {}} onName={() => {}} connections={[]} />
+    </DiscoverHost.Provider>);
+    expect(within(await screen.findByTestId("discover-kinds")).queryByRole("button", { name: /^Ask about/ })).toBeNull();
+    expect(askWords(ORDERS, "Table")).toBe("About the table “orders” on theLook: ");
+    expect(shellOrigin("http://localhost:3090")).toBe("http://localhost:3090");
+    expect(shellOrigin("https://evil.example")).toBeNull();
   });
 });
 
