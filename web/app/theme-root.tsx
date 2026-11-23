@@ -19,6 +19,7 @@
 import { useEffect, useState } from "react";
 import { Theme } from "@radix-ui/themes";
 
+import { followFrameTheme } from "@/lib/frameTheme";
 import { useLook } from "@/lib/look";
 import { LOOK_ATTRIBUTE } from "@/lib/themeBoot";
 
@@ -39,6 +40,8 @@ function useAppearance(): "light" | "dark" {
 export function ThemeRoot({ children }: { children: React.ReactElement }) {
   const appearance = useAppearance();
   const look = useLook();
+  // inside another page's panel (the coworker's), wear that page's light or dark as it turns (`lib/frameTheme.ts`)
+  useEffect(() => followFrameTheme(), []);
   useEffect(() => {
     const root = document.documentElement;
     root.setAttribute(LOOK_ATTRIBUTE.edges, look.edges);

@@ -13,6 +13,7 @@
  * one of them is left to the default, exactly as `cleanLook` leaves it.
  */
 import { DEFAULT_LOOK, LOOK_KEY, LOOK_VALUES, type Look } from "@/lib/lookValues";
+import { FRAME_THEME_QUERY } from "@/lib/frameTheme";
 import { THEME_KEY } from "@/lib/themeSwitch";
 
 /** Which `<html>` attribute each knob lives in: Radix Themes' own for the first four, ours for
@@ -27,11 +28,14 @@ export const LOOK_ATTRIBUTE: Record<keyof Look, string> = {
   rows: "data-rows",
 };
 
-/** Inline and pre-paint. Blocked storage, or nothing stored, leaves the default: dark, blue (indigo until 2026-11-10). */
+/** Inline and pre-paint. Blocked storage, or nothing stored, leaves the default: dark, blue (indigo until 2026-11-10). A page
+ *  inside another's panel takes the holder's theme from its address first (`lib/frameTheme.ts`). */
 export const THEME_BOOT = [
   "try{",
   "var d=document.documentElement,s=localStorage;",
-  `var t=s.getItem(${JSON.stringify(THEME_KEY)})==="light"?"light":"dark";`,
+  // a page inside another's panel wears the holder's theme, said in its address (`lib/frameTheme.ts`); nothing is stored
+  `var q=window.parent!==window&&${FRAME_THEME_QUERY.toString()}.exec(location.search);`,
+  `var t=q?q[1]:s.getItem(${JSON.stringify(THEME_KEY)})==="light"?"light":"dark";`,
   'd.setAttribute("data-theme",t);d.classList.remove("light","dark");d.classList.add(t);d.style.colorScheme=t;',
   `var l=JSON.parse(s.getItem(${JSON.stringify(LOOK_KEY)})||"{}")||{};`,
   `var v=${JSON.stringify(LOOK_VALUES)},a=${JSON.stringify(LOOK_ATTRIBUTE)},f=${JSON.stringify(DEFAULT_LOOK)};`,
