@@ -29,6 +29,7 @@ import {
   type DiscoverKindView, type SuggestedInView,
 } from "@/lib/discover";
 import { formatCount } from "@/lib/format";
+import { withUniqueKeys } from "@/lib/listKeys";
 
 interface Filters { conn: string; q: string; kind: DiscoverKind | ""; area: string; certified: boolean; mine: boolean }
 const NO_FILTERS: Filters = { conn: "", q: "", kind: "", area: "", certified: false, mine: false };
@@ -198,8 +199,8 @@ function Browse({ home, areaNames, many, onOpenArea, onViewAll, onCertified, rel
 
       <Card label="Everything, by kind" testId="discover-kinds">
         <div className="aug-discover-kinds">
-          {home.kinds.filter(k => k.count || k.withheld).map(k => (
-            <KindTile key={k.kind} view={k} areaNames={areaNames} many={many}
+          {withUniqueKeys(home.kinds.filter(k => k.count || k.withheld), k => k.kind).map(([key, k]) => (
+            <KindTile key={key} view={k} areaNames={areaNames} many={many}
               more={k.count > k.items.length ? () => onViewAll(k.kind) : undefined} />
           ))}
         </div>
@@ -321,7 +322,7 @@ function AreaView({ areaId, conn, workspaceId, onBack, onOpenArea, onName }: {
         <span className="aug-fs-xs">each says how it came to be here</span>}>
         {page.kinds.length
           ? <div className="aug-discover-kinds">
-              {page.kinds.map(k => <AreaKindTile key={k.kind} view={k} many={many} />)}
+              {withUniqueKeys(page.kinds, k => k.kind).map(([key, k]) => <AreaKindTile key={key} view={k} many={many} />)}
             </div>
           : <Empty>Nothing on the connections in view stands in this Area yet.</Empty>}
         {page.kinds.length > 0 && page.empty_kinds.length > 0 && (
