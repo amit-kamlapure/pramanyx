@@ -264,3 +264,143 @@ async def test_the_run_goes_on_after_its_reader_leaves():
     job = await _job_of(inv_id)
     assert row["status"] == "complete" and row["report"]["headline"] == "Revenue fell on fewer orders"
     assert job["state"] == JobState.SUCCEEDED
+
+
+# ── 5. the turn's trace: a reader leaving is not the run failing ──────────────
+
+def _trace(run_id: str, kind: str) -> list[dict]:
+    from pramanyx.obs import session_log
+    return [e for e in session_log.recover_session(run_id) if e["kind"] == kind]
+
+
+async def _until(check, what: str):
+    for _ in range(300):
+        got = check()
+        if got:
+            return got
+        await asyncio.sleep(0.01)
+    pytest.fail(f"never: {what}")
+
+
+def _door(body, inv_id: str):
+    """The deep turn as `build_ask_stream` composes it: the session log on the HTTP side, the K1 bridge inside."""
+    from pramanyx.routers import investigations as inv
+    return inv.stream_with_session_log(
+        inv._job_streamed_body(lambda: body(), session_id="", conn_id="conn-drr", payload={"question": inv_id}),
+        question="why did revenue fall?", conn_id="conn-drr", door="ask", depth="deep")
+
+
+async def _read_then_leave(door, got: list) -> None:
+    """The reader goes as Starlette makes it go: its task is cancelled where it waits, inside the bridge."""
+    async def read():
+        async for frame in door:
+            got.append(frame)
+    reader = asyncio.create_task(read())
+    await _until(lambda: got, "the first frame")
+    reader.cancel()
+    await asyncio.gather(reader, return_exceptions=True)
+
+
+@pytest.mark.anyio
+async def test_a_reader_leaving_a_carried_run_is_not_its_failure_and_the_job_writes_its_end():
+    """0237d0fc, 2026-11-24: the coworker's call let the stream go at 300 s; the run finished with its report, and its
+    trace said it failed — "Cancelled via cancel scope …". The end is now the job's to write, when the run ends."""
+    from pramanyx import telemetry
+    from pramanyx.db import history
+    from pramanyx.routers import investigations as inv
+
+    inv_id = history.create_investigation("why did revenue fall?", "conn-drr")
+    go_on, trace = asyncio.Event(), {}
+
+    async def body():
+        trace["id"] = telemetry.current_trace_id()
+        yield f'data: {json.dumps({"type": "start", "investigation_id": inv_id})}\n\n'
+        await go_on.wait()                        # the reader leaves here
+        history.complete_investigation(inv_id, report={"headline": "Revenue fell on fewer orders"}, hypotheses=[],
+                                       query_history=[], question="why did revenue fall?", connection_id="conn-drr",
+                                       skip_index=True)
+        yield inv._sse("answer_report", {"answer_report": {"headline": "Revenue fell on fewer orders"},
+                                         "investigation_id": inv_id})
+
+    await _read_then_leave(_door(body, inv_id), [])
+    run = trace["id"]
+    assert not _trace(run, "final_response"), "the run goes on: its trace is unfinished, not failed"
+    assert not _trace(run, "execution_error"), "a reader leaving is not an error of the run's"
+
+    go_on.set()
+    finals = await _until(lambda: _trace(run, "final_response"), "the run's end")
+    assert len(finals) == 1 and finals[0]["ok"] is True
+    assert finals[0]["payload"]["headline"] == "Revenue fell on fewer orders"
+    assert finals[0]["payload"]["reader_left_ms"] >= 0 and "error" not in finals[0]["payload"]
+    assert finals[0]["investigation_id"] == inv_id
+    assert not _trace(run, "execution_error")
+
+
+@pytest.mark.anyio
+async def test_a_carried_run_that_stops_after_its_reader_left_is_ended_with_why():
+    from pramanyx import telemetry
+    from pramanyx.db import history
+    from pramanyx.routers import investigations as inv
+
+    inv_id = history.create_investigation("why did revenue fall?", "conn-drr")
+    go_on, trace = asyncio.Event(), {}
+
+    async def body():
+        trace["id"] = telemetry.current_trace_id()
+        yield f'data: {json.dumps({"type": "start", "investigation_id": inv_id})}\n\n'
+        await go_on.wait()
+        yield inv._sse("error", inv._error_event(message="the warehouse did not answer"))
+
+    await _read_then_leave(_door(body, inv_id), [])
+    go_on.set()
+    run = trace["id"]
+    finals = await _until(lambda: _trace(run, "final_response"), "the run's end")
+    why = "Stopped before answering (0 model calls, 0 queries): the warehouse did not answer"
+    assert len(finals) == 1 and finals[0]["ok"] is False and (finals[0]["payload"] or {}).get("error") == why
+    assert [e["payload"]["message"] for e in _trace(run, "execution_error")] == [why]
+    assert "Cancelled" not in json.dumps(finals[0])
+
+
+@pytest.mark.anyio
+async def test_a_reader_that_stays_to_the_end_writes_the_one_end():
+    """No second end from the job when the door wrote it."""
+    from pramanyx import telemetry
+    from pramanyx.db import history
+    from pramanyx.routers import investigations as inv
+
+    inv_id = history.create_investigation("why did revenue fall?", "conn-drr")
+    trace = {}
+
+    async def body():
+        trace["id"] = telemetry.current_trace_id()
+        yield f'data: {json.dumps({"type": "start", "investigation_id": inv_id})}\n\n'
+        history.complete_investigation(inv_id, report={"headline": "Revenue fell on fewer orders"}, hypotheses=[],
+                                       query_history=[], question="why did revenue fall?", connection_id="conn-drr",
+                                       skip_index=True)
+        yield inv._sse("headline", {"headline": "Revenue fell on fewer orders"})
+
+    _ = [f async for f in _door(body, inv_id)]
+    await asyncio.sleep(0.05)                      # room for a second end, were one to be written
+    finals = _trace(trace["id"], "final_response")
+    assert len(finals) == 1 and finals[0]["ok"] is True and "reader_left_ms" not in finals[0]["payload"]
+
+
+@pytest.mark.anyio
+async def test_a_quick_turn_whose_reader_leaves_is_still_recorded_as_stopped():
+    """Unchanged where no job carries the run: a quick answer stops with its reader, and its trace says so."""
+    from pramanyx import telemetry
+    from pramanyx.routers import investigations as inv
+
+    trace = {}
+
+    async def quick():
+        trace["id"] = telemetry.current_trace_id()
+        yield inv._sse("sql", {"sql": "SELECT 1"})
+        await asyncio.sleep(30)                   # the reader leaves here
+        yield "data: {}\n\n"                      # pragma: no cover
+
+    door = inv.stream_with_session_log(quick(), question="how many orders?", conn_id="conn-drr")
+    await _read_then_leave(door, [])
+    finals = _trace(trace["id"], "final_response")
+    assert len(finals) == 1 and finals[0]["ok"] is False
+    assert len(_trace(trace["id"], "execution_error")) == 1

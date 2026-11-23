@@ -413,28 +413,31 @@ function DeepReport({ text, asked }) {
   const [copied, setCopied] = useState(false);
   const got = reportOf(text);
   if (!got) return null;
-  const { id, connection, running, cut, head, summary, period, closing, recs, sources, message } = reportFacts(got);
+  const { id, connection, running, stopped, why, cut, head, summary, period, closing, recs, sources, message } = reportFacts(got);
   const lead = headlineOf(head);
   const question = String(got.question || asked || "").trim();
   const full = id && hasPane() ? () => openBeside("page", pageFor.report(id)) : null;
   const becomes = question && connection && hasPane() ? [
-    ...(id && !running ? [["Save as a skill", pageFor.toSkill(id, connection), "Keep its method, to run again on other values"]] : []),
+    ...(id && !running && !stopped ? [["Save as a skill", pageFor.toSkill(id, connection), "Keep its method, to run again on other values"]] : []),
     ["Schedule it", pageFor.toSchedule(question, connection), "Set this question on a schedule — you choose when, and where the answer goes"],
     ["Keep on a dashboard", pageFor.toKeep(question, connection, id), "Keep it on the connection's dashboard, asked again on a rhythm you choose"],
     ["Make an agent from it", pageFor.toAgent(question, connection), "Draft an agent that answers questions like this one — you read it before it is made"],
   ] : [];
   const copy = () => {
-    const words = [head, summary, ...period, closing ? `Bottom line: ${closing}` : "", ...recs.map((r) => `- ${r}`)].filter(Boolean).join("\n\n");
+    const words = [head, stopped ? why : "", summary, ...period, closing ? `Bottom line: ${closing}` : "", ...recs.map((r) => `- ${r}`)].filter(Boolean).join("\n\n");
     navigator.clipboard?.writeText(words).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); });
   };
   const label = { ...quiet, fontSize: 12, fontWeight: 600 };
   return h("div", { "data-pramanyx-deep-report": "", style: { display: "flex", flexDirection: "column", gap: 14, margin: "10px 0 6px", fontSize: 14, lineHeight: 1.6 } },
     h("div", { role: "heading", "aria-level": 3, style: { fontSize: 18, fontWeight: 600, lineHeight: 1.35 } },
-      head ? rich(lead.head || head) : running ? "The deep analysis is still running" : cut ? "The deep analysis finished" : "The deep analysis found no answer"),
+      head ? rich(lead.head || head) : running ? "The deep analysis is still running"
+        : stopped ? "The deep analysis stopped before answering" : cut ? "The deep analysis finished" : "The deep analysis found no answer"),
     h(Caution, { said: lead.cautions }),
     summary && said(summary) !== said(head) ? prose(summary) : null,
     period.length ? h("div", { style: { ...quiet, fontSize: 12 } }, period.join(" · ")) : null,
     running ? h("div", { style: { ...quiet, fontSize: 13 } }, message || "It goes on in the platform; its report opens here when it is done.") : null,
+    // why it stopped, in the platform's own sentence — withheld is said, never implied (2026-11-24)
+    stopped ? h("div", { "data-pramanyx-stopped": "" }, why || "No reason was recorded for it.") : null,
     cut && !head ? h("div", { style: { ...quiet, fontSize: 13 } }, "Its report was too long to read here whole; it opens in full beside the conversation.") : null,
     closing ? h("div", { style: { display: "flex", flexDirection: "column", gap: 6 } },
       h("div", { role: "heading", "aria-level": 4, style: label }, "Bottom line"), prose(closing)) : null,
@@ -451,7 +454,7 @@ function DeepReport({ text, asked }) {
           onClick: () => openBeside("page", path) }, name))) : null) : null,
     h(Feedback, { answer: { investigation_id: id, connection, answer: head, question }, extras: [
       h("button", { key: "copy", type: "button", className: "pramanyx-icon", "aria-label": copied ? "Copied" : "Copy the answer", title: copied ? "Copied" : "Copy the answer", onClick: copy }, h(Glyph, { d: GLYPH.copy })),
-      id && !running ? h("a", { key: "pdf", className: "pramanyx-icon", download: "", "aria-label": "Download as PDF", title: "Download as PDF",
+      id && !running && !stopped ? h("a", { key: "pdf", className: "pramanyx-icon", download: "", "aria-label": "Download as PDF", title: "Download as PDF",
                                 href: `/pramanyx/investigations/${encodeURIComponent(id)}/export?format=pdf` }, h(Glyph, { d: GLYPH.download })) : null,
       // still running, the report opens beside and says so until it lands; done, its sources are the queries it ran
       full ? h("button", { key: "source", type: "button", className: "pramanyx-source",

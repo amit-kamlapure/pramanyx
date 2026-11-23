@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import json
 import logging
 import os
@@ -5668,6 +5669,27 @@ def _error_said(sse: str) -> str:
         return ""
 
 
+_TURN_FACT_TYPES = ('data: {"type": "answer_report"', 'data: {"type": "report"', 'data: {"type": "headline"',
+                    'data: {"type": "receipt_id"')
+
+
+def _turn_facts(sse: str) -> tuple[str, str]:
+    """``(headline, receipt_id)`` a frame carries — what the door's session log reads off a turn — or empties."""
+    if not sse.startswith(_TURN_FACT_TYPES):
+        return "", ""
+    try:
+        frame = json.loads(sse[6:])
+    except Exception:
+        return "", ""
+    kind = frame.get("type")
+    if kind == "receipt_id":
+        return "", str(frame.get("receipt_id") or "")
+    if kind == "headline":
+        return str(frame.get("headline") or ""), ""
+    report = frame.get(kind) if isinstance(frame.get(kind), dict) else {}
+    return str(report.get("headline") or ""), ""
+
+
 def _open_resume_run(session_id: str):
     """FL-1b — the frame-hub run mirroring this investigation's SSE for reattach
     (key = the conversation). Unconditional since 2026-08-28: ``ask.resume_stream``
@@ -5770,6 +5792,7 @@ async def _job_streamed_body(
         stop_exc: Optional[BaseException] = None
         seen_inv: Optional[str] = None
         said = ""          # the last error the body streamed — its own word on why it stopped
+        headline, receipt = "", ""   # what the door's session log would have read, for a reader that left
         try:
             async for sse in body_factory():
                 if seen_inv is None and '"investigation_id"' in sse:
@@ -5781,6 +5804,8 @@ async def _job_streamed_body(
                     except Exception:
                         seen_inv = None
                 said = _error_said(sse) or said
+                _head, _receipt = _turn_facts(sse)
+                headline, receipt = _head or headline, _receipt or receipt
                 await queue.put(sse)
                 if resume_run is not None:
                     resume_run.publish(sse)
@@ -5831,11 +5856,37 @@ async def _job_streamed_body(
                         resume_run.publish(told)
                 except Exception:
                     logger.debug("bridge could not say why the run stopped", exc_info=True)
+            # The turn's end in the session log is the job's to write when the reader left first (`_TurnEnd`); set
+            # before the drainer is released, so a reader leaving after this reads the run's outcome, not its own cancel.
+            turn = _TURN_END.get()
+            if turn is not None and turn.carried:
+                try:
+                    _row = get_investigation(seen_inv) if seen_inv else None
+                    if _row is not None:
+                        ok = _row.get("status") in ("complete", "paused")
+                    else:
+                        ok = stop_exc is None and not said
+                    error = None
+                    if not ok:
+                        from pramanyx.kernel.jobs import describe_end
+                        error = why or said or str((_row or {}).get("error") or "") or describe_end("")
+                    head = headline or str((_row or {}).get("headline")
+                                           or ((_row or {}).get("report") or {}).get("headline") or "")
+                    turn.outcome = {"inv_id": seen_inv, "ok": ok, "headline": head[:2000],
+                                    "receipt_id": receipt or None, "error": error}
+                    if turn.reader_left_ms is not None:
+                        _write_turn_end(turn, turn.outcome)
+                except Exception:
+                    logger.debug("bridge could not write the run's end for a reader that left", exc_info=True)
             if resume_run is not None:
                 resume_run.close(error=err)
             # Always release the client drainer, even on cancellation/error.
             queue.put_nowait(_STREAM_END)
 
+    # The run is carried by its job from here: a reader that leaves hands the turn's end to it (`_TurnEnd`).
+    _turn = _TURN_END.get()
+    if _turn is not None:
+        _turn.carried = True
     job_id = await kernel().submit(
         "investigation", _drive,
         conn_id=conn_id, canvas_id=canvas_id,
@@ -6822,6 +6873,52 @@ async def _stream_as_agent(agent, stream: AsyncGenerator[str, None]) -> AsyncGen
 _SESSION_LOG_SNIFF = ('"start"', '"error"', '"headline"', '"receipt_id"')
 
 
+@dataclass
+class _TurnEnd:
+    """Who writes a door turn's end — its FINAL_RESPONSE — in the session log, which is written once.
+
+    The door writes it (`stream_with_session_log`) when its reader reads the stream to the end. A deep run is a job that
+    goes on without a reader (the K1 bridge, `_job_streamed_body`, sets ``carried``), so when the reader leaves first —
+    a closed panel, a restarted coworker, a client past its deadline — the end is handed to the job, which writes it
+    when the run ends, with the run's own outcome. Until 2026-11-24 the door wrote the reader's cancel as the run's end:
+    0237d0fc finished with its report while its trace said it failed ("Cancelled via cancel scope …").
+    """
+    run_id: str
+    door: str
+    conn_id: str
+    claimed: bool
+    t0: float
+    carried: bool = False
+    #: When the reader left a carried run (ms after the turn began): the end is then the job's to write.
+    reader_left_ms: Optional[float] = None
+    #: The run's outcome, set by the job when it ends — read by a reader that leaves after that, before reading it.
+    outcome: Optional[dict] = None
+
+
+_TURN_END: contextvars.ContextVar[Optional[_TurnEnd]] = contextvars.ContextVar("pramanyx_turn_end", default=None)
+
+
+def _write_turn_end(turn: _TurnEnd, outcome: dict) -> None:
+    """Write a carried run's end, which its reader did not stay to read: its error as the door would have recorded it,
+    then — for a turn the door records (not one the coworker claimed) — its final response, saying when the reader left."""
+    from pramanyx.obs import session_log
+    if outcome.get("error"):
+        session_log.emit(session_log.EXECUTION_ERROR, name=turn.door, trace_id=turn.run_id,
+                         investigation_id=outcome.get("inv_id"), conn_id=turn.conn_id, ok=False,
+                         payload={"message": str(outcome["error"])[:2000]})
+    if turn.claimed:
+        return
+    import time as _t
+    session_log.emit(
+        session_log.FINAL_RESPONSE, name=turn.door, trace_id=turn.run_id,
+        investigation_id=outcome.get("inv_id"), conn_id=turn.conn_id, ok=bool(outcome.get("ok")),
+        duration_ms=round((_t.monotonic() - turn.t0) * 1000, 1),
+        payload={**({"headline": outcome["headline"]} if outcome.get("headline") else {}),
+                 **({"receipt_id": outcome["receipt_id"]} if outcome.get("receipt_id") else {}),
+                 **({"error": str(outcome["error"])[:2000]} if outcome.get("error") else {}),
+                 **({"reader_left_ms": turn.reader_left_ms} if turn.reader_left_ms is not None else {})})
+
+
 async def stream_with_session_log(
     stream: AsyncGenerator[str, None], *, question: str, conn_id: str,
     door: str = "ask", depth: str = "", canvas_id: str = "", schema: str = "",
@@ -6873,10 +6970,13 @@ async def stream_with_session_log(
     headline: str = ""
     receipt_id: str | None = None
     t0 = _t.monotonic()
+    turn = _TurnEnd(run_id=run_id, door=door, conn_id=conn_id, claimed=bool(claim), t0=t0)
+    handed_over = False
     # Arc TC, TC-2 — the turn is a run too, named by the same id as its trace: an edit or an action it makes says so
     with ExitStack() as _bound:
         _bound.enter_context(_tel.bind_trace(run_id))
         _bound.enter_context(_tel.bind_run(run_id, "chat"))
+        _bound.callback(_TURN_END.reset, _TURN_END.set(turn))   # unwound as the trace's binding is
         if claim:
             _bound.enter_context(_tel.bind_parent_span(claim["span_id"]))
             _bound.callback(reset_session_id, set_session_id(f"coworker:{claim['session']}"))
@@ -6915,6 +7015,17 @@ async def stream_with_session_log(
                         )
                 yield event
         except BaseException as exc:
+            if turn.carried and isinstance(exc, (asyncio.CancelledError, GeneratorExit)):
+                # The reader left a run its job carries on: that is not the run failing. Its end is the job's to write
+                # when the run ends (`_job_streamed_body`) — or, when it already has, it is written here from the job's
+                # outcome, which this reader left before reading.
+                if turn.outcome is None:
+                    turn.reader_left_ms = round((_t.monotonic() - t0) * 1000, 1)
+                    handed_over = True
+                else:
+                    handed_over = True
+                    _write_turn_end(turn, turn.outcome)
+                raise
             # A cancelled or crashed stream must leave the same evidence as a
             # clean failure — otherwise the log's most interesting runs are
             # exactly the ones missing from it. `failed` must be set too, or the
@@ -6929,7 +7040,7 @@ async def stream_with_session_log(
             )
             raise
         finally:
-            if not claim:
+            if not claim and not handed_over:
                 session_log.emit(
                     session_log.FINAL_RESPONSE, name=door, trace_id=run_id,
                     investigation_id=inv_id, conn_id=conn_id, ok=failed is None,
