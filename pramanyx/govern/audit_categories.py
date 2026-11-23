@@ -69,6 +69,9 @@ KIND_CATEGORY: dict[str, str] = {
     # Governance because every accept changes a governed definition somewhere; the
     # per-store trails (metric.governance, trusted_query.governance) carry the detail.
     "intake.governance": "governance_change",
+    # Discover D4 (2026-11-23): an Area's curators changed its description, its owners or what it features. Governance:
+    # an Area's owners are who may change it and place things in it, and its page is published on save.
+    "area.changed": "governance_change",
     # HB-6 — installing a pack's function layer mints level grants for its group and
     # lands declared automations: reach changed, which is what this category means.
     # Its sibling `pack.status_changed` stays operational above — a status flip grants
@@ -605,6 +608,7 @@ _SINKS: list[tuple[str, Callable[..., list[AuditEvent]]]] = [
     ("governance_change", lambda n, **w: _from_ledger("metric.governance", n, **w)),
     ("governance_change", lambda n, **w: _from_ledger("trusted_query.governance", n, **w)),
     ("governance_change", lambda n, **w: _from_ledger("intake.governance", n, **w)),
+    ("governance_change", lambda n, **w: _from_ledger("area.changed", n, **w)),
     ("governance_change", lambda n, **w: _from_ledger("pack.installed", n, **w)),
     ("governance_change", lambda n, **w: _from_ledger("authority.graduated", n, **w)),
     ("governance_change", lambda n, **w: _from_ledger("authority.demoted", n, **w)),

@@ -60,12 +60,16 @@ export interface DiscoverItem {
   matched?: string[];
   also_on?: string[];
   similarity?: number;
+  /** A person placed it in its Area, so it can be taken out; one read from its tables or its name cannot. */
+  placed?: boolean;
 }
 
 export interface DiscoverArea {
   id: string;
   name: string;
   question: string;
+  /** What its curators wrote for its page (D4); its question stays the line under its name. */
+  description?: string;
   parent: string;
   business_owners: string[];
   technical_owners: string[];
@@ -107,11 +111,20 @@ export interface DiscoverItems {
   said: string[];
 }
 
+export interface FeaturedRef { kind: DiscoverKind; ref: string }
+
 export interface DiscoverAreaPage {
   area: DiscoverArea;
   children: DiscoverArea[];
+  /** What its curators put first, in their order — those the person may open; `featured_refs` is the whole list. */
+  featured: DiscoverItem[];
+  featured_refs: FeaturedRef[];
   kinds: DiscoverKindView[];
   empty_kinds: DiscoverKind[];
+  /** Whether the person curates it: one of its owners, or whoever administers the organisation (D4). */
+  can_curate: boolean;
+  /** The person, as an owner is written: what a thing's owner is compared with. */
+  you: string;
   said: string[];
 }
 
@@ -194,6 +207,44 @@ export function readDiscoverArea(areaId: string, connectionId = "", workspaceId?
     if (!res.ok) throw new Error(fastApiError(await res.json().catch(() => ({})), `Reading the Area failed (${res.status})`));
     return (await res.json()) as DiscoverAreaPage;
   }, fresh);
+}
+
+// ── an Area's curation (D4) ──────────────────────────────────────────────────────────────────────────────────────
+
+/** Every Discover read kept is stale once a person changes an Area or what stands in it. */
+export function forgetDiscoverReads(): void {
+  kept.clear();
+}
+
+export interface AreaChanges {
+  name?: string; question?: string; description?: string; business_owners?: string[]; technical_owners?: string[];
+  featured?: FeaturedRef[];
+}
+
+async function write(href: string, body: unknown, what: string): Promise<unknown> {
+  const res = await fetch(href, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const out = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(fastApiError(out, `${what} failed (${res.status})`));
+  forgetDiscoverReads();
+  return out;
+}
+
+/** An Area's curators change its words, its owners or what it puts first; what is left out stays as it is. */
+export async function saveDiscoverArea(areaId: string, changes: AreaChanges, workspaceId?: string): Promise<void> {
+  await write(url(`/discover/areas/${encodeURIComponent(areaId)}`, {}, workspaceId), changes, "Saving the Area");
+}
+
+/** Place a thing in an Area, or take it out (`area` empty): its owner, the Area's owners or an admin may. */
+export async function placeInDiscoverArea(item: Pick<DiscoverItem, "kind" | "id">, area: string, workspaceId?: string): Promise<string> {
+  const out = await write(url("/discover/placement", {}, workspaceId), { kind: item.kind, id: item.id, area }, "Placing it");
+  return (out as { area: string }).area;
+}
+
+/** Whether the person may place this thing or take it out on this Area's page: they curate the Area, or it is theirs. */
+export function mayPlace(page: Pick<DiscoverAreaPage, "can_curate" | "you">, item: DiscoverItem): boolean {
+  if (item.kind === "definition") return false;
+  const you = page.you.replace(/^user:/, "").toLowerCase();
+  return page.can_curate || (!!you && item.owner.replace(/^user:/, "").toLowerCase() === you);
 }
 
 // ── what a row and a card say ────────────────────────────────────────────────────────────────────────────────────

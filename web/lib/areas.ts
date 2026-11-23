@@ -9,6 +9,8 @@ import { getApiBase } from "@/lib/config";
 export interface BusinessArea {
   id: string; name: string; question: string; parent: string;
   business_owners: string[]; technical_owners: string[]; source: "package" | "organisation"; pack_id: string;
+  /** What its curators wrote on its Discover page (D4, 2026-11-23); the server keeps both when a save leaves them out. */
+  description?: string; featured?: { kind: string; ref: string }[];
 }
 export interface AreaPlaced { area: string; by: string }
 export interface AreasRead {
@@ -31,7 +33,10 @@ export async function readAreas(connectionId: string, schema?: string): Promise<
 /** What the organisation has declared, from what it reads back: every area it named, owned or placed under another. */
 export function declarationsOf(areas: BusinessArea[]): AreaDeclaration[] {
   return areas
-    .filter((a) => a.source === "organisation" || a.parent || a.business_owners.length || a.technical_owners.length)
+    // a package's Area given only a description or things put first on its page is declared too: left out of a save, it
+    // would lose them (Discover D4)
+    .filter((a) => a.source === "organisation" || a.parent || a.business_owners.length || a.technical_owners.length
+      || a.description || a.featured?.length)
     .map((a) => ({ id: a.id, ...(a.source === "organisation" ? { name: a.name, question: a.question } : {}),
                    parent: a.parent, business_owners: a.business_owners, technical_owners: a.technical_owners }));
 }

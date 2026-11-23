@@ -15,6 +15,7 @@ import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNo
 
 import { Chip } from "@/components/clarity/kit";
 import { DefinitionBody } from "@/components/definitions/DefinitionBody";
+import { DiscoverFinder } from "@/components/discover/DiscoverFinder";
 import { Button } from "@/components/ui/button";
 import { Icon, type IconName } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
@@ -29,7 +30,7 @@ import {
   earlierWordings, inAppHref, linkHref, same, who,
   type Definition, type DefinitionLink, type DefinitionSource,
 } from "@/lib/definitions";
-import { KIND_ICON, KIND_WORDS, readDiscoverItems, readDiscoverSearch, type DiscoverItem, type DiscoverKind } from "@/lib/discover";
+import { KIND_ICON, KIND_WORDS, readDiscoverItems, type DiscoverItem, type DiscoverKind } from "@/lib/discover";
 import { fmtDate, formatCount } from "@/lib/format";
 
 const MUTED = { color: "var(--t3)" };
@@ -456,41 +457,20 @@ function BodyEditor({ value, onChange }: { value: string; onChange: (v: string) 
   );
 }
 
-/** Add a related asset: anything Discover lists, found by its name or what it means. */
+/** Add a related asset: anything Discover lists, found by its name or what it means (`DiscoverFinder`). */
 function AssetPicker({ connection, have, onPick }: { connection: string; have: DefinitionLink[]; onPick: (l: DefinitionLink) => void }) {
   const [open, setOpen] = useState(false);
-  const [q, setQ] = useState("");
-  const [found, setFound] = useState<DiscoverItem[] | null>(null);
-  useEffect(() => {
-    if (!open || !q.trim()) { setFound(null); return; }
-    let alive = true;
-    const t = window.setTimeout(() => {
-      readDiscoverSearch({ q, connectionId: connection, limit: 8 }).then((r) => { if (alive) setFound(r.items); })
-        .catch(() => { if (alive) setFound([]); });
-    }, 250);
-    return () => { alive = false; window.clearTimeout(t); };
-  }, [q, open, connection]);
   if (!open) {
     return <div><Button size="xs" variant="outline" onClick={() => setOpen(true)}><Icon name="plus" size={12} />Add related asset</Button></div>;
   }
-  const taken = (i: DiscoverItem) => have.some((l) => l.kind === i.kind && l.href === i.href);
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 4, maxWidth: 640 }} data-testid="asset-picker">
-      <Input bespoke autoFocus aria-label="Find a related asset" placeholder="Find a table, metric, dashboard, canvas, agent, document…"
-        value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }} />
-      {found?.filter((i) => !taken(i)).map((i) => (
-        <Button key={`${i.kind}:${i.id}`} size="xs" variant="ghost" style={{ justifyContent: "flex-start", gap: 8, height: "auto", padding: "4px 6px" }}
-          onClick={() => {
-            onPick({ kind: i.kind, ref: i.kind === "metric" ? i.id.split("/").slice(1).join("/") : i.id, label: i.name, href: i.href });
-            setQ(""); setOpen(false);
-          }}>
-          <Icon name={KIND_ICON[i.kind]} size={13} /><span>{i.name}</span>
-          <span className="aug-fs-xs" style={MUTED}>{KIND_WORDS[i.kind][0]}{i.connection_name ? ` · ${i.connection_name}` : ""}</span>
-        </Button>
-      ))}
-      {found && !found.length && <span className="aug-fs-xs" style={MUTED}>Nothing found by that name or meaning.</span>}
-      <div><Button size="xs" variant="link" onClick={() => setOpen(false)}>Done</Button></div>
-    </div>
+    <DiscoverFinder testId="asset-picker" label="Find a related asset" placeholder="Find a table, metric, dashboard, canvas, agent, document…"
+      connectionId={connection} onClose={() => setOpen(false)}
+      taken={(i) => have.some((l) => l.kind === i.kind && l.href === i.href)}
+      onPick={(i) => {
+        onPick({ kind: i.kind, ref: i.kind === "metric" ? i.id.split("/").slice(1).join("/") : i.id, label: i.name, href: i.href });
+        setOpen(false);
+      }} />
   );
 }
 
