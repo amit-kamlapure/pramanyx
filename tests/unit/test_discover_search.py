@@ -161,3 +161,13 @@ def test_meaning_alone_finds_only_what_is_near_enough(monkeypatch):
     cg.add_node(GraphNode(id="metric:units", kind="metric", label="units sold", provenance=Provenance(source="metrics_catalog")))
     monkeypatch.setattr(G, "similar_nodes", lambda cg, v, k, kinds=None: [("metric:revenue", 0.76), ("metric:units", 0.48)])
     assert [(n.id, sim) for n, sim in D._graph_rank(cg, "zzqx", [0.1])] == [("metric:revenue", 0.76)]
+
+
+def test_a_name_that_holds_every_word_comes_first(world, monkeypatch):
+    """Seen live, 2026-11-23: "repeat purchase" put a conversion rate the meaning found above Repeat Purchase Rate."""
+    conversion = Item("metric", "c1/session_to_purchase", "Session-to-Purchase Conversion Rate", connection_id="c1",
+                      connection_name="theLook", area="traffic_conversion")
+    monkeypatch.setitem(I.READERS, "metric", lambda scope: Found(items=[REPEAT, REVENUE, conversion]))
+    world.hits["c1"] = [_node("metric", "metric:session_to_purchase", "session_to_purchase")]
+    out = D.search(_scope(), "repeat purchase")
+    assert names(out)[0] == "Repeat Purchase Rate"

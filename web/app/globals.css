@@ -292,6 +292,9 @@ a:hover { color: var(--blue4); }
 }
 /* Hover is a fill and nothing else — no bar, no weight — so it is never mistaken for active. */
 .aug-nav-item:hover { background: var(--bg-hover); color: var(--t1); }
+/* In dark the rail's words are the primary text (2026-11-23, the user: "light grey on dark bluish grey is painful") —
+   as the reference's rail; the open page still carries its fill, weight and the accent's bar. */
+:root:not([data-theme="light"]) .aug-nav-item { color: var(--t1); }
 /* Active: one item in the whole rail — --bg-sel, weight 500, a 2px --accent bar at the edge. */
 .aug-nav-item[aria-current="page"],
 .aug-nav-item.active { background: var(--bg-nav-sel); color: var(--t1); font-weight: 500; }

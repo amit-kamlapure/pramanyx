@@ -1,19 +1,22 @@
 /* Discover (`components/discover/DiscoverPage.tsx`) — the Areas as cards, each kind's rows, the full width the page has.
-   Surfaces carry the structure and space groups it; no edge but a suggested Area's, which is not one yet. */
+   Cards stand on the page with a hairline round them (2026-11-23); a suggested Area's is dashed, as it is not one yet. */
 .aug-discover-areas { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
 .aug-discover-area {
   display: flex; flex-direction: column; gap: 6px; min-height: 112px; padding: 14px 16px; box-sizing: border-box;
-  border-radius: var(--r3); background: var(--bg-2); color: var(--t1); text-decoration: none; min-width: 0;
+  border-radius: var(--r3); background: var(--card-bg); border: 1px solid var(--card-line); color: var(--t1);
+  text-decoration: none; min-width: 0;
 }
-a.aug-discover-area:hover { background: var(--bg-hover); }
+a.aug-discover-area:hover { background: var(--bg-hover); border-color: var(--b1); }
 .aug-discover-area .name { font-weight: 600; }
-.aug-discover-area .q { color: var(--t3); }
+.aug-discover-area .q { color: var(--t2); }
 .aug-discover-area .holds { color: var(--t2); margin-top: auto; }
 .aug-discover-area .who { color: var(--t3); }
-.aug-discover-area.is-suggested { background: transparent; box-shadow: inset 0 0 0 1px var(--b1); }
+/* a suggestion is not an Area yet: its outline dashed */
+.aug-discover-area.is-suggested { background: transparent; border-style: dashed; }
 
 .aug-discover-kinds { display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 16px; }
-.aug-discover-kind { background: var(--bg-2); border-radius: var(--r3); padding: 12px 8px 8px; display: flex; flex-direction: column; min-width: 0; }
+.aug-discover-kind { background: var(--card-bg); border: 1px solid var(--card-line); border-radius: var(--r3); padding: 12px 8px 8px;
+  display: flex; flex-direction: column; min-width: 0; }
 .aug-discover-kind > .head { display: flex; align-items: baseline; gap: 8px; padding: 0 8px; margin-bottom: 6px; color: var(--t3); }
 .aug-discover-kind > .head .title { font-weight: 600; color: var(--t2); }
 .aug-discover-kind > .head .right { margin-left: auto; }

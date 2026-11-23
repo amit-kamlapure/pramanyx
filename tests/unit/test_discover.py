@@ -272,3 +272,10 @@ def test_every_kind_links_to_its_page_inside_the_app():
         assert isinstance(h, ast.Call) and getattr(h.func, "id", "") == "_href", ast.unparse(h)
         assert ast.literal_eval(h.args[0]) == "/", ast.unparse(h)
         assert any(kw.arg == "tab" for kw in h.keywords), ast.unparse(h)
+
+
+def test_a_definition_s_row_says_its_description_or_its_words_without_their_marks():
+    """Seen live, 2026-11-23: the row said "## Definition A customer with **more than one**…"."""
+    body = "## Definition\nA customer with **more than one** order in `orders`.\n\n## Business use\n- [Repeat Purchase Rate](/?tab=x) reads it."
+    assert I.plain_words(body) == "A customer with more than one order in orders. Repeat Purchase Rate reads it."
+    assert I.plain_words("| a | b |\n| --- | --- |\n| 1 | 2 |") == "a b 1 2"

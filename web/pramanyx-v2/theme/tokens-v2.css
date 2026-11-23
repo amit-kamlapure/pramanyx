@@ -253,6 +253,9 @@
   --bg-2: var(--gray-1);
   --bg-3: var(--gray-2);
   --card-edge: transparent;
+  /* a card here keeps the dashboards' own grammar: near-black on the grey ground, no edge */
+  --card-bg: var(--bg-2);
+  --card-line: transparent;
 }
 
 /* ── The reference palette (the user, 2026-11-20: "Lets do other screens as well.. and lets use this setup"), as the slate
@@ -286,6 +289,24 @@
 /* edges: on by default in both skins since 2026-10-25; off takes the card's hairline away */
 :root[data-edges="off"] {
   --card-edge: transparent;
+}
+
+/* ── A CARD (2026-11-23, the user, with the reference's Discover beside ours: "This light grey on dark bluish grey is
+   painful to the eyes" — its cards stand on the page with a hairline round them, ours were a slab a step lighter with
+   grey words on it). In dark a card is the page's own ground with a hairline; in light it is what it was — white on the
+   grey ground, its edge the knob's. `--card-bg` and `--card-line` are a card's own: what else paints with --bg-2 (a
+   graph's node, a grid's header, a menu) keeps its fill. With edges off the dark hairline is fainter, never gone: a
+   card on the ground with no edge would not be seen. ── */
+:root {
+  --card-bg: var(--bg-2);
+  --card-line: var(--card-edge);
+}
+:root:not([data-theme="light"]) {
+  --card-bg: var(--bg-0);
+  --card-line: var(--gray-6);
+}
+:root:not([data-theme="light"])[data-edges="off"] {
+  --card-line: var(--gray-5);
 }
 
 /* typeface: the interface set in Source Sans 3 instead of Inter. --font-ui is what the body

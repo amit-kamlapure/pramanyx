@@ -137,6 +137,18 @@ def by_words(scope: Scope, text: str, connection_id: str = "") -> tuple[str, str
     return "", ""
 
 
+def plain_words(markdown: str) -> str:
+    """A Definition's body as one line a row can say: its words, without the marks its toolbar writes (headings, bold,
+    code, links, lists, tables). Seen live, 2026-11-23: a row said "## Definition A customer with **more than one**…"."""
+    import re
+    text = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", markdown or "")           # a link: its words
+    text = re.sub(r"^\s{0,3}#{1,6}\s+[^\n]*\n?", "", text, flags=re.M)      # a heading is a section's name, not the words
+    text = re.sub(r"^\s*(?:[-*]|\d+\.)\s+", "", text, flags=re.M)              # a list's marks
+    text = re.sub(r"^\s*\|?\s*:?-{3,}.*$", "", text, flags=re.M)               # a table's rule
+    text = re.sub(r"[*_`>|]+", "", text)
+    return " ".join(text.split())
+
+
 def settle(item: Item, scope: Scope, *, placed: Optional[tuple[str, str]] = None) -> Item:
     """Stand ``item`` in its Area: a person's placement, else the tables it reads, else its name's words, else none.
     Its NAME only: a description is prose, and read for Areas it placed a schedule that "returns the top five" in
@@ -246,7 +258,8 @@ def definitions(scope: Scope) -> Found:
                 continue
             term, area = str(x.get("term") or ""), str(x.get("area") or "")
             found.items.append(Item(
-                kind="definition", id=f"{conn}/{term}/{area}", name=term, line=c.statement.text[:240],
+                kind="definition", id=f"{conn}/{term}/{area}", name=term,
+                line=str(x.get("description") or "") or plain_words(c.statement.text)[:240],
                 connection_id=conn, connection_name=name, area=area, area_how="its own" if area else "",
                 owner=str(x.get("approved_by") or c.owner or c.author or ""), updated_at=c.recorded_at,
                 state="published" if published else "draft",

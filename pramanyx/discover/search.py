@@ -46,6 +46,11 @@ def _matches(word: str, have: set[str]) -> bool:
     return any(h.startswith(word) or h == stem for h in have)
 
 
+def _named_by_all(item: Item, asked: list[str]) -> bool:
+    name = set(words_of(item.name.replace("_", " "))) | set(words_of(item.name))
+    return bool(asked) and all(_matches(w, name) for w in asked)
+
+
 def words_score(item: Item, asked: list[str]) -> tuple[float, str]:
     """How well the typed words name an item — its name counting twice its description — and what matched. 0 unless at
     least half the words are found somewhere."""
@@ -194,12 +199,16 @@ def search(scope: Scope, q: str, *, kind: str = "", area: str = "", certified: b
             scored.append((score, i, why))
     scored.sort(key=lambda t: (-t[0], order_key(t[1])))
     words_rank = [(_key(i), why) for _s, i, why in scored]
+    # what is named by every word asked, the closest name first — "repeat purchase" is Repeat Purchase Rate before any
+    # conversion rate the meaning also finds (seen live, 2026-11-23)
+    named = sorted((i for _s, i, _w in scored if _named_by_all(i, asked)), key=lambda i: (len(i.name), order_key(i)))
+    name_rank = [(_key(i), "its name") for i in named]
 
     graph_rank, meaning, said, graph_withheld, similarity = _graph_hits(scope, q, items) if asked else ([], False, [], 0, {})
 
     fused: dict[str, float] = {}
     why_of: dict[str, list[str]] = {}
-    for ranked in (graph_rank, words_rank):
+    for ranked in (graph_rank, words_rank, name_rank):
         # a key's rank in a list is where it first stands; a later appearance (a table found by two of its columns)
         # only adds why
         placed: set[str] = set()
