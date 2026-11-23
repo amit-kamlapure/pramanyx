@@ -21,12 +21,12 @@ import { chartCaption, repeatedCharts } from "@/components/charts/caption";
 import { FigureSources, FindingFigures, isOneRecord } from "@/components/FindingFigures";
 import { SqlResultTable } from "@/components/AugTable";
 import { AnswerProse } from "@/components/chat/AnswerProse";
+import { AnswerLead } from "@/components/chat/AnswerLead";
 /** Open the right-side Source-data drawer (data + SQL + Query Builder) for a finding. Typed inline
  *  (structurally = ChatMessage's SourcePanelData) to avoid a circular import with ChatMessage. */
 type ShowSource = (data: { columns: string[]; rows: unknown[][]; sql: string | null; title: string }) => void;
 import {
   Brief,
-  BriefHeadline,
   BriefProse,
   BriefSection,
   BriefMeta,
@@ -610,7 +610,7 @@ function ConcludedBody({ report, onShowSource, frame }: { report: AnswerReport; 
 
   return (
     <Brief>
-      {report.headline?.trim() && <BriefHeadline>{report.headline}</BriefHeadline>}
+      {report.headline?.trim() && <AnswerLead text={report.headline} />}
       {figures.length > 0 && (
         <Figures testId="answer-figures">
           {figures.map((f, i) => <Figure key={i} label={f.label} value={f.value} sub={f.note || undefined} />)}
@@ -750,7 +750,7 @@ export function InvestigationReportView({
           )}
         </div>
       )}
-      {report.headline?.trim() && <BriefHeadline>{report.headline}</BriefHeadline>}
+      {report.headline?.trim() && <AnswerLead text={report.headline} />}
       {/* Skip a summary that only restates the headline (the fallback path can emit both
           from the same sentence) — one text, rendered once. Rendered as markdown: a question
           that asks to see the data is answered in the analyst's own words (item 3), whose

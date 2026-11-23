@@ -21,6 +21,7 @@ import { ABOUT_TO, DOES, PREFIX, STAGED, saidOf, stagedOf, turnedDown } from "./
 import { drawChart, labelOf, numericColumns } from "./chart";
 import { isDeepRecord, reportFacts, reportOf } from "./report.js";
 import { unstatedFigures } from "../../../../web/lib/statedFigures";
+import { boldable, titleOf as answerTitleOf } from "../../../../web/lib/answerTitle";
 import {
   PANE, PANE_PATTERN, PaneBody, groundingOf, pageFor, PaneTitle, ResultGrid, button, code, faint, hasPane, idOf, line,
   primary, soft, surface,
@@ -408,6 +409,7 @@ function DeepReport({ text, asked }) {
   const got = reportOf(text);
   if (!got) return null;
   const { id, connection, running, cut, head, summary, period, closing, recs, sources, message } = reportFacts(got);
+  const lead = headlineOf(head);
   const question = String(got.question || asked || "").trim();
   const full = id && hasPane() ? () => openBeside("page", pageFor.report(id)) : null;
   const becomes = question && connection && hasPane() ? [
@@ -423,7 +425,8 @@ function DeepReport({ text, asked }) {
   const label = { ...quiet, fontSize: 12, fontWeight: 600 };
   return h("div", { "data-pramanyx-deep-report": "", style: { display: "flex", flexDirection: "column", gap: 14, margin: "10px 0 6px", fontSize: 14, lineHeight: 1.6 } },
     h("div", { role: "heading", "aria-level": 3, style: { fontSize: 18, fontWeight: 600, lineHeight: 1.35 } },
-      head || (running ? "The deep analysis is still running" : cut ? "The deep analysis finished" : "The deep analysis found no answer")),
+      head ? rich(lead.head || head) : running ? "The deep analysis is still running" : cut ? "The deep analysis finished" : "The deep analysis found no answer"),
+    h(Caution, { said: lead.cautions }),
     summary && said(summary) !== said(head) ? prose(summary) : null,
     period.length ? h("div", { style: { ...quiet, fontSize: 12 } }, period.join(" · ")) : null,
     running ? h("div", { style: { ...quiet, fontSize: 13 } }, message || "It goes on in the platform; its report opens here when it is done.") : null,
@@ -1406,10 +1409,18 @@ function prose(text) {
   return h("div", { style: { display: "flex", flexDirection: "column", gap: 8 } }, blocks);
 }
 
+/** Words with what was marked `**bold**` set bold — a figure or a name, never a whole sentence — and text in backticks
+ *  set as code, not shown with its marks (the platform's one rule, `web/lib/answerTitle.ts`). */
 function rich(text) {
-  return String(text || "").split(/(\*\*[^*]+\*\*)/g).filter(Boolean).map((piece, i) =>
-    (piece.startsWith("**") && piece.endsWith("**") && piece.length > 4
-      ? h("strong", { key: i, style: { fontWeight: 600 } }, piece.slice(2, -2)) : piece));
+  return String(text || "").split(/(\*\*[^*]+\*\*|`[^`\n]+`)/g).filter(Boolean).map((piece, i) => {
+    if (piece.startsWith("**") && piece.endsWith("**") && piece.length > 4) {
+      return boldable(piece.slice(2, -2)) ? h("strong", { key: i, style: { fontWeight: 600 } }, piece.slice(2, -2)) : piece.slice(2, -2);
+    }
+    if (piece.startsWith("`") && piece.endsWith("`") && piece.length > 2) {
+      return h("code", { key: i, style: { fontFamily: "var(--dsw-font-mono, ui-monospace, monospace)", fontSize: "0.9em", background: code, borderRadius: 4, padding: "0 4px" } }, piece.slice(1, -1));
+    }
+    return piece;
+  });
 }
 
 /** "Total gmv eur by platform": what an exhibit of one measure over one dimension is of, from its own columns. */
@@ -1460,16 +1471,20 @@ function unsaidOf(answer, words) {
  * row at its foot. Nothing here is a second telling: every word is the platform's, and every number is from the rows.
  */
 export function headlineOf(text) {
-  const said = String(text || "").trim();
-  // An agent's answer can be written as markdown — a sentence, then paragraphs and a list (2026-11-20, the KPI Analyst:
-  // "…€3,217,143.16 across four platforms.\n\n- Mytheresa: …"). Its first line is the headline, without the bold marks a
-  // heading has no use for; the rest is drawn as paragraphs and a list (`prose`), never run together.
-  const lineAt = said.indexOf("\n");
-  if (lineAt > 0 && lineAt <= 220) return { head: said.slice(0, lineAt).replace(/\*\*/g, "").trim(), rest: said.slice(lineAt + 1).trim() };
-  if (said.length <= 220) return { head: said.replace(/\*\*/g, ""), rest: "" };
-  const cut = said.slice(0, 220).search(/[.!?](\s|$)(?![\s\S]*[.!?](\s|$))/);
-  const at = cut > 40 ? cut + 1 : said.slice(0, 220).lastIndexOf(" ");
-  return { head: said.slice(0, at > 0 ? at : 220).trim(), rest: said.slice(at > 0 ? at : 220).trim() };
+  // The platform's one rule (`web/lib/answerTitle.ts`, 2026-11-23): the answer's first line, or its first sentence when
+  // that is long, without the marks a heading has no use for; a caution written onto it ("— caution: …") said apart,
+  // in the amber line; a lead-in, a list or a table no title at all. The rest is drawn as paragraphs and a list (`prose`).
+  const { title, cautions, rest } = answerTitleOf(String(text || ""));
+  return { head: title, cautions, rest };
+}
+
+/** The amber line under an answer's headline: what the platform cautioned about it, or found wrong with it. */
+function Caution({ said }) {
+  const text = said.filter(Boolean).join(" ");
+  return text ? h("div", { role: "alert", style: { display: "flex", gap: 8, alignItems: "baseline", padding: "8px 10px", borderRadius: 6,
+                                                   background: "color-mix(in srgb, #e5a50a 14%, transparent)" } },
+    h("span", { "aria-hidden": "true", style: { fontWeight: 600 } }, "!"),
+    h("span", null, text)) : null;
 }
 
 function Exhibit({ answer, whole, asked }) {
@@ -1559,13 +1574,11 @@ function Exhibit({ answer, whole, asked }) {
   // On the platform's scale, as its answers are (2026-11-20): the headline is the verdict sentence (18), the words are
   // read at 14, a section's label is 12, a figure 22, and a row or a cell 13.
   return h("div", { style: { display: "flex", flexDirection: "column", gap: 14, margin: "10px 0 6px", fontSize: 14, lineHeight: 1.6 } },
-    h("div", { role: "heading", "aria-level": 3, style: { fontSize: 18, fontWeight: 600, lineHeight: 1.35 } }, lead.head),
+    lead.head ? h("div", { role: "heading", "aria-level": 3, style: { fontSize: 18, fontWeight: 600, lineHeight: 1.35 } }, rich(lead.head)) : null,
+    // What the platform itself says is wrong with this answer — what it cautioned, and what its check found — said
+    // under the headline where a finding would be, and never as part of it.
+    h(Caution, { said: [...lead.cautions, wrong.length ? (checked ? wrong.join(" ") : `This may not be right: ${wrong.join("; ")}`) : ""] }),
     lead.rest ? prose(lead.rest) : null,
-    // What the platform itself says is wrong with this answer, said under the headline where a finding would be.
-    wrong.length ? h("div", { role: "alert", style: { display: "flex", gap: 8, alignItems: "baseline", padding: "8px 10px", borderRadius: 6,
-                                                      background: "color-mix(in srgb, #e5a50a 14%, transparent)" } },
-      h("span", { "aria-hidden": "true", style: { fontWeight: 600 } }, "!"),
-      h("span", null, checked ? wrong.join(" ") : `This may not be right: ${wrong.join("; ")}`)) : null,
     words || stoodOn.length ? h("div", null, rich(words), stoodOn) : null,
     figure ? (unsaid.length ? h(Figures, { answer, only: unsaid }) : null)
     : h("div", { style: { background: surface, borderRadius: 10, padding: "10px 10px 6px 16px" } },

@@ -1208,6 +1208,10 @@ def converse_system_prompt(connection_id: str, extra: Optional[str] = None,
         "as its exhibit, and a table in your prose would be shown twice; name the "
         "figures that matter in a sentence instead.",
         "",
+        "Your answer's first line is shown as its title: it is the answer itself, one "
+        "sentence with the figure it rests on — not a heading, a query's name or a line "
+        "that leads into a list.",
+        "",
         TOOLS_UNNAMED,
         *(["", settling_note] if settling_note else []),
         *(["", sql_note] if sql_note else []),
