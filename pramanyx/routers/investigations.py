@@ -107,7 +107,9 @@ def _error_event(exc: "BaseException | None" = None, *, message: str = "",
 _TITLE_CLAUSE = (
     "write the headline: the answer itself in ONE sentence with the figure it rests on, read from the results — what "
     "a reader sees first. Not a label of the query ('Revenue by month'), no caution or caveat (those are shown beside "
-    "it), no markdown. Use ONLY numbers present in the results."
+    "it), no markdown. Quote each figure exactly as a cell of the results gives it — never a difference, a sum or a "
+    "share you work out yourself: the headline is checked against the results, and one stating a figure they do not "
+    "hold is not used."
 )
 
 #: The longest title kept: one sentence, read at a glance.
@@ -131,12 +133,20 @@ def _narrated_title(title: str, columns, rows, sql: str = "") -> str:
     copied from the headline it was shown is dropped — the guards' own cautions are carried on by the caller."""
     said = " ".join(str(title or "").replace("**", "").split()).lstrip("#").strip()
     said = _CAUTION_TAIL_RE.split(said)[0].strip()
-    if not said or not rows or not re.search(r"\d", said) or len(said.split()) > _TITLE_WORDS:
+    if not said or not rows:
         return ""
     from pramanyx.explorer.grounding import ungrounded_label_values, verify_finding
-    if verify_finding(said, rows).ungrounded or ungrounded_label_values(said, rows):
-        return ""
-    if _ground_headline(said, columns, rows, sql) != said:
+    why = ("it states no figure" if not re.search(r"\d", said)
+           else f"it runs {len(said.split())} words" if len(said.split()) > _TITLE_WORDS
+           else "")
+    if not why:
+        missing = list(verify_finding(said, rows).ungrounded) + ungrounded_label_values(said, rows)
+        why = f"figures not in the rows: {', '.join(missing[:4])}" if missing else ""
+    if not why and _ground_headline(said, columns, rows, sql) != said:
+        why = "the headline's own check would rewrite it"
+    if why:
+        # said where an operator reads it: a title written and not used is not silently gone
+        logger.info("[chat] the narrator's title was not used (%s): %r", why, said[:240])
         return ""
     return said
 
