@@ -63,6 +63,7 @@ import {
   IconList, IconPaperclip, IconNumber123, IconBraces, IconBinary, createReactComponent,
   IconPointer, IconPhoto, IconArrowBackUp, IconArrowForwardUp, IconLayoutSidebarLeftCollapse,
   IconLayoutSidebarLeftExpand, IconTypography, IconChartLine, IconLayoutList, IconLayoutGrid, IconStarFilled,
+  IconCpu,
 } from "@tabler/icons-react";
 import { createContext, useContext, type ComponentType, type ReactNode } from "react";
 
@@ -113,6 +114,8 @@ const ICONS = {
   agents: IconRobot,
   spend: IconCoins,
   brain: IconBrain,
+  /** The organisation's own model, trained on the install (Define ▸ Own model) — a model, not an agent at work. */
+  model: IconCpu,
   shield: IconShieldCheck,
   settings: IconSettings,
   metric: IconActivity,

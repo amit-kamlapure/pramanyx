@@ -165,6 +165,8 @@ ENTRIES: tuple[Entry, ...] = (
     Entry("saved_queries.db", ARTIFACT, "pramanyx/savedquery/store.py", "saved queries"),
     Entry("learning.db", ARTIFACT, "pramanyx/learning/store.py", "datasets' records; their bytes are in `datasets`"),
     Entry("datasets", ARTIFACT, "pramanyx/learning/store.py", "datasets' bytes"),
+    Entry("models", ARTIFACT, "pramanyx/training/base.py",
+          "the organisation's own model: the base it starts from, each training run's files, and the models trained"),
     Entry("sheets/*/projection.*", EPHEMERAL, "pramanyx/sheets/files.py",
           "a sheet's DuckDB projection and its stamps, rebuilt from the sheet's files and edits"),
     Entry("sheets", ARTIFACT, "pramanyx/sheets/files.py", "spreadsheets: their files and their edits"),

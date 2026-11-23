@@ -215,6 +215,16 @@ a thing that wave builds — the word is fixed before the thing exists, so it ar
 The agent that runs deep analyses stays **Analyst**; the human RBAC role renamed to
 **Editor** so the word means one thing. The stored grant value is still `"analyst"`.
 
+## The organisation's own model
+
+| Use this | For | Don't use |
+|---|---|---|
+| **Own model** | A model of the organisation's own, trained on the install from what it settled (Define ▸ Own model, `pramanyx/training/`, 2026-11-23): numbered (Model 3), a draft when trained, **in service** once an admin puts it there (served through Ollama, pickable as a model), withdrawn with its record kept | fine-tune (as a user word), custom model, private LLM, adapter (it is a whole model), "our AI" |
+| **Base** | The small pretrained model an own model starts from, named by an admin and fetched into the state folder — never shipped | foundation model, checkpoint (in anything a reader sees), seed model |
+| **Training set** | What an own model learns: what the organisation settled, as questions and answers by template, each citing its source (`learning/knowledge.py`; kinds `knowledge` · `knowledge_golden` in the dataset plane) | corpus, dataset (a dataset is a schema or a table, or a dashboard's data), training data |
+| **Held out** | The phrasing of each source a model is never trained on and is measured by — its recall before and after training | test set, validation set, golden (that is the NL→SQL golden set) |
+| **Not settled** | What a training set teaches as unknown: a metric that is a draft or retired, a word nothing approved defines, a question outside what the organisation settled — so the model says so instead of inventing | refusal, guardrail, out-of-domain |
+
 ## The explorer's passes
 
 An exploration run is one of three **jobs**, and every surface — the log, the job title, the Catalog's

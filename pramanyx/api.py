@@ -1212,6 +1212,7 @@ from pramanyx.routers import (
     verify,
     approvals,
     learning,
+    training as training_router,
     intake as intake_router,
     roles as roles_router,
     groups as groups_router,
@@ -1296,6 +1297,7 @@ app.include_router(profile.router)
 app.include_router(orgsettings.router)
 app.include_router(verify.router)
 app.include_router(learning.router)
+app.include_router(training_router.router)  # the organisation's own model
 app.include_router(intake_router.router)
 app.include_router(packs_router.router)
 app.include_router(roles_router.router)

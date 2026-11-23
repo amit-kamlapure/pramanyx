@@ -262,6 +262,14 @@ Deterministic, execution-grounded guards over LLM-generated SQL — each ships w
   (exact first, then schema-tolerant via `tools/table_names.resolve_in`), so two schemas that share a table name
   no longer overwrite each other's descriptions — a bare key still answers for any schema as the migration path.
 - **Industry-aware intelligence** — `BusinessProfile` + per-industry metric knowledge base.
+- **The organisation's own model** (Define ▸ Own model, 2026-11-23) — a small model trained on the install from what
+  the organisation settled: approved metrics, the glossary, published Definitions, confirmed findings and trusted
+  queries become questions and answers by template (`learning/knowledge.py`, each row citing its source), with what is
+  NOT settled taught as such so it says so rather than inventing. A base an admin names (minimind-3 first), minimind's
+  fine-tuning loop in its own process (`training/worker.py`), measured on held-out phrasings before and after, kept as
+  lifecycle versions, served through Ollama once an admin puts one in service, and silent to anyone who may not see
+  every connection it learned from. Off until an admin allows it (`train_own_model`). Study:
+  `docs/OWN_MODEL_STUDY_2026-11-23.md`.
 
 ## 5. Data understanding & schema intelligence
 

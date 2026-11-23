@@ -221,6 +221,8 @@ export interface OrgSettings {
   coworker_models?: boolean | null;
   /** 2026-11-15 — the coworker may search the web for outside context, cited and never a figure. */
   web_search?: boolean | null;
+  /** 2026-11-23 — train the organisation's own model on what it settled, on this install; nothing leaves it. */
+  train_own_model?: boolean | null;
   /** 2026-11-17 — the map under a map answer: "" none (shapes on a blank ground), OpenFreeMap's public tiles, or the
    *  organisation's own tile server at `base_map_url`. Which map squares are viewed leave for that server. */
   base_map?: "" | "openfreemap" | "own";
@@ -258,7 +260,7 @@ export async function mintCoworkerDelegation(): Promise<string | null> {
 
 /** The choices an organisation makes about what Pramanyx may do (ROADMAP §3.65; §3.68 added `read_query_history`). */
 export type OrgAllowSetting = "share_aggregates" | "outside_row_model" | "reason_to_read_runs" | "scheduled_model_work"
-  | "read_query_history" | "copy_rows_across_sources" | "coworker_models" | "web_search";
+  | "read_query_history" | "copy_rows_across_sources" | "coworker_models" | "web_search" | "train_own_model";
 
 /** Each choice's answer, and whether an admin set it — one never set answers from the server's environment. */
 export type OrgAllows = Record<OrgAllowSetting, { allowed: boolean; set: boolean }>;
@@ -13003,4 +13005,148 @@ export async function getSlackKnowledgeStatus(botId: string): Promise<SlackKnowl
 export async function syncSlackKnowledge(botId: string): Promise<void> {
   const res = await fetch(`${getApiBase()}/slack-bots/${encodeURIComponent(botId)}/knowledge-sync`, { method: "POST" });
   if (!res.ok) throw await refused(res, "Reading the bot's channels");
+}
+
+
+// ── The organisation's own model (`routers/training.py`, 2026-11-23) ────────────────────────────────────────────────
+
+/** One held-out measure of a model: the answer loss, and greedy answers scored by word overlap (F1) with the
+ *  company's answer; `recalled` is the share at F1 ≥ 0.6. `by_kind` splits it by the source each question came from. */
+export interface OwnModelMeasure {
+  rows?: number; answer_loss?: number | null; f1?: number | null; recalled?: number | null;
+  by_kind?: Record<string, { n: number; f1: number | null; recalled: number | null }>;
+}
+
+export interface OwnModel {
+  number: number; state: "draft" | "published" | "archived"; run_id: string; trained_at: string; trained_by: string;
+  base: { source?: string; architecture?: string; bytes?: number };
+  training_set: { train?: { name?: string; version?: number; row_count?: number }; held_out?: { version?: number; row_count?: number } };
+  settings: { method?: string; epochs?: number; learning_rate?: number };
+  connections: string[]; device?: string; params?: number; steps?: number; tokens?: number; seconds?: number; bytes?: number;
+  measure: { before: OwnModelMeasure; after: OwnModelMeasure };
+  served_as: string; recorded_at: string; published_at: string; note: string;
+}
+
+export interface OwnModelEvent {
+  event: "start" | "step" | "epoch" | "measure" | "saved" | "done" | "error" | "cancelled";
+  at: number; step?: number; total?: number; epoch?: number; epochs?: number; loss?: number; tokens_per_s?: number;
+  label?: string; f1?: number; recalled?: number; error?: string; device?: string; params?: number;
+  train_rows?: number; held_rows?: number;
+}
+
+export interface TrainingSetNode { id: string; name: string; version: number; kind: string; row_count: number; created_at: string }
+
+export interface OwnModelOverview {
+  allowed: boolean; where: string;
+  setup: { ready: boolean; python: string; missing: string[]; how: string };
+  base: { source: string; dir: string; architecture: string; hidden_size?: number; layers?: number; vocab_size?: number;
+          bytes: number; fetched_at: string; by: string; present: boolean } | null;
+  serving: { reachable: boolean; detail: string; root: string };
+  training_set: { train: TrainingSetNode | null; held_out: TrainingSetNode | null };
+  run: { job_id: string; state: string; error: string; created_at: string; run_id: string; by: string;
+         settings: Record<string, number | string>; events: OwnModelEvent[] } | null;
+  models: OwnModel[];
+  defaults: { method: string; epochs: number; learning_rate: number; max_seq_len: number };
+}
+
+export interface TrainingSetBuild {
+  train: TrainingSetNode; held_out: TrainingSetNode; sources: Record<string, number>; connections: string[];
+  withheld: { reason: string; count: number }[];
+}
+
+export interface TrainingRow {
+  prompt: string; completion: string; phrasing: number;
+  source: { kind: string; id: string; connection_id: string; tier: string };
+}
+
+export interface HeldOutAnswer { question: string; expected: string; answer: string; f1: number; source: { kind?: string } }
+
+export async function getOwnModel(): Promise<OwnModelOverview> {
+  const res = await fetch(`${getApiBase()}/own-model`);
+  if (!res.ok) throw await refused(res, "Reading the organisation's own model");
+  return res.json();
+}
+
+export async function fetchOwnModelBase(source: string): Promise<OwnModelOverview["base"]> {
+  const res = await fetch(`${getApiBase()}/own-model/base`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ source }),
+  });
+  if (!res.ok) throw await refused(res, "Fetching the base");
+  return res.json();
+}
+
+export async function buildTrainingSet(): Promise<TrainingSetBuild> {
+  const res = await fetch(`${getApiBase()}/own-model/training-set`, { method: "POST" });
+  if (!res.ok) throw await refused(res, "Building the training set");
+  return res.json();
+}
+
+export async function getTrainingRows(half: "train" | "held_out", kind = "", limit = 100): Promise<{
+  half: string; version?: number; total: number; kinds?: Record<string, number>; rows: TrainingRow[]; state: string;
+}> {
+  const q = new URLSearchParams({ half, limit: String(limit), ...(kind ? { kind } : {}) });
+  const res = await fetch(`${getApiBase()}/own-model/training-set/rows?${q}`);
+  if (!res.ok) throw await refused(res, "Reading the training set");
+  return res.json();
+}
+
+export async function startTraining(choice: { method?: string; epochs?: number; learning_rate?: number }): Promise<{ job_id: string; run_id: string }> {
+  const res = await fetch(`${getApiBase()}/own-model/train`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(choice),
+  });
+  if (!res.ok) throw await refused(res, "Starting the training");
+  return res.json();
+}
+
+export async function cancelTraining(jobId: string): Promise<void> {
+  const res = await fetch(`${getApiBase()}/own-model/runs/${encodeURIComponent(jobId)}/cancel`, { method: "POST" });
+  if (!res.ok) throw await refused(res, "Stopping the training");
+}
+
+export async function getHeldOutAnswers(n: number): Promise<{ before?: HeldOutAnswer[]; after?: HeldOutAnswer[] }> {
+  const res = await fetch(`${getApiBase()}/own-model/models/${n}/answers`);
+  if (!res.ok) throw await refused(res, "Reading the held-out answers");
+  return res.json();
+}
+
+export async function publishOwnModel(n: number): Promise<OwnModel> {
+  const res = await fetch(`${getApiBase()}/own-model/models/${n}/publish`, { method: "POST" });
+  if (!res.ok) throw await refused(res, "Putting the model in service");
+  return res.json();
+}
+
+export async function withdrawOwnModel(n: number, why = ""): Promise<OwnModel> {
+  const res = await fetch(`${getApiBase()}/own-model/models/${n}/withdraw`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ why }),
+  });
+  if (!res.ok) throw await refused(res, "Withdrawing the model");
+  return res.json();
+}
+
+/** A model's answer as the door checked it: a settled source's own (with the source), "nothing is settled", or withheld
+ *  — the words not served — with why. */
+export interface OwnModelAnswer {
+  answer: string; served_as: string; tokens?: number; ms?: number;
+  verdict: "settled" | "not_settled" | "withheld"; match?: number; why?: string;
+  source?: { kind?: string; id?: string; connection_id?: string };
+  closest?: { kind?: string; id?: string };
+}
+
+export async function askOwnModel(n: number, question: string): Promise<OwnModelAnswer> {
+  const res = await fetch(`${getApiBase()}/own-model/models/${n}/ask`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question }),
+  });
+  if (!res.ok) throw await refused(res, "Asking the model");
+  return res.json();
+}
+
+export interface TrainingPlan {
+  sources: Record<string, number>; rows: { train: number; held_out: number }; connections: string[];
+  withheld: { reason: string; count: number }[];
+}
+
+export async function getTrainingPlan(): Promise<TrainingPlan> {
+  const res = await fetch(`${getApiBase()}/own-model/training-set/plan`);
+  if (!res.ok) throw await refused(res, "Reading what the training set would hold");
+  return res.json();
 }

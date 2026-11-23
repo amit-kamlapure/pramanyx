@@ -69,6 +69,8 @@ export const NAV_DESTINATIONS: readonly NavDestination[] = [
     { id: "declared-actions", label: "Actions",        icon: "bolt" },
     { id: "graph",            label: "Graph",          icon: "kgraph", blurb: "Connection knowledge graph" },
     { id: "memory",           label: "Memory",         icon: "memory" },
+    // 2026-11-23 — what the organisation defined, learned by a model of its own (`pramanyx/training/`).
+    { id: "own-model",        label: "Own model",      icon: "model" },
     { id: "org-intel",        label: "Org",            icon: "users" },
   ] },
   // The Record stays one row for its five views (the 2027 study §V): a person reads a decision's
