@@ -247,3 +247,10 @@ description.
 - https://docs.databricks.com/aws/en/discover/databricks-datasets
 - https://docs.databricks.com/aws/en/uc-semantics/domains
 - https://docs.databricks.com/aws/en/uc-semantics/pages
+
+**The look, 2026-11-23.** The user, with the reference Page beside our Discover: "This light grey on dark bluish grey is
+painful to the eyes.. Also check the Discover page.. it just has the outlines..". The palette was already the
+reference's; the difference was each card filled with the frame's gray 3. A dark card is now gray 2 with a gray-5
+hairline, and the rail's words are bright (`tokens-v2.css`, kit `CARD`, `styles/discover.css`). The "outlines" a reader
+sees first are the page waiting on its read: about 82 requests go out as the app opens, and `/discover` takes about 8 s
+among them against 2.6 s alone. That start-up rush is the app's, not Discover's, and is its own piece of work.
