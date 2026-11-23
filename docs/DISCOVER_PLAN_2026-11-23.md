@@ -254,3 +254,11 @@ reference's; the difference was each card filled with the frame's gray 3. A dark
 hairline, and the rail's words are bright (`tokens-v2.css`, kit `CARD`, `styles/discover.css`). The "outlines" a reader
 sees first are the page waiting on its read: about 82 requests go out as the app opens, and `/discover` takes about 8 s
 among them against 2.6 s alone. That start-up rush is the app's, not Discover's, and is its own piece of work.
+
+**The start-up rush, fixed the same day** (the user: "Yes, fix it here"). A cold load of Discover read 127 times and its
+data arrived at 12.2 s. Now it reads 28 times and the data arrives at 2.3 s:
+- the conversations behind every page (the Ask screen's, and each remembered Ask panel tab) are drawn the first time
+  they are shown, not at load;
+- the schema is read by the component that asks for it, not by the provider round every page;
+- the top bar's strip reads the agents' runs alone (`runners=false`), not a day of automation runs too;
+- Discover makes each connection's coverage matrix and Area map once per read (3.4 s → 1.2 s warm).
