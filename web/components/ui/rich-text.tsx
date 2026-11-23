@@ -9,7 +9,7 @@
  * Markdown, as it always was, so nothing that reads it changes. A link's address is asked in the toolbar itself, never
  * in a pop-up, and only one its reader would draw is taken.
  */
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type FocusEvent as ReactFocusEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { EditorContent, useEditor, useEditorState, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { Markdown } from "@tiptap/markdown";
@@ -77,7 +77,8 @@ export function RichText({ kind, value, onChange, onBlur, label, placeholder = "
   /** The words, as Markdown. */
   value: string;
   onChange: (markdown: string) => void;
-  /** Left: a place that keeps its words when the person moves on (a panel's field). */
+  /** Left: a place that keeps its words when the person moves on (a panel's field). The toolbar is part of the field:
+   *  focus that moves to its buttons, its heading menu or its link's address has not left it. */
   onBlur?: () => void;
   /** Its name, as a reader of the page hears it. */
   label: string;
@@ -106,7 +107,6 @@ export function RichText({ kind, value, onChange, onBlur, label, placeholder = "
       wrote.current = md;
       onChange(md);
     },
-    onBlur: () => blurred.current?.(),
   });
   useEffect(() => {
     if (!editor || value === wrote.current) return;
@@ -139,9 +139,18 @@ export function RichText({ kind, value, onChange, onBlur, label, placeholder = "
     setLinking(false); setAddress("");
   };
   const on = (pressed: boolean | undefined) => (pressed ? "aug-btn-on" : undefined);
+  // A toolbar button acts on the words chosen, so pressing it leaves the focus, and the choice, in the words. Before
+  // this, the press moved focus to the button: a field that keeps its words when left (a dashboard note's, in the
+  // panel) kept them, gave the editor its words back, and the choice was gone before Italic reached it (seen live,
+  // 2026-11-24).
+  const keep = (e: ReactMouseEvent) => e.preventDefault();
+  // the field is left when focus goes somewhere that is not the field: its toolbar is part of it
+  const left = (e: ReactFocusEvent<HTMLDivElement>) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) blurred.current?.();
+  };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8 }} data-testid={testId}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }} data-testid={testId} onBlur={left}>
       <div role="toolbar" aria-label="Format" style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap" }}>
         {kind.headings.length > 0 && (
           <SelectField bespoke aria-label="Heading" value={state?.block ?? ""} onChange={(e) => setBlock(e.target.value)}>
@@ -152,21 +161,21 @@ export function RichText({ kind, value, onChange, onBlur, label, placeholder = "
         )}
         {withUniqueKeys(MARKS, (m) => m.name).map(([key, m]) => (
           <Button key={key} size="icon-xs" variant="outline" aria-label={m.label} title={m.label} aria-pressed={!!state?.[m.name]}
-            className={on(state?.[m.name])}
+            className={on(state?.[m.name])} onMouseDown={keep}
             onClick={() => editor?.chain().focus()[m.name === "bold" ? "toggleBold" : "toggleItalic"]().run()}>
             <span style={{ fontWeight: m.text === "B" ? 700 : 400, fontStyle: m.text === "I" ? "italic" : "normal" }}>{m.text}</span>
           </Button>
         ))}
         {kind.lists && withUniqueKeys(LISTS, (l) => l.name).map(([key, l]) => (
           <Button key={key} size="icon-xs" variant="outline" aria-label={l.label} title={l.label} aria-pressed={!!state?.[l.name]}
-            className={on(state?.[l.name])}
+            className={on(state?.[l.name])} onMouseDown={keep}
             onClick={() => editor?.chain().focus()[l.name === "bulletList" ? "toggleBulletList" : "toggleOrderedList"]().run()}>
             <Icon name={l.icon} size={13} />
           </Button>
         ))}
         {kind.linkHref && (
           <Button size="icon-xs" variant="outline" aria-label="Link" title="Link" aria-pressed={linking || !!state?.link}
-            className={on(linking || state?.link)}
+            className={on(linking || state?.link)} onMouseDown={keep}
             onClick={() => {
               if (linking) { setLinking(false); return; }
               setAddress(String(editor?.getAttributes("link").href ?? ""));
@@ -176,7 +185,7 @@ export function RichText({ kind, value, onChange, onBlur, label, placeholder = "
           </Button>
         )}
         {kind.table && (
-          <Button size="icon-xs" variant="outline" aria-label="Table" title="Table" disabled={!!state?.table}
+          <Button size="icon-xs" variant="outline" aria-label="Table" title="Table" disabled={!!state?.table} onMouseDown={keep}
             onClick={() => editor?.chain().focus().insertTable({ rows: 3, cols: 2, withHeaderRow: true }).run()}>
             <Icon name="table" size={13} />
           </Button>

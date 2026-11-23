@@ -60,3 +60,28 @@ describe("what each place may hold", () => {
     expect(box.querySelector("table")).toBeNull();
   });
 });
+
+/** A field that keeps its words when left, trimmed, and shows what it kept — a dashboard note's, in the panel. */
+function KeptWhenLeft({ start, onLeave }: { start: string; onLeave: (kept: string) => void }) {
+  const [text, setText] = useState(start);
+  return <RichText kind={NOTE_TEXT} label="Words" value={text} onChange={setText}
+    onBlur={() => { const kept = text.trim(); onLeave(kept); setText(kept); }} />;
+}
+
+describe("a field kept when it is left", () => {
+  it("a toolbar press acts on the words chosen: it leaves the focus in them, and is not leaving the field", async () => {
+    const onLeave = vi.fn();
+    render(<KeptWhenLeft start={"Each row is one product.\n\n"} onLeave={onLeave} />);
+    const editor = await editorOf("Words");
+    await act(async () => { editor.commands.setTextSelection({ from: 1, to: 5 }); });
+    const italic = screen.getByRole("button", { name: "Italic" });
+    expect(fireEvent.mouseDown(italic)).toBe(false);               // the press does not take the focus
+    fireEvent.focusOut(editor.view.dom, { relatedTarget: italic }); // nor does focus moving to the toolbar leave the field
+    expect(onLeave).not.toHaveBeenCalled();
+    fireEvent.click(italic);
+    await waitFor(() => expect(editor.getMarkdown()).toMatch(/^\*Each\* row is one product\./));
+    fireEvent.focusOut(editor.view.dom, { relatedTarget: document.body });
+    expect(onLeave).toHaveBeenCalledTimes(1);
+    expect(onLeave).toHaveBeenLastCalledWith("*Each* row is one product.");
+  });
+});

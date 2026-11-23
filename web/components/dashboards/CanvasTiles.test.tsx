@@ -217,7 +217,7 @@ describe("arranging a canvas", () => {
     render(<DashboardArrange spec={canvas()} lines={new Map([["c7f3a001", { title: "Return rate" }], ["c91b2002", { title: "Net merchandise revenue" }]])} onChange={onChange} />);
     const rows = screen.getAllByTestId("arrange-card");
     expect(rows.map(r => r.dataset.kind)).toEqual(["card", "card", "card", "note", "image", "card"]);
-    expect(rows[3]).toHaveTextContent("Note · Check **ops** before the 15th.");
+    expect(rows[3]).toHaveTextContent("Note · Check ops before the 15th.");
     expect(rows[3]).toHaveTextContent("yours, not measured");
     expect(rows[4]).toHaveTextContent("Image · Promo calendar");
 
