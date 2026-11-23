@@ -146,7 +146,7 @@ Each is shown working on theLook before the next, with its tests and the gates. 
 
 | | What | Size |
 |---|---|---|
-| **D0** | **A mockup first** — `design-mockups/discover.html` at 1600 px: Discover, an Area's page, and the Data rail with its new row, shown to the user before anything is built (the user, 2026-10-05: a change of navigation is shown before it is built). | S |
+| **D0** | **A mockup first** — Discover, a search, an Area's page and the Data rail with its new row, at 1600 px, on theLook's real data, shown to the user before anything is built (the user, 2026-10-05: a change of navigation is shown before it is built). Made 2026-11-23 as a private design canvas: https://claude.ai/artifact/5V8n24p287evJgFZuvPDvv | S |
 | **D1** | **The read.** `GET /discover`, `GET /discover/areas/{id}`, `GET /discover/items?kind&area&certified&connection&q&cursor` — one adapter per kind over its existing list route and permission check; Area per item (placed, else read from its tables); certification joined; the missing deep links added (a custom agent, a document, a trusted query, a table). Fix the defects in §6. | M |
 | **D2** | **The page** in the app (§4.1, §4.2), Data's first row, the tab's name. | M |
 | **D3** | **Search** for people (§4.3), the Discover box and ⌘K's Search everything. | M |
