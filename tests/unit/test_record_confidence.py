@@ -107,6 +107,24 @@ def test_each_claim_kind_knows_its_class_and_an_uncounted_kind_says_why():
     assert "no reference class counts a claim of kind 'definition'" in K.why_uncounted(definition)
 
 
+def test_a_list_counts_each_class_once_not_once_per_claim(monkeypatch):
+    """Home's predictions read counted the class of each of its 129 predictions twice — each a read of up to 5,000 scored
+    predictions, 4 to 5 s for one list (2026-11-24). A list passes one ``tallies`` and each (class, connection) is
+    counted once; the figures are the same."""
+    reads: list[tuple] = []
+    real = K._tally
+    monkeypatch.setattr(K, "_tally", lambda name, conn: (reads.append((name, conn)), real(name, conn))[1])
+    preds = [C.Claim(kind="prediction", tier="declared", statement=C.Statement(text=f"p{i}", metric="m"),
+                     author_kind="person", about=C.About(kind="connection", key="c1")) for i in range(20)]
+    alone = [K.with_confidence(p).confidence for p in preds[:2]]
+    per_claim = len(reads)
+    reads.clear()
+    tallies: dict = {}
+    listed = [K.with_confidence(p, tallies=tallies).confidence for p in preds]
+    assert per_claim == 4 and len(reads) == 2, "one read on the connection, one across every connection, for 20 claims"
+    assert {c.model_dump_json() for c in listed} == {alone[0].model_dump_json()}
+
+
 def test_confidence_is_filled_on_read_and_never_lands_in_the_row(monkeypatch):
     monkeypatch.setattr(K, "MIN_N", 1)
     conn = _conn()
