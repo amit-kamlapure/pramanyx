@@ -195,6 +195,20 @@ export function queryChartSpec(c: QueryChart, setup: Pick<QueryShown, "segments"
       : c.as === "area" ? { type: "area", tooltip: tips, ...shape, ...(stack === null && split ? { opacity: 0.45 } : {}) }
         : { type: "point", tooltip: tips, filled: true, size: 36 };
   const across = bars && !!setup.across;
+  const labelled = setup.labels && !shares && c.as !== "scatter";
+  // Bars that run across are labelled too (2026-11-23, the coworker's chart editor: once a horizontal bar was edited it
+  // was drawn here, where no label was ever drawn across — its labels went and the switch could not bring them back).
+  // The number stands right of the bar's end, so the value scale is given room for it, as the answer's own chart gives
+  // it (`resolveSpec`'s headroom): the longest bar's number lands inside the plot.
+  if (across && labelled && !(y.scale && "domainMax" in y.scale)) {
+    const ends = new Map<string, number>();
+    for (const p of values) {
+      const at = String(p.xr ?? p.x), v = p.v ?? 0;
+      ends.set(at, stack === "zero" ? (ends.get(at) ?? 0) + v : Math.max(ends.get(at) ?? -Infinity, v));
+    }
+    const peak = Math.max(0, ...ends.values());
+    if (peak > 0) (y as Record<string, unknown>).scale = { ...(y.scale ?? {}), domainMax: peak * 1.12 };
+  }
   const offset = bars && split && setup.segments === "side_by_side" ? { field: "s", sort: named } : null;
   const tipped = tips ? { tooltip } : {};
   const encoding: Record<string, unknown> = across
@@ -203,7 +217,7 @@ export function queryChartSpec(c: QueryChart, setup: Pick<QueryShown, "segments"
   // a line stays whole: its chosen place is said by the label layer's point, not by fading the path
   if (lit && c.as !== "line") encoding.opacity = lit;
   const layer: Record<string, unknown>[] = [{ mark, encoding }];
-  if (setup.labels && !shares && c.as !== "scatter" && !across) {
+  if (labelled) {
     // labels are selective: along dates or numbers only the last place is labelled — a stack by its total, a line or a
     // side-by-side bar by each series' value there; along categories each bar is
     const lastX = temporal || numericX ? values.at(-1)?.x : undefined;
@@ -219,13 +233,18 @@ export function queryChartSpec(c: QueryChart, setup: Pick<QueryShown, "segments"
           text: { field: "__label", type: "nominal" } }
       : { transform: [], text: { field, type: "quantitative", format: labelFormat } };
     const totalSaid = said("total"), valueSaid = said("v");
+    // above a bar that stands up; right of the end of one that runs across, on its middle
+    const at = across
+      ? { mark: { type: "text", align: "left", baseline: "middle", dx: 4, fontSize: 10.5 }, place: "y", value: "x", offset: "yOffset",
+          placed: { ...x, axis: { ...x.axis, labelLimit: 180 } } }
+      : { mark: { type: "text", dy: -6, fontSize: 10.5 }, place: "x", value: "y", offset: "xOffset", placed: x };
     layer.push(bars && stack === "zero"
       ? { transform: [...only, { aggregate: [{ op: "sum", field: "v", as: "total" }], groupby: ["x"] }, ...totalSaid.transform],
-        mark: { type: "text", dy: -6, fontSize: 10.5 },
-        encoding: { x: { field: "x", type: x.type, sort: xSort }, y: { field: "total", type: "quantitative" }, text: totalSaid.text } }
-      : { transform: [...only, ...lead, ...valueSaid.transform], mark: { type: "text", dy: -6, fontSize: 10.5 },
-        encoding: { x, y: { field: "v", type: "quantitative", stack }, text: valueSaid.text,
-          ...(bars && split && setup.segments === "side_by_side" ? { xOffset: { field: "s", sort: named } } : {}) } });
+        mark: at.mark,
+        encoding: { [at.place]: { field: "x", type: x.type, sort: xSort }, [at.value]: { field: "total", type: "quantitative" }, text: totalSaid.text } }
+      : { transform: [...only, ...lead, ...valueSaid.transform], mark: at.mark,
+        encoding: { [at.place]: at.placed, [at.value]: { field: "v", type: "quantitative", stack }, text: valueSaid.text,
+          ...(bars && split && setup.segments === "side_by_side" ? { [at.offset]: { field: "s", sort: named } } : {}) } });
   }
   // reference lines a person drew (the editor's Annotation): a dashed rule across the value axis, its label at its start
   // a line drawn in the measure's own units does not apply to shares of a whole (2026-11-23: an Average of 13,087

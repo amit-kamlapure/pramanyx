@@ -8,6 +8,7 @@
  * names what it shows.
  */
 import { describe, expect, it } from "vitest";
+import * as vl from "vega-lite";
 
 import type { QueryShaped } from "@/lib/api";
 import { shapeAnswer } from "@/lib/dashboards/answerShape";
@@ -91,5 +92,33 @@ describe("a large number", () => {
     expect(String(y.labelExpr)).toContain("'B'");
     expect(JSON.stringify(spec)).toContain('"as":"__label"');
     expect(String(y.labelExpr)).not.toContain("~s");
+  });
+});
+
+describe("bars that run across", () => {
+  // 2026-11-23, the coworker's chart editor: a horizontal bar of orders by status, once edited, was drawn here, where no
+  // label was drawn across — the labels went and the Labels switch could not bring them back
+  const STATUS = [{ name: "status", type: "VARCHAR" }, { name: "count", type: "BIGINT" }];
+  const COUNTS: unknown[][] = [["Shipped", 37584], ["Complete", 31126], ["Processing", 24819]];
+  const across = (labels: boolean) => {
+    const shown = { ...QUERY_DEFAULT, as: "bar", x: "status", series: [{ column: "count", agg: "sum" }], across: true, labels } as typeof QUERY_DEFAULT;
+    return queryChartSpec(shapeAnswer(STATUS, COUNTS, shown) as Chart, shown, COLOURS) as Obj;
+  };
+
+  it("say each bar's number at its end when Labels is on, and none when it is off", () => {
+    const on = across(true);
+    const label = (on.layer as Obj[]).find((l) => (l.mark as Obj)?.type === "text") as { mark: Obj; encoding: Record<string, Obj> };
+    expect(label).toBeTruthy();
+    expect(label.mark.align).toBe("left");
+    expect(label.encoding.y.field).toBe("x");
+    expect(["v", "total"]).toContain(label.encoding.x.field);
+    expect(() => vl.compile({ ...on, width: 400, height: 200 } as never)).not.toThrow();
+    expect((across(false).layer as Obj[]).some((l) => (l.mark as Obj)?.type === "text")).toBe(false);
+  });
+
+  it("leave room for the longest bar's number inside the plot", () => {
+    const value = first(across(true)).encoding.x;
+    expect((value.scale as Obj).domainMax).toBeCloseTo(37584 * 1.12, 0);
+    expect(first(across(false)).encoding.x.scale).toBeUndefined();
   });
 });

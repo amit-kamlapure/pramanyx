@@ -19,6 +19,7 @@ import { deckOf } from "./deck.js";
 import { driveFilesOf } from "./drive.js";
 import { ABOUT_TO, DOES, PREFIX, STAGED, saidOf, stagedOf, turnedDown } from "./steps.js";
 import { drawChart, labelOf, numericColumns } from "./chart";
+import { watchTheme } from "../../../../web/components/charts/vega/themeWatch";
 import { isDeepRecord, reportFacts, reportOf } from "./report.js";
 import { unstatedFigures } from "../../../../web/lib/statedFigures";
 import { boldable, titleOf as answerTitleOf } from "../../../../web/lib/answerTitle";
@@ -85,6 +86,10 @@ function Chart({ answer, viz }) {
   const box = useRef(null);
   const [none, setNone] = useState(false);
   const [width, setWidth] = useState(0);
+  // Drawn again in the page's colours when it turns light or dark — the app's charts follow the same rule
+  // (`web/components/charts/vega/themeWatch.ts`): read once, the labels stayed the old theme's grey.
+  const [turned, setTurned] = useState(0);
+  useEffect(() => watchTheme(() => setTurned((n) => n + 1)), []);
   useEffect(() => {
     const el = box.current;
     if (!el || typeof ResizeObserver === "undefined") return undefined;
@@ -109,7 +114,7 @@ function Chart({ answer, viz }) {
     }
     setNone(!remove);
     return () => { if (remove) remove(); };
-  }, [answer, viz, width]);
+  }, [answer, viz, width, turned]);
   return h("div", { style: { minWidth: 0 } },
     h("div", { ref: box, style: { width: "100%", minHeight: none ? 0 : 220, overflow: "hidden" } }),
     none ? h("div", { style: { ...quiet, padding: "8px 0" } },

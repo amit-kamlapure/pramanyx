@@ -45,6 +45,8 @@ import { Workspace as WorkspaceShell, type WorkspaceLayer } from "@/components/W
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { NAVIGATE_EVENT, type NavigateRequest } from "@/lib/navigate";
 import { NAV_DESTINATIONS, NAV_SECTION_IDS, destinationOf } from "@/lib/navDestinations";
+import { pageName, tabTitle } from "@/lib/tabTitle";
+import { usePageSubject } from "@/lib/askSubject";
 import { ChromeActions, ChromeFacts, ChromeToolbar, PageChromeProvider, PageHeader, StatusStrip, useChromeBackTo } from "@/components/shell/PageChrome";
 import { InspectorHost, InspectorProvider } from "@/components/shell/Inspector";
 import { AskPanelHost, AskPanelToggle, AskPushedPage } from "@/components/ask/AskPanel";
@@ -1258,6 +1260,16 @@ export default function Home() {
       window.history.pushState(null, "", next);
     }
   }, [tab, rawSelectedConn, intelLayer, opsLayer, evalsLayer, agentsLayer, recordLayer, settingsSection, dataLayer, activeCanvas, openId]);
+  // The tab names what is open, and nothing else (`lib/tabTitle.ts`): the one thing the page shows, the open canvas, or
+  // the page — its layer where the rail names the layer (Health, Monitors…), else the page itself.
+  const onPage = usePageSubject();
+  useEffect(() => {
+    const layer = tab === "data" ? dataLayer
+      : tab === "intelligence" ? intelLayer : tab === "operations" ? opsLayer : tab === "evals" ? evalsLayer
+      : tab === "agentic-ops" ? agentsLayer : tab === "record" ? recordLayer : null;
+    const section = layer && pageName(String(layer)) !== "Pramanyx" ? String(layer) : tab;
+    document.title = tabTitle(section, onPage, tab === "canvas-workspace" ? activeCanvas?.name : null);
+  }, [tab, dataLayer, intelLayer, opsLayer, evalsLayer, agentsLayer, recordLayer, onPage, activeCanvas]);
   useEffect(() => {
     const onPop = () => {
       const t = tabFromUrl();

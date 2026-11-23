@@ -13,35 +13,12 @@
  */
 import { createElement as h } from "react";
 import mark from "../assets/mark.png";
-import { MARK_BOX, MARK_LINE, MARK_RING, MARK_RING_COLORS, NAME_BAR, NAME_BAR_STOPS, NAME_BOX, NAME_LETTERS } from "../../../../web/components/ui/brandArt";
+import { MARK_BOX, NAME_BAR_STOPS } from "../../../../web/components/ui/brandArt";
+import { Mark, Name } from "./logo.js";
+import { whatIsOpen } from "./tab.js";
 
 const NAME = "Pramanyx";
 const SHELL_NAME = "DeepSeek Harness";
-
-/** The ring, one colour a step round its circle, each step just over its neighbour so no seam shows. */
-const RING = MARK_RING_COLORS.map((fill, i) => {
-  const { cx, cy, outer: [ox, oy], inner: [ix, iy] } = MARK_RING;
-  const at = (step) => (step / MARK_RING_COLORS.length) * 2 * Math.PI;
-  const [a, b] = [at(i - 0.15), at(i + 1.15)];
-  const p = (angle, rx, ry) => `${(cx + rx * Math.cos(angle)).toFixed(1)} ${(cy + ry * Math.sin(angle)).toFixed(1)}`;
-  return { fill, d: `M${p(a, ox, oy)}A${ox} ${oy} 0 0 1 ${p(b, ox, oy)}L${p(b, ix, iy)}A${ix} ${iy} 0 0 0 ${p(a, ix, iy)}Z` };
-});
-
-/** The mark, fitted inside the square the shell asks for: its outer line in the text's colour, around the ring. */
-function Mark({ size, className }) {
-  return h("span", { className, style: { display: "inline-flex", width: size, height: size, alignItems: "center", justifyContent: "center" } },
-    h("svg", { width: size, height: Math.round(size * MARK_BOX.h / MARK_BOX.w), viewBox: `0 0 ${MARK_BOX.w} ${MARK_BOX.h}`, role: "img", "aria-label": NAME },
-      h("path", { d: MARK_LINE, fill: "currentColor", fillRule: "evenodd" }),
-      RING.map((w, i) => h("path", { key: i, d: w.d, fill: w.fill }))));
-}
-
-function Name() {
-  const height = 15;
-  return h("svg", { width: Math.round(height * NAME_BOX.w / NAME_BOX.h), height, viewBox: `0 0 ${NAME_BOX.w} ${NAME_BOX.h}`, role: "img", "aria-label": NAME },
-    h("defs", null, h("linearGradient", { id: "pramanyx-name-bar" }, NAME_BAR_STOPS.map(([offset, stopColor]) => h("stop", { key: offset, offset, stopColor })))),
-    h("path", { d: NAME_LETTERS, fill: "currentColor", fillRule: "evenodd" }),
-    h("rect", { x: NAME_BAR.x, y: NAME_BAR.y, width: NAME_BAR.w, height: NAME_BAR.h, fill: "url(#pramanyx-name-bar)" }));
-}
 
 /**
  * The look: the platform's, so the coworker and the app read as one product (the user, 2026-11-20: "Copy the style to
@@ -167,16 +144,31 @@ function wearLook() {
   return () => style.remove();
 }
 
-/** The tab title, corrected as the shell writes it. The shell's name for itself is a literal in its layout. */
+/**
+ * The tab's words: what is open, and nothing else (the user, 2026-11-23: "we need to be mindful of what appears as tab
+ * text based on whats running in the coworker", and of the choices put to them — "'Whats Open' only.. I will add a new
+ * logo to Coworker later which make the distinction very clear"). The shell writes "<conversation> — DeepSeek Harness",
+ * or its own name alone when no conversation is open; the tab says the conversation, or the page the sidebar marks as
+ * open (Agents, Schedules…), or "Coworker" on the first screen. Its name for itself is a literal in its layout, so this
+ * reads what it writes and writes the tab again; what the shell last wrote is kept apart from what this wrote.
+ */
 function nameTheTab() {
+  let shellSaid = document.title, wrote = "";
+  const page = () => {
+    const open = document.querySelector('[class*="_sidebarCol"] [aria-current]:not([class*="_sessionRow"])');
+    return open ? open.textContent.trim() : "";
+  };
   const fix = () => {
-    if (document.title.includes(SHELL_NAME)) document.title = document.title.split(SHELL_NAME).join(NAME);
+    if (document.title !== wrote) shellSaid = document.title;
+    const next = whatIsOpen(shellSaid, page());
+    if (document.title !== next) { wrote = next; document.title = next; }
   };
   fix();
   const title = document.querySelector("title");
-  if (!title) return () => {};
   const watch = new MutationObserver(fix);
-  watch.observe(title, { childList: true, characterData: true, subtree: true });
+  if (title) watch.observe(title, { childList: true, characterData: true, subtree: true });
+  // a page opened from the sidebar changes no title the shell writes: its mark moving is the sign
+  watch.observe(document.body, { attributes: true, subtree: true, attributeFilter: ["aria-current"] });
   return () => watch.disconnect();
 }
 

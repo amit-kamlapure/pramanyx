@@ -13,6 +13,7 @@
 import { createElement as h, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { NAME_BAR_STOPS } from "../../../../web/components/ui/brandArt";
+import { Logo } from "../../brand/src/logo.js";
 import { nextOpen } from "./opens.js";
 import { unstick, workspaceOf } from "./stuck.js";
 import { inTheApp, withOthers } from "./threads.js";
@@ -82,6 +83,36 @@ const HOME_LOOK = `
 .pramanyx-home-row:focus-visible { outline: 1px solid color-mix(in srgb, currentColor 40%, transparent); }
 .pramanyx-home-row svg { flex: none; opacity: 0.62; }
 .pramanyx-home-soft:hover, .pramanyx-home-soft:focus-visible { background: color-mix(in srgb, currentColor 15%, transparent) !important; }
+/*
+ * The bar across the top (\`TopBar\`), at the platform's measures. While it is drawn, the shell's frame starts 48 lower
+ * (as the shell's own frame does under a desktop title bar), its masks and drawer start under it, the page is a surface
+ * set into the frame with a rounded corner where the bar and the sidebar meet it (the platform's \`.aug-page-surface\`),
+ * and the sidebar's own head — its logo and its toggle — gives way to the bar's.
+ */
+html:has([data-pramanyx-bar]) { --dsh-frame-chrome-top: 48px; }
+[class$="_frame"]:has([data-pramanyx-bar]) { padding-top: 48px; background: var(--dsw-specific-sidebar-fill); }
+[class$="_frame"]:has([data-pramanyx-bar]) [class*="_centerCol"] { background: var(--dsw-alias-bg-base); border-top-left-radius: 10px; }
+[class$="_frame"]:has([data-pramanyx-bar]) [class*="_rightbarCol"] { background: var(--dsw-alias-bg-base); }
+[class$="_frame"]:has([data-pramanyx-bar]) [class*="_sidebarCol"] [class*="_logoRow"] { display: none !important; }
+[class$="_frame"][data-sidebar-drawer]:has([data-pramanyx-bar]) [class*="_sidebarCol"] { top: 48px !important; }
+[class$="_frame"]:has([data-pramanyx-bar]) [data-shell-leading] { display: none !important; }
+[data-pramanyx-bar] {
+  position: absolute; top: 0; left: 0; right: 0; height: 48px; box-sizing: border-box;
+  display: flex; align-items: center; gap: 12px; padding: 0 14px;
+  background: var(--dsw-specific-sidebar-fill); color: var(--dsw-alias-label-primary); font-size: 14px;
+}
+.pramanyx-bar-icon {
+  display: inline-flex; align-items: center; justify-content: center; flex: none; padding: 0; border: 0; border-radius: 4px;
+  background: transparent; color: var(--dsw-alias-label-secondary); cursor: pointer;
+}
+.pramanyx-bar-icon:hover, .pramanyx-bar-icon[data-open] { background: color-mix(in srgb, currentColor 10%, transparent); color: var(--dsw-alias-label-primary); }
+.pramanyx-bar-icon:focus-visible { outline: 1px solid color-mix(in srgb, currentColor 40%, transparent); }
+.pramanyx-bar-person { display: inline-flex; flex: none; padding: 2px; border-radius: 4px; background: color-mix(in srgb, currentColor 4%, transparent); }
+.pramanyx-bar-person > span {
+  width: 20px; height: 20px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  background: var(--dsw-alias-bg-layer-3, color-mix(in srgb, currentColor 14%, transparent));
+  font-size: 11px; font-weight: 600; line-height: 1; color: var(--dsw-alias-label-primary);
+}
 `;
 
 function wearHomeLook() {
@@ -505,11 +536,21 @@ function openOn(ctx, connection, tries = 0) {
   if (tries < 40) setTimeout(() => openOn(ctx, connection, tries + 1), 250);
 }
 
-function NineDots() {
-  const at = [3, 8, 13];
-  return h("svg", { width: 15, height: 15, viewBox: "0 0 16 16", fill: "currentColor", "aria-hidden": "true" },
-    at.flatMap((y) => at.map((x) => h("circle", { key: `${x}-${y}`, cx: x, cy: y, r: 1.4 }))));
+/** A glyph as the platform draws it (`web/components/ui/icon.tsx`): Tabler's outline on its 24-unit grid, at the stroke
+ *  that renders near 1.1 device pixels at its size beside regular text (`opticalStroke`). */
+function Glyph({ size, paths }) {
+  const stroke = Math.min(2.4, Math.max(1.0, Math.round((26 / size) * 100) / 100));
+  return h("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: stroke,
+                    strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" },
+    paths.map((d) => h("path", { key: d, d })));
 }
+
+/** The nine dots — Tabler's grid-dots, the platform's own (`apps`). */
+const DOTS = [5, 12, 19].flatMap((y) => [4, 11, 18].map((x) => `M${x} ${y}a1 1 0 1 0 2 0a1 1 0 1 0 -2 0`));
+function NineDots() { return h(Glyph, { size: 16, paths: DOTS }); }
+
+/** The sidebar's toggle — Tabler's layout-sidebar, the platform's own (`panel`). */
+const PANEL = ["M4 6a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2l0 -12", "M9 4l0 16"];
 
 /**
  * The nine dots, here: the way back to the app. The same control, in the same corner, as the one that led here.
@@ -534,9 +575,8 @@ function Switcher() {
     h("span", { style: { fontSize: 13, fontWeight: 600 } }, name), h("span", { style: { ...quiet, fontSize: 12 } }, note));
   return h("div", { ref: host, style: { position: "relative", display: "inline-flex" } },
     h("button", {
-      type: "button", "aria-label": "Switch to", "aria-expanded": open, onClick: () => setOpen((was) => !was),
-      style: { width: 28, height: 28, display: "inline-flex", alignItems: "center", justifyContent: "center", color: "inherit",
-               background: open ? faint : "transparent", border: 0, borderRadius: 4, cursor: "pointer", padding: 0 },
+      type: "button", "aria-label": "Switch to", title: "Switch to the app", "aria-expanded": open, className: "pramanyx-bar-icon",
+      "data-open": open || undefined, onClick: () => setOpen((was) => !was), style: { width: 26, height: 26 },
     }, h(NineDots)),
     open ? h("div", {
       role: "menu", "aria-label": "Switch to",
@@ -551,32 +591,42 @@ function Switcher() {
 }
 
 /**
- * The dots, put in the header's corner. The corner holds one thing and the shell's own panel toggle is it — a
- * second occupant there fails the whole page's start — and the header's other places are not drawn on the first
- * screen. So this is mounted where the shell always draws (its overlay) and shows the dots in a place it adds at
- * the front of the corner, found again whenever the shell redraws the header. No corner, no dots.
+ * The bar across the top, as the platform's (the user, 2026-11-23, of a reference product's two apps side by side:
+ * "you see how the top bar in both ... looks so aligned? Its literally the same. Can we have similar UX in both our
+ * platform and coworker UI? Its the same font size, logo size, bar height, etc."). At the platform's measures
+ * (`web/app/page.tsx` TopBar, `.aug-topbar`): 48 tall, 14 in from each side, the frame's own fill and no line under
+ * it; on the left the sidebar's toggle (23, a 15 glyph) and the logo 18 tall; on the right the nine dots (26, a 16
+ * glyph) and the person's mark (20). The shell has no row for a bar, so it stands in the overlay the shell always draws,
+ * and the frame under it is set 48 lower (`HOME_LOOK`) — only while the bar is drawn, so a bar that fails leaves no gap.
+ * The sidebar's own head (its logo and toggle) gives way to it; its toggle is pressed from here.
  */
-function SwitcherInTheCorner() {
-  const [place, setPlace] = useState(null);
+function sidebarToggle() {
+  // the shell's own seat for the toggle while the sidebar is a drawer, else the toggle in the sidebar's head
+  return document.querySelector("[data-shell-leading] button") || document.querySelector("[data-sidebar-toggle]");
+}
+
+function TopBar() {
+  const [collapsed, setCollapsed] = useState(false);
   useEffect(() => {
-    const tend = () => {
-      const corner = document.querySelector("[data-conversation-header-corner]");
-      if (!corner) { setPlace(null); return; }
-      let seat = corner.querySelector(":scope > [data-pramanyx-switcher]");
-      if (!seat) {
-        seat = document.createElement("span");
-        seat.setAttribute("data-pramanyx-switcher", "");
-        seat.style.cssText = "display:inline-flex;align-items:center;margin-right:4px";
-        corner.prepend(seat);
-      }
-      setPlace((was) => (was === seat ? was : seat));
-    };
-    const watch = new MutationObserver(tend);
-    watch.observe(document.body, { childList: true, subtree: true });
-    tend();
+    const read = () => setCollapsed(Boolean(document.querySelector('[class$="_frame"][data-sidebar-collapsed]')));
+    const watch = new MutationObserver(read);
+    watch.observe(document.body, { attributes: true, subtree: true, attributeFilter: ["data-sidebar-collapsed"] });
+    read();
     return () => watch.disconnect();
   }, []);
-  return place ? createPortal(h(Switcher), place) : null;
+  const label = collapsed ? "Expand sidebar" : "Collapse sidebar";
+  return h("div", { "data-pramanyx-bar": "", role: "banner" },
+    h("button", { type: "button", className: "pramanyx-bar-icon", "aria-label": label, title: label, "aria-expanded": !collapsed,
+                  onClick: () => sidebarToggle()?.click(), style: { width: 23, height: 23, marginLeft: -4 } },
+      h(Glyph, { size: 15, paths: PANEL })),
+    h("span", { style: { display: "inline-flex", alignItems: "center", marginLeft: -7 } }, h(Logo, { height: 18 })),
+    h("div", { style: { marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 } },
+      h(Switcher), h(PersonMark)));
+}
+
+/** The person's mark, as the platform draws it while no identity is configured (`AuthControl`, `StaticAvatar`). */
+function PersonMark() {
+  return h("div", { className: "pramanyx-bar-person", title: "No identity configured" }, h("span", null, "AU"));
 }
 
 /**
@@ -700,7 +750,7 @@ export function apply(ctx) {
   arrive(ctx);
   tellTheClock();
   ctx.slots.inject("shell.overlay", () =>
-    ctx.slots.register({ name: "shell.overlay", id: "pramanyx-switcher" }, SwitcherInTheCorner));
+    ctx.slots.register({ name: "shell.overlay", id: "pramanyx-bar" }, TopBar));
   ctx.slots.inject("conversation.hero.options", () =>
     ctx.slots.register({ name: "conversation.hero.options", id: "pramanyx-coworker-home" }, Home));
 

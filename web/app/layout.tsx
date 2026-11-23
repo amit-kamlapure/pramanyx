@@ -52,7 +52,8 @@ const siteUrl =
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title: "Pramanyx — Autonomous Intelligence Platform",
+  // A tab names what is open (`lib/tabTitle.ts`); before the page says what that is, the product alone.
+  title: "Pramanyx",
   description: "Pramanyx is an Autonomous Intelligence Platform — continuously explores your data, builds a living business ontology, and answers complex analytical questions with evidence.",
   icons: {
     // The tab's icon is the coworker's: the mark in one colour, dark or light as the browser is (`lib/markIcon.ts`).
