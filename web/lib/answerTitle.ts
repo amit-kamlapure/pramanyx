@@ -30,8 +30,9 @@ export const BOLD_WORDS_MAX = 8;
 /** A title is a line; past this it is cut at its first full stop. */
 const TITLE_CHARS = 220;
 
-/** " — caution: …", as the quick pipeline appends it; a dash of any width, so a model's copy of it splits too. */
-const CAUTION = /\s+[—–-]{1,2}\s+caution:\s+/i;
+/** " — caution: …" or " — note: …", as the quick pipeline's guards append them; a dash of any width, so a model's copy
+ *  of one splits too. */
+const CAUTION = /\s+[—–-]{1,2}\s+(?:caution|note):\s+/i;
 
 /** A first line that is not a sentence: a list item, a table row, a quote, a code fence. */
 const NOT_A_SENTENCE = /^(?:[-*•+]\s|\d+[.)]\s|\||>|```)/;

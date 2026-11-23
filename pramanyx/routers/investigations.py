@@ -103,6 +103,44 @@ def _error_event(exc: "BaseException | None" = None, *, message: str = "",
 #: because merging the two into ONE narrator call is what stopped this path spending
 #: two round-trips per answer. Same voice instruction either way: a chip is typed into
 #: the composer verbatim when clicked, so it must read as the user's own words.
+#: What the narrator's headline is (`_NarrativeResult.headline`), said the same in both of its prompts.
+_TITLE_CLAUSE = (
+    "write the headline: the answer itself in ONE sentence with the figure it rests on, read from the results — what "
+    "a reader sees first. Not a label of the query ('Revenue by month'), no caution or caveat (those are shown beside "
+    "it), no markdown. Use ONLY numbers present in the results."
+)
+
+#: The longest title kept: one sentence, read at a glance.
+_TITLE_WORDS = 30
+
+#: " — caution: …" / " — note: …", as the guards write them onto a headline.
+_CAUTION_TAIL_RE = re.compile(r"\s+[—–-]{1,2}\s+(?:caution|note):\s+", re.IGNORECASE)
+
+
+def _caution_tail(headline: str) -> str:
+    """The cautions the guards wrote onto a headline (" — caution: …"), as written, or "" — carried onto the title
+    that replaces it, so a reader still sees them (`web/lib/answerTitle.ts` shows them in the amber line)."""
+    m = _CAUTION_TAIL_RE.search(headline or "")
+    return (headline or "")[m.start():] if m else ""
+
+
+def _narrated_title(title: str, columns, rows, sql: str = "") -> str:
+    """The narrator's title for a quick answer when it holds, else "": one sentence stating a figure, every figure of
+    it in the rows or their totals (`verify_finding`), none beside a label whose row says otherwise
+    (`ungrounded_label_values`), and none the headline's own check would rewrite (`_ground_headline`). A caution it
+    copied from the headline it was shown is dropped — the guards' own cautions are carried on by the caller."""
+    said = " ".join(str(title or "").replace("**", "").split()).lstrip("#").strip()
+    said = _CAUTION_TAIL_RE.split(said)[0].strip()
+    if not said or not rows or not re.search(r"\d", said) or len(said.split()) > _TITLE_WORDS:
+        return ""
+    from pramanyx.explorer.grounding import ungrounded_label_values, verify_finding
+    if verify_finding(said, rows).ungrounded or ungrounded_label_values(said, rows):
+        return ""
+    if _ground_headline(said, columns, rows, sql) != said:
+        return ""
+    return said
+
+
 _FOLLOWUP_CLAUSE = (
     "suggest exactly 3 follow-up questions written AS THE USER would type them "
     "(max 12 words each) — concrete operations on THIS result, using its real column "
@@ -1182,8 +1220,12 @@ class _FollowUpBase(BaseModel):
 
 
 class _NarrativeResult(BaseModel):
-    """The prose enrichment attached to a quick answer — anomaly detection, trend, comparison."""
-    narrative: str = Field(default="", description="2-3 tight sentences that lead with the answer and wrap decisive numbers in **bold**.")
+    """The prose enrichment attached to a quick answer — its title, anomaly detection, trend, comparison."""
+    # First, so the narrator writes the answer's sentence before the words that follow it (`_narrated_title`).
+    headline: str = Field(default="", description=(
+        "The answer itself in ONE sentence (at most 25 words) with the figure it rests on, read from the results — "
+        "what a reader sees first. Not a label of the query ('Revenue by month'), no caution, no markdown."))
+    narrative: str = Field(default="", description="2-3 tight sentences that follow the headline without restating it and wrap decisive numbers in **bold**.")
     anomalies: list[str] = Field(default_factory=list, description=(
         "Only what genuinely stands out in these rows: an outlier, a break in the pattern, one value far from the "
         "rest. An EMPTY list when nothing does — never a sentence saying nothing stands out. Not the ranking or the "
@@ -1766,6 +1808,7 @@ class _AnswerCoreResult:
     # ── the answer ───────────────────────────────────────────────────────────
     #: The GROUNDED headline, after the currency pass — never `answer.headline`,
     #: which is the model's pre-execution prediction (what `headline_delta` types).
+    #: The narrator's title in its place when one held against the rows (`_narrated_title`), its cautions kept.
     headline: str = ""
     sql: str = ""
     columns: list = field(default_factory=list)
@@ -3528,18 +3571,24 @@ def _answer_core(
                     "You are an analytical data interpreter writing for a clean published brief. "
                     "Given a user question, the SQL that answered it, and its results (all of them, or the first "
                     "rows of a longer result, as the results line says): "
-                    "(1) produce a tight analytical narrative (2-3 sentences) that LEADS WITH THE ANSWER, "
-                    "wraps each decisive number in **double asterisks** for bold (e.g. **$2,112**, **+18%**), "
+                    "(1) " + _TITLE_CLAUSE + " "
+                    "(2) produce a tight analytical narrative (2-3 sentences) that FOLLOWS THE HEADLINE without "
+                    "restating it, wraps each decisive number in **double asterisks** for bold (e.g. **$2,112**, **+18%**), "
                     "names any genuine anomaly (unexpected value, spike, drop, outlier) in plain words, and "
                     "states the overall trend and your confidence. Start with the finding — no preamble, no "
                     "hedging, no 'the data shows' scaffolding. Use ONLY numbers present in the results; never "
                     "invent values, and bold never licenses invented precision." + _ts_clause + " "
-                    "Then (2) " + _FOLLOWUP_CLAUSE
+                    "Then (3) " + _FOLLOWUP_CLAUSE
+                )
+            elif result.rows:
+                _system = (
+                    "Given a user question, the SQL that answered it and its result: (1) " + _TITLE_CLAUSE
+                    + " Then (2) " + _FOLLOWUP_CLAUSE + " Leave the narrative empty."
                 )
             else:
                 _system = (
                     "Given a user question and its answer, " + _FOLLOWUP_CLAUSE
-                    + " Leave the narrative empty."
+                    + " Leave the headline and the narrative empty."
                 )
             _rows_label = _narrator_rows_label(_sample_rows, max(len(result.rows), result.row_count or 0), _is_ts)
             # The resolution's single caveat leads the narrator too, so the
@@ -3658,6 +3707,28 @@ def _answer_core(
             if "exc" in _pa_result:
                 raise _pa_result["exc"]
             _pa: _PostAnswer = _pa_result["pa"]
+            # The answer's title, written now that the rows are read (the user, 2026-11-23: "Title: the answer in one
+            # sentence, with its figure; never a caution or a query label"). The headline above was the coder's, written
+            # with the SQL before it ran, so it names the subject — "Order counts by fulfillment status" — and cannot
+            # state a figure it has not seen. Kept only when every figure in it is in the rows (`_narrated_title`); the
+            # cautions the guards wrote onto the headline ride on after it, so nothing they said is lost. Not over a
+            # verdict the platform checked (not as asked) or a claim a guard qualified in place.
+            _titled = "" if (_not_as_asked is not None or _rcpt.get("narration_inversion")) else \
+                _narrated_title(_pa.headline, result.columns, result.rows, final_sql or "")
+            if _titled:
+                # as each guard appends its caution: the sentence without its full stop, then the tail
+                _tail = _caution_tail(_grounded_headline)
+                _grounded_headline = _apply_currency(_titled.rstrip(". ") if _tail else _titled, _cur_sym) + _tail
+                emit("headline", {"headline": _grounded_headline})
+                logger.info("[chat] the narrator's title replaced the coder's headline")
+                if _chat_inv_id:
+                    try:
+                        from pramanyx.db.history import update_chat_turn_headline
+                        update_chat_turn_headline(_chat_inv_id, _grounded_headline)
+                    except Exception as exc:
+                        from pramanyx.kernel.errors import tolerate
+                        tolerate(exc, "the title's persistence is best-effort; it was already streamed this session",
+                                 counter="chat.title_persist")
             if _narrative_worth_it and _pa.narrative:
                 _narrative_dict = {
                     "narrative": _apply_currency(_pa.narrative, _cur_sym),

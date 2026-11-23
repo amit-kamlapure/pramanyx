@@ -24,6 +24,12 @@ describe("an answer's title", () => {
     ]);
   });
 
+  it("says a guard's note apart as well", () => {
+    const got = titleOf("All orders have 3 items — note: this value varies across the data and is not uniform across every row.");
+    expect(got.title).toBe("All orders have 3 items");
+    expect(got.cautions).toEqual(["This value varies across the data and is not uniform across every row."]);
+  });
+
   it("is the first line of a markdown answer, without its bold or heading marks, the rest kept as written", () => {
     const got = titleOf("**Complete** leads with **31,021 orders**.\n\n- Shipped: 38,107\n- Cancelled: 12,345");
     expect(got.title).toBe("Complete leads with 31,021 orders.");
