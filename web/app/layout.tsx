@@ -55,7 +55,9 @@ export const metadata: Metadata = {
   title: "Pramanyx — Autonomous Intelligence Platform",
   description: "Pramanyx is an Autonomous Intelligence Platform — continuously explores your data, builds a living business ontology, and answers complex analytical questions with evidence.",
   icons: {
-    icon: "/pramanyx-logo.jpeg",
+    // The tab's icon is the coworker's: the mark in one colour, dark or light as the browser is (`lib/markIcon.ts`).
+    // A home-screen icon keeps the filled square, which a phone draws on its own ground.
+    icon: [{ url: "/mark.svg", type: "image/svg+xml" }],
     apple: "/pramanyx-logo.jpeg",
   },
   openGraph: {
