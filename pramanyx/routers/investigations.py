@@ -5572,14 +5572,23 @@ async def _metered_stream(gen: AsyncGenerator[str, None],
     own. A fresh one shadowed the job's for the whole run: the heartbeat and the final
     flush read an accumulator nothing wrote to, so every analyst-body job flushed zero
     spend (measured on every scheduled run 09-10 → 09-16), its token budget could never
-    fire, and its failure said "0 queries"."""
+    fire, and its failure said "0 queries".
+
+    Inside a kernel job, a budget it did not arm is the job's own — `JobKernel._run` arms it
+    and its heartbeat enforces it — so its stop is re-raised to the job, which records it as
+    the kernel's kill: CANCELLED, with the budget, the spend and the fix. Caught here it read
+    as the Responder's and ended the job SUCCEEDED, its investigation left 'running'
+    (2026-11-24, e4796f93)."""
     from pramanyx.kernel import metering
+    from pramanyx.kernel.jobs import current_job_id
     token = metering.start() if metering.current() is None else None
     btoken = metering.set_budget(*budget) if budget else None
     try:
         async for chunk in gen:
             yield chunk
     except metering.BudgetExceeded as be:
+        if btoken is None and current_job_id() is not None:
+            raise
         # The budget armed here is the Responder's, so the event names it: the chat links
         # straight to that agent's page, where the budget is raised.
         from pramanyx.kernel.agents import RESPONDER_ID
@@ -5647,6 +5656,16 @@ async def chat_endpoint(req: ChatRequest, request: Request):
 
 
 _STREAM_END = object()   # queue sentinel: the investigation generator finished
+
+
+def _error_said(sse: str) -> str:
+    """The message of an ``error`` frame, or "" for any other frame — read only when the frame is one."""
+    if not sse.startswith('data: {"type": "error"'):
+        return ""
+    try:
+        return str(json.loads(sse[6:]).get("message") or "")
+    except Exception:
+        return ""
 
 
 def _open_resume_run(session_id: str):
@@ -5750,6 +5769,7 @@ async def _job_streamed_body(
         err: Optional[str] = None
         stop_exc: Optional[BaseException] = None
         seen_inv: Optional[str] = None
+        said = ""          # the last error the body streamed — its own word on why it stopped
         try:
             async for sse in body_factory():
                 if seen_inv is None and '"investigation_id"' in sse:
@@ -5760,6 +5780,7 @@ async def _job_streamed_body(
                                      else {}).get("investigation_id") or None)
                     except Exception:
                         seen_inv = None
+                said = _error_said(sse) or said
                 await queue.put(sse)
                 if resume_run is not None:
                     resume_run.publish(sse)
@@ -5771,22 +5792,47 @@ async def _job_streamed_body(
             stop_exc = exc
             raise
         finally:
-            if resume_run is not None:
-                resume_run.close(error=err)
-            if err is not None and seen_inv:
-                # Terminal consistency for ANY body the bridge carries: the
-                # graph path reconciles its own row in its finally, but the
-                # analyst body never did — a cancelled analyst run left its
+            why = ""
+            if seen_inv:
+                # Terminal consistency for ANY body the bridge carries, however it
+                # ended: the graph path reconciles its own row in its finally, but
+                # the analyst body never did. A cancelled analyst run left its
                 # investigation 'running' until the sweep (seen live, FL-1b
-                # receipt). Idempotent: a row already terminal is left alone.
+                # receipt), and so did one that ENDED without raising — a budget
+                # stop explained as an error frame, a crash `_stream_analyst` turned
+                # into one (2026-11-24, e4796f93: 'running' until a restart's sweep
+                # called it orphaned). Idempotent: a row already terminal — complete,
+                # failed, or paused for a person — is left alone.
                 try:
                     _row = get_investigation(seen_inv)
                     if _row and _row.get("status") == "running":
-                        from pramanyx.kernel.jobs import describe_stop
-                        fail_investigation(seen_inv, status="failed",
-                                           reason=describe_stop(stop_exc))
+                        from pramanyx.kernel.jobs import describe_end, describe_stop
+                        why = describe_stop(stop_exc) if stop_exc is not None else describe_end(said)
+                        fail_investigation(seen_inv, status="failed", reason=why)
                 except Exception:
                     logger.debug("bridge reconcile failed for %s", seen_inv, exc_info=True)
+            if not said and (stop_exc is not None or why):
+                # Withheld is said: a stream that just ends tells its reader nothing, so a
+                # run that stopped without saying why says it here, in the record's words.
+                try:
+                    from pramanyx.kernel import metering
+                    from pramanyx.kernel.jobs import current_charter_id, describe_stop, stop_reason
+                    if not why:
+                        why = describe_stop(stop_exc)
+                    # The code is the shared vocabulary's: the exception's own, except a heartbeat's
+                    # budget kill, which arrives as a cancel. A budget stop names the agent whose page raises it.
+                    budget = (isinstance(stop_exc, metering.BudgetExceeded)
+                              or stop_reason().startswith("budget exceeded"))
+                    told = _sse("error", _error_event(
+                        stop_exc, message=why, reason="budget_exceeded" if budget else "",
+                        agent_id=(current_charter_id() or "") if budget else ""))
+                    queue.put_nowait(told)
+                    if resume_run is not None:
+                        resume_run.publish(told)
+                except Exception:
+                    logger.debug("bridge could not say why the run stopped", exc_info=True)
+            if resume_run is not None:
+                resume_run.close(error=err)
             # Always release the client drainer, even on cancellation/error.
             queue.put_nowait(_STREAM_END)
 
@@ -6385,10 +6431,14 @@ async def _stream_ask(req: "AskRequest", request: Request, conn_id: str) -> Asyn
         # a supervised job (so a closed tab no longer kills it mid-run and
         # orphans the row 'running'), cancellable via /investigations/{id}/cancel,
         # and mirrored for reattach. The meter rides INSIDE the job, so the
-        # budget holds with nobody watching.
-        _budget = _insight_budget(conn_id)
+        # budget holds with nobody watching — and the budget is the job's: an
+        # `investigation` job is the Analyst's, whose governance `JobKernel._run`
+        # arms and its heartbeat enforces, as on the graph path. Arming the
+        # Responder's here, a quick answer's, stopped deep runs at its time
+        # budget (1200s on the live install, 2026-11-24 e4796f93) while the
+        # Agents page said the Analyst had 1800s.
         async for sse in _job_streamed_body(
-            lambda: _metered_stream(_analyst_body, budget=_budget),
+            lambda: _metered_stream(_analyst_body),
             session_id=req.session_id, conn_id=conn_id, canvas_id=req.canvas_id,
             payload={"question": req.question[:200], "body": "analyst",
                      **({"purpose": req.purpose} if req.purpose else {})},

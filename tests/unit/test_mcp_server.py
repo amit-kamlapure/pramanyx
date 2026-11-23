@@ -191,8 +191,9 @@ def test_deep_analysis_accepts_deprecated_ada_report_wire_alias():
 
 def test_a_deep_analysis_past_its_deadline_hands_back_the_id_and_is_read_to_its_end():
     """2026-11-23, live: the analyst ran 11 minutes; the stream's keep-alive reset the read timeout, the call outran the
-    shell's tool limit, and the coworker said "Request timed out". The deadline is on the whole call now; the run, which
-    stops when its reader leaves, is read on in the background."""
+    shell's tool limit, and the coworker said "Request timed out". The deadline is on the whole call now, and the stream is
+    read on in the background: the run is a job that goes on without it, but the request's trace ends with its reader —
+    let go at the deadline, it filed a run that then finished as failed (2026-11-24, 0237d0fc)."""
     read_to_end: list[bool] = []
 
     async def slow():
