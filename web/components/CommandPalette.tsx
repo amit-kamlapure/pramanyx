@@ -214,6 +214,7 @@ export function CommandPalette({ open, onClose, selectedConn, onNavigate, onGoTo
     // depth:"quick" keeps the overlay snappy (the router honours it with no model
     // call); `surface` is the summoned-from tab, sanitized server-side.
     body: { depth: "quick", surface },
+    resume: false,   // minted with the palette: nothing of it can be running yet
   });
   const streaming = status === "submitted" || status === "streaming";
   const spotTurns = useMemo(() => projectThread(messages, {

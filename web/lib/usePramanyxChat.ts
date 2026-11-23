@@ -49,6 +49,9 @@ export interface UsePramanyxChatOptions {
   onError?: (e: Error) => void;
   /** Every data part, as it arrives — the debug log's feed. */
   onData?: (part: DataUIPart<PramanyxUIDataTypes>) => void;
+  /** Ask on mount whether a run is in flight to reattach to (default). `false` for a conversation minted here and now,
+   *  which has none: the ⌘K palette, mounted closed on every page, asked on every load (2026-11-23). */
+  resume?: boolean;
 }
 
 export function usePramanyxChat({
@@ -57,6 +60,7 @@ export function usePramanyxChat({
   body,
   onError,
   onData,
+  resume = true,
 }: UsePramanyxChatOptions) {
   // Callbacks — and the connection — ride refs so a re-rendered parent handing a fresh
   // closure does not rebuild the Chat and throw the conversation away. Mirrored in an
@@ -115,5 +119,5 @@ export function usePramanyxChat({
   // in-flight run to reattach to (GET /api/chat/{id}/stream → the frame hub's
   // snapshot-then-tail). A 204 — flag off, nothing running, or a different
   // serverless instance — resolves to "no stream" and costs one request.
-  return useChat({ chat, resume: true });
+  return useChat({ chat, resume });
 }
