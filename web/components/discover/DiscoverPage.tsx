@@ -111,12 +111,12 @@ function SearchBar({ filters, setFilters, home, areaNames, connections }: {
         placeholder="Search names and descriptions — tables, metrics, dashboards, canvases, agents, documents…"
         leading={<Icon name="search" size={16} />} style={{ width: "100%" }} data-testid="discover-search" />
       <div className="aug-discover-filters">
-        <SelectField aria-label="Area" value={filters.area} onChange={e => set({ area: e.target.value })} data-testid="discover-area-filter">
+        <SelectField bespoke aria-label="Area" value={filters.area} onChange={e => set({ area: e.target.value })} data-testid="discover-area-filter">
           <option value="">Every Area</option>
           {areaIds.map(id => <option key={id} value={id}>{areaNames[id]}</option>)}
           <option value={OTHER}>Everything else</option>
         </SelectField>
-        <SelectField aria-label="Kind" value={filters.kind} onChange={e => set({ kind: e.target.value as DiscoverKind | "" })} data-testid="discover-kind-filter">
+        <SelectField bespoke aria-label="Kind" value={filters.kind} onChange={e => set({ kind: e.target.value as DiscoverKind | "" })} data-testid="discover-kind-filter">
           <option value="">Every kind</option>
           {KINDS.map(k => <option key={k} value={k}>{KIND_TITLES[k]}</option>)}
         </SelectField>
@@ -125,7 +125,7 @@ function SearchBar({ filters, setFilters, home, areaNames, connections }: {
         <Button size="sm" variant={filters.mine ? "secondary" : "outline"} aria-pressed={filters.mine}
           onClick={() => set({ mine: !filters.mine })}>Mine</Button>
         {(connections.length > 1 || filters.conn) && (
-          <SelectField aria-label="Connection" value={filters.conn} onChange={e => set({ conn: e.target.value })} data-testid="discover-conn-filter">
+          <SelectField bespoke aria-label="Connection" value={filters.conn} onChange={e => set({ conn: e.target.value })} data-testid="discover-conn-filter">
             <option value="">Every connection</option>
             {connections.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </SelectField>
