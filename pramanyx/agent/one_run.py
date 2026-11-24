@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import re
 import socket
@@ -44,6 +45,13 @@ from datetime import datetime, timezone
 from typing import Callable, Iterable, Optional
 
 from pramanyx.db.serving import process_alive
+
+logger = logging.getLogger(__name__)
+
+#: The parts of a spec, in its order, as the log names them.
+SPEC_PARTS = ("measure", "table", "other_measures", "filters", "period_1_start", "period_1_end", "period_2_start",
+              "period_2_end", "shape", "segment", "relationship_left", "relationship_right", "named_dimensions",
+              "cross_sectional", "descriptive_only")
 
 STORE = "one_run"
 #: Claims kept: they are deleted as their runs end, so this bounds only what a crash leaves behind.
@@ -161,8 +169,8 @@ def spec_of(intake: Optional[dict]) -> Optional[str]:
     to one spec; None when the intake named no measure (nothing to compare).
 
     The measure (the governed metric it framed, with the objects that metric's rule chose; else its expression and
-    table), every further measure and the filters on them, the observation and comparison windows, its shape, the sides
-    of a driver or relationship question, and the dimensions it names. A named dimension is part of what any question
+    table), every further measure and the filters on them, the two periods it compares (as a pair), its shape, the sides
+    of a driver or relationship question (one that compares across, not over time), and the dimensions it names. A named dimension is part of what any question
     asks, a "why" too: the run breaks it down first, whatever else it looks at (`investigate._prioritize_dimensions`
     pins it), so "what drove it — break it down by category" is not the analysis of "why did it change", which may never
     reach category. When unsure, two specs differ: a repeat then runs again, as before, where a spec too loose would
@@ -177,13 +185,31 @@ def spec_of(intake: Optional[dict]) -> Optional[str]:
                     for m in (i.get("other_measures") or []))
     shape = str(i.get("question_shape") or "")
     named = ",".join(sorted({_norm_sql(d) for d in (i.get("named_dimensions") or []) if _norm_sql(d)}))
+    # A change between two periods asks for that change: a driver contrast or a relationship pair its intake wrote as
+    # well is the model's own reach, not the question's (live 2026-11-24, 4e590a65 / d3f4c051: "Why did revenue change
+    # from May to June? Find the drivers." came with `status = 'Returned'` and sale_price against category; "What drove
+    # the change between May and June?" with neither, and it ran a second analysis of the same change). A cross-sectional
+    # question keeps them: there the contrast is the question.
+    over_time = not i.get("cross_sectional") and all(i.get(k) for k in ("observation_start", "comparison_start"))
+    sides = ("" if over_time else _norm_sql(i.get(k))
+             for k in ("comparison_segment_sql", "relationship_left_sql", "relationship_right_sql"))
     parts = [measure, _norm_sql(i.get("metric_table")), ";".join(others),
              ";".join(sorted(_norm_sql(f) for f in (i.get("metric_filters") or []))),
-             *(str(i.get(k) or "") for k in ("observation_start", "observation_end", "comparison_start", "comparison_end")),
+             *_periods(i),
              shape,
-             *(_norm_sql(i.get(k)) for k in ("comparison_segment_sql", "relationship_left_sql", "relationship_right_sql")),
+             *sides,
              named, "x" if i.get("cross_sectional") else "", "d" if i.get("descriptive_only") else ""]
     return "|".join(parts)
+
+
+def _periods(intake: dict) -> list:
+    """The two periods a question compares, as one pair, earlier first: a change between May and June is one analysis
+    whichever the intake took as observed and which as its comparison (live 2026-11-24, c86e1ae1 / 6c7cab64: "Why did
+    revenue change from May to June?" observed June against May; "What drove the change between May and June?" observed
+    May against June, and ran a second analysis of the same two months)."""
+    pair = sorted([(str(intake.get("observation_start") or ""), str(intake.get("observation_end") or "")),
+                   (str(intake.get("comparison_start") or ""), str(intake.get("comparison_end") or ""))])
+    return [x for period in pair for x in period]
 
 
 def _drop_if_same(slot: str, row: dict) -> None:
@@ -412,6 +438,10 @@ class Ask:
         if not spec:
             return None
         slot = _slot("s", spec, self.connection_id, self.canvas_id, self.schema)
+        # Said in the log, part by part: a repeat in other words that runs on is read off two of these lines, which part
+        # its intake resolved otherwise (2026-11-24: two wordings of one question ran twice, and nothing said why).
+        logger.info("one run: run %s resolved its spec %s — %s", (self.claim.inv_id if self.claim else "") or "(inline)",
+                    slot.split(":", 1)[1][:12], json.dumps(dict(zip(SPEC_PARTS, spec.split("|"))), ensure_ascii=False))
         try:
             for _ in range(3):
                 if self.claim is not None:
