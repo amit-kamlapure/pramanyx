@@ -293,8 +293,9 @@ class NotAnAreaIn(BaseModel):
 
 @router.put("/areas/{conn_id}/not-an-area")
 def put_not_an_area(conn_id: str, body: NotAnAreaIn, request: Request):
-    """A curator says a suggested area is not an area of the business: it is not suggested again (or, taken back, it
-    is). A person's own call, as declaring one is."""
+    """A curator says a suggested area is not an area of the business: it is not suggested again on this connection
+    (or, taken back, it is — a word said for every connection before 2026-11-25 is taken back with it). A person's
+    own call, as declaring one is. Returns what is said on this connection."""
     from pramanyx.orgsettings.store import load_org_settings, save_org_settings
     from pramanyx.rbac.permissions import Permission
     from pramanyx.rbac.resolver import has_permission
@@ -304,12 +305,21 @@ def put_not_an_area(conn_id: str, body: NotAnAreaIn, request: Request):
     label = (body.label or "").strip()
     if not label:
         raise HTTPException(status_code=422, detail="which suggestion is not an area")
+    from pramanyx.semantic.areas import said_not_an_area
     settings = load_org_settings()
-    kept = [x for x in settings.not_areas if x.strip().lower() != label.lower()]
+    said = {k: list(v) for k, v in (settings.not_areas or {}).items()}
+
+    def without(labels: list[str]) -> list[str]:
+        return [x for x in labels if x.strip().lower() != label.lower()]
+
+    said[conn_id] = without(said.get(conn_id, []))
     if body.not_an_area:
-        kept.append(label)
-    save_org_settings(settings.model_copy(update={"not_areas": kept}))
-    return {"not_areas": kept}
+        said[conn_id].append(label)
+    elif "*" in said:
+        said["*"] = without(said["*"])
+    said = {k: v for k, v in said.items() if v}
+    save_org_settings(settings.model_copy(update={"not_areas": said}))
+    return {"not_areas": said_not_an_area(said, conn_id)}
 
 
 class PlacementIn(BaseModel):

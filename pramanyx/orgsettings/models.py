@@ -226,11 +226,22 @@ class OrgSettings(BaseModel):
     )
 
     #: What a curator said is not an area of the business, of the areas the model suggested from its own labels for
-    #: the data (punch list 87, 2026-11-18): not suggested again. A model never writes it.
-    not_areas: list[str] = Field(
-        default_factory=list,
-        description="Model-suggested area names a curator said are not areas of the business — not suggested again.",
+    #: the data (punch list 87, 2026-11-18): not suggested again on that connection. By connection id, since a label is
+    #: suggested from one connection's data (the user, 2026-11-25: "Commerce" said on theLook was hidden on every
+    #: connection); ``"*"`` holds what was said before, for every connection. A model never writes it.
+    not_areas: dict[str, list[str]] = Field(
+        default_factory=dict,
+        description="Model-suggested area names a curator said are not areas of the business, by connection id — "
+                    "not suggested again there. '*' is every connection.",
     )
+
+    @field_validator("not_areas", mode="before")
+    @classmethod
+    def _by_connection(cls, v: object) -> object:
+        """Until 2026-11-25 one list held every connection's: what it said stands for every connection."""
+        if isinstance(v, list):
+            return {"*": [str(x) for x in v if str(x).strip()]} if v else {}
+        return v
 
     #: What the organisation tells every answer, on every connection (punch list 94, 2026-11-18): "fiscal year starts
     #: in February", "exclude test accounts". It leads each question's custom instructions; a connection's own follow

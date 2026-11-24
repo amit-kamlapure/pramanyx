@@ -1557,8 +1557,9 @@ export interface paths {
         get?: never;
         /**
          * Put Not An Area
-         * @description A curator says a suggested area is not an area of the business: it is not suggested again (or, taken back, it
-         *     is). A person's own call, as declaring one is.
+         * @description A curator says a suggested area is not an area of the business: it is not suggested again on this connection
+         *     (or, taken back, it is — a word said for every connection before 2026-11-25 is taken back with it). A person's
+         *     own call, as declaring one is. Returns what is said on this connection.
          */
         put: operations["put_not_an_area_areas__conn_id__not_an_area_put"];
         post?: never;
@@ -24687,9 +24688,11 @@ export interface components {
             instructions: string;
             /**
              * Not Areas
-             * @description Model-suggested area names a curator said are not areas of the business — not suggested again.
+             * @description Model-suggested area names a curator said are not areas of the business, by connection id — not suggested again there. '*' is every connection.
              */
-            not_areas?: string[];
+            not_areas?: {
+                [key: string]: string[];
+            };
             /**
              * Outside Row Model
              * @description Send row text to an outside, cheaper model (TypeSafe's Jev) to judge rows before your own strong model. Row text leaves the install. Off by default.

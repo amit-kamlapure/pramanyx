@@ -215,6 +215,13 @@ def _plain(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", (text or "").lower()).strip()
 
 
+def said_not_an_area(said: Optional[dict], connection_id: str) -> list[str]:
+    """What a curator said is not an area on ``connection_id``: its own word, and what was said for every connection
+    (``"*"``, before 2026-11-25)."""
+    said = said or {}
+    return [*said.get(connection_id, []), *said.get("*", [])]
+
+
 def suggested_areas(connection_id: str, schema_name: Optional[str] = None) -> list[dict]:
     """Areas the model suggests from its own labels for the data, each ``{label, id, tables}`` — what the ontology's
     enricher called the business area of each entity (``entity.domain``) where no area of the connection already
@@ -224,6 +231,10 @@ def suggested_areas(connection_id: str, schema_name: Optional[str] = None) -> li
     from pramanyx.semantic.metric_map import best_areas, map_for
     from pramanyx.orgsettings.store import effective_settings
     graph = load_latest_ontology(connection_id, schema_name or None)
+    # Named none, the latest graph is one dataset's: its labels are read against that dataset's Areas, which its
+    # package's map holds. Read against the connection's own, Workspace suggested "Catalog" from olist's labels, an
+    # Area olist's package has (2026-11-25).
+    schema_name = schema_name or getattr(graph, "schema_name", None) or None
     tables: dict[str, set[str]] = {}
     names: dict[str, str] = {}
     for e in (getattr(graph, "entities", None) or {}).values():
@@ -238,7 +249,7 @@ def suggested_areas(connection_id: str, schema_name: Optional[str] = None) -> li
     known = {_plain(a["id"]) for a in areas_for(connection_id, schema_name)} | {
         _plain(a["name"]) for a in areas_for(connection_id, schema_name)}
     industry = [a for a in map_for(connection_id, schema_name).areas if not a.generic]
-    said_not = {_plain(x) for x in (getattr(effective_settings(None), "not_areas", None) or [])}
+    said_not = {_plain(x) for x in said_not_an_area(getattr(effective_settings(None), "not_areas", None), connection_id)}
     out = []
     for key, label in names.items():
         if key in known or key in said_not or best_areas(label, industry):
