@@ -74,8 +74,7 @@ class Provenance(BaseModel):
     doors: list[dict[str, Any]] = Field(default_factory=list)
     #: The run this turn was handed instead of running its own (`agent/one_run.py`, an ``already_running`` frame): that
     #: run answers the question, and the headline says so. '' for a turn that answered for itself — a conversation that
-    #: cites the run its tool was handed answers in its own words — or one handed a run still starting, whose id it was
-    #: not told (its headline says that too).
+    #: cites the run its tool was handed answers in its own words.
     handed_to: str = ""
     folded_at: str = ""
 

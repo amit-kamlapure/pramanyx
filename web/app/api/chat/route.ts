@@ -282,27 +282,36 @@ function upstreamRequest(body: ChatBody): { url: string; payload: Record<string,
  * ends in exactly one recovered report, error, or honest-uncertainty abort.
  */
 async function recoverAfterDrop(
-  invId: string,
+  firstId: string,
   adapter: PramanyxToUIMessage,
   write: (c: PramanyxChunk) => void,
   signal: AbortSignal,
 ): Promise<void> {
   const deadline = Date.now() + 4 * 60 * 1000; // bounded well inside maxDuration
+  let invId = firstId;                            // the run read on: a hand-back's names the one that answers it
+  let hops = 0;
   while (Date.now() < deadline && !signal.aborted) {
     await new Promise((r) => setTimeout(r, 4000));
-    let d: { status?: string; report?: unknown } | null = null;
+    let d: { status?: string; report?: unknown; error?: string; handed_to?: string } | null = null;
     try {
       const r = await fetch(`${backendBase()}/investigations/${encodeURIComponent(invId)}`, {
         headers: backendHeaders(),
         signal,
       });
       if (!r.ok) continue;
-      d = (await r.json()) as { status?: string; report?: unknown };
+      d = (await r.json()) as { status?: string; report?: unknown; error?: string; handed_to?: string };
     } catch {
       if (signal.aborted) break;
       continue; // transient — keep polling
     }
     const status = d?.status;
+    // A run handed the analysis of its question already under way answers nothing itself: the run it names does, and is
+    // the one read on — as the coworker's card reads it (2026-11-24).
+    if (status === "handed_back" && d?.handed_to && hops < 3) {
+      invId = d.handed_to;
+      hops += 1;
+      continue;
+    }
     if (status === "complete") {
       const rep = d?.report as { phases?: unknown[]; headline?: string } | undefined;
       if (rep && Array.isArray(rep.phases) && rep.headline) {
@@ -315,14 +324,18 @@ async function recoverAfterDrop(
       }
       return;
     }
-    if (status === "failed" || status === "timed_out") {
+    if (status === "failed" || status === "timed_out" || status === "interrupted" || status === "handed_back") {
+      // why it ended, in the platform's own sentence when the row recorded one — withheld is said, never implied
+      const why = (d?.error ?? "").trim();
       for (const c of adapter.feed({
         event: "error",
         data: {
-          message:
-            status === "timed_out"
+          message: why
+            || (status === "timed_out"
               ? "The investigation timed out after the connection dropped."
-              : "The investigation failed after the connection dropped.",
+              : status === "failed"
+                ? "The investigation failed after the connection dropped."
+                : "The investigation stopped after the connection dropped, without recording why."),
         },
       }).chunks) write(c);
       return;

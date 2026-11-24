@@ -132,11 +132,13 @@ def door(monkeypatch):
     seen: dict = {}
 
     async def analyst_body(*a, **k):
+        seen["run_id"] = k.get("run_id")
         yield inv._sse("headline", {"headline": "a new run"})
 
     async def job(body_factory, **kw):
         started.append("analyst")
         seen["claim"] = kw.get("claim")
+        seen["payload"] = kw.get("payload")
         async for f in body_factory():
             yield f
 
@@ -183,14 +185,36 @@ def test_an_agents_repeat_is_handed_the_run_under_way(door):
     assert said["investigation_id"] == run and f"get_investigation('{run}') waits for it" in said["already_running"]
 
 
-def test_an_agents_repeat_while_the_run_is_still_starting_is_told_so(door, monkeypatch):
+def test_an_agents_ask_is_named_the_moment_it_is_claimed_and_a_repeat_is_handed_that_name(door):
+    """At ca93400 a run's row was made by its body, once its job had a slot and its context was built; a repeat in
+    between waited 90 s and was told only that a run was "still starting" — with no id to read it by."""
+    import time
+
+    from pramanyx.db import history
+
+    client, started, seen = door
+    _ask(client, agent=True)
+    named = seen["claim"].inv_id
+    assert named and history.get_investigation(named)["status"] == "running", "its row exists before its job runs"
+    assert seen["run_id"] == named, "the run adopts it"
+    assert seen["payload"]["investigation_id"] == named, "its job names it while queued"
+    began = time.monotonic()
+    said = next(f for f in _ask(client, agent=True) if f["type"] == "already_running")
+    assert said["investigation_id"] == named and time.monotonic() - began < 5, "handed its name at once"
+    assert started == ["analyst"], "and not run twice"
+
+
+def test_a_claim_that_never_names_its_run_is_handed_to_no_one(door, monkeypatch):
+    """A claim whose maker never named its run (a broken maker) is never a hand-back with nothing to read: the repeat
+    runs its own."""
     from pramanyx.agent import one_run
 
     monkeypatch.setattr(one_run, "WAIT_FOR_ID_S", 0.3)
     client, started, _ = door
-    one_run.take(Q, "conn-1")                          # claimed, its row not written yet
-    said = next(f for f in _ask(client, agent=True) if f["type"] == "already_running")
-    assert started == [] and said["investigation_id"] is None and "still starting" in said["already_running"]
+    one_run.take(Q, "conn-1")                          # claimed with no name, and never named
+    frames = _ask(client, agent=True)
+    assert not [f for f in frames if f["type"] == "already_running"]
+    assert started == ["analyst"]
 
 
 def test_an_agents_first_ask_claims_its_question_for_its_run(door):
@@ -886,3 +910,360 @@ def test_a_reloaded_conversation_names_the_run_a_repeat_was_handed():
     parts = inv._turn_to_ui_messages(turn)[1]["parts"]
     assert not [p for p in parts if p["type"] == "data-error"]
     assert any(p["type"] == "text" and "(run r2)" in p["text"] and "handed that run" in p["text"] for p in parts)
+
+
+
+# ── every claim names its run; nothing nameless is handed to anyone ───────────
+
+def _nameless(slot: str) -> None:
+    """A live claim at ``slot`` that names no run: made a moment ago by this process, stamped, never named."""
+    from pramanyx.agent import one_run
+    from pramanyx.kernel.ledger import Ledger
+    Ledger.default().kv_put(one_run.STORE, slot, {"claim": "broken", "inv_id": None, "job": None,
+                                                  "began_at": one_run._now(), "beat_at": one_run._now(),
+                                                  "by": f"{one_run.socket.gethostname()}:{os.getpid()}"})
+
+
+def test_a_nameless_claim_is_never_handed_back_after_the_intake_or_to_a_conversation(monkeypatch):
+    from pramanyx.agent import one_run
+
+    monkeypatch.setattr(one_run, "WAIT_FOR_ID_S", 0.2)
+    monkeypatch.setattr(one_run, "READ_EVERY_S", 0.02)
+    _nameless(one_run._slot("s", one_run.spec_of(INTAKE), "conn-1", "", ""))
+    mine, _ = one_run.take(REWORDED, "conn-1", name_run=_running)
+    assert one_run.Ask(connection_id="conn-1", claim=mine).after_intake(INTAKE) is None, "runs on"
+    assert one_run.Ask(connection_id="conn-1", can_read=False).after_intake(INTAKE) is None
+    _nameless(one_run._question_slot(Q, "conn-1", "", ""))
+    assert one_run.under_way([Q], "conn-1") is None, "a conversation's look finds nothing to hand back"
+
+
+def test_a_claim_whose_row_cannot_be_made_starts_unclaimed():
+    from pramanyx.agent import one_run
+
+    def broken() -> str:
+        raise RuntimeError("history is unwritable")
+
+    assert one_run.take(Q, "conn-1", name_run=broken) == (None, None)
+    mine, held = one_run.take(Q, "conn-1", name_run=_running)
+    assert held is None and mine is not None and mine.inv_id, "nothing of the failed claim was left standing"
+
+
+def test_the_analyst_adopts_its_doors_row_and_ends_it_if_it_stops_first(monkeypatch):
+    from pramanyx.agent import one_run
+    from pramanyx.db import history
+
+    analyst = _analyst_up_to_intake(monkeypatch, INTAKE)
+    first, _ = one_run.take(Q, "conn-1", name_run=_running)
+    assert one_run.Ask(connection_id="conn-1", claim=first).after_intake(INTAKE) is None
+    second, _ = one_run.take(REWORDED, "conn-1", name_run=_running)
+    before = len(history.list_investigations(limit=1000))
+    result = analyst.run_analyst("conn-1", REWORDED, ask=one_run.Ask(connection_id="conn-1", claim=second),
+                                 run_id=second.inv_id)
+    assert result.investigation_id == second.inv_id and len(history.list_investigations(limit=1000)) == before
+    assert history.get_investigation(second.inv_id)["handed_to"] == first.inv_id
+
+    third, _ = one_run.take("A third question entirely", "conn-1", name_run=_running)
+
+    def no_context(*a, **k):
+        raise RuntimeError("the warehouse would not open")
+    monkeypatch.setattr(analyst, "build_analyst_context", no_context)
+    with pytest.raises(RuntimeError):
+        analyst.run_analyst("conn-1", "A third question entirely", run_id=third.inv_id)
+    row = history.get_investigation(third.inv_id)
+    assert row["status"] == "failed" and "would not open" in row["error"], "its row says why, though it never started"
+
+
+def test_a_job_cancelled_in_the_queue_ends_its_row_its_claim_and_its_readers_stream(monkeypatch):
+    """At ca93400 a job cancelled while it waited for a slot never ran its body: its claim was let go, but its reader
+    was kept on keep-alives for good, and the row its door made would have stayed 'running' for the hour."""
+    from pramanyx.agent import one_run
+    from pramanyx.db import history
+    from pramanyx.kernel.jobs import JobKernel, kernel
+    from pramanyx.routers import investigations as inv
+
+    full = asyncio.Semaphore(0)                     # no slot free: the job waits in the queue
+    monkeypatch.setattr(JobKernel, "_slot_for", lambda self, kind: full)
+    monkeypatch.setattr(inv, "KEEP_ALIVE_EVERY", 0.05)
+    mine, _ = one_run.take(Q, "conn-1", name_run=_running)
+    run = mine.inv_id
+
+    async def body():                               # pragma: no cover — never runs
+        pytest.fail("ran")
+        yield ""
+
+    async def main():
+        frames: list = []
+
+        async def read():
+            async for f in inv._job_streamed_body(lambda: body(), session_id="", conn_id="conn-1",
+                                                  payload={"question": Q, "investigation_id": run}, claim=mine):
+                frames.append(f)
+        reader = asyncio.create_task(read())
+        for _ in range(100):
+            if inv._job_id_for_investigation(run):
+                break
+            await asyncio.sleep(0.02)
+        job_id = inv._job_id_for_investigation(run)
+        assert job_id, "the cancel route finds a queued run's job by the run its payload names"
+        assert inv._progress_of(history.get_investigation(run)).get("queued") is True, "read as waiting"
+        kernel().cancel(job_id, reason="cancelled on request")
+        await asyncio.wait_for(reader, timeout=5)
+        return frames
+
+    frames = asyncio.run(main())
+    told = [json.loads(f[6:]) for f in frames if f.startswith('data: {"type": "error"')]
+    assert told and "before it started" in told[-1]["message"], "the reader is told, and let go"
+    row = history.get_investigation(run)
+    assert row["status"] == "failed" and "before it started" in row["error"]
+    assert one_run.take(Q, "conn-1")[1] is None, "its question is free again"
+
+
+def test_a_run_whose_job_cannot_be_started_ends_its_row(monkeypatch):
+    from pramanyx.agent import one_run
+    from pramanyx.db import history
+    from pramanyx.kernel.jobs import kernel
+    from pramanyx.routers import investigations as inv
+
+    mine, _ = one_run.take(Q, "conn-1", name_run=_running)
+
+    async def refuse(*a, **k):
+        raise RuntimeError("the job ledger is full")
+    monkeypatch.setattr(kernel(), "submit", refuse)
+
+    async def body():                               # pragma: no cover — never runs
+        yield ""
+
+    async def main():
+        return [f async for f in inv._job_streamed_body(lambda: body(), session_id="", conn_id="conn-1", claim=mine)]
+
+    with pytest.raises(RuntimeError):
+        asyncio.run(main())
+    row = history.get_investigation(mine.inv_id)
+    assert row["status"] == "failed" and "could not be started" in row["error"] and "ledger is full" in row["error"]
+    assert one_run.take(Q, "conn-1")[1] is None
+
+
+def test_the_phase_scripts_cache_answers_its_doors_row_by_handing_it_the_run_already_done(monkeypatch):
+    from types import SimpleNamespace
+
+    from pramanyx.db import history
+    from pramanyx.routers import investigations as inv
+
+    done = _running()
+    history.complete_investigation(done, {"headline": "Revenue rose 12%", "_report_type": "investigate"}, [], [],
+                                   question=Q, connection_id="conn-1")
+    run = _running()
+    scope = SimpleNamespace(connection_id="conn-1", schema_context="", eff_schema=None, open=lambda: object())
+    monkeypatch.setattr("pramanyx.canvas.scope.resolve_execution_scope", lambda *a, **k: scope)
+    monkeypatch.setattr("pramanyx.tools.prior_analyses.find_similar_investigation", lambda q, c: (done, 0.97))
+
+    async def main():
+        return [f async for f in inv._stream_investigation(Q, "conn-1", None, run_id=run)]
+
+    frames = asyncio.run(main())
+    assert any(f'"investigation_id": "{done}"' in f for f in frames)
+    row = history.get_investigation(run)
+    assert row["status"] == "handed_back" and row["handed_to"] == done, "opens the run that answered it"
+
+
+
+# ── the edges of a run named at its door (2026-11-24 review) ──────────────────
+
+def _drain_bridge(claim, body, **kw):
+    from pramanyx.routers import investigations as inv
+
+    async def main():
+        return [f async for f in inv._job_streamed_body(lambda: body(), session_id="", conn_id="conn-1", claim=claim,
+                                                         **kw)]
+    return asyncio.run(main())
+
+
+def test_the_bridge_names_the_run_once_its_job_holds_it():
+    """The id frame goes out once the job is submitted, never before: a reader leaving earlier would have left a row
+    and a claim nothing ends."""
+    from pramanyx.agent import one_run
+    from pramanyx.routers import investigations as inv
+
+    mine, _ = one_run.take(Q, "conn-1", name_run=_running)
+    held: dict = {}
+
+    async def body():
+        yield inv._sse("headline", {"headline": "done"})
+
+    from pramanyx.routers.investigations import _job_streamed_body
+
+    async def main():
+        frames = []
+        async for f in _job_streamed_body(lambda: body(), session_id="", conn_id="conn-1", claim=mine,
+                                          payload={"question": Q, "investigation_id": mine.inv_id}):
+            if not frames:
+                held["job"] = inv._job_id_for_investigation(mine.inv_id)
+            frames.append(f)
+        return frames
+    frames = asyncio.run(main())
+    first = json.loads(frames[0][6:])
+    assert first["type"] == "start" and first["investigation_id"] == mine.inv_id
+    assert held["job"], "its job existed when its name was sent"
+
+
+def test_an_ask_left_while_it_claims_ends_the_row_its_door_made(monkeypatch):
+    from types import SimpleNamespace
+
+    from pramanyx.agent import one_run
+    from pramanyx.db import history
+    from pramanyx.routers import investigations as inv
+
+    real_take = one_run.take
+    made: dict = {}
+
+    def slow_take(*a, **k):
+        import time
+        time.sleep(0.3)
+        mine, held = real_take(*a, **k)
+        made["claim"] = mine
+        return mine, held
+    monkeypatch.setattr(one_run, "take", slow_take)
+    req = SimpleNamespace(question=Q, canvas_id=None, schema_name=None, purpose="", session_id="")
+
+    async def main():
+        task = asyncio.create_task(inv._claim_question(req, "conn-1", inv._named_at_the_door(req, "conn-1")))
+        await asyncio.sleep(0.05)
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        await asyncio.sleep(0.6)                    # the claim finishes in its thread, then is let go
+    asyncio.run(main())
+    row = history.get_investigation(made["claim"].inv_id)
+    assert row["status"] == "interrupted" and "left before its run started" in row["error"]
+    assert one_run.take(Q, "conn-1")[1] is None
+
+
+def test_a_queued_cancel_writes_the_turns_end_and_its_answer_and_frees_an_unclaimed_reader(monkeypatch):
+    import time
+
+    from pramanyx.agent import one_run
+    from pramanyx.answer.envelope import EnvelopeFolder
+    from pramanyx.db import history
+    from pramanyx.kernel.jobs import JobKernel, kernel
+    from pramanyx.obs import session_log
+    from pramanyx.routers import investigations as inv
+
+    monkeypatch.setattr(JobKernel, "_slot_for", lambda self, kind: asyncio.Semaphore(0))   # no slot ever frees
+    monkeypatch.setattr(inv, "KEEP_ALIVE_EVERY", 0.05)
+
+    async def body():                               # pragma: no cover — never runs
+        pytest.fail("ran")
+        yield ""
+
+    async def queued_then_cancelled(claim, payload, *, left: bool):
+        frames: list = []
+
+        async def read():
+            inv._TURN_ENVELOPE.set(inv._TurnEnvelope(folder=EnvelopeFolder(question=Q, connection_id="conn-1"),
+                                                     question=Q, began=time.monotonic()))
+            inv._TURN_END.set(inv._TurnEnd(run_id="trace-queued", door="ask", conn_id="conn-1", claimed=False,
+                                           t0=time.monotonic(), reader_left_ms=1.0 if left else None))
+            async for f in inv._job_streamed_body(lambda: body(), session_id="", conn_id="conn-1", claim=claim,
+                                                  payload=payload):
+                frames.append(f)
+        reader = asyncio.create_task(read())
+        for _ in range(100):
+            jobs = [j for j in kernel().ledger.jobs_where(kinds=["investigation"], states=["PENDING"], limit=50)
+                    if (j.get("payload") or {}) == payload]
+            if jobs:
+                break
+            await asyncio.sleep(0.02)
+        kernel().cancel(jobs[0]["id"], reason="cancelled on request")
+        await asyncio.wait_for(reader, timeout=5)
+        return frames
+
+    mine, _ = one_run.take(Q, "conn-1", name_run=_running)
+    asyncio.run(queued_then_cancelled(mine, {"question": Q, "investigation_id": mine.inv_id}, left=True))
+    fins = [e for e in session_log.recover_session("trace-queued") if e["kind"] in ("final_response", "execution_error")]
+    assert fins and any("before it started" in json.dumps(e) for e in fins), "the trace says how it ended"
+    env = history.get_investigation(mine.inv_id)["report"]["envelope"]
+    assert "before it started" in env["error"], "and so does its saved answer"
+
+    unclaimed = asyncio.run(queued_then_cancelled(None, {"question": "a person's own deep ask"}, left=False))
+    assert any("before it started" in f for f in unclaimed), "a person's queued run, cancelled, is told and let go"
+
+
+def test_a_job_cancelled_before_its_first_step_still_ends():
+    """A cancel landing between the job's task being made and its first step skipped the whole queue hook."""
+    import tempfile
+
+    from pramanyx.kernel.jobs import JobKernel, JobState
+    from pramanyx.kernel.ledger import Ledger
+
+    ended: list = []
+
+    async def main():
+        k = JobKernel(Ledger(pathlib.Path(tempfile.mkdtemp()) / "system.db"))
+
+        async def work():                           # pragma: no cover — never runs
+            pytest.fail("ran")
+        jid = await k.submit("investigation", work, on_finish=lambda j, st: ended.append(st))
+        k.cancel(jid, reason="cancelled on request")    # before the task's first step: no await between
+        await asyncio.sleep(0.05)
+        return k.ledger.job_get(jid)["state"]
+    assert asyncio.run(main()) == JobState.CANCELLED and ended == [JobState.CANCELLED]
+
+
+def test_the_stale_sweep_spares_a_run_waiting_for_a_slot_and_a_run_is_timed_from_its_start():
+    from datetime import datetime, timedelta, timezone
+
+    from pramanyx.db import history
+
+    waiting, orphan = _running(), _running()
+    long_ago = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+    c = history._conn()
+    c.execute("UPDATE investigations SET started_at = ? WHERE id IN (?, ?)", (long_ago, waiting, orphan))
+    c.commit()
+    c.close()
+    _job("PENDING", payload={"question": Q, "investigation_id": waiting})
+    history.sweep_stale_running(60)
+    assert history.get_investigation(waiting)["status"] == "running", "still waiting for a slot: not orphaned"
+    assert history.get_investigation(orphan)["status"] == "failed"
+    assert history.adopt_investigation(waiting, "conn-2")
+    row = history.get_investigation(waiting)
+    assert row["started_at"] > long_ago and row["connection_id"] == "conn-2", "its run time counts from its start"
+
+
+def test_answer_now_is_refused_for_a_run_still_waiting_for_a_slot():
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from pramanyx.routers import investigations as inv
+
+    run = _running()
+    _job("PENDING", payload={"question": Q, "investigation_id": run})
+    app = FastAPI()
+    app.include_router(inv.router)
+    r = TestClient(app).post(f"/investigations/{run}/answer-now")
+    assert r.status_code == 409 and "waiting for a free analysis slot" in r.json()["detail"]
+    got = TestClient(app).get(f"/investigations/{run}").json()
+    assert got["progress"]["queued"] is True
+
+
+
+def test_a_job_whose_wait_for_a_slot_fails_still_ends():
+    import tempfile
+
+    from pramanyx.kernel.jobs import JobKernel, JobState
+    from pramanyx.kernel.ledger import Ledger
+
+    ended: list = []
+
+    class Broken:
+        async def acquire(self):
+            raise RuntimeError("the slot could not be waited on")
+
+    async def main():
+        k = JobKernel(Ledger(pathlib.Path(tempfile.mkdtemp()) / "system.db"))
+        k._slot_for = lambda kind: Broken()
+
+        async def work():                           # pragma: no cover — never runs
+            pytest.fail("ran")
+        jid = await k.submit("investigation", work, on_finish=lambda j, st: ended.append(st))
+        await asyncio.sleep(0.05)
+        return k.ledger.job_get(jid)["state"]
+    assert asyncio.run(main()) == JobState.FAILED and ended == [JobState.FAILED]

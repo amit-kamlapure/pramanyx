@@ -147,7 +147,7 @@ test("a running analysis is read again until it lands, once; a 4xx stops the rea
   assert.equal(left.signals[0].aborted, true, "the card going aborts the read in flight");
 });
 
-test("a run handed the analysis already under way reads on as that run; one not yet named lands, saying so", async () => {
+test("a run handed the analysis already under way reads on as that run; one naming no run lands, saying why", async () => {
   // 2026-11-24: the card followed a run that was then handed back — the status it never knew — and said "still
   // running" for the hour, never the answer of the run it was handed.
   const { follow, landed, handedTo, isDeepRecord } = await import("../src/report.js");
@@ -171,12 +171,12 @@ test("a run handed the analysis already under way reads on as that run; one not 
   assert.equal(seen[0].report.headline, "It rose");
 
   const unnamed = { id: "b", kind: "investigation", status: "handed_back", handed_to: "",
-                    error: "This question is already being analysed, and that run is still starting" };
+                    error: "This question is already being analysed, so it was not started a second time." };
   assert.equal(handedTo(unnamed), "");
   assert.equal(landed(unnamed), unnamed, "nothing to read on: it lands, and says why");
   assert.equal(isDeepRecord(unnamed), true);
   const facts = reportFacts(unnamed);
   assert.equal(facts.handed, true);
   assert.equal(facts.stopped, false, "never drawn as stopped");
-  assert.match(facts.why, /still starting/);
+  assert.match(facts.why, /already being analysed/);
 });

@@ -33,8 +33,9 @@ _DB_PATH = resolve_db_path("PRAMANYX_HISTORY_DB", Path(__file__).parent.parent.p
 #: (nothing went wrong) — the same distinction ``JobState`` draws with its own
 #: ``INTERRUPTED``, and the one the frontend's ``UNCERTAIN_RESULT`` sentence exists for.
 #: ``handed_back`` (2026-11-24) for an agent's repeat of an analysis already under way, which stopped at its intake and
-#: was handed that run (`agent/one_run.py`): no answer of its own, nothing went wrong, and no person stopped it — the
-#: run it names in ``handed_to`` answers its question.
+#: was handed that run (`agent/one_run.py`) — or, on the phase script's path, an agent's ask its cache answered with a
+#: run already done: no answer of its own, nothing went wrong, and no person stopped it — the run it names in
+#: ``handed_to`` answers its question.
 InvStatus = Literal["running", "complete", "timed_out", "failed", "paused", "interrupted", "handed_back"]
 
 
@@ -823,6 +824,19 @@ def last_activity_by_canvas() -> dict[str, str]:
     return {r["canvas_id"]: r["last"] for r in rows if r["last"]}
 
 
+def queued_run_ids() -> set:
+    """The runs whose deep-analysis job still waits for a free slot, by the id each job's payload names."""
+    try:
+        from pramanyx.kernel.ledger import Ledger
+        return {str((j.get("payload") or {}).get("investigation_id")) for j in
+                Ledger.default().jobs_where(kinds=["investigation"], states=["PENDING"], limit=500)
+                if isinstance(j.get("payload"), dict) and (j.get("payload") or {}).get("investigation_id")}
+    except Exception as exc:  # noqa: BLE001 — unread, nothing is spared: the sweep runs as it always did
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "the queued runs could not be read; the stale sweep spares none", counter="history.queued")
+        return set()
+
+
 def sweep_stale_running(max_age_minutes: int = 60) -> int:
     """Mark investigations stuck in 'running' past max_age_minutes as 'failed'.
     These are orphaned by interrupted streams / restarts and otherwise clutter
@@ -841,13 +855,18 @@ def sweep_stale_running(max_age_minutes: int = 60) -> int:
         "WHERE status = 'running' AND started_at < ?",
         (cutoff,),
     ).fetchall()
+    # A run still waiting for a free slot is not orphaned: its door made its row as it claimed the question
+    # (`agent/one_run.take`), and its queued job names it.
+    waiting = queued_run_ids()
+    rows = [r for r in rows if r["id"] not in waiting]
     if not rows:
         c.close()
         return 0
+    ids = [r["id"] for r in rows]
     c.execute(
-        "UPDATE investigations SET status = 'failed', completed_at = ? "
-        "WHERE status = 'running' AND started_at < ?",
-        (_now(), cutoff),
+        f"UPDATE investigations SET status = 'failed', completed_at = ? "
+        f"WHERE status = 'running' AND id IN ({','.join('?' * len(ids))})",
+        (_now(), *ids),
     )
     c.commit()
     c.close()
@@ -1522,8 +1541,9 @@ def fail_if_running(inv_id: str, reason: str) -> bool:
 
 
 def hand_back_investigation(inv_id: str, reason: str, handed_to: str = "") -> bool:
-    """A run that stopped because the same analysis was already under way (`agent/one_run.py`): 'handed_back', naming
-    the run it was handed (``handed_to``) and what it was told, written only while it is still 'running' — one
+    """A run that stopped because the same analysis was already under way (`agent/one_run.py`), or already done (the
+    phase script's cache): 'handed_back', naming the run it was handed (``handed_to``) and what it was told, written
+    only while it is still 'running' — one
     statement, so a cancel or an end recorded first stands. Not a failure: no failure event and no failed verdict is
     booked for it. True when this call wrote."""
     if not inv_id:
@@ -1542,6 +1562,21 @@ def hand_back_investigation(inv_id: str, reason: str, handed_to: str = "") -> bo
     if wrote:
         _emit_lifecycle(inv_id, "investigation.handed_back", conn_id=_conn_scope, canvas_id=_canvas_scope)
     return wrote
+
+
+def adopt_investigation(inv_id: str, connection_id: str) -> bool:
+    """A run takes on the row its door made as it claimed the question (`agent/one_run.take`): started now — the time it
+    waited for a free slot is not its run time, which the stale sweep reads — and on the connection its scope resolved
+    to. Only while the row is still 'running'. True when it was taken on."""
+    if not inv_id:
+        return False
+    c = _conn()
+    ensure_once(c, _ensure_schema)
+    cur = c.execute("UPDATE investigations SET started_at = ?, connection_id = COALESCE(NULLIF(?, ''), connection_id) "
+                    "WHERE id = ? AND status = 'running'", (_now(), connection_id or "", inv_id))
+    c.commit()
+    c.close()
+    return bool(cur.rowcount)
 
 
 def normalized_question(q: str) -> str:

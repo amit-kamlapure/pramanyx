@@ -2135,8 +2135,12 @@ def run_analyst(
     purpose: str = "",
     shape: Optional[str] = None,
     ask: Optional[Any] = None,
+    run_id: str = "",
 ) -> AnalystResult:
     """One deep turn as the analyst: intake once, then the loop, then the narrator.
+
+    ``run_id`` — the row its door already made as it claimed the question (`agent/one_run.take`), which this turn
+    adopts rather than make its own; "" for a turn that makes its own.
 
     ``shape`` is the question's shape the door decided (`agent/question_shape`) — describe,
     check, diagnose or survey — carried in so the roster, the stopping rule, the report and the
@@ -2154,13 +2158,14 @@ def run_analyst(
     only the K1 bridge did that, so a deep analysis a conversation ran inline (`converse_tools.deep_analysis`) and whose
     reader left stayed 'running' until a restart's sweep.
     """
-    made: dict = {}
+    # A row the door made is the turn's from the first moment: a turn that stops building its context ends it, with why.
+    made: dict = {"inv_id": run_id} if run_id and persist else {}
     try:
         return _run_analyst(
             connection_id, question, origin_finding=origin_finding, extra_context=extra_context,
             session_id=session_id, canvas_id=canvas_id, schema_scope=schema_scope, emit=emit, on_step=on_step,
             provider=provider, max_steps=max_steps, persist=persist, purpose=purpose, shape=shape, made=made,
-            ask=ask)
+            ask=ask, run_id=run_id)
     except BaseException as exc:
         if made.get("inv_id"):
             _say_how_it_stopped(made["inv_id"], exc)
@@ -2197,6 +2202,7 @@ def _run_analyst(
     shape: Optional[str] = None,
     made: Optional[dict] = None,
     ask: Optional[Any] = None,
+    run_id: str = "",
 ) -> AnalystResult:
     """The turn itself (:func:`run_analyst`); ``made`` is told the run's id as soon as its row exists. ``ask`` — an
     agent's plain ask (`agent/one_run.Ask`) — is checked once the intake has resolved the question: a repeat of a run
@@ -2212,12 +2218,17 @@ def _run_analyst(
     context_timings = seed.pop("context_timings", None) or {}
 
     inv_id = ""
-    if persist:
+    if persist and run_id:
+        # the row its door made as it claimed the question: on the connection the run resolved to
+        from pramanyx.db.history import adopt_investigation
+        inv_id = run_id
+        adopt_investigation(inv_id, eff_conn_id)
+    elif persist:
         from pramanyx.db.history import create_investigation
         inv_id = create_investigation(question, eff_conn_id, canvas_id=canvas_id,
                                       purpose=purpose, session_id=session_id or "")
-        if made is not None:
-            made["inv_id"] = inv_id
+    if inv_id and made is not None:
+        made["inv_id"] = inv_id
     emit("start", {"question": question, "connection_id": eff_conn_id,
                    "investigation_id": inv_id or None, "body": "analyst"})
 

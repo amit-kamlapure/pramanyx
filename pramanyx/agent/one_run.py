@@ -11,6 +11,12 @@ canvas and schema — is handed the run when it asks in the same words (at the d
 that resolve to the same spec (after its own intake: it stops there, said, rather than run the analysis twice). Two
 wordings racing to their spec: the first to claim it runs on, the other is handed it.
 
+A claim names its run from the moment it is taken: the door makes the run's row as it claims (:func:`take`'s
+``name_run``) and the run adopts that row, so a repeat is always handed an id it can read — queued behind the
+investigation slots, running, or ended. Until 2026-11-24 the row was the run's own to make, once its job had a slot and
+its context was built, and a repeat in between was told only that a run was "still starting". A claim that names no
+run a moment after it was taken has a broken maker, and is handed to no one (:func:`_wait_for_id`).
+
 A conversation's own deep analysis (`converse_tools`) runs inline and stops with its reader, so it is never one a repeat
 is handed, and it claims nothing; it only looks. Only agents' plain asks take part: a person in the app, a fresh run, an
 "ask again", a follow-up and a drill from a finding are never handed one.
@@ -35,7 +41,7 @@ import uuid
 import weakref
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Iterable, Optional
+from typing import Callable, Iterable, Optional
 
 from pramanyx.db.serving import process_alive
 
@@ -52,7 +58,8 @@ UNSUBMITTED_FOR_S = 120
 HEARTBEAT_LAPSES_S = 120
 #: How often the process holding a claim stamps it — the kernel's own heartbeat interval.
 BEAT_EVERY_S = 15.0
-#: How long a repeat waits for the id of a run still starting before it is told the run is still starting.
+#: How long a repeat waits for the id of a claim taken a moment ago: its door names the run as it claims, so a claim
+#: that has not by then never will — its maker is broken — and is handed to no one.
 WAIT_FOR_ID_S = 90.0
 #: How often a waiting repeat reads the claim again.
 READ_EVERY_S = 0.5
@@ -320,11 +327,13 @@ def _keep_stamping(claim: Claim) -> None:
             _STAMPER.start()
 
 
-def take(question: str, connection_id: str, *, canvas_id: str = "", schema: str = "") \
-        -> "tuple[Optional[Claim], Optional[dict]]":
-    """For a run about to start as a job: ``(mine, None)`` — its claim, to be told its job and id and ended with it — or
-    ``(None, held)`` — the claim of the run of this question already under way (``held["inv_id"]`` empty while it is
-    still starting). Never blocks. ``(None, None)`` when no claim can be had: the run starts unclaimed, as before."""
+def take(question: str, connection_id: str, *, canvas_id: str = "", schema: str = "",
+         name_run: Optional[Callable[[], str]] = None) -> "tuple[Optional[Claim], Optional[dict]]":
+    """For a run about to start as a job: ``(mine, None)`` — its claim, to be told its job and ended with it — or
+    ``(None, held)`` — the claim of the run of this question already under way (``held["inv_id"]`` empty for the
+    moment between a claim and its name). Never blocks on another run. ``name_run`` makes the run's row and returns its
+    id, which the claim names from then on; ``(None, None)`` when no claim can be had or no row made: the run starts
+    unclaimed and makes its own, as before."""
     slot = _question_slot(question, connection_id, canvas_id, schema)
     if not slot:
         return None, None
@@ -337,32 +346,47 @@ def take(question: str, connection_id: str, *, canvas_id: str = "", schema: str 
         return None, None
     if held is not None:
         return None, held
-    return (mine, None) if mine.slots else (None, None)
+    if not mine.slots:
+        return None, None
+    if name_run is not None:
+        try:
+            mine.found(name_run())
+        except Exception as exc:  # noqa: BLE001 — a row that cannot be made leaves the run to make its own, unclaimed
+            from pramanyx.kernel.errors import tolerate
+            tolerate(exc, "a deep analysis's row could not be made with its claim; it starts unclaimed",
+                     counter="one_run.name")
+        if not mine.inv_id:
+            mine.end()
+            return None, None
+    return mine, None
 
 
 def _wait_for_id(slot: str, row: dict, wait_s: float) -> Optional[dict]:
-    """``{"id", "started_at"}`` of the claim at ``slot`` — waiting up to ``wait_s`` for its id while it is still
-    starting (``id`` "" if it is still starting then) — or None if it ends first."""
+    """``{"id", "started_at"}`` of the run the claim at ``slot`` names — waiting up to ``wait_s`` for the name of one
+    taken a moment ago — or None: it ended first, or never named its run (a broken maker; handed to no one, so the
+    repeat runs on rather than be handed a run it could not read)."""
     deadline = time.monotonic() + max(0.0, wait_s)
-    while not row.get("inv_id") and time.monotonic() < deadline:
+    while not row.get("inv_id"):
+        if time.monotonic() >= deadline:
+            return None
         time.sleep(READ_EVERY_S)
         again = _ledger().kv_get(STORE, slot)
         if not _live(again):
             return None
         row = again
-    return {"id": row.get("inv_id") or "", "started_at": row.get("began_at", "")}
+    return {"id": row["inv_id"], "started_at": row.get("began_at", "")}
 
 
 def under_way(questions: Iterable[str], connection_id: str, *, canvas_id: str = "", schema: str = "",
-              wait_s: float = WAIT_FOR_ID_S) -> Optional[dict]:
+              wait_s: Optional[float] = None) -> Optional[dict]:
     """The run of one of ``questions`` already under way as a job, or None — for a caller about to start one inline (a
-    conversation's deep tool), which only looks. Blocks up to ``wait_s`` for the id of a run still starting."""
+    conversation's deep tool), which only looks. Blocks up to ``wait_s`` for the name of a claim taken a moment ago."""
     try:
         for q in questions:
             slot = _question_slot(q, connection_id, canvas_id, schema)
             row = _ledger().kv_get(STORE, slot) if slot else None
             if _live(row):
-                return _wait_for_id(slot, row, wait_s)
+                return _wait_for_id(slot, row, WAIT_FOR_ID_S if wait_s is None else wait_s)
     except Exception as exc:  # noqa: BLE001 — a claim that cannot be read hands nothing back: the run goes on
         from pramanyx.kernel.errors import tolerate
         tolerate(exc, "a deep analysis could not read the claims; it runs", counter="one_run.read")
@@ -412,10 +436,7 @@ def said(under_way: dict, *, can_read: bool = True) -> str:
     secs = _age_s(under_way.get("started_at"))
     mins = int(secs // 60) if secs < 9999 * 3600 else -1     # an unparsable start reads as 9999 hours
     when = "" if mins < 0 else f", started {mins} min ago" if mins else ", started under a minute ago"
-    rid = under_way.get("id") or ""
-    if not rid:
-        return (f"This question is already being analysed{when}, and that run is still starting, so it was not "
-                "started a second time. Ask for it again in a minute to be handed its id.")
+    rid = under_way.get("id") or ""                          # always named (`_wait_for_id`)
     then = (f"get_investigation('{rid}') waits for it and says how far it has got; ask for a fresh run only if a new "
             "one is wanted alongside it." if can_read else
             f"Say so in the answer, giving the run's id, {rid}, by which its report is read when it lands.")

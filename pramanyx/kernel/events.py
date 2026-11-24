@@ -76,7 +76,7 @@ CATALOGUE: dict[str, dict[str, Any]] = {
     "store.wal_drift": {"what": "a store's WAL drifted from the ledger", "payload": ["store"], "emitted_by": "kernel"},
     "node.span": {"what": "a graph node's timing", "payload": ["name", "ms"], "emitted_by": "telemetry"},
     "phase_complete": {"what": "a deep analysis finished a phase", "payload": ["phase", "all_phases"], "emitted_by": "agent/analyst"},
-    "investigation.handed_back": {"what": "an agent's repeat of a deep analysis already under way stopped and was handed that run", "payload": ["investigation_id"], "emitted_by": "db/history.hand_back_investigation"},
+    "investigation.handed_back": {"what": "an agent's ask of a deep analysis already under way (or already done) stopped and was handed that run", "payload": ["investigation_id"], "emitted_by": "db/history.hand_back_investigation"},
     "investigations.swept": {"what": "stale investigations were swept", "payload": ["swept"], "emitted_by": "db/history"},
     "explorer.resumed": {"what": "the explorer resumed on a connection", "payload": ["connection_id"], "emitted_by": "explorer"},
     "exploration.skipped": {"what": "exploration was skipped on a connection, with the reason", "payload": ["reason", "connection_id"], "emitted_by": "routers/_shared"},

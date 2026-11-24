@@ -35,6 +35,8 @@ const STATE_COLOR: Record<string, string> = {
   // AO-3 — the history store's spellings (a custom agent's runs): `complete` had no
   // colour, so every finished run of a custom agent drew grey beside green built-in ones.
   complete: "var(--grn4)", paused: "var(--amb4)", timed_out: "var(--red4)",
+  // an agent's repeat handed the run already under way (`db/history.InvStatus`): nothing failed, nothing stopped it
+  handed_back: "var(--t3)", interrupted: "var(--amb4)",
 };
 
 export function RunTimeline({ runs, onOpen, emptyNote }: {

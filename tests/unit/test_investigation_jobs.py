@@ -91,13 +91,21 @@ def test_cancel_route_maps_investigation_to_its_job(monkeypatch):
 
     import pramanyx.kernel.ledger as ledger_mod
 
+    # a row its door made as it claimed the question was created outside any job: its job's payload names it
+    jobs = [{"id": "jZ", "payload": {"investigation_id": "invC", "question": "q"}}]
+
     class _L:
         def events(self, **kw):
             assert kw.get("kind") == "investigation.created"
-            return events
+            return events + [{"job_id": None, "payload": {"investigation_id": "invC"}}]
+
+        def jobs_where(self, **kw):
+            assert kw.get("kinds") == ["investigation"]
+            return jobs
 
     monkeypatch.setattr(ledger_mod.Ledger, "default", classmethod(lambda cls: _L()))
     assert inv_mod._job_id_for_investigation("invB") == "jY"
+    assert inv_mod._job_id_for_investigation("invC") == "jZ"
     assert inv_mod._job_id_for_investigation("missing") is None
 
 
