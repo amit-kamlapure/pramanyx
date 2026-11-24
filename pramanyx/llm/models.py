@@ -180,6 +180,10 @@ def _ollama_root(base_url: str) -> str:
     return root.rstrip("/")
 
 
+#: Public for the organisation's own model (`training/serve.py`), which imports into Ollama's native API.
+ollama_native_root = _ollama_root
+
+
 #: How many models one catalogue load will interrogate with /api/show. Each is its own
 #: HTTP call, so an operator with a large local library must not turn opening Settings
 #: into a hundred round-trips. The cap is generous against a real Ollama library and the

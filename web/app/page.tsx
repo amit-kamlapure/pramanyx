@@ -77,6 +77,7 @@ const EvalsWorkspace = dynamic(() => import("@/components/EvalsWorkspace").then(
 const SystemPanel       = dynamic(() => import("@/components/SystemPanel").then(m => ({ default: m.SystemPanel })),          { ssr: false, loading });
 const IntegrationsPanel = dynamic(() => import("@/components/IntegrationsPanel").then(m => ({ default: m.IntegrationsPanel })), { ssr: false, loading });
 const RolesPanel        = dynamic(() => import("@/components/RolesPanel").then(m => ({ default: m.RolesPanel })),            { ssr: false, loading });
+const AIFactoryPanel = dynamic(() => import("@/components/aiFactory/AIFactoryPanel").then(m => ({ default: m.AIFactoryPanel })), { ssr: false, loading });
 const ProcessHealthPanel= dynamic(() => import("@/components/ProcessHealthPanel").then(m => ({ default: m.ProcessHealthPanel })), { ssr: false, loading });
 const PlaybookPanel     = dynamic(() => import("@/components/PlaybookPanel").then(m => ({ default: m.PlaybookPanel })),      { ssr: false, loading });
 const RecommendationInbox= dynamic(() => import("@/components/RecommendationInbox").then(m => ({ default: m.RecommendationInbox })), { ssr: false, loading });
@@ -183,6 +184,7 @@ type NavTab =
   | "agentic-ops"       // Agentic Ops — runs · agents · attention · activity · run graphs
   | "control-room"      // legacy deep-link → agentic-ops (Wave CR's original id)
   | "evals"             // unified Evals workspace (Suites / Runs) — Wave E
+  | "ai-factory"        // 2026-11-24 — Define ▸ AI Factory: where the organisation's own models are made
   | "data"              // unified Data workspace (Catalog / Query Builder / Semantic Layer)
   | "health"
   | "playbook"
@@ -881,7 +883,7 @@ const VALID_TABS = new Set<NavTab>([
   "home", "spend", "chat", "canvases", "canvas-workspace", "recents", "fleet", "agents",
   "inbox", "briefing", "intelligence", "intel-hub", "intel", "org-intel",
   "graph", "memory", "declared-actions", "evidence", "brain",
-  "ontology", "dashboards", "operations", "agentic-ops", "control-room", "evals", "data",
+  "ontology", "dashboards", "operations", "agentic-ops", "control-room", "evals", "ai-factory", "data",
   "health", "playbook", "discover", "documents", "spreadsheets", "catalog", "builder", "query", "connections", "metrics",
   // AO-4 — `integrations` is an Operations layer alias like `monitors`; it was missing
   // here, so `?tab=integrations` (the link every Slack door hands out) opened Home.
@@ -2237,6 +2239,13 @@ export default function Home() {
                   layer={evalsLayer}
                   onLayerChange={setEvalsLayer}
                 />
+              </ErrorBoundary>
+            )}
+
+            {/* ── AI FACTORY ── where the organisation's own models are made (2026-11-23; named 2026-11-24) */}
+            {tab === "ai-factory" && (
+              <ErrorBoundary label="The AI Factory hit an error.">
+                <AIFactoryPanel />
               </ErrorBoundary>
             )}
 

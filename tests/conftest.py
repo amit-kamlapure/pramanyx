@@ -222,6 +222,8 @@ for _dir_env in ("PRAMANYX_EPISODES_DIR", "PRAMANYX_MEMORY_DIR", "PRAMANYX_ACTIO
                  # MI-3 — snapshot bytes. The DB name above is not enough on its own: a
                  # dir-keyed store needs the directory family too, a lesson paid twice.
                  "PRAMANYX_DATASETS_DIR",
+                 # The organisation's own model — bases, runs and trained models (`training/base.py`).
+                 "PRAMANYX_MODELS_DIR",
                  "PRAMANYX_SLACKBOTS_DIR", "PRAMANYX_STATE_DIR",
                  # AO-5 — a custom agent's HTTP-door keys (`custom_agents/keys.py`) and the
                  # Teams bot records (`teamsbots/store.py`), added in the SAME COMMIT.

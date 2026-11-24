@@ -215,6 +215,21 @@ a thing that wave builds — the word is fixed before the thing exists, so it ar
 The agent that runs deep analyses stays **Analyst**; the human RBAC role renamed to
 **Editor** so the word means one thing. The stored grant value is still `"analyst"`.
 
+## The AI Factory
+
+| Use this | For | Don't use |
+|---|---|---|
+| **AI Factory** | Where the organisation's own models are made, measured and put in service (Define ▸ AI Factory, `pramanyx/training/`; named by the user 2026-11-24, it was "Own model" the day before). Its tabs: Overview · Recipes · Environments · Runs · Models · Playground (no Engines tab: the page does not say how a model is trained, the user 2026-11-24) | Own model (as the page's name), model studio, training centre, fine-tuning |
+| **Model** (in the AI Factory) | One the AI Factory made: numbered (Model 3), a draft when trained, **in service** once an admin puts it there (served through Ollama, pickable as a model), withdrawn with its record kept | fine-tune (as a user word), custom model, private LLM, adapter (it is a whole model), "our AI" |
+| **Recipe** | What a model is for: the environment it learns from, how it is taught (by example, by preference, by reward), how it is measured — each saying whether it can be made now (`training/recipes.py`) | template, use case, blueprint |
+| **Environment** (in the AI Factory) | A set of tasks, how the model is run on them, and how each answer is scored; the same environment teaches and measures, and the expected answers never leave the platform (`training/recipes.py`) | dataset (a dataset is a schema or a table), gym, benchmark (a benchmark only measures) |
+| **Engine** | What trains a model: Built-in, LlamaFactory, TRL — each a door that says whether it runs here (`training/engines.py`); a new run offers the ready ones as a dropdown, and one not ready is not offered | framework, backend, trainer (in anything a reader sees) |
+| **Teach by example · preference · reward** | The three ways a model is taught: questions with their answers (SFT); an answer a person fixed over the one they rejected (DPO); a score from checking each attempt (reinforcement learning — offered only where the model passes 10–80% of an environment's tasks) | SFT, DPO, RL, GRPO (in anything a reader sees) |
+| **Base** | The small pretrained model an own model starts from, named by an admin and fetched into the state folder — never shipped | foundation model, checkpoint (in anything a reader sees), seed model |
+| **Training set** | What an own model learns: what the organisation settled, as questions and answers by template, each citing its source (`learning/knowledge.py`; kinds `knowledge` · `knowledge_golden` in the dataset plane) | corpus, dataset (a dataset is a schema or a table, or a dashboard's data), training data |
+| **Held out** | The phrasing of each source a model is never trained on and is measured by — its recall before and after training | test set, validation set, golden (that is the NL→SQL golden set) |
+| **Not settled** | What a training set teaches as unknown: a metric that is a draft or retired, a word nothing approved defines, a question outside what the organisation settled — so the model says so instead of inventing | refusal, guardrail, out-of-domain |
+
 ## The explorer's passes
 
 An exploration run is one of three **jobs**, and every surface — the log, the job title, the Catalog's

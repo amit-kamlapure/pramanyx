@@ -97,6 +97,7 @@ Every piece of the platform's own state, by class (Track B3 of the 10× program,
 | `saved_queries.db` | `pramanyx/savedquery/store.py` | saved queries |
 | `learning.db` | `pramanyx/learning/store.py` | datasets' records; their bytes are in `datasets` |
 | `datasets` | `pramanyx/learning/store.py` | datasets' bytes |
+| `models` | `pramanyx/training/base.py` | the organisation's own model: the base it starts from, each training run's files, and the models trained |
 | `sheets` | `pramanyx/sheets/files.py` | spreadsheets: their files and their edits |
 | `uploads` | `pramanyx/connectors/file/local_upload.py` | files people uploaded as connections |
 | `documents` | `pramanyx/knowledge/blobs.py` | documents people uploaded, as uploaded |

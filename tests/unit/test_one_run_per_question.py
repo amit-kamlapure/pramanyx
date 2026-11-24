@@ -460,6 +460,17 @@ def test_two_wordings_resolve_to_one_spec_and_different_questions_do_not():
     # model's spelling of one measure is not a different question
     reworded = {**INTAKE, "metric_sql": "sum( oi.sale_price )", "metric_table": "`order_items`"}
     assert spec_of(INTAKE) == spec_of(reworded), "the model's spelling is not a different question"
+    # live 2026-11-24: one wording's intake observed June against May, the other's May against June — the same change
+    swapped = {**INTAKE, "observation_start": INTAKE["comparison_start"], "observation_end": INTAKE["comparison_end"],
+               "comparison_start": INTAKE["observation_start"], "comparison_end": INTAKE["observation_end"]}
+    assert spec_of(swapped) == spec_of(INTAKE), "the same two periods, either way round"
+    # live 2026-11-24: one wording's intake added a driver contrast and a relationship pair to a change over time
+    reached = {**INTAKE, "comparison_segment_sql": "(order_items.status='Returned')",
+               "relationship_left_sql": "order_items.sale_price", "relationship_right_sql": "products.category"}
+    assert spec_of(reached) == spec_of(INTAKE), "a change between two periods asks for that change"
+    across = {**INTAKE, "cross_sectional": True, "comparison_start": "", "comparison_end": ""}
+    assert spec_of({**across, "comparison_segment_sql": "(is_late)"}) != spec_of(across), \
+        "across groups, the contrast is the question"
     by_category = {**INTAKE, "named_dimensions": ["products.category"]}
     assert spec_of(by_category) != spec_of(INTAKE), \
         "a why broken down by category pins category first: not the analysis of the why that named nothing"
@@ -1267,3 +1278,18 @@ def test_a_job_whose_wait_for_a_slot_fails_still_ends():
         await asyncio.sleep(0.05)
         return k.ledger.job_get(jid)["state"]
     assert asyncio.run(main()) == JobState.FAILED and ended == [JobState.FAILED]
+
+
+
+def test_each_run_says_the_spec_it_resolved_part_by_part(caplog):
+    import logging
+
+    from pramanyx.agent import one_run
+
+    mine, _ = one_run.take(Q, "conn-1", name_run=_running)
+    with caplog.at_level(logging.INFO, logger="pramanyx.agent.one_run"):
+        one_run.Ask(connection_id="conn-1", claim=mine).after_intake(INTAKE)
+    said = [r.getMessage() for r in caplog.records if "resolved its spec" in r.getMessage()]
+    assert said and mine.inv_id in said[0]
+    parts = json.loads(said[0].split(" — ", 1)[1])
+    assert list(parts) == list(one_run.SPEC_PARTS) and parts["shape"] == "diagnose"

@@ -123,7 +123,9 @@ def _isolate_stores() -> None:
                      "PRAMANYX_AGENTS_DIR", "PRAMANYX_TEAMSBOTS_DIR",   # AO-5: agent keys, Teams bots
                      "PRAMANYX_AUTOMATIONS_DIR", "PRAMANYX_MCPSERVERS_DIR",
                      # MI-3's snapshot bytes — the directory half of the same store.
-                     "PRAMANYX_DATASETS_DIR"):
+                     "PRAMANYX_DATASETS_DIR",
+                     # the organisation's own model: bases, runs, trained models
+                     "PRAMANYX_MODELS_DIR"):
         os.environ.setdefault(_dir_env, tmp)
     # IN-4 — the data home. A deployment that has run `migrate-state` keeps its marker in
     # ~/.pramanyx, and the marker moves the default of every generated store this list does not

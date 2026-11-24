@@ -31,7 +31,10 @@ _DB_PATH = resolve_db_path("PRAMANYX_LEARNING_DB", Path("data/learning.db"))
 #: (`{context, options, label}` selection rows, exporters.export_decisions): a separate
 #: kind pair rather than reusing sft/golden because MI-4's entry gates COUNT golden
 #: examples, and a decision row inflating the nl2sql gate would corrupt that measurement.
-KINDS = ("sft", "dpo", "golden", "choice", "choice_golden", "sft_bronze", "dpo_repair")
+#: `knowledge` / `knowledge_golden` are the organisation's settled knowledge as questions and answers
+#: (`learning/knowledge.py`), its own pair for the same reason.
+KINDS = ("sft", "dpo", "golden", "choice", "choice_golden", "sft_bronze", "dpo_repair",
+         "knowledge", "knowledge_golden")
 
 
 def datasets_dir() -> Path:
