@@ -1907,6 +1907,10 @@ class _CoreCancelled(BaseException):
     tolerate(...)`` blocks, and an ``Exception``-derived cancellation would be
     swallowed by the nearest one and the core would sail on.
     """
+    #: A cancel of the turn from outside it — its reader leaving, or the job carrying it cancelled — read by a run
+    #: that records how it stopped (`agent/analyst._say_how_it_stopped`), which says it as a cancel rather than
+    #: naming this class.
+    cancels = True
 
 
 def _note_unanswered(connection_id: str, schema: Optional[str], sql: str, signal: str, error: str) -> None:
@@ -4063,6 +4067,7 @@ async def _stream_converse(
     dashboard: Optional[tuple[str, ...]] = None,
     person: str = "",
     asked_again: bool = False,
+    agent_call: bool = False,
 ) -> AsyncGenerator[str, None]:
     """Serve one `/ask` turn as a CONVERSATION (SP-14; unconditional since 2026-10-28).
 
@@ -4280,7 +4285,8 @@ async def _stream_converse(
                               on_step=_on_step, tool_emit=_forward,
                               session_id=session_id, canvas_id=canvas_id, agent=_agent_rec,
                               trace_id=_decision_trace, schema_scope=schema_scope, shape=shape,
-                              sheet=sheet, dashboard=dashboard, person=person)
+                              sheet=sheet, dashboard=dashboard, person=person,
+                              agent_call=agent_call and not asked_again)
         except _CoreCancelled:
             raise
         except Exception as _exc:
@@ -5734,6 +5740,7 @@ async def _investigation_job_streamed(
     purpose: str = "",
     allow_clarify: bool = True,
     session_id: str = "",
+    claim: Any = None,
 ) -> AsyncGenerator[str, None]:
     """Run the investigation as a first-class supervised kernel job (K1).
 
@@ -5757,6 +5764,7 @@ async def _investigation_job_streamed(
         ),
         session_id=session_id, conn_id=connection_id, canvas_id=canvas_id,
         payload={"question": question[:200], **({"purpose": purpose} if purpose else {})},
+        claim=claim,
     ):
         yield sse
 
@@ -5768,6 +5776,7 @@ async def _job_streamed_body(
     conn_id: Optional[str] = None,
     canvas_id: Optional[str] = None,
     payload: Any = None,
+    claim: Any = None,
 ) -> AsyncGenerator[str, None]:
     """The K1 bridge, generalised (FL-1b): run any SSE body inside a supervised
     kernel job and drain its frames to the request over an in-process queue.
@@ -5784,8 +5793,13 @@ async def _job_streamed_body(
     """
     from pramanyx.kernel.jobs import kernel
     queue: asyncio.Queue = asyncio.Queue()
-    # The queue serves THIS request; the hub serves every later one.
-    resume_run = _open_resume_run(session_id)
+    try:
+        # The queue serves THIS request; the hub serves every later one.
+        resume_run = _open_resume_run(session_id)
+    except BaseException:
+        if claim is not None:
+            claim.end()
+        raise
 
     async def _drive() -> None:
         err: Optional[str] = None
@@ -5806,6 +5820,8 @@ async def _job_streamed_body(
                                      else {}).get("investigation_id") or None)
                     except Exception:
                         seen_inv = None
+                    if seen_inv and claim is not None:
+                        claim.found(seen_inv)      # a repeat of this question is handed this run from here on
                 said = _error_said(sse) or said
                 _head, _receipt = _turn_facts(sse)
                 headline, receipt = _head or headline, _receipt or receipt
@@ -5820,6 +5836,8 @@ async def _job_streamed_body(
             stop_exc = exc
             raise
         finally:
+            if claim is not None:
+                claim.end()                        # the run is over: its question may start again — first, so nothing below can keep it held
             why = ""
             if seen_inv:
                 # Terminal consistency for ANY body the bridge carries, however it
@@ -5832,11 +5850,11 @@ async def _job_streamed_body(
                 # called it orphaned). Idempotent: a row already terminal — complete,
                 # failed, or paused for a person — is left alone.
                 try:
-                    _row = get_investigation(seen_inv)
-                    if _row and _row.get("status") == "running":
-                        from pramanyx.kernel.jobs import describe_end, describe_stop
-                        why = describe_stop(stop_exc) if stop_exc is not None else describe_end(said)
-                        fail_investigation(seen_inv, status="failed", reason=why)
+                    from pramanyx.db.history import fail_if_running
+                    from pramanyx.kernel.jobs import describe_end, describe_stop
+                    _why = describe_stop(stop_exc) if stop_exc is not None else describe_end(said)
+                    if fail_if_running(seen_inv, _why):
+                        why = _why
                 except Exception:
                     logger.debug("bridge reconcile failed for %s", seen_inv, exc_info=True)
             if not said and (stop_exc is not None or why):
@@ -5902,13 +5920,20 @@ async def _job_streamed_body(
     for _carried in (_TURN_END.get(), _TURN_ENVELOPE.get()):
         if _carried is not None:
             _carried.carried = True
-    job_id = await kernel().submit(
-        "investigation", _drive,
-        conn_id=conn_id, canvas_id=canvas_id,
-        # R10 — the starter's purpose tag rides the job row, so Fleet/jobs
-        # are queryable per purpose.
-        payload=payload,
-    )
+    try:
+        job_id = await kernel().submit(
+            "investigation", _drive,
+            conn_id=conn_id, canvas_id=canvas_id,
+            # R10 — the starter's purpose tag rides the job row, so Fleet/jobs
+            # are queryable per purpose.
+            payload=payload,
+            # A job cancelled while still queued never runs `_drive`: the kernel's end lets its claim go.
+            on_finish=(lambda _job, _state: claim.end()) if claim is not None else None,
+        )
+    except BaseException:
+        if claim is not None:
+            claim.end()                            # no job took the run: nothing holds its question
+        raise
     logger.debug("investigation job %s submitted", job_id)
     while True:
         try:
@@ -6345,6 +6370,27 @@ async def record_overview_drill(req: OverviewDrillRequest) -> None:
     await asyncio.to_thread(record_drill, cid, req.lens, req.table)
 
 
+async def _claim_question(req: "AskRequest", conn_id: str):
+    """``(claim, under_way)`` for an agent's plain deep ask (`agent/one_run.take`): a claim for the run about to start,
+    or the run of this question already under way — waited on here, on the loop, while it is still starting."""
+    from pramanyx.agent import one_run
+    deadline = asyncio.get_running_loop().time() + one_run.WAIT_FOR_ID_S
+    while True:
+        mine, held = one_run.take(req.question, conn_id, canvas_id=req.canvas_id or "", schema=req.schema_name or "")
+        if mine is not None:
+            return mine, None
+        if held.inv_id or asyncio.get_running_loop().time() >= deadline:
+            return None, held.under_way()
+        await asyncio.sleep(0.25)
+
+
+def _already_running(under_way: dict) -> str:
+    """The frame an agent's repeat is handed instead of a second run: the run under way, by its id, said."""
+    from pramanyx.agent import one_run
+    return _sse("already_running", {"investigation_id": under_way.get("id") or None,
+                                    "already_running": one_run.said(under_way)})
+
+
 async def _stream_ask(req: "AskRequest", request: Request, conn_id: str) -> AsyncGenerator[str, None]:
     """The unified door: decide depth, emit the `route` receipt, then delegate to a body.
 
@@ -6474,6 +6520,16 @@ async def _stream_ask(req: "AskRequest", request: Request, conn_id: str) -> Asyn
         _route_ev["subject"] = _subject.receipt(carried=_use_converse or _use_analyst)
     yield _sse("route", _route_ev)
 
+    # An agent's call (the coworker) asking again for a deep analysis it already has under way is handed that run, not a
+    # second one beside it (`agent/one_run.py`; 2026-11-24: the coworker read a run that outlived its call a few times,
+    # took it for stuck and asked again). Only a plain ask: a fresh run, an "ask again", a follow-up and a drill from a
+    # finding start their own, as a person's ask in the app always does.
+    from pramanyx.rbac.agent_gate import is_agent_request
+    _agent_call = request is not None and is_agent_request(request)
+    _plain_ask = (not req.skip_cache and (req.purpose or "") != "ask_again" and not req.insight_id
+                  and not req.seed_sql and not (req.seed_context or "").strip() and not req.history)
+    _one_run = _agent_call and _plain_ask and getattr(route, "mode", "") != "explore"
+
     if _use_analyst:
         # CA-3 — the analyst loop serves the deep turn: intake anchors the spec (the
         # origin resolution below is the same one the phase script seeds, so a drill
@@ -6503,14 +6559,23 @@ async def _stream_ask(req: "AskRequest", request: Request, conn_id: str) -> Asyn
         # Responder's here, a quick answer's, stopped deep runs at its time
         # budget (1200s on the live install, 2026-11-24 e4796f93) while the
         # Agents page said the Analyst had 1800s.
+        _claim, _under_way = await _claim_question(req, conn_id) if _one_run else (None, None)
+        if _under_way is not None:
+            yield _already_running(_under_way)
+            return
         async for sse in _job_streamed_body(
             lambda: _metered_stream(_analyst_body),
             session_id=req.session_id, conn_id=conn_id, canvas_id=req.canvas_id,
             payload={"question": req.question[:200], "body": "analyst",
                      **({"purpose": req.purpose} if req.purpose else {})},
+            claim=_claim,
         ):
             yield sse
     elif route.depth == "deep" and not _use_converse:
+        _claim, _under_way = await _claim_question(req, conn_id) if _one_run else (None, None)
+        if _under_way is not None:
+            yield _already_running(_under_way)
+            return
         async for sse in _investigation_job_streamed(
             req.question, conn_id, request,
             hitl=req.hitl, skip_cache=req.skip_cache, canvas_id=req.canvas_id,
@@ -6523,6 +6588,7 @@ async def _stream_ask(req: "AskRequest", request: Request, conn_id: str) -> Asyn
             allow_clarify=req.allow_clarify,
             purpose=req.purpose,  # R10 — starter provenance on the job row + run record
             session_id=req.session_id,  # CA-0 — the deep run is filed under the conversation
+            claim=_claim,
         ):
             yield sse
     else:
@@ -6547,6 +6613,8 @@ async def _stream_ask(req: "AskRequest", request: Request, conn_id: str) -> Asyn
                              person=_asker(request),
                              # Ask again — answered afresh, not from what the conversation already holds
                              asked_again=(req.purpose or "") == "ask_again",
+                             # an agent's plain ask: its deep tool hands back a run of the same question under way
+                             agent_call=_agent_call and _plain_ask,
                              # CI-4 — a seeded/dossier turn hands its finding to the
                              # conversation instead of bypassing it; SP-15 — a turn
                              # summoned from an object hands that object's live state.
@@ -7150,6 +7218,12 @@ def said_asker(principal_ref: str) -> str:
     return raw if raw.startswith(_DOOR_PREFIXES) else f"said:{raw}"
 
 
+def is_said_asker(who: str) -> bool:
+    """Whether ``who`` is a label :func:`said_asker` made — a door's or a caller's word for who asks — and so not a
+    person."""
+    return str(who or "").strip().lower().startswith((*_DOOR_PREFIXES, "said:"))
+
+
 def _early(inv_id: str) -> dict:
     """``{"answered_early": <what it says>}`` on a report the person had answered now (punch list 89), else nothing."""
     from pramanyx.agent import answer_now
@@ -7271,7 +7345,38 @@ def get_investigation_detail(inv_id: str, principal=Depends(get_principal)):
     inv = get_investigation(inv_id)
     if not inv:
         raise HTTPException(status_code=404, detail="Investigation not found")
+    if inv.get("status") == "running":
+        inv["progress"] = _progress_of(inv)
     return inv
+
+
+def _progress_of(inv: dict) -> dict:
+    """How far a running run has got — how long it has run, its steps so far and the last one — read off the steps its
+    trace records (`session_log` STEP). A run read back while it goes on reads as moving, not stuck: the coworker read
+    a bare 'running' four times in half a minute and asked the question again (2026-11-24)."""
+    from pramanyx.util.time import age_hours
+
+    out: dict = {"steps": 0, "last_step": "", "running_for_s": None}
+    hours = age_hours(str(inv.get("started_at") or ""))
+    if hours < 9999:                                        # 9999: a start time that does not parse
+        out["running_for_s"] = max(0, int(hours * 3600))
+    trace_id = inv.get("trace_id") or ""
+    if not trace_id:
+        return out
+    try:
+        from pramanyx.kernel.ledger import Ledger
+        from pramanyx.obs import session_log
+        from pramanyx.org.context import current_org_id
+        steps = Ledger.default().session_events(trace_id=trace_id, kind=session_log.STEP,
+                                                org_id=current_org_id() or None, limit=500, ascending=True)
+    except Exception as exc:  # noqa: BLE001 — a run's progress is a courtesy; its status stands without it
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "a running run's progress could not be read", counter="investigations.progress")
+        return out
+    out["steps"] = len(steps)
+    if steps:
+        out["last_step"] = str((steps[-1].get("payload") or {}).get("tool") or steps[-1].get("name") or "")
+    return out
 
 
 @router.get("/investigations/{inv_id}/graph")

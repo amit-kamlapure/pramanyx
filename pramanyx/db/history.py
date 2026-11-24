@@ -332,7 +332,7 @@ def pause_investigation(inv_id: str) -> None:
 
 
 def fail_investigation(inv_id: str, status: InvStatus = "timed_out",
-                       reason: str = "") -> None:
+                       reason: str = "", *, when_running: bool = False) -> bool:
     """Mark an investigation timed_out or failed, and say WHY.
 
     Deliberately does NOT index — partial results must not pollute the cache.
@@ -346,11 +346,15 @@ def fail_investigation(inv_id: str, status: InvStatus = "timed_out",
     """
     c = _conn()
     ensure_once(c, _ensure_schema)
-    c.execute(
-        "UPDATE investigations SET completed_at = ?, status = ?, error = ? WHERE id = ?",
+    cur = c.execute(
+        "UPDATE investigations SET completed_at = ?, status = ?, error = ? WHERE id = ?"
+        + (" AND status = 'running'" if when_running else ""),
         (_now(), status, str(reason or "")[:2000], inv_id),
     )
     c.commit()
+    if when_running and not cur.rowcount:
+        c.close()
+        return False          # it ended some other way first; what it recorded stands
     _conn_scope, _canvas_scope = _inv_scope(c, inv_id)
     c.close()
     _emit_lifecycle(inv_id, "investigation.failed", conn_id=_conn_scope,
@@ -365,6 +369,7 @@ def fail_investigation(inv_id: str, status: InvStatus = "timed_out",
         from pramanyx.kernel.errors import tolerate
         tolerate(exc, "the run failed and was recorded; its typed verdict could not be booked",
                  counter="inquiry.verdict", conn_id=_conn_scope or None)
+    return True
 
 
 def save_chat_turn(
@@ -1494,6 +1499,19 @@ def asked_before(question: str, connection_id: str, *, scan: int = 2000) -> dict
                            "asked_at": latest.get("started_at", "")}}
     except Exception:
         return empty
+
+
+def fail_if_running(inv_id: str, reason: str) -> bool:
+    """Mark a run failed with ``reason`` when — and only when — it is still 'running': a run that completed, failed, or
+    paused for a person keeps what it recorded, even one that completed a moment before (the test and the write are
+    one statement). True when this call ended it. The one test every caller that reconciles a run's end makes (the K1
+    bridge, `agent/analyst.run_analyst`)."""
+    return bool(inv_id) and fail_investigation(inv_id, status="failed", reason=reason, when_running=True)
+
+
+def normalized_question(q: str) -> str:
+    """A question as two asks of it compare (:func:`_normalize_question`) — public, for the doors that match one."""
+    return _normalize_question(q)
 
 
 def investigation_counts_since(days: int = 7) -> dict:

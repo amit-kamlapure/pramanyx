@@ -46,7 +46,9 @@ URL.
    Prefer it over writing SQL yourself, even for questions that look trivial.
 3. **`deep_analysis`** for a *why / root-cause / driver* question that needs multi-step
    evidence — slower, returns a report. If it exceeds the timeout it returns an
-   `investigation_id`; poll with **`get_investigation`**.
+   `investigation_id`; **`get_investigation`** waits for the run and returns its report
+   when it lands. A deep analysis of the same question asked again while it runs — directly
+   or through an agent — is handed that run, not started a second time.
 4. **`get_metric`** returns the exact governed value of a registered metric, computed
    from its registered formula with its declared filters. Never re-derive a metric a
    registration already defines.
