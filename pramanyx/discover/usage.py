@@ -115,7 +115,9 @@ def _seed_seen(now: float) -> None:
             p = e.get("payload") or {}
             try:
                 age = (wall - datetime.fromisoformat(str(e.get("at") or ""))).total_seconds()
-            except ValueError:
+            except ValueError as exc:
+                from pramanyx.kernel.errors import tolerate
+                tolerate(exc, "an open in the journal has no time to read back", counter="discover.opened_seed")
                 continue
             key = (str(p.get("by") or ""), str(p.get("kind") or ""), str(p.get("connection_id") or ""), str(p.get("ref") or ""))
             _seen[key] = max(_seen.get(key, -AGAIN_AFTER_S - 1), now - max(0.0, age))
@@ -174,7 +176,10 @@ def _kept_reads(org: Optional[str], connection_id: str) -> Optional[tuple[float,
             return None
         age = (datetime.now(timezone.utc) - datetime.fromisoformat(str(kept.get("at") or ""))).total_seconds()
         return time.monotonic() - max(0.0, age), kept["reads"]
-    except Exception:  # noqa: BLE001 — nothing kept is nothing to show; the reads are read again
+    except Exception as exc:  # noqa: BLE001 — nothing kept is nothing to show; the reads are read again
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, f"discover: the kept reads of {connection_id}'s tables could not be read back",
+                 counter="discover.reads_kept")
         return None
 
 

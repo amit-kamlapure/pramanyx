@@ -175,8 +175,8 @@ def _ensure_schema(c: sqlite3.Connection) -> None:
 def _table_pattern(names: list[str]):
     """A statement's reads of these tables: each name where a table stands — after FROM or JOIN, or after a comma in a
     FROM list — bare, quoted, or under its schema (and project), in any case; group 1 is the name. A whole word anywhere
-    counted an alias as a read (``... AS orders FROM order_items`` read ``orders``; `web/lib/catalogSummary.ts`), and
-    Discover's Tables read most and the Ontology's reads both said so (2026-11-24)."""
+    counted an alias as a read (``... AS t FROM t_lines`` read ``t``; `web/lib/catalogSummary.ts`), and Discover's
+    Tables read most and the Ontology's reads both said so (2026-11-24)."""
     import re
     alternatives = "|".join(re.escape(n) for n in names)
     return re.compile(r"(?:\bfrom|\bjoin|,)\s+(?:[`\"\[]?[a-z0-9_$-]+[`\"\]]?\.){0,3}[`\"\[]?(" + alternatives
