@@ -134,6 +134,8 @@ describe("Define ▸ AI Factory", () => {
     const form = await screen.findByTestId("ai-factory-new-run");
     expect(form.textContent).toContain("LlamaFactory");
     expect(form.textContent).toContain("Built-in");
+    // No LoRA run on LlamaFactory has been timed yet: the estimate says whose time it borrows, never a guessed factor.
+    expect(form.textContent).toContain("roughly 5 min, going by Model 1 (Built-in, every weight)");
     expect(screen.getByRole("radio", { name: "LoRA" }).getAttribute("aria-checked") ?? screen.getByRole("radio", { name: "LoRA" }).getAttribute("data-state")).toMatch(/true|checked|on/);
   });
 });

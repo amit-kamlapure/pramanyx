@@ -71,6 +71,8 @@ export function EnvironmentsTab({ data, onChanged }: { data: FactoryData; onChan
   );
 }
 
+/** A name and its count on one line: a long name wraps under itself, never pushing the count to a line of its own. */
+const LIST_ROW: React.CSSProperties = { display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, padding: "4px 0" };
 const GRID: React.CSSProperties = { display: "grid", gridTemplateColumns: "minmax(140px,1.2fr) minmax(110px,1fr) minmax(150px,1.3fr) 110px minmax(160px,1.3fr)", gap: 12, minWidth: 720 };
 
 function tasksWord(e: FactoryEnvironment): string {
@@ -119,16 +121,16 @@ function EnvironmentDetail({ env, data, onChanged }: { env: FactoryEnvironment; 
           <div>
             <div className="aug-label" style={{ marginBottom: 4 }}>Holds{plan ? ` · ${formatCount(plan.rows.train)} questions` : ""}</div>
             {plan ? Object.entries(plan.sources).sort((a, b) => b[1] - a[1]).map(([k, n], i) => (
-              <div key={k} className="aug-fs-chrome" style={{ ...ROW, justifyContent: "space-between", padding: "4px 0", ...(i ? RULE : {}) }}>
-                <span>{kindWord(k)}</span><span style={{ ...NUM, color: "var(--t2)" }}>{formatCount(n)}</span>
+              <div key={k} className="aug-fs-chrome" style={{ ...LIST_ROW, ...(i ? RULE : {}) }}>
+                <span style={{ minWidth: 0 }}>{kindWord(k)}</span><span style={{ ...NUM, color: "var(--t2)", flexShrink: 0 }}>{formatCount(n)}</span>
               </div>
             )) : <Empty>Reading the sources…</Empty>}
           </div>
           <div>
             <div className="aug-label" style={{ marginBottom: 4 }}>Leaves out</div>
             {plan?.withheld.length ? plan.withheld.map((w, i) => (
-              <div key={w.reason} className="aug-fs-chrome" style={{ ...ROW, justifyContent: "space-between", padding: "4px 0", ...(i ? RULE : {}) }}>
-                <span>{w.reason}</span><span style={{ ...NUM, color: "var(--t2)" }}>{formatCount(w.count)}</span>
+              <div key={w.reason} className="aug-fs-chrome" style={{ ...LIST_ROW, ...(i ? RULE : {}) }}>
+                <span style={{ minWidth: 0 }}>{w.reason}</span><span style={{ ...NUM, color: "var(--t2)", flexShrink: 0 }}>{formatCount(w.count)}</span>
               </div>
             )) : <Empty>{plan ? "Nothing — every source is in." : "Reading the sources…"}</Empty>}
           </div>

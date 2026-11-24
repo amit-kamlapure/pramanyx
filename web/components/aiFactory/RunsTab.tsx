@@ -6,6 +6,7 @@
 import { useState } from "react";
 
 import { Sparkline } from "@/components/brief/Sparkline";
+import { useMeasured } from "@/components/dashboards/cellBox";
 import { Card, Chip, Empty, Facts, MUTED, NUM, ROW, RULE } from "@/components/clarity/kit";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -68,10 +69,15 @@ function NewRun({ data, running, onChanged }: { data: FactoryData; running: bool
   const why = !view.allowed ? "the organisation does not allow it yet" : !view.setup.ready ? "this install cannot train yet"
     : !view.base?.present ? "fetch a base on the Engines tab" : !node ? "build the training set on the Environments tab"
     : !readyEngines.some(e => e.id === engine) ? "the engine is not ready here" : "";
-  // About how long: the last model's seconds per question-epoch, scaled — said as an estimate, or not at all.
-  const last = view.models.find(m => m.seconds && m.settings.epochs && m.training_set.train?.row_count);
-  const perUnit = last ? (last.seconds ?? 0) / ((last.settings.epochs ?? 1) * (last.training_set.train?.row_count ?? 1)) : null;
-  const estimate = perUnit && node ? perUnit * node.row_count * (Number(epochs) || 1) * (method === "lora" ? 0.6 : 1) : null;
+  // About how long: a timed model's seconds per question-epoch, scaled — one made the same way when there is one; else
+  // the nearest, and the line says whose time it borrows. No factor is guessed between engines or methods: on this Mac
+  // LoRA through LlamaFactory ran slower per token than every weight through the built-in loop.
+  const timed = view.models.filter(m => m.seconds && m.settings.epochs && m.training_set.train?.row_count);
+  const same = timed.find(m => (m.engine ?? "builtin") === engine && m.settings.method === method);
+  const from = same ?? timed[0];
+  const perUnit = from ? (from.seconds ?? 0) / ((from.settings.epochs ?? 1) * (from.training_set.train?.row_count ?? 1)) : null;
+  const estimate = perUnit && node ? perUnit * node.row_count * (Number(epochs) || 1) : null;
+  const borrowed = from && !same ? `going by Model ${from.number} (${engineWord(from.engine)}, ${from.settings.method === "lora" ? "LoRA" : "every weight"})` : "";
   const notYet = (engines?.engines ?? []).filter(e => !readyEngines.includes(e) && (e.id === "builtin" || e.id === "llamafactory"));
 
   return (
@@ -98,7 +104,7 @@ function NewRun({ data, running, onChanged }: { data: FactoryData; running: bool
           <Input value={rate} onChange={e => setRate(e.target.value)} style={{ width: 96 }}
             placeholder={method === "lora" ? "4e-4" : String(view.defaults.learning_rate)} disabled={running} />
         </label>
-        {estimate != null && <span className="aug-fs-sm" style={MUTED}>about {minutes(estimate)} · nothing leaves the install</span>}
+        {estimate != null && <span className="aug-fs-sm" style={MUTED}>{borrowed ? "roughly" : "about"} {minutes(estimate)}{borrowed ? `, ${borrowed}` : ""} · nothing leaves the install</span>}
       </div>
       {notYet.length > 0 && (
         <div className="aug-fs-sm" style={{ ...MUTED, marginTop: 8 }}>
@@ -131,13 +137,14 @@ function NewRun({ data, running, onChanged }: { data: FactoryData; running: bool
 
 function RunDetail({ run, running, onChanged, go }: { run: FactoryRun; running: boolean; onChanged: () => void; go: (t: FactoryTab, model?: number) => void }) {
   const last = run.last_step;
+  const [lossBox, box] = useMeasured<HTMLDivElement>();   // the curve takes its column's width, never pushes the page wider
   return (
     <Card label="The run" right={<span>{engineWord(run.settings.engine)} · {RUN_WORD[run.state] ?? run.state}</span>} testId="ai-factory-run-detail">
       <div className="aug-fs-chrome" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {last && <span style={NUM}>step {last.step} of {last.total}{last.loss != null ? ` · loss ${f2(last.loss)}` : ""}{last.tokens_per_s ? ` · ${formatCount(Math.round(last.tokens_per_s))} tokens/s` : ""}</span>}
         {run.losses.length > 1 ? (
-          <div role="img" aria-label={`Loss from ${run.losses[0]} to ${run.losses[run.losses.length - 1]}`}>
-            <Sparkline values={run.losses} width={520} height={72} color="var(--chart-1)" showDot={false} />
+          <div ref={lossBox} role="img" aria-label={`Loss from ${run.losses[0]} to ${run.losses[run.losses.length - 1]}`} style={{ minWidth: 0, height: 72 }}>
+            {box.width > 0 && <Sparkline values={run.losses} width={box.width} height={72} color="var(--chart-1)" showDot={false} />}
           </div>
         ) : running ? <span style={MUTED}>The first steps are on their way…</span> : null}
         <span style={ROW}>
