@@ -116,21 +116,6 @@ class PramanyxError(RuntimeError):
     (404) read cleanly rather than as raw stack traces."""
 
 
-#: Deep runs still being read after their caller stopped waiting (`deep_analysis`). Module-level, not per client: the
-#: loop keeps only weak references to tasks, and a client made for one tool call may be gone before its run ends.
-_CARRIED: "set[asyncio.Task]" = set()
-
-
-def _settle_quietly(task: "asyncio.Task") -> None:
-    """A deep run read on after its caller moved on: its outcome is the platform's record, so an error here is logged,
-    never raised into a loop nobody is awaiting."""
-    if task.cancelled():
-        return
-    exc = task.exception()
-    if exc is not None:
-        logger.warning("a deep analysis read in the background ended with %s", exc)
-
-
 class PramanyxClient:
     """An async client over the Pramanyx REST API.
 
@@ -467,8 +452,8 @@ class PramanyxClient:
         return acc
 
     async def _drive_deep(self, body: dict, acc: dict) -> None:
-        """Read a deep ``/ask`` stream to its end, folding each frame into ``acc`` as it lands — so a caller that stops
-        waiting still holds what arrived (the run's id first of all), and the door files the run's answer envelope."""
+        """Read a deep ``/ask`` stream, folding each frame into ``acc`` as it lands — so a caller that stops waiting
+        still holds what arrived, the run's id first of all."""
         async for ev in self._stream_sse("POST", "/ask", body, timeout=self.deep_timeout):
             t = ev.get("type")
             if t == "route" and ev.get("downgraded_from") == "deep":
@@ -532,17 +517,14 @@ class PramanyxClient:
         # The deadline is on the whole call, not on silence (2026-11-23, seen live: the analyst ran 11 minutes on a free
         # model; the stream's keep-alive every 20 s reset the read timeout, so the call ran past the shell's 6-minute
         # tool limit and the coworker said "Request timed out" over an analysis that then finished). At the deadline the
-        # caller gets the id to poll, and the stream is read to its end in the background. Not for the run's sake: it is
-        # a job on the platform and goes on without a reader (measured 2026-11-24, 0237d0fc), and its trace's end is the
-        # job's to write when its reader leaves (`routers/investigations._TurnEnd`). For the answer envelope: the door
-        # folds it from the frames its reader reads, and files it on the run's row only at the stream's end.
+        # stream is let go and the caller gets the id to poll. Nothing on the platform needs a reader: the run is a job
+        # (measured 2026-11-24, 0237d0fc), and the job writes the trace's end and files the answer envelope when the run
+        # ends (`routers/investigations._TurnEnd`, `_TurnEnvelope`). Until then this read on in the background, first on
+        # the belief that the run would stop without it, then for the trace and the envelope.
         run = asyncio.create_task(self._drive_deep(body, acc))
         try:
-            await asyncio.wait_for(asyncio.shield(run), timeout=self.deep_timeout)
+            await asyncio.wait_for(run, timeout=self.deep_timeout)
         except asyncio.TimeoutError:
-            _CARRIED.add(run)
-            run.add_done_callback(_CARRIED.discard)
-            run.add_done_callback(_settle_quietly)
             if acc["investigation_id"]:
                 acc["status"] = "running"
                 acc["message"] = (

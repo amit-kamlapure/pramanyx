@@ -189,21 +189,27 @@ def test_deep_analysis_accepts_deprecated_ada_report_wire_alias():
     assert res["report"] == {"findings": [{"x": 1}]}
 
 
-def test_a_deep_analysis_past_its_deadline_hands_back_the_id_and_is_read_to_its_end():
+def test_a_deep_analysis_past_its_deadline_hands_back_the_id_and_lets_the_stream_go():
     """2026-11-23, live: the analyst ran 11 minutes; the stream's keep-alive reset the read timeout, the call outran the
-    shell's tool limit, and the coworker said "Request timed out". The deadline is on the whole call now, and the stream is
-    read on in the background: the run is a job that goes on without it, but the answer envelope the door files on the
-    run's row is folded from what its reader reads, to the end."""
-    read_to_end: list[bool] = []
+    shell's tool limit, and the coworker said "Request timed out". The deadline is on the whole call now, and at it the
+    stream is let go: the run is a job, which writes its trace's end and files its answer envelope when it ends, read or
+    not (`test_deep_run_outlives_its_reader.py`). Until 2026-11-24 it was read on in the background for those two."""
+    read: list[str] = []
+    let_go: list[bool] = []
 
     async def slow():
-        yield _sse([{"type": "start", "investigation_id": "inv8", "body": "analyst"}]).encode()
-        await asyncio.sleep(0.5)
-        yield b": keep-alive\n\n"
-        await asyncio.sleep(0.3)
-        yield _sse([{"type": "answer_report", "answer_report": {"headline": "h"}, "investigation_id": "inv8"},
-                    {"type": "done"}]).encode()
-        read_to_end.append(True)
+        try:
+            yield _sse([{"type": "start", "investigation_id": "inv8", "body": "analyst"}]).encode()
+            read.append("start")
+            await asyncio.sleep(0.5)
+            yield b": keep-alive\n\n"
+            read.append("keep-alive")
+            await asyncio.sleep(0.3)
+            yield _sse([{"type": "answer_report", "answer_report": {"headline": "h"}, "investigation_id": "inv8"},
+                        {"type": "done"}]).encode()
+            read.append("report")
+        finally:
+            let_go.append(True)
 
     async def go():
         client = _client({"/ask": lambda req: httpx.Response(200, content=slow())})
@@ -211,9 +217,9 @@ def test_a_deep_analysis_past_its_deadline_hands_back_the_id_and_is_read_to_its_
         res = await client.deep_analysis("why did margin fall", "c")
         assert res["status"] == "running" and res["investigation_id"] == "inv8"
         assert "get_investigation('inv8')" in res["message"]
-        assert not read_to_end, "returned at the deadline, not at the end"
         await asyncio.sleep(1.2)
-        assert read_to_end == [True], "the run was left without a reader, and a deep /ask stops then"
+        assert "report" not in read, "nothing reads on after the caller has the id"
+        assert let_go == [True], "the stream is closed, not carried"
 
     _run(go())
 

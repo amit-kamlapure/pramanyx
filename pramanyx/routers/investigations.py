@@ -5793,8 +5793,11 @@ async def _job_streamed_body(
         seen_inv: Optional[str] = None
         said = ""          # the last error the body streamed — its own word on why it stopped
         headline, receipt = "", ""   # what the door's session log would have read, for a reader that left
+        envelope = _TURN_ENVELOPE.get()   # the turn's answer envelope, this job's to fold and file (`_TurnEnvelope`)
         try:
             async for sse in body_factory():
+                if envelope is not None:
+                    _fold(envelope.folder, sse)
                 if seen_inv is None and '"investigation_id"' in sse:
                     # Sniffed off the frames the way the session log does — the
                     # bridge carries bodies that never hand it an id directly.
@@ -5851,6 +5854,8 @@ async def _job_streamed_body(
                     told = _sse("error", _error_event(
                         stop_exc, message=why, reason="budget_exceeded" if budget else "",
                         agent_id=(current_charter_id() or "") if budget else ""))
+                    if envelope is not None:
+                        _fold(envelope.folder, told)
                     queue.put_nowait(told)
                     if resume_run is not None:
                         resume_run.publish(told)
@@ -5878,15 +5883,25 @@ async def _job_streamed_body(
                         _write_turn_end(turn, turn.outcome)
                 except Exception:
                     logger.debug("bridge could not write the run's end for a reader that left", exc_info=True)
+            if envelope is not None:
+                # Filed here, at the run's end, before the drainer is released: a reader still on the stream is handed
+                # the same envelope by the door, and one that left finds it on the run's row.
+                try:
+                    env = envelope.folder.finish()
+                    if env.has_answer:
+                        await _file_envelope(envelope, env.model_dump(), env.provenance.investigation_id)
+                except Exception:
+                    logger.debug("bridge could not file the run's answer envelope", exc_info=True)
             if resume_run is not None:
                 resume_run.close(error=err)
             # Always release the client drainer, even on cancellation/error.
             queue.put_nowait(_STREAM_END)
 
-    # The run is carried by its job from here: a reader that leaves hands the turn's end to it (`_TurnEnd`).
-    _turn = _TURN_END.get()
-    if _turn is not None:
-        _turn.carried = True
+    # The run is carried by its job from here: a reader that leaves hands the turn's end to it (`_TurnEnd`), and the
+    # job folds and files the turn's answer envelope whether or not anyone reads on (`_TurnEnvelope`).
+    for _carried in (_TURN_END.get(), _TURN_ENVELOPE.get()):
+        if _carried is not None:
+            _carried.carried = True
     job_id = await kernel().submit(
         "investigation", _drive,
         conn_id=conn_id, canvas_id=canvas_id,
@@ -6571,41 +6586,76 @@ async def stream_with_envelope(
     — a scheduled send, the export, a later reader — selects from the same structure.
     A stream that ends with nothing to say (no headline, body or error) emits nothing.
     """
-    import asyncio as _asyncio
-    import json as _json
-
     from pramanyx.answer.envelope import EnvelopeFolder
 
     import time as _time
 
     folder = EnvelopeFolder(question=question, connection_id=conn_id, session_id=session_id)
-    began = _time.monotonic()
-    async for event in stream:
-        if event.startswith("data: "):
-            try:
-                frame = _json.loads(event[6:])
-            except Exception:
-                frame = None
-            if isinstance(frame, dict) and frame.get("type"):
-                folder.feed(str(frame["type"]), frame)
-        yield event
+    turn = _TurnEnvelope(folder=folder, question=question, began=_time.monotonic())
+    token = _TURN_ENVELOPE.set(turn)
+    try:
+        async for event in stream:
+            if not turn.carried:          # once a job carries the run, it folds the frames — each once, read or not
+                _fold(folder, event)
+            yield event
+    finally:
+        _TURN_ENVELOPE.reset(token)
     env = folder.finish()
     if not env.has_answer:
         return
     payload = env.model_dump()
     yield _sse("envelope", {"envelope": payload})
-    inv_id = env.provenance.investigation_id
-    if inv_id:
-        try:
-            from pramanyx.db.history import attach_envelope
-            took_ms = int((_time.monotonic() - began) * 1000)
-            if await _asyncio.to_thread(attach_envelope, inv_id, payload, said=folder.said, asked=question,
-                                        took_ms=took_ms, steps=folder.steps):
-                _remember_answer(inv_id)
-        except Exception as exc:
-            from pramanyx.kernel.errors import tolerate
-            tolerate(exc, "envelope persistence is best-effort; it was already streamed",
-                     counter="ask.envelope_persist")
+    if not turn.carried:                  # a carried run's envelope is filed by its job, when the run ends
+        await _file_envelope(turn, payload, env.provenance.investigation_id)
+
+
+@dataclass
+class _TurnEnvelope:
+    """One ``/ask`` turn's answer envelope (CP-4): folded once, frame by frame, and filed once on the run's row.
+
+    The door (`stream_with_envelope`) folds and files it for a turn it reads to the end. A deep run is a job that goes
+    on without a reader (the K1 bridge, `_job_streamed_body`, sets ``carried``), so from then the job folds each frame
+    the run streams and files the envelope when the run ends — whether or not anyone is still reading. Until 2026-11-24
+    the door did both, so a run whose reader left (a closed panel, a coworker past its deadline) finished with no
+    envelope on its row, and the coworker had to keep reading every deep stream to its end for the envelope's sake.
+    """
+    folder: Any
+    question: str
+    began: float
+    carried: bool = False
+
+
+_TURN_ENVELOPE: contextvars.ContextVar[Optional[_TurnEnvelope]] = contextvars.ContextVar(
+    "pramanyx_turn_envelope", default=None)
+
+
+def _fold(folder: Any, event: str) -> None:
+    """Feed one SSE frame to the envelope folder; a keep-alive or a line that does not parse is not a frame."""
+    if not event.startswith("data: "):
+        return
+    try:
+        frame = json.loads(event[6:])
+    except Exception:
+        return
+    if isinstance(frame, dict) and frame.get("type"):
+        folder.feed(str(frame["type"]), frame)
+
+
+async def _file_envelope(turn: _TurnEnvelope, payload: dict, inv_id: str) -> None:
+    """File the folded envelope on the run's row (`attach_envelope`) and let the answer teach the few-shot memory."""
+    if not inv_id:
+        return
+    import time as _time
+    try:
+        from pramanyx.db.history import attach_envelope
+        took_ms = int((_time.monotonic() - turn.began) * 1000)
+        if await asyncio.to_thread(attach_envelope, inv_id, payload, said=turn.folder.said, asked=turn.question,
+                                   took_ms=took_ms, steps=turn.folder.steps):
+            _remember_answer(inv_id)
+    except Exception as exc:
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "envelope persistence is best-effort; it was already streamed",
+                 counter="ask.envelope_persist")
 
 
 def _remember_answer(inv_id: str) -> None:

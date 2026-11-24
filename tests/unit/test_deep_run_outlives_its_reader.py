@@ -404,3 +404,75 @@ async def test_a_quick_turn_whose_reader_leaves_is_still_recorded_as_stopped():
     finals = _trace(trace["id"], "final_response")
     assert len(finals) == 1 and finals[0]["ok"] is False
     assert len(_trace(trace["id"], "execution_error")) == 1
+
+
+# ── 6. the answer envelope: folded and filed by the job, read or not ──────────
+
+def _ask_door(body, inv_id: str):
+    """The whole deep turn as `build_ask_stream` composes it: the session log, the envelope, then what `_stream_ask`
+    yields on a deep turn — the route receipt, then the K1 bridge."""
+    from pramanyx.routers import investigations as inv
+
+    async def ask():
+        yield inv._sse("route", {"depth": "deep", "body": "analyst"})
+        async for frame in inv._job_streamed_body(lambda: body(), session_id="", conn_id="conn-drr",
+                                                  payload={"question": inv_id}):
+            yield frame
+    return inv.stream_with_session_log(
+        inv.stream_with_envelope(ask(), question="why did revenue fall?", conn_id="conn-drr"),
+        question="why did revenue fall?", conn_id="conn-drr", door="ask", depth="deep")
+
+
+def _deep_body(inv_id: str, go_on: "asyncio.Event | None" = None):
+    from pramanyx.db import history
+    from pramanyx.routers import investigations as inv
+
+    async def body():
+        yield f'data: {json.dumps({"type": "start", "investigation_id": inv_id, "connection_id": "conn-drr"})}\n\n'
+        for i, tool in enumerate(("baseline", "decompose"), 1):
+            yield inv._sse("converse_step", {"index": i, "tool": tool, "ok": True, "detail": "", "result_chars": 10})
+        if go_on is not None:
+            await go_on.wait()                    # the reader leaves here
+        history.complete_investigation(inv_id, report={"headline": "Revenue fell on fewer orders"}, hypotheses=[],
+                                       query_history=[], question="why did revenue fall?", connection_id="conn-drr",
+                                       skip_index=True)
+        yield inv._sse("answer_report", {"answer_report": {"headline": "Revenue fell on fewer orders",
+                                                           "executive_summary": "Orders fell 9%."},
+                                         "investigation_id": inv_id})
+        yield inv._sse("done", {"body": "analyst"})
+    return body
+
+
+async def _filed(inv_id: str) -> dict:
+    from pramanyx.db import history
+    return await _until(lambda: ((history.get_investigation(inv_id) or {}).get("report") or {}).get("envelope")
+                        and history.get_investigation(inv_id)["report"], "the envelope on the run's row")
+
+
+@pytest.mark.anyio
+async def test_a_run_whose_reader_left_still_files_its_answer_envelope():
+    """The envelope was folded from what the reader read and filed at the stream's end, so a run whose reader left
+    finished with none on its row — and the coworker read every deep stream on in the background to keep it."""
+    from pramanyx.db import history
+
+    inv_id = history.create_investigation("why did revenue fall?", "conn-drr")
+    go_on = asyncio.Event()
+    await _read_then_leave(_ask_door(_deep_body(inv_id, go_on), inv_id), [])
+    go_on.set()
+    report = await _filed(inv_id)
+    assert "Revenue fell on fewer orders" in json.dumps(report["envelope"])
+    assert report["envelope"]["provenance"]["investigation_id"] == inv_id
+    assert [s["tool"] for s in report["steps"]] == ["baseline", "decompose"], "every step, though nobody read them"
+    assert report["took_ms"] >= 0 and report["asked"] == "why did revenue fall?"
+
+
+@pytest.mark.anyio
+async def test_a_reader_that_stays_is_handed_the_envelope_the_run_filed_each_frame_folded_once():
+    from pramanyx.db import history
+
+    inv_id = history.create_investigation("why did revenue fall?", "conn-drr")
+    frames = _frames([f async for f in _ask_door(_deep_body(inv_id), inv_id)])
+    streamed = [f["envelope"] for f in frames if f["type"] == "envelope"]
+    report = await _filed(inv_id)
+    assert len(streamed) == 1 and report["envelope"] == streamed[0], "the reader is handed what is on the row"
+    assert [s["tool"] for s in report["steps"]] == ["baseline", "decompose"], "folded once, not by the door and the job"
