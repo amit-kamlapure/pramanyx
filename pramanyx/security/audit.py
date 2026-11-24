@@ -183,6 +183,12 @@ def _table_pattern(names: list[str]):
                       + r")[`\"\]]?(?![a-z0-9_])", re.IGNORECASE)
 
 
+#: A statement that ran. Its check writes a row of its own when it flags or refuses the statement — a flagged one is
+#: then run and audited again, a refused one never runs — so a count of reads counts the rows a run wrote, and a
+#: statement the checker flagged is read once, not twice.
+_RAN = "COALESCE(verdict, '') NOT IN ('suspicious', 'blocked')"
+
+
 class AuditLogger:
     """Append-only audit writer. Thread-safe via per-call connection open/close."""
 
@@ -243,7 +249,7 @@ class AuditLogger:
         org_id: str | None = None,
         now: float | None = None,
     ) -> list[dict[str, Any]]:
-        """How many audited statements on ``connection_id`` named one of ``tables`` in each of the last
+        """How many statements that ran on ``connection_id`` named one of ``tables`` in each of the last
         ``months`` calendar months, oldest first and every month present (a quiet month is 0, not absent).
         A table is named when it stands as a whole word in the statement — ``events`` does not count a
         read of ``event_log``; a schema-qualified ``shop.events`` counts. ``org_id`` is the tenant filter,
@@ -266,7 +272,7 @@ class AuditLogger:
         c = _connect()
         try:
             ensure_once(c, _ensure_schema)
-            clauses = ["connection_id = ?", "ts >= ?"]
+            clauses = ["connection_id = ?", "ts >= ?", _RAN]
             params: list[Any] = [connection_id, keys[0] + "-01T00:00:00Z"]
             if org_id is not None:
                 clauses.append("org_id = ?")
@@ -290,7 +296,7 @@ class AuditLogger:
         org_id: str | None = None,
         now: float | None = None,
     ) -> dict[str, dict[str, Any]]:
-        """For each key of ``tables_by_key`` (an entity, say), the audited statements on ``connection_id`` in the last
+        """For each key of ``tables_by_key`` (an entity, say), the statements that ran on ``connection_id`` in the last
         ``days`` days — today included — that named one of its tables where a table stands, as :meth:`reads_by_month`
         names them: ``{"reads": n, "last_read": the newest such statement's ts or None, "people": {who: how many they
         ran}, "runs": {trace id: how many of them that run issued}}``. A statement that names who it was run by or for
@@ -316,7 +322,7 @@ class AuditLogger:
         c = _connect()
         try:
             ensure_once(c, _ensure_schema)
-            clauses = ["connection_id = ?", "ts >= ?"]
+            clauses = ["connection_id = ?", "ts >= ?", _RAN]
             params: list[Any] = [connection_id, since]
             if org_id is not None:
                 clauses.append("org_id = ?")

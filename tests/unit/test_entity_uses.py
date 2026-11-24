@@ -96,3 +96,13 @@ def test_a_read_is_a_table_where_a_table_stands_never_an_alias_or_a_column():
     got = AuditLogger.reads_within(conn, {"orders": ["orders"], "order_items": ["order_items"]})
     assert got["orders"]["reads"] == 3 and got["order_items"]["reads"] == 2
     assert sum(m["reads"] for m in AuditLogger.reads_by_month(conn, ["orders"], months=1)) == 3
+
+
+def test_a_statement_the_checker_flagged_is_read_once_and_one_it_refused_never():
+    """A flagged statement leaves the check's row and its run's; a refused one only the check's, and never ran."""
+    conn = "ran-t"
+    AuditLogger.log(connection_id=conn, sql="SELECT * FROM orders /* x */", verdict="suspicious")
+    AuditLogger.log(connection_id=conn, sql="SELECT * FROM orders /* x */")                      # its run
+    AuditLogger.log(connection_id=conn, sql="SELECT * FROM orders; DROP TABLE orders", verdict="blocked")
+    assert AuditLogger.reads_within(conn, {"orders": ["orders"]})["orders"]["reads"] == 1
+    assert sum(m["reads"] for m in AuditLogger.reads_by_month(conn, ["orders"], months=1)) == 1
