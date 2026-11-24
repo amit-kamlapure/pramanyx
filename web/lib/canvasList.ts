@@ -117,6 +117,7 @@ export function runStateWord(status: string): { word: string; tone: "amber" | "d
   if (status === "complete" || status === "completed" || !status) return null;
   if (status === "failed") return { word: "failed", tone: "down" };
   if (status === "timed_out") return { word: "timed out", tone: "down" };
+  if (status === "handed_back") return { word: "handed to another run", tone: "amber" };   // `db/history.InvStatus`
   if (status === "running") return { word: "running", tone: "amber" };
   return { word: status.replace(/_/g, " "), tone: "amber" };
 }

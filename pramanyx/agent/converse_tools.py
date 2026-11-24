@@ -597,8 +597,8 @@ def deep_analysis(connection_id: str, args: dict, *, emit: Optional[Emit] = None
     # not a second one beside it (`agent/one_run.py`; 2026-11-24: dd94959a beside cff38269) — looked up by the question
     # the agent sent and by this conversation's wording of it. A run started here is inline and stops with its reader,
     # so it is never one a repeat is handed, and it claims nothing.
+    from pramanyx.agent import one_run
     if agent_call:
-        from pramanyx.agent import one_run
         under_way = one_run.under_way([question, user_question], connection_id, canvas_id=canvas_id or "",
                                       schema=schema_scope or "")
         if under_way is not None:
@@ -613,7 +613,13 @@ def deep_analysis(connection_id: str, args: dict, *, emit: Optional[Emit] = None
         connection_id, question,
         session_id=session_id, canvas_id=canvas_id, schema_scope=schema_scope,
         emit=emit, purpose="converse_deep",
+        # an agent's plain ask that its intake resolves to a run already under way, in other words, is handed that run
+        ask=one_run.Ask(connection_id=connection_id, canvas_id=canvas_id or "", schema=schema_scope or "",
+                        can_read=False) if agent_call else None,
     )
+    if result.handed_to is not None:
+        return {"status": "running", "investigation_id": result.handed_to.get("id") or None,
+                "note": one_run.said(result.handed_to, can_read=False)}
     out: dict = {
         "status": "completed" if (result.report or result.answer) else "inconclusive",
         "stop_reason": result.stop_reason,

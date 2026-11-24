@@ -32,7 +32,11 @@ _DB_PATH = resolve_db_path("PRAMANYX_HISTORY_DB", Path(__file__).parent.parent.p
 #: deliberately neither ``complete`` (no verified answer was produced) nor ``failed``
 #: (nothing went wrong) — the same distinction ``JobState`` draws with its own
 #: ``INTERRUPTED``, and the one the frontend's ``UNCERTAIN_RESULT`` sentence exists for.
-InvStatus = Literal["running", "complete", "timed_out", "failed", "paused", "interrupted"]
+#: ``handed_back`` (2026-11-24) for an agent's repeat of an analysis already under way, which stopped at its intake and
+#: was handed that run (`agent/one_run.py`) — or, on the phase script's path, an agent's ask its cache answered with a
+#: run already done: no answer of its own, nothing went wrong, and no person stopped it — the run it names in
+#: ``handed_to`` answers its question.
+InvStatus = Literal["running", "complete", "timed_out", "failed", "paused", "interrupted", "handed_back"]
 
 
 # ── Kernel event spine (K2) — investigation lifecycle ─────────────────────────
@@ -160,6 +164,13 @@ def _migrate_v8(c: sqlite3.Connection) -> None:
     add_column_if_missing(c, "chat_session_meta", "members", "TEXT NOT NULL DEFAULT '[]'")
 
 
+def _migrate_v9(c: sqlite3.Connection) -> None:
+    """The run a repeat was handed (2026-11-24, `agent/one_run.py`): an agent asking again for an analysis already under
+    way is handed that run, and its own row — 'handed_back' — names it, so a person's history opens the run that answers
+    the question rather than drawing the repeat as stopped. Additive; every other row reads '' (handed nothing)."""
+    add_column_if_missing(c, "investigations", "handed_to", "TEXT NOT NULL DEFAULT ''")
+
+
 _MIGRATIONS = [
     Migration(2, "additive columns + backfills (through 2026-07)", _migrate_v2),
     Migration(3, "add agent_id (per-agent run history)", _migrate_v3),
@@ -169,6 +180,7 @@ _MIGRATIONS = [
               _migrate_v6),
     Migration(7, "trace id on the row (a guard fire outlives the 14-day session log)", _migrate_v7),
     Migration(8, "group conversations: a thread's owner and members, a turn's asker", _migrate_v8),
+    Migration(9, "the run a repeat was handed (one run per question)", _migrate_v9),
 ]
 
 
@@ -812,6 +824,19 @@ def last_activity_by_canvas() -> dict[str, str]:
     return {r["canvas_id"]: r["last"] for r in rows if r["last"]}
 
 
+def queued_run_ids() -> set:
+    """The runs whose deep-analysis job still waits for a free slot, by the id each job's payload names."""
+    try:
+        from pramanyx.kernel.ledger import Ledger
+        return {str((j.get("payload") or {}).get("investigation_id")) for j in
+                Ledger.default().jobs_where(kinds=["investigation"], states=["PENDING"], limit=500)
+                if isinstance(j.get("payload"), dict) and (j.get("payload") or {}).get("investigation_id")}
+    except Exception as exc:  # noqa: BLE001 — unread, nothing is spared: the sweep runs as it always did
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "the queued runs could not be read; the stale sweep spares none", counter="history.queued")
+        return set()
+
+
 def sweep_stale_running(max_age_minutes: int = 60) -> int:
     """Mark investigations stuck in 'running' past max_age_minutes as 'failed'.
     These are orphaned by interrupted streams / restarts and otherwise clutter
@@ -830,13 +855,18 @@ def sweep_stale_running(max_age_minutes: int = 60) -> int:
         "WHERE status = 'running' AND started_at < ?",
         (cutoff,),
     ).fetchall()
+    # A run still waiting for a free slot is not orphaned: its door made its row as it claimed the question
+    # (`agent/one_run.take`), and its queued job names it.
+    waiting = queued_run_ids()
+    rows = [r for r in rows if r["id"] not in waiting]
     if not rows:
         c.close()
         return 0
+    ids = [r["id"] for r in rows]
     c.execute(
-        "UPDATE investigations SET status = 'failed', completed_at = ? "
-        "WHERE status = 'running' AND started_at < ?",
-        (_now(), cutoff),
+        f"UPDATE investigations SET status = 'failed', completed_at = ? "
+        f"WHERE status = 'running' AND id IN ({','.join('?' * len(ids))})",
+        (_now(), *ids),
     )
     c.commit()
     c.close()
@@ -965,7 +995,8 @@ def get_session_turns(session_id: str) -> list[dict]:
     _org, _op = ((" AND org_id = ?", [current_org_id()])
                  if require_identity_enabled() else ("", []))
     rows = c.execute(
-        f"""SELECT id, question, headline, report_json, started_at, status, kind, trace_id, asked_by
+        f"""SELECT id, question, headline, report_json, started_at, status, kind, trace_id, asked_by,
+                  COALESCE(handed_to, '') AS handed_to
            FROM investigations
            WHERE session_id = ? AND {_THREAD_TURN_KINDS}{_org}
            ORDER BY started_at ASC""",
@@ -1509,6 +1540,45 @@ def fail_if_running(inv_id: str, reason: str) -> bool:
     return bool(inv_id) and fail_investigation(inv_id, status="failed", reason=reason, when_running=True)
 
 
+def hand_back_investigation(inv_id: str, reason: str, handed_to: str = "") -> bool:
+    """A run that stopped because the same analysis was already under way (`agent/one_run.py`), or already done (the
+    phase script's cache): 'handed_back', naming the run it was handed (``handed_to``) and what it was told, written
+    only while it is still 'running' — one
+    statement, so a cancel or an end recorded first stands. Not a failure: no failure event and no failed verdict is
+    booked for it. True when this call wrote."""
+    if not inv_id:
+        return False
+    c = _conn()
+    ensure_once(c, _ensure_schema)
+    cur = c.execute(
+        "UPDATE investigations SET completed_at = ?, status = 'handed_back', error = ?, handed_to = ? "
+        "WHERE id = ? AND status = 'running'",
+        (_now(), str(reason or "")[:2000], str(handed_to or ""), inv_id),
+    )
+    c.commit()
+    wrote = bool(cur.rowcount)
+    _conn_scope, _canvas_scope = _inv_scope(c, inv_id) if wrote else (None, None)
+    c.close()
+    if wrote:
+        _emit_lifecycle(inv_id, "investigation.handed_back", conn_id=_conn_scope, canvas_id=_canvas_scope)
+    return wrote
+
+
+def adopt_investigation(inv_id: str, connection_id: str) -> bool:
+    """A run takes on the row its door made as it claimed the question (`agent/one_run.take`): started now — the time it
+    waited for a free slot is not its run time, which the stale sweep reads — and on the connection its scope resolved
+    to. Only while the row is still 'running'. True when it was taken on."""
+    if not inv_id:
+        return False
+    c = _conn()
+    ensure_once(c, _ensure_schema)
+    cur = c.execute("UPDATE investigations SET started_at = ?, connection_id = COALESCE(NULLIF(?, ''), connection_id) "
+                    "WHERE id = ? AND status = 'running'", (_now(), connection_id or "", inv_id))
+    c.commit()
+    c.close()
+    return bool(cur.rowcount)
+
+
 def normalized_question(q: str) -> str:
     """A question as two asks of it compare (:func:`_normalize_question`) — public, for the doors that match one."""
     return _normalize_question(q)
@@ -1741,7 +1811,8 @@ def list_investigations(limit: int = 50, *, asked_by: str = "") -> list[dict]:
         f"""SELECT id, question, connection_id, canvas_id, started_at, completed_at,
                   status, hypothesis_count, query_count, headline,
                   COALESCE(kind, 'investigation') as kind,
-                  NULL as session_id, COALESCE(agent_id, '') as agent_id
+                  NULL as session_id, COALESCE(agent_id, '') as agent_id,
+                  COALESCE(handed_to, '') as handed_to
            FROM investigations
            WHERE (kind IS NULL OR kind = 'investigation'){_org}
            ORDER BY started_at DESC
@@ -1803,10 +1874,10 @@ def list_investigations_for_session(session_id: str, limit: int = 50) -> list[di
     from pramanyx.security.authz import require_identity_enabled
     _org, _op = (" AND org_id = ?", [current_org_id()]) if require_identity_enabled() else ("", [])
     rows = c.execute(
-        f"""SELECT id, question, connection_id, started_at, completed_at, status, headline
+        f"""SELECT id, question, connection_id, started_at, completed_at, status, headline, COALESCE(handed_to, '')
             FROM investigations WHERE session_id = ? AND COALESCE(kind, 'investigation') = 'investigation'{_org}
             ORDER BY started_at DESC LIMIT ?""", [session_id, *_op, int(limit)]).fetchall()
-    keys = ("id", "question", "connection_id", "started_at", "completed_at", "status", "headline")
+    keys = ("id", "question", "connection_id", "started_at", "completed_at", "status", "headline", "handed_to")
     return [dict(zip(keys, tuple(r))) for r in rows]
 
 
@@ -1835,7 +1906,8 @@ def list_investigations_for_agent(agent_id: str, limit: int = 50) -> list[dict]:
     inv_rows = c.execute(
         f"""SELECT id, question, connection_id, canvas_id, started_at, completed_at,
                   status, hypothesis_count, query_count, headline,
-                  COALESCE(kind, 'investigation') as kind, NULL as session_id, agent_id
+                  COALESCE(kind, 'investigation') as kind, NULL as session_id, agent_id,
+                  COALESCE(handed_to, '') as handed_to
            FROM investigations
            WHERE agent_id = ? AND (kind IS NULL OR kind = 'investigation'){_org}
            ORDER BY started_at DESC

@@ -428,6 +428,45 @@ def test_a_finished_run_is_read_at_once():
     assert got["status"] == "failed" and len(reads) == 1 and "message" not in got
 
 
+def test_a_deep_analysis_waiting_for_a_slot_says_so_by_its_id(monkeypatch):
+    """Its door names the run as it claims the question; a call whose deadline comes while the job still waits for a
+    slot hands back that id, and says the run is queued — not that it is running, nor that it never started."""
+    import pramanyx.mcp.client as C
+    monkeypatch.setattr(C, "READ_EVERY_S", 0.01)
+
+    async def queued():
+        yield _sse([{"type": "route", "depth": "deep"}, {"type": "start", "investigation_id": "inv5"}]).encode()
+        await asyncio.sleep(1.0)
+        yield b": keep-alive\n\n"
+
+    record = httpx.Response(200, json={"id": "inv5", "status": "running",
+                                       "progress": {"queued": True, "steps": 0, "running_for_s": 40}})
+
+    async def go():
+        client = _client({"/ask": lambda req: httpx.Response(200, content=queued()), "/investigations/inv5": record})
+        client.deep_timeout = 0.2
+        res = await client.deep_analysis("why did margin fall", "c")
+        assert res["status"] == "running" and res["investigation_id"] == "inv5"
+        assert "queued" in res["message"] and "get_investigation('inv5')" in res["message"]
+        client.read_wait = 0.05
+        read = await client.get_investigation("inv5")
+        assert "queued" in read["message"] and "still running" not in read["message"]
+    _run(go())
+
+
+def test_a_repeat_handed_another_run_is_read_as_the_run_that_answers_it():
+    """A coworker holding a repeat's id (its runs list names it) reads the run it was handed, said so — not a record
+    with an error and no report, which reads as a failure."""
+    client = _client({
+        "/investigations/again": httpx.Response(200, json={"id": "again", "status": "handed_back", "handed_to": "inv9",
+                                                           "error": "This question is already being analysed"}),
+        "/investigations/inv9": httpx.Response(200, json={"id": "inv9", "status": "complete",
+                                                          "report": {"headline": "It fell"}}),
+    })
+    got = _run(client.get_investigation("again"))
+    assert got["id"] == "inv9" and got["status"] == "complete" and got["handed_from"] == "again"
+
+
 def test_a_deep_analysis_already_under_way_is_handed_back_running_not_complete():
     """The door hands back the run under way by its id; it is read as running, never as a finished run with nothing in
     it."""

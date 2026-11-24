@@ -93,3 +93,90 @@ test("a deep analysis that stopped is drawn, and says why in the platform's own 
   assert.equal(isDeepRecord({ id: "q1", kind: "chat", status: "failed", error: "x" }), false, "a quick answer's failure is not a deep report");
   assert.equal(isDeepRecord({ id: "inv8", kind: "investigation", status: "running" }), false, "a running record read back is not drawn, as before");
 });
+
+test("a running analysis read again becomes what it found — or why it stopped — once it lands (2026-11-24)", async () => {
+  const { landed } = await import("../src/report.js");
+  assert.equal(landed({ id: "d8b19615", status: "running", progress: { steps: 4 } }), null, "still going: keep reading");
+  assert.equal(landed({ id: "d8b19615", status: "pending" }), null);
+  const done = { id: "d8b19615", status: "complete", report: { headline: "Jeans, Sweaters and Active rose most", phases: [] } };
+  assert.equal(landed(done), done);
+  assert.equal(reportFacts(landed(done)).head, "Jeans, Sweaters and Active rose most");
+  const stopped = { id: "e4796f93", kind: "investigation", status: "failed", error: "Stopped at the Analyst's 1800s time budget" };
+  assert.equal(reportFacts(landed(stopped)).why, "Stopped at the Analyst's 1800s time budget");
+  assert.equal(landed(null), null);
+});
+
+test("a running analysis is read again until it lands, once; a 4xx stops the reading; stopping aborts the read", async () => {
+  const { follow } = await import("../src/report.js");
+  const timers = [];
+  const clock = { t: 0 };
+  const opts = (answers, seen) => ({
+    read: (_id, signal) => { seen.signals.push(signal); return Promise.resolve(answers.shift()); },
+    onLanded: (record) => seen.landed.push(record),
+    every: 10, forMs: 1000, now: () => clock.t,
+    later: (fn) => { timers.push(fn); return timers.length; }, cancel: () => {},
+    controller: () => ({ signal: { aborted: false }, abort() { this.signal.aborted = true; } }),
+  });
+  const json = (body) => ({ ok: true, status: 200, json: () => Promise.resolve(body) });
+  const step = async () => { const fn = timers.shift(); fn(); await new Promise((r) => setTimeout(r, 0)); };
+
+  const seen = { landed: [], signals: [] };
+  follow("d8b19615", opts([json({ status: "running" }), json({ status: "paused" }),
+                           json({ status: "complete", report: { headline: "It rose" } })], seen));
+  await step(); await step(); await step();
+  assert.equal(seen.landed.length, 1, "landed once, after still-running and paused reads");
+  assert.equal(seen.landed[0].report.headline, "It rose");
+  assert.equal(timers.length, 0, "nothing is read after it lands");
+
+  const gone = { landed: [], signals: [] };
+  follow("x", opts([{ ok: false, status: 404 }], gone));
+  await step();
+  assert.equal(timers.length, 0, "a 404 — the run gone — stops the reading for good");
+
+  const signedOut = { landed: [], signals: [] };
+  follow("z", opts([{ ok: false, status: 401 }, json({ status: "complete", report: { headline: "back" } })], signedOut));
+  await step();
+  assert.equal(timers.length, 1, "a 401 is read again: the session may be signed into once more");
+  await step();
+  assert.equal(signedOut.landed.length, 1);
+
+  const left = { landed: [], signals: [] };
+  const stop = follow("y", opts([new Promise(() => {})], left));
+  await step();
+  stop();
+  assert.equal(left.signals[0].aborted, true, "the card going aborts the read in flight");
+});
+
+test("a run handed the analysis already under way reads on as that run; one naming no run lands, saying why", async () => {
+  // 2026-11-24: the card followed a run that was then handed back — the status it never knew — and said "still
+  // running" for the hour, never the answer of the run it was handed.
+  const { follow, landed, handedTo, isDeepRecord } = await import("../src/report.js");
+  const timers = [];
+  const reads = [];
+  const answers = {
+    b: [{ status: "running" }, { status: "handed_back", handed_to: "r2", error: "already being analysed (run r2)" }],
+    r2: [{ status: "running" }, { status: "complete", report: { headline: "It rose" } }],
+  };
+  const json = (body) => ({ ok: true, status: 200, json: () => Promise.resolve(body) });
+  const seen = [];
+  follow("b", {
+    read: (id) => { reads.push(id); return Promise.resolve(json(answers[id].shift())); },
+    onLanded: (record) => seen.push(record), every: 10, forMs: 1000, now: () => 0,
+    later: (fn) => { timers.push(fn); return timers.length; }, cancel: () => {},
+    controller: () => ({ signal: { aborted: false }, abort() {} }),
+  });
+  for (let i = 0; i < 4; i += 1) { timers.shift()(); await new Promise((r) => setTimeout(r, 0)); }
+  assert.deepEqual(reads, ["b", "b", "r2", "r2"], "read on as the run it was handed");
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].report.headline, "It rose");
+
+  const unnamed = { id: "b", kind: "investigation", status: "handed_back", handed_to: "",
+                    error: "This question is already being analysed, so it was not started a second time." };
+  assert.equal(handedTo(unnamed), "");
+  assert.equal(landed(unnamed), unnamed, "nothing to read on: it lands, and says why");
+  assert.equal(isDeepRecord(unnamed), true);
+  const facts = reportFacts(unnamed);
+  assert.equal(facts.handed, true);
+  assert.equal(facts.stopped, false, "never drawn as stopped");
+  assert.match(facts.why, /already being analysed/);
+});

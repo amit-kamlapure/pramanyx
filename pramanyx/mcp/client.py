@@ -114,6 +114,8 @@ def attached_file(path: str) -> "tuple[str, int] | str":
 #: shell's six-minute tool limit, with room for the deep call's own wait (`PRAMANYX_MCP_DEEP_TIMEOUT`) before it.
 READ_WAIT_S = 120.0
 READ_EVERY_S = 5.0
+#: How long the call's deadline waits to read how far a run it hands back has got.
+PROGRESS_READ_S = 5.0
 
 
 def _running(rec: Any) -> bool:
@@ -476,8 +478,10 @@ class PramanyxClient:
             if t == "start":
                 acc["investigation_id"] = ev.get("investigation_id") or acc["investigation_id"]
             elif t == "already_running":
-                # The platform handed back this question's run already under way, rather than start a second.
-                acc["investigation_id"] = ev.get("investigation_id") or acc["investigation_id"]
+                # The platform handed back this question's run already under way, rather than start a second — by its
+                # id, which its door names the moment it claims the question (a platform before 2026-11-24 could send
+                # none): never this repeat's own run, which stopped at the hand-back.
+                acc["investigation_id"] = ev.get("investigation_id") or None
                 acc["already_running"], acc["message"] = True, str(ev.get("already_running") or "")
             elif t == "hypotheses":
                 acc["hypotheses"] = ev.get("hypotheses")
@@ -544,7 +548,8 @@ class PramanyxClient:
         except asyncio.TimeoutError:
             if acc["investigation_id"]:
                 acc["status"] = "running"
-                acc["message"] = self._still_running(acc["investigation_id"], self.deep_timeout)
+                acc["message"] = self._still_running(acc["investigation_id"], self.deep_timeout,
+                                                     await self._progress(acc["investigation_id"]))
                 return dict(acc)
             raise PramanyxError(
                 f"deep_analysis had not started after {self.deep_timeout:.0f}s; it goes on, and its report will be "
@@ -555,7 +560,7 @@ class PramanyxClient:
             # the id to read it by; otherwise it never got going. Genuine errors — a 402 lock, a bad request — are raised by
             # _stream_sse and propagate cleanly, uncaught here.
             if acc["investigation_id"]:
-                acc["status"] = "running"
+                acc["status"] = "running"         # the platform went silent: not asked again how far it has got
                 acc["message"] = self._still_running(acc["investigation_id"], self.deep_timeout)
                 return acc
             raise PramanyxError(
@@ -575,20 +580,36 @@ class PramanyxClient:
                 acc["receipt"] = None
         return acc
 
+    async def _progress(self, investigation_id: str) -> dict:
+        """How far a run handed back at the call's deadline has got — queued, or its steps — read once, within a few
+        seconds (the deadline is there to keep inside the shell's tool limit); {} when the read fails or is slow (the run
+        is still said to go on, without how far)."""
+        try:
+            rec = await asyncio.wait_for(self._get(f"/investigations/{investigation_id}"), timeout=PROGRESS_READ_S)
+        except (PramanyxError, asyncio.TimeoutError):
+            return {}
+        return (rec or {}).get("progress") or {} if isinstance(rec, dict) else {}
+
     def _still_running(self, investigation_id: str, after_s: Optional[float], progress: Optional[dict] = None) -> str:
         """What a caller is told about a run still going: that it goes on, how far it has got, and that reading it
         waits — so a read that finds it running is not mistaken for one that found it stuck."""
         p = progress or {}
+        after = f" after {after_s:.0f}s" if after_s else ""
+        if p.get("queued"):
+            # its door named it as it claimed the question; it waits for one of the platform's analysis slots
+            return (f"Deep analysis is queued{after}: other analyses hold every slot, and it starts by itself as one "
+                    f"frees. get_investigation('{investigation_id}') waits for it (up to {self.read_wait:.0f}s a call) "
+                    "and returns its report as soon as it lands.")
         far = ""
         if p.get("steps"):
             far = f" It has taken {p['steps']} step{'' if p['steps'] == 1 else 's'} so far" + (
                 f", the last {p['last_step']}." if p.get("last_step") else ".")
-        after = f" after {after_s:.0f}s" if after_s else ""
         return (f"Deep analysis is still running{after}, and goes on in the platform.{far} "
                 f"get_investigation('{investigation_id}') waits for it (up to {self.read_wait:.0f}s a call) and "
                 "returns its report as soon as it lands.")
 
-    async def get_investigation(self, investigation_id: str, *, wait_s: Optional[float] = None) -> dict:
+    async def get_investigation(self, investigation_id: str, *, wait_s: Optional[float] = None,
+                                _follow: bool = True) -> dict:
         """A run by its id. One still running is waited on — up to ``wait_s`` (default ``read_wait``), read every few
         seconds — and returned the moment it ends; still going at the end of the wait, it comes back with how far it has
         got. 2026-11-24, seen twice: the coworker read a running run four times in half a minute, each answering at once
@@ -597,6 +618,11 @@ class PramanyxClient:
         wait = self.read_wait if wait_s is None else float(wait_s)
         deadline = _time.monotonic() + max(0.0, wait)
         rec = await self._get(f"/investigations/{investigation_id}")
+        handed_to = str((rec or {}).get("handed_to") or "") if (rec or {}).get("status") == "handed_back" else ""
+        if handed_to and _follow:
+            # A repeat handed the run of its question already under way (`agent/one_run.py`) answers nothing itself:
+            # the run it was handed does, and is the one read — named, so a caller knows whose record it holds.
+            return {**(await self.get_investigation(handed_to, wait_s=wait, _follow=False)), "handed_from": investigation_id}
         while _running(rec) and _time.monotonic() < deadline:
             await asyncio.sleep(max(0.0, min(READ_EVERY_S, deadline - _time.monotonic())))
             rec = await self._get(f"/investigations/{investigation_id}")

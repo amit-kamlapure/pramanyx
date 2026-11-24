@@ -467,9 +467,21 @@ async def test_a_run_whose_reader_left_still_files_its_answer_envelope():
 
 
 @pytest.mark.anyio
-async def test_a_reader_that_stays_is_handed_the_envelope_the_run_filed_each_frame_folded_once():
+async def test_a_reader_that_stays_is_handed_the_envelope_the_run_filed_each_frame_folded_once(monkeypatch):
+    import itertools
+    from datetime import datetime, timedelta, timezone
+
     from pramanyx.db import history
 
+    # Every fold reads a later clock: a reader handed a second fold, not the filed one, would differ from the row
+    # (it did, by a second, whenever the two folds straddled one — 2026-11-24).
+    tick = itertools.count()
+
+    class _Later(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 11, 24, tzinfo=timezone.utc) + timedelta(seconds=next(tick))
+    monkeypatch.setattr("pramanyx.answer.envelope.datetime", _Later)
     inv_id = history.create_investigation("why did revenue fall?", "conn-drr")
     frames = _frames([f async for f in _ask_door(_deep_body(inv_id), inv_id)])
     streamed = [f["envelope"] for f in frames if f["type"] == "envelope"]

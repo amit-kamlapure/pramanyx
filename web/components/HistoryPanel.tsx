@@ -140,7 +140,7 @@ export function HistoryPanel({ selectedId, onSelect }: Props) {
           return (
             <li key={inv.id} className="relative group/item">
               <button
-                onClick={() => onSelect(inv.id, inv.kind ?? "investigation")}
+                onClick={() => onSelect(inv.handed_to || inv.id, inv.kind ?? "investigation")}
                 className={cn(
                   "w-full text-left px-4 py-3 transition group border-l-2 pr-10",
                   isSelected
@@ -203,6 +203,13 @@ export function HistoryPanel({ selectedId, onSelect }: Props) {
                     <>
                       <span>·</span>
                       <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 aug-fs-xs font-medium">● running</span>
+                    </>
+                  )}
+                  {inv.status === "handed_back" && (
+                    <>
+                      <span>·</span>
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-zinc-500/10 text-zinc-400 aug-fs-xs font-medium"
+                        title="Asked again while the same analysis was under way — it opens the run that answers it">handed to another run</span>
                     </>
                   )}
                 </div>

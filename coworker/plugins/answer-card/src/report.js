@@ -42,6 +42,8 @@ export function reportFacts(got) {
     running: ["running", "pending", "started"].includes(String(got?.status || "")),
     // a run that stopped before answering, and why, in the platform's own sentence (`kernel/jobs.describe_stop`)
     stopped: STOPPED.includes(String(got?.status || "")),
+    // a repeat handed the run of its question already under way, which answers it — the sentence it was told is `why`
+    handed: String(got?.status || "") === HANDED,
     why: String(got?.error || "").trim(),
     cut: Boolean(got?.cut),
     message: String(got?.message || ""),
@@ -52,6 +54,9 @@ export function reportFacts(got) {
 
 /** The statuses of a run that ended without its answer (`db/history.InvStatus`). */
 const STOPPED = ["failed", "timed_out", "interrupted"];
+/** A repeat that stopped at its intake, handed the run of its question already under way (`agent/one_run.py`): it has
+ *  no answer of its own, and names the run that answers it (`handed_to`) once that run has an id. */
+const HANDED = "handed_back";
 
 /** Whether a record read back (`get_investigation`) is a deep analysis's — one its report card draws — rather than a
  *  quick answer's, which has no phases. A deep analysis that stopped before answering has no phases either; it is drawn
@@ -59,5 +64,59 @@ const STOPPED = ["failed", "timed_out", "interrupted"];
 export function isDeepRecord(got) {
   if (!got || typeof got !== "object") return false;
   if (got.report && typeof got.report === "object" && Array.isArray(got.report.phases)) return true;
-  return got.kind === "investigation" && STOPPED.includes(String(got.status || ""));
+  return got.kind === "investigation" && [...STOPPED, HANDED].includes(String(got.status || ""));
+}
+
+/** How often a deep analysis still running is read again, and for how long (`DeepReport`). Past the hour the platform
+ *  has failed any run still 'running' (`kernel/jobs.py`, the supervisor's sweep), so the last read says how it ended. */
+export const FOLLOW_EVERY_MS = 10_000;
+export const FOLLOW_FOR_MS = 61 * 60_000;
+
+/** A deep analysis read again while it ran: its record once it has ended — finished, or stopped with why — else null
+ *  (still going, or paused for a person). 2026-11-24: the card said "still running" for good after the turn ended, a
+ *  minute before the run did; nothing in the coworker needs a refresh. */
+export function landed(record) {
+  if (!record || typeof record !== "object") return null;
+  return ["complete", ...STOPPED, HANDED].includes(String(record.status || "")) ? record : null;
+}
+
+/** The run a record was handed instead of answering itself, or "" — the run to read on (`follow`). */
+export function handedTo(record) {
+  return record && record.status === HANDED ? String(record.handed_to || "") : "";
+}
+
+/** Read a running deep analysis again until it lands: `onLanded(record)` once, then nothing more. Returns the stop the
+ *  card calls when it goes. A 404 or 410 — the run gone — stops the reading for good; anything else (a session to
+ *  sign in again, the platform restarting) is read again. A run handed the analysis of its question already under way
+ *  reads on as that run, which answers it (a few hops at most). `read(id, signal)` answers like `fetch`; the clock and the timers are passed in, so this is tested
+ *  without a page. */
+export function follow(id, { read, onLanded, every = FOLLOW_EVERY_MS, forMs = FOLLOW_FOR_MS, now = () => Date.now(),
+                             later = setTimeout, cancel = clearTimeout, controller = () => new AbortController() }) {
+  let live = true;
+  let timer = null;
+  let abort = null;
+  let current = id;
+  let hops = 0;
+  const until = now() + forMs;
+  const again = () => { if (live && now() < until) timer = later(tick, every); };
+  function tick() {
+    if (!live) return;
+    abort = controller();
+    Promise.resolve(read(current, abort.signal))
+      .then((answer) => {
+        if (!live) return undefined;
+        if (answer && (answer.status === 404 || answer.status === 410)) { live = false; return undefined; }
+        if (!answer || !answer.ok) return again();
+        return answer.json().then((record) => {
+          if (!live) return;
+          const onward = handedTo(record);
+          if (onward && onward !== current && hops < 3) { current = onward; hops += 1; again(); return; }
+          const done = landed(record);
+          if (done) { live = false; onLanded(done); } else again();
+        });
+      })
+      .catch(() => again());
+  }
+  timer = later(tick, every);
+  return () => { live = false; cancel(timer); abort?.abort(); };
 }

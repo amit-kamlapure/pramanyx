@@ -375,11 +375,13 @@ export interface InvestigationSummary {
   connection_id: string;
   started_at: string;
   completed_at: string | null;
-  status: "running" | "complete" | "timed_out" | "failed";
+  status: "running" | "complete" | "timed_out" | "failed" | "handed_back";
   hypothesis_count: number;
   query_count: number;
   headline: string | null;
   kind: "investigation" | "chat";
+  /** A repeat handed the run of its question already under way (status `handed_back`): that run, which answers it. */
+  handed_to?: string;
 }
 
 export interface InvestigationState {
