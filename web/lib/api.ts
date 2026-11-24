@@ -13008,7 +13008,7 @@ export async function syncSlackKnowledge(botId: string): Promise<void> {
 }
 
 
-// ── The organisation's own model (`routers/training.py`, 2026-11-23) ────────────────────────────────────────────────
+// ── The AI Factory (`routers/training.py`, 2026-11-23; named AI Factory 2026-11-24) ────────────────────────────────────────────────
 
 /** One held-out measure of a model: the answer loss, and greedy answers scored by word overlap (F1) with the
  *  company's answer; `recalled` is the share at F1 ≥ 0.6. `by_kind` splits it by the source each question came from. */
@@ -13023,6 +13023,8 @@ export interface OwnModel {
   training_set: { train?: { name?: string; version?: number; row_count?: number }; held_out?: { version?: number; row_count?: number } };
   settings: { method?: string; epochs?: number; learning_rate?: number };
   connections: string[]; device?: string; params?: number; steps?: number; tokens?: number; seconds?: number; bytes?: number;
+  /** The engine that trained it (`builtin`, `llamafactory`); a model from before engines were named is the built-in's. */
+  engine?: string; dir?: string;
   measure: { before: OwnModelMeasure; after: OwnModelMeasure };
   served_as: string; recorded_at: string; published_at: string; note: string;
 }
@@ -13036,7 +13038,7 @@ export interface OwnModelEvent {
 
 export interface TrainingSetNode { id: string; name: string; version: number; kind: string; row_count: number; created_at: string }
 
-export interface OwnModelOverview {
+export interface AIFactoryOverview {
   allowed: boolean; where: string;
   setup: { ready: boolean; python: string; missing: string[]; how: string };
   base: { source: string; dir: string; architecture: string; hidden_size?: number; layers?: number; vocab_size?: number;
@@ -13061,14 +13063,14 @@ export interface TrainingRow {
 
 export interface HeldOutAnswer { question: string; expected: string; answer: string; f1: number; source: { kind?: string } }
 
-export async function getOwnModel(): Promise<OwnModelOverview> {
-  const res = await fetch(`${getApiBase()}/own-model`);
-  if (!res.ok) throw await refused(res, "Reading the organisation's own model");
+export async function getAIFactory(): Promise<AIFactoryOverview> {
+  const res = await fetch(`${getApiBase()}/ai-factory`);
+  if (!res.ok) throw await refused(res, "Reading the AI Factory");
   return res.json();
 }
 
-export async function fetchOwnModelBase(source: string): Promise<OwnModelOverview["base"]> {
-  const res = await fetch(`${getApiBase()}/own-model/base`, {
+export async function fetchOwnModelBase(source: string): Promise<AIFactoryOverview["base"]> {
+  const res = await fetch(`${getApiBase()}/ai-factory/base`, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ source }),
   });
   if (!res.ok) throw await refused(res, "Fetching the base");
@@ -13076,7 +13078,7 @@ export async function fetchOwnModelBase(source: string): Promise<OwnModelOvervie
 }
 
 export async function buildTrainingSet(): Promise<TrainingSetBuild> {
-  const res = await fetch(`${getApiBase()}/own-model/training-set`, { method: "POST" });
+  const res = await fetch(`${getApiBase()}/ai-factory/training-set`, { method: "POST" });
   if (!res.ok) throw await refused(res, "Building the training set");
   return res.json();
 }
@@ -13085,13 +13087,13 @@ export async function getTrainingRows(half: "train" | "held_out", kind = "", lim
   half: string; version?: number; total: number; kinds?: Record<string, number>; rows: TrainingRow[]; state: string;
 }> {
   const q = new URLSearchParams({ half, limit: String(limit), ...(kind ? { kind } : {}) });
-  const res = await fetch(`${getApiBase()}/own-model/training-set/rows?${q}`);
+  const res = await fetch(`${getApiBase()}/ai-factory/training-set/rows?${q}`);
   if (!res.ok) throw await refused(res, "Reading the training set");
   return res.json();
 }
 
-export async function startTraining(choice: { method?: string; epochs?: number; learning_rate?: number }): Promise<{ job_id: string; run_id: string }> {
-  const res = await fetch(`${getApiBase()}/own-model/train`, {
+export async function startTraining(choice: { engine?: string; teach_by?: string; method?: string; epochs?: number; learning_rate?: number }): Promise<{ job_id: string; run_id: string }> {
+  const res = await fetch(`${getApiBase()}/ai-factory/train`, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(choice),
   });
   if (!res.ok) throw await refused(res, "Starting the training");
@@ -13099,24 +13101,24 @@ export async function startTraining(choice: { method?: string; epochs?: number; 
 }
 
 export async function cancelTraining(jobId: string): Promise<void> {
-  const res = await fetch(`${getApiBase()}/own-model/runs/${encodeURIComponent(jobId)}/cancel`, { method: "POST" });
+  const res = await fetch(`${getApiBase()}/ai-factory/runs/${encodeURIComponent(jobId)}/cancel`, { method: "POST" });
   if (!res.ok) throw await refused(res, "Stopping the training");
 }
 
 export async function getHeldOutAnswers(n: number): Promise<{ before?: HeldOutAnswer[]; after?: HeldOutAnswer[] }> {
-  const res = await fetch(`${getApiBase()}/own-model/models/${n}/answers`);
+  const res = await fetch(`${getApiBase()}/ai-factory/models/${n}/answers`);
   if (!res.ok) throw await refused(res, "Reading the held-out answers");
   return res.json();
 }
 
 export async function publishOwnModel(n: number): Promise<OwnModel> {
-  const res = await fetch(`${getApiBase()}/own-model/models/${n}/publish`, { method: "POST" });
+  const res = await fetch(`${getApiBase()}/ai-factory/models/${n}/publish`, { method: "POST" });
   if (!res.ok) throw await refused(res, "Putting the model in service");
   return res.json();
 }
 
 export async function withdrawOwnModel(n: number, why = ""): Promise<OwnModel> {
-  const res = await fetch(`${getApiBase()}/own-model/models/${n}/withdraw`, {
+  const res = await fetch(`${getApiBase()}/ai-factory/models/${n}/withdraw`, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ why }),
   });
   if (!res.ok) throw await refused(res, "Withdrawing the model");
@@ -13133,7 +13135,7 @@ export interface OwnModelAnswer {
 }
 
 export async function askOwnModel(n: number, question: string): Promise<OwnModelAnswer> {
-  const res = await fetch(`${getApiBase()}/own-model/models/${n}/ask`, {
+  const res = await fetch(`${getApiBase()}/ai-factory/models/${n}/ask`, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question }),
   });
   if (!res.ok) throw await refused(res, "Asking the model");
@@ -13146,7 +13148,62 @@ export interface TrainingPlan {
 }
 
 export async function getTrainingPlan(): Promise<TrainingPlan> {
-  const res = await fetch(`${getApiBase()}/own-model/training-set/plan`);
+  const res = await fetch(`${getApiBase()}/ai-factory/training-set/plan`);
   if (!res.ok) throw await refused(res, "Reading what the training set would hold");
   return res.json();
+}
+
+
+/** A recipe: what a model is for, whether it can be made now, and why not when it cannot. */
+export interface FactoryRecipe {
+  id: string; name: string; environment: string | null; what: string; facts: string[];
+  status: string; why?: string; trainable: boolean; measured_by: string;
+}
+
+export interface FactoryRubricRow { check: string; weight: number; means: string }
+
+/** An environment: tasks, how an answer is scored, the pass rate base → best model, and whether reward training fits. */
+export interface FactoryEnvironment {
+  id: string; name: string; tasks: number | null; held_out: number | null; need?: number | null; version?: number | null;
+  scored_by: string; pass_base: number | null; pass_best: number | null; fit: string; status: string; why?: string;
+  runs: boolean; rubric?: FactoryRubricRow[]; sources?: { accepts?: number; trusted?: number };
+}
+
+export interface FactoryEngine {
+  id: string; name: string; version: string; status: "ready" | "needs_setup" | "unavailable" | "not_offered" | "off" | "review";
+  why: string; how: string; teaches: string[]; runs_here: boolean; summary: string;
+}
+
+export interface FactoryRun {
+  job_id: string; run_id: string; state: string; error: string; created_at: string; by: string;
+  settings: { engine?: string; method?: string; epochs?: number; learning_rate?: number; teach_by?: string };
+  rows?: number | null; losses: number[]; last_step: OwnModelEvent | null;
+  measures: Record<string, { f1?: number | null; recalled?: number | null; answer_loss?: number | null }>; model?: number | null;
+}
+
+export async function getFactoryRecipes(): Promise<FactoryRecipe[]> {
+  const res = await fetch(`${getApiBase()}/ai-factory/recipes`);
+  if (!res.ok) throw await refused(res, "Reading the recipes");
+  return ((await res.json()) as { recipes: FactoryRecipe[] }).recipes;
+}
+
+export async function getFactoryEnvironments(): Promise<{ environments: FactoryEnvironment[]; reward_band: [number, number] }> {
+  const res = await fetch(`${getApiBase()}/ai-factory/environments`);
+  if (!res.ok) throw await refused(res, "Reading the environments");
+  return res.json();
+}
+
+export async function getFactoryEngines(): Promise<{
+  engines: FactoryEngine[]; capabilities: Record<string, Record<string, string>>;
+  hardware: { system: string; machine: string; memory_bytes: number; accelerator: string; nvidia: boolean };
+}> {
+  const res = await fetch(`${getApiBase()}/ai-factory/engines`);
+  if (!res.ok) throw await refused(res, "Reading the engines");
+  return res.json();
+}
+
+export async function getFactoryRuns(): Promise<FactoryRun[]> {
+  const res = await fetch(`${getApiBase()}/ai-factory/runs`);
+  if (!res.ok) throw await refused(res, "Reading the runs");
+  return ((await res.json()) as { runs: FactoryRun[] }).runs;
 }

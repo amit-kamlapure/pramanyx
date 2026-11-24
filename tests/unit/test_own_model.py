@@ -262,10 +262,10 @@ def client():
 def test_the_page_reads_off_until_an_admin_allows_it_and_the_writes_say_so(client, monkeypatch):
     from pramanyx.training import serve
     monkeypatch.setattr(serve, "reachable", lambda timeout=3.0: (False, "not running"))
-    body = client.get("/own-model").json()
+    body = client.get("/ai-factory").json()
     assert body["allowed"] is False and "What Pramanyx may do" in body["where"]
     assert set(body) >= {"setup", "base", "serving", "training_set", "run", "models", "defaults"}
-    r = client.post("/own-model/training-set")
+    r = client.post("/ai-factory/training-set")
     assert r.status_code == 409 and "does not allow" in r.json()["detail"]
 
 
@@ -273,9 +273,9 @@ def test_once_allowed_the_training_set_door_builds_and_its_rows_cite_their_sourc
     from pramanyx.orgsettings import store as org_store
     org_store.save_org_settings(org_store.load_org_settings().model_copy(update={"train_own_model": True}))
     try:
-        r = client.post("/own-model/training-set")
+        r = client.post("/ai-factory/training-set")
         assert r.status_code == 200, r.text
-        rows = client.get("/own-model/training-set/rows", params={"half": "held_out"}).json()
+        rows = client.get("/ai-factory/training-set/rows", params={"half": "held_out"}).json()
         assert rows["total"] > 0 and all(row["source"]["kind"] for row in rows["rows"])
     finally:
         org_store.save_org_settings(org_store.load_org_settings().model_copy(update={"train_own_model": None}))

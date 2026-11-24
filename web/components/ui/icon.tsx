@@ -114,7 +114,7 @@ const ICONS = {
   agents: IconRobot,
   spend: IconCoins,
   brain: IconBrain,
-  /** The organisation's own model, trained on the install (Define ▸ Own model) — a model, not an agent at work. */
+  /** The AI Factory, where the organisation's own models are made (Define ▸ AI Factory) — a model, not an agent at work. */
   model: IconCpu,
   shield: IconShieldCheck,
   settings: IconSettings,

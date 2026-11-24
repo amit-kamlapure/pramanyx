@@ -39,7 +39,14 @@ JOB_KIND = "own_model_training"
 #: context length) and the method. Defaults measured 2026-11-23 on theLook + LuxExperience (337 sources): full
 #: fine-tuning at 3e-5 for 8 epochs took held-out recall from 0% to 98% in ~5 minutes on an Apple M5.
 DEFAULTS: dict[str, Any] = {"method": "full", "epochs": 8, "learning_rate": 3e-5, "max_seq_len": 512,
-                            "batch_size": 8, "lora_rank": 16}
+                            "batch_size": 8, "lora_rank": 16, "engine": "builtin", "teach_by": "example"}
+
+#: The engines a run may be given, and why the ways of teaching not yet offered are not — said, never a silent no.
+ENGINES = ("builtin", "llamafactory")
+_NOT_YET = {
+    "preference": "teaching by preference needs corrections a person typed — the Corrections environment has none yet",
+    "reward": "teaching by reward needs an environment whose tasks the model passes 10–80% of the time — none does yet",
+}
 _LIMITS = {"epochs": (1, 30), "learning_rate": (1e-6, 1e-2), "max_seq_len": (128, 2048), "batch_size": (1, 64),
            "lora_rank": (2, 128)}
 _LORA_RATE = 4e-4
@@ -110,6 +117,10 @@ def settings_for(choice: Optional[dict]) -> dict:
         raise TrainingRefused("the method is full (every weight) or lora (a low-rank branch, merged back)")
     if choice.get("method") == "lora" and "learning_rate" not in choice:
         out["learning_rate"] = _LORA_RATE
+    if choice.get("engine") not in (None, *ENGINES):
+        raise TrainingRefused(f"the engine is one of {', '.join(ENGINES)}; the others are said on the Engines tab")
+    if choice.get("teach_by") not in (None, "example"):
+        raise TrainingRefused(_NOT_YET.get(str(choice.get("teach_by")), "teach by example, preference or reward"))
     out.update(choice)
     for key, (lo, hi) in _LIMITS.items():
         value = float(out[key])
@@ -149,11 +160,22 @@ def prepare(run_id: str, *, settings: dict, base: dict, train: dict, held: dict)
 
 
 def progress(run_id: str) -> list[dict]:
-    """The worker's events so far, oldest first."""
-    p = models_dir() / "runs" / run_id / "progress.jsonl"
-    if not p.exists():
-        return []
-    return [e for e in (_event(line) for line in p.read_text(encoding="utf-8").splitlines()) if e is not None]
+    """The run's events so far, oldest first: the worker's, and — for a LlamaFactory run — its trainer's steps, read
+    from its own `trainer_log.jsonl` and said in the same words."""
+    run_dir = models_dir() / "runs" / run_id
+    p = run_dir / "progress.jsonl"
+    ours = [e for e in (_event(line) for line in p.read_text(encoding="utf-8").splitlines()) if e is not None] \
+        if p.exists() else []
+    lf = run_dir / "lf_out" / "trainer_log.jsonl"
+    if not lf.exists():
+        return ours
+    steps = []
+    for e in (_event(line) for line in lf.read_text(encoding="utf-8").splitlines()):
+        if e and "current_steps" in e:
+            steps.append({"event": "step", "step": e.get("current_steps"), "total": e.get("total_steps"),
+                          "loss": e.get("loss"), "lr": e.get("lr"), "epoch": e.get("epoch"),
+                          "tokens": e.get("total_tokens"), "tokens_per_s": e.get("throughput")})
+    return [e for e in ours if e.get("event") == "start"] + steps + [e for e in ours if e.get("event") != "start"]
 
 
 def _event(line: str) -> Optional[dict]:
@@ -184,14 +206,22 @@ async def start(choice: Optional[dict] = None, *, by: str = "") -> dict:
     from pramanyx.kernel.ledger import Ledger
     if Ledger.default().jobs_where(states=list(JobState.ACTIVE), idempotency_key=f"{JOB_KIND}:{_org()}", limit=1):
         raise TrainingRefused("a run is already going for this organisation — stop it, or wait for it to finish")
+    if settings["engine"] == "llamafactory":
+        from pramanyx.training.engines import door
+        d = door("llamafactory") or {}
+        if d.get("status") != "ready":
+            raise TrainingRefused(f"LlamaFactory is not ready here: {d.get('why') or 'not found'} — {d.get('how') or ''}")
     run_id = uuid.uuid4().hex[:12]
     run_dir = prepare(run_id, settings=settings, base=b, train=train, held=held)
+    if settings["engine"] == "llamafactory":
+        prepare_llamafactory(run_dir)
     org = _org()
     meta = {"run_id": run_id, "org_id": org, "by": by, "settings": settings,
             "base": {k: b.get(k) for k in ("source", "dir", "architecture", "bytes")},
             "training_set": {k: {f: n.get(f) for f in ("id", "name", "version", "data_id", "row_count")}
                              for k, n in (("train", train), ("held_out", held))}}
-    job_id = await kernel().submit(JOB_KIND, lambda: _run(run_dir, meta), org_id=org,
+    body = _run_llamafactory if settings["engine"] == "llamafactory" else _run
+    job_id = await kernel().submit(JOB_KIND, lambda: body(run_dir, meta), org_id=org,
                                    idempotency_key=f"{JOB_KIND}:{org}", payload=meta)
     return {"job_id": job_id, "run_id": run_id, "settings": settings}
 
@@ -218,6 +248,125 @@ async def _run(run_dir: Path, meta: dict) -> dict:
     return await asyncio.to_thread(record_trained, run_dir, meta, result)
 
 
+# ── the LlamaFactory engine ───────────────────────────────────────────────────────────────────────────────────────
+#
+# Driven the way its own web UI drives it (the study, §2): a dataset and its registration in the run folder, a config,
+# `llamafactory-cli train`, its `trainer_log.jsonl` followed; a LoRA run merged with `llamafactory-cli export`. No
+# chat template is named, so it renders the base's own (measured 2026-11-24: minimind-3's, empty think block and all) —
+# the same words the worker measures with and Ollama serves. Then the worker, in measure-only mode, measures the base
+# and the result on the held-out questions exactly as it measures its own runs.
+
+def prepare_llamafactory(run_dir: Path) -> None:
+    import yaml
+    cfg = json.loads((run_dir / "config.json").read_text(encoding="utf-8"))
+    data = run_dir / "lf_data"
+    data.mkdir(exist_ok=True)
+    rows = [json.loads(x) for x in (run_dir / "train.jsonl").read_text(encoding="utf-8").splitlines() if x.strip()]
+    (data / "train.jsonl").write_text("".join(json.dumps({"messages": [
+        {"role": "user", "content": r["prompt"]}, {"role": "assistant", "content": r["completion"]}]}) + "\n"
+        for r in rows), encoding="utf-8")
+    (data / "dataset_info.json").write_text(json.dumps({"knowledge": {
+        "file_name": "train.jsonl", "formatting": "sharegpt", "columns": {"messages": "messages"},
+        "tags": {"role_tag": "role", "content_tag": "content", "user_tag": "user", "assistant_tag": "assistant",
+                 "system_tag": "system"}}}), encoding="utf-8")
+    lora = cfg["method"] == "lora"
+    train = {"model_name_or_path": cfg["base_dir"], "stage": "sft", "do_train": True,
+             "finetuning_type": "lora" if lora else "full", **({"lora_target": "all", "lora_rank": cfg["lora_rank"]}
+                                                             if lora else {}),
+             "dataset": "knowledge", "dataset_dir": str(data), "cutoff_len": cfg["max_seq_len"],
+             "overwrite_cache": True, "preprocessing_num_workers": 1, "dataloader_num_workers": 0,
+             "output_dir": str(run_dir / "lf_out"), "overwrite_output_dir": True, "logging_steps": 5,
+             "save_strategy": "no", "plot_loss": False, "report_to": "none",
+             "per_device_train_batch_size": cfg["batch_size"], "gradient_accumulation_steps": 1,
+             "learning_rate": cfg["learning_rate"], "num_train_epochs": float(cfg["epochs"]),
+             "lr_scheduler_type": "cosine", "warmup_ratio": 0.05, "include_num_input_tokens_seen": True, "seed": 42}
+    (run_dir / "lf_train.yaml").write_text(yaml.safe_dump(train, sort_keys=False), encoding="utf-8")
+    if lora:
+        merge = {"model_name_or_path": cfg["base_dir"], "adapter_name_or_path": str(run_dir / "lf_out"),
+                 "finetuning_type": "lora", "export_dir": cfg["out_dir"], "export_size": 5, "export_device": "cpu",
+                 "export_legacy_format": False}
+        (run_dir / "lf_export.yaml").write_text(yaml.safe_dump(merge, sort_keys=False), encoding="utf-8")
+
+
+def _emit(run_dir: Path, event: str, **data) -> None:
+    import time
+    with open(run_dir / "progress.jsonl", "a", encoding="utf-8") as f:
+        f.write(json.dumps({"event": event, "at": time.time(), **data}) + "\n")
+
+
+async def _step(args: list[str], run_dir: Path, env: dict, what: str) -> None:
+    """One subprocess of a run, logged to the run's folder; a cancel stops it; a failure says what failed."""
+    with open(run_dir / "engine.log", "ab") as log:
+        proc = await asyncio.create_subprocess_exec(*args, stdout=log, stderr=asyncio.subprocess.STDOUT,
+                                                    env=env, cwd=str(run_dir))
+        try:
+            await proc.wait()
+        except asyncio.CancelledError:
+            proc.terminate()
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=30)
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                proc.kill()
+            _emit(run_dir, "cancelled")
+            raise
+    if proc.returncode != 0:
+        _emit(run_dir, "error", error=f"{what} stopped with exit code {proc.returncode} (engine.log)")
+        raise RuntimeError(f"{what} stopped with exit code {proc.returncode}; its log is engine.log in the run folder")
+
+
+async def _run_llamafactory(run_dir: Path, meta: dict) -> dict:
+    from pramanyx.training.engines import LLAMAFACTORY_ENV, llamafactory_cli
+    cli = llamafactory_cli()
+    if not cli:
+        raise RuntimeError("LlamaFactory is no longer installed where it was found")
+    cfg = json.loads((run_dir / "config.json").read_text(encoding="utf-8"))
+    env = {**os.environ, **LLAMAFACTORY_ENV, "HF_DATASETS_CACHE": str(run_dir / "hf_cache")}
+    _emit(run_dir, "start", engine="llamafactory", method=cfg["method"], device="", params=None,
+          train_rows=len((run_dir / "train.jsonl").read_text(encoding="utf-8").splitlines()),
+          held_rows=len((run_dir / "held_out.jsonl").read_text(encoding="utf-8").splitlines()))
+    await _step([cli, "train", str(run_dir / "lf_train.yaml")], run_dir, env, "LlamaFactory's training")
+    if cfg["method"] == "lora":
+        _emit(run_dir, "merge")
+        await _step([cli, "export", str(run_dir / "lf_export.yaml")], run_dir, env, "LlamaFactory's merge")
+    else:
+        import shutil
+        shutil.copytree(run_dir / "lf_out", cfg["out_dir"], dirs_exist_ok=True)
+    worker = Path(__file__).with_name("worker.py")
+    await _step([training_python(), "-I", str(worker), "--measure", str(run_dir)], run_dir,
+                {**os.environ, "TOKENIZERS_PARALLELISM": "false", "PYTORCH_ENABLE_MPS_FALLBACK": "1"},
+                "the held-out measure")
+    result = json.loads((run_dir / "result.json").read_text(encoding="utf-8"))
+    if not result.get("ok"):
+        raise RuntimeError(result.get("error") or "the held-out measure gave no result")
+    return await asyncio.to_thread(record_trained, run_dir, meta, result)
+
+
+def runs(org_id: Optional[str] = None, limit: int = 30) -> list[dict]:
+    """The organisation's training runs, newest first: what each was asked to do, how far it got, what it made."""
+    from pramanyx.kernel.ledger import Ledger
+    org = org_id or _org()
+    made = {str(m.get("run_id")): m.get("number") for m in models(org)}
+    out = []
+    for job in Ledger.default().jobs_where(kinds=[JOB_KIND], limit=200):
+        if (job.get("org_id") or "default") != org:
+            continue
+        payload = job.get("payload") or {}
+        run_id = str(payload.get("run_id") or "")
+        events = progress(run_id) if run_id else []
+        steps = [e for e in events if e.get("event") == "step"]
+        measures = {e.get("label"): {k: e.get(k) for k in ("f1", "recalled", "answer_loss")}
+                    for e in events if e.get("event") == "measure"}
+        out.append({"job_id": job["id"], "run_id": run_id, "state": job.get("state"), "error": job.get("error") or "",
+                    "created_at": job.get("created_at"), "by": payload.get("by") or "",
+                    "settings": payload.get("settings") or {}, "rows": (payload.get("training_set") or {}).get(
+                        "train", {}).get("row_count"),
+                    "losses": [e.get("loss") for e in steps if e.get("loss") is not None],
+                    "last_step": steps[-1] if steps else None, "measures": measures,
+                    "model": made.get(run_id)})
+    out.sort(key=lambda r: r.get("created_at") or "", reverse=True)
+    return out[:limit]
+
+
 def _measure_summary(m: dict) -> dict:
     return {k: m.get(k) for k in ("rows", "answer_loss", "f1", "recalled", "by_kind")}
 
@@ -237,6 +386,7 @@ def record_trained(run_dir: Path, meta: dict, result: dict) -> dict:
     body = {"number": number, "run_id": meta["run_id"], "trained_at": _now(), "trained_by": meta["by"],
             "base": meta["base"], "training_set": meta["training_set"], "settings": meta["settings"],
             "connections": connections, "dir": cfg["out_dir"], "device": result.get("device"),
+            "engine": cfg.get("engine", "builtin"),
             "params": result.get("params"), "steps": result.get("steps"), "tokens": result.get("tokens"),
             "seconds": result.get("seconds"), "bytes": result.get("bytes"),
             "measure": {"before": _measure_summary(result["before"]), "after": _measure_summary(result["after"])},

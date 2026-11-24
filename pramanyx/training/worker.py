@@ -325,6 +325,50 @@ def run(run_dir: Path) -> dict:
             "seconds": round(time.time() - t0, 1), "bytes": size, "before": before, "after": after}
 
 
+def measure_only(run_dir: Path) -> dict:
+    """``worker.py --measure <run_dir>`` — for a model another engine trained into ``out_dir``: measure the base and the
+    result on the held-out questions exactly as `run` does its own, say where the answer ends, and write the template
+    Ollama serves it with. The weights are not rewritten."""
+    cfg = json.loads((run_dir / "config.json").read_text(encoding="utf-8"))
+    cancel_file = run_dir / "cancel"
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+    device = cfg.get("device") or pick_device(torch)
+    out = Path(cfg["out_dir"])
+    tokenizer = AutoTokenizer.from_pretrained(out)
+    if tokenizer.pad_token_id is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.padding_side = "right"
+    held_rows, t0 = _rows(cfg["held_out"]), time.time()
+    base = AutoModelForCausalLM.from_pretrained(cfg["base_dir"], dtype=torch.float32).to(device)
+    before = measure(torch, base, tokenizer, held_rows, cfg, device, label="before", cancel_file=cancel_file)
+    _emit(run_dir, "measure", **{k: v for k, v in before.items() if k != "answers"})
+    del base
+    model = AutoModelForCausalLM.from_pretrained(out, dtype=torch.float32).to(device)
+    params = sum(p.numel() for p in model.parameters())
+    after = measure(torch, model, tokenizer, held_rows, cfg, device, label="after", cancel_file=cancel_file)
+    _emit(run_dir, "measure", **{k: v for k, v in after.items() if k != "answers"})
+    # Where the answer ends, said in the files every runtime reads (minimind-3's config named no end-of-turn token).
+    for name in ("config.json", "generation_config.json"):
+        path = out / name
+        doc = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+        doc.update(eos_token_id=tokenizer.eos_token_id, pad_token_id=tokenizer.pad_token_id,
+                   **({"bos_token_id": tokenizer.bos_token_id} if tokenizer.bos_token_id is not None else {}))
+        path.write_text(json.dumps(doc, indent=2), encoding="utf-8")
+    (out / "ollama_template.json").write_text(json.dumps(ollama_template(tokenizer, str(cfg.get("system") or ""))),
+                                              encoding="utf-8")
+    state = run_dir / "lf_out" / "trainer_state.json"
+    trained = json.loads(state.read_text(encoding="utf-8")) if state.exists() else {}
+    seen = run_dir / "lf_out" / "all_results.json"
+    results = json.loads(seen.read_text(encoding="utf-8")) if seen.exists() else {}
+    size = sum(p.stat().st_size for p in out.rglob("*") if p.is_file())
+    _emit(run_dir, "saved", out_dir=str(out), bytes=size)
+    seconds = float(results.get("train_runtime") or 0.0) + (time.time() - t0)
+    return {"ok": True, "device": device, "params": params, "method": cfg.get("method"),
+            "steps": trained.get("global_step"), "tokens": results.get("num_input_tokens_seen"),
+            "seconds": round(seconds, 1), "bytes": size, "before": before, "after": after}
+
+
 def fetch(repo: str, folder: str, patterns: list[str]) -> int:
     """``worker.py --fetch <owner/name> <folder> <pattern>...`` — a base's files from Hugging Face, in this process (it
     has the libraries; the API's does not need them)."""
@@ -337,9 +381,10 @@ def fetch(repo: str, folder: str, patterns: list[str]) -> int:
 def main(argv: list[str]) -> int:
     if len(argv) > 1 and argv[1] == "--fetch":
         return fetch(argv[2], argv[3], argv[4:])
-    run_dir = Path(argv[1])
+    measure_mode = len(argv) > 2 and argv[1] == "--measure"
+    run_dir = Path(argv[2] if measure_mode else argv[1])
     try:
-        result = run(run_dir)
+        result = measure_only(run_dir) if measure_mode else run(run_dir)
         status = 0
         _emit(run_dir, "done", seconds=result["seconds"])
     except Cancelled:

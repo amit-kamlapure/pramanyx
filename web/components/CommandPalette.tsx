@@ -383,7 +383,7 @@ export function CommandPalette({ open, onClose, selectedConn, onNavigate, onGoTo
     { id: "nav-spend",       label: "Spend",                sublabel: "Model usage, cost, caps and the governance feed", type: "action", icon: "scales", accent: "var(--amb3)" },
     { id: "nav-security",    label: "Security & Audit",     sublabel: "Query audit, approvals, guardrail activity", type: "action", icon: "shield", accent: "var(--red3)" },
     { id: "nav-evals",       label: "Evals",                sublabel: "Suites, runs and experiments",       type: "action", icon: "flask",    accent: "var(--cyn3)" },
-    { id: "nav-own-model",   label: "Own model",            sublabel: "The organisation's own model, trained here on what it settled", type: "action", icon: "model", accent: "var(--t2)" },
+    { id: "nav-ai-factory",  label: "AI Factory",           sublabel: "Make, measure and serve the organisation's own models", type: "action", icon: "model", accent: "var(--t2)" },
     { id: "nav-settings",    label: "Settings",             sublabel: "Theme, model, system configuration", type: "action", icon: "settings", accent: "var(--t3)" },
     // The Record's pages and the two Operations layers the 2027 study added — under the rail's words.
     { id: "nav-now",         label: "Now",                  sublabel: "What used a slot this week, what waits on you, what was held", type: "action", icon: "bell", accent: "var(--amb3)" },
@@ -439,7 +439,7 @@ export function CommandPalette({ open, onClose, selectedConn, onNavigate, onGoTo
     "nav-spend":       () => onNavigate("spend"),
     "nav-security":    () => onNavigate("security"),
     "nav-evals":       () => onNavigate("evals"),
-    "nav-own-model":   () => onNavigate("own-model"),
+    "nav-ai-factory":  () => onNavigate("ai-factory"),
     "nav-settings":    () => onNavigate("settings"),
     "nav-now":         () => onNavigate("now"),
     "nav-inquiries":   () => onNavigate("inquiries"),
