@@ -2145,7 +2145,55 @@ def run_analyst(
     vocabulary CA-1's parts path renders. ``on_step`` fires per loop step (the
     cancellation checkpoint, like converse). ``persist`` writes the investigation
     row so History, receipts and follow-ups see the run like any other deep run.
+
+    However the turn ends, its row says so. The turn writes its outcome only when it returns; one stopped on the way —
+    a budget, a cancel, its conversation's reader leaving, a crash — is marked failed here, with why. Until 2026-11-24
+    only the K1 bridge did that, so a deep analysis a conversation ran inline (`converse_tools.deep_analysis`) and whose
+    reader left stayed 'running' until a restart's sweep.
     """
+    made: dict = {}
+    try:
+        return _run_analyst(
+            connection_id, question, origin_finding=origin_finding, extra_context=extra_context,
+            session_id=session_id, canvas_id=canvas_id, schema_scope=schema_scope, emit=emit, on_step=on_step,
+            provider=provider, max_steps=max_steps, persist=persist, purpose=purpose, shape=shape, made=made)
+    except BaseException as exc:
+        if made.get("inv_id"):
+            _say_how_it_stopped(made["inv_id"], exc)
+        raise
+
+
+def _say_how_it_stopped(inv_id: str, exc: BaseException) -> None:
+    """Mark a turn that stopped on the way failed, with why. The answer path's own cancel (``cancels``: its reader
+    leaving, or its job cancelled) is said as a cancel — with the kernel's reason, inside a job."""
+    try:
+        from pramanyx.db.history import fail_if_running
+        from pramanyx.kernel.jobs import describe_stop
+        fail_if_running(inv_id, describe_stop(None if getattr(exc, "cancels", False) else exc))
+    except Exception as e:  # noqa: BLE001 — the stop itself is re-raised; recording it is best-effort
+        from pramanyx.kernel.errors import tolerate
+        tolerate(e, "a stopped analyst turn could not record how it stopped", counter="analyst.stop_recorded")
+
+
+def _run_analyst(
+    connection_id: str,
+    question: str,
+    *,
+    origin_finding: Optional[dict] = None,
+    extra_context: Optional[str] = None,
+    session_id: str = "",
+    canvas_id: Optional[str] = None,
+    schema_scope: Optional[str] = None,
+    emit: Optional[Emit] = None,
+    on_step: Optional[Callable[[LoopStep], None]] = None,
+    provider=None,
+    max_steps: Optional[int] = None,
+    persist: bool = True,
+    purpose: str = "",
+    shape: Optional[str] = None,
+    made: Optional[dict] = None,
+) -> AnalystResult:
+    """The turn itself (:func:`run_analyst`); ``made`` is told the run's id as soon as its row exists."""
     from pramanyx.agent.investigate import ada_intake, ada_synthesize
     from pramanyx.llm.profile import profile_for
     from pramanyx.llm.provider import get_provider
@@ -2161,6 +2209,8 @@ def run_analyst(
         from pramanyx.db.history import create_investigation
         inv_id = create_investigation(question, eff_conn_id, canvas_id=canvas_id,
                                       purpose=purpose, session_id=session_id or "")
+        if made is not None:
+            made["inv_id"] = inv_id
     emit("start", {"question": question, "connection_id": eff_conn_id,
                    "investigation_id": inv_id or None, "body": "analyst"})
 

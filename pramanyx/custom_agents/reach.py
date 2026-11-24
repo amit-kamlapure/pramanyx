@@ -75,6 +75,11 @@ def fold_frame(out: dict[str, Any], frame: dict[str, Any], *, max_rows: int = 20
         out["receipt_id"] = str(frame.get("receipt_id") or frame.get("id") or "")
     elif t == "error":
         out["error"] = str(frame.get("message") or frame.get("error") or "error")
+    elif t == "already_running":
+        # The agent's conversation was handed a deep analysis of this question already under way (`agent/one_run.py`):
+        # its id, which the turn's own `done` below would otherwise stand over, and what was said of it.
+        out["deep_analysis"] = {"investigation_id": str(frame.get("investigation_id") or ""),
+                                "already_running": str(frame.get("already_running") or "")}
     elif t == "done":
         # The quick path names the turn here as `inv_id` (the deep path as
         # `investigation_id` on its start frame). Receipt 2026-10-03: the fold read

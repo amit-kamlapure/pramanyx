@@ -383,6 +383,13 @@ class JobKernel:
                     self._transition(job_id, JobState.CANCELLED)
                     self._tasks.pop(job_id, None)
                     _stop_reasons.pop(job_id, None)
+                    # The contract holds for a job cancelled before it ran, too: `on_finish` runs after the terminal
+                    # transition (it releases what the submitter holds for the run — `agent/one_run` claims).
+                    if on_finish is not None:
+                        try:
+                            on_finish(job_id, JobState.CANCELLED)
+                        except Exception:
+                            logger.warning("job %s on_finish hook failed", job_id, exc_info=True)
                     raise
             try:
                 await self._run(job_id, coro_factory, on_finish)

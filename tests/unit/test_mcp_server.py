@@ -384,3 +384,68 @@ def test_real_path_metric_value_endpoint_404():
     with pytest.raises(PramanyxError) as e:
         _run(client._get("/metrics/__no_such_metric__/value", params={"conn_id": "x"}))
     assert "not found" in str(e.value).lower()
+
+
+# ── one run per question: the coworker waits on the run it has, rather than ask again (2026-11-24) ──────────────────
+def test_reading_a_running_analysis_waits_for_it_and_returns_the_report_when_it_lands(monkeypatch):
+    """Seen twice: the coworker read a running run four times in half a minute — each read answered at once with a
+    bare 'running' — took it for stuck, and asked the same question again through another tool."""
+    import pramanyx.mcp.client as C
+    monkeypatch.setattr(C, "READ_EVERY_S", 0.01)
+    reads: list[int] = []
+
+    def record(req):
+        reads.append(1)
+        if len(reads) < 3:
+            return httpx.Response(200, json={"id": "inv9", "status": "running",
+                                             "progress": {"steps": len(reads), "last_step": "decompose"}})
+        return httpx.Response(200, json={"id": "inv9", "status": "complete", "report": {"headline": "It fell"}})
+
+    client = _client({"/investigations/inv9": record})
+    client.read_wait = 5.0
+    got = _run(client.get_investigation("inv9"))
+    assert got["status"] == "complete" and got["report"]["headline"] == "It fell"
+    assert len(reads) == 3, "read again while it ran, and not after it ended"
+
+
+def test_a_run_still_going_at_the_end_of_the_wait_says_how_far_it_has_got(monkeypatch):
+    import pramanyx.mcp.client as C
+    monkeypatch.setattr(C, "READ_EVERY_S", 0.01)
+    client = _client({"/investigations/inv9": httpx.Response(200, json={
+        "id": "inv9", "status": "running", "progress": {"steps": 4, "last_step": "decompose", "running_for_s": 410}})})
+    client.read_wait = 0.05
+    got = _run(client.get_investigation("inv9"))
+    assert got["status"] == "running"
+    assert "taken 4 steps so far, the last decompose" in got["message"]
+    assert "get_investigation('inv9') waits for it" in got["message"] and "Poll" not in got["message"]
+
+
+def test_a_finished_run_is_read_at_once():
+    reads: list[int] = []
+    client = _client({"/investigations/inv9": lambda req: (reads.append(1), httpx.Response(
+        200, json={"id": "inv9", "status": "failed", "error": "Stopped at the Analyst's 1800s time budget"}))[1]})
+    got = _run(client.get_investigation("inv9"))
+    assert got["status"] == "failed" and len(reads) == 1 and "message" not in got
+
+
+def test_a_deep_analysis_already_under_way_is_handed_back_running_not_complete():
+    """The door hands back the run under way by its id; it is read as running, never as a finished run with nothing in
+    it."""
+    said = "This question is already being analysed (run inv7, started 3 min ago, still going), so it was not started"
+    routes = {"/ask": httpx.Response(200, content=_sse([
+        {"type": "route", "depth": "deep"},
+        {"type": "already_running", "investigation_id": "inv7", "already_running": said},
+    ]))}
+    res = _run(_client(routes).deep_analysis("why did margin fall", "c"))
+    assert res["status"] == "running" and res["investigation_id"] == "inv7"
+    assert res["message"] == said and res["report"] is None
+
+
+def test_a_deep_analysis_handed_a_run_still_starting_says_so_without_an_id():
+    said = "This question is already being analysed, started under a minute ago, and that run is still starting"
+    routes = {"/ask": httpx.Response(200, content=_sse([
+        {"type": "route", "depth": "deep"},
+        {"type": "already_running", "investigation_id": None, "already_running": said},
+    ]))}
+    res = _run(_client(routes).deep_analysis("why did margin fall", "c"))
+    assert res["status"] == "running" and res["investigation_id"] is None and res["message"] == said

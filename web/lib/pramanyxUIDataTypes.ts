@@ -237,6 +237,10 @@ export const UNRENDERED_FRAMES: ReadonlySet<string> = new Set([
   // follow-ups) from the frames themselves; headless doors (Slack, a scheduled send,
   // the export) are the readers that select from it.
   "envelope",
+  // An agent's repeat of a deep analysis already under way is handed that run by its id
+  // (`pramanyx/agent/one_run.py`). Only an agent's call is ever handed one — the coworker's
+  // MCP client and a custom agent's fold read it; a person's ask in the app never gets it.
+  "already_running",
 ]);
 
 /**
