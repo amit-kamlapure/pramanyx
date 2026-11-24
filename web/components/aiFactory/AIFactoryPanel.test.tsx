@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 /**
- * Define ▸ AI Factory (2026-11-24): seven tabs over one read. The Overview says what needs a person; Environments says
- * how an answer will be scored and what a build leaves out; Engines says where each engine stands — Axolotl under
- * licence review, a hosted service off; the Playground never shows a withheld answer's words; and Runs says why it
- * cannot start while the organisation does not allow it.
+ * Define ▸ AI Factory (2026-11-24): six tabs over one read. The Overview says what needs a person; Environments says
+ * how an answer will be scored and what a build leaves out; the Playground never shows a withheld answer's words; and
+ * Runs says why it cannot start while the organisation does not allow it. There is no Engines tab ("lets not say how
+ * we do it", the user): a new run offers the engines ready here as a dropdown, and the base is changed beside it.
  *
  * The client is mocked: an unmocked call would reach the live API from jsdom.
  */
@@ -12,6 +12,7 @@ import { Theme } from "@radix-ui/themes";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AIFactoryOverview, OwnModel } from "@/lib/api";
+import { optionsOf } from "@/lib/testing";
 
 const model = (over: Partial<OwnModel> = {}): OwnModel => ({
   number: 1, state: "published", run_id: "r1", trained_at: "2026-11-23T12:00:00Z", trained_by: "ana",
@@ -101,12 +102,25 @@ describe("Define ▸ AI Factory", () => {
     expect((await screen.findByTestId("ai-factory-env-sql")).textContent).toContain("Result matches the reference");
   });
 
-  it("says where each engine stands, never offering one that cannot run here", async () => {
+  it("has no Engines tab, and a new run offers only the engines ready here — never says how it trains", async () => {
     mount();
-    await openTab(/Engines/);
-    expect((await screen.findByTestId("engine-axolotl")).textContent).toContain("Licence review first");
-    expect(screen.getByTestId("engine-hosted").textContent).toContain("leave the install");
-    expect(screen.getByTestId("engine-llamafactory").textContent).toContain("Ready here");
+    await screen.findByTestId("ai-factory-figures");
+    expect(screen.queryByRole("tab", { name: /Engines/ })).toBeNull();
+    await openTab(/Runs/);
+    const form = await screen.findByTestId("ai-factory-new-run");
+    expect(optionsOf(screen.getByRole("combobox", { name: "Engine" })).map(o => o.text)).toEqual(["Built-in", "LlamaFactory"]);
+    for (const word of ["Axolotl", "Hosted", "licence", "Apple silicon", "rented GPU"]) expect(form.textContent).not.toContain(word);
+  });
+
+  it("changes the base from the run form", async () => {
+    mount();
+    await openTab(/Runs/);
+    const base = await screen.findByTestId("ai-factory-base");
+    expect(base.textContent).toContain("owner/base · Qwen3ForCausalLM · 128 MB");
+    expect(screen.queryByLabelText("The base to fetch")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    expect(screen.getByLabelText("The base to fetch")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Fetch" })).toBeTruthy();
   });
 
   it("shows a withheld answer as withheld, with its nearest source, and not its words", async () => {
@@ -132,8 +146,7 @@ describe("Define ▸ AI Factory", () => {
     mount();
     await openTab(/Runs/);
     const form = await screen.findByTestId("ai-factory-new-run");
-    expect(form.textContent).toContain("LlamaFactory");
-    expect(form.textContent).toContain("Built-in");
+    expect(screen.getByRole("combobox", { name: "Engine" }).getAttribute("data-value")).toBe("llamafactory");
     // No LoRA run on LlamaFactory has been timed yet: the estimate says whose time it borrows, never a guessed factor.
     expect(form.textContent).toContain("roughly 5 min, going by Model 1 (Built-in, every weight)");
     expect(screen.getByRole("radio", { name: "LoRA" }).getAttribute("aria-checked") ?? screen.getByRole("radio", { name: "LoRA" }).getAttribute("data-state")).toMatch(/true|checked|on/);

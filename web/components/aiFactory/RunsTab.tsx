@@ -1,8 +1,8 @@
 "use client";
 
-/** AI Factory ▸ Runs — a new run, read before it starts (what, on which base, by which engine, how, where, about how
- *  long), and every run with its loss and its measure. A way of teaching not offered yet is said with why, never a
- *  choice that fails when chosen. */
+/** AI Factory ▸ Runs — a new run, read before it starts (what, from which base, about how long), and every run with its
+ *  loss and its measure. The engine is a choice among those ready here, nothing more: the page does not say how a
+ *  model is trained (the user, 2026-11-24) — an engine not ready is simply not offered. The base is changed here. */
 import { useState } from "react";
 
 import { Sparkline } from "@/components/brief/Sparkline";
@@ -11,12 +11,13 @@ import { Card, Chip, Empty, Facts, MUTED, NUM, ROW, RULE } from "@/components/cl
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Segmented } from "@/components/ui/segmented";
+import { SelectField } from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
-import { cancelTraining, startTraining, type FactoryRun } from "@/lib/api";
+import { cancelTraining, fetchOwnModelBase, startTraining, type FactoryRun } from "@/lib/api";
 import { formatCount, relTime } from "@/lib/format";
 
 import type { FactoryData } from "./AIFactoryPanel";
-import { RUN_WORD, engineWord, f2, minutes, pct, type FactoryTab } from "./shared";
+import { RUN_WORD, engineWord, f2, mb, minutes, pct, type FactoryTab } from "./shared";
 
 export function RunsTab({ data, running, onChanged, go }: {
   data: FactoryData; running: boolean; onChanged: () => void; go: (t: FactoryTab, model?: number) => void;
@@ -67,8 +68,8 @@ function NewRun({ data, running, onChanged }: { data: FactoryData; running: bool
   const node = view.training_set.train;
   const can = view.allowed && view.setup.ready && !!view.base?.present && !!node && readyEngines.some(e => e.id === engine);
   const why = !view.allowed ? "the organisation does not allow it yet" : !view.setup.ready ? "this install cannot train yet"
-    : !view.base?.present ? "fetch a base on the Engines tab" : !node ? "build the training set on the Environments tab"
-    : !readyEngines.some(e => e.id === engine) ? "the engine is not ready here" : "";
+    : !view.base?.present ? "fetch a base above" : !node ? "build the training set on the Environments tab"
+    : !readyEngines.some(e => e.id === engine) ? "no engine is ready here" : "";
   // About how long: a timed model's seconds per question-epoch, scaled — one made the same way when there is one; else
   // the nearest, and the line says whose time it borrows. No factor is guessed between engines or methods: on this Mac
   // LoRA through LlamaFactory ran slower per token than every weight through the built-in loop.
@@ -78,23 +79,24 @@ function NewRun({ data, running, onChanged }: { data: FactoryData; running: bool
   const perUnit = from ? (from.seconds ?? 0) / ((from.settings.epochs ?? 1) * (from.training_set.train?.row_count ?? 1)) : null;
   const estimate = perUnit && node ? perUnit * node.row_count * (Number(epochs) || 1) : null;
   const borrowed = from && !same ? `going by Model ${from.number} (${engineWord(from.engine)}, ${from.settings.method === "lora" ? "LoRA" : "every weight"})` : "";
-  const notYet = (engines?.engines ?? []).filter(e => !readyEngines.includes(e) && (e.id === "builtin" || e.id === "llamafactory"));
 
   return (
     <Card label="New run" right="read what it will do before it starts" testId="ai-factory-new-run">
       <Facts rows={[
         ["Recipe", "Company dictionary"],
         ["Learns from", node ? `Company knowledge · version ${node.version} · ${formatCount(node.row_count)} questions, ${formatCount(view.training_set.held_out?.row_count ?? 0)} held out` : "no training set yet"],
-        ["Base", view.base?.present ? `${view.base.source} · ${view.base.architecture}` : "none fetched"],
+        ["Base", <BaseRow key="base" data={data} running={running} onChanged={onChanged} />],
         ["Taught by", "example — preference needs corrections a person typed (none yet); reward needs an environment passed 10–80% of the time (none yet)"],
-        ["Runs on", `this machine${engines ? ` · ${engines.hardware.accelerator}` : ""} — a rented GPU or a hosted service would send the tasks out of the install, so neither is offered`],
       ]} />
       <div style={{ ...ROW, gap: 16, marginTop: 12 }}>
-        {readyEngines.length > 1 ? (
-          <Segmented label="Engine" value={engine} disabled={running}
-            onChange={v => { setEngine(v); setMethod(v === "llamafactory" ? "lora" : "full"); }}
-            options={readyEngines.map(e => ({ value: e.id, label: e.name }))} />
-        ) : <Chip>{readyEngines[0]?.name ?? "no engine ready"}</Chip>}
+        {readyEngines.length ? (
+          <label className="aug-fs-sm" style={{ ...ROW, gap: 6 }}>Engine
+            <SelectField aria-label="Engine" value={engine} disabled={running || readyEngines.length < 2} style={{ minWidth: 150 }}
+              onChange={ev => { setEngine(ev.target.value); setMethod(ev.target.value === "llamafactory" ? "lora" : "full"); }}>
+              {readyEngines.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+            </SelectField>
+          </label>
+        ) : <span className="aug-fs-sm" style={MUTED}>No engine is ready here.</span>}
         <Segmented label="Method" value={method} onChange={setMethod} disabled={running}
           options={[{ value: "full", label: "Every weight" }, { value: "lora", label: "LoRA", title: "A low-rank branch beside each weight, merged back" }]} />
         <label className="aug-fs-sm" style={{ ...ROW, gap: 6 }}>Epochs
@@ -106,11 +108,6 @@ function NewRun({ data, running, onChanged }: { data: FactoryData; running: bool
         </label>
         {estimate != null && <span className="aug-fs-sm" style={MUTED}>{borrowed ? "roughly" : "about"} {minutes(estimate)}{borrowed ? `, ${borrowed}` : ""} · nothing leaves the install</span>}
       </div>
-      {notYet.length > 0 && (
-        <div className="aug-fs-sm" style={{ ...MUTED, marginTop: 8 }}>
-          {notYet.map(e => `${e.name}: ${e.why}${e.how ? ` — ${e.how}` : ""}`).join(" · ")}
-        </div>
-      )}
       <div style={{ ...ROW, marginTop: 12 }}>
         {running ? (
           <Button size="sm" variant="destructive" disabled={busy} onClick={async () => {
@@ -132,6 +129,36 @@ function NewRun({ data, running, onChanged }: { data: FactoryData; running: bool
         {!can && !running && <span className="aug-fs-sm" style={MUTED}>Not yet: {why}.</span>}
       </div>
     </Card>
+  );
+}
+
+/** The base a run starts from, and changing it: a Hugging Face repository (owner/name) or a folder on this machine. */
+function BaseRow({ data, running, onChanged }: { data: FactoryData; running: boolean; onChanged: () => void }) {
+  const b = data.view.base;
+  const [open, setOpen] = useState(!b?.present);
+  const [source, setSource] = useState(b?.source ?? "");
+  const [busy, setBusy] = useState(false);
+  return (
+    <div data-testid="ai-factory-base" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <span style={ROW}>
+        {b ? <span>{b.source} · {b.architecture} · {mb(b.bytes)}{b.present ? "" : " — its folder is gone"}</span> : <span style={MUTED}>none fetched</span>}
+        {b?.present && !open && <Button size="xs" variant="secondary" disabled={running || !data.view.allowed} onClick={() => setOpen(true)}>Change</Button>}
+      </span>
+      {open && (
+        <span style={ROW}>
+          <Input value={source} onChange={ev => setSource(ev.target.value)} placeholder="owner/name on Hugging Face, or a folder on this machine"
+            style={{ flex: "1 1 260px", maxWidth: 460 }} aria-label="The base to fetch" />
+          <Button size="xs" disabled={busy || running || !source.trim() || !data.view.allowed}
+            onClick={async () => {
+              setBusy(true);
+              try { await fetchOwnModelBase(source.trim()); toast.info("The base is fetched"); setOpen(false); onChanged(); }
+              catch (err) { toast.error(err instanceof Error ? err.message : String(err)); }
+              finally { setBusy(false); }
+            }}>{busy ? "Fetching…" : "Fetch"}</Button>
+          {b?.present && <Button size="xs" variant="secondary" disabled={busy} onClick={() => setOpen(false)}>Keep {b.source}</Button>}
+        </span>
+      )}
+    </div>
   );
 }
 

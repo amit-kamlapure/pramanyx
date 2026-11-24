@@ -2,10 +2,10 @@
 
 /**
  * Define ▸ AI Factory — where the organisation's own models are made (`pramanyx/training/`; the page was "Own model"
- * until 2026-11-24, when the user named it). Seven tabs in the order the work goes — Overview · Recipes ·
- * Environments · Runs · Models · Playground · Engines — from the mockup the user approved
- * (`web/public/_mockups/ai-factory.html`, not committed) and the engines study
- * (`docs/AI_FACTORY_ENGINES_STUDY_2026-11-24.md`).
+ * until 2026-11-24, when the user named it). Six tabs in the order the work goes — Overview · Recipes ·
+ * Environments · Runs · Models · Playground — from the mockup the user approved (`web/public/_mockups/ai-factory.html`,
+ * not committed). The mockup's Engines tab is gone (the user, 2026-11-24: "lets not say how we do it"): an engine is a
+ * dropdown on a new run, offering only those ready here, and the base is changed beside it.
  *
  * One read of everything the tabs show, kept fresh while a run is going; each tab lays it out. The tabs sit in the
  * shell's toolbar row and "New run" in its title row, as every page with views does.
@@ -25,7 +25,6 @@ import {
 } from "@/lib/api";
 import { useVisiblePoll } from "@/lib/useVisiblePoll";
 
-import { EnginesTab } from "./EnginesTab";
 import { EnvironmentsTab } from "./EnvironmentsTab";
 import { ModelsTab } from "./ModelsTab";
 import { OverviewTab } from "./OverviewTab";
@@ -107,7 +106,6 @@ export function AIFactoryPanel() {
         {tab === "runs" && <RunsTab data={data} running={running} onChanged={reload} go={go} />}
         {tab === "models" && <ModelsTab data={data} picked={picked} onPick={setPicked} onChanged={reload} />}
         {tab === "playground" && <PlaygroundTab data={data} />}
-        {tab === "engines" && <EnginesTab data={data} onChanged={reload} />}
       </Page>
     </div>
   );

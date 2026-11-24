@@ -7,10 +7,10 @@ import { Button } from "@/components/ui/button";
 import { formatCount, relTime } from "@/lib/format";
 
 import type { FactoryData } from "./AIFactoryPanel";
-import { RUN_WORD, STATE_TONE, STATE_WORD, engineWord, minutes, pct, type FactoryTab } from "./shared";
+import { RUN_WORD, STATE_TONE, STATE_WORD, engineWord, mb, minutes, pct, type FactoryTab } from "./shared";
 
 export function OverviewTab({ data, go }: { data: FactoryData; go: (t: FactoryTab, model?: number) => void }) {
-  const { view, plan, environments, engines, runs } = data;
+  const { view, plan, environments, runs } = data;
   const inService = view.models.filter(m => m.state === "published");
   const latest = view.models[0];
   const best = view.models.reduce<number | null>((b, m) => {
@@ -21,8 +21,6 @@ export function OverviewTab({ data, go }: { data: FactoryData; go: (t: FactoryTa
   const leftOut = plan ? plan.withheld.reduce((a, w) => a + w.count, 0) : null;
   const unconfirmed = plan?.withheld.find(w => w.reason.includes("confirmed"))?.count ?? 0;
   const sql = environments?.environments.find(e => e.id === "sql");
-  const ready = engines?.engines.filter(e => e.status === "ready" && e.runs_here) ?? [];
-  const here = engines?.engines.filter(e => e.runs_here) ?? [];
   const lastRun = runs?.[0];
 
   const stage = (label: string, value: string, meta: string, share: number, done = false) => (
@@ -46,8 +44,8 @@ export function OverviewTab({ data, go }: { data: FactoryData; go: (t: FactoryTa
           sub={latest ? `best model, from ${pct(latest.measure.before.recalled)} before training` : "no model trained yet"} />
         <Figure label="Ready to learn from" value={sourceCount == null ? "—" : formatCount(sourceCount)}
           sub={plan ? `settled sources · ${formatCount(plan.rows.train)} questions` : "not read"} />
-        <Figure label="Engines on this machine" value={engines ? `${ready.length} of ${here.length}` : "—"}
-          sub={engines ? engines.hardware.accelerator : "not read"} />
+        <Figure label="Base model" value={view.base ? view.base.source.split("/").pop() ?? view.base.source : "None"}
+          sub={view.base ? `${mb(view.base.bytes)} · fetched ${relTime(view.base.fetched_at)}` : "fetch one on a new run"} />
       </Figures>
 
       <NeedsYou testId="ai-factory-needs" empty={<span>Nothing waits on a person.</span>}>

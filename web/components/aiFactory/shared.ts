@@ -34,9 +34,8 @@ export const paramsWord = (p?: number | null) => (p == null ? "—" : `${Math.ro
 export const minutes = (s?: number | null) => (s == null ? "—" : s < 90 ? `${Math.round(s)} s` : `${Math.round(s / 6) / 10} min`);
 
 /** The tabs, in the order the work goes. */
-export type FactoryTab = "overview" | "recipes" | "environments" | "runs" | "models" | "playground" | "engines";
+export type FactoryTab = "overview" | "recipes" | "environments" | "runs" | "models" | "playground";
 export const FACTORY_TABS: { id: FactoryTab; label: string }[] = [
   { id: "overview", label: "Overview" }, { id: "recipes", label: "Recipes" }, { id: "environments", label: "Environments" },
   { id: "runs", label: "Runs" }, { id: "models", label: "Models" }, { id: "playground", label: "Playground" },
-  { id: "engines", label: "Engines" },
 ];
