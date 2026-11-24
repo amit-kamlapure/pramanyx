@@ -146,3 +146,37 @@ test("a running analysis is read again until it lands, once; a 4xx stops the rea
   stop();
   assert.equal(left.signals[0].aborted, true, "the card going aborts the read in flight");
 });
+
+test("a run handed the analysis already under way reads on as that run; one not yet named lands, saying so", async () => {
+  // 2026-11-24: the card followed a run that was then handed back — the status it never knew — and said "still
+  // running" for the hour, never the answer of the run it was handed.
+  const { follow, landed, handedTo, isDeepRecord } = await import("../src/report.js");
+  const timers = [];
+  const reads = [];
+  const answers = {
+    b: [{ status: "running" }, { status: "handed_back", handed_to: "r2", error: "already being analysed (run r2)" }],
+    r2: [{ status: "running" }, { status: "complete", report: { headline: "It rose" } }],
+  };
+  const json = (body) => ({ ok: true, status: 200, json: () => Promise.resolve(body) });
+  const seen = [];
+  follow("b", {
+    read: (id) => { reads.push(id); return Promise.resolve(json(answers[id].shift())); },
+    onLanded: (record) => seen.push(record), every: 10, forMs: 1000, now: () => 0,
+    later: (fn) => { timers.push(fn); return timers.length; }, cancel: () => {},
+    controller: () => ({ signal: { aborted: false }, abort() {} }),
+  });
+  for (let i = 0; i < 4; i += 1) { timers.shift()(); await new Promise((r) => setTimeout(r, 0)); }
+  assert.deepEqual(reads, ["b", "b", "r2", "r2"], "read on as the run it was handed");
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].report.headline, "It rose");
+
+  const unnamed = { id: "b", kind: "investigation", status: "handed_back", handed_to: "",
+                    error: "This question is already being analysed, and that run is still starting" };
+  assert.equal(handedTo(unnamed), "");
+  assert.equal(landed(unnamed), unnamed, "nothing to read on: it lands, and says why");
+  assert.equal(isDeepRecord(unnamed), true);
+  const facts = reportFacts(unnamed);
+  assert.equal(facts.handed, true);
+  assert.equal(facts.stopped, false, "never drawn as stopped");
+  assert.match(facts.why, /still starting/);
+});

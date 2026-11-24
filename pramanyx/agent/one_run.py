@@ -18,8 +18,9 @@ is handed, and it claims nothing; it only looks. Only agents' plain asks take pa
 The claims are the kernel ledger's (`Ledger.kv_put_if_absent`, as `notifications/sent_once` claims a send), so every API
 process that shares the ledger sees them; two racing for one get exactly one, and a claim is changed or let go only while
 it is still the one read (`kv_replace_if`, `kv_delete_if`). A claim stands while its job does — queued, or running with a
-fresh heartbeat (`kernel/jobs.py`) — so one whose process died lapses within two minutes, and one queued behind the
-investigation slots stands as long as it waits.
+fresh heartbeat (`kernel/jobs.py`) — and while the process that made it keeps stamping it (every 15 seconds, `_beat`): one
+queued behind the investigation slots stands as long as it waits, and one whose process died lapses within two minutes,
+read from any host (at once on its own, which can ask whether the process is still alive).
 """
 from __future__ import annotations
 
@@ -28,8 +29,10 @@ import json
 import os
 import re
 import socket
+import threading
 import time
 import uuid
+import weakref
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Iterable, Optional
@@ -44,8 +47,11 @@ CAP = 5_000
 STALE_AFTER_S = 60 * 60
 #: A claim no job has taken by now never will be: a door submits its job a moment after it claims.
 UNSUBMITTED_FOR_S = 120
-#: A running job whose heartbeat is older than this has lost its process (the kernel's own lease, `_STALE_SECONDS`).
+#: A running job whose heartbeat is older than this has lost its process (the kernel's own lease, `_STALE_SECONDS`); a
+#: claim whose maker last stamped it longer ago than this has lost its maker.
 HEARTBEAT_LAPSES_S = 120
+#: How often the process holding a claim stamps it — the kernel's own heartbeat interval.
+BEAT_EVERY_S = 15.0
 #: How long a repeat waits for the id of a run still starting before it is told the run is still starting.
 WAIT_FOR_ID_S = 90.0
 #: How often a waiting repeat reads the claim again.
@@ -80,7 +86,7 @@ def _job_alive(job_id: str) -> bool:
 
 def _maker_gone(row: dict) -> bool:
     """The process that made the claim, on this host, is no longer alive — its queued or still-starting run went with
-    it (another host's process cannot be asked; its claim stands on its job and its age)."""
+    it. Asked at once, where it can be; a process on another host is judged by its stamps (:func:`_live`)."""
     host, _, pid = str(row.get("by") or "").rpartition(":")
     if host != socket.gethostname() or not pid.isdigit():
         return False
@@ -88,10 +94,13 @@ def _maker_gone(row: dict) -> bool:
 
 
 def _live(row: Optional[dict]) -> bool:
-    """A claim stands for a run still going: fresh; once it names its run, that run's row still 'running' (a run that
-    ended is never handed back, whatever its claim says); its job alive — or, before a job took it, only just made."""
-    if not row or _age_s(row.get("began_at")) > STALE_AFTER_S or _maker_gone(row):
+    """A claim stands for a run still going: fresh; stamped lately by the process that made it, which is still alive;
+    once it names its run, that run's row still 'running' (a run that ended is never handed back, whatever its claim
+    says); its job alive — or, before a job took it, only just made."""
+    if not row or _age_s(row.get("began_at")) > STALE_AFTER_S:
         return False
+    if _age_s(row.get("beat_at") or row.get("began_at")) > HEARTBEAT_LAPSES_S or _maker_gone(row):
+        return False                                # its maker stopped stamping it: gone, on whatever host
     if row.get("inv_id"):
         from pramanyx.db.history import get_investigation
         if (get_investigation(row["inv_id"]) or {}).get("status") != "running":
@@ -146,10 +155,11 @@ def spec_of(intake: Optional[dict]) -> Optional[str]:
 
     The measure (the governed metric it framed, with the objects that metric's rule chose; else its expression and
     table), every further measure and the filters on them, the observation and comparison windows, its shape, the sides
-    of a driver or relationship question. The dimensions a question names are part of what it asks — except in a "why"
-    (diagnose) question, whose analysis looks across every dimension anyway: "what drove it — break it down by
-    category" asks the same analysis as "why did it change". When unsure, two specs differ: a repeat then runs again,
-    as before, where a spec too loose would hand a question someone else's answer."""
+    of a driver or relationship question, and the dimensions it names. A named dimension is part of what any question
+    asks, a "why" too: the run breaks it down first, whatever else it looks at (`investigate._prioritize_dimensions`
+    pins it), so "what drove it — break it down by category" is not the analysis of "why did it change", which may never
+    reach category. When unsure, two specs differ: a repeat then runs again, as before, where a spec too loose would
+    hand a question someone else's answer."""
     i = intake or {}
     framed = i.get("framed_metric") or {}
     measure = (f"m={framed['metric']};{json.dumps(framed.get('objects'), sort_keys=True, default=str)}"
@@ -159,7 +169,7 @@ def spec_of(intake: Optional[dict]) -> Optional[str]:
     others = sorted(_norm_sql((m or {}).get("sql") if isinstance(m, dict) else getattr(m, "sql", ""))
                     for m in (i.get("other_measures") or []))
     shape = str(i.get("question_shape") or "")
-    named = "" if shape == "diagnose" else ",".join(sorted(_norm_sql(d) for d in (i.get("named_dimensions") or [])))
+    named = ",".join(sorted({_norm_sql(d) for d in (i.get("named_dimensions") or []) if _norm_sql(d)}))
     parts = [measure, _norm_sql(i.get("metric_table")), ";".join(others),
              ";".join(sorted(_norm_sql(f) for f in (i.get("metric_filters") or []))),
              *(str(i.get(k) or "") for k in ("observation_start", "observation_end", "comparison_start", "comparison_end")),
@@ -176,27 +186,53 @@ def _drop_if_same(slot: str, row: dict) -> None:
 
 @dataclass(eq=False)
 class Claim:
-    """One run's claims — its question, then its spec — in the ledger: told its job and its id, ended with the run."""
+    """One run's claims — its question, then its spec — in the ledger: told its job and its id, stamped while its
+    process holds it (:func:`_beat`), ended with the run."""
     slots: list
     claim_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     began_at: str = field(default_factory=_now)
     inv_id: Optional[str] = None
     job_id: Optional[str] = None
+    #: Held across every write of this claim's rows — a stamp, a `found` on a worker thread, a `hold`, the end — so none
+    #: reads a row another of them is about to replace. Re-entrant: a stamp rewrites under it.
+    _lock: threading.RLock = field(default_factory=threading.RLock, repr=False)
+    #: Let go: never claimed, rewritten or stamped again (an end can come while a stamp or a late `found` is under way).
+    _ended: bool = field(default=False, repr=False)
 
     def _row(self) -> dict:
         return {"claim": self.claim_id, "inv_id": self.inv_id, "job": self.job_id, "began_at": self.began_at,
-                "by": f"{socket.gethostname()}:{os.getpid()}"}
+                "beat_at": _now(), "by": f"{socket.gethostname()}:{os.getpid()}"}
 
-    def _rewrite(self) -> None:
-        try:
-            ledger = _ledger()
-            for slot in self.slots:
-                row = ledger.kv_get(STORE, slot)
-                if (row or {}).get("claim") == self.claim_id:
-                    ledger.kv_replace_if(STORE, slot, row, self._row())
-        except Exception as exc:  # noqa: BLE001 — a claim never fails the run it serves; it lapses with its job
-            from pramanyx.kernel.errors import tolerate
-            tolerate(exc, "a deep analysis's claim could not be updated; it lapses with its job", counter="one_run.update")
+    def _rewrite(self, *, what: str = "updated") -> bool:
+        """Write this claim's rows again from what it now knows, stamped now. True while any of them is still this
+        claim's; one another process let go (it judged it lapsed) stays gone, and so does every row once it has ended."""
+        with self._lock:
+            if self._ended:
+                return False
+            try:
+                ledger, ours = _ledger(), False
+                for slot in list(self.slots):
+                    for _ in range(3):
+                        row = ledger.kv_get(STORE, slot)
+                        if (row or {}).get("claim") != self.claim_id:
+                            break
+                        if ledger.kv_replace_if(STORE, slot, row, self._row()):
+                            ours = True
+                            break
+                return ours
+            except Exception as exc:  # noqa: BLE001 — a claim never fails the run it serves; it lapses with its job
+                from pramanyx.kernel.errors import tolerate
+                tolerate(exc, f"a deep analysis's claim could not be {what}; it lapses with its job",
+                         counter="one_run.update")
+                return True                              # unread, not lost: stamped again next time
+
+    def _stamp(self) -> None:
+        """The stamper's write. A claim none of whose rows is its own any more is stamped no more — decided under its
+        lock, so a slot `hold` claims meanwhile is stamped on (it puts the claim back)."""
+        with self._lock:
+            if not self._rewrite(what="stamped"):
+                with _HELD_LOCK:
+                    _HELD.discard(self)
 
     def started(self, job_id: str) -> None:
         """A job carries the run: the claim stands while that job does."""
@@ -215,9 +251,13 @@ class Claim:
         (or cannot be had); otherwise the live claim of the run already holding it — the run this one repeats."""
         ledger = _ledger()
         for _ in range(3):
-            if ledger.kv_put_if_absent(STORE, slot, self._row(), max_entries=CAP):
-                self.slots.append(slot)
-                return None
+            with self._lock:
+                if self._ended:
+                    return None                     # its run is over: nothing to claim for it
+                if ledger.kv_put_if_absent(STORE, slot, self._row(), max_entries=CAP):
+                    self.slots.append(slot)
+                    _keep_stamping(self)
+                    return None
             other = ledger.kv_get(STORE, slot)
             if other is None:
                 continue                            # let go between our insert and our read: once more
@@ -230,16 +270,54 @@ class Claim:
 
     def end(self) -> None:
         """The run has ended (or never started): its question and spec are free again. Idempotent, and never raises: a
-        claim that cannot be let go lapses with its job."""
-        try:
-            ledger = _ledger()
-            for slot in list(self.slots):
-                row = ledger.kv_get(STORE, slot)
-                if (row or {}).get("claim") == self.claim_id:
-                    _drop_if_same(slot, row)
-        except Exception as exc:  # noqa: BLE001 — see above
-            from pramanyx.kernel.errors import tolerate
-            tolerate(exc, "a deep analysis's claim could not be let go; it lapses with its job", counter="one_run.end")
+        claim that cannot be let go lapses with its job. Under the claim's lock, so a stamp or a late `found` cannot
+        replace a row between this read of it and its delete, and leave it standing."""
+        with self._lock:
+            self._ended = True
+            with _HELD_LOCK:
+                _HELD.discard(self)
+            try:
+                ledger = _ledger()
+                for slot in list(self.slots):
+                    for _ in range(3):
+                        row = ledger.kv_get(STORE, slot)
+                        if (row or {}).get("claim") != self.claim_id or ledger.kv_delete_if(STORE, slot, row):
+                            break
+            except Exception as exc:  # noqa: BLE001 — see above
+                from pramanyx.kernel.errors import tolerate
+                tolerate(exc, "a deep analysis's claim could not be let go; it lapses with its job", counter="one_run.end")
+
+
+#: The claims this process holds, stamped every `BEAT_EVERY_S` by one thread. Weak: a claim nothing holds any more (its
+#: run gone without ending it) is stamped no more, and lapses.
+_HELD: "weakref.WeakSet[Claim]" = weakref.WeakSet()
+_HELD_LOCK = threading.Lock()
+_STAMPER: Optional[threading.Thread] = None
+
+
+def _stamp_held() -> None:
+    """Stamp every claim this process holds; one whose rows are all gone — let go by another process that judged it
+    lapsed — is stamped no more."""
+    with _HELD_LOCK:
+        held = list(_HELD)
+    for claim in held:
+        claim._stamp()
+
+
+def _beat() -> None:
+    """The stamper: every `BEAT_EVERY_S`, for as long as the process runs."""
+    while True:
+        time.sleep(BEAT_EVERY_S)
+        _stamp_held()
+
+
+def _keep_stamping(claim: Claim) -> None:
+    global _STAMPER
+    with _HELD_LOCK:
+        _HELD.add(claim)
+        if _STAMPER is None or not _STAMPER.is_alive():
+            _STAMPER = threading.Thread(target=_beat, daemon=True, name="one-run-stamp")
+            _STAMPER.start()
 
 
 def take(question: str, connection_id: str, *, canvas_id: str = "", schema: str = "") \
@@ -321,8 +399,7 @@ class Ask:
                     return None
                 twin = _wait_for_id(slot, other, WAIT_FOR_ID_S)
                 if twin is not None:
-                    focus = [str(d) for d in ((intake or {}).get("named_dimensions") or [])]
-                    return {**twin, **({"focus": focus} if focus else {})}
+                    return twin
         except Exception as exc:  # noqa: BLE001 — a spec that cannot be claimed or read lets the run go on, as before
             from pramanyx.kernel.errors import tolerate
             tolerate(exc, "a deep analysis could not claim its spec; it runs on", counter="one_run.spec")
@@ -342,8 +419,5 @@ def said(under_way: dict, *, can_read: bool = True) -> str:
     then = (f"get_investigation('{rid}') waits for it and says how far it has got; ask for a fresh run only if a new "
             "one is wanted alongside it." if can_read else
             f"Say so in the answer, giving the run's id, {rid}, by which its report is read when it lands.")
-    focus = under_way.get("focus") or []
-    also = (f" This ask named {', '.join(focus)}: that run looks across every dimension, so read its report for it, and "
-            "ask about it there if it is not broken down that way." if focus else "")
     return (f"This question is already being analysed (run {rid}{when}, still going), so it was not started a second "
-            f"time. {then}{also}")
+            f"time. {then}")

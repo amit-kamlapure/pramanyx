@@ -432,11 +432,15 @@ INTAKE = {"metric_sql": "SUM(oi.sale_price)", "metric_table": "order_items", "ob
 def test_two_wordings_resolve_to_one_spec_and_different_questions_do_not():
     from pramanyx.agent.one_run import spec_of
 
-    # the motivating pair: "Why did revenue change…? Find the drivers." / "What drove the increase…? Break it down by
-    # category" — a why question looks across every dimension, so naming one does not make it another analysis
-    reworded = {**INTAKE, "metric_sql": "sum( oi.sale_price )", "metric_table": "`order_items`",
-                "named_dimensions": ["products.category"]}
-    assert spec_of(INTAKE) == spec_of(reworded), "the model's spelling and a named focus are not a different question"
+    # the motivating pair: "Why did revenue change…? Find the drivers." / "What drove the revenue increase…?" — the
+    # model's spelling of one measure is not a different question
+    reworded = {**INTAKE, "metric_sql": "sum( oi.sale_price )", "metric_table": "`order_items`"}
+    assert spec_of(INTAKE) == spec_of(reworded), "the model's spelling is not a different question"
+    by_category = {**INTAKE, "named_dimensions": ["products.category"]}
+    assert spec_of(by_category) != spec_of(INTAKE), \
+        "a why broken down by category pins category first: not the analysis of the why that named nothing"
+    assert spec_of(by_category) == spec_of({**INTAKE, "named_dimensions": ["`Products`.Category"]})
+    assert spec_of({**INTAKE, "named_dimensions": ["a", "b"]}) == spec_of({**INTAKE, "named_dimensions": ["b", "a", "a"]})
     different = [
         {**INTAKE, "observation_start": "2026-06-01", "observation_end": "2026-06-30"},          # another period
         {**INTAKE, "question_shape": "describe"},                                                # another kind of ask
@@ -470,7 +474,7 @@ def _analyst_up_to_intake(monkeypatch, intake: dict):
     return analyst
 
 
-REWORDED = "What drove the revenue increase from April to May 2026? Break it down by category."
+REWORDED = "What drove the revenue increase from April to May 2026?"
 
 
 @pytest.mark.parametrize("job", [True, False], ids=["as a job", "inline in a conversation"])
@@ -478,7 +482,7 @@ def test_a_repeat_in_other_words_is_handed_the_run_after_its_intake(monkeypatch,
     from pramanyx.agent import one_run
     from pramanyx.db import history
 
-    analyst = _analyst_up_to_intake(monkeypatch, {**INTAKE, "named_dimensions": ["products.category"]})
+    analyst = _analyst_up_to_intake(monkeypatch, {**INTAKE, "metric_sql": "sum( oi.sale_price )"})
     first, _ = one_run.take(Q, "conn-1")
     run = _running()
     first.found(run)
@@ -491,9 +495,26 @@ def test_a_repeat_in_other_words_is_handed_the_run_after_its_intake(monkeypatch,
     assert result.stop_reason == "already_running" and result.handed_to["id"] == run
     handed = dict(frames)["already_running"]
     assert handed["investigation_id"] == run and "already being analysed" in handed["already_running"]
-    assert "This ask named products.category" in handed["already_running"], "the focus it asked for, said"
     row = history.get_investigation(result.investigation_id)
-    assert row["status"] == "interrupted" and row["error"] == handed["already_running"], "its own row says so"
+    assert row["status"] == "handed_back" and row["handed_to"] == run, "its own row names the run that answers it"
+    assert row["error"] == handed["already_running"], "and what it was told"
+
+
+def test_a_why_broken_down_by_something_else_runs_its_own_analysis():
+    """At c24a181 a named dimension in a why question was taken as a focus of the run under way, and the repeat was
+    handed a run that might never break it down that way."""
+    from pramanyx.agent import one_run
+
+    first, _ = one_run.take(Q, "conn-1")
+    first.found(_running())
+    assert one_run.Ask(connection_id="conn-1", claim=first).after_intake(INTAKE) is None
+    by_brand, _ = one_run.take("Why did revenue change from April to May 2026, by brand?", "conn-1")
+    assert one_run.Ask(connection_id="conn-1", claim=by_brand).after_intake(
+        {**INTAKE, "named_dimensions": ["products.brand"]}) is None, "runs: it asks for a breakdown the other may not"
+    by_brand.found(_running())
+    again, _ = one_run.take("What drove April to May revenue, broken down by brand?", "conn-1")
+    assert one_run.Ask(connection_id="conn-1", claim=again).after_intake(
+        {**INTAKE, "named_dimensions": ["products.brand"]})["id"] == by_brand.inv_id, "and the same breakdown is its run"
 
 
 def test_a_hand_back_is_not_booked_as_a_failure_and_never_overwrites_an_end():
@@ -502,8 +523,11 @@ def test_a_hand_back_is_not_booked_as_a_failure_and_never_overwrites_an_end():
     from pramanyx.kernel.ledger import Ledger
 
     run = _running()
-    assert history.hand_back_investigation(run, "handed run abc") is True
-    assert history.get_investigation(run)["status"] == "interrupted"
+    assert history.hand_back_investigation(run, "handed run abc", handed_to="abc") is True
+    got = history.get_investigation(run)
+    assert got["status"] == "handed_back" and got["handed_to"] == "abc"
+    listed = next(r for r in history.list_investigations(limit=500) if r["id"] == run)
+    assert listed["status"] == "handed_back" and listed["handed_to"] == "abc", "the person's history opens run abc"
     journaled = Ledger.default().events(kind="investigation.handed_back", limit=20)
     assert any((e.get("payload") or {}).get("investigation_id") == run for e in journaled), \
         "a page listening for investigation events redraws the row"
@@ -579,8 +603,8 @@ def test_a_claim_stands_while_its_job_does():
 
     long_ago = (datetime.now(timezone.utc) - timedelta(minutes=20)).isoformat()
 
-    def row(**kw):
-        return {"claim": "c", "inv_id": None, "job": None, "began_at": long_ago, **kw}
+    def row(**kw):       # made twenty minutes ago, its maker stamping it since
+        return {"claim": "c", "inv_id": None, "job": None, "began_at": long_ago, "beat_at": one_run._now(), **kw}
 
     assert one_run._live(row(job=_job("PENDING"))), "queued behind the slots for twenty minutes: still the run"
     assert one_run._live(row(job=_job("RUNNING", heartbeat_at=one_run._now())))
@@ -601,7 +625,42 @@ def test_a_claim_whose_process_on_this_host_is_gone_lapses_at_once():
            "by": f"{one_run.socket.gethostname()}:{dead_pid}"}
     assert not one_run._live(row)
     assert one_run._live({**row, "by": f"{one_run.socket.gethostname()}:{os.getpid()}"})
-    assert one_run._live({**row, "by": "another-host:1"}), "another host's process cannot be asked; its job stands"
+    assert one_run._live({**row, "by": "another-host:1"}), "another host's process cannot be asked: it is stamping"
+
+
+def test_a_claim_whose_maker_stopped_stamping_it_lapses_on_any_host():
+    """At c24a181 a claim made on another host stood on its job alone: a queued job whose process died there held its
+    question for the hour, as nothing on this host could ask that process."""
+    from datetime import datetime, timedelta, timezone
+
+    from pramanyx.agent import one_run
+
+    lapsed = (datetime.now(timezone.utc) - timedelta(seconds=one_run.HEARTBEAT_LAPSES_S + 30)).isoformat()
+    queued = {"claim": "c", "inv_id": None, "job": _job("PENDING"), "began_at": lapsed, "by": "another-host:1"}
+    assert one_run._live({**queued, "beat_at": one_run._now()})
+    assert not one_run._live({**queued, "beat_at": lapsed}), "its maker stopped stamping it: gone"
+    assert not one_run._live(queued), "a claim never stamped counts from when it was made"
+
+
+def test_the_process_holding_a_claim_stamps_it_and_stops_once_it_is_let_go(monkeypatch):
+    from pramanyx.agent import one_run
+    from pramanyx.kernel.ledger import Ledger
+
+    mine, _ = one_run.take(Q, "conn-1")
+    slot = mine.slots[0]
+    first = Ledger.default().kv_get(one_run.STORE, slot)["beat_at"]
+    assert mine in one_run._HELD, "stamped from the moment it is taken"
+    monkeypatch.setattr(one_run, "_now", lambda: "2099-01-01T00:00:00+00:00")
+    one_run._stamp_held()
+    assert Ledger.default().kv_get(one_run.STORE, slot)["beat_at"] == "2099-01-01T00:00:00+00:00" != first
+    monkeypatch.undo()
+
+    other, _ = one_run.take("Another question", "conn-1")
+    Ledger.default().kv_delete_if(one_run.STORE, other.slots[0], Ledger.default().kv_get(one_run.STORE, other.slots[0]))
+    one_run._stamp_held()                                   # another process let it go: never written back
+    assert Ledger.default().kv_get(one_run.STORE, other.slots[0]) is None and other not in one_run._HELD
+    mine.end()
+    assert mine not in one_run._HELD
 
 
 def test_a_claim_never_fails_the_run_it_serves(monkeypatch):
@@ -678,10 +737,10 @@ def test_a_handed_back_run_whose_reader_left_ends_its_trace_ok(monkeypatch):
                 REWORDED, "conn-1", [], ask=one_run.Ask(connection_id="conn-1", claim=mine))):
             yield frame
 
-    door = inv.stream_with_session_log(
+    door = inv.stream_with_session_log(inv.stream_with_envelope(
         inv._job_streamed_body(lambda: turn(), session_id="", conn_id="conn-1", payload={"question": REWORDED},
                                claim=mine),
-        question=REWORDED, conn_id="conn-1", door="ask", depth="deep")
+        question=REWORDED, conn_id="conn-1"), question=REWORDED, conn_id="conn-1", door="ask", depth="deep")
 
     async def read_then_leave():
         got: list = []
@@ -704,3 +763,126 @@ def test_a_handed_back_run_whose_reader_left_ends_its_trace_ok(monkeypatch):
     fins = asyncio.run(read_then_leave())
     assert len(fins) == 1 and fins[0]["ok"] is True
     assert f"run {run}" in fins[0]["payload"]["headline"], "the run it was handed, said"
+    from pramanyx.db import history
+    assert history.get_investigation(run)["status"] == "running", "the run under way is never ended by its repeat"
+    own = next(r for r in history.list_investigations(limit=500) if r.get("handed_to") == run)
+    assert own["status"] == "handed_back"
+    env = history.get_investigation(own["id"])["report"]["envelope"]
+    assert env["provenance"]["handed_to"] == run and env["provenance"]["investigation_id"] == own["id"]
+    assert "already being analysed" in env["headline"], "the saved answer says it was handed the run, and which"
+
+
+def test_the_answer_envelope_records_a_hand_back():
+    """At c24a181 the fold ignored the `already_running` frame: a repeat's envelope had no answer, so none was filed."""
+    from pramanyx.answer.envelope import EnvelopeFolder
+
+    folder = EnvelopeFolder(question=REWORDED, connection_id="conn-1")
+    folder.feed("start", {"investigation_id": "own-row", "connection_id": "conn-1", "question": REWORDED})
+    folder.feed("already_running", {"investigation_id": "twin", "already_running": "This question is already being "
+                                    "analysed (run twin, still going), so it was not started a second time."})
+    env = folder.finish()
+    assert env.has_answer and env.headline.startswith("This question is already being analysed")
+    assert env.provenance.handed_to == "twin" and env.provenance.investigation_id == "own-row"
+    talk = EnvelopeFolder(question=REWORDED, connection_id="conn-1")      # a conversation whose deep tool was handed it
+    talk.feed("already_running", {"investigation_id": "twin", "already_running": "already being analysed"})
+    talk.feed("headline_delta", {"headline": "Revenue rose 12%; run twin, still going, is breaking it down."})
+    said = talk.finish()
+    assert said.headline.startswith("Revenue rose 12%") and said.provenance.handed_to == "", \
+        "it answered in its own words: its own answer, not a hand-back"
+    door = EnvelopeFolder(question=REWORDED, connection_id="conn-1")      # handed at the door: no run of its own
+    door.feed("already_running", {"investigation_id": "twin", "already_running": "already being analysed"})
+    assert door.finish().provenance.investigation_id == "", "nothing of its own to file the answer on"
+
+
+def test_a_body_that_hands_back_first_never_ends_the_run_it_names():
+    """The bridge files a run's end on the first run id its frames name. A hand-back's frame names the run under way —
+    taken for this run's own, a body handed back before it named itself would have the bridge fail the run it was
+    handed."""
+    from pramanyx.db import history
+    from pramanyx.routers import investigations as inv
+
+    twin = _running()
+
+    async def body():
+        yield inv._sse("already_running", {"investigation_id": twin, "already_running": f"already being analysed ({twin})"})
+
+    async def drain():
+        return [f async for f in inv._job_streamed_body(lambda: body(), session_id="", conn_id="conn-1",
+                                                         payload={"question": twin})]
+
+    frames = asyncio.run(drain())
+    assert any('"already_running"' in f for f in frames)
+    assert history.get_investigation(twin)["status"] == "running", "the run under way goes on"
+
+
+def test_a_claim_let_go_while_it_is_being_stamped_is_gone(monkeypatch):
+    """The stamper reads the claim's row and replaces it; an end that read the same row and deletes after that replace
+    would miss it, and leave the claim standing for a run that is over."""
+    import time
+
+    from pramanyx.agent import one_run
+    from pramanyx.kernel.ledger import Ledger
+
+    real = Ledger.default()
+    mine, _ = one_run.take(Q, "conn-1")
+    slot = mine.slots[0]
+    replacing, release, replaced = threading.Event(), threading.Event(), threading.Event()
+
+    class Slow:
+        def __getattr__(self, name):
+            return getattr(real, name)
+
+        def kv_replace_if(self, *a, **k):
+            replacing.set()
+            release.wait(5)
+            try:
+                return real.kv_replace_if(*a, **k)
+            finally:
+                replaced.set()
+
+        def kv_delete_if(self, *a, **k):
+            replaced.wait(5)                       # an end that read the row before the stamp deletes after it
+            return real.kv_delete_if(*a, **k)
+
+    monkeypatch.setattr(one_run, "_ledger", lambda: Slow())
+    stamp = threading.Thread(target=one_run._stamp_held)
+    stamp.start()
+    assert replacing.wait(5)
+    ender = threading.Thread(target=mine.end)
+    ender.start()
+    time.sleep(0.1)
+    release.set()
+    stamp.join(5)
+    ender.join(5)
+    assert real.kv_get(one_run.STORE, slot) is None, "let go, whatever the stamp did meanwhile"
+
+
+def test_the_stamper_thread_stamps_on_its_own(monkeypatch):
+    import time
+
+    from pramanyx.agent import one_run
+    from pramanyx.kernel.ledger import Ledger
+
+    monkeypatch.setattr(one_run, "BEAT_EVERY_S", 0.02)
+    monkeypatch.setattr(one_run, "_STAMPER", None)
+    mine, _ = one_run.take(Q, "conn-1")
+    first = Ledger.default().kv_get(one_run.STORE, mine.slots[0])["beat_at"]
+    for _ in range(250):
+        if Ledger.default().kv_get(one_run.STORE, mine.slots[0])["beat_at"] != first:
+            break
+        time.sleep(0.02)
+    assert Ledger.default().kv_get(one_run.STORE, mine.slots[0])["beat_at"] != first, "stamped with no one asking"
+    assert one_run._STAMPER is not None and one_run._STAMPER.is_alive()
+    mine.end()
+
+
+def test_a_reloaded_conversation_names_the_run_a_repeat_was_handed():
+    """At c24a181 a thread's handed-back turn reloaded as "This deep analysis ended as interrupted — its result is
+    uncertain"; nothing about it is uncertain."""
+    from pramanyx.routers import investigations as inv
+
+    turn = {"id": "again", "question": REWORDED, "kind": "investigation", "status": "handed_back", "handed_to": "r2",
+            "started_at": "2026-11-24T10:00:00+00:00"}
+    parts = inv._turn_to_ui_messages(turn)[1]["parts"]
+    assert not [p for p in parts if p["type"] == "data-error"]
+    assert any(p["type"] == "text" and "(run r2)" in p["text"] and "handed that run" in p["text"] for p in parts)

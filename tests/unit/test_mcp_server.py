@@ -428,6 +428,19 @@ def test_a_finished_run_is_read_at_once():
     assert got["status"] == "failed" and len(reads) == 1 and "message" not in got
 
 
+def test_a_repeat_handed_another_run_is_read_as_the_run_that_answers_it():
+    """A coworker holding a repeat's id (its runs list names it) reads the run it was handed, said so — not a record
+    with an error and no report, which reads as a failure."""
+    client = _client({
+        "/investigations/again": httpx.Response(200, json={"id": "again", "status": "handed_back", "handed_to": "inv9",
+                                                           "error": "This question is already being analysed"}),
+        "/investigations/inv9": httpx.Response(200, json={"id": "inv9", "status": "complete",
+                                                          "report": {"headline": "It fell"}}),
+    })
+    got = _run(client.get_investigation("again"))
+    assert got["id"] == "inv9" and got["status"] == "complete" and got["handed_from"] == "again"
+
+
 def test_a_deep_analysis_already_under_way_is_handed_back_running_not_complete():
     """The door hands back the run under way by its id; it is read as running, never as a finished run with nothing in
     it."""

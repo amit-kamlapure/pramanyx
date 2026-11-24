@@ -2274,8 +2274,13 @@ def _run_analyst(
             note = one_run.said(twin, can_read=ask.can_read)
             emit("already_running", {"investigation_id": twin.get("id") or None, "already_running": note})
             if persist and inv_id:
-                from pramanyx.db.history import hand_back_investigation
-                hand_back_investigation(inv_id, note)
+                try:
+                    from pramanyx.db.history import hand_back_investigation
+                    hand_back_investigation(inv_id, note, handed_to=twin.get("id") or "")
+                except Exception as exc:                # noqa: BLE001 — the hand-back stands; its door ends the row
+                    from pramanyx.kernel.errors import tolerate
+                    tolerate(exc, "recording a handed-back run is best-effort; it was handed the run",
+                             counter="analyst.hand_back_persist")
             return AnalystResult(answer="", report=None, steps=[], stop_reason="already_running",
                                  investigation_id=inv_id, context_timings=context_timings, handed_to=twin)
 

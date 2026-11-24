@@ -72,6 +72,11 @@ class Provenance(BaseModel):
     #: order they ran (`pramanyx.db.doors`). Guard receipts say what FIRED; this says what every statement
     #: went through, fired or not. Empty when no statement reported its path.
     doors: list[dict[str, Any]] = Field(default_factory=list)
+    #: The run this turn was handed instead of running its own (`agent/one_run.py`, an ``already_running`` frame): that
+    #: run answers the question, and the headline says so. '' for a turn that answered for itself — a conversation that
+    #: cites the run its tool was handed answers in its own words — or one handed a run still starting, whose id it was
+    #: not told (its headline says that too).
+    handed_to: str = ""
     folded_at: str = ""
 
 
@@ -256,6 +261,8 @@ class EnvelopeFolder:
         self._mode = ""
         self._confidence = ""
         self._error = ""
+        self._handed_to = ""
+        self._handed_said = ""
         self._steps: list[dict[str, Any]] = []
 
     #: The most steps a turn keeps for a reload; a deep loop can run fifty.
@@ -345,6 +352,14 @@ class EnvelopeFolder:
             self._mode = self._mode or str(p.get("query_mode") or "")
         elif kind == "error":
             self._error = str(p.get("hint") or p.get("message") or p.get("error") or "the run failed")
+        elif kind == "already_running":
+            # Handed the run of this question already under way: that run's id — never this turn's own, which the
+            # start frame named — and what the reader was told. The turn's answer only while nothing else answers it: a
+            # conversation whose tool was handed the run goes on to answer in its own words, which replace it.
+            self._handed_to = str(p.get("investigation_id") or self._handed_to)
+            self._handed_said = str(p.get("already_running") or self._handed_said)
+            if self._handed_said and not self._headline:
+                self._headline = self._handed_said
 
     def _report(self, rep: Any) -> None:
         """A deep run's ``answer_report``: the finished sentence, its summary, and every
@@ -458,6 +473,7 @@ class EnvelopeFolder:
                 confidence=self._confidence, sql=list(self._sql),
                 tables_used=list(self._tables), guard_receipts=list(self._receipts),
                 doors=list(self._doors),
+                handed_to=self._handed_to if self._handed_said and self._headline == self._handed_said else "",
                 folded_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
             ),
             error=self._error,

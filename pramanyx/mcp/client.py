@@ -589,7 +589,8 @@ class PramanyxClient:
                 f"get_investigation('{investigation_id}') waits for it (up to {self.read_wait:.0f}s a call) and "
                 "returns its report as soon as it lands.")
 
-    async def get_investigation(self, investigation_id: str, *, wait_s: Optional[float] = None) -> dict:
+    async def get_investigation(self, investigation_id: str, *, wait_s: Optional[float] = None,
+                                _follow: bool = True) -> dict:
         """A run by its id. One still running is waited on — up to ``wait_s`` (default ``read_wait``), read every few
         seconds — and returned the moment it ends; still going at the end of the wait, it comes back with how far it has
         got. 2026-11-24, seen twice: the coworker read a running run four times in half a minute, each answering at once
@@ -598,6 +599,11 @@ class PramanyxClient:
         wait = self.read_wait if wait_s is None else float(wait_s)
         deadline = _time.monotonic() + max(0.0, wait)
         rec = await self._get(f"/investigations/{investigation_id}")
+        handed_to = str((rec or {}).get("handed_to") or "") if (rec or {}).get("status") == "handed_back" else ""
+        if handed_to and _follow:
+            # A repeat handed the run of its question already under way (`agent/one_run.py`) answers nothing itself:
+            # the run it was handed does, and is the one read — named, so a caller knows whose record it holds.
+            return {**(await self.get_investigation(handed_to, wait_s=wait, _follow=False)), "handed_from": investigation_id}
         while _running(rec) and _time.monotonic() < deadline:
             await asyncio.sleep(max(0.0, min(READ_EVERY_S, deadline - _time.monotonic())))
             rec = await self._get(f"/investigations/{investigation_id}")

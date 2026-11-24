@@ -5676,9 +5676,12 @@ def _error_said(sse: str) -> str:
         return ""
 
 
+_HANDED_FRAME = 'data: {"type": "already_running"'
+
+
 def _handed_said(sse: str) -> str:
     """What an ``already_running`` frame said — the run this one was handed (`agent/one_run.py`) — or ""."""
-    if not sse.startswith('data: {"type": "already_running"'):
+    if not sse.startswith(_HANDED_FRAME):
         return ""
     try:
         return str(json.loads(sse[6:]).get("already_running") or "") or "handed a run already under way"
@@ -5824,9 +5827,10 @@ async def _job_streamed_body(
             async for sse in body_factory():
                 if envelope is not None:
                     _fold(envelope.folder, sse)
-                if seen_inv is None and '"investigation_id"' in sse:
+                if seen_inv is None and '"investigation_id"' in sse and not sse.startswith(_HANDED_FRAME):
                     # Sniffed off the frames the way the session log does — the
-                    # bridge carries bodies that never hand it an id directly.
+                    # bridge carries bodies that never hand it an id directly. Never off a hand-back's frame: the id it
+                    # names is the run under way, not this one, and this one's end would be written onto it.
                     try:
                         seen_inv = ((json.loads(sse[6:]) if sse.startswith("data: ")
                                      else {}).get("investigation_id") or None)
@@ -7894,7 +7898,14 @@ def _turn_to_ui_messages(t: dict) -> list[dict]:
         parts.extend(receipt)
         parts.extend(work)
         status = t.get("status") or "complete"
-        if status != "complete":
+        if status == "handed_back":
+            # An agent's repeat, handed the run of its question already under way (`agent/one_run.py`): nothing of its
+            # own to replay, and nothing uncertain — the run it names answers the question.
+            rid = str(t.get("handed_to") or "")
+            parts.append({"type": "text", "state": "done", "text": (
+                f"This question was already being analysed{f' (run {rid})' if rid else ''}, so it was handed that run "
+                "rather than analysed twice.")})
+        elif status != "complete":
             parts.append({"type": "data-error", "data": {
                 "message": f"This deep analysis ended as {status} — {UNCERTAIN_RESULT}.",
             }})
