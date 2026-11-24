@@ -82,10 +82,10 @@ def get_environments():
 
 @router.get("/ai-factory/engines")
 def get_engines():
-    """Every engine's door — ready, needs setup, needs NVIDIA, off, or under licence review — what each can do, and
-    this machine."""
+    """The engines a run may be given — each by name and whether it is ready here, the run form's dropdown. How a
+    model is trained is not said (`training/engines.offered`)."""
     from pramanyx.training import engines
-    return {"engines": engines.doors(), "capabilities": engines.CAPABILITIES, "hardware": engines.hardware()}
+    return {"engines": engines.offered()}
 
 
 @router.get("/ai-factory/runs")

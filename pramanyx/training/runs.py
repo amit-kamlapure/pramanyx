@@ -210,7 +210,7 @@ async def start(choice: Optional[dict] = None, *, by: str = "") -> dict:
         from pramanyx.training.engines import door
         d = door("llamafactory") or {}
         if d.get("status") != "ready":
-            raise TrainingRefused(f"LlamaFactory is not ready here: {d.get('why') or 'not found'} — {d.get('how') or ''}")
+            raise TrainingRefused("LlamaFactory is not ready here — choose an engine the run form offers")
     run_id = uuid.uuid4().hex[:12]
     run_dir = prepare(run_id, settings=settings, base=b, train=train, held=held)
     if settings["engine"] == "llamafactory":

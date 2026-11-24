@@ -13169,10 +13169,8 @@ export interface FactoryEnvironment {
   runs: boolean; rubric?: FactoryRubricRow[]; sources?: { accepts?: number; trusted?: number };
 }
 
-export interface FactoryEngine {
-  id: string; name: string; version: string; status: "ready" | "needs_setup" | "unavailable" | "not_offered" | "off" | "review";
-  why: string; how: string; teaches: string[]; runs_here: boolean; summary: string;
-}
+/** An engine a run may be given — a dropdown's option, and whether it is ready here; how it trains is not said. */
+export interface FactoryEngine { id: string; name: string; ready: boolean }
 
 export interface FactoryRun {
   job_id: string; run_id: string; state: string; error: string; created_at: string; by: string;
@@ -13193,10 +13191,7 @@ export async function getFactoryEnvironments(): Promise<{ environments: FactoryE
   return res.json();
 }
 
-export async function getFactoryEngines(): Promise<{
-  engines: FactoryEngine[]; capabilities: Record<string, Record<string, string>>;
-  hardware: { system: string; machine: string; memory_bytes: number; accelerator: string; nvidia: boolean };
-}> {
+export async function getFactoryEngines(): Promise<{ engines: FactoryEngine[] }> {
   const res = await fetch(`${getApiBase()}/ai-factory/engines`);
   if (!res.ok) throw await refused(res, "Reading the engines");
   return res.json();

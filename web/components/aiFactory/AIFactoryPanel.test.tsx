@@ -11,7 +11,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Theme } from "@radix-ui/themes";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { AIFactoryOverview, OwnModel } from "@/lib/api";
+import type { AIFactoryOverview, FactoryEngine, OwnModel } from "@/lib/api";
 import { optionsOf } from "@/lib/testing";
 
 const model = (over: Partial<OwnModel> = {}): OwnModel => ({
@@ -26,6 +26,7 @@ const model = (over: Partial<OwnModel> = {}): OwnModel => ({
 });
 
 let overview: AIFactoryOverview;
+let engines: FactoryEngine[];
 const asked: string[] = [];
 vi.mock("@/lib/api", async importOriginal => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -47,16 +48,7 @@ vi.mock("@/lib/api", async importOriginal => ({
       pass_base: null, pass_best: null, fit: "waiting for checked pairs", status: "waiting for data", runs: false,
       rubric: [{ check: "Result matches the reference", weight: 1, means: "same rows" }], sources: { accepts: 10, trusted: 2 } },
   ] }),
-  getFactoryEngines: () => Promise.resolve({
-    engines: [
-      { id: "builtin", name: "Built-in", version: "", status: "ready", why: "", how: "", teaches: ["example"], runs_here: true, summary: "MiniMind's loop." },
-      { id: "llamafactory", name: "LlamaFactory", version: "0.9.5", status: "ready", why: "", how: "", teaches: ["example"], runs_here: true, summary: "Every tuning method." },
-      { id: "hosted", name: "Hosted services", version: "", status: "off", why: "the tasks and the data would leave the install", how: "", teaches: [], runs_here: false, summary: "Tinker." },
-      { id: "axolotl", name: "Axolotl", version: "", status: "review", why: "its plugin licence forbids fine-tuning platforms", how: "", teaches: [], runs_here: false, summary: "GRPO." },
-    ],
-    capabilities: { builtin: { example: "full · LoRA" }, llamafactory: { example: "full · LoRA · DoRA" }, hosted: {}, axolotl: {} },
-    hardware: { system: "Darwin", machine: "arm64", memory_bytes: 24 * 2 ** 30, accelerator: "Apple silicon (MPS)", nvidia: false },
-  }),
+  getFactoryEngines: () => Promise.resolve({ engines }),
   getFactoryRuns: () => Promise.resolve([]),
   getTrainingRows: () => Promise.resolve({ half: "train", total: 0, kinds: {}, rows: [], state: "present" }),
   getHeldOutAnswers: () => Promise.resolve({ before: [], after: [] }),
@@ -74,6 +66,7 @@ const openTab = async (name: RegExp) => fireEvent.mouseDown(await screen.findByR
 
 beforeEach(() => {
   asked.length = 0;
+  engines = [{ id: "builtin", name: "Built-in", ready: true }, { id: "llamafactory", name: "LlamaFactory", ready: true }];
   overview = {
     allowed: true, where: "Settings ▸ Organization ▸ What Pramanyx may do",
     setup: { ready: true, python: "/py", missing: [], how: "" },
@@ -110,6 +103,18 @@ describe("Define ▸ AI Factory", () => {
     const form = await screen.findByTestId("ai-factory-new-run");
     expect(optionsOf(screen.getByRole("combobox", { name: "Engine" })).map(o => o.text)).toEqual(["Built-in", "LlamaFactory"]);
     for (const word of ["Axolotl", "Hosted", "licence", "Apple silicon", "rented GPU"]) expect(form.textContent).not.toContain(word);
+  });
+
+  it("does not offer an engine that is not ready here", async () => {
+    engines = [{ id: "builtin", name: "Built-in", ready: true }, { id: "llamafactory", name: "LlamaFactory", ready: false }];
+    mount();
+    await openTab(/Runs/);
+    await screen.findByTestId("ai-factory-new-run");
+    const pick = screen.getByRole("combobox", { name: "Engine" });   // one choice: shown, and not to be changed
+    expect(pick.getAttribute("data-value")).toBe("builtin");
+    expect(pick.textContent).toContain("Built-in");
+    expect(pick.hasAttribute("disabled") || pick.getAttribute("data-disabled") != null).toBe(true);
+    expect(screen.getByTestId("ai-factory-new-run").textContent).not.toContain("LlamaFactory");
   });
 
   it("changes the base from the run form", async () => {

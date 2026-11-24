@@ -1000,8 +1000,8 @@ export interface paths {
         };
         /**
          * Get Engines
-         * @description Every engine's door — ready, needs setup, needs NVIDIA, off, or under licence review — what each can do, and
-         *     this machine.
+         * @description The engines a run may be given — each by name and whether it is ready here, the run form's dropdown. How a
+         *     model is trained is not said (`training/engines.offered`).
          */
         get: operations["get_engines_ai_factory_engines_get"];
         put?: never;

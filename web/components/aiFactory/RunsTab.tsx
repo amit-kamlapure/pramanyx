@@ -59,7 +59,7 @@ const GRID: React.CSSProperties = { display: "grid", gridTemplateColumns: "minma
 
 function NewRun({ data, running, onChanged }: { data: FactoryData; running: boolean; onChanged: () => void }) {
   const { view, engines } = data;
-  const readyEngines = (engines?.engines ?? []).filter(e => (e.id === "builtin" || e.id === "llamafactory") && e.status === "ready");
+  const readyEngines = (engines?.engines ?? []).filter(e => e.ready);
   const [engine, setEngine] = useState<string>(readyEngines.some(e => e.id === "llamafactory") ? "llamafactory" : "builtin");
   const [method, setMethod] = useState<"full" | "lora">(engine === "llamafactory" ? "lora" : "full");
   const [epochs, setEpochs] = useState(String(view.defaults.epochs));

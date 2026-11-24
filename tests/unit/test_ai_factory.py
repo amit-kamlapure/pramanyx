@@ -21,7 +21,20 @@ def test_every_engine_says_where_it_stands(monkeypatch, tmp_path):
     assert doors["llamafactory"]["status"] == "needs_setup" and "install" in doors["llamafactory"]["how"]
     assert doors["hosted"]["status"] == "off" and "leave the install" in doors["hosted"]["why"]
     assert doors["axolotl"]["status"] == "review" and "licence" in doors["axolotl"]["why"]
-    assert set(engines.CAPABILITIES) == set(doors)
+
+
+def test_a_reader_is_told_only_the_engines_a_run_may_be_given_by_name_and_readiness(monkeypatch, tmp_path):
+    """The user, 2026-11-24: "lets not say how we do it" — no setup command, licence, summary, capability or hardware
+    leaves the door; an engine a run cannot be given is not listed."""
+    from pramanyx.api import app
+    from pramanyx.training import engines
+    monkeypatch.setenv("PRAMANYX_LLAMAFACTORY_CLI", str(tmp_path / "missing-cli"))
+    body = TestClient(app).get("/ai-factory/engines").json()
+    assert set(body) == {"engines"}
+    assert [e["id"] for e in body["engines"]] == ["builtin", "llamafactory"]
+    assert all(set(e) == {"id", "name", "ready"} for e in body["engines"])
+    assert {e["id"]: e["ready"] for e in body["engines"]}["llamafactory"] is False
+    assert body["engines"] == engines.offered()
 
 
 def test_llamafactory_is_ready_when_its_cli_answers_with_a_version(monkeypatch, tmp_path):

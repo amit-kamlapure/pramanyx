@@ -1,4 +1,4 @@
-"""The AI Factory's engines — what trains a model, whether each can run here, and what each can do.
+"""The AI Factory's engines — what trains a model, and whether each can run here.
 
 Studied and measured 2026-11-24 (`docs/AI_FACTORY_ENGINES_STUDY_2026-11-24.md`), each engine a door that says where it
 stands rather than an option that fails when chosen:
@@ -13,8 +13,12 @@ stands rather than an option that fails when chosen:
   Prime Intellect unless told not to; a hosted service takes the tasks off the install; Axolotl's plugin code carries
   a licence that forbids fine-tuning platforms for third parties, and it did not train on MPS.
 
-No engine is installed by the platform: each is the operator's to install, in its own interpreter (their pins clash),
-and the door says the one command.
+No engine is installed by the platform: each is the operator's to install, in its own interpreter (their pins clash).
+
+**What a reader is told is `offered()`, nothing more** — the engines a run may be given, each by name and whether it is
+ready here. The page does not say how a model is trained (the user, 2026-11-24: "lets not say how we do it.. we can
+only give dropdown options"); `doors()` — statuses, reasons, setup commands, licences — stays inside the platform, read
+by `runs.start`. What each engine can do is in the study.
 """
 from __future__ import annotations
 
@@ -27,33 +31,6 @@ from typing import Optional
 
 #: What a person may choose a run to be taught by, and the engines that teach that way here.
 TEACH_BY = ("example", "preference", "reward")
-
-#: What each engine can do — from the study; `measured` marks what ran on this kind of machine.
-CAPABILITIES: dict[str, dict[str, str]] = {
-    "builtin": {"example": "full · LoRA", "preference": "—", "reward": "—", "pretrain": "—",
-                "merge": "whole model", "bases": "Qwen3, Llama, Mistral, Gemma 2/3, Phi-3 shapes",
-                "licence": "Pramanyx (MiniMind's loop, Apache-2.0)", "telemetry": "none"},
-    "llamafactory": {"example": "full · LoRA · DoRA · PiSSA · OFT", "preference": "DPO · ORPO · SimPO · KTO",
-                     "reward": "reward model · PPO", "pretrain": "continued pre-training",
-                     "merge": "merged model + Ollama Modelfile",
-                     "bases": "128 templates — Qwen3/3.5, Gemma 4, Phi-4, Ministral 3, gpt-oss",
-                     "licence": "Apache-2.0", "telemetry": "none found"},
-    "trl": {"example": "SFT", "preference": "DPO · KTO", "reward": "GRPO · DAPO · Dr.GRPO · RLOO", "pretrain": "—",
-            "merge": "—", "bases": "any transformers causal LM", "licence": "Apache-2.0", "telemetry": "none"},
-    "prime-rl": {"example": "SFT", "preference": "—", "reward": "GRPO family, async, multi-turn environments",
-                 "pretrain": "pre-training", "merge": "—", "bases": "Qwen3 to 1T-parameter MoE",
-                 "licence": "Apache-2.0 · verifiers MIT",
-                 "telemetry": "registers each run with Prime Intellect unless --no-monitors.prime"},
-    "hosted": {"example": "LoRA or full", "preference": "DPO", "reward": "RL with your rewards",
-               "pretrain": "—", "merge": "adapter or weights out", "bases": "the service's list",
-               "licence": "the service's terms", "telemetry": "tasks and data are uploaded"},
-    "axolotl": {"example": "full · LoRA · QLoRA · DoRA", "preference": "DPO · IPO · ORPO · KTO · SimPO",
-                "reward": "GRPO (needs vLLM) · reward models", "pretrain": "continued pre-training",
-                "merge": "merge-lora · GGUF via llama.cpp",
-                "bases": "Qwen3/3.5, Gemma 4, Ministral 3, Olmo 3, gpt-oss, Nemotron",
-                "licence": "Apache-2.0, plus a community licence on its plugins forbidding fine-tuning platforms",
-                "telemetry": "PostHog unless DO_NOT_TRACK=1"},
-}
 
 #: The environment a LlamaFactory process is given: offline, no version check, no tracker, no Hugging Face login probe.
 LLAMAFACTORY_ENV = {"DISABLE_VERSION_CHECK": "1", "HF_HUB_OFFLINE": "1", "HF_DATASETS_OFFLINE": "1",
@@ -148,3 +125,9 @@ def _missing_trl(python: str) -> tuple[str, ...]:
 
 def door(engine_id: str) -> Optional[dict]:
     return next((d for d in doors() if d["id"] == engine_id), None)
+
+
+def offered() -> list[dict]:
+    """The engines a run may be given — a dropdown's options: id, name, and whether it is ready here. Nothing else."""
+    from pramanyx.training.runs import ENGINES
+    return [{"id": d["id"], "name": d["name"], "ready": d["status"] == "ready"} for d in doors() if d["id"] in ENGINES]
