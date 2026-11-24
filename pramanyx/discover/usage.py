@@ -30,6 +30,8 @@ WINDOW_DAYS = 30
 AGAIN_AFTER_S = 600
 #: How long a connection's table reads are kept before they are read again.
 READS_FRESH_S = 600
+#: Where the last reading of each connection's table reads is kept across a restart (the kernel ledger's kv).
+READS_STORE = "discover_reads"
 #: What each kind's use is measured from; a kind not named is not measured.
 MEASURED = {"table": "reads", "dashboard": "opens", "canvas": "opens", "agent": "opens", "schedule": "opens",
             "document": "opens", "sheet": "opens", "definition": "opens"}
@@ -37,6 +39,8 @@ NOT_MEASURED = "Metrics and trusted queries have no page of their own to open, s
 
 _seen: dict[tuple, float] = {}
 _seen_lock = threading.Lock()
+#: Whether this process has read the last ten minutes' opens back from the journal (`_seed_seen`).
+_seeded = False
 _reads: dict[tuple[str, str], tuple[float, dict[str, dict]]] = {}
 _reading: set[tuple[str, str]] = set()
 _reads_lock = threading.Lock()
@@ -59,6 +63,7 @@ def note_opened(request: Any, kind: str, ref: str, connection_id: str = "") -> N
         key = (by, kind, connection_id or "", ref)
         now = time.monotonic()
         with _seen_lock:
+            _seed_seen(now)
             if now - _seen.get(key, -AGAIN_AFTER_S - 1) < AGAIN_AFTER_S:
                 return
             _seen[key] = now
@@ -71,6 +76,31 @@ def note_opened(request: Any, kind: str, ref: str, connection_id: str = "") -> N
     except Exception as exc:  # noqa: BLE001 — see the docstring
         from pramanyx.kernel.errors import tolerate
         tolerate(exc, f"an open of the {kind} {ref} was not kept", counter="discover.opened")
+
+
+def _seed_seen(now: float) -> None:
+    """The opens of the last ten minutes, read back from the journal the first time this process notes one: kept in
+    memory alone, a page read again just after a restart was a second open (2026-11-24). Held under ``_seen_lock``.
+    Best effort: unread, an open may be counted twice, and nothing else."""
+    global _seeded
+    if _seeded:
+        return
+    _seeded = True
+    try:
+        from pramanyx.kernel.ledger import Ledger
+        wall = datetime.now(timezone.utc)
+        since = (wall - timedelta(seconds=AGAIN_AFTER_S)).isoformat()
+        for e in Ledger.default().events(kind=OPENED, since=since, limit=5_000):
+            p = e.get("payload") or {}
+            try:
+                age = (wall - datetime.fromisoformat(str(e.get("at") or ""))).total_seconds()
+            except ValueError:
+                continue
+            key = (str(p.get("by") or ""), str(p.get("kind") or ""), str(p.get("connection_id") or ""), str(p.get("ref") or ""))
+            _seen[key] = max(_seen.get(key, -AGAIN_AFTER_S - 1), now - max(0.0, age))
+    except Exception as exc:  # noqa: BLE001 — see the docstring
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "the last opens could not be read back from the journal", counter="discover.opened_seed")
 
 
 def _org() -> Optional[str]:
@@ -103,6 +133,28 @@ def _read_tables(org: Optional[str], connection_id: str, tables: dict[str, list[
         _reading.discard((org or "", connection_id))
         if got is not None:
             _reads[(org or "", connection_id)] = (time.monotonic(), got)
+    if got is not None:
+        try:
+            from pramanyx.kernel.ledger import Ledger
+            Ledger.default().kv_put(READS_STORE, f"{org or ''}:{connection_id}",
+                                    {"at": datetime.now(timezone.utc).isoformat(), "reads": got})
+        except Exception as exc:  # noqa: BLE001 — kept in memory all the same; a restart reads them again
+            from pramanyx.kernel.errors import tolerate
+            tolerate(exc, f"discover: the reads of {connection_id}'s tables were not kept", counter="discover.reads_kept")
+
+
+def _kept_reads(org: Optional[str], connection_id: str) -> Optional[tuple[float, dict]]:
+    """The last reading of a connection's table reads kept across a restart, aged as it is: so the first visit after a
+    restart shows the last reads while they are read again, rather than saying they are being read (2026-11-24)."""
+    try:
+        from pramanyx.kernel.ledger import Ledger
+        kept = Ledger.default().kv_get(READS_STORE, f"{org or ''}:{connection_id}")
+        if not isinstance(kept, dict) or not isinstance(kept.get("reads"), dict):
+            return None
+        age = (datetime.now(timezone.utc) - datetime.fromisoformat(str(kept.get("at") or ""))).total_seconds()
+        return time.monotonic() - max(0.0, age), kept["reads"]
+    except Exception:  # noqa: BLE001 — nothing kept is nothing to show; the reads are read again
+        return None
 
 
 def table_reads(tables_by_connection: dict[str, dict[str, list[str]]], *, wait: bool = False) -> tuple[dict[str, dict], list[str]]:
@@ -116,6 +168,13 @@ def table_reads(tables_by_connection: dict[str, dict[str, list[str]]], *, wait: 
         if not tables:
             continue
         key = (org or "", conn)
+        with _reads_lock:
+            missing = key not in _reads
+        if missing:
+            back = _kept_reads(org, conn)
+            if back is not None:
+                with _reads_lock:
+                    _reads.setdefault(key, back)
         with _reads_lock:
             kept = _reads.get(key)
             stale = kept is None or time.monotonic() - kept[0] > READS_FRESH_S

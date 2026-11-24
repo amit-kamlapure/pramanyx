@@ -83,3 +83,16 @@ def test_a_type_with_no_bound_table_counts_nothing_and_says_so(graph, monkeypatc
 def test_an_unknown_type_is_refused_as_the_detail_refuses_it(router, monkeypatch):
     out = router.get_object_type_uses("unicorn", CONN, schema_name=None)
     assert out["path"] == "refused" and out["connection_id"] == CONN
+
+
+def test_a_read_is_a_table_where_a_table_stands_never_an_alias_or_a_column():
+    conn = "alias-t"
+    for sql in ("SELECT o.id AS orders FROM order_items o",                           # an alias named like a table
+                "SELECT status, orders_count FROM shop.order_items",                 # a column, a longer name
+                "select * from `bigquery-public-data.thelook.ORDERS` o",             # quoted, under a project
+                "SELECT * FROM users u JOIN orders ON u.id = orders.user_id",        # a join
+                "SELECT * FROM users, orders WHERE users.id = orders.user_id"):      # a comma in the FROM list
+        AuditLogger.log(connection_id=conn, sql=sql)
+    got = AuditLogger.reads_within(conn, {"orders": ["orders"], "order_items": ["order_items"]})
+    assert got["orders"]["reads"] == 3 and got["order_items"]["reads"] == 2
+    assert sum(m["reads"] for m in AuditLogger.reads_by_month(conn, ["orders"], months=1)) == 3

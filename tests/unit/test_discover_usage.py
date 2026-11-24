@@ -18,6 +18,9 @@ from pramanyx.discover.items import Found, Item, Scope
 @pytest.fixture(autouse=True)
 def _fresh(monkeypatch):
     monkeypatch.setattr(U, "_seen", {})
+    monkeypatch.setattr(U, "_seeded", True)
+    import uuid
+    monkeypatch.setattr(U, "READS_STORE", f"discover_reads_test_{uuid.uuid4().hex[:8]}")   # each test its own
     monkeypatch.setattr(U, "_reads", {})
     monkeypatch.setattr(U, "_reading", set())
     heard: list[dict] = []
@@ -121,3 +124,37 @@ def test_the_page_puts_the_most_used_first_and_what_the_person_opened_lately(_fr
     assert U.NOT_MEASURED in page["use_said"]
     listed = S.list_items(Scope(None, "user:ana", {"c1": "theLook"}), kind="table", sort="use")
     assert [i["name"] for i in listed["items"]] == ["orders", "distribution_centers"]
+
+
+def test_an_open_just_before_a_restart_is_not_counted_again_after_it(_fresh, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from pramanyx.kernel import ledger as L
+    two_minutes_ago = (datetime.now(timezone.utc) - timedelta(minutes=2)).isoformat()
+    monkeypatch.setattr(L.Ledger, "events", lambda self, **kw: [
+        {"at": two_minutes_ago, "payload": {"kind": "dashboard", "ref": "c1:user:ana:sales", "connection_id": "c1",
+                                            "by": "user:ana"}}] if kw.get("kind") == U.OPENED else [])
+    monkeypatch.setattr(U, "_seeded", False)                     # a process that has not read the journal back yet
+    U.note_opened(_request("ana"), "dashboard", "c1:user:ana:sales", "c1")     # read again, just after a restart
+    U.note_opened(_request("bo"), "dashboard", "c1:user:ana:sales", "c1")      # someone else's open still counts
+    assert [o["by"] for o in _fresh] == ["user:bo"]
+
+
+def test_the_last_reads_are_kept_across_a_restart_and_shown_while_they_are_read_again(_fresh, monkeypatch):
+    from pramanyx.ontology import entity_uses
+    monkeypatch.setattr(entity_uses, "window_reads", lambda conn, tables, days=30: {
+        key: {"reads": 7, "readers": 1, "unattributed": 0, "last_read": "2026-11-24"} for key in tables})
+    conn = "kept-" + str(id(object()))
+    U._read_tables(U._org(), conn, {f"{conn}.s.orders": ["orders"]})     # read once, and kept
+    monkeypatch.setattr(U, "_reads", {})                                    # a restart: nothing in memory
+    started: list[str] = []
+
+    class _Thread:
+        def __init__(self, target, args, **kw):
+            self.args = args
+
+        def start(self):
+            started.append(self.args[2])
+    monkeypatch.setattr(U.threading, "Thread", _Thread)
+    use, said = U.use_of([Item("table", f"{conn}.s.orders", "orders", connection_id=conn)])
+    assert use[f"{conn}.s.orders"]["count"] == 7 and said == []            # the last reads, not "being read"
+    assert started == []                                                    # and fresh enough not to read again yet

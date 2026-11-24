@@ -166,6 +166,17 @@ def _ensure_schema(c: sqlite3.Connection) -> None:
     c.commit()
 
 
+def _table_pattern(names: list[str]):
+    """A statement's reads of these tables: each name where a table stands — after FROM or JOIN, or after a comma in a
+    FROM list — bare, quoted, or under its schema (and project), in any case; group 1 is the name. A whole word anywhere
+    counted an alias as a read (``... AS orders FROM order_items`` read ``orders``; `web/lib/catalogSummary.ts`), and
+    Discover's Tables read most and the Ontology's reads both said so (2026-11-24)."""
+    import re
+    alternatives = "|".join(re.escape(n) for n in names)
+    return re.compile(r"(?:\bfrom|\bjoin|,)\s+(?:[`\"\[]?[a-z0-9_$-]+[`\"\]]?\.){0,3}[`\"\[]?(" + alternatives
+                      + r")[`\"\]]?(?![a-z0-9_])", re.IGNORECASE)
+
+
 class AuditLogger:
     """Append-only audit writer. Thread-safe via per-call connection open/close."""
 
@@ -231,7 +242,6 @@ class AuditLogger:
         A table is named when it stands as a whole word in the statement — ``events`` does not count a
         read of ``event_log``; a schema-qualified ``shop.events`` counts. ``org_id`` is the tenant filter,
         as in :meth:`recent`. An empty ``tables`` counts nothing."""
-        import re
         from datetime import datetime, timezone
         stamp = datetime.fromtimestamp(now if now is not None else time.time(), tz=timezone.utc)
         keys: list[str] = []
@@ -246,7 +256,7 @@ class AuditLogger:
         names = [t.strip() for t in tables if t and t.strip()]
         if not names:
             return [{"month": k, "reads": 0} for k in keys]
-        pattern = re.compile(r"(?<![a-z0-9_])(?:" + "|".join(re.escape(n) for n in names) + r")(?![a-z0-9_])")
+        pattern = _table_pattern(names)
         c = _connect()
         try:
             ensure_once(c, _ensure_schema)
@@ -279,7 +289,6 @@ class AuditLogger:
         them: ``{"reads": n, "last_read": the newest such statement's ts or None, "runs": {trace id: how many of them
         that run issued}}`` — a statement no run issued is counted under ``""``. One scan of the log for every key; a
         key with no tables counts nothing."""
-        import re
         from datetime import datetime, timedelta, timezone
         stamp = datetime.fromtimestamp(now if now is not None else time.time(), tz=timezone.utc)
         since = (stamp - timedelta(days=max(1, days) - 1)).strftime("%Y-%m-%dT00:00:00Z")
@@ -295,7 +304,7 @@ class AuditLogger:
         if not owners:
             return out
         names = sorted(owners, key=len, reverse=True)
-        pattern = re.compile(r"(?<![a-z0-9_])(?:" + "|".join(re.escape(n) for n in names) + r")(?![a-z0-9_])")
+        pattern = _table_pattern(names)
         c = _connect()
         try:
             ensure_once(c, _ensure_schema)
@@ -311,7 +320,7 @@ class AuditLogger:
         for ts, sql, trace_id in rows:
             keys: set[str] = set()
             for m in pattern.finditer(str(sql or "").lower()):
-                keys |= owners.get(m.group(0), set())
+                keys |= owners.get(m.group(1), set())
             for key in keys:
                 row = out[key]
                 row["reads"] += 1
