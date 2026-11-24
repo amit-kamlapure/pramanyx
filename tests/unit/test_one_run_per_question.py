@@ -1271,3 +1271,18 @@ def test_a_job_whose_wait_for_a_slot_fails_still_ends():
         await asyncio.sleep(0.05)
         return k.ledger.job_get(jid)["state"]
     assert asyncio.run(main()) == JobState.FAILED and ended == [JobState.FAILED]
+
+
+
+def test_each_run_says_the_spec_it_resolved_part_by_part(caplog):
+    import logging
+
+    from pramanyx.agent import one_run
+
+    mine, _ = one_run.take(Q, "conn-1", name_run=_running)
+    with caplog.at_level(logging.INFO, logger="pramanyx.agent.one_run"):
+        one_run.Ask(connection_id="conn-1", claim=mine).after_intake(INTAKE)
+    said = [r.getMessage() for r in caplog.records if "resolved its spec" in r.getMessage()]
+    assert said and mine.inv_id in said[0]
+    parts = json.loads(said[0].split(" — ", 1)[1])
+    assert list(parts) == list(one_run.SPEC_PARTS) and parts["shape"] == "diagnose"

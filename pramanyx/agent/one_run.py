@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import re
 import socket
@@ -44,6 +45,13 @@ from datetime import datetime, timezone
 from typing import Callable, Iterable, Optional
 
 from pramanyx.db.serving import process_alive
+
+logger = logging.getLogger(__name__)
+
+#: The parts of a spec, in its order, as the log names them.
+SPEC_PARTS = ("measure", "table", "other_measures", "filters", "period_1_start", "period_1_end", "period_2_start",
+              "period_2_end", "shape", "segment", "relationship_left", "relationship_right", "named_dimensions",
+              "cross_sectional", "descriptive_only")
 
 STORE = "one_run"
 #: Claims kept: they are deleted as their runs end, so this bounds only what a crash leaves behind.
@@ -422,6 +430,10 @@ class Ask:
         if not spec:
             return None
         slot = _slot("s", spec, self.connection_id, self.canvas_id, self.schema)
+        # Said in the log, part by part: a repeat in other words that runs on is read off two of these lines, which part
+        # its intake resolved otherwise (2026-11-24: two wordings of one question ran twice, and nothing said why).
+        logger.info("one run: run %s resolved its spec %s — %s", (self.claim.inv_id if self.claim else "") or "(inline)",
+                    slot.split(":", 1)[1][:12], json.dumps(dict(zip(SPEC_PARTS, spec.split("|"))), ensure_ascii=False))
         try:
             for _ in range(3):
                 if self.claim is not None:
