@@ -183,7 +183,7 @@ def home(scope: Scope) -> dict:
         "use_said": [*use_said, NOT_MEASURED],
         "kinds": [_kind_view(k, by_kind[k], found[k].withheld) for k in KINDS],
         "withheld": {k: found[k].withheld for k in KINDS if found[k].withheld},
-        "said": [s for k in KINDS for s in found[k].said],
+        "said": [s for k in KINDS for s in found[k].all_said()],
         "took_ms": {k: LAST_TOOK.get(k, 0) for k in KINDS},
     }
 
@@ -221,7 +221,7 @@ def list_items(scope: Scope, *, kind: str = "", area: str = "", certified: bool 
     nxt = cursor + limit if cursor + limit < len(ordered) else None
     return {"items": [i.view() for i in page], "total": len(ordered), "next_cursor": nxt,
             "withheld": {k: found[k].withheld for k in kinds if found[k].withheld},
-            "said": [s for k in kinds for s in found[k].said], "use_said": use_said}
+            "said": [s for k in kinds for s in found[k].all_said()], "use_said": use_said}
 
 
 def area_page(scope: Scope, area_id: str) -> Optional[dict]:
@@ -244,7 +244,8 @@ def area_page(scope: Scope, area_id: str) -> Optional[dict]:
     by_ref = {(i.kind, i.id): i for i in items}
     wanted = a.get("featured") or []
     featured = [by_ref[(f["kind"], f["ref"])] for f in wanted if (f["kind"], f["ref"]) in by_ref]
-    said = [s for k in KINDS for s in found[k].said]
+    # only what is said of the connections that hold this Area
+    said = [s for k in KINDS for s in found[k].all_said(set(a.get("connections") or []))]
     if len(featured) < len(wanted):
         gone = len(wanted) - len(featured)
         said.append(f"{gone} of the things put first here {'is' if gone == 1 else 'are'} not yours to open, or no longer there")

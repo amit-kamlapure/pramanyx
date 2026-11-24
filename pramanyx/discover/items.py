@@ -67,6 +67,13 @@ class Found:
     items: list = field(default_factory=list)
     withheld: int = 0
     said: list = field(default_factory=list)
+    #: What is said of one connection, with it: an Area's page says only what is said of the connections that hold it
+    #: (seen live, 2026-11-24: theLook's Returns page said another connection's tables had not been read yet).
+    said_of: list = field(default_factory=list)
+
+    def all_said(self, connections=None) -> list:
+        """What this reader says — of every connection, or of those in ``connections`` alone."""
+        return [*self.said, *(text for conn, text in self.said_of if connections is None or conn in connections)]
 
 
 class Scope:
@@ -228,7 +235,7 @@ def tables(scope: Scope) -> Found:
             continue
         facts = tables_of(conn)
         if not facts:
-            found.said.append(f"{name}: its tables have not been read yet")
+            found.said_of.append((conn, f"{name}: its tables have not been read yet"))
             continue
         placed, _metrics, _schema = _coverage_placements(scope, conn)
         schema = _declared_schema(conn)

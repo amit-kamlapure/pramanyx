@@ -128,6 +128,18 @@ def test_an_area_s_page_holds_its_things_by_kind_and_its_sub_areas(monkeypatch):
     assert S.area_page(_scope(), "no_such_area") is None
 
 
+def test_an_area_s_page_says_only_what_is_said_of_the_connections_that_hold_it(monkeypatch):
+    found = _found()
+    found["table"].said_of.append(("c2", "Pramanyx Ops: its tables have not been read yet"))
+    found["table"].said_of.append(("c1", "theLook: its tables have not been read yet"))
+    _stand_in(monkeypatch, found)
+    scope = Scope(None, "user:ana", {"c1": "theLook", "c2": "Pramanyx Ops"})
+    page = S.area_page(scope, "returns")                                           # Returns is on c1 alone
+    assert "theLook: its tables have not been read yet" in page["said"]
+    assert not any(s.startswith("Pramanyx Ops") for s in page["said"])
+    assert "Pramanyx Ops: its tables have not been read yet" in S.home(scope)["said"]   # Discover itself says all
+
+
 # ── the Area each thing stands in ──────────────────────────────────────────────────────────────────────────────────
 
 

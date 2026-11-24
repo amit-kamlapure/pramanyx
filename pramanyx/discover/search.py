@@ -247,6 +247,6 @@ def search(scope: Scope, q: str, *, kind: str = "", area: str = "", certified: b
     return {
         "items": out[:limit], "total": len(out), "by_meaning": meaning,
         "withheld": {**{k: f.withheld for k, f in found.items() if f.withheld}, **({"graph": graph_withheld} if graph_withheld else {})},
-        "said": [s for f in found.values() for s in f.said] + said,
+        "said": [s for f in found.values() for s in f.all_said()] + said,
     }
 
