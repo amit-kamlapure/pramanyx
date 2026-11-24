@@ -225,10 +225,10 @@ function Browse({ home, areaNames, many, onOpenArea, onViewAll, onCertified, rel
       <Card label="Most used this month" testId="discover-most-used" right={<span className="aug-fs-xs">the last 30 days</span>}>
         <div className="aug-discover-kinds">
           <div data-testid="discover-most-opened">
-            <Label>Opened most</Label>
+            <Label>Opened or used most</Label>
             {home.most_used?.length
               ? home.most_used.map(i => <ItemRow key={`${i.kind}:${i.id}`} item={i} areaName={areaNames[i.area]} many={many} />)
-              : <Empty>Nothing was opened this month yet.</Empty>}
+              : <Empty>Nothing was opened or used this month yet.</Empty>}
           </div>
           <div data-testid="discover-most-read">
             <Label>Tables read most</Label>

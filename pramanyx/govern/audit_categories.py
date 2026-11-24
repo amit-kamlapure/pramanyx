@@ -109,6 +109,8 @@ KIND_CATEGORY: dict[str, str] = {
     # Discover D5 (2026-11-24): a person opened a dashboard, a canvas, an agent, a schedule, a document, a sheet or a
     # Definition on its own page — what "Most used this month" and "Recently opened by you" are read from.
     "thing.opened": "data_access",
+    # ... and a trusted query that guided an answer (2026-11-24): what "Opened or used most" counts beside the opens.
+    "thing.used": "data_access",
     # 2026-11-15 — an email a person sent: words and figures that left the install, and to whom (`routers/email.py`).
     "email.sent": "data_access",
     # MI-1 — the two feedback doors. Both have been writing to the ledger since they
@@ -405,6 +407,8 @@ def _summarize(kind: str, p: dict) -> str:
         return (f"guardrail {p.get('guardrail') or '?'} blocked"
                 + (f" {p.get('agent_id')}" if p.get("agent_id") else "")
                 + (f" — {detail[:60]}" if detail else ""))
+    if kind == "thing.used":
+        return f"the {p.get('kind') or 'thing'} {p.get('ref') or ''} guided an answer for {p.get('by') or 'a person'}"
     if kind == "thing.opened":
         return f"{p.get('by') or 'a person'} opened the {p.get('kind') or 'thing'} {p.get('ref') or ''}".strip()
     if kind == "definition.handed":
@@ -610,6 +614,7 @@ _SINKS: list[tuple[str, Callable[..., list[AuditEvent]]]] = [
     ("data_access", lambda n, **w: _from_ledger("agent.grounding_read", n, **w)),
     ("data_access", lambda n, **w: _from_ledger("web.searched", n, **w)),
     ("data_access", lambda n, **w: _from_ledger("thing.opened", n, **w)),
+    ("data_access", lambda n, **w: _from_ledger("thing.used", n, **w)),
     ("data_access", lambda n, **w: _from_ledger("email.sent", n, **w)),
     ("governance_change", lambda n, **w: _from_ledger("directory.imported", n, **w)),
     ("action_decision", lambda n, **w: _from_ledger("action.approval", n, **w)),

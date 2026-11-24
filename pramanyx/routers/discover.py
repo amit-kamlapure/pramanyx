@@ -192,3 +192,29 @@ def put_discover_placement(request: Request, body: PlaceIn, workspace_id: Option
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     return {"kind": kind, "id": item.id, "area": now or ""}
+
+
+class OpenedIn(BaseModel):
+    kind: str
+    id: str
+    connection_id: str
+
+
+#: What a page says it opened: the kinds with no read route of their own to record it (2026-11-24). Every other kind is
+#: recorded on its own read route, so a page saying so too would count it twice.
+OPENED_BY_ITS_PAGE = ("metric",)
+
+
+@router.post("/discover/opened", status_code=204)
+def note_discover_opened(body: OpenedIn, request: Request, workspace_id: Optional[str] = None) -> None:
+    """A page says a person opened a thing that has no read route of its own — a metric. Kept as any open is
+    (`discover.usage.note_opened`): once a person and a thing in ten minutes, never for an agent. Its id is Discover's
+    (``<connection>/<name>``), on a connection the person may see."""
+    from pramanyx.discover.usage import note_opened
+    if body.kind not in OPENED_BY_ITS_PAGE:
+        raise HTTPException(status_code=422, detail=f"a page says it opened a {', '.join(OPENED_BY_ITS_PAGE)}; "
+                                                    f"a {body.kind or 'nothing'} is recorded where it is read")
+    if not body.id.startswith(f"{body.connection_id}/") or len(body.id) > 300:
+        raise HTTPException(status_code=422, detail="a metric is named <connection>/<name>")
+    scope_of(request, workspace_id, body.connection_id)          # 404 for a connection the person may not see
+    note_opened(request, body.kind, body.id, body.connection_id)

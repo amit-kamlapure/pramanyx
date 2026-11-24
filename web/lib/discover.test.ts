@@ -6,7 +6,7 @@
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { askSubjectOf, holdsWords, markOf, ownersLine, readDiscover, secondLine, useLine, withheldWords, type DiscoverItem } from "@/lib/discover";
+import { askSubjectOf, holdsWords, markOf, noteOpened, ownersLine, readDiscover, secondLine, useLine, withheldWords, type DiscoverItem } from "@/lib/discover";
 
 const item = (over: Partial<DiscoverItem>): DiscoverItem => ({
   kind: "metric", id: "x", name: "x", line: "", connection_id: "8233e4fd", connection_name: "theLook", area: "",
@@ -89,5 +89,24 @@ describe("a thing's use this month, in words (D5)", () => {
     expect(useLine({ measured: "opens", count: 1, people: 1, unattributed: 0, last: null })).toBe("opened once this month by one person");
     expect(useLine({ measured: "opens", count: 0, people: 0, unattributed: 0, last: null })).toBe("");
     expect(useLine(null)).toBe("");
+  });
+});
+
+describe("a trusted query's use, and a metric's open said by its page (D5)", () => {
+  it("says the answers a trusted query guided", () => {
+    expect(useLine({ measured: "uses", count: 1, people: 1, unattributed: 0, last: null })).toBe("answered one question this month by one person");
+    expect(useLine({ measured: "uses", count: 12, people: 3, unattributed: 0, last: null })).toBe("answered 12 questions this month by 3 people");
+  });
+
+  it("posts a metric's open, and says nothing when it is not kept", async () => {
+    const fetched = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetched);
+    noteOpened("metric", "8233e4fd/revenue", "8233e4fd");
+    expect(fetched).toHaveBeenCalledWith(expect.stringMatching(/\/discover\/opened$/), expect.objectContaining({ method: "POST" }));
+    expect(JSON.parse(String((fetched.mock.calls[0] as unknown[])[1] && ((fetched.mock.calls[0] as unknown[])[1] as RequestInit).body)))
+      .toEqual({ kind: "metric", id: "8233e4fd/revenue", connection_id: "8233e4fd" });
+    noteOpened("metric", "", "8233e4fd");                                  // nothing to say, nothing sent
+    expect(fetched).toHaveBeenCalledTimes(1);
+    vi.unstubAllGlobals();
   });
 });

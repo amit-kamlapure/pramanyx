@@ -205,7 +205,7 @@ describe("use this month (D5)", () => {
 
   it("says nothing was used yet, and shows no recent row for a person who opened nothing", async () => {
     renderPage();
-    expect(await screen.findByTestId("discover-most-used")).toHaveTextContent("Nothing was opened this month yet.");
+    expect(await screen.findByTestId("discover-most-used")).toHaveTextContent("Nothing was opened or used this month yet.");
     expect(screen.getByTestId("discover-most-read")).toHaveTextContent("No table was read this month yet.");
     expect(screen.queryByTestId("discover-recent")).toBeNull();
   });

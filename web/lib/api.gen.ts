@@ -6109,6 +6109,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/discover/opened": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Note Discover Opened
+         * @description A page says a person opened a thing that has no read route of its own — a metric. Kept as any open is
+         *     (`discover.usage.note_opened`): once a person and a thing in ten minutes, never for an agent. Its id is Discover's
+         *     (``<connection>/<name>``), on a connection the person may see.
+         */
+        post: operations["note_discover_opened_discover_opened_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/discover/placement": {
         parameters: {
             query?: never;
@@ -24554,6 +24576,15 @@ export interface components {
              */
             table: string;
         };
+        /** OpenedIn */
+        OpenedIn: {
+            /** Connection Id */
+            connection_id: string;
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+        };
         /**
          * OrgSettings
          * @description App-wide organization settings (the singleton) and the shape of a
@@ -39266,6 +39297,39 @@ export interface operations {
                         [key: string]: unknown;
                     };
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    note_discover_opened_discover_opened_post: {
+        parameters: {
+            query?: {
+                workspace_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpenedIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

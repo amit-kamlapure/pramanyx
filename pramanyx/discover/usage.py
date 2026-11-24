@@ -10,9 +10,10 @@ Two records, and neither is a new store:
   agent — reads it (`note_opened`), at most once a person and a thing in ten minutes, so a page read again on a refresh
   is not a second open.
 
-Measured 2026-11-24, the premise: no route recorded an open; the statement log keeps no person, and the session log names
-one only for the runs it kept, so who read a table is often not known — that is said, never counted as nobody. Metrics
-and trusted queries have no read route of their own: their use is not measured here, and says so.
+Measured 2026-11-24, the premise: no route recorded an open; the statement log kept no person (it names one since), and
+the session log named one only for the runs it kept, so who read a table before then is often not known — said, never
+counted as nobody. A metric has no read route of its own, so its page says it was opened; a trusted query's use is the
+answers it guided (`note_used`).
 """
 from __future__ import annotations
 
@@ -24,6 +25,8 @@ from typing import Any, Iterable, Optional
 
 #: The journal kind of an open.
 OPENED = "thing.opened"
+#: The journal kind of a use that is not an open: a trusted query that guided an answer.
+USED = "thing.used"
 #: "This month": the last thirty days, today included.
 WINDOW_DAYS = 30
 #: A person reading the same thing again within this long has not opened it again.
@@ -34,8 +37,11 @@ READS_FRESH_S = 600
 READS_STORE = "discover_reads"
 #: What each kind's use is measured from; a kind not named is not measured.
 MEASURED = {"table": "reads", "dashboard": "opens", "canvas": "opens", "agent": "opens", "schedule": "opens",
-            "document": "opens", "sheet": "opens", "definition": "opens"}
-NOT_MEASURED = "Metrics and trusted queries have no page of their own to open, so their use is not measured yet."
+            "document": "opens", "sheet": "opens", "definition": "opens",
+            # a metric has no read route of its own: its page says it was opened (`POST /discover/opened`, 2026-11-24)
+            "metric": "opens",
+            # a trusted query is used when it guides an answer, which is what it is for (`note_used`)
+            "trusted_query": "uses"}
 
 _seen: dict[tuple, float] = {}
 _seen_lock = threading.Lock()
@@ -49,7 +55,7 @@ _reads_lock = threading.Lock()
 def note_opened(request: Any, kind: str, ref: str, connection_id: str = "") -> None:
     """A person opened ``kind`` ``ref`` on its own page: kept in the journal, once a person and a thing in ten minutes.
     An agent's read is not an open. Best effort: the page is read whether or not its open is kept."""
-    if not ref or kind not in MEASURED:
+    if not ref or MEASURED.get(kind) != "opens":
         return
     try:
         if request is not None:
@@ -76,6 +82,21 @@ def note_opened(request: Any, kind: str, ref: str, connection_id: str = "") -> N
     except Exception as exc:  # noqa: BLE001 — see the docstring
         from pramanyx.kernel.errors import tolerate
         tolerate(exc, f"an open of the {kind} {ref} was not kept", counter="discover.opened")
+
+
+def note_used(kind: str, ref: str, connection_id: str = "") -> None:
+    """A thing used for what it is for — a trusted query that guided an answer — kept in the journal under who the
+    request or the job acts for. Every use counts: an answer is not a page read again. Best effort."""
+    if not ref or MEASURED.get(kind) != "uses":
+        return
+    try:
+        from pramanyx.kernel.ledger import Ledger
+        from pramanyx.org.context import current_actor
+        Ledger.default().emit(USED, {"kind": kind, "ref": ref, "connection_id": connection_id or "",
+                                     "by": current_actor()}, conn_id=connection_id or None)
+    except Exception as exc:  # noqa: BLE001 — see the docstring
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, f"a use of the {kind} {ref} was not kept", counter="discover.used")
 
 
 def _seed_seen(now: float) -> None:
@@ -108,12 +129,12 @@ def _org() -> Optional[str]:
     return current_org_id() or None
 
 
-def opens(*, days: int = WINDOW_DAYS, now: Optional[datetime] = None) -> list[dict]:
-    """The opens of the last ``days`` days, newest first: ``{kind, ref, by, at}``."""
+def opens(*, days: int = WINDOW_DAYS, now: Optional[datetime] = None, kind: str = OPENED) -> list[dict]:
+    """The opens (or, with ``kind=USED``, the uses) of the last ``days`` days, newest first: ``{kind, ref, by, at}``."""
     from pramanyx.kernel.ledger import Ledger
     since = ((now or datetime.now(timezone.utc)) - timedelta(days=days)).isoformat()
     out = []
-    for e in Ledger.default().events(kind=OPENED, since=since, limit=50_000, org_id=_org()):
+    for e in Ledger.default().events(kind=kind, since=since, limit=50_000, org_id=_org()):
         p = e.get("payload") or {}
         if p.get("kind") and p.get("ref"):
             out.append({"kind": str(p["kind"]), "ref": str(p["ref"]), "by": str(p.get("by") or ""),
@@ -209,7 +230,7 @@ def use_of(items: Iterable[Any], *, wait: bool = False) -> tuple[dict[str, dict]
     opened: dict[tuple[str, str], dict] = {}
     opens_read = True
     try:
-        for o in opens():
+        for o in [*opens(), *opens(kind=USED)]:
             row = opened.setdefault((o["kind"], o["ref"]), {"opened": 0, "people": set(), "last": ""})
             row["opened"] += 1
             if o["by"]:
@@ -227,9 +248,9 @@ def use_of(items: Iterable[Any], *, wait: bool = False) -> tuple[dict[str, dict]
             r = reads[i.id]
             out[i.id] = {"measured": "reads", "count": int(r.get("reads") or 0), "people": r.get("readers"),
                          "unattributed": r.get("unattributed"), "last": r.get("last_read") or None}
-        elif how == "opens" and opens_read:
+        elif how in ("opens", "uses") and opens_read:
             o = opened.get((i.kind, i.id))
-            out[i.id] = {"measured": "opens", "count": o["opened"] if o else 0, "people": len(o["people"]) if o else 0,
+            out[i.id] = {"measured": how, "count": o["opened"] if o else 0, "people": len(o["people"]) if o else 0,
                          "unattributed": 0, "last": (o["last"] or None) if o else None}
     return out, said
 

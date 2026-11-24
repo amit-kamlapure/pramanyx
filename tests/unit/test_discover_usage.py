@@ -24,13 +24,14 @@ def _fresh(monkeypatch):
     monkeypatch.setattr(U, "_reads", {})
     monkeypatch.setattr(U, "_reading", set())
     heard: list[dict] = []
-    monkeypatch.setattr(U, "opens", lambda **kw: list(reversed(heard)))
+    monkeypatch.setattr(U, "opens", lambda **kw: [h for h in reversed(heard) if h["event"] == kw.get("kind", U.OPENED)])
     from pramanyx.kernel import ledger as L
     emit = L.Ledger.emit
 
     def kept(self, kind, payload, *a, **kw):
-        if kind == U.OPENED:
-            heard.append({**{k: payload[k] for k in ("kind", "ref", "by")}, "at": f"2026-11-24T10:{len(heard):02d}:00"})
+        if kind in (U.OPENED, U.USED):
+            heard.append({**{k: payload[k] for k in ("kind", "ref", "by")}, "event": kind,
+                          "at": f"2026-11-24T10:{len(heard):02d}:00"})
         return emit(self, kind, payload, *a, **kw)
     monkeypatch.setattr(L.Ledger, "emit", kept)
     return heard
@@ -54,14 +55,14 @@ def test_an_open_is_a_person_s_once_in_ten_minutes_and_an_agent_s_read_is_none(_
     U.note_opened(_request("ana"), "dashboard", "c1:user:ana:sales", "c1")       # the page read again: not a second open
     U.note_opened(_request("bo"), "dashboard", "c1:user:ana:sales", "c1")
     U.note_opened(_request("coworker", agent=True), "dashboard", "c1:user:ana:sales", "c1")
-    U.note_opened(_request("ana"), "metric", "c1/revenue", "c1")                 # not a kind a person opens on its page
+    U.note_opened(_request("ana"), "table", "c1.s.orders", "c1")                 # a table's use is its reads, not opens
     assert [(o["by"], o["ref"]) for o in _fresh] == [("user:ana", "c1:user:ana:sales"), ("user:bo", "c1:user:ana:sales")]
     monkeypatch.setattr(U.time, "monotonic", lambda: 10 ** 9)                     # ten minutes on, it is opened again
     U.note_opened(_request("ana"), "dashboard", "c1:user:ana:sales", "c1")
     assert len(_fresh) == 3
 
 
-def test_use_is_reads_for_a_table_and_opens_for_what_is_opened_and_none_for_what_is_not_measured(_fresh, monkeypatch):
+def test_use_is_reads_for_a_table_and_opens_for_what_is_opened(_fresh, monkeypatch):
     from pramanyx.ontology import entity_uses
     monkeypatch.setattr(entity_uses, "window_reads", lambda conn, tables, days=30: {
         key: {"reads": 120 if key == "c1.s.orders" else 0, "readers": 2, "unattributed": 40, "last_read": "2026-11-23"}
@@ -78,7 +79,8 @@ def test_use_is_reads_for_a_table_and_opens_for_what_is_opened_and_none_for_what
     assert use["c1.s.dc"]["count"] == 0
     assert use["c1:user:ana:sales"] == {"measured": "opens", "count": 2, "people": 2, "unattributed": 0,
                                         "last": "2026-11-24T10:01:00"}
-    assert use["cv1"]["count"] == 0 and "c1/revenue" not in use and said == []
+    assert use["cv1"]["count"] == 0 and use["c1/revenue"] == {"measured": "opens", "count": 0, "people": 0,
+                                                               "unattributed": 0, "last": None} and said == []
 
 
 def test_reads_not_read_yet_are_said_and_read_off_the_request(_fresh, monkeypatch):
@@ -121,7 +123,7 @@ def test_the_page_puts_the_most_used_first_and_what_the_person_opened_lately(_fr
     assert [i["name"] for i in page["most_read"]] == ["orders"]                                     # reads, apart
     assert page["most_read"][0]["use"]["measured"] == "reads" and page["most_read"][0]["use"]["people"] is None
     assert [i["name"] for i in page["recent"]] == ["Operations", "The Look Analytics"]       # hers, newest first
-    assert U.NOT_MEASURED in page["use_said"]
+    assert page["use_said"] == []                                         # every kind is measured now
     listed = S.list_items(Scope(None, "user:ana", {"c1": "theLook"}), kind="table", sort="use")
     assert [i["name"] for i in listed["items"]] == ["orders", "distribution_centers"]
 
@@ -158,3 +160,40 @@ def test_the_last_reads_are_kept_across_a_restart_and_shown_while_they_are_read_
     use, said = U.use_of([Item("table", f"{conn}.s.orders", "orders", connection_id=conn)])
     assert use[f"{conn}.s.orders"]["count"] == 7 and said == []            # the last reads, not "being read"
     assert started == []                                                    # and fresh enough not to read again yet
+
+
+def test_a_metric_is_opened_by_its_page_and_a_trusted_query_used_by_the_answers_it_guides(_fresh, monkeypatch):
+    from pramanyx.org.context import reset_actor, set_actor
+    U.note_opened(_request("ana"), "metric", "c1/revenue", "c1")
+    token = set_actor("bo")
+    try:
+        U.note_used("trusted_query", "c1/tq1", "c1")
+        U.note_used("trusted_query", "c1/tq1", "c1")                     # every answer counts: not a page read again
+        U.note_used("dashboard", "c1:user:ana:sales", "c1")              # a dashboard is opened, never "used"
+    finally:
+        reset_actor(token)
+    use, said = U.use_of([Item("metric", "c1/revenue", "Revenue", connection_id="c1"),
+                          Item("trusted_query", "c1/tq1", "Revenue by month", connection_id="c1")])
+    assert use["c1/revenue"]["measured"] == "opens" and use["c1/revenue"]["count"] == 1
+    assert use["c1/tq1"] == {"measured": "uses", "count": 2, "people": 1, "unattributed": 0, "last": "2026-11-24T10:02:00"}
+    assert said == [] and [h["event"] for h in _fresh].count(U.USED) == 2
+
+
+def test_a_page_says_it_opened_a_metric_and_nothing_the_server_records_itself(monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from pramanyx.routers import discover as R
+    opened: list[tuple] = []
+    monkeypatch.setattr(U, "note_opened", lambda request, kind, ref, conn="": opened.append((kind, ref, conn)))
+    monkeypatch.setattr(R, "scope_of", lambda request, ws, conn: (_ for _ in ()).throw(R.HTTPException(404, "no"))
+                        if conn == "hidden" else None)
+    app = FastAPI()
+    app.include_router(R.router)
+    client = TestClient(app)
+    assert client.post("/discover/opened", json={"kind": "metric", "id": "c1/revenue", "connection_id": "c1"}).status_code == 204
+    assert opened == [("metric", "c1/revenue", "c1")]
+    for body, status in [({"kind": "dashboard", "id": "c1:ana:x", "connection_id": "c1"}, 422),   # its read route does
+                         ({"kind": "metric", "id": "c2/revenue", "connection_id": "c1"}, 422),    # not this connection's
+                         ({"kind": "metric", "id": "hidden/revenue", "connection_id": "hidden"}, 404)]:
+        assert client.post("/discover/opened", json=body).status_code == status
+    assert len(opened) == 1

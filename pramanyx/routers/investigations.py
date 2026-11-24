@@ -2601,6 +2601,11 @@ def _answer_core(
                 prompt = _tblk + "\n" + prompt
                 _trusted_used = [{"question": tq.question, "note": tq.note, "score": sc}
                                  for tq, sc in _tmatches]
+                # each trusted query that guided this answer is used (Discover D5: what it is for, counted)
+                from pramanyx.discover.items import trusted_query_id
+                from pramanyx.discover.usage import note_used
+                for tq, _sc in _tmatches:
+                    note_used("trusted_query", f"{connection_id}/{trusted_query_id(connection_id, tq)}", connection_id)
         except Exception:
             _trusted_used = []
 

@@ -70,7 +70,8 @@ export interface DiscoverItem {
 /** Use read from what happened, never guessed: how many reads or opens in the last thirty days, by how many people —
  *  `people` null and `unattributed` above 0 when the log does not name who. */
 export interface DiscoverUse {
-  measured: "reads" | "opens";
+  /** reads — a table's statements; opens — a page opened; uses — a trusted query that guided an answer. */
+  measured: "reads" | "opens" | "uses";
   count: number;
   people: number | null;
   unattributed: number | null;
@@ -81,7 +82,9 @@ export interface DiscoverUse {
 export function useLine(u: DiscoverUse | null | undefined): string {
   if (!u || !u.count) return "";
   const times = u.count === 1 ? "once" : `${formatCount(u.count)} times`;
-  const did = u.measured === "reads" ? `read ${times} this month` : `opened ${times} this month`;
+  const did = u.measured === "reads" ? `read ${times} this month`
+    : u.measured === "uses" ? `answered ${u.count === 1 ? "one question" : `${formatCount(u.count)} questions`} this month`
+    : `opened ${times} this month`;
   if (u.people == null) return `${did} · who read it is not recorded`;
   const by = u.people ? ` by ${u.people === 1 ? "one person" : `${formatCount(u.people)} people`}` : "";
   const unnamed = u.unattributed ? ` (${formatCount(u.unattributed)} not recorded who)` : "";
@@ -346,4 +349,14 @@ export function withheldWords(kind: DiscoverKind | "graph", n: number): string {
   if (!n) return "";
   if (kind === "graph") return `${formatCount(n)} found by the knowledge graph withheld by data governance`;
   return kind === "trusted_query" ? `${formatCount(n)} beyond your clearance` : `${formatCount(n)} not shared with you`;
+}
+
+/** A page says a person opened a thing that has no read route of its own to record it — a metric (D5, 2026-11-24).
+ *  Fire and forget: a page never waits on it, and one not kept is only one open fewer. */
+export function noteOpened(kind: "metric", id: string, connectionId: string): void {
+  if (!id || !connectionId) return;
+  void fetch(`${getApiBase()}/discover/opened`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ kind, id, connection_id: connectionId }),
+  }).catch(() => {});
 }

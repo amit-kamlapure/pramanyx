@@ -29,6 +29,12 @@ TITLES = {"metric": "Metrics", "table": "Tables", "definition": "Definitions", "
 OTHER = "other"
 
 
+def trusted_query_id(conn: str, q) -> str:
+    """A trusted query's id on a connection, as Discover names it — its own, else one made from its question — so a use
+    recorded where it guides an answer (`discover.usage.note_used`) lands on its row."""
+    return str(getattr(q, "id", "") or hashlib.sha1(f"{conn}:{q.question}".encode()).hexdigest()[:12])
+
+
 @dataclass
 class Item:
     kind: str
@@ -443,7 +449,7 @@ def trusted_queries(scope: Scope) -> Found:
         trimmed = trim_by_tables(rows, lambda q: tables_of_sql(str(getattr(q, "sql", "") or "")), connection_id=conn)
         found.withheld += len(rows) - len(trimmed.kept)
         for q in trimmed.kept:
-            qid = str(getattr(q, "id", "") or hashlib.sha1(f"{conn}:{q.question}".encode()).hexdigest()[:12])
+            qid = trusted_query_id(conn, q)
             found.items.append(settle(Item(
                 kind="trusted_query", id=f"{conn}/{qid}", name=str(q.question), connection_id=conn,
                 connection_name=name, state=str(getattr(q, "status", "") or "approved"),

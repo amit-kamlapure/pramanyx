@@ -128,11 +128,12 @@ def _used(items: list[Item]) -> list[str]:
     return said
 
 
-def _by_use(items: list[Item], measured: str = "") -> list[Item]:
+def _by_use(items: list[Item], measured: "str | tuple[str, ...]" = "") -> list[Item]:
     """The used this month, most first — of one measure when ``measured`` names it. A table's reads (statements, most of
     them the platform's own) and a thing's opens (a person's) are not one scale: the page ranks each apart."""
     from pramanyx.discover.usage import score
-    return sorted((i for i in items if score(i.use) > 0 and (not measured or (i.use or {}).get("measured") == measured)),
+    wanted = (measured,) if isinstance(measured, str) and measured else tuple(measured or ())
+    return sorted((i for i in items if score(i.use) > 0 and (not wanted or (i.use or {}).get("measured") in wanted)),
                   key=lambda i: (-score(i.use), order_key(i)))
 
 
@@ -161,7 +162,7 @@ def home(scope: Scope) -> dict:
                 from pramanyx.kernel.errors import tolerate
                 tolerate(exc, "discover: a connection's suggested areas could not be read", counter="discover.suggested")
     certified = _order([i for i in items if (i.certification or {}).get("status") == "certified"])
-    from pramanyx.discover.usage import NOT_MEASURED, recently_opened
+    from pramanyx.discover.usage import recently_opened
     use_said = _used(items)
     try:
         recent = recently_opened(items, scope.person, limit=SHOWN)
@@ -177,10 +178,11 @@ def home(scope: Scope) -> dict:
         "areas": holding, "quiet_areas": quiet, "suggested": suggested,
         "certified": [i.view() for i in certified[:SHOWN]], "certified_count": len(certified),
         # D5: read from what happened — a table's reads, the opens of what a person opens — never a model's guess
-        "most_used": [i.view() for i in _by_use(items, "opens")[:SHOWN]],
+        # a person's own acts — what they opened, and the trusted queries that answered them — apart from table reads
+        "most_used": [i.view() for i in _by_use(items, ("opens", "uses"))[:SHOWN]],
         "most_read": [i.view() for i in _by_use(items, "reads")[:SHOWN]],
         "recent": [i.view() for i in recent],
-        "use_said": [*use_said, NOT_MEASURED],
+        "use_said": use_said,
         "kinds": [_kind_view(k, by_kind[k], found[k].withheld) for k in KINDS],
         "withheld": {k: found[k].withheld for k in KINDS if found[k].withheld},
         "said": [s for k in KINDS for s in found[k].all_said()],
