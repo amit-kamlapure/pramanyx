@@ -1509,6 +1509,27 @@ def fail_if_running(inv_id: str, reason: str) -> bool:
     return bool(inv_id) and fail_investigation(inv_id, status="failed", reason=reason, when_running=True)
 
 
+def hand_back_investigation(inv_id: str, reason: str) -> bool:
+    """A run that stopped because the same analysis was already under way (`agent/one_run.py`): 'interrupted', with
+    what it was handed, written only while it is still 'running' — one statement, so a cancel or an end recorded first
+    stands. Not a failure: no failure event and no failed verdict is booked for it. True when this call wrote."""
+    if not inv_id:
+        return False
+    c = _conn()
+    ensure_once(c, _ensure_schema)
+    cur = c.execute(
+        "UPDATE investigations SET completed_at = ?, status = 'interrupted', error = ? WHERE id = ? AND status = 'running'",
+        (_now(), str(reason or "")[:2000], inv_id),
+    )
+    c.commit()
+    wrote = bool(cur.rowcount)
+    _conn_scope, _canvas_scope = _inv_scope(c, inv_id) if wrote else (None, None)
+    c.close()
+    if wrote:
+        _emit_lifecycle(inv_id, "investigation.handed_back", conn_id=_conn_scope, canvas_id=_canvas_scope)
+    return wrote
+
+
 def normalized_question(q: str) -> str:
     """A question as two asks of it compare (:func:`_normalize_question`) — public, for the doors that match one."""
     return _normalize_question(q)

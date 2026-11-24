@@ -4473,6 +4473,7 @@ async def _stream_analyst(
     purpose: str = "",
     shape: Optional[str] = None,
     subject_prose: str = "",
+    ask: Any = None,
 ) -> AsyncGenerator[str, None]:
     """Serve one deep `/ask` turn as the ANALYST (CA-3) — the phase library as tools,
     the sequence as the model's, under the deep step budget. Arc FA-2 — ``subject_prose`` is
@@ -4558,13 +4559,13 @@ async def _stream_analyst(
                 origin_finding=origin_finding,
                 extra_context=_memory or None,
                 session_id=session_id, canvas_id=canvas_id, schema_scope=schema_scope,
-                emit=_forward, on_step=_on_step, purpose=purpose, shape=shape,
+                emit=_forward, on_step=_on_step, purpose=purpose, shape=shape, ask=ask,
             )
         finally:
             clear_progress_sink(token)
             clear_chain_sink(chain_token)
 
-        if result.report is None:
+        if result.report is None and result.stop_reason != "already_running":   # handed a run: it said so, above
             # No synthesized report — the loop concluded in prose (or ran dry). The
             # turn renders as a direct answer: what it produced, said plainly, never
             # a report-shaped shell around nothing.
@@ -4585,7 +4586,7 @@ async def _stream_analyst(
 
         session_log.emit(
             session_log.TOOL_CALL, name="ask.analyst", conn_id=connection_id,
-            ok=bool(result.report or result.answer), row_count=len(result.steps),
+            ok=bool(result.report or result.answer or result.handed_to), row_count=len(result.steps),
             payload={"body": "analyst", "stop_reason": result.stop_reason,
                      "tools": [s.tool for s in result.steps],
                      "injected_chars": result.injected_chars,
@@ -5675,6 +5676,16 @@ def _error_said(sse: str) -> str:
         return ""
 
 
+def _handed_said(sse: str) -> str:
+    """What an ``already_running`` frame said — the run this one was handed (`agent/one_run.py`) — or ""."""
+    if not sse.startswith('data: {"type": "already_running"'):
+        return ""
+    try:
+        return str(json.loads(sse[6:]).get("already_running") or "") or "handed a run already under way"
+    except Exception:
+        return "handed a run already under way"
+
+
 _TURN_FACT_TYPES = ('data: {"type": "answer_report"', 'data: {"type": "report"', 'data: {"type": "headline"',
                     'data: {"type": "receipt_id"')
 
@@ -5807,6 +5818,7 @@ async def _job_streamed_body(
         seen_inv: Optional[str] = None
         said = ""          # the last error the body streamed — its own word on why it stopped
         headline, receipt = "", ""   # what the door's session log would have read, for a reader that left
+        handed = ""                  # the run this one was handed instead (`agent/one_run.py`), as it was said
         envelope = _TURN_ENVELOPE.get()   # the turn's answer envelope, this job's to fold and file (`_TurnEnvelope`)
         try:
             async for sse in body_factory():
@@ -5821,10 +5833,11 @@ async def _job_streamed_body(
                     except Exception:
                         seen_inv = None
                     if seen_inv and claim is not None:
-                        claim.found(seen_inv)      # a repeat of this question is handed this run from here on
+                        await asyncio.to_thread(claim.found, seen_inv)   # a repeat is handed this run from here on
                 said = _error_said(sse) or said
                 _head, _receipt = _turn_facts(sse)
                 headline, receipt = _head or headline, _receipt or receipt
+                handed = _handed_said(sse) or handed
                 await queue.put(sse)
                 if resume_run is not None:
                     resume_run.publish(sse)
@@ -5837,7 +5850,7 @@ async def _job_streamed_body(
             raise
         finally:
             if claim is not None:
-                claim.end()                        # the run is over: its question may start again — first, so nothing below can keep it held
+                claim.end()                        # the run is over: its question may start again (never raises)
             why = ""
             if seen_inv:
                 # Terminal consistency for ANY body the bridge carries, however it
@@ -5885,7 +5898,9 @@ async def _job_streamed_body(
             if turn is not None and turn.carried:
                 try:
                     _row = get_investigation(seen_inv) if seen_inv else None
-                    if _row is not None:
+                    if handed:
+                        ok, headline = True, headline or handed      # handed a run under way: not a failure
+                    elif _row is not None:
                         ok = _row.get("status") in ("complete", "paused")
                     else:
                         ok = stop_exc is None and not said
@@ -5934,6 +5949,8 @@ async def _job_streamed_body(
         if claim is not None:
             claim.end()                            # no job took the run: nothing holds its question
         raise
+    if claim is not None:
+        await asyncio.to_thread(claim.started, job_id)   # the claim stands while this job does — queued or running
     logger.debug("investigation job %s submitted", job_id)
     while True:
         try:
@@ -6376,12 +6393,20 @@ async def _claim_question(req: "AskRequest", conn_id: str):
     from pramanyx.agent import one_run
     deadline = asyncio.get_running_loop().time() + one_run.WAIT_FOR_ID_S
     while True:
-        mine, held = one_run.take(req.question, conn_id, canvas_id=req.canvas_id or "", schema=req.schema_name or "")
-        if mine is not None:
-            return mine, None
-        if held.inv_id or asyncio.get_running_loop().time() >= deadline:
-            return None, held.under_way()
-        await asyncio.sleep(0.25)
+        task = asyncio.ensure_future(asyncio.to_thread(one_run.take, req.question, conn_id,
+                                                       canvas_id=req.canvas_id or "", schema=req.schema_name or ""))
+        try:
+            mine, held = await asyncio.shield(task)
+        except asyncio.CancelledError:
+            # The reader left while the claim was taken: nothing will run under it.
+            task.add_done_callback(lambda t: None if t.cancelled() or t.exception() or not t.result()[0]
+                                   else t.result()[0].end())
+            raise
+        if held is None:
+            return mine, None                       # this run's claim — or none could be written, and it runs unclaimed
+        if held.get("inv_id") or asyncio.get_running_loop().time() >= deadline:
+            return None, {"id": held.get("inv_id") or "", "started_at": held.get("began_at", "")}
+        await asyncio.sleep(one_run.READ_EVERY_S)
 
 
 def _already_running(under_way: dict) -> str:
@@ -6541,6 +6566,11 @@ async def _stream_ask(req: "AskRequest", request: Request, conn_id: str) -> Asyn
         if _origin is None and req.history:
             from pramanyx.agent.followup import is_followup
             _origin = _followup_origin(req.history, followup=is_followup(req.question))
+        _claim, _under_way = await _claim_question(req, conn_id) if _one_run else (None, None)
+        if _under_way is not None:
+            yield _already_running(_under_way)
+            return
+        from pramanyx.agent import one_run as _one_run_mod
         _analyst_body = _stream_analyst(
             req.question, conn_id, req.history,
             session_id=req.session_id, canvas_id=req.canvas_id,
@@ -6548,6 +6578,9 @@ async def _stream_ask(req: "AskRequest", request: Request, conn_id: str) -> Asyn
             purpose=req.purpose,
             shape=route.shape,   # decided once at the door; the analyst serves this shape
             subject_prose=_subject.prose() if _subject is not None else "",
+            # an agent's plain ask: its spec is claimed once the intake resolves it, and a rewording is handed the run
+            ask=_one_run_mod.Ask(connection_id=conn_id, canvas_id=req.canvas_id or "", schema=req.schema_name or "",
+                                 claim=_claim) if _claim is not None else None,
         )
         # FL-1b — the analyst runs through the same K1 bridge as the graph path:
         # a supervised job (so a closed tab no longer kills it mid-run and
@@ -6559,10 +6592,6 @@ async def _stream_ask(req: "AskRequest", request: Request, conn_id: str) -> Asyn
         # Responder's here, a quick answer's, stopped deep runs at its time
         # budget (1200s on the live install, 2026-11-24 e4796f93) while the
         # Agents page said the Analyst had 1800s.
-        _claim, _under_way = await _claim_question(req, conn_id) if _one_run else (None, None)
-        if _under_way is not None:
-            yield _already_running(_under_way)
-            return
         async for sse in _job_streamed_body(
             lambda: _metered_stream(_analyst_body),
             session_id=req.session_id, conn_id=conn_id, canvas_id=req.canvas_id,
@@ -6988,7 +7017,7 @@ async def _stream_as_agent(agent, stream: AsyncGenerator[str, None]) -> AsyncGen
 #: SSE types the session log needs to notice. Checked as cheap substrings before
 #: paying for a JSON parse — the stream is mostly high-frequency delta frames and
 #: an observability sink must not tax every one of them.
-_SESSION_LOG_SNIFF = ('"start"', '"error"', '"headline"', '"receipt_id"')
+_SESSION_LOG_SNIFF = ('"start"', '"error"', '"headline"', '"receipt_id"', '"already_running"')
 
 
 @dataclass
@@ -7124,6 +7153,9 @@ async def stream_with_session_log(
                         headline = str(frame.get("headline") or "")[:2000]
                     elif kind == "receipt_id":
                         receipt_id = frame.get("receipt_id")
+                    elif kind == "already_running":
+                        # handed a run already under way (`agent/one_run.py`): what it was told is its answer
+                        headline = headline or str(frame.get("already_running") or "")[:2000]
                     elif kind == "error":
                         failed = str(frame.get("message") or "")[:2000]
                         session_log.emit(

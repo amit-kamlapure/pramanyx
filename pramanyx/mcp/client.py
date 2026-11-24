@@ -476,8 +476,9 @@ class PramanyxClient:
             if t == "start":
                 acc["investigation_id"] = ev.get("investigation_id") or acc["investigation_id"]
             elif t == "already_running":
-                # The platform handed back this question's run already under way, rather than start a second.
-                acc["investigation_id"] = ev.get("investigation_id") or acc["investigation_id"]
+                # The platform handed back this question's run already under way, rather than start a second — by its
+                # id, or none while it is still starting: never this repeat's own run, which stopped at the hand-back.
+                acc["investigation_id"] = ev.get("investigation_id") or None
                 acc["already_running"], acc["message"] = True, str(ev.get("already_running") or "")
             elif t == "hypotheses":
                 acc["hypotheses"] = ev.get("hypotheses")

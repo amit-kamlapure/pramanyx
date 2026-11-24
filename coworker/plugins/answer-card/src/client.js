@@ -20,7 +20,7 @@ import { driveFilesOf } from "./drive.js";
 import { ABOUT_TO, DOES, PREFIX, STAGED, saidOf, stagedOf, turnedDown } from "./steps.js";
 import { drawChart, labelOf, numericColumns } from "./chart";
 import { watchTheme } from "../../../../web/components/charts/vega/themeWatch";
-import { isDeepRecord, reportFacts, reportOf } from "./report.js";
+import { follow, isDeepRecord, reportFacts, reportOf } from "./report.js";
 import { unstatedFigures } from "../../../../web/lib/statedFigures";
 import { boldable, titleOf as answerTitleOf } from "../../../../web/lib/answerTitle";
 import {
@@ -411,7 +411,21 @@ const EarlierAnalysisCard = inTail(
 function DeepReport({ text, asked }) {
   const [onward, setOnward] = useState(false);
   const [copied, setCopied] = useState(false);
-  const got = reportOf(text);
+  const [later, setLater] = useState(null);            // the run read again, once it has landed
+  const first = reportOf(text);
+  const following = first ? reportFacts(first) : null;
+  // A run still going when its card was drawn is read again until it lands; the card then says what it found, or why it
+  // stopped — the turn that drew it may have ended a minute before the run did.
+  useEffect(() => {
+    setLater(null);                                    // another run, or the same one drawn afresh: nothing landed yet
+    if (!following?.running || !following.id) return undefined;
+    return follow(following.id, {
+      read: (id, signal) => fetch(`/pramanyx/investigations/${encodeURIComponent(id)}`,
+                                  { headers: { accept: "application/json" }, signal }),
+      onLanded: (record) => setLater({ ...record, question: record.question || first?.question }),
+    });
+  }, [following?.id, following?.running]);
+  const got = later || first;
   if (!got) return null;
   const { id, connection, running, stopped, why, cut, head, summary, period, closing, recs, sources, message } = reportFacts(got);
   const lead = headlineOf(head);

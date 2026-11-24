@@ -2007,6 +2007,8 @@ class AnalystResult:
     reinjection_ratio: float = 0.0
     #: How long the context took before intake — schema, linking, catalog — in seconds.
     context_timings: dict = field(default_factory=dict)
+    #: The run this one was handed instead of running (`agent/one_run.py`): a repeat of it in other words.
+    handed_to: Optional[dict] = None
 
 
 def _base_state(question: str, connection_id: str, investigation_id: str,
@@ -2132,6 +2134,7 @@ def run_analyst(
     persist: bool = True,
     purpose: str = "",
     shape: Optional[str] = None,
+    ask: Optional[Any] = None,
 ) -> AnalystResult:
     """One deep turn as the analyst: intake once, then the loop, then the narrator.
 
@@ -2156,7 +2159,8 @@ def run_analyst(
         return _run_analyst(
             connection_id, question, origin_finding=origin_finding, extra_context=extra_context,
             session_id=session_id, canvas_id=canvas_id, schema_scope=schema_scope, emit=emit, on_step=on_step,
-            provider=provider, max_steps=max_steps, persist=persist, purpose=purpose, shape=shape, made=made)
+            provider=provider, max_steps=max_steps, persist=persist, purpose=purpose, shape=shape, made=made,
+            ask=ask)
     except BaseException as exc:
         if made.get("inv_id"):
             _say_how_it_stopped(made["inv_id"], exc)
@@ -2192,8 +2196,11 @@ def _run_analyst(
     purpose: str = "",
     shape: Optional[str] = None,
     made: Optional[dict] = None,
+    ask: Optional[Any] = None,
 ) -> AnalystResult:
-    """The turn itself (:func:`run_analyst`); ``made`` is told the run's id as soon as its row exists."""
+    """The turn itself (:func:`run_analyst`); ``made`` is told the run's id as soon as its row exists. ``ask`` — an
+    agent's plain ask (`agent/one_run.Ask`) — is checked once the intake has resolved the question: a repeat of a run
+    already under way, in other words, stops there and is handed that run."""
     from pramanyx.agent.investigate import ada_intake, ada_synthesize
     from pramanyx.llm.profile import profile_for
     from pramanyx.llm.provider import get_provider
@@ -2257,6 +2264,20 @@ def _run_analyst(
                              counter="analyst.intake_failed_persist")
             return AnalystResult(answer="", report=None, steps=[], stop_reason="intake_failed",
                                  investigation_id=inv_id, context_timings=context_timings)
+
+        # An agent's repeat of a run already under way, asked in other words: the intake has resolved it to the same
+        # spec (`agent/one_run.spec_of`), so it stops here — said, on its row and in its stream — rather than run the
+        # same analysis twice (2026-11-24: the coworker asked again, reworded, through a custom agent).
+        twin = ask.after_intake(turn.intake) if ask is not None else None
+        if twin is not None:
+            from pramanyx.agent import one_run
+            note = one_run.said(twin, can_read=ask.can_read)
+            emit("already_running", {"investigation_id": twin.get("id") or None, "already_running": note})
+            if persist and inv_id:
+                from pramanyx.db.history import hand_back_investigation
+                hand_back_investigation(inv_id, note)
+            return AnalystResult(answer="", report=None, steps=[], stop_reason="already_running",
+                                 investigation_id=inv_id, context_timings=context_timings, handed_to=twin)
 
         budget = max_steps if max_steps is not None else profile_for("coder").deep_loop_steps
         # Item 3: measure-and-state, check or investigate — the shape the door carried in.

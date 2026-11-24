@@ -11,7 +11,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import pathlib
+import subprocess
+import sys
 import threading
+import uuid
 
 import pytest
 
@@ -21,9 +26,10 @@ Q = "Why did theLook's revenue change from May to June 2026? Find the drivers."
 @pytest.fixture(autouse=True)
 def no_claims_left():
     from pramanyx.agent import one_run
-    one_run._claims.clear()
+    from pramanyx.kernel.ledger import Ledger
+    Ledger.default().kv_replace_all(one_run.STORE, {})
     yield
-    one_run._claims.clear()
+    Ledger.default().kv_replace_all(one_run.STORE, {})
 
 
 @pytest.fixture
@@ -55,11 +61,11 @@ def test_a_repeat_is_handed_the_run_under_way_and_only_its_own_partys(as_user):
     run = _running()
     mine.found(run)
     assert one_run.take("why did thelook's revenue change from may to june 2026?  find the drivers.",
-                        "conn-1")[1].inv_id == run, "the same question, as `asked_before` compares two"
+                        "conn-1")[1]["inv_id"] == run, "the same question, as `asked_before` compares two"
     # The review's probe: with no person in scope, `deep_analysis` files the actor and a custom agent's ask files
     # `api:mcp:<host>` — both the install's own agent, one party.
     as_user("api:mcp:my-host")
-    assert one_run.take(Q, "conn-1")[1].inv_id == run
+    assert one_run.take(Q, "conn-1")[1]["inv_id"] == run
     for other in (dict(question=Q, connection_id="conn-2"), dict(question=Q, connection_id="conn-1", canvas_id="cv"),
                   dict(question=Q, connection_id="conn-1", schema="sales"),
                   dict(question="Why did orders fall?", connection_id="conn-1")):
@@ -190,7 +196,7 @@ def test_an_agents_repeat_while_the_run_is_still_starting_is_told_so(door, monke
 def test_an_agents_first_ask_claims_its_question_for_its_run(door):
     client, started, seen = door
     _ask(client, agent=True)
-    assert started == ["analyst"] and seen["claim"] is not None and seen["claim"].keys
+    assert started == ["analyst"] and seen["claim"] is not None and seen["claim"].slots
 
 
 @pytest.mark.parametrize("who", [
@@ -324,7 +330,7 @@ def test_the_bridge_hands_its_claim_the_runs_id_and_frees_it_when_the_run_ends()
         return [f async for f in inv._job_streamed_body(lambda: body(), session_id="", conn_id="conn-1", claim=mine)]
 
     asyncio.run(drain())
-    assert during["repeat"].inv_id == run
+    assert during["repeat"]["inv_id"] == run
     assert one_run.take(Q, "conn-1")[1] is None
 
 
@@ -414,3 +420,287 @@ def test_reading_a_running_run_says_how_far_it_has_got():
     assert got["status"] == "running"
     assert got["progress"]["steps"] == 2 and got["progress"]["last_step"] == "decompose"
     assert got["progress"]["running_for_s"] >= 0
+
+
+# ── a repeat in other words: the same spec once the intake has resolved it ────
+
+INTAKE = {"metric_sql": "SUM(oi.sale_price)", "metric_table": "order_items", "observation_start": "2026-05-01",
+          "observation_end": "2026-05-31", "comparison_start": "2026-04-01", "comparison_end": "2026-04-30",
+          "question_shape": "diagnose", "named_dimensions": []}
+
+
+def test_two_wordings_resolve_to_one_spec_and_different_questions_do_not():
+    from pramanyx.agent.one_run import spec_of
+
+    # the motivating pair: "Why did revenue change…? Find the drivers." / "What drove the increase…? Break it down by
+    # category" — a why question looks across every dimension, so naming one does not make it another analysis
+    reworded = {**INTAKE, "metric_sql": "sum( oi.sale_price )", "metric_table": "`order_items`",
+                "named_dimensions": ["products.category"]}
+    assert spec_of(INTAKE) == spec_of(reworded), "the model's spelling and a named focus are not a different question"
+    different = [
+        {**INTAKE, "observation_start": "2026-06-01", "observation_end": "2026-06-30"},          # another period
+        {**INTAKE, "question_shape": "describe"},                                                # another kind of ask
+        {**INTAKE, "metric_sql": "SUM(o.sale_price)"},                                            # another table's column
+        {**INTAKE, "metric_filters": ["order_items.status = 'Returned'"]},                        # a filter on the rows
+        {**INTAKE, "other_measures": [{"label": "orders", "sql": "COUNT(DISTINCT order_id)"}]},   # a second measure
+    ]
+    for d in different:
+        assert spec_of(d) != spec_of(INTAKE), d
+    assert spec_of({**INTAKE, "metric_filters": ["status = 'Returned'"]}) != \
+        spec_of({**INTAKE, "metric_filters": ["status = 'returned'"]}), "a literal's case is the data's"
+    describe = {**INTAKE, "question_shape": "describe"}
+    assert spec_of(describe) != spec_of({**describe, "named_dimensions": ["products.category"]}), \
+        "a breakdown asked for IS the question when nothing is being explained"
+    framed = {**INTAKE, "framed_metric": {"metric": "revenue", "objects": ["completed"]}}
+    assert spec_of(framed) == spec_of({**framed, "metric_sql": "SUM(x.y)"}), "a governed metric is itself"
+    assert spec_of(framed) != spec_of({**framed, "framed_metric": {"metric": "revenue", "objects": ["returned"]}})
+    assert spec_of({"question_shape": "check"}) is None, "nothing to compare without a measure"
+
+
+def _analyst_up_to_intake(monkeypatch, intake: dict):
+    """The real `_run_analyst` as far as its intake, which resolves the question to ``intake``; no model, no
+    warehouse."""
+    from pramanyx.agent import analyst
+
+    monkeypatch.setattr(analyst, "build_analyst_context", lambda conn_id, question, **kw: (None, {
+        "connection_id": conn_id, "schema_context": "", "scope_schema": "", "canvas_id": None,
+        "canvas_schema_context": "", "data_catalog": ""}))
+    monkeypatch.setattr("pramanyx.agent.investigate.ada_intake", lambda state, conn: {"_ada_intake": dict(intake)})
+    monkeypatch.setattr(analyst, "run_tool_loop", lambda *a, **k: pytest.fail("ran the analysis a second time"))
+    return analyst
+
+
+REWORDED = "What drove the revenue increase from April to May 2026? Break it down by category."
+
+
+@pytest.mark.parametrize("job", [True, False], ids=["as a job", "inline in a conversation"])
+def test_a_repeat_in_other_words_is_handed_the_run_after_its_intake(monkeypatch, job):
+    from pramanyx.agent import one_run
+    from pramanyx.db import history
+
+    analyst = _analyst_up_to_intake(monkeypatch, {**INTAKE, "named_dimensions": ["products.category"]})
+    first, _ = one_run.take(Q, "conn-1")
+    run = _running()
+    first.found(run)
+    assert one_run.Ask(connection_id="conn-1", claim=first).after_intake(INTAKE) is None, "the first claims its spec"
+
+    second, _ = one_run.take(REWORDED, "conn-1") if job else (None, None)
+    frames: list[tuple] = []
+    result = analyst.run_analyst("conn-1", REWORDED, emit=lambda t, p: frames.append((t, p)),
+                                 ask=one_run.Ask(connection_id="conn-1", claim=second, can_read=job))
+    assert result.stop_reason == "already_running" and result.handed_to["id"] == run
+    handed = dict(frames)["already_running"]
+    assert handed["investigation_id"] == run and "already being analysed" in handed["already_running"]
+    assert "This ask named products.category" in handed["already_running"], "the focus it asked for, said"
+    row = history.get_investigation(result.investigation_id)
+    assert row["status"] == "interrupted" and row["error"] == handed["already_running"], "its own row says so"
+
+
+def test_a_hand_back_is_not_booked_as_a_failure_and_never_overwrites_an_end():
+    from pramanyx.db import history
+
+    from pramanyx.kernel.ledger import Ledger
+
+    run = _running()
+    assert history.hand_back_investigation(run, "handed run abc") is True
+    assert history.get_investigation(run)["status"] == "interrupted"
+    journaled = Ledger.default().events(kind="investigation.handed_back", limit=20)
+    assert any((e.get("payload") or {}).get("investigation_id") == run for e in journaled), \
+        "a page listening for investigation events redraws the row"
+    assert not [e for e in Ledger.default().events(kind="investigation.failed", limit=50)
+                if (e.get("payload") or {}).get("investigation_id") == run], "not a failure"
+    done = _running()
+    history.fail_investigation(done, status="failed", reason="cancelled on request")
+    assert history.hand_back_investigation(done, "handed run abc") is False
+    assert history.get_investigation(done)["error"] == "cancelled on request"
+
+
+@pytest.mark.parametrize("attempt", range(5))
+def test_two_wordings_racing_to_their_spec_at_once_run_once(attempt):
+    """Both intakes finish at the same moment: exactly one claims the spec and runs on; the other is handed it."""
+    from pramanyx.agent import one_run
+
+    claims = [one_run.take(Q, "conn-1")[0], one_run.take(REWORDED, "conn-1")[0]]
+    for c in claims:
+        c.found(_running())
+    got: list = [None, None]
+    go = threading.Barrier(2)
+
+    def race(i):
+        go.wait()
+        got[i] = one_run.Ask(connection_id="conn-1", claim=claims[i]).after_intake(INTAKE)
+
+    threads = [threading.Thread(target=race, args=(i,)) for i in (0, 1)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(10)
+    ran_on = [i for i in (0, 1) if got[i] is None]
+    assert len(ran_on) == 1, got
+    assert got[1 - ran_on[0]]["id"] == claims[ran_on[0]].inv_id
+
+
+def test_a_twin_that_ends_while_awaited_leaves_the_spec_to_the_waiting_run(monkeypatch):
+    """Otherwise a third wording, later, would find the spec unclaimed and run too."""
+    from pramanyx.agent import one_run
+
+    monkeypatch.setattr(one_run, "READ_EVERY_S", 0.02)
+    a, _ = one_run.take(Q, "conn-1")
+    assert one_run.Ask(connection_id="conn-1", claim=a).after_intake(INTAKE) is None   # holds the spec, no row yet
+    b, _ = one_run.take(REWORDED, "conn-1")
+    got: dict = {}
+    t = threading.Thread(target=lambda: got.update(r=one_run.Ask(connection_id="conn-1", claim=b).after_intake(INTAKE)))
+    t.start()
+    a.end()
+    t.join(5)
+    assert got["r"] is None, "b runs on"
+    b.found(_running())
+    third, _ = one_run.take("Why did revenue move between April and May 2026?", "conn-1")
+    assert one_run.Ask(connection_id="conn-1", claim=third).after_intake(INTAKE)["id"] == b.inv_id
+
+
+# ── claims every API process sees, standing as long as their job does ──────────
+
+def _job(state: str, **at) -> str:
+    from pramanyx.kernel.ledger import Ledger
+    from pramanyx.agent.one_run import _now
+    jid = uuid.uuid4().hex[:12]
+    Ledger.default().job_insert({"id": jid, "kind": "investigation", "state": state, "created_at": _now(),
+                                 "attempt": 1, **at})
+    return jid
+
+
+def test_a_claim_stands_while_its_job_does():
+    """At 281c594 a claim with no run yet lapsed after five minutes, though eight investigation slots can keep a job
+    queued far longer; and a run whose process died stayed 'running' — handed to repeats — until the hourly sweep."""
+    from datetime import datetime, timedelta, timezone
+
+    from pramanyx.agent import one_run
+
+    long_ago = (datetime.now(timezone.utc) - timedelta(minutes=20)).isoformat()
+
+    def row(**kw):
+        return {"claim": "c", "inv_id": None, "job": None, "began_at": long_ago, **kw}
+
+    assert one_run._live(row(job=_job("PENDING"))), "queued behind the slots for twenty minutes: still the run"
+    assert one_run._live(row(job=_job("RUNNING", heartbeat_at=one_run._now())))
+    stale = (datetime.now(timezone.utc) - timedelta(seconds=one_run.HEARTBEAT_LAPSES_S + 30)).isoformat()
+    assert not one_run._live(row(job=_job("RUNNING", heartbeat_at=stale))), "its process stopped beating"
+    assert not one_run._live(row(job=_job("CANCELLED")))
+    assert not one_run._live(row()), "never taken by a job, twenty minutes on"
+    assert one_run._live(row(began_at=one_run._now())), "a moment before its job is submitted"
+
+
+def test_a_claim_whose_process_on_this_host_is_gone_lapses_at_once():
+    """A queued job left by a crashed process would otherwise hold its question for the hour."""
+    from pramanyx.agent import one_run
+
+    gone = subprocess.run([sys.executable, "-c", "import os; print(os.getpid())"], capture_output=True, text=True)
+    dead_pid = int(gone.stdout.strip())
+    row = {"claim": "c", "inv_id": None, "job": _job("PENDING"), "began_at": one_run._now(),
+           "by": f"{one_run.socket.gethostname()}:{dead_pid}"}
+    assert not one_run._live(row)
+    assert one_run._live({**row, "by": f"{one_run.socket.gethostname()}:{os.getpid()}"})
+    assert one_run._live({**row, "by": "another-host:1"}), "another host's process cannot be asked; its job stands"
+
+
+def test_a_claim_never_fails_the_run_it_serves(monkeypatch):
+    from pramanyx.agent import one_run
+
+    mine, _ = one_run.take(Q, "conn-1")
+
+    class Broken:
+        def __getattr__(self, name):
+            raise RuntimeError("the ledger is unwritable")
+
+    monkeypatch.setattr(one_run, "_ledger", lambda: Broken())
+    mine.found("inv-x")
+    mine.started("job-x")
+    mine.end()                                              # none of these raises
+    assert one_run.take(Q, "conn-2") == (None, None), "and a run that cannot claim starts unclaimed"
+
+
+def test_another_api_process_sees_the_claim_and_is_handed_the_run():
+    """A second process sharing the ledger: a real one, not this process pretending."""
+    from pramanyx.agent import one_run
+
+    mine, _ = one_run.take(Q, "conn-1")
+    run = _running()
+    mine.found(run)
+    mine.started(_job("RUNNING", heartbeat_at=one_run._now()))
+    code = ("import json; from pramanyx.agent import one_run; "
+            f"m, held = one_run.take({Q!r}, 'conn-1'); print(json.dumps({{'mine': m is not None, 'held': held}}))")
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=120,
+                         cwd=str(pathlib.Path(__file__).resolve().parents[2]), env=dict(os.environ))
+    assert out.returncode == 0, out.stderr[-2000:]
+    got = json.loads(out.stdout.strip().splitlines()[-1])
+    assert got["mine"] is False and got["held"]["inv_id"] == run
+    assert got["held"]["by"].endswith(f":{os.getpid()}"), "the claim the other process saw is this one's"
+
+
+def test_a_claim_is_changed_or_let_go_only_while_it_is_the_one_read():
+    """Two processes both finding a dead claim: the first replaces it; the second's late delete must not take the
+    first's new claim with it."""
+    from pramanyx.agent import one_run
+    from pramanyx.kernel.ledger import Ledger
+
+    ledger = Ledger.default()
+    slot = one_run._question_slot(Q, "conn-1", "", "")
+    dead = {"claim": "dead", "inv_id": None, "job": None, "began_at": "2000-01-01T00:00:00+00:00", "by": "gone:1"}
+    ledger.kv_put(one_run.STORE, slot, dead)
+    seen_by_late_process = ledger.kv_get(one_run.STORE, slot)
+    mine, held = one_run.take(Q, "conn-1")                  # this process clears the dead claim and claims
+    assert mine is not None and held is None
+    one_run._drop_if_same(slot, seen_by_late_process)       # the late process acts on what it read
+    assert ledger.kv_get(one_run.STORE, slot)["claim"] == mine.claim_id
+
+
+# ── a handed-back run whose reader left, through the real analyst and bridge ──
+
+def test_a_handed_back_run_whose_reader_left_ends_its_trace_ok(monkeypatch):
+    """The job writes the trace's end for a reader that left (570a226): a run handed back is not a failure."""
+    from pramanyx import telemetry
+    from pramanyx.agent import one_run
+    from pramanyx.obs import session_log
+    from pramanyx.routers import investigations as inv
+
+    _analyst_up_to_intake(monkeypatch, INTAKE)
+    first, _ = one_run.take(Q, "conn-1")
+    run = _running()
+    first.found(run)
+    one_run.Ask(connection_id="conn-1", claim=first).after_intake(INTAKE)
+    mine, _ = one_run.take(REWORDED, "conn-1")
+    trace: dict = {}
+
+    async def turn():
+        trace["id"] = telemetry.current_trace_id()
+        async for frame in inv._metered_stream(inv._stream_analyst(
+                REWORDED, "conn-1", [], ask=one_run.Ask(connection_id="conn-1", claim=mine))):
+            yield frame
+
+    door = inv.stream_with_session_log(
+        inv._job_streamed_body(lambda: turn(), session_id="", conn_id="conn-1", payload={"question": REWORDED},
+                               claim=mine),
+        question=REWORDED, conn_id="conn-1", door="ask", depth="deep")
+
+    async def read_then_leave():
+        got: list = []
+
+        async def read():
+            async for frame in door:
+                got.append(frame)
+        reader = asyncio.create_task(read())
+        while not got:
+            await asyncio.sleep(0.01)
+        reader.cancel()
+        await asyncio.gather(reader, return_exceptions=True)
+        for _ in range(500):
+            fins = [e for e in session_log.recover_session(trace.get("id") or "-") if e["kind"] == "final_response"]
+            if fins:
+                return fins
+            await asyncio.sleep(0.01)
+        pytest.fail("no end written")
+
+    fins = asyncio.run(read_then_leave())
+    assert len(fins) == 1 and fins[0]["ok"] is True
+    assert f"run {run}" in fins[0]["payload"]["headline"], "the run it was handed, said"

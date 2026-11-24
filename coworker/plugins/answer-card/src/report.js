@@ -61,3 +61,47 @@ export function isDeepRecord(got) {
   if (got.report && typeof got.report === "object" && Array.isArray(got.report.phases)) return true;
   return got.kind === "investigation" && STOPPED.includes(String(got.status || ""));
 }
+
+/** How often a deep analysis still running is read again, and for how long (`DeepReport`). Past the hour the platform
+ *  has failed any run still 'running' (`kernel/jobs.py`, the supervisor's sweep), so the last read says how it ended. */
+export const FOLLOW_EVERY_MS = 10_000;
+export const FOLLOW_FOR_MS = 61 * 60_000;
+
+/** A deep analysis read again while it ran: its record once it has ended — finished, or stopped with why — else null
+ *  (still going, or paused for a person). 2026-11-24: the card said "still running" for good after the turn ended, a
+ *  minute before the run did; nothing in the coworker needs a refresh. */
+export function landed(record) {
+  if (!record || typeof record !== "object") return null;
+  return ["complete", ...STOPPED].includes(String(record.status || "")) ? record : null;
+}
+
+/** Read a running deep analysis again until it lands: `onLanded(record)` once, then nothing more. Returns the stop the
+ *  card calls when it goes. A 404 or 410 — the run gone — stops the reading for good; anything else (a session to
+ *  sign in again, the platform restarting) is read again. `read(id, signal)` answers like `fetch`; the clock and the timers are passed in, so this is tested
+ *  without a page. */
+export function follow(id, { read, onLanded, every = FOLLOW_EVERY_MS, forMs = FOLLOW_FOR_MS, now = () => Date.now(),
+                             later = setTimeout, cancel = clearTimeout, controller = () => new AbortController() }) {
+  let live = true;
+  let timer = null;
+  let abort = null;
+  const until = now() + forMs;
+  const again = () => { if (live && now() < until) timer = later(tick, every); };
+  function tick() {
+    if (!live) return;
+    abort = controller();
+    Promise.resolve(read(id, abort.signal))
+      .then((answer) => {
+        if (!live) return undefined;
+        if (answer && (answer.status === 404 || answer.status === 410)) { live = false; return undefined; }
+        if (!answer || !answer.ok) return again();
+        return answer.json().then((record) => {
+          if (!live) return;
+          const done = landed(record);
+          if (done) { live = false; onLanded(done); } else again();
+        });
+      })
+      .catch(() => again());
+  }
+  timer = later(tick, every);
+  return () => { live = false; cancel(timer); abort?.abort(); };
+}
