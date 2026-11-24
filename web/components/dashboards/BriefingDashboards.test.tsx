@@ -182,6 +182,19 @@ describe("a person's dashboards", () => {
     await waitFor(() => expect(drawn.props.at(-1)!.sym).toBe("€"));
   });
 
+  it("opens the one a link names once the connection is known, never reading it or the list for none", async () => {
+    localStorage.clear();
+    window.history.replaceState(null, "", "/?tab=intelligence&layer=dashboards&dashboard=pricing-1");
+    const { rerender } = render(<BriefingDashboards connectionId="" schema="thelook" />);
+    await new Promise(r => setTimeout(r, 0));
+    expect(api.listDashboards).not.toHaveBeenCalled();
+    expect(api.getDashboard).not.toHaveBeenCalled();
+    rerender(<BriefingDashboards connectionId="thelook" schema="thelook" />);
+    await waitFor(() => expect(api.getDashboard).toHaveBeenCalledWith("thelook", "pricing-1", null));
+    expect(api.getDashboard.mock.calls.every(c => c[0] === "thelook")).toBe(true);
+    window.history.replaceState(null, "", "/");
+  });
+
   it("opens the one the person chose last time", async () => {
     localStorage.setItem("pramanyx:dashboard-to-open:thelook", "pricing-1");
     show();

@@ -1050,8 +1050,10 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
     return () => window.removeEventListener(DASHBOARD_CHANGED, reload);
   }, [reload]);
 
-  // The person's dashboards.
+  // The person's dashboards. Not before the page knows its connection: a list read for none held no dashboard, so it took
+  // back the one a link had asked for, and the page landed on its home (seen live, 2026-11-24).
   useEffect(() => {
+    if (!connectionId) return;
     let cancelled = false;
     listDashboards(connectionId).then(l => {
       if (cancelled) return;
@@ -1078,6 +1080,8 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
   // The chosen dashboard, read for the page's range, each card it places run through the guards.
   useEffect(() => {
     if (!chosen || chosen === METRICS_DASHBOARD || chosen.startsWith("shared:")) { setData(null); return; }
+    // a dashboard asked for by a link is read once the connection is known — read for none, it was refused (a 422)
+    if (!connectionId) return;
     let cancelled = false;
     setReading(true);
     (async () => {
@@ -1135,7 +1139,7 @@ export function BriefingDashboards({ connectionId, schema, onOpenSource, onEvide
   const choose = (id: string, keepEditing = false) => {
     if (burst.current.timer) sendBurst();
     setDraft(null);
-    setChosen(id); keepOpenInThisTab(connectionId, id); setShowHistory(false); setRefusal(null); setProblem("");
+    setChosen(id); if (connectionId) keepOpenInThisTab(connectionId, id); setShowHistory(false); setRefusal(null); setProblem("");
     setPicking(false); setPublishing(false); setNoting(false); setImaging(false); setComposing(false); setQuestioning(false);
     setEditing(keepEditing); setStacks(NO_STEPS); previewAsGroup("");
   };
