@@ -54,6 +54,12 @@ _MIGRATIONS = [
     # three NULLIFs and two caps deep). Empty on a row no person wrote, and on every row before this one.
     Migration(5, "the statement as written: sql_written on audit_log",
               lambda c: add_column_if_missing(c, "audit_log", "sql_written", "TEXT NOT NULL DEFAULT ''")),
+    # Who a statement was run by or for (2026-11-24, Discover D5: "how many people read it"). The run that issued it
+    # named a person only when the session log kept that run, so most reads said who was not recorded; the person the
+    # request or the job acts for (`org.context.current_actor`) is known at every write. Empty outside a request or a
+    # job, and on every row before this one.
+    Migration(6, "who a statement was run by or for: actor on audit_log",
+              lambda c: add_column_if_missing(c, "audit_log", "actor", "TEXT NOT NULL DEFAULT ''")),
 ]
 
 #: The statement as written, for the audit rows of the run that executes it — set by `as_written`.
@@ -199,7 +205,7 @@ class AuditLogger:
         the current tenant context so every audited query is tenant-keyed, and
         ``trace_id`` to the ambient run so the statement joins to the session log
         without any caller threading it through."""
-        from pramanyx.org.context import current_org_id
+        from pramanyx.org.context import current_actor, current_org_id
         record_id = str(uuid.uuid4())
         digest = sql[:120].replace("\n", " ").strip()
         ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
@@ -216,11 +222,11 @@ class AuditLogger:
             c.execute(
                 """INSERT INTO audit_log
                    (id, ts, connection_id, hypothesis_id, sql_digest, sql_full,
-                    verdict, row_count, duration_ms, pii_redacted, error, org_id, trace_id, sql_written)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    verdict, row_count, duration_ms, pii_redacted, error, org_id, trace_id, sql_written, actor)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (record_id, ts, connection_id, hypothesis_id, digest, sql,
                  verdict, row_count, round(duration_ms, 2), pii_redacted, error, oid,
-                 trace_id or "", _WRITTEN.get()),
+                 trace_id or "", _WRITTEN.get(), current_actor()),
             )
             c.commit()
         finally:
@@ -285,10 +291,11 @@ class AuditLogger:
         now: float | None = None,
     ) -> dict[str, dict[str, Any]]:
         """For each key of ``tables_by_key`` (an entity, say), the audited statements on ``connection_id`` in the last
-        ``days`` days — today included — that named one of its tables as a whole word, as :meth:`reads_by_month` names
-        them: ``{"reads": n, "last_read": the newest such statement's ts or None, "runs": {trace id: how many of them
-        that run issued}}`` — a statement no run issued is counted under ``""``. One scan of the log for every key; a
-        key with no tables counts nothing."""
+        ``days`` days — today included — that named one of its tables where a table stands, as :meth:`reads_by_month`
+        names them: ``{"reads": n, "last_read": the newest such statement's ts or None, "people": {who: how many they
+        ran}, "runs": {trace id: how many of them that run issued}}``. A statement that names who it was run by or for
+        (since 2026-11-24) is counted under ``people``; one that does not, under its run, ``""`` for none. One scan of
+        the log for every key; a key with no tables counts nothing."""
         from datetime import datetime, timedelta, timezone
         stamp = datetime.fromtimestamp(now if now is not None else time.time(), tz=timezone.utc)
         since = (stamp - timedelta(days=max(1, days) - 1)).strftime("%Y-%m-%dT00:00:00Z")
@@ -300,7 +307,8 @@ class AuditLogger:
             for t in tables:
                 if t and t.strip():
                     owners.setdefault(t.strip().lower(), set()).add(key)
-        out: dict[str, dict[str, Any]] = {k: {"reads": 0, "last_read": None, "runs": {}} for k in tables_by_key}
+        out: dict[str, dict[str, Any]] = {k: {"reads": 0, "last_read": None, "runs": {}, "people": {}}
+                                          for k in tables_by_key}
         if not owners:
             return out
         names = sorted(owners, key=len, reverse=True)
@@ -313,11 +321,11 @@ class AuditLogger:
             if org_id is not None:
                 clauses.append("org_id = ?")
                 params.append(org_id)
-            rows = c.execute(f"SELECT ts, sql_full, trace_id FROM audit_log WHERE {' AND '.join(clauses)}",
+            rows = c.execute(f"SELECT ts, sql_full, trace_id, actor FROM audit_log WHERE {' AND '.join(clauses)}",
                              params).fetchall()
         finally:
             c.close()
-        for ts, sql, trace_id in rows:
+        for ts, sql, trace_id, actor in rows:
             keys: set[str] = set()
             for m in pattern.finditer(str(sql or "").lower()):
                 keys |= owners.get(m.group(1), set())
@@ -326,6 +334,11 @@ class AuditLogger:
                 row["reads"] += 1
                 if row["last_read"] is None or str(ts) > row["last_read"]:
                     row["last_read"] = str(ts)
+                who = str(actor or "")
+                if who:
+                    # named on the statement itself (since 2026-11-24): not the session log's to answer
+                    row["people"][who] = row["people"].get(who, 0) + 1
+                    continue
                 run = str(trace_id or "")
                 row["runs"][run] = row["runs"].get(run, 0) + 1
         return out

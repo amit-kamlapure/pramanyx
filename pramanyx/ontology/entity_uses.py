@@ -68,12 +68,18 @@ def shared_said(rows: list[dict]) -> str:
     return "; ".join(f"a statement naming {r['table']} counts for {', '.join(r['with'])} too" for r in rows) + "."
 
 
+def _person(who: object) -> str:
+    """One person however a log spells them: ``user:ana`` and ``ana`` are Ana."""
+    w = str(who or "").strip().lower()
+    return w[len("user:"):] if w.startswith("user:") else w
+
+
 def window_reads(connection_id: str, tables_by_entity: dict[str, list[str]], *, days: int = WINDOW_DAYS,
                  now: Optional[float] = None) -> dict[str, dict]:
     """For each entity, the audited statements of the last ``days`` days naming its tables: how many, the newest one's
-    moment, how many distinct people the session log names for the runs that issued them, and how many of the reads
-    name no one (``unattributed``). Raises when the statement log cannot be read; a session log that cannot be read
-    leaves ``readers`` None, with why."""
+    moment, how many distinct people ran them — named on the statement itself (since 2026-11-24), else by the session
+    log for the run that issued it — and how many of the reads name no one (``unattributed``). Raises when the statement
+    log cannot be read; a session log that cannot be read counts only the people the statements name, with why."""
     from pramanyx.org.context import current_org_id
     from pramanyx.security.audit import AuditLogger
     org = current_org_id() or None
@@ -91,15 +97,19 @@ def window_reads(connection_id: str, tables_by_entity: dict[str, list[str]], *, 
     out: dict[str, dict] = {}
     for key, row in raw.items():
         entry: dict[str, Any] = {"days": days, "reads": row["reads"], "last_read": row["last_read"]}
+        # who each statement names itself (since 2026-11-24), else who the session log names for the run that issued it
+        on_statement = {_person(p) for p in (row.get("people") or {}) if _person(p)}
         if people is None:
-            entry.update({"readers": None, "unattributed": None, "readers_said": why})
+            entry.update({"readers": len(on_statement) if on_statement else None,
+                          "unattributed": None, "readers_said": why})
         else:
-            named = {people[run] for run in row["runs"] if run in people}
+            named = on_statement | {_person(people[run]) for run in row["runs"] if run in people and _person(people[run])}
             unattributed = sum(n for run, n in row["runs"].items() if run not in people)
             entry.update({"readers": len(named), "unattributed": unattributed})
             if unattributed:
-                entry["readers_said"] = (f"Who ran {unattributed:,} of {row['reads']:,} is not recorded — the session "
-                                         "log names a person only for the runs it kept.")
+                entry["readers_said"] = (f"Who ran {unattributed:,} of {row['reads']:,} is not recorded — a statement "
+                                         "names who it was run for since 24 November 2026, and before then the "
+                                         "session log named a person only for the runs it kept.")
         out[key] = entry
     return out
 

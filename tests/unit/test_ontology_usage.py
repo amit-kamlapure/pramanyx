@@ -137,3 +137,27 @@ def test_one_reading_of_each_statement_counts_every_entity_whose_table_it_names(
     got = AuditLogger.reads_within(conn, {"Order": ["orders"], "OrderItem": ["order_items"], "Event": ["events"],
                                          "User": ["users", "events"], "Unbound": []})
     assert {k: v["reads"] for k, v in got.items()} == {"Order": 1, "OrderItem": 2, "Event": 1, "User": 1, "Unbound": 0}
+
+
+def test_a_statement_names_who_it_was_run_for_and_the_readers_are_counted_from_it(ledger, monkeypatch):
+    from pramanyx.org.context import reset_actor, set_actor
+    conn = "usage-actor-t"
+    _ran(ledger, "run-c", "person:cai")
+
+    def as_(who, sql, trace=""):
+        token = set_actor(who)
+        try:
+            AuditLogger.log(connection_id=conn, sql=sql, trace_id=trace)
+        finally:
+            reset_actor(token)
+    as_("ana", "SELECT * FROM customers")
+    as_("Ana", "SELECT 2 FROM customers")                  # one person, however spelled
+    as_("user:ben", "SELECT 3 FROM customers")
+    as_("", "SELECT 4 FROM customers", trace="run-c")      # named by the session log, as before
+    as_("", "SELECT 5 FROM customers")                     # named by neither
+    row = U.window_reads(conn, {"Customer": ["customers"]})["Customer"]
+    assert (row["reads"], row["readers"], row["unattributed"]) == (5, 3, 1)
+    assert "since 24 November 2026" in row["readers_said"]
+    # an unreadable session log still counts the people the statements name
+    monkeypatch.setattr(type(ledger), "session_people", lambda self, ids, org_id=None: (_ for _ in ()).throw(OSError("x")))
+    assert U.window_reads(conn, {"Customer": ["customers"]})["Customer"]["readers"] == 2
