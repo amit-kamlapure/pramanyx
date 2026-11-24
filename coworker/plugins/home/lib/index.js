@@ -15,6 +15,10 @@ export const READS = [
   /^\/suggestions$/,          // starter questions for one connection (cached; a first read may cost a model call)
   /^\/agents\/custom$/,       // a person's own agents
   /^\/investigations$/,       // recent questions — a person's own (`?mine=1`): each coworker is its person's
+  // One analysis as the platform has it now (`GET /investigations/<id>`, checked as the person's own there): a deep
+  // analysis's card is read again while its run goes on, until it lands (`answer-card/src/report.js` `follow`). Not
+  // relayed until 2026-11-25, the card read a 404, took the run for gone and said "still running" for good.
+  /^\/investigations\/[A-Za-z0-9_-]{1,64}$/,
   /^\/chat-sessions$/,        // the group conversations a person is in (2026-11-17), opened as the app's own thread
   /^\/sheets$/,               // the sheets by name, so an answer that read one can open it
   // An answer as a file — Excel, PowerPoint, Word or PDF — built by Pramanyx from the answer's stored rows, never by

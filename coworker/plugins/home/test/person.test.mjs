@@ -105,3 +105,16 @@ test("the relay passes a deck of a person's answers through, and nothing else un
   assert.ok(relayed("/exports/answers"));
   for (const path of ["/exports", "/exports/answers/x", "/exports/other", "/ledger/export"]) assert.ok(!relayed(path), path);
 });
+
+test("the relay reads one analysis as it stands, so a deep analysis's card lands, and nothing that acts on it", async () => {
+  // 2026-11-25: the card read its run again through this relay, which answered 404 — the run gone, to the card — and
+  // a run that outlasted its turn read "still running" for good.
+  const { READS } = await import("../lib/index.js");
+  const relayed = (path) => READS.some((allowed) => allowed.test(path));
+  assert.ok(relayed("/investigations/d8b19615") && relayed("/investigations/3f2a9c1e-77aa-4b0e-9d1e-0c5a2f6b8e11"));
+  assert.ok(relayed("/investigations/d8b19615/export"));
+  for (const path of ["/investigations/d8b19615/cancel", "/investigations/d8b19615/rerun", "/investigations/a/b",
+                      "/investigations/../org-settings", "/investigations/a b", "/investigations/"]) {
+    assert.ok(!relayed(path), path);
+  }
+});
