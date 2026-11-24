@@ -17,7 +17,7 @@ import { useState, type ReactNode } from "react";
 
 import { Foot, Frame, Title } from "@/components/dashboards/DashboardTile";
 import { NOTE_TEXT, NoteProse, isHeadingNote } from "@/components/dashboards/NoteProse";
-import { useCellBox } from "@/components/dashboards/cellBox";
+import { useCellBox, useMeasured } from "@/components/dashboards/cellBox";
 import { SizePick } from "@/components/dashboards/SizePick";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
@@ -74,8 +74,17 @@ export function NoteTile({ elementKey, text, author, writtenAt, size, doors }: {
     ? `${person(author)} · written ${writtenAt ? formatDateTime(writtenAt) : "just now"}`
     : "Not yet kept";
   const headingOnly = isHeadingNote(text) && !editing;
+  // On a section's grid a note's box is fixed, and a short one held nothing but its head and its stamp: at its least, two
+  // rows, the words had no room at all (seen live, 2026-11-24). A short box gives up the head and the air before the
+  // words: its stamp still says whose words they are, and that nothing measured them.
+  const box = useCellBox();
+  const short = box.onGrid && box.h > 0 && box.h <= 3 && !headingOnly && !editing;
+  const [room, roomSize] = useMeasured<HTMLDivElement>();
+  const [held, heldSize] = useMeasured<HTMLDivElement>();
+  // words the box cannot show are said, never implied: the stamp's line says there is more to scroll
+  const more = box.onGrid && !editing && roomSize.height > 0 && heldSize.height > roomSize.height + 1;
   return (
-    <Frame testid="dashboard-note" bare={headingOnly} doors={own && !editing ? (
+    <Frame testid="dashboard-note" bare={headingOnly} tight={short} doors={own && !editing ? (
       <DoorsBar>
         {doors.onEditNote && (
           <Button variant="ghost" size="icon-xs" aria-label="Edit the note" title="Change its words. The note is re-stamped when kept."
@@ -88,7 +97,7 @@ export function NoteTile({ elementKey, text, author, writtenAt, size, doors }: {
         )}
       </DoorsBar>
     ) : undefined}>
-      {!headingOnly && <Title title="Note" right={<span className="aug-fs-xs" data-testid="note-chip" style={{ color: "var(--t3)", whiteSpace: "nowrap" }}>Your words</span>} />}
+      {!headingOnly && !short && <Title title="Note" right={<span className="aug-fs-xs" data-testid="note-chip" style={{ color: "var(--t3)", whiteSpace: "nowrap" }}>Your words</span>} />}
       {editing ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 6, flex: 1 }}>
           {/* written as it reads (the user, 2026-11-23), kept as the Markdown a note is drawn from */}
@@ -102,9 +111,14 @@ export function NoteTile({ elementKey, text, author, writtenAt, size, doors }: {
         </div>
       ) : (
         // a heading's stamp is said on hover: it stands on the page as a title, and its words are still the person's
-        <div title={headingOnly ? `${stamp} · not measured, cited by nothing` : undefined} style={{ flex: 1, minHeight: 0, overflow: "auto" }}><NoteProse text={text} /></div>
+        <div ref={room} data-testid="note-room" title={headingOnly ? `${stamp} · not measured, cited by nothing` : undefined}
+          style={{ flex: 1, minHeight: 0, overflow: "auto" }}><div ref={held} data-testid="note-words"><NoteProse text={text} /></div></div>
       )}
-      {!headingOnly && <Foot icon="user">{stamp} · not measured, cited by nothing</Foot>}
+      {!headingOnly && (
+        <Foot icon="user" aside={more ? <span data-testid="note-more" style={{ whiteSpace: "nowrap" }}>more below</span> : undefined}>
+          {short ? "Your words · " : ""}{stamp} · not measured, cited by nothing
+        </Foot>
+      )}
     </Frame>
   );
 }

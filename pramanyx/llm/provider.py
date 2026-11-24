@@ -3653,8 +3653,11 @@ def door_binding(role: Role) -> tuple[str, str, str, str]:
         raise NoModelConfigured(backend, role)
     if backend in SIGN_IN_BACKENDS:
         # The ChatGPT plan answers the Responses API only (its `/chat/completions` is a 401), and its credential is a
-        # person's sign-in, not a key another runtime should be handed.
-        raise NotOnTheDoorsWire(backend)
+        # person's sign-in, not a key another runtime should be handed. So the door relays to it through the plan's
+        # own translation (`chatgpt_plan.AsyncPlanTransport`) and hands no key: the token is added in this process,
+        # on the way out (the user, 2026-11-24: "Teach the door the plan").
+        from pramanyx.llm import chatgpt_plan
+        return backend, model.strip(), f"{chatgpt_plan.API_BASE}/chat/completions", ""
     base_url, key = endpoint_for(backend)
     if backend == "ollama":
         base_url = _ollama_openai_base(base_url)

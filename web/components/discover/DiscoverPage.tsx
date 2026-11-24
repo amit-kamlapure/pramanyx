@@ -14,7 +14,7 @@
  */
 import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 
-import { Card, Chip, Empty, MUTED, Page } from "@/components/clarity/kit";
+import { Card, Chip, Empty, Label, MUTED, Page } from "@/components/clarity/kit";
 import { DefinitionBody } from "@/components/definitions/DefinitionBody";
 import { AddToArea, AreaEditor, RowMenu } from "@/components/discover/AreaCuration";
 import { BackHeader } from "@/components/record/kit";
@@ -26,6 +26,7 @@ import { Loading, ReadFailed } from "@/components/ui/states";
 import { openInApp, useFromAddress } from "@/lib/addressOnce";
 import { declarationsOf, readAreas, saveAreas, setNotAnArea } from "@/lib/areas";
 import { askAbout } from "@/lib/askSubject";
+import { useDiscoverHost } from "@/components/discover/host";
 import {
   KINDS, KIND_ICON, KIND_TITLES, KIND_WORDS, OTHER, askSubjectOf, holdsWords, markOf, ownersLine, readDiscover,
   readDiscoverArea, readDiscoverItems, readDiscoverSearch, secondLine, withheldWords,
@@ -167,7 +168,11 @@ function Browse({ home, areaNames, many, onOpenArea, onViewAll, onCertified, rel
   onViewAll: (kind: DiscoverKind) => void; onCertified: () => void; reload: () => void; conn: string;
 }) {
   // A Definition is written on its Page, in the Semantic Layer (its home inside the app)
-  const writeDefinition = () => openInApp(`/?${new URLSearchParams({ tab: "semantic", ...(conn ? { conn } : {}), new_definition: "1" })}`);
+  const host = useDiscoverHost();
+  const writeDefinition = () => {
+    const href = `/?${new URLSearchParams({ tab: "semantic", ...(conn ? { conn } : {}), new_definition: "1" })}`;
+    if (host) host.open(href); else openInApp(href);
+  };
   const [showQuiet, setShowQuiet] = useState(false);
   // the model's suggestions are a curator's to answer, and on every connection they can outnumber the Areas: one click away
   const [showSuggested, setShowSuggested] = useState(false);
@@ -209,6 +214,32 @@ function Browse({ home, areaNames, many, onOpenArea, onViewAll, onCertified, rel
           ? home.certified.map(i => <ItemRow key={`${i.kind}:${i.id}`} item={i} areaName={areaNames[i.area]} many={many} />)
           : <Empty>Nothing here is certified yet. An Area’s owners mark what people should trust; a deprecated thing
               says so wherever it shows.</Empty>}
+      </Card>
+
+      {(home.recent?.length ?? 0) > 0 && (
+        <Card label="Recently opened by you" testId="discover-recent" right={<span className="aug-fs-xs">newest first</span>}>
+          {home.recent!.map(i => <ItemRow key={`${i.kind}:${i.id}`} item={i} areaName={areaNames[i.area]} many={many} />)}
+        </Card>
+      )}
+
+      <Card label="Most used this month" testId="discover-most-used" right={<span className="aug-fs-xs">the last 30 days</span>}>
+        <div className="aug-discover-kinds">
+          <div data-testid="discover-most-opened">
+            <Label>Opened most</Label>
+            {home.most_used?.length
+              ? home.most_used.map(i => <ItemRow key={`${i.kind}:${i.id}`} item={i} areaName={areaNames[i.area]} many={many} />)
+              : <Empty>Nothing was opened this month yet.</Empty>}
+          </div>
+          <div data-testid="discover-most-read">
+            <Label>Tables read most</Label>
+            {home.most_read?.length
+              ? home.most_read.map(i => <ItemRow key={`${i.kind}:${i.id}`} item={i} areaName={areaNames[i.area]} many={many} />)
+              : <Empty>No table was read this month yet.</Empty>}
+          </div>
+        </div>
+        {(home.use_said?.length ?? 0) > 0 && (
+          <p className="aug-fs-xs" style={{ ...MUTED, margin: "8px 0 0" }} data-testid="discover-use-said">{home.use_said!.join(" ")}</p>
+        )}
       </Card>
 
       <Card label="Everything, by kind" testId="discover-kinds">
@@ -495,12 +526,16 @@ function ItemRow({ item, areaName, many, how = false, actions }: {
   actions?: ReactNode;
 }) {
   const mark = markOf(item);
+  // shown in the coworker (D6), its host opens the thing and takes the question; else the app's own doors
+  const host = useDiscoverHost();
   const subject = askSubjectOf(item);
+  const ask = host ? (host.ask ? () => host.ask!(item) : null) : subject ? () => askAbout(subject) : null;
   const also = item.also_on?.length ? `also on ${item.also_on.join(", ")}` : "";
   const line = [secondLine(item, many), also].filter(Boolean).join(" · ");
   return (
     <div className="aug-discover-row" data-testid="discover-row">
-      <a href={item.href} title={`${KIND_WORDS[item.kind][0]} · ${item.name}`} onClick={e => inPlace(e, () => openInApp(item.href))}>
+      <a href={item.href} title={`${KIND_WORDS[item.kind][0]} · ${item.name}`}
+        onClick={e => inPlace(e, () => (host ? host.open(item.href) : openInApp(item.href)))}>
         <span className="k"><Icon name={KIND_ICON[item.kind]} size={15} /></span>
         <span className="main">
           <span className="n aug-fs-chrome">{item.name}</span>
@@ -514,9 +549,9 @@ function ItemRow({ item, areaName, many, how = false, actions }: {
             : areaName && <Chip title={item.area_how || undefined}>{areaName}</Chip>}
         </span>
       </a>
-      {subject && (
+      {ask && (
         <Button className="ask" size="icon-xs" variant="ghost" aria-label={`Ask about ${item.name}`} title="Ask about it"
-          onClick={() => askAbout(subject)}>
+          onClick={ask}>
           <Icon name="chat" size={14} />
         </Button>
       )}

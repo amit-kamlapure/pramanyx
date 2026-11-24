@@ -28,6 +28,7 @@ Every door here is best-effort by contract — the receipt and the re-check stan
 from __future__ import annotations
 
 import datetime as _dt
+import re as _re
 from typing import Any, Optional
 
 from pramanyx.record import claims as _claims
@@ -652,6 +653,25 @@ def _clean_sources(sources: Optional[list[dict]]) -> list[dict]:
     return out[:MAX_SOURCES]
 
 
+#: A picture in a Definition's words (2026-11-24): Markdown's ``![words](path)``, the path one of its connection's uploads.
+_PICTURE = _re.compile(r"!\[[^\]]*\]\(([^)\s]*)\)")
+_KEPT_PICTURE = _re.compile(r"^/dashboards/images/([A-Za-z0-9_.%-]+)\?connection_id=([A-Za-z0-9_.%-]+)$")
+
+
+def _check_pictures(connection_id: str, text: str) -> None:
+    """Every picture a Definition shows is one uploaded to its own connection's image store: an address anywhere else
+    would tell that host who reads the page, and another connection's picture is not this page's to show. Raises
+    ``ValueError`` naming the first that is not."""
+    from urllib.parse import unquote
+    for src in _PICTURE.findall(text or ""):
+        kept = _KEPT_PICTURE.match(src)
+        if not kept or unquote(kept.group(2)) != connection_id:
+            raise ValueError(f"a definition shows pictures uploaded to its own connection; not {src[:80] or 'an empty one'}")
+        from pramanyx.dashboards.images import stamp_of
+        if stamp_of(connection_id, unquote(kept.group(1))) is None:
+            raise ValueError(f"the picture {unquote(kept.group(1))} is not one uploaded to this connection, or it is gone")
+
+
 def _clean_description(description: Optional[str]) -> str:
     return " ".join(str(description or "").split())[:MAX_DESCRIPTION]
 
@@ -676,6 +696,7 @@ def write_definition(*, connection_id: str, term: str, text: str, by: str,
     term, text, area = (term or "").strip(), (text or "").strip(), (area or "").strip()
     if not (term and text and by):
         raise ValueError("a definition names its word, says what it means, and is a person's")
+    _check_pictures(connection_id, text)
     key = definition_key(connection_id, term, area)
     prior = _claims.latest(key)
     live = prior if prior is not None and prior.state != "withdrawn" else None   # a withdrawn word is written anew
@@ -725,6 +746,7 @@ def suggest_definition_edit(*, connection_id: str, term: str, by: str, area: str
     if not ((text or "").strip() or aliases is not None or links is not None or description is not None
             or sources is not None):
         raise ValueError("a suggestion changes the wording, the other names, the description, the links or the sources")
+    _check_pictures(connection_id, text)
     suggestion = {"id": _uuid.uuid4().hex[:10], "by": by, "at": _today(), "why": (why or "").strip()[:400],
                   "by_agent": bool(by_agent),
                   **({"text": text.strip()[:4000]} if (text or "").strip() else {}),
@@ -836,6 +858,53 @@ def unpublish_definition(*, connection_id: str, term: str, by: str, area: str = 
     new.tier = "declared"
     new.extra = {**prior.extra, "unpublished_by": by, "unpublished_on": _today()}
     return _claims.restate(key, new, conn_id=connection_id)
+
+
+def _a_person(who: str) -> bool:
+    who = (who or "").strip()
+    return bool(who) and who not in ("unidentified", "model") and not who.startswith(("agent:", "system"))
+
+
+def hand_definition(*, connection_id: str, term: str, by: str, to: str, area: str = "",
+                    by_admin: bool = False) -> Optional[str]:
+    """Its OWNER hands a Definition to another person (2026-11-24, the Page editor's owner handover), who answers for it
+    from then on: edits it directly, publishes or unpublishes it, decides its suggested edits. An organisation's admin
+    may hand on one whose owner cannot (``by_admin``: someone who left). Restated with the new owner; its words and
+    whether it stands published are unchanged — the approval it carries still names who approved it — and the hand-over
+    is kept on it (``handed``: when, by whom, from whom, to whom). Raises `NotTheOwner` for anyone else, ``ValueError``
+    for an owner who is not a person: a Definition is a person's. None when there is no such Definition, or it is
+    already theirs."""
+    to = (to or "").strip()[:200]
+    if not _a_person(to):
+        raise ValueError("a definition is handed to a person; an agent cannot own one")
+    key = definition_key(connection_id, term, area)
+    prior = _claims.latest(key)
+    if prior is None or prior.state == "withdrawn" or not by:
+        return None
+    if not by_admin and not _same(prior.owner, by):
+        raise NotTheOwner(f"only its owner, {prior.owner or 'no one named'}, hands this definition on")
+    if _same(prior.owner, to):
+        return None
+    new = prior.model_copy(deep=True)
+    new.confidence = None
+    new.owner = to
+    new.extra = {**prior.extra, "handed": [*(prior.extra.get("handed") or []),
+                                           {"on": _today(), "by": by, "from": prior.owner, "to": to}]}
+    cid = _claims.restate(key, new, conn_id=connection_id)
+    _journal_handed(connection_id, term, area, prior.owner, to, by)
+    return cid
+
+
+def _journal_handed(connection_id: str, term: str, area: str, was: str, to: str, by: str) -> None:
+    """Who answers for a Definition changed: a governance change, said in the audit log. Best effort: the Record holds
+    the hand-over (``handed``) and has it; an unrecorded event is said, never undone."""
+    try:
+        from pramanyx.kernel.ledger import Ledger
+        Ledger.default().emit("definition.handed", {"connection_id": connection_id, "term": term, "area": area,
+                                                    "from": was, "to": to, "by": by})
+    except Exception as exc:  # noqa: BLE001 — see the docstring
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, f"the definition {term} was handed to {to} but not journalled", counter="definitions.journal")
 
 
 def withdraw_definition(*, connection_id: str, term: str, by: str, reason: str = "", area: str = "",

@@ -59,6 +59,12 @@ def areas_for(connection_id: str, schema_name: Optional[str] = None, *, workspac
                     "technical_owners": list(d.technical_owners) if d else [], "source": "package", "pack_id": a.pack_id,
                     **_curated(d)})
     for d in declared.values():
+        # A declaration with no name of its own annotates a package's Area (its owners, its description, what it
+        # features — check_declarations refuses a NEW area without one): it belongs where that package's map has the
+        # Area, never as an organisation's Area of its own on a connection without it. Listed there, it stood on every
+        # other connection as "returns", source organisation, and Discover showed that one (seen live, 2026-11-24).
+        if not (d.name or "").strip():
+            continue
         out.append({"id": d.id, "name": d.name or d.id, "question": d.question, "parent": d.parent,
                     "business_owners": list(d.business_owners), "technical_owners": list(d.technical_owners),
                     "source": "organisation", "pack_id": "", **_curated(d)})

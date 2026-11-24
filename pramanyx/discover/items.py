@@ -52,6 +52,9 @@ class Item:
     placed: bool = False
     #: The tables it reads, for its Area; not sent.
     tables: list = field(default_factory=list)
+    #: Its use this month (D5, `discover.usage`): ``{measured: reads | opens, count, people, unattributed, last}``; None
+    #: for a kind whose use is not measured, or not read yet.
+    use: Optional[dict] = None
 
     def view(self) -> dict:
         d = asdict(self)

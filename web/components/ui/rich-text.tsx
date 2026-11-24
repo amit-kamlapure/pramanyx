@@ -9,8 +9,8 @@
  * Markdown, as it always was, so nothing that reads it changes. A link's address is asked in the toolbar itself, never
  * in a pop-up, and only one its reader would draw is taken.
  */
-import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { EditorContent, useEditor, useEditorState, type Editor } from "@tiptap/react";
+import { useEffect, useRef, useState, type CSSProperties, type FocusEvent as ReactFocusEvent, type MouseEvent as ReactMouseEvent } from "react";
+import { EditorContent, Node as EditorNode, mergeAttributes, useEditor, useEditorState, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { Markdown } from "@tiptap/markdown";
 import { TableKit } from "@tiptap/extension-table";
@@ -39,6 +39,29 @@ export interface RichTextKind {
   linkHref: ((href: string) => string | null) | null;
   /** What the address box suggests. */
   linkHint?: string;
+  /** Images a place keeps: where one it keeps is read from to be drawn, or null for one it would not. Absent, no images
+   *  (2026-11-24: a Definition's body holds pictures uploaded to its connection). */
+  imageShown?: (src: string) => string | null;
+}
+
+/** A picture in the words, kept as Markdown (`![words](path)`): the path a place keeps, drawn from where `shown` says. */
+function imageNode(shown: (src: string) => string | null) {
+  return EditorNode.create({
+    name: "image", inline: true, group: "inline", atom: true, draggable: true,
+    addAttributes() { return { src: { default: "" }, alt: { default: "" } }; },
+    // the path kept rides on the drawn picture, so the editor reading its own page keeps the path, not the address
+    parseHTML() {
+      return [{ tag: "img[src]", getAttrs: (el: HTMLElement) => ({ src: el.getAttribute("data-kept") || el.getAttribute("src") || "",
+        alt: el.getAttribute("alt") || "" }) }];
+    },
+    renderHTML({ HTMLAttributes }) {
+      const kept = String(HTMLAttributes.src ?? "");
+      return ["img", mergeAttributes(HTMLAttributes, { src: shown(kept) ?? "", "data-kept": kept })];
+    },
+    markdownTokenName: "image",
+    parseMarkdown: (token, helpers) => helpers.createNode("image", { src: String(token.href ?? ""), alt: String(token.text ?? "") }),
+    renderMarkdown: (node) => `![${String(node.attrs?.alt ?? "").replace(/[[\]]/g, "")}](${String(node.attrs?.src ?? "")})`,
+  });
 }
 
 /** What the editor understands, for one kind of words. */
@@ -55,6 +78,7 @@ export function richTextExtensions(kind: RichTextKind, placeholder = "") {
       link: href ? { openOnClick: false, autolink: true, defaultProtocol: "https", isAllowedUri: (url: string) => !!href(url) } : false,
     }),
     ...(kind.table ? [TableKit.configure({ table: { resizable: false } })] : []),
+    ...(kind.imageShown ? [imageNode(kind.imageShown)] : []),
     Placeholder.configure({ placeholder }),
     Markdown,
   ];
@@ -72,13 +96,17 @@ const blockOf = (e: Editor, kind: RichTextKind): string => {
   return h ? `h${h.level}` : e.isActive("paragraph") ? "text" : "";
 };
 
-export function RichText({ kind, value, onChange, onBlur, label, placeholder = "", max, autoFocus = false, minHeight = 220, testId = "rich-text" }: {
+export function RichText({ kind, value, onChange, onBlur, onImage, label, placeholder = "", max, autoFocus = false, minHeight = 220, testId = "rich-text" }: {
   kind: RichTextKind;
   /** The words, as Markdown. */
   value: string;
   onChange: (markdown: string) => void;
-  /** Left: a place that keeps its words when the person moves on (a panel's field). */
+  /** Left: a place that keeps its words when the person moves on (a panel's field). The toolbar is part of the field:
+   *  focus that moves to its buttons, its heading menu or its link's address has not left it. */
   onBlur?: () => void;
+  /** Takes a picture the person chose where the place keeps pictures, and says what the words keep for it — for a kind
+   *  with `imageShown`; without it there is no Image button. A refusal (its reason) is said under the toolbar. */
+  onImage?: (file: File) => Promise<{ src: string; alt: string }>;
   /** Its name, as a reader of the page hears it. */
   label: string;
   placeholder?: string;
@@ -106,7 +134,6 @@ export function RichText({ kind, value, onChange, onBlur, label, placeholder = "
       wrote.current = md;
       onChange(md);
     },
-    onBlur: () => blurred.current?.(),
   });
   useEffect(() => {
     if (!editor || value === wrote.current) return;
@@ -122,6 +149,17 @@ export function RichText({ kind, value, onChange, onBlur, label, placeholder = "
     } : null,
   });
   const [linking, setLinking] = useState(false);
+  const [picturing, setPicturing] = useState(false);
+  const [pictureSaid, setPictureSaid] = useState("");
+  const picker = useRef<HTMLInputElement>(null);
+  const picked = (file: File | undefined) => {
+    if (!file || !onImage || !editor) return;
+    setPicturing(true); setPictureSaid("");
+    onImage(file)
+      .then(({ src, alt }) => { editor.chain().focus().insertContent({ type: "image", attrs: { src, alt } }).run(); })
+      .catch((e) => setPictureSaid(String((e as Error)?.message ?? e)))
+      .finally(() => { setPicturing(false); if (picker.current) picker.current.value = ""; });
+  };
   const [address, setAddress] = useState("");
   const linked = kind.linkHref ? kind.linkHref(address.trim()) : null;
 
@@ -139,9 +177,18 @@ export function RichText({ kind, value, onChange, onBlur, label, placeholder = "
     setLinking(false); setAddress("");
   };
   const on = (pressed: boolean | undefined) => (pressed ? "aug-btn-on" : undefined);
+  // A toolbar button acts on the words chosen, so pressing it leaves the focus, and the choice, in the words. Before
+  // this, the press moved focus to the button: a field that keeps its words when left (a dashboard note's, in the
+  // panel) kept them, gave the editor its words back, and the choice was gone before Italic reached it (seen live,
+  // 2026-11-24).
+  const keep = (e: ReactMouseEvent) => e.preventDefault();
+  // the field is left when focus goes somewhere that is not the field: its toolbar is part of it
+  const left = (e: ReactFocusEvent<HTMLDivElement>) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) blurred.current?.();
+  };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8 }} data-testid={testId}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }} data-testid={testId} onBlur={left}>
       <div role="toolbar" aria-label="Format" style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap" }}>
         {kind.headings.length > 0 && (
           <SelectField bespoke aria-label="Heading" value={state?.block ?? ""} onChange={(e) => setBlock(e.target.value)}>
@@ -152,21 +199,21 @@ export function RichText({ kind, value, onChange, onBlur, label, placeholder = "
         )}
         {withUniqueKeys(MARKS, (m) => m.name).map(([key, m]) => (
           <Button key={key} size="icon-xs" variant="outline" aria-label={m.label} title={m.label} aria-pressed={!!state?.[m.name]}
-            className={on(state?.[m.name])}
+            className={on(state?.[m.name])} onMouseDown={keep}
             onClick={() => editor?.chain().focus()[m.name === "bold" ? "toggleBold" : "toggleItalic"]().run()}>
             <span style={{ fontWeight: m.text === "B" ? 700 : 400, fontStyle: m.text === "I" ? "italic" : "normal" }}>{m.text}</span>
           </Button>
         ))}
         {kind.lists && withUniqueKeys(LISTS, (l) => l.name).map(([key, l]) => (
           <Button key={key} size="icon-xs" variant="outline" aria-label={l.label} title={l.label} aria-pressed={!!state?.[l.name]}
-            className={on(state?.[l.name])}
+            className={on(state?.[l.name])} onMouseDown={keep}
             onClick={() => editor?.chain().focus()[l.name === "bulletList" ? "toggleBulletList" : "toggleOrderedList"]().run()}>
             <Icon name={l.icon} size={13} />
           </Button>
         ))}
         {kind.linkHref && (
           <Button size="icon-xs" variant="outline" aria-label="Link" title="Link" aria-pressed={linking || !!state?.link}
-            className={on(linking || state?.link)}
+            className={on(linking || state?.link)} onMouseDown={keep}
             onClick={() => {
               if (linking) { setLinking(false); return; }
               setAddress(String(editor?.getAttributes("link").href ?? ""));
@@ -175,8 +222,18 @@ export function RichText({ kind, value, onChange, onBlur, label, placeholder = "
             <Icon name="link" size={13} />
           </Button>
         )}
+        {kind.imageShown && onImage && (
+          <>
+            <Button size="icon-xs" variant="outline" aria-label="Image" title="A picture: PNG, JPEG, GIF, WebP or SVG, up to 5 MB"
+              disabled={picturing} onMouseDown={keep} onClick={() => picker.current?.click()}>
+              <Icon name="image" size={13} />
+            </Button>
+            <input ref={picker} type="file" hidden aria-label="Choose a picture" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml"
+              onChange={(e) => picked(e.target.files?.[0])} />
+          </>
+        )}
         {kind.table && (
-          <Button size="icon-xs" variant="outline" aria-label="Table" title="Table" disabled={!!state?.table}
+          <Button size="icon-xs" variant="outline" aria-label="Table" title="Table" disabled={!!state?.table} onMouseDown={keep}
             onClick={() => editor?.chain().focus().insertTable({ rows: 3, cols: 2, withHeaderRow: true }).run()}>
             <Icon name="table" size={13} />
           </Button>
@@ -203,6 +260,7 @@ export function RichText({ kind, value, onChange, onBlur, label, placeholder = "
           </>
         )}
       </div>
+      {pictureSaid && <div className="aug-fs-sm" role="alert" style={{ color: "var(--red4)" }}>{pictureSaid}</div>}
       <EditorContent editor={editor} />
     </div>
   );

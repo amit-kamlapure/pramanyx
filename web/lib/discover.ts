@@ -62,6 +62,30 @@ export interface DiscoverItem {
   similarity?: number;
   /** A person placed it in its Area, so it can be taken out; one read from its tables or its name cannot. */
   placed?: boolean;
+  /** Its use this month (D5): a table's audited reads, the opens of what a person opens; absent for a kind not
+   *  measured, or not read yet. */
+  use?: DiscoverUse | null;
+}
+
+/** Use read from what happened, never guessed: how many reads or opens in the last thirty days, by how many people —
+ *  `people` null and `unattributed` above 0 when the log does not name who. */
+export interface DiscoverUse {
+  measured: "reads" | "opens";
+  count: number;
+  people: number | null;
+  unattributed: number | null;
+  last: string | null;
+}
+
+/** A thing's use this month in words, for its row: nothing when it was not used, or is not measured. */
+export function useLine(u: DiscoverUse | null | undefined): string {
+  if (!u || !u.count) return "";
+  const times = u.count === 1 ? "once" : `${formatCount(u.count)} times`;
+  const did = u.measured === "reads" ? `read ${times} this month` : `opened ${times} this month`;
+  if (u.people == null) return `${did} · who read it is not recorded`;
+  const by = u.people ? ` by ${u.people === 1 ? "one person" : `${formatCount(u.people)} people`}` : "";
+  const unnamed = u.unattributed ? ` (${formatCount(u.unattributed)} not recorded who)` : "";
+  return `${did}${by}${unnamed}`;
 }
 
 export interface DiscoverArea {
@@ -98,6 +122,13 @@ export interface DiscoverHome {
   suggested: SuggestedInView[];
   certified: DiscoverItem[];
   certified_count: number;
+  /** D5: the most opened this month (a person's opens), the tables most read (audited statements, most of them the
+   *  platform's own — not one scale with opens, so apart), and what the person reading opened lately, newest first. */
+  most_used?: DiscoverItem[];
+  most_read?: DiscoverItem[];
+  recent?: DiscoverItem[];
+  /** What use could not be said yet, or is not measured. */
+  use_said?: string[];
   kinds: DiscoverKindView[];
   withheld: Partial<Record<DiscoverKind, number>>;
   said: string[];
@@ -109,6 +140,7 @@ export interface DiscoverItems {
   next_cursor: number | null;
   withheld: Partial<Record<DiscoverKind, number>>;
   said: string[];
+  use_said?: string[];
 }
 
 export interface FeaturedRef { kind: DiscoverKind; ref: string }
@@ -175,11 +207,13 @@ export function readDiscover(connectionId = "", workspaceId?: string, fresh = fa
 export interface ItemsAsked {
   kind?: DiscoverKind | ""; area?: string; certified?: boolean; mine?: boolean; q?: string; connectionId?: string;
   cursor?: number; limit?: number; workspaceId?: string;
+  /** "use": the most used this month first (D5). */
+  sort?: "" | "use";
 }
 
 export function readDiscoverItems(a: ItemsAsked): Promise<DiscoverItems> {
   return read(url("/discover/items", { kind: a.kind, area: a.area, certified: a.certified, mine: a.mine, q: a.q?.trim(),
-    connection_id: a.connectionId, cursor: a.cursor, limit: a.limit }, a.workspaceId), "what Discover holds");
+    connection_id: a.connectionId, cursor: a.cursor, limit: a.limit, sort: a.sort || undefined }, a.workspaceId), "what Discover holds");
 }
 
 export interface DiscoverSearch {
@@ -274,7 +308,7 @@ export function secondLine(i: DiscoverItem, manyConnections: boolean): string {
     : i.kind === "dashboard" ? [i.line, i.updated_at && relTime(i.updated_at) !== "—" ? `kept ${relTime(i.updated_at)} ago` : ""]
     : i.kind === "agent" ? [i.line || "No purpose written yet"]
     : [i.line];
-  return [manyConnections ? i.connection_name : "", ...own].map((s) => (s ?? "").trim()).filter(Boolean).join(" · ");
+  return [manyConnections ? i.connection_name : "", ...own, useLine(i.use)].map((s) => (s ?? "").trim()).filter(Boolean).join(" · ");
 }
 
 export type MarkTone = "up" | "amber" | "plain";

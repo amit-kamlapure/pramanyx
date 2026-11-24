@@ -205,6 +205,8 @@ def read_shared_dashboard(request: Request, owner: str, cockpit_id: str, connect
     except sharing.Refused as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     home, kept = got["home"], got["cockpit"]
+    from pramanyx.discover.usage import note_opened
+    note_opened(request, "dashboard", ":".join(str(v) for v in home.as_params().values()), connection_id)
     block, why = host.range_state(connection_id, preset, start=_day(start, "start"), end=_day(end, "end"),
                                   workspace_id=workspace_id)
     if block is None:
@@ -551,6 +553,9 @@ def read_dashboard(request: Request, cockpit_id: str, connection_id: str, preset
         raise HTTPException(status_code=422, detail=why)
     held = cards.cards_of(home)
     withheld = cards.not_offered(home, held, kept.get("cards") or [])
+    from pramanyx.discover.usage import note_opened
+    # Discover's id for a dashboard is its connection, its owner and its id, in that order — as its home says them
+    note_opened(request, "dashboard", ":".join(str(v) for v in home.as_params().values()), connection_id)
     return {
         **home.as_params(),
         "cockpit": kept,

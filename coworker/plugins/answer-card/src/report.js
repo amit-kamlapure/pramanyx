@@ -40,6 +40,9 @@ export function reportFacts(got) {
     id: String(got?.investigation_id || got?.id || ""),
     connection: String(got?.connection || got?.connection_id || ""),
     running: ["running", "pending", "started"].includes(String(got?.status || "")),
+    // a run that stopped before answering, and why, in the platform's own sentence (`kernel/jobs.describe_stop`)
+    stopped: STOPPED.includes(String(got?.status || "")),
+    why: String(got?.error || "").trim(),
     cut: Boolean(got?.cut),
     message: String(got?.message || ""),
     head, summary, period, recs, sources,
@@ -47,8 +50,14 @@ export function reportFacts(got) {
   };
 }
 
+/** The statuses of a run that ended without its answer (`db/history.InvStatus`). */
+const STOPPED = ["failed", "timed_out", "interrupted"];
+
 /** Whether a record read back (`get_investigation`) is a deep analysis's — one its report card draws — rather than a
- *  quick answer's, which has no phases. */
+ *  quick answer's, which has no phases. A deep analysis that stopped before answering has no phases either; it is drawn
+ *  too, so its reason reaches the person (2026-11-24: a stopped run read back drew nothing, and said nothing of why). */
 export function isDeepRecord(got) {
-  return Boolean(got && typeof got === "object" && got.report && typeof got.report === "object" && Array.isArray(got.report.phases));
+  if (!got || typeof got !== "object") return false;
+  if (got.report && typeof got.report === "object" && Array.isArray(got.report.phases)) return true;
+  return got.kind === "investigation" && STOPPED.includes(String(got.status || ""));
 }

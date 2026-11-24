@@ -11,6 +11,7 @@ import { fireEvent, render, screen, waitFor } from "@/lib/testing";
 import { ComposedDashboard } from "@/components/dashboards/ComposedDashboard";
 import { NoteProse, isHeadingNote } from "@/components/dashboards/NoteProse";
 import { NoteTile } from "@/components/dashboards/StaticTile";
+import { CellBoxContext } from "@/components/dashboards/cellBox";
 import type { CardState } from "@/components/brief/PinnedCardBody";
 import type { DashboardHostState } from "@/lib/dashboards/hostState";
 
@@ -80,10 +81,48 @@ describe("a note's headings", () => {
     const { unmount } = render(<NoteTile elementKey={null} text="# Revenue" author="user:amit" size="full" doors={{}} />);
     expect(screen.queryByTestId("note-chip")).toBeNull();
     expect(screen.getByTestId("dashboard-note").style.background).toBe("transparent");
-    expect(screen.getByTestId("note-prose").parentElement?.getAttribute("title")).toMatch(/amit.*not measured, cited by nothing/);
+    expect(screen.getByTestId("note-room").getAttribute("title")).toMatch(/amit.*not measured, cited by nothing/);
     unmount();
     render(<NoteTile elementKey={null} text="Words of mine" author="user:amit" size="small" doors={{}} />);
     expect(screen.getByTestId("note-chip")).toBeInTheDocument();
     expect(screen.getByText(/not measured, cited by nothing/)).toBeInTheDocument();
+  });
+});
+
+describe("a note in a box of the grid", () => {
+  // jsdom lays nothing out: the room the box gives the words, and how tall the words are, are said here
+  const sized = (room: number, words: number) => {
+    const was = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientHeight");
+    Object.defineProperty(HTMLElement.prototype, "clientHeight", { configurable: true, get(this: HTMLElement) {
+      return this.dataset?.testid === "note-room" ? room : this.dataset?.testid === "note-words" ? words : 0;
+    } });
+    return () => { if (was) Object.defineProperty(HTMLElement.prototype, "clientHeight", was); };
+  };
+  const note = (h: number) => (
+    <CellBoxContext.Provider value={{ onGrid: true, w: 12, h }}>
+      <NoteTile elementKey={null} text={"Each row is **one product in one year**.\n\n- the Returns Area\n- the Operations dashboard"}
+        author="user:amit" writtenAt="2026-11-24T02:26:00Z" size="full" doors={{}} />
+    </CellBoxContext.Provider>
+  );
+
+  it("short, keeps its words: its head folds into its stamp, and the words past the box are said", () => {
+    const back = sized(26, 80);
+    try {
+      render(note(2));
+      expect(screen.queryByTestId("note-chip")).toBeNull();
+      expect(screen.getByText(/^Your words · amit · written .* · not measured, cited by nothing$/)).toBeInTheDocument();
+      expect(screen.getByTestId("note-more")).toHaveTextContent("more below");
+      expect(screen.getByTestId("dashboard-note").style.padding).toBe("8px 12px 6px");
+    } finally { back(); }
+  });
+
+  it("tall enough, keeps its head and its air, and says nothing more when every word shows", () => {
+    const back = sized(200, 80);
+    try {
+      render(note(6));
+      expect(screen.getByTestId("note-chip")).toHaveTextContent("Your words");
+      expect(screen.queryByTestId("note-more")).toBeNull();
+      expect(screen.getByTestId("dashboard-note").style.padding).toBe("16px 18px 14px");
+    } finally { back(); }
   });
 });

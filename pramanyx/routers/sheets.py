@@ -219,7 +219,10 @@ def create(req: CreateRequest, request: Request) -> dict:
 
 @router.get("/{sheet_id}")
 def read(sheet_id: str, request: Request) -> dict:
-    return _definition(_sheet(sheet_id, request, VIEW), _who(request))
+    out = _definition(_sheet(sheet_id, request, VIEW), _who(request))
+    from pramanyx.discover.usage import note_opened
+    note_opened(request, "sheet", sheet_id)
+    return out
 
 
 @router.get("/{sheet_id}/dependents")

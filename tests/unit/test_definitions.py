@@ -309,3 +309,111 @@ def test_the_door_writes_and_reads_the_page_s_fields(monkeypatch):
     refused = client.post("/record/definitions", json={"connection_id": conn, "term": "Y", "text": "z",
                                                       "sources": [{"kind": "url", "ref": "not an address"}]})
     assert refused.status_code == 422
+
+
+def test_an_owner_hands_a_definition_to_another_person_who_answers_for_it_from_then_on(monkeypatch):
+    from pramanyx.kernel import ledger as L
+    said: list[tuple[str, dict]] = []
+    emit = L.Ledger.emit
+
+    def heard(self, kind, payload, *a, **kw):
+        if kind == "definition.handed":
+            said.append((kind, payload))
+        return emit(self, kind, payload, *a, **kw)
+    monkeypatch.setattr(L.Ledger, "emit", heard)
+    conn = _conn()
+    W.write_definition(connection_id=conn, term="Repeat buyer", text="Ordered twice or more.", by="user:ana")
+    W.approve_definition(connection_id=conn, term="Repeat buyer", by="user:ana")
+    with pytest.raises(W.NotTheOwner):                                   # only its owner hands it on
+        W.hand_definition(connection_id=conn, term="Repeat buyer", by="user:cai", to="user:cai")
+    with pytest.raises(ValueError):                                      # and only to a person
+        W.hand_definition(connection_id=conn, term="Repeat buyer", by="user:ana", to="agent:coworker")
+    assert W.hand_definition(connection_id=conn, term="Repeat buyer", by="user:ana", to="user:cai")
+    now = C.latest(W.definition_key(conn, "Repeat buyer"))
+    assert now.owner == "user:cai" and now.tier == "approved" and now.statement.text == "Ordered twice or more."
+    assert now.extra["approved_by"] == "user:ana"                         # the approval still names who approved it
+    assert [(h["by"], h["from"], h["to"]) for h in now.extra["handed"]] == [("user:ana", "user:ana", "user:cai")]
+    assert said == [("definition.handed", {"connection_id": conn, "term": "Repeat buyer", "area": "",
+                                           "from": "user:ana", "to": "user:cai", "by": "user:ana"})]
+    # the new owner changes it directly; the one who handed it on now suggests, like anyone else
+    W.write_definition(connection_id=conn, term="Repeat buyer", text="Ordered on two days or more.", by="user:cai")
+    with pytest.raises(W.NotTheOwner):
+        W.write_definition(connection_id=conn, term="Repeat buyer", text="x", by="user:ana")
+    assert W.hand_definition(connection_id=conn, term="Repeat buyer", by="user:cai", to="user:cai") is None   # already theirs
+    # an admin hands on one whose owner cannot
+    assert W.hand_definition(connection_id=conn, term="Repeat buyer", by="user:root", to="user:dee", by_admin=True)
+    assert C.latest(W.definition_key(conn, "Repeat buyer")).owner == "user:dee"
+
+
+def test_the_door_hands_a_definition_on_as_the_person_signs_in_and_refuses_anyone_but_its_owner(monkeypatch):
+    from pramanyx.routers import record as R
+    conn = _conn()
+    who = {"now": "user:ana"}
+    monkeypatch.setattr(R, "_visible", lambda c: True)
+    monkeypatch.setattr(R, "_who", lambda principal: who["now"])
+    monkeypatch.setattr(R, "_refresh_definitions", lambda c: None)
+    app = FastAPI()
+    app.include_router(R.router)
+    client = TestClient(app)
+    assert client.post("/record/definitions", json={"connection_id": conn, "term": "Churned",
+                                                    "text": "No order in 180 days."}).status_code == 201
+    body = {"connection_id": conn, "term": "Churned", "to": "cai"}
+    who["now"] = "user:bo"
+    refused = client.post("/record/definitions/owner", json=body)
+    assert refused.status_code == 403 and "not yours" in refused.json()["detail"]
+    who["now"] = "user:ana"
+    handed = client.post("/record/definitions/owner", json=body)
+    assert handed.status_code == 200
+    got = handed.json()
+    assert got["owner"] == "user:cai"                                    # kept as the person signs in
+    assert got["handed"][-1]["from"] == "user:ana" and got["handed"][-1]["to"] == "user:cai"
+    assert client.post("/record/definitions/owner", json={**body, "term": "Nothing"}).status_code == 404
+    assert client.post("/record/definitions/owner", json={**body, "to": "agent:coworker"}).status_code == 422
+
+
+def test_a_drafted_description_is_drawn_from_what_the_definition_says_and_booked_nowhere(monkeypatch):
+    from pramanyx.llm import provider as P
+    from pramanyx.routers import record as R
+    asked: list[dict] = []
+
+    class _Model:
+        def complete(self, *, system, user, response_model, temperature):
+            asked.append({"system": system, "user": user})
+            return response_model(description='  "A customer who has ordered more than once."  ')
+    monkeypatch.setattr(P, "get_provider", lambda role="coder", **kw: _Model())
+    monkeypatch.setattr(R, "_visible", lambda c: True)
+    app = FastAPI()
+    app.include_router(R.router)
+    client = TestClient(app)
+    conn = _conn()
+    body = {"connection_id": conn, "term": "Repeat buyer", "area": "customers", "aliases": ["returning customer"],
+            "text": "## Definition\nA customer with more than one order."}
+    got = client.post("/record/definitions/suggest-description", json=body)
+    assert got.status_code == 200 and got.json() == {"description": "A customer who has ordered more than once."}
+    assert "A customer with more than one order." in asked[0]["user"] and "returning customer" in asked[0]["user"]
+    assert "never add a number" in asked[0]["system"]
+    assert C.latest(W.definition_key(conn, "Repeat buyer", "customers")) is None        # booked nowhere
+    assert client.post("/record/definitions/suggest-description", json={**body, "text": " "}).status_code == 422
+
+    class _Down:
+        def complete(self, **kw):
+            raise RuntimeError("the plan is spent")
+    monkeypatch.setattr(P, "get_provider", lambda role="coder", **kw: _Down())
+    failed = client.post("/record/definitions/suggest-description", json=body)
+    assert failed.status_code == 502 and "the plan is spent" in failed.json()["detail"]
+
+
+def test_a_definition_shows_pictures_uploaded_to_its_own_connection_and_no_other(monkeypatch):
+    from pramanyx.dashboards import images
+    conn = _conn()
+    monkeypatch.setattr(images, "stamp_of", lambda c, object_id: {"object": object_id} if (c, object_id) == (conn, "ab12") else None)
+    kept = f"## Definition\nA buyer, as the form shows it:\n\n![the order form](/dashboards/images/ab12?connection_id={conn})"
+    W.write_definition(connection_id=conn, term="Buyer", text=kept, by="user:ana")
+    assert "![the order form]" in C.latest(W.definition_key(conn, "Buyer")).statement.text
+    for src, said in [("https://elsewhere.example/p.png", "its own connection"),
+                      ("/dashboards/images/ab12?connection_id=other", "its own connection"),
+                      (f"/dashboards/images/zz99?connection_id={conn}", "not one uploaded")]:
+        with pytest.raises(ValueError, match=said):
+            W.write_definition(connection_id=conn, term="Buyer", text=f"A buyer. ![x]({src})", by="user:ana")
+        with pytest.raises(ValueError, match=said):
+            W.suggest_definition_edit(connection_id=conn, term="Buyer", by="user:cai", text=f"A buyer. ![x]({src})")

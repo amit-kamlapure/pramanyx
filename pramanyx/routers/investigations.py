@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import json
 import logging
 import os
@@ -5572,14 +5573,23 @@ async def _metered_stream(gen: AsyncGenerator[str, None],
     own. A fresh one shadowed the job's for the whole run: the heartbeat and the final
     flush read an accumulator nothing wrote to, so every analyst-body job flushed zero
     spend (measured on every scheduled run 09-10 → 09-16), its token budget could never
-    fire, and its failure said "0 queries"."""
+    fire, and its failure said "0 queries".
+
+    Inside a kernel job, a budget it did not arm is the job's own — `JobKernel._run` arms it
+    and its heartbeat enforces it — so its stop is re-raised to the job, which records it as
+    the kernel's kill: CANCELLED, with the budget, the spend and the fix. Caught here it read
+    as the Responder's and ended the job SUCCEEDED, its investigation left 'running'
+    (2026-11-24, e4796f93)."""
     from pramanyx.kernel import metering
+    from pramanyx.kernel.jobs import current_job_id
     token = metering.start() if metering.current() is None else None
     btoken = metering.set_budget(*budget) if budget else None
     try:
         async for chunk in gen:
             yield chunk
     except metering.BudgetExceeded as be:
+        if btoken is None and current_job_id() is not None:
+            raise
         # The budget armed here is the Responder's, so the event names it: the chat links
         # straight to that agent's page, where the budget is raised.
         from pramanyx.kernel.agents import RESPONDER_ID
@@ -5647,6 +5657,37 @@ async def chat_endpoint(req: ChatRequest, request: Request):
 
 
 _STREAM_END = object()   # queue sentinel: the investigation generator finished
+
+
+def _error_said(sse: str) -> str:
+    """The message of an ``error`` frame, or "" for any other frame — read only when the frame is one."""
+    if not sse.startswith('data: {"type": "error"'):
+        return ""
+    try:
+        return str(json.loads(sse[6:]).get("message") or "")
+    except Exception:
+        return ""
+
+
+_TURN_FACT_TYPES = ('data: {"type": "answer_report"', 'data: {"type": "report"', 'data: {"type": "headline"',
+                    'data: {"type": "receipt_id"')
+
+
+def _turn_facts(sse: str) -> tuple[str, str]:
+    """``(headline, receipt_id)`` a frame carries — what the door's session log reads off a turn — or empties."""
+    if not sse.startswith(_TURN_FACT_TYPES):
+        return "", ""
+    try:
+        frame = json.loads(sse[6:])
+    except Exception:
+        return "", ""
+    kind = frame.get("type")
+    if kind == "receipt_id":
+        return "", str(frame.get("receipt_id") or "")
+    if kind == "headline":
+        return str(frame.get("headline") or ""), ""
+    report = frame.get(kind) if isinstance(frame.get(kind), dict) else {}
+    return str(report.get("headline") or ""), ""
 
 
 def _open_resume_run(session_id: str):
@@ -5750,6 +5791,8 @@ async def _job_streamed_body(
         err: Optional[str] = None
         stop_exc: Optional[BaseException] = None
         seen_inv: Optional[str] = None
+        said = ""          # the last error the body streamed — its own word on why it stopped
+        headline, receipt = "", ""   # what the door's session log would have read, for a reader that left
         try:
             async for sse in body_factory():
                 if seen_inv is None and '"investigation_id"' in sse:
@@ -5760,6 +5803,9 @@ async def _job_streamed_body(
                                      else {}).get("investigation_id") or None)
                     except Exception:
                         seen_inv = None
+                said = _error_said(sse) or said
+                _head, _receipt = _turn_facts(sse)
+                headline, receipt = _head or headline, _receipt or receipt
                 await queue.put(sse)
                 if resume_run is not None:
                     resume_run.publish(sse)
@@ -5771,25 +5817,76 @@ async def _job_streamed_body(
             stop_exc = exc
             raise
         finally:
-            if resume_run is not None:
-                resume_run.close(error=err)
-            if err is not None and seen_inv:
-                # Terminal consistency for ANY body the bridge carries: the
-                # graph path reconciles its own row in its finally, but the
-                # analyst body never did — a cancelled analyst run left its
+            why = ""
+            if seen_inv:
+                # Terminal consistency for ANY body the bridge carries, however it
+                # ended: the graph path reconciles its own row in its finally, but
+                # the analyst body never did. A cancelled analyst run left its
                 # investigation 'running' until the sweep (seen live, FL-1b
-                # receipt). Idempotent: a row already terminal is left alone.
+                # receipt), and so did one that ENDED without raising — a budget
+                # stop explained as an error frame, a crash `_stream_analyst` turned
+                # into one (2026-11-24, e4796f93: 'running' until a restart's sweep
+                # called it orphaned). Idempotent: a row already terminal — complete,
+                # failed, or paused for a person — is left alone.
                 try:
                     _row = get_investigation(seen_inv)
                     if _row and _row.get("status") == "running":
-                        from pramanyx.kernel.jobs import describe_stop
-                        fail_investigation(seen_inv, status="failed",
-                                           reason=describe_stop(stop_exc))
+                        from pramanyx.kernel.jobs import describe_end, describe_stop
+                        why = describe_stop(stop_exc) if stop_exc is not None else describe_end(said)
+                        fail_investigation(seen_inv, status="failed", reason=why)
                 except Exception:
                     logger.debug("bridge reconcile failed for %s", seen_inv, exc_info=True)
+            if not said and (stop_exc is not None or why):
+                # Withheld is said: a stream that just ends tells its reader nothing, so a
+                # run that stopped without saying why says it here, in the record's words.
+                try:
+                    from pramanyx.kernel import metering
+                    from pramanyx.kernel.jobs import current_charter_id, describe_stop, stop_reason
+                    if not why:
+                        why = describe_stop(stop_exc)
+                    # The code is the shared vocabulary's: the exception's own, except a heartbeat's
+                    # budget kill, which arrives as a cancel. A budget stop names the agent whose page raises it.
+                    budget = (isinstance(stop_exc, metering.BudgetExceeded)
+                              or stop_reason().startswith("budget exceeded"))
+                    told = _sse("error", _error_event(
+                        stop_exc, message=why, reason="budget_exceeded" if budget else "",
+                        agent_id=(current_charter_id() or "") if budget else ""))
+                    queue.put_nowait(told)
+                    if resume_run is not None:
+                        resume_run.publish(told)
+                except Exception:
+                    logger.debug("bridge could not say why the run stopped", exc_info=True)
+            # The turn's end in the session log is the job's to write when the reader left first (`_TurnEnd`); set
+            # before the drainer is released, so a reader leaving after this reads the run's outcome, not its own cancel.
+            turn = _TURN_END.get()
+            if turn is not None and turn.carried:
+                try:
+                    _row = get_investigation(seen_inv) if seen_inv else None
+                    if _row is not None:
+                        ok = _row.get("status") in ("complete", "paused")
+                    else:
+                        ok = stop_exc is None and not said
+                    error = None
+                    if not ok:
+                        from pramanyx.kernel.jobs import describe_end
+                        error = why or said or str((_row or {}).get("error") or "") or describe_end("")
+                    head = headline or str((_row or {}).get("headline")
+                                           or ((_row or {}).get("report") or {}).get("headline") or "")
+                    turn.outcome = {"inv_id": seen_inv, "ok": ok, "headline": head[:2000],
+                                    "receipt_id": receipt or None, "error": error}
+                    if turn.reader_left_ms is not None:
+                        _write_turn_end(turn, turn.outcome)
+                except Exception:
+                    logger.debug("bridge could not write the run's end for a reader that left", exc_info=True)
+            if resume_run is not None:
+                resume_run.close(error=err)
             # Always release the client drainer, even on cancellation/error.
             queue.put_nowait(_STREAM_END)
 
+    # The run is carried by its job from here: a reader that leaves hands the turn's end to it (`_TurnEnd`).
+    _turn = _TURN_END.get()
+    if _turn is not None:
+        _turn.carried = True
     job_id = await kernel().submit(
         "investigation", _drive,
         conn_id=conn_id, canvas_id=canvas_id,
@@ -6385,10 +6482,14 @@ async def _stream_ask(req: "AskRequest", request: Request, conn_id: str) -> Asyn
         # a supervised job (so a closed tab no longer kills it mid-run and
         # orphans the row 'running'), cancellable via /investigations/{id}/cancel,
         # and mirrored for reattach. The meter rides INSIDE the job, so the
-        # budget holds with nobody watching.
-        _budget = _insight_budget(conn_id)
+        # budget holds with nobody watching — and the budget is the job's: an
+        # `investigation` job is the Analyst's, whose governance `JobKernel._run`
+        # arms and its heartbeat enforces, as on the graph path. Arming the
+        # Responder's here, a quick answer's, stopped deep runs at its time
+        # budget (1200s on the live install, 2026-11-24 e4796f93) while the
+        # Agents page said the Analyst had 1800s.
         async for sse in _job_streamed_body(
-            lambda: _metered_stream(_analyst_body, budget=_budget),
+            lambda: _metered_stream(_analyst_body),
             session_id=req.session_id, conn_id=conn_id, canvas_id=req.canvas_id,
             payload={"question": req.question[:200], "body": "analyst",
                      **({"purpose": req.purpose} if req.purpose else {})},
@@ -6772,6 +6873,52 @@ async def _stream_as_agent(agent, stream: AsyncGenerator[str, None]) -> AsyncGen
 _SESSION_LOG_SNIFF = ('"start"', '"error"', '"headline"', '"receipt_id"')
 
 
+@dataclass
+class _TurnEnd:
+    """Who writes a door turn's end — its FINAL_RESPONSE — in the session log, which is written once.
+
+    The door writes it (`stream_with_session_log`) when its reader reads the stream to the end. A deep run is a job that
+    goes on without a reader (the K1 bridge, `_job_streamed_body`, sets ``carried``), so when the reader leaves first —
+    a closed panel, a restarted coworker, a client past its deadline — the end is handed to the job, which writes it
+    when the run ends, with the run's own outcome. Until 2026-11-24 the door wrote the reader's cancel as the run's end:
+    0237d0fc finished with its report while its trace said it failed ("Cancelled via cancel scope …").
+    """
+    run_id: str
+    door: str
+    conn_id: str
+    claimed: bool
+    t0: float
+    carried: bool = False
+    #: When the reader left a carried run (ms after the turn began): the end is then the job's to write.
+    reader_left_ms: Optional[float] = None
+    #: The run's outcome, set by the job when it ends — read by a reader that leaves after that, before reading it.
+    outcome: Optional[dict] = None
+
+
+_TURN_END: contextvars.ContextVar[Optional[_TurnEnd]] = contextvars.ContextVar("pramanyx_turn_end", default=None)
+
+
+def _write_turn_end(turn: _TurnEnd, outcome: dict) -> None:
+    """Write a carried run's end, which its reader did not stay to read: its error as the door would have recorded it,
+    then — for a turn the door records (not one the coworker claimed) — its final response, saying when the reader left."""
+    from pramanyx.obs import session_log
+    if outcome.get("error"):
+        session_log.emit(session_log.EXECUTION_ERROR, name=turn.door, trace_id=turn.run_id,
+                         investigation_id=outcome.get("inv_id"), conn_id=turn.conn_id, ok=False,
+                         payload={"message": str(outcome["error"])[:2000]})
+    if turn.claimed:
+        return
+    import time as _t
+    session_log.emit(
+        session_log.FINAL_RESPONSE, name=turn.door, trace_id=turn.run_id,
+        investigation_id=outcome.get("inv_id"), conn_id=turn.conn_id, ok=bool(outcome.get("ok")),
+        duration_ms=round((_t.monotonic() - turn.t0) * 1000, 1),
+        payload={**({"headline": outcome["headline"]} if outcome.get("headline") else {}),
+                 **({"receipt_id": outcome["receipt_id"]} if outcome.get("receipt_id") else {}),
+                 **({"error": str(outcome["error"])[:2000]} if outcome.get("error") else {}),
+                 **({"reader_left_ms": turn.reader_left_ms} if turn.reader_left_ms is not None else {})})
+
+
 async def stream_with_session_log(
     stream: AsyncGenerator[str, None], *, question: str, conn_id: str,
     door: str = "ask", depth: str = "", canvas_id: str = "", schema: str = "",
@@ -6823,10 +6970,13 @@ async def stream_with_session_log(
     headline: str = ""
     receipt_id: str | None = None
     t0 = _t.monotonic()
+    turn = _TurnEnd(run_id=run_id, door=door, conn_id=conn_id, claimed=bool(claim), t0=t0)
+    handed_over = False
     # Arc TC, TC-2 — the turn is a run too, named by the same id as its trace: an edit or an action it makes says so
     with ExitStack() as _bound:
         _bound.enter_context(_tel.bind_trace(run_id))
         _bound.enter_context(_tel.bind_run(run_id, "chat"))
+        _bound.callback(_TURN_END.reset, _TURN_END.set(turn))   # unwound as the trace's binding is
         if claim:
             _bound.enter_context(_tel.bind_parent_span(claim["span_id"]))
             _bound.callback(reset_session_id, set_session_id(f"coworker:{claim['session']}"))
@@ -6865,6 +7015,17 @@ async def stream_with_session_log(
                         )
                 yield event
         except BaseException as exc:
+            if turn.carried and isinstance(exc, (asyncio.CancelledError, GeneratorExit)):
+                # The reader left a run its job carries on: that is not the run failing. Its end is the job's to write
+                # when the run ends (`_job_streamed_body`) — or, when it already has, it is written here from the job's
+                # outcome, which this reader left before reading.
+                if turn.outcome is None:
+                    turn.reader_left_ms = round((_t.monotonic() - t0) * 1000, 1)
+                    handed_over = True
+                else:
+                    handed_over = True
+                    _write_turn_end(turn, turn.outcome)
+                raise
             # A cancelled or crashed stream must leave the same evidence as a
             # clean failure — otherwise the log's most interesting runs are
             # exactly the ones missing from it. `failed` must be set too, or the
@@ -6879,7 +7040,7 @@ async def stream_with_session_log(
             )
             raise
         finally:
-            if not claim:
+            if not claim and not handed_over:
                 session_log.emit(
                     session_log.FINAL_RESPONSE, name=door, trace_id=run_id,
                     investigation_id=inv_id, conn_id=conn_id, ok=failed is None,

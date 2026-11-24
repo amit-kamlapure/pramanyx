@@ -414,11 +414,13 @@ def agents_routing(connection_id: str):
 
 
 @router.get("/agents/custom/{agent_id}")
-def get_user_agent(agent_id: str):
+def get_user_agent(agent_id: str, request: Request):
     from pramanyx.custom_agents import get_agent
     agent = get_agent(agent_id)
     if agent is None:
         raise HTTPException(status_code=404, detail="No such agent")
+    from pramanyx.discover.usage import note_opened
+    note_opened(request, "agent", agent_id, str(agent.connection_id or ""))
     return agent.model_dump()
 
 

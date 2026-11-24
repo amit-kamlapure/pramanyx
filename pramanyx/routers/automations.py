@@ -426,10 +426,12 @@ def exposed_tools(conn_id: str = ""):
 
 
 @router.get("/automations/{automation_id}")
-def get_one(automation_id: str):
+def get_one(automation_id: str, request: Request):
     a = get_automation(automation_id)
     if a is None:
         raise HTTPException(status_code=404, detail="Automation not found")
+    from pramanyx.discover.usage import note_opened
+    note_opened(request, "schedule", automation_id, str(a.conn_id or ""))
     return a.model_dump()
 
 

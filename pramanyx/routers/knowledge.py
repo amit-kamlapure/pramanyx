@@ -377,7 +377,7 @@ async def upload_document(file: UploadFile = File(...),
 
 
 @router.get("/documents/{doc_id}/markdown")
-def document_markdown(doc_id: str):
+def document_markdown(doc_id: str, request: Request):
     """The document as Markdown — what every agent, canvas and prompt actually reads.
 
     Served from the cache when it is there and re-converted from the original when it
@@ -388,6 +388,8 @@ def document_markdown(doc_id: str):
 
     if get_document(doc_id) is None:
         raise HTTPException(status_code=404, detail="Document not found")
+    from pramanyx.discover.usage import note_opened
+    note_opened(request, "document", doc_id)
     text = blobs.markdown(doc_id)
     if text is None:
         raise HTTPException(

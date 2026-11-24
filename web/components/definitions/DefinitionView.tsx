@@ -33,6 +33,7 @@ import {
 } from "@/lib/definitions";
 import { KIND_ICON, KIND_WORDS, readDiscoverItems, type DiscoverItem, type DiscoverKind } from "@/lib/discover";
 import { fmtDate } from "@/lib/format";
+import { readDirectory, type DirectoryPerson } from "@/lib/threads";
 
 const MUTED = { color: "var(--t3)" };
 
@@ -71,6 +72,15 @@ export function DefinitionView({ term, connection, initialArea = "", inApp = fal
   const [writing, setWriting] = useState(!term);
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState("");
+  // handing it to another person (2026-11-24): the name they sign in with, the directory's names offered where the
+  // reader may read it (it is an admin's list: for anyone else it is empty, and a name is typed)
+  const [handing, setHanding] = useState(false);
+  const [handTo, setHandTo] = useState("");
+  const [people, setPeople] = useState<DirectoryPerson[]>([]);
+  // a description the model drafted from what it means, at the person's press (2026-11-24): said as such until they
+  // change it or keep it — their save is what makes it theirs
+  const [drafted, setDrafted] = useState(false);
+  const [drafting, setDrafting] = useState(false);
 
   // undefined while it is read; null when there is none — a new one (no word yet) is none, never "Reading…"
   const found = !term ? null
@@ -139,9 +149,30 @@ export function DefinitionView({ term, connection, initialArea = "", inApp = fal
     return <main className="aug-fs-sm" style={{ padding: 20, ...MUTED }}>This page needs a connection: add <code>?conn=</code> to its address.</main>;
   }
   const mine = !!found && !!me && same(found.owner, me);
+  const startHanding = () => {
+    setHanding(true); setHandTo(""); setSaid("");
+    if (!people.length) readDirectory().then(setPeople).catch(() => setPeople([]));
+  };
+  const handOn = async () => {
+    const to = handTo.trim();
+    if (!to) return;
+    if (found && same(who(to), who(found.owner))) { setSaid(`It is already ${who(found.owner)}'s`); setHanding(false); return; }
+    await act("/record/definitions/owner", { to }, `Handed to ${who(to)}: they answer for it now`);
+    setHanding(false);
+  };
+  const lastHanded = found?.handed?.at(-1);
+  const draftDescription = async () => {
+    setDrafting(true); setSaid("");
+    try {
+      const out = await post("/record/definitions/suggest-description", { text: draft.text, aliases: draft.aliases },
+        (found?.term ?? draft.name).trim(), found?.area ?? draft.area);
+      setDraft((d) => ({ ...d, description: String(out?.description ?? "") }));
+      setDrafted(true);
+    } catch (e) { setSaid((e as Error).message); } finally { setDrafting(false); }
+  };
   const published = found?.state === "published";
   const isNew = !found;
-  const startWriting = () => { setDraft(fromDefinition(found, term, area)); setWriting(true); setSaid(""); };
+  const startWriting = () => { setDraft(fromDefinition(found, term, area)); setWriting(true); setSaid(""); setDrafted(false); };
   const cancel = () => { setWriting(false); setSaid(""); if (!term) onCancel?.(); };
   const nameOk = !!(found?.term ?? draft.name).trim();
   const textOk = !isBlankBody(draft.text) && draft.text.length <= BODY_MAX;
@@ -241,8 +272,31 @@ export function DefinitionView({ term, connection, initialArea = "", inApp = fal
                   </span>
                 ) : <span className="aug-fs-sm" style={MUTED}>Everywhere — no one area</span>}
               </Field>
-              <Field label="Owner" title="Whoever writes it first owns it; only its owner publishes it, and anyone else suggests an edit">
-                <Chip>{found ? `${who(found.owner) || "no one named"}${mine ? " (you)" : ""}` : `${who(me) || "you"} (you)`}</Chip>
+              <Field label="Owner" title="Whoever writes it first owns it, until they hand it on; only its owner publishes it, and anyone else suggests an edit">
+                <span style={{ display: "inline-flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                  <Chip>{found ? `${who(found.owner) || "no one named"}${mine ? " (you)" : ""}` : `${who(me) || "you"} (you)`}</Chip>
+                  {mine && !writing && !handing && (
+                    <Button size="xs" variant="outline" disabled={busy} onClick={startHanding}
+                      title="Make someone else its owner: they publish it, change it and decide what others suggest">Hand to…</Button>
+                  )}
+                  {handing && (
+                    <>
+                      <Input bespoke autoFocus aria-label="Hand it to" placeholder="The name they sign in with" list="definition-people"
+                        value={handTo} onChange={(e) => setHandTo(e.target.value)} style={{ width: 220 }}
+                        onKeyDown={(e) => { if (e.key === "Enter") void handOn(); if (e.key === "Escape") setHanding(false); }} />
+                      <datalist id="definition-people">
+                        {people.map((p) => <option key={p.email} value={p.email}>{p.name}</option>)}
+                      </datalist>
+                      <Button size="xs" disabled={busy || !handTo.trim()} onClick={() => void handOn()}>Hand it on</Button>
+                      <Button size="xs" variant="ghost" disabled={busy} onClick={() => setHanding(false)}>Cancel</Button>
+                    </>
+                  )}
+                  {lastHanded && !handing && (
+                    <span className="aug-fs-xs" style={MUTED} data-testid="definition-handed">
+                      handed on by {who(lastHanded.by)} on {fmtDate(lastHanded.on, "day")}
+                    </span>
+                  )}
+                </span>
               </Field>
               <Field label="Synonyms">
                 <Synonyms value={writing ? draft.aliases : (found?.aliases ?? [])} editing={writing}
@@ -250,8 +304,23 @@ export function DefinitionView({ term, connection, initialArea = "", inApp = fal
               </Field>
               <Field label="Description">
                 {writing ? (
-                  <Textarea aria-label="Description" rows={2} placeholder="Add a short description" value={draft.description}
-                    maxLength={400} onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))} style={{ width: "100%" }} />
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, width: "100%" }}>
+                    <Textarea aria-label="Description" rows={2} placeholder="Add a short description" value={draft.description}
+                      maxLength={400} onChange={(e) => { setDrafted(false); setDraft((d) => ({ ...d, description: e.target.value })); }}
+                      style={{ width: "100%" }} />
+                    <span style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                      <Button size="xs" variant="outline" disabled={busy || drafting || isBlankBody(draft.text) || !nameOk}
+                        title="One model call: a line drawn from what it means, below. Nothing is kept until you save."
+                        onClick={() => void draftDescription()}>
+                        {drafting ? "Drafting…" : "Draft with AI"}
+                      </Button>
+                      {drafted && (
+                        <span className="aug-fs-xs" style={MUTED} data-testid="description-drafted">
+                          Drafted by the model from what it means: read it before you keep it
+                        </span>
+                      )}
+                    </span>
+                  </div>
                 ) : found?.description ? (
                   <span className="aug-fs-ui" style={{ color: "var(--t1)" }} data-testid="definition-description">{found.description}</span>
                 ) : <span className="aug-fs-sm" style={MUTED}>No description</span>}
@@ -261,7 +330,7 @@ export function DefinitionView({ term, connection, initialArea = "", inApp = fal
             {/* the body */}
             <div style={{ padding: "0 20px 16px", boxShadow: "inset 0 1px 0 var(--b0)" }}>
               {writing ? (
-                <RichBody value={draft.text} onChange={(text) => setDraft((d) => ({ ...d, text }))} />
+                <RichBody value={draft.text} onChange={(text) => setDraft((d) => ({ ...d, text }))} connection={connection} />
               ) : (
                 <div style={{ paddingTop: 12 }}><DefinitionBody text={found?.statement.text ?? ""} /></div>
               )}

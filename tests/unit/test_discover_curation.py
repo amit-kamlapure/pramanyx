@@ -172,3 +172,17 @@ def test_a_thing_is_placed_by_its_owner_or_the_area_s_owners_and_taken_out_only_
     # a third person with no standing
     door.who["person"] = "user:cai"
     assert c.put("/discover/placement", json={"kind": "canvas", "id": "cv1", "area": "returns"}).status_code == 403
+
+
+def test_a_package_area_annotated_stays_on_the_connections_whose_map_has_it(journal, monkeypatch):
+    """Seen live, 2026-11-24: Returns (theLook's package Area) given a description stood on every other connection as an
+    organisation's Area named "returns", and Discover showed that one. A nameless declaration annotates a package's Area;
+    it is listed only where the package's map has the Area."""
+    from types import SimpleNamespace as NS
+    maps = {"thelook": [NS(id="returns", name="Returns", question="What came back?", generic=False, pack_id="p")],
+            "other": []}
+    monkeypatch.setattr("pramanyx.semantic.metric_map.map_for", lambda conn, schema=None: NS(areas=maps[conn]))
+    A.edit_area("returns", {"description": "Sent back."}, by="user:bo", known={"returns"})
+    on_thelook = {a["id"]: a for a in A.areas_for("thelook")}
+    assert on_thelook["returns"]["name"] == "Returns" and on_thelook["returns"]["description"] == "Sent back."
+    assert "returns" not in {a["id"] for a in A.areas_for("other")}

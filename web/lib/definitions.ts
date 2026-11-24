@@ -21,6 +21,8 @@ export interface Definition {
   suggestions: Suggestion[]; versions: Version[];
   /** The coworker drafted it for its owner, who has not published it yet (2026-11-17). */
   drafted_by_agent?: boolean;
+  /** Who handed it to whom, latest last (2026-11-24): its owner answers for it, and may hand it on. */
+  handed?: { on: string; by: string; from: string; to: string }[];
 }
 
 export const LINK_KINDS = ["metric", "table", "definition", "dashboard", "document", "person", "url",

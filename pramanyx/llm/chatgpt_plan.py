@@ -743,3 +743,45 @@ class PlanTransport(httpx.BaseTransport):
 
     def close(self) -> None:
         self._http.close()
+
+
+class _ThreadedStream(httpx.AsyncByteStream):
+    """A sync answer's body read off the event loop, a chunk at a time, as the plan writes it."""
+
+    def __init__(self, response: httpx.Response):
+        self._response = response
+
+    async def __aiter__(self):
+        import anyio
+        chunks = iter(self._response.stream)
+        while True:
+            chunk = await anyio.to_thread.run_sync(next, chunks, None)
+            if chunk is None:
+                return
+            yield chunk
+
+    async def aclose(self) -> None:
+        import anyio
+        await anyio.to_thread.run_sync(self._response.close)
+
+
+class AsyncPlanTransport(httpx.AsyncBaseTransport):
+    """`PlanTransport` for an async client — the model door's (`routers/model_door.py`), so the coworker's own turns run
+    on the person's plan too (the user, 2026-11-24: "Teach the door the plan"). The one translation, not a second: each
+    request runs through `PlanTransport` off the event loop, and a streamed answer's chunks are read off it as the plan
+    writes them. The credential never leaves this process: the door makes the call, the caller is handed none."""
+
+    def __init__(self, sync: Optional[PlanTransport] = None):
+        self._sync = sync or PlanTransport()
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        import anyio
+        body = await request.aread()
+        sync_request = httpx.Request(request.method, request.url, headers=request.headers, content=body)
+        answer = await anyio.to_thread.run_sync(self._sync.handle_request, sync_request)
+        return httpx.Response(answer.status_code, headers=answer.headers, stream=_ThreadedStream(answer),
+                              request=request)
+
+    async def aclose(self) -> None:
+        import anyio
+        await anyio.to_thread.run_sync(self._sync.close)

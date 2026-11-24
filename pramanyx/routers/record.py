@@ -83,6 +83,15 @@ def _named(name: str) -> str:
     return name if ":" in name else f"person:{name}"
 
 
+def _signs_in_as(name: str) -> str:
+    """The person a Definition is handed to, as they sign in: who owns one is who may change it, so it is kept the way a
+    signed-in person is (``user:<id>``, `_who`) — never ``person:``, a name nobody signs in as."""
+    name = (name or "").strip()
+    if not name:
+        return ""
+    return name if name.startswith("user:") else name if ":" in name else f"user:{name}"
+
+
 # ── claims ─────────────────────────────────────────────────────────────────────────────────
 
 @router.get("/record/claims")
@@ -198,6 +207,10 @@ class DefinitionApproval(BaseModel):
     area: str = Field("", max_length=120)
 
 
+class DefinitionHandover(DefinitionApproval):
+    to: str = Field(min_length=1, max_length=200)    # the person it is handed to, as the directory names them
+
+
 class SuggestionDecision(DefinitionApproval):
     suggestion_id: str = Field(min_length=1, max_length=40)
     accept: bool
@@ -210,6 +223,7 @@ def _definition_view(c: C.Claim) -> dict:
             "links": x.get("links") or [], "description": x.get("description", ""), "sources": x.get("sources") or [],
             "state": "published" if c.tier == "approved" else "draft",
             "approved_by": x.get("approved_by", ""), "approved_on": x.get("approved_on", ""),
+            "handed": (x.get("handed") or [])[-5:],
             "drafted_by_agent": bool(x.get("drafted_by_agent")) and c.tier != "approved",
             "suggestions": x.get("suggestions") or [], "declined": (x.get("declined") or [])[-5:],
             "accepted": (x.get("accepted") or [])[-5:],
@@ -226,7 +240,8 @@ def _persons_own(request, what: str) -> None:
 
 
 @router.get("/record/definitions")
-def list_definitions(connection_id: str, term: Optional[str] = None, area: Optional[str] = None) -> list[dict]:
+def list_definitions(connection_id: str, term: Optional[str] = None, area: Optional[str] = None,
+                     request: Request = None) -> list[dict]:
     """A connection's Definitions, or the ones for ``term`` — one per area it is defined in, or the one in ``area``.
     Read by the app's Definition page and by an answer that leaned on one."""
     from pramanyx.record.writers import definition_term, definitions, definitions_of
@@ -236,6 +251,10 @@ def list_definitions(connection_id: str, term: Optional[str] = None, area: Optio
         rows = definitions_of(connection_id, term)
         if area is not None:
             rows = [c for c in rows if definition_term(c.extra.get("area", "")) == definition_term(area)]
+        from pramanyx.discover.usage import note_opened
+        for c in rows:     # a word read on its page: each of its Areas' Definitions is opened (Discover D5)
+            note_opened(request, "definition", f"{connection_id}/{c.extra.get('term', '')}/{c.extra.get('area', '')}",
+                        connection_id)
         return [_definition_view(c) for c in rows]
     return [_definition_view(c) for c in definitions(connection_id)]
 
@@ -272,6 +291,55 @@ def write_record_definition(req: DefinitionRequest, principal=Depends(get_princi
         raise HTTPException(status_code=422, detail=str(exc))
     _refresh_definitions(req.connection_id)
     return {**_definition_view(C.get(cid)), "suggested": suggested}
+
+
+class DescriptionAsk(BaseModel):
+    connection_id: str = Field(min_length=1, max_length=80)
+    term: str = Field(min_length=1, max_length=120)
+    area: str = Field("", max_length=120)
+    text: str = Field("", max_length=4000)                   # what it means, as written on the page — saved or not yet
+    aliases: Optional[list[str]] = Field(None, max_length=50)
+
+
+class _Described(BaseModel):
+    description: str
+
+
+#: What the model is told when a person asks it to draft a Definition's description: one plain sentence drawn from the
+#: Definition's own words, adding nothing they do not say — the description is the person's once they keep it.
+DESCRIBE_SYSTEM = (
+    "You write the one-line description shown under a business word's name in a company's glossary. You are given the "
+    "word, the part of the business it belongs to, its synonyms, and what it means, as its owner wrote it. Write ONE "
+    "plain sentence, under 25 words, that says what the word is to a person who has not read the definition. Use only "
+    "what the definition says: never add a number, a rule, a source or a claim it does not make. No quotes, no markup, "
+    "do not start with the word itself.")
+
+
+@router.post("/record/definitions/suggest-description", dependencies=[gate(Capability.SEMANTIC_EDIT)])
+def suggest_record_definition_description(req: DescriptionAsk, request: Request = None) -> dict:
+    """⚑ Spends one model call, when a person presses for it (the Page editor's AI-drafted description, 2026-11-24): a
+    description drawn from what the Definition says, returned to the page and booked nowhere — the person reads it, and
+    their own save makes it theirs. Refused without words to draw it from; a model that fails is said, never guessed."""
+    from pramanyx.record.writers import MAX_DESCRIPTION
+    if not _visible(req.connection_id):
+        raise HTTPException(status_code=404, detail="No such connection")
+    _persons_own(request, "asking for a drafted description")
+    text = (req.text or "").strip()
+    if not text:
+        raise HTTPException(status_code=422, detail="Write what it means first: the description is drawn from it.")
+    synonyms = ", ".join(a.strip() for a in (req.aliases or []) if a.strip()) or "none"
+    user = (f"Word: {req.term.strip()}\nPart of the business: {req.area.strip() or 'the whole business'}\n"
+            f"Synonyms: {synonyms}\n\nWhat it means:\n{text}")
+    try:
+        from pramanyx.llm.provider import get_provider
+        out = get_provider("narrator").complete(system=DESCRIBE_SYSTEM, user=user, response_model=_Described,
+                                                temperature=0.2)
+    except Exception as exc:  # noqa: BLE001 — the reason is said to the person who pressed for it
+        raise HTTPException(status_code=502, detail=f"The model could not draft a description: {str(exc)[:200]}")
+    words = " ".join(str(getattr(out, "description", "") or "").split()).strip().strip('"')[:MAX_DESCRIPTION]
+    if not words:
+        raise HTTPException(status_code=502, detail="The model drafted no description; write one, or ask again.")
+    return {"description": words}
 
 
 class DraftForRequest(BaseModel):
@@ -349,6 +417,20 @@ def unpublish_record_definition(req: DefinitionApproval, principal=Depends(get_p
     from pramanyx.record.writers import unpublish_definition
     return _owners_act(lambda who: unpublish_definition(connection_id=req.connection_id, term=req.term, by=who,
                                                         area=req.area), req, principal, request, "unpublishing a definition")
+
+
+@router.post("/record/definitions/owner", dependencies=[gate(Capability.SEMANTIC_EDIT)])
+def hand_record_definition(req: DefinitionHandover, principal=Depends(get_principal), request: Request = None) -> dict:
+    """Its owner hands a definition to another person, who answers for it from then on; an organisation's admin may hand
+    on one whose owner cannot. Anyone else is refused, and told whose it is. Nothing is sent: the hand-over is on its
+    record and in the audit log."""
+    from pramanyx.rbac.permissions import Permission
+    from pramanyx.rbac.resolver import has_permission
+    from pramanyx.record.writers import hand_definition
+    admin = bool(principal) and has_permission(principal, Permission.ADMIN_MANAGE_ORG)
+    return _owners_act(lambda who: hand_definition(connection_id=req.connection_id, term=req.term, area=req.area,
+                                                   by=who, to=_signs_in_as(req.to), by_admin=admin),
+                       req, principal, request, "handing a definition on")
 
 
 @router.post("/record/definitions/suggestions/decide", dependencies=[gate(Capability.SEMANTIC_EDIT)])

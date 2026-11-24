@@ -468,7 +468,7 @@ class PramanyxClient:
 
     async def _drive_deep(self, body: dict, acc: dict) -> None:
         """Read a deep ``/ask`` stream to its end, folding each frame into ``acc`` as it lands — so a caller that stops
-        waiting still holds what arrived (the run's id first of all), and the run is never left without a reader."""
+        waiting still holds what arrived (the run's id first of all), and the door files the run's answer envelope."""
         async for ev in self._stream_sse("POST", "/ask", body, timeout=self.deep_timeout):
             t = ev.get("type")
             if t == "route" and ev.get("downgraded_from") == "deep":
@@ -531,9 +531,11 @@ class PramanyxClient:
         }
         # The deadline is on the whole call, not on silence (2026-11-23, seen live: the analyst ran 11 minutes on a free
         # model; the stream's keep-alive every 20 s reset the read timeout, so the call ran past the shell's 6-minute
-        # tool limit and the coworker said "Request timed out" over an analysis that then finished). A deep `/ask` stops
-        # when its reader leaves, so the run is not dropped at the deadline: it is read to its end in the background,
-        # and the caller gets the id to poll.
+        # tool limit and the coworker said "Request timed out" over an analysis that then finished). At the deadline the
+        # caller gets the id to poll, and the stream is read to its end in the background. Not for the run's sake: it is
+        # a job on the platform and goes on without a reader (measured 2026-11-24, 0237d0fc), and its trace's end is the
+        # job's to write when its reader leaves (`routers/investigations._TurnEnd`). For the answer envelope: the door
+        # folds it from the frames its reader reads, and files it on the run's row only at the stream's end.
         run = asyncio.create_task(self._drive_deep(body, acc))
         try:
             await asyncio.wait_for(asyncio.shield(run), timeout=self.deep_timeout)

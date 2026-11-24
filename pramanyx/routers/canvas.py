@@ -179,7 +179,10 @@ def get_canvas_endpoint(canvas_id: str, request: Request):
     canvas = get_canvas(canvas_id)
     if not canvas:
         raise HTTPException(status_code=404, detail="Canvas not found")
-    return seen_as(canvas, request)
+    seen = seen_as(canvas, request)
+    from pramanyx.discover.usage import note_opened
+    note_opened(request, "canvas", canvas_id, str(getattr(canvas, "connection_id", "") or ""))
+    return seen
 
 
 class CanvasSharingRequest(BaseModel):

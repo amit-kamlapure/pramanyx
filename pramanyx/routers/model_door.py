@@ -58,6 +58,14 @@ def _client() -> httpx.AsyncClient:
     return httpx.AsyncClient(timeout=_TIMEOUT)
 
 
+def _plan_client() -> httpx.AsyncClient:
+    """The upstream client for a sign-in backend — the ChatGPT plan: the request runs through the plan's own
+    translation (Chat Completions in, its Responses API out, the answer back as chunks), with the person's token added
+    there. A seam, so a test answers for the plan."""
+    from pramanyx.llm.chatgpt_plan import AsyncPlanTransport
+    return httpx.AsyncClient(timeout=_TIMEOUT, transport=AsyncPlanTransport())
+
+
 def _said(status: int, message: str, kind: str) -> JSONResponse:
     """A refusal in the wire's own error shape, so the caller shows the sentence and not a parse failure."""
     return JSONResponse(status_code=status, content={"error": {"message": message, "type": kind, "code": kind}})
@@ -226,7 +234,8 @@ async def door_chat(request: Request):
             if token is not None:
                 reset_session_id(token)
 
-    client = _client()
+    from pramanyx.llm.provider import SIGN_IN_BACKENDS
+    client = _plan_client() if backend in SIGN_IN_BACKENDS else _client()
     try:
         answer = await client.send(client.build_request("POST", url, json=upstream, headers=headers), stream=True)
     except Exception as exc:

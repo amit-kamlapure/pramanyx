@@ -38,6 +38,7 @@ vi.mock("@/lib/areas", async importOriginal => ({
 }));
 
 const { DiscoverPage } = await import("@/components/discover/DiscoverPage");
+const { DiscoverHost, askWords, shellOrigin } = await import("@/components/discover/host");
 
 const item = (over: Partial<DiscoverItem>): DiscoverItem => ({
   kind: "metric", id: "x", name: "x", line: "", connection_id: "8233e4fd", connection_name: "theLook", area: "orders_sales",
@@ -182,6 +183,57 @@ describe("Discover", () => {
     await waitFor(() => expect(saveAreas).toHaveBeenCalledWith("8233e4fd", [
       expect.objectContaining({ id: "vip", name: "VIP" }), { id: "operations", name: "Operations", question: "", parent: "" }]));
     await waitFor(() => expect(readDiscover).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe("use this month (D5)", () => {
+  it("lists the most used with each one's use, what the person opened lately, and says what is not measured", async () => {
+    readDiscover.mockResolvedValue({ ...HOME,
+      most_read: [{ ...ORDERS, use: { measured: "reads", count: 1204, people: null, unattributed: null, last: null } }],
+      most_used: [{ ...SCOUT, use: { measured: "opens", count: 3, people: 1, unattributed: 0, last: null } }],
+      recent: [{ ...SCOUT, use: { measured: "opens", count: 3, people: 1, unattributed: 0, last: null } }],
+      use_said: ["Metrics and trusted queries have no page of their own to open, so their use is not measured yet."] });
+    renderPage();
+    const most = await screen.findByTestId("discover-most-used");
+    expect(within(screen.getByTestId("discover-most-read")).getByTestId("discover-row").textContent)
+      .toContain("read 1,204 times this month · who read it is not recorded");
+    expect(within(screen.getByTestId("discover-most-opened")).getByTestId("discover-row").textContent).toContain("Anomaly Scout");
+    expect(within(most).getAllByTestId("discover-row")).toHaveLength(2);
+    expect(within(screen.getByTestId("discover-recent")).getByText(/opened 3 times this month by one person/)).toBeInTheDocument();
+    expect(screen.getByTestId("discover-use-said")).toHaveTextContent("their use is not measured yet");
+  });
+
+  it("says nothing was used yet, and shows no recent row for a person who opened nothing", async () => {
+    renderPage();
+    expect(await screen.findByTestId("discover-most-used")).toHaveTextContent("Nothing was opened this month yet.");
+    expect(screen.getByTestId("discover-most-read")).toHaveTextContent("No table was read this month yet.");
+    expect(screen.queryByTestId("discover-recent")).toBeNull();
+  });
+});
+
+describe("shown in the coworker (D6)", () => {
+  it("opens a thing through its host and hands any thing's question to it, never the app's own Ask panel", async () => {
+    const open = vi.fn();
+    const ask = vi.fn();
+    render(<DiscoverHost.Provider value={{ open, ask }}>
+      <DiscoverPage openId={null} onOpenArea={() => {}} onName={() => {}} connections={[{ id: "8233e4fd", name: "theLook" }]} />
+    </DiscoverHost.Provider>);
+    const kinds = await screen.findByTestId("discover-kinds");
+    fireEvent.click(within(kinds).getByText("Revenue"));
+    expect(open).toHaveBeenCalledWith("/metrics/revenue?conn=8233e4fd");
+    fireEvent.click(within(kinds).getByRole("button", { name: "Ask about Revenue" }));   // a metric too, in the coworker
+    expect(ask).toHaveBeenCalledWith(expect.objectContaining({ name: "Revenue" }));
+    expect(askAbout).not.toHaveBeenCalled();
+  });
+
+  it("offers no question where its host can take none, and words one for the person to finish", async () => {
+    render(<DiscoverHost.Provider value={{ open: vi.fn() }}>
+      <DiscoverPage openId={null} onOpenArea={() => {}} onName={() => {}} connections={[]} />
+    </DiscoverHost.Provider>);
+    expect(within(await screen.findByTestId("discover-kinds")).queryByRole("button", { name: /^Ask about/ })).toBeNull();
+    expect(askWords(ORDERS, "Table")).toBe("About the table “orders” on theLook: ");
+    expect(shellOrigin("http://localhost:3090")).toBe("http://localhost:3090");
+    expect(shellOrigin("https://evil.example")).toBeNull();
   });
 });
 

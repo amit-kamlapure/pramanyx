@@ -114,6 +114,28 @@ def _kind_view(kind: str, items: list[Item], withheld: int, shown: int = SHOWN) 
             "items": [i.view() for i in ordered[:shown]]}
 
 
+def _used(items: list[Item]) -> list[str]:
+    """Each item's use this month put on it (D5); what could not be said, said."""
+    from pramanyx.discover import usage
+    try:
+        use, said = usage.use_of(items)
+    except Exception as exc:  # noqa: BLE001 — use unread is said; the page stands without it
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "discover: use this month could not be read", counter="discover.use")
+        return ["How often things were used this month could not be read."]
+    for i in items:
+        i.use = use.get(i.id)
+    return said
+
+
+def _by_use(items: list[Item], measured: str = "") -> list[Item]:
+    """The used this month, most first — of one measure when ``measured`` names it. A table's reads (statements, most of
+    them the platform's own) and a thing's opens (a person's) are not one scale: the page ranks each apart."""
+    from pramanyx.discover.usage import score
+    return sorted((i for i in items if score(i.use) > 0 and (not measured or (i.use or {}).get("measured") == measured)),
+                  key=lambda i: (-score(i.use), order_key(i)))
+
+
 def home(scope: Scope) -> dict:
     """The page: the Areas that hold something (and apart, those that hold nothing yet), what is certified, each kind
     with its first few, what the person may not open counted, and what could not be read said."""
@@ -139,6 +161,14 @@ def home(scope: Scope) -> dict:
                 from pramanyx.kernel.errors import tolerate
                 tolerate(exc, "discover: a connection's suggested areas could not be read", counter="discover.suggested")
     certified = _order([i for i in items if (i.certification or {}).get("status") == "certified"])
+    from pramanyx.discover.usage import NOT_MEASURED, recently_opened
+    use_said = _used(items)
+    try:
+        recent = recently_opened(items, scope.person, limit=SHOWN)
+    except Exception as exc:  # noqa: BLE001 — unread, it is said
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "discover: what the person opened could not be read", counter="discover.recent")
+        recent, use_said = [], [*use_said, "What you opened lately could not be read."]
     by_kind: dict[str, list[Item]] = {k: [] for k in KINDS}
     for i in items:
         by_kind[i.kind].append(i)
@@ -146,6 +176,11 @@ def home(scope: Scope) -> dict:
         "connections": [{"id": c, "name": n} for c, n in scope.connections.items()],
         "areas": holding, "quiet_areas": quiet, "suggested": suggested,
         "certified": [i.view() for i in certified[:SHOWN]], "certified_count": len(certified),
+        # D5: read from what happened — a table's reads, the opens of what a person opens — never a model's guess
+        "most_used": [i.view() for i in _by_use(items, "opens")[:SHOWN]],
+        "most_read": [i.view() for i in _by_use(items, "reads")[:SHOWN]],
+        "recent": [i.view() for i in recent],
+        "use_said": [*use_said, NOT_MEASURED],
         "kinds": [_kind_view(k, by_kind[k], found[k].withheld) for k in KINDS],
         "withheld": {k: found[k].withheld for k in KINDS if found[k].withheld},
         "said": [s for k in KINDS for s in found[k].said],
@@ -160,9 +195,10 @@ def _matches(i: Item, q: str) -> bool:
 
 
 def list_items(scope: Scope, *, kind: str = "", area: str = "", certified: bool = False, mine: bool = False,
-               q: str = "", cursor: int = 0, limit: int = 50) -> dict:
+               q: str = "", cursor: int = 0, limit: int = 50, sort: str = "") -> dict:
     """Every thing of a kind, an Area or both, in order, a page at a time — what "View all" opens. ``mine`` keeps what
-    the person owns; ``q`` matches the words of a thing's name and line (the meaning search is D3's)."""
+    the person owns; ``q`` matches the words of a thing's name and line (the meaning search is D3's). ``sort="use"``
+    puts the most used this month first (D5), the rest after in their usual order."""
     kinds = (kind,) if kind else KINDS
     found = gather(scope, kinds)
     items = all_items(found)
@@ -175,12 +211,17 @@ def list_items(scope: Scope, *, kind: str = "", area: str = "", certified: bool 
         items = [i for i in items if me and who_of(i.owner).lower() == me]
     if q.strip():
         items = [i for i in items if _matches(i, q)]
+    use_said = _used(items)
     ordered = _order(items)
+    if sort == "use":
+        used = _by_use(items)
+        ids = {i.id for i in used}
+        ordered = used + [i for i in ordered if i.id not in ids]
     page = ordered[cursor:cursor + limit]
     nxt = cursor + limit if cursor + limit < len(ordered) else None
     return {"items": [i.view() for i in page], "total": len(ordered), "next_cursor": nxt,
             "withheld": {k: found[k].withheld for k in kinds if found[k].withheld},
-            "said": [s for k in kinds for s in found[k].said]}
+            "said": [s for k in kinds for s in found[k].said], "use_said": use_said}
 
 
 def area_page(scope: Scope, area_id: str) -> Optional[dict]:

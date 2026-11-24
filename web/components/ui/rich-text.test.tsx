@@ -8,7 +8,7 @@ import { useState } from "react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { NOTE_TEXT } from "@/components/dashboards/NoteProse";
-import { DEFINITION_TEXT } from "@/components/definitions/DefinitionBody";
+import { DEFINITION_TEXT, DefinitionBody } from "@/components/definitions/DefinitionBody";
 import { AREA_TEXT } from "@/components/discover/AreaCuration";
 import { RichText, type RichTextKind } from "@/components/ui/rich-text";
 import { editorOf, measureNothing } from "@/components/ui/richTextTesting";
@@ -58,5 +58,67 @@ describe("what each place may hold", () => {
     render(<Harness kind={NOTE_TEXT} start={"| a | b |\n| --- | --- |\n| 1 | 2 |"} onChange={onChange} />);
     const box = await screen.findByRole("textbox", { name: "Words" });
     expect(box.querySelector("table")).toBeNull();
+  });
+});
+
+/** A field that keeps its words when left, trimmed, and shows what it kept — a dashboard note's, in the panel. */
+function KeptWhenLeft({ start, onLeave }: { start: string; onLeave: (kept: string) => void }) {
+  const [text, setText] = useState(start);
+  return <RichText kind={NOTE_TEXT} label="Words" value={text} onChange={setText}
+    onBlur={() => { const kept = text.trim(); onLeave(kept); setText(kept); }} />;
+}
+
+describe("a field kept when it is left", () => {
+  it("a toolbar press acts on the words chosen: it leaves the focus in them, and is not leaving the field", async () => {
+    const onLeave = vi.fn();
+    render(<KeptWhenLeft start={"Each row is one product.\n\n"} onLeave={onLeave} />);
+    const editor = await editorOf("Words");
+    await act(async () => { editor.commands.setTextSelection({ from: 1, to: 5 }); });
+    const italic = screen.getByRole("button", { name: "Italic" });
+    expect(fireEvent.mouseDown(italic)).toBe(false);               // the press does not take the focus
+    fireEvent.focusOut(editor.view.dom, { relatedTarget: italic }); // nor does focus moving to the toolbar leave the field
+    expect(onLeave).not.toHaveBeenCalled();
+    fireEvent.click(italic);
+    await waitFor(() => expect(editor.getMarkdown()).toMatch(/^\*Each\* row is one product\./));
+    fireEvent.focusOut(editor.view.dom, { relatedTarget: document.body });
+    expect(onLeave).toHaveBeenCalledTimes(1);
+    expect(onLeave).toHaveBeenLastCalledWith("*Each* row is one product.");
+  });
+});
+
+describe("pictures in a Definition's words", () => {
+  const kept = "/dashboards/images/ab12?connection_id=shop";
+
+  it("takes a chosen picture where the place keeps pictures, and keeps the store's path as Markdown", async () => {
+    const onChange = vi.fn();
+    const onImage = vi.fn(async () => ({ src: kept, alt: "order form" }));
+    function WithPictures() {
+      const [value, setValue] = useState("A buyer.");
+      return <RichText kind={DEFINITION_TEXT} label="Words" value={value} onImage={onImage}
+        onChange={(md) => { setValue(md); onChange(md); }} />;
+    }
+    render(<WithPictures />);
+    const editor = await editorOf("Words");
+    expect(tools()).toContain("Image");
+    const file = new File(["png"], "order form.png", { type: "image/png" });
+    fireEvent.change(screen.getByLabelText("Choose a picture"), { target: { files: [file] } });
+    await waitFor(() => expect(onChange).toHaveBeenLastCalledWith(expect.stringContaining(`![order form](${kept})`)));
+    expect(onImage).toHaveBeenCalledWith(file);
+    const img = (editor.view.dom as HTMLElement).querySelector("img[data-kept]")!;
+    expect(img.getAttribute("data-kept")).toBe(kept);
+    expect(img.getAttribute("src")).toMatch(/\/dashboards\/images\/ab12\?connection_id=shop$/);
+  });
+
+  it("has no picture button where the place keeps none, or nothing takes one", async () => {
+    render(<RichText kind={DEFINITION_TEXT} label="Words" value="x" onChange={() => {}} />);
+    await editorOf("Words");
+    expect(tools()).not.toContain("Image");
+  });
+
+  it("draws a kept picture, and says where one from anywhere else stood instead of fetching it", () => {
+    render(<DefinitionBody text={`![order form](${kept})\n\n![tracker](https://elsewhere.example/p.png)`} />);
+    expect(screen.getByTestId("definition-image").getAttribute("src")).toMatch(/\/dashboards\/images\/ab12\?connection_id=shop$/);
+    expect(screen.getAllByTestId("definition-image")).toHaveLength(1);
+    expect(screen.getByText("[a picture this page does not show: tracker]")).toBeInTheDocument();
   });
 });
