@@ -170,7 +170,7 @@ def spec_of(intake: Optional[dict]) -> Optional[str]:
 
     The measure (the governed metric it framed, with the objects that metric's rule chose; else its expression and
     table), every further measure and the filters on them, the two periods it compares (as a pair), its shape, the sides
-    of a driver or relationship question, and the dimensions it names. A named dimension is part of what any question
+    of a driver or relationship question (one that compares across, not over time), and the dimensions it names. A named dimension is part of what any question
     asks, a "why" too: the run breaks it down first, whatever else it looks at (`investigate._prioritize_dimensions`
     pins it), so "what drove it — break it down by category" is not the analysis of "why did it change", which may never
     reach category. When unsure, two specs differ: a repeat then runs again, as before, where a spec too loose would
@@ -185,11 +185,19 @@ def spec_of(intake: Optional[dict]) -> Optional[str]:
                     for m in (i.get("other_measures") or []))
     shape = str(i.get("question_shape") or "")
     named = ",".join(sorted({_norm_sql(d) for d in (i.get("named_dimensions") or []) if _norm_sql(d)}))
+    # A change between two periods asks for that change: a driver contrast or a relationship pair its intake wrote as
+    # well is the model's own reach, not the question's (live 2026-11-24, 4e590a65 / d3f4c051: "Why did revenue change
+    # from May to June? Find the drivers." came with `status = 'Returned'` and sale_price against category; "What drove
+    # the change between May and June?" with neither, and it ran a second analysis of the same change). A cross-sectional
+    # question keeps them: there the contrast is the question.
+    over_time = not i.get("cross_sectional") and all(i.get(k) for k in ("observation_start", "comparison_start"))
+    sides = ("" if over_time else _norm_sql(i.get(k))
+             for k in ("comparison_segment_sql", "relationship_left_sql", "relationship_right_sql"))
     parts = [measure, _norm_sql(i.get("metric_table")), ";".join(others),
              ";".join(sorted(_norm_sql(f) for f in (i.get("metric_filters") or []))),
              *_periods(i),
              shape,
-             *(_norm_sql(i.get(k)) for k in ("comparison_segment_sql", "relationship_left_sql", "relationship_right_sql")),
+             *sides,
              named, "x" if i.get("cross_sectional") else "", "d" if i.get("descriptive_only") else ""]
     return "|".join(parts)
 

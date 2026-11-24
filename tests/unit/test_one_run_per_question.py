@@ -464,6 +464,13 @@ def test_two_wordings_resolve_to_one_spec_and_different_questions_do_not():
     swapped = {**INTAKE, "observation_start": INTAKE["comparison_start"], "observation_end": INTAKE["comparison_end"],
                "comparison_start": INTAKE["observation_start"], "comparison_end": INTAKE["observation_end"]}
     assert spec_of(swapped) == spec_of(INTAKE), "the same two periods, either way round"
+    # live 2026-11-24: one wording's intake added a driver contrast and a relationship pair to a change over time
+    reached = {**INTAKE, "comparison_segment_sql": "(order_items.status='Returned')",
+               "relationship_left_sql": "order_items.sale_price", "relationship_right_sql": "products.category"}
+    assert spec_of(reached) == spec_of(INTAKE), "a change between two periods asks for that change"
+    across = {**INTAKE, "cross_sectional": True, "comparison_start": "", "comparison_end": ""}
+    assert spec_of({**across, "comparison_segment_sql": "(is_late)"}) != spec_of(across), \
+        "across groups, the contrast is the question"
     by_category = {**INTAKE, "named_dimensions": ["products.category"]}
     assert spec_of(by_category) != spec_of(INTAKE), \
         "a why broken down by category pins category first: not the analysis of the why that named nothing"
