@@ -53,6 +53,14 @@ POLICY: dict[tuple[str, str], Optional[P]] = {
     ("POST", "/access/grants"): P.ADMIN_MANAGE_ROLES,
     ("DELETE", "/access/grants"): P.ADMIN_MANAGE_ROLES,
     ("PUT", "/org-settings"): P.ADMIN_MANAGE_ORG,
+    # 2026-11-23 — the organisation's own model (`routers/training.py`): its corpus, its base, its training and what is
+    # in service are an admin's, as allowing it is.
+    ("POST", "/ai-factory/base"): P.ADMIN_MANAGE_ORG,
+    ("POST", "/ai-factory/training-set"): P.ADMIN_MANAGE_ORG,
+    ("POST", "/ai-factory/train"): P.ADMIN_MANAGE_ORG,
+    ("POST", "/ai-factory/runs/{job_id}/cancel"): P.ADMIN_MANAGE_ORG,
+    ("POST", "/ai-factory/models/{number}/publish"): P.ADMIN_MANAGE_ORG,
+    ("POST", "/ai-factory/models/{number}/withdraw"): P.ADMIN_MANAGE_ORG,
     # DE-2b — the organisation's agent policy is set by a person who manages the org, never by
     # the agent it governs (the route refuses the agent mark on its own).
     ("PUT", "/org-settings/agent-policy"): P.ADMIN_MANAGE_ORG,
@@ -196,6 +204,8 @@ POLICY: dict[tuple[str, str], Optional[P]] = {
     # PENDING 54 — a question kept on a dashboard is asked by the agent on its rhythm, and asking now is a run.
     ("POST", "/dashboards/questions"): P.ANALYSIS_RUN,
     ("POST", "/dashboards/questions/{automation_id}/ask"): P.ANALYSIS_RUN,
+    # 2026-11-23 — asking the organisation's own model is asking a question; making one is an admin's (below).
+    ("POST", "/ai-factory/models/{number}/ask"): P.ANALYSIS_RUN,
 
     # ── Resource delete / export (more specific than the write floor) ──
     ("DELETE", "/investigations"): P.RESOURCE_DELETE,

@@ -96,6 +96,19 @@ adaptations are Pramanyx's; the originals remain under their own copyright.
    Superset's pandas_postprocessing but independently written against Pramanyx's
    own `(columns, rows)` shape with no pandas and no copied code.
 
+2. MiniMind (https://github.com/jingyaogong/minimind)
+   Copyright Jingyao Gong, licensed under Apache-2.0.
+
+   pramanyx/training/worker.py — the supervised fine-tuning loop (a loss on the
+                            answer's tokens only, AdamW with a clipped gradient,
+                            the cosine learning rate that ends at a tenth) and
+                            LoRA as low-rank A·B branches merged back into the
+                            weights, adapted from trainer/train_full_sft.py,
+                            trainer/trainer_utils.py and model/model_lora.py
+
+   No MiniMind weights are redistributed. A base model is fetched by an admin
+   at run time, from where the admin names, under that model's own license.
+
 --------------------------------------------------------------------------------
 THIRD-PARTY DEPENDENCIES (not redistributed; resolved at install time)
 --------------------------------------------------------------------------------

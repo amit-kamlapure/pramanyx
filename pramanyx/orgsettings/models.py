@@ -186,6 +186,15 @@ class OrgSettings(BaseModel):
                     "Off by default.",
     )
 
+    # 2026-11-23 — `pramanyx/training/`. Trained here, from what the organisation approved; nothing leaves the install.
+    train_own_model: Optional[bool] = Field(
+        default=None,
+        description="Train the organisation's own model on what it settled — approved metrics, the glossary, "
+                    "published Definitions and confirmed findings — on this install's own hardware. Nothing leaves "
+                    "the install; a model answers only people who may see every connection it learned from. Off by "
+                    "default.",
+    )
+
     # 2026-11-17 (the coworker as a two-way door, maps) — `pramanyx/orgsettings/base_map.py`. The answer's points and
     # shapes are drawn in the browser from its own rows; a base map under them is fetched square by square from a
     # tile server, so which squares a person views leave for that server. None by default: shapes on a blank ground.

@@ -81,6 +81,15 @@ dependencies = [
 # (`db/connection.py`), which already falls back to DuckDB on ImportError — so the
 # fast bulk-read path is an optimisation, not a requirement. `connectorx` (113 MB) is
 # its partner and already lives in [warehouse].
+# The organisation's own model (`pramanyx/training/`, 2026-11-23). Training runs in its own process with these, never
+# in the API's: torch alone is ~400 MB the serving path does not import. Without the extra the Own model page says
+# what is missing; `PRAMANYX_TRAINING_PYTHON` may instead name another interpreter that has them.
+train = [
+    "torch>=2.6",
+    "transformers>=4.57",
+    "safetensors>=0.4",
+    "huggingface_hub>=0.30",
+]
 fastread = [
     "polars>=1.0.0",
 ]

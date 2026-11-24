@@ -583,6 +583,13 @@ def export_decisions(site: Optional[str] = None, *, task: str = "decision") -> d
     return out
 
 
+#: The three seams the knowledge exporter (`learning/knowledge.py`) shares with these, by their public names: one PII
+#: scrub, one organisation scope, one rule for which trusted queries a person vouched for.
+scrub = _scrub
+in_org = _in_org
+trusted_export_rows = _trusted_export_rows
+
+
 def gate_status(org_id: Optional[str] = None) -> dict:
     """Where the corpus stands against MI-4's ENTRY GATES — measured, not estimated.
 

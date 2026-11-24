@@ -63,6 +63,7 @@ import {
   IconList, IconPaperclip, IconNumber123, IconBraces, IconBinary, createReactComponent,
   IconPointer, IconPhoto, IconArrowBackUp, IconArrowForwardUp, IconLayoutSidebarLeftCollapse,
   IconLayoutSidebarLeftExpand, IconTypography, IconChartLine, IconLayoutList, IconLayoutGrid, IconStarFilled,
+  IconCpu,
 } from "@tabler/icons-react";
 import { createContext, useContext, type ComponentType, type ReactNode } from "react";
 
@@ -113,6 +114,8 @@ const ICONS = {
   agents: IconRobot,
   spend: IconCoins,
   brain: IconBrain,
+  /** The AI Factory, where the organisation's own models are made (Define ▸ AI Factory) — a model, not an agent at work. */
+  model: IconCpu,
   shield: IconShieldCheck,
   settings: IconSettings,
   metric: IconActivity,

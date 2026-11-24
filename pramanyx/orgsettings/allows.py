@@ -26,6 +26,10 @@ FORMER_ENV: dict[str, tuple[str, ...]] = {
     # 2026-11-15 (the coworker plan) — the coworker may search the open web for outside context: a holiday, the
     # news, a competitor's announcement. The words searched leave the install for the search provider.
     "web_search": (),
+    # 2026-11-23 (`pramanyx/training/`) — the organisation's approved knowledge becomes the weights of a model of its
+    # own, trained on this install's hardware; nothing leaves the install. Weights anyone in the organisation may ask
+    # are a governance posture, and the admin's to take.
+    "train_own_model": (),
 }
 
 #: Where a person changes them, for the sentences that say a thing is off.

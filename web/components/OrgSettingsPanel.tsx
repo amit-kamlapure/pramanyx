@@ -229,6 +229,8 @@ export function OrgSettingsPanel({ workspaceId, workspaceName }: { workspaceId?:
       hint: "The coworker's model calls are made with your organisation's models and keys. A conversation there, and the answers in it, go to that provider. Each call is recorded and counts against the usage caps." },
     { k: "web_search", label: "Let the coworker search the web for outside context",
       hint: "Holidays, news, an announcement: cited, and never used as a figure about your business. The words searched go to the search provider." },
+    { k: "train_own_model", label: "Let the AI Factory train the organisation's own models",
+      hint: "Approved metrics, the glossary, published Definitions and confirmed findings become a model of your own, trained on this install's hardware. Nothing leaves the install; the model answers only people who may see every connection it learned from." },
   ];
   const allowField = ({ k, label, hint }: { k: OrgAllowSetting; label: string; hint: string }) => {
     const chosen = s[k];
