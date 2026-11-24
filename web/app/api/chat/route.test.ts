@@ -118,6 +118,36 @@ describe("a dropped upstream is not silence", () => {
   });
 });
 
+describe("a dropped deep run is read until it lands, and says why it ended", () => {
+  it("reads a hand-back on as the run it names, and gives that run's own reason", async () => {
+    // 2026-11-24: the recovery said a bare "failed after the connection dropped", never the reason the row recorded,
+    // and polled an interrupted or handed-back run to its deadline.
+    const realTimeout = globalThis.setTimeout;
+    // the recovery waits 4 s between reads: here each wait is a tick
+    vi.stubGlobal("setTimeout", ((fn: () => void) => realTimeout(fn, 0)) as unknown as typeof setTimeout);
+    const read: string[] = [];
+    vi.stubGlobal("fetch", async (url: string) => {
+      const path = new URL(url).pathname;
+      if (path.endsWith("/ask")) return sse('data: {"type":"start","investigation_id":"again"}\n\n');
+      read.push(path);
+      const rows: Record<string, unknown> = {
+        "/investigations/again": { id: "again", status: "handed_back", handed_to: "r2" },
+        "/investigations/r2": { id: "r2", status: "failed", error: "Stopped at the Analyst's 1800s time budget." },
+      };
+      return new Response(JSON.stringify(rows[path.replace(/^.*(\/investigations\/)/, "$1")] ?? {}),
+                          { headers: { "content-type": "application/json" } });
+    });
+    try {
+      const chunks = await chunksOf(await POST(ask()));
+      expect(read.map((p) => p.split("/").pop())).toEqual(["again", "r2"]);
+      const errors = chunks.filter((c) => c.type === "error" || c.type === "data-error").map((c) => JSON.stringify(c));
+      expect(errors.join(" ")).toContain("Stopped at the Analyst's 1800s time budget.");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
 describe("the question comes from `messages`, not `question`", () => {
   /**
    * The defect these exist for: the SDK posts `messages` and NEVER a `question`

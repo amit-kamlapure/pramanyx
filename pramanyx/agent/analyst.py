@@ -2007,6 +2007,8 @@ class AnalystResult:
     reinjection_ratio: float = 0.0
     #: How long the context took before intake — schema, linking, catalog — in seconds.
     context_timings: dict = field(default_factory=dict)
+    #: The run this one was handed instead of running (`agent/one_run.py`): a repeat of it in other words.
+    handed_to: Optional[dict] = None
 
 
 def _base_state(question: str, connection_id: str, investigation_id: str,
@@ -2132,8 +2134,13 @@ def run_analyst(
     persist: bool = True,
     purpose: str = "",
     shape: Optional[str] = None,
+    ask: Optional[Any] = None,
+    run_id: str = "",
 ) -> AnalystResult:
     """One deep turn as the analyst: intake once, then the loop, then the narrator.
+
+    ``run_id`` — the row its door already made as it claimed the question (`agent/one_run.take`), which this turn
+    adopts rather than make its own; "" for a turn that makes its own.
 
     ``shape`` is the question's shape the door decided (`agent/question_shape`) — describe,
     check, diagnose or survey — carried in so the roster, the stopping rule, the report and the
@@ -2145,7 +2152,61 @@ def run_analyst(
     vocabulary CA-1's parts path renders. ``on_step`` fires per loop step (the
     cancellation checkpoint, like converse). ``persist`` writes the investigation
     row so History, receipts and follow-ups see the run like any other deep run.
+
+    However the turn ends, its row says so. The turn writes its outcome only when it returns; one stopped on the way —
+    a budget, a cancel, its conversation's reader leaving, a crash — is marked failed here, with why. Until 2026-11-24
+    only the K1 bridge did that, so a deep analysis a conversation ran inline (`converse_tools.deep_analysis`) and whose
+    reader left stayed 'running' until a restart's sweep.
     """
+    # A row the door made is the turn's from the first moment: a turn that stops building its context ends it, with why.
+    made: dict = {"inv_id": run_id} if run_id and persist else {}
+    try:
+        return _run_analyst(
+            connection_id, question, origin_finding=origin_finding, extra_context=extra_context,
+            session_id=session_id, canvas_id=canvas_id, schema_scope=schema_scope, emit=emit, on_step=on_step,
+            provider=provider, max_steps=max_steps, persist=persist, purpose=purpose, shape=shape, made=made,
+            ask=ask, run_id=run_id)
+    except BaseException as exc:
+        if made.get("inv_id"):
+            _say_how_it_stopped(made["inv_id"], exc)
+        raise
+
+
+def _say_how_it_stopped(inv_id: str, exc: BaseException) -> None:
+    """Mark a turn that stopped on the way failed, with why. The answer path's own cancel (``cancels``: its reader
+    leaving, or its job cancelled) is said as a cancel — with the kernel's reason, inside a job."""
+    try:
+        from pramanyx.db.history import fail_if_running
+        from pramanyx.kernel.jobs import describe_stop
+        fail_if_running(inv_id, describe_stop(None if getattr(exc, "cancels", False) else exc))
+    except Exception as e:  # noqa: BLE001 — the stop itself is re-raised; recording it is best-effort
+        from pramanyx.kernel.errors import tolerate
+        tolerate(e, "a stopped analyst turn could not record how it stopped", counter="analyst.stop_recorded")
+
+
+def _run_analyst(
+    connection_id: str,
+    question: str,
+    *,
+    origin_finding: Optional[dict] = None,
+    extra_context: Optional[str] = None,
+    session_id: str = "",
+    canvas_id: Optional[str] = None,
+    schema_scope: Optional[str] = None,
+    emit: Optional[Emit] = None,
+    on_step: Optional[Callable[[LoopStep], None]] = None,
+    provider=None,
+    max_steps: Optional[int] = None,
+    persist: bool = True,
+    purpose: str = "",
+    shape: Optional[str] = None,
+    made: Optional[dict] = None,
+    ask: Optional[Any] = None,
+    run_id: str = "",
+) -> AnalystResult:
+    """The turn itself (:func:`run_analyst`); ``made`` is told the run's id as soon as its row exists. ``ask`` — an
+    agent's plain ask (`agent/one_run.Ask`) — is checked once the intake has resolved the question: a repeat of a run
+    already under way, in other words, stops there and is handed that run."""
     from pramanyx.agent.investigate import ada_intake, ada_synthesize
     from pramanyx.llm.profile import profile_for
     from pramanyx.llm.provider import get_provider
@@ -2157,10 +2218,17 @@ def run_analyst(
     context_timings = seed.pop("context_timings", None) or {}
 
     inv_id = ""
-    if persist:
+    if persist and run_id:
+        # the row its door made as it claimed the question: on the connection the run resolved to
+        from pramanyx.db.history import adopt_investigation
+        inv_id = run_id
+        adopt_investigation(inv_id, eff_conn_id)
+    elif persist:
         from pramanyx.db.history import create_investigation
         inv_id = create_investigation(question, eff_conn_id, canvas_id=canvas_id,
                                       purpose=purpose, session_id=session_id or "")
+    if inv_id and made is not None:
+        made["inv_id"] = inv_id
     emit("start", {"question": question, "connection_id": eff_conn_id,
                    "investigation_id": inv_id or None, "body": "analyst"})
 
@@ -2207,6 +2275,25 @@ def run_analyst(
                              counter="analyst.intake_failed_persist")
             return AnalystResult(answer="", report=None, steps=[], stop_reason="intake_failed",
                                  investigation_id=inv_id, context_timings=context_timings)
+
+        # An agent's repeat of a run already under way, asked in other words: the intake has resolved it to the same
+        # spec (`agent/one_run.spec_of`), so it stops here — said, on its row and in its stream — rather than run the
+        # same analysis twice (2026-11-24: the coworker asked again, reworded, through a custom agent).
+        twin = ask.after_intake(turn.intake) if ask is not None else None
+        if twin is not None:
+            from pramanyx.agent import one_run
+            note = one_run.said(twin, can_read=ask.can_read)
+            emit("already_running", {"investigation_id": twin.get("id") or None, "already_running": note})
+            if persist and inv_id:
+                try:
+                    from pramanyx.db.history import hand_back_investigation
+                    hand_back_investigation(inv_id, note, handed_to=twin.get("id") or "")
+                except Exception as exc:                # noqa: BLE001 — the hand-back stands; its door ends the row
+                    from pramanyx.kernel.errors import tolerate
+                    tolerate(exc, "recording a handed-back run is best-effort; it was handed the run",
+                             counter="analyst.hand_back_persist")
+            return AnalystResult(answer="", report=None, steps=[], stop_reason="already_running",
+                                 investigation_id=inv_id, context_timings=context_timings, handed_to=twin)
 
         budget = max_steps if max_steps is not None else profile_for("coder").deep_loop_steps
         # Item 3: measure-and-state, check or investigate — the shape the door carried in.

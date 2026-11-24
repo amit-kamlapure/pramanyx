@@ -553,7 +553,8 @@ def answer_question(connection_id: str, args: dict, *, emit: Optional[Emit] = No
 
 def deep_analysis(connection_id: str, args: dict, *, emit: Optional[Emit] = None,
                   session_id: str = "", canvas_id: Optional[str] = None,
-                  schema_scope: Optional[str] = None) -> dict:
+                  schema_scope: Optional[str] = None, agent_call: bool = False,
+                  user_question: str = "") -> dict:
     """Run the deep analysis as the ANALYST LOOP, inline (CA-3).
 
     The conversation reaching for depth — and since CA-3 the depth IS a conversation:
@@ -592,13 +593,33 @@ def deep_analysis(connection_id: str, args: dict, *, emit: Optional[Emit] = None
         tolerate(exc, "the custom-agent refusal pre-check is best-effort; the ask path "
                       "raises its own refusals", counter="converse.deep_refusal_check")
 
+    # An agent's plain ask (the coworker, through a custom agent) for what it already has under way is handed that run,
+    # not a second one beside it (`agent/one_run.py`; 2026-11-24: dd94959a beside cff38269) — looked up by the question
+    # the agent sent and by this conversation's wording of it. A run started here is inline and stops with its reader,
+    # so it is never one a repeat is handed, and it claims nothing.
+    from pramanyx.agent import one_run
+    if agent_call:
+        under_way = one_run.under_way([question, user_question], connection_id, canvas_id=canvas_id or "",
+                                      schema=schema_scope or "")
+        if under_way is not None:
+            note = one_run.said(under_way, can_read=False)
+            if emit is not None:
+                emit("already_running", {"investigation_id": under_way.get("id") or None, "already_running": note})
+            return {"status": "running", "investigation_id": under_way.get("id") or None, "note": note}
+
     from pramanyx.agent.analyst import run_analyst
 
     result = run_analyst(
         connection_id, question,
         session_id=session_id, canvas_id=canvas_id, schema_scope=schema_scope,
         emit=emit, purpose="converse_deep",
+        # an agent's plain ask that its intake resolves to a run already under way, in other words, is handed that run
+        ask=one_run.Ask(connection_id=connection_id, canvas_id=canvas_id or "", schema=schema_scope or "",
+                        can_read=False) if agent_call else None,
     )
+    if result.handed_to is not None:
+        return {"status": "running", "investigation_id": result.handed_to.get("id") or None,
+                "note": one_run.said(result.handed_to, can_read=False)}
     out: dict = {
         "status": "completed" if (result.report or result.answer) else "inconclusive",
         "stop_reason": result.stop_reason,
@@ -707,7 +728,8 @@ def converse_tools(connection_id: str, *, emit: Optional[Emit] = None,
                    session_id: str = "", canvas_id: Optional[str] = None,
                    user_question: str = "", agent: Any = None,
                    schema_scope: Optional[str] = None, sheet: str = "",
-                   dashboard: Optional[tuple[str, ...]] = None, person: str = "") -> list[ToolSpec]:
+                   dashboard: Optional[tuple[str, ...]] = None, person: str = "",
+                   agent_call: bool = False) -> list[ToolSpec]:
     """The tool set for one connection.
 
     Bound to the connection by closure rather than taking it as a model-supplied
@@ -818,7 +840,8 @@ def converse_tools(connection_id: str, *, emit: Optional[Emit] = None,
             parameters=_QUESTION_PARAMS,
             run=lambda a: deep_analysis(connection_id, a, emit=emit,
                                         session_id=session_id, canvas_id=canvas_id,
-                                        schema_scope=schema_scope),
+                                        schema_scope=schema_scope, agent_call=agent_call,
+                                        user_question=user_question),
         ),
     ] + action_tools(connection_id, agent=agent) + platform_tools(connection_id, session_id=session_id) + spotlight_roster(
         connection_id, session_id=session_id, emit=emit) + origin_tools(connection_id, person=person) + present_tools(
@@ -1016,7 +1039,7 @@ def converse(connection_id: str, question: str, *, extra_context: Optional[str] 
              session_id: str = "", canvas_id: Optional[str] = None, agent: Any = None,
              trace_id: str = "", schema_scope: Optional[str] = None,
              shape: Optional[str] = None, sheet: str = "", dashboard: Optional[tuple[str, ...]] = None,
-             person: str = ""):
+             person: str = "", agent_call: bool = False):
     """Answer one question as a conversation rather than a compiled query spec.
 
     The whole body in one place: state-not-instructions prompt, the connection's tools,
@@ -1065,7 +1088,8 @@ def converse(connection_id: str, question: str, *, extra_context: Optional[str] 
         question,
         converse_tools(connection_id, emit=tool_emit, session_id=session_id,
                        canvas_id=canvas_id, user_question=question, agent=agent,
-                       schema_scope=schema_scope, sheet=sheet, dashboard=dashboard, person=person),
+                       schema_scope=schema_scope, sheet=sheet, dashboard=dashboard, person=person,
+                       agent_call=agent_call),
         max_steps=max_steps,
         on_step=on_step,
         conn_id=connection_id or "",

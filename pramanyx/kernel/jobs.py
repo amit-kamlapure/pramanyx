@@ -373,6 +373,9 @@ class JobKernel:
 
         sem = self._slot_for(kind)
 
+        ran: list = []          # `_run` took the job: it ends the row and calls `on_finish` itself
+        told: list = []         # `on_finish` was called for a job that never ran
+
         async def _gated() -> None:
             # Hold a concurrency slot for the whole run; the job sits PENDING
             # until a slot frees. Cancelling a still-queued job closes its row.
@@ -383,7 +386,16 @@ class JobKernel:
                     self._transition(job_id, JobState.CANCELLED)
                     self._tasks.pop(job_id, None)
                     _stop_reasons.pop(job_id, None)
+                    # The contract holds for a job cancelled before it ran, too: `on_finish` runs after the terminal
+                    # transition (it releases what the submitter holds for the run — `agent/one_run` claims).
+                    told.append(True)
+                    if on_finish is not None:
+                        try:
+                            on_finish(job_id, JobState.CANCELLED)
+                        except Exception:
+                            logger.warning("job %s on_finish hook failed", job_id, exc_info=True)
                     raise
+            ran.append(True)
             try:
                 await self._run(job_id, coro_factory, on_finish)
             finally:
@@ -392,6 +404,23 @@ class JobKernel:
 
         task = asyncio.create_task(_gated(), name=f"job-{kind}-{job_id}")
         self._tasks[job_id] = task
+
+        def _ended_unrun(t: asyncio.Task) -> None:
+            # A job that ended before `_run` took it — cancelled before the task's first step, or its wait for a slot
+            # failing — closed no row and ran no `on_finish`: it stayed PENDING with its submitter's claim and reader
+            # held (2026-11-24). Closed here, once, however it ended.
+            if ran or told:
+                return
+            state = JobState.CANCELLED if t.cancelled() else JobState.FAILED
+            self._transition(job_id, state)
+            self._tasks.pop(job_id, None)
+            _stop_reasons.pop(job_id, None)
+            if on_finish is not None:
+                try:
+                    on_finish(job_id, state)
+                except Exception:
+                    logger.warning("job %s on_finish hook failed", job_id, exc_info=True)
+        task.add_done_callback(_ended_unrun)
         return job_id
 
     def _resolve_governance(self, job_id: str):

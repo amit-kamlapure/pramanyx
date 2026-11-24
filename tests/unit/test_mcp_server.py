@@ -189,21 +189,27 @@ def test_deep_analysis_accepts_deprecated_ada_report_wire_alias():
     assert res["report"] == {"findings": [{"x": 1}]}
 
 
-def test_a_deep_analysis_past_its_deadline_hands_back_the_id_and_is_read_to_its_end():
+def test_a_deep_analysis_past_its_deadline_hands_back_the_id_and_lets_the_stream_go():
     """2026-11-23, live: the analyst ran 11 minutes; the stream's keep-alive reset the read timeout, the call outran the
-    shell's tool limit, and the coworker said "Request timed out". The deadline is on the whole call now, and the stream is
-    read on in the background: the run is a job that goes on without it, but the answer envelope the door files on the
-    run's row is folded from what its reader reads, to the end."""
-    read_to_end: list[bool] = []
+    shell's tool limit, and the coworker said "Request timed out". The deadline is on the whole call now, and at it the
+    stream is let go: the run is a job, which writes its trace's end and files its answer envelope when it ends, read or
+    not (`test_deep_run_outlives_its_reader.py`). Until 2026-11-24 it was read on in the background for those two."""
+    read: list[str] = []
+    let_go: list[bool] = []
 
     async def slow():
-        yield _sse([{"type": "start", "investigation_id": "inv8", "body": "analyst"}]).encode()
-        await asyncio.sleep(0.5)
-        yield b": keep-alive\n\n"
-        await asyncio.sleep(0.3)
-        yield _sse([{"type": "answer_report", "answer_report": {"headline": "h"}, "investigation_id": "inv8"},
-                    {"type": "done"}]).encode()
-        read_to_end.append(True)
+        try:
+            yield _sse([{"type": "start", "investigation_id": "inv8", "body": "analyst"}]).encode()
+            read.append("start")
+            await asyncio.sleep(0.5)
+            yield b": keep-alive\n\n"
+            read.append("keep-alive")
+            await asyncio.sleep(0.3)
+            yield _sse([{"type": "answer_report", "answer_report": {"headline": "h"}, "investigation_id": "inv8"},
+                        {"type": "done"}]).encode()
+            read.append("report")
+        finally:
+            let_go.append(True)
 
     async def go():
         client = _client({"/ask": lambda req: httpx.Response(200, content=slow())})
@@ -211,9 +217,9 @@ def test_a_deep_analysis_past_its_deadline_hands_back_the_id_and_is_read_to_its_
         res = await client.deep_analysis("why did margin fall", "c")
         assert res["status"] == "running" and res["investigation_id"] == "inv8"
         assert "get_investigation('inv8')" in res["message"]
-        assert not read_to_end, "returned at the deadline, not at the end"
         await asyncio.sleep(1.2)
-        assert read_to_end == [True], "the run was left without a reader, and a deep /ask stops then"
+        assert "report" not in read, "nothing reads on after the caller has the id"
+        assert let_go == [True], "the stream is closed, not carried"
 
     _run(go())
 
@@ -378,3 +384,107 @@ def test_real_path_metric_value_endpoint_404():
     with pytest.raises(PramanyxError) as e:
         _run(client._get("/metrics/__no_such_metric__/value", params={"conn_id": "x"}))
     assert "not found" in str(e.value).lower()
+
+
+# ── one run per question: the coworker waits on the run it has, rather than ask again (2026-11-24) ──────────────────
+def test_reading_a_running_analysis_waits_for_it_and_returns_the_report_when_it_lands(monkeypatch):
+    """Seen twice: the coworker read a running run four times in half a minute — each read answered at once with a
+    bare 'running' — took it for stuck, and asked the same question again through another tool."""
+    import pramanyx.mcp.client as C
+    monkeypatch.setattr(C, "READ_EVERY_S", 0.01)
+    reads: list[int] = []
+
+    def record(req):
+        reads.append(1)
+        if len(reads) < 3:
+            return httpx.Response(200, json={"id": "inv9", "status": "running",
+                                             "progress": {"steps": len(reads), "last_step": "decompose"}})
+        return httpx.Response(200, json={"id": "inv9", "status": "complete", "report": {"headline": "It fell"}})
+
+    client = _client({"/investigations/inv9": record})
+    client.read_wait = 5.0
+    got = _run(client.get_investigation("inv9"))
+    assert got["status"] == "complete" and got["report"]["headline"] == "It fell"
+    assert len(reads) == 3, "read again while it ran, and not after it ended"
+
+
+def test_a_run_still_going_at_the_end_of_the_wait_says_how_far_it_has_got(monkeypatch):
+    import pramanyx.mcp.client as C
+    monkeypatch.setattr(C, "READ_EVERY_S", 0.01)
+    client = _client({"/investigations/inv9": httpx.Response(200, json={
+        "id": "inv9", "status": "running", "progress": {"steps": 4, "last_step": "decompose", "running_for_s": 410}})})
+    client.read_wait = 0.05
+    got = _run(client.get_investigation("inv9"))
+    assert got["status"] == "running"
+    assert "taken 4 steps so far, the last decompose" in got["message"]
+    assert "get_investigation('inv9') waits for it" in got["message"] and "Poll" not in got["message"]
+
+
+def test_a_finished_run_is_read_at_once():
+    reads: list[int] = []
+    client = _client({"/investigations/inv9": lambda req: (reads.append(1), httpx.Response(
+        200, json={"id": "inv9", "status": "failed", "error": "Stopped at the Analyst's 1800s time budget"}))[1]})
+    got = _run(client.get_investigation("inv9"))
+    assert got["status"] == "failed" and len(reads) == 1 and "message" not in got
+
+
+def test_a_deep_analysis_waiting_for_a_slot_says_so_by_its_id(monkeypatch):
+    """Its door names the run as it claims the question; a call whose deadline comes while the job still waits for a
+    slot hands back that id, and says the run is queued — not that it is running, nor that it never started."""
+    import pramanyx.mcp.client as C
+    monkeypatch.setattr(C, "READ_EVERY_S", 0.01)
+
+    async def queued():
+        yield _sse([{"type": "route", "depth": "deep"}, {"type": "start", "investigation_id": "inv5"}]).encode()
+        await asyncio.sleep(1.0)
+        yield b": keep-alive\n\n"
+
+    record = httpx.Response(200, json={"id": "inv5", "status": "running",
+                                       "progress": {"queued": True, "steps": 0, "running_for_s": 40}})
+
+    async def go():
+        client = _client({"/ask": lambda req: httpx.Response(200, content=queued()), "/investigations/inv5": record})
+        client.deep_timeout = 0.2
+        res = await client.deep_analysis("why did margin fall", "c")
+        assert res["status"] == "running" and res["investigation_id"] == "inv5"
+        assert "queued" in res["message"] and "get_investigation('inv5')" in res["message"]
+        client.read_wait = 0.05
+        read = await client.get_investigation("inv5")
+        assert "queued" in read["message"] and "still running" not in read["message"]
+    _run(go())
+
+
+def test_a_repeat_handed_another_run_is_read_as_the_run_that_answers_it():
+    """A coworker holding a repeat's id (its runs list names it) reads the run it was handed, said so — not a record
+    with an error and no report, which reads as a failure."""
+    client = _client({
+        "/investigations/again": httpx.Response(200, json={"id": "again", "status": "handed_back", "handed_to": "inv9",
+                                                           "error": "This question is already being analysed"}),
+        "/investigations/inv9": httpx.Response(200, json={"id": "inv9", "status": "complete",
+                                                          "report": {"headline": "It fell"}}),
+    })
+    got = _run(client.get_investigation("again"))
+    assert got["id"] == "inv9" and got["status"] == "complete" and got["handed_from"] == "again"
+
+
+def test_a_deep_analysis_already_under_way_is_handed_back_running_not_complete():
+    """The door hands back the run under way by its id; it is read as running, never as a finished run with nothing in
+    it."""
+    said = "This question is already being analysed (run inv7, started 3 min ago, still going), so it was not started"
+    routes = {"/ask": httpx.Response(200, content=_sse([
+        {"type": "route", "depth": "deep"},
+        {"type": "already_running", "investigation_id": "inv7", "already_running": said},
+    ]))}
+    res = _run(_client(routes).deep_analysis("why did margin fall", "c"))
+    assert res["status"] == "running" and res["investigation_id"] == "inv7"
+    assert res["message"] == said and res["report"] is None
+
+
+def test_a_deep_analysis_handed_a_run_still_starting_says_so_without_an_id():
+    said = "This question is already being analysed, started under a minute ago, and that run is still starting"
+    routes = {"/ask": httpx.Response(200, content=_sse([
+        {"type": "route", "depth": "deep"},
+        {"type": "already_running", "investigation_id": None, "already_running": said},
+    ]))}
+    res = _run(_client(routes).deep_analysis("why did margin fall", "c"))
+    assert res["status"] == "running" and res["investigation_id"] is None and res["message"] == said

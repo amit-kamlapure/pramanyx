@@ -26,7 +26,7 @@ that fired. The answer is verified, not plausible.
 | `list_connections` | List the warehouses Pramanyx can analyze (call first). | — |
 | `ask` | NL question → answer + **Trust Receipt** (SQL, rows sample, trusted metrics). | grounded in real rows; enforces governed metrics; receipt shows the guards. |
 | `deep_analysis` | Run the autonomous Deep Analysis agent (ADA) for "why / driver" questions → report + receipt. | multi-step, fan-out- & grain-safe; hypotheses verified against data. |
-| `get_investigation` | Fetch a Deep Analysis report by id (poll a long run, or re-read). | reads the journaled report. |
+| `get_investigation` | Fetch a Deep Analysis report by id — waits up to two minutes on a run still going and says how far it has got, or re-reads a past one. | reads the journaled report. |
 | `get_metric` | The governed value & definition of a registered metric. | runs the registered formula **with its declared filters** (e.g. revenue net-of-cancelled). |
 | `list_findings` | The insights Pramanyx's background explorer already discovered. | each a verified finding with confidence + the SQL behind it ($0 read). |
 | `get_briefing` | The executive Briefing — impact-ranked verdict, signals, citations. | built from governed metrics + verified findings; re-validated on refresh. |
@@ -138,7 +138,7 @@ claude mcp add pramanyx --env PRAMANYX_API_URL=http://127.0.0.1:8000 \
 | `PRAMANYX_API_URL` | `http://127.0.0.1:8000` | The running Pramanyx API. |
 | `PRAMANYX_API_KEY` | _(unset)_ | Sent as `X-Api-Key` when the API enforces one (`PRAMANYX_API_KEY` on the server). |
 | `PRAMANYX_MCP_TIMEOUT` | `60` | Timeout (s) for plain calls. |
-| `PRAMANYX_MCP_DEEP_TIMEOUT` | `300` | Timeout (s) for the streaming `ask` / `deep_analysis` tools. A `deep_analysis` that exceeds it returns an `investigation_id` to poll with `get_investigation`. |
+| `PRAMANYX_MCP_DEEP_TIMEOUT` | `300` | Timeout (s) for the streaming `ask` / `deep_analysis` tools. A `deep_analysis` that exceeds it returns an `investigation_id`; the run goes on, and `get_investigation` waits for it. |
 | `PRAMANYX_MCP_ORG` | _(unset)_ | The principal this server acts as when the API requires identity (`PRAMANYX_REQUIRE_IDENTITY=1`) and no OIDC issuer is configured (the API then also needs `PRAMANYX_IDENTITY_FROM_PROXY=1`, or it refuses every request): sent as `X-Pramanyx-Org`, with `PRAMANYX_MCP_USER` (default `mcp`) as `X-Pramanyx-User`. Unset, every MCP call is refused with a 401 in identity mode (DE-2a). |
 | `PRAMANYX_MCP_USER` | `mcp` | The user the server acts as, beside `PRAMANYX_MCP_ORG`. |
 | `PRAMANYX_MCP_BEARER` | _(unset)_ | An OIDC token for an API with an issuer configured, sent as `Authorization: Bearer …`. |
@@ -163,7 +163,7 @@ claude mcp add pramanyx --env PRAMANYX_API_URL=http://127.0.0.1:8000 \
 
 - **Auth depth** — today the optional `X-Api-Key` mirrors the API; richer per-client scoping
   rides on the planned platform auth (#12).
-- **Streaming progress** — `deep_analysis` is blocking-with-timeout + poll; MCP progress
-  notifications could stream phase updates.
+- **Streaming progress** — `deep_analysis` is blocking-with-timeout, then a `get_investigation`
+  that waits and says how far the run has got; MCP progress notifications could stream phase updates.
 - **Resources/prompts** — expose briefings/findings as MCP *resources* and common asks as MCP
   *prompts*, not only tools.

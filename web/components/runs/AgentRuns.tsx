@@ -57,6 +57,8 @@ export interface Run {
   canvas_id?: string | null;
   /** How many statements a conversation's turn ran (a deep analysis keeps its own in its report). */
   query_count?: number;
+  /** A repeat handed the run of its question already under way (status `handed_back`): that run, which answers it. */
+  handed_to?: string | null;
 }
 
 /** A status that is not "complete", as a mark: its word and its hue. A completed run wears none. */
@@ -65,6 +67,8 @@ const MARK: Record<string, { word: string; hue: "red" | "amber" | "blue" | "grey
   timed_out: { word: "timed out", hue: "red" },
   interrupted: { word: "stopped", hue: "grey" },
   cancelled: { word: "stopped", hue: "grey" },
+  // an agent's repeat of an analysis already under way, handed that run (2026-11-24): nothing stopped it, nothing failed
+  handed_back: { word: "handed to another run", hue: "grey" },
   paused: { word: "paused · waiting", hue: "amber" },
   running: { word: "running", hue: "blue" },
 };
@@ -204,7 +208,9 @@ export function AgentRuns({ onGoToChat, onOpenRun, onOpenMachineView, workspaceI
 
   const inspector = useInspector();
   const held = inspector.subject?.key;
-  const open = useCallback((r: Run) => onOpenRun(r.id, kindOf(r), r.connection_id, r.canvas_id), [onOpenRun]);
+  // A repeat handed another run opens that run — the one that answers its question, a deep analysis as it is.
+  const open = useCallback((r: Run) => onOpenRun(r.handed_to || r.id, kindOf(r), r.connection_id, r.canvas_id),
+    [onOpenRun]);
   const subjectOf = useCallback((r: Run, g: RunGroup) => runSubject({
     run: r, group: g, detail: details[r.id], detailRead: r.id in details, conns,
     onOpen: () => open(r), onAskAgain: () => onGoToChat(runDisplayTitle(r.question).title), onOpenMachineView,
@@ -471,7 +477,8 @@ function GroupRow({ g, grid, showConn, conns, held, onPick, onOpen }: {
         </span>
         <span role="cell" style={{ justifySelf: "end" }} onClick={stop} onKeyDown={stop}>
           <Button size="xs" variant="outline" onClick={() => onOpen(latest)}
-            title={chat ? "Opens the conversation" : "Opens the run where it was asked"}>Open</Button>
+            title={chat ? "Opens the conversation" : latest.handed_to ? "Opens the run it was handed, which answers it"
+              : "Opens the run where it was asked"}>Open</Button>
         </span>
       </div>
       {expanded && (

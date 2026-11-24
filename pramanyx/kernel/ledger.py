@@ -840,6 +840,26 @@ class Ledger:
             cur = self._conn.execute("DELETE FROM kv WHERE store=? AND key=?", (store, key))
         return cur.rowcount > 0
 
+    def kv_replace_if(self, store: str, key: str, expected: Any, value: Any) -> bool:
+        """Replace ``key``'s value only while it is still ``expected`` (as read), in one statement; True when this call
+        wrote. The compare-and-set a claim needs (`agent/one_run.py`): a read then a write could overwrite a claim another
+        process made in between."""
+        with self._lock, self._conn:
+            seq = self._next_seq()
+            cur = self._conn.execute(
+                "UPDATE kv SET value=?, seq=?, updated_at=? WHERE store=? AND key=? AND value=?",
+                (json.dumps(value, default=str), seq, _now(), store, key, json.dumps(expected, default=str)),
+            )
+        return cur.rowcount > 0
+
+    def kv_delete_if(self, store: str, key: str, expected: Any) -> bool:
+        """Delete ``key`` only while its value is still ``expected`` (as read), in one statement; True when this call
+        deleted — never a value another process wrote since the read."""
+        with self._lock, self._conn:
+            cur = self._conn.execute("DELETE FROM kv WHERE store=? AND key=? AND value=?",
+                                     (store, key, json.dumps(expected, default=str)))
+        return cur.rowcount > 0
+
     def kv_has(self, store: str) -> bool:
         """Whether any row lives under ``store`` — one indexed probe, not a load."""
         with self._lock:

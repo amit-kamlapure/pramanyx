@@ -854,7 +854,11 @@ function PiecesSection({ element, children }: ComponentRenderProps<SectionProps>
           position: "relative",
           display: "grid", gap: GAP, alignItems: "stretch", gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
           gridAutoFlow: "row dense",
-        }), ...(placedHere.floor ? { minHeight: placedHere.floor } : {}) }}>
+        }),
+        // a box carried below the last piece makes the section taller, and its rows keep their own height: off the grid an
+        // implicit row stretched to fill the room, so a table drawn 7 rows tall measured 15 when the box was set down, and
+        // the section moved onto the grid with it that tall (seen live, 2026-11-24)
+        ...(placedHere.floor ? { minHeight: placedHere.floor, alignContent: "start" } : {}) }}>
         <PlacedBoxes {...placedHere} />
         <SectionKeys.Provider value={keys}>{children}</SectionKeys.Provider>
       </div>

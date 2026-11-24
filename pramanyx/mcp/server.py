@@ -422,8 +422,10 @@ async def deep_analysis(
 
     Slower than `ask` (seconds to a few minutes). This call drives the run to completion and
     returns the report; if it exceeds the timeout it returns an `investigation_id` and
-    status='running' — then poll `get_investigation(investigation_id)` for the finished
-    report. Use `ask` for direct factual questions.
+    status='running' — the run goes on in the platform, and `get_investigation(investigation_id)`
+    waits for it and returns its report when it lands. Asked again while it runs, the same run is
+    handed back rather than a second started; `fresh` starts a new one. Use `ask` for direct
+    factual questions.
 
     Returns: {status, investigation_id, report, report_kind, hypotheses, from_cache, receipt}.
     """
@@ -434,8 +436,9 @@ async def deep_analysis(
 async def get_investigation(
     investigation_id: Annotated[str, Field(description="The id returned by deep_analysis.")],
 ) -> dict:
-    """Fetch a deep-analysis report by its id — use this to poll for a report after
-    `deep_analysis` returned status='running', or to re-read a past run."""
+    """Fetch a deep-analysis report by its id — a run `deep_analysis` handed back still running,
+    or a past one. For a run still going it waits (up to two minutes), returns the report the
+    moment it lands, and otherwise says how far the run has got."""
     return await _client.get_investigation(investigation_id)
 
 

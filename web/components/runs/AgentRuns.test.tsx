@@ -143,6 +143,25 @@ describe("Agent runs", () => {
     expect(within(list).getAllByTestId("run-group")[0]).toHaveTextContent("What is causing delivery delays?");
   });
 
+  it("says a repeat was handed another run, never that it stopped, and opens the run that answers it", async () => {
+    // 2026-11-24: the coworker asked again, reworded, while its analysis ran; the repeat was handed that run, and the
+    // person's history drew it as "stopped" — a run that ended without an answer, waiting on them.
+    list = [...(list as Run[]), run("again", {
+      question: "What drove the revenue change in July 2026?", started_at: "2026-10-12T11:00:00Z", headline: null,
+      status: "handed_back", handed_to: "rev3",
+    })];
+    mount();
+    const rows = await screen.findAllByTestId("run-group");
+    const again = rows.find(r => r.textContent?.includes("What drove the revenue change"))!;
+    expect(within(again).getByTestId("run-status")).toHaveTextContent("handed to another run");
+    expect(again.textContent).not.toMatch(/stopped/);
+    fireEvent.click(within(again).getByRole("button", { name: "Open" }));
+    expect(opened.at(-1)).toEqual(["rev3", run("x").kind, "8233e4fd", null]);
+    const figures = screen.getByTestId("runs-figures");
+    expect(within(figures).getByTestId("runs-fig-unfinished-value")).toHaveTextContent("2");   // as before: not one more
+    expect(within(screen.getByTestId("runs-needs")).queryByText(/What drove the revenue change/)).toBeNull();
+  });
+
   it("puts a run that ended without an answer under Needs you, with Open and Ask again on its row", async () => {
     mount();
     const needs = await screen.findByTestId("runs-needs");

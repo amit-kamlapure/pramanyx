@@ -68,4 +68,18 @@ describe("a box being placed", () => {
     expect(ghost.style.top).toBe("40px");
     expect(within(section).getByTestId("place-box")).toHaveTextContent("A filter · choose what it is in the panel");
   });
+
+  it("makes the section taller below its pieces without stretching them, so what is there measures as it is drawn", () => {
+    const spec = premise();
+    const sec = firstSection(spec);
+    render(
+      <PlacementShown.Provider value={{ ghost: { section: sec, x: 1, y: 14, w: 12, h: 2, kind: "text" }, box: null }}>
+        <ComposedDashboard spec={spec} cards={CARDS} host={HOST} doors={{ onRefresh: vi.fn() }} />
+      </PlacementShown.Provider>,
+    );
+    const section = screen.getAllByTestId("dashboard-section").find(s => s.dataset.key === sec)!;
+    const grid = section.querySelector<HTMLElement>("[data-columns]")!;
+    expect(grid.style.minHeight).not.toBe("");                                 // room for the box carried below the pieces
+    expect(grid.style.alignContent).toBe("start");                              // and the pieces' rows keep their own height
+  });
 });

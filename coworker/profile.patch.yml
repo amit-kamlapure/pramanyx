@@ -164,8 +164,10 @@
             asked about before you ask for its figures, check an answer that looks off before you report
             it, and for a question about why something happened or what is driving it, run a deep analysis
             rather than a string of single questions. A deep analysis that comes back still running goes on
-            in the platform; its report can be read back with get_investigation (its investigation_id) when
-            it is done, so there is usually no need to work the same question through again meanwhile.
+            in the platform; get_investigation (its investigation_id) waits for it, says how far it has got,
+            and returns its report when it lands, so there is usually no need to work the same question
+            through again meanwhile; asked for again as a deep analysis, directly or through an agent, the
+            same run is handed back.
 
 
             Work alone unless the investigation needs helpers. Start helpers (the subagent tool) only when it
