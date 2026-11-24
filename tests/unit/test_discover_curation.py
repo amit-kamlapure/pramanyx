@@ -186,3 +186,25 @@ def test_a_package_area_annotated_stays_on_the_connections_whose_map_has_it(jour
     on_thelook = {a["id"]: a for a in A.areas_for("thelook")}
     assert on_thelook["returns"]["name"] == "Returns" and on_thelook["returns"]["description"] == "Sent back."
     assert "returns" not in {a["id"] for a in A.areas_for("other")}
+
+
+def test_saving_one_connection_s_areas_keeps_an_annotation_of_an_area_that_connection_does_not_have(journal, monkeypatch):
+    """The declarations are the organisation's, saved whole from one connection's page; an annotated package Area that
+    connection does not have is never on its page, and a save from there must not drop it (2026-11-24)."""
+    from pramanyx.routers import metrics as M
+    both = {"returns", "clienteling"}                     # each annotated where its connection has it
+    A.edit_area("returns", {"description": "Sent back."}, by="user:bo", known=both)
+    A.edit_area("clienteling", {"description": "The personal touch."}, by="user:bo", known=both)
+    monkeypatch.setattr("pramanyx.rbac.resolver.has_permission", lambda principal, perm: True)
+    monkeypatch.setattr(M, "_declared_schema", lambda conn: "")
+    monkeypatch.setattr("pramanyx.semantic.metric_map.map_for", lambda conn, schema=None: SimpleNamespace(areas=[
+        SimpleNamespace(id="returns", name="Returns", question="", generic=False, pack_id="p")]))   # no clienteling here
+    monkeypatch.setattr("pramanyx.semantic.areas.areas_for", lambda conn, schema=None, **k: [])
+    request = SimpleNamespace(headers={}, state=SimpleNamespace(principal=None))
+    M.put_areas("c1", M.AreasIn(areas=[{"id": "returns", "name": "", "question": "", "parent": ""},
+                                       {"id": "operations", "name": "Operations", "question": "", "parent": ""}]), request)
+    assert set(_declared()) == {"returns", "operations", "clienteling"}
+    assert _declared()["clienteling"].description == "The personal touch."
+    # a named Area left out of the save IS taken away: it is on every connection's page, so leaving it out is meant
+    M.put_areas("c1", M.AreasIn(areas=[{"id": "returns", "name": "", "question": "", "parent": ""}]), request)
+    assert set(_declared()) == {"returns", "clienteling"}

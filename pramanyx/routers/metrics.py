@@ -264,11 +264,17 @@ def put_areas(conn_id: str, body: AreasIn, request: Request, schema: Optional[st
     except Exception as exc:  # noqa: BLE001 — a malformed row is refused, said
         raise HTTPException(status_code=422, detail=f"an area is an id, a name, a question, a parent and its owners: {exc}")
     schema = schema or _declared_schema(conn_id)
-    problems = check_declarations(decls, known={a.id for a in map_for(conn_id, schema).areas if not a.generic})
+    here = map_for(conn_id, schema).areas
+    problems = check_declarations(decls, known={a.id for a in here if not a.generic})
     if problems:
         raise HTTPException(status_code=422, detail={"code": "AREAS_REFUSED", "problems": problems})
+    # The declarations are the organisation's, saved whole from ONE connection's page, and that page never shows an
+    # annotation (a description, owners, what it puts first) of a package's Area this connection does not have
+    # (`areas_for`): left out of the save, it is kept — not dropped for having been out of sight (2026-11-24).
+    sent, on_this_map = {d.id for d in decls}, {a.id for a in here}
+    unseen = [d for d in stored.values() if d.id not in sent and not (d.name or "").strip() and d.id not in on_this_map]
     settings = load_org_settings()
-    save_org_settings(settings.model_copy(update={"areas": decls}))
+    save_org_settings(settings.model_copy(update={"areas": [*decls, *unseen]}))
     return {"areas": areas_for(conn_id, schema)}
 
 
