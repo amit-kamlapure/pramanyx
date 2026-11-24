@@ -194,7 +194,7 @@ def test_saving_one_connection_s_areas_keeps_an_annotation_of_an_area_that_conne
     from pramanyx.routers import metrics as M
     both = {"returns", "clienteling"}                     # each annotated where its connection has it
     A.edit_area("returns", {"description": "Sent back."}, by="user:bo", known=both)
-    A.edit_area("clienteling", {"description": "The personal touch."}, by="user:bo", known=both)
+    A.edit_area("clienteling", {"description": "Seen one customer at a time."}, by="user:bo", known=both)
     monkeypatch.setattr("pramanyx.rbac.resolver.has_permission", lambda principal, perm: True)
     monkeypatch.setattr(M, "_declared_schema", lambda conn: "")
     monkeypatch.setattr("pramanyx.semantic.metric_map.map_for", lambda conn, schema=None: SimpleNamespace(areas=[
@@ -204,7 +204,7 @@ def test_saving_one_connection_s_areas_keeps_an_annotation_of_an_area_that_conne
     M.put_areas("c1", M.AreasIn(areas=[{"id": "returns", "name": "", "question": "", "parent": ""},
                                        {"id": "operations", "name": "Operations", "question": "", "parent": ""}]), request)
     assert set(_declared()) == {"returns", "operations", "clienteling"}
-    assert _declared()["clienteling"].description == "The personal touch."
+    assert _declared()["clienteling"].description == "Seen one customer at a time."
     # a named Area left out of the save IS taken away: it is on every connection's page, so leaving it out is meant
     M.put_areas("c1", M.AreasIn(areas=[{"id": "returns", "name": "", "question": "", "parent": ""}]), request)
     assert set(_declared()) == {"returns", "clienteling"}
