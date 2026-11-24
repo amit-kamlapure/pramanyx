@@ -460,6 +460,10 @@ def test_two_wordings_resolve_to_one_spec_and_different_questions_do_not():
     # model's spelling of one measure is not a different question
     reworded = {**INTAKE, "metric_sql": "sum( oi.sale_price )", "metric_table": "`order_items`"}
     assert spec_of(INTAKE) == spec_of(reworded), "the model's spelling is not a different question"
+    # live 2026-11-24: one wording's intake observed June against May, the other's May against June — the same change
+    swapped = {**INTAKE, "observation_start": INTAKE["comparison_start"], "observation_end": INTAKE["comparison_end"],
+               "comparison_start": INTAKE["observation_start"], "comparison_end": INTAKE["observation_end"]}
+    assert spec_of(swapped) == spec_of(INTAKE), "the same two periods, either way round"
     by_category = {**INTAKE, "named_dimensions": ["products.category"]}
     assert spec_of(by_category) != spec_of(INTAKE), \
         "a why broken down by category pins category first: not the analysis of the why that named nothing"

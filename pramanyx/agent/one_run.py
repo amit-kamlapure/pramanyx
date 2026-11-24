@@ -161,7 +161,7 @@ def spec_of(intake: Optional[dict]) -> Optional[str]:
     to one spec; None when the intake named no measure (nothing to compare).
 
     The measure (the governed metric it framed, with the objects that metric's rule chose; else its expression and
-    table), every further measure and the filters on them, the observation and comparison windows, its shape, the sides
+    table), every further measure and the filters on them, the two periods it compares (as a pair), its shape, the sides
     of a driver or relationship question, and the dimensions it names. A named dimension is part of what any question
     asks, a "why" too: the run breaks it down first, whatever else it looks at (`investigate._prioritize_dimensions`
     pins it), so "what drove it — break it down by category" is not the analysis of "why did it change", which may never
@@ -179,11 +179,21 @@ def spec_of(intake: Optional[dict]) -> Optional[str]:
     named = ",".join(sorted({_norm_sql(d) for d in (i.get("named_dimensions") or []) if _norm_sql(d)}))
     parts = [measure, _norm_sql(i.get("metric_table")), ";".join(others),
              ";".join(sorted(_norm_sql(f) for f in (i.get("metric_filters") or []))),
-             *(str(i.get(k) or "") for k in ("observation_start", "observation_end", "comparison_start", "comparison_end")),
+             *_periods(i),
              shape,
              *(_norm_sql(i.get(k)) for k in ("comparison_segment_sql", "relationship_left_sql", "relationship_right_sql")),
              named, "x" if i.get("cross_sectional") else "", "d" if i.get("descriptive_only") else ""]
     return "|".join(parts)
+
+
+def _periods(intake: dict) -> list:
+    """The two periods a question compares, as one pair, earlier first: a change between May and June is one analysis
+    whichever the intake took as observed and which as its comparison (live 2026-11-24, c86e1ae1 / 6c7cab64: "Why did
+    revenue change from May to June?" observed June against May; "What drove the change between May and June?" observed
+    May against June, and ran a second analysis of the same two months)."""
+    pair = sorted([(str(intake.get("observation_start") or ""), str(intake.get("observation_end") or "")),
+                   (str(intake.get("comparison_start") or ""), str(intake.get("comparison_end") or ""))])
+    return [x for period in pair for x in period]
 
 
 def _drop_if_same(slot: str, row: dict) -> None:
