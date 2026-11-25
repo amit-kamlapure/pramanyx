@@ -332,37 +332,27 @@ def test_an_unfinished_backup_is_ignored_by_readers_and_pruned(state):
     assert not (state.root / "backups" / "2026-10-27T120000Z").exists()
 
 
-def test_pruning_keeps_what_retention_keeps_and_sv1_copies_thirty_days(state):
+def test_pruning_keeps_the_current_backup_and_the_previous_one_and_no_copy_before_a_migration(state):
+    """The user, 2026-11-25: "Keep only current + previous backup.. remove everything else"."""
     bdir = state.root / "backups"
     stamps = [NOW - timedelta(hours=h) for h in range(0, 30)] + [NOW - timedelta(weeks=9)]
     for at in stamps:
         folder = bdir / backups._stamp(at)
         folder.mkdir(parents=True)
         (folder / "manifest.json").write_text("{}")
-    # Twenty days back: one kept by its day, a labelled one the same day kept by its label, and one kept by neither.
-    day20 = NOW - timedelta(days=20)
-    for name in (backups._stamp(day20), backups._stamp(day20 - timedelta(hours=1)) + ".before-restore",
-                 backups._stamp(day20 - timedelta(hours=2)), backups._stamp(NOW - timedelta(weeks=9)) + ".before-restore"):
-        (bdir / name).mkdir()
-        (bdir / name / "manifest.json").write_text("{}")
+    labelled = bdir / (backups._stamp(NOW - timedelta(days=2)) + ".before-restore")
+    labelled.mkdir()
+    (labelled / "manifest.json").write_text("{}")
     young, old = bdir / "system.db.2026-10-20.v11-before-v12.bak", bdir / "system.db.2026-09-01.v10-before-v11.bak"
-    for path, age in ((young, timedelta(days=7)), (old, timedelta(days=40))):
+    for path, age in ((young, timedelta(minutes=5)), (old, timedelta(days=40))):
         path.write_text("copy")
         t = (NOW - age).timestamp()
         os.utime(path, (t, t))
     gone = set(backups.prune(now=NOW))
     left = {b.name for b in backups.list_backups()}
-    assert backups._stamp(NOW - timedelta(weeks=9)) in gone          # nothing older than eight weeks
-    assert backups._stamp(NOW - timedelta(hours=29)) in gone         # the 25th hour, in a day already kept
-    assert {backups._stamp(NOW - timedelta(hours=h)) for h in range(25)} <= left
-    assert backups._stamp(day20) in left
-    assert backups._stamp(day20 - timedelta(hours=1)) + ".before-restore" in left     # its day is used: its label
-    assert backups._stamp(day20 - timedelta(hours=2)) in gone                         # neither
-    assert backups._stamp(NOW - timedelta(weeks=9)) + ".before-restore" in gone       # a label never outlives the window
-    assert young.exists() and not old.exists() and old.name in gone
-
-
-# ── the clock and /health ──────────────────────────────────────────────────────────
+    assert left == {backups._stamp(NOW), backups._stamp(NOW - timedelta(hours=1))}
+    assert labelled.name in gone and young.name in gone and old.name in gone
+    assert not young.exists() and not old.exists()
 
 def test_the_job_is_put_on_the_clock_when_it_starts(state):
     from pramanyx.monitors import scheduler
