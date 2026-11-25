@@ -8,6 +8,7 @@
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { IconPicker } from "@/components/ui/icon-picker";
 import { Input } from "@/components/ui/input";
 import { PeopleField } from "@/components/ui/people-field";
 import { SelectField } from "@/components/ui/select";
@@ -15,6 +16,8 @@ import {
   declarationsOf, placeInArea, readSuggestedAreas, saveAreas, setNotAnArea,
   type AreaPlaced, type BusinessArea, type SuggestedArea,
 } from "@/lib/areas";
+import { AREA_ICON_PICKER, areaIcon, findAreaIcons } from "@/lib/areaIcons";
+import { saveDiscoverArea } from "@/lib/discover";
 import { countNoun } from "@/lib/format";
 
 const MUTED = { color: "var(--t2)" };
@@ -27,6 +30,7 @@ export function AreaOwnersEditor({ connId, schema, areas, area, onSaved }: {
   const [business, setBusiness] = useState<string[]>(area.business_owners);
   const [technical, setTechnical] = useState<string[]>(area.technical_owners);
   const [parent, setParent] = useState(area.parent);
+  const [icon, setIcon] = useState(areaIcon(area.icon));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   if (!open) return <Button size="xs" variant="outline" onClick={() => setOpen(true)}>Contacts and place</Button>;
@@ -36,12 +40,24 @@ export function AreaOwnersEditor({ connId, schema, areas, area, onSaved }: {
       const rest = declarationsOf(areas).filter((d) => d.id !== area.id);
       const mine = { id: area.id, ...(area.source === "organisation" ? { name: area.name, question: area.question } : {}),
                      parent, business_owners: business, technical_owners: technical };
-      onSaved(await saveAreas(connId, [...rest, mine], schema));
+      let saved = await saveAreas(connId, [...rest, mine], schema);
+      if (icon !== areaIcon(area.icon)) {
+        // the icon is curated on the Area's own page, and the list save keeps what is stored there — so it is saved
+        // through that page's door, which holds the same rule of who may (its contacts, else an admin)
+        await saveDiscoverArea(area.id, { icon });
+        saved = saved.map((a) => (a.id === area.id ? { ...a, icon } : a));
+      }
+      onSaved(saved);
       setOpen(false);
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   };
   return (
     <div style={{ display: "grid", gridTemplateColumns: "160px 1fr", gap: 8, alignItems: "center", margin: "6px 0" }} data-testid="area-owners-editor">
+      <span className="aug-fs-sm" style={MUTED}>Icon</span>
+      <span>
+        <IconPicker value={icon} onChange={setIcon} groups={AREA_ICON_PICKER} find={findAreaIcons} label={`Icon for ${area.name}`}
+          testId={`area-icon-${area.id}`} />
+      </span>
       <label className="aug-fs-sm" htmlFor={`owners-${area.id}`} style={MUTED}>Business contacts</label>
       <PeopleField id={`owners-${area.id}`} label="Business contacts" value={business} onChange={setBusiness}
         placeholder="who answers for what it means — a name or an email" />

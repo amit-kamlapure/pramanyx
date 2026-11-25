@@ -4,8 +4,8 @@ import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { ICON_NAMES } from "@/components/ui/icon";
-import { AREA_ICONS, DEFAULT_AREA_ICON, areaIcon } from "@/lib/areaIcons";
+import { ICON_NAMES, glyphOf } from "@/components/ui/icon";
+import { AREA_ICONS, AREA_ICON_WORDS, DEFAULT_AREA_ICON, areaIcon, findAreaIcons } from "@/lib/areaIcons";
 
 const PACKS = join(__dirname, "..", "..", "packs");
 
@@ -28,5 +28,24 @@ describe("an Area's glyph", () => {
     expect(areaIcon("")).toBe(DEFAULT_AREA_ICON);
     expect(areaIcon(undefined)).toBe(DEFAULT_AREA_ICON);
     expect(areaIcon("not-a-glyph")).toBe(DEFAULT_AREA_ICON);
+  });
+
+  it("offers every glyph the picker had before, many more, and no drawing twice (2026-11-25)", () => {
+    const before = ["cart", "cash", "spend", "pricetag", "discount", "returns", "card", "invoice", "recurring", "truck", "box",
+      "route", "ontime", "store", "plane", "factory", "quality", "tool", "megaphone", "funnel", "target", "users", "contacts",
+      "consent", "mood", "support", "event", "gauge", "activity", "chart", "layers"];
+    expect(before.filter((n) => !AREA_ICONS.includes(n as never))).toEqual([]);
+    expect(AREA_ICONS.length).toBeGreaterThanOrEqual(80);
+    expect(new Set(AREA_ICONS).size).toBe(AREA_ICONS.length);
+    expect(new Set(AREA_ICONS.map((n) => glyphOf(n))).size).toBe(AREA_ICONS.length);
+    expect(AREA_ICONS.filter((n) => !AREA_ICON_WORDS[n])).toEqual([]);
+  });
+
+  it("is found by what it is about: every word typed, in the picker's order", () => {
+    expect(findAreaIcons("")).toEqual(AREA_ICONS);
+    expect(findAreaIcons("shipping")).toEqual(["truck", "ship"]);
+    expect(findAreaIcons("REVENUE")).toEqual(expect.arrayContaining(["cash", "recurring"]));
+    expect(findAreaIcons("real estate")).toEqual(["property"]);
+    expect(findAreaIcons("nothing like it")).toEqual([]);
   });
 });

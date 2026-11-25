@@ -42,6 +42,36 @@ describe("the organisation's word on its areas (2026-11-17)", () => {
     expect(decls.map((d) => d.id).sort()).toEqual(["marketplace", "orders", "returns"]);       // the rest kept
   });
 
+  it("chooses the icon too, and saves it through the Area's own page, which keeps it (2026-11-25)", async () => {
+    const calls: { url: string; method: string; body: Record<string, unknown> }[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url: String(url), method: String(init?.method ?? "GET"), body: JSON.parse(String(init?.body ?? "{}")) });
+      return new Response(JSON.stringify(String(url).includes("/discover/") ? { ok: true } : { areas: AREAS }));
+    }));
+    const saved = vi.fn();
+    render(<AreaOwnersEditor connId="shop" areas={AREAS} area={area("orders", { icon: "cart" })} onSaved={saved} />);
+    fireEvent.click(screen.getByRole("button", { name: "Contacts and place" }));
+    fireEvent.click(screen.getByRole("button", { name: "Icon for Orders: cart" }));
+    fireEvent.click(await screen.findByRole("radio", { name: "warehouse" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(saved).toHaveBeenCalled());
+    const curated = calls.find((c) => c.url.includes("/discover/areas/orders"));
+    expect(curated?.method).toBe("PUT");
+    expect(curated?.body).toEqual({ icon: "warehouse" });
+    expect((saved.mock.calls[0][0] as BusinessArea[]).find((a) => a.id === "orders")?.icon).toBe("warehouse");
+  });
+
+  it("leaves the Area's page alone when the icon did not change", async () => {
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => { calls.push(String(url)); return new Response(JSON.stringify({ areas: AREAS })); }));
+    const saved = vi.fn();
+    render(<AreaOwnersEditor connId="shop" areas={AREAS} area={area("orders", { icon: "cart" })} onSaved={saved} />);
+    fireEvent.click(screen.getByRole("button", { name: "Contacts and place" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(saved).toHaveBeenCalled());
+    expect(calls.filter((u) => u.includes("/discover/"))).toEqual([]);
+  });
+
   it("says every reason a declaration was refused", async () => {
     serve(() => new Response(JSON.stringify({ detail: { code: "AREAS_REFUSED", problems: ["seller_ops sits under nowhere, which is no area"] } }), { status: 422 }));
     render(<DeclareArea connId="shop" areas={AREAS} onSaved={vi.fn()} />);

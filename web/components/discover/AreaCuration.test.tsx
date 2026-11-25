@@ -65,8 +65,11 @@ describe("editing an Area", () => {
     const put = serve();
     const onSaved = vi.fn();
     render(<AreaEditor page={page({ area: { ...page().area, icon: "returns" } })} onSaved={onSaved} onCancel={() => {}} />);
-    expect(screen.getByRole("radio", { name: "returns" })).toHaveAttribute("aria-checked", "true");
+    // a dropdown (the user, 2026-11-25): the button shows the glyph chosen, the list opens on it
+    fireEvent.click(screen.getByRole("button", { name: "Its icon: returns" }));
+    expect(await screen.findByRole("radio", { name: "returns" })).toHaveAttribute("aria-checked", "true");
     fireEvent.click(screen.getByRole("radio", { name: "box" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Its icon: box" })).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
     expect(put[0].body).toEqual(expect.objectContaining({ icon: "box" }));

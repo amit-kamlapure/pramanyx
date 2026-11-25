@@ -14,9 +14,9 @@ import { Card, MUTED } from "@/components/clarity/kit";
 import { DiscoverFinder } from "@/components/discover/DiscoverFinder";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
-import { IconSquare } from "@/components/ui/icon-square";
+import { IconPicker } from "@/components/ui/icon-picker";
 import { PeopleField } from "@/components/ui/people-field";
-import { AREA_ICONS, areaIcon } from "@/lib/areaIcons";
+import { AREA_ICON_PICKER, areaIcon, findAreaIcons } from "@/lib/areaIcons";
 import { PROSE_TEXT } from "@/components/definitions/DefinitionBody";
 import { RichText, type RichTextKind } from "@/components/ui/rich-text";
 import { toast } from "@/components/ui/toast";
@@ -76,15 +76,10 @@ export function AreaEditor({ page, workspaceId, onSaved, onCancel }: {
           <span className="aug-fs-xs" style={MUTED}>Its question stays the line under its name.</span>
         </div>
         <span className="aug-fs-sm" style={{ ...MUTED, paddingTop: 6 }}>Icon</span>
-        <div role="radiogroup" aria-label="Its icon" data-testid="discover-area-editor-icon"
-          style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-          {AREA_ICONS.map((name) => (
-            <Button key={name} size="icon-sm" variant={icon === name ? "secondary" : "ghost"} role="radio" aria-checked={icon === name}
-              aria-label={name} title={name} onClick={() => setIcon(name)}>
-              <IconSquare name={name} size={24} />
-            </Button>
-          ))}
-        </div>
+        <span>
+          <IconPicker value={icon} onChange={setIcon} groups={AREA_ICON_PICKER} find={findAreaIcons} label="Its icon"
+            testId="discover-area-editor-icon" />
+        </span>
         <label className="aug-fs-sm" htmlFor="area-business" style={{ ...MUTED, paddingTop: 6 }}>Business contacts</label>
         <PeopleField id="area-business" label="Business contacts" value={business} onChange={setBusiness}
           placeholder="Who answers for what it means — type a name or an email" testId="area-business-contacts" />
