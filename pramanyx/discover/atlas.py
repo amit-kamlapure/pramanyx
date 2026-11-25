@@ -129,7 +129,7 @@ def _read_slow(key: tuple, connections: dict[str, str]) -> None:
     from pramanyx.semantic.areas import suggestions_read_once
     by_area: dict[str, Counter] = {}
     out = {"review_total": 0, "review_unplaced": 0, "learned_total": 0, "learned_unplaced": 0, "unread": [],
-           "suggested": {}}
+           "suggested": {}, "review_items": []}
     try:
         # the review queue reads each learned list and each connection's suggestions too: read once, for both
         with read_once(), suggestions_read_once():
@@ -149,6 +149,8 @@ def _read_each(connections: dict[str, str], by_area: dict, out: dict, review, le
             r = review(conn, limit=10_000)
             out["review_total"] += int(r.get("total") or 0)
             out["review_unplaced"] += int(r.get("unplaced") or 0)
+            # each row kept for review by Area (A5), with the connection it waits on
+            out["review_items"] += [{**i, "connection_id": conn, "connection_name": name} for i in r.get("items") or []]
             for i in r.get("items") or []:
                 for a in [x for x in str(i.get("area") or "").split(",") if x]:
                     by_area.setdefault(a, Counter())[str(i.get("kind") or "")] += 1
@@ -224,6 +226,40 @@ def slow_parts(scope, *, wait: bool = False) -> tuple[Optional[dict], list[str]]
     if kept is None:
         return None, ["What waits for review and what was learned, by Area, is being read; it shows on the next visit."]
     return kept[1], [f"Not read: {', '.join(kept[1]['unread'])}." ] if kept[1].get("unread") else []
+
+
+def _weight(i: dict) -> int:
+    """A review row's weight, as the queue weighs it: how often asked, and twice each complaint."""
+    return int(i.get("count") or 1) + 2 * int(i.get("complaints") or 0)
+
+
+def review_in(scope, area_id: str = "") -> dict:
+    """What waits for review in an Area across the connections in view, its sub-Areas' rolled up into it (the Atlas
+    plan's §3.4, A5) — or, ``"none"``, what waits in no Area; ``""`` every row. From the kept reading, never read here:
+    the rows are as old as it (``read_at``), and a reading not landed yet is said."""
+    from pramanyx.discover.service import areas_in_view, newest_first
+    slow, said = slow_parts(scope)
+    if slow is None:
+        return {"area": area_id, "items": [], "within": [], "by_source": {}, "total": 0, "read_at": None, "said": said}
+    areas = areas_in_view(scope)
+    within: list[str] = []
+    if area_id and area_id != "none":
+        within, frontier = [area_id], [area_id]
+        while frontier:                       # every Area under it, however deep
+            below = [a_id for a_id, a in areas.items() if a.get("parent") in frontier and a_id not in within]
+            within += below
+            frontier = below
+    wanted = set(within)
+
+    def placed(i: dict) -> bool:
+        mine = {a for a in str(i.get("area") or "").split(",") if a}
+        return (not mine) if area_id == "none" else (not area_id or bool(mine & wanted))
+    rows = sorted((i for i in slow.get("review_items") or [] if placed(i)),
+                  key=lambda i: (-_weight(i), newest_first(str(i.get("at") or "")), i["id"]))
+    return {"area": area_id, "items": rows, "within": within[1:], "by_source": dict(Counter(i["source"] for i in rows)),
+            "total": len(rows), "read_at": slow.get("at"),
+            "said": [*said, *([] if "review_items" in slow else
+                              ["What waits for review is being read again to list it by Area; it shows on the next visit."])]}
 
 
 def atlas(scope, *, wait: bool = False) -> dict:

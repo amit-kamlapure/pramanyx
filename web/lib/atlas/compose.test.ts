@@ -261,3 +261,22 @@ describe("the Business Atlas composer", () => {
     expect(found).toEqual([]);
   });
 });
+
+describe("zones that are Areas (A6)", () => {
+  const e = (id: string, domain?: string) => ({ id, name: id, roles: ["place"], domain, count: 1 });
+  it("names each zone an Area, and says what one in no Area is", () => {
+    const scene = compose({ title: "shop", measured: true, zonesAre: "areas", links: [], processes: [],
+      entities: [e("Depot", "Orders & sales"), e("Store"), e("Hub", "Inventory")] });
+    const why = Object.fromEntries(scene.zones.map((z) => [z.name, z.why]));
+    expect(Object.keys(why).sort()).toEqual(["In no Area", "Inventory", "Orders & sales"]);
+    expect(why["Inventory"]).toBe("Inventory is an Area: its entities' tables stand in it.");
+    expect(why["In no Area"]).toBe("Its entities' tables stand in no Area.");
+  });
+
+  it("left as domains, keeps the domains' words", () => {
+    const scene = compose({ title: "shop", measured: true, links: [], processes: [], entities: [e("Depot", "Zeta"), e("Store")] });
+    const why = Object.fromEntries(scene.zones.map((z) => [z.name, z.why]));
+    expect(Object.keys(why).sort()).toEqual(["Other", "Zeta"]);
+    expect(why["Zeta"]).toBe("Zeta is a domain the ontology gives its entities.");
+  });
+});

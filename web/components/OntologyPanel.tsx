@@ -635,7 +635,9 @@ export function OntologyPanel({ connectionId, onInvestigate, schema }: Props) {
         options={[
           { value: "areas", label: <span data-testid="ontology-areas-toggle">Areas</span>,
             title: "The organisation's Areas across every connection — what each holds, the answers that drew on it, what waits" },
-          { value: "org", label: "Org" },
+          // "Org" named two things — this, and the rail's promoted findings (the Atlas plan's §7, A0): this one is said
+          // for what it draws
+          { value: "org", label: "Every connection", title: "Every connection's entities, each its own cluster, side by side" },
           { value: "domain", label: <span data-testid="ontology-domain-toggle">Domain</span>,
             title: "The organisation's ontology — types declared on any connection, and the links between them" },
           { value: "connection", label: "Connection" },

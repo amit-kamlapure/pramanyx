@@ -20,6 +20,7 @@ Use is counted only where a source counts it: a finding's uses are not recorded,
 from __future__ import annotations
 
 import hashlib
+import re
 from collections import Counter
 from typing import Callable, Optional
 from urllib.parse import quote
@@ -54,6 +55,9 @@ def _links(connection_id: str) -> dict[str, Callable[..., str]]:
         "claim": lambda claim_id: f"/?tab=record&layer=claims&id={quote(claim_id, safe='')}&conn={c}",
         "definition": lambda term, area="": (f"/definitions/{quote(term, safe='')}?conn={c}"
                                              + (f"&area={quote(area, safe='')}" if area else "")),
+        # a new Definition's page, its word (and Area) filled in — the person writes what it means (A5)
+        "new_definition": lambda term, area="": (f"/?tab=semantic&conn={c}&new_definition=1&term={quote(term, safe='')}"
+                                                 + (f"&area={quote(area, safe='')}" if area else "")),
     }
 
 
@@ -154,6 +158,59 @@ def _definitions(connection_id: str, link: dict) -> list[dict]:
     return out
 
 
+def _term_of(text: str) -> str:
+    """The word a learned item is about, as Promote guesses it (`web/lib/learned.wordOf`): its words before a colon or a
+    dash, when short — "" when it names none."""
+    t = re.sub(r"^Restated:\s*", "", text or "", flags=re.IGNORECASE).strip()
+    head = re.sub(r"\s*\(.*\)\s*$", "", re.split(r":\s|\s[—–-]\s", t)[0]).strip()
+    return head if head and len(head) <= 60 and head != t else ""
+
+
+def _new_definitions(connection_id: str, link: dict) -> list[dict]:
+    """New Definition (the Atlas plan's §3.4, A5): what was learned again and again about a word no Definition holds —
+    "learned 3 times; no Definition says what it means". Weighed by how often it was learned: the answers that drew on a
+    learned item are not counted yet (A1 counts what an answer was given), and the row says what it is weighed by."""
+    from pramanyx.knowledge.learned import learned_items
+    from pramanyx.record.writers import definition_term, definitions
+    defined = {definition_term(str(c.extra.get("term") or "")) for c in definitions(connection_id)}
+    out = []
+    for i in learned_items(connection_id, limit=500)["items"]:
+        times = int(i.get("times") or 1)
+        term = _term_of(i["text"]) if i["kind"] != "trusted_query" and times >= 2 else ""
+        if not term or definition_term(term) in defined:
+            continue
+        out.append(_row(source="new_definition", ref=i["ref"] or _ref(i["text"]), kind="candidate",
+                        title=f"“{term}” — learned {times} times; no Definition says what it means",
+                        detail=i["text"][:240], area=i.get("area") or "", count=times, at=i.get("as_of") or "",
+                        href=link["new_definition"](term, i.get("area") or ""), action="Write its Definition"))
+    return out
+
+
+def _definition_edits(connection_id: str, link: dict) -> list[dict]:
+    """Definition edit (§3.4, A5): what was learned since a published Definition was last written that names its word —
+    things the Definition may not cover yet, one row per Definition, weighed by how many."""
+    from pramanyx.knowledge.learned import learned_items
+    from pramanyx.record.writers import definitions
+    published = [c for c in definitions(connection_id) if c.tier != "said" and str(c.extra.get("term") or "").strip()]
+    if not published:
+        return []
+    learned = [i for i in learned_items(connection_id, limit=500)["items"] if i["kind"] != "trusted_query"]
+    out = []
+    for c in published:
+        term = str(c.extra.get("term")).strip()
+        area = str(c.extra.get("area") or "")
+        names = re.compile(rf"(?<![a-z0-9]){re.escape(term.lower())}(?![a-z0-9])")
+        since = [i for i in learned if str(i.get("as_of") or "") > str(c.as_of or "") and names.search(i["text"].lower())]
+        if not since:
+            continue
+        n = len(since)
+        out.append(_row(source="definition_edit", ref=c.id, kind="candidate",
+                        title=f"{n} thing{'s' if n != 1 else ''} learned about “{term}” since its Definition was written",
+                        detail=since[0]["text"][:240], area=area, count=n, at=str(since[0].get("as_of") or ""),
+                        href=link["definition"](term, area), action="Read them against its Definition"))
+    return out
+
+
 def _proposed_synonyms(connection_id: str, link: dict) -> list[dict]:
     from pramanyx.ontology.vocabulary import synonyms_for
     return [_row(source="synonym", ref=f"{s.subject_kind}:{s.subject_id}:{s.synonym}", kind="candidate",
@@ -246,7 +303,7 @@ def _answered_two_ways(connection_id: str, link: dict) -> list[dict]:
 SOURCES: tuple[tuple[str, Callable[[str, dict], list[dict]]], ...] = (
     ("framing_miss", _framing_misses), ("unanswered", _unanswered),
     ("unconfirmed", _unconfirmed), ("definitions", _definitions), ("synonym", _proposed_synonyms),
-    ("suggested_area", _suggested_areas),
+    ("suggested_area", _suggested_areas), ("new_definition", _new_definitions), ("definition_edit", _definition_edits),
     ("import", _imports), ("verdict", _marked_wrong), ("unhelpful", _unhelpful),
     ("rival_meanings", _rivals), ("divergence", _answered_two_ways),
 )
@@ -264,15 +321,17 @@ def review(connection_id: str, *, area: str = "", limit: int = 200) -> dict:
     items: list[dict] = []
     sources: dict[str, int] = {}
     unread: list[str] = []
-    for name, read in SOURCES:
-        try:
-            got = read(connection_id, link)
-        except Exception as exc:  # noqa: BLE001 — unread is said, never taken for none
-            tolerate(exc, f"the review queue could not read {name}", counter="review.unread")
-            unread.append(name)
-            continue
-        sources[name] = len(got)
-        items.extend(got)
+    from pramanyx.knowledge.learned import read_once
+    with read_once():          # three sources read the learned list: read once, for all of them
+        for name, read in SOURCES:
+            try:
+                got = read(connection_id, link)
+            except Exception as exc:  # noqa: BLE001 — unread is said, never taken for none
+                tolerate(exc, f"the review queue could not read {name}", counter="review.unread")
+                unread.append(name)
+                continue
+            sources[name] = len(got)
+            items.extend(got)
 
     try:
         from pramanyx.semantic.areas import areas_for

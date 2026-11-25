@@ -19,7 +19,9 @@ import { Segmented } from "@/components/ui/segmented";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SkeletonRows } from "@/components/ui/motion";
 import { compose, SHAPES, type AtlasScene, type SceneLane } from "@/lib/atlas/compose";
-import { modelOf } from "@/lib/atlas/model";
+import { modelOf, type PlacedIn } from "@/lib/atlas/model";
+import { readAreas } from "@/lib/areas";
+import { readDiscoverItems } from "@/lib/discover";
 import { gutterOf, routesOf } from "@/lib/atlas/route";
 import { formatCount, formatTimestamp, pct } from "@/lib/format";
 import { getProcesses, getTypeMap, type ProcessesAndRules, type TypeMap, type TypeMapRow } from "@/lib/objectTypes";
@@ -65,14 +67,19 @@ interface Props {
   /** Where the page around the Atlas can make and change things: the entity picked here gets a bar of what can be done
    *  with it, in the header's own row. "link" comes with the entity it goes to — the second one clicked. */
   onAct?: (act: AtlasAct, entity: TypeMapRow, to?: TypeMapRow) => void;
+  /** Only the entities whose table is placed in this Area, and the links and processes among them (A6: the Atlas
+   *  inside an Area). */
+  onlyArea?: string;
 }
 
 export type AtlasAct = "change" | "link" | "rule" | "process" | "action";
 
-export function BusinessAtlas({ connectionId, schema, title, map: given, embedded, onOpenEntity, onOpenProcess, onAct }: Props) {
+export function BusinessAtlas({ connectionId, schema, title, map: given, embedded, onOpenEntity, onOpenProcess, onAct, onlyArea }: Props) {
   // What was read, kept with the scope it was read for: a read that lands after the connection changed is not shown.
   const scope = `${connectionId}/${schema ?? ""}`;
-  const [read, setRead] = useState<{ scope: string; map?: TypeMap; declared?: ProcessesAndRules; failed?: string }>({ scope });
+  // `placed`: each table's Area by name (A6) — undefined while it is read, null when it could not be
+  const [read, setRead] = useState<{ scope: string; map?: TypeMap; declared?: ProcessesAndRules; failed?: string;
+    placed?: Map<string, PlacedIn> | null }>({ scope });
   const [drawn, setDrawn] = useState<"raised" | "flat">("raised");
   const [show, setShow] = useState("");
   // Where the zoom controls go: the header, which is on screen at every window size. Under the scene they fell
@@ -81,19 +88,38 @@ export function BusinessAtlas({ connectionId, schema, title, map: given, embedde
   const inspector = useInspector();
 
   useEffect(() => {
-    const put = (part: { map?: TypeMap; declared?: ProcessesAndRules; failed?: string }) =>
+    const put = (part: { map?: TypeMap; declared?: ProcessesAndRules; failed?: string; placed?: Map<string, PlacedIn> | null }) =>
       setRead((was) => (was.scope === scope ? { ...was, ...part } : { scope, ...part }));
     if (!given) getTypeMap(connectionId, schema).then((map) => put({ map }))
       .catch((e: unknown) => put({ failed: e instanceof Error ? e.message : String(e) }));
     // The processes are their own door: when it fails the entities are still drawn, with an empty route.
     getProcesses(connectionId, schema).then((declared) => put({ declared }))
       .catch(() => put({ declared: { processes: [], rules: [] } }));
+    // The zones are Areas (A6): where Discover places each table, by the connection's own names for its Areas. Read
+    // apart: when it fails the zones are the ontology's domains, and the Atlas says so.
+    Promise.all([readDiscoverItems({ kind: "table", connectionId, limit: 200 }), readAreas(connectionId, schema)])
+      .then(([tables, areas]) => {
+        const names = new Map(areas.areas.map((a) => [a.id, a.name]));
+        const placed = new Map<string, PlacedIn>();
+        for (const t of tables.items) {
+          if (t.connection_id === connectionId && t.area && names.has(t.area)) placed.set(t.name.toLowerCase(), { id: t.area, name: names.get(t.area)! });
+        }
+        put({ placed });
+      })
+      .catch(() => put({ placed: null }));
   }, [connectionId, schema, scope, given]);
 
-  const { map: fetched = null, declared = null, failed = "" } = read.scope === scope ? read : {};
+  const { map: fetched = null, declared = null, failed = "", placed } = read.scope === scope ? read : {};
   const map = given ?? fetched;
   const shell = `aug-atlas${embedded ? " is-embedded" : ""}`;
-  const model = useMemo(() => (map && declared ? modelOf(title, map, declared) : null), [map, declared, title]);
+  const model = useMemo(() => {
+    if (!map || !declared || placed === undefined) return null;
+    const m = modelOf(title, map, declared, placed ?? undefined);
+    if (!onlyArea) return m;
+    const kept = new Set(m.entities.filter((e) => e.area === onlyArea).map((e) => e.id));
+    return { ...m, entities: m.entities.filter((e) => kept.has(e.id)), links: m.links.filter((l) => kept.has(l.a) && kept.has(l.b)),
+      processes: m.processes.filter((p) => kept.has(p.entity)) };
+  }, [map, declared, title, placed, onlyArea]);
   const scene = useMemo(() => (model ? compose(model) : null), [model]);
   // The selection IS the inspector's subject: closing it there clears the mark here.
   const held = inspector.subject?.key ?? "";
@@ -106,7 +132,13 @@ export function BusinessAtlas({ connectionId, schema, title, map: given, embedde
   const picked = pages ? (chosen?.scope === scope ? chosen.key : null) : held.startsWith("atlas:") ? held.slice(6) : null;
 
   if (failed) return <div className={shell}><EmptyState title="The Atlas could not be read">{failed}</EmptyState></div>;
+  if (onlyArea && placed === null) {
+    return <div className={shell}><EmptyState title="The Areas could not be read">So which entities stand in this Area cannot be said.</EmptyState></div>;
+  }
   if (!scene || !map || !declared) return <div className={shell}><SkeletonRows rows={6} /></div>;
+  if (onlyArea && !scene.structures.length && !scene.records.length) {
+    return <div className={shell}><EmptyState title="No entity here">No entity of {title} has its table placed in this Area.</EmptyState></div>;
+  }
   if (!scene.structures.length && !scene.records.length && !scene.lanes.some((l) => l.stages.length)) {
     return <div className={shell}><EmptyState title="No entity to draw yet">The Atlas draws the entities of this ontology once it is built.</EmptyState></div>;
   }
@@ -168,7 +200,12 @@ export function BusinessAtlas({ connectionId, schema, title, map: given, embedde
               )}
             </div>
           ) : (
-            <h2 title="The journey is the declared processes, joined where a measured link joins them; each zone is a domain, beside the leg it links to. Position is sequence, not geography.">{title} — Business Atlas</h2>
+            <h2 title={`The journey is the declared processes, joined where a measured link joins them; each zone is ${model?.zonesAre === "areas"
+              ? "an Area — where Discover places its entities' tables" : "a domain the ontology gives its entities"}, beside the leg it links to. Position is sequence, not geography.`}>
+              {title} — Business Atlas
+              {placed === null && <span className="aug-fs-xs" data-testid="atlas-zones-said" style={{ color: "var(--amb4)", fontWeight: 400, marginLeft: 8 }}>
+                zoned by the ontology&apos;s domains — the Areas could not be read</span>}
+            </h2>
           )}
           <div className="aug-atlas-tools">
             {legs.length > 1 && (

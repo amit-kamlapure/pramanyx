@@ -294,3 +294,55 @@ def test_with_no_reading_that_holds_suggestions_the_map_reads_them_itself(monkey
     monkeypatch.setattr(A, "_suggested_areas", lambda conn, schema=None: [{"label": "Loyalty", "id": "loyalty", "tables": []}])
     out = AT.atlas(NS(connections={"c1": "theLook"}, person="", curator=True))
     assert [s["id"] for s in out["suggested"]] == ["loyalty"]
+
+
+def _waiting(id_, area, *, count=None, complaints=0, at=""):
+    return {"id": id_, "source": "framing_miss", "kind": "gap", "title": id_, "detail": "", "area": area, "count": count,
+            "complaints": complaints, "at": at, "resolve": {"href": "/x", "action": "Define it"}}
+
+
+def test_review_by_area_rolls_its_sub_areas_up_and_lists_the_busiest_first(monkeypatch):
+    """The Atlas plan's §3.4 (A5): an Area's review across connections, its sub-Areas' rows in it, however deep."""
+    from pramanyx.discover import service as S
+    monkeypatch.setattr(S, "areas_in_view", lambda scope: {
+        "orders_sales": {"id": "orders_sales", "parent": ""}, "returns": {"id": "returns", "parent": "orders_sales"},
+        "web_returns": {"id": "web_returns", "parent": "returns"}, "marketing": {"id": "marketing", "parent": ""}})
+    rows = [_waiting("a", "orders_sales", count=1), _waiting("b", "web_returns", count=5),
+            _waiting("c", "marketing", count=9), _waiting("d", "", count=2),
+            _waiting("e", "returns,marketing", complaints=3), _waiting("f", "orders_sales", count=1, at="2026-11-25")]
+    monkeypatch.setattr(AT, "slow_parts", lambda scope, wait=False: ({"review_items": rows, "at": "2026-11-25T10:00"}, []))
+    scope = NS(connections={"c1": "theLook"}, person="", curator=False)
+    got = AT.review_in(scope, "orders_sales")
+    assert [i["id"] for i in got["items"]] == ["e", "b", "f", "a"], "complaints weigh double; then the newest"
+    assert got["within"] == ["returns", "web_returns"] and got["by_source"] == {"framing_miss": 4}
+    assert [i["id"] for i in AT.review_in(scope, "none")["items"]] == ["d"], "what waits in no Area"
+    assert AT.review_in(scope, "")["total"] == 6
+    monkeypatch.setattr(AT, "slow_parts", lambda scope, wait=False: ({"at": "2026-11-25T10:00"}, []))
+    assert "being read again to list it by Area" in AT.review_in(scope, "orders_sales")["said"][0]
+    monkeypatch.setattr(AT, "slow_parts", lambda scope, wait=False: (None, ["It is being read."]))
+    nothing = AT.review_in(scope, "orders_sales")
+    assert nothing["items"] == [] and nothing["read_at"] is None and nothing["said"] == ["It is being read."]
+
+
+def test_the_reading_keeps_each_review_row_with_the_connection_it_waits_on(monkeypatch):
+    AT._slow.clear()
+    monkeypatch.setattr(AT, "PAUSE_S", 0)
+    monkeypatch.setattr("pramanyx.knowledge.review.review", lambda conn, limit=200: {
+        "total": 1, "unplaced": 0, "items": [_waiting(f"{conn}-gap", "orders_sales")]})
+    monkeypatch.setattr("pramanyx.knowledge.learned.learned_items", lambda conn, limit=50: {"total": 0, "items": []})
+    scope = NS(connections={"c1": "theLook", "c2": "DuckDB"}, person="p-" + uuid.uuid4().hex[:6], curator=False)
+    slow, _ = AT.slow_parts(scope, wait=True)
+    assert [(i["id"], i["connection_name"]) for i in slow["review_items"]] == [("c1-gap", "theLook"), ("c2-gap", "DuckDB")]
+
+
+def test_a_read_once_inside_another_shares_the_outer_one_s_reads(monkeypatch):
+    """A review queue read inside the Atlas's reading opens a read_once of its own; it must not start a fresh one."""
+    from pramanyx.knowledge import learned as L
+    reads = []
+    monkeypatch.setattr(L, "_learned", lambda conn, about="": reads.append(conn) or {"items": [], "total": 0})
+    with L.read_once():
+        L.learned_items("c1")
+        with L.read_once():
+            L.learned_items("c1")
+        L.learned_items("c1")
+    assert reads == ["c1"]

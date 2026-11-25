@@ -74,6 +74,14 @@ def get_atlas(request: Request, workspace_id: Optional[str] = None) -> dict:
     return atlas(scope_of(request, workspace_id, None))
 
 
+@router.get("/discover/atlas/review")
+def get_atlas_review(request: Request, area: str = "", workspace_id: Optional[str] = None) -> dict:
+    """What waits for review in an Area across the connections in view, its sub-Areas' rolled up (A5); ``area=none``
+    what waits in no Area, none given every row. From the Atlas's kept reading — as old as its ``read_at``."""
+    from pramanyx.discover.atlas import review_in
+    return review_in(scope_of(request, workspace_id, None), area)
+
+
 @router.get("/discover/items")
 def get_discover_items(request: Request, workspace_id: Optional[str] = None, connection_id: Optional[str] = None,
                        kind: str = "", area: str = "", certified: bool = False, mine: bool = False,

@@ -3,7 +3,7 @@
  *  every time and never touching; the figures said in words, a share of nothing said as a dash. */
 import { describe, expect, it } from "vitest";
 
-import { bounds, changeWords, fanOf, itemsOf, packBubbles, radiusFor, R_MIN, ring, share, waitingWords } from "@/lib/areaMap";
+import { bounds, changeWords, curve, fanOf, itemsOf, oneSided, packBubbles, radiusFor, R_MIN, reviewFilters, reviewWord, ring, share, waitingWords } from "@/lib/areaMap";
 import type { DiscoverItem, DiscoverKind } from "@/lib/discover";
 
 describe("the Areas laid out", () => {
@@ -80,3 +80,43 @@ describe("an Area, opened (A4b)", () => {
     expect(ring(4, 100)).toEqual(r);
   });
 });
+
+describe("review by Area (A5)", () => {
+  it("says each row in the plan's words, by where it came from; an unknown source by its kind", () => {
+    expect(reviewWord("framing_miss", "gap")).toBe("Gap");
+    expect(reviewWord("unhelpful", "candidate")).toBe("Thumbs-down");
+    expect(reviewWord("definition_edit", "candidate")).toBe("Definition edit");
+    expect(reviewWord("something_new", "conflict")).toBe("Conflict");
+  });
+
+  it("offers a filter per word that has rows, summed across its sources, in the plan's order", () => {
+    expect(reviewFilters({ unanswered: 2, verdict: 1, framing_miss: 3, new_definition: 4 })).toEqual([
+      { word: "New Definition", count: 4 }, { word: "Gap", count: 5 }, { word: "Thumbs-down", count: 1 }]);
+  });
+});
+
+describe("an Area opened to one side (2026-11-25)", () => {
+  it("puts what it holds and its sub-Areas to its right, every one on the same side, inside the canvas", () => {
+    const L = oneSided(900, 640, { parent: false, siblings: 0, chosenAt: 0, chips: 6, subs: 2 });
+    expect(L.parent).toBeNull();
+    for (const c of L.chips) expect(c.x).toBeGreaterThan(L.chosen.x + L.chosen.r);
+    for (const d of L.subs) expect(d.x - d.r).toBeGreaterThan(L.chosen.x + L.chosen.r);
+    expect(Math.min(...L.chips.map((c) => c.y - c.h / 2))).toBeGreaterThanOrEqual(16);
+    expect(Math.max(...L.subs.map((d) => d.y + d.r))).toBeLessThanOrEqual(640 - 16 + 1e-6);
+    expect(oneSided(900, 640, { parent: false, siblings: 0, chosenAt: 0, chips: 6, subs: 2 })).toEqual(L);
+  });
+
+  it("with a parent: the parent large on the left, the Area among its siblings to its right and larger than them", () => {
+    const L = oneSided(900, 640, { parent: true, siblings: 4, chosenAt: 1, chips: 3, subs: 0 });
+    expect(L.parent!.x + L.parent!.r).toBeLessThan(L.siblings[0].x - L.siblings[0].r);
+    expect(new Set(L.siblings.map((d) => d.x)).size).toBe(1);
+    expect(L.chosen).toBe(L.siblings[1]);
+    expect(L.chosen.r).toBeGreaterThan(L.siblings[0].r);
+    expect(L.parent!.r).toBeGreaterThan(L.chosen.r);
+  });
+
+  it("draws every line from a circle's right side", () => {
+    expect(curve({ x: 100, y: 100, r: 50 }, { x: 300, y: 40 })).toMatch(/^M 150 100 C /);
+  });
+});
+

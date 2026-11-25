@@ -7,14 +7,21 @@
 import type { ProcessesAndRules, TypeMap } from "@/lib/objectTypes";
 import { roleOfShape, SHAPES, type AtlasModel } from "./compose";
 
-export function modelOf(title: string, map: TypeMap, declared: ProcessesAndRules | null): AtlasModel {
+/** An Area, as an entity's zone: where its table is placed on Discover (A6). */
+export interface PlacedIn { id: string; name: string }
+
+/** ``placed`` — each table's Area, by its name in lower case: the zones are then Areas (A6), an entity whose table is in
+ *  none standing "In no Area". Without it, the zones are the domains the ontology gives its entities, as before. */
+export function modelOf(title: string, map: TypeMap, declared: ProcessesAndRules | null, placed?: Map<string, PlacedIn>): AtlasModel {
   const byApiName = new Map(map.object_types.map((t) => [t.object_type, t]));
+  const areaOf = (table: string) => placed?.get(String(table || "").split(".").pop()!.toLowerCase());
   // ON-7 — a part is read under its parent: it is not drawn beside it, and its links are drawn from the parent, the
   // way the entity map draws them (`shown_from`, `shown_to`). It stays an entity; only the picture folds.
   const standing = map.object_types.filter((t) => !t.absorbed_into);
   return {
     title,
     measured: true,
+    ...(placed ? { zonesAre: "areas" as const } : {}),
     entities: standing.map((t) => {
       // A person's own choice of shape comes first, and the shape says what the entity is; then the word of a package
       // deployed and matched; else only what the builder measured of the table.
@@ -24,7 +31,8 @@ export function modelOf(title: string, map: TypeMap, declared: ProcessesAndRules
       id: t.id,
       name: t.display_name,
       roles: chosen ? (said ? [said] : []) : t.pack_roles?.length ? t.pack_roles : t.role === "event" ? ["event"] : [],
-      domain: t.domain || undefined,
+      domain: placed ? areaOf(t.table)?.name : t.domain || undefined,
+      area: placed ? areaOf(t.table)?.id : undefined,
       drawn_as: chosen || t.pack_drawn_as || undefined,
       chosen: !!chosen || undefined,
       count: t.rows ?? null,

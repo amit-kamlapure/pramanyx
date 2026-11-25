@@ -78,8 +78,11 @@ export interface AtlasEntity {
   id: string;
   name: string;
   roles: string[];
-  /** The domain the ontology gives it; its zone. */
+  /** Its zone's name: the Area its table stands in (the Atlas plan's A6), or — when the Areas could not be read — the
+   *  domain the ontology gives it. */
   domain?: string;
+  /** The Area its table stands in, by id, when the zones are Areas. */
+  area?: string;
   /** A shape a package asks for; used only where it refines a role the entity has. */
   drawn_as?: string;
   /** How many there are; null when not counted, absent when nothing is measured. */
@@ -120,6 +123,9 @@ export interface AtlasModel {
    *  when it is drawn from its parent. */
   links: { a: string; b: string; verb: string; part?: string }[];
   processes: AtlasProcess[];
+  /** "areas" when each zone is an Area (A6): the one an entity's table stands in, on Discover. Else each is a domain the
+   *  ontology gives its entities. */
+  zonesAre?: "areas";
 }
 
 export interface SceneStructure {
@@ -202,6 +208,7 @@ const STAGE_PITCH = 6.4;  // the least room a stage needs along its leg
 const TURN = 4.4;         // the room a leg leaves after the corner before its first stage
 const BEHIND = 27;        // how much may stand behind a leg before the rest stands in front of it
 const OTHER = "Other";    // the zone of an entity the ontology gives no domain
+const NO_AREA = "In no Area";    // the zone of an entity whose table stands in no Area (A6)
 
 const a = (word: string) => `${/^[aeiou]/.test(word) ? "an" : "a"} ${word}`;
 
@@ -277,13 +284,20 @@ export function compose(model: AtlasModel): AtlasScene {
   //     not a place, so neither stands in a zone. A record of activity is marked in its zone, not built.
   const isRecord = (e: AtlasEntity) => roleOf(e.roles) === "event";
   const standing = model.entities.filter((e) => !through.has(e.id) && !sliced.has(e.id));
-  const domains = [...new Set(standing.map((e) => e.domain || OTHER))].sort();
+  const isArea = model.zonesAre === "areas";
+  const other = isArea ? NO_AREA : OTHER;
+  /** What a zone is, in words: an Area its entities' tables stand in, or a domain the ontology gives them. */
+  const zoneSays = (name: string) => !isArea ? `${name} is a domain the ontology gives its entities`
+    : name === other ? "Its entities' tables stand in no Area" : `${name} is an Area: its entities' tables stand in it`;
+  // Areas in order, "In no Area" last (drawn aside); the domains as they always were
+  const named = [...new Set(standing.map((e) => e.domain || other))].sort();
+  const domains = isArea ? [...named.filter((n) => n !== other), ...named.filter((n) => n === other)] : named;
   type Item = { e: AtlasEntity; shape: Shape; w: number; d: number; u: number; v: number; room: number };
   /** What is written beside a structure: its name alone. How many there are is on its label, with the rest. */
   const writtenOf = (e: AtlasEntity) => e.name.length;
   type Zone = { key: string; name: string; items: Item[]; marks: AtlasEntity[]; w: number; d: number; u: number; v: number; leg: number | null };
   const zones: Zone[] = domains.map((name) => {
-    const mine = standing.filter((e) => (e.domain || OTHER) === name).sort((x, y) => rank.get(x.id)! - rank.get(y.id)!);
+    const mine = standing.filter((e) => (e.domain || other) === name).sort((x, y) => rank.get(x.id)! - rank.get(y.id)!);
     const items: Item[] = mine.filter((e) => !isRecord(e)).map((e) => { const shape = shapeOf(e); return { e, shape, w: SHAPES[shape].w, d: SHAPES[shape].d, u: 0, v: 0, room: Math.max(SHAPES[shape].w, writtenOf(e) * LETTER) }; });
     const marks = mine.filter(isRecord);
     // rows of up to ACROSS structures; each row as deep as its deepest
@@ -384,9 +398,9 @@ export function compose(model: AtlasModel): AtlasScene {
     const leg = z.leg === null ? null : legs[z.leg];
     sceneZones.push({
       key: z.key, name: z.name, u: z.u, v: z.v, w: z.w, d: z.d, leg: leg?.id ?? null,
-      why: leg ? `${z.name} is a domain the ontology gives its entities. It stands beside ${leg.name} because an entity in it links to ${byId.get(leg.entity)?.name ?? leg.entity}.`
-        : legs.length ? `${z.name} is a domain the ontology gives its entities. None of them links to what goes through the journey, so it stands aside.`
-        : `${z.name} is a domain the ontology gives its entities.`,
+      why: leg ? `${zoneSays(z.name)}. It stands beside ${leg.name} because an entity in it links to ${byId.get(leg.entity)?.name ?? leg.entity}.`
+        : legs.length ? `${zoneSays(z.name)}. None of them links to what goes through the journey, so it stands aside.`
+        : `${zoneSays(z.name)}.`,
     });
     for (const it of z.items) {
       const role = roleOf(it.e.roles), n = steps.get(it.e.id), count = it.e.count ?? null, loose = isLoose(it.e.id);
@@ -409,7 +423,8 @@ export function compose(model: AtlasModel): AtlasScene {
       centre.set(e.id, [u, v]);
       records.push({
         key: `entity:${e.id}`, entity: e.id, name: e.name, count: e.count ?? null, u, v, measured: model.measured, zone: z.key, loose: isLoose(e.id),
-        why: `Marked, not built: its rows are records of activity, not things. It stands in ${z.name}, the domain the ontology gives it.`,
+        why: `Marked, not built: its rows are records of activity, not things. ${!isArea ? `It stands in ${z.name}, the domain the ontology gives it.`
+          : z.name === other ? "Its table stands in no Area." : `It stands in ${z.name}, the Area its table stands in.`}`,
       });
     });
   }

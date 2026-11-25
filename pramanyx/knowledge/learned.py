@@ -34,7 +34,11 @@ _SHARED: contextvars.ContextVar[Optional[dict]] = contextvars.ContextVar("praman
 @contextmanager
 def read_once() -> Iterator[None]:
     """Each connection's learned list is read once inside this, whoever asks for it (the Atlas's background reading,
-    2026-11-25: every review queue read the learned list again, doubling the reading's cost). Nothing is kept after."""
+    2026-11-25: every review queue read the learned list again, doubling the reading's cost). Nothing is kept after.
+    Inside another, it is that one's: a review queue read within the Atlas's reading shares the reading's reads."""
+    if _SHARED.get() is not None:
+        yield
+        return
     token = _SHARED.set({})
     try:
         yield
@@ -129,7 +133,8 @@ def _learned(connection_id: str, *, about: str = "") -> dict:
     for c in C.list_claims(kind="usage", conn_id=connection_id, limit=2000):
         if c.state == "withdrawn":
             continue
-        items.append(_item(kind="usage", text=c.statement.text, source="the warehouse's query history", author=c.author,
+        items.append(_item(kind="usage", text=c.statement.text, author=c.author,
+                           source=str(c.extra.get("came_from") or "the warehouse's query history"),
                            standing="mined", as_of=c.as_of, tables=_tables_of(str(c.extra.get("proposal") or "")),
                            lineage=[f"{w.kind}:{w.ref}" for w in c.warrants], ref=c.id))
     try:

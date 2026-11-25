@@ -99,7 +99,7 @@ describe("OntologyPanel — the bar", () => {
     render(<OntologyPanel connectionId="c1" schema="thelook" />);
     fireEvent.click(await screen.findByRole("radio", { name: "Map" }));
     await screen.findByTestId("ontology-facts");
-    fireEvent.click(screen.getByRole("radio", { name: "Org" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Every connection" }));
     expect(await screen.findByTestId("org-stub")).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByTestId("ontology-facts")).toBeNull());
   });

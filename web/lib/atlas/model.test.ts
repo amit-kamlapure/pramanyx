@@ -51,3 +51,21 @@ describe("the Atlas model of a connection's ontology", () => {
     expect(plain.processes).toEqual([]);
   });
 });
+
+describe("the Atlas zoned by Area (A6)", () => {
+  it("gives each entity the Area its table is placed in, by the table's name; one in none has no zone of its own", () => {
+    const placed = new Map([["orders", { id: "orders_sales", name: "Orders & sales" }]]);
+    const m = modelOf("shop", { ...MAP, object_types: MAP.object_types.map((t) => ({ ...t, table: t.id === MAP.object_types[0].id ? "shop.ORDERS" : "elsewhere" })) },
+      { processes: [], rules: [] } as unknown as ProcessesAndRules, placed);
+    expect(m.zonesAre).toBe("areas");
+    expect(m.entities[0]).toMatchObject({ domain: "Orders & sales", area: "orders_sales" });
+    expect(m.entities.slice(1).every((e) => e.domain === undefined && e.area === undefined)).toBe(true);
+  });
+
+  it("without the Areas, keeps the domain the ontology gives", () => {
+    const m = modelOf("shop", { ...MAP, object_types: MAP.object_types.map((t) => ({ ...t, domain: "Commerce" })) },
+      { processes: [], rules: [] } as unknown as ProcessesAndRules);
+    expect(m.zonesAre).toBeUndefined();
+    expect(m.entities[0].domain).toBe("Commerce");
+  });
+});

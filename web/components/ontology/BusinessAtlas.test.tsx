@@ -32,6 +32,21 @@ vi.mock("@/lib/objectTypes", async (orig) => ({
   getProcesses: async () => { if (served.declared === "fails") throw new Error("no door"); return served.declared; },
 }));
 
+// where Discover places each table, and the connection's Areas (A6): the zones are Areas
+type Placement = { tables: { name: string; area: string }[]; areas: { id: string; name: string }[] } | "fails";
+let placed: Placement = { tables: [], areas: [] };
+vi.mock("@/lib/discover", async (orig) => ({
+  ...(await orig<typeof import("@/lib/discover")>()),
+  readDiscoverItems: async () => {
+    if (placed === "fails") throw new Error("no door");
+    return { items: placed.tables.map((t) => ({ ...t, connection_id: "c1", kind: "table", id: `c1.s.${t.name}` })), total: placed.tables.length };
+  },
+}));
+vi.mock("@/lib/areas", async (orig) => ({
+  ...(await orig<typeof import("@/lib/areas")>()),
+  readAreas: async () => { if (placed === "fails") throw new Error("no door"); return { areas: placed.areas }; },
+}));
+
 import { BusinessAtlas } from "@/components/ontology/BusinessAtlas";
 
 const MAP = {
@@ -53,7 +68,7 @@ const PROCESS = {
 const drawn = () => waitFor(() => expect(screen.getByTestId("business-atlas").querySelector("svg")).toBeTruthy());
 const shapes = () => Object.fromEntries([...screen.getByTestId("business-atlas").querySelectorAll("[data-shape]")].map((g) => [g.getAttribute("data-name"), g.getAttribute("data-shape")]));
 
-beforeEach(() => { inspect.mockClear(); served.map = MAP; served.declared = { processes: [], rules: [] }; });
+beforeEach(() => { inspect.mockClear(); served.map = MAP; served.declared = { processes: [], rules: [] }; placed = { tables: [], areas: [] }; });
 
 describe("the Business Atlas", () => {
   it("shapes each entity by what a deployed package says it does, and says how many it drew plain", async () => {
@@ -101,7 +116,7 @@ describe("the Business Atlas", () => {
     await drawn();
     const atlas = screen.getByTestId("business-atlas");
     expect([...atlas.querySelectorAll("text.aug-atlas-written.is-entity")].map((t) => t.textContent).sort()).toEqual(["Buyer", "Depot", "Note", "Order"]);                 // the name alone: how many is on the label
-    expect(atlas.querySelector("text.aug-atlas-written.is-zone")?.textContent).toBe("OTHER");   // the zone is written on its ground too
+    expect(atlas.querySelector("text.aug-atlas-written.is-zone")?.textContent).toBe("IN NO AREA");   // the zone is written on its ground too — an Area (A6); here none is placed
     // every flag is tucked to its mark, which stays the control a keyboard and a screen reader reach
     const mark = screen.getByRole("button", { name: "Depot" }).closest(".aug-atlas-mark")!;
     expect(atlas.querySelectorAll(".aug-atlas-mark.is-tucked").length).toBe(4);
@@ -255,4 +270,33 @@ describe("the Business Atlas", () => {
     expect(Object.keys(shapes())).toHaveLength(4);
     expect(screen.getByTestId("atlas-no-process")).toBeTruthy();
   });
+
+  it("zones each entity by the Area its table is placed in (A6), the unplaced aside, and says what a zone is", async () => {
+    placed = { tables: [{ name: "orders", area: "orders_sales" }, { name: "buyers", area: "customers" }],
+      areas: [{ id: "orders_sales", name: "Orders & sales" }, { id: "customers", name: "Customers" }] };
+    render(<BusinessAtlas connectionId="c1" schema="s" title="shop" />);
+    await drawn();
+    const zones = [...screen.getByTestId("business-atlas").querySelectorAll("[data-zone]")].map((z) => z.getAttribute("data-zone"));
+    expect(zones).toEqual(expect.arrayContaining(["Orders & sales", "Customers", "In no Area"]));
+    expect(screen.getByRole("heading", { name: /shop — Business Atlas/ }).getAttribute("title")).toContain("each zone is an Area");
+  });
+
+  it("inside an Area draws only its entities; one with none there says so", async () => {
+    placed = { tables: [{ name: "orders", area: "orders_sales" }, { name: "buyers", area: "orders_sales" }, { name: "depots", area: "inventory" }],
+      areas: [{ id: "orders_sales", name: "Orders & sales" }, { id: "inventory", name: "Inventory" }] };
+    render(<BusinessAtlas connectionId="c1" schema="s" title="shop" onlyArea="orders_sales" />);
+    await drawn();
+    expect(Object.keys(shapes()).sort()).toEqual(["Buyer", "Order"]);
+  });
+
+  it("when the Areas cannot be read, zones by the ontology's domains and says so; inside an Area, says it cannot tell", async () => {
+    placed = "fails";
+    const { unmount } = render(<BusinessAtlas connectionId="c1" schema="s" title="shop" />);
+    await drawn();
+    expect(screen.getByTestId("atlas-zones-said").textContent).toContain("the Areas could not be read");
+    unmount();
+    render(<BusinessAtlas connectionId="c1" schema="s" title="shop" onlyArea="orders_sales" />);
+    expect(await screen.findByText("The Areas could not be read")).toBeTruthy();
+  });
 });
+

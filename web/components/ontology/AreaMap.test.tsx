@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AreaMap } from "@/components/ontology/AreaMap";
 import type { Atlas, AtlasArea } from "@/lib/areaMap";
-import { forgetDiscoverReads, type DiscoverAreaPage, type DiscoverItem } from "@/lib/discover";
+import { forgetDiscoverReads, type AtlasReview, type DiscoverAreaPage, type DiscoverItem, type ReviewRow } from "@/lib/discover";
 import type { LearnedItem } from "@/lib/learned";
 import { fireEvent, render, screen } from "@/lib/testing";
 
@@ -55,10 +55,26 @@ const LEARNED: LearnedItem = {
   tables: ["orders"], lineage: [], ref: "r1", area: "orders_sales", uses: null, times: 1, also: [],
 };
 
+const waiting = (id: string, source: string, kind: ReviewRow["kind"], title: string, extra: Partial<ReviewRow> = {}): ReviewRow => ({
+  id, source, kind, title, detail: "", area: "orders_sales", count: null, complaints: 0, at: "", connection_id: "c1",
+  connection_name: "theLook", resolve: { href: `/?tab=semantic&id=${id}`, action: "Decide it" }, ...extra,
+});
+
+const REVIEW: AtlasReview = {
+  area: "orders_sales", within: ["returns_sub"], total: 3, read_at: "2026-11-25T10:00:00+00:00", said: [],
+  by_source: { framing_miss: 1, new_definition: 1, rival_meanings: 1 },
+  items: [
+    waiting("g1", "framing_miss", "gap", "What is a repeat buyer?", { count: 12, resolve: { href: "/?tab=semantic", action: "Define it" } }),
+    waiting("n1", "new_definition", "candidate", "“Repeat buyer” — learned 3 times; no Definition says what it means", { count: 3 }),
+    waiting("c1", "rival_meanings", "conflict", "“Active customer” means two things", { complaints: 2 }),
+  ],
+};
+
 function serve(body: Atlas = ATLAS) {
   const urls: string[] = [];
   vi.stubGlobal("fetch", vi.fn(async (url: string) => {
     urls.push(String(url));
+    if (String(url).includes("/discover/atlas/review")) return new Response(JSON.stringify(REVIEW));
     if (String(url).includes("/discover/areas/")) return new Response(JSON.stringify(PAGE));
     if (String(url).includes("/learned")) {
       return new Response(JSON.stringify({ items: [LEARNED], total: 1, matched: 1, folded: 0, unplaced: 0, areas: [], withheld: null }));
@@ -96,7 +112,8 @@ describe("the Atlas, by Area", () => {
     render(<AreaMap />);
     fireEvent.click(await screen.findByRole("tab", { name: "Review 801" }));
     expect(screen.getByTestId("atlas-review-total")).toHaveTextContent("801 wait for review, 534 in no Area");
-    expect(screen.getAllByRole("listitem").map((r) => r.textContent)).toEqual(["Orders & sales2 gaps · 1 to confirm · 4 learned"]);
+    expect(screen.getAllByRole("listitem").map((r) => r.textContent)).toEqual([
+      "In no Area534 wait, placed in no Area", "Orders & sales2 gaps · 1 to confirm · 4 learned"]);
     fireEvent.click(screen.getByTestId("atlas-bubble-orders_sales"));
     expect(screen.getByTestId("atlas-area-panel")).toHaveTextContent("Orders & sales");
     expect(screen.getByTestId("atlas-area-answers")).toHaveTextContent("40 answers this month drew on it");
@@ -173,4 +190,49 @@ describe("the Atlas, by Area", () => {
     fireEvent.click(screen.getByRole("button", { name: "Promote to a Definition" }));
     expect(screen.getByTestId("learned-promote")).toBeTruthy();
   });
+
+  it("an Area's Review lists what waits in it and its sub-Areas, in the plan's words, each with its door", async () => {
+    const urls = serve();
+    render(<AreaMap />);
+    fireEvent.click(await screen.findByTestId("atlas-bubble-orders_sales"));
+    fireEvent.click(await screen.findByTestId("atlas-area-review"));
+    expect(await screen.findByTestId("atlas-review-list")).toHaveTextContent("3 wait for review");
+    expect(screen.getByTestId("atlas-review-list")).toHaveTextContent("with its 1 sub-Area · across its connections");
+    expect(screen.getAllByTestId("atlas-review-row").map((r) => r.textContent?.split("theLook")[0])).toEqual([
+      "GapWhat is a repeat buyer?", "New Definition“Repeat buyer” — learned 3 times; no Definition says what it means",
+      "Conflict“Active customer” means two things"]);
+    expect(screen.getAllByTestId("atlas-review-row")[0]).toHaveTextContent("theLook · asked 12 times");
+    expect(screen.getAllByTestId("atlas-review-row")[2]).toHaveTextContent("2 complaints");
+    expect(screen.getByRole("button", { name: "Define it" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Conflict 1" }));
+    expect(screen.getAllByTestId("atlas-review-row")).toHaveLength(1);
+    expect(urls.find((u) => u.includes("/discover/atlas/review"))).toContain("area=orders_sales");
+  });
+
+  it("the Review tab opens an Area straight to its review, and lists what waits in no Area", async () => {
+    const urls = serve();
+    render(<AreaMap />);
+    fireEvent.click(await screen.findByRole("tab", { name: "Review 801" }));
+    fireEvent.click(screen.getByTestId("atlas-review-unplaced"));
+    expect(await screen.findByTestId("atlas-review-list")).toHaveTextContent("for review in no Area");
+    expect(urls.some((u) => u.includes("/discover/atlas/review") && u.includes("area=none"))).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "By Area" }));
+    fireEvent.click(screen.getAllByRole("listitem").find((r) => r.textContent?.startsWith("Orders & sales"))!);
+    expect(await screen.findByTestId("atlas-area-panel")).toHaveTextContent("Orders & sales");
+    expect(await screen.findByTestId("atlas-review-list")).toHaveTextContent("3 wait for review");
+  });
+
+  it("a circle clicked opens that Area and its tab on the right; a sub-Area opens beside its parent, to one side", async () => {
+    serve();
+    render(<AreaMap />);
+    fireEvent.click(await screen.findByTestId("atlas-bubble-orders_sales"));
+    expect(await screen.findByTestId("atlas-open-area")).toHaveTextContent("Orders & sales");
+    expect(screen.getByTestId("atlas-open-area")).toHaveTextContent("This month40 answers drew on it");
+    fireEvent.click(await screen.findByTestId("atlas-fan-child-returns_sub"));
+    expect(await screen.findByTestId("atlas-fan-parent")).toHaveTextContent("Orders & sales");
+    expect(screen.getByTestId("atlas-fan-centre")).toHaveTextContent("Refunds");
+    expect(screen.getAllByRole("tab", { name: /Orders & sales|Refunds/ }).map((t) => t.textContent)).toEqual(["Orders & sales", "Refunds"]);
+    expect(screen.getByTestId("atlas-open-area")).toHaveTextContent("Refunds");
+  });
 });
+

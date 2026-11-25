@@ -54,14 +54,14 @@ def order_key(i: Item) -> tuple:
     its name. Search breaks a tie in relevance by it."""
     mark = (i.certification or {}).get("status")
     return (0 if mark == "certified" else 2 if mark == "deprecated" else 1,
-            _STATE_RANK.get(i.state, 1), _negated(i.updated_at), i.name.lower())
+            _STATE_RANK.get(i.state, 1), newest_first(i.updated_at), i.name.lower())
 
 
 def _order(items: list[Item]) -> list[Item]:
     return sorted(items, key=order_key)
 
 
-def _negated(at: str) -> tuple:
+def newest_first(at: str) -> tuple:
     """A timestamp sorted newest first, as a key; the undated last."""
     return (0, tuple(-ord(ch) for ch in at)) if at else (1, ())
 

@@ -14,9 +14,11 @@ import { MUTED, ROW } from "@/components/clarity/kit";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { IconSquare } from "@/components/ui/icon-square";
+import { Segmented } from "@/components/ui/segmented";
+import { BusinessAtlas } from "@/components/ontology/BusinessAtlas";
 import { Loading, ReadFailed } from "@/components/ui/states";
 import {
-  AreaFan, AreaRail, OpenPanel, readLearnedIn, withOpened, type LearnedHere, type Opened,
+  AreaFan, AreaRail, areaOpened, OpenPanel, readLearnedIn, ReviewList, withOpened, type AreaLike, type LearnedHere, type Opened,
 } from "@/components/ontology/AreaDrill";
 import { areaIcon } from "@/lib/areaIcons";
 import {
@@ -83,6 +85,8 @@ function Overview({ atlas }: { atlas: Atlas }) {
 }
 
 function Review({ atlas, onPick }: { atlas: Atlas; onPick: (id: string) => void }) {
+  const [unplaced, setUnplaced] = useState(false);
+  if (unplaced) return <ReviewList area="none" onBack={() => setUnplaced(false)} backWords="By Area" />;
   if (!atlas.review) {
     return <span className="aug-fs-sm" style={MUTED}>{atlas.said[0] ?? "What waits for review is being read."}</span>;
   }
@@ -94,6 +98,16 @@ function Review({ atlas, onPick }: { atlas: Atlas; onPick: (id: string) => void 
         {atlas.read_at && ` · read at ${new Date(atlas.read_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}
       </span>
       <div role="list" style={{ display: "flex", flexDirection: "column", gap: 2, margin: "0 -8px" }}>
+        {atlas.review.unplaced > 0 && (
+          <Button role="listitem" variant="ghost" size="sm" data-testid="atlas-review-unplaced" onClick={() => setUnplaced(true)}
+            style={{ justifyContent: "flex-start", gap: 10, height: "auto", padding: "6px 8px", textAlign: "left" }}>
+            <IconSquare name={areaIcon("")} size={22} />
+            <span style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
+              <span className="aug-fs-sm" style={{ color: "var(--t1)" }}>In no Area</span>
+              <span className="aug-fs-xs" style={MUTED}>{`${formatCount(atlas.review.unplaced)} wait, placed in no Area`}</span>
+            </span>
+          </Button>
+        )}
         {rows.map((a) => (
           <Button key={a.id} role="listitem" variant="ghost" size="sm" onClick={() => onPick(a.id)}
             style={{ justifyContent: "flex-start", gap: 10, height: "auto", padding: "6px 8px", textAlign: "left" }}>
@@ -125,6 +139,8 @@ export function AreaMap() {
   const [open, setOpen] = useState<Opened[]>([]);
   const [active, setActive] = useState<string | null>(null);
   const [children, setChildren] = useState<Map<string, DiscoverArea>>(new Map());
+  // an opened Area's canvas: what it holds, fanned out by kind — or its Relationships, the Business Atlas inside it (A6)
+  const [view, setView] = useState<"holds" | "relationships">("holds");
   const workspaceId = getActiveWorkspace() || undefined;
 
   const load = useCallback(() => {
@@ -197,6 +213,15 @@ export function AreaMap() {
     if (active === key) setActive(null);
   };
   const areaList = [...atlas.areas, ...atlas.quiet].map((a) => ({ id: a.id, name: a.name }));
+  // every Area this page knows — on the map, opened as a sub-Area, or holding nothing — for an opened Area's parent and
+  // its siblings: the canvas opens to one side of the parent (the user, 2026-11-25)
+  const known = new Map<string, AreaLike>([...atlas.quiet.map((q) => [q.id, { id: q.id, name: q.name, question: q.question }] as const),
+    ...[...children.values()].map((c) => [c.id, c] as const), ...atlas.areas.map((a) => [a.id, a] as const)]);
+  const parentOf = chosen?.parent ? known.get(chosen.parent) ?? null : null;
+  const siblings = parentOf ? [...known.values()].filter((a) => a.parent === parentOf.id) : [];
+  /** A circle clicked: that Area opened, and its tab on the right with what it is (the user: "panels on the right side
+   *  with the artefact/circle clicked upon"). */
+  const openArea = (a: AreaLike) => { pick(a.id); openOne(areaOpened(known.get(a.id) ?? a)); };
 
   return (
     <div data-testid="area-map" style={{ flex: 1, minHeight: 0, display: "flex", flexWrap: "wrap", overflow: "hidden" }}>
@@ -205,7 +230,7 @@ export function AreaMap() {
         {chosen ? (
           <AreaRail area={chosen} page={page} pageFailed={pageFailed} onRetry={() => readPage(chosen.id, true)}
             connections={atlas.connections} fan={fan} kind={kind} onKind={chooseKind} learned={learned} onOpen={openOne}
-            onPickArea={(a) => pick(a.id)} onBack={() => pick(null)} workspaceId={workspaceId}
+            onPickArea={openArea} onBack={() => pick(null)} workspaceId={workspaceId}
             onSaved={() => { readPage(chosen.id, true); load(); }} />
         ) : (
           <>
@@ -217,7 +242,7 @@ export function AreaMap() {
                 </Button>
               ))}
             </div>
-            {tab === "overview" ? <Overview atlas={atlas} /> : <Review atlas={atlas} onPick={pick} />}
+            {tab === "overview" ? <Overview atlas={atlas} /> : <Review atlas={atlas} onPick={(id) => { pick(id); setKind("review"); }} />}
           </>
         )}
       </aside>
@@ -225,8 +250,23 @@ export function AreaMap() {
         overflow: "hidden", backgroundColor: "var(--bg-0)", backgroundImage: "radial-gradient(var(--bg-hover) 1px, transparent 1px)",
         backgroundSize: "18px 18px" }}>
         {chosen && (
-          <AreaFan area={chosen} fan={fan} subAreas={page?.children ?? []} size={size} zoom={zoom} kind={kind} onKind={chooseKind}
-            onPickArea={(a) => pick(a.id)} />
+          <div style={{ position: "absolute", left: 14, top: 12, zIndex: 3 }}>
+            <Segmented<"holds" | "relationships"> label="What the Area shows" value={view} onChange={setView}
+              options={[{ value: "holds", label: "What it holds" }, { value: "relationships", label: "Relationships" }]} />
+          </div>
+        )}
+        {chosen && view === "holds" && (
+          <AreaFan area={chosen} parent={parentOf} siblings={siblings} fan={fan} subAreas={page?.children ?? []} size={size} zoom={zoom}
+            kind={kind} onKind={chooseKind} onPickArea={openArea} />
+        )}
+        {chosen && view === "relationships" && (
+          <div data-testid="atlas-area-relationships" style={{ position: "absolute", inset: 0, paddingTop: 52, overflowY: "auto",
+            display: "flex", flexDirection: "column", gap: 16, boxSizing: "border-box" }}>
+            {conns.length === 0 && <span className="aug-fs-sm" style={{ ...MUTED, padding: "0 16px" }}>The Area is on no connection in view.</span>}
+            {conns.map((c) => (
+              <BusinessAtlas key={c.id} connectionId={c.id} title={c.name} embedded onlyArea={chosen.id} />
+            ))}
+          </div>
         )}
         {!chosen && other.total > 0 && (
           <span className="aug-fs-xs" data-testid="atlas-everything-else" style={{ position: "absolute", left: 14, top: 12, zIndex: 2,
@@ -243,7 +283,7 @@ export function AreaMap() {
             <Button key={p.id} variant="ghost" data-testid={area ? `atlas-bubble-${area.id}` : "atlas-bubble-suggested"}
               aria-pressed={area ? picked === area.id : undefined} disabled={!area}
               aria-label={area ? `${area.name}: ${area.answers} answers this month, holds ${area.total}` : `${sug?.label}, suggested by the model`}
-              onClick={() => area && pick(picked === area.id ? null : area.id)}
+              onClick={() => area && (picked === area.id ? pick(null) : openArea(area))}
               style={{ position: "absolute", left: pos.left - d / 2, top: pos.top - d / 2, width: d, height: d, padding: 4,
                 borderRadius: "50%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3,
                 background: area ? "var(--bg-2)" : "transparent", opacity: 1,
@@ -272,7 +312,7 @@ export function AreaMap() {
         </div>
       </section>
       {open.length > 0 && (
-        <OpenPanel open={open} active={active} onActive={setActive} onClose={closeOne} areas={areaList} />
+        <OpenPanel open={open} active={active} onActive={setActive} onClose={closeOne} areas={areaList} connections={atlas.connections} />
       )}
     </div>
   );

@@ -53,9 +53,11 @@ function inPlace(e: MouseEvent, open: () => void) {
   e.preventDefault(); open();
 }
 
-export function DefinitionView({ term, connection, initialArea = "", inApp = false, onCancel, onNamed }: {
+export function DefinitionView({ term, connection, initialArea = "", inApp = false, onCancel, onNamed, newTerm = "" }: {
   /** The word; empty for a new Definition, named on the page. */
   term: string;
+  /** A new Definition's word, filled in for the person to keep or change (the Atlas's review: "Write its Definition"). */
+  newTerm?: string;
   connection: string;
   /** The area of the business the link named, when it named one. */
   initialArea?: string;
@@ -69,7 +71,7 @@ export function DefinitionView({ term, connection, initialArea = "", inApp = fal
   const [area, setArea] = useState(initialArea);
   const [all, setAll] = useState<Definition[] | null | undefined>(term ? undefined : null);
   const [me, setMe] = useState("");
-  const [draft, setDraft] = useState<Draft>(fromDefinition(null, term, initialArea));
+  const [draft, setDraft] = useState<Draft>(fromDefinition(null, term || newTerm, initialArea));
   const [writing, setWriting] = useState(!term);
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState("");

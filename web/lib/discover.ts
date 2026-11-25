@@ -217,6 +217,43 @@ function read<T>(href: string, what: string, fresh = false): Promise<T> {
   }, fresh);
 }
 
+/** One row waiting on a person (`knowledge/review.py`), on the connection it waits on (A5). */
+export interface ReviewRow {
+  id: string;
+  /** Where it came from: framing_miss, unanswered, new_definition, definition_edit, rival_meanings, divergence, verdict,
+   *  unhelpful, definition_draft, definition_suggestion, finding, usage, synonym, import, suggested_area. */
+  source: string;
+  kind: "gap" | "candidate" | "conflict";
+  title: string;
+  detail: string;
+  /** The Areas it sits in, comma-separated; "" for none. */
+  area: string;
+  count: number | null;
+  complaints: number;
+  at: string;
+  resolve: { href: string | null; action: string };
+  owners?: string[];
+  connection_id: string;
+  connection_name: string;
+}
+
+/** What waits for review in an Area across the connections in view, its sub-Areas' rolled up (A5); "none" for what waits
+ *  in no Area. From the Atlas's kept reading — as old as `read_at`. */
+export interface AtlasReview {
+  area: string;
+  items: ReviewRow[];
+  /** The sub-Areas rolled up into it. */
+  within: string[];
+  by_source: Record<string, number>;
+  total: number;
+  read_at: string | null;
+  said: string[];
+}
+
+export function readAtlasReview(area: string, workspaceId?: string, fresh = false): Promise<AtlasReview> {
+  return read(url("/discover/atlas/review", { area }, workspaceId), "what waits for review", fresh);
+}
+
 /** The Atlas, by Area (A4a, 2026-11-25): the organisation's map — `lib/areaMap.ts` says what it holds. */
 export function readAtlas<T>(workspaceId?: string, fresh = false): Promise<T> {
   return read(url("/discover/atlas", {}, workspaceId), "the Atlas", fresh);

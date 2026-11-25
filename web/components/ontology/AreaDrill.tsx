@@ -9,7 +9,7 @@
  * adds a tab to the right panel — several stay open side by side: a metric, a table, a dashboard, a Definition, a
  * learned item with where it came from, why it stands where it does, and Promote.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Chip, MUTED, ROW } from "@/components/clarity/kit";
 import { AreaEditor } from "@/components/discover/AreaCuration";
@@ -20,15 +20,19 @@ import { IconSquare } from "@/components/ui/icon-square";
 import { Loading, ReadFailed } from "@/components/ui/states";
 import { openInApp } from "@/lib/addressOnce";
 import { areaIcon } from "@/lib/areaIcons";
-import { itemsOf, ring, waitingWords, type AtlasArea, type Fan, type FanKey } from "@/lib/areaMap";
 import {
-  holdsWords, KIND_WORDS, markOf, ownersLine, usageLine, type DiscoverArea, type DiscoverAreaPage, type DiscoverItem,
+  curve, itemsOf, oneSided, reviewFilters, reviewWord, waitingWords, type AtlasArea, type Disc, type Fan, type FanKey,
+} from "@/lib/areaMap";
+import {
+  holdsWords, KIND_WORDS, markOf, ownersLine, readAtlasReview, usageLine, type AtlasReview, type DiscoverArea,
+  type DiscoverAreaPage, type DiscoverItem,
 } from "@/lib/discover";
 import { countNoun, formatCount, relTime } from "@/lib/format";
 import { KIND_WORDS as LEARNED_WORDS, readLearned, whereFrom, type LearnedItem, type Promoted } from "@/lib/learned";
 
 /** A thing open in the right panel. */
 export type Opened =
+  | { key: string; title: string; what: "area"; area: AreaLike }
   | { key: string; title: string; what: "item"; item: DiscoverItem }
   | { key: string; title: string; what: "learned"; item: LearnedItem; connId: string; connName: string };
 
@@ -62,12 +66,87 @@ export function withOpened(open: Opened[], o: Opened): Opened[] {
   return [...open, o].slice(-MAX_OPEN);
 }
 
+export const areaOpened = (area: AreaLike): Opened => ({ key: `area:${area.id}`, title: area.name, what: "area", area });
 export const itemOpened = (item: DiscoverItem): Opened => ({ key: `item:${item.kind}:${item.id}`, title: item.name, what: "item", item });
 export const learnedOpened = (l: LearnedHere): Opened => ({
   key: `learned:${l.connId}:${l.item.ref || l.item.text}`, title: l.item.text, what: "learned", ...l,
 });
 
 // ── the side panel ──────────────────────────────────────────────────────────────────────────────────────────────────
+
+/** The most review rows drawn at once; the rest are counted. */
+const REVIEW_SHOWN = 100;
+
+/** What waits for review in an Area across its connections — its sub-Areas' rolled up — or, "none", in no Area (the
+ *  Atlas plan's §3.4, A5): each row in the plan's words, its reason, its weight, and the door to the page it is decided
+ *  on, where only a contact or an admin decides, as today. */
+export function ReviewList({ area, onBack, backWords = "The Area" }: { area: string; onBack?: () => void; backWords?: string }) {
+  const [review, setReview] = useState<AtlasReview | null>(null);
+  const [failed, setFailed] = useState("");
+  const [only, setOnly] = useState("");
+  useEffect(() => {
+    readAtlasReview(area).then((r) => { setReview(r); setFailed(""); })
+      .catch((e) => setFailed(e instanceof Error ? e.message : String(e)));
+  }, [area]);
+  if (failed) return <span className="aug-fs-sm" style={{ color: "var(--red4)" }}>{`What waits for review could not be read: ${failed}`}</span>;
+  if (!review) return <Loading what="what waits for review" />;
+  const rows = review.items.filter((r) => !only || reviewWord(r.source, r.kind) === only);
+  const at = review.read_at ? new Date(review.read_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+  return (
+    <section data-testid="atlas-review-list" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <span style={{ ...ROW, gap: 8, justifyContent: "space-between" }}>
+        <span className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: 600 }}>
+          {`${countNoun(review.total, "waits", "wait")} for review${area === "none" ? " in no Area" : ""}`}
+        </span>
+        {onBack && <Button variant="ghost" size="xs" onClick={onBack}>{backWords}</Button>}
+      </span>
+      <span className="aug-fs-xs" style={MUTED}>
+        {[review.within.length ? `with its ${countNoun(review.within.length, "sub-Area")}` : "", "across its connections",
+          at && `as read at ${at}`].filter(Boolean).join(" · ")}
+      </span>
+      {review.total > 0 && (
+        <div role="group" aria-label="What kind" style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+          <Button size="xs" variant={only ? "ghost" : "secondary"} aria-pressed={!only} onClick={() => setOnly("")}>All</Button>
+          {reviewFilters(review.by_source).map((f) => (
+            <Button key={f.word} size="xs" variant={only === f.word ? "secondary" : "ghost"} aria-pressed={only === f.word}
+              onClick={() => setOnly(only === f.word ? "" : f.word)}>{`${f.word} ${formatCount(f.count)}`}</Button>
+          ))}
+        </div>
+      )}
+      {review.total === 0 && review.said.length === 0 && <span className="aug-fs-sm" style={MUTED}>Nothing waits here.</span>}
+      <div role="list" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {rows.slice(0, REVIEW_SHOWN).map((r) => {
+          const meta = [r.connection_name, r.count != null && (r.source === "framing_miss" || r.source === "unanswered")
+            ? `asked ${r.count === 1 ? "once" : `${formatCount(r.count)} times`}` : "",
+            r.complaints ? countNoun(r.complaints, "complaint") : "", r.at ? relTime(r.at) : ""].filter(Boolean);
+          return (
+            <div key={`${r.connection_id}:${r.id}`} role="listitem" data-testid="atlas-review-row"
+              style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+              <span style={{ ...ROW, gap: 6, alignItems: "flex-start" }}>
+                <Chip tone={r.kind === "conflict" ? "amber" : "plain"}>{reviewWord(r.source, r.kind)}</Chip>
+                <span className="aug-fs-sm" style={{ color: "var(--t1)", wordBreak: "break-word" }}>{r.title}</span>
+              </span>
+              {r.detail && (
+                <span className="aug-fs-xs" style={{ ...MUTED, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
+                  overflow: "hidden" }}>{r.detail}</span>
+              )}
+              <span style={{ ...ROW, gap: 8, justifyContent: "space-between" }}>
+                <span className="aug-fs-xs" style={MUTED}>{meta.join(" · ")}</span>
+                {r.resolve.href && (
+                  <Button size="xs" variant="secondary" onClick={() => openInApp(r.resolve.href as string)}>{r.resolve.action}</Button>
+                )}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      {rows.length > REVIEW_SHOWN && (
+        <span className="aug-fs-xs" style={MUTED}>{`The first ${REVIEW_SHOWN} of ${formatCount(rows.length)}, the busiest first.`}</span>
+      )}
+      {review.said.map((s) => <span key={s} className="aug-fs-xs" style={{ color: "var(--amb4)" }}>{s}</span>)}
+    </section>
+  );
+}
 
 function KindList({ fan, items, learned, onOpen, onBack }: {
   fan: Fan; items: DiscoverItem[]; learned: { items: LearnedHere[]; unread: string[] } | null | "failed";
@@ -133,7 +212,7 @@ export function AreaRail({ area, page, pageFailed, onRetry, connections, fan, ki
   area: AtlasArea; page: DiscoverAreaPage | null; pageFailed: string; onRetry: () => void;
   connections: { id: string; name: string }[]; fan: Fan[]; kind: FanKey | null; onKind: (k: FanKey | null) => void;
   learned: { items: LearnedHere[]; unread: string[] } | null | "failed"; onOpen: (o: Opened) => void;
-  onPickArea: (a: DiscoverArea) => void; onBack: () => void; workspaceId?: string; onSaved: () => void;
+  onPickArea: (a: AreaLike) => void; onBack: () => void; workspaceId?: string; onSaved: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const chosenFan = kind ? fan.find((f) => f.key === kind) ?? null : null;
@@ -161,7 +240,7 @@ export function AreaRail({ area, page, pageFailed, onRetry, connections, fan, ki
           {page?.can_curate && <Button size="xs" variant="secondary" onClick={() => setEditing(true)}>Edit</Button>}
         </span>
       )}
-      {chosenFan ? (
+      {kind === "review" ? <ReviewList area={area.id} onBack={() => onKind(null)} /> : chosenFan ? (
         <KindList fan={chosenFan} items={page ? itemsOf(page, chosenFan.key) : []} learned={learned} onOpen={onOpen}
           onBack={() => onKind(null)} />
       ) : (
@@ -171,7 +250,10 @@ export function AreaRail({ area, page, pageFailed, onRetry, connections, fan, ki
               {`${formatCount(area.answers)} answer${area.answers === 1 ? "" : "s"} this month drew on it`}
             </span>
             <span className="aug-fs-sm" style={{ color: "var(--t2)" }}>{`Holds ${holdsWords(area.counts) || "nothing yet"}`}</span>
-            <span className="aug-fs-sm" style={{ color: "var(--t2)" }}>{`Waiting: ${waitingWords(area.review, area.learned)}`}</span>
+            <span style={{ ...ROW, gap: 8, justifyContent: "space-between" }}>
+              <span className="aug-fs-sm" style={{ color: "var(--t2)" }}>{`Waiting: ${waitingWords(area.review, area.learned)}`}</span>
+              <Button size="xs" variant="secondary" data-testid="atlas-area-review" onClick={() => onKind("review")}>Review</Button>
+            </span>
             {on.length > 0 && <span className="aug-fs-xs" style={MUTED}>{`On ${on.join(", ")}`}</span>}
           </div>
           {pageFailed ? <ReadFailed what="the Area" error={pageFailed} onRetry={onRetry} />
@@ -213,50 +295,74 @@ export function AreaRail({ area, page, pageFailed, onRetry, connections, fan, ki
 
 // ── the canvas ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
-/** The Area at the middle, its kinds around it, its sub-Areas further out — each a door. */
-export function AreaFan({ area, fan, subAreas, size, zoom, kind, onKind, onPickArea }: {
-  area: AtlasArea; fan: Fan[]; subAreas: DiscoverArea[]; size: { w: number; h: number }; zoom: number;
-  kind: FanKey | null; onKind: (k: FanKey) => void; onPickArea: (a: DiscoverArea) => void;
+/** An Area-like thing a circle stands for: an Area on the map, its parent, a sibling, a sub-Area. */
+export type AreaLike = Pick<DiscoverArea, "id" | "name"> & Partial<AtlasArea>;
+
+function Circle({ disc, area, note, chosen = false, faded = false, testId, onClick }: {
+  disc: Disc; area: AreaLike; note: string; chosen?: boolean; faded?: boolean; testId: string; onClick: () => void;
 }) {
-  const cx = size.w / 2;
-  const cy = size.h / 2;
-  const unit = Math.max(0.55, Math.min(1.2, Math.min(size.w / 900, size.h / 640))) * zoom;
-  const centre = 64 * unit;
-  const kinds = ring(fan.length, (centre + 120) * unit);
-  const outer = ring(subAreas.length, (centre + 250) * unit);
+  const d = 2 * disc.r;
+  return (
+    <Button variant="ghost" data-testid={testId} aria-pressed={chosen} onClick={onClick} title={area.question || area.name}
+      style={{ position: "absolute", left: disc.x - disc.r, top: disc.y - disc.r, width: d, height: d, borderRadius: "50%", padding: 6,
+        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, whiteSpace: "normal",
+        background: "var(--bg-2)", opacity: faded ? 0.5 : 1, color: "var(--t1)",
+        boxShadow: chosen ? "0 0 0 2px var(--accent)" : "inset 0 0 0 1px var(--b0)" }}>
+      <IconSquare name={areaIcon(area.icon)} size={Math.max(16, Math.min(28, disc.r / 2.6))} />
+      <span className={disc.r >= 52 ? "aug-fs-sm" : "aug-fs-xs"} style={{ fontWeight: 600, lineHeight: 1.15, textAlign: "center" }}>{area.name}</span>
+      {note && <span className="aug-fs-xs" style={{ ...MUTED, textAlign: "center" }}>{note}</span>}
+    </Button>
+  );
+}
+
+/** An opened Area, to one side (the user, 2026-11-25, on a reference design: "how everything opens up — on one side
+ *  of the bigger circle"): its parent large on the left with the Area among its siblings to its right — the others
+ *  faded — or, with no parent, the Area itself large on the left; what it holds stacked to its right, each count a
+ *  door, its sub-Areas below them; every line leaves a circle on the same side. A circle clicked opens that Area. */
+export function AreaFan({ area, parent, siblings, fan, subAreas, size, zoom, kind, onKind, onPickArea }: {
+  area: AtlasArea; parent: AreaLike | null; siblings: AreaLike[]; fan: Fan[]; subAreas: AreaLike[];
+  size: { w: number; h: number }; zoom: number; kind: FanKey | null; onKind: (k: FanKey) => void; onPickArea: (a: AreaLike) => void;
+}) {
+  const sibs = parent ? (siblings.some((s) => s.id === area.id) ? siblings : [area, ...siblings]) : [];
+  const chosenAt = parent ? sibs.findIndex((s) => s.id === area.id) : 0;
+  const L = oneSided(size.w, size.h, { parent: !!parent, siblings: sibs.length, chosenAt, chips: fan.length, subs: subAreas.length });
+  // zoomed about the canvas's middle; type stays its own size
+  const zx = (x: number) => size.w / 2 + (x - size.w / 2) * zoom;
+  const zy = (y: number) => size.h / 2 + (y - size.h / 2) * zoom;
+  const zd = (d: Disc): Disc => ({ x: zx(d.x), y: zy(d.y), r: d.r * zoom });
+  const chosen = zd(L.chosen);
+  const things = (a: AreaLike) => (a.total === undefined ? "" : countNoun(a.total, "thing"));
   return (
     <div data-testid="atlas-area-fan" style={{ position: "absolute", inset: 0 }}>
-      <svg aria-hidden width={size.w} height={size.h} style={{ position: "absolute", inset: 0 }}>
-        {[...kinds, ...outer].map((p, n) => (
-          <line key={n} x1={cx} y1={cy} x2={cx + p.x} y2={cy + p.y} stroke="var(--b1)" strokeWidth={1}
-            strokeDasharray={n >= kinds.length ? "4 4" : undefined} />
+      <svg aria-hidden width={size.w} height={size.h} style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+        {L.parent && L.siblings.map((s, i) => (
+          <path key={`p${i}`} d={curve(zd(L.parent!), { x: zx(s.x - s.r), y: zy(s.y) })} fill="none"
+            stroke={i === chosenAt ? "var(--t3)" : "var(--b1)"} strokeWidth={1} />
+        ))}
+        {L.chips.map((c, i) => <path key={`c${i}`} d={curve(chosen, { x: zx(c.x), y: zy(c.y) })} fill="none" stroke="var(--b1)" strokeWidth={1} />)}
+        {L.subs.map((d, i) => (
+          <path key={`s${i}`} d={curve(chosen, { x: zx(d.x - d.r), y: zy(d.y) })} fill="none" stroke="var(--b1)" strokeWidth={1} strokeDasharray="4 4" />
         ))}
       </svg>
-      <span data-testid="atlas-fan-centre" style={{ position: "absolute", left: cx - centre, top: cy - centre, width: 2 * centre,
-        height: 2 * centre, borderRadius: "50%", background: "var(--bg-2)", boxShadow: "0 0 0 2px var(--accent)", display: "flex",
-        flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, textAlign: "center", padding: 6, boxSizing: "border-box" }}>
-        <IconSquare name={areaIcon(area.icon)} size={28} />
-        <span className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: 600, lineHeight: 1.15 }}>{area.name}</span>
-        <span className="aug-fs-xs" style={MUTED}>{`${formatCount(area.answers)} answers`}</span>
-      </span>
+      {parent && L.parent && (
+        <Circle disc={zd(L.parent)} area={parent} note={things(parent)} faded testId="atlas-fan-parent" onClick={() => onPickArea(parent)} />
+      )}
+      {parent ? sibs.map((s, i) => i === chosenAt
+        ? <Circle key={s.id} disc={chosen} area={area} note={countNoun(area.answers, "answer")} chosen testId="atlas-fan-centre" onClick={() => onPickArea(area)} />
+        : <Circle key={s.id} disc={zd(L.siblings[i])} area={s} note={things(s)} faded testId={`atlas-fan-sibling-${s.id}`} onClick={() => onPickArea(s)} />)
+        : <Circle disc={chosen} area={area} note={countNoun(area.answers, "answer")} chosen testId="atlas-fan-centre" onClick={() => onPickArea(area)} />}
       {fan.map((f, n) => (
         <Button key={f.key} variant="secondary" size="sm" data-testid={`atlas-fan-${f.key}`} aria-pressed={kind === f.key}
           onClick={() => onKind(f.key)}
-          style={{ position: "absolute", left: cx + kinds[n].x, top: cy + kinds[n].y, transform: "translate(-50%, -50%)", gap: 6,
+          style={{ position: "absolute", left: zx(L.chips[n].x), top: zy(L.chips[n].y) - L.chips[n].h / 2, width: L.chips[n].w,
+            height: L.chips[n].h, justifyContent: "flex-start", gap: 8,
             boxShadow: kind === f.key ? "0 0 0 2px var(--accent)" : undefined }}>
-          <Icon name={f.icon} size={13} />
+          <Icon name={f.icon} size={14} />
           <span className="aug-fs-sm">{f.words}</span>
         </Button>
       ))}
       {subAreas.map((c, n) => (
-        <Button key={c.id} variant="ghost" data-testid={`atlas-fan-child-${c.id}`} onClick={() => onPickArea(c)}
-          style={{ position: "absolute", left: cx + outer[n].x, top: cy + outer[n].y, transform: "translate(-50%, -50%)",
-            width: 96 * unit, height: 96 * unit, borderRadius: "50%", background: "var(--bg-2)", boxShadow: "inset 0 0 0 1px var(--b0)",
-            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, padding: 4, whiteSpace: "normal" }}>
-          <IconSquare name={areaIcon(c.icon)} size={18} />
-          <span className="aug-fs-xs" style={{ color: "var(--t1)", fontWeight: 600, textAlign: "center", lineHeight: 1.15 }}>{c.name}</span>
-          <span className="aug-fs-xs" style={MUTED}>{countNoun(c.total, "thing")}</span>
-        </Button>
+        <Circle key={c.id} disc={zd(L.subs[n])} area={c} note={things(c)} testId={`atlas-fan-child-${c.id}`} onClick={() => onPickArea(c)} />
       ))}
     </div>
   );
@@ -274,6 +380,34 @@ function Fact({ label, value }: { label: string; value: string }) {
 }
 
 const plainKey = (k: string) => k.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
+
+/** An Area, opened on the right (the user, 2026-11-25: "panels on the right side with the artefact/circle clicked upon"):
+ *  what it is, who answers for it, what it holds, the month's answers that drew on it, what waits in it. */
+function AreaCard({ area, connections }: { area: AreaLike; connections: { id: string; name: string }[] }) {
+  const on = connections.filter((c) => (area.connections ?? []).includes(c.id)).map((c) => c.name);
+  return (
+    <div data-testid="atlas-open-area" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <span style={{ ...ROW, gap: 10 }}>
+        <IconSquare name={areaIcon(area.icon)} size={28} />
+        <span className="aug-fs-h2" style={{ color: "var(--t1)", fontWeight: 600 }}>{area.name}</span>
+      </span>
+      {area.question && <span className="aug-fs-sm" style={{ color: "var(--t2)" }}>{area.question}</span>}
+      {area.description && <span className="aug-fs-sm" style={{ color: "var(--t1)", whiteSpace: "pre-wrap" }}>{area.description}</span>}
+      <div style={{ display: "grid", gridTemplateColumns: "120px 1fr", gap: "6px 10px", alignItems: "baseline" }}>
+        <Fact label="Who answers for it" value={area.business_owners || area.technical_owners
+          ? ownersLine({ business_owners: area.business_owners ?? [], technical_owners: area.technical_owners ?? [] }) : "not read"} />
+        {area.answers !== undefined && <Fact label="This month" value={`${countNoun(area.answers, "answer")} drew on it`} />}
+        {area.counts && <Fact label="Holds" value={holdsWords(area.counts) || "nothing yet"} />}
+        {area.review !== undefined && <Fact label="Waiting" value={waitingWords(area.review ?? null, area.learned ?? null)} />}
+        {on.length > 0 && <Fact label="On" value={on.join(", ")} />}
+      </div>
+      <Button size="sm" variant="secondary" style={{ alignSelf: "flex-start" }}
+        onClick={() => openInApp(`/?view=discover&tab=discover&id=${encodeURIComponent(area.id)}`)}>
+        Open its page in Discover <Icon name="external" size={12} />
+      </Button>
+    </div>
+  );
+}
 
 function ItemCard({ item }: { item: DiscoverItem }) {
   const mark = markOf(item);
@@ -350,9 +484,9 @@ function LearnedCard({ o, areas, areaName }: {
   );
 }
 
-export function OpenPanel({ open, active, onActive, onClose, areas }: {
+export function OpenPanel({ open, active, onActive, onClose, areas, connections = [] }: {
   open: Opened[]; active: string | null; onActive: (key: string) => void; onClose: (key: string) => void;
-  areas: { id: string; name: string }[];
+  areas: { id: string; name: string }[]; connections?: { id: string; name: string }[];
 }) {
   const shown = open.find((o) => o.key === active) ?? open[open.length - 1];
   const areaName = (id: string) => areas.find((a) => a.id === id)?.name ?? id;
@@ -373,7 +507,8 @@ export function OpenPanel({ open, active, onActive, onClose, areas }: {
           </span>
         ))}
       </div>
-      {shown && (shown.what === "item" ? <ItemCard key={shown.key} item={shown.item} />
+      {shown && (shown.what === "area" ? <AreaCard key={shown.key} area={shown.area} connections={connections} />
+        : shown.what === "item" ? <ItemCard key={shown.key} item={shown.item} />
         : <LearnedCard key={shown.key} o={shown} areas={areas} areaName={areaName} />)}
     </aside>
   );

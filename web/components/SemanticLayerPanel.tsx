@@ -356,7 +356,7 @@ const EMPTY_ENTRY = { id: "", title: "", body: "", kind: "note", tags: "", area:
 function KnowledgeTab({ connId, openDef, onOpenDef, onCloseDef }: {
   connId: string;
   /** The Definition open inside the app, from a link or an entry's Open; null for the list. */
-  openDef: { term: string; area: string } | null;
+  openDef: { term: string; area: string; newTerm?: string } | null;
   onOpenDef: (term: string, area: string) => void;
   onCloseDef: () => void;
 }) {
@@ -423,7 +423,7 @@ function KnowledgeTab({ connId, openDef, onOpenDef, onCloseDef }: {
     return (
       <Page testId="semantic-definition">
         <div><Button size="xs" variant="link" onClick={onCloseDef} style={{ padding: 0 }}>‹ Definitions</Button></div>
-        <DefinitionView key={`${openDef.term}:${openDef.area}`} term={openDef.term} connection={connId} initialArea={openDef.area} inApp
+        <DefinitionView key={`${openDef.term}:${openDef.area}`} term={openDef.term} newTerm={openDef.newTerm} connection={connId} initialArea={openDef.area} inApp
           onCancel={onCloseDef} onNamed={(term, area) => { onOpenDef(term, area); void load(); }} />
       </Page>
     );
@@ -784,7 +784,7 @@ export function SemanticLayerPanel({ connectionId, connName, connections = [] }:
   // this page is open (`lib/addressOnce.ts`). The metric opens in the whole list of its connection; the Definition opens
   // here, inside the app.
   const [focusMetric, setFocusMetric] = useState<{ name: string; n: number } | null>(null);
-  const [openDef, setOpenDef] = useState<{ term: string; area: string } | null>(null);
+  const [openDef, setOpenDef] = useState<{ term: string; area: string; newTerm?: string } | null>(null);
   useFromAddress(["metric", "schema"], ({ metric }) => {
     setScopeSchema(""); setScopeTable("");
     setActiveTab("Metrics");
@@ -794,10 +794,12 @@ export function SemanticLayerPanel({ connectionId, connName, connections = [] }:
     setActiveTab("Definitions");
     setOpenDef({ term: definition, area: area ?? "" });
   });
-  // `?new_definition=1` — Discover's "Write a Definition" opens a new one's Page here
-  useFromAddress(["new_definition"], () => {
+  // `?new_definition=1` — Discover's "Write a Definition" opens a new one's Page here; the Atlas's review adds the word
+  // (and Area) it was learned under — `&term=…&area=…` (A5)
+  useFromAddress(["new_definition", "term", "area"], ({ new_definition: asked, term, area }) => {
+    if (!asked) return;          // an Area on the address alone is another link's
     setActiveTab("Definitions");
-    setOpenDef({ term: "", area: "" });
+    setOpenDef({ term: "", area: area ?? "", newTerm: term ?? "" });
   });
 
   // The semantic layer is an ORG-level surface: the active connection here is independent of the app's globally-

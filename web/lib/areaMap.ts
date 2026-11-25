@@ -115,17 +115,45 @@ export function waiting(r: AtlasArea["review"]): number {
 // ── an Area, opened (A4b, the plan's §3.2–3.3) ────────────────────────────────────────────────────────────────────────
 
 /** What an opened Area fans out into: each kind it holds, what was learned in it, and what is certified across kinds. */
-export type FanKey = DiscoverKind | "learned" | "certified";
+export type FanKind = DiscoverKind | "learned" | "certified";
 
-export interface Fan { key: FanKey; count: number; words: string; icon: IconName }
+/** What the opened Area's side panel can show: one of its fan's lists, or what waits for review in it (A5). */
+export type FanKey = FanKind | "review";
+
+export interface Fan { key: FanKind; count: number; words: string; icon: IconName }
 
 /** The order an Area fans out in — the plan's: what people defined and certified first, then the rest. */
-const FAN_ORDER: FanKey[] = ["metric", "definition", "certified", "learned", "trusted_query", "dashboard", "canvas",
+const FAN_ORDER: FanKind[] = ["metric", "definition", "certified", "learned", "trusted_query", "dashboard", "canvas",
   "agent", "document", "sheet", "schedule", "table"];
+
+/** What a review row is, in the plan's words (§3.4) — by where it came from; the order the filters are offered in. */
+export const REVIEW_WORDS: [string, string[]][] = [
+  ["New Definition", ["new_definition"]], ["Gap", ["framing_miss", "unanswered"]], ["Definition edit", ["definition_edit"]],
+  ["Conflict", ["rival_meanings", "divergence"]], ["Thumbs-down", ["verdict", "unhelpful"]], ["To confirm", ["finding", "usage"]],
+  ["Draft", ["definition_draft"]], ["Suggested edit", ["definition_suggestion"]], ["Synonym", ["synonym"]], ["Import", ["import"]],
+  ["Suggested Area", ["suggested_area"]],
+];
+
+/** A review row's word: its source's, or its kind's when the source is one this page does not know yet. */
+export function reviewWord(source: string, kind: string): string {
+  return REVIEW_WORDS.find(([, sources]) => sources.includes(source))?.[0] ?? kind.replace(/^./, (c) => c.toUpperCase());
+}
+
+/** The filters a review list offers: each word that has rows, with how many, in the plan's order. */
+export function reviewFilters(bySource: Record<string, number>): { word: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const [source, n] of Object.entries(bySource)) {
+    const w = reviewWord(source, source);
+    counts.set(w, (counts.get(w) ?? 0) + n);
+  }
+  const order = REVIEW_WORDS.map(([w]) => w);
+  return [...counts].map(([word, count]) => ({ word, count }))
+    .sort((a, b) => (order.indexOf(a.word) + 1 || 99) - (order.indexOf(b.word) + 1 || 99));
+}
 
 /** An Area's fan: each kind with a count, in the plan's order — a kind it holds none of is not drawn. */
 export function fanOf(page: Pick<DiscoverAreaPage, "kinds">, learned: number | null): Fan[] {
-  const counts = new Map<FanKey, number>(page.kinds.map((k) => [k.kind, k.count]));
+  const counts = new Map<FanKind, number>(page.kinds.map((k) => [k.kind, k.count]));
   const certified = page.kinds.reduce((n, k) => n + k.items.filter((i) => i.certification?.status === "certified").length, 0);
   if (certified) counts.set("certified", certified);
   if (learned) counts.set("learned", learned);
@@ -142,6 +170,56 @@ export function itemsOf(page: Pick<DiscoverAreaPage, "kinds">, key: FanKey): Dis
   if (key === "learned") return [];
   if (key === "certified") return page.kinds.flatMap((k) => k.items.filter((i) => i.certification?.status === "certified"));
   return page.kinds.find((k) => k.kind === key)?.items ?? [];
+}
+
+/** A circle's place on the canvas, in pixels: its centre and radius. */
+export interface Disc { x: number; y: number; r: number }
+/** A count's place: its left edge's middle, its width and height. */
+export interface Chip { x: number; y: number; w: number; h: number }
+
+/** An opened Area, laid out to one side (the user, 2026-11-25, on a reference design: "how everything opens up — on one side of
+ *  the bigger circle"): its parent, when it has one, a large circle on the left with the Area and its siblings in a
+ *  column to its right; else the Area itself large on the left. What the Area holds stacks to its right, its sub-Areas
+ *  below that — every line leaves the circle on the same side. In canvas pixels, the same every time. */
+export interface OneSided { parent: Disc | null; siblings: Disc[]; chosen: Disc; chips: Chip[]; subs: Disc[] }
+
+export const CHIP_W = 190;
+export const CHIP_H = 34;
+const CHIP_GAP = 10;
+const SUB_R = 38;
+
+export function oneSided(w: number, h: number, a: { parent: boolean; siblings: number; chosenAt: number; chips: number; subs: number }): OneSided {
+  const mid = h / 2;
+  let parent: Disc | null = null;
+  let siblings: Disc[] = [];
+  let chosen: Disc;
+  if (a.parent) {
+    parent = { x: w * 0.14, y: mid, r: Math.max(60, Math.min(h * 0.2, 120)) };
+    const n = Math.max(1, a.siblings);
+    const pitch = Math.min(132, (h - 60) / n);
+    siblings = Array.from({ length: n }, (_, i) => ({
+      x: w * 0.4, y: mid + (i - (n - 1) / 2) * pitch, r: i === a.chosenAt ? Math.min(64, pitch * 0.6) : Math.min(44, pitch * 0.42),
+    }));
+    chosen = siblings[Math.min(Math.max(0, a.chosenAt), n - 1)];
+  } else {
+    chosen = { x: w * 0.26, y: mid, r: Math.max(64, Math.min(h * 0.2, 110)) };
+  }
+  // what it holds, then its sub-Areas: one column to its right, centred on it, kept inside the canvas
+  const left = chosen.x + chosen.r + 72;
+  const chipsH = a.chips ? a.chips * (CHIP_H + CHIP_GAP) - CHIP_GAP : 0;
+  const subsH = a.subs ? a.subs * (2 * SUB_R + CHIP_GAP) + (a.chips ? CHIP_GAP * 2 : 0) : 0;
+  const top = Math.max(16, Math.min(h - 16 - chipsH - subsH, chosen.y - (chipsH + subsH) / 2));
+  const chips = Array.from({ length: a.chips }, (_, i) => ({ x: left, y: top + i * (CHIP_H + CHIP_GAP) + CHIP_H / 2, w: CHIP_W, h: CHIP_H }));
+  const subsTop = top + chipsH + (a.chips ? CHIP_GAP * 2 : 0);
+  const subs = Array.from({ length: a.subs }, (_, i) => ({ x: left + SUB_R, y: subsTop + i * (2 * SUB_R + CHIP_GAP) + SUB_R, r: SUB_R }));
+  return { parent, siblings, chosen, chips, subs };
+}
+
+/** A curve leaving a circle on its right and arriving at a point from the left — the same side, every time. */
+export function curve(from: Disc, to: { x: number; y: number }): string {
+  const x1 = from.x + from.r, y1 = from.y;
+  const dx = Math.max(24, (to.x - x1) / 2);
+  return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${to.x - dx} ${to.y}, ${to.x} ${to.y}`;
 }
 
 /** ``n`` places on a ring of radius ``r`` around (0, 0), the first at the top, going clockwise — the same every time. */
