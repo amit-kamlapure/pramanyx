@@ -34,6 +34,7 @@ import {
   type DiscoverKindView, type SuggestedInView,
 } from "@/lib/discover";
 import { formatCount } from "@/lib/format";
+import { getMyPreferences, putMyPreference } from "@/lib/api";
 import { withUniqueKeys } from "@/lib/listKeys";
 
 interface Filters { conn: string; q: string; kind: DiscoverKind | ""; area: string; certified: boolean; mine: boolean;
@@ -166,6 +167,73 @@ function SearchBar({ filters, setFilters, home, areaNames, connections }: {
           </span>
         )}
       </div>
+      <SavedSearches filters={filters} onPick={f => { setText(f.q); setFilters(f); }} />
+    </div>
+  );
+}
+
+/** A search a person keeps on Discover (S2, 2026-11-25): a name and the filters it sets, in their preferences. */
+interface SavedSearch { name: string; q: string; kind: string; area: string; conn: string; certified: boolean; mine: boolean; across: boolean }
+
+/** What a search is called before its person names it: its words, else what it narrows to. */
+export function searchName(f: Filters): string {
+  return f.q.trim() || [f.kind, f.area, f.certified ? "certified" : "", f.mine ? "mine" : ""].filter(Boolean).join(" · ") || "My search";
+}
+
+/** A person's own searches, one click from the box — each sets the filters it was kept with, and the search runs then;
+ *  none is a live section (each would read every kind and embed a question on every visit). */
+export function SavedSearches({ filters, onPick }: { filters: Filters; onPick: (f: Filters) => void }) {
+  const [saved, setSaved] = useState<SavedSearch[] | null>(null);
+  const [naming, setNaming] = useState<string | null>(null);
+  const [said, setSaid] = useState("");
+  useEffect(() => {
+    let alive = true;
+    getMyPreferences().then(p => {
+      const v = p.preferences.discover_searches;
+      if (alive) setSaved(Array.isArray(v) ? (v as SavedSearch[]) : []);
+    }).catch(() => { if (alive) setSaved([]); });
+    return () => { alive = false; };
+  }, []);
+  if (saved === null) return null;
+  const keep = async (next: SavedSearch[], done: string) => {
+    const before = saved;
+    setSaved(next); setSaid("");
+    try { await putMyPreference("discover_searches", next); setSaid(done); }
+    catch { setSaved(before); setSaid("It was not kept — try again."); }
+  };
+  const save = (name: string) => {
+    const one: SavedSearch = { name: name.trim(), q: filters.q.trim(), kind: filters.kind, area: filters.area, conn: filters.conn,
+      certified: filters.certified, mine: filters.mine, across: !!filters.across };
+    setNaming(null);
+    void keep([...saved.filter(s => s.name.toLowerCase() !== one.name.toLowerCase()), one].slice(-20), `Kept as “${one.name}”`);
+  };
+  if (!saved.length && !narrowed(filters)) return null;
+  return (
+    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }} data-testid="discover-saved-searches">
+      {saved.length > 0 && <span className="aug-fs-xs" style={MUTED}>Your searches</span>}
+      {withUniqueKeys(saved, s => `search:${s.name.toLowerCase()}`).map(([key, s]) => (
+        <span key={key} style={{ display: "inline-flex", alignItems: "center", gap: 2 }}>
+          <Button size="xs" variant="secondary" title={`Search again: ${searchName({ ...s, kind: s.kind as DiscoverKind | "" })}`}
+            onClick={() => onPick({ ...NO_FILTERS, ...s, kind: s.kind as DiscoverKind | "" })}>{s.name}</Button>
+          <Button size="icon-xs" variant="ghost" aria-label={`Forget ${s.name}`} title="Forget this search"
+            onClick={() => void keep(saved.filter(x => x.name !== s.name), `Forgot “${s.name}”`)}>
+            <Icon name="close" size={12} />
+          </Button>
+        </span>
+      ))}
+      {narrowed(filters) && naming === null && (
+        <Button size="xs" variant="outline" onClick={() => setNaming(searchName(filters))}>Save this search</Button>
+      )}
+      {naming !== null && (
+        <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+          <Input bespoke autoFocus aria-label="Name this search" value={naming} maxLength={60} style={{ width: 200 }}
+            onChange={e => setNaming(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter" && naming.trim()) save(naming); if (e.key === "Escape") setNaming(null); }} />
+          <Button size="xs" disabled={!naming.trim()} onClick={() => save(naming)}>Keep</Button>
+          <Button size="xs" variant="ghost" onClick={() => setNaming(null)}>Cancel</Button>
+        </span>
+      )}
+      {said && <span className="aug-fs-xs" style={MUTED} role="status">{said}</span>}
     </div>
   );
 }
