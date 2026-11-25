@@ -15,6 +15,7 @@ import { createElement as h } from "react";
 import mark from "../assets/mark.png";
 import { MARK_BOX, NAME_BAR_STOPS } from "../../../../web/components/ui/brandArt";
 import { Mark, Name } from "./logo.js";
+import { narrowTheSidebar } from "./sidebar.js";
 import { whatIsOpen } from "./tab.js";
 
 const NAME = "Pramanyx";
@@ -311,8 +312,9 @@ function listConversationsNewestFirst() {
   }
 }
 
-// `uiConversation` is asked for so this runs after the shell's conversation plugin has registered its dictionary.
-export const inject = ["slots", "locale", "uiConversation"];
+// `uiConversation` is asked for so this runs after the shell's conversation plugin has registered its dictionary;
+// `layout` for the sidebar's width.
+export const inject = ["slots", "locale", "uiConversation", "layout"];
 
 export function apply(ctx) {
   ctx.slots.inject("sidebar.brand.mark", () => ctx.slots.inject("sidebar.brand.name", function* () {
@@ -322,6 +324,6 @@ export function apply(ctx) {
   ctx.slots.inject("conversation.hero.brand.mark", () =>
     ctx.slots.register({ name: "conversation.hero.brand.mark" }, Mark));
   listConversationsNewestFirst();
-  const undo = [wearLook(), nameTheTab(), markTheTab(), keepSayingOurWords(ctx.locale)];
+  const undo = [wearLook(), nameTheTab(), markTheTab(), keepSayingOurWords(ctx.locale), narrowTheSidebar(ctx.layout)];
   ctx.on?.("dispose", () => undo.forEach((off) => off()));
 }
