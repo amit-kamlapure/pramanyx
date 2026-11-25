@@ -261,7 +261,7 @@ def most_queried_block(connection_id: str, *, top: int = 6) -> str:
 # which count Pramanyx's own.
 
 #: Where each connection's last reading of its history is kept (the kernel ledger's kv), and how long it stands.
-HISTORY_USE_STORE = "column_use_history"
+HISTORY_USE_STORE = "column_use_history.v2"   # v2: every run counted, the window said
 HISTORY_USE_FRESH_S = 6 * 3600
 
 _history_lock = threading.Lock()
@@ -286,11 +286,19 @@ def read_history_use(connection_id: str) -> dict:
             said = check_query_history(db).sentence()     # the engine's own refusal, with the admin's step
     finally:
         db.close()
+    # An aggregate (Postgres' pg_stat_statements) counts runs since its statistics were last reset and says so of
+    # itself (`rows_from_result`'s aggregate note); a log reads the last `hours` and says nothing when it has rows.
+    aggregate = bool(history.rows) and bool(history.note)
+    days = max(1, round((history.hours or 24) / 24))
     out: dict = {"at": datetime.now(timezone.utc).isoformat(), "engine": history.engine, "source": history.source,
                  "hours": history.hours, "supported": history.supported and not history.error, "said": said,
+                 "window": "since the engine's statistics were last reset" if aggregate
+                           else f"in the last {'day' if days == 1 else f'{days} days'}",
                  "statements": 0, "calls": 0, "ours": history.ours, "columns": {}}
     if out["supported"]:
-        sqls, weights = history.statements_and_weights()
+        # Every run counts: the miner's cap (`CALLS_CAP`) keeps one hot statement from drowning its patterns, but a
+        # count of the queries that named a column is the runs themselves.
+        sqls, weights = history.statements_and_weights(cap=2 ** 31)
         dialect = connection_traits(get_conn_type(connection_id)).get("dialect") or "duckdb"
         # Each statement counts a column once, however often it names it, as many times as it was run: "used in N
         # queries". The miner's own count is of mentions (a column selected and grouped by counts twice).
@@ -349,6 +357,7 @@ def column_use(connection_id: str, table: str, *, wait: bool = False) -> dict:
     bare = (table or "").split(".")[-1].strip().strip('`"').lower()
     columns = {k.split(".", 1)[1]: n for k, n in kept["columns"].items()
                if "." in k and k.split(".", 1)[0].strip('`"').lower() == bare}
-    return {"columns": columns, "as_of": kept.get("at"), "hours": kept.get("hours"), "statements": kept.get("statements"),
+    return {"columns": columns, "as_of": kept.get("at"), "hours": kept.get("hours"), "window": kept.get("window") or "",
+            "statements": kept.get("statements"),
             "ours": kept.get("ours") or {}, "source": kept.get("source") or "",
             "said": [kept["said"]] if kept.get("said") else []}

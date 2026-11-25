@@ -497,6 +497,10 @@ describe("what a column's use counts, said once (C2, 2026-11-25)", () => {
     expect(columnUseLine({ columns: { status: 4 }, hours: 336, as_of: "2026-11-25T09:00:00Z", said: [] }, now))
       .toBe("Used — queries people ran in the warehouse in the last 14 days that name the column, Pramanyx's own left out · read today");
   });
+  it("says the window as the source keeps it", () => {
+    expect(columnUseLine({ columns: { status: 4 }, window: "since the engine's statistics were last reset", said: [] }, now))
+      .toBe("Used — queries people ran in the warehouse since the engine's statistics were last reset that name the column, Pramanyx's own left out");
+  });
   it("says nothing when nothing is counted — the page says why instead", () => {
     expect(columnUseLine({ columns: {}, said: ["Reading the warehouse's query history is off for this organisation"] }, now)).toBeNull();
     expect(columnUseLine(undefined, now)).toBeNull();

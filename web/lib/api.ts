@@ -10120,6 +10120,8 @@ export interface ColumnUse {
   columns: Record<string, number>;
   as_of?: string;
   hours?: number;
+  /** The window as the source keeps it: "in the last 14 days", or "since the engine's statistics were last reset". */
+  window?: string;
   statements?: number;
   ours?: { statements?: number; calls?: number };
   source?: string;

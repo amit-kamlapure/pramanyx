@@ -26,9 +26,9 @@ def allowed(monkeypatch):
     monkeypatch.setattr("pramanyx.orgsettings.allows.allows", lambda what: what == "read_query_history")
 
 
-def _history(rows, *, error=""):
+def _history(rows, *, error="", note=""):
     return QueryHistory(engine="postgres", supported=True, rows=rows, hours=336, source="pg_stat_statements",
-                        error=error)
+                        error=error, note=note)
 
 
 @pytest.fixture
@@ -94,3 +94,15 @@ def test_never_read_it_says_it_is_being_read(allowed, conn, warehouse, monkeypat
     got = P.column_use(conn, "orders")
     assert got["columns"] == {} and "being read" in got["said"][0]
     assert started == [f"column-use-{conn}"]
+
+
+def test_every_run_counts_and_the_window_is_said_as_the_source_keeps_it(allowed, conn, warehouse):
+    """Live on Lux (2026-11-25): counts stopped at the miner's cap of 100 runs a statement, and `pg_stat_statements`
+    counts since its last reset, not over fourteen days."""
+    warehouse["history"] = _history([HistoryRow(ended_at="", sql="SELECT status FROM orders", calls=2500)],
+                                    note="an aggregate since the extension's last reset")
+    got = P.column_use(conn, "orders", wait=True)
+    assert got["columns"] == {"status": 2500} and got["window"] == "since the engine's statistics were last reset"
+    logged = f"{conn}-log"
+    warehouse["history"] = _history([HistoryRow(ended_at="2026-11-24", sql="SELECT status FROM orders")])
+    assert P.column_use(logged, "orders", wait=True)["window"] == "in the last 14 days"

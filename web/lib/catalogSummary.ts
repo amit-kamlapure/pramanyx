@@ -562,11 +562,11 @@ export function columnRows(
 
 /** What a column's use counts, said once above the list (the user, 2026-11-25: worded apart from a table's reads,
  *  which count Pramanyx's own): "Used — queries people ran in the warehouse in the last 14 days that name the column,
- *  Pramanyx's own left out · read today". `null` when nothing is counted; the page says `said` instead. */
+ *  Pramanyx's own left out · read today" — the window as the source keeps it (an aggregate counts since its reset). `null` when nothing is counted; the page says `said` instead. */
 export function columnUseLine(use: ColumnUse | null | undefined, now: number): string | null {
   if (!use || !Object.keys(use.columns ?? {}).length) return null;
   const days = use.hours ? Math.max(1, Math.round(use.hours / 24)) : null;
-  const span = days ? ` in the last ${days === 1 ? "day" : `${days} days`}` : "";
+  const span = use.window ? ` ${use.window}` : days ? ` in the last ${days === 1 ? "day" : `${days} days`}` : "";
   const read = use.as_of ? ` · read ${agoWords(use.as_of, now)}` : "";
   return `Used — queries people ran in the warehouse${span} that name the column, Pramanyx's own left out${read}`;
 }
