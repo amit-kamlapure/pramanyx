@@ -47,14 +47,18 @@ export function RightVotes(where: Where) {
   const read = useCallback(() => {
     fetch(`${getApiBase()}/record/definitions/votes?${q(where)}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((v: RightVotesRead) => setGot(v)).catch(() => setGot(null));
+      .then((v: RightVotesRead) => setGot(typeof v?.right === "number" && Array.isArray(v.by) ? v : null))
+      .catch(() => setGot(null));
   }, [where.connection, where.term, where.area]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { read(); }, [read]);
   if (got === undefined) return <span className="aug-fs-xs" style={MUTED}>Reading…</span>;
   if (got === null) return <span className="aug-fs-xs" style={MUTED}>Who says it is right could not be read</span>;
   const toggle = async () => {
     setBusy(true); setSaid("");
-    try { setGot(await send("/record/definitions/vote", where, { right: !got.mine })); }
+    try {
+      const v = await send("/record/definitions/vote", where, { right: !got.mine });
+      setGot(typeof v?.right === "number" && Array.isArray(v.by) ? v : null);
+    }
     catch (e) { setSaid((e as Error).message); } finally { setBusy(false); }
   };
   return (
@@ -79,7 +83,8 @@ export function DefinitionComments({ me, ...where }: Where & { me: string }) {
   const read = useCallback(() => {
     fetch(`${getApiBase()}/record/definitions/comments?${q(where)}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((rows: DefinitionComment[]) => setList(rows)).catch(() => setList(null));
+      .then((rows: DefinitionComment[]) => setList(Array.isArray(rows) ? rows.filter((c) => c && typeof c.text === "string") : null))
+      .catch(() => setList(null));
   }, [where.connection, where.term, where.area]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { read(); }, [read]);
   const act = async (path: string, body: Record<string, unknown>, done: string) => {
