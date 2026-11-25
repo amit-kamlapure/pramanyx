@@ -25,10 +25,8 @@ export function VizDock({ cardId, title }: { cardId: string; title?: string }) {
   }, [cardId]);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 0 }}>
-      <div>
-        <div className="aug-fs-chrome" style={{ color: "var(--t1)", fontWeight: 600 }}>Edit visualization</div>
-        {title && <div className="aug-fs-xs" style={{ color: "var(--t3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={title}>{title}</div>}
-      </div>
+      {/* the tab says "Edit visualization"; under it, which chart (as the coworker's tab opens on its chart's line) */}
+      {title && <div className="aug-fs-sm" style={{ color: "var(--t2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={title}>{title}</div>}
       <div ref={ref} data-testid="viz-dock" style={{ display: "flex", flexDirection: "column", minWidth: 0 }} />
     </div>
   );
