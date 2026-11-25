@@ -233,6 +233,18 @@ def _weight(i: dict) -> int:
     return int(i.get("count") or 1) + 2 * int(i.get("complaints") or 0)
 
 
+def set_aside_rows() -> set[str]:
+    """The review rows a person set aside in the Inbox ("Not now", 2026-11-26), each ``<connection>:<row id>``, until their
+    day — off every list of what waits, as Now leaves what was set aside off its own."""
+    try:
+        from pramanyx.record.set_aside import listing
+        return {str(x.get("ref") or "") for x in listing()["active"] if x.get("item_kind") == "review"}
+    except Exception as exc:  # noqa: BLE001 — unread, nothing is hidden: a row shows rather than vanish unsaid
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "the set-aside review rows could not be read", counter="atlas.set_aside")
+        return set()
+
+
 def review_in(scope, area_id: str = "") -> dict:
     """What waits for review in an Area across the connections in view, its sub-Areas' rolled up into it (the Atlas
     plan's §3.4, A5) — or, ``"none"``, what waits in no Area; ``""`` every row. From the kept reading, never read here:
@@ -240,7 +252,7 @@ def review_in(scope, area_id: str = "") -> dict:
     from pramanyx.discover.service import areas_in_view, newest_first
     slow, said = slow_parts(scope)
     if slow is None:
-        return {"area": area_id, "items": [], "within": [], "by_source": {}, "total": 0, "read_at": None, "said": said}
+        return {"area": area_id, "items": [], "within": [], "by_source": {}, "total": 0, "set_aside": 0, "read_at": None, "said": said}
     areas = areas_in_view(scope)
     within: list[str] = []
     if area_id and area_id != "none":
@@ -254,10 +266,13 @@ def review_in(scope, area_id: str = "") -> dict:
     def placed(i: dict) -> bool:
         mine = {a for a in str(i.get("area") or "").split(",") if a}
         return (not mine) if area_id == "none" else (not area_id or bool(mine & wanted))
-    rows = sorted((i for i in slow.get("review_items") or [] if placed(i)),
+    aside = set_aside_rows()
+    here = [i for i in slow.get("review_items") or [] if placed(i)]
+    kept = [i for i in here if f"{i.get('connection_id') or ''}:{i['id']}" not in aside]
+    rows = sorted(kept,
                   key=lambda i: (-_weight(i), newest_first(str(i.get("at") or "")), i["id"]))
     return {"area": area_id, "items": rows, "within": within[1:], "by_source": dict(Counter(i["source"] for i in rows)),
-            "total": len(rows), "read_at": slow.get("at"),
+            "total": len(rows), "set_aside": len(here) - len(kept), "read_at": slow.get("at"),
             "said": [*said, *([] if "review_items" in slow else
                               ["What waits for review is being read again to list it by Area; it shows on the next visit."])]}
 

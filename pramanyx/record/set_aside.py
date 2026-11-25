@@ -21,8 +21,9 @@ from pydantic import BaseModel
 
 KIND = "set_aside"
 #: What can be set aside: the kinds of row "Waiting on you" lists — the fifth (2026-11-17) is a connection's knowledge
-#: to review (`knowledge/review.py`), named by the connection.
-ITEM_KINDS: tuple[str, ...] = ("decision", "inquiry", "departure", "approval", "knowledge")
+#: to review (`knowledge/review.py`), named by the connection; the sixth (2026-11-26) one row of that review, set aside
+#: in the Inbox ("Not now"), named `<connection>:<row id>`.
+ITEM_KINDS: tuple[str, ...] = ("decision", "inquiry", "departure", "approval", "knowledge", "review")
 #: A set-aside whose day came this long ago is no longer listed as returned — its row is either
 #: dealt with or simply on the list again.
 RETURNED_LISTED_DAYS = 30
@@ -104,6 +105,9 @@ def record_of(item_kind: str, ref_or_id: str) -> Optional[dict[str, str]]:
             return None
         current = I.latest(q.key) or q
         return {"ref": current.key, "seen": current.id, "connection_id": current.connection_id}
+    if item_kind == "review":
+        # a review row is named by its connection and its id; it says nothing more until it is read again
+        return {"ref": ref_or_id, "seen": "", "connection_id": ref_or_id.split(":", 1)[0]}
     # a departure and a proposed action have one id for life; nothing about them restates
     return {"ref": ref_or_id, "seen": "", "connection_id": ""}
 

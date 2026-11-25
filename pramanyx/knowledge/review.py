@@ -37,10 +37,32 @@ def _ref(text: str) -> str:
 
 
 def _row(*, source: str, ref: str, kind: str, title: str, detail: str = "", area: str = "", count: Optional[int] = None,
-         complaints: int = 0, at: str = "", href: Optional[str], action: str) -> dict:
+         complaints: int = 0, at: str = "", href: Optional[str], action: str, actions: Optional[list[dict]] = None) -> dict:
     return {"id": f"{source}:{ref}", "source": source, "kind": kind, "title": title.strip()[:300], "detail": detail,
             "area": area or "", "count": count, "complaints": complaints, "at": (at or "")[:19],
-            "resolve": {"href": href, "action": action}}
+            "resolve": {"href": href, "action": action}, "actions": actions or []}
+
+
+# ── what a row can be settled by, where it is shown (the Inbox, 2026-11-26) ─────────────────────────────────────────
+# The reference opens a row for review beside the list with Accept · Edit and accept · Reject. A row says which of them
+# it has, each the door that already settles it — never a new one: `call` is a request the page makes as the person,
+# `open` a page it opens beside the list. A row with nothing to accept or reject (a gap, a conflict) says only what to
+# write; every row may be set aside ("Not now"), which the page offers itself.
+
+def _call(do: str, label: str, method: str, path: str, body: dict) -> dict:
+    return {"do": do, "label": label, "call": {"method": method, "path": path, "body": body}}
+
+
+def _definition_page(do: str, label: str, connection_id: str, term: str, area: str = "") -> dict:
+    return {"do": do, "label": label, "open": {"definition": {"connection": connection_id, "term": term, "area": area}}}
+
+
+def _new_definition(label: str, connection_id: str, term: str = "", area: str = "") -> dict:
+    return {"do": "edit", "label": label, "open": {"new_definition": {"connection": connection_id, "term": term, "area": area}}}
+
+
+def _page(label: str, href: str) -> dict:
+    return {"do": "open", "label": label, "open": {"href": href}}
 
 
 def _links(connection_id: str) -> dict[str, Callable[..., str]]:
@@ -83,7 +105,8 @@ def _framing_misses(connection_id: str, link: dict) -> list[dict]:
             last[q] = max(last.get(q, ""), str(r.get("at") or ""))
     out = [_row(source="framing_miss", ref=_ref(q), kind="gap", title=q,
                 detail="Framed on no definition: the words it used are not ones the business declared.",
-                count=n, at=last[q], href=link["definitions_tab"](), action="Add the words it used")
+                count=n, at=last[q], href=link["definitions_tab"](), action="Add the words it used",
+                actions=[_new_definition("Define the words it used", connection_id)])
            for q, n in asked.most_common()]
     if own:
         n = sum(own.values())
@@ -118,7 +141,8 @@ def _unanswered(connection_id: str, link: dict) -> list[dict]:
     return [_row(source="unanswered", ref=_ref(a["title"]), kind="gap", title=a["title"],
                  detail=f"No run could answer it ({', '.join(sorted(a['statuses'])) or 'not complete'})"
                         + (f"; {a['scheduled']} of them on a schedule." if a["scheduled"] else "."),
-                 count=a["count"], href=link["definitions_tab"](), action="Define what it needs")
+                 count=a["count"], href=link["definitions_tab"](), action="Define what it needs",
+                 actions=[_new_definition("Define what it needs", connection_id)])
             for a in rows]
 
 
@@ -133,7 +157,10 @@ def _unconfirmed(connection_id: str, link: dict) -> list[dict]:
                         detail=f"{i['standing_said'].capitalize()}, from {i['source']}; no answer leans on it until a "
                                "person confirms it.",
                         area=i.get("area") or "", at=i.get("as_of") or "", href=link["claim"](i["ref"]),
-                        action="Confirm it, or mark it wrong"))
+                        action="Confirm it, or mark it wrong",
+                        actions=[_call("accept", "Confirm it", "POST", f"/record/claims/{quote(i['ref'], safe='')}/right", {}),
+                                 _call("reject", "Mark it wrong", "POST", f"/record/claims/{quote(i['ref'], safe='')}/wrong",
+                                       {"why": "marked wrong in review"})]))
     return out
 
 
@@ -149,12 +176,20 @@ def _definitions(connection_id: str, link: dict) -> list[dict]:
                             title=f"A suggested edit to “{term}”",
                             detail=f"From {who}: {(s.get('text') or 'other names or links')[:240]}",
                             area=area, at=str(s.get("at") or ""), href=link["definition"](term, area),
-                            action="Accept or decline it"))
+                            action="Accept or decline it",
+                            actions=[*(_call(do, label, "POST", "/record/definitions/suggestions/decide",
+                                             {"connection_id": connection_id, "term": term, "area": area,
+                                              "suggestion_id": str(s.get("id") or ""), "accept": do == "accept"})
+                                       for do, label in (("accept", "Accept"), ("reject", "Decline"))),
+                                     _definition_page("edit", "Edit and accept", connection_id, term, area)]))
         if c.tier == "said":
             by = "the coworker" if c.extra.get("drafted_by_agent") else (c.author or "someone")
             out.append(_row(source="definition_draft", ref=c.id, kind="candidate", title=f"“{term}”, a draft",
                             detail=f"Drafted by {by}: {c.statement.text[:240]}. Not used until its owner publishes it.",
-                            area=area, at=c.as_of, href=link["definition"](term, area), action="Publish it, or change it"))
+                            area=area, at=c.as_of, href=link["definition"](term, area), action="Publish it, or change it",
+                            actions=[_call("accept", "Publish it", "POST", "/record/definitions/approve",
+                                           {"connection_id": connection_id, "term": term, "area": area}),
+                                     _definition_page("edit", "Edit and publish", connection_id, term, area)]))
     return out
 
 
@@ -182,7 +217,8 @@ def _new_definitions(connection_id: str, link: dict) -> list[dict]:
         out.append(_row(source="new_definition", ref=i["ref"] or _ref(i["text"]), kind="candidate",
                         title=f"“{term}” — learned {times} times; no Definition says what it means",
                         detail=i["text"][:240], area=i.get("area") or "", count=times, at=i.get("as_of") or "",
-                        href=link["new_definition"](term, i.get("area") or ""), action="Write its Definition"))
+                        href=link["new_definition"](term, i.get("area") or ""), action="Write its Definition",
+                        actions=[_new_definition("Write its Definition", connection_id, term, i.get("area") or "")]))
     return out
 
 
@@ -207,7 +243,8 @@ def _definition_edits(connection_id: str, link: dict) -> list[dict]:
         out.append(_row(source="definition_edit", ref=c.id, kind="candidate",
                         title=f"{n} thing{'s' if n != 1 else ''} learned about “{term}” since its Definition was written",
                         detail=since[0]["text"][:240], area=area, count=n, at=str(since[0].get("as_of") or ""),
-                        href=link["definition"](term, area), action="Read them against its Definition"))
+                        href=link["definition"](term, area), action="Read them against its Definition",
+                        actions=[_definition_page("edit", "Read them against its Definition", connection_id, term, area)]))
     return out
 
 
@@ -215,7 +252,8 @@ def _proposed_synonyms(connection_id: str, link: dict) -> list[dict]:
     from pramanyx.ontology.vocabulary import synonyms_for
     return [_row(source="synonym", ref=f"{s.subject_kind}:{s.subject_id}:{s.synonym}", kind="candidate",
                  title=f"“{s.synonym}” for {s.subject_id}", detail="Proposed by a model; it matches nothing until a "
-                 "person keeps it.", href=link["definitions_tab"](), action="Keep it, or drop it")
+                 "person keeps it.", href=link["definitions_tab"](), action="Keep it, or drop it",
+                 actions=[_page("Keep it, or drop it", link["definitions_tab"]())])
             for s in synonyms_for(connection_id) if str(getattr(s, "source", "")) == "llm_candidate"]
 
 
@@ -227,7 +265,10 @@ def _suggested_areas(connection_id: str, link: dict) -> list[dict]:
         out.append(_row(source="suggested_area", ref=s["id"], kind="candidate", title=f"“{s['label']}” as an area",
                         detail=f"The model labelled {len(s['tables'])} table{'s' if len(s['tables']) != 1 else ''} so"
                                f"{f' ({shown})' if shown else ''}. Not an area until a curator declares it.",
-                        count=len(s["tables"]) or None, href=link["areas"](), action="Declare it, or say it is not one"))
+                        count=len(s["tables"]) or None, href=link["areas"](), action="Declare it, or say it is not one",
+                        actions=[_page("Declare it", link["areas"]()),
+                                 _call("reject", "Not an area", "PUT", f"/areas/{quote(connection_id, safe='')}/not-an-area",
+                                       {"label": s["label"]})]))
     return out
 
 
@@ -244,7 +285,7 @@ def _imports(connection_id: str, link: dict) -> list[dict]:
                             title=f"{len(pending)} from {b.get('source') or 'an import'} wait for a verdict",
                             detail=", ".join(f"{n} {k.replace('_', ' ')}{'' if n == 1 else 's'}" for k, n in kinds.most_common()),
                             count=len(pending), at=str(b.get("uploaded_at") or ""), href=link["import_tab"](),
-                            action="Accept or dismiss each"))
+                            action="Accept or dismiss each", actions=[_page("Accept or dismiss each", link["import_tab"]())]))
     return out
 
 
@@ -256,7 +297,7 @@ def _marked_wrong(connection_id: str, link: dict) -> list[dict]:
                  detail=(str(v.get("note") or "").strip() or "No note.")[:240]
                         + (" A corrected SQL was given." if v.get("corrected_sql") else ""),
                  complaints=1, at=str(v.get("created_at") or ""), href=link["definitions_tab"](),
-                 action="Write what it should have known")
+                 action="Write what it should have known", actions=[_new_definition("Write what it should have known", connection_id)])
             for v in list_corrections(connection_id, limit=PER_SOURCE)]
 
 
@@ -270,7 +311,8 @@ def _unhelpful(connection_id: str, link: dict) -> list[dict]:
         out.append(_row(source="unhelpful", ref=str(p.get("turn_id") or e.get("at")), kind="candidate",
                         title="An answer marked unhelpful", detail=(str(p.get("note") or "").strip() or "No note.")[:240],
                         complaints=1, at=str(e.get("at") or ""), href=link["definitions_tab"](),
-                        action="Write what it should have known"))
+                        action="Write what it should have known",
+                        actions=[_new_definition("Write what it should have known", connection_id)]))
     return out[:PER_SOURCE]
 
 
@@ -283,7 +325,8 @@ def _rivals(connection_id: str, link: dict) -> list[dict]:
                         title=f"“{g['term']}” means different things in {', '.join(names[:-1])} and {names[-1]}",
                         detail=" · ".join(f"{m['area_name']}: {m['text'][:120]}" for m in g["meanings"]),
                         area=",".join(m["area"] for m in g["meanings"]), href=link["definition"](g["term"]),
-                        action="Read both meanings; a question that names neither is asked which"))
+                        action="Read both meanings; a question that names neither is asked which",
+                        actions=[_definition_page("edit", "Read both meanings", connection_id, g["term"])]))
     return out
 
 
