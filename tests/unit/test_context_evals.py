@@ -40,7 +40,7 @@ def test_the_cases_are_drawn_from_the_layer_without_a_model(layer):
     cases, unread = CL.cases_for(conn)
     assert unread == []
     assert [(c["expected"]["source"], c["question"]) for c in cases] == [
-        ("definition", "How many Repeat buyer were there in the last 30 days?"),
+        ("definition", "How did “Repeat buyer” change over the last 30 days?"),
         ("metric", "What was Revenue over the last 30 days?"),
         ("trusted_query", "Revenue by month"),
         ("corrected", "How many orders shipped?")], "a draft and a correction with no SQL are not cases"

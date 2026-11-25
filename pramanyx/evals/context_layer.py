@@ -8,7 +8,7 @@ answers, whether a corrected answer is now answered as corrected.
 
 So the cases are drawn from the layer itself — no model writes them, no person types them:
 
-* each **published Definition** — "How many <word> were there in the last 30 days?" — passes when the answer was given
+* each **published Definition** — "How did “<word>” change over the last 30 days?" — passes when the answer was given
   that Definition (the receipt's ``given`` row, A1);
 * each **approved metric** — "What was <label> over the last 30 days?" — passes when the answer's SQL used its formula
   (the receipt's ``metric_used`` row);
@@ -59,7 +59,8 @@ def _definitions(conn: str) -> list[dict]:
         if c.tier != "approved" or not term:
             continue                     # a draft is not the layer yet: it reaches no answer until it is published
         area = str((c.extra or {}).get("area") or "")
-        out.append({"question": f"How many {term} were there in the last 30 days?",
+        # names the word as people would, for any word — "How many Repeat buyer…" read wrong for most of them
+        out.append({"question": f"How did “{term}” change over the last 30 days?",
                     "expected": {"source": "definition", "ref": f"{conn}/{term}/{area}", "name": term,
                                  "given": f"definition:{conn}/{term}/{area}"}})
     return out[:PER_SOURCE]

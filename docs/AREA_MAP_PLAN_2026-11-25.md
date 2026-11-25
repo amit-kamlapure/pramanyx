@@ -306,7 +306,7 @@ Both pages' parts are on the Atlas's Overview (`web/components/ontology/AtlasKno
 ### Decision 3, done (2026-11-26) — Evals test the context layer (A2b)
 
 `pramanyx/evals/context_layer.py`; the Evals page's first view, **Context layer**. Cases are drawn from the layer, no
-model writing them: each published Definition ("How many <word> …"), approved metric ("What was <label> …"), trusted
+model writing them: each published Definition ("How did “<word>” change …"), approved metric ("What was <label> …"), trusted
 query (its own question) and corrected answer (its question, the corrected SQL). A run answers them through the real
 answer path — a person's click (40 at most), or nightly only where `scheduled_model_work` is allowed — and grades each
 from the answer's receipt, never a model: given the Definition, its SQL using the metric's formula, the trusted query
