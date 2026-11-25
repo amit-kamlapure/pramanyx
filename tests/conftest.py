@@ -670,6 +670,16 @@ def _reset_answers_read():
 
 
 @pytest.fixture(autouse=True)
+def _reset_scanned_statements():
+    """Forget the statements the audit log's table-read count already scanned (`security.audit._scanned`): one test's
+    log is not the next one's."""
+    from pramanyx.security import audit as _audit
+    _audit._SCANS.clear()
+    yield
+    _audit._SCANS.clear()
+
+
+@pytest.fixture(autouse=True)
 def _reset_install_area_names():
     """Forget the install's one name per Area between tests (`semantic.areas.install_names`, read once a minute). A
     test's connections are not the next test's: a name read over one test's registry would name the next one's Areas."""

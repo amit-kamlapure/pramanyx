@@ -17,6 +17,7 @@ import sqlite3
 import threading
 import time
 import uuid
+from collections import OrderedDict
 from contextlib import contextmanager
 from contextvars import ContextVar
 from pathlib import Path
@@ -188,6 +189,52 @@ def _table_pattern(names: list[str]):
 #: statement the checker flagged is read once, not twice.
 _RAN = "COALESCE(verdict, '') NOT IN ('suspicious', 'blocked')"
 
+#: The tables each statement already scanned names, by statement id — per store, connection, tenant and set of table
+#: names — so a month's statements are scanned once, not every time their reads are counted. A busy connection's month
+#: is hundreds of megabytes of SQL (PostgreSQL's: 40,640 statements, 244 MB, 2026-11-25): Discover's table reads scanned
+#: it all every ten minutes, 7.5 s of a regex that holds the interpreter, and every page load meanwhile ran ten times
+#: slower (the Atlas 10–12 s). The log only grows, so a statement's tables never change; ids that leave the window are
+#: forgotten. Kept for the process; the first count after a start scans the month once.
+_SCANS: "OrderedDict[tuple, dict[str, frozenset]]" = OrderedDict()
+_scan_locks: dict[tuple, threading.Lock] = {}
+_scans_lock = threading.Lock()
+#: The most scans kept (a connection and a set of table names each).
+_MAX_SCANS = 32
+_NONE: frozenset = frozenset()
+
+
+def _scanned(connection_id: str, org_id: str | None, names: list[str], clauses: list[str],
+             params: list[Any]) -> tuple[list[tuple], dict[str, frozenset]]:
+    """The window's statements, ``(ts, id, trace_id, actor)``, and the tables each names where a table stands — the
+    ones scanned before read back, only the new ones read and scanned."""
+    key = (str(_DB_PATH), connection_id, org_id, tuple(names))
+    with _scans_lock:
+        named = _SCANS.pop(key, None) or {}
+    c = _connect()
+    try:
+        ensure_once(c, _ensure_schema)
+        rows = [tuple(r) for r in c.execute(
+            f"SELECT ts, id, trace_id, actor FROM audit_log WHERE {' AND '.join(clauses)}", params).fetchall()]
+        new = [r[1] for r in rows if r[1] not in named]
+        if new:
+            pattern = _table_pattern(names)
+            shapes: dict[frozenset, frozenset] = {}
+            for at in range(0, len(new), 500):
+                batch = new[at:at + 500]
+                for statement_id, sql in c.execute(
+                        f"SELECT id, sql_full FROM audit_log WHERE id IN ({','.join('?' * len(batch))})", batch):
+                    found = frozenset(m.group(1) for m in pattern.finditer(str(sql or "").lower())) or _NONE
+                    named[statement_id] = shapes.setdefault(found, found)
+    finally:
+        c.close()
+    in_window = {r[1] for r in rows}
+    named = {i: n for i, n in named.items() if i in in_window}
+    with _scans_lock:
+        _SCANS[key] = named
+        while len(_SCANS) > _MAX_SCANS:
+            _SCANS.popitem(last=False)
+    return rows, named
+
 
 class AuditLogger:
     """Append-only audit writer. Thread-safe via per-call connection open/close."""
@@ -318,23 +365,19 @@ class AuditLogger:
         if not owners:
             return out
         names = sorted(owners, key=len, reverse=True)
-        pattern = _table_pattern(names)
-        c = _connect()
-        try:
-            ensure_once(c, _ensure_schema)
-            clauses = ["connection_id = ?", "ts >= ?", _RAN]
-            params: list[Any] = [connection_id, since]
-            if org_id is not None:
-                clauses.append("org_id = ?")
-                params.append(org_id)
-            rows = c.execute(f"SELECT ts, sql_full, trace_id, actor FROM audit_log WHERE {' AND '.join(clauses)}",
-                             params).fetchall()
-        finally:
-            c.close()
-        for ts, sql, trace_id, actor in rows:
+        clauses = ["connection_id = ?", "ts >= ?", _RAN]
+        params: list[Any] = [connection_id, since]
+        if org_id is not None:
+            clauses.append("org_id = ?")
+            params.append(org_id)
+        with _scans_lock:
+            key_lock = _scan_locks.setdefault((str(_DB_PATH), connection_id, org_id, tuple(names)), threading.Lock())
+        with key_lock:          # one reader at a time scans a connection's statements for these tables
+            rows, named = _scanned(connection_id, org_id, names, clauses, params)
+        for ts, statement_id, trace_id, actor in rows:
             keys: set[str] = set()
-            for m in pattern.finditer(str(sql or "").lower()):
-                keys |= owners.get(m.group(1), set())
+            for name in named.get(statement_id, ()):
+                keys |= owners.get(name, set())
             for key in keys:
                 row = out[key]
                 row["reads"] += 1
