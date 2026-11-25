@@ -120,7 +120,35 @@ export type FanKind = DiscoverKind | "learned" | "certified";
 /** What the opened Area's side panel can show: one of its fan's lists, or what waits for review in it (A5). */
 export type FanKey = FanKind | "review";
 
-export interface Fan { key: FanKind; count: number; words: string; icon: IconName }
+export interface Fan { key: FanKind; count: number; words: string; icon: IconName; tone: string }
+
+// ── colour by type (the user, 2026-11-25: "colour coding for the Areas and their subparts — based on type") ──────────
+// The theme's six ramps, which flip with light and dark (`styles/tokens.css`), never a raw colour: what people defined
+// in the cool ramps (metrics blue, Definitions violet, what is certified green, trusted queries cyan), what was learned
+// in amber, what is built on them in the third step of a ramp, and the data itself — tables — neutral.
+
+/** Each kind's colour. */
+export const KIND_TONE: Record<FanKind, string> = {
+  metric: "var(--blue4)", definition: "var(--vio4)", certified: "var(--grn4)", trusted_query: "var(--cyn4)",
+  learned: "var(--amb4)",
+  dashboard: "var(--red4)", canvas: "var(--vio3)", agent: "var(--cyn3)", schedule: "var(--blue3)", document: "var(--amb3)",
+  sheet: "var(--grn3)", table: "var(--t2)",
+};
+
+/** The Areas' colours, one each, the same every time; what sits in no Area stays neutral. */
+export const AREA_TONES = ["var(--blue4)", "var(--grn4)", "var(--vio4)", "var(--amb4)", "var(--cyn4)", "var(--red4)"] as const;
+
+export function areaTone(id: string): string {
+  if (!id || id === "other") return "var(--t3)";
+  let h = 0;
+  for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return AREA_TONES[h % AREA_TONES.length];
+}
+
+/** A colour laid thinly over a surface: a fill that names the type without shouting. */
+export function tint(tone: string, pct = 14, over = "var(--bg-2)"): string {
+  return `color-mix(in srgb, ${tone} ${pct}%, ${over})`;
+}
 
 /** The order an Area fans out in — the plan's: what people defined and certified first, then the rest. */
 const FAN_ORDER: FanKind[] = ["metric", "definition", "certified", "learned", "trusted_query", "dashboard", "canvas",
@@ -161,7 +189,8 @@ export function fanOf(page: Pick<DiscoverAreaPage, "kinds">, learned: number | n
     const n = counts.get(k) ?? 0;
     const words = k === "learned" ? "learned" : k === "certified" ? "certified"
       : KIND_WORDS[k][n === 1 ? 0 : 1];
-    return { key: k, count: n, words: `${formatCount(n)} ${words}`, icon: k === "learned" ? "idea" : k === "certified" ? "certificate" : KIND_ICON[k] };
+    return { key: k, count: n, words: `${formatCount(n)} ${words}`, icon: k === "learned" ? "idea" : k === "certified" ? "certificate" : KIND_ICON[k],
+      tone: KIND_TONE[k] };
   });
 }
 

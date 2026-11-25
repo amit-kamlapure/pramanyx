@@ -652,7 +652,7 @@ def draft_monitor(connection_id: str, args: dict, *, emit=None) -> dict:
 
 def draft_brief(connection_id: str, args: dict, *, emit=None) -> dict:
     """SP-12 — a recurring briefing delivery, staged. The delivery TRIGGER must exist
-    (a Notifications trigger); an unnamed or unknown one is refused with the known
+    (a Delivery trigger); an unnamed or unknown one is refused with the known
     ones listed — a subscription pointing at nothing would look scheduled and deliver
     nowhere."""
     from pramanyx.actions.inbox import StagedProposal, stage_proposal
@@ -958,7 +958,7 @@ _BRIEF_PARAMS = {
                  "description": "Send hour, 0-23 UTC (default 9)."},
         "trigger": {"type": "string",
                     "description": "The delivery trigger's id or exact name — a "
-                                   "configured Notifications trigger. Unknown ones "
+                                   "configured Delivery trigger. Unknown ones "
                                    "are refused with the known ones listed."},
         "supersedes": {"type": "string",
                        "description": "When this corrects a draft you staged earlier "

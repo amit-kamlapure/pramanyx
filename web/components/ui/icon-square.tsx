@@ -9,8 +9,11 @@
  */
 import { Icon, type IconName } from "@/components/ui/icon";
 
-export function IconSquare({ name, title, size = 16, testId }: {
+export function IconSquare({ name, title, size = 16, testId, tone }: {
   name: IconName;
+  /** A colour by type, where a page codes its things by it (the Atlas, 2026-11-25): a theme ramp's token. Without it the
+   *  square is the one quiet grey everywhere. */
+  tone?: string;
   /** What the mark means, on hover; a square with no title is decoration to a screen reader and is hidden from it. */
   title?: string;
   size?: number;
@@ -20,8 +23,8 @@ export function IconSquare({ name, title, size = 16, testId }: {
     <span title={title} data-testid={testId} aria-hidden={title ? undefined : true} role={title ? "img" : undefined}
       aria-label={title}
       style={{ width: size, height: size, flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center",
-               borderRadius: "var(--r1)", background: "var(--bg-3)", boxShadow: "inset 0 0 0 1px var(--b1)",
-               color: "var(--t2)", lineHeight: 0 }}>
+               borderRadius: "var(--r1)", background: tone ? `color-mix(in srgb, ${tone} 22%, var(--bg-3))` : "var(--bg-3)",
+               boxShadow: "inset 0 0 0 1px var(--b1)", color: tone ?? "var(--t2)", lineHeight: 0 }}>
       <Icon name={name} size={Math.round(size * 0.68)} />
     </span>
   );

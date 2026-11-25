@@ -146,7 +146,7 @@ describe("the action designer", () => {
     expect(screen.getByTestId("action-placed").textContent).toContain("The button is on Late dispatch.");
   });
 
-  it("tells a destination saved in Notifications — chosen, never typed — and shows the message a press would send", async () => {
+  it("tells a destination saved in Delivery — chosen, never typed — and shows the message a press would send", async () => {
     calls.triggers.mockResolvedValue([{ id: "t-desk", name: "Carrier desk", type: "slack", url: "•••", headers: {}, enabled: true }]);
     calls.preview.mockResolvedValue({ ...PREVIEW, sample: { ...PREVIEW.sample!, edits: [],
       tell: { destination: "Carrier desk", type: "slack", saved: true, message: "Order 6 needs the carrier: Missed pickup" } } });
@@ -154,7 +154,7 @@ describe("the action designer", () => {
     designer();
     await user.type(screen.getByLabelText("Action name"), "Tell the carrier desk");
     await user.click(within(screen.getByTestId("action-does")).getByRole("button", { name: /Tell someone/ }));
-    expect(screen.getByTestId("action-designer-status").textContent).toBe("Choose who is told — a destination saved in Notifications.");
+    expect(screen.getByTestId("action-designer-status").textContent).toBe("Choose who is told — a destination saved in Delivery.");
     await choose(await screen.findByLabelText("Who is told"), "t-desk");
     await user.type(screen.getByLabelText("The message"), "Order {{order} needs the carrier: {{reason}");
     await waitFor(() => expect(lastAsked()?.action.side_effects).toEqual(
@@ -170,7 +170,7 @@ describe("the action designer", () => {
     const user = userEvent.setup();
     designer();
     await user.click(within(screen.getByTestId("action-does")).getByRole("button", { name: /Tell someone/ }));
-    expect(await within(screen.getByTestId("action-tell")).findByText(/Set one up in Notifications, under Operations/)).toBeTruthy();
+    expect(await within(screen.getByTestId("action-tell")).findByText(/Set one up in Delivery, under Operations/)).toBeTruthy();
   });
 
   it("asks for the call, its check and how it is taken back only when the action calls another system", async () => {

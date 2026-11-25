@@ -85,7 +85,7 @@ class UpdateMonitorRequest(BaseModel):
 
 
 def _validate_channel(channel: Optional[str]) -> None:
-    """A channel is ``in_app`` or the id of a Notifications trigger. Anything else is refused here, where the person
+    """A channel is ``in_app`` or the id of a Delivery trigger. Anything else is refused here, where the person
     is: a monitor saved with one sends every alert nowhere, and the form once offered "slack" and "email", which are no
     trigger's id. A trigger deleted later is the delivery path's to say (`monitors/notify.py`)."""
     channel = (channel or "").strip()
@@ -95,7 +95,7 @@ def _validate_channel(channel: Optional[str]) -> None:
     if get_trigger(channel) is None:
         raise HTTPException(status_code=422, detail=(
             f"notification_channel: no destination has the id {channel!r}. Use in_app, or a trigger from "
-            f"Operations ▸ Notifications."))
+            f"Operations ▸ Delivery."))
 
 
 def _validate_custom_sql(conn_id: str, custom_sql: Optional[str]) -> None:

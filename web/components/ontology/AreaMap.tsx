@@ -15,14 +15,14 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { IconSquare } from "@/components/ui/icon-square";
 import { Segmented } from "@/components/ui/segmented";
-import { BusinessAtlas } from "@/components/ontology/BusinessAtlas";
+import { AreaRelationships } from "@/components/ontology/AreaRelationships";
 import { Loading, ReadFailed } from "@/components/ui/states";
 import {
-  AreaFan, AreaRail, areaOpened, OpenPanel, readLearnedIn, ReviewList, withOpened, type AreaLike, type LearnedHere, type Opened,
+  AreaFan, AreaRail, areaOpened, entityOpened, OpenPanel, readLearnedIn, ReviewList, withOpened, type AreaLike, type LearnedHere, type Opened,
 } from "@/components/ontology/AreaDrill";
 import { areaIcon } from "@/lib/areaIcons";
 import {
-  bounds, changeWords, fanOf, packBubbles, radiusFor, R_MIN, share, waiting, waitingWords, type Atlas, type AtlasArea, type FanKey,
+  areaTone, bounds, changeWords, fanOf, packBubbles, tint, radiusFor, R_MIN, share, waiting, waitingWords, type Atlas, type AtlasArea, type FanKey,
 } from "@/lib/areaMap";
 import { readAtlas, readDiscoverArea, usageLine, type DiscoverArea, type DiscoverAreaPage } from "@/lib/discover";
 import { countNoun, formatCount } from "@/lib/format";
@@ -111,7 +111,7 @@ function Review({ atlas, onPick }: { atlas: Atlas; onPick: (id: string) => void 
         {rows.map((a) => (
           <Button key={a.id} role="listitem" variant="ghost" size="sm" onClick={() => onPick(a.id)}
             style={{ justifyContent: "flex-start", gap: 10, height: "auto", padding: "6px 8px", textAlign: "left" }}>
-            <IconSquare name={areaIcon(a.icon)} size={22} />
+            <IconSquare name={areaIcon(a.icon)} size={22} tone={areaTone(a.id)} />
             <span style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
               <span className="aug-fs-sm" style={{ color: "var(--t1)" }}>{a.name}</span>
               <span className="aug-fs-xs" style={MUTED}>{waitingWords(a.review, a.learned)}</span>
@@ -261,11 +261,8 @@ export function AreaMap() {
         )}
         {chosen && view === "relationships" && (
           <div data-testid="atlas-area-relationships" style={{ position: "absolute", inset: 0, paddingTop: 52, overflowY: "auto",
-            display: "flex", flexDirection: "column", gap: 16, boxSizing: "border-box" }}>
-            {conns.length === 0 && <span className="aug-fs-sm" style={{ ...MUTED, padding: "0 16px" }}>The Area is on no connection in view.</span>}
-            {conns.map((c) => (
-              <BusinessAtlas key={c.id} connectionId={c.id} title={c.name} embedded onlyArea={chosen.id} />
-            ))}
+            boxSizing: "border-box" }}>
+            <AreaRelationships area={chosen.id} connections={conns} onOpenEntity={(row, c) => openOne(entityOpened(row, c))} />
           </div>
         )}
         {!chosen && other.total > 0 && (
@@ -286,10 +283,10 @@ export function AreaMap() {
               onClick={() => area && (picked === area.id ? pick(null) : openArea(area))}
               style={{ position: "absolute", left: pos.left - d / 2, top: pos.top - d / 2, width: d, height: d, padding: 4,
                 borderRadius: "50%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3,
-                background: area ? "var(--bg-2)" : "transparent", opacity: 1,
+                background: area ? tint(areaTone(area.id), 16) : "transparent", opacity: 1,
                 boxShadow: area ? (picked === area.id ? "0 0 0 2px var(--accent)" : "inset 0 0 0 1px var(--b0)") : "inset 0 0 0 1px var(--b1)",
                 border: area ? "none" : "1px dashed var(--t4)", color: "var(--t1)", whiteSpace: "normal" }}>
-              <IconSquare name={areaIcon(area?.icon)} size={Math.max(18, Math.min(28, d / 5))} />
+              <IconSquare name={areaIcon(area?.icon)} size={Math.max(18, Math.min(28, d / 5))} tone={area ? areaTone(area.id) : undefined} />
               <span className="aug-fs-sm" style={{ fontWeight: 600, lineHeight: 1.15, textAlign: "center", padding: "0 6px" }}>
                 {area ? area.name : sug?.label}
               </span>

@@ -103,53 +103,42 @@ describe("the Business Atlas", () => {
     expect(shapes().Order).toBeUndefined();                          // what goes through the process is its route
     for (const said of ["placed", "sent"]) expect(screen.getByText(said)).toBeTruthy();
     expect(screen.getByRole("button", { name: "17 overdue" })).toBeTruthy();
-    // and written on the ground, where it is read without pointing at anything
-    const written = [...screen.getByTestId("business-atlas").querySelectorAll("text.aug-atlas-written")].map((x) => x.textContent);
-    expect(written).toEqual(expect.arrayContaining(["01  placed  500", "02  sent  321", "17 overdue", "40 Void", "Order"]));
     expect(screen.getAllByText("321")).toHaveLength(2);              // reached the stage, and moved to it
     expect(screen.getByText(/left · Void/).textContent).toBe("40 left · Void");
     expect(screen.getByText(/moved/).textContent).toBe("321 moved");
   });
 
-  it("writes each entity's name on the ground, and shows its flag only while it is pointed at", async () => {
+  it("names each entity on its plot and on its label, and each zone on its ground", async () => {
     render(<BusinessAtlas connectionId="c1" schema="s" title="shop" />);
     await drawn();
     const atlas = screen.getByTestId("business-atlas");
-    expect([...atlas.querySelectorAll("text.aug-atlas-written.is-entity")].map((t) => t.textContent).sort()).toEqual(["Buyer", "Depot", "Note", "Order"]);                 // the name alone: how many is on the label
-    expect(atlas.querySelector("text.aug-atlas-written.is-zone")?.textContent).toBe("IN NO AREA");   // the zone is written on its ground too — an Area (A6); here none is placed
-    // every flag is tucked to its mark, which stays the control a keyboard and a screen reader reach
-    const mark = screen.getByRole("button", { name: "Depot" }).closest(".aug-atlas-mark")!;
-    expect(atlas.querySelectorAll(".aug-atlas-mark.is-tucked").length).toBe(4);
-    expect(mark.classList.contains("is-over")).toBe(false);
-    await userEvent.hover(atlas.querySelector('g[data-name="Depot"]')!);                       // pointing at the structure shows its flag
-    expect(mark.classList.contains("is-over")).toBe(true);
-    await userEvent.unhover(atlas.querySelector('g[data-name="Depot"]')!);
-    expect(mark.classList.contains("is-over")).toBe(false);
+    expect([...atlas.querySelectorAll(".aug-atlas-flat-plot .name")].map((t) => t.textContent).sort()).toEqual(["Buyer", "Depot", "Note", "Order"]);
+    expect(atlas.querySelector(".aug-atlas-flat-zone .name")?.textContent).toBe("In no Area");   // an Area (A6); here none is placed
     await userEvent.click(screen.getByRole("button", { name: "Depot" }));
     expect(inspect).toHaveBeenLastCalledWith(expect.objectContaining({ key: "atlas:entity:Depot" }));
   });
 
-  it("keeps one row of controls above the scene and nothing else between the reader and it", async () => {
+  it("keeps one row of controls above the scene and nothing else between the reader and it — and no raised drawing", async () => {
     served.declared = PROCESS;
     render(<BusinessAtlas connectionId="c1" schema="s" title="shop" />);
     await drawn();
     const atlas = screen.getByTestId("business-atlas"), head = atlas.querySelector(".aug-atlas-head")!, stage = atlas.querySelector(".aug-atlas-stage")!;
     expect(head.nextElementSibling).toBe(stage);                                                // the scene comes straight after the row
     for (const id of ["atlas-zoom-in", "atlas-zoom-out", "atlas-zoom-fit"]) expect(head.contains(screen.getByTestId(id))).toBe(true);
-    expect(head.contains(screen.getAllByTestId("atlas-flat")[0])).toBe(true);
     expect(screen.queryByTestId("atlas-story")).toBeNull();
+    // the raised, isometric drawing was retired (the user, 2026-11-25): drawn from above, with no switch to it
+    expect(screen.getByTestId("atlas-flat-scene")).toBeTruthy();
+    expect(screen.queryByTestId("atlas-raised")).toBeNull();
+    expect(screen.queryByRole("radio", { name: /Raised/ })).toBeNull();
   });
 
-  it("draws each link flat, around the outside of the plane, raised and flat", async () => {
+  it("draws each link around the outside of the plane, never one straight stroke across it", async () => {
     render(<BusinessAtlas connectionId="c1" schema="s" title="shop" />);
     await drawn();
     const atlas = screen.getByTestId("business-atlas");
     const lines = () => [...atlas.querySelectorAll("polyline.aug-atlas-link")].map((x) => (x.getAttribute("points") ?? "").split(" ").length);
     expect(lines()).toHaveLength(2);                                                            // Order to Buyer, Order to Depot
-    expect(lines().every((corners) => corners >= 4)).toBe(true);                                // out, along, back in: never one straight stroke across
-    expect(atlas.querySelector(".aug-atlas-arc")).toBeNull();
-    await userEvent.click(screen.getAllByTestId("atlas-flat")[0]);
-    expect(lines()).toHaveLength(2);
+    expect(lines().every((corners) => corners >= 4)).toBe(true);                                // out, along, back in
   });
 
   it("opens the inspector on what is selected, with why it is drawn as it is", async () => {
@@ -164,38 +153,31 @@ describe("the Business Atlas", () => {
     expect(inspect).toHaveBeenLastCalledWith(expect.objectContaining({ key: "atlas:stage:fulfil:sent", kind: "Stage" }));
   });
 
-  it("selects on a press — the thing, its links and its label lit — and opens its page only from the label's way in", async () => {
+  it("selects on a press — the thing, its links and its label lit — and opens its page on a second press", async () => {
     served.declared = PROCESS;
     const onOpenEntity = vi.fn(), onOpenProcess = vi.fn();
     render(<BusinessAtlas connectionId="c1" schema="s" title="shop" onOpenEntity={onOpenEntity} onOpenProcess={onOpenProcess} />);
     await drawn();
     const atlas = screen.getByTestId("business-atlas");
-    await userEvent.click(atlas.querySelector('g[data-name="Depot"]')!);                        // a press on the structure selects it
+    await userEvent.click(screen.getByRole("button", { name: "Depot" }));                     // a press selects it
     expect(onOpenEntity).not.toHaveBeenCalled();
-    expect(atlas.querySelector('g[data-name="Depot"]')!.classList.contains("is-picked")).toBe(true);
+    expect(atlas.querySelector('.aug-atlas-flat-plot[data-name="Depot"]')!.classList.contains("is-picked")).toBe(true);
     expect(atlas.querySelectorAll("polyline.aug-atlas-link.is-picked")).toHaveLength(1);        // its link to the order is lit
-    const flag = screen.getByRole("button", { name: /Depot/ });
-    expect(within(flag).getByTestId("atlas-go").textContent).toBe("›");                         // the label carries the way in
-    await userEvent.click(flag);
+    expect(within(screen.getByRole("button", { name: "Depot" })).getByTestId("atlas-go").textContent).toBe("›");
+    await userEvent.click(screen.getByRole("button", { name: "Depot" }));                     // the label carries the way in
     expect(onOpenEntity).toHaveBeenLastCalledWith("depot");                                     // the entity's own name, as its page is opened by
-    await userEvent.click(atlas.querySelector('g[data-stage="sent"]')!);                        // a stage selects the same way
+    await userEvent.click(screen.getByRole("button", { name: /sent/ }));                      // a stage selects the same way
     expect(onOpenProcess).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: /sent/ }));
     expect(onOpenProcess).toHaveBeenLastCalledWith("fulfil");
-    await userEvent.click(atlas.querySelector(".aug-atlas-world svg")!);                        // the open ground lets go
-    expect(screen.queryByTestId("atlas-go")).toBeNull();
     expect(inspect).not.toHaveBeenCalled();                                                     // and no side panel, ever
   });
 
-  it("draws the same scene flat: the same labels, the same counts, the same selection", async () => {
+  it("draws the scene from above, exact: each entity's shape said, a promise past due opened on a press", async () => {
     served.declared = PROCESS;
     render(<BusinessAtlas connectionId="c1" schema="s" title="shop" />);
     await drawn();
-    const said = (root: Element) => [...root.querySelectorAll(".aug-atlas-board")].map((b) => b.textContent).sort();
-    const raised = said(screen.getByTestId("business-atlas"));
-    await userEvent.click(screen.getAllByTestId("atlas-flat")[0]);   // the control draws each label twice, for its two states
     const flat = screen.getByTestId("atlas-flat-scene");
-    expect(said(flat)).toEqual(raised);
     expect(Object.fromEntries([...flat.querySelectorAll("[data-shape]")].map((g) => [g.getAttribute("data-name"), g.getAttribute("data-shape")]))).toEqual({ Depot: "site", Buyer: "cluster", Note: "plinth" });
     await userEvent.click(screen.getByRole("button", { name: "17 overdue" }));
     expect(inspect).toHaveBeenLastCalledWith(expect.objectContaining({ key: "atlas:promise:fulfil:on time" }));
@@ -228,19 +210,15 @@ describe("the Business Atlas", () => {
     expect(inspect).toHaveBeenLastCalledWith(expect.objectContaining({ key: "atlas:entity:Order", kind: "Entity" }));
   });
 
-  it("writes each process's name along its leg, and says where the journey starts and ends, raised and flat", async () => {
+  it("writes each process's name along its leg, and says where the journey starts and ends", async () => {
     served.declared = PROCESS;
     render(<BusinessAtlas connectionId="c1" schema="s" title="shop" />);
     await drawn();
     const atlas = screen.getByTestId("business-atlas");
-    expect(atlas.querySelector("text.aug-atlas-written.is-route")?.textContent).toBe("Fulfilment");
+    expect(atlas.querySelector(".aug-atlas-flat-lane .name")?.textContent).toBe("Fulfilment");
     expect(screen.getByTestId("atlas-route-start").textContent).toBe("starts");
     expect(screen.getByTestId("atlas-route-entity").textContent).toBe("Order");
     expect(screen.getByRole("button", { name: /sent/ }).textContent).toContain("ends");      // the last stage says so
-    expect(atlas.querySelectorAll(".aug-atlas-cap").length).toBe(2);
-    await userEvent.click(screen.getAllByTestId("atlas-flat")[0]);
-    expect(atlas.querySelector(".aug-atlas-flat-lane .name")?.textContent).toBe("Fulfilment");
-    expect(screen.getByTestId("atlas-route-start").textContent).toBe("starts");
     expect(atlas.querySelectorAll(".aug-atlas-cap").length).toBe(2);
   });
 

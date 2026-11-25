@@ -85,7 +85,9 @@ export const NAV_DESTINATIONS: readonly NavDestination[] = [
     { id: "health",      label: "Health",           icon: "health" },
     { id: "monitors",    label: "Monitors",         icon: "monitor" },
     { id: "agentic-ops", label: "Agent Ops",        icon: "agents" },
-    { id: "actions",     label: "Notifications",    icon: "send" },
+    // "Notifications" was where messages GO — Slack, webhooks, Jira — not a list of messages for a person (the user,
+    // 2026-11-25: renamed Delivery; the Inbox is what waits on a person). The id stays: every link to it still opens it.
+    { id: "actions",     label: "Delivery",         icon: "send" },
     { id: "spend",       label: "Spend",            icon: "spend" },
     { id: "security",    label: "Security & Audit", icon: "shield" },
     { id: "evals",       label: "Evals",            icon: "flask" },

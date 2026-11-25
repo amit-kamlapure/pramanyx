@@ -3892,7 +3892,7 @@ def _checked_action(action_id: str, fields: dict, graph):
         except SyntaxError:
             raise HTTPException(status_code=422,
                                 detail=f"invalid action spec: condition {i} ({criterion.expr!r}) is not an expression")
-    # A message goes to a destination saved in Notifications, by its id: one that is not there is refused here, not
+    # A message goes to a destination saved in Delivery (Notifications until 2026-11-25), by its id: one that is not there is refused here, not
     # discovered by the first press.
     for effect in declared.side_effects:
         destination = (effect.config or {}).get("destination") if effect.kind == "notify" else None
@@ -3900,7 +3900,7 @@ def _checked_action(action_id: str, fields: dict, graph):
             from pramanyx.notifications.store import get_trigger
             if get_trigger(str(destination)) is None:
                 raise HTTPException(status_code=422, detail=f"invalid action spec: no destination '{destination}' is "
-                                                            "saved in Notifications")
+                                                            "saved in Delivery")
     # Phase 4 of the 2027 study (§M): a side-effect action is declared with the read that verifies
     # it and the undo that compensates it, or declared irreversible by name — refused here, at the
     # declaration, never discovered at execute.

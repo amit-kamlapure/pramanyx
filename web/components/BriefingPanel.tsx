@@ -2717,7 +2717,7 @@ export function BriefingPanel({
   }, []);
 
   const showTriggersHint = useCallback(() => {
-    toast.info("No delivery channel yet", { description: "Add a Slack/webhook trigger in Notifications to share findings." });
+    toast.info("No delivery channel yet", { description: "Add a Slack/webhook trigger in Delivery to share findings." });
   }, []);
 
   const load = useCallback(async () => {

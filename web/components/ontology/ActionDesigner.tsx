@@ -140,7 +140,7 @@ export function ActionDesigner({ connectionId, schema, types, entity, within = "
   // Read per type and kept under the type read — a reading of another type is never shown beside this one.
   const [candsRead, setCandsRead] = useState<{ entity: string; cands: ProcessCandidates | null } | null>(null);
   const [declared, setDeclared] = useState<Record<string, { name: string; takes: string[] }>>({});
-  // The destinations saved in Notifications — who a press may tell.
+  // The destinations saved in Delivery — who a press may tell.
   const [destinations, setDestinations] = useState<ActionTrigger[] | null>(null);
   const [placesRead, setPlacesRead] = useState<{ entity: string; places: ActionPlace[] } | null>(null);
   const [ticked, setTicked] = useState<Record<string, boolean>>({});
@@ -436,13 +436,13 @@ export function ActionDesigner({ connectionId, schema, types, entity, within = "
               </div>
             )}
             <Choice on={draft.does === "tell"} disabled={!drafting} icon="send" title="Tell someone"
-              says="Sends a message to a destination saved in Notifications — a Slack channel, Jira, a webhook."
+              says="Sends a message to a destination saved in Delivery — a Slack channel, Jira, a webhook."
               onPick={() => edit({ does: "tell", approval: false })} />
             {draft.does === "tell" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 6, margin: "2px 0 8px 26px" }} data-testid="action-tell">
                 {destinations !== null && destinations.length === 0 ? (
                   <p className="aug-fs-xs" style={{ ...HINT, margin: 0 }}>
-                    No destination is saved yet. Set one up in Notifications, under Operations — then choose it here.
+                    No destination is saved yet. Set one up in Delivery, under Operations — then choose it here.
                   </p>
                 ) : (
                   <SelectField value={draft.tell.destination} aria-label="Who is told" disabled={!drafting || destinations === null}

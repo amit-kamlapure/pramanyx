@@ -183,5 +183,5 @@ def test_the_declare_door_refuses_a_destination_not_saved_in_notifications(serve
     r = served.put("/ontology/kinetic-actions/tell_desk", params={"connection_id": CONN}, json={
         **ESCALATE, "kind": "side_effect", "edits": [], "reversibility": "irreversible",
         "side_effects": [{"kind": "notify", "config": {"destination": "gone", "message": "x"}}]})
-    assert r.status_code == 422 and "no destination 'gone' is saved in Notifications" in r.json()["detail"]
+    assert r.status_code == 422 and "no destination 'gone' is saved in Delivery" in r.json()["detail"]
     assert find_override(CONN, SCHEMA, "action", "tell_desk") is None

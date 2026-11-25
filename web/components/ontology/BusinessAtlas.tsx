@@ -10,7 +10,7 @@
  * What is not known is said: an entity no deployed package matched is drawn plain and the Atlas says so; a connection
  * with no declared process shows an empty route that says so. Position is sequence, never geography.
  */
-import React, { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { createContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { InspectorFacts, useInspector, type InspectorSubject } from "@/components/shell/Inspector";
@@ -26,9 +26,8 @@ import { gutterOf, routesOf } from "@/lib/atlas/route";
 import { formatCount, formatTimestamp, pct } from "@/lib/format";
 import { getProcesses, getTypeMap, type ProcessesAndRules, type TypeMap, type TypeMapRow } from "@/lib/objectTypes";
 
-import { AtlasDefs, DRAW, DRAW_STAGE, Pen, projection, type Projection } from "./atlas/draw";
 
-const W = 1100, SHAPE = 590 / 1100, STAGE_PAD = 2.2;
+const W = 1100, SHAPE = 590 / 1100;
 
 /** The frame the scene is drawn in: its width on the page, and how tall it is for that width. The frame is sized to
  *  the window (`styles/atlas.css`), so the whole Atlas is on screen without scrolling; the drawing is fitted to it. */
@@ -80,7 +79,6 @@ export function BusinessAtlas({ connectionId, schema, title, map: given, embedde
   // `placed`: each table's Area by name (A6) — undefined while it is read, null when it could not be
   const [read, setRead] = useState<{ scope: string; map?: TypeMap; declared?: ProcessesAndRules; failed?: string;
     placed?: Map<string, PlacedIn> | null }>({ scope });
-  const [drawn, setDrawn] = useState<"raised" | "flat">("raised");
   const [show, setShow] = useState("");
   // Where the zoom controls go: the header, which is on screen at every window size. Under the scene they fell
   // below the window on a wide one, where the scene is as tall as the page.
@@ -212,15 +210,14 @@ export function BusinessAtlas({ connectionId, schema, title, map: given, embedde
               <Segmented<string> label="Which process to show" value={shown} onChange={setShow}
                 options={[{ value: "", label: "Everything" }, ...legs.map((l) => ({ value: l.process as string, label: l.name, title: `Dim everything but ${l.name} and the zones beside it` }))]} />
             )}
-            <Segmented<"raised" | "flat"> label="How the Atlas is drawn" value={drawn} onChange={setDrawn}
-              options={[{ value: "raised", label: <span data-testid="atlas-raised">Raised</span>, title: "Structures with height, seen from a corner" },
-                { value: "flat", label: <span data-testid="atlas-flat">Flat</span>, title: "The same scene from above: exact, nothing hidden" }]} />
             <div className="aug-atlas-zoomer" ref={setControls} />
           </div>
         </div>
         <div className="aug-atlas-stage">
-          <ZoomPane key={`${scope}/${drawn}`} controls={controls}>
-            {drawn === "raised" ? <Scene scene={scene} picked={picked} onPick={pick} onOpen={pages ? open : undefined} look={look} /> : <Flat scene={scene} picked={picked} onPick={pick} onOpen={pages ? open : undefined} look={look} />}
+          {/* drawn from above, exact and nothing hidden — the raised, isometric drawing was retired (the user, 2026-11-25:
+              "I don't want this isometric view at all") */}
+          <ZoomPane key={scope} controls={controls}>
+            <Flat scene={scene} picked={picked} onPick={pick} onOpen={pages ? open : undefined} look={look} />
           </ZoomPane>
         </div>
         {plain > 0 && (
@@ -362,202 +359,6 @@ const exitAt = (lane: SceneLane): Pt => across(lane, ahead(lane, lane.exit!.to, 
 const moveSaid = (m: SceneLane["moves"][number]) => `${m.count === null ? "" : `${formatCount(m.count)} moved`}${m.count !== null && m.days !== null ? " · " : ""}${m.days === null ? "" : daysSaid(m.days)}`;
 
 /** The scene: the drawing under, the labels over it as ordinary controls a keyboard reaches. */
-function Scene({ scene, picked, onPick, onOpen, look }: { scene: AtlasScene; picked: string | null; onPick: (key: string) => void; onOpen?: (key: string) => void; look: Look }) {
-  const { flag, go } = flagsOf(picked, onPick, onOpen);
-  // the ground is drawn with room beyond its two far edges for the tracks the links run along
-  const { ref: world, width, shape } = useFrame();
-  const H = Math.round(W * shape);
-  const at = useMemo<Projection>(() => { const g = gutterOf(scene), on = projection({ u: scene.extent.u + g, v: scene.extent.v + g }, W, H); return (u, v, z = 0) => on(u + g, v + g, z); }, [scene, H]);
-  const where = (q: Pt, z = 0): React.CSSProperties => { const [x, y] = at(q[0], q[1], z); return { left: `${(x / W) * 100}%`, top: `${(y / H) * 100}%` }; };
-  // The drawing answers a pointer; the labels over it are the controls a keyboard and a screen reader reach.
-  const act = (key: string) => ({ onClick: (e: React.MouseEvent) => { e.stopPropagation(); onPick(key); } });
-  const pickedEntity = picked?.startsWith("entity:") ? picked.slice(7) : null;
-  const zoneLeg = useMemo(() => new Map(scene.zones.map((z) => [z.key, z.leg])), [scene]);
-  const dim = (of: string | null | undefined) => (look.show && of !== look.show ? " is-dim" : "");
-  const ground = useMemo(() => groundOf(scene, at), [scene, at]);
-  const routes = useMemo(() => routesOf(scene), [scene]);
-  const last = scene.lanes[scene.lanes.length - 1];
-  /** A joint is said just past the corner it turns, on the outside of the turn, clear of both legs' stages. */
-  const jointAt = (j: AtlasScene["joints"][number]): Pt => { const i = scene.joints.indexOf(j), was = scene.lanes[i]; return was ? across(was, ahead(was, j.from, 2.6), -0.4) : mid(j.from, j.to); };
-  const k = useContext(Zoom);
-  // Nothing stands over the scene at rest. A name, a stage, a count and a time are WRITTEN on the ground; the label
-  // that says the rest — parts, a promise past, the link a joint is — is a tip, shown while the pointer is on the
-  // thing or on its mark, and to a keyboard while the mark has focus.
-  const [over, setOver] = useState<string | null>(null);
-  const hover = (key: string) => ({ onMouseEnter: () => setOver(key), onMouseLeave: () => setOver((was) => (was === key ? null : was)) });
-  const tip = (key: string) => (over === key ? " is-over" : "");
-  void width; void k;
-  /** A name written on the ground, along the near edge of what it names. */
-  const written = (key: string, q: Pt, text: string, cls: string, along: "u" | "v" = "u", anchor?: "end") => {
-    const [x, y] = at(q[0], q[1]), s = (at(1, 0)[0] - at(0, 0)[0]) / 22;
-    // along u it reads down the ground to the right; along v it reads up the ground to the right, so it is never upside down
-    const m = along === "u" ? [s, s / 2, -s, s / 2] : [s, -s / 2, s, s / 2];
-    return <text key={key} className={`aug-atlas-written ${cls}`} textAnchor={anchor} transform={`matrix(${m.map((n) => n.toFixed(3)).join(",")},${x.toFixed(1)},${y.toFixed(1)})`}>{text}</text>;
-  };
-  /** A process's name, written on its own bed before its first stage: the composer leaves it the room. */
-  const routeName = (lane: SceneLane) => (lane.along === "u"
-    ? written(`route:${lane.process}`, [lane.start[0] + (lane === scene.lanes[0] ? 1.2 : 0.9), lane.start[1] + 0.24], lane.name, "is-route")
-    : written(`route:${lane.process}`, [lane.start[0] - 0.85, lane.start[1] + 1.0], lane.name, "is-route", "v", "end"));
-  const raised = [
-    ...scene.structures.map((s) => ({ depth: s.u + s.v + (s.w + s.d) / 2, node: (() => {
-      const pen = new Pen(at);
-      pen.pad(s.u, s.v, s.w, s.d, s.measured ? "entity" : "expected");
-      DRAW[s.shape](pen, s.u, s.v, s.w, s.d, s.count);
-      return <g key={s.key} className={`aug-atlas-st${s.measured ? "" : " is-expected"}${s.loose ? " is-loose" : ""}${picked === s.key ? " is-picked" : ""}${dim(zoneLeg.get(s.zone))}`} data-name={s.name} data-shape={s.shape} {...act(s.key)} {...hover(s.key)}>{pen.out}</g>;
-    })() })),
-    ...scene.lanes.flatMap((lane) => lane.stages.map((st) => ({ depth: st.u + st.v, node: (() => {
-      const pen = new Pen(at), u = st.u - STAGE_PAD / 2, v = st.v - STAGE_PAD / 2;
-      pen.pad(u, v, STAGE_PAD, STAGE_PAD, !lane.measured ? "expected" : st.past ? "past" : "stage");
-      DRAW_STAGE[st.shape](pen, u, v);
-      return <g key={st.key} className={`aug-atlas-st${lane.measured ? "" : " is-expected"}${picked === st.key ? " is-picked" : ""}${dim(lane.process)}`} data-stage={st.label} {...act(st.key)} {...hover(st.key)}>{pen.out}</g>;
-    })() }))),
-  ].sort((p, q) => p.depth - q.depth).map((x) => x.node);
-
-  return (
-    <div className="aug-atlas-world" ref={world}>
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" onClick={() => onPick("")} aria-label={`The business of ${scene.title}: ${[...scene.lanes.filter((l) => l.process).map((l) => l.name), ...scene.structures.map((s) => s.name)].join(", ")}.`}>
-        <AtlasDefs />
-        {ground}
-        {scene.zones.map((z) => {
-          const pen = new Pen(at), aside = z.leg === null && scene.lanes.some((l) => l.process);
-          pen.poly([at(z.u, z.v + z.d), at(z.u + z.w, z.v + z.d), at(z.u + z.w, z.v + z.d, -5), at(z.u, z.v + z.d, -5)], "var(--atlas-pad-side)");
-          pen.poly([at(z.u + z.w, z.v), at(z.u + z.w, z.v + z.d), at(z.u + z.w, z.v + z.d, -5), at(z.u + z.w, z.v, -5)], "var(--atlas-pad-under)");
-          pen.poly([at(z.u, z.v), at(z.u + z.w, z.v), at(z.u + z.w, z.v + z.d), at(z.u, z.v + z.d)], "var(--atlas-lane)", { className: "aug-atlas-zone-plate", stroke: "var(--atlas-lane-line)", strokeWidth: 1.2, fillOpacity: aside ? 0.5 : 0.85, strokeDasharray: aside ? "7 6" : undefined });
-          return <g key={z.key} className={`aug-atlas-zone${aside ? " is-aside" : ""}${picked === z.key ? " is-picked" : ""}${dim(z.leg)}`} data-zone={z.name} {...act(z.key)}>{pen.out}{written("name", [z.u + 0.45, z.v + z.d - 0.35], z.name.toUpperCase(), "is-zone")}</g>;
-        })}
-        {scene.structures.map((s) => <g key={`w:${s.key}`} className={dim(zoneLeg.get(s.zone)).trim()}>{written(s.key, [s.u - 0.1, s.v + s.d + 0.98], s.name, "is-entity")}</g>)}
-        {scene.lanes.map((lane, i) => <g key={lane.process ?? `none-${i}`} className={dim(lane.process).trim()} data-route={lane.process ? lane.name : undefined}>{laneOf(lane, at)}{lane.process && routeName(lane)}</g>)}
-        {scene.lanes[0]?.process && (() => { const l = scene.lanes[0], a0 = ahead(l, l.start, 0.25), head = ahead(l, l.start, 0.9);
-          return <polygon className="aug-atlas-cap is-start" points={[at(...across(l, a0, -0.38)), at(...head), at(...across(l, a0, 0.38))].map((q) => q.join(",")).join(" ")} {...hover(`goes:${l.process}`)} {...act(`entity:${l.entity}`)} />; })()}
-        {last?.process && (() => { const c = ahead(last, last.end, -0.55);
-          return <polygon className="aug-atlas-cap is-end" points={[at(c[0] - 0.3, c[1] - 0.3), at(c[0] + 0.3, c[1] - 0.3), at(c[0] + 0.3, c[1] + 0.3), at(c[0] - 0.3, c[1] + 0.3)].map((q) => q.join(",")).join(" ")} />; })()}
-        {scene.records.map((r) => {
-          const p = at(r.u, r.v), g = 5.5;
-          return <polygon key={r.key} className={`aug-atlas-record${picked === r.key ? " is-picked" : ""}${dim(zoneLeg.get(r.zone))}`} data-name={r.name} data-record=""
-            points={`${p[0]},${p[1] - g} ${p[0] + g * 1.7},${p[1]} ${p[0]},${p[1] + g} ${p[0] - g * 1.7},${p[1]}`} {...act(r.key)} {...hover(r.key)} />;
-        })}
-        {scene.lanes.flatMap((lane) => lane.moves.map((m) => (
-          <Arrow key={m.key} tail={at(...m.a)} tip={at(...m.b)} label={`${m.from} to ${m.to}`}
-            className={`aug-atlas-move${lane.measured ? "" : " is-expected"}${picked === `move:${m.key}` ? " is-picked" : ""}${dim(lane.process)}`} {...(lane.measured ? act(`move:${m.key}`) : {})} {...hover(`move:${m.key}`)} />
-        )))}
-        {/* past its last stage a leg runs on to where the journey turns: drawn as a way on, not as a counted move */}
-        {scene.lanes.slice(0, -1).flatMap((lane) => { const end = lane.stages[lane.stages.length - 1]; return end ? [
-          <Arrow key={`on:${lane.process}`} tail={at(...ahead(lane, [end.u, end.v], STAGE_PAD / 2 + 0.15))} tip={at(...ahead(lane, lane.end, -0.2))} label="on to the next process" className={`aug-atlas-move is-expected${dim(lane.process)}`} />] : []; })}
-        {scene.joints.map((j) => (
-          <Arrow key={j.key} tail={at(...j.from)} tip={at(...j.to)} label={`${j.after} ${j.verb || "follows"} ${j.before}`}
-            className={`aug-atlas-move is-joint${j.linked ? "" : " is-expected"}${picked === j.key ? " is-picked" : ""}`} {...act(j.key)} {...hover(j.key)} />
-        ))}
-        {scene.lanes.flatMap((lane) => (lane.exit ? [
-          <Arrow key={lane.exit.key} tail={at(...lane.exit.from)} tip={at(...across(lane, lane.exit.to, -0.85))} label="leaves the process"
-            className={`aug-atlas-move is-exit${picked === lane.exit.key ? " is-picked" : ""}${dim(lane.process)}`} {...act(lane.exit.key)} {...hover(lane.exit.key)} />,
-          (() => { const pen = new Pen(at), [u, v] = [lane.exit.to[0] - 1, lane.exit.to[1] - 0.8];
-            pen.pad(u, v, 2, 1.6, "expected");
-            pen.line(at(u + 0.5, v + 0.4), at(u + 1.5, v + 1.2), "var(--t3)", { strokeWidth: 2, strokeLinecap: "round" });
-            pen.line(at(u + 1.5, v + 0.4), at(u + 0.5, v + 1.2), "var(--t3)", { strokeWidth: 2, strokeLinecap: "round" });
-            return <g key={`${lane.exit.key}:pad`} className={`aug-atlas-st${picked === lane.exit.key ? " is-picked" : ""}${dim(lane.process)}`} {...act(lane.exit.key)} {...hover(lane.exit.key)}>{pen.out}</g>; })(),
-        ] : []))}
-        {/* what the journey says, written on the ground beside it: each stage and how many reached it, a promise past,
-            how long a move took, what left, the entity it is of and the entity each later leg is of */}
-        {scene.lanes.filter((l) => l.process).map((lane, i) => {
-          const u = lane.along === "u", f = lane.stages[0];
-          return (
-            <g key={`said:${lane.process}`} className={dim(lane.process).trim()} data-said={lane.name}>
-              {lane.stages.map((st) => { const text = `${String(st.index + 1).padStart(2, "0")}  ${st.label}${st.reached === null ? "" : `  ${formatCount(st.reached)}`}`;
-                // in front of the stage, where nothing that stands can hide it — and clear of the spur what leaves takes
-                const from = st.u + (st.index === 0 && lane.exit ? 0.6 : -1.0);
-                return u ? written(st.key, [from, st.v + 1.95], text, "is-stage") : written(st.key, [st.u + 1.75, st.v + 1.0], text, "is-stage", "v"); })}
-              {lane.stages.filter((st) => st.past).map((st) => (u
-                ? written(`${st.key}:past`, [st.u - 1.0, st.v + 2.85], `${formatCount(st.past!.count)} overdue`, "is-past")
-                : written(`${st.key}:past`, [st.u + 2.65, st.v + 1.0], `${formatCount(st.past!.count)} overdue`, "is-past", "v")))}
-              {lane.moves.filter((m) => m.days !== null).map((m) => (u
-                ? written(`took:${m.key}`, [m.a[0] + 0.5, m.a[1] + 1.1], daysSaid(m.days!), "is-said")
-                : written(`took:${m.key}`, [m.a[0] - 1.0, m.b[1] - 0.15], daysSaid(m.days!), "is-said", "v")))}
-              {lane.exit && written(`left:${lane.exit.key}`, u ? [lane.exit.to[0] + 1.3, lane.exit.to[1] + 0.4] : [lane.exit.to[0] - 1.0, lane.exit.to[1] + 1.5], `${count(lane.exit.count)} ${lane.exit.label}`, "is-said")}
-              {i === 0 && f && written(`goes:${lane.process}`, u ? [lane.start[0], lane.start[1] - 0.9] : [lane.start[0] + 1.75, lane.start[1] + 0.2],
-                `${lane.entityName}${lane.parts.length ? `  ${partsSaid(lane.parts.length)}` : ""}`, "is-said", lane.along)}
-            </g>
-          );
-        })}
-        {scene.joints.map((j, i) => { const next = scene.lanes[i + 1], text = j.linked ? j.after : `no link to ${j.before}`;
-          return next ? <g key={`said:${j.key}`}>{next.along === "v"
-            ? written(j.key, [j.from[0] + 2.65, j.from[1] + 4.3], text, j.linked ? "is-said" : "is-past", "v")
-            : written(j.key, [j.from[0] + 0.6, j.from[1] - 2.2], text, j.linked ? "is-said" : "is-past")}</g> : null; })}
-        {/* links lie flat: out to a far edge of the plane, along a track of their own outside it, and back in */}
-        {scene.links.map((l) => (
-          <polyline key={`${l.a}>${l.b}:${l.verb}`} className={`aug-atlas-link${pickedEntity === l.a || pickedEntity === l.b ? " is-picked" : ""}`} data-link={`${l.a}>${l.b}`}
-            points={(routes.get(l) ?? []).map((q) => at(q[0], q[1]).map((n) => n.toFixed(1)).join(",")).join(" ")} />
-        ))}
-        {/* what stands, back to front */}
-        {raised}
-      </svg>
-
-      {scene.structures.map((s) => {
-        const [x, y] = at(s.u + s.w / 2, s.v + s.d / 2, s.h + 6);
-        return (
-          <div key={s.key} className={`aug-atlas-mark is-tucked${picked === s.key ? " is-picked" : ""}${over === s.key ? " is-over" : ""}${s.loose ? " is-loose" : ""}${dim(zoneLeg.get(s.zone))}`} style={{ left: `${(x / W) * 100}%`, top: `${(y / H) * 100}%` }}>
-            <Button variant="ghost" size="xs" className="aug-atlas-board" aria-label={s.name} onClick={flag(s.key)}>
-              <span className={`dot ${s.measured ? "is-entity" : "is-expected"}`} /><span>{s.name}</span>{s.count !== null && <span className="n"><b>{formatCount(s.count)}</b></span>}{s.parts.length > 0 && <span className="n" data-testid="atlas-parts">{partsSaid(s.parts.length)}</span>}
-            {go(s.key)}</Button>
-            <span className="aug-atlas-stem" />
-          </div>
-        );
-      })}
-      {scene.records.map((r) => (
-        <div key={r.key} className={`aug-atlas-mark is-record is-tucked${picked === r.key ? " is-picked" : ""}${over === r.key ? " is-over" : ""}${dim(zoneLeg.get(r.zone))}`} style={(() => { const [x, y] = at(r.u, r.v, 0); return { left: `${(x / W) * 100}%`, top: `${((y - 6) / H) * 100}%` }; })()}>
-          <Button variant="ghost" size="xs" className="aug-atlas-board is-quiet" aria-label={r.name} onClick={flag(r.key)}>
-            <span className="dot is-record" /><span className="n"><b>{r.name}</b>{r.count !== null && ` ${formatCount(r.count)}`}</span>
-          {go(r.key)}</Button>
-          <span className="aug-atlas-stem" />
-        </div>
-      ))}
-      {scene.lanes.flatMap((lane) => lane.stages.map((st) => (
-        <div key={st.key} className={`aug-atlas-mark is-stage is-tucked${picked === st.key ? " is-picked" : ""}${tip(st.key)}${dim(lane.process)}`} style={where([st.u, st.v], 31)}>
-          <Button variant="ghost" size="xs" className="aug-atlas-board" onClick={flag(st.key)}>
-            {/* the journey says it starts on its first stage and ends on its last */}
-            {st.index === 0 && lane === scene.lanes[0] && <span className="n route" data-testid="atlas-route-start"><span className="cap is-start" />starts</span>}
-            <span className="ix">{String(st.index + 1).padStart(2, "0")}</span><span className={`dot${lane.measured ? "" : " is-expected"}`} /><span>{st.label}</span>
-            {st.reached !== null && <span className="n"><b>{formatCount(st.reached)}</b></span>}
-            {lane === last && st.index === lane.stages.length - 1 && st.index > 0 && <span className="n route"><span className="cap is-end" />ends</span>}
-          {go(st.key)}</Button>
-          {st.past && <Button variant="destructive" size="xs" className="aug-atlas-board is-past" onClick={flag(st.past!.key)}>{`${formatCount(st.past.count)} overdue`}{go(st.past!.key)}</Button>}
-          <span className="aug-atlas-stem" />
-        </div>
-      )))}
-      {scene.lanes.flatMap((lane) => lane.moves.filter((m) => m.count !== null || m.days !== null).map((m) => (
-        <div key={m.key} className={`aug-atlas-mark is-on-ground is-tip${tip(`move:${m.key}`)}${picked === `move:${m.key}` ? " is-picked" : ""}${dim(lane.process)}`} style={where(across(lane, mid(m.a, m.b), 0.2))}>
-          <Button variant="ghost" size="xs" className="aug-atlas-board is-quiet" onClick={flag(`move:${m.key}`)}><span className="n">{m.count !== null && <><b>{formatCount(m.count)}</b> moved</>}{m.count !== null && m.days !== null && " · "}{m.days !== null && daysSaid(m.days)}</span>{go(`move:${m.key}`)}</Button>
-        </div>
-      )))}
-      {scene.lanes.flatMap((lane) => (lane.exit ? [
-        <div key={lane.exit.key} className={`aug-atlas-mark is-on-ground is-tip${tip(lane.exit.key)}${picked === lane.exit.key ? " is-picked" : ""}${dim(lane.process)}`} style={where(lane.exit.to)}>
-          <Button variant="ghost" size="xs" className="aug-atlas-board is-quiet" onClick={flag(lane.exit!.key)}><span className="n"><b>{count(lane.exit.count)}</b> left · {lane.exit.label}</span>{go(lane.exit!.key)}</Button>
-        </div>] : []))}
-      {scene.joints.map((j) => (
-        <div key={j.key} className={`aug-atlas-mark is-on-ground is-tip${tip(j.key)}${picked === j.key || picked === `entity:${j.entity}` ? " is-picked" : ""}`} style={where(mid(j.from, j.to))}>
-          <Button variant="ghost" size="xs" className={`aug-atlas-board is-quiet${j.linked ? "" : " is-gap"}`} data-testid="atlas-joint" onClick={flag(j.linked ? `entity:${j.entity}` : j.key)}>
-            <span className="n">{j.linked ? <>{j.count !== null && <b>{formatCount(j.count)}</b>} <b>{j.after}</b>{j.parts.length > 0 && ` ${partsSaid(j.parts.length)}`} · {j.verb} {j.before}</> : <>no link joins <b>{j.after}</b> to <b>{j.before}</b></>}</span>
-          {go(j.linked ? `entity:${j.entity}` : j.key)}</Button>
-        </div>
-      ))}
-      {scene.lanes.filter((l, i) => l.process && i === 0).map((lane) => (
-        <div key={`goes:${lane.process}`} className={`aug-atlas-mark is-on-ground is-tip${tip(`goes:${lane.process}`)}${picked === `entity:${lane.entity}` ? " is-picked" : ""}${dim(lane.process)}`} style={where(lane.start)}>
-          <Button variant="ghost" size="xs" className="aug-atlas-board is-quiet" data-testid="atlas-route-entity" onClick={flag(`entity:${lane.entity}`)}>
-            <span className="n"><b>{lane.entityName}</b>{lane.parts.length > 0 && ` ${partsSaid(lane.parts.length)}`}</span>
-          {go(`entity:${lane.entity}`)}</Button>
-        </div>
-      ))}
-      {scene.lanes.filter((l) => !l.process).map((lane) => (
-        <div key="none" className="aug-atlas-mark is-on-ground" style={where(mid(lane.start, lane.end))} data-testid="atlas-no-process">
-          <span className="aug-atlas-board is-quiet">No process is declared on this ontology</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/** The same scene from above. Every zone is its plot, every structure its footprint, every leg a straight band; the
- *  labels are the same controls, so what is selected, and what the inspector says of it, does not depend on how the
- *  Atlas is drawn. */
 function Flat({ scene, picked, onPick, onOpen, look }: { scene: AtlasScene; picked: string | null; onPick: (key: string) => void; onOpen?: (key: string) => void; look: Look }) {
   const { flag, go } = flagsOf(picked, onPick, onOpen);
   // the plan is drawn with the same margin beyond its two far edges, for the tracks the links run along
@@ -671,44 +472,6 @@ function Flat({ scene, picked, onPick, onOpen, look }: { scene: AtlasScene; pick
   );
 }
 
-function Arrow({ tail: from, tip: to, className, label, ...rest }: { tail: [number, number]; tip: [number, number]; className: string; label: string } & React.SVGProps<SVGGElement>) {
-  const angle = Math.atan2(to[1] - from[1], to[0] - from[0]), L = 11, Wd = 5.5;
-  const base: [number, number] = [to[0] - L * Math.cos(angle), to[1] - L * Math.sin(angle)];
-  const head = [to, [base[0] - Wd * Math.sin(angle), base[1] + Wd * Math.cos(angle)], [base[0] + Wd * Math.sin(angle), base[1] - Wd * Math.cos(angle)]];
-  return (
-    <g className={className} data-name={label} {...rest}>
-      <path className="hit" d={`M${from} L${to}`} /><path className="ln" d={`M${from} L${base}`} />
-      <polygon className="hd" points={head.map((p) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ")} />
-    </g>
-  );
-}
-
-/** The ground and its grid. */
-function groundOf(scene: AtlasScene, at: Projection): React.ReactNode[] {
-  const pen = new Pen(at), { u: U, v: V } = scene.extent;
-  const top = [at(0, 0), at(U, 0), at(U, V), at(0, V)];
-  pen.poly([at(0, V), at(U, V), at(U, V, -16), at(0, V, -16)], "var(--atlas-ground-edge)");
-  pen.poly([at(U, 0), at(U, V), at(U, V, -16), at(U, 0, -16)], "var(--atlas-ground-under)");
-  pen.poly(top, "url(#atlas-ground)", { stroke: "var(--atlas-ground-line)", strokeWidth: 1 });
-  pen.poly(top, "url(#atlas-glow)");
-  for (let i = 1; i < U; i++) pen.line(at(i, 0), at(i, V), "var(--atlas-grid)");
-  for (let j = 1; j < V; j++) pen.line(at(0, j), at(U, j), "var(--atlas-grid)");
-  return pen.out;
-}
-/** The bed a leg of the journey runs along, and the spur what leaves it takes. */
-function laneOf(lane: SceneLane, at: Projection): React.ReactNode[] {
-  const pen = new Pen(at), firm = lane.process !== null && lane.measured;
-  const rect = (u: number, v: number, w: number, d: number) => [at(u, v), at(u + w, v), at(u + w, v + d), at(u, v + d)];
-  const bed = lane.along === "u" ? rect(lane.start[0], lane.start[1] - 0.6, lane.end[0] - lane.start[0] + 0.6, 1.2) : rect(lane.start[0] - 0.6, lane.start[1] - 0.6, 1.2, lane.end[1] - lane.start[1] + 0.6);
-  pen.poly(bed, "var(--atlas-lane)", { stroke: "var(--atlas-lane-line)", strokeWidth: 1, ...(firm ? {} : { strokeDasharray: "6 6", fillOpacity: 0.55 }) });
-  if (lane.exit) {
-    const f = lane.exit.from, t = lane.exit.to;
-    pen.poly(lane.along === "u" ? rect(f[0] - 0.3, f[1], 0.6, t[1] - f[1] - 0.8) : rect(t[0] + 0.8, f[1] - 0.3, f[0] - t[0] - 0.8, 0.6), "var(--atlas-lane)", { stroke: "var(--atlas-lane-line)", strokeWidth: 1 });
-  }
-  return pen.out;
-}
-
-/** What the inspector says of a selected thing: the figures the doors returned, and why it is drawn as it is. */
 function subjectOf(key: string, scene: AtlasScene, map: TypeMap, declared: ProcessesAndRules): InspectorSubject | null {
   const facts = (rows: { label: string; value: React.ReactNode; note?: React.ReactNode }[], why?: string): InspectorSubject["tabs"] => ({
     overview: <><InspectorFacts rows={rows} />{why && <p className="aug-inspector-note" data-testid="atlas-why">{why}</p>}</>,

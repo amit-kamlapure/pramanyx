@@ -52,7 +52,7 @@ export type OpsLayer = "monitors" | "actions" | "spend" | "security";
 
 const LAYERS: WorkspaceLayer<OpsLayer>[] = [
   { id: "monitors",    icon: "activity", label: "Monitors",         blurb: "Metric watches & alerts" },
-  { id: "actions",     icon: "spark",    label: "Notifications",    blurb: "Webhook, Slack & Jira triggers" },
+  { id: "actions",     icon: "spark",    label: "Delivery",         blurb: "Where messages go: webhook, Slack & Jira" },
   // PX-2 — the governed-spend dashboard. The caps store shipped 2026-09-06 with a write
   // door and no form; usage, model health and the audit feed were folds with no route
   // to an eye. This layer is those endpoints given a screen.
@@ -87,7 +87,7 @@ export function OperationsWorkspace({ connId, workspaceId, layer, onLayerChange,
       layer={layer}
       onLayerChange={onLayerChange}
       ariaLabel="Operations views"
-      // Monitors, Notifications, Spend and Security & Audit are each their own rail item: the switcher
+      // Monitors, Delivery, Spend and Security & Audit are each their own rail item: the switcher
       // row repeated the rail. The rail is the switcher, as on Data.
       hideTabs
       renderIcon={(name, size, color) => <Icon name={name} size={size} color={color} />}

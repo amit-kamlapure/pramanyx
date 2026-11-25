@@ -49,7 +49,7 @@ export const CONDITION_KINDS: { value: ConditionKind; label: string; desc: strin
 ];
 
 export const EFFECT_KINDS: { value: EffectKind; label: string; desc: string }[] = [
-  { value: "notify",         label: "Notify",         desc: "Send through a Notifications trigger" },
+  { value: "notify",         label: "Notify",         desc: "Send through a Delivery trigger" },
   { value: "investigate",    label: "Investigate",    desc: "Run the Agent" },
   { value: "brief",          label: "Deliver briefing", desc: "Deliver a briefing subscription" },
   { value: "kinetic_action", label: "Declared action",
@@ -943,7 +943,7 @@ export function EffectRow({ e, agents, bots = [], siblings, index = 0, onChange,
       </SelectField>
       <div style={{ flex: 1 }}>
         {e.kind === "notify" && (
-          <Input style={inputStyle} value={String(e.config.trigger_id ?? "")} onChange={ev => set({ trigger_id: ev.target.value })} placeholder="Notifications trigger id" />
+          <Input style={inputStyle} value={String(e.config.trigger_id ?? "")} onChange={ev => set({ trigger_id: ev.target.value })} placeholder="Delivery trigger id" />
         )}
         {e.kind === "investigate" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>

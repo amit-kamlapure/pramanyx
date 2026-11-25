@@ -21,7 +21,8 @@ import { Loading, ReadFailed } from "@/components/ui/states";
 import { openInApp } from "@/lib/addressOnce";
 import { areaIcon } from "@/lib/areaIcons";
 import {
-  curve, itemsOf, oneSided, reviewFilters, reviewWord, waitingWords, type AtlasArea, type Disc, type Fan, type FanKey,
+  areaTone, curve, itemsOf, KIND_TONE, oneSided, reviewFilters, reviewWord, tint, waitingWords, type AtlasArea, type Disc,
+  type Fan, type FanKey,
 } from "@/lib/areaMap";
 import {
   holdsWords, KIND_WORDS, markOf, ownersLine, readAtlasReview, usageLine, type AtlasReview, type DiscoverArea,
@@ -29,15 +30,22 @@ import {
 } from "@/lib/discover";
 import { countNoun, formatCount, relTime } from "@/lib/format";
 import { KIND_WORDS as LEARNED_WORDS, readLearned, whereFrom, type LearnedItem, type Promoted } from "@/lib/learned";
+import type { TypeMapRow } from "@/lib/objectTypes";
 
 /** A thing open in the right panel. */
 export type Opened =
   | { key: string; title: string; what: "area"; area: AreaLike }
+  | { key: string; title: string; what: "entity"; row: TypeMapRow; connection: { id: string; name: string } }
   | { key: string; title: string; what: "item"; item: DiscoverItem }
   | { key: string; title: string; what: "learned"; item: LearnedItem; connId: string; connName: string };
 
 /** A learned item, with the connection it was learned on. */
 export interface LearnedHere { item: LearnedItem; connId: string; connName: string }
+
+/** A small mark in a kind's colour (the user, 2026-11-25: colour by type). */
+function KindDot({ tone }: { tone: string }) {
+  return <span aria-hidden style={{ width: 8, height: 8, borderRadius: "50%", background: tone, flexShrink: 0, display: "inline-block" }} />;
+}
 
 /** A kind's name for one, as a line starts with it: "Table", "Data Canvas". */
 const kindWord = (k: DiscoverItem["kind"]) => KIND_WORDS[k][0].replace(/^./, (c) => c.toUpperCase());
@@ -67,6 +75,9 @@ export function withOpened(open: Opened[], o: Opened): Opened[] {
 }
 
 export const areaOpened = (area: AreaLike): Opened => ({ key: `area:${area.id}`, title: area.name, what: "area", area });
+export const entityOpened = (row: TypeMapRow, connection: { id: string; name: string }): Opened => ({
+  key: `entity:${connection.id}:${row.object_type}`, title: row.display_name, what: "entity", row, connection,
+});
 export const itemOpened = (item: DiscoverItem): Opened => ({ key: `item:${item.kind}:${item.id}`, title: item.name, what: "item", item });
 export const learnedOpened = (l: LearnedHere): Opened => ({
   key: `learned:${l.connId}:${l.item.ref || l.item.text}`, title: l.item.text, what: "learned", ...l,
@@ -155,7 +166,7 @@ function KindList({ fan, items, learned, onOpen, onBack }: {
   return (
     <section data-testid="atlas-kind-list" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <span style={{ ...ROW, gap: 8, justifyContent: "space-between" }}>
-        <span className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: 600 }}>{fan.words}</span>
+        <span className="aug-fs-sm" style={{ ...ROW, gap: 8, color: "var(--t1)", fontWeight: 600 }}><KindDot tone={fan.tone} />{fan.words}</span>
         <Button variant="ghost" size="xs" onClick={onBack}>The Area</Button>
       </span>
       <span className="aug-fs-xs" style={MUTED}>
@@ -170,9 +181,12 @@ function KindList({ fan, items, learned, onOpen, onBack }: {
             <Button key={`${i.kind}:${i.id}`} role="listitem" variant="ghost" size="sm" data-testid="atlas-kind-row"
               onClick={() => onOpen(itemOpened(i))}
               style={{ justifyContent: "flex-start", height: "auto", padding: "6px 8px", textAlign: "left", whiteSpace: "normal" }}>
-              <span style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
-                <span className="aug-fs-sm" style={{ color: "var(--t1)" }}>{i.name}</span>
-                <span className="aug-fs-xs" style={MUTED}>{fan.key === "certified" ? `${kindWord(i.kind)} · ${line}` : line}</span>
+              <span style={{ ...ROW, gap: 8, alignItems: "flex-start", minWidth: 0 }}>
+                <span style={{ paddingTop: 5 }}><KindDot tone={KIND_TONE[i.kind]} /></span>
+                <span style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
+                  <span className="aug-fs-sm" style={{ color: "var(--t1)" }}>{i.name}</span>
+                  <span className="aug-fs-xs" style={MUTED}>{fan.key === "certified" ? `${kindWord(i.kind)} · ${line}` : line}</span>
+                </span>
               </span>
             </Button>
           );
@@ -223,7 +237,7 @@ export function AreaRail({ area, page, pageFailed, onRetry, connections, fan, ki
         <Icon name="chevl" size={12} /> All Areas
       </Button>
       <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <IconSquare name={areaIcon(area.icon)} size={32} />
+        <IconSquare name={areaIcon(area.icon)} size={32} tone={areaTone(area.id)} />
         <span style={{ display: "flex", flexDirection: "column", gap: 1 }}>
           <span className="aug-fs-h1" style={{ color: "var(--t1)", fontWeight: 600 }}>{area.name}</span>
           {area.question && <span className="aug-fs-sm" style={MUTED}>{area.question}</span>}
@@ -265,7 +279,7 @@ export function AreaRail({ area, page, pageFailed, onRetry, connections, fan, ki
                     {page.children.map((c) => (
                       <Button key={c.id} variant="ghost" size="sm" onClick={() => onPickArea(c)}
                         style={{ justifyContent: "flex-start", gap: 8, height: "auto", padding: "4px 8px", margin: "0 -8px" }}>
-                        <IconSquare name={areaIcon(c.icon)} size={20} />
+                        <IconSquare name={areaIcon(c.icon)} size={20} tone={areaTone(c.id)} />
                         <span className="aug-fs-sm" style={{ color: "var(--t1)" }}>{c.name}</span>
                         <span className="aug-fs-xs" style={MUTED}>{countNoun(c.total, "thing")}</span>
                       </Button>
@@ -278,7 +292,7 @@ export function AreaRail({ area, page, pageFailed, onRetry, connections, fan, ki
                   {fan.map((f) => (
                     <Button key={f.key} variant="ghost" size="sm" data-testid={`atlas-fan-row-${f.key}`} onClick={() => onKind(f.key)}
                       style={{ justifyContent: "flex-start", gap: 8, height: "auto", padding: "4px 8px", margin: "0 -8px" }}>
-                      <Icon name={f.icon} size={14} />
+                      <span style={{ color: f.tone, lineHeight: 0 }}><Icon name={f.icon} size={14} /></span>
                       <span className="aug-fs-sm" style={{ color: "var(--t1)" }}>{f.words}</span>
                     </Button>
                   ))}
@@ -306,9 +320,9 @@ function Circle({ disc, area, note, chosen = false, faded = false, testId, onCli
     <Button variant="ghost" data-testid={testId} aria-pressed={chosen} onClick={onClick} title={area.question || area.name}
       style={{ position: "absolute", left: disc.x - disc.r, top: disc.y - disc.r, width: d, height: d, borderRadius: "50%", padding: 6,
         display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, whiteSpace: "normal",
-        background: "var(--bg-2)", opacity: faded ? 0.5 : 1, color: "var(--t1)",
+        background: tint(areaTone(area.id), chosen ? 20 : 12), opacity: faded ? 0.5 : 1, color: "var(--t1)",
         boxShadow: chosen ? "0 0 0 2px var(--accent)" : "inset 0 0 0 1px var(--b0)" }}>
-      <IconSquare name={areaIcon(area.icon)} size={Math.max(16, Math.min(28, disc.r / 2.6))} />
+      <IconSquare name={areaIcon(area.icon)} size={Math.max(16, Math.min(28, disc.r / 2.6))} tone={areaTone(area.id)} />
       <span className={disc.r >= 52 ? "aug-fs-sm" : "aug-fs-xs"} style={{ fontWeight: 600, lineHeight: 1.15, textAlign: "center" }}>{area.name}</span>
       {note && <span className="aug-fs-xs" style={{ ...MUTED, textAlign: "center" }}>{note}</span>}
     </Button>
@@ -339,7 +353,7 @@ export function AreaFan({ area, parent, siblings, fan, subAreas, size, zoom, kin
           <path key={`p${i}`} d={curve(zd(L.parent!), { x: zx(s.x - s.r), y: zy(s.y) })} fill="none"
             stroke={i === chosenAt ? "var(--t3)" : "var(--b1)"} strokeWidth={1} />
         ))}
-        {L.chips.map((c, i) => <path key={`c${i}`} d={curve(chosen, { x: zx(c.x), y: zy(c.y) })} fill="none" stroke="var(--b1)" strokeWidth={1} />)}
+        {L.chips.map((c, i) => <path key={`c${i}`} d={curve(chosen, { x: zx(c.x), y: zy(c.y) })} fill="none" stroke={tint(fan[i].tone, 55, "var(--bg-0)")} strokeWidth={1.2} />)}
         {L.subs.map((d, i) => (
           <path key={`s${i}`} d={curve(chosen, { x: zx(d.x - d.r), y: zy(d.y) })} fill="none" stroke="var(--b1)" strokeWidth={1} strokeDasharray="4 4" />
         ))}
@@ -355,9 +369,9 @@ export function AreaFan({ area, parent, siblings, fan, subAreas, size, zoom, kin
         <Button key={f.key} variant="secondary" size="sm" data-testid={`atlas-fan-${f.key}`} aria-pressed={kind === f.key}
           onClick={() => onKind(f.key)}
           style={{ position: "absolute", left: zx(L.chips[n].x), top: zy(L.chips[n].y) - L.chips[n].h / 2, width: L.chips[n].w,
-            height: L.chips[n].h, justifyContent: "flex-start", gap: 8,
+            height: L.chips[n].h, justifyContent: "flex-start", gap: 8, background: tint(f.tone, 16),
             boxShadow: kind === f.key ? "0 0 0 2px var(--accent)" : undefined }}>
-          <Icon name={f.icon} size={14} />
+          <span style={{ color: f.tone, lineHeight: 0 }}><Icon name={f.icon} size={14} /></span>
           <span className="aug-fs-sm">{f.words}</span>
         </Button>
       ))}
@@ -388,7 +402,7 @@ function AreaCard({ area, connections }: { area: AreaLike; connections: { id: st
   return (
     <div data-testid="atlas-open-area" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       <span style={{ ...ROW, gap: 10 }}>
-        <IconSquare name={areaIcon(area.icon)} size={28} />
+        <IconSquare name={areaIcon(area.icon)} size={28} tone={areaTone(area.id)} />
         <span className="aug-fs-h2" style={{ color: "var(--t1)", fontWeight: 600 }}>{area.name}</span>
       </span>
       {area.question && <span className="aug-fs-sm" style={{ color: "var(--t2)" }}>{area.question}</span>}
@@ -409,6 +423,32 @@ function AreaCard({ area, connections }: { area: AreaLike; connections: { id: st
   );
 }
 
+/** An entity of an Area, opened on the right: what it is, its key, how many there are, what it reads and links to. */
+function EntityCard({ row, connection }: { row: TypeMapRow; connection: { id: string; name: string } }) {
+  return (
+    <div data-testid="atlas-open-entity" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <span style={{ ...ROW, gap: 8 }}>
+        <Chip tone="plain">Entity</Chip>
+        <span className="aug-fs-xs" style={MUTED}>{connection.name}</span>
+      </span>
+      <span className="aug-fs-h2" style={{ color: "var(--t1)", fontWeight: 600 }}>{row.display_name}</span>
+      <div style={{ display: "grid", gridTemplateColumns: "120px 1fr", gap: "6px 10px", alignItems: "baseline" }}>
+        <Fact label="How many" value={row.rows === null || row.rows === undefined ? "not counted" : formatCount(row.rows)} />
+        <Fact label="Its key" value={row.key ? `${row.key}${row.key_verified ? " — proved unique" : row.key_verified === false ? " — not unique" : ""}` : "none yet"} />
+        <Fact label="Read from" value={row.table || "—"} />
+        <Fact label="Properties" value={formatCount(row.properties ?? 0)} />
+        <Fact label="Links" value={`${formatCount(row.links ?? 0)}, ${formatCount(row.traversable_links ?? 0)} followed by answers`} />
+        <Fact label="Metrics" value={formatCount(row.metrics ?? 0)} />
+        <Fact label="Actions" value={formatCount(row.actions ?? 0)} />
+      </div>
+      <Button size="sm" variant="secondary" style={{ alignSelf: "flex-start" }}
+        onClick={() => openInApp(`/?tab=ontology&conn=${encodeURIComponent(connection.id)}`)}>
+        Open {connection.name}&apos;s ontology <Icon name="external" size={12} />
+      </Button>
+    </div>
+  );
+}
+
 function ItemCard({ item }: { item: DiscoverItem }) {
   const mark = markOf(item);
   const facts = Object.entries(item.detail ?? {})
@@ -417,7 +457,7 @@ function ItemCard({ item }: { item: DiscoverItem }) {
   return (
     <div data-testid="atlas-open-item" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       <span style={{ ...ROW, gap: 8 }}>
-        <Chip tone="plain">{kindWord(item.kind)}</Chip>
+        <span style={{ ...ROW, gap: 6 }}><KindDot tone={KIND_TONE[item.kind]} /><Chip tone="plain">{kindWord(item.kind)}</Chip></span>
         {mark && <Chip tone={mark.tone === "up" ? "up" : mark.tone === "amber" ? "amber" : "plain"}>{mark.word}</Chip>}
       </span>
       <span className="aug-fs-h2" style={{ color: "var(--t1)", fontWeight: 600, wordBreak: "break-word" }}>{item.name}</span>
@@ -452,7 +492,7 @@ function LearnedCard({ o, areas, areaName }: {
   return (
     <div data-testid="atlas-open-learned" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       <span style={{ ...ROW, gap: 8 }}>
-        <Chip tone="plain">{LEARNED_WORDS[i.kind] ?? i.kind}</Chip>
+        <span style={{ ...ROW, gap: 6 }}><KindDot tone={KIND_TONE.learned} /><Chip tone="plain">{LEARNED_WORDS[i.kind] ?? i.kind}</Chip></span>
         <span className="aug-fs-xs" style={MUTED}>{o.connName}</span>
       </span>
       <span className="aug-fs-chrome" style={{ color: "var(--t1)", wordBreak: "break-word" }}>{i.text}</span>
@@ -508,6 +548,7 @@ export function OpenPanel({ open, active, onActive, onClose, areas, connections 
         ))}
       </div>
       {shown && (shown.what === "area" ? <AreaCard key={shown.key} area={shown.area} connections={connections} />
+        : shown.what === "entity" ? <EntityCard key={shown.key} row={shown.row} connection={shown.connection} />
         : shown.what === "item" ? <ItemCard key={shown.key} item={shown.item} />
         : <LearnedCard key={shown.key} o={shown} areas={areas} areaName={areaName} />)}
     </aside>

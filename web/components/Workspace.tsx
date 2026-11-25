@@ -41,7 +41,7 @@ type WorkspaceProps<L extends string> = {
   help?: (layer: L) => void;
   /** Drop the layer-tab row. For a workspace whose layers each already have their own
    *  item in the left rail (Data: Catalog / SQL Editor / Semantic Layer; Operations:
-   *  Monitors / Notifications / Integrations / Spend / Security & Audit), the tabs are a
+   *  Monitors / Delivery / Integrations / Spend / Security & Audit), the tabs are a
    *  second copy of a control the rail already provides. The other workspaces fold
    *  several rail items into fewer layers, or none at all, so their switcher is the only
    *  way to reach a layer and the tabs stay. */

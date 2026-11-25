@@ -3,7 +3,10 @@
  *  every time and never touching; the figures said in words, a share of nothing said as a dash. */
 import { describe, expect, it } from "vitest";
 
-import { bounds, changeWords, curve, fanOf, itemsOf, oneSided, packBubbles, radiusFor, R_MIN, reviewFilters, reviewWord, ring, share, waitingWords } from "@/lib/areaMap";
+import {
+  AREA_TONES, areaTone, bounds, changeWords, curve, fanOf, itemsOf, KIND_TONE, oneSided, packBubbles, radiusFor, R_MIN, reviewFilters,
+  reviewWord, ring, share, tint, waitingWords,
+} from "@/lib/areaMap";
 import type { DiscoverItem, DiscoverKind } from "@/lib/discover";
 
 describe("the Areas laid out", () => {
@@ -120,3 +123,20 @@ describe("an Area opened to one side (2026-11-25)", () => {
   });
 });
 
+
+describe("colour by type (2026-11-25)", () => {
+  it("gives each kind its colour from the theme's ramps, never a raw one, and tables none", () => {
+    const fan = fanOf({ kinds: [{ kind: "metric" as const, title: "Metrics", count: 2, withheld: 0, states: {}, items: [] },
+      { kind: "table" as const, title: "Tables", count: 1, withheld: 0, states: {}, items: [] }] }, 3);
+    expect(fan.map((f) => [f.key, f.tone])).toEqual([["metric", "var(--blue4)"], ["learned", "var(--amb4)"], ["table", "var(--t2)"]]);
+    expect(Object.values(KIND_TONE).every((t) => /^var\(--[a-z]+\d?\)$/.test(t))).toBe(true);
+  });
+
+  it("gives each Area one colour, the same every time, and what sits in no Area none", () => {
+    expect(areaTone("orders_sales")).toBe(areaTone("orders_sales"));
+    expect(AREA_TONES).toContain(areaTone("orders_sales"));
+    expect(new Set(["orders_sales", "inventory", "customers", "payments", "marketing", "returns"].map(areaTone)).size).toBeGreaterThan(2);
+    expect(areaTone("other")).toBe("var(--t3)");
+    expect(tint("var(--blue4)", 16)).toBe("color-mix(in srgb, var(--blue4) 16%, var(--bg-2))");
+  });
+});

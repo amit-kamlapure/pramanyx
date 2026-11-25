@@ -417,7 +417,7 @@ export function ProfileLayer({ connectionId, canvasId, schema, workspaceId }: {
 
   const openEvidence = useCallback((finding: RecordedFinding, domain: string) => setEvidence({ finding, domain }), []);
   const showTriggersHint = useCallback(() => {
-    toast.info("No delivery channel yet", { description: "Add a Slack or webhook trigger in Notifications to share findings." });
+    toast.info("No delivery channel yet", { description: "Add a Slack or webhook trigger in Delivery to share findings." });
   }, []);
 
   const names = useMemo(() => Object.keys(domains ?? {}).sort(), [domains]);

@@ -378,7 +378,7 @@ export function CommandPalette({ open, onClose, selectedConn, onNavigate, onGoTo
     { id: "nav-connections", label: "Connections",          sublabel: "Data source connections live in the Catalog", type: "action", icon: "plug", accent: "var(--grn3)" },
     { id: "nav-metrics",     label: "Metrics Catalog",      sublabel: "Semantic KPI definitions",           type: "action", icon: "metric",   accent: "var(--amb3)" },
     { id: "nav-monitors",    label: "Monitors",             sublabel: "Thresholds, drift and staleness watches", type: "action", icon: "activity", accent: "var(--grn3)" },
-    { id: "nav-actions",     label: "Notifications",        sublabel: "Webhooks, Slack, Jira integrations", type: "action", icon: "inbox",    accent: "var(--vio3)" },
+    { id: "nav-actions",     label: "Delivery",             sublabel: "Where messages go: webhooks, Slack, Jira", type: "action", icon: "inbox",    accent: "var(--vio3)" },
     { id: "nav-integrations", label: "Integrations",        sublabel: "Settings ▸ Integrations: OAuth accounts, Slack apps, MCP servers", type: "action", icon: "plug",  accent: "var(--grn3)" },
     { id: "nav-spend",       label: "Spend",                sublabel: "Model usage, cost, caps and the governance feed", type: "action", icon: "scales", accent: "var(--amb3)" },
     { id: "nav-security",    label: "Security & Audit",     sublabel: "Query audit, approvals, guardrail activity", type: "action", icon: "shield", accent: "var(--red3)" },
