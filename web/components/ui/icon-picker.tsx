@@ -69,7 +69,8 @@ export function IconPicker({ value, onChange, groups, find, label, testId }: {
               else if (e.key === "Enter" && found?.length === 1) { e.preventDefault(); pick(found[0]); }
             }} />
           <div ref={grid} role="radiogroup" aria-label={label} onKeyDown={onGridKey}
-            style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 320, overflowY: "auto", paddingRight: 2 }}>
+            // one height whatever a search leaves, so the list never jumps to the other side of its button as you type
+            style={{ display: "flex", flexDirection: "column", gap: 8, height: 280, overflowY: "auto", paddingRight: 2 }}>
             {shown.map((g) => (
               <div key={g.group || "found"} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 {g.group && <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>{g.group}</span>}
