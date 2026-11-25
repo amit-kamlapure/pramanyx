@@ -217,6 +217,11 @@ function read<T>(href: string, what: string, fresh = false): Promise<T> {
   }, fresh);
 }
 
+/** The Atlas, by Area (A4a, 2026-11-25): the organisation's map — `lib/areaMap.ts` says what it holds. */
+export function readAtlas<T>(workspaceId?: string, fresh = false): Promise<T> {
+  return read(url("/discover/atlas", {}, workspaceId), "the Atlas", fresh);
+}
+
 export function readDiscover(connectionId = "", workspaceId?: string, fresh = false): Promise<DiscoverHome> {
   return read(url("/discover", { connection_id: connectionId }, workspaceId), "Discover", fresh);
 }

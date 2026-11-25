@@ -1,0 +1,241 @@
+"""The Atlas, by Area — the organisation's map (2026-11-25, the Atlas-by-Area plan's A4a —
+`docs/AREA_MAP_PLAN_2026-11-25.md` §3.1).
+
+The Ontology page opened on one connection's entities; this is what it opens on now: the organisation's Areas across
+every connection in view, each with what it holds (Discover's own reading, `discover.service`), how many of the month's
+answers drew on it, and what waits for review in it — and, for the side panel, the month's answers, the share that drew
+on governed knowledge, the share placed in an Area, who answers for the Areas, what is used most. Stores nothing.
+
+- **Answers per Area** come from the answers' receipts: each says which tables its SQL read, and each table stands in
+  the Area Discover places it in. An answer that read tables in two Areas drew on both. Every answer that ran SQL
+  carries a receipt, so the month is counted back thirty days, not from today.
+- **Governed reach** — of those answers, the ones that drew on an approved metric (its formula used, the receipt's
+  `metric_used`), an approved trusted query (`trusted`), or a published Definition given to it (`given`, recorded since
+  `trust.answer_inputs.RECORDED_SINCE` — said so).
+- **Area coverage** — of those answers, the ones that read at least one table placed in an Area.
+- **Review and learned, per Area** — the review queue and the learned list of each connection, added up. They are slow
+  to read (seconds a connection), so they are kept and read again off the request every ten minutes, as Discover keeps
+  a connection's table reads (`discover.usage.table_reads`); until the first reading lands the page says so.
+"""
+from __future__ import annotations
+
+import contextvars
+import re
+import threading
+import time
+from collections import Counter
+from datetime import datetime, timedelta, timezone
+from typing import Any, Optional
+
+#: The receipts an answer writes (`routers.investigations._write_answer_receipt`): a quick answer's, a deep run's.
+RECEIPT_KINDS = ("chat_answer", "ada_report")
+#: "This month": the last thirty days, as Discover counts use.
+WINDOW_DAYS = 30
+#: How long a reading of the review queues and learned lists is kept before it is read again, off the request.
+SLOW_FRESH_S = 600
+#: Where the last reading is kept across a restart (the kernel ledger's kv).
+SLOW_STORE = "atlas_slow"
+#: The most of the month's receipts read — far above a month's answers on any install measured.
+MAX_RECEIPTS = 20_000
+
+_slow: dict[tuple, tuple[float, dict]] = {}
+_reading: set[tuple] = set()
+_slow_lock = threading.Lock()
+
+
+def _bare(table: str) -> str:
+    """A table as a receipt names it — qualified, quoted — as Discover names it: the last part, lower case."""
+    return re.split(r"\.", str(table or "").strip().strip("`\"'"))[-1].strip("`\"'").lower()
+
+
+def _when(at: Any) -> Optional[datetime]:
+    try:
+        t = datetime.fromisoformat(str(at or "").replace("Z", "+00:00").replace(" ", "T"))
+    except ValueError:
+        return None
+    return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
+
+
+def answers(scope, items: list, *, now: Optional[datetime] = None) -> dict:
+    """The month's answers on the connections in view: how many, the month before's, how many drew on governed
+    knowledge, how many read a table placed in an Area, and how many drew on each Area."""
+    from pramanyx.discover.service import OTHER
+    from pramanyx.kernel.ledger import Ledger
+    table_area = {(i.connection_id, i.name.lower()): i.area for i in items
+                  if i.kind == "table" and i.area and i.area != OTHER}
+    approved_metric = {i.id for i in items if i.kind == "metric" and i.state == "approved"}
+    published = {i.id for i in items if i.kind == "definition" and i.state == "published"}
+    now = now or datetime.now(timezone.utc)
+    since, before = now - timedelta(days=WINDOW_DAYS), now - timedelta(days=2 * WINDOW_DAYS)
+    recent: list[dict] = []
+    previous = 0
+    for a in Ledger.default().artifacts_of_kind(list(RECEIPT_KINDS), limit=MAX_RECEIPTS):
+        if a.get("conn_id") not in scope.connections:
+            continue
+        at = _when(a.get("created_at"))
+        if at is None:
+            continue
+        if at >= since:
+            recent.append(a)
+        elif at >= before:
+            previous += 1
+    conn_of = {a["id"]: a.get("conn_id") or "" for a in recent}
+    governed: set[str] = set()
+    for art_id, relation, ref, _detail in Ledger.default().lineage_of_many(
+            list(conn_of), relations=["metric_used", "trusted", "given"]):
+        ref = str(ref or "")
+        if relation == "trusted":
+            governed.add(art_id)
+        elif relation == "metric_used" and f"{conn_of.get(art_id, '')}/{ref.removeprefix('metric:')}" in approved_metric:
+            governed.add(art_id)
+        elif relation == "given" and ref.startswith("definition:") and ref[len("definition:"):] in published:
+            governed.add(art_id)
+    per_area: Counter = Counter()
+    placed = 0
+    for a in recent:
+        payload = a.get("payload") if isinstance(a.get("payload"), dict) else {}
+        drew = {table_area.get((a.get("conn_id"), _bare(t))) for t in (payload.get("tables") or [])} - {None}
+        if drew:
+            placed += 1
+        per_area.update(drew)
+    return {"answers": len(recent), "previous": previous, "governed": len(governed), "in_an_area": placed,
+            "per_area": dict(per_area)}
+
+
+def _slow_key(scope) -> tuple:
+    from pramanyx.org.context import current_org_id
+    return (current_org_id() or "", str(scope.person or ""), tuple(sorted(scope.connections)))
+
+
+def _read_slow(key: tuple, connections: dict[str, str]) -> None:
+    """Each connection's review queue and learned list, added up by Area — kept, and in the ledger across a restart."""
+    from pramanyx.kernel.errors import tolerate
+    from pramanyx.knowledge.learned import learned_items
+    from pramanyx.knowledge.review import review
+    by_area: dict[str, Counter] = {}
+    out = {"review_total": 0, "review_unplaced": 0, "learned_total": 0, "learned_unplaced": 0, "unread": []}
+    for conn, name in connections.items():
+        try:
+            r = review(conn, limit=10_000)
+            out["review_total"] += int(r.get("total") or 0)
+            out["review_unplaced"] += int(r.get("unplaced") or 0)
+            for i in r.get("items") or []:
+                for a in [x for x in str(i.get("area") or "").split(",") if x]:
+                    by_area.setdefault(a, Counter())[str(i.get("kind") or "")] += 1
+        except Exception as exc:  # noqa: BLE001 — a connection unread is said, never counted as none
+            tolerate(exc, f"the Atlas could not read {conn}'s review queue", counter="atlas.review")
+            out["unread"].append(f"what waits for review on {name}")
+        try:
+            got = learned_items(conn, limit=10_000)
+            out["learned_total"] += int(got.get("total") or 0)
+            for i in got.get("items") or []:
+                if i.get("area"):
+                    by_area.setdefault(i["area"], Counter())["learned"] += 1
+                else:
+                    out["learned_unplaced"] += 1
+        except Exception as exc:  # noqa: BLE001
+            tolerate(exc, f"the Atlas could not read what was learned on {conn}", counter="atlas.learned")
+            out["unread"].append(f"what was learned on {name}")
+    out["areas"] = {a: dict(c) for a, c in by_area.items()}
+    out["at"] = datetime.now(timezone.utc).isoformat()
+    with _slow_lock:
+        _reading.discard(key)
+        _slow[key] = (time.monotonic(), out)
+    try:
+        from pramanyx.kernel.ledger import Ledger
+        Ledger.default().kv_put(SLOW_STORE, "|".join([key[0], key[1], ",".join(key[2])]), out)
+    except Exception as exc:  # noqa: BLE001 — kept in memory all the same
+        tolerate(exc, "the Atlas's reading was not kept across a restart", counter="atlas.kept")
+
+
+def slow_parts(scope, *, wait: bool = False) -> tuple[Optional[dict], list[str]]:
+    """The review queues and learned lists of the connections in view, added up by Area, from what is kept — and what
+    is not read yet, said. Read again off the request when older than ten minutes; ``wait`` reads it here (a test)."""
+    key = _slow_key(scope)
+    with _slow_lock:
+        kept = _slow.get(key)
+    if kept is None:
+        try:
+            from pramanyx.kernel.ledger import Ledger
+            back = Ledger.default().kv_get(SLOW_STORE, "|".join([key[0], key[1], ",".join(key[2])]))
+            if isinstance(back, dict) and isinstance(back.get("areas"), dict):
+                age = (datetime.now(timezone.utc) - (_when(back.get("at")) or datetime.now(timezone.utc))).total_seconds()
+                kept = (time.monotonic() - max(0.0, age), back)
+                with _slow_lock:
+                    _slow.setdefault(key, kept)
+        except Exception as exc:  # noqa: BLE001 — nothing kept is nothing to show; it is read again
+            from pramanyx.kernel.errors import tolerate
+            tolerate(exc, "the Atlas's kept reading could not be read back", counter="atlas.kept_back")
+    stale = kept is None or time.monotonic() - kept[0] > SLOW_FRESH_S
+    with _slow_lock:
+        start = stale and key not in _reading
+        if start:
+            _reading.add(key)
+    if start:
+        if wait:
+            _read_slow(key, dict(scope.connections))
+        else:
+            ctx = contextvars.copy_context()
+            threading.Thread(target=ctx.run, args=(_read_slow, key, dict(scope.connections)), daemon=True,
+                             name="atlas-slow").start()
+    with _slow_lock:
+        kept = _slow.get(key)
+    if kept is None:
+        return None, ["What waits for review and what was learned, by Area, is being read; it shows on the next visit."]
+    return kept[1], [f"Not read: {', '.join(kept[1]['unread'])}." ] if kept[1].get("unread") else []
+
+
+def atlas(scope, *, wait: bool = False) -> dict:
+    """The organisation's map: every Area in view that holds something or that answers drew on — what it holds, the
+    answers that drew on it, what waits for review in it, what was learned in it — the Areas that hold nothing apart,
+    the model's suggestions, and the side panel's figures."""
+    from pramanyx.discover.service import OTHER, area_view, by_use, all_items, areas_in_view, gather
+    from pramanyx.trust.answer_inputs import RECORDED_SINCE
+    found = gather(scope)
+    items = all_items(found)
+    areas = areas_in_view(scope)
+    held: dict[str, list] = {}
+    for i in items:
+        held.setdefault(i.area if i.area in areas else OTHER, []).append(i)
+    month = answers(scope, items)
+    slow, said = slow_parts(scope, wait=wait)
+    slow_areas = (slow or {}).get("areas") or {}
+
+    def row(a_id: str, a: dict) -> dict:
+        view = area_view(a, held.get(a_id, []))
+        waits = slow_areas.get(a_id) or {}
+        return {**view, "answers": int(month["per_area"].get(a_id, 0)),
+                "review": None if slow is None else {k: int(waits.get(k, 0)) for k in ("gap", "candidate", "conflict")},
+                "learned": None if slow is None else int(waits.get("learned", 0))}
+
+    shown = [row(a_id, a) for a_id, a in areas.items()
+             if a_id != OTHER and (held.get(a_id) or month["per_area"].get(a_id))]
+    shown.sort(key=lambda r: (-r["answers"], -r["total"], r["name"]))
+    quiet = [{"id": a_id, "name": a["name"], "question": a.get("question", "")} for a_id, a in areas.items()
+             if a_id != OTHER and not held.get(a_id) and not month["per_area"].get(a_id)]
+    declared = [a for a_id, a in areas.items() if a_id != OTHER]
+    suggested: list[dict] = []
+    if scope.curator:
+        from pramanyx.semantic.areas import suggested_areas
+        for conn, name in scope.connections.items():
+            try:
+                suggested += [{**s, "connection_id": conn, "connection_name": name} for s in suggested_areas(conn)]
+            except Exception as exc:  # noqa: BLE001 — suggestions unread are only fewer suggestions
+                from pramanyx.kernel.errors import tolerate
+                tolerate(exc, "the Atlas: a connection's suggested areas could not be read", counter="atlas.suggested")
+    return {
+        "connections": [{"id": c, "name": n} for c, n in scope.connections.items()],
+        "areas": shown,
+        "everything_else": {**area_view(areas[OTHER], held.get(OTHER, [])), "answers": month["answers"] - month["in_an_area"]},
+        "quiet": quiet,
+        "suggested": suggested,
+        "figures": {"answers": month["answers"], "previous": month["previous"], "governed": month["governed"],
+                    "in_an_area": month["in_an_area"], "window_days": WINDOW_DAYS, "given_since": RECORDED_SINCE},
+        "contacts": {"named": sum(1 for a in declared if a.get("business_owners") or a.get("technical_owners")),
+                     "of": len(declared)},
+        "most_used": [i.view() for i in by_use(items, ("opens", "uses"))[:6]],
+        "review": None if slow is None else {"total": slow["review_total"], "unplaced": slow["review_unplaced"]},
+        "learned": None if slow is None else {"total": slow["learned_total"], "unplaced": slow["learned_unplaced"]},
+        "read_at": (slow or {}).get("at"),
+        "said": [*said, *[s for k in found for s in found[k].all_said()]],
+    }

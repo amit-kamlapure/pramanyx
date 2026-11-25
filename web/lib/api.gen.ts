@@ -6134,6 +6134,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/discover/atlas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Atlas
+         * @description The Atlas, by Area — the organisation's map (A4a, 2026-11-25): every Area in view with what it holds, how many of
+         *     the month's answers drew on it, what waits for review and what was learned in it; and the side panel's figures —
+         *     the month's answers, the share that drew on governed knowledge, the share placed in an Area, who answers for the
+         *     Areas, what is used most. No model and no warehouse is read; what is not read yet is said.
+         */
+        get: operations["get_atlas_discover_atlas_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/discover/items": {
         parameters: {
             query?: never;
@@ -39567,6 +39590,39 @@ export interface operations {
                 "application/json": components["schemas"]["AreaEditIn"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_atlas_discover_atlas_get: {
+        parameters: {
+            query?: {
+                workspace_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

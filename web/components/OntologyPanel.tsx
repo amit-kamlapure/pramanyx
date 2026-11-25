@@ -37,6 +37,7 @@ import {
   type OntologyProposal,
 } from "@/lib/api";
 import { OntologyOrgCanvas } from "./OntologyOrgCanvas";
+import { AreaMap } from "@/components/ontology/AreaMap";
 import { cn } from "@/lib/utils";
 import { formatTimestamp, countNoun, formatCount } from "@/lib/format";
 import { Icon } from "@/components/ui/icon";
@@ -572,6 +573,9 @@ export function OntologyPanel({ connectionId, onInvestigate, schema }: Props) {
   // which would close the designer.
   const [releaseVersion,    setReleaseVersion]    = useState(0);
   const [orgMode,           setOrgMode]          = useState(false);
+  // The Atlas, by Area (A4a, 2026-11-25): inside the app the page opens on the organisation's Areas; a Data Canvas's
+  // ontology still opens on its connection. The other three are the Relationships: nothing moved out of reach.
+  const [areasMode,         setAreasMode]        = useState(useInShell());
   // ON-8 — the organisation's ontology: one map over every connection a type is declared on.
   const [domainMode,        setDomainMode]       = useState(false);
   // ON-3b — the entity-type map IS this layer (re-laid 2026-09-12, the user: "we need only map in ontology..
@@ -615,7 +619,7 @@ export function OntologyPanel({ connectionId, onInvestigate, schema }: Props) {
   // pramanyx-v2/CLARITY.md): the scope, the figures the map holds, the release everyone reads, what waits on a person,
   // and every tool in one menu. Inside the app the shell's title row names the screen.
   const tool = (which: Drawer) => setDrawer(open => (open === which ? null : which));
-  const facts = !orgMode ? summary : null;
+  const facts = !orgMode && !areasMode ? summary : null;
   // Inside the app the bar FOLDS into the shell's rows (2026-11-10, ROADMAP §6 item 64): which ontology and its release
   // in the toolbar row (the release's changes still open as a full line under it), the scope and what the map holds
   // beside the title, "to approve" and Tools with the page's actions — every one the same live control. Outside the
@@ -625,10 +629,12 @@ export function OntologyPanel({ connectionId, onInvestigate, schema }: Props) {
     <>
       {/* Org ⟷ Domain ⟷ Connection. ON-8 — Domain is the organisation's ontology: types declared on any connection, and
           the links between them, read by key where they cross two. */}
-      <Segmented<"org" | "domain" | "connection"> label="Which ontology"
-        value={orgMode ? "org" : domainMode ? "domain" : "connection"}
-        onChange={next => { setOrgMode(next === "org"); setDomainMode(next === "domain"); }}
+      <Segmented<"areas" | "org" | "domain" | "connection"> label="Which ontology"
+        value={areasMode ? "areas" : orgMode ? "org" : domainMode ? "domain" : "connection"}
+        onChange={next => { setAreasMode(next === "areas"); setOrgMode(next === "org"); setDomainMode(next === "domain"); }}
         options={[
+          { value: "areas", label: <span data-testid="ontology-areas-toggle">Areas</span>,
+            title: "The organisation's Areas across every connection — what each holds, the answers that drew on it, what waits" },
           { value: "org", label: "Org" },
           { value: "domain", label: <span data-testid="ontology-domain-toggle">Domain</span>,
             title: "The organisation's ontology — types declared on any connection, and the links between them" },
@@ -636,7 +642,7 @@ export function OntologyPanel({ connectionId, onInvestigate, schema }: Props) {
         ]} />
     </>
   );
-  const barView = !orgMode ? (
+  const barView = !orgMode && !areasMode ? (
     <Segmented<"register" | "map" | "review"> label="Ontology view" value={view}
       onChange={next => { setView(next); setPage(null); }}
       options={[
@@ -656,7 +662,7 @@ export function OntologyPanel({ connectionId, onInvestigate, schema }: Props) {
           duplicates, proposals, skills, and every edit made here — belongs to this
           schema and no other. It used to be possible to be looking at a neighbour's
           graph with nothing on screen saying so. */}
-      {!orgMode && !domainMode && schema && (
+      {!orgMode && !areasMode && !domainMode && schema && (
         <span className="aug-tag aug-tag-gray font-code"
           title="This ontology is scoped to one schema. Switch schemas with the workspace's Schema picker."
           data-testid="ontology-schema-scope">
@@ -678,12 +684,12 @@ export function OntologyPanel({ connectionId, onInvestigate, schema }: Props) {
   );
   const barState = (
     <>
-      {!orgMode && !domainMode && graph && !graph.enriched && (
+      {!orgMode && !areasMode && !domainMode && graph && !graph.enriched && (
         <span className="aug-tag aug-tag-gray">not yet described in business terms</span>
       )}
 
       {/* CB-5 — how much of the business the platform can see here, and the one definition holding sends back. */}
-      {!orgMode && !domainMode && selectedConnId && (
+      {!orgMode && !areasMode && !domainMode && selectedConnId && (
         <VisibilityLine connectionId={selectedConnId} schema={schema} />
       )}
     </>
@@ -692,7 +698,7 @@ export function OntologyPanel({ connectionId, onInvestigate, schema }: Props) {
     <>
       {/* Arc OC-2 — which release everyone reads, and what waits to be published: a chip, which opens the changes when
           any wait. A publish or a discard re-reads the map, which shows the draft. */}
-      {!orgMode && !domainMode && graph && (
+      {!orgMode && !areasMode && !domainMode && graph && (
         <ReleaseStrip connectionId={selectedConnId} schema={schema} version={releaseVersion} onChanged={() => {
           setMapVersion(v => v + 1);
           getOntology(selectedConnId, schema).then(setGraph).catch(() => {});
@@ -709,7 +715,7 @@ export function OntologyPanel({ connectionId, onInvestigate, schema }: Props) {
           {facts.proposed} to approve
         </Button>
       )}
-      {!orgMode && (domainMode || graph) && (
+      {!orgMode && !areasMode && (domainMode || graph) && (
         <DropdownMenu.Root>
           <DropdownMenu.Trigger>
             <Button variant="default" size="xs" data-testid="ontology-new" title="Make an entity, a link, a process, a rule or an action">
@@ -739,7 +745,7 @@ export function OntologyPanel({ connectionId, onInvestigate, schema }: Props) {
           </DropdownMenu.Content>
         </DropdownMenu.Root>
       )}
-      {!orgMode && !domainMode && graph && (
+      {!orgMode && !areasMode && !domainMode && graph && (
         <DropdownMenu.Root>
           <DropdownMenu.Trigger>
             <Button variant="ghost" size="xs" data-testid="ontology-tools">
@@ -797,6 +803,16 @@ export function OntologyPanel({ connectionId, onInvestigate, schema }: Props) {
       </span>
     </div>
   );
+
+  // ── A4a — the organisation's Areas, which no one connection's graph gates ─────────
+  if (areasMode) {
+    return (
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {headerBar}
+        <div className="flex-1 flex overflow-hidden"><AreaMap /></div>
+      </div>
+    );
+  }
 
   // ── ON-8 — the organisation's ontology, which no one connection's graph gates ─────
   if (domainMode) {

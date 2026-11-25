@@ -32,6 +32,9 @@ from __future__ import annotations
 import contextvars
 from typing import Optional
 
+#: The day answers began to record what they were given (A1's deploy): a figure that reads `given` rows says it counts
+#: from here — an older receipt holds none, which is not the same as having been given nothing.
+RECORDED_SINCE = "2026-11-25"
 #: The kinds whose being given to an answer is counted as a use of them: each is picked for the question.
 COUNTED = ("definition", "trusted_query", "document")
 #: The most of one kind a receipt names — a retriever's own top-k is smaller; this only bounds a runaway.

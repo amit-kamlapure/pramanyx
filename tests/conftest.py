@@ -649,6 +649,17 @@ def _reset_guard_process_caches():
 
 
 @pytest.fixture(autouse=True)
+def _reset_atlas_reading():
+    """Forget the Atlas's kept reading of review queues and learned lists between tests (`discover.atlas.slow_parts`)."""
+    from pramanyx.discover import atlas as _atlas
+    _atlas._slow.clear()
+    _atlas._reading.clear()
+    yield
+    _atlas._slow.clear()
+    _atlas._reading.clear()
+
+
+@pytest.fixture(autouse=True)
 def _reset_answers_read():
     """Forget the answers each thing was used in between tests (`discover.usage.answers_of`, read every five minutes):
     one test's journal is not the next one's."""

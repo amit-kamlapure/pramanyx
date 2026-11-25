@@ -213,7 +213,7 @@ def test_saving_one_connection_s_areas_keeps_an_annotation_of_an_area_that_conne
 def test_an_area_carries_its_packages_glyph_and_its_owners_choice_wins(journal, monkeypatch):
     """Areas carry an icon (2026-11-25): the package that names an Area picks its glyph; its owners may choose another."""
     from types import SimpleNamespace as NS
-    from pramanyx.discover.service import _area_view
+    from pramanyx.discover.service import area_view
     monkeypatch.setattr("pramanyx.semantic.metric_map.map_for", lambda conn, schema=None: NS(areas=[
         NS(id="returns", name="Returns", question="What came back?", generic=False, pack_id="p", icon="returns"),
         NS(id="fulfilment", name="Fulfilment", question="Did it arrive?", generic=False, pack_id="p", icon="truck")]))
@@ -221,7 +221,7 @@ def test_an_area_carries_its_packages_glyph_and_its_owners_choice_wins(journal, 
     A.edit_area("returns", {"icon": "Box"}, by="user:bo", known={"returns", "fulfilment"})
     got = {a["id"]: a for a in A.areas_for("c1")}
     assert got["returns"]["icon"] == "box" and got["fulfilment"]["icon"] == "truck"
-    assert _area_view(got["returns"], [])["icon"] == "box"
+    assert area_view(got["returns"], [])["icon"] == "box"
     A.edit_area("returns", {"icon": ""}, by="user:bo", known={"returns", "fulfilment"})
     assert {a["id"]: a["icon"] for a in A.areas_for("c1")}["returns"] == "returns"     # back to its package's
     with pytest.raises(ValueError, match="icon"):

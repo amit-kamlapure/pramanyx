@@ -96,7 +96,7 @@ def all_items(found: dict[str, Found]) -> list[Item]:
     return items
 
 
-def _area_view(a: dict, held: list[Item]) -> dict:
+def area_view(a: dict, held: list[Item]) -> dict:
     counts = Counter(i.kind for i in held)
     return {"id": a["id"], "name": a["name"], "question": a.get("question", ""), "description": a.get("description", ""),
             "parent": a.get("parent", ""), "icon": a.get("icon", ""),
@@ -128,7 +128,7 @@ def _used(items: list[Item]) -> list[str]:
     return said
 
 
-def _by_use(items: list[Item], measured: "str | tuple[str, ...]" = "") -> list[Item]:
+def by_use(items: list[Item], measured: "str | tuple[str, ...]" = "") -> list[Item]:
     """The used this month, most first — of one measure when ``measured`` names it. A table's reads (statements, most of
     them the platform's own) and a thing's opens (a person's) are not one scale: the page ranks each apart."""
     from pramanyx.discover.usage import score
@@ -146,10 +146,10 @@ def home(scope: Scope) -> dict:
     by_area: dict[str, list[Item]] = {}
     for i in items:
         by_area.setdefault(i.area if i.area in areas else OTHER, []).append(i)
-    holding = [_area_view(a, by_area[a_id]) for a_id, a in areas.items() if by_area.get(a_id) and a_id != OTHER]
+    holding = [area_view(a, by_area[a_id]) for a_id, a in areas.items() if by_area.get(a_id) and a_id != OTHER]
     holding.sort(key=lambda a: -a["total"])
     if by_area.get(OTHER):
-        holding.append(_area_view(areas[OTHER], by_area[OTHER]))
+        holding.append(area_view(areas[OTHER], by_area[OTHER]))
     quiet = [{"id": a_id, "name": a["name"], "question": a.get("question", "")}
              for a_id, a in areas.items() if a_id != OTHER and not by_area.get(a_id)]
     suggested: list[dict] = []
@@ -179,8 +179,8 @@ def home(scope: Scope) -> dict:
         "certified": [i.view() for i in certified[:SHOWN]], "certified_count": len(certified),
         # D5: read from what happened — a table's reads, the opens of what a person opens — never a model's guess
         # a person's own acts — what they opened, and the trusted queries that answered them — apart from table reads
-        "most_used": [i.view() for i in _by_use(items, ("opens", "uses"))[:SHOWN]],
-        "most_read": [i.view() for i in _by_use(items, "reads")[:SHOWN]],
+        "most_used": [i.view() for i in by_use(items, ("opens", "uses"))[:SHOWN]],
+        "most_read": [i.view() for i in by_use(items, "reads")[:SHOWN]],
         "recent": [i.view() for i in recent],
         "use_said": use_said,
         "kinds": [_kind_view(k, by_kind[k], found[k].withheld) for k in KINDS],
@@ -216,7 +216,7 @@ def list_items(scope: Scope, *, kind: str = "", area: str = "", certified: bool 
     use_said = _used(items)
     ordered = _order(items)
     if sort == "use":
-        used = _by_use(items)
+        used = by_use(items)
         ids = {i.id for i in used}
         ordered = used + [i for i in ordered if i.id not in ids]
     page = ordered[cursor:cursor + limit]
@@ -241,7 +241,7 @@ def area_page(scope: Scope, area_id: str) -> Optional[dict]:
     children = []
     for c_id, c in areas.items():
         if c.get("parent") == area_id:
-            children.append(_area_view(c, [i for i in items if i.area == c_id]))
+            children.append(area_view(c, [i for i in items if i.area == c_id]))
     # what its curators put first, in their order — one the person may not open, or one gone, is counted and said
     by_ref = {(i.kind, i.id): i for i in items}
     wanted = a.get("featured") or []
@@ -252,7 +252,7 @@ def area_page(scope: Scope, area_id: str) -> Optional[dict]:
         gone = len(wanted) - len(featured)
         said.append(f"{gone} of the things put first here {'is' if gone == 1 else 'are'} not yours to open, or no longer there")
     from pramanyx.semantic.areas import curates
-    return {"area": _area_view(a, held), "children": children,
+    return {"area": area_view(a, held), "children": children,
             "featured": [i.view() for i in featured], "featured_refs": wanted,
             "kinds": [_kind_view(k, by_kind[k], 0, shown=len(by_kind[k])) for k in KINDS if by_kind[k]],
             "empty_kinds": [k for k in KINDS if not by_kind[k]],

@@ -64,6 +64,16 @@ def get_discover(request: Request, workspace_id: Optional[str] = None, connectio
     return home(scope_of(request, workspace_id, connection_id))
 
 
+@router.get("/discover/atlas")
+def get_atlas(request: Request, workspace_id: Optional[str] = None) -> dict:
+    """The Atlas, by Area — the organisation's map (A4a, 2026-11-25): every Area in view with what it holds, how many of
+    the month's answers drew on it, what waits for review and what was learned in it; and the side panel's figures —
+    the month's answers, the share that drew on governed knowledge, the share placed in an Area, who answers for the
+    Areas, what is used most. No model and no warehouse is read; what is not read yet is said."""
+    from pramanyx.discover.atlas import atlas
+    return atlas(scope_of(request, workspace_id, None))
+
+
 @router.get("/discover/items")
 def get_discover_items(request: Request, workspace_id: Optional[str] = None, connection_id: Optional[str] = None,
                        kind: str = "", area: str = "", certified: bool = False, mine: bool = False,

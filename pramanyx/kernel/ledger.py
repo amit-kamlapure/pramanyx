@@ -1056,6 +1056,23 @@ class Ledger:
             cur = self._conn.execute("SELECT * FROM artifacts WHERE id=? LIMIT 1", (art_id,))
             return self._artifact_row(cur, cur.fetchone())
 
+    def lineage_of_many(self, artifact_ids: "list[str]", *, relations: "Optional[list[str]]" = None) -> list[tuple]:
+        """``(artifact_id, relation, ref, detail)`` for many artifacts in one read — the Atlas's answers (A4, 2026-11-25:
+        which of a month's answers drew on governed knowledge), where a receipt each would be hundreds of reads. Read in
+        batches of 500; ``relations`` narrows it."""
+        ids = [i for i in dict.fromkeys(artifact_ids or []) if i]
+        out: list[tuple] = []
+        for at in range(0, len(ids), 500):
+            batch = ids[at:at + 500]
+            sql = f"SELECT artifact_id, relation, ref, detail FROM lineage WHERE artifact_id IN ({','.join('?' * len(batch))})"
+            params: list[Any] = list(batch)
+            if relations:
+                sql += f" AND relation IN ({','.join('?' * len(relations))})"
+                params += list(relations)
+            with self._lock:
+                out.extend(tuple(r) for r in self._conn.execute(sql, tuple(params)).fetchall())
+        return out
+
     def _receipt_from_artifact(self, art: Optional[dict]) -> Optional[dict]:
         """Assemble the Trust Receipt view from a resolved artifact: provenance edges
         + the job that computed it + one normalized cost field."""
