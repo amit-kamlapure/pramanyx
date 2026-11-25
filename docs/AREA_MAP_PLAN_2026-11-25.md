@@ -128,16 +128,19 @@ model writing a person's tier.
 ## 4 · The work, in order
 
 Each phase is shown working on theLook before the next; no flags (each source of learned knowledge that costs a model
-call or reads outside data is an organisation setting, off by default).
+call or reads outside data is an organisation setting, off by default). Since 2026-11-25 (late) each phase also folds in
+the surfaces §7 places on its stage of the loop — a surface folded is moved, its every feature listed and shown working
+in its new place, never dropped.
 
-- **A0 · Defects** (§2's four): MCP findings confirmed-only; one name per Area wherever it is said; learned items
-  deduplicated by statement; `ontology/ranking.py` kept for A2 (§2, defect 4).
-- **A1 · What an answer used, recorded when it is made.** Every answer path (`/chat`, `/investigate`, the coworker's
-  MCP reads on a person's behalf) records what it **considered** and what it **chose** — metrics, Definitions, learned
-  items, trusted queries, documents, tables — as edges on the receipt (the Ledger's lineage table, beside the tables
-  and columns it already holds) and a `thing.used` per thing chosen (`discover/usage.py`, today trusted queries only).
-  No new store. Gives every "used in N answers", the governed reach, and citations under an answer that show both.
-- **A2 · One standing.** DONE 2026-11-25 (`pramanyx/trust/standing.py`). The orders disagreed out loud — the
+- **A0 · Defects** (§2's four) — DONE. *Added by §7:* the platform's own runs (agent self-checks, eval runs) counted as
+  people's signals — they are 10 of theLook's last 25 framing misses and crowd answers out of the graph's 100-receipt
+  window (`context_graph_build.py:111`); "Org" names two different things (the rail's promoted findings, the Ontology
+  switch's every-connection entity map); 3 eval runs stuck "running" since August; stale comments
+  (`context_graph_readback.py:12`, `OrgIntelPanel.tsx:14,146`).
+- **A1 · What an answer used** — DONE (`trust/answer_inputs.py`). *Added by §7 (A1b):* what an answer **tried** — the
+  SQL that failed and the one that worked after it, the joins it chose, the clarification left unanswered — kept on the
+  receipt, so A7 can learn from them; today only the trace views see them, for 14 days.
+- **A2 · One standing** — DONE 2026-11-25 (`pramanyx/trust/standing.py`). The orders disagreed out loud — the
   platform's ladder put *measured* above *approved*, the learned list *confirmed* above *measured* — and were both right:
   a thing stands on the data's word, a person's, or both. Tiers, strongest first: both · the data's · a person's · mined
   · said; within a tier and never across: published before a draft, certified before plain (deprecated last), its Area
@@ -147,19 +150,40 @@ call or reads outside data is an organisation setting, off by default).
   agrees with the hub's ladder (measured > approved > declared > mined > said). Left as they are, on purpose: the graph
   slice selects by relevance first (its vouched/published parts already agree); `ontology/ranking.py` orders candidate
   COLUMNS for a vague word — schema linking, not knowledge — and wiring it is a retrieval change to measure with an
-  eval of its own, not part of one standing.
-- **A3 · Learned knowledge on a page.** The learned list in the rail and the right panel; **Promote → a draft
-  Definition**; learned items placed in an Area (147 of theLook's sit in none).
-- **A4 · The Atlas, by Area** (§3.1–3.3): the organisation canvas, an Area's fan-out, kinds and tabs — over
-  Discover's per-Area counts (`discover/service.py`), which already cross connections.
-- **A5 · Review by Area** (§3.4) over `knowledge/review.py`, regrouped and rolled up.
-- **A6 · Relationships by Area** (§3.5): today's Atlas inside an Area, zones = Areas, joins from the organisation's
-  ontology.
-- **A7 · More to learn from** (each an organisation setting): query history on a schedule rather than by hand; our
-  own dashboards, Data Canvases and saved SQL mined into learned items — the SQL read without a model; a sentence
-  written for it only where the organisation allows model work it did not ask for.
-- **A8 · Across connections**: a Definition placed in an Area may hold for every connection the Area spans (the
-  connection becomes optional); the organisation's ontology reaches the answer path.
+  eval of its own, not part of one standing. *Added by §7 (A2b):* the *measured* tier also earned by evals that test
+  the context layer (§7.9), not only by a run's own numbers.
+- **A3 · Learned knowledge on a page** — DONE (the list, Promote, `area=`). *Added by §7 (A3b): one learned list.*
+  Memory's readings (clarifications a person answered), reviewer verdicts and trusted queries, and the learned list's
+  answers, findings and usage are two halves of what the platform learned, each missing the other's: one list, one
+  standing, one Promote; the Memory page becomes that list's place in the rail; its training corpus moves to the AI
+  Factory, where it is used.
+- **A4 · The Atlas, by Area** — A4a DONE (the organisation's map, the month's figures, review by Area counts), A4b DONE
+  (an Area opened: fan-out by kind with counts, each kind by use, tabs on the right, Promote). *Added by §7 (A4c):*
+  Brain Map's one idea — the loop's stages counted, with measured arrows between them — becomes the Atlas's Overview,
+  and its page retires; the rail's **Org** page (promoted findings: an empty store, one writer, one deep-analysis
+  reader) retires into the Atlas (the bird's-eye view it was meant to be) and into Promote (a finding promoted becomes a
+  draft Definition, which every answer reads).
+- **A5 · Review by Area → one "Needs you"** (§3.4, widened by §7.8). The review queue regrouped by Area across
+  connections and rolled up to the parent Area, with the plan's new kinds (*new Definition*, *Definition edit*); then the
+  same view over every queue that waits on a person — staged proposals (today on 7 surfaces), the deep analyses'
+  recommendations (today "Decide ▸ Inbox"), monitor and agent alerts (two stores, one badge) — by Area and by person,
+  with read state per person. **Inbox** becomes that view; **Notifications** (outbound channels: Slack, webhook, Jira)
+  is renamed **Delivery** and moves under Operations' settings; **Actions** stays what agents may do (the ontology's
+  declared actions).
+- **A6 · Relationships by Area** (§3.5, widened by §7.5): today's Business Atlas inside an Area, zones = Areas, joins
+  from the organisation's ontology; the Ontology switch's Domain and Org (every connection's entity map) become
+  Relationships across connections; the **Graph** page's Explore / Tour / Review become Relationships' "one thing and
+  its neighbours" view. The graph's store stays: it is what every answer reads (§7.5).
+- **A7 · More to learn from** (each an organisation setting): query history on a schedule rather than by hand; our own
+  dashboards, Data Canvases and saved SQL mined into learned items — the SQL read without a model. *Added by §7:* the
+  traces' unread parts (A1b) — joins an agent chose that ran become join candidates beside the warehouse's query log's;
+  a failure and the fix after it become a learned "watch for this"; `trace.feedback` verdicts join the thumbs-down
+  cluster (A5).
+- **A8 · Across connections, and agents read the map** (widened by §7.1): a Definition placed in an Area may hold for
+  every connection the Area spans; the organisation's ontology reaches the answer path; **the Areas themselves reach
+  every agent** — the answer path and the coworker's MCP get "which Area is this question in, who answers for it, what
+  is governed there" (today the Atlas is read by its page alone). *Added by §7.10:* one meaning of "off target" — a
+  metric's target, kept on the metric, is what a monitor watches and what Health shows on the Area.
 
 ## 5 · Decisions this plan needs from the user
 
@@ -176,3 +200,52 @@ call or reads outside data is an organisation setting, off by default).
 A private design canvas: three screens on theLook's real figures as of 2026-11-25 — the organisation's Areas, the
 Area *Orders & sales* with its fan-out and a learned item open, and its Review — stickies marking every figure that is
 not counted yet and every example: https://claude.ai/artifact/48XsayxW6tAoJAVdfar1kU (private until shared).
+
+## 7 · One organism — every surface on one loop (2026-11-25, late)
+
+The user, mid-build: *"rethink the relationship between Ontology (the unified context layer that gives AI agents a
+business-aware map of the organization — very important definition), Memory, Metrics, Brain Map, Graph, Org, how traces
+are used, notifications vs Inbox and Actions, Evals, Health & Monitor"* — and *"there is a lot repetitive features …
+living in silos; the platform and the coworker should work as an organism."* Surveyed in code and live (GET only) the
+same evening; every count below is from that survey.
+
+### The loop
+
+**Act** (answers, investigations, agents — their traces) → **Learn** (what a trace teaches) → **Review** (people decide,
+in one queue) → **Govern** (the ontology: Areas, metrics, Definitions, actions, one standing) → **Serve** (every agent —
+the platform's and the coworker's — reads the same layer through the same doors) → **Measure** (use, evals, health say
+whether it worked) → Act. A surface is a window onto one stage; a surface with its own copy of a stage is a silo. The
+coworker has no features of its own: its tools are the platform's doors (one coworker, two places, 11-20).
+
+### The ten, placed
+
+| # | Surface | Stage | What it is, measured | Verdict | Phase |
+|---|---|---|---|---|---|
+| 7.1 | **Ontology** | Govern + Serve | The context layer's page: Areas (default), Org, Domain, Connection. Agents read the connection's ontology heavily (semantic block, framing, synonyms, MCP `describe_entity`) — but **no agent reads the Areas map**; Areas reach answers only through two clarify paths. | Stays the one page of the layer; its switch becomes **Areas · Relationships**; the map reaches every agent. | A6, A8 |
+| 7.2 | **Memory** | Learn | Readings (11: 5 probes, 4 people, 2 verdicts — served 46 times), 2 trusted queries, 13 verdicts, few-shot (69 SQL, 214 investigations), a training corpus of 0 SFT / 0 DPO. Read by the answer path. | Merge with the learned list (it holds answers, findings, usage — not readings or verdicts): **one learned list**; corpus to the AI Factory. | A3b |
+| 7.3 | **Metrics** | Govern | 71 metrics (59 approved), one store, read by every answer and MCP `get_metric`; shown in six places, as views. No rail row. | Keep: one store, many views is right. Edited on the Semantic Layer; seen in an Area's fan (A4b). | — |
+| 7.4 | **Brain Map** | (Measure) | Nine boxes counted from other stores; no store, no reader but its page, backend untouched since history began; its "facts" box is the Graph's node count. | Retire the page; its idea — the loop counted, with measured arrows — becomes the Atlas's Overview. | A4c |
+| 7.5 | **Graph** | Serve | The context graph: a projection of ontology, glossary, readings, claims, findings and receipts — **read by every answer** (the graph slice) and MCP `search_graph`. The page is a map centred on one node. | Keep the store (it is what agents read) and project the Areas into it; the page folds into Relationships. | A6, A8 |
+| 7.6 | **Org** (rail) | (Learn) | Findings promoted to the organisation: 0 items, one writer button (Profile), read only by a deep analysis's synthesis, no MCP. "Org" also names an Ontology view. | Retire into the Atlas (the bird's-eye view) and Promote (a draft Definition every answer reads). | A4c |
+| 7.7 | **Traces** | Act → Learn | 14 days kept. Read back: few-shot memory, graph findings, learned items, framing misses, clarifications, run labels (1 good, 19 bad, 80 unlabelled of 100), suggestions, use. **Never read back:** SQL that failed and the fix, joins chosen, columns picked, unanswered clarifications, `trace.feedback`. Self-checks are counted as people's misses. | Keep what an answer *tried* (A1b) and learn from it (A7); the platform's own runs never stand in for people's signals (A0). | A0, A1b, A7 |
+| 7.8 | **Notifications / Inbox / Actions** | Review | "Notifications" is outbound channels (0 triggers, 336 sends all failed); "Inbox" is deep-analysis recommendations, while the Automations tab's "Inbox" is staged proposals — one proposal shows on up to 7 surfaces; "Actions" is declared actions and their outbox. Monitor and agent alerts sit in two stores, one badge. No per-person read state anywhere. | One **Needs you** view over every queue, by Area and person, with read state; Inbox = it; Notifications → **Delivery**; Actions = what agents may do. | A5 |
+| 7.9 | **Evals** | Measure | The page runs one target (each case's own SQL replayed, no model); last run 2026-08-15; results feed only flag graduation — and there are no flags since 10-28. Four more eval surfaces don't share its store (agent goldens nightly, the pack gate, semantic benchmarks, the AI Factory's held-out set). | Evals test the **context layer**: questions drawn from each published Definition, certified metric and trusted query, and from corrected answers, run nightly through the real answer path; results earn the measured tier (A2b) and file *Definition edit* rows (A5). One store. | A2b, A5 |
+| 7.10 | **Health & Monitor** | Measure | Health scores metrics with a target, live per visit — 0 targeted metrics on 7 connections, so empty everywhere. Monitors: 5, 58 alerts (24 open). A metric's target and a monitor's threshold are two unlinked meanings of "off target"; three alert stores. | One meaning: the target lives on the metric; monitors watch it; Health is shown on the Area and the metric; alerts go to Needs you. | A5, A8 |
+
+### What moves where (nothing is dropped)
+
+- Brain Map's nine counts → the Atlas Overview (answers, governed reach, coverage, learned, waiting; departures and
+  owners on Now and the Areas' contacts). Its page goes when every count shows in the Atlas — listed and checked then.
+- Org's list (and its remove) → Promote and the Record; its "domain" grouping → Areas.
+- Graph's Explore, Tour, Review and lineage → Relationships; `?tab=graph&table=` keeps opening the same thing.
+- Memory's readings, verdicts, trusted queries (with Needs you) → the one learned list; datasets and export → AI Factory.
+- Decide ▸ Inbox's recommendation outcomes (accept, implemented, verified, rejected, execute) → Needs you, a lane of it.
+- Notifications' triggers, test and send log → Delivery, unchanged.
+- Health's per-metric score and "ask why" → the metric and its Area.
+
+### Decisions this section needs from the user
+
+1. Retire **Brain Map** and the rail's **Org** page once their parts show in the Atlas (A4c)?
+2. **Inbox** = the one Needs-you view, and **Notifications** renamed **Delivery**?
+3. Evals rebuilt around the context layer, and the flag-graduation half retired?
+
