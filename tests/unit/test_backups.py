@@ -332,6 +332,19 @@ def test_an_unfinished_backup_is_ignored_by_readers_and_pruned(state):
     assert not (state.root / "backups" / "2026-10-27T120000Z").exists()
 
 
+def test_the_newest_complete_backup_is_never_pruned_when_the_two_newest_are_not_whole(state):
+    """Only two are kept; a backup a store could not be copied into still counts, so two such hours in a row would
+    leave nothing whole to restore — the newest complete one stays."""
+    bdir = state.root / "backups"
+    for hours, complete in ((0, False), (1, False), (2, True), (3, True)):
+        folder = bdir / backups._stamp(NOW - timedelta(hours=hours))
+        folder.mkdir(parents=True)
+        (folder / "manifest.json").write_text(json.dumps({"complete": complete}))
+    backups.prune(now=NOW)
+    left = {b.name for b in backups.list_backups()}
+    assert left == {backups._stamp(NOW), backups._stamp(NOW - timedelta(hours=1)), backups._stamp(NOW - timedelta(hours=2))}
+
+
 def test_pruning_keeps_the_current_backup_and_the_previous_one_and_no_copy_before_a_migration(state):
     """The user, 2026-11-25: "Keep only current + previous backup.. remove everything else"."""
     bdir = state.root / "backups"

@@ -682,6 +682,14 @@ def _bytes_on_disk(root: Path) -> tuple[int, int]:
     return total, len(backups)
 
 
+def _complete(folder: Path) -> bool:
+    """Whether a finished backup holds every store it set out to copy (its manifest's ``complete``)."""
+    try:
+        return json.loads((folder / MANIFEST).read_text()).get("complete") is True
+    except (OSError, ValueError):
+        return False
+
+
 def prune(root: Optional[Path] = None, now: Optional[datetime] = None) -> list[str]:
     """Drop what retention does not keep — whole folders — and every unfinished one; and SV-1's copies before a
     migration, which retention no longer keeps (`retention.LABELLED_ONLY`). Returns what went. Called with the backup lock held, so no folder being
@@ -691,7 +699,13 @@ def prune(root: Optional[Path] = None, now: Optional[datetime] = None) -> list[s
     now = now or _now()
     gone: list[str] = []
     finished = list_backups(root)
-    for b, keep in zip(finished, should_keep([(b.taken_at, b.label) for b in finished], PRAMANYX, now=now)):
+    keeps = should_keep([(b.taken_at, b.label) for b in finished], PRAMANYX, now=now)
+    # Only two are kept (2026-11-25), and a backup a store could not be copied into still counts as one: two such hours
+    # in a row would leave nothing whole to restore. The newest complete backup is never pruned.
+    whole = next((i for i, b in enumerate(finished) if _complete(b.folder)), None)
+    if whole is not None and not any(k and _complete(b.folder) for b, k in zip(finished, keeps)):
+        keeps[whole] = True
+    for b, keep in zip(finished, keeps):
         if not keep:
             shutil.rmtree(b.folder, ignore_errors=True)
             gone.append(b.name)
