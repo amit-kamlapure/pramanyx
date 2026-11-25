@@ -80,7 +80,8 @@ const RolesPanel        = dynamic(() => import("@/components/RolesPanel").then(m
 const AIFactoryPanel = dynamic(() => import("@/components/aiFactory/AIFactoryPanel").then(m => ({ default: m.AIFactoryPanel })), { ssr: false, loading });
 const ProcessHealthPanel= dynamic(() => import("@/components/ProcessHealthPanel").then(m => ({ default: m.ProcessHealthPanel })), { ssr: false, loading });
 const PlaybookPanel     = dynamic(() => import("@/components/PlaybookPanel").then(m => ({ default: m.PlaybookPanel })),      { ssr: false, loading });
-const RecommendationInbox= dynamic(() => import("@/components/RecommendationInbox").then(m => ({ default: m.RecommendationInbox })), { ssr: false, loading });
+// The Inbox is Needs you (2026-11-26): every queue that waits on a person; the recommendations are one of its lanes.
+const NeedsYouPage = dynamic(() => import("@/components/inbox/NeedsYouPage").then(m => ({ default: m.NeedsYouPage })), { ssr: false, loading });
 const DiscoverPage      = dynamic(() => import("@/components/discover/DiscoverPage").then(m => ({ default: m.DiscoverPage })),{ ssr: false, loading });
 const DocumentsPage     = dynamic(() => import("@/components/documents/DocumentsPage").then(m => ({ default: m.DocumentsPage })),{ ssr: false, loading });
 const SpreadsheetsPage  = dynamic(() => import("@/components/sheets/SpreadsheetsPage").then(m => ({ default: m.SpreadsheetsPage })),{ ssr: false, loading });
@@ -347,6 +348,7 @@ function Sidebar({
     if (id === "monitors" && counts?.unackedAlerts) return { value: counts.unackedAlerts, waiting: true, noun: "unacknowledged" };
     if (id === "recents" && counts?.runningRuns) return { value: counts.runningRuns, waiting: false, noun: "running" };
     if (id === "now" && counts && waitingOnAPerson(counts)) return { value: waitingOnAPerson(counts), waiting: true, noun: "waiting on a person" };
+    if (id === "inbox" && counts?.needsYou) return { value: counts.needsYou, waiting: true, noun: "not opened" };
     return null;
   };
   // Collapsed (the toggle at the head, or ⌘\), the rail is a column of icons: every row keeps its
@@ -2328,12 +2330,10 @@ export default function Home() {
               </div>
             )}
 
-            {/* ── RECOMMENDATION INBOX ── */}
+            {/* ── INBOX: NEEDS YOU ── */}
             {tab === "inbox" && (
               <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--bg-0)" }}>
-                <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px" }}>
-                  <RecommendationInbox onOpenInvestigation={invId => { setSelectedHistoryInvId(invId); setTab("chat"); }} workspaceId={selectedWorkspace} />
-                </div>
+                <NeedsYouPage onOpenInvestigation={invId => { setSelectedHistoryInvId(invId); setTab("chat"); }} workspaceId={selectedWorkspace} />
               </div>
             )}
 

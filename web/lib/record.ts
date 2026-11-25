@@ -654,7 +654,7 @@ export const getMissionTemplates = (connectionId?: string) =>
 
 // ── set aside: "not now" on what waits on a person ───────────────────────────────────────
 
-export type SetAsideKind = "decision" | "inquiry" | "departure" | "approval" | "knowledge";
+export type SetAsideKind = "decision" | "inquiry" | "departure" | "approval" | "knowledge" | "review";
 
 /** One item a person took off the Now list until a day — and, once it is back, why. */
 export interface SetAside {

@@ -169,8 +169,14 @@ in its new place, never dropped.
   review rows kept with the Atlas's reading and served by Area (`GET /discover/atlas/review`), sub-Areas rolled up, the
   busiest first, in the plan's words (New Definition, Gap, Definition edit, Conflict, Thumbs-down, To confirm …) with
   filters; what waits in no Area listed apart; the two new kinds (`review._new_definitions`, `._definition_edits`);
-  "Write its Definition" opens a new one with the word filled in. *Next, from the user's Genie stills:* a row opens in
-  the right panel with Accept · Edit and accept · Reject, rather than linking out. *Part two waits on §7 decision 2.* The review queue regrouped by Area across
+  "Write its Definition" opens a new one with the word filled in. *Part two DONE 2026-11-26 (decision 2):* the **Inbox
+  is Needs you** (`record/needs_you.py`, `GET /needs-you`, `components/inbox/NeedsYouPage.tsx`) — lanes To decide (staged
+  proposals, automation approvals, paused deep analyses, automations that cannot send — Agent Ops' derivation, read
+  without its sweep), Alerts (monitor and agent, one lane), Recommendations (the old Inbox page, whole), Knowledge review
+  by Area (yours first); read state per person; the rail's Inbox count is what you have not opened that is yours. A row
+  opens in a tab of the side panel: a review row as "For review: …" with the doors that settle it (Confirm / Mark it
+  wrong, Accept / Decline a suggested edit, Publish a draft, Write its Definition, Not an area) and **Not now** (set aside
+  30 days, kind `review`). Drawn as Discover draws (the user, 2026-11-26). The review queue regrouped by Area across
   connections and rolled up to the parent Area, with the plan's new kinds (*new Definition*, *Definition edit*); then the
   same view over every queue that waits on a person — staged proposals (today on 7 surfaces), the deep analyses'
   recommendations (today "Decide ▸ Inbox"), monitor and agent alerts (two stores, one badge) — by Area and by person,

@@ -5067,12 +5067,13 @@ export interface paths {
         };
         /**
          * Needs Human
-         * @description One derived list over the four real sources — a VIEW, never a queue.
+         * @description One derived list over the five real sources — a VIEW, never a queue.
          *
          *     Each row deep-links to its native resolve surface, so resolving anywhere
          *     removes it everywhere by construction (one store per source, no copies).
          *     `count` equals the sum of the per-source counts at read time — that
-         *     equality is the CR4 gate.
+         *     equality is the CR4 gate. The derivation is `record.needs_you.waiting`, which the Inbox reads too; this route
+         *     alone sweeps first — lapsed proposals expired, the runs parked behind them released (RC-3, DS-8).
          */
         get: operations["needs_human_control_room_needs_human_get"];
         put?: never;
@@ -12909,6 +12910,69 @@ export interface paths {
         get: operations["monitor_versions_monitors__monitor_id__versions_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/needs-you": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Needs You
+         * @description What waits on this person across the connections in view: ``lanes`` — to decide (staged proposals, automation
+         *     approvals, paused deep runs, automations that cannot dispatch), alerts (monitor and agent), the knowledge review by
+         *     Area — each row with ``key`` and ``read``; ``badge``, what this person has not opened that is theirs to act on.
+         */
+        get: operations["get_needs_you_needs_you_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/needs-you/count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Needs You Count
+         * @description The rail's count: what this person has not opened, by lane, and in all.
+         */
+        get: operations["get_needs_you_count_needs_you_count_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/needs-you/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark Needs You Read
+         * @description Mark rows read (or unread) for the person signed in. Past `TIDY_AT` marks, those whose rows no longer wait are
+         *     let go, read afresh then rather than on every mark.
+         */
+        post: operations["mark_needs_you_read_needs_you_read_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -24357,6 +24421,16 @@ export interface components {
              * @default
              */
             why: string;
+        };
+        /** Marks */
+        Marks: {
+            /** Keys */
+            keys?: string[];
+            /**
+             * Read
+             * @default true
+             */
+            read: boolean;
         };
         /**
          * MeasureTerm
@@ -50899,6 +50973,109 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_needs_you_needs_you_get: {
+        parameters: {
+            query?: {
+                workspace_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_needs_you_count_needs_you_count_get: {
+        parameters: {
+            query?: {
+                workspace_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_needs_you_read_needs_you_read_post: {
+        parameters: {
+            query?: {
+                workspace_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Marks"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
