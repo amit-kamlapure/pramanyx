@@ -159,7 +159,12 @@ in its new place, never dropped.
   Memory's readings (clarifications a person answered), reviewer verdicts and trusted queries, and the learned list's
   answers, findings and usage are two halves of what the platform learned, each missing the other's: one list, one
   standing, one Promote; the Memory page becomes that list's place in the rail; its training corpus moves to the AI
-  Factory, where it is used.
+  Factory, where it is used. *A3b DONE 2026-11-26:* the learned list holds Memory's half — remembered readings (a
+  person's own stays theirs) and reviewers' verdicts with a lesson — beside answers, findings, usage, trusted queries and
+  fixes (`learned._memory`); the Memory page leads with that list for the connection in view and keeps what waits on a
+  person, the readings (Revoke), the trusted queries (Approve, Deprecate, Seed) and the reviewers' figures; the training
+  corpus — its gates, Export now, which verdicts fed each version — is the AI Factory's **Corpus** tab
+  (`?tab=ai-factory&factory=corpus`), its code and tests moved whole.
 - **A4 · The Atlas, by Area** — A4a DONE (the organisation's map, the month's figures, review by Area counts), A4b DONE
   (an Area opened: its counts by kind, each kind by use, tabs on the right, Promote) — and, the user's Genie stills
   (2026-11-25), it opens **to one side**: the parent large on the left, the Area among its siblings, its counts stacked to

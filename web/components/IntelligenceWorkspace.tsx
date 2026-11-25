@@ -287,7 +287,7 @@ export function IntelligenceWorkspace({ connectionId, onInvestigate, layer, onLa
         if (id === "graph")    return <ConnectionGraphPanel connectionId={connectionId} schema={schema} onInvestigate={q => onInvestigate(q)} initialTableId={initialGraphTable} />;
         if (id === "hub")      return <ProfileLayer connectionId={connectionId} canvasId={canvasId} schema={schema} workspaceId={workspaceId} />;
         if (id === "evidence") return <EvidencePanel connectionId={connectionId} canvasId={canvasId} onInvestigate={askAgent} />;
-        if (id === "memory")   return <MemoryPanel />;
+        if (id === "memory")   return <MemoryPanel connId={connectionId} />;
         return <DeclaredActionsPanel connectionId={connectionId} />; // "kinetic"
       }}
     />

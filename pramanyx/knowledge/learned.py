@@ -154,6 +154,7 @@ def _learned(connection_id: str, *, about: str = "") -> dict:
         tolerate(exc, "trusted queries could not be read into the learned view", counter="learned.trusted")
 
     items += _fixes(connection_id)
+    items += _memory(connection_id)
 
     if about.strip():
         words = {w for w in re.findall(r"[a-z0-9]{3,}", about.lower())}
@@ -171,6 +172,47 @@ def _learned(connection_id: str, *, about: str = "") -> dict:
         i.pop("_standing", None)
     return {"items": items, "total": len(items), "folded": booked - len(items),
             "withheld": trimmed.to_dict() if trimmed.trimmed else None, "uses_counted": False}
+
+
+#: Who settled a remembered reading, in a reader's words.
+SETTLED_BY = {"probe": "a probe of the data", "user": "a person", "verdict": "a reviewer's verdict", "reviewer": "a reviewer"}
+
+
+def _memory(connection_id: str) -> list[dict]:
+    """The other half of what was learned (the Atlas plan's A3b, 2026-11-26: "one learned list"): Memory's remembered
+    readings — how an ambiguous word was settled, by a probe of the data, a person or a reviewer — and reviewers' verdicts
+    that carry a lesson (marked wrong, or corrected). A person's own reading is theirs alone and stays off a list others
+    read. Each source read on its own; an unread one is counted, never taken for none."""
+    from pramanyx.kernel.errors import tolerate
+    out: list[dict] = []
+    try:
+        from pramanyx.org.context import current_org_id
+        from pramanyx.semantic.ambiguity_ledger import list_resolutions
+        for r in list_resolutions(connection_id, org_id=current_org_id() or ""):
+            if getattr(r, "person", ""):
+                continue
+            src = str(r.resolution_source or "")
+            sql = str(r.resolved_sql or "")
+            out.append(_item(kind="reading", text=f"“{r.subject}” reads as {r.resolved_reading}",
+                             source=f"settled by {SETTLED_BY.get(src, src or 'someone')}", author="",
+                             standing="measured" if src == "probe" else "approved", as_of=str(r.created_at or "")[:10],
+                             tables=_tables_of(sql), lineage=[f"sql:{sql[:160]}"] if sql else [], ref=str(r.id),
+                             measured=src == "probe", uses=int(r.use_count or 0)))
+    except Exception as exc:  # noqa: BLE001 — unread, said by the count of what was read
+        tolerate(exc, "remembered readings could not be read into the learned view", counter="learned.readings")
+    try:
+        from pramanyx.feedback.verdicts import list_corrections
+        for v in list_corrections(connection_id, limit=200):
+            note = str(v.get("note") or "").strip()
+            word = "Marked wrong" if v.get("verdict") == "reject" else "Corrected"
+            sql = str(v.get("corrected_sql") or v.get("sql_source") or "")
+            out.append(_item(kind="verdict", text=f"{word}: {v.get('headline') or 'an answer'}" + (f" — {note}" if note else ""),
+                             source="a reviewer's verdict", author="", standing="approved",
+                             as_of=str(v.get("created_at") or "")[:10], tables=_tables_of(sql),
+                             lineage=[f"sql:{sql[:160]}"] if sql else [], ref=f"verdict:{v.get('id')}"))
+    except Exception as exc:  # noqa: BLE001 — unread, said by the count of what was read
+        tolerate(exc, "reviewers' verdicts could not be read into the learned view", counter="learned.verdicts")
+    return out
 
 
 #: How far back an answer's fixes are read into what was learned.

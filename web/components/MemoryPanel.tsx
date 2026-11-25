@@ -16,21 +16,22 @@ import { compactNumber, countNoun, formatCount, formatTimestamp, pct } from "@/l
 import { dayWords } from "@/lib/home";
 import {
   createTrustedQuery, deleteTrustedQuery, editTrustedQuery, getConnections,
-  getLearningDataset, getLearningDatasets, getLearningSummary, listRememberedReadings,
-  listTrustedQueries, revokeRememberedReading, runLearningExport, transitionTrustedQuery,
-  type Connection, type LearningDatasetDetail, type LearningDatasets, type LearningSummary, type RememberedReading,
+  getLearningSummary, listRememberedReadings,
+  listTrustedQueries, revokeRememberedReading, transitionTrustedQuery,
+  type Connection, type LearningSummary, type RememberedReading,
   type TrustedQueryRow,
 } from "@/lib/api";
 import { signedInEmail } from "@/lib/auth";
 import {
-  Bar, CARD, Chip, Columns, Dot, Empty, HBars, MUTED, NUM, NeedsRow, NeedsYou, ONE_LINE, Page, ROW, RULE,
+  CARD, Chip, Columns, Dot, Empty, HBars, MUTED, NUM, NeedsRow, NeedsYou, ONE_LINE, Page, ROW, RULE,
 } from "@/components/clarity/kit";
 import { Button } from "@/components/ui/button";
 import { Loading, ReadFailed } from "@/components/ui/states";
 import { SelectField } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { showWhenDrawn, useFromAddress } from "@/lib/addressOnce";
+import { openInApp, showWhenDrawn, useFromAddress } from "@/lib/addressOnce";
+import { LearnedPanel } from "@/components/semantic/LearnedPanel";
 
 /** The acting identity for governance writes — the signed-in email, else the
  *  same word the actions inbox uses. The server owns identity; this is provenance. */
@@ -47,21 +48,6 @@ const VERDICT_WORD: Record<string, string> = { accept: "accepted", correct: "cor
 
 /** Readings shown before "Show all" — a long list stays scannable, and the cut is never silent. */
 const READINGS_SHOWN = 30;
-
-/** What each gate counts — on hover; the kind keeps the name the corpus is registered under. */
-const GATE_WHAT: Record<string, string> = {
-  sft: "Accepted answers to train on",
-  dpo: "A rejected answer paired with its correction",
-  golden: "Accepted answers held out to measure against",
-  guard_days: "Days of guard data on real traffic",
-};
-
-/** The dataset each kind is exported as — `pramanyx/learning/exporters.py`'s default names. The inspector asked for the
- *  kind itself ("sft") and the registry, which keys by name ("nl2sql-sft"), never found one: every corpus read as
- *  "no exported version yet" while the gates counted its rows. Keep in step with the exporters' defaults. */
-const DATASET_OF: Record<string, string> = {
-  sft: "nl2sql-sft", dpo: "nl2sql-dpo", golden: "nl2sql-golden", sft_bronze: "nl2sql-bronze", dpo_repair: "nl2sql-repairs",
-};
 
 /** A section of the page: a heading, what it counts, its one tool at the right, then its lines. */
 function Section({ title, meta, right, children, testId, style }: {
@@ -106,7 +92,10 @@ const SQL_BOX: React.CSSProperties = {
   borderRadius: "var(--r2)", padding: 8, overflowWrap: "anywhere",
 };
 
-export function MemoryPanel() {
+export function MemoryPanel({ connId }: {
+  /** The connection the page stands on: its one learned list leads the page (A3b). */
+  connId?: string;
+} = {}) {
   // Connections by name: a reading and a trusted query read `theLook`, never `8233e4fd` (lib/names.ts).
   const [conns, setConns] = useState<Connection[]>([]);
   useEffect(() => { getConnections().then(setConns).catch(() => {}); }, []);
@@ -121,8 +110,6 @@ export function MemoryPanel() {
   // names one while this page is open (`lib/addressOnce.ts`)
   useFromAddress(["trusted"], ({ trusted: id }) => showWhenDrawn(`[data-testid="tq-${CSS.escape(id)}"]`, 40));
   const [trustedErr, setTrustedErr] = useState("");
-  const [datasets, setDatasets] = useState<LearningDatasets | null>(null);
-  const [datasetsState, setDatasetsState] = useState<"loading" | "ready" | "failed">("loading");
 
   // Each read sets only what it answers, so the first reads can run straight from the effect; a Retry says it is
   // reading again before it reads.
@@ -135,23 +122,18 @@ export function MemoryPanel() {
   const fetchTrusted = useCallback(() => listTrustedQueries()
     .then(rs => { setTrusted(rs); setTrustedErr(""); })
     .catch(e => setTrustedErr(errText(e))), []);
-  const fetchDatasets = useCallback(() => getLearningDatasets()
-    .then(d => { setDatasets(d); setDatasetsState(d ? "ready" : "failed"); })
-    .catch(() => setDatasetsState("failed")), []);
 
-  useEffect(() => { void fetchSummary(); void fetchReadings(); void fetchTrusted(); void fetchDatasets(); },
-    [fetchSummary, fetchReadings, fetchTrusted, fetchDatasets]);
+  useEffect(() => { void fetchSummary(); void fetchReadings(); void fetchTrusted(); },
+    [fetchSummary, fetchReadings, fetchTrusted]);
 
   const loadSummary = () => { setSummaryState("loading"); void fetchSummary(); };
   const loadReadings = () => { setReadings(null); setReadingsErr(""); void fetchReadings(); };
   const loadTrusted = () => { setTrusted(null); setTrustedErr(""); void fetchTrusted(); };
-  const loadDatasets = () => { setDatasetsState("loading"); void fetchDatasets(); };
 
   // After a governance write: the queries, and what they feed — without blanking what is on screen.
   const afterTrustedWrite = useCallback(() => {
     void fetchTrusted();
     getLearningSummary().then(s => { if (s) setSummary(s); }).catch(() => {});
-    getLearningDatasets().then(d => { if (d) setDatasets(d); }).catch(() => {});
   }, [fetchTrusted]);
 
   // ── the readings ──
@@ -166,24 +148,6 @@ export function MemoryPanel() {
       setReadings(rs => (rs ?? []).filter(r => r.id !== id));
     } catch (e) { setRevokeErr({ id, text: errText(e) }); }   // the row stays; the user can retry
     finally { setRevoking(null); }
-  };
-
-  // ── the training corpus ──
-  const [exporting, setExporting] = useState(false);
-  // A refused export used to end the spinner and change nothing, saying nothing.
-  const [exportRefused, setExportRefused] = useState<string | null>(null);
-  const exportNow = async () => {
-    setExporting(true);
-    setExportRefused(null);
-    try {
-      const out = await runLearningExport();
-      setDatasets(d => ({ stats: d?.stats ?? {}, gates: out.gates }));
-      setDatasetsState("ready");
-      const fresh = await getLearningDatasets();
-      if (fresh) setDatasets(fresh);
-    } catch (e) {
-      setExportRefused(e instanceof Error ? e.message : "The export was refused");
-    } finally { setExporting(false); }
   };
 
   // ── trusted-query governance (the write half) ──
@@ -250,9 +214,15 @@ export function MemoryPanel() {
   return (
     <Page testId="memory-page">
       <p className="aug-fs-ui" style={{ margin: 0, color: "var(--t2)" }}>
-        What Pramanyx has learned across every connection: how it reads ambiguous terms, the queries it trusts, and what
-        reviewers said.
+        What Pramanyx has learned — one list, one standing, one Promote (2026-11-26): what answers, the explorer, people&apos;s
+        queries and fixes taught it, the readings it remembers, the queries it trusts and what reviewers said. Below, what
+        waits on a person and the readings and trusted queries across every connection, to approve, revoke or deprecate.
       </p>
+      {connId ? (
+        <section aria-label="The one learned list" data-testid="memory-learned" style={{ ...CARD, padding: "12px 16px" }}>
+          <LearnedPanel connId={connId} />
+        </section>
+      ) : <Empty>Choose a connection in the bar above: its learned list leads this page.</Empty>}
 
       <NeedsYou testId="memory-needs" waiting={waiting.length > 0}
         right={waiting.length > 0 ? countNoun(waiting.length, "trusted query", "trusted queries") : undefined}>
@@ -436,55 +406,16 @@ export function MemoryPanel() {
               )}
           </Section>
 
-          <Section title="Training corpus" testId="memory-corpus" meta="distillation waits until every gate passes"
-            right={
-              <Button variant="ghost" size="xs" disabled={exporting} onClick={exportNow}
-                title="Runs every exporter once — an unchanged corpus exports nothing new, so it is safe to press.">
-                {exporting ? "Exporting…" : "Export now"}
-              </Button>
-            }>
-            {exportRefused && (
-              <p role="alert" className="aug-fs-xs" style={{ color: "var(--red4)", margin: "0 0 8px" }}>{exportRefused}</p>
-            )}
-            {datasetsState === "loading" ? <Loading what="the training corpus" />
-              : datasetsState === "failed" || !datasets ? <ReadFailed what="the training corpus" onRetry={loadDatasets} />
-              : <Corpus datasets={datasets} />}
+          <Section title="Training corpus" testId="memory-corpus-moved" meta="on the AI Factory since 2026-11-26">
+            <p className="aug-fs-sm" style={{ margin: 0, color: "var(--t2)" }}>
+              What reviewers&apos; verdicts and the trusted queries become — the gates, Export now and which verdicts fed each
+              version — is on the AI Factory&apos;s Corpus tab, where it is used.{" "}
+              <Button size="xs" variant="link" onClick={() => openInApp("/?tab=ai-factory&factory=corpus")}>Open it</Button>
+            </p>
           </Section>
         </div>
       </article>
     </Page>
-  );
-}
-
-// ── the training corpus: each gate as a bar to its line, then what is not a gate ─────────────────────────────────────
-
-function Corpus({ datasets }: { datasets: LearningDatasets }) {
-  const entries = Object.entries(datasets.gates);
-  const gates = entries.filter(([, g]) => g.need != null);
-  const tiers = entries.filter(([, g]) => g.need == null);
-  return (
-    <>
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(70px, auto) minmax(60px, 1fr) auto", gap: "8px 10px",
-        alignItems: "center" }}>
-        {gates.map(([kind, g]) => (
-          <React.Fragment key={kind}>
-            <span className="aug-fs-sm" title={GATE_WHAT[kind]} style={{ color: "var(--t1)" }}>{keyToWords(kind)}</span>
-            <Bar value={g.have} max={g.need ?? 0} color={g.passes ? "var(--grn3)" : "var(--chart-1)"} />
-            <span className="aug-fs-sm" style={{ ...ROW, gap: 6, color: "var(--t2)", ...NUM, flexWrap: "nowrap" }}>
-              {formatCount(g.have)} of {formatCount(g.need)}{kind === "guard_days" ? " days" : ""}
-              {g.passes && <Chip tone="up">passes</Chip>}
-            </span>
-          </React.Fragment>
-        ))}
-      </div>
-      {tiers.length > 0 && (
-        <div className="aug-fs-xs" style={{ ...MUTED, marginTop: 8 }}
-          title={tiers[0][1].note}>
-          Not gates, graded by execution or a guard: {tiers.map(([k, g]) => `${keyToWords(k)} ${formatCount(g.have)}`).join(" · ")}
-        </div>
-      )}
-      <DatasetInspector kinds={entries.map(([k]) => k).filter(k => DATASET_OF[k])} />
-    </>
   );
 }
 
@@ -567,53 +498,3 @@ function EditTrustedForm({ row, onDone }: { row: TrustedQueryRow; onDone: () => 
   );
 }
 
-// ── which verdicts fed a corpus ──────────────────────────────────────────────────────────────────────────────────────
-
-function DatasetInspector({ kinds }: { kinds: string[] }) {
-  const [kind, setKind] = useState<string | null>(null);
-  const [detail, setDetail] = useState<LearningDatasetDetail | null>(null);
-  const [state, setState] = useState<"idle" | "loading" | "missing" | "failed">("idle");
-  const inspect = async (k: string) => {
-    if (kind === k) { setKind(null); setDetail(null); return; }
-    setKind(k); setState("loading"); setDetail(null);
-    try {
-      const d = await getLearningDataset(DATASET_OF[k]);
-      if (!d.found) { setState("missing"); return; }
-      setDetail(d);
-      setState("idle");
-    } catch { setState("failed"); }
-  };
-  if (!kinds.length) return null;
-  const node = detail?.dataset ?? {};
-  const lineage = detail?.lineage?.length ?? 0;
-  return (
-    <div style={{ marginTop: 12 }}>
-      <div style={{ ...ROW, gap: 6 }}>
-        <span className="aug-fs-xs" style={MUTED}>Inspect a corpus:</span>
-        {kinds.map(k => (
-          <Button key={k} size="xs" variant={kind === k ? "secondary" : "ghost"} onClick={() => inspect(k)}>
-            {keyToWords(k)}
-          </Button>
-        ))}
-      </div>
-      {kind && state === "loading" && <Loading what={`the ${keyToWords(kind)} corpus`} style={{ marginTop: 6 }} />}
-      {kind && state === "failed" && <Empty>Could not read the {keyToWords(kind)} corpus.</Empty>}
-      {kind && state === "missing" && (
-        <Empty>No exported version of “{DATASET_OF[kind]}” yet — press Export now once the corpus has rows.</Empty>
-      )}
-      {kind && detail && (
-        <div className="aug-fs-chrome" style={{ marginTop: 8, background: "var(--bg-1)", borderRadius: "var(--r2)", padding: 10,
-          color: "var(--t2)" }} title={`id ${String(node.id ?? "")} · data ${String(node.data_id ?? "")}`}>
-          <span style={{ fontFamily: "var(--font-mono)", color: "var(--t1)" }}>{String(node.name ?? DATASET_OF[kind])}</span>
-          {" · "}version {String(node.version ?? "—")}
-          {" · "}{countNoun(Number(node.row_count ?? 0), "example")}
-          {node.created_at ? ` · exported ${dayWords(String(node.created_at))}` : ""}
-          <div className="aug-fs-sm" style={{ ...MUTED, marginTop: 4 }}>
-            {countNoun(lineage, "lineage record")} — the verdicts and trusted queries that fed this version.
-          </div>
-          {detail.note && <div className="aug-fs-sm" style={{ color: "var(--amb4)", marginTop: 4 }}>{detail.note}</div>}
-        </div>
-      )}
-    </div>
-  );
-}
