@@ -268,8 +268,8 @@ export interface ItemsAsked {
   cursor?: number; limit?: number; workspaceId?: string;
   /** Search only: every workspace of the organisation, not this one alone (S1). */
   across?: boolean;
-  /** "use": the most used this month first (D5). */
-  sort?: "" | "use";
+  /** "use": the most used this month first (D5); "name": by name; "recent": the newest changed first. */
+  sort?: "" | "use" | "name" | "recent";
 }
 
 export function readDiscoverItems(a: ItemsAsked): Promise<DiscoverItems> {

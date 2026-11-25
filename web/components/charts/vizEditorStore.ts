@@ -50,6 +50,13 @@ export function setVizDock(next: { key: string; el: HTMLElement } | null) {
   emit();
 }
 
+/** Let go of the dock — only when it still serves `key` (another may have taken it since). */
+export function clearVizDock(key: string) {
+  if (dock?.key !== key) return;
+  dock = null;
+  emit();
+}
+
 /** The element this card's editor draws into, when a dock serves it; null draws the drawer. */
 export function useVizDock(id: string): HTMLElement | null {
   const get = () => (dock && dock.key === id ? dock.el : null);

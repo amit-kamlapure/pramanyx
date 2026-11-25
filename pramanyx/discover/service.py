@@ -201,7 +201,8 @@ def list_items(scope: Scope, *, kind: str = "", area: str = "", certified: bool 
                q: str = "", cursor: int = 0, limit: int = 50, sort: str = "") -> dict:
     """Every thing of a kind, an Area or both, in order, a page at a time — what "View all" opens. ``mine`` keeps what
     the person owns; ``q`` matches the words of a thing's name and line (the meaning search is D3's). ``sort="use"``
-    puts the most used this month first (D5), the rest after in their usual order."""
+    puts the most used this month first (D5), the rest after in their usual order; ``"name"`` orders by name, and
+    ``"recent"`` the newest changed first (the Areas' lists, 2026-11-25: "Most used", by name, recently changed)."""
     kinds = (kind,) if kind else KINDS
     found = gather(scope, kinds)
     items = all_items(found)
@@ -220,6 +221,10 @@ def list_items(scope: Scope, *, kind: str = "", area: str = "", certified: bool 
         used = by_use(items)
         ids = {i.id for i in used}
         ordered = used + [i for i in ordered if i.id not in ids]
+    elif sort == "name":
+        ordered = sorted(items, key=lambda i: (i.name.lower(), i.id))
+    elif sort == "recent":
+        ordered = sorted(items, key=lambda i: (newest_first(i.updated_at), i.name.lower(), i.id))
     page = ordered[cursor:cursor + limit]
     nxt = cursor + limit if cursor + limit < len(ordered) else None
     return {"items": [i.view() for i in page], "total": len(ordered), "next_cursor": nxt,

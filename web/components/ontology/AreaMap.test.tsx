@@ -7,7 +7,9 @@ import { AreaMap } from "@/components/ontology/AreaMap";
 import type { Atlas, AtlasArea } from "@/lib/areaMap";
 import { forgetDiscoverReads, type AtlasReview, type DiscoverAreaPage, type DiscoverItem, type ReviewRow } from "@/lib/discover";
 import type { LearnedItem } from "@/lib/learned";
-import { act, fireEvent, render, screen } from "@/lib/testing";
+import { InspectorHost, InspectorProvider } from "@/components/shell/Inspector";
+import { PageChromeProvider } from "@/components/shell/PageChrome";
+import { act, fireEvent, render, screen, within } from "@/lib/testing";
 import { setActiveWorkspace } from "@/lib/workspace";
 
 const area = (id: string, name: string, answers: number, extra: Partial<AtlasArea> = {}): AtlasArea => ({
@@ -71,7 +73,7 @@ const REVIEW: AtlasReview = {
   ],
 };
 
-function serve(body: Atlas = ATLAS) {
+function serve(body: Atlas = ATLAS, many?: DiscoverItem[]) {
   const urls: string[] = [];
   vi.stubGlobal("fetch", vi.fn(async (url: string) => {
     urls.push(String(url));
@@ -81,6 +83,21 @@ function serve(body: Atlas = ATLAS) {
     if (String(url).includes("/org-intelligence")) return new Response(JSON.stringify([]));
     if (String(url).includes("/connections")) return new Response(JSON.stringify([]));
     if (String(url).includes("/discover/areas/")) return new Response(JSON.stringify(PAGE));
+    if (String(url).includes("/discover/items")) {
+      // the server's paged list of a kind in an Area (`discover/service.list_items`), as many as `many` asks for
+      const q = new URL(String(url), "http://x").searchParams;
+      const all = (many ?? PAGE.kinds.flatMap((k) => k.items)).filter((i) =>
+        (!q.get("kind") || i.kind === q.get("kind")) && (!q.get("area") || i.area === q.get("area"))
+        && (q.get("certified") !== "true" || i.certification?.status === "certified"));
+      const at = Number(q.get("cursor") ?? 0), n = Number(q.get("limit") ?? 50);
+      return new Response(JSON.stringify({ items: all.slice(at, at + n), total: all.length, next_cursor: at + n < all.length ? at + n : null,
+        withheld: {}, said: [] }));
+    }
+    if (String(url).includes("/discover/search")) {
+      const q = new URL(String(url), "http://x").searchParams.get("q") ?? "";
+      const hit = PAGE.kinds.flatMap((k) => k.items).filter((i) => i.name.toLowerCase().includes(q.toLowerCase()));
+      return new Response(JSON.stringify({ items: hit, total: hit.length, by_meaning: false, withheld: {}, said: [] }));
+    }
     if (String(url).includes("/learned")) {
       return new Response(JSON.stringify({ items: [LEARNED], total: 1, matched: 1, folded: 0, unplaced: 0, areas: [], withheld: null }));
     }
@@ -131,7 +148,7 @@ describe("the Atlas, by Area", () => {
     expect(screen.getByTestId("atlas-area-panel")).toHaveTextContent("Orders & sales");
     expect(screen.getByTestId("atlas-area-answers")).toHaveTextContent("40 answers this month drew on it");
     expect(screen.getByRole("link", { name: "Open its page in Discover" }).getAttribute("href")).toContain("id=orders_sales");
-    fireEvent.click(screen.getByRole("button", { name: /All Areas/ }));
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Where you are" })).getByRole("button", { name: "Ontology" }));
     expect(screen.queryByTestId("atlas-area-panel")).toBeNull();
   });
 
@@ -162,13 +179,64 @@ describe("the Atlas, by Area", () => {
     render(<AreaMap />);
     fireEvent.click(await screen.findByTestId("atlas-bubble-orders_sales"));
     fireEvent.click(await screen.findByTestId("atlas-fan-metric"));
-    expect(screen.getAllByTestId("atlas-kind-row").map((r) => r.textContent)).toEqual([
-      "RevenuetheLook · opened 3 times this month by 2 people · used in 12 answers",
-      "Average order valueDraft · theLook · not used this month",
+    // the reference's rows: the name, how much it was used and its mark, what it says
+    expect((await screen.findAllByTestId("atlas-kind-row")).map((r) => r.textContent)).toEqual([
+      "RevenueUsed in 12 answers · theLook",
+      "Average order valueNot used this month · theLookDraft",
     ]);
-    fireEvent.click(screen.getByRole("button", { name: "The Area" }));
+    expect(screen.getByTestId("atlas-kind-count")).toHaveTextContent("2 metrics");
+    // where the reader is, each place a way back
+    const trail = screen.getByRole("navigation", { name: "Where you are" });
+    expect(trail.textContent).toBe("OntologyOrders & salesMetrics");
+    fireEvent.click(within(trail).getByRole("button", { name: "Orders & sales" }));
     fireEvent.click(screen.getByTestId("atlas-fan-row-certified"));
-    expect(screen.getAllByTestId("atlas-kind-row").map((r) => r.textContent)).toEqual(["ordersTable · Certified · theLook · not used this month"]);
+    expect((await screen.findAllByTestId("atlas-kind-row")).map((r) => r.textContent)).toEqual(["ordersNot used this month · theLookCertified"]);
+  });
+
+  it("lists a long kind a page at a time, in the order asked for", async () => {
+    const many = Array.from({ length: 45 }, (_, n) => item("metric", `c1/m${n}`, `Metric ${n}`));
+    const urls = serve(ATLAS, many);
+    render(<AreaMap />);
+    fireEvent.click(await screen.findByTestId("atlas-bubble-orders_sales"));
+    fireEvent.click(await screen.findByTestId("atlas-fan-metric"));
+    expect(await screen.findAllByTestId("atlas-kind-row")).toHaveLength(20);
+    expect(screen.getByTestId("atlas-kind-count")).toHaveTextContent("45 metrics");
+    fireEvent.click(screen.getByRole("button", { name: "Page 3" }));
+    await vi.waitFor(() => expect(screen.getAllByTestId("atlas-kind-row")).toHaveLength(5));
+    expect(screen.getAllByTestId("atlas-kind-row")[0]).toHaveTextContent("Metric 40");
+    const listed = urls.filter((u) => u.includes("/discover/items"));
+    expect(listed[0]).toContain("sort=use");
+    expect(listed.at(-1)).toContain("cursor=40");
+    fireEvent.keyDown(screen.getByRole("button", { name: "In order: Most used" }), { key: "Enter" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Name" }));
+    await vi.waitFor(() => expect(urls.filter((u) => u.includes("/discover/items")).at(-1)).toContain("sort=name"));
+    expect(urls.filter((u) => u.includes("/discover/items")).at(-1)).toContain("cursor=0");    // a new order starts at its first page
+  });
+
+  it("searches what is in view from the head of the left panel; a thing found opens on the right", async () => {
+    serve();
+    render(<AreaMap />);
+    fireEvent.click(await screen.findByRole("button", { name: "Search every Area" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Search every Area" }), { target: { value: "revenue" } });
+    await vi.waitFor(() => expect(screen.getByTestId("atlas-search")).toHaveTextContent("1 found in every Area"));
+    fireEvent.click(screen.getByTestId("atlas-kind-row"));
+    expect(screen.getByTestId("atlas-open-item")).toHaveTextContent("Revenue");
+    fireEvent.click(screen.getByRole("button", { name: "Stop searching" }));
+    expect(screen.queryByTestId("atlas-search")).toBeNull();
+  });
+
+  it("inside the app, a thing opens as a tab of the one side panel — a page of its own, with its glyph", async () => {
+    serve();
+    render(
+      <PageChromeProvider pageKey="p"><InspectorProvider pageKey="p"><AreaMap /><InspectorHost /></InspectorProvider></PageChromeProvider>,
+    );
+    fireEvent.click(await screen.findByTestId("atlas-bubble-orders_sales"));
+    fireEvent.click(await screen.findByTestId("atlas-fan-metric"));
+    fireEvent.click((await screen.findAllByTestId("atlas-kind-row"))[0]);
+    expect(screen.queryByTestId("atlas-open-panel")).toBeNull();                       // no second panel of the Areas' own
+    const open = screen.getByRole("tablist", { name: "Open in the side panel" });
+    expect(within(open).getAllByRole("tab").map((t) => t.textContent)).toEqual(["Orders & sales", "Revenue"]);
+    expect(screen.getByRole("complementary", { name: "Inspector: Revenue" })).toHaveTextContent("FormulaSUM(sale_price)");
   });
 
   it("opening things adds tabs to the right panel, side by side; one closes", async () => {
@@ -176,7 +244,7 @@ describe("the Atlas, by Area", () => {
     render(<AreaMap />);
     fireEvent.click(await screen.findByTestId("atlas-bubble-orders_sales"));
     fireEvent.click(await screen.findByTestId("atlas-fan-metric"));
-    const [revenue, aov] = screen.getAllByTestId("atlas-kind-row");
+    const [revenue, aov] = await screen.findAllByTestId("atlas-kind-row");
     fireEvent.click(revenue);
     expect(screen.getByTestId("atlas-open-item")).toHaveTextContent("Revenue");
     expect(screen.getByTestId("atlas-open-item")).toHaveTextContent("FormulaSUM(sale_price)");
@@ -200,7 +268,7 @@ describe("the Atlas, by Area", () => {
     fireEvent.click(row);
     expect(screen.getByTestId("atlas-open-learned")).toHaveTextContent("Where it standssaid, never measured — no person has confirmed it");
     expect(screen.getByTestId("atlas-open-learned")).toHaveTextContent("Used in answersnot counted yet");
-    fireEvent.click(screen.getByRole("button", { name: "Promote to a Definition" }));
+    fireEvent.click(screen.getByRole("button", { name: "Promote" }));
     expect(screen.getByTestId("learned-promote")).toBeTruthy();
   });
 

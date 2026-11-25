@@ -129,6 +129,21 @@ def test_the_page_puts_the_most_used_first_and_what_the_person_opened_lately(_fr
     assert [i["name"] for i in listed["items"]] == ["orders", "distribution_centers"]
 
 
+def test_a_kind_is_listed_by_name_or_the_newest_changed_first(monkeypatch):
+    """The Areas' lists (2026-11-25): Most used, by name, recently changed — each a page at a time."""
+    found = Found(items=[Item("metric", "c1/b", "Basket size", connection_id="c1", updated_at="2026-11-01T00:00:00"),
+                         Item("metric", "c1/a", "average order value", connection_id="c1", updated_at="2026-11-20T00:00:00"),
+                         Item("metric", "c1/c", "Conversion", connection_id="c1", updated_at="")])
+    for kind in I.KINDS:
+        monkeypatch.setitem(I.READERS, kind, (lambda f: (lambda scope: f))(found if kind == "metric" else Found()))
+    monkeypatch.setattr(S, "put_use", lambda items: [])
+    scope = Scope(None, "user:ana", {"c1": "theLook"})
+    names = lambda **kw: [i["name"] for i in S.list_items(scope, kind="metric", **kw)["items"]]    # noqa: E731
+    assert names(sort="name") == ["average order value", "Basket size", "Conversion"]
+    assert names(sort="recent") == ["average order value", "Basket size", "Conversion"]     # the undated last
+    assert names(sort="name", cursor=1, limit=1) == ["Basket size"]
+
+
 def test_an_open_just_before_a_restart_is_not_counted_again_after_it(_fresh, monkeypatch):
     from datetime import datetime, timedelta, timezone
     from pramanyx.kernel import ledger as L

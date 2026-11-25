@@ -61,7 +61,8 @@ import {
   IconGridDots,
   IconArrowsSort, IconArrowsSplit2, IconBinaryTree, IconChartDots3, IconGauge, IconHandStop, IconStack2,
   IconList, IconPaperclip, IconNumber123, IconBraces, IconBinary, createReactComponent,
-  IconPointer, IconPhoto, IconArrowBackUp, IconArrowForwardUp, IconLayoutSidebarLeftCollapse,
+  IconPointer, IconPhoto, IconArrowBackUp, IconArrowForwardUp, IconLayoutSidebarLeftCollapse, IconMinimize,
+  IconLayoutSidebarRightCollapse, IconLayoutSidebarRightExpand,
   IconLayoutSidebarLeftExpand, IconTypography, IconChartLine, IconLayoutList, IconLayoutGrid, IconStarFilled,
   IconCpu,
   IconShoppingCart, IconCash, IconReceiptRefund, IconTag, IconTruckDelivery, IconSpeakerphone, IconDiscount,
@@ -259,6 +260,10 @@ const ICONS = {
   undo: IconArrowBackUp,
   redo: IconArrowForwardUp,
   fold: IconLayoutSidebarLeftCollapse,
+  // the side panel's own controls (2026-11-25): back to its width from full, and hide or show it
+  restore: IconMinimize,
+  panelhide: IconLayoutSidebarRightCollapse,
+  panelshow: IconLayoutSidebarRightExpand,
   unfold: IconLayoutSidebarLeftExpand,
   // An Area of the business (2026-11-25: Discover's Area cards carry a glyph, as a package or an Area's owners choose
   // it — `lib/areaIcons.ts`). Named for what the Area is about.

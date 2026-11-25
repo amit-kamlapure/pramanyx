@@ -87,7 +87,7 @@ def get_discover_items(request: Request, workspace_id: Optional[str] = None, con
                        kind: str = "", area: str = "", certified: bool = False, mine: bool = False,
                        q: str = Query("", max_length=200),
                        cursor: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=200),
-                       sort: str = Query("", pattern="^(|use)$")) -> dict:
+                       sort: str = Query("", pattern="^(|use|name|recent)$")) -> dict:
     """Every thing of a kind, of an Area, certified, or the person's own — "View all" — a page at a time; ``sort=use``
     puts the most used this month first (D5)."""
     from pramanyx.discover.items import KINDS

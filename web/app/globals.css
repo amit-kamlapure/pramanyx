@@ -1137,6 +1137,19 @@ td, [role="gridcell"][role="gridcell"], [role="cell"][role="cell"] { font-size: 
   border-radius: var(--r1); background: var(--b2); }
 .aug-inspector-grip:focus-visible { outline-offset: 0; }
 .aug-inspector-head { padding: 10px 12px 8px 14px; }
+/* the side panel's tabs, one for each thing open, and its controls (2026-11-25: the coworker's side panel, the reference's) */
+.aug-inspector-bar { display: flex; align-items: center; gap: 6px; padding: 6px 8px 4px 10px; min-width: 0; }
+.aug-inspector-open { display: flex; align-items: center; gap: 2px; flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.aug-inspector-tab { display: inline-flex; align-items: center; flex: 0 1 auto; min-width: 0; max-width: 200px; border-radius: var(--r2); color: var(--t2); }
+.aug-inspector-tab[data-front] { background: var(--bg-3); color: var(--t1); }
+.aug-inspector-tab:hover { color: var(--t1); }
+.aug-inspector-tab-name { gap: 6px; min-width: 0; padding: 4px 2px 4px 8px; color: inherit; }
+.aug-inspector-tab-name > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aug-inspector-controls { display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; color: var(--t2); }
+.aug-inspector[data-full] { flex: 1 1 auto; }
+.aug-body:has(> .aug-inspector[data-full]) > .aug-page-surface { display: none; }
+.aug-inspector-tucked { width: 36px; align-items: center; padding-top: 8px; gap: 4px; }
+.aug-inspector-count { font-size: 11px; color: var(--t3); font-variant-numeric: tabular-nums; }
 .aug-inspector-row1 { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .aug-inspector-glyph { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: var(--r2);
   background: var(--bg-sel); color: var(--accent-text); flex-shrink: 0; }

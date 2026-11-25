@@ -29,7 +29,8 @@ const EXTS = [".tsx", ".ts"];
 // hand-rolled status menu became Radix Themes' own DropdownMenu. 31 → 29 (2026-10-12): Settings ▸ Appearance's theme
 // cards and the Organization playbook's disclosure header became <Button>s. (The Data Canvas list's filter chip, a
 // chip and raw on purpose, stays: the list was kept as it was — the user, 2026-10-12.)
-const BASELINE = 29;
+// 29 → 28 (2026-11-25): the retired Business Atlas and the Ontology's "Every connection" board took one with them.
+const BASELINE = 28;
 
 // `\s`, not a space: a <button whose first attribute sits on the next line is a raw button too
 // (three such went uncounted until 2026-10-06).

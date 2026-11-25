@@ -9,11 +9,11 @@
  * adds a tab to the right panel — several stay open side by side: a metric, a table, a dashboard, a Definition, a
  * learned item with where it came from, why it stands where it does, and Promote.
  */
-import { useEffect, useState } from "react";
+import { DropdownMenu } from "@radix-ui/themes";
+import { useEffect, useRef, useState } from "react";
 
 import { Chip, MUTED, ROW } from "@/components/clarity/kit";
 import { AreaEditor } from "@/components/discover/AreaCuration";
-import { PromoteForm } from "@/components/semantic/LearnedPanel";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { IconSquare } from "@/components/ui/icon-square";
@@ -21,15 +21,16 @@ import { Loading, ReadFailed } from "@/components/ui/states";
 import { openInApp } from "@/lib/addressOnce";
 import { areaIcon } from "@/lib/areaIcons";
 import {
-  areaTone, curve, itemsOf, KIND_TONE, oneSided, reviewFilters, reviewWord, tint, waitingWords, type AtlasArea, type Disc,
+  areaTone, curve, KIND_TONE, oneSided, reviewFilters, reviewWord, tint, waitingWords, type AtlasArea, type Disc,
   type Fan, type FanKey,
 } from "@/lib/areaMap";
 import {
-  holdsWords, KIND_WORDS, markOf, ownersLine, readAtlasReview, usageLine, type AtlasReview, type DiscoverArea,
+  holdsWords, KIND_ICON, markOf, ownersLine, readAtlasReview, readDiscoverItems, readDiscoverSearch, usageLine,
+  type AtlasReview, type DiscoverArea,
   type DiscoverAreaPage, type DiscoverItem,
 } from "@/lib/discover";
 import { countNoun, formatCount, relTime } from "@/lib/format";
-import { KIND_WORDS as LEARNED_WORDS, readLearned, whereFrom, type LearnedItem, type Promoted } from "@/lib/learned";
+import { KIND_WORDS as LEARNED_WORDS, readLearned, type LearnedItem } from "@/lib/learned";
 import type { TypeMapRow } from "@/lib/objectTypes";
 
 /** A thing open in the right panel. */
@@ -48,7 +49,6 @@ function KindDot({ tone }: { tone: string }) {
 }
 
 /** A kind's name for one, as a line starts with it: "Table", "Data Canvas". */
-const kindWord = (k: DiscoverItem["kind"]) => KIND_WORDS[k][0].replace(/^./, (c) => c.toUpperCase());
 
 /** The most things kept open side by side; opening one more closes the oldest. */
 export const MAX_OPEN = 6;
@@ -159,48 +159,135 @@ export function ReviewList({ area, onBack, backWords = "The Area" }: { area: str
   );
 }
 
-function KindList({ fan, items, learned, onOpen, onBack }: {
-  fan: Fan; items: DiscoverItem[]; learned: { items: LearnedHere[]; unread: string[] } | null | "failed";
-  onOpen: (o: Opened) => void; onBack: () => void;
-}) {
+/** How many things a kind's list shows a page at a time (the reference pages a long list; it never scrolls forever). */
+export const PER_PAGE = 20;
+type Order = "use" | "name" | "recent";
+const ORDER_WORDS: Record<Order, string> = { use: "Most used", name: "Name", recent: "Recently changed" };
+
+/** "Used in 12 answers" when answers drew on it this month — the reference's "Used in 6.2K responses" — else what was
+ *  measured of it, or that it was not used. */
+function usedWords(i: DiscoverItem): string {
+  const a = i.use?.answers ?? 0;
+  if (a) return `Used in ${a === 1 ? "one answer" : `${formatCount(a)} answers`}`;
+  const u = usageLine(i.use);
+  return u ? u.replace(/^./, (c) => c.toUpperCase()) : "Not used this month";
+}
+
+/** The pages of a long list: the first, the last, the one shown and its neighbours, "…" between. */
+export function pagesShown(at: number, pages: number): (number | "gap")[] {
+  const want = new Set([0, pages - 1, at - 1, at, at + 1].filter((n) => n >= 0 && n < pages));
+  const out: (number | "gap")[] = [];
+  [...want].sort((x, y) => x - y).forEach((n, k, all) => { if (k && n - all[k - 1] > 1) out.push("gap"); out.push(n); });
+  return out;
+}
+
+function Pager({ at, total, onAt }: { at: number; total: number; onAt: (n: number) => void }) {
+  const pages = Math.ceil(total / PER_PAGE);
+  if (pages <= 1) return null;
   return (
-    <section data-testid="atlas-kind-list" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <span style={{ ...ROW, gap: 8, justifyContent: "space-between" }}>
-        <span className="aug-fs-sm" style={{ ...ROW, gap: 8, color: "var(--t1)", fontWeight: 600 }}><KindDot tone={fan.tone} />{fan.words}</span>
-        <Button variant="ghost" size="xs" onClick={onBack}>The Area</Button>
+    <nav aria-label="Pages" style={{ ...ROW, gap: 2, justifyContent: "center", paddingTop: 4 }}>
+      <Button variant="ghost" size="icon-xs" aria-label="The page before" disabled={at === 0} onClick={() => onAt(at - 1)}>
+        <Icon name="chevl" size={12} />
+      </Button>
+      {pagesShown(at, pages).map((n, k) => (n === "gap"
+        ? <span key={`gap${k}`} className="aug-fs-xs" style={MUTED}>…</span>
+        : (
+          <Button key={n} variant={n === at ? "secondary" : "ghost"} size="xs" aria-current={n === at ? "page" : undefined}
+            aria-label={`Page ${n + 1}`} onClick={() => onAt(n)}>{n + 1}</Button>
+        )))}
+      <Button variant="ghost" size="icon-xs" aria-label="The page after" disabled={at >= pages - 1} onClick={() => onAt(at + 1)}>
+        <Icon name="chevr" size={12} />
+      </Button>
+    </nav>
+  );
+}
+
+/** One thing in a kind's list, as the reference lists a page or a snippet: its glyph in its kind's colour, its name, how
+ *  much it was used with its mark, and what it says. */
+function ItemRow({ i, onOpen }: { i: DiscoverItem; onOpen: (o: Opened) => void }) {
+  const mark = markOf(i);
+  return (
+    <Button role="listitem" variant="ghost" size="sm" data-testid="atlas-kind-row" onClick={() => onOpen(itemOpened(i))}
+      style={{ justifyContent: "flex-start", height: "auto", padding: "8px", textAlign: "left", whiteSpace: "normal", alignItems: "flex-start" }}>
+      <span style={{ color: KIND_TONE[i.kind], lineHeight: 0, paddingTop: 2 }}><Icon name={KIND_ICON[i.kind]} size={15} /></span>
+      <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+        <span className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: 600 }}>{i.name}</span>
+        <span className="aug-fs-xs" style={{ ...ROW, gap: 6, color: "var(--t3)", flexWrap: "wrap" }}>
+          <span>{[usedWords(i), i.connection_name].filter(Boolean).join(" · ")}</span>
+          {mark && <Chip tone={mark.tone === "up" ? "up" : mark.tone === "amber" ? "amber" : "plain"}>{mark.word}</Chip>}
+        </span>
+        {i.line && (
+          <span className="aug-fs-xs" style={{ color: "var(--t2)", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
+            overflow: "hidden" }}>{i.line}</span>
+        )}
       </span>
-      <span className="aug-fs-xs" style={MUTED}>
-        {fan.key === "learned" ? "In the one standing's order: a person's word on what a run measured first"
-          : "The most used this month first"}
+    </Button>
+  );
+}
+
+/** A kind of what an Area holds, listed on the left as the reference lists an Area's pages: how many, in which order
+ *  (Most used, by name, recently changed), a page at a time; a thing clicked opens on the right. Read from the server a
+ *  page at a time — an Area's page carries only the first few of each kind. */
+function KindList({ area, fan, learned, onOpen, workspaceId }: {
+  area: string; fan: Fan; learned: { items: LearnedHere[]; unread: string[] } | null | "failed";
+  onOpen: (o: Opened) => void; workspaceId?: string;
+}) {
+  const [order, setOrder] = useState<Order>("use");
+  const [at, setAt] = useState(0);
+  const asked = `${area}|${fan.key}|${order}|${at}`;
+  const [got, setGot] = useState<{ asked: string; items: DiscoverItem[]; total: number } | { asked: string; failed: string } | null>(null);
+  const [tries, setTries] = useState(0);
+  useEffect(() => {
+    if (fan.key === "learned") return undefined;
+    let live = true;
+    readDiscoverItems({ kind: fan.key === "certified" ? "" : fan.key, area, certified: fan.key === "certified", sort: order,
+      cursor: at * PER_PAGE, limit: PER_PAGE, workspaceId })
+      .then((r) => { if (live) setGot({ asked, items: r.items, total: r.total }); })
+      .catch((e) => { if (live) setGot({ asked, failed: e instanceof Error ? e.message : String(e) }); });
+    return () => { live = false; };
+  }, [asked, tries]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const here = got?.asked === asked ? got : null;
+  const learnedRows = learned && learned !== "failed" ? learned.items : [];
+  const total = fan.key === "learned" ? learnedRows.length : here && "total" in here ? here.total : fan.count;
+  return (
+    <section data-testid="atlas-kind-list" aria-label={fan.words} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <span style={{ ...ROW, gap: 8, justifyContent: "space-between" }}>
+        <span className="aug-fs-sm" data-testid="atlas-kind-count" style={{ ...ROW, gap: 8, color: "var(--t2)" }}>
+          <KindDot tone={fan.tone} />{fan.key === "learned" ? fan.words : `${formatCount(total)} ${fan.words.replace(/^[\d,]+\s*/, "")}`}
+        </span>
+        {fan.key === "learned" ? (
+          <span className="aug-fs-xs" style={MUTED} title="A person's word on what a run measured first">In standing order</span>
+        ) : (
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger>
+              <Button variant="ghost" size="xs" aria-label={`In order: ${ORDER_WORDS[order]}`} style={{ color: "var(--accent-11, var(--blue4))" }}>
+                {ORDER_WORDS[order]} <Icon name="chevd" size={12} />
+              </Button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content size="1" align="end">
+              {(Object.keys(ORDER_WORDS) as Order[]).map((o) => (
+                <DropdownMenu.Item key={o} onSelect={() => { setOrder(o); setAt(0); }}>{ORDER_WORDS[o]}</DropdownMenu.Item>
+              ))}
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
+        )}
       </span>
       <div role="list" style={{ display: "flex", flexDirection: "column", gap: 2, margin: "0 -8px" }}>
-        {fan.key !== "learned" && items.map((i) => {
-          const mark = markOf(i);
-          const line = [mark?.word, i.connection_name, usageLine(i.use) || "not used this month"].filter(Boolean).join(" · ");
-          return (
-            <Button key={`${i.kind}:${i.id}`} role="listitem" variant="ghost" size="sm" data-testid="atlas-kind-row"
-              onClick={() => onOpen(itemOpened(i))}
-              style={{ justifyContent: "flex-start", height: "auto", padding: "6px 8px", textAlign: "left", whiteSpace: "normal" }}>
-              <span style={{ ...ROW, gap: 8, alignItems: "flex-start", minWidth: 0 }}>
-                <span style={{ paddingTop: 5 }}><KindDot tone={KIND_TONE[i.kind]} /></span>
-                <span style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
-                  <span className="aug-fs-sm" style={{ color: "var(--t1)" }}>{i.name}</span>
-                  <span className="aug-fs-xs" style={MUTED}>{fan.key === "certified" ? `${kindWord(i.kind)} · ${line}` : line}</span>
-                </span>
-              </span>
-            </Button>
-          );
-        })}
+        {fan.key !== "learned" && (here === null ? <Loading what={fan.words.replace(/^[\d,]+\s*/, "")} />
+          : "failed" in here ? <ReadFailed what={fan.words.replace(/^[\d,]+\s*/, "")} error={here.failed} onRetry={() => setTries((n) => n + 1)} />
+          : here.items.length === 0 ? <span className="aug-fs-sm" style={{ ...MUTED, padding: "0 8px" }}>Nothing of this kind here.</span>
+          : here.items.map((i) => <ItemRow key={`${i.kind}:${i.id}`} i={i} onOpen={onOpen} />))}
         {fan.key === "learned" && (learned === null ? <Loading what="what was learned here" />
           : learned === "failed" ? <span className="aug-fs-sm" style={{ color: "var(--red4)" }}>What was learned here could not be read.</span>
           : (
             <>
-              {learned.items.map((l) => (
+              {learned.items.slice(at * PER_PAGE, (at + 1) * PER_PAGE).map((l) => (
                 <Button key={`${l.connId}:${l.item.ref}:${l.item.text}`} role="listitem" variant="ghost" size="sm"
                   data-testid="atlas-learned-row" onClick={() => onOpen(learnedOpened(l))}
-                  style={{ justifyContent: "flex-start", height: "auto", padding: "6px 8px", textAlign: "left", whiteSpace: "normal" }}>
-                  <span style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
-                    <span className="aug-fs-sm" style={{ color: "var(--t1)", display: "-webkit-box", WebkitLineClamp: 2,
+                  style={{ justifyContent: "flex-start", height: "auto", padding: "8px", textAlign: "left", whiteSpace: "normal", alignItems: "flex-start" }}>
+                  <span style={{ color: KIND_TONE.learned, lineHeight: 0, paddingTop: 2 }}><Icon name="memory" size={15} /></span>
+                  <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+                    <span className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: 600, display: "-webkit-box", WebkitLineClamp: 2,
                       WebkitBoxOrient: "vertical", overflow: "hidden" }}>{l.item.text}</span>
                     <span className="aug-fs-xs" style={MUTED}>{[LEARNED_WORDS[l.item.kind] ?? l.item.kind, l.connName].join(" · ")}</span>
                   </span>
@@ -208,7 +295,7 @@ function KindList({ fan, items, learned, onOpen, onBack }: {
               ))}
               {learned.items.length < fan.count && (
                 <span className="aug-fs-xs" data-testid="atlas-learned-shown" style={{ ...MUTED, padding: "0 8px" }}>
-                  {`The first ${formatCount(learned.items.length)} of ${formatCount(fan.count)} — every one is on the Semantic Layer's Learned tab.`}
+                  {`${formatCount(learned.items.length)} of ${formatCount(fan.count)} read here — every one is on the Semantic Layer's Learned tab.`}
                 </span>
               )}
               {learned.unread.length > 0 && (
@@ -217,13 +304,107 @@ function KindList({ fan, items, learned, onOpen, onBack }: {
             </>
           ))}
       </div>
+      <Pager at={at} total={total} onAt={setAt} />
     </section>
   );
 }
 
-export function AreaRail({ area, page, pageFailed, onRetry, connections, fan, kind, onKind, learned, onOpen, onPickArea,
+/** One place in the breadcrumb: its name, and where it goes — none for where the reader is. */
+export interface Crumb { label: string; go?: () => void }
+/** How many places the breadcrumb names; before them a "…" goes one place up (the reference's "… › Customers › Pages"). */
+const CRUMBS_SHOWN = 3;
+
+/**
+ * The head of the left panel, as the reference heads it: where the reader is — "Ontology › Customers › Orders & sales ›
+ * Metrics", each place a way back to it — and a search over what is in view (the Area's, or every Area's). While a search
+ * is typed, what it finds stands where the panel's own content was; a thing found opens on the right.
+ */
+export function RailHead({ crumbs, area = "", workspaceId, onOpen, children }: {
+  crumbs: Crumb[]; area?: string; workspaceId?: string; onOpen: (o: Opened) => void; children?: React.ReactNode;
+}) {
+  const [searching, setSearching] = useState(false);
+  const [q, setQ] = useState("");
+  const [found, setFound] = useState<{ q: string; items: DiscoverItem[]; total: number } | { q: string; failed: string } | null>(null);
+  const box = useRef<HTMLInputElement>(null);
+  const asked = searching ? q.trim() : "";
+  useEffect(() => {
+    if (!asked) return undefined;
+    let live = true;
+    const t = setTimeout(() => {
+      readDiscoverSearch({ q: asked, area: area || undefined, workspaceId, limit: PER_PAGE })
+        .then((r) => { if (live) setFound({ q: asked, items: r.items, total: r.total }); })
+        .catch((e) => { if (live) setFound({ q: asked, failed: e instanceof Error ? e.message : String(e) }); });
+    }, 250);
+    return () => { live = false; clearTimeout(t); };
+  }, [asked, area, workspaceId]);
+  useEffect(() => { if (searching) box.current?.focus(); }, [searching]);
+  const results = asked && found?.q === asked ? found : null;
+  const hidden = crumbs.length > CRUMBS_SHOWN ? crumbs.slice(0, crumbs.length - CRUMBS_SHOWN) : [];
+  const shown = crumbs.slice(hidden.length);
+  const up = hidden[hidden.length - 1];
+  const where = area ? "this Area" : "every Area";
+  return (
+    <>
+      <div style={{ ...ROW, gap: 6, justifyContent: "space-between", minHeight: 28 }}>
+        {searching ? (
+          <span style={{ ...ROW, gap: 6, flex: 1, minWidth: 0 }}>
+            <Icon name="search" size={14} />
+            <input ref={box} value={q} onChange={(e) => setQ(e.target.value)} aria-label={`Search ${where}`} placeholder={`Search ${where}`}
+              onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); setSearching(false); setQ(""); } }}
+              className="aug-fs-sm" style={{ flex: 1, minWidth: 0, background: "transparent", border: 0, outline: "none", color: "var(--t1)" }} />
+          </span>
+        ) : (
+          <nav aria-label="Where you are" style={{ ...ROW, gap: 2, minWidth: 0, flexWrap: "nowrap", overflow: "hidden" }}>
+            {up && (
+              <>
+                <Button variant="ghost" size="xs" aria-label={`Up to ${up.label}`} title={hidden.map((c) => c.label).join(" › ")}
+                  onClick={up.go}>…</Button>
+                <Icon name="chevr" size={11} />
+              </>
+            )}
+            {shown.map((c, k) => (
+              <span key={`${k}:${c.label}`} style={{ ...ROW, gap: 2, minWidth: 0 }}>
+                {k > 0 && <span style={{ color: "var(--t3)", lineHeight: 0 }}><Icon name="chevr" size={11} /></span>}
+                {c.go ? (
+                  <Button variant="ghost" size="xs" onClick={c.go} style={{ color: "var(--t2)", maxWidth: 160 }}>
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.label}</span>
+                  </Button>
+                ) : (
+                  <span className="aug-fs-sm" aria-current="page" style={{ color: "var(--t1)", fontWeight: 600, padding: "0 6px",
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.label}</span>
+                )}
+              </span>
+            ))}
+          </nav>
+        )}
+        <Button variant="ghost" size="icon-xs" aria-label={searching ? "Stop searching" : `Search ${where}`}
+          onClick={() => { setSearching((x) => !x); setQ(""); }}>
+          <Icon name={searching ? "close" : "search"} size={14} />
+        </Button>
+      </div>
+      {asked ? (
+        <section data-testid="atlas-search" aria-label="What the search found" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {results === null ? <Loading what="the search" />
+            : "failed" in results ? <span className="aug-fs-sm" style={{ color: "var(--red4)" }}>{`The search could not be read: ${results.failed}`}</span>
+            : (
+              <>
+                <span className="aug-fs-xs" style={MUTED}>{results.total ? `${formatCount(results.total)} found in ${where}` : `Nothing in ${where} says “${asked}”.`}</span>
+                <div role="list" style={{ display: "flex", flexDirection: "column", gap: 2, margin: "0 -8px" }}>
+                  {results.items.map((i) => <ItemRow key={`${i.kind}:${i.id}`} i={i} onOpen={onOpen} />)}
+                </div>
+              </>
+            )}
+        </section>
+      ) : children}
+    </>
+  );
+}
+
+export function AreaRail({ area, ancestors = [], page, pageFailed, onRetry, connections, fan, kind, onKind, learned, onOpen, onPickArea,
   onBack, workspaceId, onSaved }: {
   area: AtlasArea; page: DiscoverAreaPage | null; pageFailed: string; onRetry: () => void;
+  /** The Areas it sits inside, the outermost first — its place in the breadcrumb. */
+  ancestors?: AreaLike[];
   connections: { id: string; name: string }[]; fan: Fan[]; kind: FanKey | null; onKind: (k: FanKey | null) => void;
   learned: { items: LearnedHere[]; unread: string[] } | null | "failed"; onOpen: (o: Opened) => void;
   onPickArea: (a: AreaLike) => void; onBack: () => void; workspaceId?: string; onSaved: () => void;
@@ -233,9 +414,12 @@ export function AreaRail({ area, page, pageFailed, onRetry, connections, fan, ki
   const on = connections.filter((c) => area.connections.includes(c.id)).map((c) => c.name);
   return (
     <div data-testid="atlas-area-panel" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <Button variant="ghost" size="xs" onClick={onBack} style={{ alignSelf: "flex-start" }}>
-        <Icon name="chevl" size={12} /> All Areas
-      </Button>
+      <RailHead area={area.id} workspaceId={workspaceId} onOpen={onOpen} crumbs={[
+        { label: "Ontology", go: onBack },
+        ...ancestors.map((a) => ({ label: a.name, go: () => onPickArea(a) })),
+        { label: area.name, go: kind ? () => onKind(null) : undefined },
+        ...(kind ? [{ label: kind === "review" ? "Review" : (chosenFan?.words.replace(/^[\d,]+\s*/, "") ?? kind).replace(/^./, (c) => c.toUpperCase()) }] : []),
+      ]}>
       <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <IconSquare name={areaIcon(area.icon)} size={32} tone={areaTone(area.id)} />
         <span style={{ display: "flex", flexDirection: "column", gap: 1 }}>
@@ -254,9 +438,8 @@ export function AreaRail({ area, page, pageFailed, onRetry, connections, fan, ki
           {page?.can_curate && <Button size="xs" variant="secondary" onClick={() => setEditing(true)}>Edit</Button>}
         </span>
       )}
-      {kind === "review" ? <ReviewList area={area.id} onBack={() => onKind(null)} /> : chosenFan ? (
-        <KindList fan={chosenFan} items={page ? itemsOf(page, chosenFan.key) : []} learned={learned} onOpen={onOpen}
-          onBack={() => onKind(null)} />
+      {kind === "review" ? <ReviewList area={area.id} /> : chosenFan ? (
+        <KindList area={area.id} fan={chosenFan} learned={learned} onOpen={onOpen} workspaceId={workspaceId} />
       ) : (
         <>
           <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: 12, borderRadius: "var(--r3)", background: "var(--bg-0)" }}>
@@ -303,6 +486,7 @@ export function AreaRail({ area, page, pageFailed, onRetry, connections, fan, ki
           <a href={`/?view=discover&tab=discover&id=${encodeURIComponent(area.id)}`} className="aug-fs-sm">Open its page in Discover</a>
         </>
       )}
+      </RailHead>
     </div>
   );
 }
@@ -379,178 +563,5 @@ export function AreaFan({ area, parent, siblings, fan, subAreas, size, zoom, kin
         <Circle key={c.id} disc={zd(L.subs[n])} area={c} note={things(c)} testId={`atlas-fan-child-${c.id}`} onClick={() => onPickArea(c)} />
       ))}
     </div>
-  );
-}
-
-// ── the right panel ─────────────────────────────────────────────────────────────────────────────────────────────────
-
-function Fact({ label, value }: { label: string; value: string }) {
-  return (
-    <>
-      <span className="aug-fs-xs" style={MUTED}>{label}</span>
-      <span className="aug-fs-sm" style={{ color: "var(--t1)", wordBreak: "break-word" }}>{value}</span>
-    </>
-  );
-}
-
-const plainKey = (k: string) => k.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
-
-/** An Area, opened on the right (the user, 2026-11-25: "panels on the right side with the artefact/circle clicked upon"):
- *  what it is, who answers for it, what it holds, the month's answers that drew on it, what waits in it. */
-function AreaCard({ area, connections }: { area: AreaLike; connections: { id: string; name: string }[] }) {
-  const on = connections.filter((c) => (area.connections ?? []).includes(c.id)).map((c) => c.name);
-  return (
-    <div data-testid="atlas-open-area" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      <span style={{ ...ROW, gap: 10 }}>
-        <IconSquare name={areaIcon(area.icon)} size={28} tone={areaTone(area.id)} />
-        <span className="aug-fs-h2" style={{ color: "var(--t1)", fontWeight: 600 }}>{area.name}</span>
-      </span>
-      {area.question && <span className="aug-fs-sm" style={{ color: "var(--t2)" }}>{area.question}</span>}
-      {area.description && <span className="aug-fs-sm" style={{ color: "var(--t1)", whiteSpace: "pre-wrap" }}>{area.description}</span>}
-      <div style={{ display: "grid", gridTemplateColumns: "120px 1fr", gap: "6px 10px", alignItems: "baseline" }}>
-        <Fact label="Who answers for it" value={area.business_owners || area.technical_owners
-          ? ownersLine({ business_owners: area.business_owners ?? [], technical_owners: area.technical_owners ?? [] }) : "not read"} />
-        {area.answers !== undefined && <Fact label="This month" value={`${countNoun(area.answers, "answer")} drew on it`} />}
-        {area.counts && <Fact label="Holds" value={holdsWords(area.counts) || "nothing yet"} />}
-        {area.review !== undefined && <Fact label="Waiting" value={waitingWords(area.review ?? null, area.learned ?? null)} />}
-        {on.length > 0 && <Fact label="On" value={on.join(", ")} />}
-      </div>
-      <Button size="sm" variant="secondary" style={{ alignSelf: "flex-start" }}
-        onClick={() => openInApp(`/?view=discover&tab=discover&id=${encodeURIComponent(area.id)}`)}>
-        Open its page in Discover <Icon name="external" size={12} />
-      </Button>
-    </div>
-  );
-}
-
-/** An entity of an Area, opened on the right: what it is, its key, how many there are, what it reads and links to. */
-function EntityCard({ row, connection }: { row: TypeMapRow; connection: { id: string; name: string } }) {
-  return (
-    <div data-testid="atlas-open-entity" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      <span style={{ ...ROW, gap: 8 }}>
-        <Chip tone="plain">Entity</Chip>
-        <span className="aug-fs-xs" style={MUTED}>{connection.name}</span>
-      </span>
-      <span className="aug-fs-h2" style={{ color: "var(--t1)", fontWeight: 600 }}>{row.display_name}</span>
-      <div style={{ display: "grid", gridTemplateColumns: "120px 1fr", gap: "6px 10px", alignItems: "baseline" }}>
-        <Fact label="How many" value={row.rows === null || row.rows === undefined ? "not counted" : formatCount(row.rows)} />
-        <Fact label="Its key" value={row.key ? `${row.key}${row.key_verified ? " — proved unique" : row.key_verified === false ? " — not unique" : ""}` : "none yet"} />
-        <Fact label="Read from" value={row.table || "—"} />
-        <Fact label="Properties" value={formatCount(row.properties ?? 0)} />
-        <Fact label="Links" value={`${formatCount(row.links ?? 0)}, ${formatCount(row.traversable_links ?? 0)} followed by answers`} />
-        <Fact label="Metrics" value={formatCount(row.metrics ?? 0)} />
-        <Fact label="Actions" value={formatCount(row.actions ?? 0)} />
-      </div>
-      <Button size="sm" variant="secondary" style={{ alignSelf: "flex-start" }}
-        onClick={() => openInApp(`/?tab=ontology&conn=${encodeURIComponent(connection.id)}`)}>
-        Open {connection.name}&apos;s ontology <Icon name="external" size={12} />
-      </Button>
-    </div>
-  );
-}
-
-function ItemCard({ item }: { item: DiscoverItem }) {
-  const mark = markOf(item);
-  const facts = Object.entries(item.detail ?? {})
-    .filter(([, v]) => (typeof v === "string" || typeof v === "number") && String(v).trim() !== "")
-    .slice(0, 8);
-  return (
-    <div data-testid="atlas-open-item" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      <span style={{ ...ROW, gap: 8 }}>
-        <span style={{ ...ROW, gap: 6 }}><KindDot tone={KIND_TONE[item.kind]} /><Chip tone="plain">{kindWord(item.kind)}</Chip></span>
-        {mark && <Chip tone={mark.tone === "up" ? "up" : mark.tone === "amber" ? "amber" : "plain"}>{mark.word}</Chip>}
-      </span>
-      <span className="aug-fs-h2" style={{ color: "var(--t1)", fontWeight: 600, wordBreak: "break-word" }}>{item.name}</span>
-      {item.line && <span className="aug-fs-sm" style={{ color: "var(--t2)" }}>{item.line}</span>}
-      <div style={{ display: "grid", gridTemplateColumns: "120px 1fr", gap: "6px 10px", alignItems: "baseline" }}>
-        <Fact label="Used this month" value={usageLine(item.use) || (item.use === undefined ? "not measured for this kind" : "not used this month")} />
-        {item.connection_name && <Fact label="Connection" value={item.connection_name} />}
-        {item.area_how && <Fact label="In this Area" value={item.area_how} />}
-        {item.owner && <Fact label="Owner" value={item.owner} />}
-        {item.updated_at && <Fact label="Updated" value={relTime(item.updated_at)} />}
-        {item.certification?.status && (
-          <Fact label="Certification" value={[item.certification.status, item.certification.by && `by ${item.certification.by}`,
-            item.certification.why].filter(Boolean).join(" · ")} />
-        )}
-        {facts.map(([k, v]) => <Fact key={k} label={plainKey(k)} value={String(v)} />)}
-      </div>
-      {item.href && (
-        <Button size="sm" variant="secondary" style={{ alignSelf: "flex-start" }} onClick={() => openInApp(item.href)}>
-          Open its page <Icon name="external" size={12} />
-        </Button>
-      )}
-    </div>
-  );
-}
-
-function LearnedCard({ o, areas, areaName }: {
-  o: Extract<Opened, { what: "learned" }>; areas: { id: string; name: string }[]; areaName: (id: string) => string;
-}) {
-  const [promoting, setPromoting] = useState(false);
-  const [promoted, setPromoted] = useState<Promoted | null>(null);
-  const i = o.item;
-  return (
-    <div data-testid="atlas-open-learned" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      <span style={{ ...ROW, gap: 8 }}>
-        <span style={{ ...ROW, gap: 6 }}><KindDot tone={KIND_TONE.learned} /><Chip tone="plain">{LEARNED_WORDS[i.kind] ?? i.kind}</Chip></span>
-        <span className="aug-fs-xs" style={MUTED}>{o.connName}</span>
-      </span>
-      <span className="aug-fs-chrome" style={{ color: "var(--t1)", wordBreak: "break-word" }}>{i.text}</span>
-      <div style={{ display: "grid", gridTemplateColumns: "120px 1fr", gap: "6px 10px", alignItems: "baseline" }}>
-        <Fact label="Where it stands" value={i.why} />
-        <Fact label="Where it came from" value={whereFrom(i)} />
-        <Fact label="What it read" value={i.tables.length ? i.tables.join(", ") : "names no table"} />
-        <Fact label="Its Area" value={i.area ? areaName(i.area) : "in no Area"} />
-        <Fact label="Used in answers" value={i.uses == null ? "not counted yet" : formatCount(i.uses)} />
-        {i.times > 1 && <Fact label="Said" value={`${i.times} times`} />}
-      </div>
-      {promoted ? (
-        <span className="aug-fs-sm" data-testid="atlas-promoted" style={{ color: "var(--t2)" }}>
-          {promoted.suggested ? `“${promoted.term}” is already defined — filed as a suggested edit for its owner. `
-            : `Drafted as “${promoted.term}”. `}
-          <Button size="xs" variant="ghost" onClick={() => openInApp(promoted.href)}>Open it</Button>
-        </span>
-      ) : i.kind !== "trusted_query" && (
-        promoting ? (
-          <PromoteForm connId={o.connId} item={i} areas={areas} onDone={(p) => { setPromoted(p); setPromoting(false); }}
-            onCancel={() => setPromoting(false)} />
-        ) : (
-          <Button size="sm" variant="secondary" style={{ alignSelf: "flex-start" }} onClick={() => setPromoting(true)}>
-            Promote to a Definition
-          </Button>
-        )
-      )}
-    </div>
-  );
-}
-
-export function OpenPanel({ open, active, onActive, onClose, areas, connections = [] }: {
-  open: Opened[]; active: string | null; onActive: (key: string) => void; onClose: (key: string) => void;
-  areas: { id: string; name: string }[]; connections?: { id: string; name: string }[];
-}) {
-  const shown = open.find((o) => o.key === active) ?? open[open.length - 1];
-  const areaName = (id: string) => areas.find((a) => a.id === id)?.name ?? id;
-  return (
-    <aside aria-label="What is open" data-testid="atlas-open-panel" style={{ flex: "1 1 340px", maxWidth: 420, minWidth: 0, maxHeight: "100%",
-      background: "var(--bg-2)", padding: "10px 16px 20px", display: "flex", flexDirection: "column", gap: 12, overflowY: "auto",
-      boxSizing: "border-box" }}>
-      <div role="tablist" aria-label="Open things" style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-        {open.map((o) => (
-          <span key={o.key} style={{ ...ROW, gap: 0, borderRadius: "var(--r2)", background: o.key === shown?.key ? "var(--bg-0)" : undefined }}>
-            <Button role="tab" aria-selected={o.key === shown?.key} variant="ghost" size="xs" onClick={() => onActive(o.key)}
-              title={o.title} style={{ maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}>
-              {o.title}
-            </Button>
-            <Button variant="ghost" size="icon-xs" aria-label={`Close ${o.title}`} onClick={() => onClose(o.key)}>
-              <Icon name="close" size={11} />
-            </Button>
-          </span>
-        ))}
-      </div>
-      {shown && (shown.what === "area" ? <AreaCard key={shown.key} area={shown.area} connections={connections} />
-        : shown.what === "entity" ? <EntityCard key={shown.key} row={shown.row} connection={shown.connection} />
-        : shown.what === "item" ? <ItemCard key={shown.key} item={shown.item} />
-        : <LearnedCard key={shown.key} o={shown} areas={areas} areaName={areaName} />)}
-    </aside>
   );
 }

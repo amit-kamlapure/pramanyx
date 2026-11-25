@@ -19,8 +19,11 @@ import { AreaRelationships } from "@/components/ontology/AreaRelationships";
 import { PromotedFindings, WhereItLives } from "@/components/ontology/AtlasKnows";
 import { Loading, ReadFailed } from "@/components/ui/states";
 import {
-  AreaFan, AreaRail, areaOpened, entityOpened, OpenPanel, readLearnedIn, ReviewList, withOpened, type AreaLike, type LearnedHere, type Opened,
+  AreaFan, AreaRail, areaOpened, entityOpened, RailHead, readLearnedIn, ReviewList, withOpened, type AreaLike, type LearnedHere, type Opened,
 } from "@/components/ontology/AreaDrill";
+import { OpenPanel, subjectOf, type OpenedContext } from "@/components/ontology/OpenedPages";
+import { useInShell } from "@/components/shell/PageChrome";
+import { useInspector } from "@/components/shell/Inspector";
 import { areaIcon } from "@/lib/areaIcons";
 import {
   areaTone, bounds, changeWords, fanOf, packBubbles, tint, radiusFor, R_MIN, share, waiting, waitingWords, type Atlas, type AtlasArea, type FanKey,
@@ -150,6 +153,9 @@ export function AreaMap({ connectionId }: {
   // an opened Area's canvas: what it holds, fanned out by kind — or its Relationships, the Business Atlas inside it (A6)
   const [view, setView] = useState<"holds" | "relationships">("holds");
   const workspaceId = getActiveWorkspace() || undefined;
+  const inShell = useInShell();
+  const inspector = useInspector();
+  const closeAll = inspector.closeAll;
 
   const load = useCallback(() => {
     readAtlas<Atlas>(getActiveWorkspace() || undefined).then((a) => { setAtlas(a); setFailed(""); })
@@ -159,10 +165,10 @@ export function AreaMap({ connectionId }: {
   // the workspace chosen (or changed) after the map was read: read it again for that workspace, and close what was open,
   // which belonged to the other one
   useEffect(() => {
-    const again = () => { setPicked(null); setOpen([]); setActive(null); setPage(null); load(); };
+    const again = () => { setPicked(null); setOpen([]); setActive(null); setPage(null); closeAll(); load(); };
     window.addEventListener(WORKSPACE_EVENT, again);
     return () => window.removeEventListener(WORKSPACE_EVENT, again);
-  }, [load]);
+  }, [load, closeAll]);
   const readPage = useCallback((id: string, fresh = false) => {
     setPage(null); setPageFailed("");
     readDiscoverArea(id, "", getActiveWorkspace() || undefined, fresh, true)
@@ -222,17 +228,26 @@ export function AreaMap({ connectionId }: {
       readLearnedIn(chosen.id, conns).then(setLearned).catch(() => setLearned("failed"));
     }
   };
-  const openOne = (o: Opened) => { setOpen((xs) => withOpened(xs, o)); setActive(o.key); };
+  // Inside the app a thing opens as a tab of the shell's one side panel, a page of its own (the user, 2026-11-25: "several
+  // artefacts … open up in the right panel in the form of tabs"); outside it the Areas keep a panel of their own.
+  const openOne = (o: Opened) => {
+    if (inShell) { inspector.inspect(subjectOf(o, openedCtx)); return; }
+    setOpen((xs) => withOpened(xs, o)); setActive(o.key);
+  };
   const closeOne = (key: string) => {
     setOpen((xs) => xs.filter((x) => x.key !== key));
     if (active === key) setActive(null);
   };
-  const areaList = [...atlas.areas, ...atlas.quiet].map((a) => ({ id: a.id, name: a.name }));
   // every Area this page knows — on the map, opened as a sub-Area, or holding nothing — for an opened Area's parent and
   // its siblings: the canvas opens to one side of the parent (the user, 2026-11-25)
   const known = new Map<string, AreaLike>([...atlas.quiet.map((q) => [q.id, { id: q.id, name: q.name, question: q.question }] as const),
     ...[...children.values()].map((c) => [c.id, c] as const), ...atlas.areas.map((a) => [a.id, a] as const)]);
+  // what a page opened on the right reads of this one: the Areas by id (for their chips), the connections by id
+  const openedCtx: OpenedContext = { areas: [...known.values()], connections: atlas.connections };
   const parentOf = chosen?.parent ? known.get(chosen.parent) ?? null : null;
+  // the Areas it sits inside, the outermost first — its place in the breadcrumb
+  const ancestors: AreaLike[] = [];
+  for (let up = parentOf; up && !ancestors.some((a) => a.id === up?.id); up = up.parent ? known.get(up.parent) ?? null : null) ancestors.unshift(up);
   const siblings = parentOf ? [...known.values()].filter((a) => a.parent === parentOf.id) : [];
   /** A circle clicked: that Area opened, and its tab on the right with what it is (the user: "panels on the right side
    *  with the artefact/circle clicked upon"). */
@@ -243,12 +258,12 @@ export function AreaMap({ connectionId }: {
       <aside aria-label="The Areas at a glance" style={{ flex: "1 1 320px", maxWidth: 380, minWidth: 0, maxHeight: "100%", background: "var(--bg-2)",
         padding: "14px 16px 20px", display: "flex", flexDirection: "column", gap: 16, overflowY: "auto", boxSizing: "border-box" }}>
         {chosen ? (
-          <AreaRail area={chosen} page={page} pageFailed={pageFailed} onRetry={() => readPage(chosen.id, true)}
+          <AreaRail area={chosen} ancestors={ancestors} page={page} pageFailed={pageFailed} onRetry={() => readPage(chosen.id, true)}
             connections={atlas.connections} fan={fan} kind={kind} onKind={chooseKind} learned={learned} onOpen={openOne}
             onPickArea={openArea} onBack={() => pick(null)} workspaceId={workspaceId}
             onSaved={() => { readPage(chosen.id, true); load(); }} />
         ) : (
-          <>
+          <RailHead crumbs={[{ label: "Ontology" }]} workspaceId={workspaceId} onOpen={openOne}>
             <div role="tablist" aria-label="The side panel" style={{ ...ROW, gap: 18 }}>
               {(["overview", "review"] as const).map((t) => (
                 <Button key={t} role="tab" aria-selected={tab === t} variant="ghost" size="xs" onClick={() => setTab(t)}
@@ -258,7 +273,7 @@ export function AreaMap({ connectionId }: {
               ))}
             </div>
             {tab === "overview" ? <Overview atlas={atlas} standing={connectionId} workspaceId={workspaceId} /> : <Review atlas={atlas} onPick={(id) => { pick(id); setKind("review"); }} />}
-          </>
+          </RailHead>
         )}
       </aside>
       <section ref={canvas} aria-label="The Areas of the business" style={{ flex: "999 1 480px", minWidth: 0, minHeight: 520, maxHeight: "100%", position: "relative",
@@ -324,7 +339,7 @@ export function AreaMap({ connectionId }: {
         </div>
       </section>
       {open.length > 0 && (
-        <OpenPanel open={open} active={active} onActive={setActive} onClose={closeOne} areas={areaList} connections={atlas.connections} />
+        <OpenPanel open={open} active={active} onActive={setActive} onClose={closeOne} ctx={openedCtx} />
       )}
     </div>
   );
