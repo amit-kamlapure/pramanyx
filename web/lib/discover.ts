@@ -78,11 +78,21 @@ export interface DiscoverUse {
   people: number | null;
   unattributed: number | null;
   last: string | null;
+  /** The answers that drew on it this month (2026-11-25, A1): a Definition, document or trusted query picked for an
+   *  answer's question, a metric whose formula its SQL used — beside its opens, never added into them. */
+  answers?: number;
 }
 
 /** A thing's use this month in words, for its row: nothing when it was not used, or is not measured. */
 export function usageLine(u: DiscoverUse | null | undefined): string {
-  if (!u || !u.count) return "";
+  if (!u) return "";
+  const answers = u.answers ? `used in ${u.answers === 1 ? "one answer" : `${formatCount(u.answers)} answers`}` : "";
+  if (!u.count) return answers ? `${answers} this month` : "";
+  const line = openedLine(u);
+  return answers ? `${line} · ${answers}` : line;
+}
+
+function openedLine(u: DiscoverUse): string {
   const times = u.count === 1 ? "once" : `${formatCount(u.count)} times`;
   const did = u.measured === "reads" ? `read ${times} this month`
     : u.measured === "uses" ? `answered ${u.count === 1 ? "one question" : `${formatCount(u.count)} questions`} this month`

@@ -586,11 +586,12 @@ def get_exploration_findings(conn_id: str, schema: str | None = None, confirmed:
         result["insights"] = trimmed.kept
         result["withheld"] = trimmed.to_dict()
     if confirmed:
+        from pramanyx.explorer.store import FINDINGS
         from pramanyx.record.writers import confirmed_explorer_findings
         sure = confirmed_explorer_findings(conn_id)
-        kept = [f for f in result["insights"] or [] if str(f.get("id") or "") in sure]
-        result["unconfirmed_withheld"] = len(result["insights"] or []) - len(kept)
-        result["insights"] = kept
+        kept = [f for f in result[FINDINGS] or [] if str(f.get("id") or "") in sure]
+        result["unconfirmed_withheld"] = len(result[FINDINGS] or []) - len(kept)
+        result[FINDINGS] = kept
     # `findings` is the current key. The retired one mirrors the SAME list object and is kept
     # for one release; mirrored AFTER the schema filter so neither can serve unscoped rows.
     result["findings"] = result["insights"]

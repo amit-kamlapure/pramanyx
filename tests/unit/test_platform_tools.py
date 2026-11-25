@@ -134,7 +134,8 @@ def test_findings_hand_the_agent_only_what_a_person_confirmed(monkeypatch):
     """The user, 2026-11-17: a finding reaches an answer only once a person confirmed it, on every path — the agent's
     own findings tool too. The rest are counted, never shown, so the agent cannot lean on them or call them none."""
     monkeypatch.setattr("pramanyx.explorer.store.schema_run_keys", lambda cid: [])
-    monkeypatch.setattr("pramanyx.explorer.store.load", lambda cid: {"phase": "complete", "insights": [
+    from pramanyx.explorer.store import FINDINGS
+    monkeypatch.setattr("pramanyx.explorer.store.load", lambda cid: {"phase": "complete", FINDINGS: [
         {"id": "sure", "finding": "confirmed"}, {"id": "maybe", "finding": "computed once"},
         {"id": "gone", "finding": "dismissed", "invalid": True}]})
     monkeypatch.setattr("pramanyx.record.writers.confirmed_explorer_findings", lambda cid: {"sure"})

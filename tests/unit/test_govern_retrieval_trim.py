@@ -301,9 +301,10 @@ def test_the_findings_read_withholds_a_finding_over_a_restricted_table_and_says_
 def test_an_agents_findings_read_keeps_what_a_person_confirmed_and_counts_the_rest(monkeypatch):
     """The user, 2026-11-17: findings reach an answer "confirmed only", everywhere. ``confirmed=true`` is the MCP
     tool's read; the page a person confirms them on still reads them all."""
+    from pramanyx.explorer.store import FINDINGS
     from pramanyx.routers import exploration as X
-    state = {"phase": "complete", "insights": [{"id": "a", "finding": "Orders fell 2%"},
-                                               {"id": "b", "finding": "Returns rose 1%"}]}
+    state = {"phase": "complete", FINDINGS: [{"id": "a", "finding": "Orders fell 2%"},
+                                             {"id": "b", "finding": "Returns rose 1%"}]}
     monkeypatch.setattr(X, "_load_state", lambda conn, schema: state)
     monkeypatch.setattr("pramanyx.routers._shared.canonical_schema", lambda conn, schema: schema)
     monkeypatch.setattr(X, "_needs_filter", lambda conn, schema: False)

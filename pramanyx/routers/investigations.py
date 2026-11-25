@@ -286,6 +286,11 @@ def _note_finding_on_graph(*, connection_id: str, receipt_id: str | None,
         logger.debug("graph finding write failed", exc_info=True)
 
 
+def _given_summary(given: dict) -> dict:
+    from pramanyx.trust.answer_inputs import summary
+    return summary(given)
+
+
 def _write_answer_receipt(*, kind: str, natural_key: str, question: str,
                           sqls: list[str], headline: str, schema: str,
                           connection_id: str, canvas_id: str = "",
@@ -356,6 +361,18 @@ def _write_answer_receipt(*, kind: str, natural_key: str, question: str,
                      counter="chat.receipt_metrics")
         for e in (guard_edges or []):
             lineage.append(e)
+        # A1 (2026-11-25) — what this answer was GIVEN (the Definitions, trusted queries and documents picked for its
+        # question, the confirmed findings every answer reads), recorded as it was made (`trust.answer_inputs`), beside
+        # what its SQL USED above. Consumed here, so the next answer in this context starts from nothing.
+        _given: dict = {}
+        try:
+            from pramanyx.trust.answer_inputs import consume, lineage_rows
+            _given = consume()
+            lineage.extend(lineage_rows(_given))
+        except Exception as exc:
+            from pramanyx.kernel.errors import tolerate
+            tolerate(exc, "what the answer was given is best-effort on the receipt; it still writes without it",
+                     counter="chat.receipt_given")
         # Wave P1 — the graph nodes the planner was actually SHOWN before writing this
         # SQL. `last_cited_nodes()` has been populated on every read-back since Wave C2
         # and read by nothing but its own tests: the receipt's own flag description
@@ -446,9 +463,18 @@ def _write_answer_receipt(*, kind: str, natural_key: str, question: str,
              **({"resolved_ambiguities": _resolved_ambig} if _resolved_ambig else {}),
              **({"learning": _learning} if _learning else {}),
              **({"activations": _activations} if _activations else {}),
+             **({"given": _given_summary(_given)} if _given else {}),
              **(payload_extra or {})},
             conn_id=connection_id, canvas_id=canvas_id or None, lineage=lineage,
         )
+        # A1 — each thing picked for this question, and each governed metric its SQL used, is used in one more answer
+        # (Discover's "used in N answers"): counted once the answer stands on a receipt, never for one that failed.
+        try:
+            from pramanyx.trust.answer_inputs import count_uses
+            count_uses(_given, _metrics_used, connection_id)
+        except Exception as exc:
+            from pramanyx.kernel.errors import tolerate
+            tolerate(exc, "an answer's uses are best-effort; the receipt is written", counter="chat.receipt_uses")
         if enf is not None:
             Ledger.default().emit("metric.enforcement", enf,
                                   conn_id=connection_id, canvas_id=canvas_id or None)
@@ -1991,6 +2017,10 @@ def _answer_core(
     find again. It is a label only. Everything that decides the answer still reads
     ``question``, so an unset ``persist_question`` leaves every caller byte-identical.
     """
+    # A1 (2026-11-25): what this answer is given is recorded from here — every retriever below notes what it put in
+    # front of the model, and the receipt carries it (`trust.answer_inputs`).
+    from pramanyx.trust.answer_inputs import start_recording
+    start_recording()
     #: Guard receipts go BOTH ways, through one helper, so the frame and the return
     #: value cannot drift apart: nine sites, one place that decides what a receipt is.
     receipts: list[dict] = []
@@ -2601,11 +2631,8 @@ def _answer_core(
                 prompt = _tblk + "\n" + prompt
                 _trusted_used = [{"question": tq.question, "note": tq.note, "score": sc}
                                  for tq, sc in _tmatches]
-                # each trusted query that guided this answer is used (Discover D5: what it is for, counted)
-                from pramanyx.discover.items import trusted_query_id
-                from pramanyx.discover.usage import note_used
-                for tq, _sc in _tmatches:
-                    note_used("trusted_query", f"{connection_id}/{trusted_query_id(connection_id, tq)}", connection_id)
+                # each trusted query that guided this answer is counted as used once its receipt is written (A1:
+                # `trust.answer_inputs`, noted by `build_trusted_block`), on this path and the deep run's alike
         except Exception:
             _trusted_used = []
 
@@ -5084,6 +5111,10 @@ async def _stream_investigation(
         timed_out = False
         report_emitted = False  # did the graph reach a terminal synthesis node?
 
+        # A1 (2026-11-25): what the deep run is given is recorded from here; the graph's nodes run in a context copied
+        # just below, which shares this record, and the receipt carries it (`trust.answer_inputs`).
+        from pramanyx.trust.answer_inputs import start_recording
+        start_recording()
         async for event in _investigation_stream(agent.stream(initial_state, config={"configurable": {"thread_id": inv_id}}),
                                                  held=_es.held()):
             # A supervised kernel job (K1) completes SERVER-SIDE even if the streaming client goes away: a
@@ -5511,6 +5542,9 @@ async def _stream_resume(inv_id: str, feedback: str, request: Request,
         _TIMEOUT = int(os.getenv("PRAMANYX_TIMEOUT_SECONDS", "600"))
         deadline = time.monotonic() + _TIMEOUT
 
+        # A1 (2026-11-25): a resumed run records what its remaining nodes are given, as a started one does
+        from pramanyx.trust.answer_inputs import start_recording
+        start_recording()
         async for event in _investigation_stream(agent.stream(None, config=config),
                                                  declared=merged.get("declared_rules"),
                                                  held=_resumed_scope.held()):

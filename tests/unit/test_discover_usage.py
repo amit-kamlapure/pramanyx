@@ -79,8 +79,9 @@ def test_use_is_reads_for_a_table_and_opens_for_what_is_opened(_fresh, monkeypat
     assert use["c1.s.dc"]["count"] == 0
     assert use["c1:user:ana:sales"] == {"measured": "opens", "count": 2, "people": 2, "unattributed": 0,
                                         "last": "2026-11-24T10:01:00"}
+    # a metric is also counted by the answers whose SQL used it (A1, 2026-11-25) — none here, and said as 0
     assert use["cv1"]["count"] == 0 and use["c1/revenue"] == {"measured": "opens", "count": 0, "people": 0,
-                                                               "unattributed": 0, "last": None} and said == []
+                                                               "unattributed": 0, "last": None, "answers": 0} and said == []
 
 
 def test_reads_not_read_yet_are_said_and_read_off_the_request(_fresh, monkeypatch):

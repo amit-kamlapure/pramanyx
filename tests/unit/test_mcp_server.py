@@ -286,7 +286,8 @@ def test_list_findings_asks_for_confirmed_only_and_says_what_waits():
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen["query"] = str(request.url.query)
-        return httpx.Response(200, json={"phase": "complete", "insights": [{"id": "i1", "finding": "f"}],
+        from pramanyx.explorer.store import FINDINGS
+        return httpx.Response(200, json={"phase": "complete", FINDINGS: [{"id": "i1", "finding": "f"}],
                                          "unconfirmed_withheld": 3})
 
     res = _run(PramanyxClient(base_url="http://test", transport=httpx.MockTransport(handler)).list_findings("conn1"))

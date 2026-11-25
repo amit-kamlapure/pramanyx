@@ -665,6 +665,10 @@ def build_external_context_section(query: str, top_k: int = 4,
     if not pinned_hits and not hits:
         return ""
 
+    # each document a passage of which is put in front of the model writing an answer (A1: "used in N answers")
+    from pramanyx.trust.answer_inputs import note_given
+    for h in pinned_hits + hits:
+        note_given("document", str(h.get("doc_id") or ""), str(h.get("title") or h.get("filename") or ""))
     lines: list[str] = []
     if held_back:
         lines.append(f"({held_back} passage{'s' if held_back != 1 else ''} from deprecated documents "

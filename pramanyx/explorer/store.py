@@ -431,6 +431,10 @@ def render_exploration_annotations(connection_id: str) -> str:
                      counter="explorer.confirmed_findings")
             confirmed = set()
         kept = [ins for ins in insights if str(ins.get("id") or "") in confirmed]
+        # given to an answer, and said so on its receipt — every answer reads them all, so not counted as a use (A1)
+        from pramanyx.trust.answer_inputs import note_given
+        for ins in kept:
+            note_given("finding", str(ins.get("id") or ""), str(ins.get("finding") or "")[:120])
         by_domain: dict[str, list] = {}
         for ins in kept:
             d = ins.get("domain", "General")

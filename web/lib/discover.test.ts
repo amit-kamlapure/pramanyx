@@ -88,6 +88,12 @@ describe("a thing's use this month, in words (D5)", () => {
       .toBe("read 9 times this month · who read it is not recorded");
     expect(usageLine({ measured: "opens", count: 1, people: 1, unattributed: 0, last: null })).toBe("opened once this month by one person");
     expect(usageLine({ measured: "opens", count: 0, people: 0, unattributed: 0, last: null })).toBe("");
+    // A1 (2026-11-25): the answers that drew on it, beside its opens — never added into them
+    expect(usageLine({ measured: "opens", count: 3, people: 1, unattributed: 0, last: null, answers: 2 }))
+      .toBe("opened 3 times this month by one person · used in 2 answers");
+    expect(usageLine({ measured: "opens", count: 0, people: 0, unattributed: 0, last: null, answers: 1 }))
+      .toBe("used in one answer this month");
+    expect(usageLine({ measured: "opens", count: 0, people: 0, unattributed: 0, last: null, answers: 0 })).toBe("");
     expect(usageLine(null)).toBe("");
   });
 });

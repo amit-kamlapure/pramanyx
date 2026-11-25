@@ -413,6 +413,12 @@ def retrieve_for_question(question: str, connection_id: str, top_k: int = _TOP_K
     entries = sorted(_relevant_entries(question, connection_id, top_k),
                      key=lambda e: (_TIER_ORDER.get(str((e.standing or {}).get("tier") or ""), 2),
                                     _behind(e, connection_id)))
+    # each Definition put in front of the model writing an answer, as Discover names it (A1: "used in N answers")
+    from pramanyx.trust.answer_inputs import note_given
+    for e in entries:
+        title = str(getattr(e, "title", "") or "")
+        if title:
+            note_given("definition", f"{connection_id}/{title}/{getattr(e, 'area', '') or ''}", title)
     rivals = ""
     try:
         from pramanyx.semantic.areas import rival_meanings, rival_meanings_block

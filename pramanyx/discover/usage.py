@@ -43,6 +43,11 @@ MEASURED = {"table": "reads", "dashboard": "opens", "canvas": "opens", "agent": 
             # a trusted query is used when it guides an answer, which is what it is for (`note_used`)
             "trusted_query": "uses"}
 
+#: What an answer is counted as using (2026-11-25, the Atlas-by-Area plan's A1 — `trust.answer_inputs`): a thing picked
+#: for its question, and a governed metric its SQL used. Kept apart from the opens of the same thing: an answer that
+#: drew on a Definition is not a person opening it.
+USED_IN_ANSWERS = ("metric", "definition", "document", "trusted_query")
+
 _seen: dict[tuple, float] = {}
 _seen_lock = threading.Lock()
 #: Whether this process has read the last ten minutes' opens back from the journal (`_seed_seen`).
@@ -85,9 +90,10 @@ def note_opened(request: Any, kind: str, ref: str, connection_id: str = "") -> N
 
 
 def note_used(kind: str, ref: str, connection_id: str = "") -> None:
-    """A thing used for what it is for — a trusted query that guided an answer — kept in the journal under who the
-    request or the job acts for. Every use counts: an answer is not a page read again. Best effort."""
-    if not ref or MEASURED.get(kind) != "uses":
+    """A thing used for what it is for — given to an answer that stands on a receipt (`trust.answer_inputs`) — kept in
+    the journal under who the request or the job acts for. Every use counts: an answer is not a page read again. Best
+    effort."""
+    if not ref or kind not in USED_IN_ANSWERS:
         return
     try:
         from pramanyx.kernel.ledger import Ledger
@@ -233,14 +239,16 @@ def use_of(items: Iterable[Any], *, wait: bool = False) -> tuple[dict[str, dict]
             tables.setdefault(i.connection_id, {})[i.id] = [i.name]
     reads, said = table_reads(tables, wait=wait)
     opened: dict[tuple[str, str], dict] = {}
+    used: dict[tuple[str, str], dict] = {}
     opens_read = True
     try:
-        for o in [*opens(), *opens(kind=USED)]:
-            row = opened.setdefault((o["kind"], o["ref"]), {"opened": 0, "people": set(), "last": ""})
-            row["opened"] += 1
-            if o["by"]:
-                row["people"].add(o["by"].lower())
-            row["last"] = max(row["last"], o["at"])
+        for into, kind in ((opened, OPENED), (used, USED)):
+            for o in opens(kind=kind):
+                row = into.setdefault((o["kind"], o["ref"]), {"opened": 0, "people": set(), "last": ""})
+                row["opened"] += 1
+                if o["by"]:
+                    row["people"].add(o["by"].lower())
+                row["last"] = max(row["last"], o["at"])
     except Exception as exc:  # noqa: BLE001 — opens unread are said, not counted as none
         from pramanyx.kernel.errors import tolerate
         tolerate(exc, "discover: the journal's opens could not be read", counter="discover.opens")
@@ -254,14 +262,20 @@ def use_of(items: Iterable[Any], *, wait: bool = False) -> tuple[dict[str, dict]
             out[i.id] = {"measured": "reads", "count": int(r.get("reads") or 0), "people": r.get("readers"),
                          "unattributed": r.get("unattributed"), "last": r.get("last_read") or None}
         elif how in ("opens", "uses") and opens_read:
-            o = opened.get((i.kind, i.id))
+            o = (used if how == "uses" else opened).get((i.kind, i.id))
             out[i.id] = {"measured": how, "count": o["opened"] if o else 0, "people": len(o["people"]) if o else 0,
                          "unattributed": 0, "last": (o["last"] or None) if o else None}
+            if how == "opens" and i.kind in USED_IN_ANSWERS:
+                # the answers that drew on it this month, beside its opens (A1) — never added into them
+                u = used.get((i.kind, i.id))
+                out[i.id]["answers"] = u["opened"] if u else 0
     return out, said
 
 
 def score(use: Optional[dict]) -> int:
-    return int((use or {}).get("count") or 0)
+    """How much a thing was used this month, for "most used": its reads, opens or uses, and the answers that drew on
+    it."""
+    return int((use or {}).get("count") or 0) + int((use or {}).get("answers") or 0)
 
 
 def recently_opened(items: Iterable[Any], person: str, *, limit: int = 6) -> list[Any]:
