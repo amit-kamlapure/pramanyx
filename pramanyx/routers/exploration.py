@@ -524,7 +524,11 @@ def time_to_first_insight_kpi(limit: int = 200):
 
 
 @router.get("/exploration/{conn_id}/findings")
-def get_exploration_findings(conn_id: str, schema: str | None = None):
+def get_exploration_findings(conn_id: str, schema: str | None = None, confirmed: bool = False):
+    """The explorer's findings on a connection. ``confirmed=true`` is an agent's read (the MCP `list_findings` tool):
+    only the findings a person has confirmed — the user, 2026-11-17, "confirmed only", on every path an answer leans
+    on — the rest counted in ``unconfirmed_withheld``, never dropped silently. The page a person confirms them on reads
+    them all."""
     # Single-schema connections resolve to the bare key — same invariant as the briefing.
     from pramanyx.routers._shared import canonical_schema
     schema = canonical_schema(conn_id, schema)
@@ -581,6 +585,12 @@ def get_exploration_findings(conn_id: str, schema: str | None = None):
     if trimmed.trimmed:
         result["insights"] = trimmed.kept
         result["withheld"] = trimmed.to_dict()
+    if confirmed:
+        from pramanyx.record.writers import confirmed_explorer_findings
+        sure = confirmed_explorer_findings(conn_id)
+        kept = [f for f in result["insights"] or [] if str(f.get("id") or "") in sure]
+        result["unconfirmed_withheld"] = len(result["insights"] or []) - len(kept)
+        result["insights"] = kept
     # `findings` is the current key. The retired one mirrors the SAME list object and is kept
     # for one release; mirrored AFTER the schema filter so neither can serve unscoped rows.
     result["findings"] = result["insights"]

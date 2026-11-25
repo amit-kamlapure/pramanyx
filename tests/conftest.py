@@ -649,6 +649,16 @@ def _reset_guard_process_caches():
 
 
 @pytest.fixture(autouse=True)
+def _reset_install_area_names():
+    """Forget the install's one name per Area between tests (`semantic.areas.install_names`, read once a minute). A
+    test's connections are not the next test's: a name read over one test's registry would name the next one's Areas."""
+    from pramanyx.semantic import areas as _areas
+    _areas._names_read.update(at=None, names={})
+    yield
+    _areas._names_read.update(at=None, names={})
+
+
+@pytest.fixture(autouse=True)
 def _reset_migration_report():
     """Clear what this process recorded before its migrations (Arc SV-1). A store held back in one test — the
     damaged-ledger probe holds one back on purpose — would otherwise leave `/health` degraded for every test after it."""

@@ -13,9 +13,14 @@ four, each with its own lifecycle, and this module stores nothing: it reads them
 Each is held to the reader's clearance by the tables it rests on (`govern/retrieval_trim.py`), as the graph slice is;
 what was withheld is counted. Placed in an area by what a person placed its tables in, else by its tables' names. How
 often each was used is not counted yet, and is said so — never a number made up. No model, no warehouse.
+
+One thing learned is one item (2026-11-25, the Atlas-by-Area plan's A0): the same statement booked twice, and one
+re-check's restatement booked under each answer it moved, are folded into one — said with how many times, every ref
+kept in ``also`` — never listed as several things the platform knows.
 """
 from __future__ import annotations
 
+import json
 import re
 from typing import Optional
 
@@ -35,7 +40,31 @@ def _item(*, kind: str, text: str, source: str, author: str, standing: str, as_o
     said, _rank = STANDING.get(standing, (standing, 3))
     return {"kind": kind, "text": text, "source": source, "author": author, "standing": standing, "standing_said": said,
             "as_of": as_of, "tables": sorted({t.rsplit(".", 1)[-1] for t in tables if t}), "lineage": lineage, "ref": ref,
-            "area": "", "uses": None}
+            "area": "", "uses": None, "times": 1, "also": [], "_same": (kind, " ".join(text.lower().split()))}
+
+
+#: How a re-check's restatement ends: the answer it moved, named by that answer's own first words (`record.writers`).
+FIRST_SAID = " First said: "
+
+
+def _fold(items: list[dict]) -> list[dict]:
+    """One item per thing learned, the first of each kept — the list comes in authority order, so the best-standing,
+    newest one speaks for the rest — with how many times it was booked and the others' refs."""
+    kept: dict = {}
+    for i in items:
+        same = kept.get(i["_same"])
+        if same is None:
+            kept[i["_same"]] = i
+            continue
+        same["times"] += 1
+        same["also"].append(i["ref"])
+    out = list(kept.values())
+    for i in out:
+        if i["times"] > 1 and i["_same"][0] == "restated":
+            # one restatement under several answers: what changed, not one of the answers it moved
+            i["text"] = i["text"].split(FIRST_SAID, 1)[0]
+        i.pop("_same", None)
+    return out
 
 
 def learned_items(connection_id: str, *, about: str = "", limit: int = 50) -> dict:
@@ -50,10 +79,14 @@ def learned_items(connection_id: str, *, about: str = "", limit: int = 50) -> di
                 continue
             run = next((w for w in c.warrants if w.kind == "run"), None)
             tables = list(c.extra.get("tables") or []) or _tables_of(run.detail if run else "")
-            items.append(_item(kind="finding" if c.extra.get("writer") == "explorer" else "answer",
-                               text=c.statement.text, source=("the explorer" if c.extra.get("writer") == "explorer" else "an answer"),
-                               author=c.extra.get("approved_by") or c.author, standing=c.tier, as_of=c.as_of,
-                               tables=tables, lineage=[f"{w.kind}:{w.ref}" for w in c.warrants], ref=c.id))
+            item = _item(kind="finding" if c.extra.get("writer") == "explorer" else "answer",
+                         text=c.statement.text, source=("the explorer" if c.extra.get("writer") == "explorer" else "an answer"),
+                         author=c.extra.get("approved_by") or c.author, standing=c.tier, as_of=c.as_of,
+                         tables=tables, lineage=[f"{w.kind}:{w.ref}" for w in c.warrants], ref=c.id)
+            if c.extra.get("restated_by") and c.extra.get("changes"):
+                # the same numbers moved under several answers by one re-check: one thing learned
+                item["_same"] = ("restated", json.dumps(c.extra["changes"], sort_keys=True, default=str))
+            items.append(item)
     for c in C.list_claims(kind="usage", conn_id=connection_id, limit=2000):
         if c.state == "withdrawn":
             continue
@@ -80,8 +113,10 @@ def learned_items(connection_id: str, *, about: str = "", limit: int = 50) -> di
     items = trimmed.kept
     _place(items, connection_id)
     items.sort(key=lambda i: (STANDING.get(i["standing"], ("", 3))[1], -_day(i["as_of"]), i["ref"]))
-    return {"items": items[:limit], "total": len(items), "withheld": trimmed.to_dict() if trimmed.trimmed else None,
-            "uses_counted": False}
+    booked = len(items)
+    items = _fold(items)
+    return {"items": items[:limit], "total": len(items), "folded": booked - len(items),
+            "withheld": trimmed.to_dict() if trimmed.trimmed else None, "uses_counted": False}
 
 
 def _day(as_of: str) -> int:
@@ -114,7 +149,8 @@ def _place(items: list[dict], connection_id: str) -> None:
 def learned_line(item: dict) -> str:
     """One item as a reader is told it: what it says, and how it stands, where it came from and when."""
     area = f" · {item['area']}" if item.get("area") else ""
-    return f"{item['text']} — {item['standing_said']}, from {item['source']}{area}, {item['as_of'] or 'undated'}"
+    times = f" · booked {item['times']} times" if item.get("times", 1) > 1 else ""
+    return f"{item['text']} — {item['standing_said']}, from {item['source']}{area}, {item['as_of'] or 'undated'}{times}"
 
 
 def area_filter(items: list[dict], area: Optional[str]) -> list[dict]:

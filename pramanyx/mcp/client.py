@@ -653,8 +653,10 @@ class PramanyxClient:
         return result
 
     async def list_findings(self, connection: str, *, schema: Optional[str] = None, limit: int = _FINDING_CAP) -> dict:
-        data = await self._get(f"/exploration/{connection}/findings", params={"schema": schema})
+        # Only what a person confirmed (the user, 2026-11-17: findings reach an answer "confirmed only", everywhere).
+        data = await self._get(f"/exploration/{connection}/findings", params={"schema": schema, "confirmed": "true"})
         insights = (data or {}).get("insights") or []
+        waiting = int((data or {}).get("unconfirmed_withheld") or 0)
         trimmed = [
             {
                 "id": i.get("id"), "finding": i.get("finding"), "confidence": i.get("confidence"),
@@ -662,10 +664,14 @@ class PramanyxClient:
             }
             for i in insights[: max(1, int(limit))]
         ]
-        return {
+        out = {
             "connection": connection, "schema": schema, "phase": (data or {}).get("phase"),
-            "count": len(insights), "findings": trimmed,
+            "count": len(insights), "findings": trimmed, "unconfirmed_withheld": waiting,
         }
+        if waiting:
+            out["said"] = (f"{waiting} more the explorer found wait for a person to confirm them; no answer leans on "
+                           "them until then, and neither should you.")
+        return out
 
     async def get_briefing(self, connection: str, *, schema: Optional[str] = None, refresh: bool = False) -> dict:
         data = await self._post(

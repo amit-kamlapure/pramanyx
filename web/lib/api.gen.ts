@@ -7937,7 +7937,13 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Exploration Findings */
+        /**
+         * Get Exploration Findings
+         * @description The explorer's findings on a connection. ``confirmed=true`` is an agent's read (the MCP `list_findings` tool):
+         *     only the findings a person has confirmed — the user, 2026-11-17, "confirmed only", on every path an answer leans
+         *     on — the rest counted in ``unconfirmed_withheld``, never dropped silently. The page a person confirms them on reads
+         *     them all.
+         */
         get: operations["get_exploration_findings_exploration__conn_id__findings_get"];
         put?: never;
         post?: never;
@@ -42520,6 +42526,7 @@ export interface operations {
         parameters: {
             query?: {
                 schema?: string | null;
+                confirmed?: boolean;
             };
             header?: never;
             path: {

@@ -568,10 +568,11 @@ async def list_findings(
     schema: Annotated[Optional[str], Field(description="Optional schema name to scope a multi-schema connection.")] = None,
     limit: Annotated[int, Field(description="Max findings to return (default 25).", ge=1, le=100)] = 25,
 ) -> dict:
-    """List the insights Pramanyx's background explorer has already discovered for a connection
-    — each a verified finding with its confidence, novelty, domain, and the SQL behind it.
-    These are pre-computed (a $0 read), so prefer this before asking Pramanyx to re-derive what
-    it already found. If `count` is 0, the connection hasn't been explored yet — call `explore`.
+    """List the findings Pramanyx's background explorer discovered for a connection that a PERSON HAS CONFIRMED —
+    each with its confidence, novelty, domain, and the SQL behind it. The rest are counted in `unconfirmed_withheld`
+    and never shown: no answer leans on a finding until a person confirms it. Pre-computed (a $0 read), so prefer
+    this before asking Pramanyx to re-derive what it already found. `count` 0 with nothing withheld: the connection
+    hasn't been explored yet — call `explore`.
     """
     return await _client.list_findings(connection, schema=schema, limit=limit)
 

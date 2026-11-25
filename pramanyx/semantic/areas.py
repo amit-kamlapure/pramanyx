@@ -17,6 +17,7 @@ A read of what is stored; no model, no warehouse.
 from __future__ import annotations
 
 import re
+import time
 from typing import Optional
 
 KEY = "area"
@@ -43,6 +44,67 @@ def declarations(workspace_id: Optional[str] = None) -> list:
     return list(getattr(effective_settings(workspace_id), "areas", None) or [])
 
 
+#: How long the install's one name per Area is kept before it is read again: connections and packages change rarely,
+#: and every page over several connections asks for it.
+NAMES_FRESH_S = 60.0
+_names_read: dict = {"at": None, "names": {}}
+
+
+def install_names() -> dict[str, tuple[str, str]]:
+    """``area id → (name, question)``: one name for each package Area across the install (2026-11-25, the Atlas-by-Area
+    plan's A0). Packages share an Area's id, but an industry's package names it in its own words — retail's "Inventory
+    & merchandising" is analytics-base's "Inventory" — and a page over several connections named it after whichever
+    connection it read first (seen live: Discover said "Inventory", theLook's review queue "Inventory & merchandising").
+    The name most of the install's connections give it; a tie, the shorter — the more general — then the first in
+    order. The organisation's own name for it, where it set one, stands over this (`areas_for`)."""
+    now = time.monotonic()
+    if _names_read["at"] is not None and now - _names_read["at"] < NAMES_FRESH_S:
+        return _names_read["names"]
+    from collections import Counter
+
+    from pramanyx.kernel.errors import tolerate
+    from pramanyx.semantic.metric_catalogue import industry_packages
+    from pramanyx.semantic.metric_map import map_of
+    try:
+        from pramanyx.db.registry import list_connections
+        connections = [str(c["id"]) for c in list_connections()]
+    except Exception as exc:  # noqa: BLE001 — unread, each page names an Area as its own connection's package does
+        tolerate(exc, "the install's connections could not be read; Areas keep their packages' names",
+                 counter="areas.install_names")
+        connections = []
+    maps: dict[tuple, list] = {}
+    said: dict[str, Counter] = {}
+    asked: dict[tuple[str, str], str] = {}
+    for conn in connections:
+        try:
+            packages = industry_packages(conn, None)
+            key = tuple(sorted(p.pack_id for p in packages))
+            if key not in maps:
+                maps[key] = [a for a in map_of(packages).areas if not a.generic]
+        except Exception as exc:  # noqa: BLE001 — one connection unread: the others still name its Areas
+            tolerate(exc, f"the Areas of {conn} could not be read for their one name", counter="areas.install_names")
+            continue
+        for a in maps[key]:
+            said.setdefault(a.id, Counter())[a.name] += 1
+            asked.setdefault((a.id, a.name), a.question)
+    names: dict[str, tuple[str, str]] = {}
+    for area, counted in said.items():
+        name = min(counted, key=lambda n: (-counted[n], len(n), n))
+        names[area] = (name, asked[(area, name)])
+    _names_read.update(at=now, names=names)
+    return names
+
+
+def one_name(area_id: str, name: str, question: str) -> tuple[str, str]:
+    """A package Area's name and question as the whole install says them (`install_names`); its own, unread."""
+    try:
+        return install_names().get(area_id, (name, question))
+    except Exception as exc:  # noqa: BLE001 — a page still names it, as its package does
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "the install's one name for an Area could not be read", counter="areas.one_name")
+        return name, question
+
+
 def areas_for(connection_id: str, schema_name: Optional[str] = None, *, workspace_id: Optional[str] = None) -> list[dict]:
     """Every area a connection is read by — its industry map's, in its order, then the organisation's own — each with
     its owners, its place and where it came from (``package`` or ``organisation``)."""
@@ -54,7 +116,8 @@ def areas_for(connection_id: str, schema_name: Optional[str] = None, *, workspac
         if a.generic:
             continue
         d = declared.pop(a.id, None)
-        out.append({"id": a.id, "name": (d.name if d and d.name else a.name), "question": (d.question if d and d.question else a.question),
+        name, question = one_name(a.id, a.name, a.question)
+        out.append({"id": a.id, "name": (d.name if d and d.name else name), "question": (d.question if d and d.question else question),
                     "parent": d.parent if d else "", "business_owners": list(d.business_owners) if d else [],
                     "technical_owners": list(d.technical_owners) if d else [], "source": "package", "pack_id": a.pack_id,
                     "icon": (d.icon if d and d.icon else getattr(a, "icon", "")), **_curated(d)})

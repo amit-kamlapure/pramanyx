@@ -68,7 +68,9 @@ Area's name.
    "Payments". An Area across connections needs one name.
 3. theLook's learned list repeats itself: 5 of the first 200 word for word, and one restatement ("revenue for South
    Korea is now 519,924.80…") filed once under each of three answers.
-4. `ontology/ranking.py` is dead code; `authority.py` reaches no answer.
+4. `ontology/ranking.py` is on no path (its test alone imports it); `authority.py` reaches no answer. Read on 25 Nov:
+   the ranker is the designed order A2 needs — a person's word over use over freshness, never edge evidence,
+   ordering and never filtering — so it is kept for A2 to put on the answer path, not deleted.
 
 ## 3 · The Atlas, by Area
 
@@ -129,7 +131,7 @@ Each phase is shown working on theLook before the next; no flags (each source of
 call or reads outside data is an organisation setting, off by default).
 
 - **A0 · Defects** (§2's four): MCP findings confirmed-only; one name per Area wherever it is said; learned items
-  deduplicated by statement; delete `ontology/ranking.py` or put it on a path.
+  deduplicated by statement; `ontology/ranking.py` kept for A2 (§2, defect 4).
 - **A1 · What an answer used, recorded when it is made.** Every answer path (`/chat`, `/investigate`, the coworker's
   MCP reads on a person's behalf) records what it **considered** and what it **chose** — metrics, Definitions, learned
   items, trusted queries, documents, tables — as edges on the receipt (the Ledger's lineage table, beside the tables

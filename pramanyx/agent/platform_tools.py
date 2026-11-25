@@ -140,8 +140,12 @@ def list_findings(connection_id: str, args: dict) -> dict:
     else:
         state = _store.load(connection_id)
 
-    # The store's legacy state key, read as data; this roster's vocabulary is "findings".
-    findings = [f for f in state.get("insights", []) if not f.get("invalid")]
+    # The store's legacy state key, read as data; this roster's vocabulary is "findings". Only what a person confirmed
+    # (the user, 2026-11-17: findings reach an answer "confirmed only", on every path) — the rest counted, not shown.
+    from pramanyx.record.writers import confirmed_explorer_findings
+    sure = confirmed_explorer_findings(connection_id)
+    valid = [f for f in state.get("insights", []) if not f.get("invalid")]
+    findings = [f for f in valid if str(f.get("id") or "") in sure]
     limit = _cap(args.get("limit"), _MAX_FINDINGS, hard=25)
     out = []
     for f in findings[:limit]:
@@ -160,6 +164,7 @@ def list_findings(connection_id: str, args: dict) -> dict:
         "count": len(findings),
         "findings": out,
         "truncated": len(findings) > limit,
+        "unconfirmed_withheld": len(valid) - len(findings),
     }
 
 
@@ -969,8 +974,9 @@ def platform_tools(connection_id: str, *, session_id: str = "") -> list[ToolSpec
         ToolSpec(
             name="list_findings",
             description=(
-                "The findings Pramanyx's background exploration already discovered — "
-                "each verified, with confidence and the SQL behind it. Pre-computed: "
+                "The findings Pramanyx's background exploration discovered that a person "
+                "has confirmed, with confidence and the SQL behind it (the rest are only "
+                "counted: no answer leans on them until confirmed). Pre-computed: "
                 "check here before running new analysis on a broad question like "
                 "'what's interesting in this data'."
             ),

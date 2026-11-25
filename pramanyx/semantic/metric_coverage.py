@@ -221,7 +221,19 @@ def _placed_by_people(connection_id: str) -> dict:
 
 def _with_declared(mmap: MetricMap) -> MetricMap:
     """The map with the organisation's own areas after the industry's, named and asked as declared; a package's own
-    area renamed when the organisation named it otherwise. The map read is never changed in place."""
+    area renamed when the organisation named it otherwise, else named as the whole install names it
+    (`areas.install_names`: one name per Area across connections). The map read is never changed in place."""
+    from dataclasses import replace as _replace
+
+    from pramanyx.semantic.areas import one_name
+    named = []
+    for a in mmap.areas:
+        if a.generic:
+            named.append(a)
+            continue
+        name, question = one_name(a.id, a.name, a.question)
+        named.append(_replace(a, name=name, question=question) if (name, question) != (a.name, a.question) else a)
+    mmap = MetricMap(areas=named, industry_pack=mmap.industry_pack, problems=list(mmap.problems))
     try:
         from pramanyx.semantic.areas import declarations
         decls = declarations()
@@ -231,7 +243,6 @@ def _with_declared(mmap: MetricMap) -> MetricMap:
         return mmap
     if not decls:
         return mmap
-    from dataclasses import replace as _replace
     by_id = {d.id: d for d in decls}
     areas = [(_replace(a, name=by_id[a.id].name or a.name, question=by_id[a.id].question or a.question)
               if a.id in by_id else a) for a in mmap.areas]

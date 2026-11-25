@@ -279,6 +279,22 @@ def test_list_findings_trims_and_caps():
     assert set(res["findings"][0]) == {"id", "finding", "confidence", "novelty", "domain", "sql"}
 
 
+def test_list_findings_asks_for_confirmed_only_and_says_what_waits():
+    """The user, 2026-11-17: findings reach an answer "confirmed only", everywhere — the coworker's tool asks the door
+    for those alone, and says how many wait for a person rather than calling them none."""
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["query"] = str(request.url.query)
+        return httpx.Response(200, json={"phase": "complete", "insights": [{"id": "i1", "finding": "f"}],
+                                         "unconfirmed_withheld": 3})
+
+    res = _run(PramanyxClient(base_url="http://test", transport=httpx.MockTransport(handler)).list_findings("conn1"))
+    assert "confirmed=true" in seen["query"]
+    assert (res["count"], res["unconfirmed_withheld"]) == (1, 3)
+    assert res["said"].startswith("3 more the explorer found wait for a person to confirm them")
+
+
 def test_get_briefing_maps_fields():
     routes = {"/exploration/conn1/briefing": httpx.Response(200, json={
         "narrative": "Margin erosion …", "headline_theme": "Margin", "citations": [{"id": "i1"}],
