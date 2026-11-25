@@ -15,6 +15,8 @@ import { DiscoverFinder } from "@/components/discover/DiscoverFinder";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
+import { IconSquare } from "@/components/ui/icon-square";
+import { AREA_ICONS, areaIcon } from "@/lib/areaIcons";
 import { PROSE_TEXT } from "@/components/definitions/DefinitionBody";
 import { RichText, type RichTextKind } from "@/components/ui/rich-text";
 import { toast } from "@/components/ui/toast";
@@ -44,6 +46,7 @@ export function AreaEditor({ page, workspaceId, onSaved, onCancel }: {
   const [business, setBusiness] = useState(plain(a.business_owners));
   const [technical, setTechnical] = useState(plain(a.technical_owners));
   const [featured, setFeatured] = useState<FeaturedRef[]>(page.featured_refs);
+  const [icon, setIcon] = useState(areaIcon(a.icon));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const named = (f: FeaturedRef) => page.featured.find((i) => i.kind === f.kind && i.id === f.ref)?.name;
@@ -56,7 +59,7 @@ export function AreaEditor({ page, workspaceId, onSaved, onCancel }: {
     setBusy(true); setErr("");
     try {
       await saveDiscoverArea(a.id, { description: description.trim(), business_owners: people(business),
-        technical_owners: people(technical), featured }, workspaceId);
+        technical_owners: people(technical), featured, ...(icon !== areaIcon(a.icon) ? { icon } : {}) }, workspaceId);
       onSaved();
     } catch (e) { setErr(String((e as Error)?.message ?? e)); setBusy(false); }
   };
@@ -77,6 +80,16 @@ export function AreaEditor({ page, workspaceId, onSaved, onCancel }: {
         <label className="aug-fs-sm" htmlFor="area-business" style={{ ...MUTED, paddingTop: 6 }}>Owned by</label>
         <Input bespoke id="area-business" value={business} onChange={(e) => setBusiness(e.target.value)}
           placeholder="Who answers for what it means — names, separated by commas" />
+        <span className="aug-fs-sm" style={{ ...MUTED, paddingTop: 6 }}>Icon</span>
+        <div role="radiogroup" aria-label="Its icon" data-testid="discover-area-editor-icon"
+          style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+          {AREA_ICONS.map((name) => (
+            <Button key={name} size="icon-sm" variant={icon === name ? "secondary" : "ghost"} role="radio" aria-checked={icon === name}
+              aria-label={name} title={name} onClick={() => setIcon(name)}>
+              <IconSquare name={name} size={24} />
+            </Button>
+          ))}
+        </div>
         <label className="aug-fs-sm" htmlFor="area-technical" style={{ ...MUTED, paddingTop: 6 }}>Its data by</label>
         <Input bespoke id="area-technical" value={technical} onChange={(e) => setTechnical(e.target.value)}
           placeholder="Who answers for its data — names, separated by commas" />

@@ -99,7 +99,7 @@ def all_items(found: dict[str, Found]) -> list[Item]:
 def _area_view(a: dict, held: list[Item]) -> dict:
     counts = Counter(i.kind for i in held)
     return {"id": a["id"], "name": a["name"], "question": a.get("question", ""), "description": a.get("description", ""),
-            "parent": a.get("parent", ""),
+            "parent": a.get("parent", ""), "icon": a.get("icon", ""),
             "business_owners": a.get("business_owners", []), "technical_owners": a.get("technical_owners", []),
             "source": a.get("source", ""), "connections": a.get("connections", []),
             "counts": {k: counts[k] for k in KINDS if counts[k]}, "total": len(held),

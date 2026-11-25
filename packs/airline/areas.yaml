@@ -2,16 +2,19 @@
 areas:
   - id: unit_revenue
     name: Unit revenue and cost
+    icon: cash
     question: What does each seat earn and cost?
     # baggage fees and paid upgrades are the ancillary revenue the knowledge base's per-passenger pattern reads
     words: [fare, ticket, booking, revenue, ancillary, yield, cost, baggage, upgrade]
     absorbs: [revenue, profitability]
   - id: network
     name: Traffic and capacity
+    icon: plane
     question: Are the seats filled?
     words: [flight, flights, route, aircraft, seat, capacity, leg, passenger, fleet, airport, hub, station]
   - id: operations
     name: Operations
+    icon: gauge
     question: Did we fly as scheduled?
     # a flight is flown as scheduled or not: its table reads here as well as in Traffic and capacity, and the crew
     # and boarding that keep it on time read here alone
@@ -19,6 +22,7 @@ areas:
             check in]
   - id: customers
     name: Customers
+    icon: users
     question: Who flies, and do they come back?
     words: [customer, loyalty, member, frequent flyer]
     absorbs: [experience]

@@ -60,6 +60,17 @@ describe("editing an Area", () => {
       featured: [{ kind: "canvas", ref: "cv1" }, { kind: "metric", ref: "c1/return_rate" }] } }]);
   });
 
+  it("chooses its icon from the Area glyphs, and sends it only when it changed (2026-11-25)", async () => {
+    const put = serve();
+    const onSaved = vi.fn();
+    render(<AreaEditor page={page({ area: { ...page().area, icon: "returns" } })} onSaved={onSaved} onCancel={() => {}} />);
+    expect(screen.getByRole("radio", { name: "returns" })).toHaveAttribute("aria-checked", "true");
+    fireEvent.click(screen.getByRole("radio", { name: "box" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    expect(put[0].body).toEqual(expect.objectContaining({ icon: "box" }));
+  });
+
   it("says a featured thing the person may not open, rather than leaving it out", () => {
     serve();
     render(<AreaEditor page={page({ featured: [RATE] })} onSaved={() => {}} onCancel={() => {}} />);

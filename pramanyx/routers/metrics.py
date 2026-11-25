@@ -240,6 +240,11 @@ def _persons_own(request, what: str) -> None:
             raise HTTPException(status_code=403, detail=f"{what} is a person's own call; an agent cannot make it")
 
 
+#: What an Area's curators choose on its own page (Discover), which the Semantic Layer's save of every declaration
+#: neither shows nor edits: kept whatever that save sends.
+CURATED_ON_ITS_PAGE = ("description", "featured", "icon")
+
+
 @router.put("/areas/{conn_id}")
 def put_areas(conn_id: str, body: AreasIn, request: Request, schema: Optional[str] = None):
     """A curator declares the organisation's areas — new ones, and owners and places for the industry's own — whole,
@@ -256,9 +261,9 @@ def put_areas(conn_id: str, body: AreasIn, request: Request, schema: Optional[st
         raise HTTPException(status_code=403, detail="only a curator — whoever administers the organisation — declares its areas")
     stored = {d.id: d for d in load_org_settings().areas}
     try:
-        # A row that does not say an Area's description or what it puts first keeps what its curators wrote on its page
-        # (Discover D4): the Semantic Layer saves every declaration at once and edits neither.
-        decls = [AreaDeclaration(**{**({k: getattr(stored[a["id"]], k) for k in ("description", "featured")}
+        # A row that does not say an Area's description, what it puts first or its icon keeps what its curators chose on
+        # its page (Discover D4; the icon, 2026-11-25): the Semantic Layer saves every declaration at once and edits none.
+        decls = [AreaDeclaration(**{**({k: getattr(stored[a["id"]], k) for k in CURATED_ON_ITS_PAGE}
                                       if isinstance(a, dict) and a.get("id") in stored else {}), **a})
                  for a in body.areas]
     except Exception as exc:  # noqa: BLE001 — a malformed row is refused, said
@@ -273,8 +278,14 @@ def put_areas(conn_id: str, body: AreasIn, request: Request, schema: Optional[st
     # (`areas_for`): left out of the save, it is kept — not dropped for having been out of sight (2026-11-24).
     sent, on_this_map = {d.id for d in decls}, {a.id for a in here}
     unseen = [d for d in stored.values() if d.id not in sent and not (d.name or "").strip() and d.id not in on_this_map]
+    # A package's Area on this map, left out of the save, keeps what its curators chose on its page and nothing else:
+    # the page lists only the Areas it declares something of (owners, a place) and cannot tell a chosen icon from its
+    # package's (2026-11-25) — the owners and place it no longer sends are gone, as the page said.
+    kept_page = [AreaDeclaration(id=d.id, **{k: getattr(d, k) for k in CURATED_ON_ITS_PAGE})
+                 for d in stored.values() if d.id not in sent and not (d.name or "").strip() and d.id in on_this_map
+                 and any(getattr(d, k) for k in CURATED_ON_ITS_PAGE)]
     settings = load_org_settings()
-    save_org_settings(settings.model_copy(update={"areas": [*decls, *unseen]}))
+    save_org_settings(settings.model_copy(update={"areas": [*decls, *unseen, *kept_page]}))
     return {"areas": areas_for(conn_id, schema)}
 
 

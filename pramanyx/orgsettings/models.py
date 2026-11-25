@@ -55,6 +55,8 @@ class AreaDeclaration(BaseModel):
     technical_owners: list[str] = Field(default_factory=list, description="Who answers for its data")
     description: str = Field(default="", description="What the area covers, in its curators' words; its question stays the line under its name")
     featured: list[FeaturedThing] = Field(default_factory=list, description="What its curators put first on its page, in their order")
+    icon: str = Field(default="", max_length=32, pattern=r"^([a-z][a-z0-9-]*)?$",
+                      description="The glyph its curators chose for it, by the app's icon role; empty keeps the package's")
 
 
 class OrgSettings(BaseModel):

@@ -8,6 +8,7 @@
 }
 a.aug-discover-area:hover { background: var(--bg-hover); border-color: var(--b1); }
 .aug-discover-area .name { font-weight: 600; }
+.aug-discover-area .head { display: flex; align-items: center; gap: 10px; }
 .aug-discover-area .q { color: var(--t2); }
 .aug-discover-area .holds { color: var(--t2); margin-top: auto; }
 .aug-discover-area .who { color: var(--t3); }

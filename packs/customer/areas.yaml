@@ -3,13 +3,16 @@
 areas:
   - id: customers
     name: Customers
+    icon: users
     question: Who are they, and do they stay?
     words: [customer, customers, user, users, member, account, cohort, retention, churn, loyalty, lifetime]
   - id: acquisition
     name: Acquisition
+    icon: target
     question: What does a new customer cost?
     words: [acquisition, lead, leads, signup]
   - id: experience
     name: Experience
+    icon: mood
     question: Are customers happy?
     words: [nps, survey, csat, feedback, review, rating]

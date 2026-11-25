@@ -57,7 +57,7 @@ def areas_for(connection_id: str, schema_name: Optional[str] = None, *, workspac
         out.append({"id": a.id, "name": (d.name if d and d.name else a.name), "question": (d.question if d and d.question else a.question),
                     "parent": d.parent if d else "", "business_owners": list(d.business_owners) if d else [],
                     "technical_owners": list(d.technical_owners) if d else [], "source": "package", "pack_id": a.pack_id,
-                    **_curated(d)})
+                    "icon": (d.icon if d and d.icon else getattr(a, "icon", "")), **_curated(d)})
     for d in declared.values():
         # A declaration with no name of its own annotates a package's Area (its owners, its description, what it
         # features — check_declarations refuses a NEW area without one): it belongs where that package's map has the
@@ -67,7 +67,7 @@ def areas_for(connection_id: str, schema_name: Optional[str] = None, *, workspac
             continue
         out.append({"id": d.id, "name": d.name or d.id, "question": d.question, "parent": d.parent,
                     "business_owners": list(d.business_owners), "technical_owners": list(d.technical_owners),
-                    "source": "organisation", "pack_id": "", **_curated(d)})
+                    "source": "organisation", "pack_id": "", "icon": d.icon, **_curated(d)})
     return out
 
 
@@ -88,7 +88,7 @@ def curates(area: dict, person: str, *, admin: bool) -> bool:
 
 
 #: The fields of an Area its curators may change from its page.
-EDITABLE = ("name", "question", "description", "business_owners", "technical_owners", "featured")
+EDITABLE = ("name", "question", "description", "business_owners", "technical_owners", "featured", "icon")
 
 
 def edit_area(area_id: str, changes: dict, *, by: str, known: set[str]) -> dict:
@@ -112,6 +112,11 @@ def edit_area(area_id: str, changes: dict, *, by: str, known: set[str]) -> dict:
     for k in ("name", "question"):
         if k in changes:
             update[k] = str(changes[k] or "").strip()[:200]
+    if "icon" in changes:
+        icon = str(changes["icon"] or "").strip().lower()
+        if icon and not re.fullmatch(r"[a-z][a-z0-9-]{0,31}", icon):
+            raise ValueError("an Area's icon is one of the app's icon names")
+        update["icon"] = icon
     if "description" in changes:
         text = str(changes["description"] or "").strip()
         if len(text) > MAX_DESCRIPTION:

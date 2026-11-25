@@ -97,6 +97,8 @@ export interface DiscoverArea {
   id: string;
   name: string;
   question: string;
+  /** The glyph it is drawn with — its package's, or its owners' choice (`lib/areaIcons.ts`); "" for the default. */
+  icon?: string;
   /** What its curators wrote for its page (D4); its question stays the line under its name. */
   description?: string;
   parent: string;
@@ -261,6 +263,7 @@ export function forgetDiscoverReads(): void {
 export interface AreaChanges {
   name?: string; question?: string; description?: string; business_owners?: string[]; technical_owners?: string[];
   featured?: FeaturedRef[];
+  icon?: string;
 }
 
 async function write(href: string, body: unknown, what: string): Promise<unknown> {

@@ -146,6 +146,8 @@ class AreaEditIn(BaseModel):
     business_owners: Optional[list[str]] = None
     technical_owners: Optional[list[str]] = None
     featured: Optional[list[dict]] = None
+    #: The glyph its curators chose (an icon role of the app); "" draws its package's, or the default.
+    icon: Optional[str] = None
 
 
 @router.put("/discover/areas/{area_id}")

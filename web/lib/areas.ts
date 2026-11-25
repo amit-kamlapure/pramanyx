@@ -11,6 +11,8 @@ export interface BusinessArea {
   business_owners: string[]; technical_owners: string[]; source: "package" | "organisation"; pack_id: string;
   /** What its curators wrote on its Discover page (D4, 2026-11-23); the server keeps both when a save leaves them out. */
   description?: string; featured?: { kind: string; ref: string }[];
+  /** The glyph it is drawn with — its package's, or its owners' choice (`lib/areaIcons.ts`). Kept through a save too. */
+  icon?: string;
 }
 export interface AreaPlaced { area: string; by: string }
 export interface AreasRead {

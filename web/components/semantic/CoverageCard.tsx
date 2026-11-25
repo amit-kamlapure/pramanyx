@@ -17,6 +17,8 @@ import { AreaOwnersEditor, DeclareArea, SuggestedAreas } from "@/components/sema
 import { rowButtonStyle } from "@/components/semantic/parts";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
+import { IconSquare } from "@/components/ui/icon-square";
+import { areaIcon } from "@/lib/areaIcons";
 import {
   getMetricCoverage, runMetricCoverage, writeMetricCoverage,
   type CatalogueMetric, type CoverageArea, type CoverageGate, type CoverageProposal, type MetricCoverage,
@@ -183,7 +185,9 @@ export function CoverageCard({ connId, schema, rows, onAdopted }: {
             return (
               <div key={a.id} data-testid="coverage-area" data-area={a.id}>
                 <Button variant="plain" aria-expanded={isOpen} onClick={() => setOpen(isOpen ? null : a.id)} style={rowButtonStyle(isOpen, GRID)}>
-                  <span style={{ minWidth: 0 }}>
+                  <span style={{ minWidth: 0, display: "flex", gap: 10, alignItems: "flex-start" }}>
+                    <IconSquare name={areaIcon(ownersOf(a.id)?.icon)} size={24} />
+                    <span style={{ minWidth: 0 }}>
                     <span className="aug-fs-chrome" style={{ ...ONE_LINE, display: "block", color: "var(--t1)", fontWeight: 500 }}>{a.name}</span>
                     <span className="aug-fs-sm" style={{ ...MUTED, ...ONE_LINE, display: "block" }}>{a.question}</span>
                     {ownersOf(a.id) && ownersWords(ownersOf(a.id)!) && (
@@ -191,6 +195,7 @@ export function CoverageCard({ connId, schema, rows, onAdopted }: {
                         {ownersWords(ownersOf(a.id)!)}
                       </span>
                     )}
+                    </span>
                   </span>
                   <span className="aug-fs-chrome" style={{ ...NUM, color: a.has_data ? "var(--t2)" : "var(--t3)" }}>
                     {a.has_data ? `${formatCount(a.rows)} rows · ${countNoun(a.tables.length, "table")}` : "—"}

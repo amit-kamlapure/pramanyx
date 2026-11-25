@@ -21054,6 +21054,12 @@ export interface components {
              */
             featured?: components["schemas"]["FeaturedThing"][];
             /**
+             * Icon
+             * @description The glyph its curators chose for it, by the app's icon role; empty keeps the package's
+             * @default
+             */
+            icon: string;
+            /**
              * Id
              * @description A short id: an industry package's area id to annotate it, or a new one
              */
@@ -21095,6 +21101,8 @@ export interface components {
             featured?: {
                 [key: string]: unknown;
             }[] | null;
+            /** Icon */
+            icon?: string | null;
             /** Name */
             name?: string | null;
             /** Question */

@@ -108,6 +108,14 @@ describe("Discover", () => {
     expect(onOpenArea).toHaveBeenCalledWith("orders_sales");
   });
 
+  it("draws each Area with its glyph, and the default for one that names none (2026-11-25)", async () => {
+    readDiscover.mockResolvedValue({ ...HOME, areas: [{ ...HOME.areas[0], icon: "cart" }, ...HOME.areas.slice(1)] });
+    renderPage();
+    await screen.findByTestId("discover-areas");
+    expect(screen.getByTestId("discover-area-icon-orders_sales").innerHTML).toContain("tabler-icon-shopping-cart");
+    expect(screen.getByTestId("discover-area-icon-margin_pricing").innerHTML).toContain("tabler-icon-layers-intersect");
+  });
+
   it("says that nothing is certified, counts what is withheld, says a kind it could not read, and names the empty kinds once", async () => {
     renderPage();
     expect((await screen.findByTestId("discover-certified")).textContent).toContain("Nothing here is certified yet");

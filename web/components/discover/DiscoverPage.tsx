@@ -19,6 +19,8 @@ import { DefinitionBody } from "@/components/definitions/DefinitionBody";
 import { AddToArea, AreaEditor, RowMenu } from "@/components/discover/AreaCuration";
 import { BackHeader } from "@/components/record/kit";
 import { Button } from "@/components/ui/button";
+import { IconSquare } from "@/components/ui/icon-square";
+import { areaIcon } from "@/lib/areaIcons";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
 import { SelectField } from "@/components/ui/select";
@@ -441,6 +443,7 @@ function AreaView({ areaId, conn, workspaceId, onBack, onOpenArea, onName }: {
   return (
     <Page testId="discover-area">
       <BackHeader from="Discover" onBack={onBack} title={a.name} chips={<>
+        <IconSquare name={areaIcon(a.icon)} size={20} title={`${a.name}'s icon`} testId="discover-area-page-icon" />
         {a.source === "package" && <Chip>From the industry package</Chip>}
         {a.source === "organisation" && <Chip>Declared by your organisation</Chip>}
         {a.total > 0 && <Chip>{formatCount(a.total)} {a.total === 1 ? "thing" : "things"}</Chip>}
@@ -525,7 +528,10 @@ function AreaCard({ area, onOpen, quiet = false }: { area: DiscoverArea; onOpen:
   return (
     <a className="aug-discover-area" href={`?tab=discover&id=${encodeURIComponent(area.id)}`} data-testid={`discover-area-${area.id}`}
       onClick={e => inPlace(e, () => onOpen(area.id))}>
-      <span className="name aug-fs-ui">{area.name}</span>
+      <span className="head">
+        <IconSquare name={areaIcon(area.icon)} size={28} testId={`discover-area-icon-${area.id}`} />
+        <span className="name aug-fs-ui">{area.name}</span>
+      </span>
       {area.question && <span className="q aug-fs-sm">{area.question}</span>}
       <span className="holds aug-fs-sm">
         {quiet ? "Holds nothing yet" : holdsWords(area.counts)}
@@ -555,7 +561,8 @@ function SuggestedCard({ s, many, onDone }: { s: SuggestedInView; many: boolean;
   const tables = s.tables.slice(0, 4).join(", ") + (s.tables.length > 4 ? ` and ${formatCount(s.tables.length - 4)} more` : "");
   return (
     <div className="aug-discover-area is-suggested" data-testid={`discover-suggested-${s.id}`}>
-      <span style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+      <span className="head" style={{ flexWrap: "wrap" }}>
+        <IconSquare name={areaIcon("")} size={28} />
         <span className="name aug-fs-ui">{s.label}</span><Chip tone="accent">Suggested by the model</Chip>
       </span>
       <span className="q aug-fs-sm">{many ? `${s.connection_name} · ` : ""}{tables ? `Read from ${tables}` : "Read from its tables"}</span>

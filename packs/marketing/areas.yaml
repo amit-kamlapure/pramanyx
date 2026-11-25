@@ -3,17 +3,21 @@
 areas:
   - id: marketing
     name: Marketing
+    icon: megaphone
     question: What did growth cost?
     words: [marketing, campaign, attribution, advert, advertising, ads, spend, impression, roas]
   - id: acquisition
     name: Acquisition
+    icon: target
     question: What does a new customer cost?
     words: [acquisition, lead, leads, signup]
   - id: crm
     name: CRM
+    icon: contacts
     question: Do our messages land?
     words: [email, newsletter, sms, push notification]
   - id: promotions
     name: Promotions
+    icon: discount
     question: Do discounts pay?
     words: [voucher, coupon, promo, promotion, discount]

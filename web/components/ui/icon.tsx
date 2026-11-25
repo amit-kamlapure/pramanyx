@@ -64,6 +64,10 @@ import {
   IconPointer, IconPhoto, IconArrowBackUp, IconArrowForwardUp, IconLayoutSidebarLeftCollapse,
   IconLayoutSidebarLeftExpand, IconTypography, IconChartLine, IconLayoutList, IconLayoutGrid, IconStarFilled,
   IconCpu,
+  IconShoppingCart, IconCash, IconReceiptRefund, IconTag, IconTruckDelivery, IconSpeakerphone, IconDiscount,
+  IconChartFunnel, IconCreditCard, IconAddressBook, IconHeadset, IconCalendarEvent, IconPackage, IconRepeat,
+  IconFileInvoice, IconPlane, IconMoodSmile, IconBuildingStore, IconClockCheck, IconBuildingFactory2,
+  IconRosetteDiscountCheck, IconTool, IconRoute, IconUserCheck,
 } from "@tabler/icons-react";
 import { createContext, useContext, type ComponentType, type ReactNode } from "react";
 
@@ -248,6 +252,32 @@ const ICONS = {
   redo: IconArrowForwardUp,
   fold: IconLayoutSidebarLeftCollapse,
   unfold: IconLayoutSidebarLeftExpand,
+  // An Area of the business (2026-11-25: Discover's Area cards carry a glyph, as a package or an Area's owners choose
+  // it — `lib/areaIcons.ts`). Named for what the Area is about.
+  cart: IconShoppingCart,
+  cash: IconCash,
+  returns: IconReceiptRefund,
+  pricetag: IconTag,
+  truck: IconTruckDelivery,
+  megaphone: IconSpeakerphone,
+  discount: IconDiscount,
+  funnel: IconChartFunnel,
+  card: IconCreditCard,
+  contacts: IconAddressBook,
+  support: IconHeadset,
+  event: IconCalendarEvent,
+  box: IconPackage,
+  recurring: IconRepeat,
+  invoice: IconFileInvoice,
+  plane: IconPlane,
+  mood: IconMoodSmile,
+  store: IconBuildingStore,
+  ontime: IconClockCheck,
+  factory: IconBuildingFactory2,
+  quality: IconRosetteDiscountCheck,
+  tool: IconTool,
+  route: IconRoute,
+  consent: IconUserCheck,
 } satisfies Record<string, Glyph>;
 
 /** The drawing a role is — for a check that two rows do not share one (`lib/navDestinations.test.ts`). */
