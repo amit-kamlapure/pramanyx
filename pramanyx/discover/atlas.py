@@ -37,6 +37,12 @@ SLOW_FRESH_S = 600
 SLOW_STORE = "atlas_slow"
 #: The most of the month's receipts read — far above a month's answers on any install measured.
 MAX_RECEIPTS = 20_000
+#: A pause between one connection's reading and the next, so a page load in between is not kept waiting (measured
+#: 2026-11-25: a fifteen-second reading took a load from 2.1 s to 3–4 s while it ran).
+PAUSE_S = 0.3
+#: A reading kept across a restart is served as it is for the first ten minutes after it, rather than read again on
+#: the first visit — when every read is cold and a load ran ten seconds (2026-11-25) — unless it is older than this.
+KEPT_SERVED_S = 3600
 
 _slow: dict[tuple, tuple[float, dict]] = {}
 _reading: set[tuple] = set()
@@ -110,11 +116,24 @@ def _slow_key(scope) -> tuple:
 def _read_slow(key: tuple, connections: dict[str, str]) -> None:
     """Each connection's review queue and learned list, added up by Area — kept, and in the ledger across a restart."""
     from pramanyx.kernel.errors import tolerate
-    from pramanyx.knowledge.learned import learned_items
+    from pramanyx.knowledge.learned import learned_items, read_once
     from pramanyx.knowledge.review import review
     by_area: dict[str, Counter] = {}
     out = {"review_total": 0, "review_unplaced": 0, "learned_total": 0, "learned_unplaced": 0, "unread": []}
-    for conn, name in connections.items():
+    try:
+        with read_once():          # the review queue reads each learned list too: read once, for both
+            _read_each(connections, by_area, out, review, learned_items, tolerate)
+        out["areas"] = {a: dict(c) for a, c in by_area.items()}
+        _keep(key, out)
+    finally:
+        with _slow_lock:           # never left "being read" by a reading that failed: the next visit reads again
+            _reading.discard(key)
+
+
+def _read_each(connections: dict[str, str], by_area: dict, out: dict, review, learned_items, tolerate) -> None:
+    for n, (conn, name) in enumerate(connections.items()):
+        if n:
+            time.sleep(PAUSE_S)
         try:
             r = review(conn, limit=10_000)
             out["review_total"] += int(r.get("total") or 0)
@@ -136,7 +155,10 @@ def _read_slow(key: tuple, connections: dict[str, str]) -> None:
         except Exception as exc:  # noqa: BLE001
             tolerate(exc, f"the Atlas could not read what was learned on {conn}", counter="atlas.learned")
             out["unread"].append(f"what was learned on {name}")
-    out["areas"] = {a: dict(c) for a, c in by_area.items()}
+
+
+def _keep(key: tuple, out: dict) -> None:
+    from pramanyx.kernel.errors import tolerate
     out["at"] = datetime.now(timezone.utc).isoformat()
     with _slow_lock:
         _reading.discard(key)
@@ -160,7 +182,9 @@ def slow_parts(scope, *, wait: bool = False) -> tuple[Optional[dict], list[str]]
             back = Ledger.default().kv_get(SLOW_STORE, "|".join([key[0], key[1], ",".join(key[2])]))
             if isinstance(back, dict) and isinstance(back.get("areas"), dict):
                 age = (datetime.now(timezone.utc) - (_when(back.get("at")) or datetime.now(timezone.utc))).total_seconds()
-                kept = (time.monotonic() - max(0.0, age), back)
+                # kept across a restart: served as it is for ten minutes from now when under an hour old (it says
+                # when it was read), rather than read again on the first, coldest visit
+                kept = (time.monotonic() - (0.0 if age < KEPT_SERVED_S else max(0.0, age)), back)
                 with _slow_lock:
                     _slow.setdefault(key, kept)
         except Exception as exc:  # noqa: BLE001 — nothing kept is nothing to show; it is read again

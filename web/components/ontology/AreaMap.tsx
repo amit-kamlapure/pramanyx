@@ -88,6 +88,7 @@ function Review({ atlas, onPick }: { atlas: Atlas; onPick: (id: string) => void 
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       <span className="aug-fs-sm" data-testid="atlas-review-total" style={{ color: "var(--t2)" }}>
         {`${formatCount(atlas.review.total)} wait for review, ${formatCount(atlas.review.unplaced)} in no Area`}
+        {atlas.read_at && ` · read at ${new Date(atlas.read_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}
       </span>
       <div role="list" style={{ display: "flex", flexDirection: "column", gap: 2, margin: "0 -8px" }}>
         {rows.map((a) => (

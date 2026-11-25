@@ -20,9 +20,26 @@ kept in ``also`` — never listed as several things the platform knows.
 """
 from __future__ import annotations
 
+import contextvars
 import json
 import re
-from typing import Optional
+from contextlib import contextmanager
+from typing import Iterator, Optional
+
+#: Within `read_once`, each connection's learned list as it was read — so one pass that reads it twice (the review
+#: queue reads it for its findings to confirm, and the Atlas for its counts) reads the store once.
+_SHARED: contextvars.ContextVar[Optional[dict]] = contextvars.ContextVar("pramanyx_learned_shared", default=None)
+
+
+@contextmanager
+def read_once() -> Iterator[None]:
+    """Each connection's learned list is read once inside this, whoever asks for it (the Atlas's background reading,
+    2026-11-25: every review queue read the learned list again, doubling the reading's cost). Nothing is kept after."""
+    token = _SHARED.set({})
+    try:
+        yield
+    finally:
+        _SHARED.reset(token)
 
 #: How each store's word is said. The ORDER is the one standing's (`trust.standing`, A2): a person's word on a measured
 #: result, then the data's, then a person's alone, then mined, then said — and `why` says where each stands.
@@ -79,6 +96,17 @@ def learned_items(connection_id: str, *, about: str = "", limit: int = 50) -> di
     """``{"items": [...], "withheld": {...} | None, "uses_counted": False}`` — the learned knowledge of one connection in
     one shape, in the one authority order (confirmed and approved, then measured, then mined; the newest first among
     equals), optionally narrowed to items whose words or tables share a word with ``about``."""
+    shared = _SHARED.get()
+    if shared is not None and (connection_id, about) in shared:
+        whole = shared[(connection_id, about)]
+    else:
+        whole = _learned(connection_id, about=about)
+        if shared is not None:
+            shared[(connection_id, about)] = whole
+    return {**whole, "items": whole["items"][:limit]}
+
+
+def _learned(connection_id: str, *, about: str = "") -> dict:
     from pramanyx.record import claims as C
     items: list[dict] = []
     receipts: dict[str, list[str]] = {}
@@ -134,7 +162,7 @@ def learned_items(connection_id: str, *, about: str = "", limit: int = 50) -> di
     items = _fold(items)
     for i in items:
         i.pop("_standing", None)
-    return {"items": items[:limit], "total": len(items), "folded": booked - len(items),
+    return {"items": items, "total": len(items), "folded": booked - len(items),
             "withheld": trimmed.to_dict() if trimmed.trimmed else None, "uses_counted": False}
 
 

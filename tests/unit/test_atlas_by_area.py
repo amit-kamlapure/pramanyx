@@ -109,3 +109,64 @@ def test_the_map_lists_the_areas_answers_drew_on_first_and_the_rest_apart(monkey
     assert out["figures"]["governed"] == 4 and out["figures"]["given_since"] == "2026-11-25"
     assert out["contacts"] == {"named": 1, "of": 4}
     assert out["review"] == {"total": 5, "unplaced": 3} and out["learned"] == {"total": 12, "unplaced": 3}
+
+
+def test_a_learned_list_asked_twice_in_one_reading_is_read_once(monkeypatch):
+    """The review queue reads each connection's learned list for its findings to confirm, and the Atlas reads it for its
+    counts: within one reading it is read from the store once (measured 2026-11-25: the reading took fifteen seconds
+    and slowed page loads while it ran)."""
+    from pramanyx.knowledge import learned as L
+    reads = []
+    monkeypatch.setattr(L, "_learned", lambda conn, about="": reads.append(conn) or {
+        "items": [{"area": "a"}] * 3, "total": 3, "folded": 0, "withheld": None, "uses_counted": False})
+    with L.read_once():
+        assert len(L.learned_items("c1", limit=2)["items"]) == 2
+        assert L.learned_items("c1", limit=500)["total"] == 3
+    L.learned_items("c1")
+    assert reads == ["c1", "c1"], "once inside, and nothing kept after"
+
+
+def test_a_reading_kept_across_a_restart_is_served_for_ten_minutes_not_read_again_on_the_first_visit(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    AT._slow.clear()
+    started = []
+    monkeypatch.setattr(AT, "_read_slow", lambda key, connections: started.append(key))
+    kept = {"areas": {"orders_sales": {"gap": 1}}, "review_total": 1, "review_unplaced": 0, "learned_total": 0,
+            "learned_unplaced": 0, "unread": [], "at": (datetime.now(timezone.utc) - timedelta(minutes=20)).isoformat()}
+    monkeypatch.setattr(Ledger.default(), "kv_get", lambda store, key: kept)
+    scope = NS(connections={"c1": "theLook"}, person="p-" + uuid.uuid4().hex[:6], curator=False)
+    slow, said = AT.slow_parts(scope, wait=True)
+    assert slow["review_total"] == 1 and said == [] and started == []
+    AT._slow.clear()
+    kept["at"] = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+    AT.slow_parts(scope, wait=True)
+    assert len(started) == 1, "older than an hour, it is read again"
+
+
+def test_a_reading_that_fails_is_never_left_being_read(monkeypatch):
+    AT._slow.clear()
+    AT._reading.clear()
+    monkeypatch.setattr(AT, "_read_each", lambda *a: (_ for _ in ()).throw(RuntimeError("boom")))
+    scope = NS(connections={"c1": "theLook"}, person="p-" + uuid.uuid4().hex[:6], curator=False)
+    try:
+        AT.slow_parts(scope, wait=True)
+    except RuntimeError:
+        pass
+    assert AT._reading == set()
+
+
+def test_the_reading_reads_each_connections_learned_list_once_though_the_review_queue_asks_for_it_too(monkeypatch):
+    from pramanyx.knowledge import learned as L
+    AT._slow.clear()
+    reads = []
+    monkeypatch.setattr(L, "_learned", lambda conn, about="": reads.append(conn) or {
+        "items": [{"area": "orders_sales"}], "total": 1, "folded": 0, "withheld": None, "uses_counted": False})
+    monkeypatch.setattr(AT, "PAUSE_S", 0)
+
+    def review(conn, limit=200):
+        L.learned_items(conn, limit=500)          # as the review queue's findings-to-confirm read does
+        return {"total": 0, "unplaced": 0, "items": []}
+    monkeypatch.setattr("pramanyx.knowledge.review.review", review)
+    scope = NS(connections={"c1": "theLook", "c2": "DuckDB"}, person="p-" + uuid.uuid4().hex[:6], curator=False)
+    slow, _ = AT.slow_parts(scope, wait=True)
+    assert reads == ["c1", "c2"] and slow["learned_total"] == 2
