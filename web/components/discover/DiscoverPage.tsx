@@ -12,11 +12,12 @@
  * counted where it would have stood, and a kind that could not be read is said. No title bar: the rail and the tab say
  * where this is (the user, 2026-09-26).
  */
-import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { Card, Chip, Empty, Label, MUTED, Page } from "@/components/clarity/kit";
 import { DefinitionBody } from "@/components/definitions/DefinitionBody";
 import { AddToArea, AreaEditor, RowMenu } from "@/components/discover/AreaCuration";
+import { inPlace, ItemRow, Said } from "@/components/discover/parts";
 import { BackHeader } from "@/components/record/kit";
 import { Button } from "@/components/ui/button";
 import { IconSquare } from "@/components/ui/icon-square";
@@ -27,11 +28,10 @@ import { SelectField } from "@/components/ui/select";
 import { Loading, ReadFailed } from "@/components/ui/states";
 import { openInApp, useFromAddress } from "@/lib/addressOnce";
 import { declarationsOf, readAreas, saveAreas, setNotAnArea } from "@/lib/areas";
-import { askAbout } from "@/lib/askSubject";
 import { useDiscoverHost } from "@/components/discover/host";
 import {
-  KINDS, KIND_ICON, KIND_TITLES, KIND_WORDS, OTHER, askSubjectOf, holdsWords, markOf, ownersLine, readDiscover,
-  readDiscoverArea, readDiscoverItems, readDiscoverSearch, secondLine, withheldWords,
+  KINDS, KIND_TITLES, OTHER, holdsWords, ownersLine, readDiscover,
+  readDiscoverArea, readDiscoverItems, readDiscoverSearch, withheldWords,
   type DiscoverArea, type DiscoverAreaPage, type DiscoverHome, type DiscoverItem, type DiscoverItems, type DiscoverKind,
   type DiscoverKindView, type SuggestedInView,
 } from "@/lib/discover";
@@ -516,13 +516,6 @@ function AreaKindTile({ view, many, menu }: { view: DiscoverKindView; many: bool
 
 // ── the parts ────────────────────────────────────────────────────────────────────────────────────────────────────
 
-/** A click that opens in place; one with a modifier is the browser's (a new tab, a new window). */
-function inPlace(e: MouseEvent, open: () => void) {
-  if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-  e.preventDefault();
-  open();
-}
-
 function AreaCard({ area, onOpen, quiet = false }: { area: DiscoverArea; onOpen: (id: string) => void; quiet?: boolean }) {
   const other = area.id === OTHER;
   return (
@@ -597,61 +590,5 @@ function KindTile({ view, areaNames, many, more, add }: {
         </p>
       )}
     </section>
-  );
-}
-
-/** One thing: its kind, its name and what it is, its mark, and its Area (or, on the Area's own page, how it came to
- *  stand there). The row is a link to its page; "Ask about it" sits beside the link, never inside it. */
-function ItemRow({ item, areaName, many, how = false, actions }: {
-  item: DiscoverItem; areaName?: string; many: boolean; how?: boolean;
-  /** What may be done to it here — an Area's page gives its curators and the thing's owner a menu (D4). */
-  actions?: ReactNode;
-}) {
-  const mark = markOf(item);
-  // shown in the coworker (D6), its host opens the thing and takes the question; else the app's own doors
-  const host = useDiscoverHost();
-  const subject = askSubjectOf(item);
-  const ask = host ? (host.ask ? () => host.ask!(item) : null) : subject ? () => askAbout(subject) : null;
-  const also = item.also_on?.length ? `also on ${item.also_on.join(", ")}` : "";
-  const homes = item.workspaces?.length ? `in ${item.workspaces.join(", ")}` : "";
-  const line = [secondLine(item, many || !!item.workspaces), also, homes].filter(Boolean).join(" · ");
-  return (
-    <div className="aug-discover-row" data-testid="discover-row">
-      <a href={item.href} title={`${KIND_WORDS[item.kind][0]} · ${item.name}`}
-        onClick={e => inPlace(e, () => (host ? host.open(item.href) : openInApp(item.href)))}>
-        <span className="k"><Icon name={KIND_ICON[item.kind]} size={15} /></span>
-        <span className="main">
-          <span className="n aug-fs-chrome">{item.name}</span>
-          {line && <span className="d aug-fs-sm">{line}</span>}
-        </span>
-        <span className="meta aug-fs-xs">
-          {item.matched?.length ? <span className="how" style={MUTED} title={item.matched.join(" · ")}>{item.matched.join(" · ")}</span> : null}
-          {mark && <Chip tone={mark.tone}>{mark.word}</Chip>}
-          {how
-            ? item.area_how && <span className="how" style={MUTED} title={item.area_how}>{item.area_how}</span>
-            : areaName && <Chip title={item.area_how || undefined}>{areaName}</Chip>}
-        </span>
-      </a>
-      {ask && (
-        <Button className="ask" size="icon-xs" variant="ghost" aria-label={`Ask about ${item.name}`} title="Ask about it"
-          onClick={ask}>
-          <Icon name="chat" size={14} />
-        </Button>
-      )}
-      {actions}
-    </div>
-  );
-}
-
-function Said({ lines }: { lines: string[] }): ReactNode {
-  if (!lines.length) return null;
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 12 }} data-testid="discover-said">
-      {lines.map(l => (
-        <span key={l} className="aug-fs-sm" style={{ color: "var(--amb4)", display: "inline-flex", gap: 6, alignItems: "center" }}>
-          <Icon name="warning" size={13} />{l}
-        </span>
-      ))}
-    </div>
   );
 }

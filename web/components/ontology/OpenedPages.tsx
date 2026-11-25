@@ -15,6 +15,7 @@
 import { useState, type ReactNode } from "react";
 
 import { Chip, MUTED, ROW } from "@/components/clarity/kit";
+import { DefinitionBody } from "@/components/definitions/DefinitionBody";
 import { DefinitionView } from "@/components/definitions/DefinitionView";
 import { PromoteForm } from "@/components/semantic/LearnedPanel";
 import { SIDE, type InspectorSubject } from "@/components/shell/Inspector";
@@ -123,28 +124,37 @@ const Mark = ({ word, tone }: { word: string; tone: "up" | "amber" | "plain" }) 
  *  what it is, who answers for it, what it holds, the month's answers that drew on it, what waits in it. */
 function AreaPage({ area, ctx }: { area: AreaLike; ctx: OpenedContext }) {
   const on = ctx.connections.filter((c) => (area.connections ?? []).includes(c.id)).map((c) => c.name);
+  const named = (area.business_owners?.length ?? 0) + (area.technical_owners?.length ?? 0) > 0;
+  // as Discover heads an Area's page: its glyph and name with what it is in chips, its question, what it covers, and who
+  // answers for it — in amber while nobody does
   return (
     <div data-testid="atlas-open-area" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <PageHead icon={areaIcon(area.icon)} tone={areaTone(area.id)} title={area.name} sub={area.question}
+      <PageHead icon={areaIcon(area.icon)} tone={areaTone(area.id)} title={area.name}
+        mark={(
+          <span style={{ display: "inline-flex", gap: 6, flexWrap: "wrap" }}>
+            {area.source === "package" && <Chip>From the industry package</Chip>}
+            {area.source === "organisation" && <Chip>Declared by your organisation</Chip>}
+            {(area.deprecated ?? 0) > 0 && <Chip tone="amber">{`${formatCount(area.deprecated ?? 0)} deprecated`}</Chip>}
+          </span>
+        )}
+        sub={area.question}
         actions={(
-          <Button size="sm" variant="secondary" onClick={() => openInApp(`/?view=discover&tab=discover&id=${encodeURIComponent(area.id)}`)}>
+          <Button size="xs" variant="outline" onClick={() => openInApp(`/?view=discover&tab=discover&id=${encodeURIComponent(area.id)}`)}>
             Open its page <Icon name="external" size={12} />
           </Button>
         )} />
+      {area.description && <div style={{ maxWidth: "80ch" }}><DefinitionBody text={area.description} /></div>}
+      <p className="aug-fs-sm" style={{ margin: 0, color: named ? "var(--t3)" : "var(--amb4)" }}>
+        {area.business_owners || area.technical_owners
+          ? ownersLine({ business_owners: area.business_owners ?? [], technical_owners: area.technical_owners ?? [] }) : "Who answers for it was not read."}
+      </p>
       <Props rows={[
-        ["Who answers for it", area.business_owners || area.technical_owners
-          ? ownersLine({ business_owners: area.business_owners ?? [], technical_owners: area.technical_owners ?? [] }) : "not read"],
         ["This month", area.answers !== undefined ? `${countNoun(area.answers, "answer")} drew on it` : null],
         ["Holds", area.counts ? holdsWords(area.counts) || "nothing yet" : null],
         ["Waiting", area.review !== undefined ? waitingWords(area.review ?? null, area.learned ?? null) : null],
         ["On", on.length ? on.join(", ") : null],
         ["Inside", area.parent ? <AreaChips ids={[area.parent]} ctx={ctx} /> : null],
       ]} />
-      {area.description && (
-        <Section title="Description">
-          <span className="aug-fs-ui" style={{ color: "var(--t1)", whiteSpace: "pre-wrap", lineHeight: 1.55 }}>{area.description}</span>
-        </Section>
-      )}
     </div>
   );
 }
@@ -156,7 +166,7 @@ function EntityPage({ o }: { o: Extract<Opened, { what: "entity" }> }) {
     <div data-testid="atlas-open-entity" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <PageHead icon="node" title={row.display_name} sub={`Entity · ${connection.name}`}
         actions={(
-          <Button size="sm" variant="secondary" onClick={() => openInApp(`/?tab=ontology&conn=${encodeURIComponent(connection.id)}`)}>
+          <Button size="xs" variant="outline" onClick={() => openInApp(`/?tab=ontology&conn=${encodeURIComponent(connection.id)}`)}>
             Open {connection.name}&apos;s ontology <Icon name="external" size={12} />
           </Button>
         )} />
@@ -188,7 +198,7 @@ function ItemPage({ item, ctx }: { item: DiscoverItem; ctx: OpenedContext }) {
         mark={mark && <Mark word={mark.word} tone={mark.tone === "up" ? "up" : mark.tone === "amber" ? "amber" : "plain"} />}
         sub={[kindWord(item.kind), item.connection_name].filter(Boolean).join(" · ")}
         actions={item.href ? (
-          <Button size="sm" variant="secondary" onClick={() => openInApp(item.href)}>
+          <Button size="xs" variant="outline" onClick={() => openInApp(item.href)}>
             Open its page <Icon name="external" size={12} />
           </Button>
         ) : undefined} />
@@ -243,7 +253,7 @@ function LearnedPage({ o, ctx }: { o: Extract<Opened, { what: "learned" }>; ctx:
   return (
     <div data-testid="atlas-open-learned" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <PageHead icon={LEARNED_ICON} tone={KIND_TONE.learned} title={i.text} sub={`Learned · ${LEARNED_WORDS[i.kind] ?? i.kind} · ${o.connName}`}
-        actions={canPromote ? <Button size="sm" variant="secondary" onClick={() => setPromoting(true)}>Promote</Button> : undefined} />
+        actions={canPromote ? <Button size="xs" variant="outline" onClick={() => setPromoting(true)}>Promote</Button> : undefined} />
       {promoting && (
         <PromoteForm connId={o.connId} item={i} areas={ctx.areas.map((a) => ({ id: a.id, name: a.name }))}
           onDone={(p) => { setPromoted(p); setPromoting(false); }} onCancel={() => setPromoting(false)} />

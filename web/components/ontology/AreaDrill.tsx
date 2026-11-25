@@ -12,8 +12,9 @@
 import { DropdownMenu } from "@radix-ui/themes";
 import { useEffect, useRef, useState } from "react";
 
-import { Chip, MUTED, ROW } from "@/components/clarity/kit";
+import { Chip, Empty, MUTED, ROW } from "@/components/clarity/kit";
 import { AreaEditor } from "@/components/discover/AreaCuration";
+import { inPlace, ItemRow, Said } from "@/components/discover/parts";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { IconSquare } from "@/components/ui/icon-square";
@@ -25,7 +26,7 @@ import {
   type Fan, type FanKey,
 } from "@/lib/areaMap";
 import {
-  holdsWords, KIND_ICON, markOf, ownersLine, readAtlasReview, readDiscoverItems, readDiscoverSearch, usageLine,
+  holdsWords, KIND_TITLES, ownersLine, readAtlasReview, readDiscoverItems, readDiscoverSearch,
   type AtlasReview, type DiscoverArea,
   type DiscoverAreaPage, type DiscoverItem,
 } from "@/lib/discover";
@@ -42,13 +43,6 @@ export type Opened =
 
 /** A learned item, with the connection it was learned on. */
 export interface LearnedHere { item: LearnedItem; connId: string; connName: string }
-
-/** A small mark in a kind's colour (the user, 2026-11-25: colour by type). */
-function KindDot({ tone }: { tone: string }) {
-  return <span aria-hidden style={{ width: 8, height: 8, borderRadius: "50%", background: tone, flexShrink: 0, display: "inline-block" }} />;
-}
-
-/** A kind's name for one, as a line starts with it: "Table", "Data Canvas". */
 
 /** The most things kept open side by side; opening one more closes the oldest. */
 export const MAX_OPEN = 6;
@@ -164,15 +158,6 @@ export const PER_PAGE = 20;
 type Order = "use" | "name" | "recent";
 const ORDER_WORDS: Record<Order, string> = { use: "Most used", name: "Name", recent: "Recently changed" };
 
-/** "Used in 12 answers" when answers drew on it this month — the reference's "Used in 6.2K responses" — else what was
- *  measured of it, or that it was not used. */
-function usedWords(i: DiscoverItem): string {
-  const a = i.use?.answers ?? 0;
-  if (a) return `Used in ${a === 1 ? "one answer" : `${formatCount(a)} answers`}`;
-  const u = usageLine(i.use);
-  return u ? u.replace(/^./, (c) => c.toUpperCase()) : "Not used this month";
-}
-
 /** The pages of a long list: the first, the last, the one shown and its neighbours, "…" between. */
 export function pagesShown(at: number, pages: number): (number | "gap")[] {
   const want = new Set([0, pages - 1, at - 1, at, at + 1].filter((n) => n >= 0 && n < pages));
@@ -202,35 +187,32 @@ function Pager({ at, total, onAt }: { at: number; total: number; onAt: (n: numbe
   );
 }
 
-/** One thing in a kind's list, as the reference lists a page or a snippet: its glyph in its kind's colour, its name, how
- *  much it was used with its mark, and what it says. */
-function ItemRow({ i, onOpen }: { i: DiscoverItem; onOpen: (o: Opened) => void }) {
-  const mark = markOf(i);
+/** Something learned, as Discover draws a row (the user, 2026-11-26: Discover's design followed in the Ontology): its
+ *  glyph, what it says on one line, what kind of learned thing it is and where on the next; a click opens it beside the
+ *  list, ⌘-click the Semantic Layer's Learned tab. */
+function LearnedRow({ l, onOpen }: { l: LearnedHere; onOpen: (o: Opened) => void }) {
+  const href = `/?tab=semantic&semtab=learned&conn=${encodeURIComponent(l.connId)}`;
   return (
-    <Button role="listitem" variant="ghost" size="sm" data-testid="atlas-kind-row" onClick={() => onOpen(itemOpened(i))}
-      style={{ justifyContent: "flex-start", height: "auto", padding: "8px", textAlign: "left", whiteSpace: "normal", alignItems: "flex-start" }}>
-      <span style={{ color: KIND_TONE[i.kind], lineHeight: 0, paddingTop: 2 }}><Icon name={KIND_ICON[i.kind]} size={15} /></span>
-      <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
-        <span className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: 600 }}>{i.name}</span>
-        <span className="aug-fs-xs" style={{ ...ROW, gap: 6, color: "var(--t3)", flexWrap: "wrap" }}>
-          <span>{[usedWords(i), i.connection_name].filter(Boolean).join(" · ")}</span>
-          {mark && <Chip tone={mark.tone === "up" ? "up" : mark.tone === "amber" ? "amber" : "plain"}>{mark.word}</Chip>}
+    <div className="aug-discover-row" data-testid="atlas-learned-row">
+      <a href={href} title={l.item.text} onClick={(e) => inPlace(e, () => onOpen(learnedOpened(l)))}>
+        <span className="k" style={{ color: KIND_TONE.learned }}><Icon name="memory" size={15} /></span>
+        <span className="main">
+          <span className="n aug-fs-chrome">{l.item.text}</span>
+          <span className="d aug-fs-sm">{[LEARNED_WORDS[l.item.kind] ?? l.item.kind, l.connName, l.item.standing_said].filter(Boolean).join(" · ")}</span>
         </span>
-        {i.line && (
-          <span className="aug-fs-xs" style={{ color: "var(--t2)", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
-            overflow: "hidden" }}>{i.line}</span>
-        )}
-      </span>
-    </Button>
+      </a>
+    </div>
   );
 }
 
 /** A kind of what an Area holds, listed on the left as the reference lists an Area's pages: how many, in which order
  *  (Most used, by name, recently changed), a page at a time; a thing clicked opens on the right. Read from the server a
  *  page at a time — an Area's page carries only the first few of each kind. */
-function KindList({ area, fan, learned, onOpen, workspaceId }: {
+function KindList({ area, fan, learned, onOpen, workspaceId, many }: {
   area: string; fan: Fan; learned: { items: LearnedHere[]; unread: string[] } | null | "failed";
   onOpen: (o: Opened) => void; workspaceId?: string;
+  /** The Area spans more than one connection: each row names its own. */
+  many: boolean;
 }) {
   const [order, setOrder] = useState<Order>("use");
   const [at, setAt] = useState(0);
@@ -249,64 +231,60 @@ function KindList({ area, fan, learned, onOpen, workspaceId }: {
   const here = got?.asked === asked ? got : null;
   const learnedRows = learned && learned !== "failed" ? learned.items : [];
   const total = fan.key === "learned" ? learnedRows.length : here && "total" in here ? here.total : fan.count;
+  const title = fanTitle(fan);
+  // drawn as Discover draws a kind on an Area's page: its title and count, what orders it at the right, its rows
   return (
-    <section data-testid="atlas-kind-list" aria-label={fan.words} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      <span style={{ ...ROW, gap: 8, justifyContent: "space-between" }}>
-        <span className="aug-fs-sm" data-testid="atlas-kind-count" style={{ ...ROW, gap: 8, color: "var(--t2)" }}>
-          <KindDot tone={fan.tone} />{fan.key === "learned" ? fan.words : `${formatCount(total)} ${fan.words.replace(/^[\d,]+\s*/, "")}`}
-        </span>
-        {fan.key === "learned" ? (
-          <span className="aug-fs-xs" style={MUTED} title="A person's word on what a run measured first">In standing order</span>
-        ) : (
-          <DropdownMenu.Root>
-            <DropdownMenu.Trigger>
-              <Button variant="ghost" size="xs" aria-label={`In order: ${ORDER_WORDS[order]}`} style={{ color: "var(--accent-11, var(--blue4))" }}>
-                {ORDER_WORDS[order]} <Icon name="chevd" size={12} />
-              </Button>
-            </DropdownMenu.Trigger>
-            <DropdownMenu.Content size="1" align="end">
-              {(Object.keys(ORDER_WORDS) as Order[]).map((o) => (
-                <DropdownMenu.Item key={o} onSelect={() => { setOrder(o); setAt(0); }}>{ORDER_WORDS[o]}</DropdownMenu.Item>
-              ))}
-            </DropdownMenu.Content>
-          </DropdownMenu.Root>
-        )}
-      </span>
-      <div role="list" style={{ display: "flex", flexDirection: "column", gap: 2, margin: "0 -8px" }}>
-        {fan.key !== "learned" && (here === null ? <Loading what={fan.words.replace(/^[\d,]+\s*/, "")} />
-          : "failed" in here ? <ReadFailed what={fan.words.replace(/^[\d,]+\s*/, "")} error={here.failed} onRetry={() => setTries((n) => n + 1)} />
-          : here.items.length === 0 ? <span className="aug-fs-sm" style={{ ...MUTED, padding: "0 8px" }}>Nothing of this kind here.</span>
-          : here.items.map((i) => <ItemRow key={`${i.kind}:${i.id}`} i={i} onOpen={onOpen} />))}
-        {fan.key === "learned" && (learned === null ? <Loading what="what was learned here" />
-          : learned === "failed" ? <span className="aug-fs-sm" style={{ color: "var(--red4)" }}>What was learned here could not be read.</span>
-          : (
-            <>
-              {learned.items.slice(at * PER_PAGE, (at + 1) * PER_PAGE).map((l) => (
-                <Button key={`${l.connId}:${l.item.ref}:${l.item.text}`} role="listitem" variant="ghost" size="sm"
-                  data-testid="atlas-learned-row" onClick={() => onOpen(learnedOpened(l))}
-                  style={{ justifyContent: "flex-start", height: "auto", padding: "8px", textAlign: "left", whiteSpace: "normal", alignItems: "flex-start" }}>
-                  <span style={{ color: KIND_TONE.learned, lineHeight: 0, paddingTop: 2 }}><Icon name="memory" size={15} /></span>
-                  <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
-                    <span className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: 600, display: "-webkit-box", WebkitLineClamp: 2,
-                      WebkitBoxOrient: "vertical", overflow: "hidden" }}>{l.item.text}</span>
-                    <span className="aug-fs-xs" style={MUTED}>{[LEARNED_WORDS[l.item.kind] ?? l.item.kind, l.connName].join(" · ")}</span>
-                  </span>
+    <section className="aug-discover-kind" data-testid="atlas-kind-list" aria-label={title}>
+      <div className="head aug-fs-sm">
+        <span className="title">{title}</span><span data-testid="atlas-kind-count">{formatCount(fan.key === "learned" ? fan.count : total)}</span>
+        <span className="right">
+          {fan.key === "learned" ? (
+            <span className="aug-fs-xs" title="A person's word on what a run measured first">in standing order</span>
+          ) : (
+            <DropdownMenu.Root>
+              <DropdownMenu.Trigger>
+                <Button variant="link" size="xs" aria-label={`In order: ${ORDER_WORDS[order]}`}>
+                  {ORDER_WORDS[order]} <Icon name="chevd" size={12} />
                 </Button>
-              ))}
-              {learned.items.length < fan.count && (
-                <span className="aug-fs-xs" data-testid="atlas-learned-shown" style={{ ...MUTED, padding: "0 8px" }}>
-                  {`${formatCount(learned.items.length)} of ${formatCount(fan.count)} read here — every one is on the Semantic Layer's Learned tab.`}
-                </span>
-              )}
-              {learned.unread.length > 0 && (
-                <span className="aug-fs-xs" style={{ color: "var(--amb4)", padding: "0 8px" }}>{`Not read: what was learned on ${learned.unread.join(", ")}.`}</span>
-              )}
-            </>
-          ))}
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Content size="1" align="end">
+                {(Object.keys(ORDER_WORDS) as Order[]).map((o) => (
+                  <DropdownMenu.Item key={o} onSelect={() => { setOrder(o); setAt(0); }}>{ORDER_WORDS[o]}</DropdownMenu.Item>
+                ))}
+              </DropdownMenu.Content>
+            </DropdownMenu.Root>
+          )}
+        </span>
       </div>
+      {fan.key !== "learned" && (here === null ? <Loading what={title.toLowerCase()} />
+        : "failed" in here ? <ReadFailed what={title.toLowerCase()} error={here.failed} onRetry={() => setTries((n) => n + 1)} />
+        : here.items.length === 0 ? <Empty>Nothing of this kind stands in this Area.</Empty>
+        : here.items.map((i) => (
+          <ItemRow key={`${i.kind}:${i.id}`} item={i} many={many} how tone={KIND_TONE[i.kind]} onOpen={(x) => onOpen(itemOpened(x))} />
+        )))}
+      {fan.key === "learned" && (learned === null ? <Loading what="what was learned here" />
+        : learned === "failed" ? <Said lines={["What was learned here could not be read."]} />
+        : (
+          <>
+            {learned.items.slice(at * PER_PAGE, (at + 1) * PER_PAGE).map((l) => (
+              <LearnedRow key={`${l.connId}:${l.item.ref}:${l.item.text}`} l={l} onOpen={onOpen} />
+            ))}
+            {learned.items.length < fan.count && (
+              <p className="aug-fs-xs" data-testid="atlas-learned-shown" style={{ ...MUTED, margin: "6px 8px 0" }}>
+                {`${formatCount(learned.items.length)} of ${formatCount(fan.count)} read here — every one is on the Semantic Layer's Learned tab.`}
+              </p>
+            )}
+            {learned.unread.length > 0 && <Said lines={[`Not read: what was learned on ${learned.unread.join(", ")}.`]} />}
+          </>
+        ))}
       <Pager at={at} total={total} onAt={setAt} />
     </section>
   );
+}
+
+/** A kind's title, as Discover names it ("Metrics", "Tables"), and the Areas' own two: what is certified, what was learned. */
+function fanTitle(fan: Fan): string {
+  return fan.key === "learned" ? "Learned" : fan.key === "certified" ? "Certified" : KIND_TITLES[fan.key];
 }
 
 /** One place in the breadcrumb: its name, and where it goes — none for where the reader is. */
@@ -319,8 +297,11 @@ const CRUMBS_SHOWN = 3;
  * Metrics", each place a way back to it — and a search over what is in view (the Area's, or every Area's). While a search
  * is typed, what it finds stands where the panel's own content was; a thing found opens on the right.
  */
-export function RailHead({ crumbs, area = "", workspaceId, onOpen, children }: {
-  crumbs: Crumb[]; area?: string; workspaceId?: string; onOpen: (o: Opened) => void; children?: React.ReactNode;
+export function RailHead({ crumbs, area = "", workspaceId, onOpen, areaNames, children }: {
+  crumbs: Crumb[]; area?: string; workspaceId?: string; onOpen: (o: Opened) => void;
+  /** The Areas' names by id, for the chip a found thing carries. */
+  areaNames?: Record<string, string>;
+  children?: React.ReactNode;
 }) {
   const [searching, setSearching] = useState(false);
   const [q, setQ] = useState("");
@@ -390,7 +371,10 @@ export function RailHead({ crumbs, area = "", workspaceId, onOpen, children }: {
               <>
                 <span className="aug-fs-xs" style={MUTED}>{results.total ? `${formatCount(results.total)} found in ${where}` : `Nothing in ${where} says “${asked}”.`}</span>
                 <div role="list" style={{ display: "flex", flexDirection: "column", gap: 2, margin: "0 -8px" }}>
-                  {results.items.map((i) => <ItemRow key={`${i.kind}:${i.id}`} i={i} onOpen={onOpen} />)}
+                  {results.items.map((i) => (
+                    <ItemRow key={`${i.kind}:${i.id}`} item={i} many areaName={areaNames?.[i.area]} tone={KIND_TONE[i.kind]}
+                      onOpen={(x) => onOpen(itemOpened(x))} />
+                  ))}
                 </div>
               </>
             )}
@@ -439,7 +423,7 @@ export function AreaRail({ area, ancestors = [], page, pageFailed, onRetry, conn
         </span>
       )}
       {kind === "review" ? <ReviewList area={area.id} /> : chosenFan ? (
-        <KindList area={area.id} fan={chosenFan} learned={learned} onOpen={onOpen} workspaceId={workspaceId} />
+        <KindList area={area.id} fan={chosenFan} learned={learned} onOpen={onOpen} workspaceId={workspaceId} many={area.connections.length > 1} />
       ) : (
         <>
           <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: 12, borderRadius: "var(--r3)", background: "var(--bg-0)" }}>

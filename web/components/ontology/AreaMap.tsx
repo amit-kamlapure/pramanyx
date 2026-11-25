@@ -269,7 +269,8 @@ export function AreaMap({ connectionId }: {
             onPickArea={openArea} onBack={() => pick(null)} workspaceId={workspaceId}
             onSaved={() => { readPage(chosen.id, true); load(); }} />
         ) : (
-          <RailHead crumbs={[{ label: "Ontology" }]} workspaceId={workspaceId} onOpen={openOne}>
+          <RailHead crumbs={[{ label: "Ontology" }]} workspaceId={workspaceId} onOpen={openOne}
+            areaNames={Object.fromEntries([...atlas.areas, ...atlas.quiet].map((x) => [x.id, x.name]))}>
             <div role="tablist" aria-label="The side panel" style={{ ...ROW, gap: 18 }}>
               {(["overview", "review"] as const).map((t) => (
                 <Button key={t} role="tab" aria-selected={tab === t} variant="ghost" size="xs" onClick={() => setTab(t)}

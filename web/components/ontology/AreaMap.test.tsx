@@ -73,6 +73,11 @@ const REVIEW: AtlasReview = {
   ],
 };
 
+/** The rows a list shows — Discover's own (`discover/parts.ItemRow`) — and a click on one, which opens it beside the list. */
+const listed = () => screen.getAllByTestId("discover-row");
+const findListed = () => screen.findAllByTestId("discover-row");
+const openRow = (row: HTMLElement) => fireEvent.click(row.querySelector("a")!);
+
 function serve(body: Atlas = ATLAS, many?: DiscoverItem[]) {
   const urls: string[] = [];
   vi.stubGlobal("fetch", vi.fn(async (url: string) => {
@@ -179,18 +184,18 @@ describe("the Atlas, by Area", () => {
     render(<AreaMap />);
     fireEvent.click(await screen.findByTestId("atlas-bubble-orders_sales"));
     fireEvent.click(await screen.findByTestId("atlas-fan-metric"));
-    // the reference's rows: the name, how much it was used and its mark, what it says
-    expect((await screen.findAllByTestId("atlas-kind-row")).map((r) => r.textContent)).toEqual([
-      "RevenueUsed in 12 answers · theLook",
-      "Average order valueNot used this month · theLookDraft",
+    // Discover's own rows (the user, 2026-11-26): the name, what it is and its use, its mark, how it came to stand here
+    expect((await findListed()).map((r) => r.textContent)).toEqual([
+      "Revenueopened 3 times this month by 2 people · used in 12 answersread from its tables",
+      "Average order valueDraftread from its tables",
     ]);
-    expect(screen.getByTestId("atlas-kind-count")).toHaveTextContent("2 metrics");
+    expect(screen.getByTestId("atlas-kind-list").querySelector(".head")).toHaveTextContent("Metrics2");
     // where the reader is, each place a way back
     const trail = screen.getByRole("navigation", { name: "Where you are" });
     expect(trail.textContent).toBe("OntologyOrders & salesMetrics");
     fireEvent.click(within(trail).getByRole("button", { name: "Orders & sales" }));
     fireEvent.click(screen.getByTestId("atlas-fan-row-certified"));
-    expect((await screen.findAllByTestId("atlas-kind-row")).map((r) => r.textContent)).toEqual(["ordersNot used this month · theLookCertified"]);
+    expect((await findListed()).map((r) => r.textContent)).toEqual(["ordersCertifiedread from its tables"]);
   });
 
   it("lets the reader widen or narrow the left panel, and keeps the width they chose", async () => {
@@ -216,14 +221,14 @@ describe("the Atlas, by Area", () => {
     render(<AreaMap />);
     fireEvent.click(await screen.findByTestId("atlas-bubble-orders_sales"));
     fireEvent.click(await screen.findByTestId("atlas-fan-metric"));
-    expect(await screen.findAllByTestId("atlas-kind-row")).toHaveLength(20);
-    expect(screen.getByTestId("atlas-kind-count")).toHaveTextContent("45 metrics");
+    expect(await findListed()).toHaveLength(20);
+    expect(screen.getByTestId("atlas-kind-list").querySelector(".head")).toHaveTextContent("Metrics45");
     fireEvent.click(screen.getByRole("button", { name: "Page 3" }));
-    await vi.waitFor(() => expect(screen.getAllByTestId("atlas-kind-row")).toHaveLength(5));
-    expect(screen.getAllByTestId("atlas-kind-row")[0]).toHaveTextContent("Metric 40");
-    const listed = urls.filter((u) => u.includes("/discover/items"));
-    expect(listed[0]).toContain("sort=use");
-    expect(listed.at(-1)).toContain("cursor=40");
+    await vi.waitFor(() => expect(listed()).toHaveLength(5));
+    expect(listed()[0]).toHaveTextContent("Metric 40");
+    const asked = urls.filter((u) => u.includes("/discover/items"));
+    expect(asked[0]).toContain("sort=use");
+    expect(asked.at(-1)).toContain("cursor=40");
     fireEvent.keyDown(screen.getByRole("button", { name: "In order: Most used" }), { key: "Enter" });
     fireEvent.click(await screen.findByRole("menuitem", { name: "Name" }));
     await vi.waitFor(() => expect(urls.filter((u) => u.includes("/discover/items")).at(-1)).toContain("sort=name"));
@@ -236,7 +241,7 @@ describe("the Atlas, by Area", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Search every Area" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Search every Area" }), { target: { value: "revenue" } });
     await vi.waitFor(() => expect(screen.getByTestId("atlas-search")).toHaveTextContent("1 found in every Area"));
-    fireEvent.click(screen.getByTestId("atlas-kind-row"));
+    openRow(listed()[0]);
     expect(screen.getByTestId("atlas-open-item")).toHaveTextContent("Revenue");
     fireEvent.click(screen.getByRole("button", { name: "Stop searching" }));
     expect(screen.queryByTestId("atlas-search")).toBeNull();
@@ -249,7 +254,7 @@ describe("the Atlas, by Area", () => {
     );
     fireEvent.click(await screen.findByTestId("atlas-bubble-orders_sales"));
     fireEvent.click(await screen.findByTestId("atlas-fan-metric"));
-    fireEvent.click((await screen.findAllByTestId("atlas-kind-row"))[0]);
+    openRow((await findListed())[0]);
     expect(screen.queryByTestId("atlas-open-panel")).toBeNull();                       // no second panel of the Areas' own
     const open = screen.getByRole("tablist", { name: "Open in the side panel" });
     expect(within(open).getAllByRole("tab").map((t) => t.textContent)).toEqual(["Orders & sales", "Revenue"]);
@@ -261,11 +266,11 @@ describe("the Atlas, by Area", () => {
     render(<AreaMap />);
     fireEvent.click(await screen.findByTestId("atlas-bubble-orders_sales"));
     fireEvent.click(await screen.findByTestId("atlas-fan-metric"));
-    const [revenue, aov] = await screen.findAllByTestId("atlas-kind-row");
-    fireEvent.click(revenue);
+    const [revenue, aov] = await findListed();
+    openRow(revenue);
     expect(screen.getByTestId("atlas-open-item")).toHaveTextContent("Revenue");
     expect(screen.getByTestId("atlas-open-item")).toHaveTextContent("FormulaSUM(sale_price)");
-    fireEvent.click(aov);
+    openRow(aov);
     expect(screen.getAllByRole("tab", { name: /Revenue|Average order value/ }).map((t) => t.textContent)).toEqual(["Revenue", "Average order value"]);
     expect(screen.getByTestId("atlas-open-item")).toHaveTextContent("Average order value");
     fireEvent.click(screen.getByRole("tab", { name: "Revenue" }));
@@ -282,7 +287,7 @@ describe("the Atlas, by Area", () => {
     const row = await screen.findByTestId("atlas-learned-row");
     expect(row).toHaveTextContent("Revenue counts completed orders onlyFrom an answer · theLook");
     expect(urls.find((u) => u.includes("/knowledge/c1/learned"))).toContain("area=orders_sales");
-    fireEvent.click(row);
+    openRow(row);
     expect(screen.getByTestId("atlas-open-learned")).toHaveTextContent("Where it standssaid, never measured — no person has confirmed it");
     expect(screen.getByTestId("atlas-open-learned")).toHaveTextContent("Used in answersnot counted yet");
     fireEvent.click(screen.getByRole("button", { name: "Promote" }));
