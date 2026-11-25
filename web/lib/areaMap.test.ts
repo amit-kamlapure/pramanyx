@@ -3,7 +3,8 @@
  *  every time and never touching; the figures said in words, a share of nothing said as a dash. */
 import { describe, expect, it } from "vitest";
 
-import { bounds, changeWords, packBubbles, radiusFor, R_MIN, share, waitingWords } from "@/lib/areaMap";
+import { bounds, changeWords, fanOf, itemsOf, packBubbles, radiusFor, R_MIN, ring, share, waitingWords } from "@/lib/areaMap";
+import type { DiscoverItem, DiscoverKind } from "@/lib/discover";
 
 describe("the Areas laid out", () => {
   const sizes = Array.from({ length: 18 }, (_, n) => ({ id: `a${n}`, r: radiusFor([120, 40, 12, 9, 5, 0][n % 6]) }));
@@ -49,5 +50,33 @@ describe("the figures in words", () => {
     expect(waitingWords({ gap: 2, candidate: 1, conflict: 0 }, 9)).toBe("2 gaps · 1 to confirm · 9 learned");
     expect(waitingWords({ gap: 0, candidate: 0, conflict: 0 }, 0)).toBe("nothing waits");
     expect(waitingWords(null, null)).toBe("not read yet");
+  });
+});
+
+describe("an Area, opened (A4b)", () => {
+  const it_ = (kind: DiscoverKind, id: string, cert = "") => ({ kind, id, name: id, certification: cert ? { status: cert } : null }) as DiscoverItem;
+  const page = { kinds: [
+    { kind: "table" as const, title: "Tables", count: 3, withheld: 0, states: {}, items: [it_("table", "t1", "certified"), it_("table", "t2")] },
+    { kind: "metric" as const, title: "Metrics", count: 1, withheld: 0, states: {}, items: [it_("metric", "m1", "certified")] },
+  ] };
+
+  it("fans out in the plan's order — defined and certified first — each with its count; none drawn for nothing", () => {
+    expect(fanOf(page, 7).map((f) => [f.key, f.words])).toEqual([
+      ["metric", "1 metric"], ["certified", "2 certified"], ["learned", "7 learned"], ["table", "3 tables"]]);
+    expect(fanOf(page, null).map((f) => f.key)).toEqual(["metric", "certified", "table"]);
+    expect(fanOf({ kinds: [] }, 0)).toEqual([]);
+  });
+
+  it("lists a kind's own things, or every certified thing across kinds", () => {
+    expect(itemsOf(page, "table").map((i) => i.id)).toEqual(["t1", "t2"]);
+    expect(itemsOf(page, "certified").map((i) => i.id)).toEqual(["t1", "m1"]);
+    expect(itemsOf(page, "learned")).toEqual([]);
+  });
+
+  it("places a ring the same every time, the first at the top", () => {
+    const r = ring(4, 100);
+    expect(r[0].x).toBeCloseTo(0); expect(r[0].y).toBeCloseTo(-100);
+    expect(r[2].y).toBeCloseTo(100);
+    expect(ring(4, 100)).toEqual(r);
   });
 });

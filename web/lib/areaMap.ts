@@ -4,7 +4,11 @@
  * for review and what was learned in it; the side panel's figures; and the layout that draws the Areas as bubbles,
  * sized by the answers that drew on them — the same picture every time it is read.
  */
-import type { DiscoverArea, DiscoverItem, SuggestedInView } from "@/lib/discover";
+import type { IconName } from "@/components/ui/icon";
+import {
+  KIND_ICON, KIND_WORDS, type DiscoverArea, type DiscoverAreaPage, type DiscoverItem, type DiscoverKind, type SuggestedInView,
+} from "@/lib/discover";
+import { formatCount } from "@/lib/format";
 
 export interface AtlasArea extends DiscoverArea {
   /** The month's answers that read a table placed in it. */
@@ -106,4 +110,44 @@ export function waitingWords(r: AtlasArea["review"], learned: number | null): st
 /** How many wait for review in an Area. */
 export function waiting(r: AtlasArea["review"]): number {
   return r ? r.gap + r.candidate + r.conflict : 0;
+}
+
+// ── an Area, opened (A4b, the plan's §3.2–3.3) ────────────────────────────────────────────────────────────────────────
+
+/** What an opened Area fans out into: each kind it holds, what was learned in it, and what is certified across kinds. */
+export type FanKey = DiscoverKind | "learned" | "certified";
+
+export interface Fan { key: FanKey; count: number; words: string; icon: IconName }
+
+/** The order an Area fans out in — the plan's: what people defined and certified first, then the rest. */
+const FAN_ORDER: FanKey[] = ["metric", "definition", "certified", "learned", "trusted_query", "dashboard", "canvas",
+  "agent", "document", "sheet", "schedule", "table"];
+
+/** An Area's fan: each kind with a count, in the plan's order — a kind it holds none of is not drawn. */
+export function fanOf(page: Pick<DiscoverAreaPage, "kinds">, learned: number | null): Fan[] {
+  const counts = new Map<FanKey, number>(page.kinds.map((k) => [k.kind, k.count]));
+  const certified = page.kinds.reduce((n, k) => n + k.items.filter((i) => i.certification?.status === "certified").length, 0);
+  if (certified) counts.set("certified", certified);
+  if (learned) counts.set("learned", learned);
+  return FAN_ORDER.filter((k) => (counts.get(k) ?? 0) > 0).map((k) => {
+    const n = counts.get(k) ?? 0;
+    const words = k === "learned" ? "learned" : k === "certified" ? "certified"
+      : KIND_WORDS[k][n === 1 ? 0 : 1];
+    return { key: k, count: n, words: `${formatCount(n)} ${words}`, icon: k === "learned" ? "idea" : k === "certified" ? "certificate" : KIND_ICON[k] };
+  });
+}
+
+/** The things of one fan key, as its list shows them — a kind's own, or every certified thing. */
+export function itemsOf(page: Pick<DiscoverAreaPage, "kinds">, key: FanKey): DiscoverItem[] {
+  if (key === "learned") return [];
+  if (key === "certified") return page.kinds.flatMap((k) => k.items.filter((i) => i.certification?.status === "certified"));
+  return page.kinds.find((k) => k.kind === key)?.items ?? [];
+}
+
+/** ``n`` places on a ring of radius ``r`` around (0, 0), the first at the top, going clockwise — the same every time. */
+export function ring(n: number, r: number): { x: number; y: number }[] {
+  return Array.from({ length: n }, (_, i) => {
+    const a = -Math.PI / 2 + (2 * Math.PI * i) / Math.max(1, n);
+    return { x: Math.cos(a) * r * WIDE, y: Math.sin(a) * r };
+  });
 }

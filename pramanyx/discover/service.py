@@ -107,8 +107,9 @@ def area_view(a: dict, held: list[Item]) -> dict:
                               or (i.certification or {}).get("status") == "deprecated")}
 
 
-def _kind_view(kind: str, items: list[Item], withheld: int, shown: int = SHOWN) -> dict:
-    ordered = _order(items)
+def _kind_view(kind: str, items: list[Item], withheld: int, shown: int = SHOWN, *, keep_order: bool = False) -> dict:
+    """A kind's section; ``keep_order`` keeps the order it was handed (the most used first), else the page's own."""
+    ordered = list(items) if keep_order else _order(items)
     return {"kind": kind, "title": TITLES[kind], "count": len(items), "withheld": withheld,
             "states": dict(Counter(i.state for i in items if i.state)),
             "items": [i.view() for i in ordered[:shown]]}
@@ -226,8 +227,10 @@ def list_items(scope: Scope, *, kind: str = "", area: str = "", certified: bool 
             "said": [s for k in kinds for s in found[k].all_said()], "use_said": use_said}
 
 
-def area_page(scope: Scope, area_id: str) -> Optional[dict]:
-    """One Area's page: the Area, its sub-areas, what it holds by kind. None when no connection in view has it."""
+def area_page(scope: Scope, area_id: str, *, by_use_first: bool = False) -> Optional[dict]:
+    """One Area's page: the Area, its sub-areas, what it holds by kind. None when no connection in view has it.
+    ``by_use_first`` (the Atlas's opened Area, A4b): each thing carries its use this month, and each kind lists the most
+    used first, the rest in the page's own order after them."""
     areas = areas_in_view(scope)
     a = areas.get(area_id)
     if a is None:
@@ -235,9 +238,15 @@ def area_page(scope: Scope, area_id: str) -> Optional[dict]:
     found = gather(scope)
     items = all_items(found)
     held = [i for i in items if i.area == area_id]
+    use_said = put_use(held) if by_use_first else []
     by_kind: dict[str, list[Item]] = {k: [] for k in KINDS}
     for i in held:
         by_kind[i.kind].append(i)
+    if by_use_first:
+        for k, kind_items in by_kind.items():
+            used = by_use(kind_items)
+            first = {id(i) for i in used}
+            by_kind[k] = used + [i for i in _order(kind_items) if id(i) not in first]
     children = []
     for c_id, c in areas.items():
         if c.get("parent") == area_id:
@@ -254,7 +263,7 @@ def area_page(scope: Scope, area_id: str) -> Optional[dict]:
     from pramanyx.semantic.areas import curates
     return {"area": area_view(a, held), "children": children,
             "featured": [i.view() for i in featured], "featured_refs": wanted,
-            "kinds": [_kind_view(k, by_kind[k], 0, shown=len(by_kind[k])) for k in KINDS if by_kind[k]],
+            "kinds": [_kind_view(k, by_kind[k], 0, shown=len(by_kind[k]), keep_order=by_use_first) for k in KINDS if by_kind[k]],
             "empty_kinds": [k for k in KINDS if not by_kind[k]],
             "can_curate": area_id != OTHER and curates(a, scope.person, admin=scope.curator),
-            "you": who_of(scope.person), "said": said}
+            "you": who_of(scope.person), "said": [*said, *use_said]}

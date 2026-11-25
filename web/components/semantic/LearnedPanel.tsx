@@ -23,7 +23,8 @@ import {
   KIND_WORDS, NO_AREA, promoteLearned, readLearned, whereFrom, wordOf, type Learned, type LearnedItem, type Promoted,
 } from "@/lib/learned";
 
-function PromoteForm({ connId, item, areas, onDone, onCancel }: {
+/** Promote a learned item to a draft Definition — here under its row, and on the Atlas in an opened item's tab (A4b). */
+export function PromoteForm({ connId, item, areas, onDone, onCancel }: {
   connId: string; item: LearnedItem; areas: { id: string; name: string }[];
   onDone: (p: Promoted) => void; onCancel: () => void;
 }) {
@@ -111,12 +112,12 @@ export function LearnedPanel({ connId }: { connId: string }) {
     return () => window.clearTimeout(t);
   }, [typed]);
   const load = useCallback(() => {
-    setFailed("");
-    readLearned(connId, { area, about }).then(setLearned).catch((e) => setFailed(e instanceof Error ? e.message : String(e)));
+    readLearned(connId, { area, about }).then((l) => { setLearned(l); setFailed(""); })
+      .catch((e) => setFailed(e instanceof Error ? e.message : String(e)));
   }, [connId, area, about]);
   useEffect(() => { load(); }, [load]);
 
-  if (failed) return <ReadFailed what="what was learned" error={failed} onRetry={load} />;
+  if (failed) return <ReadFailed what="what was learned" error={failed} onRetry={() => { setFailed(""); load(); }} />;
   if (!learned) return <Loading what="what was learned" />;
 
   const names = new Map(learned.areas.map((a) => [a.id, a.name]));

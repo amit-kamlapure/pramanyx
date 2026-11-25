@@ -257,9 +257,11 @@ export function readDiscoverSearch(a: ItemsAsked & { q: string }): Promise<Disco
     a.across ? undefined : a.workspaceId), "the search");
 }
 
-/** One Area's page; null when no connection in view has that Area (the server's 404). */
-export function readDiscoverArea(areaId: string, connectionId = "", workspaceId?: string, fresh = false): Promise<DiscoverAreaPage | null> {
-  const href = url(`/discover/areas/${encodeURIComponent(areaId)}`, { connection_id: connectionId }, workspaceId);
+/** One Area's page; null when no connection in view has that Area (the server's 404). `byUse` (the Atlas, A4b): each
+ *  thing carries its use this month and each kind lists the most used first. */
+export function readDiscoverArea(areaId: string, connectionId = "", workspaceId?: string, fresh = false,
+  byUse = false): Promise<DiscoverAreaPage | null> {
+  const href = url(`/discover/areas/${encodeURIComponent(areaId)}`, { connection_id: connectionId, by_use: byUse || undefined }, workspaceId);
   return once(href, async () => {
     const res = await fetch(href);
     if (res.status === 404) return null;

@@ -6118,7 +6118,8 @@ export interface paths {
         };
         /**
          * Get Discover Area
-         * @description One Area's page: the Area, its sub-areas, and what it holds by kind.
+         * @description One Area's page: the Area, its sub-areas, and what it holds by kind. ``by_use`` (the Atlas's opened Area, A4b):
+         *     each thing with its use this month, the most used of each kind first.
          */
         get: operations["get_discover_area_discover_areas__area_id__get"];
         /**
@@ -39543,6 +39544,7 @@ export interface operations {
             query?: {
                 workspace_id?: string | null;
                 connection_id?: string | null;
+                by_use?: boolean;
             };
             header?: never;
             path: {

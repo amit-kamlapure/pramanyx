@@ -15,11 +15,14 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { IconSquare } from "@/components/ui/icon-square";
 import { Loading, ReadFailed } from "@/components/ui/states";
+import {
+  AreaFan, AreaRail, OpenPanel, readLearnedIn, withOpened, type LearnedHere, type Opened,
+} from "@/components/ontology/AreaDrill";
 import { areaIcon } from "@/lib/areaIcons";
 import {
-  bounds, changeWords, packBubbles, radiusFor, R_MIN, share, waiting, waitingWords, type Atlas, type AtlasArea,
+  bounds, changeWords, fanOf, packBubbles, radiusFor, R_MIN, share, waiting, waitingWords, type Atlas, type AtlasArea, type FanKey,
 } from "@/lib/areaMap";
-import { holdsWords, ownersLine, readAtlas, usageLine } from "@/lib/discover";
+import { readAtlas, readDiscoverArea, usageLine, type DiscoverArea, type DiscoverAreaPage } from "@/lib/discover";
 import { formatCount } from "@/lib/format";
 import { getActiveWorkspace } from "@/lib/workspace";
 
@@ -106,37 +109,6 @@ function Review({ atlas, onPick }: { atlas: Atlas; onPick: (id: string) => void 
   );
 }
 
-function AreaPanel({ area, onBack }: { area: AtlasArea; onBack: () => void }) {
-  return (
-    <div data-testid="atlas-area-panel" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <Button variant="ghost" size="xs" onClick={onBack} style={{ alignSelf: "flex-start" }}>
-        <Icon name="chevl" size={12} /> All Areas
-      </Button>
-      <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <IconSquare name={areaIcon(area.icon)} size={32} />
-        <span style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-          <span className="aug-fs-h1" style={{ color: "var(--t1)", fontWeight: 600 }}>{area.name}</span>
-          {area.question && <span className="aug-fs-sm" style={MUTED}>{area.question}</span>}
-        </span>
-      </span>
-      <span className="aug-fs-sm" style={{ color: area.business_owners.length || area.technical_owners.length ? "var(--t2)" : "var(--amb4)" }}>
-        {ownersLine(area)}
-      </span>
-      <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: 12, borderRadius: "var(--r3)", background: "var(--bg-0)" }}>
-        <span className="aug-fs-sm" style={{ color: "var(--t1)" }} data-testid="atlas-area-answers">
-          {`${formatCount(area.answers)} answer${area.answers === 1 ? "" : "s"} this month drew on it`}
-        </span>
-        <span className="aug-fs-sm" style={{ color: "var(--t2)" }}>{`Holds ${holdsWords(area.counts) || "nothing yet"}`}</span>
-        <span className="aug-fs-sm" style={{ color: "var(--t2)" }}>{`Waiting: ${waitingWords(area.review, area.learned)}`}</span>
-        {area.connections.length > 0 && (
-          <span className="aug-fs-xs" style={MUTED}>{`On ${area.connections.length} connection${area.connections.length === 1 ? "" : "s"}`}</span>
-        )}
-      </div>
-      <a href={`/?view=discover&tab=discover&id=${encodeURIComponent(area.id)}`} className="aug-fs-sm">Open its page in Discover</a>
-    </div>
-  );
-}
-
 export function AreaMap() {
   const [atlas, setAtlas] = useState<Atlas | null>(null);
   const [failed, setFailed] = useState("");
@@ -145,12 +117,36 @@ export function AreaMap() {
   const [zoom, setZoom] = useState(1);
   const [size, setSize] = useState({ w: 900, h: 640 });
   const canvas = useRef<HTMLDivElement>(null);
+  // an Area opened (A4b): its page, the kind whose list is open, what was learned in it, the things open on the right
+  const [page, setPage] = useState<DiscoverAreaPage | null>(null);
+  const [pageFailed, setPageFailed] = useState("");
+  const [kind, setKind] = useState<FanKey | null>(null);
+  const [learned, setLearned] = useState<{ items: LearnedHere[]; unread: string[] } | null | "failed">(null);
+  const [open, setOpen] = useState<Opened[]>([]);
+  const [active, setActive] = useState<string | null>(null);
+  const [children, setChildren] = useState<Map<string, DiscoverArea>>(new Map());
+  const workspaceId = getActiveWorkspace() || undefined;
 
   const load = useCallback(() => {
     readAtlas<Atlas>(getActiveWorkspace() || undefined).then((a) => { setAtlas(a); setFailed(""); })
       .catch((e) => setFailed(e instanceof Error ? e.message : String(e)));
   }, []);
   useEffect(() => { load(); }, [load]);
+  const readPage = useCallback((id: string, fresh = false) => {
+    setPage(null); setPageFailed("");
+    readDiscoverArea(id, "", getActiveWorkspace() || undefined, fresh, true)
+      .then((p) => {
+        if (!p) { setPageFailed("No connection in view holds this Area."); return; }
+        setPage(p);
+        setChildren((m) => new Map([...m, ...p.children.map((c) => [c.id, c] as const)]));
+      })
+      .catch((e) => setPageFailed(e instanceof Error ? e.message : String(e)));
+  }, []);
+  /** Open an Area — or, with null, go back to all of them: its kind list closed, what was learned in it read afresh. */
+  const pick = useCallback((id: string | null) => {
+    setPicked(id); setKind(null); setLearned(null); setZoom(1);
+    if (id) readPage(id);
+  }, [readPage]);
   useEffect(() => {
     const el = canvas.current;
     if (!el || typeof ResizeObserver === "undefined") return undefined;
@@ -183,14 +179,35 @@ export function AreaMap() {
     top: (size.h - 40) / 2 + 20 + (p.y - (box.minY + box.height / 2)) * scale,
   });
   const byId = new Map(atlas.areas.map((a) => [a.id, a]));
-  const chosen = picked ? byId.get(picked) ?? null : null;
+  const child = picked ? children.get(picked) : undefined;
+  const chosen: AtlasArea | null = !picked ? null : byId.get(picked)
+    ?? (child ? { ...child, answers: 0, review: null, learned: null } : null);
   const other = atlas.everything_else;
+  const fan = chosen && page ? fanOf(page, chosen.learned) : [];
+  const conns = chosen ? atlas.connections.filter((c) => chosen.connections.includes(c.id)) : [];
+  const chooseKind = (k: FanKey | null) => {
+    setKind(k);
+    if (k === "learned" && chosen && learned === null) {
+      readLearnedIn(chosen.id, conns).then(setLearned).catch(() => setLearned("failed"));
+    }
+  };
+  const openOne = (o: Opened) => { setOpen((xs) => withOpened(xs, o)); setActive(o.key); };
+  const closeOne = (key: string) => {
+    setOpen((xs) => xs.filter((x) => x.key !== key));
+    if (active === key) setActive(null);
+  };
+  const areaList = [...atlas.areas, ...atlas.quiet].map((a) => ({ id: a.id, name: a.name }));
 
   return (
     <div data-testid="area-map" style={{ flex: 1, minHeight: 0, display: "flex", flexWrap: "wrap" }}>
       <aside aria-label="The Areas at a glance" style={{ flex: "1 1 320px", maxWidth: 380, minWidth: 0, background: "var(--bg-2)",
         padding: "14px 16px 20px", display: "flex", flexDirection: "column", gap: 16, overflowY: "auto", boxSizing: "border-box" }}>
-        {chosen ? <AreaPanel area={chosen} onBack={() => setPicked(null)} /> : (
+        {chosen ? (
+          <AreaRail area={chosen} page={page} pageFailed={pageFailed} onRetry={() => readPage(chosen.id, true)}
+            connections={atlas.connections} fan={fan} kind={kind} onKind={chooseKind} learned={learned} onOpen={openOne}
+            onPickArea={(a) => pick(a.id)} onBack={() => pick(null)} workspaceId={workspaceId}
+            onSaved={() => { readPage(chosen.id, true); load(); }} />
+        ) : (
           <>
             <div role="tablist" aria-label="The side panel" style={{ ...ROW, gap: 18 }}>
               {(["overview", "review"] as const).map((t) => (
@@ -200,20 +217,24 @@ export function AreaMap() {
                 </Button>
               ))}
             </div>
-            {tab === "overview" ? <Overview atlas={atlas} /> : <Review atlas={atlas} onPick={setPicked} />}
+            {tab === "overview" ? <Overview atlas={atlas} /> : <Review atlas={atlas} onPick={pick} />}
           </>
         )}
       </aside>
       <section ref={canvas} aria-label="The Areas of the business" style={{ flex: "999 1 480px", minWidth: 0, minHeight: 520, position: "relative",
         overflow: "hidden", backgroundColor: "var(--bg-0)", backgroundImage: "radial-gradient(var(--bg-hover) 1px, transparent 1px)",
         backgroundSize: "18px 18px" }}>
-        {other.total > 0 && (
+        {chosen && (
+          <AreaFan area={chosen} fan={fan} subAreas={page?.children ?? []} size={size} zoom={zoom} kind={kind} onKind={chooseKind}
+            onPickArea={(a) => pick(a.id)} />
+        )}
+        {!chosen && other.total > 0 && (
           <span className="aug-fs-xs" data-testid="atlas-everything-else" style={{ position: "absolute", left: 14, top: 12, zIndex: 2,
             padding: "4px 10px", borderRadius: 12, background: "var(--bg-2)", color: "var(--t2)" }}>
             {`Everything else · ${formatCount(other.total)} things in no Area${other.answers ? ` · ${formatCount(other.answers)} answers read no placed table` : ""}`}
           </span>
         )}
-        {placed.map((p) => {
+        {!chosen && placed.map((p) => {
           const area = byId.get(p.id);
           const sug = p.id.startsWith(SUGGESTED) ? suggested.find((s) => SUGGESTED + s.label === p.id) : null;
           const d = 2 * p.r * scale;
@@ -222,7 +243,7 @@ export function AreaMap() {
             <Button key={p.id} variant="ghost" data-testid={area ? `atlas-bubble-${area.id}` : "atlas-bubble-suggested"}
               aria-pressed={area ? picked === area.id : undefined} disabled={!area}
               aria-label={area ? `${area.name}: ${area.answers} answers this month, holds ${area.total}` : `${sug?.label}, suggested by the model`}
-              onClick={() => area && setPicked(picked === area.id ? null : area.id)}
+              onClick={() => area && pick(picked === area.id ? null : area.id)}
               style={{ position: "absolute", left: pos.left - d / 2, top: pos.top - d / 2, width: d, height: d, padding: 4,
                 borderRadius: "50%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3,
                 background: area ? "var(--bg-2)" : "transparent", opacity: 1,
@@ -239,7 +260,7 @@ export function AreaMap() {
             </Button>
           );
         })}
-        {atlas.quiet.length > 0 && (
+        {!chosen && atlas.quiet.length > 0 && (
           <span className="aug-fs-xs" data-testid="atlas-quiet" style={{ position: "absolute", left: 14, bottom: 12, maxWidth: "60%", ...MUTED }}>
             {`${atlas.quiet.length} hold nothing yet — ${atlas.quiet.map((q) => q.name).join(", ")}`}
           </span>
@@ -250,6 +271,9 @@ export function AreaMap() {
           <Button size="icon-sm" variant="secondary" aria-label="Fit the map" onClick={() => setZoom(1)}><Icon name="expand" size={14} /></Button>
         </div>
       </section>
+      {open.length > 0 && (
+        <OpenPanel open={open} active={active} onActive={setActive} onClose={closeOne} areas={areaList} />
+      )}
     </div>
   );
 }

@@ -116,10 +116,11 @@ def get_discover_search(request: Request, q: str = Query(..., min_length=1, max_
 
 @router.get("/discover/areas/{area_id}")
 def get_discover_area(request: Request, area_id: str, workspace_id: Optional[str] = None,
-                      connection_id: Optional[str] = None) -> dict:
-    """One Area's page: the Area, its sub-areas, and what it holds by kind."""
+                      connection_id: Optional[str] = None, by_use: bool = False) -> dict:
+    """One Area's page: the Area, its sub-areas, and what it holds by kind. ``by_use`` (the Atlas's opened Area, A4b):
+    each thing with its use this month, the most used of each kind first."""
     from pramanyx.discover.service import area_page
-    page = area_page(scope_of(request, workspace_id, connection_id), area_id)
+    page = area_page(scope_of(request, workspace_id, connection_id), area_id, by_use_first=by_use)
     if page is None:
         raise HTTPException(status_code=404, detail="No such Area on the connections in view")
     return page

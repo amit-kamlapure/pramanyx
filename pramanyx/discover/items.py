@@ -131,6 +131,13 @@ def who_of(person: str) -> str:
 
 
 
+def _listed(value: Any) -> str:
+    """A list a record keeps, as a line: its names, comma-separated — a dimension may be a record with a name."""
+    if not isinstance(value, (list, tuple)):
+        return str(value or "")
+    return ", ".join(str(v.get("name") or v.get("column") or "") if isinstance(v, dict) else str(v) for v in value if v)
+
+
 def _href(path: str, **params: str) -> str:
     """The thing's own page INSIDE the app, in the shell's own words for it (`tab` and `layer` as the app writes them, so
     opening it adds one step Back undoes) and the words its page reads (`web/lib/addressOnce.ts`). Never a page of its
@@ -278,7 +285,10 @@ def metrics(scope: Scope) -> Found:
                 state=str(m.get("status") or ""),
                 updated_at=str(m.get("approved_at") or m.get("proposed_at") or ""),
                 href=_href("/", tab="semantic", conn=conn, metric=str(m["name"]), schema=str(m.get("home_schema") or "")),
-                detail={"unit": m.get("unit") or "", "measurable": m.get("measurable")}))
+                # what an opened metric says on the Atlas (A4b): its formula, what it is cut by, what it reads
+                detail={"unit": m.get("unit") or "", "measurable": m.get("measurable"),
+                        "formula": str(m.get("sql") or ""), "dimensions": _listed(m.get("dimensions")),
+                        "tables": _listed(m.get("tables"))}))
     return found
 
 
