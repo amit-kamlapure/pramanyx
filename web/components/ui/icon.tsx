@@ -297,7 +297,7 @@ const ICONS = {
   budget: IconCalculator,
   tax: IconReportMoney,
   team: IconUsersGroup,
-  hiring: IconUserPlus,
+  recruiting: IconUserPlus,
   badge: IconId,
   briefcase: IconBriefcase,
   school: IconSchool,

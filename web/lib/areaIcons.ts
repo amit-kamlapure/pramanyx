@@ -34,7 +34,7 @@ export const AREA_ICON_GROUPS: { group: string; icons: [IconName, string][] }[] 
     ["event", "events clienteling calendar"],
   ] },
   { group: "People and organisation", icons: [
-    ["badge", "employees staff identity"], ["hiring", "hiring recruiting headcount"], ["briefcase", "business work"],
+    ["badge", "employees staff identity"], ["recruiting", "recruiting headcount new joiners"], ["briefcase", "business work"],
     ["school", "training learning education"], ["org", "organisation structure hierarchy"], ["office", "offices buildings"],
     ["community", "community regions locations"], ["legal", "legal compliance contracts"], ["certificate", "certification quality standards"],
     ["flag", "goals milestones countries"],
