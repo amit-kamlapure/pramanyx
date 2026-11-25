@@ -153,6 +153,8 @@ def _learned(connection_id: str, *, about: str = "") -> dict:
         from pramanyx.kernel.errors import tolerate
         tolerate(exc, "trusted queries could not be read into the learned view", counter="learned.trusted")
 
+    items += _fixes(connection_id)
+
     if about.strip():
         words = {w for w in re.findall(r"[a-z0-9]{3,}", about.lower())}
         items = [i for i in items if words & set(re.findall(r"[a-z0-9]{3,}", f"{i['text']} {' '.join(i['tables'])}".lower()))]
@@ -169,6 +171,43 @@ def _learned(connection_id: str, *, about: str = "") -> dict:
         i.pop("_standing", None)
     return {"items": items, "total": len(items), "folded": booked - len(items),
             "withheld": trimmed.to_dict() if trimmed.trimmed else None, "uses_counted": False}
+
+
+#: How far back an answer's fixes are read into what was learned.
+FIX_DAYS = 30
+
+
+def _fixes(connection_id: str) -> list[dict]:
+    """A failure and its fix (the Atlas plan's A7, from A1b's receipts): each statement an answer replaced and the one that
+    ran in its place — "watch for this" — standing on the data's word, the fix having run. From the last `FIX_DAYS`
+    days of answers; the same fix to the same failure is one thing learned."""
+    from datetime import datetime, timedelta, timezone
+
+    from pramanyx.kernel.ledger import Ledger
+    since = (datetime.now(timezone.utc) - timedelta(days=FIX_DAYS)).isoformat()
+    try:
+        receipts = Ledger.default().artifacts_since(["chat_answer"], since, conn_ids=[connection_id], limit=5000)
+    except Exception as exc:  # noqa: BLE001 — unread, no fix is said to be learned
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "answers' fixes could not be read into the learned view", counter="learned.fixes")
+        return []
+    out, seen = [], set()
+    for r in receipts:
+        payload = r.get("payload") if isinstance(r.get("payload"), dict) else {}
+        for step in payload.get("tried") or []:
+            if step.get("what") != "repaired_sql" or not step.get("after"):
+                continue
+            key = (" ".join(str(step.get("why") or "").lower().split())[:200], " ".join(step["after"].lower().split()))
+            if key in seen:
+                continue
+            seen.add(key)
+            why = str(step.get("why") or "it did not run").strip().rstrip(".")
+            out.append(_item(kind="fix", text=f"Watch for this: {why} — rewritten, it ran",
+                             source="an answer's repair", author="", standing="measured",
+                             as_of=str(r.get("created_at") or "")[:10], tables=_tables_of(step["after"]),
+                             lineage=[f"before:{step['before'][:300]}", f"after:{step['after'][:300]}", f"receipt:{r['id']}"],
+                             ref=str(r["id"]), measured=True))
+    return out
 
 
 def _receipt_tables(receipt_id: str, read: dict[str, list[str]]) -> list[str]:

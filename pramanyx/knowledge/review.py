@@ -302,14 +302,21 @@ def _marked_wrong(connection_id: str, link: dict) -> list[dict]:
 
 
 def _unhelpful(connection_id: str, link: dict) -> list[dict]:
+    """Answers marked unhelpful — on the answer (`chat.feedback`), and since 2026-11-26 on a run's trace too
+    (`trace.feedback`, the Atlas plan's A7: a run's thumbs-down joins the answer's in one cluster)."""
     from pramanyx.kernel.ledger import Ledger
     out = []
-    for e in Ledger.default().events(kind="chat.feedback", conn_id=connection_id, limit=500):
+    marks = [*Ledger.default().events(kind="chat.feedback", conn_id=connection_id, limit=500),
+             *Ledger.default().events(kind="trace.feedback", conn_id=connection_id, limit=500)]
+    for e in marks:
         p = e.get("payload") if isinstance(e.get("payload"), dict) else {}
         if p.get("verdict") != "unhelpful":
             continue
-        out.append(_row(source="unhelpful", ref=str(p.get("turn_id") or e.get("at")), kind="candidate",
-                        title="An answer marked unhelpful", detail=(str(p.get("note") or "").strip() or "No note.")[:240],
+        on_run = e.get("kind") == "trace.feedback" or bool(p.get("trace_id") and not p.get("turn_id"))
+        out.append(_row(source="unhelpful", ref=str(p.get("turn_id") or p.get("trace_id") or e.get("at")), kind="candidate",
+                        title=(f"A run marked unhelpful: {p['question']}"[:300] if on_run and p.get("question")
+                               else "A run marked unhelpful" if on_run else "An answer marked unhelpful"),
+                        detail=(str(p.get("note") or "").strip() or "No note.")[:240],
                         complaints=1, at=str(e.get("at") or ""), href=link["definitions_tab"](),
                         action="Write what it should have known",
                         actions=[_new_definition("Write what it should have known", connection_id)]))

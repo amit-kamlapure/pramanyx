@@ -6,7 +6,7 @@
 import { fastApiError } from "@/lib/api";
 import { getApiBase } from "@/lib/config";
 
-export type LearnedKind = "answer" | "finding" | "usage" | "trusted_query";
+export type LearnedKind = "answer" | "finding" | "usage" | "trusted_query" | "fix";
 
 export interface LearnedItem {
   kind: LearnedKind;
@@ -50,6 +50,8 @@ export async function readLearned(connectionId: string, { area = "", about = "",
 
 export const KIND_WORDS: Record<LearnedKind, string> = {
   answer: "From an answer", finding: "From the explorer", usage: "From people's queries", trusted_query: "Trusted query",
+  // a failure and the fix that ran after it (A7, from what an answer tried — A1b)
+  fix: "Watch for this",
 };
 
 /** The word a Promote drafts, guessed from what the item says: its words before a colon or a dash when short, else its

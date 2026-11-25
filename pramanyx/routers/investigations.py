@@ -310,6 +310,9 @@ def _write_answer_receipt(*, kind: str, natural_key: str, question: str,
         from pramanyx.kernel.ledger import Ledger
         sqls = [s for s in (sqls or []) if s]
         lineage: list = [("source_sql", "sql", s) for s in sqls[:6]]
+        # A1b — what the answer tried before the statements it kept (`trust.answer_tried`)
+        from pramanyx.trust.answer_tried import lineage_rows as _tried_rows
+        lineage.extend(_tried_rows(list((payload_extra or {}).get("tried") or [])))
         seen: set[str] = set()
         for s in sqls:
             for t in _extract_tables(s):
@@ -3557,13 +3560,17 @@ def _answer_core(
                                 "the question was under-specified (no explicit metric/time window); answered with a default reading — refine for a different cut"))
             for _tq in (_trusted_used or []):
                 _guards.append(("trusted", f"query:{(_tq.get('question') or '')[:60]}", _tq.get('note')))
+            # A1b — what the answer tried: each statement it replaced (or would not), kept on its receipt
+            from pramanyx.trust.answer_tried import tried as _tried_of
+            _tried = _tried_of(receipts)
             _receipts = _write_answer_receipt(
                 kind="chat_answer", natural_key=f"chat:{connection_id}:{_chat_inv_id}",
                 question=question, sqls=[final_sql], headline=_grounded_headline or question,
                 schema=schema, connection_id=connection_id, canvas_id=canvas_id,
                 guard_edges=_guards,
-                payload_extra=answer_chart_payload(
+                payload_extra={**answer_chart_payload(
                     answer.chart_type, answer.chart_config, len(result.rows), _cx.tier),
+                    **({"tried": _tried} if _tried else {})},
             )
             # Surface the per-run receipts live (Wave 1·E4 learning · E3 activations); each is flag-gated.
             for _evt in ("learning", "activations"):

@@ -139,7 +139,10 @@ in its new place, never dropped.
   (`context_graph_readback.py:12`, `OrgIntelPanel.tsx:14,146`).
 - **A1 · What an answer used** — DONE (`trust/answer_inputs.py`). *Added by §7 (A1b):* what an answer **tried** — the
   SQL that failed and the one that worked after it, the joins it chose, the clarification left unanswered — kept on the
-  receipt, so A7 can learn from them; today only the trace views see them, for 14 days.
+  receipt, so A7 can learn from them; today only the trace views see them, for 14 days. *A1b DONE 2026-11-26:* each
+  statement an answer replaced (or would not), why, and what ran instead — the repair round's own pairs (pre-flight,
+  repair, re-check) — kept on the receipt (`trust/answer_tried.py`: payload `tried`, lineage `tried_sql`); the joins it
+  chose were already there (its executed SQL, mined by A7). A clarification left unanswered is not kept yet.
 - **A2 · One standing** — DONE 2026-11-25 (`pramanyx/trust/standing.py`). The orders disagreed out loud — the
   platform's ladder put *measured* above *approved*, the learned list *confirmed* above *measured* — and were both right:
   a thing stands on the data's word, a person's, or both. Tiers, strongest first: both · the data's · a person's · mined
@@ -193,8 +196,10 @@ in its new place, never dropped.
 - **A7 · More to learn from** — *DONE 2026-11-25:* one mining door (`ontology/statement_mining.py`) fed three ways —
   the warehouse's history (its setting, as before), the platform's own dashboards, Data Canvases and saved queries, and
   the SQL answers ran (the joins agents chose) — each claim saying where it came from, once a UTC day on the heartbeat
-  and by hand (`POST /ontology/candidates/mine-our-own`). *Not yet:* a failure and its fix (needs A1b), `trace.feedback`
-  in the thumbs-down cluster. The plan as written (each an organisation setting): query history on a schedule rather than by hand; our own
+  and by hand (`POST /ontology/candidates/mine-our-own`). *DONE 2026-11-26:* a failure and its fix (from A1b's receipts)
+  is a learned "Watch for this", measured — the fix ran (`learned._fixes`, the last 30 days, the same fix once); a run's
+  thumbs-down (`trace.feedback`, now kept with its connection and question) joins the answer's in the review's
+  thumbs-down rows. The plan as written (each an organisation setting): query history on a schedule rather than by hand; our own
   dashboards, Data Canvases and saved SQL mined into learned items — the SQL read without a model. *Added by §7:* the
   traces' unread parts (A1b) — joins an agent chose that ran become join candidates beside the warehouse's query log's;
   a failure and the fix after it become a learned "watch for this"; `trace.feedback` verdicts join the thumbs-down
