@@ -128,6 +128,15 @@ No feature flags.
 | **S1** | Search across workspaces, §6.2 fixed | M |
 | **S2** | Saved searches | S |
 
+**Where each stands (2026-11-25, branch `claude/discover-d4-d5-rest`, unpushed).** C1 db64065 · C2 3776f65, c338a19 ·
+C3 4f07fdb · C4 1315c47 · P1 and P2 51bf6f6, 5cf8ba5 · S1 9a40213 · S2 631a2a6 — each shown working on live data
+(theLook; Lux for C2, whose history theLook's BigQuery account may not read). **Not built: C5 and P1's mentions
+reaching a person.** This install runs with sign-in off: one person, who administers everything, so nobody is ever
+refused a canvas and there is no one else to mention. Both are the user's call: build them anyway, shown on a copy
+with sign-in on, or leave them until sign-in is on. What C5 found while measuring: the withheld dashboard card names
+nothing it withholds (clearance, not a share), and the metastore's "No access" is the admin's grant table — the
+refusal that names a thing and who may share it is a Data Canvas's, and a sheet's by the same rule.
+
 ## 6 · Defects found while planning
 
 1. **A person's edit to a model-written description stays the model's.** `update_table` and `update_column`
