@@ -43,6 +43,64 @@ def test_the_months_answers_by_area_and_which_drew_on_governed_knowledge():
     assert (later["answers"], later["previous"]) == (0, 5), "a month on, they are the month before's"
 
 
+def _aged(art_id: str, days: float) -> None:
+    """A receipt written ``days`` ago — the test's own temporary ledger, rewritten in place."""
+    at = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    led = Ledger.default()
+    with led._lock, led._conn:
+        led._conn.execute("UPDATE artifacts SET created_at=? WHERE id=?", (at, art_id))
+
+
+def test_the_months_answers_are_read_from_the_two_windows_only_and_only_on_the_connections_in_view():
+    conn, other = "c" + uuid.uuid4().hex[:8], "c" + uuid.uuid4().hex[:8]
+    now_one, last_month = _receipt(conn, ["orders"]), _receipt(conn, ["orders"])
+    _aged(last_month, AT.WINDOW_DAYS + 3)
+    long_ago = _receipt(conn, ["orders"])
+    _aged(long_ago, 2 * AT.WINDOW_DAYS + 5)
+    elsewhere = _receipt(other, ["orders"])
+    not_an_answer = Ledger.default().artifact_write("dashboard", f"dash:{conn}:{uuid.uuid4().hex[:8]}", {"tables": ["orders"]},
+                                                    conn_id=conn)
+    since = (datetime.now(timezone.utc) - timedelta(days=2 * AT.WINDOW_DAYS + 1)).isoformat()
+    read = Ledger.default().artifacts_since(list(AT.RECEIPT_KINDS), since, conn_ids=[conn])
+    ids = {r["id"] for r in read}
+    assert {now_one, last_month} <= ids, "this month's and the month before's are read"
+    assert not ids & {long_ago, elsewhere, not_an_answer}, "nothing older, on another connection, or of another kind"
+    assert all(set(r) == {"id", "conn_id", "created_at", "payload"} for r in read), "only what a count needs"
+    assert next(r for r in read if r["id"] == now_one)["payload"]["tables"] == ["orders"], "the payload decoded"
+    assert Ledger.default().artifacts_since(list(AT.RECEIPT_KINDS), since, conn_ids=[]) == [], "no connection, nothing"
+    month = AT.answers(NS(connections={conn: "theLook"}, person="", curator=False), [_item("table", "t", "orders", "o", conn=conn)])
+    assert (month["answers"], month["previous"]) == (1, 1)
+
+
+def test_a_receipt_written_earlier_on_the_first_day_is_still_read():
+    """The date is what the read compares, so a row from the morning of the first day is not dropped by a later hour."""
+    conn = "c" + uuid.uuid4().hex[:8]
+    early = _receipt(conn, ["orders"])
+    first_day = (datetime.now(timezone.utc) - timedelta(days=10)).replace(hour=0, minute=0, second=1)
+    led = Ledger.default()
+    with led._lock, led._conn:
+        led._conn.execute("UPDATE artifacts SET created_at=? WHERE id=?", (first_day.isoformat(), early))
+    later_that_day = first_day.replace(hour=23).isoformat()
+    assert early in {r["id"] for r in led.artifacts_since(list(AT.RECEIPT_KINDS), later_that_day, conn_ids=[conn])}
+
+
+def test_a_superseded_receipt_is_not_counted_and_a_payload_that_is_not_json_stays_text():
+    conn = "c" + uuid.uuid4().hex[:8]
+    key = f"chat:{conn}:{uuid.uuid4().hex[:8]}"
+    first = Ledger.default().artifact_write("chat_answer", key, {"tables": ["orders"]}, conn_id=conn)
+    second = Ledger.default().artifact_write("chat_answer", key, {"tables": ["orders"]}, conn_id=conn)
+    clipped = _receipt(conn, ["orders"])
+    led = Ledger.default()
+    with led._lock, led._conn:
+        led._conn.execute("UPDATE artifacts SET payload=? WHERE id=?", ('{"tables": ["ord', clipped))
+    since = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+    read = {r["id"]: r for r in led.artifacts_since(list(AT.RECEIPT_KINDS), since, conn_ids=[conn])}
+    assert second in read and first not in read, "a re-answered question counts once"
+    assert read[clipped]["payload"] == '{"tables": ["ord'
+    month = AT.answers(NS(connections={conn: "theLook"}, person="", curator=False), [_item("table", "t", "orders", "o", conn=conn)])
+    assert (month["answers"], month["in_an_area"]) == (2, 1), "the clipped one counted, placed nowhere"
+
+
 def test_what_waits_for_review_and_what_was_learned_is_added_up_by_area_and_an_unread_one_said(monkeypatch):
     AT._slow.clear()
     reviews = {"c1": {"total": 3, "unplaced": 1, "items": [{"kind": "gap", "area": "orders_sales"},
@@ -109,6 +167,8 @@ def test_the_map_lists_the_areas_answers_drew_on_first_and_the_rest_apart(monkey
     assert out["figures"]["governed"] == 4 and out["figures"]["given_since"] == "2026-11-25"
     assert out["contacts"] == {"named": 1, "of": 4}
     assert out["review"] == {"total": 5, "unplaced": 3} and out["learned"] == {"total": 12, "unplaced": 3}
+    assert set(out["took_ms"]) == {"gather", "use", "areas", "answers", "review_and_learned", "suggested", "most_used"}, \
+        "each part of the page says how long it took, so a slow load says which part it was"
 
 
 def test_a_learned_list_asked_twice_in_one_reading_is_read_once(monkeypatch):

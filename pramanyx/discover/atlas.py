@@ -20,6 +20,7 @@ on governed knowledge, the share placed in an Area, who answers for the Areas, w
 from __future__ import annotations
 
 import contextvars
+import logging
 import re
 import threading
 import time
@@ -43,6 +44,10 @@ PAUSE_S = 0.3
 #: A reading kept across a restart is served as it is for the first ten minutes after it, rather than read again on
 #: the first visit — when every read is cold and a load ran ten seconds (2026-11-25) — unless it is older than this.
 KEPT_SERVED_S = 3600
+#: A page that took this long says in the API's log which part of it took the time.
+SLOW_LOAD_MS = 4000
+
+_log = logging.getLogger(__name__)
 
 _slow: dict[tuple, tuple[float, dict]] = {}
 _reading: set[tuple] = set()
@@ -75,7 +80,8 @@ def answers(scope, items: list, *, now: Optional[datetime] = None) -> dict:
     since, before = now - timedelta(days=WINDOW_DAYS), now - timedelta(days=2 * WINDOW_DAYS)
     recent: list[dict] = []
     previous = 0
-    for a in Ledger.default().artifacts_of_kind(list(RECEIPT_KINDS), limit=MAX_RECEIPTS):
+    for a in Ledger.default().artifacts_since(list(RECEIPT_KINDS), (before - timedelta(days=1)).isoformat(),
+                                              conn_ids=list(scope.connections), limit=MAX_RECEIPTS):
         if a.get("conn_id") not in scope.connections:
             continue
         at = _when(a.get("created_at"))
@@ -215,15 +221,28 @@ def atlas(scope, *, wait: bool = False) -> dict:
     the model's suggestions, and the side panel's figures."""
     from pramanyx.discover.service import OTHER, all_items, area_view, areas_in_view, by_use, gather, put_use
     from pramanyx.trust.answer_inputs import RECORDED_SINCE
+    took: dict[str, int] = {}
+    clock = [time.perf_counter()]
+
+    def step(name: str) -> None:       # how long each part of the page took — so a slow load says which part it was
+        now = time.perf_counter()
+        took[name] = round(1000 * (now - clock[0]))
+        clock[0] = now
+
     found = gather(scope)
     items = all_items(found)
+    step("gather")
     use_said = put_use(items)          # each item's use this month, as Discover reads it — for "used most"
+    step("use")
     areas = areas_in_view(scope)
     held: dict[str, list] = {}
     for i in items:
         held.setdefault(i.area if i.area in areas else OTHER, []).append(i)
+    step("areas")
     month = answers(scope, items)
+    step("answers")
     slow, said = slow_parts(scope, wait=wait)
+    step("review_and_learned")
     slow_areas = (slow or {}).get("areas") or {}
 
     def row(a_id: str, a: dict) -> dict:
@@ -248,6 +267,11 @@ def atlas(scope, *, wait: bool = False) -> dict:
             except Exception as exc:  # noqa: BLE001 — suggestions unread are only fewer suggestions
                 from pramanyx.kernel.errors import tolerate
                 tolerate(exc, "the Atlas: a connection's suggested areas could not be read", counter="atlas.suggested")
+    step("suggested")
+    most_used = [i.view() for i in by_use(items, ("opens", "uses"))[:6]]
+    step("most_used")
+    if sum(took.values()) >= SLOW_LOAD_MS:
+        _log.info("the Atlas took %d ms: %s", sum(took.values()), took)
     return {
         "connections": [{"id": c, "name": n} for c, n in scope.connections.items()],
         "areas": shown,
@@ -258,9 +282,10 @@ def atlas(scope, *, wait: bool = False) -> dict:
                     "in_an_area": month["in_an_area"], "window_days": WINDOW_DAYS, "given_since": RECORDED_SINCE},
         "contacts": {"named": sum(1 for a in declared if a.get("business_owners") or a.get("technical_owners")),
                      "of": len(declared)},
-        "most_used": [i.view() for i in by_use(items, ("opens", "uses"))[:6]],
+        "most_used": most_used,
         "review": None if slow is None else {"total": slow["review_total"], "unplaced": slow["review_unplaced"]},
         "learned": None if slow is None else {"total": slow["learned_total"], "unplaced": slow["learned_unplaced"]},
         "read_at": (slow or {}).get("at"),
         "said": [*said, *use_said, *[s for k in found for s in found[k].all_said()]],
+        "took_ms": took,
     }
