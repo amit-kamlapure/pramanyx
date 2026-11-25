@@ -757,6 +757,17 @@ def get_glossary(connection_id: Optional[str] = None):
     return said_who_wrote(organisation_visible(load_glossary()))
 
 
+def _journal_words(connection_id: Optional[str], table: str, schema: Optional[str], by: str, sent: dict) -> None:
+    """A person's edit of a table's words, in its history (C3): which words, and who. An agent's is the model's, and
+    a write for no connection is no one table's."""
+    if not connection_id or by != "person":
+        return
+    from pramanyx.db.table_history import note_words
+    from pramanyx.org.context import current_actor
+    note_words(connection_id, f"{schema}.{table}" if schema else table, [k for k, v in sent.items() if v is not None],
+               current_actor())
+
+
 def _who_writes(request: Request) -> str:
     """``model`` for an agent's write (it is the model's words), else ``person``."""
     from pramanyx.rbac.agent_gate import is_agent_request
@@ -796,9 +807,11 @@ def put_table_glossary(table: str, req: UpdateTableRequest, request: Request, sc
     """``connection_id`` writes that connection's own entry — where the model's words for it are, so a person's edit
     makes them theirs (`glossary._written`) rather than shadowing them from the global entries."""
     org = None if connection_id else _organisation_for_write(organisation)
+    by = _who_writes(request)
     update_table(table, description=req.description, grain=req.grain, joins=req.joins,
-                 schema=schema, owner=req.owner, organisation=org, connection=connection_id,
-                 by=_who_writes(request))
+                 schema=schema, owner=req.owner, organisation=org, connection=connection_id, by=by)
+    _journal_words(connection_id, table, schema, by, {"description": req.description, "grain": req.grain,
+                                                      "joins": req.joins, "owner": req.owner})
     return {"ok": True, "table": table, "schema": schema, "organisation": org, "connection_id": connection_id}
 
 
@@ -808,9 +821,13 @@ def put_column_glossary(table: str, column: str, req: UpdateColumnRequest, reque
                         connection_id: Optional[str] = None):
     """``connection_id`` as on a table."""
     org = None if connection_id else _organisation_for_write(organisation)
+    by = _who_writes(request)
     update_column(table, column, description=req.description, values=req.values,
                   caveats=req.caveats, schema=schema, owner=req.owner, organisation=org,
-                  connection=connection_id, by=_who_writes(request))
+                  connection=connection_id, by=by)
+    _journal_words(connection_id, table, schema, by, {f"{column}.description": req.description,
+                                                      f"{column}.values": req.values, f"{column}.caveats": req.caveats,
+                                                      f"{column}.owner": req.owner})
     return {"ok": True, "table": table, "column": column, "schema": schema, "organisation": org,
             "connection_id": connection_id}
 

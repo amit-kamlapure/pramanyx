@@ -300,6 +300,17 @@ def get_column_use(conn_id: str, table: str, request: Request):
     return column_use(conn_id, table)
 
 
+@router.get("/catalog/{conn_id}/tables/history")
+def get_table_history(conn_id: str, table: str, request: Request):
+    """What changed about a table and when, newest first (`db.table_history`): columns added, taken away or given
+    another type, its row count moving (at most once a day), and a person's edit of its words with who. ``since`` is
+    when its shape was first kept — before then nothing was watched, and that is said, not implied."""
+    from pramanyx.security.authz import check_owner, get_principal
+    check_owner("connection", conn_id, get_principal(request))
+    from pramanyx.db.table_history import history
+    return history(conn_id, table)
+
+
 @router.get("/catalog/tree")
 async def get_catalog_tree(workspace_id: str | None = None):
     """Return the full 4-level catalog hierarchy: Section → Catalog → Schema → Table.

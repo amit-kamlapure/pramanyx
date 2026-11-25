@@ -10128,6 +10128,26 @@ export interface ColumnUse {
   said: string[];
 }
 
+/** One change to a table (`GET /catalog/{conn}/tables/history`, journal kind `table.changed`). */
+export interface TableChange {
+  at: string;
+  by?: string;
+  table?: string;
+  added?: string[];
+  removed?: string[];
+  retyped?: { column: string; from: string; to: string }[];
+  rows?: { from: number; to: number };
+  words?: string[];
+}
+/** A table's changes, newest first; `since` is when its shape was first kept (null: not seen yet). */
+export interface TableHistory { changes: TableChange[]; since: string | null }
+
+export async function getTableHistory(connId: string, table: string): Promise<TableHistory> {
+  const res = await fetch(`${getApiBase()}/catalog/${encodeURIComponent(connId)}/tables/history?table=${encodeURIComponent(table)}`);
+  if (!res.ok) throw new Error(`Reading what changed failed (${res.status})`);
+  return res.json();
+}
+
 export async function getColumnUse(connId: string, table: string): Promise<ColumnUse> {
   const res = await fetch(`${getApiBase()}/catalog/${encodeURIComponent(connId)}/columns/use?table=${encodeURIComponent(table)}`);
   if (!res.ok) throw new Error(`Reading how its columns are used failed (${res.status})`);

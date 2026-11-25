@@ -14,9 +14,9 @@
 import { agoWords } from "@/lib/canvasList";
 import type {
   CatalogEntry, CatalogTree, DatasetSchema, DatasetTable, DatasetsView, KnowledgeStatus, Metric, OntologyEntity,
-  OntologyGraph, OntologyRelationship, ColumnUse,
+  OntologyGraph, OntologyRelationship, ColumnUse, TableChange,
 } from "@/lib/api";
-import { columnTypeKind } from "@/lib/format";
+import { columnTypeKind, formatCount } from "@/lib/format";
 import { bare } from "@/lib/tableName";
 
 // ── Words ────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -569,6 +569,27 @@ export function columnUseLine(use: ColumnUse | null | undefined, now: number): s
   const span = use.window ? ` ${use.window}` : days ? ` in the last ${days === 1 ? "day" : `${days} days`}` : "";
   const read = use.as_of ? ` · read ${agoWords(use.as_of, now)}` : "";
   return `Used — queries people ran in the warehouse${span} that name the column, Pramanyx's own left out${read}`;
+}
+
+/** One change to a table, in words (C3): "Columns added: returned_at", "order_id: INT64 → STRING",
+ *  "Rows 124,452 → 125,080", "Description and status's caveats edited by ana@example.com". */
+export function changeWords(c: TableChange): string[] {
+  const out: string[] = [];
+  const names = (xs: string[]) => xs.join(", ");
+  if (c.added?.length) out.push(`${c.added.length === 1 ? "Column" : "Columns"} added: ${names(c.added)}`);
+  if (c.removed?.length) out.push(`${c.removed.length === 1 ? "Column" : "Columns"} taken away: ${names(c.removed)}`);
+  for (const r of c.retyped ?? []) out.push(`${r.column}: ${r.from} → ${r.to}`);
+  if (c.rows) out.push(`Rows ${formatCount(c.rows.from)} → ${formatCount(c.rows.to)}`);
+  if (c.words?.length) {
+    const word = (w: string) => {
+      const [col, field] = w.includes(".") ? w.split(".", 2) : ["", w];
+      const what = field === "description" ? "description" : field === "values" ? "known values" : field;
+      return col ? `${col}'s ${what}` : what.charAt(0).toUpperCase() + what.slice(1);
+    };
+    const said = c.words.map(word);
+    out.push(`${said.length > 1 ? `${said.slice(0, -1).join(", ")} and ${said[said.length - 1]}` : said[0]} edited${c.by ? ` by ${c.by}` : ""}`);
+  }
+  return out;
 }
 
 /** "1 key · 1 link · 4 times" — the marks a table's columns carry, counted. */

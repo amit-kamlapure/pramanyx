@@ -3695,6 +3695,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/catalog/{conn_id}/tables/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Table History
+         * @description What changed about a table and when, newest first (`db.table_history`): columns added, taken away or given
+         *     another type, its row count moving (at most once a day), and a person's edit of its words with who. ``since`` is
+         *     when its shape was first kept — before then nothing was watched, and that is said, not implied.
+         */
+        get: operations["get_table_history_catalog__conn_id__tables_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/charts/png": {
         parameters: {
             query?: never;
@@ -35358,6 +35380,39 @@ export interface operations {
         };
     };
     get_column_use_catalog__conn_id__columns_use_get: {
+        parameters: {
+            query: {
+                table: string;
+            };
+            header?: never;
+            path: {
+                conn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_table_history_catalog__conn_id__tables_history_get: {
         parameters: {
             query: {
                 table: string;

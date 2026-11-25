@@ -49,14 +49,15 @@ import {
   getQueryHistory, getSchemaRich, getTableColumns, listGovernedTags, lookupGlossaryTable, modelWrote, type GlossaryTable,
   type AuditRecord, type CatalogTableInfo, type DatasetsView, type DistributionProfile, type GovernedTag, type GraphLineage,
   type Metric, type OntologyEntity, type OntologyGraph, type OntologyRelationship, type SchemaColumn, type SchemaTable,
-  type TableColumn, getColumnUse, type ColumnUse,
+  type TableColumn, getColumnUse, type ColumnUse, getTableHistory, type TableHistory,
 } from "@/lib/api";
 import {
   approvedMetrics, columnMarks, columnRows, findingsAbout, findingsIn, itemKey, lifecycleOf, metricsReading, objectFor,
-  objectWords, objectsByTable, ofCount, readsTable, columnUseLine, type ColumnRow, type TableFinding,
+  objectWords, objectsByTable, ofCount, readsTable, columnUseLine, changeWords, type ColumnRow, type TableFinding,
 } from "@/lib/catalogSummary";
 import { compactNumber, countNoun, formatCount, isNumericType, utcDayWords } from "@/lib/format";
 import { dayWords } from "@/lib/home";
+import { dayMonth } from "@/lib/canvasList";
 import { withUniqueKeys } from "@/lib/listKeys";
 import { richSchemaKey, useRichSchema } from "@/lib/schema-context";
 import { bare } from "@/lib/tableName";
@@ -204,6 +205,17 @@ export function CatalogTable({ connId, catalogName, schemaName, table, view, onA
     try { void navigator.clipboard?.writeText(identifier); toast.success(`Copied ${identifier}`); }
     catch { toast.error("This browser would not copy it"); }
   };
+  // What changed about it and when — read when the Activity tab opens (C3).
+  const [changes, setChanges] = useState<TableHistory | null | undefined>(undefined);
+  const activityOpen = tab === "activity";
+  useEffect(() => {
+    if (!activityOpen) return;
+    let alive = true;
+    setChanges(undefined);
+    getTableHistory(connId, schemaName ? `${schemaName}.${bare(table.name)}` : bare(table.name))
+      .then(h => { if (alive) setChanges(h); }).catch(() => { if (alive) setChanges(null); });
+    return () => { alive = false; };
+  }, [connId, schemaName, table.name, activityOpen]);
   // How often each column is used in the warehouse's own history — read when the Columns tab opens (C2).
   const [columnUse, setColumnUse] = useState<ColumnUse | null | undefined>(undefined);
   const columnsOpen = tab === "columns";
@@ -442,6 +454,20 @@ export function CatalogTable({ connId, catalogName, schemaName, table, view, onA
           )}
           {tab === "activity" && (
             <>
+              <Card label="What changed" testId="catalog-table-changes"
+                right={changes?.since ? `watched since ${dayMonth(changes.since)}` : undefined}>
+                {changes === undefined ? <Loading what="what changed" />
+                  : changes === null ? <Empty>What changed could not be read.</Empty>
+                  : !changes.since && !changes.changes.length
+                    ? <Empty>Not watched yet — its shape is kept the first time the Catalog reads its schema, and each change after that is listed here.</Empty>
+                  : !changes.changes.length ? <Empty>No change since it was first watched.</Empty>
+                  : changes.changes.map((c, i) => (
+                    <div key={`${c.at}-${i}`} style={{ ...ROW, flexWrap: "nowrap", alignItems: "baseline", padding: "6px 0", ...(i ? RULE : {}) }}>
+                      <span className="aug-fs-xs" style={{ ...MUTED, ...NUM, width: 64, flexShrink: 0 }}>{dayMonth(c.at)}</span>
+                      <span className="aug-fs-chrome" style={{ color: "var(--t2)", minWidth: 0 }}>{changeWords(c).join(" · ")}</span>
+                    </div>
+                  ))}
+              </Card>
               <Card label="Layer and analysis" testId="catalog-table-history">
                 {view === undefined ? <Loading what="its datasets" />
                   : view === null ? <Empty>Its datasets could not be read.</Empty>
