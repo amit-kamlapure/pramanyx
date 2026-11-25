@@ -27,6 +27,8 @@ export function PeopleField({ id, label, value, onChange, placeholder = "Type a 
 }) {
   const [q, setQ] = useState("");
   const [found, setFound] = useState<PersonFound[]>([]);
+  /** The words `found` answers — "nobody by that name" is said only once the look-up for these words came back. */
+  const [answered, setAnswered] = useState("");
   const [at, setAt] = useState(0);
   const listId = useId();
   const box = useRef<HTMLInputElement>(null);
@@ -37,7 +39,8 @@ export function PeopleField({ id, label, value, onChange, placeholder = "Type a 
     if (!q.trim()) return undefined;
     let live = true;
     const t = window.setTimeout(() => {
-      findPeople(q).then((people) => { if (live) { setFound(people); setAt(0); } }).catch(() => { if (live) setFound([]); });
+      findPeople(q).then((people) => { if (live) { setFound(people); setAt(0); setAnswered(q.trim()); } })
+        .catch(() => { if (live) { setFound([]); setAnswered(q.trim()); } });
     }, 150);
     return () => { live = false; window.clearTimeout(t); };
   }, [q]);
@@ -92,7 +95,7 @@ export function PeopleField({ id, label, value, onChange, placeholder = "Type a 
           ))}
         </div>
       )}
-      {q.trim() && !offered.length && (
+      {q.trim() && answered === q.trim() && !offered.length && (
         <span className="aug-fs-xs" style={MUTED}>Nobody by that name yet — Enter names “{q.trim()}” as typed.</span>
       )}
     </div>

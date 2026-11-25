@@ -42,6 +42,8 @@ describe("naming people", () => {
     render(<Field start={["user:cai"]} onChange={onChange} />);
     const box = screen.getByLabelText("Business contacts");
     fireEvent.change(box, { target: { value: "dee@shop.example" } });
+    // not while the look-up is on its way — only once it came back with nobody
+    expect(screen.queryByText(/Nobody by that name yet/)).toBeNull();
     await waitFor(() => screen.getByText(/Nobody by that name yet/));
     fireEvent.keyDown(box, { key: "Enter" });
     expect(onChange).toHaveBeenLastCalledWith(["user:cai", "user:dee@shop.example"]);
