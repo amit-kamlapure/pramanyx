@@ -1009,16 +1009,37 @@ async def create_knowledge_source(body: KnowledgeSourceIn):
 # router's `connection_owner_guard` — so the MCP client reads the same data with the same
 # clearances as a person at the web app.
 
+#: The ``area`` that asks for what sits in no Area.
+NO_AREA = "none"
+
+
 @router.get("/knowledge/{connection_id}/learned")
 def read_learned(connection_id: str, about: str = "", area: str = "", limit: int = Query(50, ge=1, le=200)):
     """What the platform has learned about a connection, in one shape (the ontology study, 2026-11-17): what each item
-    says, where it came from, who wrote it, its area, how it stands, when, what it rests on — confirmed and approved
-    first, then measured, then mined; held to the reader's clearance, what was withheld counted. Use is not counted
-    yet, and says so."""
+    says, where it came from, who wrote it, its area, how it stands and `why`, when, what it rests on — in the one
+    standing's order (A2); held to the reader's clearance, what was withheld counted. ``area`` narrows it to one Area,
+    or ``none`` to what sits in none; ``areas`` names each Area that holds some, with how many (A3, the Learned page),
+    across every item, not the first page of them. A trusted query says how many answers it guided; the rest are not
+    counted yet (`uses` null)."""
+    from collections import Counter
+
     from pramanyx.knowledge.learned import area_filter, learned_items
-    out = learned_items(connection_id, about=about, limit=200)
-    items = area_filter(out["items"], area or None)[:limit]
-    return {**out, "items": items}
+    out = learned_items(connection_id, about=about, limit=10_000)
+    every = out["items"]
+    held = Counter(i.get("area") or "" for i in every)
+    try:
+        from pramanyx.semantic.areas import areas_for
+        names = {a["id"]: a["name"] for a in areas_for(connection_id)}
+    except Exception as exc:  # noqa: BLE001 — unnamed, an Area is said by its id
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "the learned page could not name its Areas", counter="knowledge.learned_areas")
+        names = {}
+    items = [i for i in every if not i.get("area")] if area == NO_AREA else area_filter(every, area or None)
+    return {**out, "items": items[:limit], "matched": len(items), "unplaced": held.get("", 0),
+            # every Area of the connection — what a Promote may place a draft in — with how many it holds, busiest first
+            "areas": sorted(({"id": a, "name": names.get(a, a), "count": held.get(a, 0)}
+                             for a in dict.fromkeys([*names, *(a for a in held if a)])),
+                            key=lambda a: (-a["count"], a["name"]))}
 
 
 @router.get("/knowledge/{connection_id}/review")

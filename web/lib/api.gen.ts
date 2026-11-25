@@ -10379,9 +10379,11 @@ export interface paths {
         /**
          * Read Learned
          * @description What the platform has learned about a connection, in one shape (the ontology study, 2026-11-17): what each item
-         *     says, where it came from, who wrote it, its area, how it stands, when, what it rests on — confirmed and approved
-         *     first, then measured, then mined; held to the reader's clearance, what was withheld counted. Use is not counted
-         *     yet, and says so.
+         *     says, where it came from, who wrote it, its area, how it stands and `why`, when, what it rests on — in the one
+         *     standing's order (A2); held to the reader's clearance, what was withheld counted. ``area`` narrows it to one Area,
+         *     or ``none`` to what sits in none; ``areas`` names each Area that holds some, with how many (A3, the Learned page),
+         *     across every item, not the first page of them. A trusted query says how many answers it guided; the rest are not
+         *     counted yet (`uses` null).
          */
         get: operations["read_learned_knowledge__connection_id__learned_get"];
         put?: never;

@@ -81,12 +81,14 @@ def learned_items(connection_id: str, *, about: str = "", limit: int = 50) -> di
     equals), optionally narrowed to items whose words or tables share a word with ``about``."""
     from pramanyx.record import claims as C
     items: list[dict] = []
+    receipts: dict[str, list[str]] = {}
     for kind in ("finding", "observation"):
         for c in C.list_claims(kind=kind, conn_id=connection_id, limit=2000):
             if c.state == "withdrawn":
                 continue
             run = next((w for w in c.warrants if w.kind == "run"), None)
-            tables = list(c.extra.get("tables") or []) or _tables_of(run.detail if run else "")
+            tables = (list(c.extra.get("tables") or []) or _tables_of(run.detail if run else "")
+                      or (_receipt_tables(run.ref, receipts) if run else []))
             item = _item(kind="finding" if c.extra.get("writer") == "explorer" else "answer",
                          text=c.statement.text, source=("the explorer" if c.extra.get("writer") == "explorer" else "an answer"),
                          author=c.extra.get("approved_by") or c.author, standing=c.tier, as_of=c.as_of,
@@ -134,6 +136,25 @@ def learned_items(connection_id: str, *, about: str = "", limit: int = 50) -> di
         i.pop("_standing", None)
     return {"items": items[:limit], "total": len(items), "folded": booked - len(items),
             "withheld": trimmed.to_dict() if trimmed.trimmed else None, "uses_counted": False}
+
+
+def _receipt_tables(receipt_id: str, read: dict[str, list[str]]) -> list[str]:
+    """The tables an answer's receipt says its SQL read — for a claim whose warrant names the receipt and carries no SQL
+    of its own. Measured 2026-11-25 (A3): 145 of theLook's 150 learned items in no Area named no table, every one with
+    a run warrant whose receipt held them, so none could be placed. Read once per receipt; [] when unread."""
+    if not receipt_id:
+        return []
+    if receipt_id not in read:
+        try:
+            from pramanyx.kernel.ledger import Ledger
+            art = Ledger.default().artifact_by_id(receipt_id) or {}
+            payload = art.get("payload") if isinstance(art.get("payload"), dict) else {}
+            read[receipt_id] = [str(t) for t in (payload.get("tables") or []) if t]
+        except Exception as exc:  # noqa: BLE001 — unread, the item names no table, as before
+            from pramanyx.kernel.errors import tolerate
+            tolerate(exc, "a learned item's receipt could not be read for its tables", counter="learned.receipt_tables")
+            read[receipt_id] = []
+    return read[receipt_id]
 
 
 def _place(items: list[dict], connection_id: str) -> None:
