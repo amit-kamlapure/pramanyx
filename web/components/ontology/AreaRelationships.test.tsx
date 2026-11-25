@@ -36,6 +36,18 @@ describe("an Area's relationships", () => {
     expect(partOf(MAP, DECLARED, PLACED, "customers").processes).toEqual([]);
   });
 
+  it("reads a part under its parent: its links are its parent's, never a link out of the Area; one link said once", () => {
+    const map = { ...MAP, object_types: [...MAP.object_types, { ...row("order_line", "Order Line", "order_items"), absorbed_into: "order" },
+      row("stock", "Inventory Item", "inventory_items")],
+      links: [...MAP.links, link("order_line", "order", "belongs to"), { ...link("stock", "order_line", "fulfilled by"), shown_to: "order" },
+        link("order", "user", "placed by")] } as unknown as TypeMap;
+    const placed = new Map([...PLACED, ["inventory_items", { id: "orders_sales", name: "Orders & sales" }]]);
+    const part = partOf(map, DECLARED, placed, "orders_sales");
+    expect(part.map.object_types.map((t) => t.display_name)).toEqual(["Order", "Order Item", "Inventory Item"]);
+    expect(part.map.links.map((l) => `${l.from}>${l.to}:${l.verb}`)).toContain("stock>order:fulfilled by");
+    expect(part.leaving).toEqual([{ from: "Order", verb: "placed by", to: "User", toArea: "Customers" }]);
+  });
+
   it("draws them with their links named, the stages with their counts, and opens an entity on a press", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       const u = String(url);

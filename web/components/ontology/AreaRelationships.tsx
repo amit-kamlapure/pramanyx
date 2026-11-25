@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Loading } from "@/components/ui/states";
 import { readAreas } from "@/lib/areas";
 import { readDiscoverItems } from "@/lib/discover";
-import { CARD, hubOf, layoutMap } from "@/lib/entityMapLayout";
+import { CARD, collapseParts, hubOf, layoutMap } from "@/lib/entityMapLayout";
 import { formatCount } from "@/lib/format";
 import { getProcesses, getTypeMap, type ProcessesAndRules, type TypeMap, type TypeMapRow } from "@/lib/objectTypes";
 
@@ -31,21 +31,27 @@ export interface AreaPart {
 export function partOf(map: TypeMap, declared: ProcessesAndRules | null, areaOfTable: Map<string, { id: string; name: string }>,
   area: string): AreaPart {
   const areaOf = (t: TypeMapRow) => areaOfTable.get(String(t.table || "").split(".").pop()!.toLowerCase());
-  const standing = map.object_types.filter((t) => !t.absorbed_into);
+  // a part is read under its parent, as the entity map reads it: its links are its parent's, said through it
+  const folded = collapseParts(map);
+  const standing = folded.object_types;
   const inside = new Set(standing.filter((t) => areaOf(t)?.id === area).map((t) => t.object_type));
   const byName = new Map(map.object_types.map((t) => [t.object_type, t]));
   const leaving: AreaPart["leaving"] = [];
-  for (const l of map.links) {
+  const said = new Set<string>();
+  for (const l of folded.links) {
     const a = inside.has(l.from), b = inside.has(l.to);
     if (a === b) continue;
     const [here, there] = a ? [l.from, l.to] : [l.to, l.from];
     const far = byName.get(there);
-    leaving.push({ from: byName.get(here)?.display_name ?? here, verb: (l.verb || l.business_name || "").replace(/_/g, " "),
-      to: far?.display_name ?? there, toArea: far ? areaOf(far)?.name ?? "no Area" : "no Area" });
+    const out = { from: byName.get(here)?.display_name ?? here, verb: (l.verb || l.business_name || "").replace(/_/g, " "),
+      to: far?.display_name ?? there, toArea: far ? areaOf(far)?.name ?? "no Area" : "no Area" };
+    const key = `${out.from}|${out.verb}|${out.to}`;
+    if (!said.has(key)) { said.add(key); leaving.push(out); }      // one link said once, however many relationships carry it
   }
   const ids = new Set(standing.filter((t) => inside.has(t.object_type)).map((t) => t.id));
   return {
-    map: { ...map, object_types: standing.filter((t) => inside.has(t.object_type)), links: map.links.filter((l) => inside.has(l.from) && inside.has(l.to)) },
+    map: { ...folded, object_types: standing.filter((t) => inside.has(t.object_type)),
+      links: folded.links.filter((l) => inside.has(l.from) && inside.has(l.to)) },
     leaving,
     processes: (declared?.processes ?? []).filter((p) => ids.has(p.entity_id)),
   };
@@ -68,7 +74,7 @@ function Graph({ part, onOpen }: { part: AreaPart; onOpen: (row: TypeMapRow) => 
               <g key={`${l.from}>${l.to}:${l.relationship}`}>
                 <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="var(--b1)" strokeWidth={1.2} />
                 <text x={(a.x + b.x) / 2} y={(a.y + b.y) / 2 - 6} textAnchor="middle" fill="var(--t2)" className="aug-fs-xs">
-                  {`${(l.verb || l.business_name || "").replace(/_/g, " ")}${l.cardinality ? ` · ${l.cardinality}` : ""}`}
+                  {`${(l.verb || l.business_name || "").replace(/_/g, " ")}${l.cardinality ? ` · ${l.cardinality}` : ""}${"via" in l && l.via ? ` · through ${l.via}` : ""}`}
                 </text>
               </g>
             );
