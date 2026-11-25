@@ -97,7 +97,7 @@ describe("Discover", () => {
     const card = within(areas).getByTestId("discover-area-orders_sales");
     expect(card.textContent).toContain("How much did we sell?");
     expect(card.textContent).toContain("1 metric · 1 table");
-    expect(card.textContent).toContain("No owner yet");
+    expect(card.textContent).toContain("No contacts yet");
     expect(card.getAttribute("href")).toBe("?tab=discover&id=orders_sales");
     expect(within(areas).getByTestId("discover-area-margin_pricing").textContent).toContain("1 deprecated");
     expect(within(areas).getByTestId("discover-area-other").textContent).toContain("no Area names them");
@@ -284,7 +284,7 @@ describe("an Area's page", () => {
     const holds = await screen.findByTestId("discover-area-holds");
     await waitFor(() => expect(onName).toHaveBeenLastCalledWith("Orders & sales"));
     expect(screen.getByTestId("discover-area").textContent).toContain("How much did we sell?");
-    expect(screen.getByTestId("discover-area").textContent).toContain("No owner yet");
+    expect(screen.getByTestId("discover-area").textContent).toContain("No contacts yet");
     expect(within(holds).getByTestId("discover-row").textContent).toContain("its name says order");
     expect(holds.textContent).toContain("Nothing here yet: Definitions, Agents.");
     expect(readDiscoverArea).toHaveBeenCalledWith("orders_sales", "", "", false);

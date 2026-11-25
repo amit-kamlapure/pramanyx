@@ -14,13 +14,12 @@ import { Card, MUTED } from "@/components/clarity/kit";
 import { DiscoverFinder } from "@/components/discover/DiscoverFinder";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
-import { Input } from "@/components/ui/input";
 import { IconSquare } from "@/components/ui/icon-square";
+import { PeopleField } from "@/components/ui/people-field";
 import { AREA_ICONS, areaIcon } from "@/lib/areaIcons";
 import { PROSE_TEXT } from "@/components/definitions/DefinitionBody";
 import { RichText, type RichTextKind } from "@/components/ui/rich-text";
 import { toast } from "@/components/ui/toast";
-import { people } from "@/lib/areas";
 import {
   KIND_WORDS, mayPlace, placeInDiscoverArea, saveDiscoverArea, type DiscoverAreaPage, type DiscoverItem, type FeaturedRef,
 } from "@/lib/discover";
@@ -34,7 +33,6 @@ export const MAX_DESCRIPTION = 2000;
 export const AREA_TEXT: RichTextKind = PROSE_TEXT;
 
 const aThing = (word: string) => `${/^[aeiou]/i.test(word) ? "An" : "A"} ${word}`;
-const plain = (owners: string[]) => owners.map((o) => o.replace(/^user:/, "")).join(", ");
 const isFeatured = (page: DiscoverAreaPage, item: DiscoverItem) => page.featured_refs.some((f) => f.kind === item.kind && f.ref === item.id);
 
 /** Edit an Area: its description, its owners and the order of what it features. */
@@ -43,8 +41,8 @@ export function AreaEditor({ page, workspaceId, onSaved, onCancel }: {
 }) {
   const a = page.area;
   const [description, setDescription] = useState(a.description ?? "");
-  const [business, setBusiness] = useState(plain(a.business_owners));
-  const [technical, setTechnical] = useState(plain(a.technical_owners));
+  const [business, setBusiness] = useState<string[]>(a.business_owners);
+  const [technical, setTechnical] = useState<string[]>(a.technical_owners);
   const [featured, setFeatured] = useState<FeaturedRef[]>(page.featured_refs);
   const [icon, setIcon] = useState(areaIcon(a.icon));
   const [busy, setBusy] = useState(false);
@@ -58,8 +56,8 @@ export function AreaEditor({ page, workspaceId, onSaved, onCancel }: {
   const save = async () => {
     setBusy(true); setErr("");
     try {
-      await saveDiscoverArea(a.id, { description: description.trim(), business_owners: people(business),
-        technical_owners: people(technical), featured, ...(icon !== areaIcon(a.icon) ? { icon } : {}) }, workspaceId);
+      await saveDiscoverArea(a.id, { description: description.trim(), business_owners: business,
+        technical_owners: technical, featured, ...(icon !== areaIcon(a.icon) ? { icon } : {}) }, workspaceId);
       onSaved();
     } catch (e) { setErr(String((e as Error)?.message ?? e)); setBusy(false); }
   };
@@ -77,9 +75,6 @@ export function AreaEditor({ page, workspaceId, onSaved, onCancel }: {
             minHeight={96} placeholder={`What ${a.name} covers, and what someone new to it should know`} testId="area-description-editor" />
           <span className="aug-fs-xs" style={MUTED}>Its question stays the line under its name.</span>
         </div>
-        <label className="aug-fs-sm" htmlFor="area-business" style={{ ...MUTED, paddingTop: 6 }}>Owned by</label>
-        <Input bespoke id="area-business" value={business} onChange={(e) => setBusiness(e.target.value)}
-          placeholder="Who answers for what it means — names, separated by commas" />
         <span className="aug-fs-sm" style={{ ...MUTED, paddingTop: 6 }}>Icon</span>
         <div role="radiogroup" aria-label="Its icon" data-testid="discover-area-editor-icon"
           style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
@@ -90,9 +85,12 @@ export function AreaEditor({ page, workspaceId, onSaved, onCancel }: {
             </Button>
           ))}
         </div>
-        <label className="aug-fs-sm" htmlFor="area-technical" style={{ ...MUTED, paddingTop: 6 }}>Its data by</label>
-        <Input bespoke id="area-technical" value={technical} onChange={(e) => setTechnical(e.target.value)}
-          placeholder="Who answers for its data — names, separated by commas" />
+        <label className="aug-fs-sm" htmlFor="area-business" style={{ ...MUTED, paddingTop: 6 }}>Business contacts</label>
+        <PeopleField id="area-business" label="Business contacts" value={business} onChange={setBusiness}
+          placeholder="Who answers for what it means — type a name or an email" testId="area-business-contacts" />
+        <label className="aug-fs-sm" htmlFor="area-technical" style={{ ...MUTED, paddingTop: 6 }}>Technical contacts</label>
+        <PeopleField id="area-technical" label="Technical contacts" value={technical} onChange={setTechnical}
+          placeholder="Who answers for its data — type a name or an email" testId="area-technical-contacts" />
         <span className="aug-fs-sm" style={{ ...MUTED, paddingTop: 4 }}>Featured</span>
         <div style={{ display: "flex", flexDirection: "column", gap: 2 }} data-testid="discover-area-editor-featured">
           {!featured.length && <span className="aug-fs-sm" style={MUTED}>Nothing yet — choose “Feature” on a row of this page.</span>}

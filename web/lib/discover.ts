@@ -302,11 +302,12 @@ export function holdsWords(counts: Partial<Record<DiscoverKind, number>>): strin
 
 const person = (raw: string) => raw.replace(/^user:/, "");
 
-/** Who owns an Area, in words — or that nobody is recorded, which is a fact worth saying. */
+/** An Area's contacts, in words (2026-11-25: Business and Technical contacts) — or that nobody is named, which is a fact
+ *  worth saying. They are who curates it, with the organisation's admins. */
 export function ownersLine(a: Pick<DiscoverArea, "business_owners" | "technical_owners">): string {
-  const parts = [a.business_owners.length ? `Owned by ${a.business_owners.map(person).join(", ")}` : "",
-    a.technical_owners.length ? `its data by ${a.technical_owners.map(person).join(", ")}` : ""].filter(Boolean);
-  return parts.length ? parts.join(" · ") : "No owner yet";
+  const parts = [a.business_owners.length ? `Business contacts: ${a.business_owners.map(person).join(", ")}` : "",
+    a.technical_owners.length ? `Technical contacts: ${a.technical_owners.map(person).join(", ")}` : ""].filter(Boolean);
+  return parts.length ? parts.join(" · ") : "No contacts yet";
 }
 
 const rowsOf = (d: Record<string, unknown>): number | null => (typeof d.rows === "number" ? d.rows : null);

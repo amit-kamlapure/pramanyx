@@ -16486,6 +16486,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/people": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find People
+         * @description People to name as someone, as a person types a name or an email (2026-11-25: an Area's contacts "pop up if they
+         *     exist") — ``[{ref, name, email, source}]``, ``ref`` being who they sign in as (``user:<email>``). Read by anyone who
+         *     may name someone, so it says names and emails only: the organisation's directory (the admin's list holds titles,
+         *     teams and managers), the person asking, and the people already named as an Area's contacts. Matched on any part of
+         *     the name or the email; the person asking first, then the directory, by name.
+         */
+        get: operations["find_people_people_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/playbook": {
         parameters: {
             query?: never;
@@ -21039,7 +21063,7 @@ export interface components {
         AreaDeclaration: {
             /**
              * Business Owners
-             * @description Who answers for what it means
+             * @description Its business contacts: who answers for what it means
              */
             business_owners?: string[];
             /**
@@ -21084,7 +21108,7 @@ export interface components {
             question: string;
             /**
              * Technical Owners
-             * @description Who answers for its data
+             * @description Its technical contacts: who answers for its data
              */
             technical_owners?: string[];
         };
@@ -56813,6 +56837,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    find_people_people_get: {
+        parameters: {
+            query?: {
+                q?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
                 };
             };
             /** @description Validation Error */

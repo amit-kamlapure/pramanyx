@@ -21,8 +21,8 @@ describe("what an Area holds", () => {
   });
 
   it("names its owners, or says nobody is recorded", () => {
-    expect(ownersLine({ business_owners: ["user:ana"], technical_owners: ["bo"] })).toBe("Owned by ana · its data by bo");
-    expect(ownersLine({ business_owners: [], technical_owners: [] })).toBe("No owner yet");
+    expect(ownersLine({ business_owners: ["user:ana"], technical_owners: ["bo"] })).toBe("Business contacts: ana · Technical contacts: bo");
+    expect(ownersLine({ business_owners: [], technical_owners: [] })).toBe("No contacts yet");
   });
 });
 

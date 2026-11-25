@@ -66,8 +66,8 @@ export async function placeInArea(connectionId: string, body: { kind: "table" | 
 
 export const ownersWords = (a: Pick<BusinessArea, "business_owners" | "technical_owners">): string => {
   const who = (xs: string[]) => xs.map((x) => x.replace(/^user:/, "")).join(", ");
-  return [a.business_owners.length ? `owned by ${who(a.business_owners)}` : "",
-          a.technical_owners.length ? `its data by ${who(a.technical_owners)}` : ""].filter(Boolean).join(" · ");
+  return [a.business_owners.length ? `Business contacts: ${who(a.business_owners)}` : "",
+          a.technical_owners.length ? `Technical contacts: ${who(a.technical_owners)}` : ""].filter(Boolean).join(" · ");
 };
 export const people = (raw: string): string[] => raw.split(",").map((s) => s.trim()).filter(Boolean)
   .map((s) => (s.includes(":") ? s : `user:${s}`));

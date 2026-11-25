@@ -51,7 +51,8 @@ describe("editing an Area", () => {
     const onSaved = vi.fn();
     render(<AreaEditor page={page()} onSaved={onSaved} onCancel={() => {}} />);
     await writeIn("Description", "What customers send back.");
-    fireEvent.change(screen.getByLabelText("Owned by"), { target: { value: "bo, cai" } });
+    fireEvent.change(screen.getByLabelText("Business contacts"), { target: { value: "cai" } });
+    fireEvent.keyDown(screen.getByLabelText("Business contacts"), { key: "Enter" });
     fireEvent.click(screen.getByRole("button", { name: "Move Return rate down" }));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(onSaved).toHaveBeenCalled());

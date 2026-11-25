@@ -163,7 +163,8 @@ def put_discover_area(request: Request, area_id: str, body: AreaEditIn, workspac
     if area is None or area_id == OTHER:
         raise HTTPException(status_code=404, detail="No such Area on the connections in view")
     if not curates(area, scope.person, admin=scope.curator):
-        raise HTTPException(status_code=403, detail="only this Area's owners, or whoever administers the organisation, change it")
+        raise HTTPException(status_code=403, detail="only this Area's business and technical contacts, or whoever "
+                                                    "administers the organisation, change it")
     changes = body.model_dump(exclude_unset=True)
     try:
         return {"area": edit_area(area_id, changes, by=scope.person, known=_every_package_area())}

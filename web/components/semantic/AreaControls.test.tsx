@@ -29,8 +29,11 @@ describe("the organisation's word on its areas (2026-11-17)", () => {
     const sent = serve(() => new Response(JSON.stringify({ areas: AREAS })));
     const saved = vi.fn();
     render(<AreaOwnersEditor connId="shop" areas={AREAS} area={AREAS[0]} onSaved={saved} />);
-    fireEvent.click(screen.getByRole("button", { name: "Owners and place" }));
-    fireEvent.change(screen.getByLabelText("Owned by"), { target: { value: "bo, cai" } });
+    fireEvent.click(screen.getByRole("button", { name: "Contacts and place" }));
+    for (const name of ["bo", "cai"]) {
+      fireEvent.change(screen.getByLabelText("Business contacts"), { target: { value: name } });
+      fireEvent.keyDown(screen.getByLabelText("Business contacts"), { key: "Enter" });
+    }
     change(screen.getByLabelText("Sits under"), { target: { value: "marketplace" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(saved).toHaveBeenCalled());
