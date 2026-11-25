@@ -16,6 +16,8 @@ on governed knowledge, the share placed in an Area, who answers for the Areas, w
 - **Review and learned, per Area** — the review queue and the learned list of each connection, added up. They are slow
   to read (seconds a connection), so they are kept and read again off the request every ten minutes, as Discover keeps
   a connection's table reads (`discover.usage.table_reads`); until the first reading lands the page says so.
+- **Suggested Areas** (a curator's) are kept with that reading — reading them decodes every saved ontology, and a load
+  that read them beside a reading waited nine seconds (2026-11-25) — and served less any taken or refused since.
 """
 from __future__ import annotations
 
@@ -124,10 +126,13 @@ def _read_slow(key: tuple, connections: dict[str, str]) -> None:
     from pramanyx.kernel.errors import tolerate
     from pramanyx.knowledge.learned import learned_items, read_once
     from pramanyx.knowledge.review import review
+    from pramanyx.semantic.areas import suggestions_read_once
     by_area: dict[str, Counter] = {}
-    out = {"review_total": 0, "review_unplaced": 0, "learned_total": 0, "learned_unplaced": 0, "unread": []}
+    out = {"review_total": 0, "review_unplaced": 0, "learned_total": 0, "learned_unplaced": 0, "unread": [],
+           "suggested": {}}
     try:
-        with read_once():          # the review queue reads each learned list too: read once, for both
+        # the review queue reads each learned list and each connection's suggestions too: read once, for both
+        with read_once(), suggestions_read_once():
             _read_each(connections, by_area, out, review, learned_items, tolerate)
         out["areas"] = {a: dict(c) for a, c in by_area.items()}
         _keep(key, out)
@@ -161,6 +166,12 @@ def _read_each(connections: dict[str, str], by_area: dict, out: dict, review, le
         except Exception as exc:  # noqa: BLE001
             tolerate(exc, f"the Atlas could not read what was learned on {conn}", counter="atlas.learned")
             out["unread"].append(f"what was learned on {name}")
+        from pramanyx.semantic.areas import suggested_areas
+        try:
+            out["suggested"][conn] = suggested_areas(conn)
+        except Exception as exc:  # noqa: BLE001 — suggestions unread are only fewer suggestions, and said
+            tolerate(exc, f"the Atlas could not read the Areas suggested on {conn}", counter="atlas.suggested")
+            out["unread"].append(f"the Areas suggested on {name}")
 
 
 def _keep(key: tuple, out: dict) -> None:
@@ -260,10 +271,15 @@ def atlas(scope, *, wait: bool = False) -> dict:
     declared = [a for a_id, a in areas.items() if a_id != OTHER]
     suggested: list[dict] = []
     if scope.curator:
-        from pramanyx.semantic.areas import suggested_areas
+        from pramanyx.semantic.areas import still_suggested, suggested_areas
+        kept_suggested = (slow or {}).get("suggested") or {}
         for conn, name in scope.connections.items():
             try:
-                suggested += [{**s, "connection_id": conn, "connection_name": name} for s in suggested_areas(conn)]
+                # as the reading kept them, less any taken or refused since; read here only when no reading holds them
+                # (the first visit, a reading from before they were kept, a connection the reading could not read)
+                got = (still_suggested(conn, kept_suggested[conn], declared) if conn in kept_suggested
+                       else suggested_areas(conn))
+                suggested += [{**s, "connection_id": conn, "connection_name": name} for s in got]
             except Exception as exc:  # noqa: BLE001 — suggestions unread are only fewer suggestions
                 from pramanyx.kernel.errors import tolerate
                 tolerate(exc, "the Atlas: a connection's suggested areas could not be read", counter="atlas.suggested")

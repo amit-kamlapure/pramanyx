@@ -230,3 +230,67 @@ def test_the_reading_reads_each_connections_learned_list_once_though_the_review_
     scope = NS(connections={"c1": "theLook", "c2": "DuckDB"}, person="p-" + uuid.uuid4().hex[:6], curator=False)
     slow, _ = AT.slow_parts(scope, wait=True)
     assert reads == ["c1", "c2"] and slow["learned_total"] == 2
+
+
+def test_the_reading_keeps_each_connections_suggested_areas_read_once_though_the_review_queue_asks_too(monkeypatch):
+    from pramanyx.semantic import areas as A
+    AT._slow.clear()
+    reads = []
+    monkeypatch.setattr(A, "_suggested_areas", lambda conn, schema=None: reads.append(conn) or [
+        {"label": "Loyalty", "id": "loyalty", "tables": ["members"]}])
+    monkeypatch.setattr(AT, "PAUSE_S", 0)
+
+    def review(conn, limit=200):
+        A.suggested_areas(conn)                   # as the review queue's suggested-area source does
+        return {"total": 0, "unplaced": 0, "items": []}
+    monkeypatch.setattr("pramanyx.knowledge.review.review", review)
+    monkeypatch.setattr("pramanyx.knowledge.learned.learned_items", lambda conn, limit=50: {"total": 0, "items": []})
+    scope = NS(connections={"c1": "theLook", "c2": "DuckDB"}, person="p-" + uuid.uuid4().hex[:6], curator=True)
+    slow, _ = AT.slow_parts(scope, wait=True)
+    assert reads == ["c1", "c2"], "one read of each connection's suggestions in a reading"
+    assert slow["suggested"].get("c1") == [{"label": "Loyalty", "id": "loyalty", "tables": ["members"]}]
+    A.suggested_areas("c1")
+    assert reads == ["c1", "c2", "c1"], "outside a reading, nothing is shared"
+
+
+def _page_stubs(monkeypatch, slow: dict):
+    from pramanyx.discover import service as S
+    areas = {"orders_sales": {"id": "orders_sales", "name": "Orders & sales", "question": "", "business_owners": [],
+                              "technical_owners": [], "connections": ["c1"]},
+             S.OTHER: {"id": S.OTHER, "name": "Everything else", "question": "", "business_owners": [], "technical_owners": [],
+                       "connections": ["c1"]}}
+    monkeypatch.setattr(S, "gather", lambda scope: {})
+    monkeypatch.setattr(S, "all_items", lambda found: [])
+    monkeypatch.setattr(S, "areas_in_view", lambda scope: areas)
+    monkeypatch.setattr(S, "area_view", lambda a, items: {"id": a["id"], "name": a["name"], "total": len(items)})
+    monkeypatch.setattr(S, "by_use", lambda items, measured="": [])
+    monkeypatch.setattr(S, "put_use", lambda items: [])
+    monkeypatch.setattr(AT, "answers", lambda scope, items, now=None: {
+        "answers": 0, "previous": 0, "governed": 0, "in_an_area": 0, "per_area": {}})
+    monkeypatch.setattr(AT, "slow_parts", lambda scope, wait=False: (slow, []))
+    monkeypatch.setattr("pramanyx.orgsettings.store.effective_settings", lambda org=None: NS(not_areas={"c1": ["Fraud"]}))
+
+
+def test_the_map_serves_the_kept_suggestions_less_any_taken_or_refused_since_and_reads_no_ontology(monkeypatch):
+    from pramanyx.semantic import areas as A
+    kept = [{"label": "Loyalty", "id": "loyalty", "tables": ["members"]},
+            {"label": "Orders & sales", "id": "orders_sales", "tables": ["orders"]},     # declared since
+            {"label": "Fraud", "id": "fraud", "tables": ["flags"]}]                     # said to be none since
+    _page_stubs(monkeypatch, {"areas": {}, "review_total": 0, "review_unplaced": 0, "learned_total": 0,
+                              "learned_unplaced": 0, "unread": [], "suggested": {"c1": kept}, "at": "2026-11-25T14:00:00+00:00"})
+
+    def no_read(*a, **k):
+        raise AssertionError("the page read the ontology")
+    monkeypatch.setattr(A, "_suggested_areas", no_read)
+    out = AT.atlas(NS(connections={"c1": "theLook"}, person="", curator=True))
+    assert [(s["id"], s["connection_id"], s["connection_name"]) for s in out["suggested"]] == [("loyalty", "c1", "theLook")]
+    assert AT.atlas(NS(connections={"c1": "theLook"}, person="", curator=False))["suggested"] == [], "a curator's only"
+
+
+def test_with_no_reading_that_holds_suggestions_the_map_reads_them_itself(monkeypatch):
+    from pramanyx.semantic import areas as A
+    _page_stubs(monkeypatch, {"areas": {}, "review_total": 0, "review_unplaced": 0, "learned_total": 0,
+                              "learned_unplaced": 0, "unread": [], "at": "2026-11-25T14:00:00+00:00"})   # kept before
+    monkeypatch.setattr(A, "_suggested_areas", lambda conn, schema=None: [{"label": "Loyalty", "id": "loyalty", "tables": []}])
+    out = AT.atlas(NS(connections={"c1": "theLook"}, person="", curator=True))
+    assert [s["id"] for s in out["suggested"]] == ["loyalty"]

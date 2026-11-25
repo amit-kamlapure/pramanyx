@@ -16,9 +16,11 @@ A read of what is stored; no model, no warehouse.
 """
 from __future__ import annotations
 
+import contextvars
 import re
 import time
-from typing import Optional
+from contextlib import contextmanager
+from typing import Iterable, Iterator, Optional
 
 KEY = "area"
 MAX_DEPTH = 5
@@ -290,11 +292,46 @@ def said_not_an_area(said: Optional[dict], connection_id: str) -> list[str]:
     return [*said.get(connection_id, []), *said.get("*", [])]
 
 
+_SUGGESTED: contextvars.ContextVar[Optional[dict]] = contextvars.ContextVar("pramanyx_suggested_shared", default=None)
+
+
+@contextmanager
+def suggestions_read_once() -> Iterator[None]:
+    """Each connection's suggestions are read once inside this, whoever asks (the Atlas's background reading keeps them,
+    and the review queue it reads asks for them too). Reading them decodes every saved ontology, a long stretch the
+    interpreter holds; a page load that read them beside a reading waited nine seconds (measured 2026-11-25). Nothing is
+    kept after."""
+    token = _SUGGESTED.set({})
+    try:
+        yield
+    finally:
+        _SUGGESTED.reset(token)
+
+
+def still_suggested(connection_id: str, suggestions: list[dict], declared: Iterable[dict]) -> list[dict]:
+    """Suggestions read earlier — the Atlas keeps them with its background reading — less any an Area declared since
+    answers to, or a curator has since said is none: taking or refusing one shows on the next load, not ten minutes on."""
+    from pramanyx.orgsettings.store import effective_settings
+    gone = {_plain(x) for a in declared for x in (a.get("id", ""), a.get("name", ""))}
+    gone |= {_plain(x) for x in said_not_an_area(getattr(effective_settings(None), "not_areas", None), connection_id)}
+    return [s for s in suggestions if _plain(s.get("label", "")) not in gone and _plain(s.get("id", "")) not in gone]
+
+
 def suggested_areas(connection_id: str, schema_name: Optional[str] = None) -> list[dict]:
     """Areas the model suggests from its own labels for the data, each ``{label, id, tables}`` — what the ontology's
     enricher called the business area of each entity (``entity.domain``) where no area of the connection already
     answers to it and a curator has not said it is none (punch list 87, 2026-11-18). A suggestion is only that: an area
-    is declared by a curator (`PUT /areas`), never by the model. Reads what is stored; no model."""
+    is declared by a curator (`PUT /areas`), never by the model. Reads what is stored; no model. Read once per
+    connection inside :func:`suggestions_read_once`."""
+    shared = _SUGGESTED.get()
+    if shared is None:
+        return _suggested_areas(connection_id, schema_name)
+    if (connection_id, schema_name) not in shared:
+        shared[(connection_id, schema_name)] = _suggested_areas(connection_id, schema_name)
+    return [dict(s) for s in shared[(connection_id, schema_name)]]
+
+
+def _suggested_areas(connection_id: str, schema_name: Optional[str] = None) -> list[dict]:
     from pramanyx.ontology.store import load_latest_ontology
     from pramanyx.semantic.metric_map import best_areas, map_for
     from pramanyx.orgsettings.store import effective_settings
