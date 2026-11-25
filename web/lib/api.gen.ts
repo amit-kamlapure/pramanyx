@@ -8431,6 +8431,9 @@ export interface paths {
          * @description The whole glossary as the caller's organisation may read it: with identity on, another
          *     organisation's section and another organisation's connections are not in it (the 2027 study
          *     §E item 2); identity off is one tenant and reads exactly what it always did.
+         *
+         *     With ``connection_id``, the glossary as that connection reads it (`glossary.connection_glossary`) — what a table's
+         *     page shows. Every entry says which of its words a model wrote (``model_wrote``).
          */
         get: operations["get_glossary_glossary_get"];
         put?: never;
@@ -8449,7 +8452,11 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Put Table Glossary */
+        /**
+         * Put Table Glossary
+         * @description ``connection_id`` writes that connection's own entry — where the model's words for it are, so a person's edit
+         *     makes them theirs (`glossary._written`) rather than shadowing them from the global entries.
+         */
         put: operations["put_table_glossary_glossary__table__put"];
         post?: never;
         delete?: never;
@@ -8466,7 +8473,10 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Put Column Glossary */
+        /**
+         * Put Column Glossary
+         * @description ``connection_id`` as on a table.
+         */
         put: operations["put_column_glossary_glossary__table___column__put"];
         post?: never;
         delete?: never;
@@ -43076,7 +43086,9 @@ export interface operations {
     };
     get_glossary_glossary_get: {
         parameters: {
-            query?: never;
+            query?: {
+                connection_id?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -43092,6 +43104,15 @@ export interface operations {
                     "application/json": unknown;
                 };
             };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
         };
     };
     put_table_glossary_glossary__table__put: {
@@ -43099,6 +43120,7 @@ export interface operations {
             query?: {
                 schema?: string | null;
                 organisation?: boolean;
+                connection_id?: string | null;
             };
             header?: never;
             path: {
@@ -43137,6 +43159,7 @@ export interface operations {
             query?: {
                 schema?: string | null;
                 organisation?: boolean;
+                connection_id?: string | null;
             };
             header?: never;
             path: {

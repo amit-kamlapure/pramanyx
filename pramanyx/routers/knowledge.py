@@ -744,12 +744,23 @@ def delete_org_intelligence_endpoint(point_id: str):
 # ── Glossary ──────────────────────────────────────────────────────────────────
 
 @router.get("/glossary")
-def get_glossary():
+def get_glossary(connection_id: Optional[str] = None):
     """The whole glossary as the caller's organisation may read it: with identity on, another
     organisation's section and another organisation's connections are not in it (the 2027 study
-    §E item 2); identity off is one tenant and reads exactly what it always did."""
-    from pramanyx.semantic.glossary import organisation_visible
-    return organisation_visible(load_glossary())
+    §E item 2); identity off is one tenant and reads exactly what it always did.
+
+    With ``connection_id``, the glossary as that connection reads it (`glossary.connection_glossary`) — what a table's
+    page shows. Every entry says which of its words a model wrote (``model_wrote``)."""
+    from pramanyx.semantic.glossary import connection_glossary, organisation_visible, said_who_wrote
+    if connection_id:
+        return connection_glossary(connection_id)
+    return said_who_wrote(organisation_visible(load_glossary()))
+
+
+def _who_writes(request: Request) -> str:
+    """``model`` for an agent's write (it is the model's words), else ``person``."""
+    from pramanyx.rbac.agent_gate import is_agent_request
+    return "model" if is_agent_request(request) else "person"
 
 
 def _organisation_for_write(organisation: bool) -> Optional[str]:
@@ -780,21 +791,28 @@ class UpdateColumnRequest(BaseModel):
 # unqualified behaviour, so existing callers are unaffected.
 
 @router.put("/glossary/{table}")
-def put_table_glossary(table: str, req: UpdateTableRequest, schema: Optional[str] = None,
-                       organisation: bool = False):
-    org = _organisation_for_write(organisation)
+def put_table_glossary(table: str, req: UpdateTableRequest, request: Request, schema: Optional[str] = None,
+                       organisation: bool = False, connection_id: Optional[str] = None):
+    """``connection_id`` writes that connection's own entry — where the model's words for it are, so a person's edit
+    makes them theirs (`glossary._written`) rather than shadowing them from the global entries."""
+    org = None if connection_id else _organisation_for_write(organisation)
     update_table(table, description=req.description, grain=req.grain, joins=req.joins,
-                 schema=schema, owner=req.owner, organisation=org)
-    return {"ok": True, "table": table, "schema": schema, "organisation": org}
+                 schema=schema, owner=req.owner, organisation=org, connection=connection_id,
+                 by=_who_writes(request))
+    return {"ok": True, "table": table, "schema": schema, "organisation": org, "connection_id": connection_id}
 
 
 @router.put("/glossary/{table}/{column}")
-def put_column_glossary(table: str, column: str, req: UpdateColumnRequest,
-                        schema: Optional[str] = None, organisation: bool = False):
-    org = _organisation_for_write(organisation)
+def put_column_glossary(table: str, column: str, req: UpdateColumnRequest, request: Request,
+                        schema: Optional[str] = None, organisation: bool = False,
+                        connection_id: Optional[str] = None):
+    """``connection_id`` as on a table."""
+    org = None if connection_id else _organisation_for_write(organisation)
     update_column(table, column, description=req.description, values=req.values,
-                  caveats=req.caveats, schema=schema, owner=req.owner, organisation=org)
-    return {"ok": True, "table": table, "column": column, "schema": schema, "organisation": org}
+                  caveats=req.caveats, schema=schema, owner=req.owner, organisation=org,
+                  connection=connection_id, by=_who_writes(request))
+    return {"ok": True, "table": table, "column": column, "schema": schema, "organisation": org,
+            "connection_id": connection_id}
 
 
 # ── Knowledge sources (2026-09-06) — Confluence / Notion, on the documents surface ──

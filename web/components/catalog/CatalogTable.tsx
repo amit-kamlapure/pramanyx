@@ -29,7 +29,7 @@ import { Icon } from "@/components/ui/icon";
 import { toast } from "@/components/ui/toast";
 import { useOpenInQuery } from "@/lib/openInQuery";
 import { tableStarter } from "@/lib/query/workbench";
-import { GlossaryPanel } from "@/components/catalog/GlossaryPanel";
+import { ByModel, GlossaryPanel } from "@/components/catalog/GlossaryPanel";
 import { CertificationMark } from "@/components/govern/CertificationMark";
 import { AreaPlacement } from "@/components/semantic/AreaControls";
 import { readAreas, type AreasRead } from "@/lib/areas";
@@ -46,7 +46,7 @@ import { TabStrip } from "@/components/ui/tab-strip";
 import { ChromeToolbar, useInShell } from "@/components/shell/PageChrome";
 import {
   alterColumn, deleteConnectionTable, getExplorationFindings, getGlossary, getGraphLineage, getMetrics, getOntology,
-  getQueryHistory, getSchemaRich, getTableColumns, listGovernedTags, lookupGlossaryTable, type GlossaryTable,
+  getQueryHistory, getSchemaRich, getTableColumns, listGovernedTags, lookupGlossaryTable, modelWrote, type GlossaryTable,
   type AuditRecord, type CatalogTableInfo, type DatasetsView, type DistributionProfile, type GovernedTag, type GraphLineage,
   type Metric, type OntologyEntity, type OntologyGraph, type OntologyRelationship, type SchemaColumn, type SchemaTable,
   type TableColumn,
@@ -70,6 +70,12 @@ const TYPE_OPTIONS = [
 ];
 
 type Tab = "overview" | "columns" | "preview" | "lineage" | "usage" | "findings" | "mapping" | "docs" | "activity";
+
+/** A glossary word on the Overview, said as the model's when the model wrote it (2026-11-25). */
+function Written({ text, byModel }: { text: string; byModel: boolean }) {
+  if (!byModel) return <>{text}</>;
+  return <span style={{ display: "inline-flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>{text}<ByModel /></span>;
+}
 
 export function CatalogTable({ connId, catalogName, schemaName, table, view, onAsk, onRemoved, onProgramChanged }: {
   connId: string;
@@ -204,10 +210,11 @@ export function CatalogTable({ connId, catalogName, schemaName, table, view, onA
   useEffect(() => {
     let alive = true;
     setGloss(undefined);
-    getGlossary().then(g => { if (alive) setGloss(lookupGlossaryTable(g, bare(table.name), schemaName) ?? null); })
+    // as this connection reads it: the model's words for theLook sit in theLook's own section (2026-11-25)
+    getGlossary(connId).then(g => { if (alive) setGloss(lookupGlossaryTable(g, bare(table.name), schemaName) ?? null); })
       .catch(() => { if (alive) setGloss(null); });
     return () => { alive = false; };
-  }, [table.name, schemaName, docsOpen]);   // read again on leaving Docs, where it is edited
+  }, [connId, table.name, schemaName, docsOpen]);   // read again on leaving Docs, where it is edited
   // The table's governed tags (`table:{connection}.{schema}.{table}` — `metastore/models.table_securable`).
   const [tags, setTags] = useState<GovernedTag[] | null | undefined>(undefined);
   useEffect(() => {
@@ -315,9 +322,11 @@ export function CatalogTable({ connId, catalogName, schemaName, table, view, onA
                   </span>],
                   ["Source", `${catalogName} · ${schemaName || "no schema"}`],
                   ["Description", gloss === undefined ? "Reading…" : gloss?.description?.trim()
-                    || <NotSet key="d" what="No description is written for it — Docs is where it is written" />],
+                    ? <Written key="d" text={gloss.description.trim()} byModel={modelWrote(gloss, "description")} />
+                    : <NotSet key="d" what="No description is written for it — Docs is where it is written" />],
                   ["Grain", gloss === undefined ? "Reading…" : gloss?.grain?.trim()
-                    || <NotSet key="g" what="Its grain (what one row is) is not written — Docs is where it is written" />],
+                    ? <Written key="g" text={gloss.grain.trim()} byModel={modelWrote(gloss, "grain")} />
+                    : <NotSet key="g" what="Its grain (what one row is) is not written — Docs is where it is written" />],
                   ["Business object", objectName ?? (graph === undefined ? "Reading…" : <NotSet key="o" word="Not mapped"
                     what={graph === null ? "The ontology is not built for this schema" : "No business object is read from this table"} />)],
                   ["Owner", <NotSet key="ow" what="No owner is recorded for a table" />],

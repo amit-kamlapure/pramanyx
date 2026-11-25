@@ -10070,7 +10070,14 @@ export interface GlossaryTable {
   grain?: string;
   joins?: string[];
   columns?: Record<string, GlossaryColumn>;
+  /** Which of its words the model wrote, by path — `description`, `grain`, `joins`, `columns.<name>.description` …
+   *  — said by the server (`glossary.model_wrote`); a person's write takes its words out. */
+  model_wrote?: string[];
 }
+
+/** Whether the model wrote this word of a glossary entry (`description`, `columns.status.caveats` …). */
+export const modelWrote = (entry: GlossaryTable | null | undefined, field: string): boolean =>
+  !!entry?.model_wrote?.includes(field);
 export interface Glossary { tables?: Record<string, GlossaryTable>; }
 
 /** Look up a table's glossary entry tolerantly, mirroring `semantic.glossary.lookup_table`.
@@ -10098,10 +10105,22 @@ export function lookupGlossaryTable(
   return undefined;
 }
 
-export async function getGlossary(): Promise<Glossary> {
-  const res = await fetch(`${getApiBase()}/glossary`);
+/** The glossary — with a connection, as that connection reads it: a person's words, and the model's written for it. */
+export async function getGlossary(connectionId?: string | null): Promise<Glossary> {
+  const q = connectionId ? `?connection_id=${encodeURIComponent(connectionId)}` : "";
+  const res = await fetch(`${getApiBase()}/glossary${q}`);
   if (!res.ok) return { tables: {} };
   return res.json();
+}
+
+/** Where a glossary write lands: its schema, and the connection whose own words they are — where the model's words
+ *  for it are, so a person's edit makes them theirs instead of shadowing them. */
+function glossaryWhere(schema?: string | null, connectionId?: string | null): string {
+  const q = new URLSearchParams();
+  if (schema) q.set("schema", schema);
+  if (connectionId) q.set("connection_id", connectionId);
+  const s = q.toString();
+  return s ? `?${s}` : "";
 }
 
 /** Partial table-level glossary patch. Every field the agent reads at query time:
@@ -10110,9 +10129,9 @@ export async function updateTableGlossary(
   table: string,
   patch: { description?: string; grain?: string; joins?: string[] },
   schema?: string | null,
+  connectionId?: string | null,
 ): Promise<void> {
-  const q = schema ? `?schema=${encodeURIComponent(schema)}` : "";
-  const res = await fetch(`${getApiBase()}/glossary/${encodeURIComponent(table)}${q}`, {
+  const res = await fetch(`${getApiBase()}/glossary/${encodeURIComponent(table)}${glossaryWhere(schema, connectionId)}`, {
     method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch),
   });
   if (!res.ok) throw new Error("Failed to save table comment");
@@ -10124,9 +10143,9 @@ export async function updateColumnGlossary(
   column: string,
   patch: { description?: string; values?: string; caveats?: string },
   schema?: string | null,
+  connectionId?: string | null,
 ): Promise<void> {
-  const q = schema ? `?schema=${encodeURIComponent(schema)}` : "";
-  const res = await fetch(`${getApiBase()}/glossary/${encodeURIComponent(table)}/${encodeURIComponent(column)}${q}`, {
+  const res = await fetch(`${getApiBase()}/glossary/${encodeURIComponent(table)}/${encodeURIComponent(column)}${glossaryWhere(schema, connectionId)}`, {
     method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch),
   });
   if (!res.ok) throw new Error("Failed to save column comment");

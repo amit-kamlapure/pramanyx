@@ -645,9 +645,84 @@ def save_glossary(data: dict, path: Path | None = None) -> None:
         _write_yaml(gen_p, {"tables": {}})
 
 
-def _tables_for(data: dict, organisation: str | None) -> dict:
+#: The words of an entry a model may write: the table's, and each column's (``columns.<name>.<field>``).
+_TABLE_WORDS = ("description", "grain", "joins")
+_COLUMN_WORDS = ("description", "values", "caveats")
+
+
+def _words_in(entry: dict) -> list[str]:
+    """The fields of ``entry`` that hold words, by path."""
+    out = [f for f in _TABLE_WORDS if entry.get(f)]
+    for column, ce in (entry.get("columns") or {}).items():
+        if isinstance(ce, dict):
+            out += [f"columns.{column}.{f}" for f in _COLUMN_WORDS if ce.get(f)]
+    return out
+
+
+def model_wrote(entry: Any) -> list[str]:
+    """Which of an entry's words a model wrote, by path (``description``, ``columns.price.caveats``): every one while the
+    entry is the model's (``auto_generated``); once a person has written in it, those the model wrote and no person has
+    written since (``model_wrote``, kept by :func:`_written`)."""
+    if not isinstance(entry, dict):
+        return []
+    if _generated(entry):
+        return _words_in(entry)
+    return [f for f in entry.get("model_wrote") or [] if isinstance(f, str)]
+
+
+def _written(entry: dict, fields: list[str], by: str) -> None:
+    """Say who writes ``fields`` of ``entry``, before they are written.
+
+    A person's write to the model's entry makes the entry theirs. It leaves the model's layer, which the drift re-seed
+    rewrites (`autoseed`): until 2026-11-25 a person's words stayed there, marked as the model's, for the next re-seed
+    to overwrite. The words the model wrote that the person has not stay said as the model's. A model's write to a
+    person's entry says which words are the model's; to the model's own entry it changes nothing."""
+    if by == "model":
+        if fields and not _generated(entry):
+            entry["model_wrote"] = sorted(set(model_wrote(entry)) | set(fields))
+        return
+    if _generated(entry):
+        entry["model_wrote"] = _words_in(entry)
+        entry.pop("auto_generated", None)
+    left = [f for f in model_wrote(entry) if f not in fields]
+    if left:
+        entry["model_wrote"] = left
+    else:
+        entry.pop("model_wrote", None)
+
+
+def said_who_wrote(doc: dict) -> dict:
+    """A copy of ``doc`` in which every table entry says which of its words a model wrote (``model_wrote``), for a page
+    to say so beside them. The store is not touched."""
+    import copy
+    out = copy.deepcopy(doc or {})
+
+    def mark(tables: Any) -> None:
+        for entry in (tables or {}).values():
+            if isinstance(entry, dict):
+                entry["model_wrote"] = model_wrote(entry)
+
+    mark(out.get("tables"))
+    for key in _SCAFFOLDING_KEYS:
+        for section in (out.get(key) or {}).values():
+            mark((section or {}).get("tables"))
+    return out
+
+
+def connection_glossary(connection_id: str, path: Path | None = None) -> dict:
+    """The glossary as ``connection_id`` reads it — a person's words for every connection, its organisation's, its
+    own, and the model's written for it — each entry saying which words the model wrote. A table's page reads this:
+    the whole file's top level holds none of what the model wrote for one connection (2026-11-25: theLook's six
+    model-written tables showed "no description" in the Catalog)."""
+    return said_who_wrote(_connection_layers(path, connection_id)[0])
+
+
+def _tables_for(data: dict, organisation: str | None, connection: str | None = None) -> dict:
     """The ``tables`` dict a write lands in: the organisation's section when one is named (the 2027
-    study §E item 2 — a person's words for every connection of the organisation), else the global."""
+    study §E item 2 — a person's words for every connection of the organisation), else the global. ``connection`` is
+    that connection's own section: the specific answer (O2), and where the model writes for it."""
+    if connection:
+        return data.setdefault(CONNECTIONS_KEY, {}).setdefault(connection, {}).setdefault("tables", {})
     if organisation:
         return data.setdefault(ORGANISATIONS_KEY, {}).setdefault(organisation, {}).setdefault("tables", {})
     return data.setdefault("tables", {})
@@ -656,13 +731,17 @@ def _tables_for(data: dict, organisation: str | None) -> dict:
 def update_table(table: str, description: str | None = None, grain: str | None = None,
                  joins: list[str] | None = None, path: Path | None = None,
                  schema: str | None = None, owner: str | None = None,
-                 organisation: str | None = None) -> None:
+                 organisation: str | None = None, connection: str | None = None,
+                 by: str = "person") -> None:
     """Upsert table-level glossary entry, keyed per schema when one is known. ``owner`` (CB-3)
     is the person or team responsible, free text a person may later link to a principal.
-    ``organisation`` writes the entry into that organisation's section instead of the global one."""
+    ``organisation`` writes the entry into that organisation's section instead of the global one;
+    ``connection`` into that connection's. ``by`` is who writes — ``person`` or ``model`` (:func:`_written`)."""
     data = _load_raw(path)
-    tables = _tables_for(data, organisation)
+    tables = _tables_for(data, organisation, connection)
     entry = tables.setdefault(canonical_key(table, schema), {})
+    _written(entry, [f for f, v in (("description", description), ("grain", grain), ("joins", joins))
+                     if v is not None], by)
     if owner is not None:
         entry["owner"] = " ".join(owner.split())
     if description is not None:
@@ -677,16 +756,15 @@ def update_table(table: str, description: str | None = None, grain: str | None =
 def update_column(table: str, column: str, description: str | None = None,
                   values: str | None = None, caveats: str | None = None,
                   path: Path | None = None, schema: str | None = None,
-                  owner: str | None = None, organisation: str | None = None) -> None:
-    """Upsert column-level glossary entry, keyed per schema when one is known. ``owner`` (CB-3) as
-    on a table; ``organisation`` as on a table."""
+                  owner: str | None = None, organisation: str | None = None,
+                  connection: str | None = None, by: str = "person") -> None:
+    """Upsert column-level glossary entry, keyed per schema when one is known. ``owner`` (CB-3),
+    ``organisation``, ``connection`` and ``by`` as on a table."""
     data = _load_raw(path)
-    col_entry = (
-        _tables_for(data, organisation)
-            .setdefault(canonical_key(table, schema), {})
-            .setdefault("columns", {})
-            .setdefault(column, {})
-    )
+    entry = _tables_for(data, organisation, connection).setdefault(canonical_key(table, schema), {})
+    _written(entry, [f"columns.{column}.{f}" for f, v in (("description", description), ("values", values),
+                                                          ("caveats", caveats)) if v is not None], by)
+    col_entry = entry.setdefault("columns", {}).setdefault(column, {})
     if owner is not None:
         col_entry["owner"] = " ".join(owner.split())
     if description is not None:
