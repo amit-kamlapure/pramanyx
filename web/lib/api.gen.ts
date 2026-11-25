@@ -6903,6 +6903,68 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/evals/context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Context Evals
+         * @description The context-layer suite of a connection: its cases by source (published Definitions, approved metrics, trusted
+         *     queries, corrected answers), its newest run and each case's result. Reads only.
+         */
+        get: operations["get_context_evals_evals_context_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/evals/context/{conn_id}/cases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Draw Context Cases
+         * @description Draw the cases afresh from the connection's layer — no model, no warehouse.
+         */
+        post: operations["draw_context_cases_evals_context__conn_id__cases_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/evals/context/{conn_id}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Context Evals
+         * @description Answer the cases through the real answer path, in the background: model calls, a person's click. Returns the
+         *     run's id at once; its results land on GET /evals/context as each answer is graded.
+         */
+        post: operations["run_context_evals_evals_context__conn_id__run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/evals/evaluators": {
         parameters: {
             query?: never;
@@ -6966,32 +7028,6 @@ export interface paths {
         get: operations["compare_experiment_runs_evals_experiments_compare_get"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/evals/flags/{flag}/graduate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Graduate Flag
-         * @description Decide whether ``flag`` has earned default-on, from an eval run, and RECEIPT it.
-         *
-         *     This records a decision — it does not flip the flag. A graduation is the evidence a
-         *     human uses to change ``FLAG_DEFAULT`` in a reviewed PR; setting a runtime override here
-         *     would re-create the ledger-on/code-off drift the 2026-07-22 audit removed. The decision
-         *     (and its blockers, if any) is persisted and emitted as an ``eval.graduation`` ledger
-         *     event — the receipt.
-         */
-        post: operations["graduate_flag_evals_flags__flag__graduate_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -22371,6 +22407,14 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** ContextRunIn */
+        ContextRunIn: {
+            /**
+             * Limit
+             * @default 40
+             */
+            limit: number;
+        };
         /** CoworkerAddress */
         CoworkerAddress: {
             /**
@@ -23971,20 +24015,6 @@ export interface components {
             threshold_direction: string;
             /** Warning Threshold */
             warning_threshold?: number | null;
-        };
-        /** GraduateIn */
-        GraduateIn: {
-            /** Baseline Pass Rate */
-            baseline_pass_rate?: number | null;
-            /**
-             * Min Pass Rate
-             * @default 1
-             */
-            min_pass_rate: number;
-            /** Run Id */
-            run_id?: string | null;
-            /** Suite Id */
-            suite_id: string;
         };
         /** GrantL5Body */
         GrantL5Body: {
@@ -40763,6 +40793,107 @@ export interface operations {
             };
         };
     };
+    get_context_evals_evals_context_get: {
+        parameters: {
+            query: {
+                connection_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    draw_context_cases_evals_context__conn_id__cases_post: {
+        parameters: {
+            query?: {
+                connection_id?: string | null;
+            };
+            header?: never;
+            path: {
+                conn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_context_evals_evals_context__conn_id__run_post: {
+        parameters: {
+            query?: {
+                connection_id?: string | null;
+            };
+            header?: never;
+            path: {
+                conn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContextRunIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_evaluators_evals_evaluators_get: {
         parameters: {
             query?: {
@@ -40839,43 +40970,6 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    graduate_flag_evals_flags__flag__graduate_post: {
-        parameters: {
-            query?: {
-                connection_id?: string | null;
-            };
-            header?: never;
-            path: {
-                flag: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["GraduateIn"];
-            };
-        };
         responses: {
             /** @description Successful Response */
             200: {

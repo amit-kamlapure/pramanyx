@@ -181,6 +181,14 @@ def housekeeping_once() -> dict[str, int]:
     except Exception as exc:
         logger.warning("automation heartbeat could not mine the day's statements: %s", exc)
         counts["mined"] = 0
+    # Decision 3 — the context layer evaluated once a UTC day, only where the organisation allows model work nobody
+    # asked for (`scheduled_model_work`, off by default): each run is real answers, with their cost.
+    try:
+        from pramanyx.evals.context_layer import run_nightly
+        counts["context_evals"] = run_nightly()
+    except Exception as exc:
+        logger.warning("automation heartbeat could not evaluate the context layer: %s", exc)
+        counts["context_evals"] = 0
     return counts
 
 

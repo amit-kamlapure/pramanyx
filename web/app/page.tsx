@@ -1027,7 +1027,7 @@ const VALID_LAYERS = new Set<IntelLayer>([
  *  reload). One vocabulary per workspace; a `?layer=` value is honoured only on the
  *  workspace it belongs to, so a stale or foreign value is ignored, not routed to. */
 const OPS_LAYERS = new Set<OpsLayer>(["monitors", "actions", "spend", "security"]);
-const EVALS_LAYERS = new Set<EvalsLayer>(["suites", "runs", "experiments"]);
+const EVALS_LAYERS = new Set<EvalsLayer>(["context", "suites", "runs", "experiments"]);
 
 const RECORD_LAYERS = new Set<RecordLayer>(["inquiries", "decisions", "missions", "claims", "corrections"]);
 
@@ -1084,7 +1084,7 @@ export default function Home() {
   // PX-0 — the other workspaces' layers, declared here (not further down) because the
   // deep-link reader and URL sync below now read and write all of them.
   const [opsLayer, setOpsLayer] = useState<OpsLayer>("monitors");
-  const [evalsLayer, setEvalsLayer] = useState<EvalsLayer>("suites");
+  const [evalsLayer, setEvalsLayer] = useState<EvalsLayer>("context");
   // The Settings section, held here like a workspace's layer so a link (`?tab=integrations`) can open one and the
   // URL says which is open.
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("organization");

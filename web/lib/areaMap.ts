@@ -159,6 +159,7 @@ export const REVIEW_WORDS: [string, string[]][] = [
   ["New Definition", ["new_definition"]], ["Gap", ["framing_miss", "unanswered"]], ["Definition edit", ["definition_edit"]],
   ["Conflict", ["rival_meanings", "divergence"]], ["Thumbs-down", ["verdict", "unhelpful"]], ["To confirm", ["finding", "usage"]],
   ["Draft", ["definition_draft"]], ["Suggested edit", ["definition_suggestion"]], ["Synonym", ["synonym"]], ["Import", ["import"]],
+  ["Not reached", ["eval_failed"]],
   ["Suggested Area", ["suggested_area"]],
 ];
 

@@ -343,12 +343,31 @@ def _answered_two_ways(connection_id: str, link: dict) -> list[dict]:
             for d in detect(connection_id)[:PER_SOURCE] if not d.pinned and ask_of(d.question) == d.question]
 
 
+def _eval_failures(connection_id: str, link: dict) -> list[dict]:
+    """What the context-layer evals found the layer did not reach (§7.9, decision 3): a published Definition not given to
+    the answer about it, a metric's formula not used, a trusted query not given, a corrected answer still answered as it
+    was. From the newest run; a connection never evaluated has none."""
+    from pramanyx.evals.context_layer import SOURCE_WORDS, failures
+    out = []
+    for f in failures(connection_id)[:PER_SOURCE]:
+        name, source = f["name"] or f["question"], f["source"]
+        actions: list[dict] = []
+        if source == "definition":
+            _, term, area = (f["ref"].split("/", 2) + ["", ""])[:3]
+            actions.append(_definition_page("edit", "Read its Definition", connection_id, term, area))
+        out.append(_row(source="eval_failed", ref=f["id"], kind="gap",
+                        title=f"“{name}” did not reach the answer to “{f['question']}”",
+                        detail=f"{SOURCE_WORDS.get(source, source)}: {f['result']['why']}.",
+                        href=link["definitions_tab"](), action="Write what the answer needed to be given", actions=actions))
+    return out
+
+
 SOURCES: tuple[tuple[str, Callable[[str, dict], list[dict]]], ...] = (
     ("framing_miss", _framing_misses), ("unanswered", _unanswered),
     ("unconfirmed", _unconfirmed), ("definitions", _definitions), ("synonym", _proposed_synonyms),
     ("suggested_area", _suggested_areas), ("new_definition", _new_definitions), ("definition_edit", _definition_edits),
     ("import", _imports), ("verdict", _marked_wrong), ("unhelpful", _unhelpful),
-    ("rival_meanings", _rivals), ("divergence", _answered_two_ways),
+    ("rival_meanings", _rivals), ("divergence", _answered_two_ways), ("eval_failed", _eval_failures),
 )
 
 

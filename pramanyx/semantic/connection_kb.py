@@ -435,10 +435,23 @@ def definition_standing(entry, connection_id: str):
     tier = str((entry.standing or {}).get("tier") or "")
     owner, right = _behind(entry, connection_id)
     title = str(getattr(entry, "title", "") or "")
-    return Standing(tier="person" if tier in _TIER_ORDER else "said", draft=tier == "declared",
+    ref = f"{getattr(entry, 'connection_id', '') or connection_id}/{title}/{getattr(entry, 'area', '') or ''}"
+    # A2b — a published Definition an eval showed reaching an answer stands on a person's word AND the data's
+    # (`evals.context_layer`): "both", above one only a person vouches for
+    person = tier in _TIER_ORDER
+    measured = person and tier != "declared" and bool(title) and _measured_by_eval(ref)
+    return Standing(tier=("both" if measured else "person") if person else "said", draft=tier == "declared",
                     owner_word=owner < 0, right=-right,
                     uses=answers_of("definition", f"{getattr(entry, 'connection_id', '') or connection_id}/{title}/"
                                   f"{getattr(entry, 'area', '') or ''}") if title else None)
+
+
+def _measured_by_eval(ref: str) -> bool:
+    try:
+        from pramanyx.evals.context_layer import measured
+        return measured("definition", ref)
+    except Exception:  # noqa: BLE001 — unread, not measured: nothing is claimed of it
+        return False
 
 
 def order_definitions(entries: list, connection_id: str) -> list:

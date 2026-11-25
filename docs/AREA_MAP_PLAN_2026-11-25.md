@@ -302,3 +302,18 @@ Both pages' parts are on the Atlas's Overview (`web/components/ontology/AtlasKno
 | Filter, "N of M"; Refresh; a failed refresh keeps the last read | The same |
 | Empty: "Nothing promoted yet — or its store could not be read", how to promote | The same |
 | "Not recorded yet: people and owners, who to ask, and disagreements over a term" | Dropped as untrue now: Areas name their contacts, and rival meanings wait in Review |
+
+### Decision 3, done (2026-11-26) — Evals test the context layer (A2b)
+
+`pramanyx/evals/context_layer.py`; the Evals page's first view, **Context layer**. Cases are drawn from the layer, no
+model writing them: each published Definition ("How many <word> …"), approved metric ("What was <label> …"), trusted
+query (its own question) and corrected answer (its question, the corrected SQL). A run answers them through the real
+answer path — a person's click (40 at most), or nightly only where `scheduled_model_work` is allowed — and grades each
+from the answer's receipt, never a model: given the Definition, its SQL using the metric's formula, the trusted query
+given, the rows matching the correction. A pass is kept per thing for 45 days: a published Definition an answer was
+shown to rest on stands on "both" (a person's word on a measured result) in the one standing (`definition_standing`);
+a failure is a knowledge-review row, "Not reached" (`review._eval_failures`), in the Inbox. One store: the eval plane's,
+a suite per connection keyed `context:<connection>`. The flag-graduation decision door
+(`POST /evals/flags/{flag}/graduate`) is retired — no flags since 2026-10-28 — and the decisions it booked stay readable
+(`GET /evals/graduations`). A metric's measured tier stays its verified formula (`ontology/authority.standing`): its
+eval files what it missed, and does not yet lift it.

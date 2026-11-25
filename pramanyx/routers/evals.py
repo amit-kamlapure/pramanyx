@@ -16,7 +16,6 @@ untouched: they are load-bearing.
 """
 from __future__ import annotations
 
-import json
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -53,66 +52,6 @@ class RunIn(BaseModel):
     iterations: int = Field(default=1, ge=1, le=10)
     evaluators: Optional[list[str]] = None
     persist: bool = True
-
-
-class GraduateIn(BaseModel):
-    suite_id: str
-    #: Judge this run; when omitted, the suite's most recent run is used.
-    run_id: Optional[str] = None
-    #: The flag-OFF pass rate to beat. When omitted, the run must clear ``min_pass_rate``.
-    baseline_pass_rate: Optional[float] = None
-    min_pass_rate: float = 1.0
-
-
-def _ab_evidence(suite_id: str, flag: str, *, limit: int = 24) -> tuple:
-    """Derive the A/B baseline and its noise floor from the suite's OWN run history.
-
-    A caller-supplied ``baseline_pass_rate`` is a scalar with no provenance: nothing
-    about it says which runs produced it, or whether those runs agree with themselves.
-    That is how a flag graduates on jitter, so the gate now demands floor evidence — and
-    demanding it from the caller only moves the burden. The runs are already on disk,
-    stamped by `run_experiment` with the cell that produced them, so the server can just
-    look.
-
-    Returns ``(baseline_pass_rate, delta)`` — both ``None`` when the history does not
-    contain a usable A/B for this flag, in which case the caller's own inputs stand.
-
-    Cells are classified by what the run RECORDED it was asked for
-    (``config.cell_requested.flags[flag]``), never by the label, so a cell named
-    "control" that actually ran with the flag on cannot be read as the baseline.
-    """
-    from pramanyx.evals import fidelity as _fidelity
-
-    off_runs: list[dict] = []
-    on_runs: list[dict] = []
-    for run in store.list_runs(suite_id, limit=limit):
-        if run.get("status") != "succeeded":
-            continue
-        cfg = run.get("config") or {}
-        if isinstance(cfg, str):
-            try:
-                cfg = json.loads(cfg)
-            except Exception as exc:
-                from pramanyx.kernel.errors import tolerate
-                tolerate(exc, "a run whose config JSON is unreadable cannot be attributed "
-                              "to a cell, so it is not counted as A/B evidence",
-                         counter="evals.graduate.bad_run_config")
-                continue
-        requested = ((cfg or {}).get("cell_requested") or {}).get("flags") or {}
-        if flag not in requested:
-            continue
-        summary = run.get("summary") or {}
-        if summary.get("pass_rate") is None:
-            continue
-        (on_runs if requested[flag] else off_runs).append(summary)
-
-    # One replicate per side cannot establish a floor — a configuration compared only
-    # against another configuration, never against itself, tells you nothing about
-    # whether it agrees with itself.
-    if len(off_runs) < 2 or not on_runs:
-        return None, None
-    baseline = sum(r["pass_rate"] for r in off_runs) / len(off_runs)
-    return baseline, _fidelity.compare(off_runs, on_runs, axis="pass_rate")
 
 
 def _suite_or_404(suite_id: str) -> dict:
@@ -277,64 +216,8 @@ def compare_experiment_runs(a: str, b: str):
 
 # ── graduations (Wave E6 — the promotion gate) ──────────────────────────────────
 
-@router.post("/evals/flags/{flag}/graduate", dependencies=[gate(Capability.EVAL_SUITE)])
-def graduate_flag(flag: str, body: GraduateIn):
-    """Decide whether ``flag`` has earned default-on, from an eval run, and RECEIPT it.
-
-    This records a decision — it does not flip the flag. A graduation is the evidence a
-    human uses to change ``FLAG_DEFAULT`` in a reviewed PR; setting a runtime override here
-    would re-create the ledger-on/code-off drift the 2026-07-22 audit removed. The decision
-    (and its blockers, if any) is persisted and emitted as an ``eval.graduation`` ledger
-    event — the receipt.
-    """
-    from pramanyx.evals import store
-    from pramanyx.evals.promotion import evaluate_graduation
-    from pramanyx.kernel.flags import FLAG_DEFAULT, FLAG_ENV, override_drift
-    from pramanyx.kernel.ledger import Ledger
-
-    suite = _suite_or_404(body.suite_id)
-
-    run = store.get_run(body.run_id) if body.run_id else None
-    if run is None and not body.run_id:
-        recent = store.list_runs(body.suite_id, limit=1)
-        run = recent[0] if recent else None
-    if body.run_id and run is None:
-        raise HTTPException(status_code=404, detail="Run not found")
-
-    run_summary = (run or {}).get("summary") or None
-
-    # Prefer evidence the server can see over a number the caller asserts. When the
-    # suite's history holds a real A/B for this flag, its baseline AND its floor are
-    # derived here; a caller-supplied baseline is only used when there is no such
-    # history, and then it is refused for lacking a floor (which is the honest answer,
-    # not a regression).
-    derived_baseline, derived_delta = _ab_evidence(body.suite_id, flag)
-    decision = evaluate_graduation(
-        flag, run_summary,
-        registered_flags=set(FLAG_ENV),
-        current_default=bool(FLAG_DEFAULT.get(flag, False)),
-        baseline_pass_rate=(derived_baseline if derived_baseline is not None
-                            else body.baseline_pass_rate),
-        min_pass_rate=body.min_pass_rate,
-        delta=derived_delta,
-        # The configuration the decision is being made in, read from the live ledger
-        # rather than trusted: a graduation decided on a drifted box is a claim about
-        # that box. Recorded on the receipt either way; a contradicting override blocks.
-        override_drift=override_drift(),
-    )
-    payload = decision.to_dict()
-    # A no-run decision carries no suite_id from the summary — pin the one the caller named.
-    payload["suite_id"] = payload.get("suite_id") or body.suite_id
-
-    record = store.record_graduation(payload)
-    try:
-        Ledger.default().emit("eval.graduation", record,
-                              conn_id=suite.get("connection_id") or None)
-    except Exception as exc:  # the decision is already persisted; the event is the audit copy
-        from pramanyx.kernel.errors import tolerate
-        tolerate(exc, "eval graduation: ledger emit failed; decision still recorded",
-                 counter="evals.graduation.emit")
-    return {**payload, "receipt_id": record["id"], "decided_at": record["decided_at"]}
+# The flag-graduation half retired 2026-11-26 (the Atlas plan §7.9, decision 3): its decision door is gone — there are no
+# flags to graduate since 2026-10-28 — and the decisions it booked stay readable below.
 
 
 @router.get("/evals/graduations", dependencies=[gate(Capability.EVAL_SUITE)])
@@ -355,3 +238,41 @@ def list_evaluators():
                     "requires": list(getattr(ev, "requires", ())),
                     "deterministic": bool(getattr(ev, "deterministic", True))})
     return {"evaluators": out, "deterministic_count": len(deterministic_evaluators())}
+
+
+# ── the context layer (§7.9, decision 3) ─────────────────────────────────────────────────────────────────────────
+
+
+class ContextRunIn(BaseModel):
+    #: The most cases to answer — each is a real answer, with its cost.
+    limit: int = Field(40, ge=1, le=200)
+
+
+@router.get("/evals/context", dependencies=[gate(Capability.EVAL_SUITE)])
+def get_context_evals(connection_id: str):
+    """The context-layer suite of a connection: its cases by source (published Definitions, approved metrics, trusted
+    queries, corrected answers), its newest run and each case's result. Reads only."""
+    from pramanyx.evals.context_layer import latest
+    return latest(connection_id)
+
+
+@router.post("/evals/context/{conn_id}/cases", dependencies=[gate(Capability.EVAL_SUITE)])
+def draw_context_cases(conn_id: str):
+    """Draw the cases afresh from the connection's layer — no model, no warehouse."""
+    from pramanyx.db.registry import list_connections
+    from pramanyx.evals.context_layer import generate
+    name = next((str(c.get("name") or "") for c in list_connections() if c["id"] == conn_id), None)
+    if name is None:
+        raise HTTPException(status_code=404, detail="Connection not found")
+    return generate(conn_id, name)
+
+
+@router.post("/evals/context/{conn_id}/run", dependencies=[gate(Capability.EVAL_SUITE)])
+def run_context_evals(conn_id: str, body: ContextRunIn):
+    """Answer the cases through the real answer path, in the background: model calls, a person's click. Returns the
+    run's id at once; its results land on GET /evals/context as each answer is graded."""
+    from pramanyx.evals.context_layer import find_suite, start
+    suite = find_suite(conn_id)
+    if suite is None:
+        raise HTTPException(status_code=409, detail="no cases are drawn yet — draw them first")
+    return {"run_id": start(conn_id, limit=body.limit)}
