@@ -33,10 +33,12 @@ describe("the rail's seven destinations", () => {
     expect(NAV_SECTION_IDS.has("integrations")).toBe(false);
   });
 
-  it("give each tab the Briefing used to hold a row of its own", () => {
-    for (const id of ["dashboards", "intel-hub", "graph", "evidence", "memory", "declared-actions", "org-intel", "brain"]) {
+  it("give each tab the Briefing used to hold a row of its own — but Org and the Brain map, parts of the Atlas now", () => {
+    for (const id of ["dashboards", "intel-hub", "graph", "evidence", "memory", "declared-actions"]) {
       expect(NAV_SECTION_IDS.has(id), id).toBe(true);
     }
+    // 2026-11-25 (the Atlas plan §7, decision 1): both are on the Atlas's Overview, and their links open the Ontology
+    for (const id of ["org-intel", "brain"]) expect(NAV_SECTION_IDS.has(id), id).toBe(false);
   });
 
   it("lose nothing the rail and the Briefing's tabs had: every section has its glyph, every former tab its hover line", () => {
@@ -49,7 +51,6 @@ describe("the rail's seven destinations", () => {
       ontology: "Object model & relationships",
       graph: "Connection knowledge graph",
       evidence: "Claim ledger & feedback",
-      brain: "Every store behind what Pramanyx knows, with live counts",
     });
   });
 
@@ -59,7 +60,7 @@ describe("the rail's seven destinations", () => {
 
   it("find the destination of a section, and none for a screen no row names", () => {
     expect(destinationOf("dashboards")?.label).toBe("Analyze");
-    expect(destinationOf("brain")?.label).toBe("Operations");
+    expect(destinationOf("evals")?.label).toBe("Operations");
     expect(destinationOf("chat")).toBeNull();
   });
 

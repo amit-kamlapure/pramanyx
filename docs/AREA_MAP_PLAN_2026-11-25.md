@@ -160,7 +160,7 @@ in its new place, never dropped.
 - **A4 · The Atlas, by Area** — A4a DONE (the organisation's map, the month's figures, review by Area counts), A4b DONE
   (an Area opened: its counts by kind, each kind by use, tabs on the right, Promote) — and, the user's Genie stills
   (2026-11-25), it opens **to one side**: the parent large on the left, the Area among its siblings, its counts stacked to
-  its right, every line leaving the circle's right edge; a circle clicked opens that Area and its tab on the right. *Added by §7 (A4c):*
+  its right, every line leaving the circle's right edge; a circle clicked opens that Area and its tab on the right. *Added by §7 (A4c), DONE 2026-11-25 — §7 "Decision 1, done" lists it feature by feature:*
   Brain Map's one idea — the loop's stages counted, with measured arrows between them — becomes the Atlas's Overview,
   and its page retires; the rail's **Org** page (promoted findings: an empty store, one writer, one deep-analysis
   reader) retires into the Atlas (the bird's-eye view it was meant to be) and into Promote (a finding promoted becomes a
@@ -268,3 +268,31 @@ coworker has no features of its own: its tools are the platform's doors (one cow
 2. **Inbox** = the one Needs-you view, and **Notifications** renamed **Delivery**?
 3. Evals rebuilt around the context layer, and the flag-graduation half retired?
 
+
+**The user, 2026-11-25: "Yes to all three, go ahead."** Decision 2's rename (Notifications → Delivery) shipped first;
+decision 1 below; decision 2's Needs you and decision 3 follow.
+
+### Decision 1, done — the two pages, feature by feature (A4c)
+
+Both pages' parts are on the Atlas's Overview (`web/components/ontology/AtlasKnows.tsx`); their rail rows are gone;
+`?tab=brain`, `?tab=org-intel` and `?layer=brain|org` open the Ontology, which opens on the Atlas; the command palette's
+"Brain map" and "Org" entries open it too. Each page's tests were ported, assertion for assertion
+(`AtlasKnows.test.tsx`). The server routes (`GET /brain/map`, `GET`/`DELETE /org-intelligence`) are unchanged.
+
+| Was on the page | On the Atlas's Overview |
+|---|---|
+| Brain map: per connection, the shell's connection | "Where what it knows lives": the connection the page stands on, any other of the Atlas's chosen from a list |
+| Nine stores in three vaults, each a live count and one line | The same nine, by vault, count and line |
+| A store not read: a hatched dash, its line says why — never a zero | The same |
+| A store's route on hover, for a developer | The same |
+| Measured links as arrows, the count on the arrow, the sentence on hover; one it could not draw said in words | Every link said in words — "Findings → Dated facts: 370 findings landed in the graph as facts"; a zero link muted |
+| Facts that changed, what each replaced, kind, reason, date; "newest N of M" | The same; the newest five, then Show all |
+| Fact history not read / no fact changed, said apart | The same |
+| A failed read, with Retry ("no store was changed") | The same |
+| Org: findings promoted from a Briefing or a Data Canvas; every deep analysis handed the five closest | "Promoted to the organisation", the same sentence |
+| Grouped by domain, newest first, a count per domain | The same |
+| Each finding: its text, angle, source (named once when one), promoted when and by whom, novelty | The same |
+| Remove (no deep analysis is handed it again); a failed remove keeps it listed | The same |
+| Filter, "N of M"; Refresh; a failed refresh keeps the last read | The same |
+| Empty: "Nothing promoted yet — or its store could not be read", how to promote | The same |
+| "Not recorded yet: people and owners, who to ask, and disagreements over a term" | Dropped as untrue now: Areas name their contacts, and rival meanings wait in Review |

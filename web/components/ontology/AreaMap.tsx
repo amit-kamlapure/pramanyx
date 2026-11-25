@@ -16,6 +16,7 @@ import { Icon } from "@/components/ui/icon";
 import { IconSquare } from "@/components/ui/icon-square";
 import { Segmented } from "@/components/ui/segmented";
 import { AreaRelationships } from "@/components/ontology/AreaRelationships";
+import { PromotedFindings, WhereItLives } from "@/components/ontology/AtlasKnows";
 import { Loading, ReadFailed } from "@/components/ui/states";
 import {
   AreaFan, AreaRail, areaOpened, entityOpened, OpenPanel, readLearnedIn, ReviewList, withOpened, type AreaLike, type LearnedHere, type Opened,
@@ -41,7 +42,9 @@ function Figure({ value, label, sub, testId }: { value: string; label: string; s
   );
 }
 
-function Overview({ atlas }: { atlas: Atlas }) {
+/** The month, then where what the platform knows lives and what was promoted to the organisation — the Brain map and
+ *  Org, pages of their own until 2026-11-25 (the plan's §7, decision 1). */
+function Overview({ atlas, standing, workspaceId }: { atlas: Atlas; standing?: string | null; workspaceId?: string }) {
   const f = atlas.figures;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -80,6 +83,8 @@ function Overview({ atlas }: { atlas: Atlas }) {
           </a>
         ))}
       </section>
+      <WhereItLives connections={atlas.connections} standing={standing} workspaceId={workspaceId} />
+      <PromotedFindings />
     </div>
   );
 }
@@ -123,7 +128,10 @@ function Review({ atlas, onPick }: { atlas: Atlas; onPick: (id: string) => void 
   );
 }
 
-export function AreaMap() {
+export function AreaMap({ connectionId }: {
+  /** The connection the page stands on (the bar above): its stores are counted first on the Overview. */
+  connectionId?: string | null;
+} = {}) {
   const [atlas, setAtlas] = useState<Atlas | null>(null);
   const [failed, setFailed] = useState("");
   const [tab, setTab] = useState<"overview" | "review">("overview");
@@ -249,7 +257,7 @@ export function AreaMap() {
                 </Button>
               ))}
             </div>
-            {tab === "overview" ? <Overview atlas={atlas} /> : <Review atlas={atlas} onPick={(id) => { pick(id); setKind("review"); }} />}
+            {tab === "overview" ? <Overview atlas={atlas} standing={connectionId} workspaceId={workspaceId} /> : <Review atlas={atlas} onPick={(id) => { pick(id); setKind("review"); }} />}
           </>
         )}
       </aside>

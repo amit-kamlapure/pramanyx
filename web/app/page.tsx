@@ -172,12 +172,10 @@ type NavTab =
   | "intelligence"      // unified multi-layered Intelligence workspace
   | "intel-hub"         // legacy deep-link → intelligence/hub layer
   | "intel"             // legacy deep-link → intelligence/domains layer
-  | "org-intel"         // the Org row (Define) → intelligence/org layer
   | "graph"             // the Graph row (Define) → intelligence/graph layer
   | "memory"            // the Memory row (Define) → intelligence/memory layer
   | "declared-actions"  // the Actions row (Define) → intelligence's declared-actions layer
   | "evidence"          // the Evidence row (Decide) → intelligence/evidence layer
-  | "brain"             // the Brain map row (Operations) → intelligence/brain layer
   | "ontology"          // legacy deep-link → intelligence/ontology layer
   | "dashboards"        // deep-link → intelligence/dashboards layer (the process designer hands a new dashboard over)
   | "operations"        // unified Operations workspace (Monitors / Action Hub / Security)
@@ -881,8 +879,8 @@ const LAST_WS_KEY = "pramanyx_last_workspace";
 const VALID_TABS = new Set<NavTab>([
   "now", "record", "inquiries", "decisions", "missions", "claims", "corrections", "action-centre", "developer",
   "home", "spend", "chat", "canvases", "canvas-workspace", "recents", "fleet", "agents",
-  "inbox", "briefing", "intelligence", "intel-hub", "intel", "org-intel",
-  "graph", "memory", "declared-actions", "evidence", "brain",
+  "inbox", "briefing", "intelligence", "intel-hub", "intel",
+  "graph", "memory", "declared-actions", "evidence",
   "ontology", "dashboards", "operations", "agentic-ops", "control-room", "evals", "ai-factory", "data",
   "health", "playbook", "discover", "documents", "spreadsheets", "catalog", "builder", "query", "connections", "metrics",
   // AO-4 — `integrations` is an Operations layer alias like `monitors`; it was missing
@@ -943,12 +941,10 @@ const INTEL_LAYER_FOR_TAB: Partial<Record<NavTab, IntelLayer>> = {
   dashboards:  "dashboards",
   "intel-hub": "hub",
   intel:       "hub",   // the former Domains layer folded into the Hub (Data Profile)
-  "org-intel":  "org",
   // Since the seven destinations (2026-11-10) every layer the Briefing held is a rail row of its own.
   graph:       "graph",
   memory:      "memory",
   evidence:    "evidence",
-  brain:       "brain",
   "declared-actions": "kinetic",   // the layer's frozen id; its one call site below routes through this row's id
 };
 /** The rail row for each Intelligence layer — the table above read backwards, over the ids a row names, so a
@@ -1009,7 +1005,9 @@ function resolveDeepLinkTab(t: NavTab): ResolvedTab {
 }
 
 /** Dashboards were called dashboards until 2026-10-23: an old `?tab=cockpit` / `?layer=cockpit` link still opens them. */
-const LINK_ALIASES: Record<string, string> = { cockpit: "dashboards" };
+// Org and the Brain map were pages until 2026-11-25; both are parts of the Atlas's Overview now (the Atlas plan §7,
+// decision 1), so their links — as a tab or as an Intelligence layer — open the Ontology, which opens on the Atlas.
+const LINK_ALIASES: Record<string, string> = { cockpit: "dashboards", "org-intel": "ontology", brain: "ontology", org: "ontology" };
 
 function tabFromUrl(): NavTab | null {
   if (typeof window === "undefined") return null;
@@ -1019,7 +1017,7 @@ function tabFromUrl(): NavTab | null {
 }
 
 const VALID_LAYERS = new Set<IntelLayer>([
-  "briefing", "dashboards", "hub", "ontology", "graph", "evidence", "memory", "kinetic", "org", "brain",
+  "briefing", "dashboards", "hub", "ontology", "graph", "evidence", "memory", "kinetic",
 ]);
 
 /** PX-0 (§3.14) — every workspace's layer is addressable, not only Intelligence's

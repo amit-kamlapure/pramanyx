@@ -1,5 +1,4 @@
 "use client";
-import { BrainMapPanel } from "@/components/BrainMapPanel";
 import { SkeletonRows } from "@/components/ui/motion";
 
 import { useEffect, useState } from "react";
@@ -28,7 +27,6 @@ const loading = () => (
 const BriefingEdition  = dynamic(() => import("@/components/brief/BriefingEdition").then(m => ({ default: m.BriefingEdition })), { ssr: false, loading });
 const OntologyPanel    = dynamic(() => import("@/components/OntologyPanel").then(m => ({ default: m.OntologyPanel })),       { ssr: false, loading });
 const ProfileLayer     = dynamic(() => import("@/components/ProfileLayer").then(m => ({ default: m.ProfileLayer })),       { ssr: false, loading });
-const OrgIntelPanel    = dynamic(() => import("@/components/OrgIntelPanel").then(m => ({ default: m.OrgIntelPanel })),      { ssr: false, loading });
 const EvidencePanel    = dynamic(() => import("@/components/EvidencePanel").then(m => ({ default: m.EvidencePanel })),      { ssr: false, loading });
 const DeclaredActionsPanel = dynamic(() => import("@/components/DeclaredActionsPanel").then(m => ({ default: m.DeclaredActionsPanel })), { ssr: false, loading });
 const ConnectionGraphPanel = dynamic(() => import("@/components/ConnectionGraphPanel").then(m => ({ default: m.ConnectionGraphPanel })), { ssr: false, loading });
@@ -65,7 +63,7 @@ function Icon({ name, size = 14, color = "currentColor" }: { name: string; size?
   );
 }
 
-export type IntelLayer = "briefing" | "dashboards" | "hub" | "ontology" | "graph" | "evidence" | "memory" | "kinetic" | "org" | "brain";
+export type IntelLayer = "briefing" | "dashboards" | "hub" | "ontology" | "graph" | "evidence" | "memory" | "kinetic";
 
 const LAYERS: WorkspaceLayer<IntelLayer>[] = [
   { id: "briefing", icon: "brief",   label: "Briefing", blurb: "Cross-domain synthesis" },
@@ -74,8 +72,6 @@ const LAYERS: WorkspaceLayer<IntelLayer>[] = [
   { id: "evidence", icon: "check",   label: "Evidence", blurb: "Claim ledger & feedback" },
   { id: "memory",   icon: "memory",  label: "Memory",   blurb: "What the closed loop has learned" },
   { id: "kinetic",  icon: "spark",   label: "Actions",  blurb: "Declared actions & overlay edits" },
-  { id: "org",      icon: "spark",   label: "Org",      blurb: "Organizational knowledge" },
-  { id: "brain",    icon: "compass", label: "Brain map", blurb: "Every store behind what Pramanyx knows, with live counts" },
 ];
 
 // Wave C4 — the connection knowledge graph layer, inserted after Ontology (which it
@@ -292,9 +288,7 @@ export function IntelligenceWorkspace({ connectionId, onInvestigate, layer, onLa
         if (id === "hub")      return <ProfileLayer connectionId={connectionId} canvasId={canvasId} schema={schema} workspaceId={workspaceId} />;
         if (id === "evidence") return <EvidencePanel connectionId={connectionId} canvasId={canvasId} onInvestigate={askAgent} />;
         if (id === "memory")   return <MemoryPanel />;
-        if (id === "kinetic")  return <DeclaredActionsPanel connectionId={connectionId} />;
-        if (id === "brain")    return <BrainMapPanel connectionId={connectionId} workspaceId={workspaceId} contextReady={contextReady} />;
-        return <OrgIntelPanel />; // "org"
+        return <DeclaredActionsPanel connectionId={connectionId} />; // "kinetic"
       }}
     />
   );

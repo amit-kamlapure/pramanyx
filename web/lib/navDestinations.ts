@@ -72,7 +72,8 @@ export const NAV_DESTINATIONS: readonly NavDestination[] = [
     // 2026-11-23 — what the organisation defined, learned by models of its own (`pramanyx/training/`); named the AI
     // Factory by the user on 2026-11-24.
     { id: "ai-factory",       label: "AI Factory",     icon: "model" },
-    { id: "org-intel",        label: "Org",            icon: "users" },
+    // Org (the findings promoted to the organisation) and the Brain map (every store, counted) are parts of the Atlas's
+    // Overview since 2026-11-25 (the Atlas plan §7, decision 1); `?tab=org-intel` and `?tab=brain` open the Atlas.
   ] },
   // The Record stays one row for its five views (the 2027 study §V): a person reads a decision's
   // claims and its inquiry together, so splitting them across destinations would split one story.
@@ -91,7 +92,6 @@ export const NAV_DESTINATIONS: readonly NavDestination[] = [
     { id: "spend",       label: "Spend",            icon: "spend" },
     { id: "security",    label: "Security & Audit", icon: "shield" },
     { id: "evals",       label: "Evals",            icon: "flask" },
-    { id: "brain",       label: "Brain map",        icon: "brain", blurb: "Every store behind what Pramanyx knows, with live counts" },
   ] },
 ];
 

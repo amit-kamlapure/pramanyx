@@ -811,7 +811,7 @@ export function OntologyPanel({ connectionId, onInvestigate, schema }: Props) {
     return (
       <div className="flex-1 flex flex-col overflow-hidden">
         {headerBar}
-        <div className="flex-1 flex overflow-hidden"><AreaMap /></div>
+        <div className="flex-1 flex overflow-hidden"><AreaMap connectionId={connectionId} /></div>
       </div>
     );
   }

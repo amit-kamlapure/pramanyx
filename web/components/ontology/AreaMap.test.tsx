@@ -76,6 +76,10 @@ function serve(body: Atlas = ATLAS) {
   vi.stubGlobal("fetch", vi.fn(async (url: string) => {
     urls.push(String(url));
     if (String(url).includes("/discover/atlas/review")) return new Response(JSON.stringify(REVIEW));
+    // the Overview's stores (the Brain map) and promoted findings (Org) — `AtlasKnows.test.tsx` holds what they show
+    if (String(url).includes("/brain/map")) return new Response(JSON.stringify({ connection_id: "c1", vaults: [], boxes: [], edges: [] }));
+    if (String(url).includes("/org-intelligence")) return new Response(JSON.stringify([]));
+    if (String(url).includes("/connections")) return new Response(JSON.stringify([]));
     if (String(url).includes("/discover/areas/")) return new Response(JSON.stringify(PAGE));
     if (String(url).includes("/learned")) {
       return new Response(JSON.stringify({ items: [LEARNED], total: 1, matched: 1, folded: 0, unplaced: 0, areas: [], withheld: null }));
@@ -106,6 +110,14 @@ describe("the Atlas, by Area", () => {
     expect(screen.getByTestId("atlas-governed")).toHaveTextContent("Definitions counted since 2026-11-25");
     expect(screen.getByTestId("atlas-coverage")).toHaveTextContent("82%Area coverage");
     expect(screen.getByTestId("atlas-contacts")).toHaveTextContent("0 of 18 Areas name a Business or Technical contact");
+  });
+
+  it("holds, on its Overview, where what the platform knows lives and what was promoted — once pages of their own", async () => {
+    const urls = serve();
+    render(<AreaMap connectionId="c1" />);
+    expect(await screen.findByTestId("atlas-stores")).toHaveTextContent("Where what it knows lives");
+    expect(await screen.findByTestId("atlas-promoted-empty")).toHaveTextContent("Nothing promoted yet");
+    await vi.waitFor(() => expect(urls.find((u) => u.includes("/brain/map"))).toContain("connection_id=c1"));
   });
 
   it("lists what waits by Area on its Review tab, and a bubble chosen becomes that Area's panel", async () => {
