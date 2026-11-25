@@ -16,7 +16,7 @@
  *
  * A page opens a tab with `useInspector().inspect(subject)`; the shell draws `<InspectorHost/>` once, beside the content.
  */
-import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Icon, type IconName } from "@/components/ui/icon";
@@ -136,6 +136,23 @@ function readWidth(): number {
   }
 }
 
+/**
+ * The tab strip's look, set on the elements themselves rather than in `globals.css`: the user's dev server keeps a
+ * compiled stylesheet across a checkout move and served this strip with none of its rules (2026-11-26: the tabs ran over
+ * each other and the controls fell onto lines of their own), so what holds the strip together travels with it.
+ */
+export const SIDE = {
+  bar: { display: "flex", alignItems: "center", gap: 6, padding: "6px 8px 4px 10px", minWidth: 0, flexShrink: 0 },
+  open: { display: "flex", alignItems: "center", gap: 2, flex: "1 1 auto", minWidth: 0, overflowX: "auto", overflowY: "hidden",
+    scrollbarWidth: "none" },
+  tab: (front: boolean): CSSProperties => ({ display: "inline-flex", alignItems: "center", flex: "0 1 auto", minWidth: 0,
+    maxWidth: 200, height: 26, borderRadius: "var(--r2)", background: front ? "var(--bg-3)" : undefined,
+    color: front ? "var(--t1)" : "var(--t2)" }),
+  name: { gap: 6, minWidth: 0, maxWidth: "100%", overflow: "hidden", padding: "0 2px 0 8px", color: "inherit", justifyContent: "flex-start" },
+  text: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 },
+  controls: { display: "inline-flex", alignItems: "center", gap: 2, flexShrink: 0, color: "var(--t2)" },
+} satisfies Record<string, CSSProperties | ((front: boolean) => CSSProperties)>;
+
 /** The panel itself — drawn once by the shell, beside the content; nothing at all while nothing is open. */
 export function InspectorHost() {
   const { subject, open, activate, close, closeAll } = useInspector();
@@ -145,8 +162,18 @@ export function InspectorHost() {
   const [full, setFull] = useState(false);
   const [hidden, setHidden] = useState(false);
   const lastKey = useRef<string | null>(null);
+  const panel = useRef<HTMLElement>(null);
 
   useEffect(() => { setWidth(readWidth()); }, []);
+  // At the page's whole width the page beside it steps aside, and comes back as it was.
+  useEffect(() => {
+    if (!full) return undefined;
+    const page = panel.current?.parentElement?.querySelector<HTMLElement>(":scope > .aug-page-surface");
+    if (!page) return undefined;
+    const was = page.style.display;
+    page.style.display = "none";
+    return () => { page.style.display = was; };
+  }, [full]);
   // A new thing opens on its own facet; the same thing again keeps the facet the reader was on.
   useEffect(() => {
     if (!subject) { lastKey.current = null; setFull(false); setHidden(false); return; }
@@ -189,20 +216,21 @@ export function InspectorHost() {
   if (!subject) return null;
   if (hidden) {
     return (
-      <aside className="aug-inspector aug-inspector-tucked" aria-label="The side panel, hidden">
+      <aside className="aug-inspector" aria-label="The side panel, hidden"
+        style={{ width: 36, alignItems: "center", paddingTop: 8, gap: 4 }}>
         <Button variant="ghost" size="icon-sm" aria-label={`Show the side panel — ${open.length} open`} title="Show the side panel"
           onClick={() => setHidden(false)}>
           <Icon name="panelshow" size={16} />
         </Button>
-        <span className="aug-inspector-count" aria-hidden>{open.length}</span>
+        <span className="aug-fs-xs" style={{ color: "var(--t3)" }} aria-hidden>{open.length}</span>
       </aside>
     );
   }
   const tabs = INSPECTOR_TABS.filter(t => subject.tabs[t] != null);
   const shown = tabs.includes(facet) ? facet : tabs[0];
   return (
-    <aside className="aug-inspector" data-full={full || undefined} aria-label={`Inspector: ${subject.title}`}
-      style={full ? undefined : { width }}>
+    <aside ref={panel} className="aug-inspector" data-full={full || undefined} aria-label={`Inspector: ${subject.title}`}
+      style={full ? { flex: "1 1 auto", minWidth: 0 } : { width }}>
       {!full && (
         <div className="aug-inspector-grip" role="separator" aria-orientation="vertical" aria-label="Resize the inspector"
           aria-valuemin={MIN_W} aria-valuemax={MAX_W} aria-valuenow={width} tabIndex={0}
@@ -212,14 +240,14 @@ export function InspectorHost() {
             if (e.key === "ArrowRight") { e.preventDefault(); keep(width - 16); }
           }} />
       )}
-      <div className="aug-inspector-bar">
-        <div role="tablist" aria-label="Open in the side panel" className="aug-inspector-open">
+      <div style={SIDE.bar}>
+        <div role="tablist" aria-label="Open in the side panel" style={SIDE.open}>
           {open.map(o => (
-            <span key={o.key} className="aug-inspector-tab" data-front={o.key === subject.key || undefined}>
+            <span key={o.key} style={SIDE.tab(o.key === subject.key)}>
               <Button variant="ghost" size="xs" role="tab" aria-selected={o.key === subject.key} title={`${o.title} — ${o.kind}`}
-                className="aug-inspector-tab-name" onClick={() => activate(o.key)}>
+                style={SIDE.name} onClick={() => activate(o.key)}>
                 {o.icon && <Icon name={o.icon} size={13} />}
-                <span>{o.title}</span>
+                <span style={SIDE.text}>{o.title}</span>
               </Button>
               <Button variant="ghost" size="icon-xs" aria-label={`Close ${o.title}`} title="Close · Esc" onClick={() => close(o.key)}>
                 <Icon name="close" size={11} />
@@ -227,7 +255,7 @@ export function InspectorHost() {
             </span>
           ))}
         </div>
-        <span className="aug-inspector-controls">
+        <span style={SIDE.controls}>
           <Button variant="ghost" size="icon-xs" aria-label={full ? "Back to its width" : "Widen to the whole page"}
             title={full ? "Back to its width · Esc" : "Widen to the whole page"} onClick={() => setFull(f => !f)}>
             <Icon name={full ? "restore" : "expand"} size={14} />

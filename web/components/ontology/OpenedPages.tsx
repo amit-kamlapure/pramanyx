@@ -17,7 +17,7 @@ import { useState, type ReactNode } from "react";
 import { Chip, MUTED, ROW } from "@/components/clarity/kit";
 import { DefinitionView } from "@/components/definitions/DefinitionView";
 import { PromoteForm } from "@/components/semantic/LearnedPanel";
-import type { InspectorSubject } from "@/components/shell/Inspector";
+import { SIDE, type InspectorSubject } from "@/components/shell/Inspector";
 import { Button } from "@/components/ui/button";
 import { Icon, type IconName } from "@/components/ui/icon";
 import { IconSquare } from "@/components/ui/icon-square";
@@ -298,14 +298,14 @@ export function OpenPanel({ open, active, onActive, onClose, ctx }: {
   return (
     <aside aria-label="What is open" data-testid="atlas-open-panel" className="aug-inspector" style={{ flex: "1 1 380px", maxWidth: 560,
       minWidth: 0, maxHeight: "100%" }}>
-      <div className="aug-inspector-bar">
-        <div role="tablist" aria-label="Open things" className="aug-inspector-open">
+      <div style={SIDE.bar}>
+        <div role="tablist" aria-label="Open things" style={SIDE.open}>
           {open.map((o) => (
-            <span key={o.key} className="aug-inspector-tab" data-front={o.key === shown?.key || undefined}>
-              <Button variant="ghost" size="xs" role="tab" aria-selected={o.key === shown?.key} title={o.title} className="aug-inspector-tab-name"
+            <span key={o.key} style={SIDE.tab(o.key === shown?.key)}>
+              <Button variant="ghost" size="xs" role="tab" aria-selected={o.key === shown?.key} title={o.title} style={SIDE.name}
                 onClick={() => onActive(o.key)}>
                 <Icon name={openedLook(o).icon} size={13} />
-                <span>{o.title}</span>
+                <span style={SIDE.text}>{o.title}</span>
               </Button>
               <Button variant="ghost" size="icon-xs" aria-label={`Close ${o.title}`} onClick={() => onClose(o.key)}>
                 <Icon name="close" size={11} />
