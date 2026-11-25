@@ -8,7 +8,7 @@
  * laid out as the entity map lays out a connection (`lib/entityMapLayout.ts`), here only the Area's; an entity pressed
  * opens on the right, as everything pressed on the Atlas does.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { MUTED, ROW } from "@/components/clarity/kit";
 import { Button } from "@/components/ui/button";
@@ -60,12 +60,24 @@ export function partOf(map: TypeMap, declared: ProcessesAndRules | null, areaOfT
 function Graph({ part, onOpen }: { part: AreaPart; onOpen: (row: TypeMapRow) => void }) {
   const hub = hubOf(part.map);
   const layout = useMemo(() => (hub ? layoutMap(part.map, hub) : null), [part.map, hub]);
+  // fitted to the width it is given, never larger than it is: the entity map's rings are laid out for a whole connection
+  const box = useRef<HTMLDivElement>(null);
+  const [room, setRoom] = useState(0);
+  useEffect(() => {
+    const el = box.current;
+    if (!el || typeof ResizeObserver === "undefined") return undefined;
+    const ro = new ResizeObserver(([e]) => setRoom(e.contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   if (!layout || !part.map.object_types.length) return null;
+  const scale = room > 0 ? Math.min(1, room / layout.width) : 1;
   const at = new Map(layout.nodes.map((n) => [n.objectType, n]));
   const byName = new Map(part.map.object_types.map((t) => [t.object_type, t]));
   return (
-    <div style={{ overflowX: "auto" }}>
-      <div data-testid="area-relationships-graph" style={{ position: "relative", width: layout.width, height: layout.height, margin: "0 auto" }}>
+    <div ref={box} style={{ width: "100%", height: layout.height * scale, overflow: "hidden" }}>
+      <div data-testid="area-relationships-graph" style={{ position: "relative", width: layout.width, height: layout.height,
+        transform: `scale(${scale})`, transformOrigin: "top left", marginLeft: Math.max(0, (room - layout.width * scale) / 2) }}>
         <svg aria-hidden width={layout.width} height={layout.height} style={{ position: "absolute", inset: 0 }}>
           {part.map.links.map((l) => {
             const a = at.get(l.from), b = at.get(l.to);
