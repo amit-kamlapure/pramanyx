@@ -94,6 +94,7 @@ def test_the_map_lists_the_areas_answers_drew_on_first_and_the_rest_apart(monkey
     monkeypatch.setattr(S, "areas_in_view", lambda scope: areas)
     monkeypatch.setattr(S, "area_view", lambda a, items: {"id": a["id"], "name": a["name"], "total": len(items)})
     monkeypatch.setattr(S, "by_use", lambda items, measured="": [])
+    monkeypatch.setattr(S, "put_use", lambda items: [])
     monkeypatch.setattr(AT, "answers", lambda scope, items, now=None: {
         "answers": 10, "previous": 6, "governed": 4, "in_an_area": 7, "per_area": {"orders_sales": 5, "payments": 2}})
     monkeypatch.setattr(AT, "slow_parts", lambda scope, wait=False: (

@@ -27,6 +27,18 @@ describe("the Areas laid out", () => {
   });
 });
 
+describe("the Areas laid out, as the live install has them", () => {
+  it("never puts two bubbles on one spot, however many and however sized (seen live: they stacked in the middle)", () => {
+    const answers = [393, 52, 34, 22, 11, 10, 4, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    const placed = packBubbles(answers.map((n, i) => ({ id: `a${i}`, r: radiusFor(n) })));
+    for (const a of placed) for (const b of placed) {
+      if (a !== b) expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThanOrEqual(a.r + b.r);
+    }
+    const box = bounds(placed);
+    expect(box.width).toBeGreaterThan(box.height);
+  });
+});
+
 describe("the figures in words", () => {
   it("says a share, a change on the month before, and what waits", () => {
     expect(share(41, 100)).toBe("41%");

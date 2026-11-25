@@ -39,6 +39,8 @@ export const R_MIN = 46;
 const GROW = 9;
 /** The space kept between two bubbles. */
 const GAP = 10;
+/** How much wider than tall the map spreads. */
+const WIDE = 1.35;
 
 /** A bubble's radius for the answers that drew on its Area this month. */
 export function radiusFor(answers: number): number {
@@ -46,8 +48,10 @@ export function radiusFor(answers: number): number {
 }
 
 /** Lay the bubbles out, biggest first, each as near the middle as it can be without touching another: around every
- *  bubble already placed, every ten degrees, the nearest free spot wins. Deterministic — the same Areas, the same
- *  picture — and the result is centred on (0, 0). */
+ *  bubble already placed, every ten degrees, at exactly the distance that touches it, the nearest free spot wins —
+ *  "nearest" measured a little wider than tall, so the map spreads as a screen does. Deterministic — the same Areas,
+ *  the same picture — and the result is centred on (0, 0). There is always a free spot on the outer side of the
+ *  outermost bubble; were there none, it goes on a ring past them all, never on top of another. */
 export function packBubbles(sizes: { id: string; r: number }[]): Placed[] {
   const placed: Placed[] = [];
   const order = [...sizes].sort((a, b) => b.r - a.r || a.id.localeCompare(b.id));
@@ -59,12 +63,13 @@ export function packBubbles(sizes: { id: string; r: number }[]): Placed[] {
       for (let deg = 0; deg < 360; deg += 10) {
         const a = (deg * Math.PI) / 180;
         const x = p.x + Math.cos(a) * (p.r + s.r + GAP);
-        const y = p.y + Math.sin(a) * (p.r + s.r + GAP) * 0.82;   // a little wider than tall, as a screen is
-        const d = Math.hypot(x, y);
+        const y = p.y + Math.sin(a) * (p.r + s.r + GAP);
+        const d = Math.hypot(x / WIDE, y);
         if ((!best || d < best.d - 1e-9) && free(x, y, s.r)) best = { x, y, d };
       }
     }
-    const at = best ?? { x: 0, y: 0, d: 0 };
+    const ring = Math.max(...placed.map((p) => Math.hypot(p.x, p.y) + p.r)) + s.r + GAP;
+    const at = best ?? { x: ring, y: 0, d: ring };
     placed.push({ id: s.id, x: at.x, y: at.y, r: s.r });
   }
   return placed;

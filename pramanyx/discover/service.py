@@ -114,7 +114,7 @@ def _kind_view(kind: str, items: list[Item], withheld: int, shown: int = SHOWN) 
             "items": [i.view() for i in ordered[:shown]]}
 
 
-def _used(items: list[Item]) -> list[str]:
+def put_use(items: list[Item]) -> list[str]:
     """Each item's use this month put on it (D5); what could not be said, said."""
     from pramanyx.discover import usage
     try:
@@ -163,7 +163,7 @@ def home(scope: Scope) -> dict:
                 tolerate(exc, "discover: a connection's suggested areas could not be read", counter="discover.suggested")
     certified = _order([i for i in items if (i.certification or {}).get("status") == "certified"])
     from pramanyx.discover.usage import recently_opened
-    use_said = _used(items)
+    use_said = put_use(items)
     try:
         recent = recently_opened(items, scope.person, limit=SHOWN)
     except Exception as exc:  # noqa: BLE001 — unread, it is said
@@ -213,7 +213,7 @@ def list_items(scope: Scope, *, kind: str = "", area: str = "", certified: bool 
         items = [i for i in items if me and who_of(i.owner).lower() == me]
     if q.strip():
         items = [i for i in items if _matches(i, q)]
-    use_said = _used(items)
+    use_said = put_use(items)
     ordered = _order(items)
     if sort == "use":
         used = by_use(items)

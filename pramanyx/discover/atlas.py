@@ -189,10 +189,11 @@ def atlas(scope, *, wait: bool = False) -> dict:
     """The organisation's map: every Area in view that holds something or that answers drew on — what it holds, the
     answers that drew on it, what waits for review in it, what was learned in it — the Areas that hold nothing apart,
     the model's suggestions, and the side panel's figures."""
-    from pramanyx.discover.service import OTHER, area_view, by_use, all_items, areas_in_view, gather
+    from pramanyx.discover.service import OTHER, all_items, area_view, areas_in_view, by_use, gather, put_use
     from pramanyx.trust.answer_inputs import RECORDED_SINCE
     found = gather(scope)
     items = all_items(found)
+    use_said = put_use(items)          # each item's use this month, as Discover reads it — for "used most"
     areas = areas_in_view(scope)
     held: dict[str, list] = {}
     for i in items:
@@ -237,5 +238,5 @@ def atlas(scope, *, wait: bool = False) -> dict:
         "review": None if slow is None else {"total": slow["review_total"], "unplaced": slow["review_unplaced"]},
         "learned": None if slow is None else {"total": slow["learned_total"], "unplaced": slow["learned_unplaced"]},
         "read_at": (slow or {}).get("at"),
-        "said": [*said, *[s for k in found for s in found[k].all_said()]],
+        "said": [*said, *use_said, *[s for k in found for s in found[k].all_said()]],
     }
