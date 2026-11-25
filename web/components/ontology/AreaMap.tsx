@@ -23,7 +23,7 @@ import {
   bounds, changeWords, fanOf, packBubbles, radiusFor, R_MIN, share, waiting, waitingWords, type Atlas, type AtlasArea, type FanKey,
 } from "@/lib/areaMap";
 import { readAtlas, readDiscoverArea, usageLine, type DiscoverArea, type DiscoverAreaPage } from "@/lib/discover";
-import { formatCount } from "@/lib/format";
+import { countNoun, formatCount } from "@/lib/format";
 import { getActiveWorkspace } from "@/lib/workspace";
 
 const SUGGESTED = "suggested:";
@@ -199,8 +199,8 @@ export function AreaMap() {
   const areaList = [...atlas.areas, ...atlas.quiet].map((a) => ({ id: a.id, name: a.name }));
 
   return (
-    <div data-testid="area-map" style={{ flex: 1, minHeight: 0, display: "flex", flexWrap: "wrap" }}>
-      <aside aria-label="The Areas at a glance" style={{ flex: "1 1 320px", maxWidth: 380, minWidth: 0, background: "var(--bg-2)",
+    <div data-testid="area-map" style={{ flex: 1, minHeight: 0, display: "flex", flexWrap: "wrap", overflow: "hidden" }}>
+      <aside aria-label="The Areas at a glance" style={{ flex: "1 1 320px", maxWidth: 380, minWidth: 0, maxHeight: "100%", background: "var(--bg-2)",
         padding: "14px 16px 20px", display: "flex", flexDirection: "column", gap: 16, overflowY: "auto", boxSizing: "border-box" }}>
         {chosen ? (
           <AreaRail area={chosen} page={page} pageFailed={pageFailed} onRetry={() => readPage(chosen.id, true)}
@@ -221,7 +221,7 @@ export function AreaMap() {
           </>
         )}
       </aside>
-      <section ref={canvas} aria-label="The Areas of the business" style={{ flex: "999 1 480px", minWidth: 0, minHeight: 520, position: "relative",
+      <section ref={canvas} aria-label="The Areas of the business" style={{ flex: "999 1 480px", minWidth: 0, minHeight: 520, maxHeight: "100%", position: "relative",
         overflow: "hidden", backgroundColor: "var(--bg-0)", backgroundImage: "radial-gradient(var(--bg-hover) 1px, transparent 1px)",
         backgroundSize: "18px 18px" }}>
         {chosen && (
@@ -254,7 +254,7 @@ export function AreaMap() {
                 {area ? area.name : sug?.label}
               </span>
               <span className="aug-fs-xs" style={{ ...MUTED, textAlign: "center", padding: "0 8px", lineHeight: 1.2 }}>
-                {area ? `${formatCount(area.answers)} answer${area.answers === 1 ? "" : "s"} · ${formatCount(area.total)} things`
+                {area ? `${countNoun(area.answers, "answer")} · ${countNoun(area.total, "thing")}`
                   : `Suggested · ${sug?.where.join(", ")}`}
               </span>
             </Button>

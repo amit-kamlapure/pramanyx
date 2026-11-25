@@ -24,7 +24,7 @@ import { itemsOf, ring, waitingWords, type AtlasArea, type Fan, type FanKey } fr
 import {
   holdsWords, KIND_WORDS, markOf, ownersLine, usageLine, type DiscoverArea, type DiscoverAreaPage, type DiscoverItem,
 } from "@/lib/discover";
-import { formatCount, relTime } from "@/lib/format";
+import { countNoun, formatCount, relTime } from "@/lib/format";
 import { KIND_WORDS as LEARNED_WORDS, readLearned, whereFrom, type LearnedItem, type Promoted } from "@/lib/learned";
 
 /** A thing open in the right panel. */
@@ -113,6 +113,11 @@ function KindList({ fan, items, learned, onOpen, onBack }: {
                   </span>
                 </Button>
               ))}
+              {learned.items.length < fan.count && (
+                <span className="aug-fs-xs" data-testid="atlas-learned-shown" style={{ ...MUTED, padding: "0 8px" }}>
+                  {`The first ${formatCount(learned.items.length)} of ${formatCount(fan.count)} — every one is on the Semantic Layer's Learned tab.`}
+                </span>
+              )}
               {learned.unread.length > 0 && (
                 <span className="aug-fs-xs" style={{ color: "var(--amb4)", padding: "0 8px" }}>{`Not read: what was learned on ${learned.unread.join(", ")}.`}</span>
               )}
@@ -180,7 +185,7 @@ export function AreaRail({ area, page, pageFailed, onRetry, connections, fan, ki
                         style={{ justifyContent: "flex-start", gap: 8, height: "auto", padding: "4px 8px", margin: "0 -8px" }}>
                         <IconSquare name={areaIcon(c.icon)} size={20} />
                         <span className="aug-fs-sm" style={{ color: "var(--t1)" }}>{c.name}</span>
-                        <span className="aug-fs-xs" style={MUTED}>{`${formatCount(c.total)} things`}</span>
+                        <span className="aug-fs-xs" style={MUTED}>{countNoun(c.total, "thing")}</span>
                       </Button>
                     ))}
                   </section>
@@ -250,7 +255,7 @@ export function AreaFan({ area, fan, subAreas, size, zoom, kind, onKind, onPickA
             display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, padding: 4, whiteSpace: "normal" }}>
           <IconSquare name={areaIcon(c.icon)} size={18} />
           <span className="aug-fs-xs" style={{ color: "var(--t1)", fontWeight: 600, textAlign: "center", lineHeight: 1.15 }}>{c.name}</span>
-          <span className="aug-fs-xs" style={MUTED}>{`${formatCount(c.total)} things`}</span>
+          <span className="aug-fs-xs" style={MUTED}>{countNoun(c.total, "thing")}</span>
         </Button>
       ))}
     </div>
@@ -352,7 +357,7 @@ export function OpenPanel({ open, active, onActive, onClose, areas }: {
   const shown = open.find((o) => o.key === active) ?? open[open.length - 1];
   const areaName = (id: string) => areas.find((a) => a.id === id)?.name ?? id;
   return (
-    <aside aria-label="What is open" data-testid="atlas-open-panel" style={{ flex: "1 1 340px", maxWidth: 420, minWidth: 0,
+    <aside aria-label="What is open" data-testid="atlas-open-panel" style={{ flex: "1 1 340px", maxWidth: 420, minWidth: 0, maxHeight: "100%",
       background: "var(--bg-2)", padding: "10px 16px 20px", display: "flex", flexDirection: "column", gap: 12, overflowY: "auto",
       boxSizing: "border-box" }}>
       <div role="tablist" aria-label="Open things" style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
