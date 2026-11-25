@@ -7,7 +7,8 @@ import { AreaMap } from "@/components/ontology/AreaMap";
 import type { Atlas, AtlasArea } from "@/lib/areaMap";
 import { forgetDiscoverReads, type AtlasReview, type DiscoverAreaPage, type DiscoverItem, type ReviewRow } from "@/lib/discover";
 import type { LearnedItem } from "@/lib/learned";
-import { fireEvent, render, screen } from "@/lib/testing";
+import { act, fireEvent, render, screen } from "@/lib/testing";
+import { setActiveWorkspace } from "@/lib/workspace";
 
 const area = (id: string, name: string, answers: number, extra: Partial<AtlasArea> = {}): AtlasArea => ({
   id, name, question: `${name}?`, icon: "cart", parent: "", business_owners: [], technical_owners: [], source: "package",
@@ -233,6 +234,24 @@ describe("the Atlas, by Area", () => {
     expect(screen.getByTestId("atlas-fan-centre")).toHaveTextContent("Refunds");
     expect(screen.getAllByRole("tab", { name: /Orders & sales|Refunds/ }).map((t) => t.textContent)).toEqual(["Orders & sales", "Refunds"]);
     expect(screen.getByTestId("atlas-open-area")).toHaveTextContent("Refunds");
+  });
+
+  it("reads the map again for a workspace chosen after it read, and closes what the other workspace had open", async () => {
+    const urls = serve();
+    const atlasReads = () => urls.filter((u) => u.includes("/discover/atlas") && !u.includes("/review"));
+    render(<AreaMap />);
+    fireEvent.click(await screen.findByTestId("atlas-bubble-orders_sales"));
+    expect(await screen.findByTestId("atlas-open-area")).toHaveTextContent("Orders & sales");
+    expect(atlasReads()).toHaveLength(1);
+    act(() => setActiveWorkspace("lux"));
+    try {
+      expect(await screen.findByTestId("atlas-bubble-orders_sales")).toBeTruthy();
+      expect(screen.queryByTestId("atlas-open-area")).toBeNull();
+      expect(atlasReads()).toHaveLength(2);
+      expect(atlasReads()[1]).toContain("workspace_id=lux");
+    } finally {
+      act(() => setActiveWorkspace(""));
+    }
   });
 });
 

@@ -164,7 +164,7 @@ export function AreaRelationships({ area, connections, onOpenEntity }: {
   area: string; connections: { id: string; name: string }[];
   onOpenEntity: (row: TypeMapRow, connection: { id: string; name: string }) => void;
 }) {
-  const [parts, setParts] = useState<Record<string, AreaPart | "failed">>({});
+  const [parts, setParts] = useState<Record<string, AreaPart | { failed: string }>>({});
   // the connections by their ids and names: a list built afresh on each render of the page is the same list
   const which = connections.map((c) => `${c.id}\t${c.name}`).join("\n");
   useEffect(() => {
@@ -180,7 +180,7 @@ export function AreaRelationships({ area, connections, onOpenEntity }: {
           }
           setParts((was) => ({ ...was, [c.id]: partOf(map, declared, placed, area) }));
         })
-        .catch(() => setParts((was) => ({ ...was, [c.id]: "failed" })));
+        .catch((e) => setParts((was) => ({ ...was, [c.id]: { failed: e instanceof Error ? e.message : String(e) } })));
     }
   }, [area, which]);
   return (
@@ -192,7 +192,7 @@ export function AreaRelationships({ area, connections, onOpenEntity }: {
           <section key={c.id} style={{ display: "flex", flexDirection: "column", gap: 10 }} aria-label={`On ${c.name}`}>
             <span className="aug-fs-xs" style={MUTED}>{`On ${c.name}`}</span>
             {part === undefined ? <Loading what={`${c.name}'s entities`} />
-              : part === "failed" ? <span className="aug-fs-sm" style={{ color: "var(--red4)" }}>{`${c.name}'s entities could not be read.`}</span>
+              : "failed" in part ? <span className="aug-fs-sm" style={{ color: "var(--red4)" }}>{`${c.name}'s entities could not be read: ${part.failed}`}</span>
               : (
                 <>
                   {part.map.object_types.length === 0

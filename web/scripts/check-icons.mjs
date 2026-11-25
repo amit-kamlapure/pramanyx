@@ -40,6 +40,7 @@ const ICON_MODULE = "components/ui/icon.tsx";
 /** Files whose `<svg>` is a drawing, not a glyph — each with why. */
 const DRAWINGS = {
   "components/ontology/AreaDrill.tsx": "an opened Area's edges to its kinds and sub-Areas, placed per canvas size",
+  "components/ontology/AreaRelationships.tsx": "an Area's entities and the links between them, curves placed per layout",
   "components/dashboards/FromFile.tsx": "a drafted card's shape from its run: bars computed per value, for a person to check",
   "components/dashboards/MetricsLedger.tsx": "a metric's trend: its line, its usual range behind it and its newest point, computed per reading",
   "components/home/LeadChart.tsx":  "the lead's metric as a line with its unsettled band and restatement, computed per width",

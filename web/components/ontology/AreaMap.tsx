@@ -26,7 +26,7 @@ import {
 } from "@/lib/areaMap";
 import { readAtlas, readDiscoverArea, usageLine, type DiscoverArea, type DiscoverAreaPage } from "@/lib/discover";
 import { countNoun, formatCount } from "@/lib/format";
-import { getActiveWorkspace } from "@/lib/workspace";
+import { getActiveWorkspace, WORKSPACE_EVENT } from "@/lib/workspace";
 
 const SUGGESTED = "suggested:";
 const PAD = 24;
@@ -148,6 +148,13 @@ export function AreaMap() {
       .catch((e) => setFailed(e instanceof Error ? e.message : String(e)));
   }, []);
   useEffect(() => { load(); }, [load]);
+  // the workspace chosen (or changed) after the map was read: read it again for that workspace, and close what was open,
+  // which belonged to the other one
+  useEffect(() => {
+    const again = () => { setPicked(null); setOpen([]); setActive(null); setPage(null); load(); };
+    window.addEventListener(WORKSPACE_EVENT, again);
+    return () => window.removeEventListener(WORKSPACE_EVENT, again);
+  }, [load]);
   const readPage = useCallback((id: string, fresh = false) => {
     setPage(null); setPageFailed("");
     readDiscoverArea(id, "", getActiveWorkspace() || undefined, fresh, true)
