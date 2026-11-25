@@ -193,6 +193,23 @@ describe("the Atlas, by Area", () => {
     expect((await screen.findAllByTestId("atlas-kind-row")).map((r) => r.textContent)).toEqual(["ordersNot used this month · theLookCertified"]);
   });
 
+  it("lets the reader widen or narrow the left panel, and keeps the width they chose", async () => {
+    window.localStorage.removeItem("pramanyx_areas_rail_width");
+    serve();
+    const { unmount } = render(<AreaMap />);
+    const grip = await screen.findByRole("separator", { name: "Resize the left panel" });
+    expect(grip).toHaveAttribute("aria-valuenow", "360");
+    fireEvent.keyDown(grip, { key: "ArrowRight" });
+    fireEvent.keyDown(grip, { key: "ArrowRight" });
+    expect(grip).toHaveAttribute("aria-valuenow", "392");
+    fireEvent.keyDown(grip, { key: "ArrowLeft" });
+    expect(grip).toHaveAttribute("aria-valuenow", "376");
+    unmount();
+    render(<AreaMap />);
+    expect(await screen.findByRole("separator", { name: "Resize the left panel" })).toHaveAttribute("aria-valuenow", "376");
+    window.localStorage.removeItem("pramanyx_areas_rail_width");
+  });
+
   it("lists a long kind a page at a time, in the order asked for", async () => {
     const many = Array.from({ length: 45 }, (_, n) => item("metric", `c1/m${n}`, `Metric ${n}`));
     const urls = serve(ATLAS, many);

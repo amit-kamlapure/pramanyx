@@ -165,6 +165,18 @@ describe("the one inspector", () => {
     expect(screen.queryByRole("complementary")).toBeNull();                          // the panel goes with its last
   });
 
+  it("is as wide as the reader drags it — its left edge, the arrow keys too", () => {
+    window.localStorage.removeItem("pramanyx_inspector_width");
+    render(<InspectorProvider pageKey="p"><Opener /><InspectorHost /></InspectorProvider>);
+    fireEvent.click(screen.getByText("one"));
+    const grip = screen.getByRole("separator", { name: "Resize the inspector" });
+    expect(grip).toHaveAttribute("aria-valuenow", "420");
+    fireEvent.keyDown(grip, { key: "ArrowLeft" });                         // on the right of the page: leftwards widens
+    expect(grip).toHaveAttribute("aria-valuenow", "436");
+    expect(screen.getByRole("complementary", { name: "Inspector: Order 1" })).toHaveStyle({ width: "436px" });
+    window.localStorage.removeItem("pramanyx_inspector_width");
+  });
+
   it("closes a tab by its ×, widens to the whole page and back, and hides with its tabs kept", () => {
     render(<InspectorProvider pageKey="p"><Opener /><InspectorHost /></InspectorProvider>);
     fireEvent.click(screen.getByText("one"));

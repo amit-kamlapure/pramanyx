@@ -20,6 +20,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useReducer,
 
 import { Button } from "@/components/ui/button";
 import { Icon, type IconName } from "@/components/ui/icon";
+import { ResizeGrip, useKeptWidth } from "@/components/ui/resize-grip";
 import { TabStrip } from "@/components/ui/tab-strip";
 
 export const INSPECTOR_TABS = ["overview", "definition", "relations", "provenance", "activity", "actions", "assist"] as const;
@@ -127,14 +128,6 @@ const WIDTH_KEY = "pramanyx_inspector_width";
 // Wide enough for a page of its own beside the page it came from (the reference keeps a third of the screen for it).
 const MIN_W = 320, MAX_W = 960, DEFAULT_W = 420;
 
-function readWidth(): number {
-  try {
-    const raw = Number(window.localStorage.getItem(WIDTH_KEY));
-    return raw >= MIN_W && raw <= MAX_W ? raw : DEFAULT_W;
-  } catch {
-    return DEFAULT_W;
-  }
-}
 
 /**
  * The tab strip's look, set on the elements themselves rather than in `globals.css`: the user's dev server keeps a
@@ -145,7 +138,8 @@ export const SIDE = {
   bar: { display: "flex", alignItems: "center", gap: 6, padding: "6px 8px 4px 10px", minWidth: 0, flexShrink: 0 },
   open: { display: "flex", alignItems: "center", gap: 2, flex: "1 1 auto", minWidth: 0, overflowX: "auto", overflowY: "hidden",
     scrollbarWidth: "none" },
-  tab: (front: boolean): CSSProperties => ({ display: "inline-flex", alignItems: "center", flex: "0 1 auto", minWidth: 0,
+  // a tab gives way to its neighbours down to where its name still reads; past that the strip scrolls sideways
+  tab: (front: boolean): CSSProperties => ({ display: "inline-flex", alignItems: "center", flex: "0 1 auto", minWidth: 96,
     maxWidth: 200, height: 26, borderRadius: "var(--r2)", background: front ? "var(--bg-3)" : undefined,
     color: front ? "var(--t1)" : "var(--t2)" }),
   name: { gap: 6, minWidth: 0, maxWidth: "100%", overflow: "hidden", padding: "0 2px 0 8px", color: "inherit", justifyContent: "flex-start" },
@@ -157,14 +151,13 @@ export const SIDE = {
 export function InspectorHost() {
   const { subject, open, activate, close, closeAll } = useInspector();
   const [facet, setFacet] = useState<InspectorTab>("overview");
-  const [width, setWidth] = useState(DEFAULT_W);
+  const [width, keep] = useKeptWidth(WIDTH_KEY, DEFAULT_W, MIN_W, MAX_W);
   // the panel at the page's whole width, or tucked away with its tabs kept — the coworker's side panel does both
   const [full, setFull] = useState(false);
   const [hidden, setHidden] = useState(false);
   const lastKey = useRef<string | null>(null);
   const panel = useRef<HTMLElement>(null);
 
-  useEffect(() => { setWidth(readWidth()); }, []);
   // At the page's whole width the page beside it steps aside, and comes back as it was.
   useEffect(() => {
     if (!full) return undefined;
@@ -199,19 +192,6 @@ export function InspectorHost() {
     return () => window.removeEventListener("keydown", onKey);
   }, [subject, hidden, full, close]);
 
-  const keep = (w: number) => {
-    const next = Math.min(MAX_W, Math.max(MIN_W, Math.round(w)));
-    setWidth(next);
-    try { window.localStorage.setItem(WIDTH_KEY, String(next)); } catch { /* a per-viewer convenience only */ }
-  };
-  const startDrag = (e: React.PointerEvent) => {
-    e.preventDefault();
-    const startX = e.clientX, startW = width;
-    const move = (ev: PointerEvent) => keep(startW + (startX - ev.clientX));
-    const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
-  };
 
   if (!subject) return null;
   if (hidden) {
@@ -231,15 +211,7 @@ export function InspectorHost() {
   return (
     <aside ref={panel} className="aug-inspector" data-full={full || undefined} aria-label={`Inspector: ${subject.title}`}
       style={full ? { flex: "1 1 auto", minWidth: 0 } : { width }}>
-      {!full && (
-        <div className="aug-inspector-grip" role="separator" aria-orientation="vertical" aria-label="Resize the inspector"
-          aria-valuemin={MIN_W} aria-valuemax={MAX_W} aria-valuenow={width} tabIndex={0}
-          onPointerDown={startDrag}
-          onKeyDown={e => {
-            if (e.key === "ArrowLeft") { e.preventDefault(); keep(width + 16); }
-            if (e.key === "ArrowRight") { e.preventDefault(); keep(width - 16); }
-          }} />
-      )}
+      {!full && <ResizeGrip edge="left" width={width} min={MIN_W} max={MAX_W} onWidth={keep} label="Resize the inspector" />}
       <div style={SIDE.bar}>
         <div role="tablist" aria-label="Open in the side panel" style={SIDE.open}>
           {open.map(o => (

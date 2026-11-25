@@ -24,6 +24,7 @@ import {
 import { OpenPanel, subjectOf, type OpenedContext } from "@/components/ontology/OpenedPages";
 import { useInShell } from "@/components/shell/PageChrome";
 import { useInspector } from "@/components/shell/Inspector";
+import { ResizeGrip, useKeptWidth } from "@/components/ui/resize-grip";
 import { areaIcon } from "@/lib/areaIcons";
 import {
   areaTone, bounds, changeWords, fanOf, packBubbles, tint, radiusFor, R_MIN, share, waiting, waitingWords, type Atlas, type AtlasArea, type FanKey,
@@ -33,6 +34,8 @@ import { countNoun, formatCount } from "@/lib/format";
 import { getActiveWorkspace, WORKSPACE_EVENT } from "@/lib/workspace";
 
 const SUGGESTED = "suggested:";
+/** The left panel's width: as it was (about 360px) until dragged, never so narrow a row's name cannot read. */
+const RAIL_MIN = 260, RAIL_MAX = 640, RAIL_DEFAULT = 360;
 const PAD = 24;
 
 function Figure({ value, label, sub, testId }: { value: string; label: string; sub?: string; testId?: string }) {
@@ -155,6 +158,7 @@ export function AreaMap({ connectionId }: {
   const workspaceId = getActiveWorkspace() || undefined;
   const inShell = useInShell();
   const inspector = useInspector();
+  const [railWidth, keepRailWidth] = useKeptWidth("pramanyx_areas_rail_width", RAIL_DEFAULT, RAIL_MIN, RAIL_MAX);
   const closeAll = inspector.closeAll;
 
   const load = useCallback(() => {
@@ -255,7 +259,9 @@ export function AreaMap({ connectionId }: {
 
   return (
     <div data-testid="area-map" style={{ flex: 1, minHeight: 0, display: "flex", flexWrap: "wrap", overflow: "hidden" }}>
-      <aside aria-label="The Areas at a glance" style={{ flex: "1 1 320px", maxWidth: 380, minWidth: 0, maxHeight: "100%", background: "var(--bg-2)",
+      {/* the left panel, as wide as the reader drags it (the user, 2026-11-26: "Keep the left panel also adjustable") */}
+      <div style={{ position: "relative", flex: "0 0 auto", width: railWidth, maxWidth: "100%", maxHeight: "100%", display: "flex" }}>
+      <aside aria-label="The Areas at a glance" style={{ flex: 1, minWidth: 0, maxHeight: "100%", background: "var(--bg-2)",
         padding: "14px 16px 20px", display: "flex", flexDirection: "column", gap: 16, overflowY: "auto", boxSizing: "border-box" }}>
         {chosen ? (
           <AreaRail area={chosen} ancestors={ancestors} page={page} pageFailed={pageFailed} onRetry={() => readPage(chosen.id, true)}
@@ -276,6 +282,8 @@ export function AreaMap({ connectionId }: {
           </RailHead>
         )}
       </aside>
+      <ResizeGrip edge="right" width={railWidth} min={RAIL_MIN} max={RAIL_MAX} onWidth={keepRailWidth} label="Resize the left panel" />
+      </div>
       <section ref={canvas} aria-label="The Areas of the business" style={{ flex: "999 1 480px", minWidth: 0, minHeight: 520, maxHeight: "100%", position: "relative",
         overflow: "hidden", backgroundColor: "var(--bg-0)", backgroundImage: "radial-gradient(var(--bg-hover) 1px, transparent 1px)",
         backgroundSize: "18px 18px" }}>
