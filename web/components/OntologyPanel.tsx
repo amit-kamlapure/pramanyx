@@ -575,8 +575,11 @@ export function OntologyPanel({ connectionId, onInvestigate, schema }: Props) {
   // opens on its connection. "Every connection" (each connection's entities side by side) was removed by the user the
   // same day: "I see no point there".
   const [areasMode,         setAreasMode]        = useState(useInShell());
-  // ON-8 — the organisation's ontology: one map over every connection a type is declared on.
-  const [domainMode,        setDomainMode]       = useState(false);
+  // ON-8 — the organisation's ontology: one map over every connection a type is declared on. Since 2026-11-25 (the user:
+  // "Yes, fold Domain") it is the Areas page's Relationships, beside the Areas as in the reference design ("Domains |
+  // Relationships"), and no longer a switch of its own.
+  const [areasView,         setAreasView]        = useState<"areas" | "relationships">("areas");
+  const domainMode = areasMode && areasView === "relationships";
   // ON-3b — the entity-type map IS this layer (re-laid 2026-09-12, the user: "we need only map in ontology..
   // overview doesnt matter if it is not being used as context.. remove it in that case"). The whole-graph ERD it
   // used to sit beside was a second drawing of the same facts that nothing downstream read; the Org board keeps
@@ -618,7 +621,7 @@ export function OntologyPanel({ connectionId, onInvestigate, schema }: Props) {
   // pramanyx-v2/CLARITY.md): the scope, the figures the map holds, the release everyone reads, what waits on a person,
   // and every tool in one menu. Inside the app the shell's title row names the screen.
   const tool = (which: Drawer) => setDrawer(open => (open === which ? null : which));
-  const facts = !areasMode ? summary : null;
+  const facts = !areasMode || domainMode ? summary : null;
   // Inside the app the bar FOLDS into the shell's rows (2026-11-10, ROADMAP §6 item 64): which ontology and its release
   // in the toolbar row (the release's changes still open as a full line under it), the scope and what the map holds
   // beside the title, "to approve" and Tools with the page's actions — every one the same live control. Outside the
@@ -626,21 +629,31 @@ export function OntologyPanel({ connectionId, onInvestigate, schema }: Props) {
   const inShell = useInShell();
   const barWhich = (
     <>
-      {/* Areas ⟷ Domain ⟷ Connection. ON-8 — Domain is the organisation's ontology: types declared on any connection,
-          and the links between them, read by key where they cross two. */}
-      <Segmented<"areas" | "domain" | "connection"> label="Which ontology"
-        value={areasMode ? "areas" : domainMode ? "domain" : "connection"}
-        onChange={next => { setAreasMode(next === "areas"); setDomainMode(next === "domain"); }}
+      {/* The organisation's ontology or a connection's — and, for the organisation, its Areas or its Relationships, as a
+          connection's has its Register, Map and Review. */}
+      <Segmented<"organisation" | "connection"> label="Which ontology"
+        value={areasMode ? "organisation" : "connection"}
+        onChange={next => setAreasMode(next === "organisation")}
         options={[
-          { value: "areas", label: <span data-testid="ontology-areas-toggle">Areas</span>,
-            title: "The organisation's Areas across every connection — what each holds, the answers that drew on it, what waits" },
-          { value: "domain", label: <span data-testid="ontology-domain-toggle">Domain</span>,
-            title: "The organisation's ontology — types declared on any connection, and the links between them" },
+          { value: "organisation", label: <span data-testid="ontology-areas-toggle">Organisation</span>,
+            title: "The organisation's: its Areas across every connection, and how its entity types relate" },
           { value: "connection", label: "Connection" },
         ]} />
+      {/* The Areas, or how the organisation's entity types relate across connections — declared on any connection, and
+          the links between them, read by key where they cross two (ON-8, once the "Domain" switch). */}
+      {areasMode && (
+        <Segmented<"areas" | "relationships"> label="The organisation's view" value={areasView}
+          onChange={next => { setAreasView(next); setPage(null); }}
+          options={[
+            { value: "areas", label: <span data-testid="ontology-areas-view">Areas</span>,
+              title: "The organisation's Areas — what each holds, the answers that drew on it, what waits" },
+            { value: "relationships", label: <span data-testid="ontology-relationships-toggle">Relationships</span>,
+              title: "The organisation's entity types, declared on any connection, and the links between them — read by key where they cross two" },
+          ]} />
+      )}
     </>
   );
-  const barView = !areasMode ? (
+  const barView = !areasMode || domainMode ? (
     <Segmented<"register" | "map" | "review"> label="Ontology view" value={view}
       onChange={next => { setView(next); setPage(null); }}
       options={[
@@ -712,7 +725,7 @@ export function OntologyPanel({ connectionId, onInvestigate, schema }: Props) {
           {facts.proposed} to approve
         </Button>
       )}
-      {!areasMode && (domainMode || graph) && (
+      {(domainMode || (!areasMode && graph)) && (
         <DropdownMenu.Root>
           <DropdownMenu.Trigger>
             <Button variant="default" size="xs" data-testid="ontology-new" title="Make an entity, a link, a process, a rule or an action">
@@ -801,16 +814,6 @@ export function OntologyPanel({ connectionId, onInvestigate, schema }: Props) {
     </div>
   );
 
-  // ── A4a — the organisation's Areas, which no one connection's graph gates ─────────
-  if (areasMode) {
-    return (
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {headerBar}
-        <div className="flex-1 flex overflow-hidden"><AreaMap connectionId={connectionId} /></div>
-      </div>
-    );
-  }
-
   // ── ON-8 — the organisation's ontology, which no one connection's graph gates ─────
   if (domainMode) {
     return (
@@ -820,6 +823,16 @@ export function OntologyPanel({ connectionId, onInvestigate, schema }: Props) {
           <EntityTypeMap connectionId={domainScope()} onSummary={setSummary}
             view={view} onView={setView} page={page} onPage={setPage} newAsk={newAsk} />
         </div>
+      </div>
+    );
+  }
+
+  // ── A4a — the organisation's Areas, which no one connection's graph gates ─────────
+  if (areasMode) {
+    return (
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {headerBar}
+        <div className="flex-1 flex overflow-hidden"><AreaMap connectionId={connectionId} /></div>
       </div>
     );
   }
