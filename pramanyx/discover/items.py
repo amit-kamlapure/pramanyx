@@ -282,10 +282,18 @@ def metrics(scope: Scope) -> Found:
 
 def definitions(scope: Scope) -> Found:
     """Each connection's published Definitions, and the person's own drafts; another's draft is theirs to publish."""
+    from pramanyx.record.definition_votes import votes_on
+    from pramanyx.record.writers import definition_term
     from pramanyx.record.writers import definitions as of_connection
     found = Found()
     me = who_of(scope.person).lower()
     for conn, name in scope.connections.items():
+        try:      # how many say each is right (P2, 2026-11-25): one journal read for the connection
+            right = votes_on(conn)
+        except Exception as exc:  # noqa: BLE001 — unread, a row says nothing of it rather than "no one"
+            from pramanyx.kernel.errors import tolerate
+            tolerate(exc, f"discover: {conn}'s votes on Definitions could not be read", counter="discover.votes")
+            right = {}
         for c in of_connection(conn):
             x = c.extra or {}
             published = c.tier == "approved"
@@ -298,6 +306,7 @@ def definitions(scope: Scope) -> Found:
                 connection_id=conn, connection_name=name, area=area, area_how="its own" if area else "",
                 owner=str(x.get("approved_by") or c.owner or c.author or ""), updated_at=c.recorded_at,
                 state="published" if published else "draft",
+                detail={"right": len(right.get((definition_term(term), definition_term(area)), ()))},
                 href=_href("/", tab="semantic", conn=conn, definition=term, area=area)))
     return found
 

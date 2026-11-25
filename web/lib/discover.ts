@@ -79,7 +79,7 @@ export interface DiscoverUse {
 }
 
 /** A thing's use this month in words, for its row: nothing when it was not used, or is not measured. */
-export function useLine(u: DiscoverUse | null | undefined): string {
+export function usageLine(u: DiscoverUse | null | undefined): string {
   if (!u || !u.count) return "";
   const times = u.count === 1 ? "once" : `${formatCount(u.count)} times`;
   const did = u.measured === "reads" ? `read ${times} this month`
@@ -302,6 +302,9 @@ export function ownersLine(a: Pick<DiscoverArea, "business_owners" | "technical_
 }
 
 const rowsOf = (d: Record<string, unknown>): number | null => (typeof d.rows === "number" ? d.rows : null);
+/** "2 say it is right" on a Definition's row (P2, 2026-11-25); nothing when no one has — a row is not a tally of zeros. */
+const rightOf = (d: Record<string, unknown>): string =>
+  typeof d.right === "number" && d.right > 0 ? `${d.right} ${d.right === 1 ? "says" : "say"} it is right` : "";
 
 /** A row's second line: what the thing is, from what its kind knows — its description, its rows, who published it —
  *  with its connection when the page spans more than one. */
@@ -310,8 +313,9 @@ export function secondLine(i: DiscoverItem, manyConnections: boolean): string {
   const own = i.kind === "table" ? [String(i.detail.schema ?? ""), rows != null ? `${formatCount(rows)} rows` : ""]
     : i.kind === "dashboard" ? [i.line, i.updated_at && relTime(i.updated_at) !== "—" ? `kept ${relTime(i.updated_at)} ago` : ""]
     : i.kind === "agent" ? [i.line || "No purpose written yet"]
+    : i.kind === "definition" ? [i.line, rightOf(i.detail)]
     : [i.line];
-  return [manyConnections ? i.connection_name : "", ...own, useLine(i.use)].map((s) => (s ?? "").trim()).filter(Boolean).join(" · ");
+  return [manyConnections ? i.connection_name : "", ...own, usageLine(i.use)].map((s) => (s ?? "").trim()).filter(Boolean).join(" · ");
 }
 
 export type MarkTone = "up" | "amber" | "plain";

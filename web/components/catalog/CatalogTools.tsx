@@ -28,7 +28,7 @@ import {
 } from "@/lib/api";
 import type { Know, ScopeTable, StateWord } from "@/lib/catalogSummary";
 import { getApiBase } from "@/lib/config";
-import { useLine, type DiscoverUse } from "@/lib/discover";
+import { usageLine, type DiscoverUse } from "@/lib/discover";
 import { compactNumber, formatCount, formatTimestamp } from "@/lib/format";
 
 // ── Favorites and recents ─────────────────────────────────────────────────────────────────────────────────────────
@@ -262,7 +262,7 @@ export function TablesList({ tables, onOpen, showSchema, testId, reads }: {
               const u = reads[readsKey(t.schema, t.name)];
               return (
                 <div style={{ ...CELL, ...RIGHT, color: u?.count ? "var(--t1)" : "var(--t3)" }} data-testid="catalog-table-reads"
-                  title={u ? useLine(u) || "Not read this month" : "Not read yet"}>
+                  title={u ? usageLine(u) || "Not read this month" : "Not read yet"}>
                   {u ? (u.count ? compactNumber(u.count) : "—") : "…"}
                 </div>
               );

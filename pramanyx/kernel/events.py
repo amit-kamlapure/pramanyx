@@ -57,6 +57,8 @@ CATALOGUE: dict[str, dict[str, Any]] = {
                           "emitted_by": "record/writers.hand_definition"},
     "thing.opened": {"what": "a person (never an agent) opened a thing on its own page — at most once a person and a thing in ten minutes (Discover D5)",
                      "payload": ["kind", "ref", "connection_id", "by"], "emitted_by": "discover/usage.note_opened"},
+    "definition.voted": {"what": "a person said a Definition is right, or took that back — the count is folded from these, each person's latest",
+                         "payload": ["connection_id", "term", "area", "by", "right"], "emitted_by": "record/definition_votes.vote"},
     "table.changed": {"what": "a table's shape changed — columns added, taken away or retyped, its row count moved (at most once a day) — or a person edited its words (Catalog C3)",
                       "payload": ["connection_id", "table", "added", "removed", "retyped", "rows", "words", "by"],
                       "emitted_by": "db/table_history.record_shapes, db/table_history.note_words"},

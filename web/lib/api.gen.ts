@@ -17662,6 +17662,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/record/definitions/comments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Definition Comments
+         * @description A Definition's comments, oldest first (`record/definition_comments`): who said what, and when.
+         */
+        get: operations["list_definition_comments_record_definitions_comments_get"];
+        put?: never;
+        /**
+         * Comment On Definition
+         * @description A person's comment on a Definition, in their name. Anyone who may read it may comment; an agent may not.
+         */
+        post: operations["comment_on_definition_record_definitions_comments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/record/definitions/comments/take-back": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Take Back Definition Comment
+         * @description Its writer takes a comment back — withdrawn, its words kept beneath it. Anyone else is refused.
+         */
+        post: operations["take_back_definition_comment_record_definitions_comments_take_back_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/record/definitions/draft": {
         parameters: {
             query?: never;
@@ -17763,6 +17807,46 @@ export interface paths {
          * @description Its owner takes a published definition back to a draft.
          */
         post: operations["unpublish_record_definition_record_definitions_unpublish_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/record/definitions/vote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Vote On Definition
+         * @description A person says a Definition is right, or takes that back. A person's own act; an agent never votes.
+         */
+        post: operations["vote_on_definition_record_definitions_vote_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/record/definitions/votes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Definition Votes
+         * @description How many people say a Definition is right, who, and whether the person asking is one of them.
+         */
+        get: operations["definition_votes_record_definitions_votes_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -22659,6 +22743,34 @@ export interface components {
             /** Term */
             term: string;
         };
+        /** DefinitionComment */
+        DefinitionComment: {
+            /**
+             * Area
+             * @default
+             */
+            area: string;
+            /** Connection Id */
+            connection_id: string;
+            /** Term */
+            term: string;
+            /** Text */
+            text: string;
+        };
+        /** DefinitionCommentTakeBack */
+        DefinitionCommentTakeBack: {
+            /**
+             * Area
+             * @default
+             */
+            area: string;
+            /** Connection Id */
+            connection_id: string;
+            /** Id */
+            id: string;
+            /** Term */
+            term: string;
+        };
         /** DefinitionHandover */
         DefinitionHandover: {
             /**
@@ -22728,6 +22840,23 @@ export interface components {
             label: string;
             /** Ref */
             ref: string;
+        };
+        /** DefinitionVote */
+        DefinitionVote: {
+            /**
+             * Area
+             * @default
+             */
+            area: string;
+            /** Connection Id */
+            connection_id: string;
+            /**
+             * Right
+             * @default true
+             */
+            right: boolean;
+            /** Term */
+            term: string;
         };
         /** DeltaStatusIn */
         DeltaStatusIn: {
@@ -58642,6 +58771,111 @@ export interface operations {
             };
         };
     };
+    list_definition_comments_record_definitions_comments_get: {
+        parameters: {
+            query: {
+                connection_id: string;
+                term: string;
+                area?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    comment_on_definition_record_definitions_comments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DefinitionComment"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    take_back_definition_comment_record_definitions_comments_take_back_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DefinitionCommentTakeBack"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     draft_record_definition_record_definitions_draft_post: {
         parameters: {
             query?: never;
@@ -58802,6 +59036,76 @@ export interface operations {
                 "application/json": components["schemas"]["DefinitionApproval"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    vote_on_definition_record_definitions_vote_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DefinitionVote"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    definition_votes_record_definitions_votes_get: {
+        parameters: {
+            query: {
+                connection_id: string;
+                term: string;
+                area?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

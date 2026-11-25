@@ -668,7 +668,7 @@ function ColumnsList({ cols, rows, loading, distMap, onSave, mode, use }: {
   const matching = q ? cols.filter(c => c.name.toLowerCase().includes(q) || c.type.toLowerCase().includes(q)) : cols;
   const shown = byUse && counted ? [...matching].sort((a, b) => usedOf(b.name) - usedOf(a.name)) : matching;
   const [now] = useState(() => Date.now());
-  const useLine = columnUseLine(use, now);
+  const columnLine = columnUseLine(use, now);
   // A distribution only means something for a numeric column — gated on its live type, so a VARCHAR id never shows
   // percentiles and a column just changed to VARCHAR stops showing its stale one.
   const dist = (c: SchemaColumn) => (isNumericType(c.type) ? distMap[c.name] : undefined);
@@ -697,9 +697,9 @@ function ColumnsList({ cols, rows, loading, distMap, onSave, mode, use }: {
         </span>
       </div>
       <Label right={countNoun(cols.length, "column")}>Columns</Label>
-      {(useLine || use?.said?.length) ? (
+      {(columnLine || use?.said?.length) ? (
         <div className="aug-fs-xs" data-testid="catalog-column-use-line" style={{ ...MUTED, marginBottom: 6 }}>
-          {useLine ?? use?.said.join(" ")}
+          {columnLine ?? use?.said.join(" ")}
         </div>
       ) : null}
       {loading ? <SkeletonRows rows={6} />

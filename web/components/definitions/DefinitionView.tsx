@@ -15,6 +15,7 @@ import { useCallback, useEffect, useState, type MouseEvent, type ReactNode } fro
 
 import { Chip } from "@/components/clarity/kit";
 import { DefinitionBody } from "@/components/definitions/DefinitionBody";
+import { DefinitionComments, RightVotes } from "@/components/definitions/DefinitionTalk";
 import { RichBody } from "@/components/definitions/RichBody";
 import { DiscoverFinder } from "@/components/discover/DiscoverFinder";
 import { Button } from "@/components/ui/button";
@@ -298,6 +299,11 @@ export function DefinitionView({ term, connection, initialArea = "", inApp = fal
                   )}
                 </span>
               </Field>
+              {found && (
+                <Field label="Right" title="Who says this Definition is right — a vote says that only; disagreement is a comment or a suggested edit">
+                  <RightVotes connection={connection} term={found.term} area={found.area} />
+                </Field>
+              )}
               <Field label="Synonyms">
                 <Synonyms value={writing ? draft.aliases : (found?.aliases ?? [])} editing={writing}
                   onChange={(aliases) => setDraft((d) => ({ ...d, aliases }))} />
@@ -424,6 +430,8 @@ export function DefinitionView({ term, connection, initialArea = "", inApp = fal
           ))}
         </section>
       )}
+
+      {found && <DefinitionComments connection={connection} term={found.term} area={found.area} me={me} />}
 
       {found && earlierWordings(found.versions).length > 0 && (
         <section>
