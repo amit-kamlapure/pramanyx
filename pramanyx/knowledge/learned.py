@@ -24,10 +24,13 @@ import json
 import re
 from typing import Optional
 
-#: How each standing is said, and its rank in the one authority order: confirmed and approved lead, mined trails.
-STANDING = {"approved": ("confirmed by a person", 0), "declared": ("confirmed by a person", 0),
-            "trusted": ("approved as a trusted query", 0), "measured": ("measured by a run", 1),
-            "mined": ("mined from people's own queries", 2), "said": ("said, never measured", 3)}
+#: How each store's word is said. The ORDER is the one standing's (`trust.standing`, A2): a person's word on a measured
+#: result, then the data's, then a person's alone, then mined, then said — and `why` says where each stands.
+SAID = {"approved": "confirmed by a person", "declared": "confirmed by a person", "trusted": "approved as a trusted query",
+        "measured": "measured by a run", "mined": "mined from people's own queries", "said": "said, never measured"}
+#: A person's word on what a run measured, as a reader is told it.
+BOTH_SAID = {"approved": "confirmed by a person, measured by a run", "declared": "confirmed by a person, measured by a run",
+             "trusted": "approved as a trusted query, and run"}
 
 
 def _tables_of(sql: str) -> list[str]:
@@ -36,11 +39,16 @@ def _tables_of(sql: str) -> list[str]:
 
 
 def _item(*, kind: str, text: str, source: str, author: str, standing: str, as_of: str, tables: list[str],
-          lineage: list[str], ref: str) -> dict:
-    said, _rank = STANDING.get(standing, (standing, 3))
+          lineage: list[str], ref: str, measured: bool = False, uses: Optional[int] = None) -> dict:
+    from pramanyx.trust.standing import Standing, tier_of
+    said = SAID.get(standing, standing)
+    stands = Standing(tier=tier_of(standing, measured=measured), uses=uses, as_of=as_of)
     return {"kind": kind, "text": text, "source": source, "author": author, "standing": standing, "standing_said": said,
+            # where it stands in the one order, and why — a reader's words (A2)
+            "why": stands.why(BOTH_SAID.get(standing, said) if stands.tier == "both" else said),
             "as_of": as_of, "tables": sorted({t.rsplit(".", 1)[-1] for t in tables if t}), "lineage": lineage, "ref": ref,
-            "area": "", "uses": None, "times": 1, "also": [], "_same": (kind, " ".join(text.lower().split()))}
+            "area": "", "uses": uses, "times": 1, "also": [], "_same": (kind, " ".join(text.lower().split())),
+            "_standing": stands}
 
 
 #: How a re-check's restatement ends: the answer it moved, named by that answer's own first words (`record.writers`).
@@ -82,7 +90,8 @@ def learned_items(connection_id: str, *, about: str = "", limit: int = 50) -> di
             item = _item(kind="finding" if c.extra.get("writer") == "explorer" else "answer",
                          text=c.statement.text, source=("the explorer" if c.extra.get("writer") == "explorer" else "an answer"),
                          author=c.extra.get("approved_by") or c.author, standing=c.tier, as_of=c.as_of,
-                         tables=tables, lineage=[f"{w.kind}:{w.ref}" for w in c.warrants], ref=c.id)
+                         tables=tables, lineage=[f"{w.kind}:{w.ref}" for w in c.warrants], ref=c.id,
+                         measured=run is not None)
             if c.extra.get("restated_by") and c.extra.get("changes"):
                 # the same numbers moved under several answers by one re-check: one thing learned
                 item["_same"] = ("restated", json.dumps(c.extra["changes"], sort_keys=True, default=str))
@@ -94,12 +103,17 @@ def learned_items(connection_id: str, *, about: str = "", limit: int = 50) -> di
                            standing="mined", as_of=c.as_of, tables=_tables_of(str(c.extra.get("proposal") or "")),
                            lineage=[f"{w.kind}:{w.ref}" for w in c.warrants], ref=c.id))
     try:
+        from pramanyx.discover.items import trusted_query_id
+        from pramanyx.discover.usage import answers_of
         from pramanyx.semantic.trusted_queries import list_trusted
         for q in list_trusted(connection_id):
+            run = bool(getattr(q, "last_executed_at", "") or (getattr(q, "verification", None) or {}).get("ok"))
             items.append(_item(kind="trusted_query", text=q.question, source=q.source or "a trusted query",
                                author=q.verified_by or q.proposed_by, standing="trusted",
                                as_of=(q.verified_at or q.proposed_at or "")[:10], tables=list(q.tables) or _tables_of(q.sql),
-                               lineage=[f"sql:{q.sql[:160]}"], ref=q.id))
+                               lineage=[f"sql:{q.sql[:160]}"], ref=q.id, measured=run,
+                               # the answers it guided this month (A1) — counted for a trusted query, not yet the rest
+                               uses=answers_of("trusted_query", f"{connection_id}/{trusted_query_id(connection_id, q)}")))
     except Exception as exc:  # noqa: BLE001 — unread, said by the count of what was read
         from pramanyx.kernel.errors import tolerate
         tolerate(exc, "trusted queries could not be read into the learned view", counter="learned.trusted")
@@ -112,16 +126,14 @@ def learned_items(connection_id: str, *, about: str = "", limit: int = 50) -> di
     trimmed = trim_by_tables(items, lambda i: i["tables"], connection_id=connection_id)
     items = trimmed.kept
     _place(items, connection_id)
-    items.sort(key=lambda i: (STANDING.get(i["standing"], ("", 3))[1], -_day(i["as_of"]), i["ref"]))
+    # the one standing's order (A2), then the ref, so a tie is still one order
+    items.sort(key=lambda i: (i["_standing"].key(), i["ref"]))
     booked = len(items)
     items = _fold(items)
+    for i in items:
+        i.pop("_standing", None)
     return {"items": items[:limit], "total": len(items), "folded": booked - len(items),
             "withheld": trimmed.to_dict() if trimmed.trimmed else None, "uses_counted": False}
-
-
-def _day(as_of: str) -> int:
-    digits = re.sub(r"[^0-9]", "", (as_of or "")[:10])
-    return int(digits) if digits else 0
 
 
 def _place(items: list[dict], connection_id: str) -> None:

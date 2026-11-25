@@ -557,8 +557,10 @@ async def read_learned(
     """What the platform has learned about a connection, each item in one shape: what it says, where it came from (the
     explorer, an answer, people's own queries, a trusted query), who wrote or confirmed it, the area of the business it
     is about, how it stands — CONFIRMED by a person or APPROVED (ground you may build on), MEASURED by a run (to measure
-    again before relying on it), MINED from query history (a hint) — when, and what it rests on. Confirmed first. What
-    the reader's clearance withholds is counted, never shown. Use is not counted yet."""
+    again before relying on it), MINED from query history (a hint) — when, and what it rests on. In the platform's one
+    order: a person's word on a measured result first, then the data's, then a person's alone, then mined; each item's
+    `why` says where it stands and why. A trusted query says how many answers it guided this month (`uses`); the rest are
+    not counted yet (`uses` null). What the reader's clearance withholds is counted, never shown."""
     return await _client.read_learned(connection, about=about, area=area)
 
 

@@ -76,11 +76,21 @@ def authority(d: DefinitionSource) -> tuple:
     )
 
 
+def standing(d: DefinitionSource):
+    """Where a metric definition stands in the one order (`trust.standing`, A2): a formula verified against the live
+    database stands on the data's word, every other is a claim; then certified, then reliance (capped), then — this
+    order's own tie-breaks — the kind of source and whether anyone is named behind it, then the newest."""
+    from pramanyx.trust.standing import Standing
+    return Standing(tier="data" if d.verified else "person", vouched="certified" if d.certified else "",
+                    uses=int(d.use_count or 0), as_of=str(d.recorded_at or ""))
+
+
 def rank(definitions: Sequence[DefinitionSource]) -> list[DefinitionSource]:
-    """Best first: verified above unverified, then authority within each tier."""
-    return sorted(definitions,
-                  key=lambda d: (1 if d.verified else 0, authority(d)),
-                  reverse=True)
+    """Best first: verified above unverified, then authority within each tier — the one standing's order, with this
+    module's own tie-breaks (source kind, attribution) before recency. Recency is compared parsed, not as text."""
+    return sorted(definitions, key=lambda d: (*standing(d).key(-_KIND_WEIGHT.get(d.source_kind, 0),
+                                                               0 if (d.author or "").strip() else 1)[:-1],
+                                              -_recency(d.recorded_at)))
 
 
 @dataclass

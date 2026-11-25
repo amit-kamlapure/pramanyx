@@ -399,6 +399,26 @@ def retrieve_for_reader(question: str, connection_id: str, top_k: int = _TOP_K) 
     return _render_block(_relevant_entries(question, connection_id, top_k), header=None)
 
 
+def definition_standing(entry, connection_id: str):
+    """Where a Definition stands in the one order (`trust.standing`, A2): published before a draft, a draft before one
+    only said; within those, its Area's contact's word first, then the person most often right there (punch list 86);
+    then the answers that drew on it this month (A1); then the newest."""
+    from pramanyx.discover.usage import answers_of
+    from pramanyx.trust.standing import Standing
+    tier = str((entry.standing or {}).get("tier") or "")
+    owner, right = _behind(entry, connection_id)
+    title = str(getattr(entry, "title", "") or "")
+    return Standing(tier="person" if tier in _TIER_ORDER else "said", draft=tier == "declared",
+                    owner_word=owner < 0, right=-right,
+                    uses=answers_of("definition", f"{connection_id}/{title}/{getattr(entry, 'area', '') or ''}") if title else None)
+
+
+def order_definitions(entries: list, connection_id: str) -> list:
+    """The relevant Definitions in the one order — a stable sort, so relevance orders what stands equal."""
+    from pramanyx.trust.standing import order
+    return order(entries, lambda e: definition_standing(e, connection_id))
+
+
 def retrieve_for_question(question: str, connection_id: str, top_k: int = _TOP_K) -> str:
     """Return a formatted block of relevant knowledge entries for *question*,
     headed for PROMPT injection.
@@ -410,9 +430,7 @@ def retrieve_for_question(question: str, connection_id: str, top_k: int = _TOP_K
     draft before one only said. A word the organisation defines differently in two areas of the business is said
     first, with the area the question chose — or the instruction to answer each meaning, named, never one picked.
     """
-    entries = sorted(_relevant_entries(question, connection_id, top_k),
-                     key=lambda e: (_TIER_ORDER.get(str((e.standing or {}).get("tier") or ""), 2),
-                                    _behind(e, connection_id)))
+    entries = order_definitions(_relevant_entries(question, connection_id, top_k), connection_id)
     # each Definition put in front of the model writing an answer, as Discover names it (A1: "used in N answers")
     from pramanyx.trust.answer_inputs import note_given
     for e in entries:

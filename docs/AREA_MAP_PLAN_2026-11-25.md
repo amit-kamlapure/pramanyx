@@ -137,9 +137,17 @@ call or reads outside data is an organisation setting, off by default).
   items, trusted queries, documents, tables — as edges on the receipt (the Ledger's lineage table, beside the tables
   and columns it already holds) and a `thing.used` per thing chosen (`discover/usage.py`, today trusted queries only).
   No new store. Gives every "used in N answers", the governed reach, and citations under an answer that show both.
-- **A2 · One standing.** One order for everything an answer may draw on — approved > published > certified > learned
-  by its standing, then use, then recency, then who stands behind it — replacing the six; each learned item gets a
-  standing a reader can read ("why trusted").
+- **A2 · One standing.** DONE 2026-11-25 (`pramanyx/trust/standing.py`). The orders disagreed out loud — the
+  platform's ladder put *measured* above *approved*, the learned list *confirmed* above *measured* — and were both right:
+  a thing stands on the data's word, a person's, or both. Tiers, strongest first: both · the data's · a person's · mined
+  · said; within a tier and never across: published before a draft, certified before plain (deprecated last), its Area
+  contact's word then the person most often right there (punch list 86), the answers that drew on it this month (A1,
+  capped), the newest; then relevance among equals. On it now: the learned list (each item says `why`), the
+  Definitions given to an answer, the metric-definition authority (its order unchanged, its own tie-breaks kept). It
+  agrees with the hub's ladder (measured > approved > declared > mined > said). Left as they are, on purpose: the graph
+  slice selects by relevance first (its vouched/published parts already agree); `ontology/ranking.py` orders candidate
+  COLUMNS for a vague word — schema linking, not knowledge — and wiring it is a retrieval change to measure with an
+  eval of its own, not part of one standing.
 - **A3 · Learned knowledge on a page.** The learned list in the rail and the right panel; **Promote → a draft
   Definition**; learned items placed in an Area (147 of theLook's sit in none).
 - **A4 · The Atlas, by Area** (§3.1–3.3): the organisation canvas, an Area's fan-out, kinds and tabs — over

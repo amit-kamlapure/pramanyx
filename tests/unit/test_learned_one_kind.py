@@ -24,7 +24,8 @@ def test_four_stores_read_in_one_shape_and_one_order(monkeypatch):
     C.confirm(other, by="user:ana")
     monkeypatch.setattr("pramanyx.semantic.trusted_queries.list_trusted", lambda c: [SimpleNamespace(
         id="tq1", question="Revenue by month", sql="SELECT SUM(x) FROM orders", tables=["orders"], source="api",
-        verified_by="user:bo", proposed_by="", verified_at="2026-11-10T00:00:00", proposed_at="")])
+        verified_by="user:bo", proposed_by="", verified_at="2026-11-10T00:00:00", proposed_at="",
+        last_executed_at="2026-11-10T00:00:00")])
     monkeypatch.setattr("pramanyx.semantic.areas.placed_by_people", lambda c: {"tables": {"returns": ("returns", "user:ana")},
                                                                                "metrics": {}, "connection": None})
     monkeypatch.setattr("pramanyx.semantic.metric_map.map_for", lambda c, s=None: SimpleNamespace(areas=[]))
@@ -90,3 +91,31 @@ def test_one_thing_learned_is_one_item_however_often_it_was_booked(monkeypatch):
     assert by_text["Returns doubled in Brazil"]["times"] == 1
     assert "_same" not in mondays
     assert learned_line(mondays).endswith("· booked 2 times")
+
+
+
+def test_one_standing_a_persons_word_on_what_ran_leads_and_a_word_never_run_stands_below_a_measurement(monkeypatch):
+    """A2 (2026-11-25): one order for everything an answer may draw on (`trust.standing`). A confirmed finding and a
+    trusted query that ran stand on a person's word AND the data's; a measured finding on the data's; a trusted query
+    nobody ran on a person's word alone — below the measurement, as the platform's ladder has always put it. Each says
+    why, and a trusted query says how many answers it guided."""
+    conn = _conn()
+    measured = W.book_explorer_finding(finding={"id": "m", "finding": "Orders fell 2%"}, sql="SELECT COUNT(*) FROM orders",
+                                       connection_id=conn, receipt_id="r1")
+    sure = W.book_explorer_finding(finding={"id": "s", "finding": "Returns rose 1%"}, sql="SELECT COUNT(*) FROM returns",
+                                   connection_id=conn, receipt_id="r2")
+    C.confirm(sure, by="user:ana")
+    monkeypatch.setattr("pramanyx.semantic.trusted_queries.list_trusted", lambda c: [SimpleNamespace(
+        id="tq9", question="Revenue by week", sql="SELECT SUM(x) FROM orders", tables=["orders"], source="api",
+        verified_by="user:bo", proposed_by="", verified_at="2026-11-12T00:00:00", proposed_at="", last_executed_at="")])
+    monkeypatch.setattr("pramanyx.semantic.metric_map.map_for", lambda c, s=None: SimpleNamespace(areas=[]))
+    monkeypatch.setattr("pramanyx.discover.usage.answers_of", lambda kind, ref: 3 if kind == "trusted_query" else 0)
+    out = learned_items(conn)
+    assert [i["text"] for i in out["items"]] == ["Returns rose 1%", "Orders fell 2%", "Revenue by week"]
+    by_text = {i["text"]: i for i in out["items"]}
+    assert by_text["Returns rose 1%"]["why"].startswith("confirmed by a person, measured by a run")
+    assert by_text["Orders fell 2%"]["why"].startswith("measured by a run") and by_text["Orders fell 2%"]["ref"] == measured
+    assert by_text["Revenue by week"]["why"] == "approved as a trusted query · used in 3 answers this month · as of 2026-11-12"
+    assert by_text["Revenue by week"]["uses"] == 3 and by_text["Orders fell 2%"]["uses"] is None
+    assert by_text["Orders fell 2%"]["standing_said"] == "measured by a run", "the review queue's sentence keeps its words"
+    assert sure

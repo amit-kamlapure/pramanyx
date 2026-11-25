@@ -48,7 +48,7 @@ def test_the_definitions_picked_for_a_question_are_noted_as_discover_names_them(
                NS(id="aov", title="AOV", area="", body="Revenue over orders", kind="note", tags=[],
                   standing={"tier": "declared"}, connection_id="c1")]
     monkeypatch.setattr(K, "_relevant_entries", lambda q, c, k=None: list(entries))
-    monkeypatch.setattr(K, "_behind", lambda e, c: 0)
+    monkeypatch.setattr(K, "_behind", lambda e, c: (0, 0))
     monkeypatch.setattr(K, "_render_block", lambda es, header=None: "BLOCK")
     monkeypatch.setattr("pramanyx.semantic.areas.rival_meanings", lambda q, c: [])
     AI.start_recording()

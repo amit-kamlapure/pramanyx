@@ -649,6 +649,16 @@ def _reset_guard_process_caches():
 
 
 @pytest.fixture(autouse=True)
+def _reset_answers_read():
+    """Forget the answers each thing was used in between tests (`discover.usage.answers_of`, read every five minutes):
+    one test's journal is not the next one's."""
+    from pramanyx.discover import usage as _usage
+    _usage._answers_read.clear()
+    yield
+    _usage._answers_read.clear()
+
+
+@pytest.fixture(autouse=True)
 def _reset_install_area_names():
     """Forget the install's one name per Area between tests (`semantic.areas.install_names`, read once a minute). A
     test's connections are not the next test's: a name read over one test's registry would name the next one's Areas."""

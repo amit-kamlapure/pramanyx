@@ -272,6 +272,35 @@ def use_of(items: Iterable[Any], *, wait: bool = False) -> tuple[dict[str, dict]
     return out, said
 
 
+#: How long the answers each thing was used in are kept for an ORDER on the answer path (`answers_of`).
+ANSWERS_FRESH_S = 300
+_answers_read: dict[str, tuple[float, dict[tuple[str, str], int]]] = {}
+_answers_lock = threading.Lock()
+
+
+def answers_of(kind: str, ref: str) -> int:
+    """How many answers drew on ``kind`` ``ref`` this month (A1), for the one standing (`trust.standing`): one read of
+    the journal kept five minutes, so a retrieval on the answer path never scans it. 0 when unread — an order then
+    falls to recency, which is what it did before use was counted."""
+    org = _org() or ""
+    now = time.monotonic()
+    with _answers_lock:
+        kept = _answers_read.get(org)
+    if kept is None or now - kept[0] > ANSWERS_FRESH_S:
+        counts: dict[tuple[str, str], int] = {}
+        try:
+            for o in opens(kind=USED):
+                counts[(o["kind"], o["ref"])] = counts.get((o["kind"], o["ref"]), 0) + 1
+        except Exception as exc:  # noqa: BLE001 — see the docstring
+            from pramanyx.kernel.errors import tolerate
+            tolerate(exc, "the answers things were used in could not be read; orders fall to recency",
+                     counter="discover.answers_of")
+        kept = (now, counts)
+        with _answers_lock:
+            _answers_read[org] = kept
+    return kept[1].get((kind, ref), 0)
+
+
 def score(use: Optional[dict]) -> int:
     """How much a thing was used this month, for "most used": its reads, opens or uses, and the answers that drew on
     it."""
