@@ -78,8 +78,9 @@ _ROWS: tuple[Ability, ...] = (
     Ability("search_graph", "Searched what is already known about", "read", BOTH, which=("query", "q", "question")),
     Ability("describe_entity", "Read the object", "read", BOTH, which=("entity", "name", "entity_id")),
     # the Atlas plan's A8 (2026-11-25): the Areas of the business — the organisation's map — read by the coworker
-    Ability("list_areas", "Read the Areas of the business", "read", COWORKER_ONLY),
-    Ability("describe_area", "Read the Area", "read", COWORKER_ONLY, which=("area",)),
+    # the Areas reach every agent (A8): the coworker over MCP, the Ask panel in-process (2026-11-26)
+    Ability("list_areas", "Read the Areas of the business", "read", BOTH),
+    Ability("describe_area", "Read the Area", "read", BOTH, which=("area",)),
     Ability("list_objects", "Listed the objects", "read", COWORKER_ONLY, which=("kind", "type")),
     Ability("get_object", "Read the object", "read", BOTH, which=("name", "object", "object_id", "id")),
     Ability("list_findings", "Read earlier findings", "read", BOTH, which=("query", "table")),
@@ -176,7 +177,7 @@ ABILITIES: dict[str, Ability] = {a.name: a for a in _ROWS}
 #: declared once and served to both, as the Spotlight roster is. Held to what is served by `tests/unit/test_abilities.py`.
 DECLARED_IN_EACH_PLACE: frozenset[str] = frozenset({
     "deep_analysis", "search_graph", "describe_entity", "list_findings", "get_briefing", "get_table_health",
-    "list_trusted_queries",
+    "list_trusted_queries", "list_areas", "describe_area",
 })
 
 #: Abilities a place adds at start-up, by family: named by the install's own agents, automations and ontology, so they

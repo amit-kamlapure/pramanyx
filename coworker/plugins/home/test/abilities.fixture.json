@@ -219,7 +219,8 @@
    "allowed": "goes_ahead",
    "why": "",
    "places": [
-    "coworker"
+    "coworker",
+    "panel"
    ],
    "only_when": "",
    "same_as": ""
@@ -235,7 +236,8 @@
    "allowed": "goes_ahead",
    "why": "",
    "places": [
-    "coworker"
+    "coworker",
+    "panel"
    ],
    "only_when": "",
    "same_as": ""

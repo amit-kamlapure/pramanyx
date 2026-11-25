@@ -153,6 +153,17 @@ def test_a_metric_says_its_formula_what_it_is_cut_by_and_what_it_reads(monkeypat
     [item] = I.metrics(_scope()).items
     assert item.detail["formula"] == "SUM(sale_price)"
     assert item.detail["dimensions"] == "status, region" and item.detail["tables"] == "order_items"
+    assert "target" not in item.detail, "no target, none said"
+
+
+def test_a_metric_carries_its_target_the_one_meaning_of_off_target(monkeypatch):
+    """A8 (2026-11-26): Health on the Area reads which metrics there have a target from the catalogue, no warehouse."""
+    monkeypatch.setattr("pramanyx.routers.metrics.get_metrics", lambda conn: [
+        {"name": "revenue", "label": "Revenue", "connection": "c1", "status": "approved", "sql": "SUM(x)",
+         "target_value": 100.0, "target_direction": "higher", "target_period": "month"}])
+    monkeypatch.setattr(I, "_coverage_placements", lambda scope, conn: ({}, {}, None))
+    [item] = I.metrics(_scope()).items
+    assert (item.detail["target"], item.detail["target_direction"], item.detail["target_period"]) == (100.0, "higher", "month")
 
 
 def test_an_area_s_page_says_only_what_is_said_of_the_connections_that_hold_it(monkeypatch):

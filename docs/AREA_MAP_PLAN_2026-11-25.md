@@ -208,7 +208,10 @@ in its new place, never dropped.
   `list_areas`, `describe_area`, over the Atlas's own doors); a published Definition placed in an Area is given to every
   connection the Area spans (`connection_kb.area_entries`; never a draft, never over a connection's own word); a
   threshold monitor with no line of its own is judged by its metric's target (`monitors.runner.metric_target_of`).
-  *Not yet:* the Ask panel's own tools for the Areas (its tools run in-process), Health shown on the Area. As written
+  *DONE 2026-11-26:* the Ask panel reads the Areas too — `list_areas` and `describe_area` in its in-process roster
+  (`agent/platform_tools.py`), the MCP tools' own bodies over the Atlas read directly, one row each in the abilities for
+  both places; Health is shown on the Area — which of its metrics have a target, from the catalogue (a metric's detail
+  carries its target), each measured on or off target by the scorecard on a click, never on load. As written
   (widened by §7.1): a Definition placed in an Area may hold for
   every connection the Area spans; the organisation's ontology reaches the answer path; **the Areas themselves reach
   every agent** — the answer path and the coworker's MCP get "which Area is this question in, who answers for it, what

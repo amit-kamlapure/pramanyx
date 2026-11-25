@@ -288,7 +288,10 @@ def metrics(scope: Scope) -> Found:
                 # what an opened metric says on the Atlas (A4b): its formula, what it is cut by, what it reads
                 detail={"unit": m.get("unit") or "", "measurable": m.get("measurable"),
                         "formula": str(m.get("sql") or ""), "dimensions": _listed(m.get("dimensions")),
-                        "tables": _listed(m.get("tables"))}))
+                        "tables": _listed(m.get("tables")),
+                        # its target, kept on the metric — the one meaning of "off target" Health shows on the Area (A8)
+                        **({"target": m["target_value"], "target_direction": m.get("target_direction") or "",
+                            "target_period": m.get("target_period") or ""} if m.get("target_value") is not None else {})}))
     return found
 
 

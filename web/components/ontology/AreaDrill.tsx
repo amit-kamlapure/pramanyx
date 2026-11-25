@@ -20,6 +20,7 @@ import { Icon } from "@/components/ui/icon";
 import { IconSquare } from "@/components/ui/icon-square";
 import { Loading, ReadFailed } from "@/components/ui/states";
 import { openInApp } from "@/lib/addressOnce";
+import { getHealthScorecard, type ScorecardItem } from "@/lib/api";
 import { areaIcon } from "@/lib/areaIcons";
 import {
   areaTone, curve, KIND_TONE, oneSided, reviewFilters, reviewWord, tint, waitingWords, type AtlasArea, type Disc,
@@ -287,6 +288,83 @@ function fanTitle(fan: Fan): string {
   return fan.key === "learned" ? "Learned" : fan.key === "certified" ? "Certified" : KIND_TITLES[fan.key];
 }
 
+const HEALTH_WORDS: Record<string, { word: string; tone: "up" | "amber" | "down" | "plain" }> = {
+  green: { word: "On target", tone: "up" }, yellow: { word: "Short of target", tone: "amber" },
+  red: { word: "Off target", tone: "down" }, unknown: { word: "Not measured", tone: "plain" },
+};
+
+/**
+ * Health on the Area (the Atlas plan's A8 and §7.10, 2026-11-26): one meaning of "off target" — a metric's target, kept on
+ * the metric, is what a monitor watches and what Health shows here. Which of the Area's metrics have a target is read
+ * from the catalogue (no warehouse); measuring them runs each one's own query, so it waits for a click.
+ */
+function AreaHealth({ area, workspaceId }: { area: string; workspaceId?: string }) {
+  const [got, setGot] = useState<{ area: string; targeted: DiscoverItem[]; total: number } | { area: string; failed: string } | null>(null);
+  const [scores, setScores] = useState<{ area: string; by: Map<string, ScorecardItem>; unread: string[] } | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let live = true;
+    readDiscoverItems({ kind: "metric", area, limit: 200, workspaceId })
+      .then((r) => { if (live) setGot({ area, targeted: r.items.filter((i) => i.detail?.target != null), total: r.total }); })
+      .catch((e) => { if (live) setGot({ area, failed: e instanceof Error ? e.message : String(e) }); });
+    return () => { live = false; };
+  }, [area, workspaceId]);
+  const here = got?.area === area ? got : null;
+  const measured = scores?.area === area ? scores : null;
+  const measure = async (targeted: DiscoverItem[]) => {
+    setBusy(true);
+    const by = new Map<string, ScorecardItem>();
+    const unread: string[] = [];
+    for (const conn of [...new Set(targeted.map((i) => i.connection_id))]) {
+      try { for (const row of await getHealthScorecard(conn)) by.set(`${conn}/${row.name}`, row); }
+      catch { unread.push(targeted.find((i) => i.connection_id === conn)?.connection_name ?? conn); }
+    }
+    setScores({ area, by, unread });
+    setBusy(false);
+  };
+  return (
+    <section aria-label="Health" data-testid="atlas-area-health" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      <span className="aug-fs-xs" style={MUTED}>Health</span>
+      {here === null ? <Loading what="which metrics here have a target" />
+        : "failed" in here ? <Said lines={[`Which metrics here have a target could not be read: ${here.failed}`]} />
+        : here.targeted.length === 0 ? (
+          <span className="aug-fs-sm" style={MUTED}>
+            {`None of the ${formatCount(here.total)} metric${here.total === 1 ? "" : "s"} here has a target yet — a target is set on a metric's page.`}
+          </span>
+        ) : (
+          <>
+            <span style={{ ...ROW, gap: 8, justifyContent: "space-between" }}>
+              <span className="aug-fs-sm" style={{ color: "var(--t2)" }}>
+                {`${formatCount(here.targeted.length)} of ${formatCount(here.total)} metrics here have a target`}
+              </span>
+              <Button size="xs" variant="outline" disabled={busy} onClick={() => void measure(here.targeted)}
+                title="Runs each one's own query on its warehouse">{busy ? "Measuring…" : measured ? "Measure again" : "Measure them now"}</Button>
+            </span>
+            {here.targeted.map((i) => {
+              const s = measured?.by.get(i.id);
+              const look = HEALTH_WORDS[s?.status ?? "unknown"] ?? HEALTH_WORDS.unknown;
+              const d = i.detail as { target?: number; target_direction?: string };
+              return (
+                <div key={i.id} className="aug-discover-row" data-testid="atlas-health-row">
+                  <span style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0, padding: "6px 8px" }}>
+                    <span className="k" style={{ color: KIND_TONE.metric }}><Icon name="metric" size={15} /></span>
+                    <span className="main">
+                      <span className="n aug-fs-chrome">{i.name}</span>
+                      <span className="d aug-fs-sm">{[`target ${formatCount(d.target ?? 0)}${d.target_direction ? ` (${d.target_direction} is better)` : ""}`,
+                        s?.current != null ? `now ${formatCount(s.current)}` : ""].filter(Boolean).join(" · ")}</span>
+                    </span>
+                    <span className="meta aug-fs-xs">{measured && <Chip tone={look.tone}>{look.word}</Chip>}</span>
+                  </span>
+                </div>
+              );
+            })}
+            {measured && measured.unread.length > 0 && <Said lines={[`Not measured: ${measured.unread.join(", ")}.`]} />}
+          </>
+        )}
+    </section>
+  );
+}
+
 /** One place in the breadcrumb: its name, and where it goes — none for where the reader is. */
 export interface Crumb { label: string; go?: () => void }
 /** How many places the breadcrumb names; before them a "…" goes one place up (the reference's "… › Customers › Pages"). */
@@ -440,6 +518,7 @@ export function AreaRail({ area, ancestors = [], page, pageFailed, onRetry, conn
           {pageFailed ? <ReadFailed what="the Area" error={pageFailed} onRetry={onRetry} />
             : !page ? <Loading what="what the Area holds" /> : (
               <>
+                <AreaHealth area={area.id} workspaceId={workspaceId} />
                 {page.children.length > 0 && (
                   <section style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                     <span className="aug-fs-xs" style={MUTED}>Inside it</span>

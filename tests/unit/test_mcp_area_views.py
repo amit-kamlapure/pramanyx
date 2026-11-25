@@ -69,3 +69,27 @@ def test_the_tools_reach_the_atlas_through_the_api_under_the_caller(monkeypatch)
     assert asyncio.run(client.describe_area("orders & sales"))["name"] == "Orders & sales"
     assert asked[1:] == [("/discover/areas/orders%20%26%20sales", {"by_use": True}),
                          ("/discover/atlas/review", {"area": "orders & sales"})]
+
+
+def test_the_ask_panel_reads_the_areas_in_process_with_the_same_bodies(monkeypatch):
+    """A8 (2026-11-26): the Ask panel's tools run in-process; its list_areas and describe_area are the MCP tools' own
+    bodies (`mcp.area_views`) over the Atlas read directly, so the two places cannot disagree about the Areas."""
+    from pramanyx.agent import platform_tools as P
+    from pramanyx.discover import atlas as AT
+    from pramanyx.discover import service as S
+    from pramanyx.mcp import area_views as V
+    seen = {}
+    monkeypatch.setattr("pramanyx.db.registry.list_connections", lambda: [{"id": "c1", "name": "theLook"}])
+    monkeypatch.setattr("pramanyx.security.authz.org_visible_conn_ids", lambda: None)
+    monkeypatch.setattr(AT, "atlas", lambda scope: seen.setdefault("atlas", scope) and {"areas": []} or {"areas": []})
+    monkeypatch.setattr(V, "areas_for_agents", lambda atlas: {"areas": ["via the MCP body"], "read": atlas})
+    assert P.list_areas("c1", {})["areas"] == ["via the MCP body"]
+    assert seen["atlas"].connections == {"c1": "theLook"}
+    monkeypatch.setattr(S, "area_page", lambda scope, area, by_use_first=False: None if area == "nowhere" else {"area": {"id": area}})
+    monkeypatch.setattr(AT, "review_in", lambda scope, area: {"total": 2})
+    monkeypatch.setattr(V, "area_for_agents", lambda page, review: {"area": page["area"]["id"], "waiting": review["total"]})
+    assert P.describe_area("c1", {"area": "orders_sales"}) == {"area": "orders_sales", "waiting": 2}
+    assert "no Area 'nowhere'" in P.describe_area("c1", {"area": "nowhere"})["error"]
+    assert "which Area" in P.describe_area("c1", {})["error"]
+    names = [t.name for t in P.platform_tools("c1")]
+    assert {"list_areas", "describe_area"} <= set(names)

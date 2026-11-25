@@ -198,6 +198,25 @@ describe("the Atlas, by Area", () => {
     expect((await findListed()).map((r) => r.textContent)).toEqual(["ordersCertifiedread from its tables"]);
   });
 
+  it("shows Health on the Area: which metrics here have a target, measured only on a click", async () => {
+    const many = [item("metric", "c1/revenue", "Revenue", { detail: { target: 100, target_direction: "higher" } }),
+      item("metric", "c1/aov", "Average order value")];
+    const urls = serve(ATLAS, many);
+    const fetched = vi.mocked(fetch);
+    const answer = fetched.getMockImplementation()!;
+    fetched.mockImplementation(async (url: RequestInfo | URL, init?: RequestInit) => (String(url).includes("/health-scorecard")
+      ? new Response(JSON.stringify([{ name: "revenue", label: "Revenue", current: 120, target: 100, variance: 0.2, status: "green",
+        unit: null, target_period: null, benchmark_source: null }]))
+      : answer(url as string, init)));
+    render(<AreaMap />);
+    fireEvent.click(await screen.findByTestId("atlas-bubble-orders_sales"));
+    const health = await screen.findByTestId("atlas-area-health");
+    await vi.waitFor(() => expect(health).toHaveTextContent("1 of 2 metrics here have a target"));
+    expect(urls.some((u) => u.includes("/health-scorecard"))).toBe(false);          // no warehouse until asked
+    fireEvent.click(within(health).getByRole("button", { name: "Measure them now" }));
+    await vi.waitFor(() => expect(screen.getByTestId("atlas-health-row")).toHaveTextContent("Revenuetarget 100 (higher is better) · now 120On target"));
+  });
+
   it("lets the reader widen or narrow the left panel, and keeps the width they chose", async () => {
     window.localStorage.removeItem("pramanyx_areas_rail_width");
     serve();
@@ -226,13 +245,13 @@ describe("the Atlas, by Area", () => {
     fireEvent.click(screen.getByRole("button", { name: "Page 3" }));
     await vi.waitFor(() => expect(listed()).toHaveLength(5));
     expect(listed()[0]).toHaveTextContent("Metric 40");
-    const asked = urls.filter((u) => u.includes("/discover/items"));
+    const asked = urls.filter((u) => u.includes("/discover/items") && u.includes("sort="));   // the list's own reads
     expect(asked[0]).toContain("sort=use");
     expect(asked.at(-1)).toContain("cursor=40");
     fireEvent.keyDown(screen.getByRole("button", { name: "In order: Most used" }), { key: "Enter" });
     fireEvent.click(await screen.findByRole("menuitem", { name: "Name" }));
-    await vi.waitFor(() => expect(urls.filter((u) => u.includes("/discover/items")).at(-1)).toContain("sort=name"));
-    expect(urls.filter((u) => u.includes("/discover/items")).at(-1)).toContain("cursor=0");    // a new order starts at its first page
+    await vi.waitFor(() => expect(urls.filter((u) => u.includes("/discover/items") && u.includes("sort=")).at(-1)).toContain("sort=name"));
+    expect(urls.filter((u) => u.includes("/discover/items") && u.includes("sort=")).at(-1)).toContain("cursor=0");    // a new order starts at its first page
   });
 
   it("searches what is in view from the head of the left panel; a thing found opens on the right", async () => {
