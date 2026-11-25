@@ -5,7 +5,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AreaMap } from "@/components/ontology/AreaMap";
 import type { Atlas, AtlasArea } from "@/lib/areaMap";
-import { forgetDiscoverReads, type AtlasReview, type DiscoverAreaPage, type DiscoverItem, type ReviewRow } from "@/lib/discover";
+import { ADDRESS_EVENT } from "@/lib/addressOnce";
+import {
+  AREA_CHANGED_EVENT, forgetDiscoverReads, type AtlasReview, type DiscoverAreaPage, type DiscoverItem, type ReviewRow,
+} from "@/lib/discover";
 import type { LearnedItem } from "@/lib/learned";
 import { InspectorHost, InspectorProvider } from "@/components/shell/Inspector";
 import { PageChromeProvider } from "@/components/shell/PageChrome";
@@ -78,7 +81,7 @@ const listed = () => screen.getAllByTestId("discover-row");
 const findListed = () => screen.findAllByTestId("discover-row");
 const openRow = (row: HTMLElement) => fireEvent.click(row.querySelector("a")!);
 
-function serve(body: Atlas = ATLAS, many?: DiscoverItem[]) {
+function serve(body: Atlas = ATLAS, many?: DiscoverItem[], page: DiscoverAreaPage = PAGE) {
   const urls: string[] = [];
   vi.stubGlobal("fetch", vi.fn(async (url: string) => {
     urls.push(String(url));
@@ -87,7 +90,7 @@ function serve(body: Atlas = ATLAS, many?: DiscoverItem[]) {
     if (String(url).includes("/brain/map")) return new Response(JSON.stringify({ connection_id: "c1", vaults: [], boxes: [], edges: [] }));
     if (String(url).includes("/org-intelligence")) return new Response(JSON.stringify([]));
     if (String(url).includes("/connections")) return new Response(JSON.stringify([]));
-    if (String(url).includes("/discover/areas/")) return new Response(JSON.stringify(PAGE));
+    if (String(url).includes("/discover/areas/")) return new Response(JSON.stringify(page));
     if (String(url).includes("/discover/items")) {
       // the server's paged list of a kind in an Area (`discover/service.list_items`), as many as `many` asks for
       const q = new URL(String(url), "http://x").searchParams;
@@ -155,6 +158,30 @@ describe("the Atlas, by Area", () => {
     expect(screen.getByRole("link", { name: "Open its page in Discover" }).getAttribute("href")).toContain("id=orders_sales");
     fireEvent.click(within(screen.getByRole("navigation", { name: "Where you are" })).getByRole("button", { name: "Ontology" }));
     expect(screen.queryByTestId("atlas-area-panel")).toBeNull();
+  });
+
+  it("sends an Area's editing to its own page — a link, never an editor in the narrow panel — and reads again when it changes there", async () => {
+    const urls = serve(ATLAS, undefined, { ...PAGE, can_curate: true });
+    render(<AreaMap />);
+    fireEvent.click(await screen.findByTestId("atlas-bubble-orders_sales"));
+    const edit = await screen.findByTestId("atlas-area-edit");
+    expect(edit).toHaveTextContent("Edit on its page");
+    const handed: string[][] = [];
+    const hear = (e: Event) => handed.push((e as CustomEvent<{ words: string[] }>).detail.words);
+    window.addEventListener(ADDRESS_EVENT, hear);
+    fireEvent.click(edit);
+    window.removeEventListener(ADDRESS_EVENT, hear);
+    expect(new URLSearchParams(window.location.search).get("tab")).toBe("discover");
+    expect(new URLSearchParams(window.location.search).get("id")).toBe("orders_sales");
+    expect(handed).toEqual([["view", "edit"]]);                     // the page it opens is asked to open its editor
+    expect(screen.queryByTestId("discover-area-editor")).toBeNull();
+    // saved there: the map and the Area open here are read again
+    const atlasReads = () => urls.filter((u) => u.includes("/discover/atlas") && !u.includes("/discover/atlas/review")).length;
+    const pageReads = () => urls.filter((u) => u.includes("/discover/areas/orders_sales")).length;
+    const [atlasBefore, pageBefore] = [atlasReads(), pageReads()];
+    act(() => { window.dispatchEvent(new CustomEvent(AREA_CHANGED_EVENT)); });
+    await vi.waitFor(() => expect([atlasReads(), pageReads()]).toEqual([atlasBefore + 1, pageBefore + 1]));
+    window.history.replaceState(null, "", "/");
   });
 
   it("says when what waits is not read yet, rather than calling it none", async () => {

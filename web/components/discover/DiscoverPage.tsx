@@ -67,10 +67,21 @@ export function DiscoverPage({ openId, onOpenArea, onName, connections, workspac
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   // `?q=` — ⌘K's "Search everything" opens Discover on the words typed there (`lib/addressOnce.ts`)
   useFromAddress(["q"], ({ q }) => setFilters(f => ({ ...NO_FILTERS, conn: f.conn, q })));
+  // `?edit=<area>` — the Ontology's "Edit on its page" opens the Area here with its editor open (the user, 2026-11-26:
+  // an Area is edited on its own page). Each ask draws the page afresh, so asking again while it is open opens the
+  // editor again; leaving the Area lets the ask go, so coming back to it later opens it to read.
+  const [editAsk, setEditAsk] = useState<{ area: string; n: number } | null>(null);
+  useFromAddress(["edit"], ({ edit }) => setEditAsk(a => ({ area: edit, n: (a?.n ?? 0) + 1 })));
+  const [shownArea, setShownArea] = useState(openId);
+  if (shownArea !== openId) {
+    setShownArea(openId);
+    if (editAsk && editAsk.area !== openId) setEditAsk(null);
+  }
+  const asked = editAsk && editAsk.area === openId ? editAsk.n : 0;
   if (!ready) return <Page testId="discover"><Loading what="Discover" /></Page>;
   if (openId) {
-    return <AreaView key={`${openId}:${filters.conn}:${workspaceId}`} areaId={openId} conn={filters.conn} workspaceId={workspaceId}
-      onBack={() => onOpenArea(null)} onOpenArea={onOpenArea} onName={onName} />;
+    return <AreaView key={`${openId}:${filters.conn}:${workspaceId}:${asked}`} areaId={openId} conn={filters.conn}
+      workspaceId={workspaceId} startEditing={asked > 0} onBack={() => onOpenArea(null)} onOpenArea={onOpenArea} onName={onName} />;
   }
   return <HomeView filters={filters} setFilters={setFilters} onOpenArea={onOpenArea} onName={onName} connections={connections}
     workspaceId={workspaceId} />;
@@ -404,20 +415,22 @@ function Results({ filters, workspaceId, areaNames, many, onClear }: {
 
 // ── one Area ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
-function AreaView({ areaId, conn, workspaceId, onBack, onOpenArea, onName }: {
+function AreaView({ areaId, conn, workspaceId, startEditing = false, onBack, onOpenArea, onName }: {
   areaId: string; conn: string; workspaceId: string; onBack: () => void; onOpenArea: (id: string) => void;
   onName: (name: string | null) => void;
+  /** Open with the editor open: a link asked for it (`?edit=`). Drawn afresh for each Area, so read once, as it mounts. */
+  startEditing?: boolean;
 }) {
   const [page, setPage] = useState<DiscoverAreaPage | null | undefined>(undefined);
   const [err, setErr] = useState("");
   const [tick, setTick] = useState(0);
-  // a curator's change re-reads the page in place; another Area, connection or workspace starts it afresh
-  const [mode, setMode] = useState<"" | "edit" | "add">("");
+  // a curator's change re-reads the page in place; another Area, connection or workspace draws it afresh (its key)
+  const [mode, setMode] = useState<"" | "edit" | "add">(startEditing ? "edit" : "");
   const shown = useRef("");
   useEffect(() => {
     let alive = true;
     const key = `${areaId}|${conn}|${workspaceId}`;
-    if (shown.current !== key) { shown.current = key; setPage(undefined); setMode(""); }
+    if (shown.current !== key) { shown.current = key; setPage(undefined); }
     setErr("");
     readDiscoverArea(areaId, conn, workspaceId, tick > 0).then(p => { if (alive) setPage(p); })
       .catch(e => { if (alive) setErr(String((e as Error)?.message ?? e)); });
@@ -466,7 +479,7 @@ function AreaView({ areaId, conn, workspaceId, onBack, onOpenArea, onName }: {
         </p>
       </div>
       <Said lines={page.said} />
-      {mode === "edit" && <AreaEditor page={page} workspaceId={workspaceId} onCancel={() => setMode("")}
+      {mode === "edit" && page.can_curate && <AreaEditor page={page} workspaceId={workspaceId} onCancel={() => setMode("")}
         onSaved={() => { setMode(""); reload(); }} />}
       {mode === "add" && <AddToArea page={page} workspaceId={workspaceId} onAdded={reload} onClose={() => setMode("")} />}
       {page.featured.length > 0 && (

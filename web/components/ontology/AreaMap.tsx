@@ -29,7 +29,7 @@ import { areaIcon } from "@/lib/areaIcons";
 import {
   areaTone, bounds, changeWords, fanOf, packBubbles, tint, radiusFor, R_MIN, share, waiting, waitingWords, type Atlas, type AtlasArea, type FanKey,
 } from "@/lib/areaMap";
-import { readAtlas, readDiscoverArea, usageLine, type DiscoverArea, type DiscoverAreaPage } from "@/lib/discover";
+import { AREA_CHANGED_EVENT, readAtlas, readDiscoverArea, usageLine, type DiscoverArea, type DiscoverAreaPage } from "@/lib/discover";
 import { countNoun, formatCount } from "@/lib/format";
 import { getActiveWorkspace, WORKSPACE_EVENT } from "@/lib/workspace";
 
@@ -161,8 +161,8 @@ export function AreaMap({ connectionId }: {
   const [railWidth, keepRailWidth] = useKeptWidth("pramanyx_areas_rail_width", RAIL_DEFAULT, RAIL_MIN, RAIL_MAX);
   const closeAll = inspector.closeAll;
 
-  const load = useCallback(() => {
-    readAtlas<Atlas>(getActiveWorkspace() || undefined).then((a) => { setAtlas(a); setFailed(""); })
+  const load = useCallback((fresh = false) => {
+    readAtlas<Atlas>(getActiveWorkspace() || undefined, fresh).then((a) => { setAtlas(a); setFailed(""); })
       .catch((e) => setFailed(e instanceof Error ? e.message : String(e)));
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -188,6 +188,13 @@ export function AreaMap({ connectionId }: {
     setPicked(id); setKind(null); setLearned(null); setZoom(1);
     if (id) readPage(id);
   }, [readPage]);
+  // an Area changed on its own page (its words, its owners, what it holds — Discover, where an Area is edited): the map
+  // and the Area open here read it again, so coming back shows what was saved without a refresh
+  useEffect(() => {
+    const again = () => { load(true); if (picked) readPage(picked, true); };
+    window.addEventListener(AREA_CHANGED_EVENT, again);
+    return () => window.removeEventListener(AREA_CHANGED_EVENT, again);
+  }, [load, readPage, picked]);
   useEffect(() => {
     const el = canvas.current;
     if (!el || typeof ResizeObserver === "undefined") return undefined;
@@ -266,8 +273,7 @@ export function AreaMap({ connectionId }: {
         {chosen ? (
           <AreaRail area={chosen} ancestors={ancestors} page={page} pageFailed={pageFailed} onRetry={() => readPage(chosen.id, true)}
             connections={atlas.connections} fan={fan} kind={kind} onKind={chooseKind} learned={learned} onOpen={openOne}
-            onPickArea={openArea} onBack={() => pick(null)} workspaceId={workspaceId}
-            onSaved={() => { readPage(chosen.id, true); load(); }} />
+            onPickArea={openArea} onBack={() => pick(null)} workspaceId={workspaceId} />
         ) : (
           <RailHead crumbs={[{ label: "Ontology" }]} workspaceId={workspaceId} onOpen={openOne}
             areaNames={Object.fromEntries([...atlas.areas, ...atlas.quiet].map((x) => [x.id, x.name]))}>

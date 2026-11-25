@@ -320,11 +320,23 @@ export interface AreaChanges {
   icon?: string;
 }
 
+/** Said when an Area changed on its page — its words or owners saved, a thing placed in it or taken out — so what is
+ *  drawn from it elsewhere (the Ontology's Areas) reads it again without a refresh. */
+export const AREA_CHANGED_EVENT = "pramanyx:area-changed";
+
+/** An Area's own page, in Discover; `edit` opens it with its editor open — where an Area is edited (the user,
+ *  2026-11-26: not in the Ontology's narrow panel). */
+export function areaPageHref(areaId: string, edit = false): string {
+  const id = encodeURIComponent(areaId);
+  return `/?view=discover&tab=discover&id=${id}${edit ? `&edit=${id}` : ""}`;
+}
+
 async function write(href: string, body: unknown, what: string): Promise<unknown> {
   const res = await fetch(href, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   const out = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(fastApiError(out, `${what} failed (${res.status})`));
   forgetDiscoverReads();
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(AREA_CHANGED_EVENT));
   return out;
 }
 

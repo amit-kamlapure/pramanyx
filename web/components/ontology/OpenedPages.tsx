@@ -25,7 +25,7 @@ import { IconSquare } from "@/components/ui/icon-square";
 import { openInApp } from "@/lib/addressOnce";
 import { areaIcon } from "@/lib/areaIcons";
 import { areaTone, KIND_TONE, waitingWords } from "@/lib/areaMap";
-import { holdsWords, KIND_ICON, KIND_WORDS, markOf, ownersLine, usageLine, type DiscoverItem } from "@/lib/discover";
+import { areaPageHref, holdsWords, KIND_ICON, KIND_WORDS, markOf, ownersLine, usageLine, type DiscoverItem } from "@/lib/discover";
 import { countNoun, formatCount, relTime } from "@/lib/format";
 import { KIND_WORDS as LEARNED_WORDS, whereFrom, type Promoted } from "@/lib/learned";
 import type { AreaLike, Opened } from "@/components/ontology/AreaDrill";
@@ -139,7 +139,7 @@ function AreaPage({ area, ctx }: { area: AreaLike; ctx: OpenedContext }) {
         )}
         sub={area.question}
         actions={(
-          <Button size="xs" variant="outline" onClick={() => openInApp(`/?view=discover&tab=discover&id=${encodeURIComponent(area.id)}`)}>
+          <Button size="xs" variant="outline" onClick={() => openInApp(areaPageHref(area.id))}>
             Open its page <Icon name="external" size={12} />
           </Button>
         )} />

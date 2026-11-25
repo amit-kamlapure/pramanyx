@@ -13,7 +13,6 @@ import { DropdownMenu } from "@radix-ui/themes";
 import { useEffect, useRef, useState } from "react";
 
 import { Chip, Empty, MUTED, ROW } from "@/components/clarity/kit";
-import { AreaEditor } from "@/components/discover/AreaCuration";
 import { inPlace, ItemRow, Said } from "@/components/discover/parts";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
@@ -27,7 +26,7 @@ import {
   type Fan, type FanKey,
 } from "@/lib/areaMap";
 import {
-  holdsWords, KIND_TITLES, ownersLine, readAtlasReview, readDiscoverItems, readDiscoverSearch,
+  areaPageHref, holdsWords, KIND_TITLES, ownersLine, readAtlasReview, readDiscoverItems, readDiscoverSearch,
   type AtlasReview, type DiscoverArea,
   type DiscoverAreaPage, type DiscoverItem,
 } from "@/lib/discover";
@@ -463,15 +462,14 @@ export function RailHead({ crumbs, area = "", workspaceId, onOpen, areaNames, ch
 }
 
 export function AreaRail({ area, ancestors = [], page, pageFailed, onRetry, connections, fan, kind, onKind, learned, onOpen, onPickArea,
-  onBack, workspaceId, onSaved }: {
+  onBack, workspaceId }: {
   area: AtlasArea; page: DiscoverAreaPage | null; pageFailed: string; onRetry: () => void;
   /** The Areas it sits inside, the outermost first — its place in the breadcrumb. */
   ancestors?: AreaLike[];
   connections: { id: string; name: string }[]; fan: Fan[]; kind: FanKey | null; onKind: (k: FanKey | null) => void;
   learned: { items: LearnedHere[]; unread: string[] } | null | "failed"; onOpen: (o: Opened) => void;
-  onPickArea: (a: AreaLike) => void; onBack: () => void; workspaceId?: string; onSaved: () => void;
+  onPickArea: (a: AreaLike) => void; onBack: () => void; workspaceId?: string;
 }) {
-  const [editing, setEditing] = useState(false);
   const chosenFan = kind ? fan.find((f) => f.key === kind) ?? null : null;
   const on = connections.filter((c) => area.connections.includes(c.id)).map((c) => c.name);
   return (
@@ -489,17 +487,20 @@ export function AreaRail({ area, ancestors = [], page, pageFailed, onRetry, conn
           {area.question && <span className="aug-fs-sm" style={MUTED}>{area.question}</span>}
         </span>
       </span>
-      {editing && page ? (
-        <AreaEditor page={page} workspaceId={workspaceId} onSaved={() => { setEditing(false); onSaved(); }} onCancel={() => setEditing(false)} />
-      ) : (
-        <span style={{ ...ROW, gap: 8, justifyContent: "space-between" }}>
-          <span className="aug-fs-sm" data-testid="atlas-area-contacts"
-            style={{ color: area.business_owners.length || area.technical_owners.length ? "var(--t2)" : "var(--amb4)" }}>
-            {ownersLine(area)}
-          </span>
-          {page?.can_curate && <Button size="xs" variant="secondary" onClick={() => setEditing(true)}>Edit</Button>}
+      {/* an Area is edited on its own page, where its editor has the room (the user, 2026-11-26: "User cannot edit
+          areas here.. it needs to go the proper page … give a link instead") */}
+      <span style={{ ...ROW, gap: 8, justifyContent: "space-between" }}>
+        <span className="aug-fs-sm" data-testid="atlas-area-contacts"
+          style={{ color: area.business_owners.length || area.technical_owners.length ? "var(--t2)" : "var(--amb4)" }}>
+          {ownersLine(area)}
         </span>
-      )}
+        {page?.can_curate && (
+          <Button size="xs" variant="outline" data-testid="atlas-area-edit" style={{ flex: "0 0 auto" }}
+            onClick={() => openInApp(areaPageHref(area.id, true))}>
+            <Icon name="edit" size={12} />Edit on its page<Icon name="external" size={12} />
+          </Button>
+        )}
+      </span>
       {kind === "review" ? <ReviewList area={area.id} /> : chosenFan ? (
         <KindList area={area.id} fan={chosenFan} learned={learned} onOpen={onOpen} workspaceId={workspaceId} many={area.connections.length > 1} />
       ) : (
@@ -546,7 +547,10 @@ export function AreaRail({ area, ancestors = [], page, pageFailed, onRetry, conn
                 {page.said.length > 0 && <span className="aug-fs-xs" style={MUTED}>{page.said.join(" ")}</span>}
               </>
             )}
-          <a href={`/?view=discover&tab=discover&id=${encodeURIComponent(area.id)}`} className="aug-fs-sm">Open its page in Discover</a>
+          <a href={areaPageHref(area.id)} className="aug-fs-sm"
+            onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey) return; e.preventDefault(); openInApp(areaPageHref(area.id)); }}>
+            Open its page in Discover
+          </a>
         </>
       )}
       </RailHead>
