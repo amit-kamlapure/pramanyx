@@ -692,15 +692,6 @@ export async function getTypePaths(
   return res.json();
 }
 
-/** Choose the shape an entity is drawn as on the Business Atlas; "" lets go of the choice. It is a change to the
- *  ontology like any other a person makes: it waits in the draft, where the editing screens already show it. */
-export async function chooseEntityShape(connectionId: string, entityId: string, shape: string, schemaName?: string): Promise<void> {
-  const res = await fetch(
-    `${getApiBase()}/ontology/entities/${encodeURIComponent(entityId)}?${scope(connectionId, schemaName)}`,
-    { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ drawn_as: shape }) });
-  if (!res.ok) throw new Error(await detailOf(res));
-}
-
 /** Change the words of an entity: what people call it, the sentence that says what it is, the domain it is filed
  *  under. Its id — what links, rules and metrics point at — never changes. Only the words handed in are changed. */
 export async function changeEntityWords(

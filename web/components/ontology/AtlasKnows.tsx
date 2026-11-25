@@ -17,7 +17,8 @@ import { SelectField } from "@/components/ui/select";
 import { Loading, ReadFailed } from "@/components/ui/states";
 import { toast } from "@/components/ui/toast";
 import {
-  deleteOrgInsight, getBrainMap, getConnections, getOrgIntelligence, type BrainMap, type Connection, type OrgInsight,
+  deleteOrgInsight as takeOutOfOrg, getBrainMap, getConnections, getOrgIntelligence, type BrainMap, type Connection,
+  type OrgInsight as Promoted,
 } from "@/lib/api";
 import { boxFigure, edgeLines, recentFacts, vaultColumns } from "@/lib/brainMap";
 import { agoWords } from "@/lib/canvasList";
@@ -188,7 +189,7 @@ function ChangedFacts({ map, all, onAll }: { map: BrainMap; all: boolean; onAll:
 
 /** The connection a finding was promoted from — read off the canvas key a Briefing's promotion writes when an older
  *  record carries no connection; "" for one promoted from a Data Canvas. */
-function sourceOf(f: OrgInsight): string {
+function sourceOf(f: Promoted): string {
   if (f.connection_id) return f.connection_id;
   return f.canvas_id?.startsWith("conn:") ? f.canvas_id.slice(5) : "";
 }
@@ -196,11 +197,11 @@ function sourceOf(f: OrgInsight): string {
 /** Prose the platform wrote, as a line: no markdown emphasis (nothing renders it here), the org's currency. */
 const plain = (text: string) => localizeCurrency(text).replace(/\*+/g, "");
 
-const domainOf = (f: OrgInsight) => f.domain?.trim() || "General";
+const domainOf = (f: Promoted) => f.domain?.trim() || "General";
 
 export function PromotedFindings() {
   const [tick, setTick] = useState(0);
-  const [read, setRead] = useState<{ tick: number; found: OrgInsight[] | null; error: string | null } | null>(null);
+  const [read, setRead] = useState<{ tick: number; found: Promoted[] | null; error: string | null } | null>(null);
   const [conns, setConns] = useState<Connection[]>([]);
   const [search, setSearch] = useState("");
   const [removing, setRemoving] = useState<string | null>(null);
@@ -221,7 +222,7 @@ export function PromotedFindings() {
   const query = search.trim().toLowerCase();
   const domains = useMemo(() => {
     const shown = (all ?? []).filter((f) => !query || [f.text, f.domain, f.angle].some((v) => (v || "").toLowerCase().includes(query)));
-    const by = new Map<string, OrgInsight[]>();
+    const by = new Map<string, Promoted[]>();
     for (const f of [...shown].sort((a, b) => (b.promoted_at || "").localeCompare(a.promoted_at || ""))) {
       by.set(domainOf(f), [...(by.get(domainOf(f)) ?? []), f]);
     }
@@ -235,7 +236,7 @@ export function PromotedFindings() {
   const remove = async (id: string) => {
     setRemoving(id);
     try {
-      await deleteOrgInsight(id);
+      await takeOutOfOrg(id);
       setRead((r) => (r ? { ...r, found: r.found?.filter((f) => f.id !== id) ?? null } : r));
     } catch (e) {
       // It stays listed: the server still holds it.

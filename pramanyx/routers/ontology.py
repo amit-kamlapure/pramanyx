@@ -1739,7 +1739,7 @@ def override_ontology_entity(
         from pramanyx.packs.ontology_map import OBJECT_SHAPES, ROLE_SHAPES, shape_role
         if not shape_role(fields["drawn_as"]):
             raise HTTPException(status_code=400, detail=(
-                f"'{fields['drawn_as']}' is not a shape the Atlas draws — one of "
+                f"'{fields['drawn_as']}' is not a shape an entity may be drawn as — one of "
                 f"{', '.join(sorted({*ROLE_SHAPES.values(), *OBJECT_SHAPES}))}, or \"\" to let go of the choice"))
     # MERGE into the entity's existing override rather than replacing its file: a PUT of one field used to
     # wipe a description, a backing or a routing rule already there (the routing-proposal door below merges

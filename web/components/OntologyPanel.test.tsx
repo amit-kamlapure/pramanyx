@@ -9,7 +9,7 @@
  */
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@/lib/testing";
+import { fireEvent, render, screen, waitFor, within } from "@/lib/testing";
 
 vi.mock("@/components/ontology/EntityTypeMap", () => ({
   EntityTypeMap: ({ onSummary, reviewDraft, view }: {
@@ -21,7 +21,6 @@ vi.mock("@/components/ontology/EntityTypeMap", () => ({
     return <div data-testid="map-stub">review:{reviewDraft ?? 0} view:{view ?? "map"}</div>;
   },
 }));
-vi.mock("@/components/OntologyOrgCanvas", () => ({ OntologyOrgCanvas: () => <div data-testid="org-stub" /> }));
 
 vi.mock("@/lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api")>()),
@@ -95,13 +94,18 @@ describe("OntologyPanel — the bar", () => {
     expect(screen.queryByTestId("ontology-proposals-drawer")).toBeNull();
   });
 
-  it("drops the map's figures on the organisation board, which draws no map", async () => {
+  it("offers the Areas, the organisation's ontology and a connection's — no Every connection, and no Atlas", async () => {
+    // the user, 2026-11-25: "Remove Atlas entirely" and "remove 'Every Connection' from Ontology section"
     render(<OntologyPanel connectionId="c1" schema="thelook" />);
-    fireEvent.click(await screen.findByRole("radio", { name: "Map" }));
-    await screen.findByTestId("ontology-facts");
-    fireEvent.click(screen.getByRole("radio", { name: "Every connection" }));
-    expect(await screen.findByTestId("org-stub")).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByTestId("ontology-facts")).toBeNull());
+    await screen.findByRole("radio", { name: "Map" });
+    const which = screen.getByRole("radiogroup", { name: "Which ontology" });
+    expect(within(which).getAllByRole("radio")).toHaveLength(3);
+    for (const name of ["Areas", "Domain", "Connection"]) expect(within(which).getByRole("radio", { name })).toBeInTheDocument();
+    expect(within(which).queryByRole("radio", { name: "Every connection" })).toBeNull();
+    const views = screen.getByRole("radiogroup", { name: "Ontology view" });
+    expect(within(views).getByRole("radio", { name: "Register" })).toBeInTheDocument();
+    expect(within(views).queryByRole("radio", { name: "Atlas" })).toBeNull();
+    expect(document.body.textContent).not.toMatch(/Atlas|Every connection/);
   });
 
   it("lists the entities by their reads, the least read first", async () => {

@@ -80,11 +80,8 @@ const HEAD: React.CSSProperties = MUTED;
 
 // ── The register ───────────────────────────────────────────────────────────────────────────────────────────────────
 
-export function OntologyRegister({ map, lead, sources, onOpen, onOpenProcess, declareDoor, onNewProcess, onNewAction }: {
+export function OntologyRegister({ map, sources, onOpen, onOpenProcess, declareDoor, onNewProcess, onNewAction }: {
   map: TypeMap;
-  /** What the register opens on, above its tables — the Business Atlas, for a connection's ontology. With it, the two
-   *  tables start folded: the picture is the page, and a table is opened when it is wanted. */
-  lead?: React.ReactNode;
   /** Kept for the callers that pass it; what waits for a person is the Review view's, and is not repeated here. */
   draft?: OntologyDraft | null;
   /** ON-8 — an organisation's ontology: each type's connection, by id. */
@@ -103,12 +100,12 @@ export function OntologyRegister({ map, lead, sources, onOpen, onOpenProcess, de
   const parts = types.filter(t => t.absorbed_into);
   const processes = map.processes ?? [];
   const rules = map.rules ?? [];
-  const [tables, setTables] = useState({ entities: !lead, declarations: !lead });
+  // The register opens on its tables (the Business Atlas that stood above them, and folded them, retired 2026-11-25).
+  const [tables, setTables] = useState({ entities: true, declarations: true });
   const processesOf = (id: string) => processes.filter(p => p.entity === id);
 
   return (
     <Page testId="ontology-register">
-      {lead}
       <div className="aug-fs-xs" data-testid="ontology-tally" style={{ ...ROW, gap: 22, color: "var(--t3)" }}>
         <Tally n={standing.length} one="entity" many="entities" />
         <Tally n={parts.length} one="part" many="parts" />

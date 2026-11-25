@@ -199,7 +199,7 @@ export function AreaMap({ connectionId }: {
     ...suggested.map((s) => ({ id: SUGGESTED + s.label, r: R_MIN })),
   ]), [atlas, suggested]);
 
-  if (failed) return <ReadFailed what="the Atlas" error={failed} onRetry={load} />;
+  if (failed) return <ReadFailed what="the Areas" error={failed} onRetry={load} />;
   if (!atlas) return <Loading what="the Areas of the business" />;
 
   const box = bounds(placed);
