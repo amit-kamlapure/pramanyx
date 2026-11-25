@@ -72,8 +72,35 @@ def _register(doc_id: str, filename: str, title: str, chunk_count: int, uploaded
         # Who may read it, as its SOURCE said when it was synced (`knowledge/access.py`). Re-stated on every sync —
         # a page restricted since is restricted now — and kept as it was by a re-index that was not told it.
         **({"access": access} if access else ({"access": previous["access"]} if previous and previous.get("access") else {})),
+        # The connection it is about, as its owner or an admin said (`set_document_about`) — kept by every re-index.
+        **({"about": previous["about"]} if previous and previous.get("about") else {}),
     })
     _save_registry(docs)
+
+
+def set_document_about(doc_id: str, connection_id: Optional[str], *, by: str) -> Optional[dict]:
+    """Say which connection an uploaded document is about (2026-11-25), or that it is about every one (``None``). A
+    document about one connection is handed to that connection's answers alone (`in_scope`): the Superstore handbook —
+    "DuckDB, schema `main`, table `main.superstore`" — reached a theLook answer on its own words, its Repeat Customer
+    Rate over Superstore's columns. The registry row, or None when there is none."""
+    docs = _load_registry()
+    row = next((d for d in docs if d["doc_id"] == doc_id), None)
+    if row is None:
+        return None
+    if connection_id:
+        from datetime import datetime, timezone
+        row["about"] = {"connection_id": connection_id, "by": by, "at": datetime.now(timezone.utc).isoformat()}
+    else:
+        row.pop("about", None)
+    _save_registry(docs)
+    return row
+
+
+def about_connection(entry: dict) -> Optional[str]:
+    """The one connection a document is about — a schema doc's own, or the one its owner or an admin named — or None
+    for a document about every connection."""
+    return doctree_connection(entry.get("doc_id", "")) or (str((entry.get("about") or {}).get("connection_id") or "")
+                                                          or None)
 
 
 def set_document_access(doc_id: str, access: dict) -> Optional[dict]:
@@ -160,11 +187,11 @@ def in_scope(entry: dict, *, connection_id: Optional[str] = None,
     """May a question on ``connection_id``, asked inside ``org_id``, read this document?
 
     Another connection's schema docs describe tables this connection does not have, so they
-    are never in scope for it. ``org_id`` is ``None`` with sign-in off (one tenant owns every
+    are never in scope for it — nor is an upload its owner or an admin said is about another connection
+    (`set_document_about`, 2026-11-25). ``org_id`` is ``None`` with sign-in off (one tenant owns every
     row); otherwise a document is readable by its own organisation, or by everyone when it
     belongs to none — and, within it, by the people its source lets read it."""
-    doc_id = entry.get("doc_id", "")
-    if connection_id and doctree_connection(doc_id) not in (None, connection_id):
+    if connection_id and about_connection(entry) not in (None, connection_id):
         return False
     if org_id is not None and entry_org(entry) not in (None, org_id):
         return False

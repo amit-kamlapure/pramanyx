@@ -606,7 +606,7 @@ def knowledge_status_endpoint():
 
 
 @router.get("/documents")
-def list_documents_endpoint():
+def list_documents_endpoint(request: Request = None):
     """The corpus, each row saying what is actually retained for it.
 
     `has_original` is the field the UI branches on — it decides whether a row offers
@@ -622,6 +622,7 @@ def list_documents_endpoint():
 
     org_id = tenant_scope()      # None with sign-in off: one tenant owns every row
     me = uploader().lower()
+    admin = _administers(request)
     rows = []
     for doc in list_documents():
         if not in_scope(doc, org_id=org_id):
@@ -636,8 +637,26 @@ def list_documents_endpoint():
                      "generated": is_generated(doc["doc_id"]),
                      # Who may read it, and whether it is the reader's own to share (punch list 82): the server
                      # says, so the page never matches names itself.
-                     "access": access, "yours": bool(owner) and bool(me) and owner.lower() == me})
+                     "access": access, "yours": bool(owner) and bool(me) and owner.lower() == me,
+                     # whether this reader may say which connection it is about (its owner, else an admin)
+                     "may_say_about": not is_generated(doc["doc_id"]) and (
+                         (bool(owner) and bool(me) and owner.lower() == me) or admin)})
     return rows
+
+
+def _administers(request: Optional[Request]) -> bool:
+    """Whether the caller administers the organisation (`ADMIN_MANAGE_ORG`) — who decides for a document with no owner."""
+    if request is None:
+        return False
+    try:
+        from pramanyx.rbac.permissions import Permission
+        from pramanyx.rbac.resolver import has_permission
+        from pramanyx.security.authz import get_principal
+        return bool(has_permission(get_principal(request), Permission.ADMIN_MANAGE_ORG))
+    except Exception as exc:  # noqa: BLE001 — unread, the caller is not taken for an admin
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "whether the caller administers the organisation could not be read", counter="documents.admin")
+        return False
 
 
 @router.delete("/documents/{doc_id}")
@@ -689,6 +708,40 @@ def share_document(doc_id: str, body: DocumentSharing, request: Request = None):
         raise HTTPException(status_code=422, detail=str(exc))
     row = set_document_access(doc_id, access)
     return {"doc_id": doc_id, "access": (row or {}).get("access", access)}
+
+
+class DocumentAbout(BaseModel):
+    connection_id: Optional[str] = None     # the connection it is about; None — every connection
+
+
+@router.put("/documents/{doc_id}/about")
+def say_document_about(doc_id: str, body: DocumentAbout, request: Request = None):
+    """Which connection an uploaded document is about (2026-11-25): handed to that connection's answers alone, or —
+    ``connection_id`` null — to every connection's. Its owner says, else whoever administers the organisation (a
+    document with no owner is the organisation's); never an agent. A schema doc is its own connection's already."""
+    from pramanyx.knowledge.access import access_of, uploader
+    from pramanyx.knowledge.indexer import get_document, is_generated, set_document_about
+    if request is not None:
+        from pramanyx.rbac.agent_gate import is_agent_request
+        if is_agent_request(request):
+            raise HTTPException(status_code=403, detail="which data a document is about is a person's word; an agent cannot say it")
+    entry = get_document(doc_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+    if is_generated(doc_id):
+        raise HTTPException(status_code=422, detail="schema documentation is about its own connection already")
+    owner = str(access_of(entry).get("owner") or "")
+    who = uploader()
+    if not (owner and owner.lower() == who.lower()) and not _administers(request):
+        raise HTTPException(status_code=403, detail=(f"only its owner, {owner}, or an admin says which data it is about"
+                                                     if owner else "only an admin says which data this document is about"))
+    connection_id = (body.connection_id or "").strip() or None
+    if connection_id:
+        from pramanyx.db.registry import list_connections
+        if connection_id not in {str(c.get("id")) for c in list_connections()}:
+            raise HTTPException(status_code=422, detail=f"no connection {connection_id}")
+    row = set_document_about(doc_id, connection_id, by=who or "someone")
+    return {"doc_id": doc_id, "about": (row or {}).get("about")}
 
 
 @router.post("/documents/search")

@@ -3,10 +3,10 @@
  * Punch list 82: an upload says who reads it, and only its owner is offered Share — to keep it, to share it with
  * people they choose, or with everyone. What is saved is what the owner's door takes.
  */
-import { fireEvent, render, screen, waitFor } from "@/lib/testing";
+import { choose, fireEvent, render, screen, waitFor } from "@/lib/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { DocumentReaders } from "./ShareDocument";
+import { DocumentAbout, DocumentReaders } from "./ShareDocument";
 import type { DocumentAccess } from "@/lib/documentAccess";
 
 const PRIVATE: DocumentAccess = { sharing: "chosen", shared_with: [{ kind: "person", id: "ana@example.com" }],
@@ -61,5 +61,24 @@ describe("who reads an uploaded document", () => {
     expect(screen.queryByRole("button", { name: "Share" })).toBeNull();
     rerender(<DocumentReaders docId="d1" name="x" access={{ sharing: "chosen", source: "confluence-restrictions" }} yours={false} onShared={() => {}} />);
     expect(screen.queryByTestId("document-readers")).toBeNull();
+  });
+});
+
+describe("which data an upload is about (2026-11-25)", () => {
+  const CONNS = [{ id: "duckdb", name: "DuckDB" }, { id: "thelook", name: "theLook" }];
+
+  it("says it to a reader who may not change it", () => {
+    render(<DocumentAbout docId="d1" name="Superstore handbook" connectionId="duckdb" connections={CONNS} maySay={false} onSaid={vi.fn()} />);
+    expect(screen.getByTestId("document-about").textContent).toBe("For DuckDB only");
+  });
+
+  it("lets its owner or an admin keep it to one connection, through the door", async () => {
+    const calls = stubFetch(() => ({ doc_id: "d1", about: { connection_id: "duckdb", by: "user:amit", at: "x" } }));
+    const onSaid = vi.fn();
+    render(<DocumentAbout docId="d1" name="Superstore handbook" connectionId={null} connections={CONNS} maySay onSaid={onSaid} />);
+    await choose(screen.getByLabelText("Which data Superstore handbook is about"), "duckdb");
+    await waitFor(() => expect(onSaid).toHaveBeenCalledWith({ connection_id: "duckdb", by: "user:amit", at: "x" }));
+    expect(calls[0].url).toContain("/documents/d1/about");
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ connection_id: "duckdb" });
   });
 });

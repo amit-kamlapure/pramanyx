@@ -13,10 +13,39 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { FormDialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Segmented } from "@/components/ui/segmented";
+import { SelectField } from "@/components/ui/select";
 import {
-  choiceOf, readersWords, shareDocument, sharedPeople, type DocumentAccess, type ShareChoice,
+  aboutWords, choiceOf, readersWords, sayDocumentAbout, shareDocument, sharedPeople, type DocumentAccess, type ShareChoice,
 } from "@/lib/documentAccess";
 import { readDirectory, type DirectoryPerson } from "@/lib/threads";
+
+/** Which data an upload is about (2026-11-25): one connection's answers alone, or every connection's. The Superstore
+ *  handbook reached a theLook answer because an upload could not say. Its owner, or an admin, chooses here; anyone
+ *  else reads it. */
+export function DocumentAbout({ docId, name, connectionId, connections, maySay, onSaid }: {
+  docId: string; name: string; connectionId: string | null; connections: ReadonlyArray<{ id: string; name: string }>;
+  maySay: boolean; onSaid: (next: { connection_id: string; by: string; at: string } | null) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState<string | null>(null);
+  if (!maySay) {
+    return <span data-testid="document-about" className="aug-fs-xs" style={{ color: "var(--t3)" }}>{aboutWords(connectionId, connections)}</span>;
+  }
+  return (
+    <span data-testid="document-about" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+      <SelectField value={connectionId ?? ""} disabled={busy} aria-label={`Which data ${name} is about`}
+        onChange={(e) => {
+          const next = e.target.value || null;
+          setBusy(true); setFailed(null);
+          sayDocumentAbout(docId, next).then(onSaid).catch((err: Error) => setFailed(err.message)).finally(() => setBusy(false));
+        }}>
+        <option value="">For every connection</option>
+        {connections.map((c) => <option key={c.id} value={c.id}>{`For ${c.name} only`}</option>)}
+      </SelectField>
+      {failed && <span role="alert" className="aug-fs-xs" style={{ color: "var(--red4)" }}>{failed}</span>}
+    </span>
+  );
+}
 
 export function DocumentReaders({ docId, name, access, yours, onShared }: {
   docId: string; name: string; access?: DocumentAccess; yours: boolean; onShared: (next: DocumentAccess) => void;

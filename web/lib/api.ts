@@ -4322,6 +4322,10 @@ export interface DocumentEntry {
   /** Who may read it, and whether it is the reader's own to share (punch list 82) — the server says both. */
   access?: DocumentAccess;
   yours?: boolean;
+  /** The one connection an upload is about (2026-11-25): handed to that connection's answers alone. Absent — every
+   *  connection's. Its owner says, else an admin (`may_say_about`). */
+  about?: { connection_id: string; by: string; at: string } | null;
+  may_say_about?: boolean;
 }
 
 /** What a document WOULD become, before anything is indexed or paid for. */

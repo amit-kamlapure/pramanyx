@@ -6522,6 +6522,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/documents/{doc_id}/about": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Say Document About
+         * @description Which connection an uploaded document is about (2026-11-25): handed to that connection's answers alone, or —
+         *     ``connection_id`` null — to every connection's. Its owner says, else whoever administers the organisation (a
+         *     document with no owner is the organisation's); never an agent. A schema doc is its own connection's already.
+         */
+        put: operations["say_document_about_documents__doc_id__about_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/documents/{doc_id}/access": {
         parameters: {
             query?: never;
@@ -23025,6 +23047,11 @@ export interface components {
             who: string;
             /** Why */
             why: string;
+        };
+        /** DocumentAbout */
+        DocumentAbout: {
+            /** Connection Id */
+            connection_id?: string | null;
         };
         /**
          * DocumentInputContent
@@ -39995,6 +40022,41 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    say_document_about_documents__doc_id__about_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocumentAbout"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
