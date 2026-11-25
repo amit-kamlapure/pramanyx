@@ -142,7 +142,10 @@ export const SIDE = {
   tab: (front: boolean): CSSProperties => ({ display: "inline-flex", alignItems: "center", flex: "0 1 auto", minWidth: 96,
     maxWidth: 200, height: 26, borderRadius: "var(--r2)", background: front ? "var(--bg-3)" : undefined,
     color: front ? "var(--t1)" : "var(--t2)" }),
-  name: { gap: 6, minWidth: 0, maxWidth: "100%", overflow: "hidden", padding: "0 2px 0 8px", color: "inherit", justifyContent: "flex-start" },
+  // the name takes what the tab has left once its × is drawn: the × never gives way (2026-11-26, the user: "The 'x'
+  // icons do not appear on the tabs" — the name had taken the whole tab and squeezed the × to nothing)
+  name: { flex: "1 1 auto", gap: 6, minWidth: 0, overflow: "hidden", padding: "0 2px 0 8px", color: "inherit", justifyContent: "flex-start" },
+  close: { flex: "0 0 auto", marginRight: 2 },
   text: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 },
   controls: { display: "inline-flex", alignItems: "center", gap: 2, flexShrink: 0, color: "var(--t2)" },
 } satisfies Record<string, CSSProperties | ((front: boolean) => CSSProperties)>;
@@ -221,7 +224,8 @@ export function InspectorHost() {
                 {o.icon && <Icon name={o.icon} size={13} />}
                 <span style={SIDE.text}>{o.title}</span>
               </Button>
-              <Button variant="ghost" size="icon-xs" aria-label={`Close ${o.title}`} title="Close · Esc" onClick={() => close(o.key)}>
+              <Button variant="ghost" size="icon-xs" aria-label={`Close ${o.title}`} title="Close · Esc" onClick={() => close(o.key)}
+                style={SIDE.close}>
                 <Icon name="close" size={11} />
               </Button>
             </span>

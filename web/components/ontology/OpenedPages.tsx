@@ -317,7 +317,7 @@ export function OpenPanel({ open, active, onActive, onClose, ctx }: {
                 <Icon name={openedLook(o).icon} size={13} />
                 <span style={SIDE.text}>{o.title}</span>
               </Button>
-              <Button variant="ghost" size="icon-xs" aria-label={`Close ${o.title}`} onClick={() => onClose(o.key)}>
+              <Button variant="ghost" size="icon-xs" aria-label={`Close ${o.title}`} onClick={() => onClose(o.key)} style={SIDE.close}>
                 <Icon name="close" size={11} />
               </Button>
             </span>
