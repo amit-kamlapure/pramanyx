@@ -522,11 +522,14 @@ _USAGE_SAYS = {
 }
 
 
-def book_usage_claims(*, connection_id: str, candidates, source: str = "", schema_name: str = "") -> dict:
+def book_usage_claims(*, connection_id: str, candidates, source: str = "", schema_name: str = "",
+                      came_from: str = "") -> dict:
     """The candidates mined from a warehouse's query history and checked to bind, booked as Record claims of kind
     ``usage`` at tier ``mined``, each warranted by the history it came from ("query history findings to become record
     claims only"). Booked once: a candidate already on record with the same words is left as it is, so a second mining
-    restates nothing. Returns ``{"booked": [...ids], "already": n}``."""
+    restates nothing. ``came_from`` (the Atlas plan's A7): the statements were not the warehouse's history but the
+    platform's own work or the SQL answers ran — said as the claim's author and kept on it, so the learned list says
+    where it came from. Returns ``{"booked": [...ids], "already": n}``."""
     import hashlib
     booked: list[str] = []
     already = 0
@@ -545,9 +548,9 @@ def book_usage_claims(*, connection_id: str, candidates, source: str = "", schem
             statement=_claims.Statement(text=text),
             warrants=[_claims.Warrant(kind="query_history", ref=f"history:{connection_id}:{source or 'warehouse'}:{digest[:16]}",
                                       detail=str(c.evidence or "")[:400], content_hash=digest)],
-            author="query history", author_kind="system",
+            author=came_from or "query history", author_kind="system",
             extra={"candidate_kind": c.kind, "subject": subject, "proposal": proposal,
-                   **({"schema": schema_name} if schema_name else {})},
+                   **({"schema": schema_name} if schema_name else {}), **({"came_from": came_from} if came_from else {})},
         )
         booked.append(_claims.restate(key, claim, conn_id=connection_id) if prior else
                       _claims.book(claim, key=key, conn_id=connection_id))

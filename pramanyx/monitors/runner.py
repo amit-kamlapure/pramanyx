@@ -361,6 +361,12 @@ def run_threshold_monitor(monitor: Monitor, db) -> Optional[MonitorAlert]:
     previous = _last_alert_value(monitor.id)
     direction = monitor.threshold_direction  # "below" or "above"
 
+    # One meaning of "off target" (the Atlas plan's A8): a monitor with no line of its own, on a metric that keeps a
+    # target, is judged by the metric's own rule — the one Health scores it by — never a second definition of its own.
+    target = metric_target_of(monitor)
+    if target is not None:
+        return _by_the_metric_s_target(monitor, target, current, previous)
+
     # ONE rule, shared with the backtest (`monitors/rules.py`): critical first, then warning.
     from pramanyx.monitors.rules import threshold_verdict
     verdict = threshold_verdict(current, direction=direction, warning=monitor.warning_threshold,
@@ -377,6 +383,43 @@ def run_threshold_monitor(monitor: Monitor, db) -> Optional[MonitorAlert]:
         f"{verdict.severity} threshold {plain_figure(verdict.threshold)}",
         current_value=current, previous_value=previous,
         threshold=verdict.threshold,
+    )
+
+
+def metric_target_of(monitor: Monitor):
+    """The metric whose target a threshold monitor is judged by: one it watches by name, keeping a target and a line
+    short of it — when the monitor has no line of its own. None otherwise, or when the metric cannot be read."""
+    if monitor.warning_threshold is not None or monitor.critical_threshold is not None or not monitor.metric_name:
+        return None
+    try:
+        from pramanyx.semantic.metrics import get_metric
+        m = get_metric(monitor.metric_name, connection_id=monitor.conn_id)
+    except Exception as exc:  # noqa: BLE001 — unread, the monitor has no line to judge by, as before
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "a monitor's metric could not be read for its target", counter="monitors.metric_target",
+                 conn_id=monitor.conn_id or None)
+        return None
+    if m is None or m.target_value is None or (m.warning_threshold is None and m.critical_threshold is None):
+        return None
+    return m
+
+
+def _by_the_metric_s_target(monitor: Monitor, m, current: float, previous) -> Optional[MonitorAlert]:
+    """Judged as Health judges the metric (`semantic.metrics.target_status`): short of its target by its critical
+    distance is critical, by its warning distance a warning; on target, or beating a directed one, is nothing."""
+    from pramanyx.semantic.metrics import target_status
+    severity = {"red": "critical", "yellow": "warning"}.get(target_status(current, m))
+    if severity is None:
+        return None
+    distance = m.critical_threshold if severity == "critical" else m.warning_threshold
+    over = covered_words()
+    period = f" for {over}" if over and not over.startswith("all history") else ""
+    side = {"higher": "short of", "lower": "over"}.get(m.target_direction or "", "away from")
+    return _make_alert(
+        monitor, severity,
+        f"{monitor.name}: {plain_figure(current)}{period}, {side} its metric's target of {plain_figure(m.target_value)} "
+        f"by more than the metric's {severity} distance ({plain_figure(distance)})",
+        current_value=current, previous_value=previous, threshold=m.target_value,
     )
 
 

@@ -677,6 +677,27 @@ async def describe_entity(
 
 
 @mcp.tool()
+async def list_areas() -> dict:
+    """The organisation's Areas of the business — the business-aware map Pramanyx keeps of the organisation (its
+    Ontology's Areas, across every connection): each Area's name and the question it answers, who answers for it (its
+    Business and Technical contacts), the connections it spans, what it holds by kind, how many of the month's answers
+    drew on it, and what waits for review in it; what sits in no Area; the month's figures. Read it to place a question
+    in its Area and to know whose word governs it — then `describe_area` for one. A $0 read, under your clearances."""
+    return await _client.list_areas()
+
+
+@mcp.tool()
+async def describe_area(
+    area: Annotated[str, Field(description="An Area id from list_areas, e.g. 'orders_sales'.")],
+) -> dict:
+    """One Area of the business: what it is and who answers for it, its sub-Areas, what is governed in it — its metrics,
+    Definitions, certified tables and dashboards, trusted queries, the most used this month first, each with its state
+    and connection — and what waits for review in it, the busiest first. What its contacts approved or published is the
+    organisation's word there: prefer it over anything learned. A $0 read, under your clearances."""
+    return await _client.describe_area(area)
+
+
+@mcp.tool()
 async def list_objects(
     connection: Annotated[str, Field(description="A connection id from list_connections.")],
     entity: Annotated[str, Field(description="The entity to list, e.g. 'Order' — as the contract names it.")],

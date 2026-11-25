@@ -6158,6 +6158,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/discover/atlas/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Atlas Review
+         * @description What waits for review in an Area across the connections in view, its sub-Areas' rolled up (A5); ``area=none``
+         *     what waits in no Area, none given every row. From the Atlas's kept reading — as old as its ``read_at``.
+         */
+        get: operations["get_atlas_review_discover_atlas_review_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/discover/items": {
         parameters: {
             query?: never;
@@ -13743,6 +13764,29 @@ export interface paths {
          *     when the read failed. No model call.
          */
         post: operations["mine_ontology_candidates_ontology_candidates_mine_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ontology/candidates/mine-our-own": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mine Our Own Candidates
+         * @description The Atlas plan's A7: the SQL of the platform's own dashboards, Data Canvases and saved queries, and the SQL the
+         *     last month's answers ran on this connection, mined for joins, filters and formulas the ontology lacks — each bound
+         *     on the connection before it is offered, each source said, what could not be read said. Inside the install, so no
+         *     organisation setting; no model; it also runs once a day (`statement_mining.run_mining_daily`).
+         */
+        post: operations["mine_our_own_candidates_ontology_candidates_mine_our_own_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -28296,6 +28340,17 @@ export interface components {
              */
             stage: boolean;
         };
+        /**
+         * _MineOwnRequest
+         * @description What the platform's own work shows (A7): ``book`` books what binds as usage claims; without it, a preview.
+         */
+        _MineOwnRequest: {
+            /**
+             * Book
+             * @default false
+             */
+            book: boolean;
+        };
         /** _OpenCaptureRequest */
         _OpenCaptureRequest: {
             /**
@@ -39618,6 +39673,40 @@ export interface operations {
     get_atlas_discover_atlas_get: {
         parameters: {
             query?: {
+                workspace_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_atlas_review_discover_atlas_review_get: {
+        parameters: {
+            query?: {
+                area?: string;
                 workspace_id?: string | null;
             };
             header?: never;
@@ -52152,6 +52241,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mine_our_own_candidates_ontology_candidates_mine_our_own_post: {
+        parameters: {
+            query?: {
+                connection_id?: string | null;
+                schema_name?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["_MineOwnRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */

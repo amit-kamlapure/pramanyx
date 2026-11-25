@@ -172,6 +172,15 @@ def housekeeping_once() -> dict[str, int]:
     except Exception as exc:
         logger.warning("automation heartbeat could not re-measure past Briefings: %s", exc)
         counts["briefing_recall"] = 0
+    # The Atlas plan's A7 — what statements show, once a UTC day: the platform's own work and the SQL answers ran on
+    # each connection, and the warehouse's own history where the organisation allows it; mined for joins, filters and
+    # formulas, bound, booked as usage claims for a person to confirm. No model.
+    try:
+        from pramanyx.ontology.statement_mining import run_mining_daily
+        counts["mined"] = run_mining_daily()
+    except Exception as exc:
+        logger.warning("automation heartbeat could not mine the day's statements: %s", exc)
+        counts["mined"] = 0
     return counts
 
 

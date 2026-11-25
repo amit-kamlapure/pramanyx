@@ -49,11 +49,17 @@ def test_the_definitions_picked_for_a_question_are_noted_as_discover_names_them(
                   standing={"tier": "declared"}, connection_id="c1")]
     monkeypatch.setattr(K, "_relevant_entries", lambda q, c, k=None: list(entries))
     monkeypatch.setattr(K, "_behind", lambda e, c: (0, 0))
-    monkeypatch.setattr(K, "_render_block", lambda es, header=None: "BLOCK")
+    monkeypatch.setattr(K, "_render_block", lambda es, header=None, home="": "BLOCK")
     monkeypatch.setattr("pramanyx.semantic.areas.rival_meanings", lambda q, c: [])
     AI.start_recording()
     K.retrieve_for_question("what is revenue", "c1")
     assert AI.consume()["definition"] == {"c1/Revenue/orders_sales": "Revenue", "c1/AOV/": "AOV"}
+    # one an Area gives this connection from another (A8) is noted under the connection it was written on
+    entries.append(NS(id="repeat", title="Repeat buyer", area="orders_sales", body="Two orders or more", kind="note",
+                      tags=[], standing={"tier": "approved"}, connection_id="c2"))
+    AI.start_recording()
+    K.retrieve_for_question("who is a repeat buyer", "c1")
+    assert AI.consume()["definition"]["c2/Repeat buyer/orders_sales"] == "Repeat buyer"
 
 
 def test_the_trusted_queries_put_in_front_of_the_model_are_noted_on_either_answer_path():

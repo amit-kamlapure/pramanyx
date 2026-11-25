@@ -211,6 +211,36 @@
    "same_as": ""
   },
   {
+   "name": "list_areas",
+   "words": "Read the Areas of the business",
+   "about_to": "Read the Areas of the business",
+   "which": [],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "coworker"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
+   "name": "describe_area",
+   "words": "Read the Area",
+   "about_to": "Read the Area",
+   "which": [
+    "area"
+   ],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "coworker"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
    "name": "list_objects",
    "words": "Listed the objects",
    "about_to": "Listed the objects",

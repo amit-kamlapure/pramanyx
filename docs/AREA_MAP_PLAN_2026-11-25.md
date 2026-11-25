@@ -158,28 +158,47 @@ in its new place, never dropped.
   standing, one Promote; the Memory page becomes that list's place in the rail; its training corpus moves to the AI
   Factory, where it is used.
 - **A4 · The Atlas, by Area** — A4a DONE (the organisation's map, the month's figures, review by Area counts), A4b DONE
-  (an Area opened: fan-out by kind with counts, each kind by use, tabs on the right, Promote). *Added by §7 (A4c):*
+  (an Area opened: its counts by kind, each kind by use, tabs on the right, Promote) — and, the user's Genie stills
+  (2026-11-25), it opens **to one side**: the parent large on the left, the Area among its siblings, its counts stacked to
+  its right, every line leaving the circle's right edge; a circle clicked opens that Area and its tab on the right. *Added by §7 (A4c):*
   Brain Map's one idea — the loop's stages counted, with measured arrows between them — becomes the Atlas's Overview,
   and its page retires; the rail's **Org** page (promoted findings: an empty store, one writer, one deep-analysis
   reader) retires into the Atlas (the bird's-eye view it was meant to be) and into Promote (a finding promoted becomes a
   draft Definition, which every answer reads).
-- **A5 · Review by Area → one "Needs you"** (§3.4, widened by §7.8). The review queue regrouped by Area across
+- **A5 · Review by Area → one "Needs you"** (§3.4, widened by §7.8). *Part one DONE 2026-11-25:* every connection's
+  review rows kept with the Atlas's reading and served by Area (`GET /discover/atlas/review`), sub-Areas rolled up, the
+  busiest first, in the plan's words (New Definition, Gap, Definition edit, Conflict, Thumbs-down, To confirm …) with
+  filters; what waits in no Area listed apart; the two new kinds (`review._new_definitions`, `._definition_edits`);
+  "Write its Definition" opens a new one with the word filled in. *Next, from the user's Genie stills:* a row opens in
+  the right panel with Accept · Edit and accept · Reject, rather than linking out. *Part two waits on §7 decision 2.* The review queue regrouped by Area across
   connections and rolled up to the parent Area, with the plan's new kinds (*new Definition*, *Definition edit*); then the
   same view over every queue that waits on a person — staged proposals (today on 7 surfaces), the deep analyses'
   recommendations (today "Decide ▸ Inbox"), monitor and agent alerts (two stores, one badge) — by Area and by person,
   with read state per person. **Inbox** becomes that view; **Notifications** (outbound channels: Slack, webhook, Jira)
   is renamed **Delivery** and moves under Operations' settings; **Actions** stays what agents may do (the ontology's
   declared actions).
-- **A6 · Relationships by Area** (§3.5, widened by §7.5): today's Business Atlas inside an Area, zones = Areas, joins
+- **A6 · Relationships by Area** (§3.5, widened by §7.5). *DONE 2026-11-25:* the Business Atlas zones by Area — where
+  Discover places each entity's table, "In no Area" aside, said when the Areas could not be read; an opened Area's
+  canvas has Relationships beside what it holds (its entities on each connection it spans); the Ontology switch's "Org"
+  is "Every connection". *Not yet:* the Graph page's fold (no decision asked; it is a page people use). today's Business Atlas inside an Area, zones = Areas, joins
   from the organisation's ontology; the Ontology switch's Domain and Org (every connection's entity map) become
   Relationships across connections; the **Graph** page's Explore / Tour / Review become Relationships' "one thing and
   its neighbours" view. The graph's store stays: it is what every answer reads (§7.5).
-- **A7 · More to learn from** (each an organisation setting): query history on a schedule rather than by hand; our own
+- **A7 · More to learn from** — *DONE 2026-11-25:* one mining door (`ontology/statement_mining.py`) fed three ways —
+  the warehouse's history (its setting, as before), the platform's own dashboards, Data Canvases and saved queries, and
+  the SQL answers ran (the joins agents chose) — each claim saying where it came from, once a UTC day on the heartbeat
+  and by hand (`POST /ontology/candidates/mine-our-own`). *Not yet:* a failure and its fix (needs A1b), `trace.feedback`
+  in the thumbs-down cluster. The plan as written (each an organisation setting): query history on a schedule rather than by hand; our own
   dashboards, Data Canvases and saved SQL mined into learned items — the SQL read without a model. *Added by §7:* the
   traces' unread parts (A1b) — joins an agent chose that ran become join candidates beside the warehouse's query log's;
   a failure and the fix after it become a learned "watch for this"; `trace.feedback` verdicts join the thumbs-down
   cluster (A5).
-- **A8 · Across connections, and agents read the map** (widened by §7.1): a Definition placed in an Area may hold for
+- **A8 · Across connections, and agents read the map** — *DONE 2026-11-25:* the coworker reads the map (MCP
+  `list_areas`, `describe_area`, over the Atlas's own doors); a published Definition placed in an Area is given to every
+  connection the Area spans (`connection_kb.area_entries`; never a draft, never over a connection's own word); a
+  threshold monitor with no line of its own is judged by its metric's target (`monitors.runner.metric_target_of`).
+  *Not yet:* the Ask panel's own tools for the Areas (its tools run in-process), Health shown on the Area. As written
+  (widened by §7.1): a Definition placed in an Area may hold for
   every connection the Area spans; the organisation's ontology reaches the answer path; **the Areas themselves reach
   every agent** — the answer path and the coworker's MCP get "which Area is this question in, who answers for it, what
   is governed there" (today the Atlas is read by its page alone). *Added by §7.10:* one meaning of "off target" — a

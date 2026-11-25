@@ -74,6 +74,10 @@ def test_the_answer_path_reads_it_only_when_the_first_attempt_was_inconclusive()
 
 
 def test_the_mining_door_books_claims_and_stages_no_inbox_card():
+    from pramanyx.ontology import statement_mining as M
     from pramanyx.routers import ontology as O
     src = inspect.getsource(O.mine_ontology_candidates)
-    assert "book_usage_claims(" in src and "stage_candidates(" not in src
+    # the door books through the one mining door (the Atlas plan's A7), which books usage claims — never an inbox card
+    assert "mine_and_book(" in src and "stage_candidates(" not in src
+    door = inspect.getsource(M.mine_and_book)
+    assert "book_usage_claims(" in door and "stage_candidates(" not in door

@@ -77,6 +77,9 @@ _ROWS: tuple[Ability, ...] = (
     Ability("list_connections", "Listed the connections", "read", COWORKER_ONLY),
     Ability("search_graph", "Searched what is already known about", "read", BOTH, which=("query", "q", "question")),
     Ability("describe_entity", "Read the object", "read", BOTH, which=("entity", "name", "entity_id")),
+    # the Atlas plan's A8 (2026-11-25): the Areas of the business — the organisation's map — read by the coworker
+    Ability("list_areas", "Read the Areas of the business", "read", COWORKER_ONLY),
+    Ability("describe_area", "Read the Area", "read", COWORKER_ONLY, which=("area",)),
     Ability("list_objects", "Listed the objects", "read", COWORKER_ONLY, which=("kind", "type")),
     Ability("get_object", "Read the object", "read", BOTH, which=("name", "object", "object_id", "id")),
     Ability("list_findings", "Read earlier findings", "read", BOTH, which=("query", "table")),

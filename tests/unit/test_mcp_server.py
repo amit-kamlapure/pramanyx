@@ -59,6 +59,9 @@ def test_server_registers_the_governed_tools():
         # this exact set deliberately: the assertion exists so growing the external agent
         # surface is a decision somebody made, not a thing that happened.
         "search_graph", "describe_entity", "get_table_health", "list_trusted_queries",
+        # The Atlas plan's A8 (2026-11-25, the user: the Ontology is "the unified context layer that gives AI agents a
+        # business-aware map of the organization") — the Areas of the business, read through the Atlas's own doors.
+        "list_areas", "describe_area",
         # VA-5 — the trace surface: find a run, see its shape, read the one span that
         # matters. Same reasoning as above; and note what is NOT here, deliberately.
         "list_runs", "inspect_run", "read_run_span",

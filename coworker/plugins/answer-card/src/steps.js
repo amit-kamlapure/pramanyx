@@ -19,6 +19,9 @@ export const DOES = {
   explain: ["Asked how an answer was reached", ["investigation_id"]],
   get_metric: ["Read the definition of the metric", ["name", "metric", "metric_name"]],
   describe_entity: ["Read the object", ["entity", "name", "entity_id"]],
+  // the Atlas plan's A8 (2026-11-25): the Areas of the business, the organisation's map
+  list_areas: ["Read the Areas of the business", []],
+  describe_area: ["Read the Area", ["area"]],
   get_object: ["Read the object", ["name", "object", "object_id", "id"]],
   list_objects: ["Listed the objects", ["kind", "type"]],
   search_graph: ["Searched what is already known about", ["query", "q", "question"]],
