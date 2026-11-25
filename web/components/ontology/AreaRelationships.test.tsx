@@ -69,3 +69,16 @@ describe("an Area's relationships", () => {
     expect(opened).toHaveBeenCalledWith(expect.objectContaining({ display_name: "Order Item" }), { id: "c1", name: "theLook" });
   });
 });
+
+describe("an Area's entities laid out to one side", () => {
+  it("puts the most linked on the left, one link from it in the next column, and those no link reaches last — at their own size", async () => {
+    const { areaLayout } = await import("@/components/ontology/AreaRelationships");
+    const map = { ...MAP, object_types: [...MAP.object_types, row("note", "Note", "notes")] } as unknown as TypeMap;
+    const L = areaLayout(map);
+    const x = Object.fromEntries(L.nodes.map((n) => [n.objectType, n.x]));
+    expect(x.order).toBeLessThan(x.order_item);          // Order links to both others: it is the one on the left
+    expect(x.order_item).toBe(x.user);                   // each one link from it: one column
+    expect(x.note).toBeGreaterThan(x.user);              // no link reaches it: last
+    expect(L.width).toBe(3 * 196 + 2 * 150);
+  });
+});

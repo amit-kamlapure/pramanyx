@@ -8,14 +8,14 @@
  * laid out as the entity map lays out a connection (`lib/entityMapLayout.ts`), here only the Area's; an entity pressed
  * opens on the right, as everything pressed on the Atlas does.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { MUTED, ROW } from "@/components/clarity/kit";
 import { Button } from "@/components/ui/button";
 import { Loading } from "@/components/ui/states";
 import { readAreas } from "@/lib/areas";
 import { readDiscoverItems } from "@/lib/discover";
-import { CARD, collapseParts, hubOf, layoutMap } from "@/lib/entityMapLayout";
+import { CARD, collapseParts, hubOf, ringsOf } from "@/lib/entityMapLayout";
 import { formatCount } from "@/lib/format";
 import { getProcesses, getTypeMap, type ProcessesAndRules, type TypeMap, type TypeMapRow } from "@/lib/objectTypes";
 
@@ -57,37 +57,57 @@ export function partOf(map: TypeMap, declared: ProcessesAndRules | null, areaOfT
   };
 }
 
+/** Gaps between columns of cards (where a link's words sit) and between cards in a column. */
+const ACROSS = 150;
+const DOWN = 28;
+
+/** An Area's entities laid out to one side, as the rest of the Atlas opens: the one with the most links on the left, the
+ *  entities one link from it in a column to its right, two links further right, and those no link reaches last. At
+ *  their own size, so the words stay readable. */
+export function areaLayout(map: TypeMap): { nodes: { objectType: string; x: number; y: number }[]; width: number; height: number } {
+  const hub = hubOf(map);
+  if (!hub) return { nodes: [], width: 0, height: 0 };
+  const rings = ringsOf(map, hub);
+  const columns = new Map<number, string[]>();
+  for (const t of map.object_types) {
+    const ring = rings.get(t.object_type) ?? -1;
+    columns.set(ring, [...(columns.get(ring) ?? []), t.object_type]);
+  }
+  const order = [...columns.keys()].sort((a, b) => (a < 0 ? 1e9 : a) - (b < 0 ? 1e9 : b));
+  const tallest = Math.max(...[...columns.values()].map((c) => c.length));
+  const height = tallest * CARD.h + (tallest - 1) * DOWN;
+  const nodes = order.flatMap((ring, col) => {
+    const names = columns.get(ring)!;
+    const top = (height - (names.length * CARD.h + (names.length - 1) * DOWN)) / 2;
+    return names.map((objectType, row) => ({ objectType, x: col * (CARD.w + ACROSS) + CARD.w / 2, y: top + row * (CARD.h + DOWN) + CARD.h / 2 }));
+  });
+  return { nodes, width: order.length * CARD.w + (order.length - 1) * ACROSS, height };
+}
+
 function Graph({ part, onOpen }: { part: AreaPart; onOpen: (row: TypeMapRow) => void }) {
-  const hub = hubOf(part.map);
-  const layout = useMemo(() => (hub ? layoutMap(part.map, hub) : null), [part.map, hub]);
-  // fitted to the width it is given, never larger than it is: the entity map's rings are laid out for a whole connection
-  const box = useRef<HTMLDivElement>(null);
-  const [room, setRoom] = useState(0);
-  useEffect(() => {
-    const el = box.current;
-    if (!el || typeof ResizeObserver === "undefined") return undefined;
-    const ro = new ResizeObserver(([e]) => setRoom(e.contentRect.width));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-  if (!layout || !part.map.object_types.length) return null;
-  const scale = room > 0 ? Math.min(1, room / layout.width) : 1;
+  const layout = useMemo(() => areaLayout(part.map), [part.map]);
+  if (!layout.nodes.length) return null;
   const at = new Map(layout.nodes.map((n) => [n.objectType, n]));
   const byName = new Map(part.map.object_types.map((t) => [t.object_type, t]));
   return (
-    <div ref={box} style={{ width: "100%", height: layout.height * scale, overflow: "hidden" }}>
-      <div data-testid="area-relationships-graph" style={{ position: "relative", width: layout.width, height: layout.height,
-        transform: `scale(${scale})`, transformOrigin: "top left", marginLeft: Math.max(0, (room - layout.width * scale) / 2) }}>
-        <svg aria-hidden width={layout.width} height={layout.height} style={{ position: "absolute", inset: 0 }}>
+    <div style={{ overflowX: "auto" }}>
+      <div data-testid="area-relationships-graph" style={{ position: "relative", width: layout.width, height: layout.height }}>
+        <svg aria-hidden width={layout.width} height={layout.height} style={{ position: "absolute", inset: 0, overflow: "visible" }}>
           {part.map.links.map((l) => {
-            const a = at.get(l.from), b = at.get(l.to);
-            if (!a || !b || l.from === l.to) return null;
+            const a0 = at.get(l.from), b0 = at.get(l.to);
+            if (!a0 || !b0 || l.from === l.to) return null;
+            const [a, b] = a0.x <= b0.x ? [a0, b0] : [b0, a0];
+            const sameColumn = a.x === b.x;
+            // a link leaves a card on its right and arrives on the next one's left; in one column it runs down the right
+            const x1 = a.x + CARD.w / 2, y1 = a.y, x2 = sameColumn ? b.x + CARD.w / 2 : b.x - CARD.w / 2, y2 = b.y;
+            const bend = sameColumn ? 40 : (x2 - x1) / 2;
+            const d = `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - (sameColumn ? -bend : bend)} ${y2}, ${x2} ${y2}`;
+            const words = `${(l.verb || l.business_name || "").replace(/_/g, " ")}${l.cardinality ? ` · ${l.cardinality}` : ""}${"via" in l && l.via ? ` · through ${l.via}` : ""}`;
             return (
               <g key={`${l.from}>${l.to}:${l.relationship}`}>
-                <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="var(--b1)" strokeWidth={1.2} />
-                <text x={(a.x + b.x) / 2} y={(a.y + b.y) / 2 - 6} textAnchor="middle" fill="var(--t2)" className="aug-fs-xs">
-                  {`${(l.verb || l.business_name || "").replace(/_/g, " ")}${l.cardinality ? ` · ${l.cardinality}` : ""}${"via" in l && l.via ? ` · through ${l.via}` : ""}`}
-                </text>
+                <path d={d} fill="none" stroke="var(--b1)" strokeWidth={1.2} />
+                <text x={sameColumn ? x1 + 46 : (x1 + x2) / 2} y={(y1 + y2) / 2 - 6} textAnchor={sameColumn ? "start" : "middle"}
+                  fill="var(--t2)" className="aug-fs-xs">{words}</text>
               </g>
             );
           })}
