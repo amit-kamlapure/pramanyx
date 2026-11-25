@@ -19,7 +19,7 @@ import { AppearancePanel } from "@/components/settings/AppearancePanel";
 import { useNavCollapsed, useNavCollapsedState } from "@/components/shell/useNavCollapsed";
 import { Tooltip } from "@/components/ui/tooltip";
 import { installAuthFetch } from "@/lib/auth";
-import { getActiveWorkspace, installWorkspaceHeader, setActiveWorkspace } from "@/lib/workspace";
+import { getActiveWorkspace, installWorkspaceHeader, setActiveWorkspace, workspaceHolding } from "@/lib/workspace";
 import { installSharedReads } from "@/lib/sharedReads";
 import { InferencePanel } from "@/components/InferencePanel";
 import { OrgSettingsPanel } from "@/components/OrgSettingsPanel";
@@ -1169,6 +1169,11 @@ export default function Home() {
     // link could open a canvas from another workspace.
   }, []);
 
+  // S1 (2026-11-25) — the workspaces as they are now, for the navigate handler below, which is registered once: a
+  // connection asked for by a link opens in the workspace that holds it, not on the current one's first connection.
+  const navWorkspaces = useRef<{ list: Workspace[]; current: string; switchTo: (id: string) => void }>(
+    { list: [], current: "", switchTo: () => {} });
+
   // SE-4 I — let a nested surface ask to change screens (the query workbench's
   // "Schedule", which hands a statement to a monitor). The shell owns `tab`, and
   // nothing below could previously reach it: the URL is written FROM this state and
@@ -1182,7 +1187,12 @@ export default function Home() {
       // untrusted input like any other, and an unknown id must be ignored, not routed to.
       if (!detail?.tab || !VALID_TABS.has(detail.tab as NavTab)) return;
       const r = resolveDeepLinkTab(detail.tab as NavTab);
-      if (detail.params?.conn) setSelectedConn(detail.params.conn);
+      if (detail.params?.conn) {
+        const ws = navWorkspaces.current;
+        const home = workspaceHolding(ws.list, detail.params.conn, ws.current);
+        if (home && home !== ws.current) ws.switchTo(home);
+        setSelectedConn(detail.params.conn);
+      }
       if (r.dataLayer) setDataLayer(r.dataLayer);
       if (r.opsLayer) setOpsLayer(r.opsLayer);
       if (r.intelLayer) setIntelLayer(r.intelLayer);
@@ -1485,7 +1495,10 @@ export default function Home() {
         setWorkspaces(ws);
         const saved = typeof window !== "undefined" ? localStorage.getItem(LAST_WS_KEY) : null;
         const valid = saved && ws.find(w => w.id === saved);
-        setSelectedWorkspace(valid ? saved : (ws[0]?.id ?? ""));
+        const kept = valid ? saved : (ws[0]?.id ?? "");
+        // a link's connection opens in the workspace that holds it (S1, 2026-11-25), not snapped back to this one's
+        const wanted = deepLinkConn.current;
+        setSelectedWorkspace(wanted ? (workspaceHolding(ws, wanted, kept) ?? kept) : kept);
       })
       .catch(err => console.error("[Pramanyx] failed to load workspaces:", err))
       .finally(() => setWsLoaded(true));
@@ -1868,6 +1881,10 @@ export default function Home() {
     setSelectedChatSessionId(null);
     setSelectedHistoryInvId(null);
   };
+
+  useEffect(() => {
+    navWorkspaces.current = { list: workspaces, current: selectedWorkspace, switchTo: handleWorkspaceChange };
+  });
 
   // Keep the selected connection inside the active workspace. When the user
   // switches workspaces and the current connection isn't a member, jump to the

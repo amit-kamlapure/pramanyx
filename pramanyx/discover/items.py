@@ -90,13 +90,15 @@ class Scope:
     same moment, and the ontology under it was applied three times per page read (2026-11-23)."""
 
     def __init__(self, request: Any, person: str, connections: dict[str, str], *, workspace_id: Optional[str] = None,
-                 curator: bool = False):
+                 curator: bool = False, homes: Optional[dict[str, list[str]]] = None):
         import threading
         self.request = request
         self.person = person
         self.connections = connections
         self.workspace_id = workspace_id
         self.curator = curator
+        #: Read across every workspace (S1, 2026-11-25): the workspaces each connection is in, by name; None in one.
+        self.homes = homes
         self._coverage: dict[str, dict] = {}
         self._maps: dict[str, Any] = {}
         self._guard = threading.Lock()

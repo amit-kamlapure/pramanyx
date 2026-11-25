@@ -161,6 +161,20 @@ describe("Discover", () => {
     await waitFor(() => expect(readDiscoverSearch).toHaveBeenLastCalledWith(expect.objectContaining({ q: "who buys again", mine: true })));
   });
 
+  it("searches every workspace when asked, each result saying where it lives (S1, 2026-11-25)", async () => {
+    readDiscoverSearch.mockResolvedValue({
+      items: [{ ...ORDERS, connection_id: "dcc63d83", connection_name: "PostgreSQL", workspaces: ["Luxeperience GmbH"] }],
+      total: 1, by_meaning: false, withheld: {}, said: [] });
+    renderPage();
+    await screen.findByTestId("discover-areas");
+    fireEvent.change(screen.getByTestId("discover-search").querySelector("input") ?? screen.getByTestId("discover-search"),
+      { target: { value: "orders" } });
+    await screen.findByTestId("discover-results", {}, { timeout: 2000 });
+    fireEvent.click(screen.getByRole("button", { name: "Every workspace" }));
+    await waitFor(() => expect(readDiscoverSearch).toHaveBeenLastCalledWith(expect.objectContaining({ q: "orders", across: true })));
+    expect(await screen.findByText(/in Luxeperience GmbH/)).toBeTruthy();
+  });
+
   it("lists by filters alone, a page at a time, when no words are typed", async () => {
     readDiscoverItems.mockResolvedValue({ items: [REVENUE], total: 1, next_cursor: null, withheld: {}, said: [] });
     renderPage();

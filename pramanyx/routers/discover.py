@@ -17,16 +17,33 @@ from pramanyx.security.authz import connection_owner_guard
 router = APIRouter(tags=["discover"], dependencies=[Depends(connection_owner_guard)])
 
 
-def scope_of(request: Request, workspace_id: Optional[str], connection_id: Optional[str]):
-    """Who is looking, over which connections: the workspace's (the catalog's gate), the organisation's, and the one
-    named when one is."""
+def _every_workspace() -> dict[str, list[str]]:
+    """Each connection the organisation's workspaces hold, with the names of the workspaces that hold it (S1). A
+    workspace has no members of its own: what a person may read is decided per connection and per thing, as in one."""
+    from pramanyx.metastore import accessible_catalog_ids
+    from pramanyx.org.context import current_org_id
+    from pramanyx.workspace.store import list_workspaces
+    org = current_org_id()
+    homes: dict[str, list[str]] = {}
+    for ws in list_workspaces():
+        if org and ws.org_id and ws.org_id != org:
+            continue                     # another organisation's workspace is never searched
+        for cid in sorted(accessible_catalog_ids(ws.id) or ()):
+            homes.setdefault(cid, []).append(ws.name)
+    return homes
+
+
+def scope_of(request: Request, workspace_id: Optional[str], connection_id: Optional[str], *, across: bool = False):
+    """Who is looking, over which connections: the workspace's (the catalog's gate) — or, ``across``, every workspace's
+    of the organisation — the organisation's, and the one named when one is."""
     from pramanyx.db.registry import list_connections
     from pramanyx.discover.items import Scope
     from pramanyx.metastore import accessible_catalog_ids
     from pramanyx.rbac.permissions import Permission
     from pramanyx.rbac.resolver import has_permission
     from pramanyx.security.authz import acting_person, get_principal, org_visible_conn_ids
-    allowed = accessible_catalog_ids(workspace_id)
+    homes = _every_workspace() if across else None
+    allowed = set(homes) if homes is not None else accessible_catalog_ids(workspace_id)
     org = org_visible_conn_ids()
     connections = {c["id"]: str(c.get("name") or c["id"]) for c in list_connections()
                    if (allowed is None or c["id"] in allowed) and (org is None or c["id"] in org)}
@@ -35,8 +52,8 @@ def scope_of(request: Request, workspace_id: Optional[str], connection_id: Optio
             raise HTTPException(status_code=404, detail="No such connection in this workspace")
         connections = {connection_id: connections[connection_id]}
     principal = get_principal(request)
-    return Scope(request, acting_person(principal), connections, workspace_id=workspace_id,
-                 curator=has_permission(principal, Permission.ADMIN_MANAGE_ORG))
+    return Scope(request, acting_person(principal), connections, workspace_id=None if across else workspace_id,
+                 curator=has_permission(principal, Permission.ADMIN_MANAGE_ORG), homes=homes)
 
 
 @router.get("/discover")
@@ -67,13 +84,22 @@ def get_discover_items(request: Request, workspace_id: Optional[str] = None, con
 def get_discover_search(request: Request, q: str = Query(..., min_length=1, max_length=200),
                         workspace_id: Optional[str] = None, connection_id: Optional[str] = None, kind: str = "",
                         area: str = "", certified: bool = False, mine: bool = False,
-                        limit: int = Query(50, ge=1, le=200)) -> dict:
+                        limit: int = Query(50, ge=1, le=200),
+                        across: str = Query("", pattern="^(|workspaces)$")) -> dict:
     """One ranked list across every kind and every connection in view, by meaning and by words, each result saying
-    why it matched (the plan's §4.3). The question is embedded once by the platform's embedder; no model is called."""
+    why it matched (the plan's §4.3). The question is embedded once by the platform's embedder; no model is called.
+
+    ``across=workspaces`` (S1, 2026-11-25) searches every workspace of the organisation, outside the request's own,
+    and each result names the workspaces it lives in."""
     from pramanyx.discover.items import KINDS
     from pramanyx.discover.search import search
     if kind and kind not in KINDS:
         raise HTTPException(status_code=422, detail=f"a kind is one of {', '.join(KINDS)}")
+    if across:
+        from pramanyx.workspace.context import workspace_scope
+        with workspace_scope(None):
+            return search(scope_of(request, None, connection_id, across=True), q, kind=kind, area=area,
+                          certified=certified, mine=mine, limit=limit)
     return search(scope_of(request, workspace_id, connection_id), q, kind=kind, area=area, certified=certified,
                   mine=mine, limit=limit)
 

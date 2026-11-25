@@ -60,6 +60,8 @@ export interface DiscoverItem {
   matched?: string[];
   also_on?: string[];
   similarity?: number;
+  /** Search across every workspace only (S1): the workspaces it lives in. */
+  workspaces?: string[];
   /** A person placed it in its Area, so it can be taken out; one read from its tables or its name cannot. */
   placed?: boolean;
   /** Its use this month (D5): a table's audited reads, the opens of what a person opens; absent for a kind not
@@ -210,6 +212,8 @@ export function readDiscover(connectionId = "", workspaceId?: string, fresh = fa
 export interface ItemsAsked {
   kind?: DiscoverKind | ""; area?: string; certified?: boolean; mine?: boolean; q?: string; connectionId?: string;
   cursor?: number; limit?: number; workspaceId?: string;
+  /** Search only: every workspace of the organisation, not this one alone (S1). */
+  across?: boolean;
   /** "use": the most used this month first (D5). */
   sort?: "" | "use";
 }
@@ -232,7 +236,8 @@ export interface DiscoverSearch {
 /** Search by meaning and by words across every kind and connection in view (`GET /discover/search`, the plan's D3). */
 export function readDiscoverSearch(a: ItemsAsked & { q: string }): Promise<DiscoverSearch> {
   return read(url("/discover/search", { q: a.q.trim(), kind: a.kind, area: a.area, certified: a.certified, mine: a.mine,
-    connection_id: a.connectionId, limit: a.limit }, a.workspaceId), "the search");
+    connection_id: a.connectionId, limit: a.limit, across: a.across ? "workspaces" : undefined },
+    a.across ? undefined : a.workspaceId), "the search");
 }
 
 /** One Area's page; null when no connection in view has that Area (the server's 404). */

@@ -240,7 +240,8 @@ def search(scope: Scope, q: str, *, kind: str = "", area: str = "", certified: b
             said_once[same]["also_on"].append(i.connection_name)
             continue
         view = {**i.view(), "matched": why_words(why_of.get(key, [])), "score": round(score, 5), "also_on": [],
-                "similarity": similarity.get(key, 0.0)}
+                "similarity": similarity.get(key, 0.0),
+                **({"workspaces": scope.homes.get(i.connection_id, [])} if scope.homes is not None else {})}
         if same:
             said_once[same] = view
         out.append(view)

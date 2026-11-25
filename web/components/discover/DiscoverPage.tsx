@@ -36,8 +36,10 @@ import {
 import { formatCount } from "@/lib/format";
 import { withUniqueKeys } from "@/lib/listKeys";
 
-interface Filters { conn: string; q: string; kind: DiscoverKind | ""; area: string; certified: boolean; mine: boolean }
-const NO_FILTERS: Filters = { conn: "", q: "", kind: "", area: "", certified: false, mine: false };
+interface Filters { conn: string; q: string; kind: DiscoverKind | ""; area: string; certified: boolean; mine: boolean;
+  /** A search across every workspace of the organisation (S1, 2026-11-25), not this one alone. */
+  across?: boolean }
+const NO_FILTERS: Filters = { conn: "", q: "", kind: "", area: "", certified: false, mine: false, across: false };
 const narrowed = (f: Filters) => !!(f.q.trim() || f.kind || f.area || f.certified || f.mine);
 
 /** How many results a search shows — the best of them; the count says how many more there are. */
@@ -144,6 +146,11 @@ function SearchBar({ filters, setFilters, home, areaNames, connections }: {
           onClick={() => set({ certified: !filters.certified })}>Certified</Button>
         <Button size="sm" variant={filters.mine ? "secondary" : "outline"} aria-pressed={filters.mine}
           onClick={() => set({ mine: !filters.mine })}>Mine</Button>
+        {(text.trim() || filters.q.trim()) && (
+          <Button size="sm" variant={filters.across ? "secondary" : "outline"} aria-pressed={!!filters.across}
+            title="Search every workspace of the organisation, not this one alone — each result says where it lives"
+            onClick={() => set({ across: !filters.across, conn: "" })}>Every workspace</Button>
+        )}
         {(connections.length > 1 || filters.conn) && (
           <SelectField bespoke aria-label="Connection" value={filters.conn} onChange={e => set({ conn: e.target.value })} data-testid="discover-conn-filter">
             <option value="">Every connection</option>
@@ -274,7 +281,7 @@ function Results({ filters, workspaceId, areaNames, many, onClear }: {
   const [tick, setTick] = useState(0);
   const searching = !!filters.q.trim();
   const asked = useMemo(() => ({ kind: filters.kind, area: filters.area, certified: filters.certified, mine: filters.mine,
-    q: filters.q, connectionId: filters.conn, workspaceId }), [filters, workspaceId]);
+    q: filters.q, connectionId: filters.conn, workspaceId, across: !!filters.across }), [filters, workspaceId]);
   useEffect(() => {
     let alive = true;
     setPage(null); setErr("");
@@ -531,7 +538,8 @@ function ItemRow({ item, areaName, many, how = false, actions }: {
   const subject = askSubjectOf(item);
   const ask = host ? (host.ask ? () => host.ask!(item) : null) : subject ? () => askAbout(subject) : null;
   const also = item.also_on?.length ? `also on ${item.also_on.join(", ")}` : "";
-  const line = [secondLine(item, many), also].filter(Boolean).join(" · ");
+  const homes = item.workspaces?.length ? `in ${item.workspaces.join(", ")}` : "";
+  const line = [secondLine(item, many || !!item.workspaces), also, homes].filter(Boolean).join(" · ");
   return (
     <div className="aug-discover-row" data-testid="discover-row">
       <a href={item.href} title={`${KIND_WORDS[item.kind][0]} · ${item.name}`}

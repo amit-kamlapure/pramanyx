@@ -6210,6 +6210,9 @@ export interface paths {
          * Get Discover Search
          * @description One ranked list across every kind and every connection in view, by meaning and by words, each result saying
          *     why it matched (the plan's §4.3). The question is embedded once by the platform's embedder; no model is called.
+         *
+         *     ``across=workspaces`` (S1, 2026-11-25) searches every workspace of the organisation, outside the request's own,
+         *     and each result names the workspaces it lives in.
          */
         get: operations["get_discover_search_discover_search_get"];
         put?: never;
@@ -39643,6 +39646,7 @@ export interface operations {
                 certified?: boolean;
                 mine?: boolean;
                 limit?: number;
+                across?: string;
             };
             header?: never;
             path?: never;
