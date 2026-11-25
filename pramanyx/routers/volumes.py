@@ -57,7 +57,28 @@ def get_object_content(volume_id: str, object_id: str) -> Response:
         data = files.read_object(object_id)
     except Exception:
         raise HTTPException(status_code=404, detail="object bytes not found")
-    return Response(content=data, media_type=obj.mime_type or "application/octet-stream")
+    return Response(content=data, media_type=obj.mime_type or "application/octet-stream",
+                    headers=object_headers(obj.name, obj.mime_type))
+
+
+#: What a browser may draw of a volume object as itself (C4, 2026-11-25): images, plain text and PDF. Anything else —
+#: HTML and SVG above all, whose script would run on this API's origin — goes as a download.
+DRAWN = frozenset({"image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf", "text/plain", "text/csv",
+                   "text/tab-separated-values", "text/markdown", "application/json"})
+
+
+def object_headers(name: str, mime_type: str) -> dict:
+    """The headers a stored object is served with. The type it was uploaded under is the uploader's browser's word,
+    so it is never sniffed past, a response that is not a PDF runs no script whatever it says it is (a sandbox; a
+    PDF's viewer cannot run in one), and a type not drawn here is a download."""
+    from urllib.parse import quote
+    kind = (mime_type or "").split(";")[0].strip().lower()
+    out = {"X-Content-Type-Options": "nosniff"}
+    if kind != "application/pdf":
+        out["Content-Security-Policy"] = "sandbox"
+    if kind not in DRAWN:
+        out["Content-Disposition"] = f"attachment; filename*=UTF-8''{quote(name or 'object')}"
+    return out
 
 
 @router.delete("/volumes/{volume_id}/objects/{object_id}")
