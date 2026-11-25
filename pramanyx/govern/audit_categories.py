@@ -75,6 +75,8 @@ KIND_CATEGORY: dict[str, str] = {
     # The Definition page (2026-11-24): who answers for a Definition changed hands — who may publish it, change it and
     # decide what others suggest for it.
     "definition.handed": "governance_change",
+    # Catalog C3 (2026-11-25): a person edited a table's words for a connection — what every answer reads of it.
+    "table.described": "governance_change",
     # HB-6 — installing a pack's function layer mints level grants for its group and
     # lands declared automations: reach changed, which is what this category means.
     # Its sibling `pack.status_changed` stays operational above — a status flip grants
@@ -119,6 +121,8 @@ KIND_CATEGORY: dict[str, str] = {
     # turn_id, `trace.feedback` on trace_id) and stay two kinds under one category.
     "chat.feedback": "human_verdict",
     "trace.feedback": "human_verdict",
+    # P2 (2026-11-25): a person said a Definition is right, or took that back — their verdict on it.
+    "definition.voted": "human_verdict",
     # Phase 0 (2026-10-04) — the enforcement trail. `govern.cap` is a cap set, cleared or hit;
     # `budget.exceeded` is the kernel cancelling a job for a governed cap; `metric.enforcement`
     # is the governed-formula check on every metric-bearing answer; `guardrail` is the
@@ -170,6 +174,9 @@ NON_GOVERNANCE_KINDS: frozenset[str] = frozenset({
     "investigation.dispatched", "investigations.swept", "job.foreign", "job.orphaned",
     "job.state", "monitor.alert", "node.span", "pack.status_changed", "phase_complete",
     "playbook.use", "store.wal_drift", "eval.graduation", "ontology.build",
+    # Catalog C3 (2026-11-25): a table's shape seen to change — observed, not decided; shown on the table's page. A
+    # person's edit of its words is `table.described`, a governance change.
+    "table.changed",
     # Arc NV-3: a mining pass over the warehouse's query history — operational, like the build; it writes nothing, and
     # the read it depends on is the organisation's setting, whose change RBAC journals.
     "ontology.candidates.mined",
@@ -411,6 +418,11 @@ def _summarize(kind: str, p: dict) -> str:
         return f"the {p.get('kind') or 'thing'} {p.get('ref') or ''} guided an answer for {p.get('by') or 'a person'}"
     if kind == "thing.opened":
         return f"{p.get('by') or 'a person'} opened the {p.get('kind') or 'thing'} {p.get('ref') or ''}".strip()
+    if kind == "definition.voted":
+        return (f"{p.get('by') or 'a person'} {'said' if p.get('right') else 'took back saying'} the definition "
+                f"{p.get('term') or ''} is right")
+    if kind == "table.described":
+        return f"{p.get('by') or 'a person'} edited {p.get('table') or 'a table'}'s {', '.join(p.get('words') or []) or 'words'}"
     if kind == "definition.handed":
         return (f"{p.get('by') or 'a person'} handed the definition {p.get('term') or ''} from "
                 f"{p.get('from') or 'no one'} to {p.get('to') or 'someone'}")
@@ -627,6 +639,7 @@ _SINKS: list[tuple[str, Callable[..., list[AuditEvent]]]] = [
     ("governance_change", lambda n, **w: _from_ledger("intake.governance", n, **w)),
     ("governance_change", lambda n, **w: _from_ledger("area.changed", n, **w)),
     ("governance_change", lambda n, **w: _from_ledger("definition.handed", n, **w)),
+    ("governance_change", lambda n, **w: _from_ledger("table.described", n, **w)),
     ("governance_change", lambda n, **w: _from_ledger("pack.installed", n, **w)),
     ("governance_change", lambda n, **w: _from_ledger("authority.graduated", n, **w)),
     ("governance_change", lambda n, **w: _from_ledger("authority.demoted", n, **w)),
@@ -641,6 +654,7 @@ _SINKS: list[tuple[str, Callable[..., list[AuditEvent]]]] = [
     # asserts they agree rather than trusting that whoever edited one edited the other.
     ("human_verdict", lambda n, **w: _from_ledger("chat.feedback", n, **w)),
     ("human_verdict", lambda n, **w: _from_ledger("trace.feedback", n, **w)),
+    ("human_verdict", lambda n, **w: _from_ledger("definition.voted", n, **w)),
     # Phase 0 (2026-10-04) — the enforcement trail, one sink per kind.
     ("enforcement", lambda n, **w: _from_ledger("govern.cap", n, **w)),
     ("enforcement", lambda n, **w: _from_ledger("budget.exceeded", n, **w)),

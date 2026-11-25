@@ -4,7 +4,8 @@ One record per change, never per look. Whenever the platform builds a connection
 every visit, from the schema the connection last read — each table's shape is set against the last one kept: columns
 added, taken away or given another type are a change, and so is its row count moving, said at most once a day (a table
 that grows by the minute would otherwise be nothing but row counts). A change goes to the journal as ``table.changed``
-(`kernel/events.CATALOGUE`); a person's edit of a table's words goes there too, with who. The first shape kept is not a
+(`kernel/events.CATALOGUE`); a person's edit of a table's words as ``table.described``, with who — a governance change,
+where a shape is only observed. The first shape kept is not a
 change: it is when watching began, and the table's page says so.
 
 The shapes are kept in the kernel ledger's kv (``table_shapes``), one record per connection; the journal is the history.
@@ -15,8 +16,10 @@ import threading
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
-#: The journal kind of a change to a table.
+#: The journal kind of a change to a table's shape — observed, not decided: operational, shown on the table's page.
 CHANGED = "table.changed"
+#: The journal kind of a person's edit of a table's words — what every answer reads of it: a governance change.
+DESCRIBED = "table.described"
 #: Where each connection's last-seen table shapes are kept (the kernel ledger's kv).
 SHAPES_STORE = "table_shapes"
 #: A row count that moved is said at most this often for one table.
@@ -109,8 +112,8 @@ def note_words(connection_id: str, table: str, fields: list[str], by: str) -> No
         return
     try:
         from pramanyx.kernel.ledger import Ledger
-        Ledger.default().emit(CHANGED, {"connection_id": connection_id, "table": table, "words": sorted(fields),
-                                        "by": by}, conn_id=connection_id)
+        Ledger.default().emit(DESCRIBED, {"connection_id": connection_id, "table": table, "words": sorted(fields),
+                                          "by": by}, conn_id=connection_id)
     except Exception as exc:  # noqa: BLE001 — the edit is saved whether or not its record is
         from pramanyx.kernel.errors import tolerate
         tolerate(exc, f"an edit of {table}'s words was not journalled", counter="table_history.words")
@@ -131,7 +134,8 @@ def history(connection_id: str, table: str, *, limit: int = 50) -> dict:
     from pramanyx.kernel.ledger import Ledger
     ledger = Ledger.default()
     out = []
-    for e in ledger.events(kind=CHANGED, conn_id=connection_id, limit=5_000):
+    for e in [*ledger.events(kind=CHANGED, conn_id=connection_id, limit=5_000),
+              *ledger.events(kind=DESCRIBED, conn_id=connection_id, limit=5_000)]:
         p = e.get("payload") or {}
         if p.get("connection_id") == connection_id and _same_table(str(p.get("table") or ""), table):
             out.append({"at": str(e.get("at") or ""), **{k: v for k, v in p.items() if k not in ("connection_id",)}})
